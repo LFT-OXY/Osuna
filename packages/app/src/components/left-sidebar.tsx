@@ -26,6 +26,7 @@ import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-pref
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Text } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -275,12 +276,15 @@ function sidebarHostOptionTestID(serverId: string): string {
   return `sidebar-host-row-${serverId}`;
 }
 
-function footerIconButtonStyle({
-  hovered,
-  pressed,
-}: PressableStateCallbackType & { hovered?: boolean }) {
-  const isHighlighted = hovered || pressed;
-  return [styles.footerIconButton, isHighlighted && styles.footerIconButtonHighlighted];
+// 手机上按钮放大到手指尺寸（上游 #6044），图标不变；桌面保持 Osuna 的 controlHeight.md 方框。
+function footerIconButtonStyle(isCompact: boolean) {
+  return ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => {
+    const isHighlighted = hovered || pressed;
+    return [
+      isCompact ? styles.footerIconButtonCompact : styles.footerIconButton,
+      isHighlighted && styles.footerIconButtonHighlighted,
+    ];
+  };
 }
 
 function FooterIconButton({
@@ -311,7 +315,7 @@ function FooterIconButton({
       <TooltipTrigger asChild>
         <Pressable
           ref={buttonRef}
-          style={footerIconButtonStyle}
+          style={footerIconButtonStyle(isCompact)}
           testID={testID}
           nativeID={testID}
           collapsable={false}
@@ -960,6 +964,13 @@ const styles = StyleSheet.create((theme) => ({
   footerIconButton: {
     width: theme.controlHeight.md,
     height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  footerIconButtonCompact: {
+    width: buttonControlHeight.md,
+    height: buttonControlHeight.md,
     borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",

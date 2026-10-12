@@ -17,7 +17,6 @@ import {
 import {
   installLoginUsage,
   installCodexWindowUsage,
-  expectCodexReportedWindows,
   openUsage,
   refreshLoginUsage,
   hoverUsageWindow,
@@ -416,11 +415,12 @@ for (const shape of ["seven-day-only", "Spark"] as const) {
     try {
       await page.setViewportSize({ width: 1440, height: 900 });
       await gotoAppShell(page);
+      // Osuna：只保留侧栏摘要那一半——窗口名由数据模型推出，在摘要里可见；卡片上的固定行与
+      // Spark 窗口的勾选在上游占用 `/usage` 的独立页面上，Osuna 没有接这个页面（见 02 的跳过说明），
+      // 上游在 v0.11.0 把它换成弹窗，届时随上游处理。
       await expect(usageItem(page)).toBeVisible();
-      await usageItem(page).click();
-      await qaScreenshot(page, `codex-${shape}-card-and-summary`);
-      await expectCodexReportedWindows(page, shape);
-      await qaScreenshot(page, `codex-${shape}-pins`);
+      await expectPinnedUsage(page, ["11% wk"]);
+      await qaScreenshot(page, `codex-${shape}-summary`);
     } finally {
       await source.cleanup();
     }
@@ -432,7 +432,9 @@ for (const theme of ["light", "dark"] as const) {
     desktop: { width: 1440, height: 900 },
     compact: { width: 390, height: 844 },
   })) {
-    test(`Usage Settings cog ${size} ${theme}`, async ({ page }, testInfo) => {
+    // Osuna：这条要在上游占用 `/usage` 的独立页面上找报告卡片与设置齿轮，Osuna 没有接这个页面；
+    // 上游在 v0.11.0 把它换成弹窗，届时随上游处理。
+    test.skip(`Usage Settings cog ${size} ${theme}`, async ({ page }, testInfo) => {
       test.setTimeout(120_000);
       await page.addInitScript((value) => {
         const key = "@paseo:app-settings";

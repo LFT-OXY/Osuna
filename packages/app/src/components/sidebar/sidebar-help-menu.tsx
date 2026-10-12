@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
@@ -96,7 +97,7 @@ export function SidebarHelpMenu() {
         <TooltipTrigger asChild>
           <View>
             <DropdownMenuTrigger
-              style={triggerStyle}
+              style={triggerStyle(isCompact)}
               testID="sidebar-help"
               accessibilityRole="button"
               accessibilityLabel={t("sidebar.help.trigger")}
@@ -166,9 +167,15 @@ export function SidebarHelpMenu() {
   );
 }
 
-function triggerStyle({ hovered, pressed, open }: MenuTriggerState) {
-  const isHighlighted = hovered || pressed || open;
-  return [styles.trigger, isHighlighted && styles.triggerHighlighted];
+// 手机上按钮放大到手指尺寸（上游 #6044），图标不变；桌面保持与底部其他按钮同框。
+function triggerStyle(isCompact: boolean) {
+  return ({ hovered, pressed, open }: MenuTriggerState) => {
+    const isHighlighted = hovered || pressed || open;
+    return [
+      isCompact ? styles.triggerCompact : styles.trigger,
+      isHighlighted && styles.triggerHighlighted,
+    ];
+  };
 }
 
 // 与侧栏底部其他按钮同框（left-sidebar.tsx 的 footerIconButton）。
@@ -176,6 +183,13 @@ const styles = StyleSheet.create((theme) => ({
   trigger: {
     width: theme.controlHeight.md,
     height: theme.controlHeight.md,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  triggerCompact: {
+    width: buttonControlHeight.md,
+    height: buttonControlHeight.md,
     borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",

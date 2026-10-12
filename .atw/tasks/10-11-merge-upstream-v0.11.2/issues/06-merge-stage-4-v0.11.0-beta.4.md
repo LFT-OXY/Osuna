@@ -6,22 +6,22 @@
 **Status:** ready-for-agent
 **Impl:** doing
 
-- [ ] 合并分支包含一个以合并前的分支头与 `6b00310f7` 为双亲的 merge commit。
-- [ ] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下。规则裁决不了、或保留两边会改变用户可见行为的冲突没有自行取舍。
-- [ ] 插件登记处的功能已收下：默认地址是上游的，环境变量覆盖可用。上游为它带来的测试通过。`plugin add 作者/仓库` 含义的变化记在 `## Comments` 下，供 15 写 PR 正文。
-- [ ] 这一段新带进来的展示性链接已按「合并后核对」处理（Osuna 有对应内容就指过来，没有就连承载它的按钮一起去掉）；上游站点链接的非测试数不多于基线。登记处、中继、Hub 这类功能性地址不在此列。
-- [ ] daemon 自更新保持删除：上游在这一段改过的那几个文件没有恢复，上游为它带来的测试随之不收，处理方式记在 `## Comments` 下。
-- [ ] Explorer：旧标签栏随上游删除；新写法下 Files、Changes、PR 与 Osuna 的会话历史四种视图都能打开，默认标签列表里有会话历史。上游的测试里不知道会话历史的预期已按 Osuna 的行为改，逐条记在 `## Comments` 下。
-- [ ] 上下文圆环：结构取上游的；Osuna 原提示里的 token、估算花费、用时、当前接口、旧 daemon 的升级提示在合并后仍然显示，对应的现有测试通过。因结构变化必须跟着改的断言逐条记在 `## Comments` 下。
-- [ ] 打包产物类的冲突文件（终端的 webview 页面）是重新生成的，不是手工合并的。
-- [ ] Claude、Pi 两边都留：Osuna 的独有行为对应的现有测试全部通过，无一改动断言。
-- [ ] 补丁分支分叉处落在这一段的文件，按固定裁决处理。
-- [ ] 所有工作区版本号是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同；`package-lock.json` 的差异能逐项对应到上游的依赖改动。
-- [ ] 协议新增的字段都是可选的；新带进来的 `COMPAT(...)` 标签已改写版本号。
-- [ ] `docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下（上游在这一段改了官网部署工作流：它仍只有手动触发）。
-- [ ] 翻译资源测试通过；指令目录的现有测试通过，无一改动断言。
-- [ ] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
-- [ ] typecheck 和 lint 通过；本段冲突文件对应的测试文件、本段新增或改动过的测试文件逐个单独跑过并通过。
+- [x] 合并分支包含一个以合并前的分支头与 `6b00310f7` 为双亲的 merge commit。
+- [x] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下。规则裁决不了、或保留两边会改变用户可见行为的冲突没有自行取舍。
+- [x] 插件登记处的功能已收下：默认地址是上游的，环境变量覆盖可用。上游为它带来的测试通过。`plugin add 作者/仓库` 含义的变化记在 `## Comments` 下，供 15 写 PR 正文。
+- [x] 这一段新带进来的展示性链接已按「合并后核对」处理（Osuna 有对应内容就指过来，没有就连承载它的按钮一起去掉）；上游站点链接的非测试数不多于基线。登记处、中继、Hub 这类功能性地址不在此列。
+- [x] daemon 自更新保持删除：上游在这一段改过的那几个文件没有恢复，上游为它带来的测试随之不收，处理方式记在 `## Comments` 下。
+- [x] Explorer：旧标签栏随上游删除；新写法下 Files、Changes、PR 与 Osuna 的会话历史四种视图都能打开，默认标签列表里有会话历史。上游的测试里不知道会话历史的预期已按 Osuna 的行为改，逐条记在 `## Comments` 下。
+- [x] 上下文圆环：结构取上游的；Osuna 原提示里的 token、估算花费、用时、当前接口、旧 daemon 的升级提示在合并后仍然显示，对应的现有测试通过。因结构变化必须跟着改的断言逐条记在 `## Comments` 下。
+- [x] 打包产物类的冲突文件（终端的 webview 页面）是重新生成的，不是手工合并的。
+- [x] Claude、Pi 两边都留：Osuna 的独有行为对应的现有测试全部通过，无一改动断言。
+- [x] 补丁分支分叉处落在这一段的文件，按固定裁决处理。
+- [x] 所有工作区版本号是 `0.14.2`；`CHANGELOG.md` 与合并前逐字节相同；`package-lock.json` 的差异能逐项对应到上游的依赖改动。
+- [x] 协议新增的字段都是可选的；新带进来的 `COMPAT(...)` 标签已改写版本号。
+- [x] `docs/release.md`「合并后核对」逐项过完，结果记在 `## Comments` 下（上游在这一段改了官网部署工作流：它仍只有手动触发）。
+- [x] 翻译资源测试通过；指令目录的现有测试通过，无一改动断言。
+- [x] 对本段冲突涉及的测试文件对比合并前后，没有 Osuna 的断言行被悄悄删掉。
+- [x] typecheck 和 lint 通过；本段冲突文件对应的测试文件、本段新增或改动过的测试文件逐个单独跑过并通过。
 - [ ] 推到 `origin` 后草稿 PR 上的 CI 结果已看过并记在 `## Comments` 下。
 
 ## Comments
@@ -64,3 +64,17 @@
 - **冲突之外的适配单独提交（`5b5c83eda`）**：五个 e2e 文件、`provider-usage-tooltip.spec.ts` 的删除、`COMPAT(usagePinSelection)` 的版本号。merge commit `1d1dc7545` 本身通过 typecheck、lint、format 与上述测试。
 - **给 12 / 08 的备注**：`composer-plan-usage-strip.spec.ts`「stays quiet when every attempt to fetch fails」删掉绕行步骤后，只剩「请求计数到 4 后窄栏没有用量条」，没有再证明取数已落在出错状态；12 把用量条接到上游数据时这条用例会重写，到时补一个明确的出错态断言。
 - **给 08 的备注**：上游的「不报告套餐用量的主机」用窄内边距、无间距的 `plainPopover`，这时 Osuna 的本会话合计紧贴在上下文段下面；按 `docs/design.md` 收尾时一起看。
+
+#### 评审（Standards 与 Spec 两个维度；本工单没有截图验收项，没有 Visual）
+
+- **Standards 报的硬违规（已修，提交 `9a1a6fec2`）：** `explorer-plugin-menu.ts` 的菜单断言恢复整表精确比对（`.atw/spec/app/frontend/testing.md`「列表断言仍是列表」，带快捷键提示的内置项用 `/^Terminal/`、`/^Diff/` 按名比对——字形随平台变）；`.atw/spec/app/frontend/styling.md` 不再引用已删的 tab rail；协议形状变更在 Comments 里如实写明；`sidebar-nav-settings.spec.ts` 解冲突时两边都留下的重复种子项 `{ key: "usage", visible: true }` 与过时注释删掉。**判断项，顺手处理：** e2e 辅助复用 `visible()`、`summaryInSidebarSwitch` 导出复用、`expectWorkspaceCloseOnHover` 改名 `expectWorkspaceCloseAlwaysVisible`、输入框槽位样式先算局部变量、详情里当前接口一行改用共用 `<Text variant="caption">`、zh-CN 的 `showInSidebarHint` 按术语表写「套餐用量」、`UsageSidebarRoot` 的标签先取局部变量。**判断项，照原样提交并记录：** token 标签的悬停变色随旧弹层去掉（给 08）；`composer-plan-usage-strip.spec.ts` 那条用例少了出错态的证明（给 12）。
+- **Spec 报的（已修，同一提交）：** 协议 payload 形状变更补记；孤儿的 `provider-usage/tooltip-section.tsx` 删除；无障碍名称的改动单列为「因换成上游实现而改动的 Osuna 行为」；记录里 `compact-explorer-sidebar.tsx` 写全路径；补「51 个冲突文件逐个的裁决」。Spec 未能核实的 `pi/agent.test.ts` 三处 `--model` 断言：对照基点 `6166a7aca`，基点与合并前各有 5 处 `openrouter/model-a`、上游与现在各 3 处，被删的是上游自己的断言，不是 Osuna 写的。
+- 复核：两个维度对已修各条都回「已解决」；Standards 顺带提到 e2e 辅助里两段叠放的注释，已合成一段（`ee833a06b`，同一提交里有规范更新：`state-management.md` 的标签种类触点表改成共用标签行与 `panelCanLaunchInPane`，`testing.md` 的列表断言补快捷键字形一句）。
+- **给 15 的「踩过的坑」候选：** 官网包的 vitest 要像 CI 一样从仓库根目录跑 `npx vitest run packages/website/src/...`，在 `packages/website` 里跑会被 Cloudflare 的 Vite 插件挡住（`resolve.external` 不兼容）；上游 e2e 里对菜单整表比对时，内置项带平台相关的快捷键字形。
+
+#### 推送后的 CI
+
+- **第一轮（`9a1a6fec2`，run 38194261992）：** 20 项里 18 项通过（format、lint、typecheck、app-tests、server-tests 三个平台、desktop-tests 两个平台、cli-tests 三片、sdk-tests、relay-tests、linux、changes、playwright 第 1、2 片）。两片浏览器测试红：
+  - `playwright (shard 3/4)`：1 条失败——上游新加的 `sidebar-help.spec.ts`「compact sidebar help › footer buttons provide finger-sized targets…」要求手机宽度下侧栏底部五个按钮至少 44×44、图标不超过 20；Osuna 的按钮是 28（03 定的 `controlHeight.md`），量到 28。这是上游 #6044 给手机加的点按区域，与 Osuna 的桌面外观不冲突，按规则 ③ 两边都留：`left-sidebar.tsx` 的 `footerIconButtonStyle(isCompact)` 与 `sidebar-help-menu.tsx` 的 `triggerStyle(isCompact)` 在窄屏用 `buttonControlHeight.md`（44）、桌面仍是 `controlHeight.md`（28）、圆角与高亮不变，图标尺寸不变。另 3 条偶发、重试后过：`provider-settings-refresh.spec.ts`「provider model update age says just now」、`rewind-menu.ui-contract.spec.ts`「rewinds from a user message sheet option」、`settings-providers-list-detail.spec.ts`「pushes the detail and returns through the breadcrumb」（都是 02/05 记过的偶发，不在本次改动范围）。
+  - `playwright (shard 4/4)`：6 条失败，都在 `usage-screen.spec.ts`，都要进上游占用 `/usage` 的独立页面（**按 Osuna 决定改写的上游测试，给 15**）：「Codex seven-day-only / Spark windows use provider durations on the card and sidebar」两条只保留侧栏摘要那一半（`expectPinnedUsage(["11% wk"])`，窗口名由数据模型推出），卡片上的固定行与 Spark 窗口的勾选随页面不可达去掉；「Usage Settings cog」四条（desktop/compact × light/dark）整条 `test.skip` 并注明原因，与 02 跳过的那组相同。上游在 v0.11.0 把这个页面换成弹窗，届时随上游处理。
+  - 本机复跑：`sidebar-help.spec.ts` 两条、`usage-screen.spec.ts` 的 Codex 两条、`sidebar-nav-settings.spec.ts`「footer rows」、`usage-sidebar-item.spec.ts` 两条，7 条通过。
