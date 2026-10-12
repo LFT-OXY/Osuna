@@ -17,3 +17,13 @@
 - [ ] 修动过的文件 typecheck 和 lint 通过，涉及的测试文件逐个跑过并通过；推到 `origin` 后草稿 PR 上的 CI 结果已看过。
 - [ ] UI：全部截图 / 桌面 1280 — `prd.md` 的截图验收点全部满足。
 - [ ] 原生端（iOS / Android）免验收，已在 `## Comments` 下注明。
+
+## Comments
+
+### 来自 09 的交接（2026-10-12）
+
+- 速度菜单只在 Composer 上按界面语言显示（`localizeSpeedFeature`）。设置 → Agent 档案的编辑弹窗（`agent-profiles/settings/agent-profile-edit-modal.tsx`）里速度那一行仍是 daemon 的英文；daemon 给的 `Plan`、模式名、思考档位名也仍是英文（`docs/i18n.md`「Translation Scope」）。要不要一并处理由维护者定。
+- 共用菜单（`Combobox`）的宽度随选中标记所在的行变化：英文速度菜单勾在 Normal 时约 95px、勾在 Fast 时约 81px（`screenshots/09-…-menu-open-…-en.png` 对 `…-menu-open-fast-checked-…-en.png`）。是共用组件的行为，不只是速度菜单。
+- 速度触发器只有图标、没有下拉箭头（上游 `desktopTrigger: "icon"`），旁边的模型、思考、模式都带箭头；快速与超快在触发器上同为实心品牌色闪电，只能从提示与菜单区分。
+- 远程 SSH 主机弹窗新增的 daemon 密码框（上游 #6081，`components/add-remote-ssh-host-modal.tsx`）是上游的写法，外观没有对过 `docs/design.md`。
+- 09 的速度菜单截图来自无头 Chromium + 夹具，Electron 里没有实看过。

@@ -21,3 +21,12 @@
 - [ ] 收尾在并入之前做完：各工单的验收项已对照勾选、任务记录与 journal 已提交。并入会让这个 worktree 被 daemon 自动归档，已提前告诉维护者。
 - [ ] 维护者看过截图、包的核对结果与 PR 正文并发话后，PR 转为可合并，以 merge commit 并入（不 squash、不 rebase）。并入由维护者操作，或得到维护者明确同意后操作。
 - [ ] 并入后：`759532509` 是 main 的祖先；任务在主工作树归档。
+
+## Comments
+
+### 来自 09 的交接（2026-10-12，写 PR 正文与 `docs/release.md` 用）
+
+- **按 Osuna 决定改写的上游测试（第五段）：** `composer/agent-controls/utils.test.ts` 的 `service_tier → yellow` 改成 `providerBrand`；`e2e/browser/codex-speed.spec.ts` 的图标色由上游的黄色改成 Codex 品牌色并补实心断言、补「不带搜索框」；`e2e/browser/usage-screen.spec.ts`「an account with all logins failing…」由 `/usage` 独立页面改到窄屏的套餐用量抽屉。维护者 2026-10-12 确认：速度菜单用 Osuna 的实心品牌色、中文界面下显示中文。
+- **与上游不同的行为：** 速度菜单的功能名与普通 / 快速 / 超快按界面语言显示（`docs/i18n.md` 已写明这条例外）；选择型功能的菜单在选项不超过 6 个时不带搜索框。
+- **「踩过的坑」候选：** 规格按「标志性文件首次出现在冲突清单里」推断功能落在哪一段会偏——速度菜单在第 1 段就自动合并进来了，到第 5 段才第一次冲突；`plugins/antigravity-provider/server/provider.test.ts`「reports startup auth…」在 macOS 本机报 `kill EPERM`（对只剩僵尸进程的进程组发信号），Linux 不会，合并前就如此，以 CI 为准；截图用 128 色量化时，画面里没有别的蓝色就会把提供方彩色图标压成灰色，这类图用 256 色。
+- **并入前看一眼：** `e2e/browser/agent-timeline-scroll-smoothness.spec.ts:137`「…during slow upward scrolling」从第四段起连续四次 CI 首跑失败（三次重试通过，`ed5f82e5e` 那次首跑与重试都挂、`rerun --failed` 后通过），本机单跑通过。失败形状固定：图片行加载后高度 560 → 225，可见文字位移 -175。没有查原因——是 runner 慢，还是 Osuna 的图片行高度与上游 #5970 预留的不一致。
