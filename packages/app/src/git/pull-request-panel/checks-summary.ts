@@ -1,5 +1,5 @@
-import type { TFunction } from "i18next";
 import { classifyCheck, type CheckPresentation } from "@/git/check-presentation";
+import type { TFunction } from "i18next";
 import type { PrPaneCheck } from "./data";
 
 /**
@@ -20,23 +20,42 @@ export const PRESENTATION_ORDER = [
 /** The worst thing happening in the run, which is what the headline and the ring report. */
 export type ChecksOutcome = "actionRequired" | "failure" | "pending" | "success" | "none";
 
+const COPY = "workspace.git.pr.checksOverview";
+// 计数短语之间的分隔符随语言变（中文是全角逗号），上游写死了 ", "。
+const SEPARATOR_KEY = "workspace.git.pr.checks.countSeparator";
+
 export interface ChecksCountPart {
   status: CheckPresentation;
   count: number;
+  /** e.g. "2 failing" */
+  text: string;
 }
 
 export interface ChecksGroup {
   status: CheckPresentation;
-  count: number;
+  /** e.g. "2 failing checks" */
+  label: string;
   checks: readonly PrPaneCheck[];
 }
 
 export interface ChecksSummary {
   outcome: ChecksOutcome;
-  /** One count per non-empty status, in `PRESENTATION_ORDER`. */
+  /** The line naming the run's outcome, e.g. that some checks were not successful. */
+  headline: string;
+  /** The count phrases behind `detail`, kept apart so the header can label each one. */
   parts: readonly ChecksCountPart[];
+  /**
+   * The words around the count phrases in `detail`: "" and " checks" in English, where the noun
+   * closes the line, while other languages lead with it.
+   */
+  detailLead: string;
+  detailTrail: string;
+  /** 两个计数短语之间的分隔符，英文是 ", "。 */
+  separator: string;
+  /** The whole line: "2 failing, 4 in progress, 1 successful checks". Empty with no checks. */
+  detail: string;
   total: number;
-  /** Non-empty groups only, in `PRESENTATION_ORDER`. */
+  /** Non-empty groups only, in `STATUS_ORDER`. */
   groups: readonly ChecksGroup[];
 }
 
@@ -45,7 +64,7 @@ export interface ChecksSummary {
  * header, the ring, and the grouped list all read from one derivation instead of each
  * filtering the array again with its own idea of what counts.
  */
-export function summarizeChecks(checks: readonly PrPaneCheck[]): ChecksSummary {
+export function summarizeChecks(checks: readonly PrPaneCheck[], t: TFunction): ChecksSummary {
   const groups: ChecksGroup[] = [];
   const parts: ChecksCountPart[] = [];
 
@@ -54,48 +73,35 @@ export function summarizeChecks(checks: readonly PrPaneCheck[]): ChecksSummary {
     if (matching.length === 0) {
       continue;
     }
-    groups.push({ status, count: matching.length, checks: matching });
-    parts.push({ status, count: matching.length });
+    groups.push({
+      status,
+      label: t(`${COPY}.${matching.length === 1 ? "groupOne" : "groupMany"}.${status}`, {
+        count: matching.length,
+      }),
+      checks: matching,
+    });
+    parts.push({
+      status,
+      count: matching.length,
+      text: t(`${COPY}.count.${status}`, { count: matching.length }),
+    });
   }
 
+  const outcome = selectOutcome(checks);
+  const { lead, trail } = detailFrame(checks.length, t);
+  const separator = t(SEPARATOR_KEY);
   return {
-    outcome: selectOutcome(checks),
+    outcome,
+    headline: t(`${COPY}.headline.${outcome}`),
     parts,
+    detailLead: lead,
+    detailTrail: trail,
+    separator,
+    detail:
+      parts.length === 0 ? "" : `${lead}${parts.map((part) => part.text).join(separator)}${trail}`,
     total: checks.length,
     groups,
   };
-}
-
-const CHECKS_KEY = "workspace.git.pr.checks";
-
-/** The line naming the run's outcome, keyed by `ChecksOutcome`. */
-export function formatChecksHeadline(t: TFunction, outcome: ChecksOutcome): string {
-  return t(`${CHECKS_KEY}.headline.${outcome}`);
-}
-
-/**
- * The count line, e.g. "2 failing, 4 in progress, 1 successful checks". The noun follows
- * the total, so "check" only for a run of one. Empty with no checks.
- */
-export function formatChecksCount(
-  t: TFunction,
-  parts: readonly ChecksCountPart[],
-  total: number,
-): string {
-  if (parts.length === 0) {
-    return "";
-  }
-  const phrases = parts.map((part) =>
-    t(`${CHECKS_KEY}.count.${part.status}`, { count: part.count }),
-  );
-  return t(total === 1 ? `${CHECKS_KEY}.countLine.one` : `${CHECKS_KEY}.countLine.many`, {
-    parts: phrases.join(t(`${CHECKS_KEY}.countSeparator`)),
-  });
-}
-
-/** e.g. "2 failing checks" */
-export function formatChecksGroupLabel(t: TFunction, group: ChecksGroup): string {
-  return formatChecksCount(t, [group], group.count);
 }
 
 /**
@@ -121,4 +127,15 @@ function selectOutcome(checks: readonly PrPaneCheck[]): ChecksOutcome {
     return "pending";
   }
   return "success";
+}
+
+/**
+ * The header renders each count phrase on its own, so the translated line is split around
+ * where the phrases go.
+ */
+function detailFrame(total: number, t: TFunction): { lead: string; trail: string } {
+  const marker = "\u0000";
+  const line = t(`${COPY}.${total === 1 ? "detailOne" : "detailMany"}`, { parts: marker });
+  const [lead = "", trail = ""] = line.split(marker);
+  return { lead, trail };
 }

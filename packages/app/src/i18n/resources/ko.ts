@@ -354,7 +354,6 @@ export const ko: TranslationResources = {
     },
   },
   message: {
-    workedFor: "작업 시간 {{duration}}",
     workingFor: "작업 중 {{duration}}",
     changedFiles: {
       one: "파일 {{count}}개 변경",
@@ -453,6 +452,9 @@ export const ko: TranslationResources = {
         started: "시작됨",
         completed: "완료됨",
       },
+    },
+    turnFooter: {
+      workedFor: "작업 시간 {{duration}}",
     },
     compaction: {
       loading: "압축하는 중...",
@@ -1066,9 +1068,47 @@ export const ko: TranslationResources = {
         actions: {
           viewPullRequest: "보기",
           openOn: "{{brand}}에서 열기",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "채팅에 추가",
+          addAllToChat: "모두 채팅에 추가",
+          addingToChat: "추가 중...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "확인이 필요한 검사가 있습니다",
+            failure: "실패한 검사가 있습니다",
+            pending: "아직 완료되지 않은 검사가 있습니다",
+            success: "모든 검사를 통과했습니다",
+            none: "검사 없음",
+          },
+          count: {
+            actionRequired: "{{count}}개 조치 필요",
+            warning: "{{count}}개 경고",
+            failure: "{{count}}개 실패",
+            pending: "{{count}}개 진행 중",
+            manual: "{{count}}개 수동",
+            success: "{{count}}개 성공",
+            ignored: "{{count}}개 건너뜀",
+          },
+          detailOne: "검사: {{parts}}",
+          detailMany: "검사: {{parts}}",
+          groupOne: {
+            actionRequired: "조치 필요 검사 {{count}}개",
+            warning: "경고 검사 {{count}}개",
+            failure: "실패한 검사 {{count}}개",
+            pending: "진행 중인 검사 {{count}}개",
+            manual: "수동 검사 {{count}}개",
+            success: "성공한 검사 {{count}}개",
+            ignored: "건너뛴 검사 {{count}}개",
+          },
+          groupMany: {
+            actionRequired: "조치 필요 검사 {{count}}개",
+            warning: "경고 검사 {{count}}개",
+            failure: "실패한 검사 {{count}}개",
+            pending: "진행 중인 검사 {{count}}개",
+            manual: "수동 검사 {{count}}개",
+            success: "성공한 검사 {{count}}개",
+            ignored: "건너뛴 검사 {{count}}개",
+          },
         },
         checksSummary: {
           passedLabel: "통과",
@@ -1082,43 +1122,25 @@ export const ko: TranslationResources = {
           checks: "검사",
           pipeline: "파이프라인",
           reviews: "리뷰",
-          activity: "Activity",
+          activity: "활동",
         },
         empty: {
           noJobs: "작업 없음",
           loadingPipeline: "파이프라인 로드 중…",
           pipelineJobsLoadFailed: "파이프라인 작업을 로드할 수 없습니다.",
           allowedToFail: "실패가 허용됨",
-          noActivity: "No activity yet",
+          noActivity: "아직 활동이 없습니다",
         },
         approvals: "{{required}} 중 {{given}} 승인",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "풀 리퀘스트 #{{number}}",
           pullRequest_mr: "병합 요청 !{{number}}",
+          commentActions: "댓글 작업",
+          threadActions: "스레드 작업",
           checkStatus: {
             passed: "통과",
             failed: "실패",
@@ -1129,8 +1151,6 @@ export const ko: TranslationResources = {
             skipped: "건너뜀",
             cancelled: "취소됨",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "초안",
@@ -1149,8 +1169,8 @@ export const ko: TranslationResources = {
         },
         thread: {
           discussion: "토론 스레드",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "해결됨",
+          outdated: "오래됨",
         },
         errors: {
           statusLoadFailed: "풀 리퀘스트 상태를 불러올 수 없습니다",
@@ -1216,6 +1236,14 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} 그룹",
+    statusBucket: {
+      needsInput: "입력 필요",
+      failed: "실패",
+      readyToReview: "검토 대기",
+      working: "실행 중",
+      done: "완료",
+    },
     display: {
       trigger: "표시 설정",
       heading: "표시",

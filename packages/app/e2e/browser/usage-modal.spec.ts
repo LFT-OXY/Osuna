@@ -17,17 +17,18 @@ import {
 import {
   installLoginUsage,
   installCodexWindowUsage,
-  openUsage,
+  expectCodexReportedWindows,
   refreshLoginUsage,
   hoverUsageWindow,
 } from "../support/helpers/usage-login";
 import {
   claudeAndCodexReports,
   expectPinnedUsage,
-  pinRow,
   openCompactSidebar,
+  openUsageFromIcon,
+  openUsageFromItem,
+  pinRow,
   openUsageOptions,
-  openUsageSheetFromIcon,
   closeUsageOptions,
   expectUsageOptionsFitContent,
   showUsageAs,
@@ -99,9 +100,7 @@ function weeklyReport(sourceId: string, usedPct: number): UsageReportEntry {
   };
 }
 
-// Osuna：`/usage` 是 Osuna 的 Usage 页（token 与估算花费），上游这个占用 `/usage` 的套餐用量独立页面没有接路由，
-// 这组用例在 Osuna 里无从进入。上游在 v0.11.0 把这个页面换成弹窗并删掉本文件，届时随上游处理。
-test.describe.skip("usage screen", () => {
+test.describe("usage modal", () => {
   test("opens from the sidebar on the host's reports, with no host filter for one host", async ({
     page,
   }) => {
@@ -137,14 +136,13 @@ test.describe.skip("usage screen", () => {
     });
 
     await gotoAppShell(page);
-    await page.locator('[data-testid="sidebar-usage"]:visible').first().click();
-    await expect(page).toHaveURL(/\/usage$/);
+    await openUsageFromItem(page);
     await usage.waitForListRequests(1);
 
     const group = page.getByTestId(`usage-host-${serverId}`);
     await expect(group.getByText("Alpha plan", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(hostFilter(page)).toHaveCount(0);
-    await qaScreenshot(page, "phase7-usage-screen-one-host");
+    await qaScreenshot(page, "usage-modal-one-host");
     await expect(group.getByText("31%")).toBeVisible();
     await expect(group.getByText("Beta plan", { exact: true })).toBeVisible();
     await expect(group.getByText("Unavailable", { exact: true })).toBeVisible();
@@ -179,7 +177,7 @@ test.describe.skip("usage screen", () => {
         windows: [{ id: "weekly", label: "Weekly", usedPct }],
       },
     });
-    // The sidebar summary and the screen each load reports; only a card's Refresh forces one.
+    // The sidebar summary and the modal each load reports; only a card's Refresh forces one.
     const usage = await installUsageReportsFixture(page, {
       lists: [
         (request) =>
@@ -190,7 +188,7 @@ test.describe.skip("usage screen", () => {
     });
 
     await gotoAppShell(page);
-    await page.locator('[data-testid="sidebar-usage"]:visible').first().click();
+    await openUsageFromItem(page);
     const group = page.getByTestId(`usage-host-${serverId}`);
     await expect(group.getByText("31%")).toBeVisible({ timeout: 10_000 });
 
@@ -227,7 +225,9 @@ test.describe.skip("usage screen", () => {
     });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/usage");
+    await gotoAppShell(page);
+    await openCompactSidebar(page);
+    await openUsageFromIcon(page);
     await usage.waitForListRequests(1);
 
     const group = page.getByTestId(`usage-host-${serverId}`);
@@ -241,8 +241,8 @@ test.describe.skip("usage screen", () => {
     const usage = await installUsageReportsFixture(page, { usageSupported: false });
 
     await gotoAppShell(page);
-    // Without reports the footer has no Usage item; its Usage icon opens the screen.
-    await page.locator('[data-testid="sidebar-usage-icon"]:visible').first().click();
+    // Without reports the footer has no Usage item; its Usage icon opens Usage.
+    await openUsageFromIcon(page);
 
     await expect(
       page.getByTestId(`usage-host-${serverId}`).getByText(/^Update .+ to see usage$/),
@@ -253,7 +253,7 @@ test.describe.skip("usage screen", () => {
     expect(usage.listRequests()).toHaveLength(0);
   });
 
-  test("a host picked on the Usage screen is the sidebar's host too, after a reload", async ({
+  test("a host picked in the Usage modal is the sidebar's host too, after a reload", async ({
     page,
   }) => {
     test.setTimeout(420_000);
@@ -276,7 +276,7 @@ test.describe.skip("usage screen", () => {
 
       // Nothing picked and no workspace open: the first host.
       await expectPinnedUsage(page, ["31% Weekly"]);
-      await usageItem(page).click();
+      await openUsageFromItem(page);
       await expect(page.getByTestId(`usage-host-${primaryServerId}`)).toBeVisible();
 
       await hostFilter(page).click();
@@ -285,7 +285,7 @@ test.describe.skip("usage screen", () => {
         page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
       ).toBeVisible({ timeout: 30_000 });
       await expect(hostFilter(page)).toContainText("Secondary box");
-      await qaScreenshot(page, "usage-screen-picked-host");
+      await qaScreenshot(page, "usage-modal-picked-host");
       await expectPinnedUsage(page, ["12% Weekly"]);
 
       // The e2e seed resets the host list on every load, so reopening re-adds the second host.
@@ -295,6 +295,7 @@ test.describe.skip("usage screen", () => {
         port: secondary.port,
       });
       await expectPinnedUsage(page, ["12% Weekly"]);
+      await openUsageFromItem(page);
       await expect(
         page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
       ).toBeVisible({ timeout: 30_000 });
@@ -312,9 +313,7 @@ const loginWindows: UsageReportEntry["report"] = {
   ],
 };
 
-// Osuna：下面两条要进上游占用 `/usage` 的套餐用量独立页面（`openUsage` 直接打开 `/usage`），Osuna 没有接这个页面，
-// 无从进入。上游在 v0.11.0 把它换成弹窗并删掉本文件，届时随上游处理。
-test.skip("expired login refreshes to windows with visible pin toggles", async ({ page }) => {
+test("expired login refreshes to windows with visible pin toggles", async ({ page }) => {
   const fixture = await installLoginUsage({
     status: "unavailable",
     problem: {
@@ -325,7 +324,7 @@ test.skip("expired login refreshes to windows with visible pin toggles", async (
   });
   try {
     await gotoAppShell(page);
-    await openUsage(page);
+    await openUsageFromIcon(page);
     await expect(
       page.getByText("Claude: Login expired 1h ago. Run claude to refresh it.", { exact: true }),
     ).toBeVisible();
@@ -366,12 +365,13 @@ test.skip("expired login refreshes to windows with visible pin toggles", async (
   }
 });
 
-test.skip("compact usage rows always show the pin glyph", async ({ page }) => {
+test("compact usage rows always show the pin glyph", async ({ page }) => {
   const fixture = await installLoginUsage(loginWindows);
   try {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAppShell(page);
-    await openUsage(page);
+    await openCompactSidebar(page);
+    await openUsageFromIcon(page);
     const card = page.getByTestId("usage-report-login-journey:account");
     await expect(card.getByTestId("usage-pin-glyph-pinned")).toHaveCount(2);
     await expect(card.getByTestId("usage-pin-glyph-pinned").nth(0)).toHaveCSS("opacity", "1");
@@ -417,12 +417,11 @@ for (const shape of ["seven-day-only", "Spark"] as const) {
     try {
       await page.setViewportSize({ width: 1440, height: 900 });
       await gotoAppShell(page);
-      // Osuna：只保留侧栏摘要那一半——窗口名由数据模型推出，在摘要里可见；卡片上的固定行与
-      // Spark 窗口的勾选在上游占用 `/usage` 的独立页面上，Osuna 没有接这个页面（见 02 的跳过说明），
-      // 上游在 v0.11.0 把它换成弹窗，届时随上游处理。
       await expect(usageItem(page)).toBeVisible();
-      await expectPinnedUsage(page, ["11% wk"]);
-      await qaScreenshot(page, `codex-${shape}-summary`);
+      await openUsageFromItem(page);
+      await qaScreenshot(page, `codex-${shape}-card-and-summary`);
+      await expectCodexReportedWindows(page, shape);
+      await qaScreenshot(page, `codex-${shape}-pins`);
     } finally {
       await source.cleanup();
     }
@@ -434,9 +433,7 @@ for (const theme of ["light", "dark"] as const) {
     desktop: { width: 1440, height: 900 },
     compact: { width: 390, height: 844 },
   })) {
-    // Osuna：这条要在上游占用 `/usage` 的独立页面上找报告卡片与设置齿轮，Osuna 没有接这个页面；
-    // 上游在 v0.11.0 把它换成弹窗，届时随上游处理。
-    test.skip(`Usage Settings cog ${size} ${theme}`, async ({ page }, testInfo) => {
+    test(`Usage Settings cog ${size} ${theme}`, async ({ page }, testInfo) => {
       test.setTimeout(120_000);
       await page.addInitScript((value) => {
         const key = "@paseo:app-settings";
@@ -447,11 +444,14 @@ for (const theme of ["light", "dark"] as const) {
         lists: [() => claudeAndCodexReports()],
       });
       await page.setViewportSize(viewport);
-      await page.goto("/usage");
+      await gotoAppShell(page);
+      if (size === "compact") await openCompactSidebar(page);
+      await openUsageFromIcon(page);
       const screen = page.getByTestId(`usage-host-${getServerId()}`);
       await expect(screen.getByText("Claude", { exact: true })).toBeVisible({ timeout: 30_000 });
       const settings = page.getByTestId("usage-options-menu");
-      await expect(settings).toHaveAccessibleName("Settings");
+      // Osuna：订阅额度的界面都叫「套餐用量」，这个齿轮的名字是 usage.planUsage.options。
+      await expect(settings).toHaveAccessibleName("Plan usage options");
       await expect(page.getByTestId("usage-display-used")).toHaveCount(0);
       await captureSettingsState(page, testInfo, `${size}-${theme}-cog`);
 
@@ -483,12 +483,9 @@ async function captureSettingsState(
   await testInfo.attach(name, { body: await page.screenshot(), contentType: "image/png" });
 }
 
-// Osuna：`/usage` 是 Osuna 的 Usage 页，上游占用它的套餐用量独立页面没有接路由。这条改到窄屏的
-// 套餐用量抽屉里验：抽屉里是同一张卡片，登录失败的逐条原因与刷新后的结果都在上面。
 test("an account with all logins failing shows each harness and remedy, then only usage when one succeeds", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
   const fixture = await installLoginUsage([
     { harness: "Codex", report: { status: "error", error: "Usage API returned 500. Try again." } },
     {
@@ -512,8 +509,7 @@ test("an account with all logins failing shows each harness and remedy, then onl
   ]);
   try {
     await gotoAppShell(page);
-    await openCompactSidebar(page);
-    await openUsageSheetFromIcon(page);
+    await openUsageFromIcon(page);
     await expectLoginErrors(page, [
       "Codex: Usage API returned 500. Try again.",
       "OpenCode: Login rejected (HTTP 401). Run opencode to refresh it.",

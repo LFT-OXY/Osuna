@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, MessageSquarePlus } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { openExternalUrl } from "@/utils/open-external-url";
@@ -9,13 +9,7 @@ import { ICON_SIZE } from "@/styles/theme";
 import { classifyCheck, type CheckPresentation } from "@/git/check-presentation";
 import { CheckPresentationIcon } from "@/git/check-presentation.view";
 import { ChecksRing } from "./checks-ring";
-import {
-  formatChecksCount,
-  formatChecksGroupLabel,
-  formatChecksHeadline,
-  summarizeChecks,
-  type ChecksGroup,
-} from "./checks-summary";
+import { summarizeChecks, type ChecksGroup } from "./checks-summary";
 import { canAddPullRequestCheckLogsToChat } from "./context-attachment";
 import type { PrPaneCheck } from "./data";
 import { foregroundMutedColorMapping, sectionKitStyles } from "./section-kit";
@@ -29,6 +23,19 @@ const ThemedChevronRight = withUnistyles(ChevronRight);
  * timeline off the pane entirely, so past this height the list scrolls in place.
  */
 const LIST_MAX_HEIGHT = 268;
+
+/**
+ * The three statuses the pane has always labelled for tests. Skipped has no id because
+ * nothing asserts on it.
+ */
+const PART_TEST_ID: Partial<Record<CheckPresentation, string>> = {
+  actionRequired: "pr-pane-check-action-required",
+  warning: "pr-pane-check-warning",
+  success: "pr-pane-check-passed",
+  failure: "pr-pane-check-failed",
+  pending: "pr-pane-check-pending",
+  manual: "pr-pane-check-manual",
+};
 
 /**
  * Identifies a check across refreshes. The forge's run id is stable where a forge exposes
@@ -66,9 +73,7 @@ export function ChecksSection({
   onAddLogsToChat,
 }: ChecksSectionProps) {
   const { t } = useTranslation();
-  const summary = useMemo(() => summarizeChecks(checks), [checks]);
-  const headline = formatChecksHeadline(t, summary.outcome);
-  const detail = formatChecksCount(t, summary.parts, summary.total);
+  const summary = useMemo(() => summarizeChecks(checks, t), [checks, t]);
   const { collapsedGroups, toggle: handleToggleGroup } = useCheckGroupState();
 
   return (
@@ -78,17 +83,29 @@ export function ChecksSection({
         style={headerPressableStyle}
         accessibilityRole="button"
         accessibilityLabel={
-          detail ? t("workspace.git.pr.checks.accessibilityLabel", { headline, detail }) : headline
+          summary.detail
+            ? t("workspace.git.pr.checks.accessibilityLabel", {
+                headline: summary.headline,
+                detail: summary.detail,
+              })
+            : summary.headline
         }
       >
         <ChecksRing summary={summary} size={ICON_SIZE.lg} />
         <View style={styles.headerText}>
           <Text style={styles.headline} numberOfLines={1}>
-            {headline}
+            {summary.headline}
           </Text>
-          {detail ? (
+          {summary.parts.length > 0 ? (
             <Text style={styles.detail} numberOfLines={1} testID="pr-pane-check-summary">
-              {detail}
+              {summary.detailLead}
+              {summary.parts.map((part, index) => (
+                <Text key={part.status}>
+                  {index > 0 ? summary.separator : ""}
+                  <Text testID={PART_TEST_ID[part.status]}>{part.text}</Text>
+                </Text>
+              ))}
+              {summary.detailTrail}
             </Text>
           ) : null}
         </View>
@@ -137,12 +154,11 @@ function CheckGroup({
   loadingCheckKeys: ReadonlySet<string>;
   onAddLogsToChat: (check: PrPaneCheck) => void;
 }) {
-  const { t } = useTranslation();
   const handlePress = useCallback(() => onToggle(group.status), [group.status, onToggle]);
   return (
     <View testID={`pr-pane-check-group-${group.status}`}>
       <Pressable onPress={handlePress} style={styles.groupHeader} accessibilityRole="button">
-        <Text style={styles.groupLabel}>{formatChecksGroupLabel(t, group)}</Text>
+        <Text style={styles.groupLabel}>{group.label}</Text>
         {collapsed ? (
           <ThemedChevronRight size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
         ) : (

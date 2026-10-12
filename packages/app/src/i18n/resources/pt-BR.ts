@@ -359,7 +359,6 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
-    workedFor: "Trabalhou por {{duration}}",
     workingFor: "Trabalhando há {{duration}}",
     changedFiles: {
       one: "{{count}} arquivo alterado",
@@ -458,6 +457,9 @@ export const ptBR: TranslationResources = {
         started: "Iniciada",
         completed: "Concluída",
       },
+    },
+    turnFooter: {
+      workedFor: "Trabalhou por {{duration}}",
     },
     compaction: {
       loading: "Compactando...",
@@ -1084,9 +1086,47 @@ export const ptBR: TranslationResources = {
         actions: {
           viewPullRequest: "Ver",
           openOn: "Abrir no {{brand}}",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "Adicionar ao chat",
+          addAllToChat: "Adicionar tudo ao chat",
+          addingToChat: "Adicionando...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "Algumas verificações precisam da sua atenção",
+            failure: "Algumas verificações não foram bem-sucedidas",
+            pending: "Algumas verificações ainda não terminaram",
+            success: "Todas as verificações foram aprovadas",
+            none: "Nenhuma verificação",
+          },
+          count: {
+            actionRequired: "{{count}} com ação pendente",
+            warning: "{{count}} com aviso",
+            failure: "{{count}} com falha",
+            pending: "{{count}} em andamento",
+            manual: "{{count}} manual(is)",
+            success: "{{count}} aprovada(s)",
+            ignored: "{{count}} ignorada(s)",
+          },
+          detailOne: "Verificação: {{parts}}",
+          detailMany: "Verificações: {{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} verificação com ação pendente",
+            warning: "{{count}} verificação com aviso",
+            failure: "{{count}} verificação com falha",
+            pending: "{{count}} verificação em andamento",
+            manual: "{{count}} verificação manual",
+            success: "{{count}} verificação aprovada",
+            ignored: "{{count}} verificação ignorada",
+          },
+          groupMany: {
+            actionRequired: "{{count}} verificações com ação pendente",
+            warning: "{{count}} verificações com aviso",
+            failure: "{{count}} verificações com falha",
+            pending: "{{count}} verificações em andamento",
+            manual: "{{count}} verificações manuais",
+            success: "{{count}} verificações aprovadas",
+            ignored: "{{count}} verificações ignoradas",
+          },
         },
         checksSummary: {
           passedLabel: "passou",
@@ -1100,43 +1140,25 @@ export const ptBR: TranslationResources = {
           checks: "Verificações",
           pipeline: "Pipeline",
           reviews: "Revisões",
-          activity: "Activity",
+          activity: "Atividade",
         },
         empty: {
           noJobs: "Sem jobs",
           loadingPipeline: "Carregando pipeline...",
           pipelineJobsLoadFailed: "Não foi possível carregar os jobs do pipeline",
           allowedToFail: "permitido falhar",
-          noActivity: "No activity yet",
+          noActivity: "Nenhuma atividade ainda",
         },
         approvals: "{{given}} de {{required}} aprovações",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
+          commentActions: "Ações do comentário",
+          threadActions: "Ações da conversa",
           checkStatus: {
             passed: "Aprovado",
             failed: "Falhou",
@@ -1147,8 +1169,6 @@ export const ptBR: TranslationResources = {
             skipped: "Ignorado",
             cancelled: "Cancelado",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "Rascunho",
@@ -1158,17 +1178,17 @@ export const ptBR: TranslationResources = {
         },
         activity: {
           commented: "Comentou",
-          approved: "Aprovado",
+          approved: "Aprovou",
           requestedChanges: "Solicitou alterações",
-          reviewed: "Revisado",
+          reviewed: "Revisou",
         },
         time: {
           justNow: "agora mesmo",
         },
         thread: {
           discussion: "Tópico de discussão",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "Resolvido",
+          outdated: "Desatualizado",
         },
         errors: {
           statusLoadFailed: "Não foi possível carregar o status da pull request",
@@ -1237,6 +1257,14 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "Grupo {{label}}",
+    statusBucket: {
+      needsInput: "Precisa de resposta",
+      failed: "Com falha",
+      readyToReview: "Para revisar",
+      working: "Em execução",
+      done: "Concluído",
+    },
     display: {
       trigger: "Preferências de exibição",
       heading: "Exibição",

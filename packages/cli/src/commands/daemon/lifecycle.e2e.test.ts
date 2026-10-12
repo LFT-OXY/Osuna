@@ -358,20 +358,21 @@ test.skipIf(process.platform === "win32").each([["start"], ["daemon", "run"]])(
         stdio: "ignore",
       });
       const exited = new Promise((resolve) => child!.once("exit", resolve));
-      // pid 锁先以 "wx" 建出空文件再写入内容，只等文件出现会读到空串。
-      const readLock = async (): Promise<{ pid: number } | null> => {
-        try {
-          return JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
-        } catch {
-          return null;
-        }
-      };
-      await expect.poll(readLock, { timeout: 10_000 }).not.toBeNull();
-      const lock = (await readLock())!;
+      // The lock file exists before its contents identify the supervisor.
+      let supervisorPid: number | undefined;
+      await expect
+        .poll(
+          async () => {
+            supervisorPid = (await readDaemonInstance(home))?.pid;
+            return supervisorPid;
+          },
+          { timeout: 10_000 },
+        )
+        .toBeTypeOf("number");
       await f.ok(["status", "--home", home]);
       child.kill("SIGINT");
       await exited;
-      expect(() => process.kill(lock.pid, 0)).toThrow();
+      expect(() => process.kill(supervisorPid!, 0)).toThrow();
       expect((await f.ok(["status", "--home", home])).localDaemon).toBe("stopped");
     } finally {
       child?.kill("SIGTERM");

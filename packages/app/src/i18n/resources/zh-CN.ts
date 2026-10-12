@@ -350,7 +350,6 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
-    workedFor: "已工作 {{duration}}",
     workingFor: "工作中 {{duration}}",
     changedFiles: {
       one: "改动了 {{count}} 个文件",
@@ -449,6 +448,9 @@ export const zhCN: TranslationResources = {
         started: "已开始",
         completed: "已完成",
       },
+    },
+    turnFooter: {
+      workedFor: "已工作 {{duration}}",
     },
     compaction: {
       loading: "正在压缩...",
@@ -1051,6 +1053,44 @@ export const zhCN: TranslationResources = {
           addAllToChat: "全部添加到聊天",
           addingToChat: "正在添加...",
         },
+        checksOverview: {
+          headline: {
+            actionRequired: "部分检查需要你处理",
+            failure: "部分检查未通过",
+            pending: "部分检查尚未完成",
+            success: "所有检查均已通过",
+            none: "没有检查",
+          },
+          count: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+          detailOne: "{{parts}}",
+          detailMany: "{{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+          groupMany: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+        },
         checksSummary: {
           passedLabel: "通过",
           failedLabel: "失败",
@@ -1074,32 +1114,14 @@ export const zhCN: TranslationResources = {
         },
         approvals: "{{given}} / {{required}} 批准",
         checks: {
-          headline: {
-            actionRequired: "部分检查需要你处理",
-            failure: "部分检查未通过",
-            pending: "部分检查尚未完成",
-            success: "所有检查均已通过",
-            none: "没有检查",
-          },
-          count: {
-            actionRequired: "{{count}} 项需要操作",
-            warning: "{{count}} 项警告",
-            failure: "{{count}} 项失败",
-            pending: "{{count}} 项进行中",
-            manual: "{{count}} 项手动",
-            success: "{{count}} 项成功",
-            ignored: "{{count}} 项已跳过",
-          },
           countSeparator: "，",
-          countLine: {
-            one: "{{parts}}",
-            many: "{{parts}}",
-          },
           accessibilityLabel: "{{headline}}。{{detail}}",
         },
         accessibility: {
           pullRequest: "拉取请求 #{{number}}",
           pullRequest_mr: "合并请求 !{{number}}",
+          commentActions: "评论操作",
+          threadActions: "讨论主题操作",
           checkStatus: {
             passed: "成功",
             failed: "失败",
@@ -1110,8 +1132,6 @@ export const zhCN: TranslationResources = {
             skipped: "已跳过",
             cancelled: "已取消",
           },
-          commentActions: "评论操作",
-          threadActions: "讨论主题操作",
         },
         states: {
           draft: "草稿",
@@ -1197,6 +1217,14 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} 分组",
+    statusBucket: {
+      needsInput: "需要输入",
+      failed: "失败",
+      readyToReview: "待查看",
+      working: "运行中",
+      done: "已完成",
+    },
     display: {
       trigger: "显示偏好",
       heading: "显示",

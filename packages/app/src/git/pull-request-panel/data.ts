@@ -318,20 +318,18 @@ function parsePullRequestNumber(url: string): number | null {
   }
 }
 
-const STATE_LABEL_KEYS = {
-  draft: "workspace.git.pr.states.draft",
-  merged: "workspace.git.pr.states.merged",
-  closed: "workspace.git.pr.states.closed",
-  open: "workspace.git.pr.states.open",
-} as const satisfies Record<PrState, string>;
-
-export function getStateLabelKey(state: PrState): string {
-  return STATE_LABEL_KEYS[state];
+export function getStateLabelKey(state: PrState) {
+  if (state === "draft") return "workspace.git.pr.states.draft";
+  if (state === "merged") return "workspace.git.pr.states.merged";
+  if (state === "closed") return "workspace.git.pr.states.closed";
+  return "workspace.git.pr.states.open";
 }
 
-export function getActivityVerbKey(item: Pick<PrPaneActivity, "kind" | "reviewState">): string {
+export function getActivityVerbKey(item: Pick<PrPaneActivity, "kind" | "reviewState">) {
   if (item.kind === "comment") return "workspace.git.pr.activity.commented";
   if (item.reviewState === "approved") return "workspace.git.pr.activity.approved";
-  if (item.reviewState === "changes_requested") return "workspace.git.pr.activity.requestedChanges";
+  if (item.reviewState === "changes_requested") {
+    return "workspace.git.pr.activity.requestedChanges";
+  }
   return "workspace.git.pr.activity.reviewed";
 }
