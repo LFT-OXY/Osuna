@@ -193,13 +193,11 @@ test.describe("Sidebar footer rows in Appearance settings", () => {
     // The Usage item shows only with summary data.
     await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
     // Keys for the fixed footer icon buttons are ignored.
-    // Osuna：底部的套餐用量摘要默认隐藏，这条用例要看到它，先打开。
     await seedSidebarFooterPreferences(page, [
       { key: "usage", visible: true },
       { key: "help", visible: false },
       { key: "hosts", visible: false },
       { key: "import", visible: false },
-      { key: "usage", visible: true },
     ]);
     await gotoAppShell(page);
 

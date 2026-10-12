@@ -69,6 +69,7 @@ const OpenSidebarUsageContext = createContext<(() => void) | null>(null);
 /** One owner for the footer icon and summary: a compact sheet or the wide Usage screen. */
 export function UsageSidebarRoot({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const label = t(builtinSidebarNavLabelKey("usage", "footer"));
   const { display } = useUsagePreferences();
   const isCompact = useIsCompactFormFactor();
   const [open, setOpen] = useState(false);
@@ -86,9 +87,7 @@ export function UsageSidebarRoot({ children }: { children: ReactNode }) {
     <OpenSidebarUsageContext.Provider value={openUsage}>
       <SidebarPopoverRoot open={isCompact && open} onOpenChange={setOpen}>
         {children}
-        {isCompact && sheetMounted ? (
-          <UsageSheet title={t(builtinSidebarNavLabelKey("usage", "footer"))} display={display} />
-        ) : null}
+        {isCompact && sheetMounted ? <UsageSheet title={label} display={display} /> : null}
       </SidebarPopoverRoot>
     </OpenSidebarUsageContext.Provider>
   );

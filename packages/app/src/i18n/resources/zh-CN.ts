@@ -3651,7 +3651,7 @@ export const zhCN: TranslationResources = {
       displayUsed: "已用",
       displayRemaining: "剩余",
       showInSidebar: "在侧栏显示",
-      showInSidebarHint: "固定的额度窗口显示在侧栏底部",
+      showInSidebarHint: "固定的套餐用量窗口显示在侧栏底部",
       refreshAll: "全部刷新",
       unpin: "取消固定",
       agentError: "无法加载套餐用量：{{reason}}",

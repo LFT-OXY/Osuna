@@ -130,7 +130,9 @@ async function closeExplorerFilesFromContextMenu(
 
 // Osuna：当前工作区标签的关闭按钮常显，不只在悬停时出现（workspace-desktop-tabs-row.tsx 的
 // showCloseControl 含 isActive）；上游这里断言离开时隐藏，按 Osuna 的行为改。
-async function expectWorkspaceCloseOnHover(page: Parameters<typeof ensureExplorerSidebar>[0]) {
+async function expectWorkspaceCloseAlwaysVisible(
+  page: Parameters<typeof ensureExplorerSidebar>[0],
+) {
   const main = page.getByTestId("workspace-pane-main");
   const tab = main.locator('[data-testid^="workspace-tab-"][aria-selected="true"]');
   const close = main.getByRole("button", { name: "Close", exact: true });
@@ -189,7 +191,7 @@ test("Explorer keeps Files and Changes close actions in the context menu", async
     });
 
     await test.step("Files and Changes omit X, and + restores Files after context-menu close", async () => {
-      await expectWorkspaceCloseOnHover(page);
+      await expectWorkspaceCloseAlwaysVisible(page);
       await closeExplorerFilesFromContextMenu(page);
       await launchExplorerPanel(page, "Files");
       await expect(

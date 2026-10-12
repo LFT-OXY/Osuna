@@ -216,9 +216,9 @@ function ActiveApiEndpointNote({
   const activeApiEndpoint = selectActiveApiEndpoint(entries, provider);
   if (!activeApiEndpoint) return null;
   return (
-    <Text style={styles.detail} testID="context-window-api-endpoint">
+    <UiText variant="caption" color="foregroundMuted" testID="context-window-api-endpoint">
       {t("usage.planUsage.apiEndpointNote", { name: activeApiEndpoint.name })}
-    </Text>
+    </UiText>
   );
 }
 

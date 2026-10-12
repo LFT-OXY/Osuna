@@ -26,6 +26,7 @@ import {
   setSummaryInSidebar,
   openUsageOptions,
   showUsageAs,
+  summaryInSidebarSwitch,
   togglePin,
   usageItem,
   usageSheet,
@@ -344,7 +345,7 @@ test("the Usage options show and hide the sidebar Usage item", async ({ page }) 
 
   await openUsageOptions(page);
   // 上游 v0.11.0-beta.4 起这一项是设置页同款的开关行，开关在行内。
-  const toggle = page.getByTestId("usage-show-in-sidebar").getByRole("switch");
+  const toggle = summaryInSidebarSwitch(page);
   await expect(toggle).toBeChecked();
   await toggle.click();
   await expect(page.locator('[data-testid="sidebar-usage"]:visible')).toHaveCount(0);

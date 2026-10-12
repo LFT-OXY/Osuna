@@ -2229,16 +2229,13 @@ function ComposerContentImpl({
   const runningTurnStartedAt = useSessionStore(
     (state) => selectAgentTurnPresentation(state.sessions[serverId], agentId).startedAt,
   );
+  const contextWindowMeterSlotStyle = showContextWindowTokenLabel
+    ? styles.contextWindowMeterLabelSlot
+    : styles.contextWindowMeterSlot;
   const beforeVoiceContent = useMemo(
     () =>
       hasAgent ? (
-        <View
-          style={
-            showContextWindowTokenLabel
-              ? styles.contextWindowMeterLabelSlot
-              : styles.contextWindowMeterSlot
-          }
-        >
+        <View style={contextWindowMeterSlotStyle}>
           <ContextWindowMeter
             serverId={serverId}
             agentId={agentId}
@@ -2260,6 +2257,7 @@ function ComposerContentImpl({
       agentState.contextWindowUsedTokens,
       agentState.provider,
       contextWindowMeterGlyphSize,
+      contextWindowMeterSlotStyle,
       runningTurnStartedAt,
       showContextWindowTokenLabel,
       usageSupport,

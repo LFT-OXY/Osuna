@@ -190,9 +190,9 @@ export async function togglePin(scope: Locator, source: string, window: string) 
 }
 
 /** The footer's Usage icon, which is there whether or not the Usage item is on. */
-// Osuna：底部图标叫「套餐用量」（Plan usage），顶部另有一个叫「用量」的条目，按 testID 定位。
+/** 底部的「套餐用量」图标。Osuna 的顶部另有一个叫「用量」的条目，按名字会点到它，所以按 testID 找。 */
 function usageIcon(page: Page): Locator {
-  return page.locator('[data-testid="sidebar-usage-icon"]:visible');
+  return visible(page, "sidebar-usage-icon");
 }
 
 export async function openUsageScreenFromIcon(page: Page): Promise<void> {
@@ -215,8 +215,8 @@ export async function closeUsageSheet(page: Page): Promise<void> {
   await expect(sheet).toHaveCount(0);
 }
 
-// Osuna：开关的文案走翻译键（「在侧栏显示」/ Show in sidebar），按 testID 找到行里的开关。
-function summaryInSidebarSwitch(page: Page): Locator {
+/** 「在侧栏显示」的开关。Osuna 的文案走翻译键，按 testID 找到行里的开关。 */
+export function summaryInSidebarSwitch(page: Page): Locator {
   return page.getByTestId("usage-show-in-sidebar").getByRole("switch");
 }
 
