@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 合并分支包含一个以合并前的分支头与 `6b00310f7` 为双亲的 merge commit。
 - [ ] 每个冲突文件怎么裁的、依据哪条规则，逐个记在 `## Comments` 下。规则裁决不了、或保留两边会改变用户可见行为的冲突没有自行取舍。
