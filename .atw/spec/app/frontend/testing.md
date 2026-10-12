@@ -63,7 +63,10 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
   `expect.arrayContaining` drops order and stops noticing extra items. When the list has real
   groups, name them and compare the concatenation exactly:
   `toHaveText([...builtInViews, ...pluginPanels])` (`e2e/support/helpers/explorer-plugin-menu.ts`)
-  keeps the full check and still says which half a new entry belongs in.
+  keeps the full check and still says which half a new entry belongs in. A menu item with a
+  shortcut hint renders its text with the platform's glyphs (`Terminal⇧⌘T` on macOS,
+  `TerminalCtrl+Shift+T` on CI's Linux), so that entry is `/^Terminal/` in the array — a regex per
+  item keeps the list a list; `expect.arrayContaining` does not.
 - A locator that hits one row today and three tomorrow gets the exact label, not a regex.
   `getByLabel(/Theme:/)` broke the moment the appearance section grew its system-pairing rows;
   `getByLabel("Theme: System", { exact: true })` says which row it meant.

@@ -189,7 +189,6 @@ export async function togglePin(scope: Locator, source: string, window: string) 
   await expect(row).toBeChecked({ checked: !pinned });
 }
 
-/** The footer's Usage icon, which is there whether or not the Usage item is on. */
 /** 底部的「套餐用量」图标。Osuna 的顶部另有一个叫「用量」的条目，按名字会点到它，所以按 testID 找。 */
 function usageIcon(page: Page): Locator {
   return visible(page, "sidebar-usage-icon");
