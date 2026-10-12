@@ -233,6 +233,7 @@ export const ptBR: TranslationResources = {
       open: "Abrir recursos do agente",
       on: "Ativado",
       off: "Desativado",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "Velocidade",

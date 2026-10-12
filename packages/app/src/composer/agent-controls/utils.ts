@@ -1,4 +1,5 @@
 import type { AgentFeature, AgentModelDefinition } from "@getpaseo/protocol/agent-types";
+import type { TFunction } from "i18next";
 import { i18n } from "@/i18n/i18next";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import {
@@ -39,32 +40,31 @@ export function getFeatureTooltip(feature: Pick<AgentFeature, "label" | "tooltip
   return feature.tooltip ?? feature.label;
 }
 
-// daemon 给 Codex 速度菜单的文字是英文，档位名来自模型目录。已知的几项按界面语言显示，其余档位名原样。
-const SPEED_OPTION_LABEL_KEYS = {
-  normal: "agentControls.speed.normal",
+// daemon 给 Codex 速度菜单的文字是英文，档位名来自模型目录。功能名、默认档与这两个已知档位按界面语言显示，
+// 模型目录里别的档位名原样（docs/i18n.md「Translation Scope」的例外）。
+const SPEED_TIER_LABEL_KEYS: Record<
+  string,
+  "agentControls.speed.fast" | "agentControls.speed.ultrafast"
+> = {
   fast: "agentControls.speed.fast",
   ultrafast: "agentControls.speed.ultrafast",
-} as const;
+};
 
-function localizeSpeedOptionLabel(label: string): string {
-  const key = Object.entries(SPEED_OPTION_LABEL_KEYS).find(
-    ([name]) => name === label.trim().toLowerCase(),
-  )?.[1];
-  return key ? i18n.t(key) : label;
-}
-
-export function localizeSpeedFeature(feature: AgentFeature): AgentFeature {
+export function localizeSpeedFeature(feature: AgentFeature, t: TFunction): AgentFeature {
   if (feature.id !== SPEED_FEATURE_ID || feature.type !== "select") {
     return feature;
   }
   return {
     ...feature,
-    label: i18n.t("agentControls.speed.label"),
-    tooltip: i18n.t("agentControls.speed.select"),
-    options: feature.options.map((option) => ({
-      ...option,
-      label: localizeSpeedOptionLabel(option.label),
-    })),
+    label: t("agentControls.speed.label"),
+    tooltip: t("agentControls.speed.select"),
+    options: feature.options.map((option) => {
+      if (option.isDefault) {
+        return { ...option, label: t("agentControls.speed.normal") };
+      }
+      const key = SPEED_TIER_LABEL_KEYS[option.label.trim().toLowerCase()];
+      return key ? { ...option, label: t(key) } : option;
+    }),
   };
 }
 

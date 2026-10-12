@@ -233,6 +233,7 @@ export const es: TranslationResources = {
       open: "Funciones de agente abierto",
       on: "En",
       off: "Apagado",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "Velocidad",

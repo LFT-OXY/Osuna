@@ -232,6 +232,7 @@ export const ru: TranslationResources = {
       open: "Открыть настройки функций агента",
       on: "Включено",
       off: "Выключено",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "Скорость",

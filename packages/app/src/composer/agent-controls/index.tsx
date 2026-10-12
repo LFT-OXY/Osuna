@@ -18,7 +18,6 @@ import {
   ThinkingIcon,
   type AgentControlIcon,
 } from "@/agent-controls/icons";
-import { FAST_MODE_FEATURE_ID, SPEED_FEATURE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import {
@@ -258,10 +257,9 @@ function useFeatureIconColorMapping(feature: AgentFeature, provider: string) {
   );
 }
 
-// 快速模式开着、速度菜单选了非默认档时，闪电换成实心。
+// 走品牌色高亮的功能（快速模式、速度菜单）在生效时闪电换成实心。
 function getFeatureIcon(feature: AgentFeature): AgentControlIcon {
-  const isSpeedFeature = feature.id === FAST_MODE_FEATURE_ID || feature.id === SPEED_FEATURE_ID;
-  if (isSpeedFeature && isFeatureActive(feature)) {
+  if (getFeatureHighlightColor(feature.id) === "providerBrand" && isFeatureActive(feature)) {
     return FastModeOnIcon;
   }
   return getAgentFeatureIcon(feature.icon);
@@ -1258,7 +1256,8 @@ function DesktopFeatureItem({
   onSetFeature?: (featureId: string, value: unknown) => void;
   onActionComplete?: () => void;
 }) {
-  const feature = useMemo(() => localizeSpeedFeature(daemonFeature), [daemonFeature]);
+  const { t } = useTranslation();
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature, t), [daemonFeature, t]);
   const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
@@ -1322,7 +1321,10 @@ function DesktopFeatureItem({
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const iconOnly = feature.desktopTrigger === "icon";
     const tooltip = iconOnly
-      ? `${feature.label}: ${selectedOption?.label ?? feature.label}`
+      ? t("agentControls.features.valueTooltip", {
+          label: feature.label,
+          value: selectedOption?.label ?? feature.label,
+        })
       : getFeatureTooltip(feature);
     return (
       <>
@@ -1379,9 +1381,9 @@ function SheetFeatureItem({
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
 }) {
-  const feature = useMemo(() => localizeSpeedFeature(daemonFeature), [daemonFeature]);
-  const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const { t } = useTranslation();
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature, t), [daemonFeature, t]);
+  const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
 

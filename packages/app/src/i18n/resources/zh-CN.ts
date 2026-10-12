@@ -230,6 +230,7 @@ export const zhCN: TranslationResources = {
       open: "打开 Agent 功能",
       on: "开启",
       off: "关闭",
+      valueTooltip: "{{label}}：{{value}}",
     },
     speed: {
       label: "速度",

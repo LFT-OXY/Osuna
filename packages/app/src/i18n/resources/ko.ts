@@ -230,6 +230,7 @@ export const ko: TranslationResources = {
       open: "에이전트 기능 열기",
       on: "켜짐",
       off: "꺼짐",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "속도",

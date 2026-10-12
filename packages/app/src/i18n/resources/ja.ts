@@ -232,6 +232,7 @@ export const ja: TranslationResources = {
       open: "エージェント機能を開く",
       on: "オン",
       off: "オフ",
+      valueTooltip: "{{label}}：{{value}}",
     },
     speed: {
       label: "速度",

@@ -230,6 +230,7 @@ export const ar: TranslationResources = {
       open: "ميزات الوكيل المفتوح",
       on: "على",
       off: "عن",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "السرعة",

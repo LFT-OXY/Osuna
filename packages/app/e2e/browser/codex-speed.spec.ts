@@ -28,8 +28,8 @@ test.use({
 
 // Osuna：Fast 与 Ultrafast 沿用快速模式的样式——实心闪电、Codex 的品牌色（#3941ff），不取上游的黄色；
 // Normal 是浅色主题的 foregroundMuted（#71717b）。
-const ACTIVE_SPEED_COLOR = "rgb(57, 65, 255)";
-const NORMAL_SPEED_COLOR = "rgb(113, 113, 123)";
+const ACTIVE_SPEED_ICON = { stroke: "rgb(57, 65, 255)", fill: "rgb(57, 65, 255)" };
+const NORMAL_SPEED_ICON = { stroke: "rgb(113, 113, 123)", fill: "none" };
 
 async function openSpeedSelector(page: Page): Promise<void> {
   const speed = page.getByRole("button", { name: /^(Select speed|Speed: .+)$/ });
@@ -45,6 +45,8 @@ async function openSpeedSelector(page: Page): Promise<void> {
   await expect(speed).toBeVisible({ timeout: 30_000 });
   await speed.click();
   await expect(page.getByText("Normal", { exact: true }).last()).toBeVisible();
+  // Osuna：选项不超过 6 个的菜单不带搜索框。
+  await expect(page.getByPlaceholder("Search...")).toHaveCount(0);
 }
 
 async function selectSpeed(page: Page, label: string): Promise<void> {
@@ -56,13 +58,13 @@ async function selectSpeed(page: Page, label: string): Promise<void> {
   else await expect(sheetTrigger).toContainText(label);
 }
 
-async function expectSpeedIconColor(page: Page, color: string): Promise<void> {
+async function expectSpeedIcon(page: Page, icon: { stroke: string; fill: string }): Promise<void> {
   const trigger = page
     .getByRole("button", { name: /^(Speed: .+|Select speed)$/ })
     .filter({ visible: true });
-  const icon = trigger.locator("svg").first();
-  await expect(icon).toHaveCSS("stroke", color);
-  await expect(icon).toHaveCSS("fill", color === ACTIVE_SPEED_COLOR ? color : "none");
+  const bolt = trigger.locator("svg").first();
+  await expect(bolt).toHaveCSS("stroke", icon.stroke);
+  await expect(bolt).toHaveCSS("fill", icon.fill);
 }
 
 async function expectSpeedChoices(page: Page, choices: string[]): Promise<void> {
@@ -115,20 +117,20 @@ for (const viewport of [
       }
       await openSpeedSelector(page);
       await selectSpeed(page, "Fast");
-      await expectSpeedIconColor(page, ACTIVE_SPEED_COLOR);
+      await expectSpeedIcon(page, ACTIVE_SPEED_ICON);
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-fast-selected.png`) });
       await openSpeedSelector(page);
       await expectSpeedChoices(page, ["Normal", "Fast", "Ultrafast"]);
       await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-speed-options.png`) });
       await selectSpeed(page, "Ultrafast");
-      await expectSpeedIconColor(page, ACTIVE_SPEED_COLOR);
+      await expectSpeedIcon(page, ACTIVE_SPEED_ICON);
       await openSpeedSelector(page);
       await expectSpeedChoices(page, ["Normal", "Fast", "Ultrafast"]);
       await page.screenshot({
         path: testInfo.outputPath(`${viewport.name}-ultrafast-selected.png`),
       });
       await selectSpeed(page, "Normal");
-      await expectSpeedIconColor(page, NORMAL_SPEED_COLOR);
+      await expectSpeedIcon(page, NORMAL_SPEED_ICON);
       if (viewport.name === "desktop") {
         await switchAgentModel(agent.id, "gpt-6-sol");
         await openSpeedSelector(page);

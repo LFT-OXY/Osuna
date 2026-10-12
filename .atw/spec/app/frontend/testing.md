@@ -75,6 +75,10 @@ intended behavior, not fragments" outranks the wish for a test nobody has to tou
   assertion. `terminal-protocol-query.spec.ts` seeds `theme: "dark"` through
   `localStorage.setItem("@paseo:app-settings", …)` in `addInitScript` before the first navigation,
   then asserts the dark theme's real terminal background — so "no pure white" means leakage again.
+- A helper takes every expected value from its caller. `expectSpeedIcon(page, { stroke, fill })`
+  (`e2e/browser/codex-speed.spec.ts`) is handed `ACTIVE_SPEED_ICON` or `NORMAL_SPEED_ICON`;
+  deriving `fill` inside the helper from which `stroke` came in is the branching
+  `docs/testing.md` "No conditional assertions or branching paths" forbids.
 - Prove a rewritten assertion still bites: break the production path once, watch the test fail on
   the line you rewrote, restore. A test that only verifies the setting the test itself seeded
   passes for the wrong reason.

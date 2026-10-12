@@ -88,7 +88,7 @@ describe("localizeSpeedFeature", () => {
   it("shows the speed menu in the app language and keeps unknown tier names", async () => {
     await i18n.changeLanguage("zh-CN");
     try {
-      expect(localizeSpeedFeature(speed)).toEqual({
+      expect(localizeSpeedFeature(speed, i18n.t)).toEqual({
         ...speed,
         label: "速度",
         tooltip: "选择速度",
@@ -104,13 +104,34 @@ describe("localizeSpeedFeature", () => {
     }
   });
 
+  it("names the default tier by its flag, whatever the daemon calls it", async () => {
+    const renamed: AgentFeature = {
+      ...speed,
+      options: [
+        { id: "default", label: "Standard", isDefault: true },
+        { id: "priority", label: "Fast" },
+      ],
+    };
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(localizeSpeedFeature(renamed, i18n.t)).toMatchObject({
+        options: [
+          { id: "default", label: "普通" },
+          { id: "priority", label: "快速" },
+        ],
+      });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
   it("keeps the daemon's wording in English", () => {
-    expect(localizeSpeedFeature(speed)).toEqual(speed);
+    expect(localizeSpeedFeature(speed, i18n.t)).toEqual(speed);
   });
 
   it("leaves other features untouched", () => {
     const plan: AgentFeature = { type: "toggle", id: "plan_mode", label: "Plan", value: false };
-    expect(localizeSpeedFeature(plan)).toBe(plan);
+    expect(localizeSpeedFeature(plan, i18n.t)).toBe(plan);
   });
 });
 

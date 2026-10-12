@@ -226,6 +226,7 @@ export const en = {
       open: "Open agent features",
       on: "On",
       off: "Off",
+      valueTooltip: "{{label}}: {{value}}",
     },
     speed: {
       label: "Speed",
