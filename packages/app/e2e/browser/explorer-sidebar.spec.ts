@@ -51,6 +51,8 @@ test.describe("Explorer sidebar", () => {
       const explorer = await ensureExplorerSidebar(page);
       await expect(explorer.getByTestId("workspace-tab-files")).toBeVisible();
       await expect(explorer.getByTestId("workspace-tab-changes_tree")).toBeVisible();
+      // Osuna：会话历史也是默认视图。
+      await expect(explorer.getByTestId("workspace-tab-session_history")).toBeVisible();
       await expect(explorer.getByTestId("workspace-new-tab-button")).toHaveCount(1);
 
       await expectExplorerActiveTabForeground(page);
@@ -76,9 +78,9 @@ test.describe("Explorer sidebar", () => {
       await gotoWorkspace(page, workspace.workspaceId);
       await waitForWorkspaceTabsVisible(page);
       const explorer = await ensureExplorerSidebar(page);
-      await explorer.getByTestId("explorer-sidebar-tab-changes_tree").click();
-      const activeExplorerTab = explorer.getByTestId("explorer-sidebar-tab-changes_tree");
-      const idleExplorerTab = explorer.getByTestId("explorer-sidebar-tab-files");
+      await explorer.getByTestId("workspace-tab-changes_tree").click();
+      const activeExplorerTab = explorer.getByTestId("workspace-tab-changes_tree");
+      const idleExplorerTab = explorer.getByTestId("workspace-tab-files");
       const activeMainTab = page
         .getByTestId("workspace-pane-main")
         .locator('[data-testid^="workspace-tab-"][aria-selected="true"]')
@@ -126,12 +128,14 @@ async function closeExplorerFilesFromContextMenu(
   await expect(files).toHaveCount(0);
 }
 
+// Osuna：当前工作区标签的关闭按钮常显，不只在悬停时出现（workspace-desktop-tabs-row.tsx 的
+// showCloseControl 含 isActive）；上游这里断言离开时隐藏，按 Osuna 的行为改。
 async function expectWorkspaceCloseOnHover(page: Parameters<typeof ensureExplorerSidebar>[0]) {
   const main = page.getByTestId("workspace-pane-main");
   const tab = main.locator('[data-testid^="workspace-tab-"][aria-selected="true"]');
   const close = main.getByRole("button", { name: "Close", exact: true });
   await explorerSidebar(page).hover();
-  await expect(close.locator("..")).toHaveCSS("opacity", "0");
+  await expect(close.locator("..")).toHaveCSS("opacity", "1");
   await tab.hover();
   await expect(close.locator("..")).toHaveCSS("opacity", "1");
 }
@@ -143,7 +147,8 @@ async function closeOtherExplorerTabs(page: Parameters<typeof ensureExplorerSide
   });
   await files.click({ button: "right", position: { x: 12, y: 13 } });
   const confirmation = page.waitForEvent("dialog").then((dialog) => {
-    expect(dialog.message()).toContain("close 1 tab");
+    // Osuna：Explorer 默认还有会话历史，Files 之外要关的是 Changes 与它两个。
+    expect(dialog.message()).toContain("close 2 tab");
     return dialog.accept();
   });
   await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click();

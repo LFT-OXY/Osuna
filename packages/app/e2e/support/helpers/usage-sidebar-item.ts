@@ -190,14 +190,19 @@ export async function togglePin(scope: Locator, source: string, window: string) 
 }
 
 /** The footer's Usage icon, which is there whether or not the Usage item is on. */
+// Osuna：底部图标叫「套餐用量」（Plan usage），顶部另有一个叫「用量」的条目，按 testID 定位。
+function usageIcon(page: Page): Locator {
+  return page.locator('[data-testid="sidebar-usage-icon"]:visible');
+}
+
 export async function openUsageScreenFromIcon(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Usage", exact: true }).click({ timeout: 30_000 });
+  await usageIcon(page).click({ timeout: 30_000 });
   await expectOnUsageScreen(page);
 }
 
 /** Both footer entry points open Usage over the current screen on a phone. */
 export async function openUsageSheetFromIcon(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Usage", exact: true }).click();
+  await usageIcon(page).click();
   await expect(usageSheet(page)).toBeVisible();
 }
 
@@ -210,8 +215,9 @@ export async function closeUsageSheet(page: Page): Promise<void> {
   await expect(sheet).toHaveCount(0);
 }
 
+// Osuna：开关的文案走翻译键（「在侧栏显示」/ Show in sidebar），按 testID 找到行里的开关。
 function summaryInSidebarSwitch(page: Page): Locator {
-  return page.getByRole("switch", { name: "Summary in sidebar", exact: true });
+  return page.getByTestId("usage-show-in-sidebar").getByRole("switch");
 }
 
 /** Turns the sidebar Usage summary on or off from the Usage screen's Settings. */

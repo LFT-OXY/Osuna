@@ -15,7 +15,6 @@ import {
 } from "../support/helpers/workspace-ui";
 
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 };
-const MOBILE_VIEWPORT = { width: 390, height: 844 };
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -257,19 +256,9 @@ test.describe("plan usage in the composer context strip", () => {
     ]);
     const session = await openMockAgentOnDesktop(page);
     try {
-      // 首次取数加上 React Query 默认的 3 次重试。
+      // 首次取数加上 React Query 默认的 3 次重试。上游 v0.11.0-beta.4 起圆环弹层按账号显示
+      // 套餐用量，不再读这份取数，出错状态只能从窄栏保持安静看出来。
       await usageFixture.waitForRequestCount(4);
-      // 圆环弹层和窄栏读同一份取数状态。桌面弹层不含套餐用量，换到手机视口（没有窄栏，
-      // 弹层带套餐卡片）看出错文案，确认取数已落在出错状态。
-      await page.setViewportSize(MOBILE_VIEWPORT);
-      await page.getByTestId("context-window-meter").hover();
-      // 悬停会让查询带着默认重试再取一轮（约 7 秒退避）才回到出错状态。
-      await expect(
-        page.getByTestId("context-window-popover").getByText("Provider usage is unavailable"),
-      ).toBeVisible({ timeout: 20_000 });
-      await page.mouse.move(0, 0);
-
-      await page.setViewportSize(DESKTOP_VIEWPORT);
       const strip = page.getByTestId("composer-context-strip");
       await expect(strip).toBeVisible({ timeout: 10_000 });
       await expect(strip.getByTestId("composer-plan-usage")).toHaveCount(0);
@@ -316,18 +305,8 @@ test.describe("plan usage in the composer context strip", () => {
     );
     const session = await openMockAgentOnDesktop(page);
     try {
-      // 手机视口的弹层带套餐卡片：它提示更新主机，说明主机特性已经读到；窄栏与它读的是
-      // 同一个特性标志。
-      await page.setViewportSize(MOBILE_VIEWPORT);
-      await page.getByTestId("context-window-meter").hover();
-      await expect(
-        page
-          .getByTestId("context-window-popover")
-          .getByText("Update the host to see provider usage"),
-      ).toBeVisible({ timeout: 10_000 });
-      await page.mouse.move(0, 0);
-
-      await page.setViewportSize(DESKTOP_VIEWPORT);
+      // 上游 v0.11.0-beta.4 起圆环弹层不再带这份按提供方的套餐卡片；窄栏读到主机特性后
+      // 保持安静、不发请求。
       await expect(page.getByTestId("composer-context-strip")).toBeVisible({ timeout: 10_000 });
       await expect(page.getByTestId("composer-plan-usage")).toHaveCount(0);
       expect(usageFixture.requestCount()).toBe(0);
