@@ -20,7 +20,7 @@
 - [x] 合并期间 main 有新提交时，已把 main 合进合并分支（不 rebase）并重新看过 CI。
 - [x] 收尾在并入之前做完：各工单的验收项已对照勾选、任务记录与 journal 已提交。并入会让这个 worktree 被 daemon 自动归档，已提前告诉维护者。
 - [x] 维护者看过截图、包的核对结果与 PR 正文并发话后，PR 转为可合并，以 merge commit 并入（不 squash、不 rebase）。并入由维护者操作，或得到维护者明确同意后操作。
-- [ ] 并入后：`759532509` 是 main 的祖先；任务在主工作树归档。
+- [x] 并入后：`759532509` 是 main 的祖先；任务在主工作树归档。
 
 ## Comments
 
@@ -152,3 +152,4 @@ Standards 与 Spec 两个维度各一个子代理，对同一份冻结补丁（`
 - **ATW 的未提交改动。** 主工作树里有同一批改动（15 个改过的文件与 2 个未跟踪的 `atw-implement-all` 目录，是 ATW 0.3.6 → 0.5.0 升级里 `.claude`、`.agents`、`.pi` 的那一半；`.atw/` 的那一半随 `451670456` 进了 main）。维护者要求提交，提交是 `1826fde6b`。`~/Downloads/osuna-v0.11.2-merge-backup/atw-uncommitted-changes.patch`（15 个文件）能对 `1826fde6b` 反向套用（`git apply --check -R`），补丁里的内容已全部在 main 里。上面「给维护者」写的 17 是 15 个文件加 2 个目录。
 - **worktree 没有被自动归档。** 写这段时 `~/.paseo/worktrees/0x9u2djy/curvy-gorilla` 还在，停在 `cef8991d8`，里面那 17 项未提交的 ATW 改动与 `packages/desktop/release/` 都没有动。本机分支 `merge-upstream-v0-11-all` 被它占着，没有删；远端同名分支也还在。这三样留给维护者处理。
 - **推 main 触发的 CI。** 写这段时 CI run 38352098970、Desktop Packages、Docker、Nix 还在跑；Nix Update Hash 已失败（已知常红，不挡发版）。结果没有等。
+- **验收与归档。** 维护者 2026-10-13 在主工作树的会话里看过上面的核对结果后说「验收，归档」。最后一条与 `prd.md`「收尾」那一条据此勾上，随后在主工作树归档任务（main 上归档带 `--skip-branch-validation`）。归档时 main 上的提交没有推送，worktree 与合并分支仍没有动。
