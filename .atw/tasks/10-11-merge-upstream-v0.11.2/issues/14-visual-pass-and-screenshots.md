@@ -4,7 +4,7 @@
 
 **Blocked by:** 13
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] dev 桌面端跑的是合并分支当前的构建（server 改动后已重建）；启动方式不影响正式 daemon。
 - [ ] `prd.md`「UI and Design」里「必须存在的页面与状态」逐项截图，存进任务目录的 `screenshots/`，文件名能看出是哪个页面哪个状态；做不出的状态写明原因与替代证据。
