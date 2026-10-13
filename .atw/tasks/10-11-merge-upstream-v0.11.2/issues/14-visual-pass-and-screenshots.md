@@ -6,17 +6,17 @@
 **Status:** ready-for-agent
 **Impl:** doing
 
-- [ ] dev 桌面端跑的是合并分支当前的构建（server 改动后已重建）；启动方式不影响正式 daemon。
-- [ ] `prd.md`「UI and Design」里「必须存在的页面与状态」逐项截图，存进任务目录的 `screenshots/`，文件名能看出是哪个页面哪个状态；做不出的状态写明原因与替代证据。
-- [ ] `prd.md`「UI and Design」里「截图可核对的验收点」逐条核对，结果（满足 / 不满足及修复提交）记在 `## Comments` 下。
-- [ ] 内容宽度：在外观页，用 Osuna 的设置组件；调整后聊天与 Markdown 的最大宽度跟着变。
-- [ ] 新界面与 Osuna 原有界面之间的不一致已修：卡片圆角、行高、卡片内行分隔、下拉触发器、对话框按钮位置、浮层的圆角与底色。每处修了什么记在 `## Comments` 下。
-- [ ] 上游 e2e 里写死上游主题色值的断言已对照 Osuna 的主题核对过。
+- [x] dev 桌面端跑的是合并分支当前的构建（server 改动后已重建）；启动方式不影响正式 daemon。
+- [x] `prd.md`「UI and Design」里「必须存在的页面与状态」逐项截图，存进任务目录的 `screenshots/`，文件名能看出是哪个页面哪个状态；做不出的状态写明原因与替代证据。
+- [x] `prd.md`「UI and Design」里「截图可核对的验收点」逐条核对，结果（满足 / 不满足及修复提交）记在 `## Comments` 下。
+- [x] 内容宽度：在外观页，用 Osuna 的设置组件；调整后聊天与 Markdown 的最大宽度跟着变。
+- [x] 新界面与 Osuna 原有界面之间的不一致已修：卡片圆角、行高、卡片内行分隔、下拉触发器、对话框按钮位置、浮层的圆角与底色。每处修了什么记在 `## Comments` 下。
+- [x] 上游 e2e 里写死上游主题色值的断言已对照 Osuna 的主题核对过。
 - [ ] 界面语言切到中文再走一遍新界面：没有残留的英文，没有把订阅额度写成「用量」的地方。
-- [ ] 快速冒烟：侧栏、输入框、终端、Usage 页、Providers 页、插件页、关于页（仍有应用更新卡片）打开正常，无报错。不逐项截图。
-- [ ] 修动过的文件 typecheck 和 lint 通过，涉及的测试文件逐个跑过并通过；推到 `origin` 后草稿 PR 上的 CI 结果已看过。
+- [x] 快速冒烟：侧栏、输入框、终端、Usage 页、Providers 页、插件页、关于页（仍有应用更新卡片）打开正常，无报错。不逐项截图。
+- [x] 修动过的文件 typecheck 和 lint 通过，涉及的测试文件逐个跑过并通过；推到 `origin` 后草稿 PR 上的 CI 结果已看过。
 - [ ] UI：全部截图 / 桌面 1280 — `prd.md` 的截图验收点全部满足。
-- [ ] 原生端（iOS / Android）免验收，已在 `## Comments` 下注明。
+- [x] 原生端（iOS / Android）免验收，已在 `## Comments` 下注明。
 
 ## Comments
 
@@ -152,3 +152,12 @@
 - 这次动到的上游文件：`agent-stream/view.tsx`、`agent-stream/turn-footer.tsx`、`screens/settings/appearance/appearance-section.tsx`、`i18n/resources/plugin-settings.ts`、`screens/settings-screen.tsx`，下次合并上游时会多几处冲突。
 - dev 桌面端的本地存储里没有 `@paseo:create-agent-preferences`，新建工作区页默认不选提供方；15 打包后实看时如果遇到「选择模型」是空的，先点左边的提供方按钮。
 - 等维护者定的事项都列在「实施记录」的「没改，留给维护者定」与「评审与处理」里。
+
+#### 推送后的 CI（草稿 PR #16）
+
+- 推送的提交 `9237cfdb6`（含 `be23885ab`），CI run 38333824622。第一次：20 个作业里 19 个通过，`app-tests` 失败在 `src/components/ui/autocomplete.browser.test.tsx`「Command menu › scrolls a group's title into view with its first row」（7102 条里的 1 条，已知的 CI 偶发，与本工单的改动无关）。`gh run rerun --failed` 之后第二次全部通过：format、lint、typecheck、server-tests（ubuntu / windows / macos 文件观察）、desktop-tests（ubuntu / windows）、app-tests、sdk-tests、relay-tests、cli-tests 三片、playwright 四片。Desktop Packages（run 38333824621）通过。
+- 改过的 `e2e/browser/content-width.spec.ts` 在 playwright 分片里通过。
+
+#### 还没勾的两条验收项
+
+「界面语言切到中文再走一遍新界面：没有残留的英文」与「`prd.md` 的截图验收点全部满足」按原文没有满足：中文界面里仍有三类英文（见「中文界面里仍是英文的」）。等维护者裁定是按范围外接受，还是在这张工单里改。
