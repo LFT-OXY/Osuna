@@ -3,7 +3,7 @@
   "name": "merge-upstream-v0.11.2",
   "title": "合并上游 Paseo v0.11.0 至 v0.11.2",
   "description": "把上游 getpaseo/paseo 从 v0.10.3 到 v0.11.2 的 247 个提交分八段合并进 main",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",

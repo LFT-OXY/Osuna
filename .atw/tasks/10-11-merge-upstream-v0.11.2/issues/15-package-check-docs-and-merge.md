@@ -4,14 +4,14 @@
 
 **Blocked by:** 14
 **Status:** ready-for-agent
-**Impl:** doing
+**Impl:** done
 
 - [x] 本机按 `docs/release.md`「本地出一个 macOS 包」打出一个包（只在本机生成，不发布、不推 tag）。包里有内置插件目录；打开应用后套餐用量有数据，Providers 列表里有 Muse Code 与 Antigravity。包的路径与核对结果记在 `## Comments` 下并交给维护者。
 - [x] 内置插件没有进包时，原因已查清并修好（Osuna 的打包流程与上游不同之处），修法写进 `docs/release.md`「踩过的坑」。
 - [x] `docs/release.md`「从上游同步」：同步点那一句更新为 v0.11.2（`759532509`）；表里加一行，含八段的发布点、各自的 merge commit 与 PR 编号。
 - [x] `docs/release.md`「上游的补丁分支」按 v0.11.2 重写（v0.11.1 在上游 main 上，13 更正）：并入后与上游 main 的共同祖先是 v0.11.1（`ab10a6694`）；用上游自己的 v0.11.2 对上游 main 模拟合并得出的、合 v0.12 时要重解的文件清单。
 - [x] 本次新踩到的、下次还会遇到的坑补进「踩过的坑」，至少包括：上游的 beta 里有它后来删掉的中间设计；上游新增的内置插件要核对进包。没有别的就不加。
-- [ ] Osuna 讲 Usage 的文档里，提到上游用量来源的地方用链接，不重述；仓库说明里的文档表与实际一致。
+- [x] Osuna 讲 Usage 的文档里，提到上游用量来源的地方用链接，不重述；仓库说明里的文档表与实际一致。例外一篇：`opencode-global-event-baseline.md` 没有加进表里，维护者 2026-10-13 同意不补（理由见「实施记录 → 文档」）。
 - [x] ADR 0006（`docs/adr/0006-usage-in-code-is-upstream-plan-usage.md`）已从 `docs/glossary.md` 的套餐用量词条与 `docs/release.md`「从上游同步」链入。01 的评审提出；这两个文件都在冲突清单里，所以没有在 01 里加。
 - [x] 文档改动用项目的格式化脚本只处理改动过的文件。
 - [x] `prd.md`「验收清单」逐项核对并勾选，没满足的写明原因。
@@ -19,7 +19,7 @@
 - [x] PR 正文按 `docs/qa.md` 写，含：各段冲突裁决摘要；两个新提供方上经核实缺失的 Osuna 功能与后续任务；因换成上游实现而改动的 Osuna 断言；按 Osuna 决定改写或没收的上游测试；`plugin add 作者/仓库` 含义的变化；daemon 自更新保持下线；平台矩阵里原生端标注免验收，Windows 包与虚拟机验收由维护者自己做。
 - [x] 合并期间 main 有新提交时，已把 main 合进合并分支（不 rebase）并重新看过 CI。
 - [x] 收尾在并入之前做完：各工单的验收项已对照勾选、任务记录与 journal 已提交。并入会让这个 worktree 被 daemon 自动归档，已提前告诉维护者。
-- [ ] 维护者看过截图、包的核对结果与 PR 正文并发话后，PR 转为可合并，以 merge commit 并入（不 squash、不 rebase）。并入由维护者操作，或得到维护者明确同意后操作。
+- [x] 维护者看过截图、包的核对结果与 PR 正文并发话后，PR 转为可合并，以 merge commit 并入（不 squash、不 rebase）。并入由维护者操作，或得到维护者明确同意后操作。
 - [ ] 并入后：`759532509` 是 main 的祖先；任务在主工作树归档。
 
 ## Comments
@@ -139,3 +139,16 @@ Standards 与 Spec 两个维度各一个子代理，对同一份冻结补丁（`
 **验收项。** 01 – 14 的验收项全部已勾。本工单留着没勾的三条：「Usage 文档的链接；仓库说明里的文档表与实际一致」——前半已做，文档表差 `opencode-global-event-baseline.md` 一篇，等维护者定；「维护者看过……并发话后……并入」与「并入后」两条在并入时与并入后做。`prd.md` 验收清单留着没勾的两条：「收尾（勾工单、journal、归档任务）在并入之前做完」——勾工单与 journal 已做，归档按本工单「并入后：任务在主工作树归档」放在并入之后；「维护者看过截图与包的核对结果并发话；PR 以 merge commit 并入」。
 
 **给维护者。** 并入会让这个 worktree 被 daemon 自动归档，里面的智能体会被关掉，`packages/desktop/release/` 下的本机包随之消失；工作树里 `.agents/`、`.claude/`、`.pi/` 下 17 个没有提交的 ATW 文件改动不是本工单的，没有动也没有提交，归档时同样会丢。并入后要做的：在主工作树 `git pull`，核对 `git merge-base --is-ancestor 759532509 main`，勾上最后两条并 `tickets.py done 15`，归档任务（main 上归档要 `--skip-branch-validation`）；这次合并带进了新的依赖与 `plugins` 工作区，主工作树要先 `npm ci` 再 `npm run build:server`。
+
+### 维护者的确认与并入结果（2026-10-13）
+
+在主工作树补记。
+
+- **维护者的确认。** 并入前那个会话留下的交接写的是：维护者 2026-10-13 说「那就并入」，由 worktree 里的会话操作合并；文档表不补 `opencode-global-event-baseline.md` 也是维护者同意的。这两句话主工作树的会话没有亲眼看到，照交接记。维护者随后在主工作树的会话里要求拉取 main 并做本工单并入后的收尾。倒数第二条与文档表那一条据此勾上；维护者有没有逐张看过截图没有另外问。
+- **并入。** `gh pr view 16 --repo LFT-OXY/Osuna`：`MERGED`，2026-10-13T05:34:34Z，合并者 `LFT-OXY`。merge commit 是 `5172d3a07`，双亲 `802b17d8c`（并入前的 main）与 `cef8991d8`（分支头，比上面记 CI 的 `7d81b5d53` 多一个只记工单与 journal 的提交）。
+- **最终提交 `cef8991d8` 的 CI。** CI run 38345559152（19 项）与 Desktop Packages run 38345559151（`linux` 1 项），都是第 1 次运行、没有重跑，20 项全部 `success`。这一轮的检查列表里同样没有 Nix 与 Nix Update Hash。
+- **并入后核对（主工作树）。** `git merge --ff-only origin/main` 快进 304 个提交（`802b17d8c` → `5172d3a07`）；`git merge-base --is-ancestor 759532509 main` 成功；`git merge-base main upstream/main` = `ab10a6694`，与 `docs/release.md` 写的一致（本机的 `upstream/main` 是 `b0f054de9`，没有重新抓取）；`git tag` 仍是 14 个。
+- **主工作树的依赖与构建。** `npm ci` 与 `npm run build:server` 都是退出码 0。两步之前提交钩子的 typecheck 报 243 个错（`Cannot find module '@getpaseo/protocol/plugin-overview'` 一类，旧的 `dist` 声明），做完后这次提交的钩子通过。
+- **ATW 的未提交改动。** 主工作树里有同一批改动（15 个改过的文件与 2 个未跟踪的 `atw-implement-all` 目录，是 ATW 0.3.6 → 0.5.0 升级里 `.claude`、`.agents`、`.pi` 的那一半；`.atw/` 的那一半随 `451670456` 进了 main）。维护者要求提交，提交是 `1826fde6b`。`~/Downloads/osuna-v0.11.2-merge-backup/atw-uncommitted-changes.patch`（15 个文件）能对 `1826fde6b` 反向套用（`git apply --check -R`），补丁里的内容已全部在 main 里。上面「给维护者」写的 17 是 15 个文件加 2 个目录。
+- **worktree 没有被自动归档。** 写这段时 `~/.paseo/worktrees/0x9u2djy/curvy-gorilla` 还在，停在 `cef8991d8`，里面那 17 项未提交的 ATW 改动与 `packages/desktop/release/` 都没有动。本机分支 `merge-upstream-v0-11-all` 被它占着，没有删；远端同名分支也还在。这三样留给维护者处理。
+- **推 main 触发的 CI。** 写这段时 CI run 38352098970、Desktop Packages、Docker、Nix 还在跑；Nix Update Hash 已失败（已知常红，不挡发版）。结果没有等。
