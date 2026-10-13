@@ -328,13 +328,13 @@ def _codex_mode_banner(config: dict) -> str:
             "context injection is preferred and child-side loading is the fallback. "
             "Implementation is never dispatched on the per-ticket path: code is written inside /atw-implement "
             "in the main session, which also coordinates, clarifies, updates specs, commits, and finishes. "
-            "Only a /atw-implement-spec run, started by the user, dispatches implementer sub-agents."
+            "Only a /atw-implement-spec or /atw-implement-all run, started by the user, dispatches implementer sub-agents."
         )
     else:
         meaning = (
             "inline: the main session also reviews directly; "
             "do not dispatch any ATW sub-agent. Implementation is in /atw-implement; "
-            "/atw-implement-spec needs sub-agents and is unavailable in this mode."
+            "/atw-implement-spec and /atw-implement-all need sub-agents and are unavailable in this mode."
         )
     return f"<codex-mode>{meaning}</codex-mode>"
 
@@ -383,8 +383,24 @@ def build_breadcrumb(
     return f"<workflow-state>\n{header}\n{body}\n</workflow-state>"
 
 
+def _is_general_project(root: Path) -> bool:
+    """Whether this is a `general` project, as `common.config` reads the mode.
+
+    An install whose scripts predate project modes is a dev project.
+    """
+    scripts_dir = root / ".atw" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.config import get_project_mode  # type: ignore[import-not-found]
+
+        return get_project_mode(root) == "general"
+    except Exception:
+        return False
+
+
 def _noob_mode_reminder(root: Path) -> str:
-    """The `<noob-mode>` block for a developer who switched noob mode on, else "".
+    """The `<noob-mode>` block while noob mode is on for this developer, else "".
 
     Riding on the per-turn breadcrumb is the point of the feature: a skill
     loaded once fades over a long conversation, this is said again every turn.
@@ -476,7 +492,10 @@ def main() -> int:
         parts: list[str] = []
         if task is None:
             parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
-        parts.append(_codex_mode_banner(config))
+        # The banner is about dispatching review sub-agents and the dev
+        # implement commands; a general project installs neither.
+        if not _is_general_project(root):
+            parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
         breadcrumb = "\n\n".join(parts)
 

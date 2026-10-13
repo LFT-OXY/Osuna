@@ -1,0 +1,5 @@
+interface:
+  display_name: "ATW Implement All"
+  short_description: "一次性串行实现整份规格，逐票审查"
+policy:
+  allow_implicit_invocation: false

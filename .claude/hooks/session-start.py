@@ -83,7 +83,7 @@ FIRST_REPLY_NOTICE = f"{_FIRST_REPLY_NOTICE_HEAD}\n{_FIRST_REPLY_NOTICE_TAIL}"
 
 
 def _noob_mode_reminder(project_dir: Path) -> str:
-    """The `<noob-mode>` block for a developer who switched noob mode on, else "".
+    """The `<noob-mode>` block while noob mode is on for this developer, else "".
 
     Platforms with a per-turn hook hear this again every turn; here it covers
     the ones that only have SessionStart (Cursor) and the first reply of a
@@ -97,6 +97,24 @@ def _noob_mode_reminder(project_dir: Path) -> str:
         from common.noob_mode import noob_mode_reminder  # type: ignore[import-not-found]
 
         return noob_mode_reminder(project_dir)
+    except Exception:
+        return ""
+
+
+def _conventions_context(project_dir: Path) -> str:
+    """The `<conventions>` block of a `general` project, else "".
+
+    A general project has one flat conventions file instead of per-package,
+    per-layer guideline indexes. An install whose scripts predate the helper is
+    treated as a dev project.
+    """
+    scripts_dir = project_dir / ".atw" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.session_context import conventions_context  # type: ignore[import-not-found]
+
+        return conventions_context(project_dir)
     except Exception:
         return ""
 
@@ -201,6 +219,9 @@ def _run_git(repo_root: Path, args: list[str]) -> str:
 
 
 def _format_git_state(repo_root: Path) -> str:
+    # 普通文件夹没有分支，也谈不上干净：照实说，不编一个状态出来。
+    if _run_git(repo_root, ["rev-parse", "--is-inside-work-tree"]) != "true":
+        return "Git: not a git repository."
     branch = _run_git(repo_root, ["branch", "--show-current"]) or "(detached)"
     dirty_lines = [
         line for line in _run_git(repo_root, ["status", "--porcelain"]).splitlines()
@@ -416,11 +437,21 @@ def _resolve_task_dir(atw_dir: Path, task_ref: str) -> Path:
     return atw_dir / "tasks" / path_obj
 
 
-def _get_task_status(atw_dir: Path, input_data: dict) -> str:
-    """Return compact active-task status, artifact presence, and next action."""
+def _get_task_status(atw_dir: Path, input_data: dict, general: bool = False) -> str:
+    """Return compact active-task status, artifact presence, and next action.
+
+    In a `general` project the AI decides on its own whether a request gets a
+    task, so the no-task line defers to the workflow instead of telling it to
+    ask first.
+    """
     active = _resolve_active_task(atw_dir, input_data)
 
     if not active.task_path:
+        if general:
+            return (
+                "Status: NO ACTIVE TASK\n"
+                "Next-Action: Do what <atw-workflow> above says for a session with no current task."
+            )
         return (
             "Status: NO ACTIVE TASK\n"
             "Next-Action: Classify the current turn before creating any ATW task. "
@@ -454,6 +485,15 @@ def _get_task_status(atw_dir: Path, input_data: dict) -> str:
     present_line = ", ".join(present) if present else "(none)"
 
     if task_status == "completed":
+        if general:
+            # A general task records no branch; without the switch the archive
+            # is refused in a repository that has a remote.
+            return (
+                f"Status: COMPLETED\nTask: {task_title}\n"
+                f"Present: {present_line}\n"
+                "Next-Action: The archive was interrupted — re-run "
+                "`task.py archive <task> --skip-branch-validation` to finish it."
+            )
         return (
             f"Status: COMPLETED\nTask: {task_title}\n"
             f"Present: {present_line}\n"
@@ -824,7 +864,12 @@ def main():
 
     output = StringIO()
 
-    spec_index_paths = _collect_spec_index_paths(atw_dir, allowed_pkgs)
+    # A general project keeps no guideline indexes — whatever a switch from dev
+    # left under `.atw/spec/` is not offered there.
+    conventions = _conventions_context(project_dir)
+    spec_index_paths = (
+        [] if conventions else _collect_spec_index_paths(atw_dir, allowed_pkgs)
+    )
 
     output.write("""<session-context>
 ATW compact SessionStart context. Use it to orient the session; load details on demand.
@@ -851,27 +896,30 @@ ATW compact SessionStart context. Use it to orient the session; load details on 
     output.write(_build_workflow_overview(atw_dir / "workflow.md"))
     output.write("\n</atw-workflow>\n\n")
 
-    output.write("<guidelines>\n")
-    # D32/C23: same as `_get_task_status` — the injected order is jsonl then
-    # `prd.md`; `design.md` / `implement.md` are no longer materialized.
-    output.write(
-        "Task context order for implementation/check: jsonl entries -> `prd.md`.\n\n"
-    )
+    if conventions:
+        output.write(f"{conventions}\n\n")
+    else:
+        output.write("<guidelines>\n")
+        # D32/C23: same as `_get_task_status` — the injected order is jsonl then
+        # `prd.md`; `design.md` / `implement.md` are no longer materialized.
+        output.write(
+            "Task context order for implementation/check: jsonl entries -> `prd.md`.\n\n"
+        )
 
-    if spec_index_paths:
-        output.write("## Available indexes (read on demand)\n")
-        for p in spec_index_paths:
-            output.write(f"- {p}\n")
-        output.write("\n")
+        if spec_index_paths:
+            output.write("## Available indexes (read on demand)\n")
+            for p in spec_index_paths:
+                output.write(f"- {p}\n")
+            output.write("\n")
 
-    output.write(
-        "Discover more via: "
-        "`python3 ./.atw/scripts/get_context.py --mode packages`\n"
-    )
-    output.write("</guidelines>\n\n")
+        output.write(
+            "Discover more via: "
+            "`python3 ./.atw/scripts/get_context.py --mode packages`\n"
+        )
+        output.write("</guidelines>\n\n")
 
     # Check task status and inject structured tag
-    task_status = _get_task_status(atw_dir, hook_input)
+    task_status = _get_task_status(atw_dir, hook_input, general=bool(conventions))
     output.write(f"<task-status>\n{task_status}\n</task-status>\n\n")
 
     output.write("""<ready>

@@ -36,7 +36,7 @@ On top of the standard ticket template, tickets here carry one extra line:
 
 | Field | Vocabulary | Who writes it |
 |---|---|---|
-| `Status:` | triage roles (see `triage-labels.md`) | Fixed at `ready-for-agent`. These tickets are ones you sliced yourself, so they never need triage — the field is a placeholder kept for vocabulary compatibility. |
+| `Status:` | triage roles (see `triage-labels.md`) | The slicer, when it writes the ticket. Default `ready-for-agent`: these tickets are ones you sliced yourself, so they never go through triage. Set `ready-for-human` on a ticket a person must do — it needs an external account, a manual test pass, or a design or legal decision. `/atw-implement-all` never dispatches such a ticket and stops when the frontier holds only those; `/atw-implement` confirms with the user before touching code — they do it themselves, or explicitly authorize the AI. `tickets.py` does not read this field; the frontier ignores it. |
 | `Impl:` | `ready` / `doing` / `done` | `tickets.py`. This is the field the workflow actually routes on, and the only field the parser requires. |
 
 The ticket template `tickets.py` writes also carries an empty `**Issue:**` line. It is meaningless in this variant — nothing fills it in — and `tickets.py` never reads it. Leave it or delete it; neither breaks anything.
@@ -74,6 +74,8 @@ python3 .atw/scripts/tickets.py claim <NN> --parallel  # → Impl: doing, alongs
 **Tickets run one at a time by default.** `claim` hard-rejects a second ticket while another is at `Impl: doing`, but that check is read-then-write — it is serial execution, not an atomic exclusive claim. Don't run two implementers against one task directory by hand.
 
 **The one parallel path is `/atw-implement-spec`.** Its orchestrator claims with `--parallel`, which lets several tickets sit at `Impl: doing`, records `implementation_base_sha` once for the whole run, and writes no current-ticket line into `$TASK/check.jsonl` — there is no single live ticket. Only the orchestrator writes ticket state; each implementer works in its own worktree.
+
+`/atw-implement-all` is not a second parallel path: its orchestrator claims with plain `claim <NN>`, one ticket at `Impl: doing` at a time, so the current-ticket line and `implementation_base_sha` are recorded per ticket exactly as on the per-ticket path. It too is the only writer of ticket state; its implementers work in place on the current branch.
 
 ## Wayfinding operations
 

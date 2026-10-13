@@ -1249,18 +1249,24 @@ function buildStartupContext(
   overview: string,
 ): string {
   const workflow = workflowOverview(root, key);
+  // get_context.py puts a <conventions> block in the overview only for a
+  // `general` project. Its workflow has its own way to pick up unfinished
+  // work; the bare `task.py start` below is one the script refuses there.
+  const ready = overview.includes("\n<conventions>\n")
+    ? [
+        "Do what <atw-workflow> above says for the current task's status. With no current task, it also says when to create one and how to pick up unfinished work.",
+      ]
+    : [
+        "Use the current workflow state to decide whether to create, continue, or skip an ATW task.",
+        "When CURRENT TASK is (none) but ACTIVE TASKS lists exactly one task assigned to you that is already at the implement or accept stage, this window is merely not bound to it yet: run `python3 ./.atw/scripts/task.py start <task-dir>` for that task, then continue from its stage. Do not ask whether to create a new task in that case.",
+        "If several tasks qualify, or the only candidate is still in a planning stage (discover / specify / slice), ask which task to bind instead of running start: start moves a planning-stage task straight into implement.",
+      ];
   return [
     "<session-context>\nATW compact SessionStart context. Use it to orient the session; load details on demand.\n</session-context>",
     FIRST_REPLY_NOTICE,
     overview,
     workflow,
-    [
-      "<ready>",
-      "Use the current workflow state to decide whether to create, continue, or skip an ATW task.",
-      "When CURRENT TASK is (none) but ACTIVE TASKS lists exactly one task assigned to you that is already at the implement or accept stage, this window is merely not bound to it yet: run `python3 ./.atw/scripts/task.py start <task-dir>` for that task, then continue from its stage. Do not ask whether to create a new task in that case.",
-      "If several tasks qualify, or the only candidate is still in a planning stage (discover / specify / slice), ask which task to bind instead of running start: start moves a planning-stage task straight into implement.",
-      "</ready>",
-    ].join("\n"),
+    ["<ready>", ...ready, "</ready>"].join("\n"),
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -1983,9 +1989,14 @@ export default function atwExtension(pi: {
   // Events
   pi.on?.("session_start", (event, ctx) => {
     const k = getKey(event, ctx);
-    inheritSessionPointer(resolveRoot(ctx), k, event);
+    const root = resolveRoot(ctx);
+    inheritSessionPointer(root, k, event);
+    // A `general` project installs no /atw-continue prompt.
+    const canContinue = exists(join(root, ".pi", "prompts", "atw-continue.md"));
     ctx?.ui?.notify?.(
-      "ATW project context is available. Use /atw-start to bootstrap or /atw-continue to resume.",
+      canContinue
+        ? "ATW project context is available. Use /atw-start to bootstrap or /atw-continue to resume."
+        : "ATW project context is available. Use /atw-start to bootstrap.",
       "info",
     );
   });

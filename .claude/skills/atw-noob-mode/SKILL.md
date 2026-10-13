@@ -7,18 +7,20 @@ description: "小白模式：给不懂技术的用户全程用大白话沟通—
 
 The user is not an engineer. They are still the one in charge: they decide what gets built, what is good enough, and what must not happen. They can only do that when they understand what you tell them and what you are about to do. An update they cannot read leaves them able to approve your work but not to review it — and then your choices ship unexamined.
 
-Noob mode keeps every reply, in every ATW stage, in language they can act on. It starts when it is switched on and lasts until the user switches it off.
+Noob mode keeps every reply, in every ATW stage, in language they can act on. In a `general` project it is on from the start; in a `dev` project it starts when it is switched on. Either way it lasts until the user switches it off.
 
 ## Switching
+
+Each user is in one of three states: switched on, switched off, or never chose. On and off are the user's own choice and always win. A user who never chose gets the project's default — on in a `general` project, off in a `dev` one (a project whose `.atw/config.yaml` has no `mode` entry is `dev`).
 
 The user's words or the argument decide the action. With neither, turn it on — unless you loaded this skill yourself because the `<noob-mode>` reminder told you to, which is "Already on" below.
 
 - **On** — `/atw-noob-mode`, "开启小白模式", "turn on noob mode", or the user says they cannot follow the terms, an approval prompt, an error or command output. Run `python3 ./.atw/scripts/noob_mode.py on`, then confirm in the user's language, for example: "小白模式已开启。接下来我会用大白话说明我在做什么、需要你决定什么、有什么风险。随时可以说“关闭小白模式”。" Apply everything below from that reply on, then do the catch-up in "Catching up".
-- **Off** — `/atw-noob-mode off`, "关闭小白模式", "turn off noob mode". Run `python3 ./.atw/scripts/noob_mode.py off`, confirm in one sentence, and stop applying these rules.
-- **Status** — `python3 ./.atw/scripts/noob_mode.py status`.
+- **Off** — `/atw-noob-mode off`, "关闭小白模式", "turn off noob mode". Run `python3 ./.atw/scripts/noob_mode.py off`, confirm in one sentence, and stop applying these rules. Off is recorded as the user's choice: the project default will not turn it back on, and neither will a change of project mode.
+- **Status** — `python3 ./.atw/scripts/noob_mode.py status`. It prints whether the mode is on, and a `Source:` line saying whether that is the user's own setting or the project default.
 - **Already on** — you loaded this skill yourself because the `<noob-mode>` reminder told you to. Nothing is being switched: run no script and announce nothing. Read on, and apply all of it starting with the reply you are about to write.
 
-The switch is personal: it is a line in this user's own `.atw/.developer`, which is never committed, so teammates are unaffected. While it is on, ATW hands you a `<noob-mode>` reminder at session start and on every turn — that is what makes the mode last through long conversations and new sessions. The reminder carries only the core of these rules. When the text of this skill is not in front of you — a new session, or a long conversation that has been summarized — load it before you reply: the reminder alone leaves out most of what is here, limits included. If the script fails, tell the user plainly and still follow the rules for this conversation.
+The choice is personal: it is a line in this user's own `.atw/.developer`, which is never committed, so teammates are unaffected. While it is on, ATW hands you a `<noob-mode>` reminder at session start and on every turn — that is what makes the mode last through long conversations and new sessions. The reminder carries only the core of these rules. When the text of this skill is not in front of you — a new session, or a long conversation that has been summarized — load it before you reply: the reminder alone leaves out most of what is here, limits included. If the script fails, tell the user plainly and still follow the rules for this conversation.
 
 Never switch it off on your own, and never drift out of it because a stage is long or technical. Only the user ends it.
 
@@ -89,7 +91,7 @@ Noob mode changes how you talk to the user. It changes nothing about what the wo
 
 - **Stages.** The first time a stage comes up, say in a few words what it is for — discover is "getting clear on what you want", specify is "writing it down so we both agree", slice is "cutting the work into small pieces", implement is "building it", accept is "checking it against what we agreed".
 - **Stops ①–④.** These are the user's decisions. Say what is being decided, what each answer leads to, and what you recommend. Never present a stop as a formality.
-- **Skills only the user can run.** When the next step is theirs to start (`/atw-spec`, `/atw-tickets`, `/atw-implement`, `/atw-implement-spec`, `/atw-askme`, `/atw-map`), say what typing it will do and why it is their call, then give the exact text to type.
+- **Skills only the user can run.** When the next step is theirs to start (`/atw-spec`, `/atw-tickets`, `/atw-implement`, `/atw-implement-spec`, `/atw-implement-all`, `/atw-askme`, `/atw-map`), say what typing it will do and why it is their call, then give the exact text to type.
 - **Asking them to confirm a file.** Do not hand over `prd.md` or a ticket list and ask "confirm?". Summarize in plain words what it commits to — what will be built, what will not, what counts as done — then point to the file.
 - **Other skills' output.** A skill with its own format keeps it. In a file (review findings, ticket tables, a spec) the content stays as that skill wants it, and what you say about it to the user follows these rules. In the reply itself (a numbered round of questions, a list of findings) the shape stays and every word inside it follows these rules — a question the user cannot read is a decision they cannot make. No skill's format outranks noob mode.
 

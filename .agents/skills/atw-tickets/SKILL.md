@@ -67,6 +67,8 @@ Publish the approved tickets. **How** depends on the tracker this repo uses — 
 - **File-based trackers** → consult the tracker doc's "When a skill says publish to the issue tracker" section for the directory and naming convention; write one file per ticket, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on — always written in the file, even where a mirror also draws native edges on a remote tracker, because tooling reads the line. Use the per-ticket file template below — one ticket per file, never a single combined file. **If the tracker doc defines extra ticket fields, add them on top of the template.**
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. If the source was an existing issue, make each ticket its sub-issue (tracker doc's operation). Apply the `ready-for-agent` triage label unless instructed otherwise — the tickets are agent-grabbable by construction.
 
+Mark a ticket a person must do — it needs an external account, a manual test pass, or a design or legal decision — as `ready-for-human` instead (the tracker doc's `Status:` line, or the triage label): `/atw-implement-all` will not dispatch it, and `/atw-implement` asks the user before doing it in their place.
+
 Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
 
 Do NOT close or modify any parent issue.
