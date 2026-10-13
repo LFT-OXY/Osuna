@@ -4,6 +4,11 @@ The daemon reads the session logs the local CLIs already write, turns them into
 token counts, and prices them. Nothing is sent anywhere; the one exception is
 the price table, below.
 
+Subscription limits are a different thing, **Plan usage**. Its data comes from
+[usage sources](plugins.md#usage-sources). Read
+[ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md) before you look for
+either one's code.
+
 ## What gets scanned
 
 Every CLI decides where its own logs live, and the scanner resolves the same
