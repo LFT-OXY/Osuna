@@ -302,6 +302,14 @@ const markdownStyles = useMemo(() => createMarkdownStyles(theme), [theme]);
 
 If a style factory is cheap, skipping `useMemo` entirely is also fine.
 
+## Numeric Theme Tokens On Web
+
+On web Unistyles runs with CSS variables on, which is its default. A color token reaches the rule as `var(--…)` and repaints when the theme is patched. A numeric token such as `theme.contentMaxWidth` is written into the rule as a literal, and with CSS variables on the web registry does not listen for theme changes (`UnistylesShadowRegistry.addStyles` drops the theme dependency), so the rule is not rewritten. A node gets the new number the next time its component renders.
+
+A node that does not render again keeps the old number. After Content width went from 820 to 600, the memoized stream rows kept `max-width: 820px` while the composer beside them moved, until a reload. An e2e that reloads between steps does not see this; return to the mounted screen in-app instead (`e2e/browser/content-width.spec.ts`).
+
+When a number has to follow a setting on nodes that do not re-render, carry it through React and merge it over the themed style as a plain object. `agent-stream/row-max-width.ts` does this for the stream row wrappers: the view reads the setting, provides it through context, and each row merges `{ maxWidth }`.
+
 ## Static Theme Imports
 
 Do not import `theme` from `@/styles/theme` for live UI colors. That export is a dark-theme compatibility default, so using it in render code leaves icons, placeholders, or third-party props pinned to dark colors in light mode.

@@ -14,6 +14,8 @@ interface FontSizeRowProps {
   title: string;
   hint: string;
   accessibilityLabel: string;
+  /** 重置按钮的读屏名；不给时按「重置 + 标题」。 */
+  resetAccessibilityLabel?: string;
   draft: string;
   placeholder?: string;
   withBorder?: boolean;
@@ -29,6 +31,7 @@ export function FontSizeRow({
   title,
   hint,
   accessibilityLabel,
+  resetAccessibilityLabel,
   draft,
   placeholder,
   withBorder = true,
@@ -67,9 +70,10 @@ export function FontSizeRow({
             size="sm"
             leftIcon={Undo2}
             onPress={handleReset}
-            accessibilityLabel={t("settings.appearance.fonts.resetSizeAccessibility", {
-              field: title,
-            })}
+            accessibilityLabel={
+              resetAccessibilityLabel ??
+              t("settings.appearance.fonts.resetSizeAccessibility", { field: title })
+            }
             testID="font-size-reset"
           />
         ) : null}

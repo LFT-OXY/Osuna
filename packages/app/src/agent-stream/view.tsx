@@ -69,6 +69,7 @@ import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/vi
 import {
   DispatchGroupView,
   DispatchSubagentIndexProvider,
+  type DispatchSubagentIndex,
   useDispatchGroupsEnabled,
   useDispatchSubagentIndex,
 } from "@/subagents/dispatch-group";
@@ -88,6 +89,7 @@ import {
   type TurnContentStrategy,
 } from "./turn-footer";
 import { resolveBottomOverlayTailInset } from "./bottom-overlay-inset";
+import { StreamRowMaxWidthProvider, useStreamRowMaxWidthStyle } from "./row-max-width";
 import { layoutStream, type StreamLayoutItem } from "./layout";
 import {
   type BottomAnchorLocalRequest,
@@ -1261,9 +1263,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     return (
       <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
         <TurnChangedFilesProvider value={turnChangedFilesActions}>
-          <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+          <StreamRowProviders
+            dispatchSubagentIndex={dispatchSubagentIndex}
+            contentMaxWidth={contentMaxWidth}
+          >
             {streamSurface}
-          </DispatchSubagentIndexProvider>
+          </StreamRowProviders>
         </TurnChangedFilesProvider>
       </AgentUsageScopeProvider>
     );
@@ -1884,6 +1889,23 @@ const permissionStyles = StyleSheet.create((theme) => ({
   },
 }));
 
+/** 行要读的两个上下文合在一个组件里：视图的 JSX 已到嵌套上限，不能再多套一层。 */
+function StreamRowProviders({
+  dispatchSubagentIndex,
+  contentMaxWidth,
+  children,
+}: {
+  dispatchSubagentIndex: DispatchSubagentIndex;
+  contentMaxWidth: number;
+  children: ReactNode;
+}) {
+  return (
+    <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+      <StreamRowMaxWidthProvider value={contentMaxWidth}>{children}</StreamRowMaxWidthProvider>
+    </DispatchSubagentIndexProvider>
+  );
+}
+
 interface StreamItemWrapperProps {
   itemId: string;
   gapBelow: number;
@@ -1891,9 +1913,10 @@ interface StreamItemWrapperProps {
 }
 
 function StreamItemWrapper({ gapBelow, children }: StreamItemWrapperProps) {
+  const maxWidthStyle = useStreamRowMaxWidthStyle();
   const wrapperStyle = useMemo(
-    () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }],
-    [gapBelow],
+    () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }, maxWidthStyle],
+    [gapBelow, maxWidthStyle],
   );
   return <View style={wrapperStyle}>{children}</View>;
 }

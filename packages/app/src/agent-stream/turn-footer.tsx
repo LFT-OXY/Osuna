@@ -19,6 +19,7 @@ import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { ShimmerText } from "@/components/shimmer/shimmer-text";
 import { TurnChangedFiles } from "./turn-changed-files-card";
+import { useStreamRowMaxWidthStyle } from "./row-max-width";
 
 const ThemedSyncedLoader = withUnistyles(SyncedLoader);
 const workingIndicatorColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -227,8 +228,16 @@ function CompletedTurnFooter({
 }
 
 function TurnFooterRow({ children }: { children: ReactNode }) {
-  const rowStyle = useMemo(() => [stylesheet.streamItemWrapper, stylesheet.turnFooterRow], []);
-  return <View style={rowStyle}>{children}</View>;
+  const maxWidthStyle = useStreamRowMaxWidthStyle();
+  const rowStyle = useMemo(
+    () => [stylesheet.streamItemWrapper, stylesheet.turnFooterRow, maxWidthStyle],
+    [maxWidthStyle],
+  );
+  return (
+    <View style={rowStyle} testID="turn-footer-row">
+      {children}
+    </View>
+  );
 }
 
 const stylesheet = StyleSheet.create((theme) => ({

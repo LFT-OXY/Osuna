@@ -152,10 +152,13 @@ function PlanUsageReports({
 const styles = StyleSheet.create((theme) => {
   const palette = theme.colors.usage;
   return {
+    // 「刷新」的文字收在卡片内容的右边线上、与标题同一行高：按钮的内边距与多出的高度向外让。
     headerRight: {
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing[2],
+      marginRight: -theme.spacing[3],
+      marginVertical: -theme.spacing[1],
     },
     updated: {
       fontSize: 11,

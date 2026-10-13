@@ -9,6 +9,7 @@ import {
 } from "../support/helpers/content-width";
 import { openFileExplorer, openFileFromExplorer } from "../support/helpers/file-explorer";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import { clickSettingsBackToWorkspace } from "../support/helpers/settings";
 
 const ULTRAWIDE_VIEWPORT = { width: 2560, height: 1080 };
 
@@ -42,6 +43,16 @@ test("widens chat and Markdown files to the chosen content width and resets to t
       await setContentWidth(page, 1600);
       await expectCustomContentWidthSetting(page, 1600);
       await page.screenshot({ path: testInfo.outputPath("settings-custom-width.png") });
+    });
+
+    // Osuna：回到已经打开的聊天不重新加载页面，宽度也要跟着变。
+    await test.step("the chat that is already open follows the custom width", async () => {
+      await clickSettingsBackToWorkspace(page);
+      await expectContentColumnWidth(assistantMessage, { min: 1200, max: 1600 });
+      await expectContentColumnWidth(page.getByTestId("turn-footer-row").first(), {
+        min: 1200,
+        max: 1600,
+      });
     });
 
     await test.step("chat and Markdown files use the custom width", async () => {

@@ -418,7 +418,7 @@ export const pluginSettings = {
     globalTitle: "启用插件",
     globalHint: "所有已配置插件的全局开关",
     sourceLabel: "插件来源",
-    sourcePlaceholder: "owner/slug, 目录、Git URL 或 npm 包",
+    sourcePlaceholder: "owner/slug、目录、Git URL 或 npm 包",
     docs: "文档",
     install: "安装插件",
     installing: "正在安装…",

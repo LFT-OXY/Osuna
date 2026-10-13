@@ -90,7 +90,7 @@ export function useDispatchGroupsEnabled(input: {
 }
 
 /** 两种子智能体各自的 callId 索引：Paseo 按关联标签一对一，provider 按描述符的 `toolCallId` 一对多。 */
-interface DispatchSubagentIndex {
+export interface DispatchSubagentIndex {
   paseo: Record<string, DispatchSubagent>;
   provider: Record<string, DispatchSubagent[]>;
 }

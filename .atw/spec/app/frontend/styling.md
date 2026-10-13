@@ -193,6 +193,7 @@ export const darkNordTheme = buildDarkTheme(
 - Do not materialize styles at module scope (`styles.container` read outside a component); `styles/unistyles-module-scope.test.ts` guards this. A module-level `const rowWithBorder = [settingsStyles.row, settingsStyles.rowBorder]` counts; compose the array in the render (`style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}`).
 - A component that flattens its `style` prop with `StyleSheet.flatten` to split it (`FormTextInput` splits chrome from text in `components/ui/form-field.tsx`) gets nothing from a `StyleSheet.create` style on web: there the style is a class name with no values, so `width` and `textAlign` silently vanish. Pass theme-independent sizing to such a component as a plain object (`const FONT_SIZE_INPUT_STYLE = { width: 64, textAlign: "right" } as const`). Symptom: the Electron input is wider than asked and left-aligned while native looks right.
 - Dynamic pixel values on web and inline styles go through `styles/unistyles-inline-style.ts` and its platform variants.
+- A numeric theme token (`theme.contentMaxWidth`) is a literal in the web rule and is not rewritten when the theme is patched; a mounted node that does not re-render keeps the old number. A number that must follow a setting live goes through React and is merged as a plain object (`agent-stream/row-max-width.ts` for the stream row wrappers). See `docs/unistyles.md` "Numeric Theme Tokens On Web".
 - `contentContainerStyle` and other non-`style` props do not get tracked; see the fix patterns in `docs/unistyles.md`.
 - Reanimated `Animated.View` with dynamic Unistyles styles crashes; the doc has the safe shape.
 - Hidden sheet content and memoized style objects have their own sections there.
@@ -277,7 +278,7 @@ Tests: `appearance/font-probe.browser.test.ts` injects a fake `LocalFontSource` 
 
 ### Font size rows and the terminal preview
 
-`screens/settings/appearance/font-size-row.tsx` renders Interface size, Content size, Code size, and Terminal size. `appearance-section.tsx` owns the drafts, the clamp, and the writes:
+`screens/settings/appearance/font-size-row.tsx` renders Interface size, Content size, Code size, and Terminal size, and Content width under Layout. It is the one row for a number with a `px` unit on this page; a bare input with its own style is wrong (the upstream Content width row was 36 tall beside 28). `appearance-section.tsx` owns the drafts, the clamp, and the writes:
 
 ```ts
 <FontSizeRow title hint accessibilityLabel draft placeholder? withBorder?
@@ -298,6 +299,7 @@ Tests: `appearance/font-probe.browser.test.ts` injects a fake `LocalFontSource` 
 | Type in Terminal size or Code size without committing | the terminal sample changes size right away, clamped to 9–22 like the real terminal |
 
 - Echo: `FontSizeRow` increments the input's `resetKey` in the same handler that calls `onCommit` / `onReset`. `AdaptiveTextInput` then calls `replaceText(initialValue)`. The input is not remounted and `onChangeText` does not fire. This only works if the parent sets the new draft synchronously inside `onCommit` / `onReset`, so React batches both updates into one render.
+- Content width keeps its own draft inside `ContentWidthRow`, passes the raw text to `parseContentMaxWidth` on commit (a typed `900.5` saves 900, `12abc` saves nothing), does not write when the typed number equals the width in effect (the setting stays `null` and keeps following the default), and writes `null` on reset. `showReset` is `value !== null`. It passes `resetAccessibilityLabel` because the upstream e2e finds the button as "Reset content width to default"; without the prop the label is "Reset {{field}}".
 - The reset button is `<Button variant="ghost" size="sm" leftIcon={Undo2} />`, the same icon-only form as the sidebar reorder buttons on this page. A hand-styled `Pressable` goes against `docs/design.md` ("A pressable styled to look like a button is wrong"). It sits left of the input so the input and `px` stay on the card's trailing rail when it appears.
 - The terminal sample does not start xterm. It is two `Text` lines in the terminal ANSI colors, and the branch glyph is U+E0A0 (Powerline, in every Nerd Font). The preview passes the committed `terminalFontFamily`, because the Terminal font picker saves on select and has no draft.
 - The code-line preview (`resolveSizeOverride`) still renders an unclamped draft, so typing `30` shows 30px code next to a 22px terminal until the commit.
