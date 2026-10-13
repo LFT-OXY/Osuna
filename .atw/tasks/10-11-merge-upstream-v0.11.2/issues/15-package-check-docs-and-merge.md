@@ -6,19 +6,19 @@
 **Status:** ready-for-agent
 **Impl:** doing
 
-- [ ] 本机按 `docs/release.md`「本地出一个 macOS 包」打出一个包（只在本机生成，不发布、不推 tag）。包里有内置插件目录；打开应用后套餐用量有数据，Providers 列表里有 Muse Code 与 Antigravity。包的路径与核对结果记在 `## Comments` 下并交给维护者。
-- [ ] 内置插件没有进包时，原因已查清并修好（Osuna 的打包流程与上游不同之处），修法写进 `docs/release.md`「踩过的坑」。
-- [ ] `docs/release.md`「从上游同步」：同步点那一句更新为 v0.11.2（`759532509`）；表里加一行，含八段的发布点、各自的 merge commit 与 PR 编号。
-- [ ] `docs/release.md`「上游的补丁分支」按 v0.11.2 重写（v0.11.1 在上游 main 上，13 更正）：并入后与上游 main 的共同祖先是 v0.11.1（`ab10a6694`）；用上游自己的 v0.11.2 对上游 main 模拟合并得出的、合 v0.12 时要重解的文件清单。
-- [ ] 本次新踩到的、下次还会遇到的坑补进「踩过的坑」，至少包括：上游的 beta 里有它后来删掉的中间设计；上游新增的内置插件要核对进包。没有别的就不加。
+- [x] 本机按 `docs/release.md`「本地出一个 macOS 包」打出一个包（只在本机生成，不发布、不推 tag）。包里有内置插件目录；打开应用后套餐用量有数据，Providers 列表里有 Muse Code 与 Antigravity。包的路径与核对结果记在 `## Comments` 下并交给维护者。
+- [x] 内置插件没有进包时，原因已查清并修好（Osuna 的打包流程与上游不同之处），修法写进 `docs/release.md`「踩过的坑」。
+- [x] `docs/release.md`「从上游同步」：同步点那一句更新为 v0.11.2（`759532509`）；表里加一行，含八段的发布点、各自的 merge commit 与 PR 编号。
+- [x] `docs/release.md`「上游的补丁分支」按 v0.11.2 重写（v0.11.1 在上游 main 上，13 更正）：并入后与上游 main 的共同祖先是 v0.11.1（`ab10a6694`）；用上游自己的 v0.11.2 对上游 main 模拟合并得出的、合 v0.12 时要重解的文件清单。
+- [x] 本次新踩到的、下次还会遇到的坑补进「踩过的坑」，至少包括：上游的 beta 里有它后来删掉的中间设计；上游新增的内置插件要核对进包。没有别的就不加。
 - [ ] Osuna 讲 Usage 的文档里，提到上游用量来源的地方用链接，不重述；仓库说明里的文档表与实际一致。
-- [ ] ADR 0006（`docs/adr/0006-usage-in-code-is-upstream-plan-usage.md`）已从 `docs/glossary.md` 的套餐用量词条与 `docs/release.md`「从上游同步」链入。01 的评审提出；这两个文件都在冲突清单里，所以没有在 01 里加。
-- [ ] 文档改动用项目的格式化脚本只处理改动过的文件。
-- [ ] `prd.md`「验收清单」逐项核对并勾选，没满足的写明原因。
-- [ ] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。CI 的等待放在后台。
-- [ ] PR 正文按 `docs/qa.md` 写，含：各段冲突裁决摘要；两个新提供方上经核实缺失的 Osuna 功能与后续任务；因换成上游实现而改动的 Osuna 断言；按 Osuna 决定改写或没收的上游测试；`plugin add 作者/仓库` 含义的变化；daemon 自更新保持下线；平台矩阵里原生端标注免验收，Windows 包与虚拟机验收由维护者自己做。
-- [ ] 合并期间 main 有新提交时，已把 main 合进合并分支（不 rebase）并重新看过 CI。
-- [ ] 收尾在并入之前做完：各工单的验收项已对照勾选、任务记录与 journal 已提交。并入会让这个 worktree 被 daemon 自动归档，已提前告诉维护者。
+- [x] ADR 0006（`docs/adr/0006-usage-in-code-is-upstream-plan-usage.md`）已从 `docs/glossary.md` 的套餐用量词条与 `docs/release.md`「从上游同步」链入。01 的评审提出；这两个文件都在冲突清单里，所以没有在 01 里加。
+- [x] 文档改动用项目的格式化脚本只处理改动过的文件。
+- [x] `prd.md`「验收清单」逐项核对并勾选，没满足的写明原因。
+- [x] 草稿 PR 上 CI 全绿，Nix 与 Nix Update Hash 除外；已知偶发失败重跑后通过。CI 的等待放在后台。
+- [x] PR 正文按 `docs/qa.md` 写，含：各段冲突裁决摘要；两个新提供方上经核实缺失的 Osuna 功能与后续任务；因换成上游实现而改动的 Osuna 断言；按 Osuna 决定改写或没收的上游测试；`plugin add 作者/仓库` 含义的变化；daemon 自更新保持下线；平台矩阵里原生端标注免验收，Windows 包与虚拟机验收由维护者自己做。
+- [x] 合并期间 main 有新提交时，已把 main 合进合并分支（不 rebase）并重新看过 CI。
+- [x] 收尾在并入之前做完：各工单的验收项已对照勾选、任务记录与 journal 已提交。并入会让这个 worktree 被 daemon 自动归档，已提前告诉维护者。
 - [ ] 维护者看过截图、包的核对结果与 PR 正文并发话后，PR 转为可合并，以 merge commit 并入（不 squash、不 rebase）。并入由维护者操作，或得到维护者明确同意后操作。
 - [ ] 并入后：`759532509` 是 main 的祖先；任务在主工作树归档。
 
@@ -118,3 +118,24 @@ Standards 与 Spec 两个维度各一个子代理，对同一份冻结补丁（`
 **复核（只看已修的十二条，一次）。** 十一条判为已修、说法属实；文档表一条判为「如实处理、验收项仍未满足」。复核另指出一处小瑕疵，没有改：示例命令里仍带 `PASEO_LISTEN`，按同一段的说法它对 daemon 不起作用（冒烟脚本也这样设，实际生效的是 `config.json` 里的 `daemon.listen`）。
 
 **规范更新。** `.atw/spec/` 没有要改的：本工单没有改代码，没有新的接口或约定；下次合并用得上的都在 `docs/release.md`。
+
+### 推送后的 CI、PR 正文与并入前的收尾（2026-10-13）
+
+**CI（草稿 PR #16，提交 `7d81b5d53`；这次推送只改文档与任务记录）。** CI run 38339731295，Desktop Packages run 38339731299。等待放在后台。
+
+- 第一次：20 项里 18 项通过。playwright 第 2 片 1 条失败：`context-window-meter.spec.ts:245`「the context window hover card shows the agent's usage (light)」（10 记过 dark 的那一条，同一个用例）；第 3 片 1 条失败：`rewind-menu.ui-contract.spec.ts:179`「rewinds from a user message sheet option」（已知的 CI 偶发）。
+- `gh run rerun 38339731295 --failed` 之后 20 项全部通过：format、lint、typecheck、changes、app-tests、sdk-tests、relay-tests、server-tests（ubuntu / windows / macos-14 文件观察）、desktop-tests（ubuntu / windows）、cli-tests 三片、playwright 四片、Desktop Packages 的 `linux`。
+- 第一次里首跑失败、重试后通过的 6 条：第 1 片 `agent-timeline-scroll-smoothness.spec.ts:137`（09 记的那条，这一轮仍是首跑失败）、`bottom-sheet-reopen.spec.ts:114`；第 3 片 `new-workspace-codex-mode-preferences.spec.ts:127`（第一次见）、`provider-settings-refresh.spec.ts:152`、`settings-providers-list-detail.spec.ts:59`、`sidebar-context-menu.spec.ts:17`。
+- 上一个提交 `005e6e6c2`（关闭工单 14，只改任务记录）的那一轮 CI（run 38337536661）被这次推送取消。取消前 cli-tests 第 3 片失败过一次：`25-daemon-restart-supervisor`「app-style restart request should restart worker and keep daemon healthy」等 worker 换进程号超时（`worker pid did not change after restart request`）。之前各段没有记过这一条；代码与全绿的 `9237cfdb6` 相同，`7d81b5d53` 这一轮同一片通过，按偶发记。
+- 这一轮的检查列表里没有 Nix 与 Nix Update Hash 两项。
+- 合并期间 main 没有新提交（`git fetch` 后 `origin/main` 仍是 `802b17d8c`），不需要把 main 合进来。
+
+**PR 正文。** 已更新到草稿 PR #16（`gh pr edit 16 --body-file`，PR 仍是草稿，`mergeable: MERGEABLE`）。按 `pr` 技能的三节（Summary / Evidence / Merge Danger）与 `docs/qa.md` 写，含：八段的树与各段冲突裁决摘要；与上游不同的地方；Muse Code 与 Antigravity 上缺的三项与后续任务；测试的改动（因换成上游实现而改动或删除的 Osuna 断言、按 Osuna 决定改写或没收的上游测试、新增的用例）；`plugin add 作者/仓库` 含义的变化与要写进下次更新日志的条目；daemon 自更新保持下线；硬指标、CI、界面对照表、本机 macOS 包；平台表里 iOS 与 Android 标注免验收，Windows 安装包与虚拟机验收由维护者自己做。
+
+- 初稿由一个只读的子代理按 01 – 14 的记录起草，主会话核对过：树里 19 个提交都是分支头的祖先；测试文件数（新增 75、修改 218、改名 15、删除 8）、247 个提交、截图数、`electron-builder.yml` 只多上游的 4 行，用命令重算一致；打包与 CI 两节由主会话填。子代理报告「按 Osuna 决定改写的上游测试」表的每一行都用 `git diff 759532509 HEAD -- <文件>` 核对过在分支头上仍成立；02、03、05、06、09 里为上游的中间页面写的跳过与改写按 10 的交接不列。
+- 子代理没有写进正文、拿不准的：Antigravity 在 macOS 上没登录时界面是否显示 `kill EPERM`（02 记给 04 核实，04 没有记录）；深色主题有没有截图。
+- 子代理顺带发现的两处残留，没有改，列在 PR 正文「留给维护者的事项」里：`e2e/browser/plugin-sidebar-items.spec.ts` 里 03 加的 `seedSidebarFooterPreferences` 一行与上游 v0.11.2 同一条用例里的一行重复；`sidebar-nav/model.test.ts:371` 的注释「上游此时默认可见」已过时。
+
+**验收项。** 01 – 14 的验收项全部已勾。本工单留着没勾的三条：「Usage 文档的链接；仓库说明里的文档表与实际一致」——前半已做，文档表差 `opencode-global-event-baseline.md` 一篇，等维护者定；「维护者看过……并发话后……并入」与「并入后」两条在并入时与并入后做。`prd.md` 验收清单留着没勾的两条：「收尾（勾工单、journal、归档任务）在并入之前做完」——勾工单与 journal 已做，归档按本工单「并入后：任务在主工作树归档」放在并入之后；「维护者看过截图与包的核对结果并发话；PR 以 merge commit 并入」。
+
+**给维护者。** 并入会让这个 worktree 被 daemon 自动归档，里面的智能体会被关掉，`packages/desktop/release/` 下的本机包随之消失；工作树里 `.agents/`、`.claude/`、`.pi/` 下 17 个没有提交的 ATW 文件改动不是本工单的，没有动也没有提交，归档时同样会丢。并入后要做的：在主工作树 `git pull`，核对 `git merge-base --is-ancestor 759532509 main`，勾上最后两条并 `tickets.py done 15`，归档任务（main 上归档要 `--skip-branch-validation`）；这次合并带进了新的依赖与 `plugins` 工作区，主工作树要先 `npm ci` 再 `npm run build:server`。
