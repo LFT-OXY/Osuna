@@ -14,16 +14,16 @@ import { UsagePlanCard } from "@/components/usage/usage-plan-card";
 import { UsageStatsCard } from "@/components/usage/usage-stats-card";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useUsageReport } from "@/hooks/use-usage-report";
-import type { UsageHostsView } from "@/usage/details";
-import { EMPTY_USAGE_REPORT } from "@/usage/merge";
+import type { UsageHostsView } from "@/usage-stats/details";
+import { EMPTY_USAGE_REPORT } from "@/usage-stats/merge";
 import {
   resolveUsageNow,
   resolveUsageRange,
   shiftUsageAnchor,
   type UsageCustomRange,
   type UsagePeriod,
-} from "@/usage/period";
-import { useUsageHosts } from "@/usage/use-usage-hosts";
+} from "@/usage-stats/period";
+import { useUsageHosts } from "@/usage-stats/use-usage-hosts";
 import { getDeviceTimeZone } from "@/utils/device-timezone";
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

@@ -15,7 +15,7 @@ import equal from "fast-deep-equal";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { PARENT_TOOL_CALL_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon, type ProviderIconComponent } from "@/components/provider-icons";
 import { LiveElapsed } from "@/components/message";
 import { Text } from "@/components/ui/text";
 import { ComposerTrackMark } from "@/composer/tracks";
@@ -90,7 +90,7 @@ export function useDispatchGroupsEnabled(input: {
 }
 
 /** 两种子智能体各自的 callId 索引：Paseo 按关联标签一对一，provider 按描述符的 `toolCallId` 一对多。 */
-interface DispatchSubagentIndex {
+export interface DispatchSubagentIndex {
   paseo: Record<string, DispatchSubagent>;
   provider: Record<string, DispatchSubagent[]>;
 }
@@ -372,9 +372,10 @@ function DispatchGroupRow({
 }): ReactElement {
   const { open } = presentation;
   const openable = open !== null;
+  const providerIcon = useProviderIcon(presentation.provider ?? "", serverId);
   const iconPresentation = useMemo(
-    () => buildIconPresentation(presentation, serverId),
-    [presentation, serverId],
+    () => buildIconPresentation(presentation, providerIcon),
+    [presentation, providerIcon],
   );
   const handlePress = useCallback(() => {
     if (open) {
@@ -428,9 +429,8 @@ function DispatchGroupRow({
 
 function buildIconPresentation(
   presentation: DispatchRowPresentation,
-  serverId: string,
+  icon: ProviderIconComponent,
 ): WorkspaceTabPresentation {
-  const icon = getProviderIcon(presentation.provider ?? "", serverId);
   return {
     key: presentation.key,
     kind: "agent",
@@ -438,6 +438,7 @@ function buildIconPresentation(
     subtitle: presentation.subtitle,
     tooltip: presentation.label,
     modified: false,
+    showCloseButton: true,
     titleState: "ready",
     icon,
     statusBucket: markBucket(presentation.bucket),

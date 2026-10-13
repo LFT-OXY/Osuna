@@ -26,6 +26,7 @@ export const zhCN: TranslationResources = {
     total: "{{total}} 个匹配项",
   },
   common: {
+    bottomSheetBackdrop: "底部面板背景",
     back: "返回",
     loading: "加载中...",
     actions: {
@@ -229,6 +230,14 @@ export const zhCN: TranslationResources = {
       open: "打开 Agent 功能",
       on: "开启",
       off: "关闭",
+      valueTooltip: "{{label}}：{{value}}",
+    },
+    speed: {
+      label: "速度",
+      select: "选择速度",
+      normal: "普通",
+      fast: "快速",
+      ultrafast: "超快",
     },
     mode: {
       title: "模式",
@@ -341,7 +350,6 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
-    workedFor: "已工作 {{duration}}",
     workingFor: "工作中 {{duration}}",
     changedFiles: {
       one: "改动了 {{count}} 个文件",
@@ -441,6 +449,9 @@ export const zhCN: TranslationResources = {
         completed: "已完成",
       },
     },
+    turnFooter: {
+      workedFor: "已工作 {{duration}}",
+    },
     compaction: {
       loading: "正在压缩...",
       auto: "上下文已自动压缩",
@@ -501,7 +512,9 @@ export const zhCN: TranslationResources = {
       recovery: {
         archivedTitle: "工作区已归档",
         restoreDescription:
-          "{{workspaceName}} 已归档，其工作树已移除。恢复分支 {{branch}} 以重新打开。",
+          "恢复 {{workspaceName}} 以回到其中的 Agent。工作树将使用分支 {{branch}}。",
+        restoreWithoutBranchDescription:
+          "恢复 {{workspaceName}} 以回到其中的 Agent。新分支将从保存的基准分支或仓库默认分支创建。",
         unarchiveDescription: "{{workspaceName}} 已归档。取消归档以重新打开。",
         restoreAction: "恢复",
         unarchiveAction: "取消归档",
@@ -1040,6 +1053,44 @@ export const zhCN: TranslationResources = {
           addAllToChat: "全部添加到聊天",
           addingToChat: "正在添加...",
         },
+        checksOverview: {
+          headline: {
+            actionRequired: "部分检查需要你处理",
+            failure: "部分检查未通过",
+            pending: "部分检查尚未完成",
+            success: "所有检查均已通过",
+            none: "没有检查",
+          },
+          count: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+          detailOne: "{{parts}}",
+          detailMany: "{{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+          groupMany: {
+            actionRequired: "{{count}} 项需要操作",
+            warning: "{{count}} 项警告",
+            failure: "{{count}} 项失败",
+            pending: "{{count}} 项进行中",
+            manual: "{{count}} 项手动",
+            success: "{{count}} 项成功",
+            ignored: "{{count}} 项已跳过",
+          },
+        },
         checksSummary: {
           passedLabel: "通过",
           failedLabel: "失败",
@@ -1063,32 +1114,14 @@ export const zhCN: TranslationResources = {
         },
         approvals: "{{given}} / {{required}} 批准",
         checks: {
-          headline: {
-            actionRequired: "部分检查需要你处理",
-            failure: "部分检查未通过",
-            pending: "部分检查尚未完成",
-            success: "所有检查均已通过",
-            none: "没有检查",
-          },
-          count: {
-            actionRequired: "{{count}} 项需要操作",
-            warning: "{{count}} 项警告",
-            failure: "{{count}} 项失败",
-            pending: "{{count}} 项进行中",
-            manual: "{{count}} 项手动",
-            success: "{{count}} 项成功",
-            ignored: "{{count}} 项已跳过",
-          },
           countSeparator: "，",
-          countLine: {
-            one: "{{parts}}",
-            many: "{{parts}}",
-          },
           accessibilityLabel: "{{headline}}。{{detail}}",
         },
         accessibility: {
           pullRequest: "拉取请求 #{{number}}",
           pullRequest_mr: "合并请求 !{{number}}",
+          commentActions: "评论操作",
+          threadActions: "讨论主题操作",
           checkStatus: {
             passed: "成功",
             failed: "失败",
@@ -1099,8 +1132,6 @@ export const zhCN: TranslationResources = {
             skipped: "已跳过",
             cancelled: "已取消",
           },
-          commentActions: "评论操作",
-          threadActions: "讨论主题操作",
         },
         states: {
           draft: "草稿",
@@ -1186,6 +1217,14 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} 分组",
+    statusBucket: {
+      needsInput: "需要输入",
+      failed: "失败",
+      readyToReview: "待查看",
+      working: "运行中",
+      done: "已完成",
+    },
     display: {
       trigger: "显示偏好",
       heading: "显示",
@@ -1245,6 +1284,10 @@ export const zhCN: TranslationResources = {
       hosts: "主机",
       settings: "设置",
       closeSidebar: "关闭侧边栏",
+    },
+    footer: {
+      usage: "套餐用量",
+      usageSummary: "套餐用量摘要",
     },
     help: {
       trigger: "帮助与支持",
@@ -1784,6 +1827,8 @@ export const zhCN: TranslationResources = {
       unknownReason: "当前 Agent 无法派发 Subagent",
       hostOutdated: "更新主机后可以提及 Agent",
     },
+    chooseProjectForCommands: "选择项目以查看指令",
+    chooseModelForCommands: "选择模型以查看指令",
   },
   loadOlderHistory: {
     failed: "无法加载更早历史",
@@ -1961,6 +2006,12 @@ export const zhCN: TranslationResources = {
       helper: "连接到远程主机上运行的 Osuna 守护进程。",
       fields: {
         target: "SSH 主机",
+        password: "守护进程密码",
+        optional: "可选",
+      },
+      passwordVisibility: {
+        show: "显示密码",
+        hide: "隐藏密码",
       },
       actions: {
         cancel: "取消",
@@ -2262,10 +2313,12 @@ export const zhCN: TranslationResources = {
     dismiss: "关闭",
   },
   contextWindow: {
+    noData: "暂无上下文数据",
+    accessibilityNoData: "上下文窗口：暂无上下文数据",
     title: "上下文窗口",
-    usedLabel: "已使用",
-    tokens: "Token",
-    accessibility: "上下文窗口已使用 {{percentage}}%，{{used}} / {{max}}",
+    used: "已使用 {{percentage}}%",
+    tokens: "{{used}} / {{max}} Token",
+    accessibility: "上下文窗口已使用 {{percentage}}%",
     sessionTotal: {
       title: "本会话合计",
       tokens: "Token",
@@ -2572,8 +2625,14 @@ export const zhCN: TranslationResources = {
         description: "显示用于在提示词之间跳转的大纲",
       },
       sidebar: {
-        title: "侧边栏",
-        description: "选择侧边栏顶部显示的项目及其顺序",
+        header: {
+          title: "顶部",
+          description: "选择侧边栏顶部显示的项目及其顺序",
+        },
+        footer: {
+          title: "底部",
+          description: "选择侧边栏底部显示的行及其顺序。添加项目和图标行始终显示",
+        },
         moveUp: "上移",
         moveDown: "下移",
       },
@@ -2608,6 +2667,14 @@ export const zhCN: TranslationResources = {
         pickerAccessibility: "{{field}}：{{value}}",
         notInstalledWarning: "本机未检测到该字体，将使用回退字体",
         notMonospaceWarning: "不是等宽字体，可能错位",
+      },
+      layout: {
+        title: "布局",
+        contentWidth: "内容宽度",
+        contentWidthHint: "宽屏上聊天和 Markdown 文件的最大宽度",
+        contentWidthAccessibility: "内容宽度（像素）",
+        reset: "重置",
+        resetAccessibility: "将内容宽度重置为默认值",
       },
       syntax: {
         title: "语法",
@@ -3611,20 +3678,42 @@ export const zhCN: TranslationResources = {
     planUsage: {
       apiEndpointNote: "当前使用第三方接口 {{name}}，此额度不代表实际消耗。",
       title: "套餐用量",
+      options: "套餐用量选项",
+      refreshFailed: "无法刷新套餐用量",
+      noHosts: "没有已连接的主机",
+      retry: "重试",
+      connectHostToSee: "连接 {{host}} 后可查看套餐用量",
+      updateHostToSee: "更新 {{host}} 后可查看套餐用量",
+      loginExpired: "登录已过期（{{ago}}）。{{remedy}}",
+      loginRejected: "登录被拒绝（HTTP {{status}}）。{{remedy}}",
+      remedyRun: "运行 {{command}} 以刷新登录。",
+      remedySignIn: "请重新登录。",
+      pin: "固定",
+      displayAs: "显示",
+      displayUsed: "已用",
+      displayRemaining: "剩余",
+      showInSidebar: "在侧边栏显示",
+      showInSidebarHint: "固定的套餐用量窗口显示在侧边栏底部",
+      refreshAll: "全部刷新",
+      unpin: "取消固定",
+      agentError: "无法加载套餐用量：{{reason}}",
       refresh: "刷新",
       refreshing: "刷新中…",
-      loading: "正在加载用量…",
-      empty: "暂无用量数据",
-      errorTitle: "无法加载用量",
-      hostUnavailable: "连接到这台主机后可查看提供方用量",
-      hostUpgradeRequired: "更新这台主机后可查看提供方用量",
+      loading: "正在加载套餐用量…",
+      empty: "暂无套餐用量数据",
+      errorTitle: "无法加载套餐用量",
+      hostUnavailable: "连接到这台主机后可查看套餐用量",
       clientUnavailable: "主机连接尚未就绪",
-      tooltipLoading: "正在加载套餐用量…",
-      updated: "更新于 {{ago}}",
+      updated: "{{ago}}更新",
       resets: "{{duration}} 后重置",
       resettingNow: "正在重置",
       runsOut: "{{duration}} 后用完",
       balanceLeft: "剩余 {{amount}}",
+      percentLeft: "剩余 {{percent}}",
+      summaryWindowUsed: "{{name}} 已用 {{percent}}",
+      summaryWindowLeft: "{{name}} 剩余 {{percent}}",
+      summaryLabel: "{{label}}：{{windows}}",
+      summarySeparator: "，",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3635,6 +3724,8 @@ export const zhCN: TranslationResources = {
         planA11y: "{{provider}} 套餐：{{plan}}",
         windowA11y: "{{label}}：已用 {{percent}}，{{trailing}}",
         windowA11yNoTrailing: "{{label}}：已用 {{percent}}",
+        windowA11yLeft: "{{label}}：剩余 {{percent}}，{{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}：剩余 {{percent}}",
       },
       status: {
         error: "错误",

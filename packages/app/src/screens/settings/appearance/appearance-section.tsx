@@ -33,6 +33,8 @@ import {
   MIN_CONTENT_FONT_SIZE,
   MIN_UI_BASE_FONT_SIZE,
   parseClampedFontSize,
+  parseContentMaxWidth,
+  resolveContentMaxWidth,
   sanitizeFontFamily,
   useAppSettings,
   type AppSettings,
@@ -363,6 +365,54 @@ function FontFamilyRow({
 }
 
 // ---------------------------------------------------------------------------
+// Content width: the same px row as the font sizes (commit on blur/submit) + reset to the default
+// ---------------------------------------------------------------------------
+
+interface ContentWidthRowProps {
+  value: AppSettings["contentMaxWidth"];
+  onChange: (value: AppSettings["contentMaxWidth"]) => void;
+}
+
+function ContentWidthRow({ value, onChange }: ContentWidthRowProps) {
+  const { t } = useTranslation();
+  const width = resolveContentMaxWidth({ contentMaxWidth: value });
+  const [draft, setDraft] = useState(String(width));
+
+  useEffect(() => {
+    setDraft(String(width));
+  }, [width]);
+
+  const commit = useCallback(() => {
+    const next = parseContentMaxWidth(draft) ?? width;
+    setDraft(String(next));
+    // Typing the width already in effect keeps following the default.
+    if (next !== width) {
+      onChange(next);
+    }
+  }, [draft, onChange, width]);
+
+  const reset = useCallback(() => {
+    setDraft(String(resolveContentMaxWidth({ contentMaxWidth: null })));
+    onChange(null);
+  }, [onChange]);
+
+  return (
+    <FontSizeRow
+      title={t("settings.appearance.layout.contentWidth")}
+      hint={t("settings.appearance.layout.contentWidthHint")}
+      accessibilityLabel={t("settings.appearance.layout.contentWidthAccessibility")}
+      resetAccessibilityLabel={t("settings.appearance.layout.resetAccessibility")}
+      draft={draft}
+      withBorder={false}
+      showReset={value !== null}
+      onChangeDraft={setDraft}
+      onCommit={commit}
+      onReset={reset}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Syntax highlight theme picker (commits immediately)
 // ---------------------------------------------------------------------------
 
@@ -504,6 +554,13 @@ export function AppearanceSection() {
   // pairing rows follow what the app actually renders rather than the stored value.
   const showSystemPairing =
     selectedPluginTheme === null && toBuiltInPreference(settings.theme) === "auto";
+
+  const handleContentMaxWidthChange = useCallback(
+    (contentMaxWidth: AppSettings["contentMaxWidth"]) => {
+      void updateSettings({ contentMaxWidth });
+    },
+    [updateSettings],
+  );
 
   const handleSyntaxThemeChange = useCallback(
     (syntaxTheme: SyntaxThemeId) => {
@@ -784,6 +841,14 @@ export function AppearanceSection() {
             onChangeDraft={handleTerminalSizeChange}
             onCommit={commitTerminalSize}
             onReset={resetTerminalSize}
+          />
+        </View>
+      </SettingsSection>
+      <SettingsSection title={t("settings.appearance.layout.title")}>
+        <View style={settingsStyles.card}>
+          <ContentWidthRow
+            value={settings.contentMaxWidth}
+            onChange={handleContentMaxWidthChange}
           />
         </View>
       </SettingsSection>

@@ -84,20 +84,26 @@ rl.on("line", (line) => {
   }
 
   if (message.method === "session/new") {
-    write({ id: message.id, result: { sessionId: "session-1" } });
     if (mode === "commands-after-session-new") {
-      setTimeout(() => {
-        write({
-          method: "session/update",
-          params: {
-            sessionId: "session-1",
-            update: {
-              sessionUpdate: "available_commands_update",
-              availableCommands: [{ name: "review", description: "Review the diff" }],
+      process.stdout.write(
+        [
+          { id: message.id, result: { sessionId: "session-1" } },
+          {
+            method: "session/update",
+            params: {
+              sessionId: "session-1",
+              update: {
+                sessionUpdate: "available_commands_update",
+                availableCommands: [{ name: "review", description: "Review the diff" }],
+              },
             },
           },
-        });
-      }, 0);
+        ]
+          .map((entry) => JSON.stringify({ jsonrpc: "2.0", ...entry }) + "\\n")
+          .join(""),
+      );
+    } else {
+      write({ id: message.id, result: { sessionId: "session-1" } });
     }
     return;
   }

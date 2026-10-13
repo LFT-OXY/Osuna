@@ -27,6 +27,7 @@ export const ja: TranslationResources = {
     total: "{{total}} 件の一致",
   },
   common: {
+    bottomSheetBackdrop: "ボトムシートの背景",
     back: "戻る",
     loading: "読み込み中...",
     actions: {
@@ -231,6 +232,14 @@ export const ja: TranslationResources = {
       open: "エージェント機能を開く",
       on: "オン",
       off: "オフ",
+      valueTooltip: "{{label}}：{{value}}",
+    },
+    speed: {
+      label: "速度",
+      select: "速度を選択",
+      normal: "標準",
+      fast: "高速",
+      ultrafast: "超高速",
     },
     mode: {
       title: "モード",
@@ -349,7 +358,6 @@ export const ja: TranslationResources = {
     },
   },
   message: {
-    workedFor: "作業時間 {{duration}}",
     workingFor: "作業中 {{duration}}",
     changedFiles: {
       one: "{{count}} 件のファイルを変更",
@@ -449,6 +457,9 @@ export const ja: TranslationResources = {
         completed: "完了",
       },
     },
+    turnFooter: {
+      workedFor: "作業時間 {{duration}}",
+    },
     compaction: {
       loading: "コンテキストを圧縮中...",
       auto: "コンテキストが自動的に圧縮されました",
@@ -509,7 +520,9 @@ export const ja: TranslationResources = {
       recovery: {
         archivedTitle: "ワークスペースはアーカイブ済みです",
         restoreDescription:
-          "{{workspaceName}} はアーカイブされ、worktree が削除されました。ブランチ {{branch}} を復元して再度開きます。",
+          "{{workspaceName}} を復元してエージェントに戻ります。worktree ではブランチ {{branch}} を使用します。",
+        restoreWithoutBranchDescription:
+          "{{workspaceName}} を復元してエージェントに戻ります。保存されたベース、またはリポジトリのデフォルトブランチから新しいブランチを作成します。",
         unarchiveDescription:
           "{{workspaceName}} はアーカイブされています。再度開くにはアーカイブを解除してください。",
         restoreAction: "復元",
@@ -1061,9 +1074,47 @@ export const ja: TranslationResources = {
         actions: {
           viewPullRequest: "表示",
           openOn: "{{brand}}で開く",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "チャットに追加",
+          addAllToChat: "すべてチャットに追加",
+          addingToChat: "追加中...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "対応が必要なチェックがあります",
+            failure: "失敗したチェックがあります",
+            pending: "完了していないチェックがあります",
+            success: "すべてのチェックに合格しました",
+            none: "チェックなし",
+          },
+          count: {
+            actionRequired: "{{count}} 件要対応",
+            warning: "{{count}} 件警告",
+            failure: "{{count}} 件失敗",
+            pending: "{{count}} 件実行中",
+            manual: "{{count}} 件手動",
+            success: "{{count}} 件成功",
+            ignored: "{{count}} 件スキップ",
+          },
+          detailOne: "チェック: {{parts}}",
+          detailMany: "チェック: {{parts}}",
+          groupOne: {
+            actionRequired: "要対応のチェック {{count}} 件",
+            warning: "警告のチェック {{count}} 件",
+            failure: "失敗したチェック {{count}} 件",
+            pending: "実行中のチェック {{count}} 件",
+            manual: "手動のチェック {{count}} 件",
+            success: "成功したチェック {{count}} 件",
+            ignored: "スキップされたチェック {{count}} 件",
+          },
+          groupMany: {
+            actionRequired: "要対応のチェック {{count}} 件",
+            warning: "警告のチェック {{count}} 件",
+            failure: "失敗したチェック {{count}} 件",
+            pending: "実行中のチェック {{count}} 件",
+            manual: "手動のチェック {{count}} 件",
+            success: "成功したチェック {{count}} 件",
+            ignored: "スキップされたチェック {{count}} 件",
+          },
         },
         checksSummary: {
           passedLabel: "成功",
@@ -1077,43 +1128,25 @@ export const ja: TranslationResources = {
           checks: "チェック",
           pipeline: "パイプライン",
           reviews: "レビュー",
-          activity: "Activity",
+          activity: "アクティビティ",
         },
         empty: {
           noJobs: "ジョブなし",
           loadingPipeline: "パイプラインを読み込み中...",
           pipelineJobsLoadFailed: "パイプラインのジョブを読み込めませんでした",
           allowedToFail: "失敗を許可",
-          noActivity: "No activity yet",
+          noActivity: "まだアクティビティはありません",
         },
         approvals: "{{given}} / {{required}} 承認",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "プルリクエスト#{{number}}",
           pullRequest_mr: "マージリクエスト !{{number}}",
+          commentActions: "コメントの操作",
+          threadActions: "スレッドの操作",
           checkStatus: {
             passed: "成功",
             failed: "失敗",
@@ -1124,8 +1157,6 @@ export const ja: TranslationResources = {
             skipped: "スキップ済み",
             cancelled: "キャンセル済み",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "ドラフト",
@@ -1144,8 +1175,8 @@ export const ja: TranslationResources = {
         },
         thread: {
           discussion: "ディスカッションスレッド",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "解決済み",
+          outdated: "古い",
         },
         errors: {
           statusLoadFailed: "プルリクエストのステータスを読み込めません",
@@ -1211,6 +1242,14 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} グループ",
+    statusBucket: {
+      needsInput: "入力待ち",
+      failed: "失敗",
+      readyToReview: "レビュー待ち",
+      working: "実行中",
+      done: "完了",
+    },
     display: {
       trigger: "表示設定",
       heading: "表示",
@@ -1271,6 +1310,10 @@ export const ja: TranslationResources = {
       hosts: "ホスト",
       settings: "設定",
       closeSidebar: "サイドバーを閉じる",
+    },
+    footer: {
+      usage: "プラン使用量",
+      usageSummary: "プラン使用量の概要",
     },
     help: {
       trigger: "ヘルプとサポート",
@@ -1809,6 +1852,8 @@ export const ja: TranslationResources = {
       unknownReason: "このエージェントはサブエージェントを起動できません",
       hostOutdated: "エージェントをメンションするには Host を更新してください",
     },
+    chooseProjectForCommands: "コマンドを表示するにはプロジェクトを選択してください",
+    chooseModelForCommands: "コマンドを表示するにはモデルを選択してください",
   },
   loadOlderHistory: {
     failed: "古い履歴を読み込めませんでした",
@@ -1988,6 +2033,12 @@ export const ja: TranslationResources = {
       helper: "リモートホストで動作する Osuna デーモンに接続します。",
       fields: {
         target: "SSH ホスト",
+        password: "デーモンのパスワード",
+        optional: "任意",
+      },
+      passwordVisibility: {
+        show: "パスワードを表示",
+        hide: "パスワードを非表示",
       },
       actions: {
         cancel: "キャンセル",
@@ -2295,10 +2346,12 @@ export const ja: TranslationResources = {
     dismiss: "閉じる",
   },
   contextWindow: {
+    noData: "コンテキストデータがありません",
+    accessibilityNoData: "コンテキストウィンドウ：コンテキストデータがありません",
     title: "コンテキストウィンドウ",
-    usedLabel: "使用",
-    tokens: "トークン",
-    accessibility: "コンテキストウィンドウ {{percentage}}% 使用、{{used}} / {{max}}",
+    used: "{{percentage}}% 使用",
+    tokens: "{{used}} / {{max}} トークン",
+    accessibility: "コンテキストウィンドウ {{percentage}}% 使用",
     sessionTotal: {
       title: "セッション合計",
       tokens: "トークン",
@@ -2569,8 +2622,15 @@ export const ja: TranslationResources = {
         description: "プロンプト間を移動するためのアウトラインを表示します",
       },
       sidebar: {
-        title: "サイドバー",
-        description: "サイドバー上部に表示する項目とその順序を選択します",
+        header: {
+          title: "ヘッダー",
+          description: "サイドバー上部に表示する項目とその順序を選択します",
+        },
+        footer: {
+          title: "フッター",
+          description:
+            "サイドバー下部に表示する行とその順序を選択します。プロジェクトを追加とアイコンの行は常に表示されます",
+        },
         moveUp: "上に移動",
         moveDown: "下に移動",
       },
@@ -2607,6 +2667,14 @@ export const ja: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "このデバイスでフォントが見つかりません。代替フォントが使われます",
         notMonospaceWarning: "等幅フォントではありません。表示がずれる可能性があります",
+      },
+      layout: {
+        title: "レイアウト",
+        contentWidth: "コンテンツ幅",
+        contentWidthHint: "ワイド画面でのチャットと Markdown ファイルの最大幅",
+        contentWidthAccessibility: "コンテンツ幅 (ピクセル)",
+        reset: "リセット",
+        resetAccessibility: "コンテンツ幅をデフォルトに戻す",
       },
       syntax: {
         title: "構文ハイライト",
@@ -3644,20 +3712,42 @@ export const ja: TranslationResources = {
       apiEndpointNote:
         "API エンドポイント {{name}} を使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
+      options: "プラン使用量のオプション",
+      refreshFailed: "プラン使用量を更新できません",
+      noHosts: "接続中のホストがありません",
+      retry: "再試行",
+      connectHostToSee: "{{host}} に接続するとプラン使用量を表示できます",
+      updateHostToSee: "{{host}} を更新するとプラン使用量を表示できます",
+      loginExpired: "ログインの有効期限が切れました（{{ago}}）。{{remedy}}",
+      loginRejected: "ログインが拒否されました（HTTP {{status}}）。{{remedy}}",
+      remedyRun: "{{command}} を実行して更新してください。",
+      remedySignIn: "もう一度サインインしてください。",
+      pin: "ピン留め",
+      displayAs: "表示",
+      displayUsed: "使用済み",
+      displayRemaining: "残り",
+      showInSidebar: "サイドバーに表示",
+      showInSidebarHint: "ピン留めした枠はサイドバー下部に表示されます",
+      refreshAll: "すべて更新",
+      unpin: "ピン留めを解除",
+      agentError: "プラン使用量を読み込めません: {{reason}}",
       refresh: "更新",
       refreshing: "更新中...",
-      loading: "使用状況を読み込み中...",
-      empty: "使用状況データがありません",
-      errorTitle: "使用状況を読み込めません",
-      hostUnavailable: "このホストに接続するとプロバイダーの使用状況を表示できます",
-      hostUpgradeRequired: "ホストを更新するとプロバイダーの使用状況を表示できます",
+      loading: "プラン使用量を読み込み中...",
+      empty: "プラン使用量のデータがありません",
+      errorTitle: "プラン使用量を読み込めません",
+      hostUnavailable: "このホストに接続するとプラン使用量を表示できます",
       clientUnavailable: "ホスト接続の準備ができていません",
-      tooltipLoading: "プラン使用状況を読み込み中…",
       updated: "{{ago}}に更新",
       resets: "{{duration}}後にリセット",
       resettingNow: "リセット中",
       runsOut: "{{duration}}後に上限",
       balanceLeft: "残り {{amount}}",
+      percentLeft: "残り {{percent}}",
+      summaryWindowUsed: "{{name}} {{percent}} 使用済み",
+      summaryWindowLeft: "{{name}} 残り {{percent}}",
+      summaryLabel: "{{label}}：{{windows}}",
+      summarySeparator: "、",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3668,6 +3758,8 @@ export const ja: TranslationResources = {
         planA11y: "{{provider}} プラン：{{plan}}",
         windowA11y: "{{label}}：{{percent}} 使用、{{trailing}}",
         windowA11yNoTrailing: "{{label}}：{{percent}} 使用",
+        windowA11yLeft: "{{label}}：残り {{percent}}、{{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}：残り {{percent}}",
       },
       status: {
         error: "エラー",

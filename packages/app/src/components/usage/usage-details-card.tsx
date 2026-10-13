@@ -14,12 +14,16 @@ import {
   type UsageDetailsTab,
   type UsageHostsView,
   type UsageProjectLimit,
-} from "@/usage/details";
-import { formatGroupedNumber, formatUsageCost, formatUsageTokensCompact } from "@/usage/format";
-import type { MergedUsageProject, MergedUsageReport } from "@/usage/merge";
-import { formatUsageDay, formatUsageMonth } from "@/usage/range-label";
-import { usageSourceColor, usageSourceLabel } from "@/usage/sources";
-import { totalUsageTokens } from "@/usage/totals";
+} from "@/usage-stats/details";
+import {
+  formatGroupedNumber,
+  formatUsageCost,
+  formatUsageTokensCompact,
+} from "@/usage-stats/format";
+import type { MergedUsageProject, MergedUsageReport } from "@/usage-stats/merge";
+import { formatUsageDay, formatUsageMonth } from "@/usage-stats/range-label";
+import { usageSourceColor, usageSourceLabel } from "@/usage-stats/sources";
+import { totalUsageTokens } from "@/usage-stats/totals";
 
 /** Below this the table scrolls sideways rather than squeezing its columns. */
 const TABLE_MIN_WIDTH = 672;

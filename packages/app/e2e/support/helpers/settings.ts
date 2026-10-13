@@ -75,6 +75,7 @@ export async function openSettingsHostSection(
 }
 
 export async function expectSettingsHeader(page: Page, title: string): Promise<void> {
+  // Osuna：设置详情页用自己的页头，没有换成上游的 PageLayout（它的标题 testID 是 page-title）。
   await expect(page.getByTestId("settings-detail-header-title")).toHaveText(title);
 }
 

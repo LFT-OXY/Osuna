@@ -27,6 +27,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useHasFinePointer } from "@/hooks/use-fine-pointer";
 import { useShallow } from "zustand/shallow";
 import {
   ArrowUp,
@@ -41,16 +42,13 @@ import {
   Paperclip,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
-import { FOOTER_HEIGHT, MAX_CONTENT_WIDTH } from "@/constants/layout";
+import { FOOTER_HEIGHT } from "@/constants/layout";
 import {
   AgentControls,
   DraftAgentControls,
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
-import {
-  ContextWindowMeter,
-  type ContextWindowPopoverLayout,
-} from "@/components/context-window-meter";
+import { ContextWindowMeter } from "@/components/context-window-meter";
 import { ComposerContextStrip } from "./context-strip";
 import type { BranchSwitchConditions, ComposerAgentPhase } from "./context-strip/model";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
@@ -68,7 +66,7 @@ import {
 import type { ComposerLiveSelection } from "./input/text-input.types";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import type { DraftCommandConfig } from "@/hooks/use-agent-commands-query";
+import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
 import { focusWithRetries } from "@/utils/web-focus";
 import {
@@ -294,61 +292,10 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       status: agent?.status ?? null,
       contextWindowMaxTokens: agent?.lastUsage?.contextWindowMaxTokens ?? null,
       contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
-      model: agent?.model ?? null,
       provider: agent?.provider ?? null,
+      model: agent?.model ?? null,
     };
   };
-}
-
-interface ContextWindowMeterArgs {
-  maxTokens: number | null;
-  usedTokens: number | null;
-  serverId: string;
-  agentId: string;
-  provider: string | null;
-  pending: boolean;
-  glyphSize: number;
-  usageSupport: boolean | null;
-  runningTurnStartedAt: Date | null;
-  showTokenLabel: boolean;
-  showPlanUsage: boolean;
-  popoverLayout: ContextWindowPopoverLayout;
-}
-
-function renderContextWindowMeter(args: ContextWindowMeterArgs): ReactElement | null {
-  const hasData = args.maxTokens !== null && args.usedTokens !== null;
-  if (!hasData && !args.pending) {
-    return null;
-  }
-  return (
-    <ContextWindowMeter
-      maxTokens={args.maxTokens}
-      usedTokens={args.usedTokens}
-      showPercentage={false}
-      serverId={args.serverId}
-      agentId={args.agentId}
-      provider={args.provider}
-      pending={args.pending}
-      glyphSize={args.glyphSize}
-      usageSupport={args.usageSupport}
-      runningTurnStartedAt={args.runningTurnStartedAt}
-      showTokenLabel={args.showTokenLabel}
-      showPlanUsage={args.showPlanUsage}
-      popoverLayout={args.popoverLayout}
-    />
-  );
-}
-
-function resolveContextWindowPlacement(input: {
-  meter: ReactElement | null;
-  reserveSlot: boolean;
-  showTokenLabel: boolean;
-}): ReactNode {
-  if (!input.reserveSlot) return null;
-  const slotStyle = input.showTokenLabel
-    ? styles.contextWindowMeterLabelSlot
-    : styles.contextWindowMeterSlot;
-  return <View style={slotStyle}>{input.meter}</View>;
 }
 
 interface RenderLeftContentArgs {
@@ -1075,8 +1022,8 @@ interface ComposerProps {
   autoFocusKey?: string;
   /** Callback to expose a focus function to parent components (desktop only). */
   onFocusInput?: (focus: () => void) => void;
-  /** Optional draft context for listing commands before an agent exists. */
-  commandDraftConfig?: DraftCommandConfig;
+  /** Draft context for listing commands before an agent exists. Omitted for running agents. */
+  commandDraft?: DraftCommandTarget;
   /** Called when a message is about to be sent (any path: keyboard, dictation, queued). */
   onMessageSent?: () => void;
   onComposerHeightChange?: (height: number) => void;
@@ -1106,16 +1053,6 @@ interface ComposerProps {
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
 const StableMessageInput = memo(MessageInput);
-
-function resolveContextWindowValues(
-  rawMax: number | null,
-  rawUsed: number | null,
-): { contextWindowMaxTokens: number | null; contextWindowUsedTokens: number | null } {
-  if (typeof rawMax === "number" && typeof rawUsed === "number") {
-    return { contextWindowMaxTokens: rawMax, contextWindowUsedTokens: rawUsed };
-  }
-  return { contextWindowMaxTokens: null, contextWindowUsedTokens: null };
-}
 
 interface OutgoingComposerMessage {
   message: string;
@@ -1346,6 +1283,7 @@ function ComposerSurfaceStack({
   gitStatus,
   branchSwitchConditions,
   planUsageProviderId,
+  planUsageAgentId,
   showContextStrip,
   children,
 }: {
@@ -1355,6 +1293,7 @@ function ComposerSurfaceStack({
   gitStatus: CheckoutStatusPayload | null;
   branchSwitchConditions: BranchSwitchConditions;
   planUsageProviderId: string | null;
+  planUsageAgentId: string | null;
   showContextStrip: boolean;
   children: ReactNode;
 }) {
@@ -1369,6 +1308,7 @@ function ComposerSurfaceStack({
           gitStatus={gitStatus}
           branchSwitchConditions={branchSwitchConditions}
           planUsageProviderId={planUsageProviderId}
+          planUsageAgentId={planUsageAgentId}
         />
       ) : null}
     </View>
@@ -1419,7 +1359,7 @@ function ComposerContentImpl({
   autoFocus = false,
   autoFocusKey,
   onFocusInput,
-  commandDraftConfig,
+  commandDraft,
   onMessageSent,
   onComposerHeightChange,
   onAttentionInputFocus,
@@ -1465,6 +1405,7 @@ function ComposerContentImpl({
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
   const isDesktopWebBreakpoint = resolveIsDesktopWebBreakpoint(isCompactFormFactor);
+  const hasFinePointer = useHasFinePointer();
   const isDesktopLayout = resolveIsDesktopWebBreakpoint(isCompactLayout);
   const isContextStripVisible = showContextStrip && !isCompactFormFactor;
   const messagePlaceholder = resolveMessagePlaceholder(inputMode, isDesktopLayout, t, placeholder);
@@ -1822,8 +1763,9 @@ function ComposerContentImpl({
     if (resolveAgentControlsMode(agentControls) === "draft") agent = "draft";
     return { agent, isHostConnected: isConnected };
   }, [agentControls, isAgentRunning, isConnected]);
-  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走。
+  // 草稿还没有 agent，套餐用量跟着草稿里选中的提供方走；有 agent 时跟着它实际所用的账号走。
   const planUsageProviderId = agentControls ? agentControls.selectedProvider : agentState.provider;
+  const planUsageAgentId = hasAgent ? agentId : null;
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2283,64 +2225,47 @@ function ComposerContentImpl({
     ],
   );
 
-  const { contextWindowMaxTokens, contextWindowUsedTokens } = resolveContextWindowValues(
-    agentState.contextWindowMaxTokens,
-    agentState.contextWindowUsedTokens,
-  );
-
-  const contextWindowPending = agentState.status === "initializing" || isAgentRunning;
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
   // A phone keeps the ring alone; the toolbar has no room for `84K / 200K`.
   const showContextWindowTokenLabel = !isCompactLayout;
-  const contextWindowPopoverLayout: ContextWindowPopoverLayout = isCompactLayout
-    ? "stacked"
-    : "columns";
   // COMPAT(usage): added in v0.8.2, remove gate after 2027-09-19.
   const usageSupport = useHostFeatureAvailability(serverId, "usage");
   const runningTurnStartedAt = useSessionStore(
     (state) => selectAgentTurnPresentation(state.sessions[serverId], agentId).startedAt,
   );
-
-  const contextWindowMeter = useMemo(
+  const contextWindowMeterSlotStyle = showContextWindowTokenLabel
+    ? styles.contextWindowMeterLabelSlot
+    : styles.contextWindowMeterSlot;
+  const beforeVoiceContent = useMemo(
     () =>
-      renderContextWindowMeter({
-        maxTokens: contextWindowMaxTokens,
-        usedTokens: contextWindowUsedTokens,
-        serverId,
-        agentId,
-        provider: agentState.provider,
-        pending: contextWindowPending,
-        glyphSize: contextWindowMeterGlyphSize,
-        usageSupport,
-        runningTurnStartedAt,
-        showTokenLabel: showContextWindowTokenLabel,
-        // 窄栏可见时套餐用量在窄栏上，弹层不再重复；没有窄栏的输入框照旧放在弹层里。
-        showPlanUsage: !isContextStripVisible,
-        popoverLayout: contextWindowPopoverLayout,
-      }),
+      hasAgent ? (
+        <View style={contextWindowMeterSlotStyle}>
+          <ContextWindowMeter
+            serverId={serverId}
+            agentId={agentId}
+            maxTokens={agentState.contextWindowMaxTokens}
+            usedTokens={agentState.contextWindowUsedTokens}
+            provider={agentState.provider}
+            glyphSize={contextWindowMeterGlyphSize}
+            usageSupport={usageSupport}
+            runningTurnStartedAt={runningTurnStartedAt}
+            showTokenLabel={showContextWindowTokenLabel}
+          />
+        </View>
+      ) : null,
     [
-      agentId,
-      contextWindowMaxTokens,
-      contextWindowUsedTokens,
+      hasAgent,
       serverId,
+      agentId,
+      agentState.contextWindowMaxTokens,
+      agentState.contextWindowUsedTokens,
       agentState.provider,
-      contextWindowPending,
       contextWindowMeterGlyphSize,
-      contextWindowPopoverLayout,
-      isContextStripVisible,
+      contextWindowMeterSlotStyle,
       runningTurnStartedAt,
       showContextWindowTokenLabel,
       usageSupport,
     ],
-  );
-  const beforeVoiceContent = useMemo(
-    () =>
-      resolveContextWindowPlacement({
-        meter: contextWindowMeter,
-        reserveSlot: hasAgent,
-        showTokenLabel: showContextWindowTokenLabel,
-      }),
-    [contextWindowMeter, hasAgent, showContextWindowTokenLabel],
   );
 
   const hasGithubAttachment = useMemo(
@@ -2589,7 +2514,7 @@ function ComposerContentImpl({
       setUserInput: replaceUserInput,
       serverId,
       agentId,
-      draftConfig: commandDraftConfig,
+      draft: commandDraft,
       prefetchCommands: isMessageInputFocused && mode.showAutocomplete,
       onPickSkill: handlePickSkill,
       onPickMention: handlePickMention,
@@ -2605,7 +2530,7 @@ function ComposerContentImpl({
       replaceUserInput,
       serverId,
       agentId,
-      commandDraftConfig,
+      commandDraft,
       isMessageInputFocused,
       mode.showAutocomplete,
       buildOutgoingAttachments,
@@ -2633,7 +2558,8 @@ function ComposerContentImpl({
     { disabled: isSubmitLoadingVisible },
   );
 
-  const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint;
+  // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
+  const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint && hasFinePointer;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
   const sendErrorNode = useMemo(
     () =>
@@ -2693,6 +2619,7 @@ function ComposerContentImpl({
                 gitStatus={checkoutStatusQuery.status}
                 branchSwitchConditions={branchSwitchConditions}
                 planUsageProviderId={planUsageProviderId}
+                planUsageAgentId={planUsageAgentId}
                 showContextStrip={isContextStripVisible}
               >
                 <StableMessageInput
@@ -2804,7 +2731,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
   inputAreaContent: {
     flexShrink: 1,
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     gap: theme.spacing[3],
   },
   messageInputContainer: {

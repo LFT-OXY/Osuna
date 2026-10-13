@@ -64,11 +64,14 @@ import {
   type WorkspaceTabMenuLabels,
 } from "@/screens/workspace/workspace-tab-menu";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import type { PaneHost } from "@/panels/panel-manifest";
+import type { WorkspaceTabLaunchPurpose } from "@/workspace-tabs/launcher";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import { ICON_SIZE, SPACING, type Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { formatCompactTimeAgoAsProse } from "@/utils/time";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
@@ -108,7 +111,7 @@ const TAB_ICON_WIDTH = 14;
 const TAB_CONTENT_GAP = 4;
 const TAB_DROP_INDICATOR_WIDTH = 4;
 const TAB_MODIFIED_DOT_SIZE = 8;
-const TAB_MIN_WIDTH = 96;
+const TAB_MIN_WIDTH = 64;
 const TAB_MAX_WIDTH = 160;
 const TAB_CLOSE_BUTTON_SIZE = 18;
 const TAB_CLOSE_BUTTON_INSET = 4;
@@ -157,12 +160,6 @@ function formatAgentTooltipTitle(singleLineTitle: string): string {
   return `${singleLineTitle.slice(0, AGENT_TOOLTIP_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
-function formatAgentTooltipActivity(compactActivity: string): string {
-  if (compactActivity === "now") return "just now";
-  if (/^\d/.test(compactActivity)) return `${compactActivity} ago`;
-  return compactActivity;
-}
-
 function AgentTabTooltipBody({
   serverId,
   agentId,
@@ -178,7 +175,7 @@ function AgentTabTooltipBody({
     return state.agentLastActivity.get(agentId) ?? agent?.lastActivityAt ?? null;
   });
   const compactActivity = useCompactTimeAgo(lastActivityAt);
-  const activity = formatAgentTooltipActivity(compactActivity);
+  const activity = formatCompactTimeAgoAsProse(compactActivity);
 
   return (
     <View style={styles.tooltipAgentContent}>
@@ -224,7 +221,12 @@ function TabLabelMeasurement({
   );
 }
 
+type PanePanelKinds = readonly WorkspaceTabDescriptor["kind"][];
+
 interface WorkspaceNewTabButtonProps {
+  panePanelKinds: PanePanelKinds;
+  host: PaneHost;
+  launchPurpose: WorkspaceTabLaunchPurpose;
   serverId: string;
   paneId?: string;
   shortcutKeys: ShortcutKey[][] | null;
@@ -232,6 +234,9 @@ interface WorkspaceNewTabButtonProps {
 }
 
 function WorkspaceNewTabButton({
+  panePanelKinds,
+  host,
+  launchPurpose,
   serverId,
   paneId,
   shortcutKeys,
@@ -252,8 +257,9 @@ function WorkspaceNewTabButton({
       </ToolbarButton>
       <WorkspaceNewTabMenuContent
         serverId={serverId}
-        purpose="primary"
-        host="main"
+        purpose={launchPurpose}
+        host={host}
+        panePanelKinds={panePanelKinds}
         paneId={paneId}
       />
     </DropdownMenu>
@@ -263,6 +269,9 @@ function WorkspaceNewTabButton({
 }
 
 function WorkspacePaneToolbarActions({
+  panePanelKinds,
+  host,
+  launchPurpose,
   showNewTabButton,
   showSplitActions,
   showMaximizeAction,
@@ -274,6 +283,9 @@ function WorkspacePaneToolbarActions({
   onSplitDown,
   onTogglePaneMaximized,
 }: {
+  panePanelKinds: PanePanelKinds;
+  host: PaneHost;
+  launchPurpose: WorkspaceTabLaunchPurpose;
   showNewTabButton: boolean;
   showSplitActions: boolean;
   showMaximizeAction: boolean;
@@ -312,6 +324,9 @@ function WorkspacePaneToolbarActions({
     <ToolbarControls style={styles.paneSplitActions}>
       {showNewTabButton ? (
         <WorkspaceNewTabButton
+          panePanelKinds={panePanelKinds}
+          host={host}
+          launchPurpose={launchPurpose}
           placement="toolbar"
           serverId={serverId}
           paneId={paneId}
@@ -507,9 +522,12 @@ function sameWidths(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((width, index) => width === right[index]);
 }
 
-interface WorkspaceDesktopTabsRowProps {
+export interface WorkspaceDesktopTabsRowProps {
+  host?: PaneHost;
+  launchPurpose?: WorkspaceTabLaunchPurpose;
   paneId?: string;
   isFocused?: boolean;
+  ownsKeyboardShortcuts?: boolean;
   tabs: WorkspaceDesktopTabRowItem[];
   normalizedServerId: string;
   normalizedWorkspaceId: string;
@@ -653,16 +671,21 @@ function useMiddleClickClose(onClose: () => void) {
   return ref;
 }
 
+/** 静止 tab 下面的底色：主 pane 的标签行是画布，Explorer 坞是侧栏。 */
+type TabRestBackdrop = Extract<SurfaceBackdrop, "surface0" | "surfaceSidebar">;
+
 /** The chip fill the running-status ring has to knock out of. Mirrors `styles.tab*` exactly. */
 function resolveChipBackdrop({
   isActiveFocused,
   isFilled,
+  restBackdrop,
 }: {
   isActiveFocused: boolean;
   isFilled: boolean;
+  restBackdrop: TabRestBackdrop;
 }): SurfaceBackdrop {
   if (isActiveFocused) return "surfaceTabActive";
-  return isFilled ? "surfaceTabHover" : "surface0";
+  return isFilled ? "surfaceTabHover" : restBackdrop;
 }
 
 function TabHandleContent({
@@ -731,6 +754,7 @@ function TabChip({
   showCloseButton,
   isCloseHovered,
   isClosingTab,
+  restBackdrop,
   presentation,
   tooltipLabel,
   accessibilityLabel,
@@ -750,6 +774,7 @@ function TabChip({
   showCloseButton: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
+  restBackdrop: TabRestBackdrop;
   presentation: WorkspaceTabPresentation;
   tooltipLabel: string;
   accessibilityLabel: string;
@@ -773,6 +798,7 @@ function TabChip({
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
     isActiveFocused,
     isFilled: isActive || isHovered,
+    restBackdrop,
   });
   // 选中的 tab 常显关闭按钮；其余 tab 悬停时出现，原生端与紧凑布局没有悬停，常显。
   const showCloseControl =
@@ -865,9 +891,8 @@ function TabChip({
               {...(dragHandleProps?.listeners as object | undefined)}
               testID={`workspace-tab-${testIdentity}`}
               triggerRef={dragHandleProps?.setActivatorNodeRef as unknown as undefined}
-              enabledOnMobile={false}
               style={tabChipStyle}
-              onPressIn={handleNavigateTab}
+              onPressIn={isWeb ? handleNavigateTab : undefined}
               onPress={handleNavigateTab}
               accessibilityRole="button"
               accessibilityLabel={accessibilityLabel}
@@ -1018,8 +1043,11 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
 }
 
 function ResolvedWorkspaceDesktopTabsRow({
+  host = "main",
+  launchPurpose = "primary",
   paneId,
   isFocused = false,
+  ownsKeyboardShortcuts = isFocused,
   tabs,
   normalizedServerId,
   normalizedWorkspaceId,
@@ -1087,6 +1115,15 @@ function ResolvedWorkspaceDesktopTabsRow({
       closeButtonWidth: TAB_CLOSE_BUTTON_RESERVED_WIDTH,
     }),
     [exitFocusModeWidth, focusModeEnabled, showPaneMaximizeAction, showPaneSplitActions],
+  );
+
+  const panePanelKinds = useMemo(() => tabs.map(({ tab }) => tab.kind), [tabs]);
+  // Explorer 坞画在侧栏底色上：标签行、静止 tab 的状态环挖空与滚动遮罩都跟着侧栏，不取主画布的底色。
+  const onSidebar = host === "explorer";
+  const restBackdrop: TabRestBackdrop = onSidebar ? "surfaceSidebar" : "surface0";
+  const tabsContainerStyle = useMemo(
+    () => (onSidebar ? [styles.tabsContainer, styles.tabsContainerSidebar] : styles.tabsContainer),
+    [onSidebar],
   );
 
   const fallbackTabLabels = useMemo(
@@ -1208,8 +1245,14 @@ function ResolvedWorkspaceDesktopTabsRow({
     });
   }, [tabLabels, tabs, trackSnapshot]);
 
+  // 与 labelWidths 同一份快照、同一顺序；不画关闭按钮的 tab（Explorer 的导航视图）不留关闭槽。
+  const tabCloseSlots = useMemo(
+    () => trackSnapshot?.tabs.map(({ presentation }) => presentation.showCloseButton) ?? [],
+    [trackSnapshot],
+  );
   const { layout } = useWorkspaceTabLayout({
     tabLabelWidths: trackSnapshot?.labelWidths ?? [],
+    tabCloseSlots,
     viewportWidthOverride: tabsContainerWidth > 0 ? tabsContainerWidth : null,
     metrics: layoutMetrics,
   });
@@ -1234,14 +1277,14 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const handleNewTabKeyboardAction = useCallback(
     (action: KeyboardActionDefinition): boolean => {
-      if (!isFocused) return false;
+      if (!ownsKeyboardShortcuts) return false;
       if (action.id === "workspace.tab.menu.open") {
         createNewTab();
         return true;
       }
       return false;
     },
-    [createNewTab, isFocused],
+    [createNewTab, ownsKeyboardShortcuts],
   );
 
   useKeyboardActionHandler({
@@ -1252,7 +1295,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       paneId,
     }),
     actions: ["workspace.tab.menu.open"],
-    enabled: isFocused,
+    enabled: ownsKeyboardShortcuts,
     priority: 200,
     handle: handleNewTabKeyboardAction,
   });
@@ -1264,7 +1307,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       dragHandleProps,
       isActive,
     }: DraggableRenderItemInfo<ResolvedWorkspaceDesktopTabRowItem>) => {
-      const shouldShowCloseButton = layout.closeButtonPolicy === "all";
+      const shouldShowCloseButton =
+        layout.closeButtonPolicy === "all" && item.presentation.showCloseButton;
       const layoutItem = layout.items[index] ?? null;
       const resolvedTabWidth = layoutItem?.width ?? 150;
       const showLabel = layoutItem?.showLabel ?? true;
@@ -1295,6 +1339,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           resolvedTabWidth={resolvedTabWidth}
           showLabel={showLabel}
           showCloseButton={shouldShowCloseButton}
+          restBackdrop={restBackdrop}
           setHoveredCloseTabKey={setHoveredCloseTabKey}
           onNavigateTab={onNavigateTab}
           onCloseTab={onCloseTab}
@@ -1309,6 +1354,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       activeDragTabId,
       isFocused,
       layout.closeButtonPolicy,
+      restBackdrop,
       layout.items,
       normalizedServerId,
       onCloseOtherTabs,
@@ -1341,7 +1387,7 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const row = (
     <View
-      style={styles.tabsContainer}
+      style={tabsContainerStyle}
       testID="workspace-tabs-row"
       onLayout={handleTabsContainerLayout}
     >
@@ -1391,6 +1437,9 @@ function ResolvedWorkspaceDesktopTabsRow({
           />
           {!layout.requiresHorizontalScrollFallback ? (
             <WorkspaceNewTabButton
+              panePanelKinds={panePanelKinds}
+              host={host}
+              launchPurpose={launchPurpose}
               placement="inline"
               serverId={normalizedServerId}
               paneId={paneId}
@@ -1400,13 +1449,16 @@ function ResolvedWorkspaceDesktopTabsRow({
         </Animated.ScrollView>
         <HorizontalScrollBoundaryShades
           visible={layout.requiresHorizontalScrollFallback}
-          backdrop="surface"
+          backdrop={onSidebar ? "sidebar" : "surface"}
           testIDPrefix="workspace-tabs-scroll-shade"
           leftStyle={tabScrollBoundary.leftShadeStyle}
           rightStyle={tabScrollBoundary.rightShadeStyle}
         />
       </View>
       <WorkspacePaneToolbarActions
+        panePanelKinds={panePanelKinds}
+        host={host}
+        launchPurpose={launchPurpose}
         showNewTabButton={layout.requiresHorizontalScrollFallback}
         showSplitActions={showPaneSplitActions}
         showMaximizeAction={showPaneMaximizeAction}
@@ -1442,6 +1494,7 @@ function ResolvedDesktopTabChip({
   resolvedTabWidth,
   showLabel,
   showCloseButton,
+  restBackdrop,
   setHoveredCloseTabKey,
   onNavigateTab,
   onCloseTab,
@@ -1468,6 +1521,7 @@ function ResolvedDesktopTabChip({
   resolvedTabWidth: number;
   showLabel: boolean;
   showCloseButton: boolean;
+  restBackdrop: TabRestBackdrop;
   setHoveredCloseTabKey: Dispatch<SetStateAction<string | null>>;
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -1541,6 +1595,7 @@ function ResolvedDesktopTabChip({
         showCloseButton={showCloseButton}
         isCloseHovered={item.isCloseHovered}
         isClosingTab={item.isClosingTab}
+        restBackdrop={restBackdrop}
         presentation={presentation}
         tooltipLabel={tooltipLabel}
         accessibilityLabel={accessibilityLabel}
@@ -1565,6 +1620,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     overflow: "visible",
+  },
+  tabsContainerSidebar: {
+    backgroundColor: theme.colors.surfaceSidebar,
   },
   tabsScroll: {
     minWidth: 0,

@@ -26,6 +26,7 @@ export const ar: TranslationResources = {
     total: "{{total}} تطابقات",
   },
   common: {
+    bottomSheetBackdrop: "خلفية اللوحة السفلية",
     back: "خلف",
     loading: "تحميل...",
     actions: {
@@ -229,6 +230,14 @@ export const ar: TranslationResources = {
       open: "ميزات الوكيل المفتوح",
       on: "على",
       off: "عن",
+      valueTooltip: "{{label}}: {{value}}",
+    },
+    speed: {
+      label: "السرعة",
+      select: "اختيار السرعة",
+      normal: "عادي",
+      fast: "سريع",
+      ultrafast: "فائق السرعة",
     },
     mode: {
       title: "وضع",
@@ -344,7 +353,6 @@ export const ar: TranslationResources = {
     },
   },
   message: {
-    workedFor: "استغرق {{duration}}",
     workingFor: "يعمل منذ {{duration}}",
     changedFiles: {
       one: "تم تغيير {{count}} ملف",
@@ -444,6 +452,9 @@ export const ar: TranslationResources = {
         completed: "اكتملت",
       },
     },
+    turnFooter: {
+      workedFor: "عمل لمدة {{duration}}",
+    },
     compaction: {
       loading: "الضغط...",
       auto: "يتم ضغط السياق تلقائيًا",
@@ -504,7 +515,9 @@ export const ar: TranslationResources = {
       recovery: {
         archivedTitle: "مساحة العمل مؤرشفة",
         restoreDescription:
-          "تمت أرشفة {{workspaceName}} وإزالة شجرة العمل الخاصة بها. استعد الفرع {{branch}} لفتحها مجددًا.",
+          "استعد {{workspaceName}} للعودة إلى وكلائها. ستستخدم شجرة العمل الفرع {{branch}}.",
+        restoreWithoutBranchDescription:
+          "استعد {{workspaceName}} للعودة إلى وكلائها. سيبدأ فرع جديد من الفرع الأساسي المحفوظ أو الفرع الافتراضي للمستودع.",
         unarchiveDescription: "{{workspaceName}} مؤرشفة. ألغِ أرشفتها لفتحها مجددًا.",
         restoreAction: "استعادة",
         unarchiveAction: "إلغاء الأرشفة",
@@ -1048,9 +1061,47 @@ export const ar: TranslationResources = {
         actions: {
           viewPullRequest: "عرض",
           openOn: "فتح على {{brand}}",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "إضافة إلى الدردشة",
+          addAllToChat: "إضافة الكل إلى الدردشة",
+          addingToChat: "جارٍ الإضافة...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "بعض الفحوصات تحتاج إلى انتباهك",
+            failure: "بعض الفحوصات لم تنجح",
+            pending: "بعض الفحوصات لم تكتمل بعد",
+            success: "نجحت جميع الفحوصات",
+            none: "لا توجد فحوصات",
+          },
+          count: {
+            actionRequired: "{{count}} تحتاج إجراءً",
+            warning: "{{count}} مع تحذير",
+            failure: "{{count}} فاشلة",
+            pending: "{{count}} قيد التشغيل",
+            manual: "{{count}} يدوية",
+            success: "{{count}} ناجحة",
+            ignored: "{{count}} متخطاة",
+          },
+          detailOne: "الفحص: {{parts}}",
+          detailMany: "الفحوصات: {{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} فحص يحتاج إجراءً",
+            warning: "{{count}} فحص مع تحذير",
+            failure: "{{count}} فحص فاشل",
+            pending: "{{count}} فحص قيد التشغيل",
+            manual: "{{count}} فحص يدوي",
+            success: "{{count}} فحص ناجح",
+            ignored: "{{count}} فحص متخطى",
+          },
+          groupMany: {
+            actionRequired: "{{count}} فحوصات تحتاج إجراءً",
+            warning: "{{count}} فحوصات مع تحذير",
+            failure: "{{count}} فحوصات فاشلة",
+            pending: "{{count}} فحوصات قيد التشغيل",
+            manual: "{{count}} فحوصات يدوية",
+            success: "{{count}} فحوصات ناجحة",
+            ignored: "{{count}} فحوصات متخطاة",
+          },
         },
         checksSummary: {
           passedLabel: "نجح",
@@ -1064,43 +1115,25 @@ export const ar: TranslationResources = {
           checks: "الشيكات",
           pipeline: "خط المعالجة",
           reviews: "التعليقات",
-          activity: "Activity",
+          activity: "النشاط",
         },
         empty: {
           noJobs: "لا توجد مهام",
           loadingPipeline: "جارٍ تحميل خط المعالجة...",
           pipelineJobsLoadFailed: "تعذر تحميل مهام خط المعالجة",
           allowedToFail: "مسموح بالفشل",
-          noActivity: "No activity yet",
+          noActivity: "لا يوجد نشاط بعد",
         },
         approvals: "{{given}} من {{required}} موافقات",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "سحب الطلب #{{number}}",
           pullRequest_mr: "طلب دمج !{{number}}",
+          commentActions: "إجراءات التعليق",
+          threadActions: "إجراءات سلسلة النقاش",
           checkStatus: {
             passed: "ناجح",
             failed: "فاشل",
@@ -1111,8 +1144,6 @@ export const ar: TranslationResources = {
             skipped: "تم التخطي",
             cancelled: "تم الإلغاء",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "مسودة",
@@ -1131,8 +1162,8 @@ export const ar: TranslationResources = {
         },
         thread: {
           discussion: "سلسلة المناقشة",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "تم الحل",
+          outdated: "قديم",
         },
         errors: {
           statusLoadFailed: "غير قادر على تحميل حالة طلب السحب",
@@ -1198,6 +1229,14 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "مجموعة {{label}}",
+    statusBucket: {
+      needsInput: "تحتاج إدخالاً",
+      failed: "فشل",
+      readyToReview: "جاهزة للمراجعة",
+      working: "قيد العمل",
+      done: "تم",
+    },
     display: {
       trigger: "تفضيلات العرض",
       heading: "العرض",
@@ -1257,6 +1296,10 @@ export const ar: TranslationResources = {
       hosts: "المضيفون",
       settings: "إعدادات",
       closeSidebar: "إغلاق الشريط الجانبي",
+    },
+    footer: {
+      usage: "استهلاك الخطة",
+      usageSummary: "ملخص استهلاك الخطة",
     },
     help: {
       trigger: "المساعدة والدعم",
@@ -1791,6 +1834,8 @@ export const ar: TranslationResources = {
       unknownReason: "لا يستطيع هذا الوكيل تشغيل وكلاء فرعيين",
       hostOutdated: "حدّث المضيف لتتمكن من الإشارة إلى الوكلاء",
     },
+    chooseProjectForCommands: "اختر مشروعًا لعرض الأوامر",
+    chooseModelForCommands: "اختر نموذجًا لعرض الأوامر",
   },
   loadOlderHistory: {
     failed: "تعذر تحميل السجل الأقدم",
@@ -1971,6 +2016,12 @@ export const ar: TranslationResources = {
       helper: "الاتصال بخادم Osuna يعمل على المضيف البعيد.",
       fields: {
         target: "مضيف SSH",
+        password: "كلمة مرور الدايمون",
+        optional: "خياري",
+      },
+      passwordVisibility: {
+        show: "إظهار كلمة المرور",
+        hide: "إخفاء كلمة المرور",
       },
       actions: {
         cancel: "إلغاء",
@@ -2274,10 +2325,12 @@ export const ar: TranslationResources = {
     dismiss: "رفض",
   },
   contextWindow: {
+    noData: "لا توجد بيانات للسياق",
+    accessibilityNoData: "نافذة السياق: لا توجد بيانات للسياق",
     title: "نافذة السياق",
-    usedLabel: "مستخدم",
-    tokens: "الرموز",
-    accessibility: "نافذة السياق مستخدمة بنسبة {{percentage}}%، {{used}} من {{max}}",
+    used: "مستخدم {{percentage}}%",
+    tokens: "{{used}} / {{max}} رمز",
+    accessibility: "نافذة السياق مستخدمة بنسبة {{percentage}}%",
     sessionTotal: {
       title: "إجمالي الجلسة",
       tokens: "الرموز",
@@ -2549,8 +2602,15 @@ export const ar: TranslationResources = {
         description: "عرض مخطط للتنقل بين المطالبات",
       },
       sidebar: {
-        title: "الشريط الجانبي",
-        description: "اختر العناصر التي تظهر أعلى الشريط الجانبي وترتيبها",
+        header: {
+          title: "الرأس",
+          description: "اختر العناصر التي تظهر أعلى الشريط الجانبي وترتيبها",
+        },
+        footer: {
+          title: "التذييل",
+          description:
+            "اختر الصفوف التي تظهر أسفل الشريط الجانبي وترتيبها. يظهر «إضافة مشروع» وصف الأيقونات دائمًا",
+        },
         moveUp: "نقل لأعلى",
         moveDown: "نقل لأسفل",
       },
@@ -2586,6 +2646,14 @@ export const ar: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "لم يُعثر على هذا الخط على هذا الجهاز؛ سيُستخدم خط بديل",
         notMonospaceWarning: "ليس خطًا ثابت العرض؛ قد يختل محاذاة النص",
+      },
+      layout: {
+        title: "التخطيط",
+        contentWidth: "عرض المحتوى",
+        contentWidthHint: "أقصى عرض للمحادثة وملفات Markdown على الشاشات العريضة",
+        contentWidthAccessibility: "عرض المحتوى بالبكسل",
+        reset: "إعادة تعيين",
+        resetAccessibility: "إعادة عرض المحتوى إلى الافتراضي",
       },
       syntax: {
         title: "بناء الجملة",
@@ -3606,20 +3674,42 @@ export const ar: TranslationResources = {
     planUsage: {
       apiEndpointNote: "تستخدم نقطة نهاية API {{name}}. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
+      options: "خيارات استهلاك الخطة",
+      refreshFailed: "تعذّر تحديث استهلاك الخطة",
+      noHosts: "لا توجد مضيفات متصلة",
+      retry: "أعد المحاولة",
+      connectHostToSee: "اتصل بـ {{host}} لعرض استهلاك الخطة",
+      updateHostToSee: "حدّث {{host}} لعرض استهلاك الخطة",
+      loginExpired: "انتهت صلاحية تسجيل الدخول {{ago}}. {{remedy}}",
+      loginRejected: "رُفض تسجيل الدخول (HTTP {{status}}). {{remedy}}",
+      remedyRun: "شغّل {{command}} لتجديده.",
+      remedySignIn: "سجّل الدخول مجددًا.",
+      pin: "تثبيت",
+      displayAs: "عرض",
+      displayUsed: "المستخدم",
+      displayRemaining: "المتبقي",
+      showInSidebar: "عرض في الشريط الجانبي",
+      showInSidebarHint: "تظهر النوافذ المثبتة في أسفل الشريط الجانبي",
+      refreshAll: "تحديث الكل",
+      unpin: "إلغاء التثبيت",
+      agentError: "تعذّر تحميل استهلاك الخطة: {{reason}}",
       refresh: "تحديث",
       refreshing: "جارٍ التحديث...",
-      loading: "جارٍ تحميل الاستخدام...",
-      empty: "لا توجد بيانات استخدام",
-      errorTitle: "تعذّر تحميل الاستخدام",
-      hostUnavailable: "اتصل بهذا المضيف لعرض استخدام المزوّدين",
-      hostUpgradeRequired: "حدّث المضيف لعرض استخدام المزوّدين",
+      loading: "جارٍ تحميل استهلاك الخطة...",
+      empty: "لا توجد بيانات عن استهلاك الخطة",
+      errorTitle: "تعذّر تحميل استهلاك الخطة",
+      hostUnavailable: "اتصل بهذا المضيف لعرض استهلاك الخطة",
       clientUnavailable: "اتصال المضيف غير جاهز",
-      tooltipLoading: "جارٍ تحميل استخدام الخطة…",
       updated: "تم التحديث {{ago}}",
       resets: "إعادة التعيين بعد {{duration}}",
       resettingNow: "تتم إعادة التعيين الآن",
       runsOut: "ينفد بعد {{duration}}",
       balanceLeft: "المتبقي {{amount}}",
+      percentLeft: "المتبقي {{percent}}",
+      summaryWindowUsed: "{{name}} المستخدم {{percent}}",
+      summaryWindowLeft: "{{name}} المتبقي {{percent}}",
+      summaryLabel: "{{label}}: {{windows}}",
+      summarySeparator: "، ",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3630,6 +3720,8 @@ export const ar: TranslationResources = {
         planA11y: "خطة {{provider}}: {{plan}}",
         windowA11y: "{{label}}: مستخدم {{percent}}، {{trailing}}",
         windowA11yNoTrailing: "{{label}}: مستخدم {{percent}}",
+        windowA11yLeft: "{{label}}: المتبقي {{percent}}، {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: المتبقي {{percent}}",
       },
       status: {
         error: "خطأ",

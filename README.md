@@ -17,12 +17,15 @@
   </a>
 </p>
 
-<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, and Pi agents.</p>
+<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code agents.</p>
 
 Run agents in parallel on your own machines. Ship from your phone or your desk.
 
+- **Parallel agents:** Run many agents at once, each in its own worktree.
+- **Built-in orchestration:** Agents in Osuna can create worktrees, launch other agents, and talk to them, across providers.
+- **Full IDE:** Edit files, review diffs, open pull requests, and run terminals, in split panes you arrange how you want.
 - **Self-hosted:** Agents run on your machine with your full dev environment. Use your tools, your configs, and your skills.
-- **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, and Pi through the same interface. Pick the right model for each job.
+- **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code through the same interface. Pick the right model for each job.
 - **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
 - **Cross-device:** Desktop, web, CLI, and your phone. Start work at your desk, check in from your phone, script it from the terminal.
 - **Privacy-first:** Osuna doesn't have any telemetry, tracking, or forced log-ins.
@@ -30,10 +33,14 @@ Run agents in parallel on your own machines. Ship from your phone or your desk.
 > [!NOTE]
 > Osuna is a fork of [Paseo](https://github.com/getpaseo/paseo). Internal names keep the upstream spelling: the CLI command is still `paseo`, data lives in `~/.paseo`, and environment variables start with `PASEO_`.
 
+[Run parallel tasks in Osuna](public-docs/parallel-development.md): start agents in separate worktrees, review their diffs, run each app, and check it in the built-in browser.
+
 ## Plugins
 
-Add themes, workspace panels, commands, settings screens, and coding-agent providers with trusted
-TypeScript plugins. Install from npm, Git, or a local directory with `paseo plugin install <source>`.
+Plugins run on the daemon and show up in every client you connect, with the same UI on desktop, web,
+iOS, and Android. Write a plugin once and it is on your phone.
+
+Install from the registry with `paseo plugin add owner/slug`, or from Git or a local directory.
 
 See the [plugin docs](docs/plugins.md). Plugins run with access to your daemon machine and inside
 connected clients; install only code you trust.
@@ -51,6 +58,8 @@ You need at least one agent CLI installed and configured with your credentials:
 - [GitHub Copilot](https://github.com/features/copilot/cli/)
 - [OpenCode](https://github.com/anomalyco/opencode)
 - [Pi](https://pi.dev)
+- [Antigravity](public-docs/supported-providers.md#antigravity)
+- [Muse Code](public-docs/muse-code.md)
 
 ### Desktop app (recommended)
 

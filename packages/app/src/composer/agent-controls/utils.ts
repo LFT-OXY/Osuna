@@ -1,7 +1,12 @@
 import type { AgentFeature, AgentModelDefinition } from "@getpaseo/protocol/agent-types";
+import type { TFunction } from "i18next";
 import { i18n } from "@/i18n/i18next";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
-import { FAST_MODE_FEATURE_ID, PLAN_MODE_FEATURE_ID } from "@/agent-controls/policy";
+import {
+  FAST_MODE_FEATURE_ID,
+  PLAN_MODE_FEATURE_ID,
+  SPEED_FEATURE_ID,
+} from "@/agent-controls/policy";
 
 export type ExplainedAgentControl = "mode" | "model" | "thinking";
 export type FeatureHighlightColor = "blue" | "default" | "green" | "providerBrand";
@@ -35,9 +40,44 @@ export function getFeatureTooltip(feature: Pick<AgentFeature, "label" | "tooltip
   return feature.tooltip ?? feature.label;
 }
 
+// daemon 给 Codex 速度菜单的文字是英文，档位名来自模型目录。功能名、默认档与这两个已知档位按界面语言显示，
+// 模型目录里别的档位名原样（docs/i18n.md「Translation Scope」的例外）。
+const SPEED_TIER_LABEL_KEYS: Record<
+  string,
+  "agentControls.speed.fast" | "agentControls.speed.ultrafast"
+> = {
+  fast: "agentControls.speed.fast",
+  ultrafast: "agentControls.speed.ultrafast",
+};
+
+export function localizeSpeedFeature(feature: AgentFeature, t: TFunction): AgentFeature {
+  if (feature.id !== SPEED_FEATURE_ID || feature.type !== "select") {
+    return feature;
+  }
+  return {
+    ...feature,
+    label: t("agentControls.speed.label"),
+    tooltip: t("agentControls.speed.select"),
+    options: feature.options.map((option) => {
+      if (option.isDefault) {
+        return { ...option, label: t("agentControls.speed.normal") };
+      }
+      const key = SPEED_TIER_LABEL_KEYS[option.label.trim().toLowerCase()];
+      return key ? { ...option, label: t(key) } : option;
+    }),
+  };
+}
+
+export function isFeatureActive(feature: AgentFeature): boolean {
+  if (feature.type === "toggle") return feature.value;
+  const selectedOption = feature.options.find((option) => option.id === feature.value);
+  return selectedOption !== undefined && !selectedOption.isDefault;
+}
+
 export function getFeatureHighlightColor(featureId: string): FeatureHighlightColor {
   switch (featureId) {
     case FAST_MODE_FEATURE_ID:
+    case SPEED_FEATURE_ID:
       return "providerBrand";
     case "auto_accept":
       return "green";
@@ -79,16 +119,23 @@ function pickSelectedModel(
   preferredModelId: string | null,
   fallbackModel: AgentModelDefinition | null,
 ): AgentModelDefinition | null {
-  if (!models || !preferredModelId) {
+  if (!preferredModelId) {
     return fallbackModel;
   }
-  return findModelById(models, preferredModelId) ?? fallbackModel;
+  return findModelById(models, preferredModelId);
 }
 
 function resolveThinkingId(
+  runtimeThinkingOptionId: string | null | undefined,
   explicitThinkingOptionId: string | null | undefined,
   selectedModel: AgentModelDefinition | null,
 ): string | null {
+  const runtimeThinkingOption = selectedModel?.thinkingOptions?.find(
+    (option) => option.id === runtimeThinkingOptionId,
+  );
+  if (runtimeThinkingOption) {
+    return runtimeThinkingOption.id;
+  }
   if (explicitThinkingOptionId && explicitThinkingOptionId !== "default") {
     return explicitThinkingOptionId;
   }
@@ -139,9 +186,16 @@ export function resolveAgentModelSelection(input: {
   models: AgentModelDefinition[] | null;
   runtimeModelId: string | null | undefined;
   configuredModelId: string | null | undefined;
+  runtimeThinkingOptionId: string | null | undefined;
   explicitThinkingOptionId: string | null | undefined;
 }) {
-  const { models, runtimeModelId, configuredModelId, explicitThinkingOptionId } = input;
+  const {
+    models,
+    runtimeModelId,
+    configuredModelId,
+    runtimeThinkingOptionId,
+    explicitThinkingOptionId,
+  } = input;
   const normalizedRuntimeModelId = normalizeModelId(runtimeModelId);
   const normalizedConfiguredModelId = normalizeModelId(configuredModelId);
 
@@ -162,9 +216,13 @@ export function resolveAgentModelSelection(input: {
   );
 
   const thinkingOptions = selectedModel?.thinkingOptions ?? null;
-  const resolvedThinkingId = resolveThinkingId(explicitThinkingOptionId, selectedModel);
+  const resolvedThinkingId = resolveThinkingId(
+    runtimeThinkingOptionId,
+    explicitThinkingOptionId,
+    selectedModel,
+  );
   const effectiveThinking = resolveEffectiveThinking(thinkingOptions, resolvedThinkingId);
-  const selectedThinkingId = effectiveThinking?.id ?? null;
+  const selectedThinkingId = effectiveThinking?.id ?? resolvedThinkingId;
   const displayThinking = resolveThinkingDisplay(
     effectiveThinking,
     selectedThinkingId,

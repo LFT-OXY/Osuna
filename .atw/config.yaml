@@ -114,12 +114,13 @@ channel:
 # atw-review sub-agents for the two review axes. On the per-ticket path
 # implementation is never dispatched on any platform: it runs inside
 # `/atw-implement` in the main session (`atw-implement-agent` ships only as a
-# reserved role). Only a `/atw-implement-spec` run dispatches implementers. This does
-# not rely on inherited parent transcripts: `fork_turns` remains
-# caller-controlled, while Codex's native SubagentStart hook injects task
-# context when trusted and child-side loading remains the fallback when it is
-# unavailable. Set to "inline" only to run the review axes in the main
-# session too. "sub-agent" remains a backwards-compatible alias for "auto".
+# reserved role). Only a `/atw-implement-spec` or `/atw-implement-all` run
+# dispatches implementers. This does not rely on inherited parent transcripts:
+# `fork_turns` remains caller-controlled, while Codex's native SubagentStart
+# hook injects task context when trusted and child-side loading remains the
+# fallback when it is unavailable. Set to "inline" only to run the review axes
+# in the main session too. "sub-agent" remains a backwards-compatible alias
+# for "auto".
 # Invalid explicit values safely use inline mode.
 #
 # In "auto" mode, dispatched sub-agents inherit the main session's model

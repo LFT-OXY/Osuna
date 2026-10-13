@@ -26,6 +26,7 @@ export const ko: TranslationResources = {
     total: "일치 항목 {{total}}개",
   },
   common: {
+    bottomSheetBackdrop: "하단 시트 배경",
     back: "뒤로",
     loading: "불러오는 중...",
     actions: {
@@ -229,6 +230,14 @@ export const ko: TranslationResources = {
       open: "에이전트 기능 열기",
       on: "켜짐",
       off: "꺼짐",
+      valueTooltip: "{{label}}: {{value}}",
+    },
+    speed: {
+      label: "속도",
+      select: "속도 선택",
+      normal: "보통",
+      fast: "빠르게",
+      ultrafast: "매우 빠르게",
     },
     mode: {
       title: "모드",
@@ -345,7 +354,6 @@ export const ko: TranslationResources = {
     },
   },
   message: {
-    workedFor: "작업 시간 {{duration}}",
     workingFor: "작업 중 {{duration}}",
     changedFiles: {
       one: "파일 {{count}}개 변경",
@@ -445,6 +453,9 @@ export const ko: TranslationResources = {
         completed: "완료됨",
       },
     },
+    turnFooter: {
+      workedFor: "작업 시간 {{duration}}",
+    },
     compaction: {
       loading: "압축하는 중...",
       auto: "컨텍스트가 자동으로 압축되었습니다",
@@ -505,7 +516,9 @@ export const ko: TranslationResources = {
       recovery: {
         archivedTitle: "워크스페이스가 보관되었습니다",
         restoreDescription:
-          "{{workspaceName}}가 보관되고 워크트리가 제거되었습니다. 다시 열려면 {{branch}} 브랜치를 복원하세요.",
+          "{{workspaceName}}를 복원하여 에이전트로 돌아갑니다. 워크트리는 {{branch}} 브랜치를 사용합니다.",
+        restoreWithoutBranchDescription:
+          "{{workspaceName}}를 복원하여 에이전트로 돌아갑니다. 저장된 기반 브랜치 또는 저장소 기본 브랜치에서 새 브랜치를 만듭니다.",
         unarchiveDescription: "{{workspaceName}}가 보관되었습니다. 다시 열려면 보관을 취소하세요.",
         restoreAction: "복원",
         unarchiveAction: "보관 취소",
@@ -1055,9 +1068,47 @@ export const ko: TranslationResources = {
         actions: {
           viewPullRequest: "보기",
           openOn: "{{brand}}에서 열기",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "채팅에 추가",
+          addAllToChat: "모두 채팅에 추가",
+          addingToChat: "추가 중...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "확인이 필요한 검사가 있습니다",
+            failure: "실패한 검사가 있습니다",
+            pending: "아직 완료되지 않은 검사가 있습니다",
+            success: "모든 검사를 통과했습니다",
+            none: "검사 없음",
+          },
+          count: {
+            actionRequired: "{{count}}개 조치 필요",
+            warning: "{{count}}개 경고",
+            failure: "{{count}}개 실패",
+            pending: "{{count}}개 진행 중",
+            manual: "{{count}}개 수동",
+            success: "{{count}}개 성공",
+            ignored: "{{count}}개 건너뜀",
+          },
+          detailOne: "검사: {{parts}}",
+          detailMany: "검사: {{parts}}",
+          groupOne: {
+            actionRequired: "조치 필요 검사 {{count}}개",
+            warning: "경고 검사 {{count}}개",
+            failure: "실패한 검사 {{count}}개",
+            pending: "진행 중인 검사 {{count}}개",
+            manual: "수동 검사 {{count}}개",
+            success: "성공한 검사 {{count}}개",
+            ignored: "건너뛴 검사 {{count}}개",
+          },
+          groupMany: {
+            actionRequired: "조치 필요 검사 {{count}}개",
+            warning: "경고 검사 {{count}}개",
+            failure: "실패한 검사 {{count}}개",
+            pending: "진행 중인 검사 {{count}}개",
+            manual: "수동 검사 {{count}}개",
+            success: "성공한 검사 {{count}}개",
+            ignored: "건너뛴 검사 {{count}}개",
+          },
         },
         checksSummary: {
           passedLabel: "통과",
@@ -1071,43 +1122,25 @@ export const ko: TranslationResources = {
           checks: "검사",
           pipeline: "파이프라인",
           reviews: "리뷰",
-          activity: "Activity",
+          activity: "활동",
         },
         empty: {
           noJobs: "작업 없음",
           loadingPipeline: "파이프라인 로드 중…",
           pipelineJobsLoadFailed: "파이프라인 작업을 로드할 수 없습니다.",
           allowedToFail: "실패가 허용됨",
-          noActivity: "No activity yet",
+          noActivity: "아직 활동이 없습니다",
         },
         approvals: "{{required}} 중 {{given}} 승인",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "풀 리퀘스트 #{{number}}",
           pullRequest_mr: "병합 요청 !{{number}}",
+          commentActions: "댓글 작업",
+          threadActions: "스레드 작업",
           checkStatus: {
             passed: "통과",
             failed: "실패",
@@ -1118,8 +1151,6 @@ export const ko: TranslationResources = {
             skipped: "건너뜀",
             cancelled: "취소됨",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "초안",
@@ -1138,8 +1169,8 @@ export const ko: TranslationResources = {
         },
         thread: {
           discussion: "토론 스레드",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "해결됨",
+          outdated: "오래됨",
         },
         errors: {
           statusLoadFailed: "풀 리퀘스트 상태를 불러올 수 없습니다",
@@ -1205,6 +1236,14 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} 그룹",
+    statusBucket: {
+      needsInput: "입력 필요",
+      failed: "실패",
+      readyToReview: "검토 대기",
+      working: "실행 중",
+      done: "완료",
+    },
     display: {
       trigger: "표시 설정",
       heading: "표시",
@@ -1264,6 +1303,10 @@ export const ko: TranslationResources = {
       hosts: "호스트",
       settings: "설정",
       closeSidebar: "사이드바 닫기",
+    },
+    footer: {
+      usage: "플랜 사용량",
+      usageSummary: "플랜 사용량 요약",
     },
     help: {
       trigger: "도움말 및 지원",
@@ -1803,6 +1846,8 @@ export const ko: TranslationResources = {
       unknownReason: "이 에이전트는 하위 에이전트를 시작할 수 없습니다",
       hostOutdated: "에이전트를 멘션하려면 Host를 업데이트하세요",
     },
+    chooseProjectForCommands: "명령을 보려면 프로젝트를 선택하세요",
+    chooseModelForCommands: "명령을 보려면 모델을 선택하세요",
   },
   loadOlderHistory: {
     failed: "이전 기록을 불러올 수 없습니다",
@@ -1981,6 +2026,12 @@ export const ko: TranslationResources = {
       helper: "원격 호스트에서 실행 중인 Osuna 데몬에 연결합니다.",
       fields: {
         target: "SSH 호스트",
+        password: "데몬 비밀번호",
+        optional: "선택 사항",
+      },
+      passwordVisibility: {
+        show: "비밀번호 표시",
+        hide: "비밀번호 숨기기",
       },
       actions: {
         cancel: "취소",
@@ -2286,10 +2337,12 @@ export const ko: TranslationResources = {
     dismiss: "닫기",
   },
   contextWindow: {
+    noData: "컨텍스트 데이터 없음",
+    accessibilityNoData: "컨텍스트 창: 컨텍스트 데이터 없음",
     title: "컨텍스트 윈도우",
-    usedLabel: "사용됨",
-    tokens: "토큰",
-    accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨, {{used}} / {{max}}",
+    used: "{{percentage}}% 사용됨",
+    tokens: "{{used}} / {{max}} 토큰",
+    accessibility: "컨텍스트 윈도우 {{percentage}}% 사용됨",
     sessionTotal: {
       title: "세션 합계",
       tokens: "토큰",
@@ -2562,8 +2615,15 @@ export const ko: TranslationResources = {
         description: "프롬프트 사이를 이동하기 위한 개요 표시",
       },
       sidebar: {
-        title: "사이드바",
-        description: "사이드바 상단에 표시할 항목과 순서를 선택하세요",
+        header: {
+          title: "헤더",
+          description: "사이드바 상단에 표시할 항목과 순서를 선택하세요",
+        },
+        footer: {
+          title: "푸터",
+          description:
+            "사이드바 하단에 표시할 행과 순서를 선택하세요. 프로젝트 추가와 아이콘 행은 항상 표시됩니다",
+        },
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
       },
@@ -2599,6 +2659,14 @@ export const ko: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "이 기기에서 글꼴을 찾을 수 없어 대체 글꼴이 사용됩니다",
         notMonospaceWarning: "고정폭 글꼴이 아니어서 정렬이 어긋날 수 있습니다",
+      },
+      layout: {
+        title: "레이아웃",
+        contentWidth: "콘텐츠 너비",
+        contentWidthHint: "와이드 화면에서 채팅과 Markdown 파일의 최대 너비",
+        contentWidthAccessibility: "콘텐츠 너비(픽셀)",
+        reset: "재설정",
+        resetAccessibility: "콘텐츠 너비를 기본값으로 재설정",
       },
       syntax: {
         title: "구문",
@@ -3626,20 +3694,42 @@ export const ko: TranslationResources = {
       apiEndpointNote:
         "API 엔드포인트 {{name}}을(를) 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
       title: "플랜 사용량",
+      options: "플랜 사용량 옵션",
+      refreshFailed: "플랜 사용량을 새로고침할 수 없습니다",
+      noHosts: "연결된 호스트가 없습니다",
+      retry: "다시 시도",
+      connectHostToSee: "{{host}}에 연결하면 플랜 사용량을 볼 수 있습니다",
+      updateHostToSee: "{{host}}을(를) 업데이트하면 플랜 사용량을 볼 수 있습니다",
+      loginExpired: "로그인이 만료되었습니다({{ago}}). {{remedy}}",
+      loginRejected: "로그인이 거부되었습니다(HTTP {{status}}). {{remedy}}",
+      remedyRun: "{{command}}을(를) 실행해 갱신하세요.",
+      remedySignIn: "다시 로그인하세요.",
+      pin: "고정",
+      displayAs: "표시",
+      displayUsed: "사용됨",
+      displayRemaining: "남음",
+      showInSidebar: "사이드바에 표시",
+      showInSidebarHint: "고정한 창은 사이드바 하단에 표시됩니다",
+      refreshAll: "모두 새로고침",
+      unpin: "고정 해제",
+      agentError: "플랜 사용량을 불러올 수 없음: {{reason}}",
       refresh: "새로고침",
       refreshing: "새로고침 중...",
-      loading: "사용량 불러오는 중...",
-      empty: "사용량 데이터 없음",
-      errorTitle: "사용량을 불러올 수 없습니다",
-      hostUnavailable: "이 호스트에 연결하면 공급자 사용량을 볼 수 있습니다",
-      hostUpgradeRequired: "호스트를 업데이트하면 공급자 사용량을 볼 수 있습니다",
+      loading: "플랜 사용량 불러오는 중...",
+      empty: "플랜 사용량 데이터 없음",
+      errorTitle: "플랜 사용량을 불러올 수 없습니다",
+      hostUnavailable: "이 호스트에 연결하면 플랜 사용량을 볼 수 있습니다",
       clientUnavailable: "호스트 연결이 준비되지 않았습니다",
-      tooltipLoading: "플랜 사용량 불러오는 중…",
       updated: "{{ago}} 업데이트됨",
       resets: "{{duration}} 후 초기화",
       resettingNow: "초기화 중",
       runsOut: "{{duration}} 후 소진",
       balanceLeft: "{{amount}} 남음",
+      percentLeft: "{{percent}} 남음",
+      summaryWindowUsed: "{{name}} {{percent}} 사용됨",
+      summaryWindowLeft: "{{name}} {{percent}} 남음",
+      summaryLabel: "{{label}}: {{windows}}",
+      summarySeparator: ", ",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3650,6 +3740,8 @@ export const ko: TranslationResources = {
         planA11y: "{{provider}} 플랜: {{plan}}",
         windowA11y: "{{label}}: {{percent}} 사용, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} 사용",
+        windowA11yLeft: "{{label}}: {{percent}} 남음, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} 남음",
       },
       status: {
         error: "오류",

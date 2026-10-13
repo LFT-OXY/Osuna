@@ -2,6 +2,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import { seedModelProvider, type HostSeed } from "../support/helpers/agent-profiles";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getServerId } from "../support/helpers/server-id";
+import { installDaemonConfigFailureFixture } from "../support/helpers/usage-pricing";
 import {
   expectProviderDetail,
   expectProvidersList,
@@ -165,8 +166,10 @@ test.describe("Settings provider detail enable switch", () => {
     });
   });
 
-  // daemon 拒绝写 providers.mock.*，用它造一次真实的写入失败。
+  // 上游 v0.11.0 起 daemon 不再拒绝写 providers.mock.*（没有 extends 的条目算作对插件提供方的覆盖），
+  // 改为让第一次配置写入以 rpc_error 应答。
   test("keeps a failed switch at the top of the detail until dismissed", async ({ page }) => {
+    await installDaemonConfigFailureFixture(page, "Injected config write failure", { times: 1 });
     await openProviderDetail(page, "mock");
     const label = (
       await page.getByTestId("settings-detail-header-title").filter({ visible: true }).innerText()

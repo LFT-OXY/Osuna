@@ -28,6 +28,7 @@ from pathlib import Path
 from .config import (
     get_codex_dispatch_mode,
     get_packages,
+    get_project_mode,
     get_session_auto_commit,
     is_monorepo,
     resolve_package,
@@ -263,10 +264,30 @@ def _parse_meta_pairs(pairs: list[str] | None) -> dict[str, str] | None:
     return meta
 
 
-def _default_prd_content(title: str, description: str | None = None) -> str:
+def _default_prd_content(
+    title: str, description: str | None = None, general: bool = False
+) -> str:
     """Return the default PRD skeleton created with every task."""
-    goal = (description or "").strip() or "TBD."
     heading = title.strip() or "Untitled task"
+    if general:
+        # The user of a general project opens this file themselves: the three
+        # parts its workflow has the AI write, and no word about tickets.
+        unwritten = "(Not written yet.)"
+        return f"""# {heading}
+
+## What will be done
+
+{(description or "").strip() or unwritten}
+
+## What will not be done
+
+{unwritten}
+
+## What counts as done
+
+{unwritten}
+"""
+    goal = (description or "").strip() or "TBD."
     return f"""# {heading}
 
 ## Goal
@@ -471,7 +492,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     # back to the checked-out branch when the default can't be resolved
     # (no remote configured, offline, etc.) — the pre-existing behavior.
     # --base-branch lets the caller override both when neither is correct.
-    _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
+    branch_rc, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
     current_branch = branch_out.strip() or "main"
     explicit_base_branch: str | None = getattr(args, "base_branch", None)
     if explicit_base_branch:
@@ -482,15 +503,17 @@ def cmd_create(args: argparse.Namespace) -> int:
             base_branch = resolved_base_branch
         else:
             base_branch = current_branch
-            print(
-                colored(
-                    f"warning: could not resolve the repository's default branch "
-                    f"(no remote configured, offline, etc.); stamping base_branch as "
-                    f"the checked-out branch '{base_branch}'. Pass --base-branch to override.",
-                    Colors.YELLOW,
-                ),
-                file=sys.stderr,
-            )
+            # 普通文件夹里没有仓库也没有检出的分支，这条提醒说的事并不存在。
+            if branch_rc == 0:
+                print(
+                    colored(
+                        f"warning: could not resolve the repository's default branch "
+                        f"(no remote configured, offline, etc.); stamping base_branch as "
+                        f"the checked-out branch '{base_branch}'. Pass --base-branch to override.",
+                        Colors.YELLOW,
+                    ),
+                    file=sys.stderr,
+                )
 
     task_data = {
         "id": slug,
@@ -535,10 +558,12 @@ def cmd_create(args: argparse.Namespace) -> int:
                 )
         return 1
 
+    general = get_project_mode(repo_root) == "general"
+
     prd_path = task_dir / "prd.md"
     if not prd_path.exists():
         prd_path.write_text(
-            _default_prd_content(args.title, description),
+            _default_prd_content(args.title, description, general),
             encoding="utf-8",
         )
 
@@ -554,8 +579,11 @@ def cmd_create(args: argparse.Namespace) -> int:
     # check.jsonl), so a seeded-but-empty implement manifest would only be a
     # file nobody curates. The `start` gate only refuses manifests that exist
     # with zero curated entries, so an absent one is not gated.
+    #
+    # A general project installs no sub-agents, so nobody would curate or read
+    # the manifest there either: it is not seeded, and `start` needs no flag.
     created_jsonl = False
-    if _has_subagent_platform(repo_root):
+    if not general and _has_subagent_platform(repo_root):
         jsonl_path = task_dir / "check.jsonl"
         if not jsonl_path.exists():
             jsonl_path.write_text("", encoding="utf-8")
@@ -654,28 +682,42 @@ def cmd_create(args: argparse.Namespace) -> int:
     print(colored(f"Created task: {dir_name}", Colors.GREEN), file=sys.stderr)
     print("", file=sys.stderr)
     print(colored("Next steps:", Colors.BLUE), file=sys.stderr)
-    print("  - Fill prd.md with requirements and acceptance criteria", file=sys.stderr)
-    print("  - Lightweight task: PRD-only is valid", file=sys.stderr)
-    print("  - Complex task: slice it into issues/NN-slug.md tickets before task.py start", file=sys.stderr)
-    if created_jsonl:
+    if general:
+        # A general project has no tickets, no sub-agents to curate context
+        # for and no `continue` command: its workflow has the AI do the rest.
+        print("  - Talk it through with the user until what they want is clear", file=sys.stderr)
         print(
-            "  - Curate check.jsonl (created empty) as the spec/research "
-            "manifest before task.py start when sub-agents need context:",
+            "  - Write prd.md: what will be done, what will not, what counts as done; "
+            "show it to the user and wait for them to confirm",
             file=sys.stderr,
         )
         print(
-            '      one JSON object per line — {"file": "<path>", "reason": "<why>"}; '
-            "spec/research docs only, no code paths",
+            "  - Once confirmed: task.py start <task>, then do the work",
             file=sys.stderr,
         )
+    else:
+        print("  - Fill prd.md with requirements and acceptance criteria", file=sys.stderr)
+        print("  - Lightweight task: PRD-only is valid", file=sys.stderr)
+        print("  - Complex task: slice it into issues/NN-slug.md tickets before task.py start", file=sys.stderr)
+        if created_jsonl:
+            print(
+                "  - Curate check.jsonl (created empty) as the spec/research "
+                "manifest before task.py start when sub-agents need context:",
+                file=sys.stderr,
+            )
+            print(
+                '      one JSON object per line — {"file": "<path>", "reason": "<why>"}; '
+                "spec/research docs only, no code paths",
+                file=sys.stderr,
+            )
+            print(
+                "      list available specs: python3 .atw/scripts/get_context.py --mode packages",
+                file=sys.stderr,
+            )
         print(
-            "      list available specs: python3 .atw/scripts/get_context.py --mode packages",
+            "  - Use the ATW `continue` command or phase context to decide the next step",
             file=sys.stderr,
         )
-    print(
-        "  - Use the ATW `continue` command or phase context to decide the next step",
-        file=sys.stderr,
-    )
     print("", file=sys.stderr)
 
     # Output relative path for script chaining
@@ -1438,6 +1480,15 @@ def _auto_commit_archive(
     if not get_session_auto_commit(repo_root):
         print(
             "[OK] session_auto_commit: false — skipping git stage/commit.",
+            file=sys.stderr,
+        )
+        return True
+
+    # 普通文件夹没有可提交的地方：这不是故障，说一句就够了，不把 git 的报错原文打出来。
+    rc, _, _ = run_git(["rev-parse", "--is-inside-work-tree"], cwd=repo_root)
+    if rc != 0:
+        print(
+            "[OK] Not a git repository — task archived, skipping auto-commit.",
             file=sys.stderr,
         )
         return True

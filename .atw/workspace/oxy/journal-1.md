@@ -956,3 +956,49 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 - 远端分支 merge-upstream-v0.10.3 由维护者手动删：git push origin --delete merge-upstream-v0.10.3
 - 任务 10-11-opencode-v2-osuna-gaps 还在 discover，没有动
 - 上游 v0.10.3 之后的版本还没合；合 v0.11 时补丁分支与主线分叉处要重解的文件见 docs/release.md「上游的补丁分支」
+
+
+## Session 33: 合并上游 v0.11.2：工单 15 并入前的收尾——本机 macOS 包核对、docs/release.md、PR #16 正文
+<!-- atw-session: v=2 fp=7536fc1ecc900389 -->
+
+**Date**: 2026-10-13
+**Task**: 合并上游 v0.11.2：工单 15 并入前的收尾——本机 macOS 包核对、docs/release.md、PR #16 正文
+**Package**: app
+**Branch**: `merge-upstream-v0-11-all`
+
+### Summary
+
+工单 15 做到「等维护者发话并入」为止：本机打出 arm64 包并隔离打开核对，docs/release.md 的同步点与补丁分支一节更新到 v0.11.2，PR #16 正文按 docs/qa.md 写完，CI 重跑后全绿。
+
+### Main Changes
+
+- 本机包 packages/desktop/release/Osuna-0.14.2-arm64.dmg：Resources/builtin-plugins 下 11 个内置插件都在 asar 之外；隔离打开（单独的 PASEO_HOME、6783、userData，HOME 不换，维护者同意）后 11 个插件全部加载，套餐用量弹窗有数据，Providers 列表里有 Muse Code 与 Antigravity；正式版的 6767 没受影响
+- docs/release.md：同步点 v0.11.2（759532509）与八段的表；「上游的补丁分支」重写（v0.11.1 在上游 main 上、v0.11.2 不在，共同祖先 ab10a6694，合 v0.12 时没有要重解的文件）；「踩过的坑」新开「规划分段时」并补 9 条；「本地出一个 macOS 包」写了正式版开着时隔离打开的做法
+- 桌面端以 managed 方式启动 daemon 时会去掉环境里的 daemon 设置变量（PASEO_LISTEN、语音开关等），设置要写进 config.json；隔离的 daemon 因此下了约 1G 语音模型，已随临时目录删掉
+- 术语表与 docs/usage.md 链到 ADR 0006；CLAUDE.md 的文档表补 i18n、hub、timeline-sync 三行，opencode-global-event-baseline 没有加（会让整张表重排），等维护者定
+- 评审（Standards、Spec 各一轮 + 只看已修项的复核一次）：硬性违规 2 条与规格问题 5 条已修，文档表一条按原文仍差一篇
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c80ca6d4` | chore(task): 认领工单 15 |
+| `7d81b5d53` | docs: 同步点更新到上游 v0.11.2，补丁分支一节按 v0.11.2 重写；本次合并踩过的坑、本机包的隔离打开方式；术语表与 Usage 文档链到 ADR 0006；文档表补三行；工单 15 的打包核对记录与评审处理 |
+
+### Testing
+
+- [OK] [OK] 草稿 PR #16 对 7d81b5d53：第一次 18/20，playwright 两片各 1 条已知偶发失败；rerun --failed 后 20 项全部通过
+- [OK] [OK] prd.md 验收清单逐项核对：版本号、CHANGELOG、更新源、桌面身份、签名、部署工作流、上游链接数、COMPAT、daemon 自更新、协议测试用命令重查
+- [OK] [!] 上一个提交 005e6e6c2 的那轮 CI 被取消前，cli-tests 第 3 片的 25-daemon-restart-supervisor 失败过一次，第一次见，按偶发记
+- [OK] [!] 没有跑任何本机测试：本工单只改文档与任务记录
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 等维护者看过截图、包的核对结果与 PR #16 正文并发话；PR 转为可合并后以 merge commit 并入（不 squash、不 rebase）
+- 并入后在主工作树：git pull，核对 759532509 是 main 的祖先，勾工单 15 最后两条并 tickets.py done 15，归档任务；先 npm ci 再 npm run build:server
+- 并入会自动归档这个 worktree：本机包与 .agents/.claude/.pi 下 17 个未提交的 ATW 文件改动会一起消失，要留先拷走或提交
+- 文档表要不要加 opencode-global-event-baseline.md 由维护者定

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type ReactNode } from "react";
 import { Text, type StyleProp, type TextStyle } from "react-native";
 import { getAgentProfileIcon, useAgentProfiles } from "@/agent-profiles";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcons } from "@/components/provider-icons";
 import { useAgentCommandsQuery } from "@/hooks/use-agent-commands-query";
 import { useSessionStore } from "@/stores/session-store";
 import { AgentProfileIconContext, InlineBlockView } from "./block-view";
@@ -54,13 +54,14 @@ interface AgentProfileIconProviderProps {
 /** 让其下的 Agent mention 块取到 profile 图标：profile 的 icon，认不出时用所属 provider 的图标。 */
 export function AgentProfileIconProvider({ serverId, children }: AgentProfileIconProviderProps) {
   const { profiles } = useAgentProfiles(serverId);
+  const getProviderIcon = useProviderIcons(serverId);
   const resolveProfileIcon = useCallback(
     (profileId: string) => {
       const profile = profiles?.find((candidate) => candidate.id === profileId);
       if (!profile) return null;
-      return getAgentProfileIcon(profile.icon) ?? getProviderIcon(profile.provider, serverId);
+      return getAgentProfileIcon(profile.icon) ?? getProviderIcon(profile.provider);
     },
-    [profiles, serverId],
+    [profiles, getProviderIcon],
   );
   return (
     <AgentProfileIconContext.Provider value={resolveProfileIcon}>

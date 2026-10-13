@@ -23,7 +23,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useMutation } from "@tanstack/react-query";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, ChevronDown, X } from "lucide-react-native";
@@ -57,7 +57,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useRevealedText } from "@/hooks/use-revealed-text";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { useLoadOlderAgentHistory } from "@/hooks/use-load-older-agent-history";
-import { useSettings } from "@/hooks/use-settings";
+import { resolveContentMaxWidth, useSettings } from "@/hooks/use-settings";
 import type { ToastApi } from "@/components/toast-host";
 import { returnToTimelineTail } from "./timeline-tail-navigation";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -69,6 +69,7 @@ import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/vi
 import {
   DispatchGroupView,
   DispatchSubagentIndexProvider,
+  type DispatchSubagentIndex,
   useDispatchGroupsEnabled,
   useDispatchSubagentIndex,
 } from "@/subagents/dispatch-group";
@@ -88,6 +89,7 @@ import {
   type TurnContentStrategy,
 } from "./turn-footer";
 import { resolveBottomOverlayTailInset } from "./bottom-overlay-inset";
+import { StreamRowMaxWidthProvider, useStreamRowMaxWidthStyle } from "./row-max-width";
 import { layoutStream, type StreamLayoutItem } from "./layout";
 import {
   type BottomAnchorLocalRequest,
@@ -114,7 +116,7 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
-import { AgentUsageScopeProvider } from "@/usage/agent-scope";
+import { AgentUsageScopeProvider } from "@/usage-stats/agent-scope";
 import { useAgentSkillNames } from "@/inline-blocks/view";
 
 function renderLiveAuxiliaryNode(input: {
@@ -373,6 +375,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const autoExpandReasoning = useSettings((settings) => settings.autoExpandReasoning);
     const toolCallDetailLevel = useSettings((settings) => settings.toolCallDetailLevel);
     const chatOutlineEnabled = useSettings((settings) => settings.chatOutlineEnabled);
+    const contentMaxWidth = useSettings(resolveContentMaxWidth);
     const viewportRef = useRef<StreamViewportHandle | null>(null);
     const pendingClientMessageIds = useMemo(
       () => new Set(pendingMessageSubmissions.map((submission) => submission.clientMessageId)),
@@ -1229,6 +1232,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 listStyle: stylesheet.list,
                 baseListContentContainerStyle: stylesheet.listContentContainer,
                 forwardListContentContainerStyle: stylesheet.forwardListContentContainer,
+                contentMaxWidth,
+                imageContext: { serverId: resolvedServerId, workspaceRoot },
               })}
             </MessageOuterSpacingProvider>
             <ChatOutlineRail
@@ -1258,9 +1263,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     return (
       <AgentUsageScopeProvider serverId={resolvedServerId} agentId={agentId}>
         <TurnChangedFilesProvider value={turnChangedFilesActions}>
-          <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+          <StreamRowProviders
+            dispatchSubagentIndex={dispatchSubagentIndex}
+            contentMaxWidth={contentMaxWidth}
+          >
             {streamSurface}
-          </DispatchSubagentIndexProvider>
+          </StreamRowProviders>
         </TurnChangedFilesProvider>
       </AgentUsageScopeProvider>
     );
@@ -1732,7 +1740,7 @@ const stylesheet = StyleSheet.create((theme) => ({
   },
   contentWrapper: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },
@@ -1753,7 +1761,7 @@ const stylesheet = StyleSheet.create((theme) => ({
   },
   streamItemWrapper: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },
@@ -1881,6 +1889,23 @@ const permissionStyles = StyleSheet.create((theme) => ({
   },
 }));
 
+/** 行要读的两个上下文合在一个组件里：视图的 JSX 已到嵌套上限，不能再多套一层。 */
+function StreamRowProviders({
+  dispatchSubagentIndex,
+  contentMaxWidth,
+  children,
+}: {
+  dispatchSubagentIndex: DispatchSubagentIndex;
+  contentMaxWidth: number;
+  children: ReactNode;
+}) {
+  return (
+    <DispatchSubagentIndexProvider value={dispatchSubagentIndex}>
+      <StreamRowMaxWidthProvider value={contentMaxWidth}>{children}</StreamRowMaxWidthProvider>
+    </DispatchSubagentIndexProvider>
+  );
+}
+
 interface StreamItemWrapperProps {
   itemId: string;
   gapBelow: number;
@@ -1888,9 +1913,10 @@ interface StreamItemWrapperProps {
 }
 
 function StreamItemWrapper({ gapBelow, children }: StreamItemWrapperProps) {
+  const maxWidthStyle = useStreamRowMaxWidthStyle();
   const wrapperStyle = useMemo(
-    () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }],
-    [gapBelow],
+    () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }, maxWidthStyle],
+    [gapBelow, maxWidthStyle],
   );
   return <View style={wrapperStyle}>{children}</View>;
 }

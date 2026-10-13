@@ -128,14 +128,15 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 ### 从上游同步
 
 上游的新版本用 `git merge` 合进来，保留上游的提交历史，下一次从上一次的同步点接着合。
-当前已同步到上游 v0.10.3（`b4af508e2`）。每次并入 main 后更新这一句，并在下表加一行；
+当前已同步到上游 v0.11.2（`759532509`）。每次并入 main 后更新这一句，并在下表加一行；
 `git merge-base --is-ancestor <同步点> main` 应当成功。
 
-| 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                      | 冲突裁决摘要                                       |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| v0.9.0  | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff`                                                                   | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
-| v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                   | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
-| v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16` | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
+| 同步到  | 分段：上游发布点 → merge commit                                                                                                                                                                                                                                                                                           | 冲突裁决摘要                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| v0.9.0  | v0.9.0-beta.1 `7c1958f5b` → `503a3e7cb`，v0.9.0-beta.2 `e9d32a17d` → `0798c61c8`，v0.9.0 `7f7e60bcb` → `e0373b2ff`                                                                                                                                                                                                        | [PR #13](https://github.com/LFT-OXY/Osuna/pull/13) |
+| v0.9.2  | v0.9.1 `818658520` → `2887a73f6`，v0.9.2 `c67b7158b` → `381896b91`                                                                                                                                                                                                                                                        | [PR #14](https://github.com/LFT-OXY/Osuna/pull/14) |
+| v0.10.3 | v0.10.0-beta.1 `52d345db7` → `0535af41b`，v0.10.0 `c481ecf3e` → `6cac3ad8b`，v0.10.1 `c5236c00d` → `260c79631`，v0.10.2 `919c737c1` → `a36ecb8de`，v0.10.3 `b4af508e2` → `e8738aa16`                                                                                                                                      | [PR #15](https://github.com/LFT-OXY/Osuna/pull/15) |
+| v0.11.2 | v0.11.0-beta.1 `4aa2f2817` → `9c56f066e`，v0.11.0-beta.2 `8498c7416` → `1fb78eb97`，v0.11.0-beta.3 `6166a7aca` → `64f2b95a3`，v0.11.0-beta.4 `6b00310f7` → `1d1dc7545`，v0.11.0-beta.5 `15d774d4a` → `5e5ea92c6`，v0.11.0 `22488d450` → `e57639e38`，v0.11.1 `ab10a6694` → `9ad8ac890`，v0.11.2 `759532509` → `d7800df9a` | [PR #16](https://github.com/LFT-OXY/Osuna/pull/16) |
 
 #### 抓取与引用
 
@@ -149,25 +150,31 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 
 #### 上游的补丁分支
 
-上游的补丁版本不在它的 main 上。v0.10.1 – v0.10.3 在从 v0.10.0 分出的 `release/0.10.1`、
-`release/0.10.2`、`hotfix/0.10.3` 上，照常按 SHA 合并。合过补丁版本之后：
+上游的补丁版本有的在它的 main 上，有的不在，合之前逐个看：
+`git merge-base --is-ancestor <发布点> upstream/main`。v0.10.1 – v0.10.3 在从 v0.10.0 分出的
+`release/0.10.1`、`release/0.10.2`、`hotfix/0.10.3` 上；v0.11.1（`ab10a6694`）的发版提交在
+main 上；v0.11.2（`759532509`，3 个提交）在从 v0.11.1 分出的补丁分支上，上游只给它打了 tag。
+都照常按 SHA 合并。合过不在 main 上的补丁版本之后：
 
-- `git merge-base main upstream/main` 给出的是分叉点 v0.10.0（`c481ecf3e`），不是同步点。
+- `git merge-base main upstream/main` 给出的是分叉点 v0.11.1（`ab10a6694`），不是同步点。
 - 下一次合上游主线的版本时，补丁分支与主线分叉的地方会再冲突一次。补丁分支上的修复在主线上
   有内容等价的提交，git 仍把它们当成两边各改了一遍。裁决固定：上游的部分取主线一侧，Osuna
   的改动保留。
-- 合 v0.11 时要重解的文件，来自上游自己的 v0.10.3 对 v0.11.0（`22488d450`）的模拟合并，
-  版本号类文件之外有 10 个：`e2e/browser/file-editing.spec.ts`、
-  `components/adaptive-modal-sheet.tsx`、`i18n/resources/fr.ts`、
-  `runtime/host-runtime.test.ts`、`provider-registry.ts`、`codex-app-server-agent.ts`
-  及其测试、`codex/rewind.ts`、`opencode/v2/agent.test.ts`、`opencode/v2/turns.ts`。
-  下一次用同一条命令对要合的版本重算：
+- 分叉处的重解都落在下一次合并的第一段。第一段合完，合并基点回到上游主线上，后面各段的基点
+  是上一段的发布点。模拟出的清单是上限：合 v0.11 时，上游自己的 v0.10.3 对 v0.11.0 模拟出
+  10 个文件，6 个在第一段报冲突，另外 4 个 git 自己合对了。
+- 截至 2026-10-13（上游 main 在 `b0f054de9`），合 v0.12 时没有要重解的文件。上游自己的 v0.11.2 对
+  上游 main 模拟合并没有冲突：v0.11.2 比 v0.11.1 多出的只有撤销 #5716 与发版提交，主线上的 #6445 删掉了
+  同一批文件。动手前用同一条命令对要合的版本重算：
   `git merge-tree --write-tree --name-only --no-messages <同步点> <上游发布点>`。
 
 #### 分段与并入
 
 - 从 main 开一条合并分支，按上游自己的发布点（各个 beta、正式版）分段，每段一个
   merge commit。出问题时能看出是哪一段带进来的，并只退回那一段。
+- 上游的新代码要占用 Osuna 已有的路径或类名时，合并之前先在合并分支上单独提交，把 Osuna 的那
+  一份挪开，只改位置与引用。上游的路径与命名不动，以后上游再改那一块就不会撞。v0.11 时做过
+  一次：[ADR 0006](adr/0006-usage-in-code-is-upstream-plan-usage.md)。
 - 每段的 merge commit 本身要通过 typecheck、lint 和该段冲突文件对应的测试。冲突之外
   的适配（文案、外观、`COMPAT` 标签）紧跟在后面单独提交，进入下一段之前做完。
 - 第一段合完就开草稿 PR，之后每段推送后看 CI。整套测试只在 CI 上跑。
@@ -179,14 +186,14 @@ tag 并把 `publish` 设为 `false`，产物会留在 workflow artifacts 里。
 
 这些文件两边都会改，内容归 Osuna：
 
-| 文件                                                          | 处理                                                                                                                                   |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 各工作区的 `package.json`                                     | 版本号（本包版本与 `@getpaseo/*` 内部依赖）保持 Osuna 的。只取版本号那一块：整个文件取 Osuna 一侧会丢掉上游对依赖项和 `exports` 的改动 |
-| `package-lock.json`                                           | 不手工合并。各 `package.json` 解完后用 `npm install --package-lock-only --ignore-scripts` 重新生成                                     |
-| `CHANGELOG.md`                                                | 只留 Osuna 的条目。上游带来的内容写进 Osuna 下次发版的条目                                                                             |
-| 安卓商店说明（`fastlane/metadata/android/en-US/changelogs/`） | 与上游同名的文件留 Osuna 的。文件名由版本号算出，两边版本号重叠就会同名                                                                |
-| `README.md`                                                   | 冲突块取 Osuna 的                                                                                                                      |
-| `nix/npm-deps.hash`                                           | 不追。Nix 与 Nix Update Hash 两项检查在本仓库是已知红灯                                                                                |
+| 文件                                                          | 处理                                                                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 各工作区的 `package.json`                                     | 版本号（本包版本与 `@getpaseo/*` 内部依赖）保持 Osuna 的。只取版本号那一块：整个文件取 Osuna 一侧会丢掉上游对依赖项和 `exports` 的改动                        |
+| `package-lock.json`                                           | 不手工合并。各 `package.json` 解完后用 `npm install --package-lock-only --ignore-scripts` 重新生成                                                            |
+| `CHANGELOG.md`                                                | 只留 Osuna 的条目。上游带来的内容写进 Osuna 下次发版的条目。冲突块取 Osuna 一侧之后，文件仍可能多出上游在冲突块之外改的行：解完与合并前 `cmp`，不同就整份恢复 |
+| 安卓商店说明（`fastlane/metadata/android/en-US/changelogs/`） | 与上游同名的文件留 Osuna 的。文件名由版本号算出，两边版本号重叠就会同名                                                                                       |
+| `README.md`                                                   | 冲突块取 Osuna 的                                                                                                                                             |
+| `nix/npm-deps.hash`                                           | 不追。Nix 与 Nix Update Hash 两项检查在本仓库是已知红灯                                                                                                       |
 
 上游在某一段里没有改外部依赖时，解完的 `package.json` 与 `package-lock.json` 与合并前
 逐字节相同，拿这一点自检。
@@ -245,6 +252,15 @@ Osuna 原有的测试不删除、不跳过、不放宽断言。上游带来的�
 
 #### 踩过的坑
 
+规划分段时：
+
+- 上游的 beta 里有它到正式版就删掉的中间设计。v0.11.0 的前五个 beta 把套餐用量做成占用
+  `/usage` 的独立页面，正式版换成弹窗。分段之前拿最后一个发布点对一遍：只在中间段存在的东西，
+  适配做到这一段通过检查为止，面向最终形态的适配放到上游删掉它的那一段之后。
+- 模拟合并的冲突清单是各发布点分别对合并前的 main 算的。前面的段解过之后，后面的段会少报
+  （v0.11.1 少了 3 个）；自动合并进来的功能不在清单里，不能按「某个文件在哪一段第一次冲突」
+  推断功能落在哪一段（Codex 速度菜单在第 1 段就进来了，到第 5 段才第一次冲突）。
+
 git 不报冲突、结果却不对的：
 
 - 两边各加了一个同名字段，自动合并后重复一份。lint 的 `no-dupe-keys` 会报。
@@ -253,6 +269,13 @@ git 不报冲突、结果却不对的：
 - 上游的新测试不知道 Osuna 的默认值，例如 Explorer 标签列表里的会话历史。按 Osuna 的
   行为改预期。
 - 上游改旧用例的断言不会报冲突。用 `git diff <合并前> -- <测试文件>` 找被删掉的断言行。
+- 两边原先各写了一模一样的行，上游删掉时不报冲突，Osuna 那一份跟着消失。v0.11.0 里上游删掉
+  自己的 `/usage` 页面，`app/_layout.tsx` 与 `utils/host-routes.ts` 里 Osuna 的 Usage 页的路由
+  接线一起没了。上游删掉一个与 Osuna 同名的东西时，用
+  `git diff <合并前> -- <Osuna 仍在用的入口文件>` 看被删的行。
+- 上游的新用例拿会话级的 `listCommands()` 当「确保进程在」用，在 Osuna 里它不启动进程
+  （[ADR 0003](adr/0003-command-list-never-spawns.md)），换成 `setModel(null)`。上游按顺序读订阅
+  事件的用例会被 Osuna 在每个 init 之后发的 `commands_changed` 挤错位，让读事件的辅助函数略过它。
 - 上游的 e2e 写死上游主题的色值，差 1 也会挂。合并后 `rg toHaveCSS packages/app/e2e`，
   对照 `packages/app/src/styles/theme.ts` 重算。
 - 上游新增的设置界面里，说明文字与操作菜单按钮要对回 `settingsStyles` 和设置页已有的
@@ -302,6 +325,8 @@ git 不报冲突、结果却不对的：
   上游的行为改在纯逻辑模块里，用上游带来的测试证明（`question-form-card-core.ts`）。
 - 两边各做了一遍的发版设置（构建的 Node 堆上限）取上游的写法。数值留 Osuna 的话，
   在那一行写注释说明；上游再改那一行时会再冲突一次。
+- 上游整份重译一种语言时（v0.11.0 的 `fr.ts`，57 个冲突块），冲突块先取上游，再把基点、
+  Osuna、上游三份资源摊平成键值，按键做三方合并并逐键比对。合完查自动合并出来的重复键。
 
 本机复核时：
 
@@ -309,6 +334,18 @@ git 不报冲突、结果却不对的：
   后者是旧的预构建缓存，都会掩盖 CI 上会挂的问题。
 - `chat-find.spec.ts`、`pane-find.spec.ts` 各有一条涉及 Control+F 的用例在 macOS 本机
   会挂，以 CI（Linux）为准。
+- `plugins/antigravity-provider/server/provider.test.ts` 的「reports startup auth…」在 macOS
+  本机报 `kill EPERM`，以 CI 为准。`packages/cli/tests/e2e/plugin-lifecycle.test.ts` 在 macOS 上
+  要 `TMPDIR="$(cd "$TMPDIR" && pwd -P)"`：`/var` 是 `/private/var` 的软链接。
+- `packages/server/src/server/daemon-client.e2e.test.ts` 会启动本机真实的提供方，也不在 CI 的
+  测试脚本里。不要整份跑。
+- 官网包的 vitest 像 CI 一样从仓库根目录跑：`npx vitest run packages/website/src/...`。在
+  `packages/website` 里跑会被 Cloudflare 的 Vite 插件挡住。
+- 上游新增的打包资源要核对进包。CI 只在 Linux 包上冒烟（Desktop Packages），macOS 包没有。v0.11.0 的内置插件（两个新提供方与全部
+  套餐用量来源）要在 asar 之外，留在 asar 里插件进程读不到，功能静默缺失。
+  [本地出一个 macOS 包](#本地出一个-macos-包)，看 `Osuna.app/Contents/Resources/builtin-plugins`
+  下的目录与 `plugins/` 一致，打开后 `daemon.log` 里每个插件有一行 `Loaded plugin`。Osuna 的发版
+  工作流调的是同一条 `npm run build:desktop`。
 
 ### 更新源
 
@@ -371,6 +408,27 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --publish never --mac
 [testing.md 的 Packaged desktop smoke](testing.md#packaged-desktop-smoke)），装一次
 亲自点开是这条路径上唯一的验证。
 
+正式版开着时（agent 就跑在正式版里），不要直接打开这个包：它与正式版共用 userData 与
+`~/.paseo`。给它单独的数据目录和端口。`packages/desktop/e2e/packaged-app-smoke.js` 用的是同
+一组变量，它另外换了 `HOME`：
+
+```bash
+env -u PASEO_CLI -u PASEO_AGENT_ID -u PASEO_AGENT_CWD \
+  PASEO_HOME=/tmp/osuna-pkg/home PASEO_LISTEN=127.0.0.1:6783 \
+  PASEO_ELECTRON_USER_DATA_DIR=/tmp/osuna-pkg/user-data \
+  PASEO_ELECTRON_FLAGS="--remote-debugging-address=127.0.0.1 --remote-debugging-port=9347" \
+  packages/desktop/release/mac-arm64/Osuna.app/Contents/MacOS/Osuna
+```
+
+- daemon 的设置写在 `$PASEO_HOME/config.json` 里：`daemon.listen`，关掉 `relay` 与 `mcp`。
+  桌面端启动它管理的 daemon 时会去掉环境里的 daemon 设置变量（`config-environment.ts` 的
+  `DAEMON_SETTING_ENV_KEYS`，`PASEO_LISTEN` 也在内），只设变量不起作用。
+- `HOME` 没有换，这个 daemon 会问本机真实的 CLI 的版本与模型，并只读地读它们的登录去查套餐
+  用量。启动前问维护者。
+- 它一启动就往 `$PASEO_HOME/models` 下载约 1G 语音模型。`PASEO_DICTATION_ENABLED=false`、
+  `PASEO_VOICE_MODE_ENABLED=false` 属于被去掉的那批变量。看完删掉整个目录。
+- 退出应用时它管理的 daemon 一起停。停完确认 6767 仍在监听。
+
 ### 加回 Linux
 
 Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux 目标配置一直保留着，
@@ -398,7 +456,7 @@ Linux 构建已从发布工作流中移除。`electron-builder.yml` 的 Linux �
 There are two supported release paths:
 
 1. **Direct stable release**: you are ready to ship the resolved release source to everyone immediately (default `origin/main`).
-2. **Beta flow**: release candidates on the `beta` channel. Each beta carries its own changelog entry, publishes npm only on the explicit `beta` dist-tag, and stays behind the Stable/Beta switch on `/download`.
+2. **Beta flow**: release candidates on the `beta` channel. Each beta folds into the series' single changelog entry, publishes npm only on the explicit `beta` dist-tag, and stays behind the Stable/Beta switch on `/download`.
 
 Paseo has one linear release track even though npm dist-tags are independent
 pointers. The npm invariant is:
@@ -497,7 +555,7 @@ npm run release:promote          # Promote X.Y.Z-beta.N to stable X.Y.Z
 - Desktop assets now come from the Electron package at `packages/desktop`
 - The Linux artifact CI checks with both restricted and usable user namespaces run on pull requests that touch `packages/desktop`; see [packaged desktop smoke](testing.md#packaged-desktop-smoke). Keep the installed-package and AppImage checks together. They no longer gate publication: this fork ships no Linux artifacts.
 - Beta releases use Electron's `beta` update channel. Users on the stable channel only receive stable releases; users on the beta channel receive beta releases and the final stable release when it is published.
-- **Each beta carries its own changelog entry.** `Release Notes Sync` mirrors the matching `## X.Y.Z-beta.N` entry into that prerelease body. Promotion collapses every beta entry for the version into one final stable entry. See the Changelog policy section.
+- **A beta series has one changelog entry.** Each beta folds into it and renames its heading to the new `## X.Y.Z-beta.N`, which `Release Notes Sync` mirrors into that prerelease body. Promotion renames it to the stable heading. See the Changelog policy section.
 
 Use the beta path when you need to:
 
@@ -717,7 +775,7 @@ The GitHub Release body is populated automatically by the `Release Notes Sync` w
 - Homebrew, the Play Store, the App Store, and `app.paseo.sh` have no beta. The Beta view drops those rows, and the whole Web section, rather than showing an inert "stable only" placeholder. When a surface gains a beta path — say a public TestFlight link — add its row back in `packages/website/src/routes/download.tsx`.
 - The default download target only moves when you publish the final stable release tag like `v0.1.41`.
 - The public `/changelog` page renders `CHANGELOG.md` as-is, so the in-flight `-beta.N` entry shows there once it lands on `main` — that's intended, it's where beta users check what's coming. Only the **default download target** stays pinned to the latest stable; the download links read GitHub's releases API, not the changelog, so a `-beta.N` heading on top never affects them.
-- The download page's "What's new" link deep-links the **minor group** anchor (`/changelog#release-0.3`), not the exact entry: promotion collapses the beta entries into one stable entry, so the minor group remains the durable target. A version with no entry in the bundled changelog — a tag whose changelog commit hasn't redeployed the site yet — links the plain `/changelog` instead of a dead anchor.
+- The download page's "What's new" link deep-links the **minor group** anchor (`/changelog#release-0.3`), not the exact entry: the beta entry is renamed on each beta and on promotion, so the minor group remains the durable target. A version with no entry in the bundled changelog — a tag whose changelog commit hasn't redeployed the site yet — links the plain `/changelog` instead of a dead anchor.
 - The website itself is deployed by `Deploy Website` (Cloudflare Workers), which redeploys on the `release: published` event emitted when a stable draft is published and on pushes to `main` that touch `CHANGELOG.md` or `packages/website/**`. Its job condition excludes beta prereleases.
 
 ## Fixing a failed release build
@@ -823,17 +881,20 @@ No prefix (`v`), no extra text. `Release Notes Sync` matches the `## X.Y.Z` (or 
 
 ## Changelog policy
 
-- `CHANGELOG.md` includes stable releases and every entry in the current beta series.
+- `CHANGELOG.md` holds stable releases and at most one entry for the current beta series.
 - The first beta of a version inserts a top entry like `## 0.1.60-beta.1 - YYYY-MM-DD`.
-- Each subsequent beta inserts a new top entry with the next beta number. Its notes cover the changes since the previous beta tag.
-- Stable promotion replaces every beta entry for that version with one `## 0.1.60 - YYYY-MM-DD` entry.
-- The promoted stable entry covers the full diff from the previous stable tag and collapses internal iterations across the beta series.
+- Each subsequent beta rewrites that entry in place: the heading becomes the new beta number and date, and the body describes the full change from the previous stable release to this beta. Never add a second beta entry.
+- The entry is a list of changes, not of PRs. When a later beta reverts, reworks, or follows up on something an earlier beta added, rewrite the bullet to the current behavior or delete it. A stable user never saw the earlier beta behavior, so fixes to it are not "Fixed" bullets.
+- Anything that already shipped to stable through a patch release on an older line stays out of the beta entry.
+- Stable promotion renames the entry to `## 0.1.60 - YYYY-MM-DD` after a final review.
+
+Older prerelease bodies on GitHub keep the notes they were synced with; `Release Notes Sync` only writes the release whose tag matches the top entry.
 
 ## Changelog ownership
 
 - **The agent running the release writes the changelog entry — beta or stable.** The release context and final wording stay with that agent.
 - **Commit history is only an index of the changes. Never draft the changelog from commit subjects or diffs alone.** For every PR in the release range, read the full PR description and every issue it links to before deciding what changed, why users care, or how changes should be grouped. Use the implementation only to verify the resulting understanding.
-- For the first beta or a direct stable release, draft from the previous stable tag to the release source. For later betas, draft from the previous beta tag to the release source. Promotion replaces the beta series with one entry drafted from the previous stable tag to the release source. Review the result against the changelog policy below, show it to the user, and wait for approval before committing it.
+- Every entry, beta or stable, is drafted from the previous stable release to the release source. For a later beta, read the PRs since the previous beta tag, then rework the existing entry so each bullet still describes current behavior. Review the result against the changelog policy below, show it to the user, and wait for approval before committing it.
 
 ## Changelog wording
 
@@ -865,7 +926,7 @@ that changed, the failure that was fixed, or the capability that was added? If t
 claims a general improvement, rewrite it with the concrete change.
 
 - **Use the entry's release scope.** Include changes within the matching range in **Changelog scope**.
-- **Collapse internal iterations within that scope.** Present a feature added and fixed in one range as working. A later beta can describe a fix to behavior delivered in an earlier beta; promotion folds the complete beta series into the final stable behavior.
+- **Collapse internal iterations within that scope.** Present a feature added and fixed in one range as working.
 - **Cut low-signal entries.** "Toolbar buttons have consistent sizing" is too granular. Combine small polish items or drop them.
 
 ## Changelog conciseness
@@ -933,12 +994,7 @@ Use `git diff <latest-release-tag>..<release-source-sha>` as the review input. T
 
 Changelog scope follows the release being described:
 
-- **First beta**: `previous stable tag → release source`
-- **Later beta**: `previous beta tag → release source`
-- **Direct stable release**: `previous stable tag → release source`
-- **Stable promotion**: replace the full beta series with one entry covering `previous stable tag → release source`
-
-Each beta entry records what its testers receive. Promotion produces the single stable record for the full jump from one stable version to the next.
+Every entry covers `previous stable release → release source`: first beta, later beta, direct stable release, and promotion alike. The beta entry always reads as the stable entry would if the beta were promoted today.
 
 ## Completion checklist
 
@@ -946,7 +1002,7 @@ Each beta entry records what its testers receive. Promotion produces the single 
 
 - [ ] The resolved release source is the intended commit (default `origin/main`) and its existing CI is green
 - [ ] Every PR in the release range has been opened, and its full description and every linked issue have been read before drafting the changelog
-- [ ] Add a new `CHANGELOG.md` entry for this beta (heading `## X.Y.Z-beta.N - YYYY-MM-DD`), review it against the changelog policy, get approval, and commit it before cutting the release
+- [ ] Fold this beta into the series' single `CHANGELOG.md` entry (heading `## X.Y.Z-beta.N - YYYY-MM-DD`, previous stable → release source), review it against the changelog policy, get approval, and commit it before cutting the release
 - [ ] The diff from the previous stable to the resolved release source is classified as patch or minor, with the target version and rationale approved
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag
 - [ ] `npm run release:beta:patch`, `npm run release:beta:minor`, or `npm run release:beta:next` completes successfully
@@ -969,7 +1025,7 @@ Each beta entry records what its testers receive. Promotion produces the single 
 - [ ] Every PR in the release range has been opened, and its full description and every linked issue have been read before drafting the changelog
 - [ ] Ensure the approved release inputs are committed locally and the git worktree is clean before running any release command
 - [ ] Ensure local `npm run typecheck` passes on that exact commit before running any release command
-- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes — not refactors). Promotion replaces every `## X.Y.Z-beta.N` entry in the series with one `## X.Y.Z - YYYY-MM-DD` entry covering the full release
+- [ ] Update `CHANGELOG.md` with user-facing release notes (features, fixes — not refactors). Promotion renames the series' `## X.Y.Z-beta.N` entry to `## X.Y.Z - YYYY-MM-DD` and re-checks it covers the full release
 - [ ] Refresh the bundled price snapshot with `npm run usage:pricing:refresh` and include it in the release-preparation commits
 - [ ] Verify the changelog heading follows strict `## X.Y.Z - YYYY-MM-DD` format
 - [ ] Release preparation stayed local until the approved release command pushed the complete branch and tag

@@ -780,36 +780,54 @@ describe("formatAge", () => {
   });
 });
 
+const english = i18n.getFixedT("en");
+const french = i18n.getFixedT("fr");
+
 describe("getStateLabelKey", () => {
   it.each([
-    ["open", "workspace.git.pr.states.open", "Open"],
-    ["draft", "workspace.git.pr.states.draft", "Draft"],
-    ["merged", "workspace.git.pr.states.merged", "Merged"],
-    ["closed", "workspace.git.pr.states.closed", "Closed"],
-  ] as const)("maps %s → %s", (state, key, english) => {
-    expect(getStateLabelKey(state)).toBe(key);
-    expect(i18n.t(key)).toBe(english);
-  });
+    ["open", "workspace.git.pr.states.open", "Open", "Ouverte"],
+    ["draft", "workspace.git.pr.states.draft", "Draft", "Brouillon"],
+    ["merged", "workspace.git.pr.states.merged", "Merged", "Fusionnée"],
+    ["closed", "workspace.git.pr.states.closed", "Closed", "Fermée"],
+  ] as const)(
+    "maps %s → %s, labelled %s, and %s in French",
+    (state, key, englishLabel, frenchLabel) => {
+      expect(getStateLabelKey(state)).toBe(key);
+      expect(english(getStateLabelKey(state))).toBe(englishLabel);
+      expect(french(getStateLabelKey(state))).toBe(frenchLabel);
+    },
+  );
 });
 
 describe("getActivityVerbKey", () => {
   it.each([
-    [{ kind: "comment" }, "workspace.git.pr.activity.commented", "Commented"],
-    [{ kind: "review", reviewState: "approved" }, "workspace.git.pr.activity.approved", "Approved"],
+    [{ kind: "comment" }, "workspace.git.pr.activity.commented", "Commented", "A commenté"],
+    [
+      { kind: "review", reviewState: "approved" },
+      "workspace.git.pr.activity.approved",
+      "Approved",
+      "A approuvé",
+    ],
     [
       { kind: "review", reviewState: "changes_requested" },
       "workspace.git.pr.activity.requestedChanges",
       "Requested changes",
+      "A demandé des modifications",
     ],
     // 带正文的 commented 审查和缺失 reviewState 都按通用的「已审查」处理
     [
       { kind: "review", reviewState: "commented" },
       "workspace.git.pr.activity.reviewed",
       "Reviewed",
+      "A relu",
     ],
-    [{ kind: "review" }, "workspace.git.pr.activity.reviewed", "Reviewed"],
-  ] as const)("maps %o → %s", (item, key, english) => {
-    expect(getActivityVerbKey(item)).toBe(key);
-    expect(i18n.t(key)).toBe(english);
-  });
+    [{ kind: "review" }, "workspace.git.pr.activity.reviewed", "Reviewed", "A relu"],
+  ] as const)(
+    "maps %o → %s, labelled %s, and %s in French",
+    (item, key, englishVerb, frenchVerb) => {
+      expect(getActivityVerbKey(item)).toBe(key);
+      expect(english(getActivityVerbKey(item))).toBe(englishVerb);
+      expect(french(getActivityVerbKey(item))).toBe(frenchVerb);
+    },
+  );
 });

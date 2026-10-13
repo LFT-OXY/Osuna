@@ -22,6 +22,7 @@ export const en = {
     total: "{{total}} matches",
   },
   common: {
+    bottomSheetBackdrop: "Bottom sheet backdrop",
     back: "Back",
     loading: "Loading...",
     actions: {
@@ -225,6 +226,14 @@ export const en = {
       open: "Open agent features",
       on: "On",
       off: "Off",
+      valueTooltip: "{{label}}: {{value}}",
+    },
+    speed: {
+      label: "Speed",
+      select: "Select speed",
+      normal: "Normal",
+      fast: "Fast",
+      ultrafast: "Ultrafast",
     },
     mode: {
       title: "Mode",
@@ -341,7 +350,6 @@ export const en = {
     },
   },
   message: {
-    workedFor: "Worked for {{duration}}",
     workingFor: "Working for {{duration}}",
     changedFiles: {
       one: "{{count}} changed file",
@@ -441,6 +449,9 @@ export const en = {
         completed: "Completed",
       },
     },
+    turnFooter: {
+      workedFor: "Worked for {{duration}}",
+    },
     compaction: {
       loading: "Compacting...",
       auto: "Context automatically compacted",
@@ -501,7 +512,9 @@ export const en = {
       recovery: {
         archivedTitle: "Workspace archived",
         restoreDescription:
-          "{{workspaceName}} was archived and its worktree was removed. Restore branch {{branch}} to open it again.",
+          "Restore {{workspaceName}} to return to its agents. Its worktree will use branch {{branch}}.",
+        restoreWithoutBranchDescription:
+          "Restore {{workspaceName}} to return to its agents. A new branch will start from the saved base or the repository default.",
         unarchiveDescription: "{{workspaceName}} is archived. Unarchive it to open it again.",
         restoreAction: "Restore",
         unarchiveAction: "Unarchive",
@@ -1060,6 +1073,44 @@ export const en = {
           addAllToChat: "Add all to chat",
           addingToChat: "Adding...",
         },
+        checksOverview: {
+          headline: {
+            actionRequired: "Some checks need your attention",
+            failure: "Some checks were not successful",
+            pending: "Some checks haven't completed yet",
+            success: "All checks have passed",
+            none: "No checks",
+          },
+          count: {
+            actionRequired: "{{count}} needs action",
+            warning: "{{count}} warning",
+            failure: "{{count}} failing",
+            pending: "{{count}} in progress",
+            manual: "{{count}} manual",
+            success: "{{count}} successful",
+            ignored: "{{count}} skipped",
+          },
+          detailOne: "{{parts}} check",
+          detailMany: "{{parts}} checks",
+          groupOne: {
+            actionRequired: "{{count}} needs action check",
+            warning: "{{count}} warning check",
+            failure: "{{count}} failing check",
+            pending: "{{count}} in progress check",
+            manual: "{{count}} manual check",
+            success: "{{count}} successful check",
+            ignored: "{{count}} skipped check",
+          },
+          groupMany: {
+            actionRequired: "{{count}} needs action checks",
+            warning: "{{count}} warning checks",
+            failure: "{{count}} failing checks",
+            pending: "{{count}} in progress checks",
+            manual: "{{count}} manual checks",
+            success: "{{count}} successful checks",
+            ignored: "{{count}} skipped checks",
+          },
+        },
         checksSummary: {
           passedLabel: "passed",
           failedLabel: "failed",
@@ -1083,32 +1134,14 @@ export const en = {
         },
         approvals: "{{given}} of {{required}} approvals",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
+          commentActions: "Comment actions",
+          threadActions: "Thread actions",
           checkStatus: {
             passed: "Passed",
             failed: "Failed",
@@ -1119,8 +1152,6 @@ export const en = {
             skipped: "Skipped",
             cancelled: "Cancelled",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "Draft",
@@ -1206,6 +1237,14 @@ export const en = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "{{label}} group",
+    statusBucket: {
+      needsInput: "Needs input",
+      failed: "Failed",
+      readyToReview: "Ready to review",
+      working: "Working",
+      done: "Done",
+    },
     display: {
       trigger: "Display preferences",
       heading: "Display",
@@ -1265,6 +1304,10 @@ export const en = {
       hosts: "Hosts",
       settings: "Settings",
       closeSidebar: "Close sidebar",
+    },
+    footer: {
+      usage: "Plan usage",
+      usageSummary: "Plan usage summary",
     },
     help: {
       trigger: "Help and support",
@@ -1816,6 +1859,8 @@ export const en = {
       unknownReason: "This agent can't start subagents",
       hostOutdated: "Update the host to mention agents",
     },
+    chooseProjectForCommands: "Choose a project to see commands",
+    chooseModelForCommands: "Select a model to see commands",
   },
   loadOlderHistory: {
     failed: "Couldn't load older history",
@@ -1995,6 +2040,12 @@ export const en = {
       helper: "Connect to an Osuna daemon running on the remote host.",
       fields: {
         target: "SSH host",
+        password: "Daemon password",
+        optional: "Optional",
+      },
+      passwordVisibility: {
+        show: "Show password",
+        hide: "Hide password",
       },
       actions: {
         cancel: "Cancel",
@@ -2299,10 +2350,12 @@ export const en = {
     dismiss: "Dismiss",
   },
   contextWindow: {
+    noData: "No context data",
+    accessibilityNoData: "Context window: No context data",
     title: "Context window",
-    usedLabel: "used",
-    tokens: "Tokens",
-    accessibility: "Context window {{percentage}}% used, {{used}} of {{max}}",
+    used: "{{percentage}}% used",
+    tokens: "{{used}} / {{max}} tokens",
+    accessibility: "Context window {{percentage}}% used",
     sessionTotal: {
       title: "Session total",
       tokens: "Tokens",
@@ -2441,6 +2494,7 @@ export const en = {
         offline: "Connect to this host to open plugin settings.",
         update: "Update this host to use plugin settings.",
         unavailable: "This plugin settings screen is unavailable.",
+        backToPlugins: "Back to plugins",
       },
       trustedTitle: "Plugins are trusted code",
       trustedDescription:
@@ -2448,7 +2502,7 @@ export const en = {
       globalTitle: "Enable plugins",
       globalHint: "Global switch for every configured plugin",
       sourceLabel: "Plugin source",
-      sourcePlaceholder: "Directory, Git URL, or npm package",
+      sourcePlaceholder: "owner/slug, directory, Git URL, or npm package",
       docs: "Docs",
       install: "Install plugin",
       installing: "Installing…",
@@ -2672,8 +2726,15 @@ export const en = {
         description: "Show an outline for jumping between prompts",
       },
       sidebar: {
-        title: "Sidebar",
-        description: "Choose which items appear at the top of the sidebar and in what order",
+        header: {
+          title: "Header",
+          description: "Choose which items appear at the top of the sidebar and in what order",
+        },
+        footer: {
+          title: "Footer",
+          description:
+            "Choose which rows appear at the bottom of the sidebar and in what order. Add project and the icon row always show",
+        },
         moveUp: "Move up",
         moveDown: "Move down",
       },
@@ -2709,6 +2770,14 @@ export const en = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "This font was not found on this device; a fallback font will be used",
         notMonospaceWarning: "Not a monospace font; text may misalign",
+      },
+      layout: {
+        title: "Layout",
+        contentWidth: "Content width",
+        contentWidthHint: "Max width of chat and Markdown files on wide screens",
+        contentWidthAccessibility: "Content width in pixels",
+        reset: "Reset",
+        resetAccessibility: "Reset content width to default",
       },
       syntax: {
         title: "Syntax",
@@ -3736,20 +3805,42 @@ export const en = {
     planUsage: {
       apiEndpointNote: "Using the API endpoint {{name}}. This quota doesn't reflect actual usage.",
       title: "Plan usage",
+      options: "Plan usage options",
+      refreshFailed: "Unable to refresh plan usage",
+      noHosts: "No connected hosts",
+      retry: "Try again",
+      connectHostToSee: "Connect to {{host}} to see plan usage",
+      updateHostToSee: "Update {{host}} to see plan usage",
+      loginExpired: "Login expired {{ago}}. {{remedy}}",
+      loginRejected: "Login rejected (HTTP {{status}}). {{remedy}}",
+      remedyRun: "Run {{command}} to refresh it.",
+      remedySignIn: "Sign in again.",
+      pin: "Pin",
+      displayAs: "Show",
+      displayUsed: "Used",
+      displayRemaining: "Remaining",
+      showInSidebar: "Show in sidebar",
+      showInSidebarHint: "Pinned windows show in the sidebar footer",
+      refreshAll: "Refresh all",
+      unpin: "Unpin",
+      agentError: "Unable to load plan usage: {{reason}}",
       refresh: "Refresh",
       refreshing: "Refreshing...",
-      loading: "Loading usage...",
-      empty: "No usage data",
-      errorTitle: "Unable to load usage",
-      hostUnavailable: "Connect to this host to see provider usage",
-      hostUpgradeRequired: "Update the host to see provider usage",
+      loading: "Loading plan usage...",
+      empty: "No plan usage data",
+      errorTitle: "Unable to load plan usage",
+      hostUnavailable: "Connect to this host to see plan usage",
       clientUnavailable: "Host connection is not ready",
-      tooltipLoading: "Loading plan usage…",
       updated: "Updated {{ago}}",
       resets: "resets {{duration}}",
       resettingNow: "resetting now",
       runsOut: "runs out {{duration}}",
       balanceLeft: "{{amount}} left",
+      percentLeft: "{{percent}} left",
+      summaryWindowUsed: "{{name}} {{percent}} used",
+      summaryWindowLeft: "{{name}} {{percent}} left",
+      summaryLabel: "{{label}}: {{windows}}",
+      summarySeparator: ", ",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3760,6 +3851,8 @@ export const en = {
         planA11y: "{{provider}} plan: {{plan}}",
         windowA11y: "{{label}}: {{percent}} used, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} used",
+        windowA11yLeft: "{{label}}: {{percent}} left, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} left",
       },
       status: {
         error: "Error",

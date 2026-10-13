@@ -27,6 +27,7 @@ export const ptBR: TranslationResources = {
     total: "{{total}} correspondências",
   },
   common: {
+    bottomSheetBackdrop: "Fundo do painel inferior",
     back: "Voltar",
     loading: "Carregando...",
     actions: {
@@ -232,6 +233,14 @@ export const ptBR: TranslationResources = {
       open: "Abrir recursos do agente",
       on: "Ativado",
       off: "Desativado",
+      valueTooltip: "{{label}}: {{value}}",
+    },
+    speed: {
+      label: "Velocidade",
+      select: "Selecionar velocidade",
+      normal: "Normal",
+      fast: "Rápido",
+      ultrafast: "Ultrarrápido",
     },
     mode: {
       title: "Modo",
@@ -350,7 +359,6 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
-    workedFor: "Trabalhou por {{duration}}",
     workingFor: "Trabalhando há {{duration}}",
     changedFiles: {
       one: "{{count}} arquivo alterado",
@@ -450,6 +458,9 @@ export const ptBR: TranslationResources = {
         completed: "Concluída",
       },
     },
+    turnFooter: {
+      workedFor: "Trabalhou por {{duration}}",
+    },
     compaction: {
       loading: "Compactando...",
       auto: "Contexto compactado automaticamente",
@@ -510,7 +521,9 @@ export const ptBR: TranslationResources = {
       recovery: {
         archivedTitle: "Workspace arquivado",
         restoreDescription:
-          "{{workspaceName}} foi arquivado e sua worktree foi removida. Restaure a branch {{branch}} para abri-lo novamente.",
+          "Restaure {{workspaceName}} para voltar aos seus agentes. A worktree usará a branch {{branch}}.",
+        restoreWithoutBranchDescription:
+          "Restaure {{workspaceName}} para voltar aos seus agentes. Uma nova branch partirá da base salva ou da branch padrão do repositório.",
         unarchiveDescription:
           "{{workspaceName}} está arquivado. Desarquive-o para abri-lo novamente.",
         restoreAction: "Restaurar",
@@ -1073,9 +1086,47 @@ export const ptBR: TranslationResources = {
         actions: {
           viewPullRequest: "Ver",
           openOn: "Abrir no {{brand}}",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "Adicionar ao chat",
+          addAllToChat: "Adicionar tudo ao chat",
+          addingToChat: "Adicionando...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "Algumas verificações precisam da sua atenção",
+            failure: "Algumas verificações não foram bem-sucedidas",
+            pending: "Algumas verificações ainda não terminaram",
+            success: "Todas as verificações foram aprovadas",
+            none: "Nenhuma verificação",
+          },
+          count: {
+            actionRequired: "{{count}} com ação pendente",
+            warning: "{{count}} com aviso",
+            failure: "{{count}} com falha",
+            pending: "{{count}} em andamento",
+            manual: "{{count}} manual(is)",
+            success: "{{count}} aprovada(s)",
+            ignored: "{{count}} ignorada(s)",
+          },
+          detailOne: "Verificação: {{parts}}",
+          detailMany: "Verificações: {{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} verificação com ação pendente",
+            warning: "{{count}} verificação com aviso",
+            failure: "{{count}} verificação com falha",
+            pending: "{{count}} verificação em andamento",
+            manual: "{{count}} verificação manual",
+            success: "{{count}} verificação aprovada",
+            ignored: "{{count}} verificação ignorada",
+          },
+          groupMany: {
+            actionRequired: "{{count}} verificações com ação pendente",
+            warning: "{{count}} verificações com aviso",
+            failure: "{{count}} verificações com falha",
+            pending: "{{count}} verificações em andamento",
+            manual: "{{count}} verificações manuais",
+            success: "{{count}} verificações aprovadas",
+            ignored: "{{count}} verificações ignoradas",
+          },
         },
         checksSummary: {
           passedLabel: "passou",
@@ -1089,43 +1140,25 @@ export const ptBR: TranslationResources = {
           checks: "Verificações",
           pipeline: "Pipeline",
           reviews: "Revisões",
-          activity: "Activity",
+          activity: "Atividade",
         },
         empty: {
           noJobs: "Sem jobs",
           loadingPipeline: "Carregando pipeline...",
           pipelineJobsLoadFailed: "Não foi possível carregar os jobs do pipeline",
           allowedToFail: "permitido falhar",
-          noActivity: "No activity yet",
+          noActivity: "Nenhuma atividade ainda",
         },
         approvals: "{{given}} de {{required}} aprovações",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
+          commentActions: "Ações do comentário",
+          threadActions: "Ações da conversa",
           checkStatus: {
             passed: "Aprovado",
             failed: "Falhou",
@@ -1136,8 +1169,6 @@ export const ptBR: TranslationResources = {
             skipped: "Ignorado",
             cancelled: "Cancelado",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "Rascunho",
@@ -1147,17 +1178,17 @@ export const ptBR: TranslationResources = {
         },
         activity: {
           commented: "Comentou",
-          approved: "Aprovado",
+          approved: "Aprovou",
           requestedChanges: "Solicitou alterações",
-          reviewed: "Revisado",
+          reviewed: "Revisou",
         },
         time: {
           justNow: "agora mesmo",
         },
         thread: {
           discussion: "Tópico de discussão",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "Resolvido",
+          outdated: "Desatualizado",
         },
         errors: {
           statusLoadFailed: "Não foi possível carregar o status da pull request",
@@ -1226,6 +1257,14 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "Grupo {{label}}",
+    statusBucket: {
+      needsInput: "Precisa de resposta",
+      failed: "Com falha",
+      readyToReview: "Para revisar",
+      working: "Em execução",
+      done: "Concluído",
+    },
     display: {
       trigger: "Preferências de exibição",
       heading: "Exibição",
@@ -1285,6 +1324,10 @@ export const ptBR: TranslationResources = {
       hosts: "Hosts",
       settings: "Configurações",
       closeSidebar: "Fechar barra lateral",
+    },
+    footer: {
+      usage: "Uso do plano",
+      usageSummary: "Resumo do uso do plano",
     },
     help: {
       trigger: "Ajuda e suporte",
@@ -1825,6 +1868,8 @@ export const ptBR: TranslationResources = {
       unknownReason: "Este agente não consegue iniciar subagentes",
       hostOutdated: "Atualize o host para mencionar agentes",
     },
+    chooseProjectForCommands: "Escolha um projeto para ver os comandos",
+    chooseModelForCommands: "Selecione um modelo para ver os comandos",
   },
   loadOlderHistory: {
     failed: "Não foi possível carregar o histórico mais antigo",
@@ -2005,6 +2050,12 @@ export const ptBR: TranslationResources = {
       helper: "Conecte-se a um daemon Osuna no host remoto.",
       fields: {
         target: "Host SSH",
+        password: "Senha do daemon",
+        optional: "Opcional",
+      },
+      passwordVisibility: {
+        show: "Mostrar senha",
+        hide: "Ocultar senha",
       },
       actions: {
         cancel: "Cancelar",
@@ -2310,10 +2361,12 @@ export const ptBR: TranslationResources = {
     dismiss: "Dispensar",
   },
   contextWindow: {
+    noData: "Sem dados de contexto",
+    accessibilityNoData: "Janela de contexto: sem dados de contexto",
     title: "Janela de contexto",
-    usedLabel: "usado",
-    tokens: "Tokens",
-    accessibility: "Janela de contexto {{percentage}}% usada, {{used}} de {{max}}",
+    used: "{{percentage}}% usado",
+    tokens: "{{used}} / {{max}} tokens",
+    accessibility: "Janela de contexto {{percentage}}% usada",
     sessionTotal: {
       title: "Total da sessão",
       tokens: "Tokens",
@@ -2587,8 +2640,15 @@ export const ptBR: TranslationResources = {
         description: "Mostrar uma estrutura para navegar entre prompts",
       },
       sidebar: {
-        title: "Barra lateral",
-        description: "Escolha quais itens aparecem no topo da barra lateral e em que ordem",
+        header: {
+          title: "Cabeçalho",
+          description: "Escolha quais itens aparecem no topo da barra lateral e em que ordem",
+        },
+        footer: {
+          title: "Rodapé",
+          description:
+            "Escolha quais linhas aparecem na parte inferior da barra lateral e em que ordem. Adicionar projeto e a linha de ícones sempre aparecem",
+        },
         moveUp: "Mover para cima",
         moveDown: "Mover para baixo",
       },
@@ -2625,6 +2685,14 @@ export const ptBR: TranslationResources = {
         notInstalledWarning:
           "Esta fonte não foi encontrada neste dispositivo; uma fonte alternativa será usada",
         notMonospaceWarning: "Não é uma fonte monoespaçada; o texto pode ficar desalinhado",
+      },
+      layout: {
+        title: "Layout",
+        contentWidth: "Largura do conteúdo",
+        contentWidthHint: "Largura máxima do chat e dos arquivos Markdown em telas largas",
+        contentWidthAccessibility: "Largura do conteúdo em pixels",
+        reset: "Redefinir",
+        resetAccessibility: "Redefinir a largura do conteúdo",
       },
       syntax: {
         title: "Sintaxe",
@@ -3663,20 +3731,42 @@ export const ptBR: TranslationResources = {
     planUsage: {
       apiEndpointNote: "Usando o endpoint de API {{name}}. Esta cota não reflete o consumo real.",
       title: "Uso do plano",
+      options: "Opções de uso do plano",
+      refreshFailed: "Não foi possível atualizar o uso do plano",
+      noHosts: "Nenhum host conectado",
+      retry: "Tentar novamente",
+      connectHostToSee: "Conecte-se a {{host}} para ver o uso do plano",
+      updateHostToSee: "Atualize {{host}} para ver o uso do plano",
+      loginExpired: "Login expirado {{ago}}. {{remedy}}",
+      loginRejected: "Login rejeitado (HTTP {{status}}). {{remedy}}",
+      remedyRun: "Execute {{command}} para renová-lo.",
+      remedySignIn: "Entre novamente.",
+      pin: "Fixar",
+      displayAs: "Mostrar",
+      displayUsed: "Usado",
+      displayRemaining: "Restante",
+      showInSidebar: "Mostrar na barra lateral",
+      showInSidebarHint: "As janelas fixadas aparecem no rodapé da barra lateral",
+      refreshAll: "Atualizar tudo",
+      unpin: "Desafixar",
+      agentError: "Não foi possível carregar o uso do plano: {{reason}}",
       refresh: "Atualizar",
       refreshing: "Atualizando...",
-      loading: "Carregando uso...",
-      empty: "Sem dados de uso",
-      errorTitle: "Não foi possível carregar o uso",
-      hostUnavailable: "Conecte-se a este host para ver o uso dos provedores",
-      hostUpgradeRequired: "Atualize o host para ver o uso dos provedores",
+      loading: "Carregando o uso do plano...",
+      empty: "Sem dados de uso do plano",
+      errorTitle: "Não foi possível carregar o uso do plano",
+      hostUnavailable: "Conecte-se a este host para ver o uso do plano",
       clientUnavailable: "A conexão com o host não está pronta",
-      tooltipLoading: "Carregando o uso do plano…",
       updated: "Atualizado {{ago}}",
       resets: "reinicia em {{duration}}",
       resettingNow: "reiniciando agora",
       runsOut: "acaba em {{duration}}",
       balanceLeft: "{{amount}} restantes",
+      percentLeft: "{{percent}} restantes",
+      summaryWindowUsed: "{{name}} {{percent}} usados",
+      summaryWindowLeft: "{{name}} {{percent}} restantes",
+      summaryLabel: "{{label}}: {{windows}}",
+      summarySeparator: ", ",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3687,6 +3777,8 @@ export const ptBR: TranslationResources = {
         planA11y: "Plano {{provider}}: {{plan}}",
         windowA11y: "{{label}}: {{percent}} usado, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: {{percent}} usado",
+        windowA11yLeft: "{{label}}: {{percent}} restantes, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: {{percent}} restantes",
       },
       status: {
         error: "Erro",

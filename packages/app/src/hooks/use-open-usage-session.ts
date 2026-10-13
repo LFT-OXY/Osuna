@@ -7,8 +7,8 @@ import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 import { useSessionStore } from "@/stores/session-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { resolveUsageSessionAction, type UsageSessionWorkspace } from "@/usage/open-session";
-import type { MergedUsageSession } from "@/usage/sessions";
+import { resolveUsageSessionAction, type UsageSessionWorkspace } from "@/usage-stats/open-session";
+import type { MergedUsageSession } from "@/usage-stats/sessions";
 
 export interface UseOpenUsageSessionResult {
   open: (session: MergedUsageSession) => void;

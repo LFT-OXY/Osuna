@@ -16,7 +16,7 @@ import {
   type UsageHostAvailability,
   type UsageHostOption,
   type UsageHostSelection,
-} from "@/usage/host-options";
+} from "@/usage-stats/host-options";
 
 interface UsageHostFilterProps {
   options: readonly UsageHostOption[];

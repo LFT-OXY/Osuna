@@ -1,4 +1,6 @@
+import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
+import { builtinSidebarNavTestKey } from "@/sidebar-nav/model";
 import { openSettings } from "./app";
 import { clickSettingsBackToWorkspace, openSettingsSection } from "./settings";
 
@@ -10,7 +12,8 @@ const SHELL_ROW_TEST_IDS = {
   history: "sidebar-sessions",
   search: "sidebar-search",
   schedules: "sidebar-schedules",
-  usage: "sidebar-usage",
+  // Osuna 的「用量」行；上游底部的套餐用量摘要行是 sidebar-usage。
+  usage: "sidebar-usage-stats",
 } as const;
 
 export type SidebarNavKey = keyof typeof SHELL_ROW_TEST_IDS;
@@ -26,8 +29,9 @@ function shellRow(page: Page, key: SidebarNavKey): Locator {
   return page.locator(`[data-testid="${SHELL_ROW_TEST_IDS[key]}"]:visible`).first();
 }
 
+/** The Header card's rows; its Usage row takes a testID apart from the Footer card's usage row. */
 function settingsRow(page: Page, key: SidebarNavKey): Locator {
-  return page.getByTestId(`sidebar-nav-item-${key}`);
+  return page.getByTestId(`sidebar-nav-item-${builtinSidebarNavTestKey(key, "header")}`);
 }
 
 function itemLabel(key: SidebarNavKey): string {
@@ -57,10 +61,25 @@ export async function seedSidebarNavPreferences(
   );
 }
 
+/** Seeds stored footer rows once; a reload keeps whatever the app wrote since. */
+export async function seedSidebarFooterPreferences(
+  page: Page,
+  preferences: SidebarNavPreference[],
+): Promise<void> {
+  await page.addInitScript(
+    ({ key, sidebarFooterItems }) => {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, JSON.stringify({ sidebarFooterItems }));
+    },
+    { key: APP_SETTINGS_KEY, sidebarFooterItems: preferences },
+  );
+}
+
 export async function openSidebarNavSettings(page: Page): Promise<void> {
   await openSettings(page);
   await openSettingsSection(page, "sidebar");
-  await expect(page.getByTestId("sidebar-nav-section")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("sidebar-nav-section-header")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("sidebar-nav-section-footer")).toBeVisible();
 }
 
 export async function leaveSettings(page: Page): Promise<void> {
@@ -127,9 +146,9 @@ export async function expectStoredSidebarNav(
     .toEqual(expected);
 }
 
-async function expectVerticalOrder(
-  keys: SidebarNavKey[],
-  locate: (key: SidebarNavKey) => Locator,
+async function expectVerticalOrder<Key extends string>(
+  keys: Key[],
+  locate: (key: Key) => Locator,
   subject: string,
 ): Promise<void> {
   await expect
@@ -138,15 +157,157 @@ async function expectVerticalOrder(
         const measured = await Promise.all(
           keys.map(async (key) => ({ key, top: await rowTop(locate(key)) })),
         );
-        if (
-          !measured.every(
-            (entry): entry is { key: SidebarNavKey; top: number } => entry.top !== null,
-          )
-        )
+        if (!measured.every((entry): entry is { key: Key; top: number } => entry.top !== null))
           return null;
         return measured.sort((a, b) => a.top - b.top).map((entry) => entry.key);
       },
       { message: `Expected ${subject} in order`, timeout: 15_000 },
     )
     .toEqual(keys);
+}
+
+/** Persisted footer row key -> the testID the app shell renders that row with. */
+function shellFooterTestID(key: string): string {
+  if (key === "usage") return "sidebar-usage";
+  const [, pluginId, itemId] = key.split(":");
+  return `plugin-sidebar-footer-${pluginId}-${itemId}`;
+}
+
+function shellFooterRow(page: Page, key: string): Locator {
+  return page.locator(`[data-testid="${shellFooterTestID(key)}"]:visible`).first();
+}
+
+function footerSettingsRows(page: Page): Locator {
+  return page
+    .getByTestId("sidebar-nav-section-footer")
+    .locator('[data-testid^="sidebar-nav-item-"]');
+}
+
+export async function expectFooterSettingsKeys(page: Page, keys: string[]): Promise<void> {
+  await expect
+    .poll(async () =>
+      (
+        await footerSettingsRows(page).evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("data-testid")),
+        )
+      ).map((testID) => testID?.replace("sidebar-nav-item-", "")),
+    )
+    .toEqual(keys);
+}
+
+export async function moveFooterItemUp(page: Page, key: string): Promise<void> {
+  await page
+    .getByTestId("sidebar-nav-section-footer")
+    .getByTestId(`sidebar-nav-move-up-${key}`)
+    .click();
+}
+
+function footerItemSwitch(page: Page, key: string): Locator {
+  return page.getByTestId("sidebar-nav-section-footer").getByTestId(`sidebar-nav-toggle-${key}`);
+}
+
+export async function setFooterItemVisible(
+  page: Page,
+  key: string,
+  visible: boolean,
+): Promise<void> {
+  const toggle = footerItemSwitch(page, key);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", String(visible));
+}
+
+/** Whether Settings > Sidebar shows a footer item as on. */
+export async function expectFooterItemSetting(
+  page: Page,
+  key: string,
+  visible: boolean,
+): Promise<void> {
+  await expect(footerItemSwitch(page, key)).toHaveAttribute("aria-checked", String(visible));
+}
+
+export async function expectFooterOrder(page: Page, keys: string[]): Promise<void> {
+  await expectVerticalOrder(keys, (key) => shellFooterRow(page, key), "sidebar footer rows");
+}
+
+export async function expectFooterItemHidden(page: Page, key: string): Promise<void> {
+  await expect(page.locator(`[data-testid="${shellFooterTestID(key)}"]:visible`)).toHaveCount(0);
+}
+
+const FOOTER_ICON_TEST_IDS = [
+  "sidebar-add-project",
+  "sidebar-usage-icon",
+  "sidebar-hosts-trigger",
+  "sidebar-help",
+  "sidebar-settings",
+];
+
+/**
+ * One line of same-size icons: Add project, Plan usage and Hosts together on the left, Help and
+ * Settings together at the end. Osuna 的图标按钮之间留 2px（上游是 0）。
+ * 窄屏侧栏是滑入的：逐个量框会量到滑动中途的位置，宽度也会带亚像素小数，所以轮询到一帧里
+ * 的数值稳定为止，并按整数比较（CI 上量到过 27.9999995 与 28、中途间距 30.2）。
+ */
+export async function expectFooterIconRow(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const boxes = await Promise.all(
+          FOOTER_ICON_TEST_IDS.map((testID) =>
+            page.locator(`[data-testid="${testID}"]:visible`).first().boundingBox(),
+          ),
+        );
+        if (boxes.some((box) => box === null)) return null;
+        const measured = boxes.map((box) => box!);
+        const [first] = measured;
+        const gaps = measured
+          .slice(1)
+          .map((box, index) => Math.round(box.x - (measured[index]!.x + measured[index]!.width)));
+        return {
+          sameWidth: measured.every((box) => Math.round(box.width) === Math.round(first!.width)),
+          sameLine: measured.every(
+            (box) => Math.abs(box.y + box.height / 2 - first!.y - first!.height / 2) < 2,
+          ),
+          gaps,
+          wideMiddleGap: gaps[2]! > first!.width,
+        };
+      },
+      { timeout: 10_000 },
+    )
+    .toEqual({
+      sameWidth: true,
+      sameLine: true,
+      gaps: [2, 2, expect.any(Number), 2],
+      wideMiddleGap: true,
+    });
+}
+
+/**
+ * Osuna 的侧栏不画横向分割线（`docs/design.md`）：底部容器没有上边框，摘要行与图标行之间也没有
+ * 分割线，不论摘要行显示与否。上游在这里断言有一条。
+ */
+export async function expectNoFooterRule(page: Page): Promise<void> {
+  await expect(page.locator('[data-testid="sidebar-footer"]:visible')).toHaveCSS(
+    "border-top-width",
+    "0px",
+  );
+  await expect(page.locator('[data-testid="sidebar-footer-bottom-line"]:visible')).toHaveCSS(
+    "border-top-width",
+    "0px",
+  );
+  await expect(page.locator('[data-testid="sidebar-footer-separator"]:visible')).toHaveCount(0);
+}
+
+export async function hoverFooterAddProject(page: Page): Promise<void> {
+  await page.locator('[data-testid="sidebar-add-project"]:visible').hover();
+  const tooltip = page.getByTestId("sidebar-add-project-tooltip");
+  await expect(tooltip.getByText("Add project", { exact: true })).toBeVisible();
+  await expect(tooltip.getByText("Ctrl+O", { exact: true })).toBeVisible();
+}
+
+export async function footerScreenshot(page: Page, name: string): Promise<void> {
+  const directory = process.env.PASEO_QA_SCREENSHOT_DIR;
+  if (!directory) return;
+  await page.waitForTimeout(600);
+  await page.addStyleTag({ content: ".__expo_fast_refresh { display: none !important; }" });
+  await page.screenshot({ path: path.join(directory, `${name}.png`) });
 }

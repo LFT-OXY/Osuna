@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { AgentFeature } from "@getpaseo/protocol/agent-types";
+import { i18n } from "@/i18n/i18next";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
   getAgentControlHintKey,
+  isFeatureActive,
+  localizeSpeedFeature,
   normalizeModelId,
   resolveAgentModelSelection,
 } from "./utils";
@@ -35,8 +39,99 @@ describe("feature metadata helpers", () => {
 
   it("maps feature highlight colors by feature id", () => {
     expect(getFeatureHighlightColor("fast_mode")).toBe("providerBrand");
+    expect(getFeatureHighlightColor("service_tier")).toBe("providerBrand");
     expect(getFeatureHighlightColor("plan_mode")).toBe("blue");
     expect(getFeatureHighlightColor("other")).toBe("default");
+  });
+
+  it("treats a select feature as active when a non-default option is selected", () => {
+    const speed = {
+      type: "select" as const,
+      id: "service_tier",
+      label: "Speed",
+      options: [
+        { id: "default", label: "Normal", isDefault: true },
+        { id: "fast", label: "Fast" },
+      ],
+    };
+    expect(isFeatureActive({ ...speed, value: "default" })).toBe(false);
+    expect(isFeatureActive({ ...speed, value: "fast" })).toBe(true);
+    expect(
+      isFeatureActive({
+        type: "toggle",
+        id: "fast_mode",
+        label: "Fast",
+        value: true,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("localizeSpeedFeature", () => {
+  // daemon 给的 Codex 速度菜单：档位名来自模型目录。
+  const speed: AgentFeature = {
+    type: "select",
+    id: "service_tier",
+    label: "Speed",
+    tooltip: "Select speed",
+    icon: "zap",
+    desktopTrigger: "icon",
+    value: "priority",
+    options: [
+      { id: "default", label: "Normal", isDefault: true },
+      { id: "priority", label: "Fast" },
+      { id: "ultrafast", label: "Ultrafast" },
+      { id: "flex", label: "Flex" },
+    ],
+  };
+
+  it("shows the speed menu in the app language and keeps unknown tier names", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(localizeSpeedFeature(speed, i18n.t)).toEqual({
+        ...speed,
+        label: "速度",
+        tooltip: "选择速度",
+        options: [
+          { id: "default", label: "普通", isDefault: true },
+          { id: "priority", label: "快速" },
+          { id: "ultrafast", label: "超快" },
+          { id: "flex", label: "Flex" },
+        ],
+      });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
+  it("names the default tier by its flag, whatever the daemon calls it", async () => {
+    const renamed: AgentFeature = {
+      ...speed,
+      options: [
+        { id: "default", label: "Standard", isDefault: true },
+        { id: "priority", label: "Fast" },
+      ],
+    };
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(localizeSpeedFeature(renamed, i18n.t)).toMatchObject({
+        options: [
+          { id: "default", label: "普通" },
+          { id: "priority", label: "快速" },
+        ],
+      });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
+  it("keeps the daemon's wording in English", () => {
+    expect(localizeSpeedFeature(speed, i18n.t)).toEqual(speed);
+  });
+
+  it("leaves other features untouched", () => {
+    const plan: AgentFeature = { type: "toggle", id: "plan_mode", label: "Plan", value: false };
+    expect(localizeSpeedFeature(plan, i18n.t)).toBe(plan);
   });
 });
 
@@ -67,6 +162,7 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: null,
       configuredModelId: "claude-fable-5[1m]",
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: null,
     });
 
@@ -88,6 +184,7 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: "a",
       configuredModelId: "b",
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: null,
     });
 
@@ -112,11 +209,60 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: "a",
       configuredModelId: null,
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: "high",
     });
 
     expect(selection.selectedThinkingId).toBe("high");
     expect(selection.displayThinking).toBe("High");
+  });
+
+  it("shows the thinking level the agent runs on when none was chosen", () => {
+    const selection = resolveAgentModelSelection({
+      models: [
+        {
+          id: "openrouter/google/gemini-3.6-flash",
+          provider: "pi",
+          label: "Gemini 3.6 Flash",
+          thinkingOptions: [
+            { id: "low", label: "Low" },
+            { id: "medium", label: "Medium", isDefault: true },
+            { id: "high", label: "High" },
+          ],
+          defaultThinkingOptionId: "medium",
+        },
+      ],
+      runtimeModelId: "openrouter/google/gemini-3.6-flash",
+      configuredModelId: null,
+      runtimeThinkingOptionId: "high",
+      explicitThinkingOptionId: null,
+    });
+
+    expect(selection.selectedThinkingId).toBe("high");
+    expect(selection.displayThinking).toBe("High");
+  });
+
+  it("falls back to the chosen thinking level when the runtime level is not a model option", () => {
+    const selection = resolveAgentModelSelection({
+      models: [
+        {
+          id: "a",
+          provider: "codex",
+          label: "Model A",
+          thinkingOptions: [
+            { id: "low", label: "Low" },
+            { id: "high", label: "High" },
+          ],
+          defaultThinkingOptionId: "low",
+        },
+      ],
+      runtimeModelId: "a",
+      configuredModelId: null,
+      runtimeThinkingOptionId: "xhigh",
+      explicitThinkingOptionId: "high",
+    });
+
+    expect(selection.selectedThinkingId).toBe("high");
   });
 
   it("formats raw thinking labels in the selected model display", () => {
@@ -134,6 +280,7 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: "a",
       configuredModelId: null,
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: "xhigh",
     });
 
@@ -155,6 +302,7 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: null,
       configuredModelId: null,
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: null,
     });
 
@@ -178,6 +326,7 @@ describe("resolveAgentModelSelection", () => {
       ],
       runtimeModelId: "claude-sonnet-4-6-20260101",
       configuredModelId: "default",
+      runtimeThinkingOptionId: null,
       explicitThinkingOptionId: null,
     });
 
@@ -185,5 +334,32 @@ describe("resolveAgentModelSelection", () => {
     expect(selection.displayModel).toBe("Default (Sonnet 4.6)");
     expect(selection.selectedThinkingId).toBe("low");
     expect(selection.displayThinking).toBe("Low");
+  });
+
+  it("shows the agent's own model when the catalog does not list it", () => {
+    const selection = resolveAgentModelSelection({
+      models: [
+        {
+          id: "gpt-6-sol",
+          provider: "codex",
+          label: "GPT-6-Sol",
+          isDefault: true,
+          thinkingOptions: [
+            { id: "medium", label: "medium" },
+            { id: "max", label: "max" },
+          ],
+          defaultThinkingOptionId: "medium",
+        },
+      ],
+      runtimeModelId: "gpt-6.1-sol",
+      configuredModelId: "gpt-6.1-sol",
+      runtimeThinkingOptionId: null,
+      explicitThinkingOptionId: "max",
+    });
+
+    expect(selection.selectedModel).toBeNull();
+    expect(selection.activeModelId).toBe("gpt-6.1-sol");
+    expect(selection.displayModel).toBe("gpt-6.1-sol");
+    expect(selection.displayThinking).toBe("Max");
   });
 });

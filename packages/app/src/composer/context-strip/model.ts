@@ -1,6 +1,6 @@
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
-import type { PlanUsageStripSpace } from "@/provider-usage/strip";
+import type { PlanUsageStripSpace } from "@/plan-usage/strip";
 
 type WorkspaceKind = Exclude<WorkspaceDescriptor["workspaceKind"], "checkout">;
 

@@ -18,7 +18,6 @@ import {
   ThinkingIcon,
   type AgentControlIcon,
 } from "@/agent-controls/icons";
-import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import {
@@ -51,6 +50,8 @@ import type {
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import {
   getFeatureHighlightColor,
+  isFeatureActive,
+  localizeSpeedFeature,
   getFeatureTooltip,
   getAgentControlHintKey,
   resolveAgentModelSelection,
@@ -217,7 +218,7 @@ function getModeProviderDefinitions(modeControl: AgentModeControlValue | null) {
 
 function getFeatureIconColor(
   featureId: string,
-  enabled: boolean,
+  active: boolean,
   provider: string,
   colors: {
     palette: {
@@ -228,7 +229,7 @@ function getFeatureIconColor(
     foregroundMuted: string;
   },
 ): string {
-  if (!enabled) {
+  if (!active) {
     return colors.foregroundMuted;
   }
 
@@ -244,18 +245,21 @@ function getFeatureIconColor(
   }
 }
 
-// 开关类功能的图标色随主题变，交给 AgentControlTrigger 经 withUnistyles 映射，不在组件里订阅主题。
-function useFeatureIconColorMapping(featureId: string, enabled: boolean, provider: string) {
+// 功能图标的颜色随主题变，交给 AgentControlTrigger 经 withUnistyles 映射，不在组件里订阅主题。
+function useFeatureIconColorMapping(feature: AgentFeature, provider: string) {
+  const featureId = feature.id;
+  const active = isFeatureActive(feature);
   return useCallback(
     (theme: Theme) => ({
-      color: getFeatureIconColor(featureId, enabled, provider, theme.colors),
+      color: getFeatureIconColor(featureId, active, provider, theme.colors),
     }),
-    [featureId, enabled, provider],
+    [featureId, active, provider],
   );
 }
 
-function getToggleFeatureIcon(feature: AgentFeature): AgentControlIcon {
-  if (feature.id === FAST_MODE_FEATURE_ID && feature.type === "toggle" && feature.value) {
+// 走品牌色高亮的功能（快速模式、速度菜单）在生效时闪电换成实心。
+function getFeatureIcon(feature: AgentFeature): AgentControlIcon {
+  if (getFeatureHighlightColor(feature.id) === "providerBrand" && isFeatureActive(feature)) {
     return FastModeOnIcon;
   }
   return getAgentFeatureIcon(feature.icon);
@@ -408,6 +412,7 @@ type AgentControlsSlice = {
   runtimeModelId: string | null;
   model: string | null | undefined;
   features: AgentFeature[] | undefined;
+  runtimeThinkingOptionId: string | null;
   thinkingOptionId: string | null | undefined;
   lastUsage: unknown;
 } | null;
@@ -427,6 +432,7 @@ function selectAgentControlsSlice(
     runtimeModelId: currentAgent.runtimeInfo?.model ?? null,
     model: currentAgent.model,
     features: currentAgent.features,
+    runtimeThinkingOptionId: currentAgent.runtimeInfo?.thinkingOptionId ?? null,
     thinkingOptionId: currentAgent.thinkingOptionId,
     lastUsage: currentAgent.lastUsage,
   };
@@ -1234,7 +1240,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
 }
 
 function DesktopFeatureItem({
-  feature,
+  feature: daemonFeature,
   provider,
   disabled,
   openSelector,
@@ -1250,11 +1256,9 @@ function DesktopFeatureItem({
   onSetFeature?: (featureId: string, value: unknown) => void;
   onActionComplete?: () => void;
 }) {
-  const featureIconColorMapping = useFeatureIconColorMapping(
-    feature.id,
-    feature.type === "toggle" && feature.value,
-    provider,
-  );
+  const { t } = useTranslation();
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature, t), [daemonFeature, t]);
+  const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
 
@@ -1289,7 +1293,7 @@ function DesktopFeatureItem({
   );
 
   if (feature.type === "toggle") {
-    const FeatureIcon = getToggleFeatureIcon(feature);
+    const FeatureIcon = getFeatureIcon(feature);
     return (
       <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
         <TooltipTrigger asChild triggerRefProp="ref">
@@ -1313,8 +1317,15 @@ function DesktopFeatureItem({
   }
 
   if (feature.type === "select") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getFeatureIcon(feature);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
+    const iconOnly = feature.desktopTrigger === "icon";
+    const tooltip = iconOnly
+      ? t("agentControls.features.valueTooltip", {
+          label: feature.label,
+          value: selectedOption?.label ?? feature.label,
+        })
+      : getFeatureTooltip(feature);
     return (
       <>
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
@@ -1322,18 +1333,20 @@ function DesktopFeatureItem({
             <AgentControlTrigger
               ref={featureAnchorRef}
               icon={FeatureIcon}
+              iconColorMapping={featureIconColorMapping}
               surface="toolbar"
               label={feature.label}
               value={selectedOption?.label ?? feature.label}
+              showToolbarLabel={!iconOnly}
               open={openSelector === featureSelector}
               disabled={disabled}
               onPress={handleSelectPress}
-              accessibilityLabel={getFeatureTooltip(feature)}
+              accessibilityLabel={tooltip}
               testID={`agent-feature-${feature.id}`}
             />
           </TooltipTrigger>
           <TooltipContent side="top" align="center" offset={8}>
-            <Text style={styles.tooltipText}>{getFeatureTooltip(feature)}</Text>
+            <Text style={styles.tooltipText}>{tooltip}</Text>
           </TooltipContent>
         </Tooltip>
         <Combobox
@@ -1344,6 +1357,7 @@ function DesktopFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           desktopPlacement="top-start"
+          searchable={comboboxOptions.length > 6}
         />
       </>
     );
@@ -1353,7 +1367,7 @@ function DesktopFeatureItem({
 }
 
 function SheetFeatureItem({
-  feature,
+  feature: daemonFeature,
   provider,
   disabled,
   openSelector,
@@ -1367,12 +1381,9 @@ function SheetFeatureItem({
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
 }) {
-  const featureIconColorMapping = useFeatureIconColorMapping(
-    feature.id,
-    feature.type === "toggle" && feature.value,
-    provider,
-  );
   const { t } = useTranslation();
+  const feature = useMemo(() => localizeSpeedFeature(daemonFeature, t), [daemonFeature, t]);
+  const featureIconColorMapping = useFeatureIconColorMapping(feature, provider);
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
 
@@ -1403,7 +1414,7 @@ function SheetFeatureItem({
   }, [feature, t]);
 
   if (feature.type === "toggle") {
-    const FeatureIcon = getToggleFeatureIcon(feature);
+    const FeatureIcon = getFeatureIcon(feature);
     return (
       <>
         <AgentControlTrigger
@@ -1435,13 +1446,14 @@ function SheetFeatureItem({
   }
 
   if (feature.type === "select") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getFeatureIcon(feature);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     return (
       <>
         <AgentControlTrigger
           ref={featureAnchorRef}
           icon={FeatureIcon}
+          iconColorMapping={featureIconColorMapping}
           surface="sheet"
           label={feature.label}
           value={selectedOption?.label ?? feature.label}
@@ -1459,6 +1471,7 @@ function SheetFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           presentation="push"
+          searchable={comboboxOptions.length > 6}
           header={sheetHeader}
         />
       </>
@@ -1523,6 +1536,7 @@ export const AgentControls = memo(function AgentControls({
     models,
     runtimeModelId: agent?.runtimeModelId,
     configuredModelId: agent?.model,
+    runtimeThinkingOptionId: agent?.runtimeThinkingOptionId,
     explicitThinkingOptionId: agent?.thinkingOptionId,
   });
 

@@ -75,6 +75,7 @@ from common.tasks import load_task
 from common.types import TaskInfo
 from common.config import (
     get_packages,
+    get_project_mode,
     get_session_auto_commit,
     get_session_commit_message,
     get_max_journal_lines,
@@ -903,8 +904,13 @@ def generate_session_content(
     extra_content: str | None = None,
     tests: list[str] | None = None,
     next_steps: list[str] | None = None,
+    general: bool = False,
 ) -> str:
-    """Generate session content."""
+    """Generate session content.
+
+    ``general``: the entry is for a general project, whose user reads the
+    journal themselves — it carries neither the branch nor the commit table.
+    """
     if evidence:
         commit_table = """| Hash | Message |
 |------|---------|"""
@@ -914,7 +920,8 @@ def generate_session_content(
         commit_table = "(No commits - planning session)"
 
     package_line = f"\n**Package**: {package}" if package else ""
-    branch_line = f"\n**Branch**: `{branch}`" if branch else ""
+    branch_line = f"\n**Branch**: `{branch}`" if branch and not general else ""
+    commits_section = "" if general else f"\n\n### Git Commits\n\n{commit_table}"
 
     main_changes_section = _render_main_changes(changes or [], extra_content)
     testing_section = _render_bullet_section("Testing", tests or [], bullet_prefix="- [OK] ")
@@ -930,11 +937,7 @@ def generate_session_content(
 
 ### Summary
 
-{summary}{main_changes_section}
-
-### Git Commits
-
-{commit_table}{testing_section}
+{summary}{main_changes_section}{commits_section}{testing_section}
 
 ### Status
 
@@ -958,9 +961,20 @@ def update_index(
     active_file: str,
     today: str,
     branch: str | None = None,
+    general: bool = False,
 ) -> bool:
     """Update index.md with new session info."""
     commit_display = format_commit_display(evidence)
+    # The session-history table follows the project's mode: the user of a
+    # general project reads it themselves, so no commit or branch columns.
+    if general:
+        history_header = "| # | Date | Title |"
+        history_separator = "|---|------|-------|"
+        history_row = f"| {new_session} | {today} | {title} |"
+    else:
+        history_header = "| # | Date | Title | Commits | Branch |"
+        history_separator = "|---|------|-------|---------|--------|"
+        history_row = f"| {new_session} | {today} | {title} | {commit_display} | `{branch or '-'}` |"
 
     # Get file number from active_file name
     match = re.search(r"(\d+)", active_file)
@@ -1033,22 +1047,26 @@ def update_index(
             continue
 
         if in_session_history:
-            # Migrate old 4/6-column headers to 5-column Branch-only history.
+            # Migrate old 4/6-column headers to 5-column Branch-only history,
+            # and either mode's header to the other's after `atw mode`.
             if re.match(
                 r"^\|\s*#\s*\|\s*Date\s*\|\s*Title\s*\|\s*Commits\s*\|\s*Branch\s*\|\s*Base Branch\s*\|\s*$",
                 line,
             ):
-                new_lines.append("| # | Date | Title | Commits | Branch |")
+                new_lines.append(history_header)
                 continue
             if re.match(r"^\|\s*#\s*\|\s*Date\s*\|\s*Title\s*\|\s*Commits\s*\|\s*Branch\s*\|\s*$", line):
-                new_lines.append("| # | Date | Title | Commits | Branch |")
+                new_lines.append(history_header)
                 continue
             if re.match(r"^\|\s*#\s*\|\s*Date\s*\|\s*Title\s*\|\s*Commits\s*\|\s*$", line):
-                new_lines.append("| # | Date | Title | Commits | Branch |")
+                new_lines.append(history_header)
+                continue
+            if re.match(r"^\|\s*#\s*\|\s*Date\s*\|\s*Title\s*\|\s*$", line):
+                new_lines.append(history_header)
                 continue
             if re.match(r"^\|[-| ]+\|\s*$", line) and not header_written:
-                new_lines.append("|---|------|-------|---------|--------|")
-                new_lines.append(f"| {new_session} | {today} | {title} | {commit_display} | `{branch or '-'}` |")
+                new_lines.append(history_separator)
+                new_lines.append(history_row)
                 header_written = True
                 continue
             new_lines.append(line)
@@ -1200,6 +1218,7 @@ def add_session(
 ) -> int:
     """Add a new session, resuming an interrupted one instead of duplicating it."""
     repo_root = get_repo_root()
+    general = get_project_mode(repo_root) == "general"
     warn_if_parallel_worktree(repo_root)
     ensure_developer(repo_root)
 
@@ -1314,6 +1333,7 @@ def add_session(
             new_session, title, evidence, summary, today, marker, package, branch,
             changes=changes, extra_content=extra_content, tests=tests,
             next_steps=next_steps,
+            general=general,
         )
         content_lines = len(session_content.splitlines())
 
@@ -1398,6 +1418,7 @@ def add_session(
             active_file,
             today,
             branch,
+            general,
         ):
             print(
                 f"[BLOCKED] Checkpoint: session {new_session} is in "

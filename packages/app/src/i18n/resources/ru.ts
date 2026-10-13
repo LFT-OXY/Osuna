@@ -27,6 +27,7 @@ export const ru: TranslationResources = {
     total: "Совпадений: {{total}}",
   },
   common: {
+    bottomSheetBackdrop: "Фон нижней панели",
     back: "Назад",
     loading: "Загрузка...",
     actions: {
@@ -231,6 +232,14 @@ export const ru: TranslationResources = {
       open: "Открыть настройки функций агента",
       on: "Включено",
       off: "Выключено",
+      valueTooltip: "{{label}}: {{value}}",
+    },
+    speed: {
+      label: "Скорость",
+      select: "Выбрать скорость",
+      normal: "Обычный",
+      fast: "Быстрый",
+      ultrafast: "Сверхбыстрый",
     },
     mode: {
       title: "Режим",
@@ -348,7 +357,6 @@ export const ru: TranslationResources = {
     },
   },
   message: {
-    workedFor: "Работа заняла {{duration}}",
     workingFor: "Работает {{duration}}",
     changedFiles: {
       one: "Изменён {{count}} файл",
@@ -448,6 +456,9 @@ export const ru: TranslationResources = {
         completed: "Завершена",
       },
     },
+    turnFooter: {
+      workedFor: "Время работы: {{duration}}",
+    },
     compaction: {
       loading: "Сжатие контекста...",
       auto: "Контекст сжат автоматически",
@@ -508,7 +519,9 @@ export const ru: TranslationResources = {
       recovery: {
         archivedTitle: "Рабочая область в архиве",
         restoreDescription:
-          "Рабочее пространство «{{workspaceName}}» было архивировано, а его worktree удалён. Восстановите ветку {{branch}}, чтобы снова открыть рабочее пространство.",
+          "Восстановите «{{workspaceName}}», чтобы вернуться к его агентам. Worktree будет использовать ветку {{branch}}.",
+        restoreWithoutBranchDescription:
+          "Восстановите «{{workspaceName}}», чтобы вернуться к его агентам. Новая ветка будет создана от сохранённой базовой или ветки репозитория по умолчанию.",
         unarchiveDescription:
           "Рабочее пространство «{{workspaceName}}» находится в архиве. Разархивируйте его, чтобы снова открыть.",
         restoreAction: "Восстановить",
@@ -1065,9 +1078,47 @@ export const ru: TranslationResources = {
         actions: {
           viewPullRequest: "Просмотреть",
           openOn: "Открыть на {{brand}}",
-          addToChat: "Add to chat",
-          addAllToChat: "Add all to chat",
-          addingToChat: "Adding...",
+          addToChat: "Добавить в чат",
+          addAllToChat: "Добавить всё в чат",
+          addingToChat: "Добавление...",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "Некоторые проверки требуют внимания",
+            failure: "Некоторые проверки не пройдены",
+            pending: "Некоторые проверки ещё не завершены",
+            success: "Все проверки пройдены",
+            none: "Нет проверок",
+          },
+          count: {
+            actionRequired: "требует действий: {{count}}",
+            warning: "с предупреждением: {{count}}",
+            failure: "не пройдено: {{count}}",
+            pending: "выполняется: {{count}}",
+            manual: "вручную: {{count}}",
+            success: "пройдено: {{count}}",
+            ignored: "пропущено: {{count}}",
+          },
+          detailOne: "Проверка ({{parts}})",
+          detailMany: "Проверки ({{parts}})",
+          groupOne: {
+            actionRequired: "Требует действий: {{count}}",
+            warning: "С предупреждением: {{count}}",
+            failure: "Не пройдена: {{count}}",
+            pending: "Выполняется: {{count}}",
+            manual: "Ручная: {{count}}",
+            success: "Пройдена: {{count}}",
+            ignored: "Пропущена: {{count}}",
+          },
+          groupMany: {
+            actionRequired: "Требуют действий: {{count}}",
+            warning: "С предупреждением: {{count}}",
+            failure: "Не пройдены: {{count}}",
+            pending: "Выполняются: {{count}}",
+            manual: "Ручные: {{count}}",
+            success: "Пройдены: {{count}}",
+            ignored: "Пропущены: {{count}}",
+          },
         },
         checksSummary: {
           passedLabel: "успешно",
@@ -1081,43 +1132,25 @@ export const ru: TranslationResources = {
           checks: "Проверки",
           pipeline: "Пайплайн",
           reviews: "Ревью",
-          activity: "Activity",
+          activity: "Активность",
         },
         empty: {
           noJobs: "Нет заданий",
           loadingPipeline: "Загрузка пайплайна...",
           pipelineJobsLoadFailed: "Не удалось загрузить задания пайплайна",
           allowedToFail: "допускается сбой",
-          noActivity: "No activity yet",
+          noActivity: "Активности пока нет",
         },
         approvals: "Одобрено: {{given}} из {{required}}",
         checks: {
-          headline: {
-            actionRequired: "Some checks need your attention",
-            failure: "Some checks were not successful",
-            pending: "Some checks haven't completed yet",
-            success: "All checks have passed",
-            none: "No checks",
-          },
-          count: {
-            actionRequired: "{{count}} needs action",
-            warning: "{{count}} warning",
-            failure: "{{count}} failing",
-            pending: "{{count}} in progress",
-            manual: "{{count}} manual",
-            success: "{{count}} successful",
-            ignored: "{{count}} skipped",
-          },
           countSeparator: ", ",
-          countLine: {
-            one: "{{parts}} check",
-            many: "{{parts}} checks",
-          },
           accessibilityLabel: "{{headline}}. {{detail}}",
         },
         accessibility: {
           pullRequest: "PR #{{number}}",
           pullRequest_mr: "MR !{{number}}",
+          commentActions: "Действия с комментарием",
+          threadActions: "Действия с обсуждением",
           checkStatus: {
             passed: "Успешно",
             failed: "Ошибка",
@@ -1128,8 +1161,6 @@ export const ru: TranslationResources = {
             skipped: "Пропущено",
             cancelled: "Отменено",
           },
-          commentActions: "Comment actions",
-          threadActions: "Thread actions",
         },
         states: {
           draft: "Черновик",
@@ -1148,8 +1179,8 @@ export const ru: TranslationResources = {
         },
         thread: {
           discussion: "Ветка обсуждения",
-          resolved: "Resolved",
-          outdated: "Outdated",
+          resolved: "Решено",
+          outdated: "Устарело",
         },
         errors: {
           statusLoadFailed: "Не удалось загрузить статус PR",
@@ -1215,6 +1246,14 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "Группа «{{label}}»",
+    statusBucket: {
+      needsInput: "Ожидает ввода",
+      failed: "Ошибка",
+      readyToReview: "На проверку",
+      working: "В работе",
+      done: "Готово",
+    },
     display: {
       trigger: "Настройки отображения",
       heading: "Отображение",
@@ -1275,6 +1314,10 @@ export const ru: TranslationResources = {
       hosts: "Хосты",
       settings: "Настройки",
       closeSidebar: "Закрыть боковую панель",
+    },
+    footer: {
+      usage: "Расход по тарифу",
+      usageSummary: "Сводка расхода по тарифу",
     },
     help: {
       trigger: "Помощь и поддержка",
@@ -1820,6 +1863,8 @@ export const ru: TranslationResources = {
       unknownReason: "Этот агент не может запускать субагентов",
       hostOutdated: "Обновите хост, чтобы упоминать агентов",
     },
+    chooseProjectForCommands: "Выберите проект, чтобы увидеть команды",
+    chooseModelForCommands: "Выберите модель, чтобы увидеть команды",
   },
   loadOlderHistory: {
     failed: "Не удалось загрузить старую историю.",
@@ -2000,6 +2045,12 @@ export const ru: TranslationResources = {
       helper: "Подключитесь к демону Osuna на удалённом хосте.",
       fields: {
         target: "Хост SSH",
+        password: "Пароль демона",
+        optional: "Необязательно",
+      },
+      passwordVisibility: {
+        show: "Показать пароль",
+        hide: "Скрыть пароль",
       },
       actions: {
         cancel: "Отмена",
@@ -2307,10 +2358,12 @@ export const ru: TranslationResources = {
     dismiss: "Закрыть",
   },
   contextWindow: {
+    noData: "Нет данных о контексте",
+    accessibilityNoData: "Контекстное окно: нет данных о контексте",
     title: "Контекстное окно",
-    usedLabel: "использовано",
-    tokens: "Токены",
-    accessibility: "Использовано {{percentage}}% контекстного окна, {{used}} из {{max}}",
+    used: "Использовано {{percentage}}%",
+    tokens: "{{used}} / {{max}} токенов",
+    accessibility: "Использовано {{percentage}}% контекстного окна",
     sessionTotal: {
       title: "Итого за сессию",
       tokens: "Токены",
@@ -2587,9 +2640,16 @@ export const ru: TranslationResources = {
         description: "Показывать оглавление для перехода между запросами",
       },
       sidebar: {
-        title: "Боковая панель",
-        description:
-          "Выберите, какие элементы отображаются вверху боковой панели и в каком порядке",
+        header: {
+          title: "Верх",
+          description:
+            "Выберите, какие элементы отображаются вверху боковой панели и в каком порядке",
+        },
+        footer: {
+          title: "Низ",
+          description:
+            "Выберите, какие строки отображаются внизу боковой панели и в каком порядке. «Добавить проект» и ряд значков видны всегда",
+        },
         moveUp: "Переместить вверх",
         moveDown: "Переместить вниз",
       },
@@ -2628,6 +2688,14 @@ export const ru: TranslationResources = {
         pickerAccessibility: "{{field}}: {{value}}",
         notInstalledWarning: "Шрифт не найден на этом устройстве; будет использован запасной шрифт",
         notMonospaceWarning: "Шрифт не моноширинный; текст может съехать",
+      },
+      layout: {
+        title: "Макет",
+        contentWidth: "Ширина содержимого",
+        contentWidthHint: "Максимальная ширина чата и файлов Markdown на широких экранах",
+        contentWidthAccessibility: "Ширина содержимого в пикселях",
+        reset: "Сбросить",
+        resetAccessibility: "Сбросить ширину содержимого",
       },
       syntax: {
         title: "Синтаксис",
@@ -3670,20 +3738,42 @@ export const ru: TranslationResources = {
       apiEndpointNote:
         "Используется API-эндпоинт {{name}}. Этот лимит не отражает реальный расход.",
       title: "Расход по тарифу",
+      options: "Параметры расхода по тарифу",
+      refreshFailed: "Не удалось обновить расход по тарифу",
+      noHosts: "Нет подключённых хостов",
+      retry: "Повторить",
+      connectHostToSee: "Подключитесь к {{host}}, чтобы увидеть расход по тарифу",
+      updateHostToSee: "Обновите {{host}}, чтобы увидеть расход по тарифу",
+      loginExpired: "Срок входа истёк {{ago}}. {{remedy}}",
+      loginRejected: "Вход отклонён (HTTP {{status}}). {{remedy}}",
+      remedyRun: "Запустите {{command}}, чтобы обновить его.",
+      remedySignIn: "Войдите снова.",
+      pin: "Закрепить",
+      displayAs: "Показывать",
+      displayUsed: "Использовано",
+      displayRemaining: "Осталось",
+      showInSidebar: "Показывать в боковой панели",
+      showInSidebarHint: "Закреплённые окна показываются внизу боковой панели",
+      refreshAll: "Обновить всё",
+      unpin: "Открепить",
+      agentError: "Не удалось загрузить расход по тарифу: {{reason}}",
       refresh: "Обновить",
       refreshing: "Обновление...",
-      loading: "Загрузка данных об использовании...",
-      empty: "Нет данных об использовании",
-      errorTitle: "Не удалось загрузить данные об использовании",
-      hostUnavailable: "Подключитесь к этому хосту, чтобы увидеть использование провайдеров",
-      hostUpgradeRequired: "Обновите хост, чтобы увидеть использование провайдеров",
+      loading: "Загрузка расхода по тарифу...",
+      empty: "Нет данных о расходе по тарифу",
+      errorTitle: "Не удалось загрузить расход по тарифу",
+      hostUnavailable: "Подключитесь к этому хосту, чтобы увидеть расход по тарифу",
       clientUnavailable: "Соединение с хостом не готово",
-      tooltipLoading: "Загрузка использования тарифа…",
       updated: "Обновлено {{ago}}",
       resets: "сброс через {{duration}}",
       resettingNow: "сбрасывается",
       runsOut: "закончится через {{duration}}",
       balanceLeft: "осталось {{amount}}",
+      percentLeft: "осталось {{percent}}",
+      summaryWindowUsed: "{{name}} использовано {{percent}}",
+      summaryWindowLeft: "{{name}} осталось {{percent}}",
+      summaryLabel: "{{label}}: {{windows}}",
+      summarySeparator: ", ",
       strip: {
         windows: {
           fiveHour: "5h",
@@ -3694,6 +3784,8 @@ export const ru: TranslationResources = {
         planA11y: "Тариф {{provider}}: {{plan}}",
         windowA11y: "{{label}}: использовано {{percent}}, {{trailing}}",
         windowA11yNoTrailing: "{{label}}: использовано {{percent}}",
+        windowA11yLeft: "{{label}}: осталось {{percent}}, {{trailing}}",
+        windowA11yLeftNoTrailing: "{{label}}: осталось {{percent}}",
       },
       status: {
         error: "Ошибка",

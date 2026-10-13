@@ -1,125 +1,68 @@
-import { describe, expect, it } from "vitest";
-import {
-  formatSessionCost,
-  formatTokenArrows,
-  formatUsageCost,
-  formatUsageShare,
-  formatUsageTokensCompact,
-  formatGroupedNumber,
-} from "./format";
-import { totalUsageTokens, usageSourceKey } from "./totals";
-import { usageBackendLabel, usageSourceColor, usageSourceLabel } from "./sources";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { i18n } from "@/i18n/i18next";
+import { formatAmount, formatDisplayPct, formatResetLabel, formatRunsOutLabel } from "./format";
 
-describe("formatGroupedNumber", () => {
-  it("groups digits by the UI language", () => {
-    expect(formatGroupedNumber(1234567, "en")).toBe("1,234,567");
-    expect(formatGroupedNumber(1234567, "de")).toBe("1.234.567");
+describe("formatAmount", () => {
+  it("groups thousands in the app's language", () => {
+    expect(formatAmount(12345, "credits", "en")).toBe("12,345");
+    expect(formatAmount(12345, "requests", "en")).toBe("12,345");
+    expect(formatAmount(12345, "credits", "fr").replace(/\s/g, " ")).toBe("12 345");
   });
 
-  it("rounds to whole tokens", () => {
-    expect(formatGroupedNumber(1234.6, "en")).toBe("1,235");
+  it("formats dollars as the language writes currency", () => {
+    expect(formatAmount(1234.5, "usd", "en")).toBe("$1,234.50");
+    expect(formatAmount(1234.5, "usd", "fr").replace(/\s/g, " ")).toBe("1 234,50 $US");
   });
 });
 
-describe("formatUsageTokensCompact", () => {
-  it("keeps one decimal at every magnitude", () => {
-    expect(formatUsageTokensCompact(999)).toBe("999");
-    expect(formatUsageTokensCompact(1200)).toBe("1.2K");
-    expect(formatUsageTokensCompact(3_450_000)).toBe("3.5M");
-    expect(formatUsageTokensCompact(5_600_000_000)).toBe("5.6B");
+describe("formatDisplayPct", () => {
+  it("writes the share used bare and names the share left", () => {
+    expect(formatDisplayPct(31, "used")).toBe("31%");
+    expect(formatDisplayPct(69, "remaining")).toBe("69% left");
   });
 
-  it("keeps the sign", () => {
-    expect(formatUsageTokensCompact(-1500)).toBe("-1.5K");
-  });
-});
-
-describe("formatUsageCost", () => {
-  it("always shows two decimals", () => {
-    expect(formatUsageCost(0)).toBe("$0.00");
-    expect(formatUsageCost(0.174)).toBe("$0.17");
-    expect(formatUsageCost(1234.5)).toBe("$1234.50");
+  it("names the share left in the app's language", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(formatDisplayPct(31, "used")).toBe("31%");
+      expect(formatDisplayPct(69, "remaining")).toBe("剩余 69%");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 });
 
-describe("formatTokenArrows", () => {
-  it("reads as uncached input in, output out", () => {
-    expect(formatTokenArrows(14_300, 4_600)).toBe("↑14.3K ↓4.6K");
-    expect(formatTokenArrows(0, 0)).toBe("↑0 ↓0");
-  });
-});
-
-describe("formatSessionCost", () => {
-  it("keeps four decimals under a cent so a real cost is never $0.00", () => {
-    expect(formatSessionCost(0.0004)).toBe("$0.0004");
-    expect(formatSessionCost(0.0099)).toBe("$0.0099");
+describe("window timing labels", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-01T12:00:00Z"));
   });
 
-  it("shows two decimals from a cent up", () => {
-    expect(formatSessionCost(0.01)).toBe("$0.01");
-    expect(formatSessionCost(0.174)).toBe("$0.17");
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("reads an unpriced turn as zero rather than blank", () => {
-    expect(formatSessionCost(0)).toBe("$0.00");
-    expect(formatSessionCost(Number.NaN)).toBe("$0.00");
-  });
-});
-
-describe("formatUsageShare", () => {
-  it("formats a share as a two-decimal percent", () => {
-    expect(formatUsageShare(0.5234, "en")).toBe("52.34%");
-    expect(formatUsageShare(1, "en")).toBe("100.00%");
+  it("says when a window resets", () => {
+    expect(formatResetLabel("2026-10-01T14:30:00Z")).toBe("resets 2h");
+    expect(formatResetLabel("2026-10-04T12:00:00Z")).toBe("resets 3d");
+    expect(formatResetLabel("2026-10-01T11:00:00Z")).toBe("resetting now");
+    expect(formatResetLabel(null)).toBeNull();
   });
 
-  it("marks a share too small to show", () => {
-    expect(formatUsageShare(0.00001, "en")).toBe("<0.01%");
-    expect(formatUsageShare(0, "en")).toBe("0.00%");
-  });
-});
-
-describe("totals", () => {
-  it("leaves reasoning out of the token total", () => {
-    expect(
-      totalUsageTokens({ input: 1, cachedInput: 2, cacheWrite: 4, output: 8, reasoning: 3 }),
-    ).toBe(15);
+  it("says when a window runs out, and nothing once that time has passed", () => {
+    expect(formatRunsOutLabel("2026-10-01T12:45:00Z")).toBe("runs out 45m");
+    expect(formatRunsOutLabel("2026-10-01T11:00:00Z")).toBeNull();
+    expect(formatRunsOutLabel(null)).toBeNull();
   });
 
-  it("keys a source by cli and backend", () => {
-    expect(usageSourceKey({ cli: "claude", backend: null })).toBe("claude");
-    expect(usageSourceKey({ cli: "pi", backend: "anthropic" })).toBe("pi:anthropic");
-  });
-});
-
-describe("source labels and colours", () => {
-  it("names a CLI and its backend", () => {
-    expect(usageSourceLabel({ cli: "claude", backend: null })).toBe("Claude Code");
-    expect(usageSourceLabel({ cli: "pi", backend: "anthropic" })).toBe("Pi · Anthropic");
-    expect(usageSourceLabel({ cli: "omp", backend: "github" })).toBe("OMP · GitHub Copilot");
-  });
-
-  it("capitalises a backend the user named themselves", () => {
-    expect(usageBackendLabel("3oxy-openai")).toBe("3oxy-openai");
-    expect(usageBackendLabel("homelab")).toBe("Homelab");
-  });
-
-  it("gives one backend the same colour under both CLIs", () => {
-    expect(usageSourceColor({ cli: "pi", backend: "openai" })).toBe(
-      usageSourceColor({ cli: "omp", backend: "openai" }),
-    );
-  });
-
-  it("gives Claude Code and Codex their brand colours", () => {
-    expect(usageSourceColor({ cli: "claude", backend: null })).toBe("#d97757");
-    expect(usageSourceColor({ cli: "codex", backend: null })).toBe("#3b82f6");
-  });
-
-  it("gives an unknown backend a stable fallback hue", () => {
-    expect(usageSourceColor({ cli: "omp", backend: "homelab" })).toBe(
-      usageSourceColor({ cli: "omp", backend: "homelab" }),
-    );
-    expect(usageSourceColor({ cli: "omp", backend: "homelab" })).not.toBe(
-      usageSourceColor({ cli: "omp", backend: "other" }),
-    );
+  it("reads in the app's language", async () => {
+    await i18n.changeLanguage("zh-CN");
+    try {
+      expect(formatResetLabel("2026-10-01T14:30:00Z")).toBe("2h 后重置");
+      expect(formatResetLabel("2026-10-01T11:00:00Z")).toBe("正在重置");
+      expect(formatRunsOutLabel("2026-10-01T12:45:00Z")).toBe("45m 后用完");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 });

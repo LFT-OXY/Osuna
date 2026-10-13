@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from .config import get_project_mode
 from .paths import (
     DEVELOPER_HINT,
     DIR_WORKFLOW,
@@ -74,13 +75,17 @@ def init_developer(name: str, repo_root: Path | None = None) -> bool:
         print(f"Error: Failed to create workspace directory: {e}", file=sys.stderr)
         return False
 
+    # The user of a general project reads the journal and its index themselves:
+    # no development, commit or branch wording in them.
+    general = get_project_mode(repo_root) == "general"
+
     # Create initial journal file
     journal_file = workspace_dir / f"{FILE_JOURNAL_PREFIX}1.md"
     if not journal_file.exists():
         today = datetime.now().strftime("%Y-%m-%d")
         journal_content = f"""# Journal - {name} (Part 1)
 
-> AI development session journal
+> {"Session journal" if general else "AI development session journal"}
 > Started: {today}
 
 ---
@@ -95,9 +100,16 @@ def init_developer(name: str, repo_root: Path | None = None) -> bool:
     # Create index.md with markers for auto-update
     index_file = workspace_dir / "index.md"
     if not index_file.exists():
+        if general:
+            history_header = "| # | Date | Title |\n|---|------|-------|"
+        else:
+            history_header = (
+                "| # | Date | Title | Commits | Branch |\n"
+                "|---|------|-------|---------|--------|"
+            )
         index_content = f"""# Workspace Index - {name}
 
-> Journal tracking for AI development sessions.
+> Journal tracking for AI {"" if general else "development "}sessions.
 
 ---
 
@@ -124,8 +136,7 @@ def init_developer(name: str, repo_root: Path | None = None) -> bool:
 ## Session History
 
 <!-- @@@auto:session-history -->
-| # | Date | Title | Commits | Branch |
-|---|------|-------|---------|--------|
+{history_header}
 <!-- @@@/auto:session-history -->
 
 ---

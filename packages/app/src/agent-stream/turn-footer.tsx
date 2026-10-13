@@ -2,7 +2,6 @@ import React, { memo, useCallback, useMemo, type ReactNode } from "react";
 import { View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { MAX_CONTENT_WIDTH } from "@/constants/layout";
 import { SPACING, type Theme } from "@/styles/theme";
 import type { TurnTiming } from "@/timeline/turn-time";
 import type { StreamItem } from "@/types/stream";
@@ -20,6 +19,7 @@ import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { ShimmerText } from "@/components/shimmer/shimmer-text";
 import { TurnChangedFiles } from "./turn-changed-files-card";
+import { useStreamRowMaxWidthStyle } from "./row-max-width";
 
 const ThemedSyncedLoader = withUnistyles(SyncedLoader);
 const workingIndicatorColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -228,14 +228,22 @@ function CompletedTurnFooter({
 }
 
 function TurnFooterRow({ children }: { children: ReactNode }) {
-  const rowStyle = useMemo(() => [stylesheet.streamItemWrapper, stylesheet.turnFooterRow], []);
-  return <View style={rowStyle}>{children}</View>;
+  const maxWidthStyle = useStreamRowMaxWidthStyle();
+  const rowStyle = useMemo(
+    () => [stylesheet.streamItemWrapper, stylesheet.turnFooterRow, maxWidthStyle],
+    [maxWidthStyle],
+  );
+  return (
+    <View style={rowStyle} testID="turn-footer-row">
+      {children}
+    </View>
+  );
 }
 
 const stylesheet = StyleSheet.create((theme) => ({
   streamItemWrapper: {
     width: "100%",
-    maxWidth: MAX_CONTENT_WIDTH,
+    maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
   },

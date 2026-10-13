@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Bot, Box, File, Folder, Image as ImageIcon } from "lucide-react-native";
-import { getProviderIcon, type ProviderIconProps } from "@/components/provider-icons";
+import { useProviderIcon, type ProviderIconProps } from "@/components/provider-icons";
 import { isNative, isWeb } from "@/constants/platform";
 import { contentTypeStep, ICON_SIZE, type Theme } from "@/styles/theme";
 import {
@@ -52,7 +52,7 @@ const INLINE_BLOCK_DATASETS: Record<InlineBlockVariant, { inlineBlock: InlineBlo
   agent: { inlineBlock: "agent" },
 };
 
-// agent 按 provider 或 profile 取图标，Bot 是两者都认不出时的回退，与 getProviderIcon 一致。
+// agent 按 provider 或 profile 取图标，Bot 是两者都认不出时的回退，与 useProviderIcon 一致。
 const VARIANT_ICONS: Record<InlineBlockVariant, ComponentType<ProviderIconProps>> = {
   skill: Box,
   file: File,
@@ -67,7 +67,17 @@ function InlineBlockIcon({ block, serverId }: InlineBlockViewProps) {
   if (block.target.kind === "profile") {
     return <AgentProfileMentionIcon profileId={block.target.id} />;
   }
-  return <AccentIcon Icon={getProviderIcon(block.target.id, serverId)} />;
+  return <ProviderMentionIcon provider={block.target.id} serverId={serverId} />;
+}
+
+function ProviderMentionIcon({
+  provider,
+  serverId,
+}: {
+  provider: string;
+  serverId: InlineBlockViewProps["serverId"];
+}) {
+  return <AccentIcon Icon={useProviderIcon(provider, serverId)} />;
 }
 
 /** 按 profile id 取图标；profile 不在（已删除或配置未到）时返回 null。 */

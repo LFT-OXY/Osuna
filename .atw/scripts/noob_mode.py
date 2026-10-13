@@ -3,9 +3,10 @@
 Switch noob mode (plain-language replies) for the current developer.
 
 Usage:
-    python3 noob_mode.py on        Turn it on
-    python3 noob_mode.py off       Turn it off
-    python3 noob_mode.py status    Show whether it is on
+    python3 noob_mode.py on        Turn it on, whatever the project default
+    python3 noob_mode.py off       Turn it off, whatever the project default
+    python3 noob_mode.py status    Show whether it is on, and whether that is
+                                   this developer's setting or the project default
 
 The switch is personal — see common/noob_mode.py.
 """
@@ -14,7 +15,8 @@ from __future__ import annotations
 
 import sys
 
-from common.noob_mode import is_noob_mode_on, set_noob_mode
+from common.config import get_project_mode
+from common.noob_mode import is_noob_mode_on, noob_mode_choice, set_noob_mode
 from common.paths import DIR_SCRIPTS, DIR_WORKFLOW, FILE_DEVELOPER, get_repo_root
 
 
@@ -35,6 +37,16 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Noob mode: {'on' if is_noob_mode_on(repo_root) else 'off'}")
+    if action == "status":
+        # stdout stays the one-line answer; where it comes from goes to stderr.
+        if noob_mode_choice(repo_root) is None:
+            source = (
+                f"project default (mode: {get_project_mode(repo_root)}), "
+                "no personal setting"
+            )
+        else:
+            source = "your own setting"
+        print(f"Source: {source}", file=sys.stderr)
 
 
 if __name__ == "__main__":

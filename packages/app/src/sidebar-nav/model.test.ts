@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PluginSidebarGroup } from "@/plugins/sidebar-groups";
 import {
+  builtinSidebarNavLabelKey,
+  builtinSidebarNavSettingsLabelKey,
   builtinSidebarNavShortcutAction,
+  builtinSidebarNavTestKey,
   moveSidebarNavItem,
   pluginSidebarNavKey,
   resolveSidebarNavItems,
@@ -12,11 +15,11 @@ import {
 
 function group(pluginId: string, contributionId: string): PluginSidebarGroup {
   return {
+    kind: "item",
     key: `${pluginId}/sidebar/${contributionId}`,
     pluginId,
     contributionId,
     title: contributionId,
-    icon: "puzzle",
     targets: [],
   };
 }
@@ -32,7 +35,11 @@ function summarize(items: readonly SidebarNavItem[]): SidebarNavPreference[] {
 
 describe("resolveSidebarNavItems", () => {
   it("yields builtins then plugins, all visible, when nothing is stored", () => {
-    const items = resolveSidebarNavItems({ pluginGroups: [kanban, notes], preferences: [] });
+    const items = resolveSidebarNavItems({
+      section: "header",
+      pluginGroups: [kanban, notes],
+      preferences: [],
+    });
 
     expect(summarize(items)).toEqual([
       { key: "new-workspace", visible: true },
@@ -54,6 +61,7 @@ describe("resolveSidebarNavItems", () => {
 
   it("keeps the stored order and appends newly available items as visible", () => {
     const items = resolveSidebarNavItems({
+      section: "header",
       pluginGroups: [notes, kanban],
       preferences: [
         { key: kanbanKey, visible: false },
@@ -75,6 +83,7 @@ describe("resolveSidebarNavItems", () => {
 
   it("skips keys that are unknown or not currently available", () => {
     const items = resolveSidebarNavItems({
+      section: "header",
       pluginGroups: [],
       preferences: [
         { key: notesKey, visible: false },
@@ -94,6 +103,7 @@ describe("resolveSidebarNavItems", () => {
 
   it("lets the first of duplicate keys win", () => {
     const items = resolveSidebarNavItems({
+      section: "header",
       pluginGroups: [],
       preferences: [
         { key: "history", visible: false },
@@ -111,9 +121,81 @@ describe("resolveSidebarNavItems", () => {
   });
 });
 
+describe("the footer Plan usage summary", () => {
+  it("starts hidden until it is turned on", () => {
+    const resolve = (preferences: SidebarNavPreference[]) =>
+      summarize(resolveSidebarNavItems({ section: "footer", pluginGroups: [], preferences }));
+
+    expect(resolve([])).toEqual([{ key: "usage", visible: false }]);
+    expect(resolve([{ key: "usage", visible: true }])).toEqual([{ key: "usage", visible: true }]);
+  });
+});
+
+// Osuna 的「用量」条目与上游的套餐用量摘要编号同为 usage，分属顶部与底部两组。
+describe("the header Usage item", () => {
+  it("reads a stored header order with Usage hidden back as-is", () => {
+    const stored: SidebarNavPreference[] = [
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "search", visible: true },
+      { key: "schedules", visible: true },
+      { key: "usage", visible: false },
+    ];
+
+    expect(
+      summarize(
+        resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: stored }),
+      ),
+    ).toEqual(stored);
+  });
+
+  it("reads a stored header order with Usage moved to the top back as-is", () => {
+    const stored: SidebarNavPreference[] = [
+      { key: "usage", visible: true },
+      { key: "search", visible: true },
+      { key: "new-workspace", visible: true },
+      { key: "history", visible: true },
+      { key: "schedules", visible: true },
+    ];
+
+    expect(
+      summarize(
+        resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: stored }),
+      ),
+    ).toEqual(stored);
+  });
+
+  it("is visible by default while the footer summary starts hidden", () => {
+    const header = resolveSidebarNavItems({ section: "header", pluginGroups: [], preferences: [] });
+    const footer = resolveSidebarNavItems({ section: "footer", pluginGroups: [], preferences: [] });
+
+    expect(summarize(header).at(-1)).toEqual({ key: "usage", visible: true });
+    expect(summarize(footer)).toEqual([{ key: "usage", visible: false }]);
+  });
+
+  it("takes its own copy, settings label and testID, apart from the footer summary", () => {
+    expect(builtinSidebarNavLabelKey("usage", "header")).toBe("sidebar.sections.usage");
+    expect(builtinSidebarNavLabelKey("usage", "footer")).toBe("sidebar.footer.usage");
+    expect(builtinSidebarNavSettingsLabelKey("usage", "header")).toBe("sidebar.sections.usage");
+    expect(builtinSidebarNavSettingsLabelKey("usage", "footer")).toBe(
+      "sidebar.footer.usageSummary",
+    );
+    expect(builtinSidebarNavSettingsLabelKey("history", "header")).toBe(
+      builtinSidebarNavLabelKey("history", "header"),
+    );
+    expect(builtinSidebarNavTestKey("usage", "header")).toBe("usage-stats");
+    expect(builtinSidebarNavTestKey("usage", "footer")).toBe("usage");
+    expect(builtinSidebarNavTestKey("history", "header")).toBe("history");
+  });
+});
+
 describe("setSidebarNavItemVisible", () => {
   it("toggles one item and writes the full resolved order", () => {
-    const items = resolveSidebarNavItems({ pluginGroups: [kanban], preferences: [] });
+    const items = resolveSidebarNavItems({
+      section: "header",
+      pluginGroups: [kanban],
+      preferences: [],
+    });
 
     const next = setSidebarNavItemVisible({ items, key: "search", visible: false, previous: [] });
 
@@ -132,7 +214,11 @@ describe("setSidebarNavItemVisible", () => {
       { key: notesKey, visible: false },
       { key: "history", visible: true },
     ];
-    const items = resolveSidebarNavItems({ pluginGroups: [], preferences: previous });
+    const items = resolveSidebarNavItems({
+      section: "header",
+      pluginGroups: [],
+      preferences: previous,
+    });
 
     const next = setSidebarNavItemVisible({ items, key: "history", visible: false, previous });
 
@@ -155,7 +241,11 @@ describe("setSidebarNavItemVisible", () => {
       { key: "schedules", visible: true },
       { key: "usage", visible: true },
     ];
-    const items = resolveSidebarNavItems({ pluginGroups: [], preferences: previous });
+    const items = resolveSidebarNavItems({
+      section: "header",
+      pluginGroups: [],
+      preferences: previous,
+    });
 
     const next = setSidebarNavItemVisible({ items, key: "history", visible: false, previous });
 
@@ -167,13 +257,23 @@ describe("setSidebarNavItemVisible", () => {
       { key: "schedules", visible: true },
       { key: "usage", visible: true },
     ]);
-    expect(summarize(resolveSidebarNavItems({ pluginGroups: [notes], preferences: next }))).toEqual(
-      next,
-    );
+    expect(
+      summarize(
+        resolveSidebarNavItems({
+          section: "header",
+          pluginGroups: [notes],
+          preferences: next,
+        }),
+      ),
+    ).toEqual(next);
   });
 
   it("returns the normalized list unchanged for an unknown key", () => {
-    const items = resolveSidebarNavItems({ pluginGroups: [], preferences: [] });
+    const items = resolveSidebarNavItems({
+      section: "header",
+      pluginGroups: [],
+      preferences: [],
+    });
 
     const next = setSidebarNavItemVisible({ items, key: "bogus", visible: false, previous: [] });
 
@@ -182,7 +282,11 @@ describe("setSidebarNavItemVisible", () => {
 });
 
 describe("moveSidebarNavItem", () => {
-  const items = resolveSidebarNavItems({ pluginGroups: [kanban], preferences: [] });
+  const items = resolveSidebarNavItems({
+    section: "header",
+    pluginGroups: [kanban],
+    preferences: [],
+  });
 
   it("moves an item up", () => {
     const next = moveSidebarNavItem({ items, key: "search", direction: "up", previous: [] });
@@ -250,5 +354,82 @@ describe("builtinSidebarNavShortcutAction", () => {
     expect(builtinSidebarNavShortcutAction("history")).toBeNull();
     expect(builtinSidebarNavShortcutAction("schedules")).toBeNull();
     expect(builtinSidebarNavShortcutAction("usage")).toBeNull();
+  });
+});
+
+describe("footer section", () => {
+  const sync = group("sync", "status");
+  const syncKey = pluginSidebarNavKey(sync);
+
+  it("resolves the Usage item first, then plugin rows", () => {
+    const items = resolveSidebarNavItems({
+      section: "footer",
+      pluginGroups: [sync],
+      preferences: [],
+    });
+
+    // Osuna：底部的套餐用量摘要默认隐藏（上游此时默认可见）。
+    expect(summarize(items)).toEqual([
+      { key: "usage", visible: false },
+      { key: syncKey, visible: true },
+    ]);
+  });
+
+  it("ignores header built-ins stored in footer preferences", () => {
+    const items = resolveSidebarNavItems({
+      section: "footer",
+      pluginGroups: [],
+      preferences: [{ key: "history", visible: false }],
+    });
+
+    expect(summarize(items)).toEqual([{ key: "usage", visible: false }]);
+  });
+
+  it("ignores the footer icon buttons, which are fixed and not items", () => {
+    const items = resolveSidebarNavItems({
+      section: "footer",
+      pluginGroups: [sync],
+      preferences: [
+        { key: "add-project", visible: false },
+        { key: "hosts", visible: false },
+        { key: "import", visible: false },
+        { key: "help", visible: false },
+        { key: syncKey, visible: true },
+        { key: "usage", visible: false },
+      ],
+    });
+
+    expect(summarize(items)).toEqual([
+      { key: syncKey, visible: true },
+      { key: "usage", visible: false },
+    ]);
+  });
+
+  it("moves and shows footer rows while keeping an unavailable plugin's entry", () => {
+    const notesPreference = { key: notesKey, visible: false };
+    const previous: SidebarNavPreference[] = [notesPreference];
+    const items = resolveSidebarNavItems({
+      section: "footer",
+      pluginGroups: [sync],
+      preferences: previous,
+    });
+
+    const moved = moveSidebarNavItem({ items, key: syncKey, direction: "up", previous });
+    const shown = setSidebarNavItemVisible({
+      items: resolveSidebarNavItems({
+        section: "footer",
+        pluginGroups: [sync],
+        preferences: moved,
+      }),
+      key: "usage",
+      visible: true,
+      previous: moved,
+    });
+
+    expect(shown).toEqual([
+      notesPreference,
+      { key: syncKey, visible: true },
+      { key: "usage", visible: true },
+    ]);
   });
 });

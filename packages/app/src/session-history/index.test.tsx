@@ -28,7 +28,7 @@ import { resetResumeTerminalsForTests } from "@/session-history/internal/resume-
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 
 vi.mock("@/components/provider-icons", () => ({
-  getProviderIcon: () => () => null,
+  useProviderIcon: () => () => null,
 }));
 
 type FetchRecentProviderSessions = DaemonClient["fetchRecentProviderSessions"];

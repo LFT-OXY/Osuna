@@ -643,6 +643,8 @@ export function resolveConfigFromPersisted(
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins,
     usage: { pricing: resolveUsagePricingConfig(env, persisted) },
+    pluginRegistries: persisted.pluginRegistries,
+    pluginRegistryUrl: env.PASEO_PLUGIN_REGISTRY,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",
     agentStoragePath: path.join(paseoHome, "agents"),

@@ -11,7 +11,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
-import { renderUsageText } from "@/usage/text";
+import { renderUsageText } from "@/usage-stats/text";
 import { CustomPriceGroup } from "./custom-price-group";
 import { LiteLLMPriceGroup } from "./litellm-price-group";
 import { resolvePriceTableLayout } from "./price-columns";

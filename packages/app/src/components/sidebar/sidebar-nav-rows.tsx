@@ -1,11 +1,11 @@
 import { router, usePathname } from "expo-router";
 import { BarChart3, CalendarClock, History, Plus, Search } from "lucide-react-native";
-import { memo, useCallback, useMemo, type ComponentType } from "react";
+import { memo, useCallback, useMemo, useRef, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
-import { PluginSidebarItemRow } from "@/plugins/sidebar-items";
+import { PluginSidebarItem } from "@/plugins/sidebar-items";
 import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
 import { useHostFeature } from "@/runtime/host-features";
 import {
@@ -14,7 +14,7 @@ import {
   type BuiltinSidebarNavId,
 } from "@/sidebar-nav/model";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
-import { useUsageHosts } from "@/usage/use-usage-hosts";
+import { useUsageHosts } from "@/usage-stats/use-usage-hosts";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -40,19 +40,22 @@ interface SidebarNavRowsProps extends SidebarNavRowProps {
  * wrapper — when every item is hidden.
  */
 export function SidebarNavRows({ style, onBeforeNavigate }: SidebarNavRowsProps) {
-  const { items } = useSidebarNavItems();
+  const { items } = useSidebarNavItems("header");
   const visibleItems = useMemo(() => items.filter((item) => item.visible), [items]);
+  const groupRef = useRef<View | null>(null);
 
   if (visibleItems.length === 0) return null;
 
   return (
-    <View style={style}>
+    <View ref={groupRef} collapsable={false} style={style}>
       {visibleItems.map((item) => {
         if (item.kind === "plugin") {
           return (
-            <PluginSidebarItemRow
+            <PluginSidebarItem
               key={item.key}
               group={item.group}
+              section="header"
+              fallbackAnchorRef={groupRef}
               onBeforeNavigate={onBeforeNavigate}
             />
           );
@@ -102,7 +105,7 @@ const SidebarNewWorkspaceRow = memo(function SidebarNewWorkspaceRow({
   return (
     <SidebarHeaderRow
       icon={Plus}
-      label={t(builtinSidebarNavLabelKey("new-workspace"))}
+      label={t(builtinSidebarNavLabelKey("new-workspace", "header"))}
       onPress={handlePress}
       testID="sidebar-global-new-workspace"
       variant="compact"
@@ -122,7 +125,7 @@ function SidebarHistoryRow({ onBeforeNavigate }: SidebarNavRowProps) {
   return (
     <SidebarHeaderRow
       icon={History}
-      label={t(builtinSidebarNavLabelKey("history"))}
+      label={t(builtinSidebarNavLabelKey("history", "header"))}
       onPress={handlePress}
       isActive={pathname.includes("/sessions")}
       testID="sidebar-sessions"
@@ -143,7 +146,7 @@ function SidebarSearchRow({ onBeforeNavigate }: SidebarNavRowProps) {
   return (
     <SidebarHeaderRow
       icon={Search}
-      label={t(builtinSidebarNavLabelKey("search"))}
+      label={t(builtinSidebarNavLabelKey("search", "header"))}
       onPress={handlePress}
       testID="sidebar-search"
       variant="compact"
@@ -163,7 +166,7 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
   return (
     <SidebarHeaderRow
       icon={CalendarClock}
-      label={t(builtinSidebarNavLabelKey("schedules"))}
+      label={t(builtinSidebarNavLabelKey("schedules", "header"))}
       onPress={handlePress}
       isActive={pathname.includes("/schedules")}
       testID="sidebar-schedules"
@@ -190,10 +193,11 @@ function SidebarUsageRow({ onBeforeNavigate }: SidebarNavRowProps) {
   return (
     <SidebarHeaderRow
       icon={BarChart3}
-      label={t(builtinSidebarNavLabelKey("usage"))}
+      label={t(builtinSidebarNavLabelKey("usage", "header"))}
       onPress={handlePress}
       isActive={pathname.includes("/usage")}
-      testID="sidebar-usage"
+      // 上游底部的套餐用量摘要行用 sidebar-usage，Osuna 的「用量」行另取一个。
+      testID="sidebar-usage-stats"
       variant="compact"
     />
   );

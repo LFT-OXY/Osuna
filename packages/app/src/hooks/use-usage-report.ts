@@ -8,10 +8,14 @@ import {
   usageQueryBaseKey,
   type UsageHostError,
   type UsageHostInput,
-} from "@/usage/aggregated-usage";
-import { usageSessionsQueryBaseKey } from "@/usage/aggregated-sessions";
-import { EMPTY_USAGE_REPORT, mergeUsageBackfill, type MergedUsageReport } from "@/usage/merge";
-import type { UsageRange } from "@/usage/period";
+} from "@/usage-stats/aggregated-usage";
+import { usageSessionsQueryBaseKey } from "@/usage-stats/aggregated-sessions";
+import {
+  EMPTY_USAGE_REPORT,
+  mergeUsageBackfill,
+  type MergedUsageReport,
+} from "@/usage-stats/merge";
+import type { UsageRange } from "@/usage-stats/period";
 
 /** A burst of `usage.updated` after one turn should cost one refetch, not five. */
 const USAGE_UPDATED_DEBOUNCE_MS = 400;

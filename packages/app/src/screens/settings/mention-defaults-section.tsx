@@ -6,7 +6,7 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { ProviderSnapshotEntry, ProviderStatus } from "@getpaseo/protocol/agent-types";
 import type { ProviderMentionDefaults } from "@getpaseo/protocol/provider-config";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import {
@@ -400,7 +400,7 @@ function ProviderRowHeader({
   onToggle,
 }: ProviderRowHeaderProps) {
   const { t } = useTranslation();
-  const providerIcon = getProviderIcon(provider, serverId);
+  const providerIcon = useProviderIcon(provider, serverId);
   const ThemedProviderIcon = useMemo(() => withUnistyles(providerIcon), [providerIcon]);
   const rowStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [

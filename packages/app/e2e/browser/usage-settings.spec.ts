@@ -1,0 +1,159 @@
+import type { UsageReportEntry } from "@getpaseo/protocol/messages";
+import { expect, test } from "../support/fixtures";
+import { gotoAppShell } from "../support/helpers/app";
+import { createUsageFixtureRoots } from "../support/helpers/usage-fixtures";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
+import {
+  installUsageReportsFixture,
+  type UsageReportsFixture,
+} from "../support/helpers/usage-reports";
+import { closeUsage, openUsageFromIcon, showUsageAs } from "../support/helpers/usage-sidebar-item";
+
+// Osuna：主机设置页保持价格表，不挂载上游的套餐用量区块（HostUsageSection）。上游的额度卡片
+// 接在 Usage 页的套餐卡片里，这组用例改到那里跑；Usage 页要有数据才渲染，daemon 指向用量夹具。
+const fixtures = createUsageFixtureRoots("paseo-usage-settings-");
+
+test.use({ e2eDaemonEnvironment: fixtures.environment });
+
+const ICON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
+
+function forcedRefreshCount(usage: UsageReportsFixture): number {
+  return usage.listRequests().filter((request) => request.forceRefresh).length;
+}
+
+function report(input: {
+  sourceId: string;
+  sourceLabel: string;
+  report:
+    | Partial<Extract<UsageReportEntry["report"], { status: "available" }>>
+    | Exclude<UsageReportEntry["report"], { status: "available" }>;
+}): UsageReportEntry {
+  return {
+    id: `${input.sourceId}:account`,
+    account: { label: input.sourceId === "alpha" ? "dev@example.com" : undefined },
+    fetchedAt: "2026-01-01T00:00:00.000Z",
+    sourceId: input.sourceId,
+    sourceLabel: input.sourceLabel,
+    icon: ICON,
+    report:
+      input.report.status === "error" || input.report.status === "unavailable"
+        ? input.report
+        : {
+            status: "available",
+            windows: [],
+            ...input.report,
+          },
+  };
+}
+
+test.describe("usage settings", () => {
+  test("renders every report returned by usage.list_reports", async ({ page }) => {
+    test.setTimeout(120_000);
+    const usage = await installUsageReportsFixture(page, {
+      lists: [
+        [
+          report({
+            sourceId: "alpha",
+            sourceLabel: "Alpha plan",
+            report: {
+              planLabel: "Max",
+              windows: [{ id: "session", label: "Session", usedPct: 7 }],
+            },
+          }),
+          report({
+            sourceId: "beta",
+            sourceLabel: "Beta plan",
+            report: {
+              planLabel: "Coding plan",
+              windows: [
+                { id: "biweekly", label: "Biweekly", usedPct: 23 },
+                { id: "daily", label: "Daily", remainingPct: 30 },
+              ],
+              balances: [
+                { id: "credits", label: "Credits", remaining: 1234, unit: "credits" },
+                { id: "extra", label: "Extra usage", used: 5, limit: 20, unit: "usd" },
+              ],
+              details: [{ id: "valid", label: "Valid until", value: "2026-12-31" }],
+            },
+          }),
+          report({
+            sourceId: "gamma",
+            sourceLabel: "Gamma plan",
+            report: { status: "error", error: "Gamma auth expired" },
+          }),
+        ],
+      ],
+    });
+
+    await gotoAppShell(page);
+    await openUsagePageFromShell(page);
+    await usage.waitForListRequests(1);
+
+    const card = page.getByTestId("usage-plan-usage-card");
+    await expect(card.getByText("Alpha plan", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByText("dev@example.com", { exact: true })).toBeVisible();
+    await expect(card.getByText("Beta plan", { exact: true })).toBeVisible();
+    await expect(card.getByText("70%")).toBeVisible();
+    await expect(card.getByText("1,234 left", { exact: true })).toBeVisible();
+    await expect(card.getByText("$5.00 / $20.00", { exact: true })).toBeVisible();
+    await expect(card.getByText("2026-12-31", { exact: true })).toBeVisible();
+    await expect(card.getByText("Gamma auth expired", { exact: true })).toBeVisible();
+
+    // The shared percentages setting applies to the usage page's card. Osuna：卡片头部没有
+    // 上游的设置齿轮，偏好在套餐用量弹窗里改；弹窗盖在当前页面上，关掉就回到卡片。
+    await openUsageFromIcon(page);
+    await showUsageAs(page, "remaining");
+    await closeUsage(page);
+    await expect(card.getByText("30% left")).toBeVisible();
+    await expect(card.getByText("93% left")).toBeVisible();
+  });
+
+  test("refresh forces a fresh report", async ({ page }) => {
+    test.setTimeout(120_000);
+    const windows = (usedPct: number) => [{ id: "w", label: "Weekly", usedPct }];
+    // The sidebar summary and the section each load reports; only Refresh forces one.
+    const usage = await installUsageReportsFixture(page, {
+      lists: [
+        (request) => [
+          report({
+            sourceId: "alpha",
+            sourceLabel: "Alpha plan",
+            report: { windows: windows(request.forceRefresh ? 64 : 23) },
+          }),
+        ],
+      ],
+    });
+
+    await gotoAppShell(page);
+    await openUsagePageFromShell(page);
+    const card = page.getByTestId("usage-plan-usage-card");
+    await expect(card.getByText("23%")).toBeVisible({ timeout: 10_000 });
+
+    // Osuna：Usage 页的卡片头部是自己的「Refresh」按钮，作用与上游的「全部刷新」相同。
+    await card.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect.poll(() => forcedRefreshCount(usage)).toBe(1);
+    await expect(card.getByText("64%")).toBeVisible();
+  });
+
+  test("asks to update a host without usage support and never calls it", async ({ page }) => {
+    test.setTimeout(120_000);
+    const usage = await installUsageReportsFixture(page, { usageSupported: false });
+
+    await gotoAppShell(page);
+    await openUsagePageFromShell(page);
+
+    await expect(
+      // Names the host: "Update Laptop to see plan usage".
+      page
+        .getByTestId("usage-plan-usage-card")
+        .getByText(/^Update (?!the host ).+ to see plan usage$/),
+    ).toBeVisible({ timeout: 10_000 });
+    // Osuna：卡片头部的刷新此时没有可刷新的主机，按不动。
+    await expect(
+      page
+        .getByTestId("usage-plan-usage-card")
+        .getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeDisabled();
+    expect(usage.listRequests()).toHaveLength(0);
+  });
+});

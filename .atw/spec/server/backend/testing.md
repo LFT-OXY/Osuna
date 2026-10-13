@@ -77,6 +77,13 @@ Never `npm run test` for the workspace; it freezes the machine. Never re-run a s
 
 `npm run typecheck` does not read test files in this package or in `packages/desktop`: `tsconfig.server.json` and `packages/desktop/tsconfig.json` exclude `*.test.ts`. A test that calls a removed import or passes a removed constructor option fails only when it runs (`ReferenceError: rmSync is not defined`, or the option is silently ignored and the assertion fails). After a change that removes or renames something tests use, and after every upstream merge, run each changed test file.
 
+Upstream's Claude session tests assume two things Osuna changed, so a new upstream case can fail here without any production conflict:
+
+- `session.listCommands()` never spawns the CLI (ADR 0003). An upstream test that calls it only to make the session launch its query (`agent.redesign.test.ts`, "does not keep a query started in a mode that Claude Code rejected") gets no launch. Swap in a call that goes through `ensureQuery()`, such as `session.setModel(null)`, and leave the assertions alone.
+- On each `system/init` frame a session with a live query re-reads the command list and, when that succeeds, emits `commands_changed` to subscribers (`refreshCommandsFromInit`). A test that reads subscribed events by position (`subscribeToEvents(...).next()` twice for `turn_started` then `timeline`) reads `commands_changed` in the middle once the script emits an init. Filter that event type in the test's subscription helper (`agent.interrupt-restart-regression.test.ts`).
+
+The built-in plugins workspace (`plugins/`) and the server's `plugins/usage-sources*` tests resolve `@getpaseo/plugin/server/*` through `packages/plugin/dist`, not `src`. After an upstream merge that changes `packages/plugin/src/server/*` (v0.11.0-beta.3 removed `identify`, added `unavailable()` and `UsageAccount`), `npm run typecheck --workspace=@getpaseo/builtin-plugins` and those test files report the *old* interface (`has no exported member 'unavailable'`, `Property 'identify' is missing`) until you run `npm run build:server-deps`. Rebuild first; do not patch the plugins to the stale declarations.
+
 CI does not run most `*.e2e.test.ts` files. The `server-tests` job runs `npm run test`, which is `test:unit` (it excludes `**/*.e2e.test.ts`) followed by `test:integration` (a fixed list of files in `packages/server/package.json`). An E2E file outside that list has no CI result: `daemon-e2e/api-endpoint-claude.e2e.test.ts` and `daemon-e2e/agent-create-agents-capability.e2e.test.ts` are two such files. Before you cite one as evidence, check the list, run the file locally, and say the run was local.
 
 ### Manual QA against a real Claude session

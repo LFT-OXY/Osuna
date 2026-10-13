@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/text";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { HOST_BADGE_ICON_SIZE, HostBadge } from "@/hosts/host-badge";
 import { useHostBadges } from "@/hosts/use-host-badges";
-import { PlanUsageStripGauge } from "@/provider-usage/strip-gauge";
+import { PlanUsageStripGauge } from "@/plan-usage/strip-gauge";
 import { SPACING, type Theme } from "@/styles/theme";
 import {
   resolveBranchSwitch,
@@ -52,6 +52,7 @@ export function ComposerContextStrip({
   gitStatus,
   branchSwitchConditions,
   planUsageProviderId,
+  planUsageAgentId,
 }: {
   serverId: string;
   workspaceId: string;
@@ -60,6 +61,8 @@ export function ComposerContextStrip({
   branchSwitchConditions: BranchSwitchConditions;
   /** 显示谁的套餐用量；没有提供方时不显示，也不取数。 */
   planUsageProviderId: string | null;
+  /** 有 Agent 时套餐用量跟着它实际所用的账号走；草稿为 null。 */
+  planUsageAgentId: string | null;
 }) {
   const { t } = useTranslation();
   const hostBadge = useHostBadges({ enabled: true }).get(serverId) ?? null;
@@ -123,6 +126,7 @@ export function ComposerContextStrip({
           <PlanUsageStripGauge
             serverId={serverId}
             providerId={planUsageProviderId}
+            agentId={planUsageAgentId}
             space={planUsageSpace}
           />
         ) : null}

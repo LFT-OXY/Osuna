@@ -1,12 +1,11 @@
 import type { UsagePricingListResponse } from "@getpaseo/protocol/usage/rpc-schemas";
-import type { UsageText } from "@/usage/text";
+import type { UsageText } from "@/usage-stats/text";
 
 export type PriceTablePayload = UsagePricingListResponse["payload"];
 
 /**
- * 客户端还没建好时抛的哨兵，形状与 `provider-usage/view.ts` 的同名常量一致：它是
- * 翻译键而不是句子，抛错和还原都用这个常量。今天 `enabled` 已经检查过 client，所以
- * 这条路走不到；留着是为了两个兄弟模块对同一形状给同一个答案。
+ * 客户端还没建好时抛的哨兵：它是翻译键而不是句子，抛错和还原都用这个常量。
+ * 今天 `enabled` 已经检查过 client，所以这条路走不到。
  */
 export const PRICE_TABLE_CLIENT_UNAVAILABLE_KEY = "settings.host.priceTable.unavailable";
 

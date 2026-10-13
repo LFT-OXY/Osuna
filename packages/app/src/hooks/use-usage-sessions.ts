@@ -5,9 +5,9 @@ import {
   fetchUsageSessions,
   usageSessionsQueryBaseKey,
   type FetchUsageSessionsState,
-} from "@/usage/aggregated-sessions";
-import type { UsageHostError, UsageHostInput } from "@/usage/aggregated-usage";
-import type { MergedUsageSession } from "@/usage/sessions";
+} from "@/usage-stats/aggregated-sessions";
+import type { UsageHostError, UsageHostInput } from "@/usage-stats/aggregated-usage";
+import type { MergedUsageSession } from "@/usage-stats/sessions";
 
 export interface UseUsageSessionsInput {
   hosts: readonly UsageHostInput[];

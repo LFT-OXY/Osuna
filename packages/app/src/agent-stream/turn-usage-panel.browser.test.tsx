@@ -5,7 +5,7 @@ import { page } from "@vitest/browser/context";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { i18n } from "@/i18n/i18next";
-import type { TurnUsageModelRow, TurnUsagePanelModel } from "@/usage/turn-usage";
+import type { TurnUsageModelRow, TurnUsagePanelModel } from "@/usage-stats/turn-usage";
 import { TURN_USAGE_PANEL_WIDTH, TurnUsagePanel } from "./turn-usage-panel";
 
 // App sources compile against the classic JSX runtime, which expects React on the global.

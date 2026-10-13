@@ -6,7 +6,9 @@ import {
   ArrowDown,
   ArrowUp,
   BarChart3,
+  Blocks,
   CalendarClock,
+  Gauge,
   History,
   Plus,
   Search,
@@ -17,14 +19,16 @@ import { Button } from "@/components/ui/button";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Switch } from "@/components/ui/switch";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
-import { resolvePluginIcon } from "@/plugins/icons";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import {
-  builtinSidebarNavLabelKey,
+  builtinSidebarNavSettingsLabelKey,
   builtinSidebarNavShortcutAction,
-  type BuiltinSidebarNavId,
+  builtinSidebarNavTestKey,
+  type BuiltinSidebarItemId,
   type SidebarNavItem,
+  type SidebarSection,
 } from "@/sidebar-nav/model";
+import { resolvePluginIcon } from "@/plugins/icons";
 import { useSidebarNavItems } from "@/sidebar-nav/use-sidebar-nav-items";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -37,13 +41,21 @@ const ThemedArrowDown = withUnistyles(ArrowDown);
 const moveUpIcon = <ThemedArrowUp size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const moveDownIcon = <ThemedArrowDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 
-const BUILTIN_ICONS: Record<BuiltinSidebarNavId, LucideIcon> = {
+const BUILTIN_ICONS: Record<BuiltinSidebarItemId, LucideIcon> = {
   "new-workspace": Plus,
   history: History,
   search: Search,
   schedules: CalendarClock,
+  usage: Gauge,
+};
+
+// 顶部组的 usage 是 Osuna 的「用量」，图标与底部组上游的套餐用量摘要不同；文案与 testID 的差别在模型里。
+const HEADER_ICONS: Partial<Record<BuiltinSidebarItemId<"header">, LucideIcon>> = {
   usage: BarChart3,
 };
+
+/** Plugin items register no icon, so they share this one; a legacy `addSidebarItem` keeps its own. */
+const PLUGIN_ICON = Blocks;
 
 function NavIcon({ Icon, color = "" }: { Icon: LucideIcon; color?: string }) {
   return <Icon size={ICON_SIZE.md} color={color} />;
@@ -51,12 +63,23 @@ function NavIcon({ Icon, color = "" }: { Icon: LucideIcon; color?: string }) {
 
 const ThemedNavIcon = withUnistyles(NavIcon);
 
-function navItemIcon(item: SidebarNavItem): LucideIcon {
-  return item.kind === "builtin" ? BUILTIN_ICONS[item.id] : resolvePluginIcon(item.group.icon);
+function navItemIcon(item: SidebarNavItem, section: SidebarSection): LucideIcon {
+  if (item.kind === "builtin") {
+    return (section === "header" ? HEADER_ICONS[item.id] : undefined) ?? BUILTIN_ICONS[item.id];
+  }
+  return item.group.kind === "legacy" ? resolvePluginIcon(item.group.icon) : PLUGIN_ICON;
 }
 
-function navItemLabel(t: TFunction, item: SidebarNavItem): string {
-  return item.kind === "builtin" ? t(builtinSidebarNavLabelKey(item.id)) : item.group.title;
+function navItemLabel(t: TFunction, item: SidebarNavItem, section: SidebarSection): string {
+  return item.kind === "builtin"
+    ? t(builtinSidebarNavSettingsLabelKey(item.id, section))
+    : item.group.title;
+}
+
+/** Plugin rows keep their preference key; the two builtin usage items get keys of their own. */
+function navItemTestKey(item: SidebarNavItem, section: SidebarSection): string {
+  if (item.kind === "builtin") return builtinSidebarNavTestKey(item.id, section);
+  return item.key;
 }
 
 /** Own component so the row can stay hook-free about which items have a shortcut. */
@@ -69,6 +92,7 @@ function NavItemShortcut({ item }: { item: SidebarNavItem }): ReactElement | nul
 
 interface SidebarNavRowProps {
   item: SidebarNavItem;
+  section: SidebarSection;
   isFirst: boolean;
   isLast: boolean;
   onMove: (key: string, direction: "up" | "down") => void;
@@ -77,13 +101,15 @@ interface SidebarNavRowProps {
 
 function SidebarNavRow({
   item,
+  section,
   isFirst,
   isLast,
   onMove,
   onSetVisible,
 }: SidebarNavRowProps): ReactElement {
   const { t } = useTranslation();
-  const label = navItemLabel(t, item);
+  const label = navItemLabel(t, item, section);
+  const testKey = navItemTestKey(item, section);
 
   const handleMoveUp = useCallback(() => onMove(item.key, "up"), [item.key, onMove]);
   const handleMoveDown = useCallback(() => onMove(item.key, "down"), [item.key, onMove]);
@@ -98,9 +124,9 @@ function SidebarNavRow({
   );
 
   return (
-    <View style={rowStyle} testID={`sidebar-nav-item-${item.key}`}>
+    <View style={rowStyle} testID={`sidebar-nav-item-${testKey}`}>
       <View style={styles.rowMain}>
-        <ThemedNavIcon Icon={navItemIcon(item)} uniProps={mutedColorMapping} />
+        <ThemedNavIcon Icon={navItemIcon(item, section)} uniProps={mutedColorMapping} />
         <Text style={settingsStyles.rowTitle} numberOfLines={1}>
           {label}
         </Text>
@@ -114,7 +140,7 @@ function SidebarNavRow({
           onPress={handleMoveUp}
           disabled={isFirst}
           accessibilityLabel={t("settings.appearance.sidebar.moveUp")}
-          testID={`sidebar-nav-move-up-${item.key}`}
+          testID={`sidebar-nav-move-up-${testKey}`}
         />
         <Button
           variant="ghost"
@@ -123,34 +149,46 @@ function SidebarNavRow({
           onPress={handleMoveDown}
           disabled={isLast}
           accessibilityLabel={t("settings.appearance.sidebar.moveDown")}
-          testID={`sidebar-nav-move-down-${item.key}`}
+          testID={`sidebar-nav-move-down-${testKey}`}
         />
         <Switch
           value={item.visible}
           onValueChange={handleVisibleChange}
           accessibilityLabel={label}
-          testID={`sidebar-nav-toggle-${item.key}`}
+          testID={`sidebar-nav-toggle-${testKey}`}
         />
       </View>
     </View>
   );
 }
 
-export function SidebarNavSection(): ReactElement {
+const SECTION_COPY = {
+  header: {
+    title: "settings.appearance.sidebar.header.title",
+    info: "settings.appearance.sidebar.header.description",
+  },
+  footer: {
+    title: "settings.appearance.sidebar.footer.title",
+    info: "settings.appearance.sidebar.footer.description",
+  },
+} as const satisfies Record<SidebarSection, { title: string; info: string }>;
+
+function SidebarItemsCard({ section }: { section: SidebarSection }): ReactElement {
   const { t } = useTranslation();
-  const { items, setVisible, move } = useSidebarNavItems();
+  const { items, setVisible, move } = useSidebarNavItems(section);
 
   return (
     <SettingsSection
-      title={t("settings.appearance.sidebar.title")}
-      info={t("settings.appearance.sidebar.description")}
-      testID="sidebar-nav-section"
+      title={t(SECTION_COPY[section].title)}
+      info={t(SECTION_COPY[section].info)}
+      testID={`sidebar-nav-section-${section}`}
     >
       <View style={settingsStyles.card}>
         {items.map((item, index) => (
           <SidebarNavRow
             key={item.key}
             item={item}
+            section={section}
             isFirst={index === 0}
             isLast={index === items.length - 1}
             onMove={move}
@@ -159,6 +197,16 @@ export function SidebarNavSection(): ReactElement {
         ))}
       </View>
     </SettingsSection>
+  );
+}
+
+/** Settings > Sidebar: one card per section. The footer's bottom line is fixed and not listed. */
+export function SidebarNavSection(): ReactElement {
+  return (
+    <>
+      <SidebarItemsCard section="header" />
+      <SidebarItemsCard section="footer" />
+    </>
   );
 }
 

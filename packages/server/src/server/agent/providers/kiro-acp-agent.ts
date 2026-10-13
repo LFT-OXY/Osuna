@@ -10,7 +10,6 @@ interface KiroACPAgentClientOptions {
   env?: Record<string, string>;
   providerId?: string;
   label?: string;
-  providerParams?: unknown;
 }
 
 // ACP extension method (per the `_`-prefixed vendor namespace convention) that
@@ -86,7 +85,6 @@ export class KiroACPAgentClient extends GenericACPAgentClient {
       env: options.env,
       providerId: options.providerId,
       label: options.label,
-      providerParams: options.providerParams,
       extensionCommandsParser: parseKiroExtensionCommands,
     });
   }
