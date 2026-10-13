@@ -1002,3 +1002,50 @@ Codex/Claude/OpenCode adapter 在权限 metadata.providerSubagentId 标出子智
 - 并入后在主工作树：git pull，核对 759532509 是 main 的祖先，勾工单 15 最后两条并 tickets.py done 15，归档任务；先 npm ci 再 npm run build:server
 - 并入会自动归档这个 worktree：本机包与 .agents/.claude/.pi 下 17 个未提交的 ATW 文件改动会一起消失，要留先拷走或提交
 - 文档表要不要加 opencode-global-event-baseline.md 由维护者定
+
+
+## Session 34: 合并上游 v0.11.2：PR #16 并入 main 后的收尾——关闭工单 15 与任务归档
+<!-- atw-session: v=2 fp=ee01c7bf4bec9743 -->
+
+**Date**: 2026-10-13
+**Task**: 合并上游 v0.11.2：PR #16 并入 main 后的收尾——关闭工单 15 与任务归档
+**Package**: app
+**Branch**: `main`
+
+### Summary
+
+PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同步点，关闭工单 15；维护者验收后任务归档。顺带把 ATW 0.3.6 → 0.5.0 升级里各平台的文件提交了。
+
+### Main Changes
+
+- 主工作树 git merge --ff-only origin/main 快进 304 个提交（802b17d8c → 5172d3a07）；本地 14 个未提交的 .atw 文件与远程逐字节相同，先 git add 再快进，没有丢改动
+- ATW 升级的平台文件（.claude、.agents、.pi 共 15 个改动与 2 个 atw-implement-all 目录）提交为 1826fde6b；.atw/ 的那一半早先随 451670456 进了 main。备份补丁能对它反向套用，不用再套
+- 工单 15 补记「维护者的确认与并入结果」：PR #16 MERGED（2026-10-13T05:34:34Z，merge commit 5172d3a07），最终提交 cef8991d8 的 20 项 CI 首跑全过；文档表不补 opencode-global-event-baseline.md 按交接里维护者的同意注明例外后勾掉
+- 维护者说「验收，归档」后勾上工单 15 与 prd.md 的最后两条，task.py archive --skip-branch-validation 归档到 archive/2026-10/
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1826fde6b` | chore(atw): 升级 ATW 框架 0.3.6 → 0.5.0（补齐各平台文件） |
+| `f3f3a766e` | chore(task): 关闭工单 15，记录维护者的确认与并入结果 |
+| `8d42692e9` | chore(task): merge-upstream-v0.11.2 验收通过，勾上最后两条验收项 |
+| `000e8ac2e` | chore(task): archive 10-11-merge-upstream-v0.11.2 |
+
+### Testing
+
+- [OK] [OK] git merge-base --is-ancestor 759532509 main 成功；git merge-base main upstream/main = ab10a6694；git tag 仍是 14 个
+- [OK] [OK] npm ci 与 npm run build:server 退出码 0；之后提交钩子的 typecheck 通过（重建前报 243 个旧 dist 声明的错，1826fde6b 那次提交用 LEFTHOOK=0 跳过）
+- [OK] [!] 推 main 触发的那一轮 CI（run 38352098970）查的时候还在跑，没有等结果；Nix Update Hash 已失败，已知常红
+- [OK] [!] 没有跑任何本机测试：只改 ATW 工具文件与任务记录
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- main 上的提交还没有推送，推不推由维护者定
+- worktree ~/.paseo/worktrees/0x9u2djy/curvy-gorilla 这次没有被自动归档，本机与远端的分支 merge-upstream-v0-11-all 也还在，留给维护者处理；本机 arm64 安装包在 ~/Downloads/osuna-v0.11.2-merge-backup/ 有备份
+- 后续任务：10-11-muse-antigravity-osuna-gaps、10-11-opencode-v2-osuna-gaps、10-13-zh-relative-time-and-plan-labels
+- ATW 有 0.6.0 可升级

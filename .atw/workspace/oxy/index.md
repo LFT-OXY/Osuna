@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
+- **Total Sessions**: 34
 - **Last Active**: 2026-10-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1004 | Active |
+| `journal-1.md` | ~1051 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-10-13 | 合并上游 v0.11.2：PR #16 并入 main 后的收尾——关闭工单 15 与任务归档 | `1826fde6b`, `f3f3a766e`, `8d42692e9`, `000e8ac2e` | `main` |
 | 33 | 2026-10-13 | 合并上游 v0.11.2：工单 15 并入前的收尾——本机 macOS 包核对、docs/release.md、PR #16 正文 | `0c80ca6d4`, `7d81b5d53` | `merge-upstream-v0-11-all` |
 | 32 | 2026-10-11 | 合并上游 v0.10.3：PR #15 并入 main 后的收尾——关闭工单 07 与任务归档 | `a8002a587`, `2e527cb23` | `main` |
 | 31 | 2026-10-11 | 合并上游 v0.10.3 工单 07：整体验收，等维护者发话并入 | `a28121772` | `merge-upstream-v0.10.3` |
