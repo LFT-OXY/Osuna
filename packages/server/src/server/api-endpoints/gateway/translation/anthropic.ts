@@ -8,12 +8,22 @@ import {
   RequestShapeError,
   TOOL_RESULT_RECEIVED,
   argsOf,
+  attachmentText,
+  budgetOf,
   effortOf,
   effortOfBudget,
+  FORMAT_NAME,
+  formatInstruction,
   newId,
+  NO_REASONING,
+  replaysThinking,
+  sourceImage,
   stringOrText,
+  toolOutput,
   type EmitEvent,
+  type SchemaFormat,
   type GatewayRequest,
+  type ImagePart,
   type Message,
   type Part,
   type Reply,
@@ -21,6 +31,7 @@ import {
   type StreamEvent,
   type Tool,
   type ToolChoice,
+  type ToolResultPart,
   type Usage,
 } from "./ir.js";
 import { sseEvent } from "./sse.js";
@@ -54,6 +65,7 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
         ? false
         : null,
     metadata: body.metadata ?? null,
+    format: parseFormat(body.output_config),
     ...parseThinking(body),
   };
 }
@@ -88,10 +100,12 @@ function parseBlock(block: unknown): Part[] {
         {
           kind: "tool_result",
           callId: anthropicInId(String(block.tool_use_id ?? "")),
-          text: stringOrText(block.content),
+          ...toolOutput(block.content),
           isError: block.is_error === true,
         },
       ];
+    case "image":
+      return isRecord(block.source) ? [sourceImage(block.source)] : [];
     case "thinking":
       return [
         {
@@ -138,6 +152,22 @@ function parseToolChoice(choice: unknown): ToolChoice {
   }
 }
 
+/** output_config.format 只有带 schema 的一种。 */
+function parseFormat(config: unknown): SchemaFormat | null {
+  if (!isRecord(config) || !isRecord(config.format)) return null;
+  const { format } = config;
+  if (format.type !== "json_schema" || format.schema === undefined || format.schema === null) {
+    return null;
+  }
+  return {
+    type: "json_schema",
+    name: FORMAT_NAME,
+    description: "",
+    schema: format.schema,
+    strict: null,
+  };
+}
+
 /** output_config 的力度只在要求思考时才算：Claude Code 起标题的请求带力度不带思考。 */
 function parseThinking(
   body: Record<string, unknown>,
@@ -169,36 +199,75 @@ export function buildAnthropicRequest(
   request: GatewayRequest,
   model: string,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    model,
-    messages: pairToolBlocks(anthropicMessages(request.messages)),
-    stream: request.stream,
-  };
-  if (request.system !== "") out.system = request.system;
-  out.max_tokens = request.maxTokens > 0 ? request.maxTokens : DEFAULT_MAX_TOKENS;
-  if (request.temperature !== null) out.temperature = request.temperature;
-  else if (request.topP !== null) out.top_p = request.topP;
+  const { format } = request;
+  // output_config.format 只收 schema：任意 JSON 对象用话写进系统提示。
+  const system =
+    format?.type === "json_object"
+      ? [request.system, formatInstruction(format)].filter((part) => part !== "").join("\n\n")
+      : request.system;
+  const replay = replaysThinking(model) && !isAnthropicModel(model);
+  const messages = pairToolBlocks(anthropicMessages({ messages: request.messages, replay }));
+  markLastBlock(messages);
+  const out: Record<string, unknown> = { model, messages, stream: request.stream };
+  if (replay) {
+    const changes = thinkingOnToolTurns(messages);
+    out.messages = messages.map((message, index) => {
+      const content = changes.get(index);
+      return content ? { role: message.role, content } : message;
+    });
+  }
+  // 系统提示与工具每轮都一样，和对话分开缓存。
+  if (system !== "") out.system = [{ type: "text", text: system, cache_control: EPHEMERAL }];
+  Object.assign(out, anthropicThinking(request, model));
+  const config: Record<string, unknown> = {};
+  const effort = adaptiveEffort(request, model);
+  if (effort !== null) config.effort = effort;
+  if (format?.type === "json_schema")
+    config.format = { type: "json_schema", schema: format.schema };
+  if (Object.keys(config).length > 0) out.output_config = config;
   if (request.stop.length > 0) out.stop_sequences = request.stop;
   if (request.metadata !== null) out.metadata = request.metadata;
   if (request.tools.length > 0) {
-    out.tools = request.tools.map((tool) => ({
+    const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       input_schema: tool.schema ?? { type: "object", properties: {} },
     }));
+    // 有系统提示时工具不标：连同 Claude 登录自带的一个，不超过 Anthropic 的四个。
+    if (system === "") tools.at(-1)!.cache_control = EPHEMERAL;
+    out.tools = tools;
     const choice = anthropicToolChoice(request);
     if (choice) out.tool_choice = choice;
   }
   return out;
 }
 
-function anthropicMessages(messages: Message[]): AnthropicMessage[] {
+const EPHEMERAL = { type: "ephemeral" };
+
+/**
+ * Anthropic 只缓存到标了记号的块，别的协议的请求从来不带：标在对话的最后一块上，下一轮只是往后加，
+ * 前面都从缓存读。思考块不能标。
+ */
+function markLastBlock(messages: AnthropicMessage[]): void {
+  const blocks = messages.at(-1)?.content ?? [];
+  const last = blocks.findLast(
+    (block) => block.type !== "thinking" && block.type !== "redacted_thinking",
+  );
+  if (last) last.cache_control = EPHEMERAL;
+}
+
+/** replay：上游要回放推理时，没签名的思考也按文字发回去。 */
+function anthropicMessages(input: { messages: Message[]; replay: boolean }): AnthropicMessage[] {
   const out: AnthropicMessage[] = [];
-  for (const message of messages) {
+  for (const message of input.messages) {
     const results: AnthropicBlock[] = [];
     const rest: AnthropicBlock[] = [];
     for (const part of message.parts) {
-      const block = anthropicBlock(part);
+      const unsignedThought = part.kind === "thinking" && part.signature === "" && part.text !== "";
+      const block =
+        input.replay && unsignedThought
+          ? { type: "thinking", thinking: part.text }
+          : anthropicBlock(part);
       if (block?.type === "tool_result") results.push(block);
       else if (block) rest.push(block);
     }
@@ -224,18 +293,157 @@ function anthropicBlock(part: Part): AnthropicBlock | null {
         input: parseJson(argsOf(part)) ?? {},
       };
     case "tool_result":
-      return {
-        type: "tool_result",
-        tool_use_id: anthropicOutId(part.callId),
-        content: part.text,
-        ...(part.isError ? { is_error: true } : {}),
-      };
+      return toolResultBlock(part);
+    case "image":
+      return imageBlock(part);
+    case "file":
+      return { type: "text", text: attachmentText(part) };
     case "thinking":
       // 只有带签名的才回给 Anthropic；无签名的文字是别家的推理。
       return part.signature === ""
         ? null
         : { type: "thinking", thinking: part.text, signature: part.signature };
   }
+}
+
+function wantsThinking(request: GatewayRequest): boolean {
+  return (request.thinking || request.effort !== "") && !request.thinkOff;
+}
+
+/**
+ * 思考、输出上限与采样参数。关了推理的发 disabled；要思考的，4.6 起的 Claude 只认自适应思考，
+ * 别的模型给预算并留出回答的余地；不思考的才带温度。
+ */
+function anthropicThinking(request: GatewayRequest, model: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  let maxTokens = request.maxTokens > 0 ? request.maxTokens : DEFAULT_MAX_TOKENS;
+  const think = wantsThinking(request);
+  if (request.thinkOff) out.thinking = { type: "disabled" };
+  if (think && adaptiveOnly(model)) {
+    out.thinking = { type: "adaptive", display: "summarized" };
+  } else if (think && (request.maxTokens <= 0 || request.maxTokens > 2048)) {
+    let budget = budgetOf(request.effort);
+    // 客户端给的上限是模型能写的：预算放在它下面；没给的抬高上限装下预算。
+    if (request.maxTokens > 0) budget = Math.min(budget, maxTokens - 1024);
+    else if (maxTokens < budget + 4096) maxTokens = budget + 4096;
+    out.thinking = { type: "enabled", budget_tokens: budget };
+  } else if (request.temperature !== null) {
+    out.temperature = request.temperature;
+  } else if (request.topP !== null) {
+    out.top_p = request.topP;
+  }
+  out.max_tokens = maxTokens;
+  return out;
+}
+
+/** 自适应思考的力度放在 output_config.effort；Opus 与 Sonnet 4.6 没有 xhigh，问 max。 */
+function adaptiveEffort(request: GatewayRequest, model: string): string | null {
+  if (!wantsThinking(request) || !adaptiveOnly(model) || request.effort === "") return null;
+  return request.effort === "xhigh" && noXhigh(model) ? "max" : request.effort;
+}
+
+// Anthropic 自家的模型：不要求就不思考。
+const ANTHROPIC_MODEL = /(?:^|[/.:-])claude-/i;
+
+export function isAnthropicModel(model: string): boolean {
+  return ANTHROPIC_MODEL.test(model);
+}
+
+// 中转站怎么拼都能读出 Claude 的版本：claude-opus-4-6、anthropic.claude-sonnet-4.6-v1、opus-5.5、claude-3-7-sonnet。
+const CLAUDE_VERSION =
+  /(?:^|[^a-z0-9])(?:claude-)?(?:opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)|claude-(\d+)(?:[-.](\d))?-(?:opus|sonnet|haiku)/;
+
+interface ClaudeVersion {
+  major: number;
+  minor: number;
+}
+
+function claudeVersionOf(model: string): ClaudeVersion | null {
+  const match = CLAUDE_VERSION.exec(model.toLowerCase());
+  if (!match) return null;
+  const [major, minor] = match[3] === undefined ? [match[1], match[2]] : [match[3], match[4]];
+  return { major: Number(major), minor: Number(minor ?? 0) };
+}
+
+/** 4.6 起的 Claude 只认自适应思考，力度放在 output_config.effort。 */
+function adaptiveOnly(model: string): boolean {
+  const version = claudeVersionOf(model);
+  return version !== null && (version.major > 4 || (version.major === 4 && version.minor >= 6));
+}
+
+function noXhigh(model: string): boolean {
+  const version = claudeVersionOf(model);
+  return version?.major === 4 && version.minor === 6;
+}
+
+/** 图片按 Anthropic 的写法：内嵌的给 base64，按地址的给地址。 */
+function imageBlock(part: ImagePart): AnthropicBlock {
+  const source =
+    part.url !== "" && part.data === ""
+      ? { type: "url", url: part.url }
+      : { type: "base64", media_type: part.mediaType, data: part.data };
+  return { type: "image", source };
+}
+
+/** tool_result 里文字旁边能放图片。 */
+function toolResultBlock(part: ToolResultPart): AnthropicBlock {
+  const block: AnthropicBlock = { type: "tool_result", tool_use_id: anthropicOutId(part.callId) };
+  if (part.images.length === 0) {
+    block.content = part.text;
+  } else {
+    const text: AnthropicBlock[] =
+      part.text.trim() === "" ? [] : [{ type: "text", text: part.text }];
+    block.content = [...text, ...part.images.map(imageBlock)];
+  }
+  if (part.isError) block.is_error = true;
+  return block;
+}
+
+/**
+ * 给回放推理的上游（DeepSeek 的 Anthropic 地址）：调用了工具、或回答只有工具结果的 assistant 消息
+ * 没有思考块的，开头补一个空格的思考块；Claude 封存的 redacted_thinking 它读不了，换成空格的思考块
+ * （消息里已有思考块就去掉）。返回要换内容的消息下标与新内容，别的消息不动。
+ */
+export function thinkingOnToolTurns(messages: unknown[]): Map<number, unknown[]> {
+  const space = { type: "thinking", thinking: NO_REASONING };
+  const changes = new Map<number, unknown[]>();
+  // 前一条消息只有工具结果。
+  let afterTool = false;
+  messages.forEach((message, index) => {
+    const blocks = isRecord(message) && Array.isArray(message.content) ? message.content : null;
+    if (!isRecord(message) || message.role !== "assistant") {
+      afterTool =
+        blocks !== null &&
+        blocks.length > 0 &&
+        blocks.every((block) => isRecord(block) && block.type === "tool_result");
+      return;
+    }
+    const after = afterTool;
+    afterTool = false;
+    if (blocks === null) return;
+    const out: unknown[] = [];
+    let thought = false;
+    let called = false;
+    let edited = false;
+    for (const block of blocks) {
+      const type = isRecord(block) ? block.type : undefined;
+      if (type === "redacted_thinking") {
+        edited = true;
+        if (!thought) out.push(space);
+        thought = true;
+        continue;
+      }
+      if (type === "thinking") thought = true;
+      if (type === "tool_use") called = true;
+      out.push(block);
+    }
+    if ((called || after) && !thought) {
+      out.unshift(space);
+      edited = true;
+    }
+    if (edited) changes.set(index, out);
+  });
+  return changes;
 }
 
 function anthropicToolChoice(request: GatewayRequest): Record<string, unknown> | null {
@@ -673,6 +881,8 @@ export function renderAnthropic(reply: Reply, model: string): Record<string, unk
           },
         ];
       case "tool_result":
+      case "image":
+      case "file":
         return [];
     }
   });

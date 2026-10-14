@@ -5,7 +5,7 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
-import { ReplyCollector, type GatewayRequest } from "./translation/ir.js";
+import { ReplyCollector, type GatewayRequest, type StreamEvent } from "./translation/ir.js";
 import { protocolOf } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import {
@@ -103,7 +103,8 @@ async function streamReply(input: {
     write: (text) => res.write(text),
   });
   const decoder = protocolOf(input.to).decoder();
-  const reader = new SseReader((data) => decoder.decode(data, (event) => encoder.event(event)));
+  const emit = (event: StreamEvent) => encoder.event(event);
+  const reader = new SseReader((data) => decoder.decode(data, emit));
   const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
   if (end.kind === "gone") return end;
   if (end.kind === "broken") {
@@ -111,6 +112,7 @@ async function streamReply(input: {
     return end;
   }
   reader.end();
+  decoder.end?.(emit);
   encoder.finish();
   res.end();
   return { kind: "complete", cacheRead: encoder.usage().cacheRead };
@@ -130,10 +132,12 @@ async function wholeReply(input: {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
   const decoder = protocolOf(input.to).decoder();
-  const reader = new SseReader((data) => decoder.decode(data, (event) => collector.add(event)));
+  const emit = (event: StreamEvent) => collector.add(event);
+  const reader = new SseReader((data) => decoder.decode(data, emit));
   const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
   if (end.kind === "gone") return end;
   reader.end();
+  decoder.end?.(emit);
   let failure: string | null = null;
   if (end.kind === "broken") failure = end.message;
   else if (collector.error && !collector.saidAnything()) failure = collector.error.message;

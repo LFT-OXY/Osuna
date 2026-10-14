@@ -21,13 +21,20 @@ magpie's internal/gateway (ir.go, anthropic.go, chat.go, responses.go, sse.go,
 gateway.go), and its tests reuse cases from magpie's
 anthropic_tool_pairing_test.go, chat_tool_pairing_test.go,
 pair_tool_items_test.go, orphan_tool_output_test.go, translate_stream_test.go,
-devin_tool_ids_test.go, anthropic_cache_ttl_test.go and stop_context_test.go:
+devin_tool_ids_test.go, anthropic_cache_ttl_test.go, stop_context_test.go,
+minimax_think_test.go, format_test.go, reasoning_replay_test.go,
+deepseek_anthropic_thinking_test.go, anthropic_image_source_test.go,
+attachments_test.go and upstream_bytes_test.go. The pass-through request's
+thinking fixes for other vendors' models (thinkingOffUnlessAsked,
+withThinkingOnToolTurns in anthropic.go) are ported into passthrough.ts:
 
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
   packages/server/src/server/api-endpoints/gateway/translation/chat.ts
   packages/server/src/server/api-endpoints/gateway/translation/responses.ts
   packages/server/src/server/api-endpoints/gateway/translation/sse.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
   packages/server/src/server/api-endpoints/gateway/translation/*.test.ts
 
 The request-format choice (chooseRequestFormat) follows magpie's usable and

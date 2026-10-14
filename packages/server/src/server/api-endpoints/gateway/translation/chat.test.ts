@@ -114,6 +114,7 @@ function request(messages: Message[]): GatewayRequest {
     thinkOff: false,
     parallel: null,
     metadata: null,
+    format: null,
   };
 }
 
@@ -122,7 +123,7 @@ function call(id: string): Part {
 }
 
 function result(id: string, output: string): Part {
-  return { kind: "tool_result", callId: id, text: output, isError: false };
+  return { kind: "tool_result", callId: id, text: output, isError: false, images: [] };
 }
 
 function text(value: string): Part {
@@ -568,5 +569,291 @@ describe("stop reasons between Chat and Anthropic (magpie anthropic.go / chat.go
       stop_reason: stopReason,
       stop_sequence: null,
     });
+  });
+});
+
+describe("thinking at the head of a Chat reply's text (magpie minimax_think_test.go)", () => {
+  function thinkAndText(parts: string[]) {
+    const chunks = parts.map((content, index) =>
+      JSON.stringify({
+        id: "x",
+        choices: [
+          {
+            index: 0,
+            delta: { content },
+            ...(index === parts.length - 1 ? { finish_reason: "stop" } : {}),
+          },
+        ],
+      }),
+    );
+    const { think, text: said } = summary(decodeChat(chunks));
+    return { think, text: said };
+  }
+
+  test.each([
+    ["whole", ["<think>Greeting.</think>\n\nHello"], "Greeting.", "Hello"],
+    ["one character a chunk", "<think>ab</think>cd".split(""), "ab", "cd"],
+    ["a <thought> block", ["<thought>Plan.</thought>Done"], "Plan.", "Done"],
+    [
+      "a thought's close doesn't end a think",
+      ["<think>a</thought>b</think>c"],
+      "a</thought>b",
+      "c",
+    ],
+    ["a think tag later in the text", ["Hi <think>no</think>"], "", "Hi <think>no</think>"],
+    ["<thin is text", ["<thin", "g>"], "", "<thing>"],
+  ])("%s", (_name, parts, think, said) => {
+    expect(thinkAndText(parts)).toEqual({ think, text: said });
+  });
+
+  test("MiniMax's stream, its tags split across chunks, reaches Claude Code as a thinking block then the answer", () => {
+    const events = chatToAnthropic([
+      '{"id":"0581e2a0","choices":[{"index":0,"delta":{"content":"<th","role":"assistant"}}]}',
+      '{"id":"0581e2a0","choices":[{"index":0,"delta":{"content":"ink>\\nThe user greets me","role":"assistant"}}]}',
+      '{"id":"0581e2a0","choices":[{"index":0,"delta":{"content":". Reply briefly.\\n</thi","role":"assistant"}}]}',
+      '{"id":"0581e2a0","choices":[{"index":0,"delta":{"content":"nk>\\n\\nHello!","role":"assistant"}}]}',
+      '{"id":"0581e2a0","choices":[{"finish_reason":"stop","index":0,"delta":{"content":""}}],"usage":{"total_tokens":40,"prompt_tokens":20,"completion_tokens":20}}',
+    ]);
+    const blocks = events.flatMap((event) =>
+      event.type === "content_block_start" ? [event.content_block] : [],
+    );
+    const deltas = events.flatMap((event) =>
+      event.type === "content_block_delta" ? [event.delta] : [],
+    );
+    expect(blocks).toEqual([
+      { type: "thinking", thinking: "" },
+      { type: "text", text: "" },
+    ]);
+    expect(deltas).toEqual([
+      { type: "thinking_delta", thinking: "\nThe user greets me" },
+      { type: "thinking_delta", thinking: ". Reply briefly.\n" },
+      { type: "text_delta", text: "Hello!" },
+    ]);
+  });
+
+  test("a stream that ends while a tag could still be starting gives the held text back", () => {
+    const decoder = new ChatDecoder();
+    const events: StreamEvent[] = [];
+    decoder.decode('{"id":"x","choices":[{"index":0,"delta":{"content":"<thi"}}]}', (event) =>
+      events.push(event),
+    );
+    decoder.end((event) => events.push(event));
+    expect(summary(events).text).toBe("<thi");
+  });
+});
+
+describe("images in a Claude Code request asked of a Chat endpoint", () => {
+  const PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  test("an inline image becomes a data URL and an image by URL stays that URL, not fetched", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what are these" },
+            { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+            { type: "image", source: { type: "url", url: "https://example.com/cat.jpg" } },
+          ],
+        },
+      ],
+    });
+    expect(buildChatRequest(parsed, "m").messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what are these" },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } },
+          { type: "image_url", image_url: { url: "https://example.com/cat.jpg" } },
+        ],
+      },
+    ]);
+  });
+
+  test("a tool's images follow its result in a user message that says whose they are", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      messages: [
+        { role: "user", content: "look at the screen" },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_1", name: "Screenshot", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: [
+                { type: "text", text: "taken" },
+                { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+              ],
+            },
+            { type: "text", text: "what do you see" },
+          ],
+        },
+      ],
+    });
+    expect(buildChatRequest(parsed, "m").messages).toEqual([
+      { role: "user", content: "look at the screen" },
+      {
+        role: "assistant",
+        tool_calls: [
+          { id: "toolu_1", type: "function", function: { name: "Screenshot", arguments: "{}" } },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "toolu_1",
+        content: "taken\n\n[The tool returned an image; it follows in the next message.]",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "[From the result of Screenshot (tool call toolu_1):]" },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } },
+          { type: "text", text: "what do you see" },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("file attachments in a Claude Code request asked of a Chat endpoint", () => {
+  test("a document block, in the message or in a tool result, is left out", () => {
+    const pdf = { type: "base64", media_type: "application/pdf", data: "JVBERi0x" };
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "document", source: pdf },
+            { type: "text", text: "summarise it" },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: {} }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: [
+                { type: "text", text: "read" },
+                { type: "document", source: pdf },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(buildChatRequest(parsed, "m").messages).toEqual([
+      { role: "user", content: "summarise it" },
+      {
+        role: "assistant",
+        tool_calls: [
+          { id: "toolu_1", type: "function", function: { name: "Read", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "toolu_1", content: "read" },
+    ]);
+  });
+});
+
+describe("earlier thinking in a Claude Code request asked of a Chat endpoint (magpie reasoning_replay_test.go)", () => {
+  const conversation = {
+    model: "m",
+    messages: [
+      { role: "user", content: "fix the bug" },
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Read main.go.", signature: "EqQBCkgIBxAB" },
+          { type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "cat main.go" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "package main" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_2", name: "Bash", input: { command: "go test" } }],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_2", content: "ok" }] },
+      { role: "assistant", content: [{ type: "text", text: "It passes." }] },
+      { role: "user", content: "thanks" },
+      { role: "assistant", content: [{ type: "text", text: "Welcome." }] },
+      { role: "user", content: "bye" },
+    ],
+  };
+  const reasoning = (model: string) =>
+    (buildChatRequest(parseAnthropicRequest(conversation), model).messages as ChatSent[])
+      .filter((message) => message.role === "assistant")
+      .map((message) => message.reasoning_content);
+
+  test("another model is sent none of it, Claude's signed thinking included", () => {
+    expect(reasoning("glm-4.6")).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  test("a DeepSeek model gets it back, and a space on a call or a reply to tool results that had none", () => {
+    expect(reasoning("deepseek-v3")).toEqual(["Read main.go.", " ", " ", undefined]);
+    expect(reasoning("Pro/DeepSeek-V3.2")).toEqual(["Read main.go.", " ", " ", undefined]);
+  });
+});
+
+interface ChatSent {
+  role: string;
+  reasoning_content?: string;
+}
+
+describe("this turn's thinking and server tools between Claude Code and a Chat endpoint", () => {
+  test("reasoning streamed by a Chat endpoint reaches Claude Code as a thinking block as it comes", () => {
+    const events = chatToAnthropic([
+      '{"id":"x","choices":[{"index":0,"delta":{"reasoning_content":"Let me "}}]}',
+      '{"id":"x","choices":[{"index":0,"delta":{"reasoning_content":"think."}}]}',
+      '{"id":"x","choices":[{"index":0,"delta":{"content":"Done."},"finish_reason":"stop"}]}',
+    ]);
+    expect(events.filter((event) => String(event.type).startsWith("content_block"))).toEqual([
+      { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "Let me " },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "think." },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Done." } },
+      { type: "content_block_stop", index: 1 },
+    ]);
+  });
+
+  test("Anthropic's web search tool is left out of the tools a Chat endpoint is offered", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      messages: [{ role: "user", content: "news?" }],
+      tools: [
+        { type: "web_search_20250305", name: "web_search", max_uses: 5 },
+        { name: "Bash", description: "Run", input_schema: { type: "object" } },
+      ],
+    });
+    expect(buildChatRequest(parsed, "m").tools).toEqual([
+      {
+        type: "function",
+        function: { name: "Bash", description: "Run", parameters: { type: "object" } },
+      },
+    ]);
   });
 });

@@ -6,7 +6,7 @@ import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
  * 三种协议共用的中间格式：请求先读成它，回复由它写出。只在中转站里用，不进 packages/protocol。
- * 思考只带本轮文字与 Anthropic 签名；图片、附件、结构化输出、联网搜索在工单 06 补。
+ * 思考只带本轮文字与 Anthropic 签名；联网搜索不代搜，服务端工具在解析时剔除。
  */
 
 export interface TextPart {
@@ -34,9 +34,28 @@ export interface ToolResultPart {
   callId: string;
   text: string;
   isError: boolean;
+  // 工具随文字一起返回的图片。
+  images: ImagePart[];
 }
 
-export type Part = TextPart | ThinkingPart | ToolCallPart | ToolResultPart;
+/** 内嵌（base64）或按地址给的图片；地址原样转发，不下载。 */
+export interface ImagePart {
+  kind: "image";
+  mediaType: string;
+  data: string;
+  url: string;
+}
+
+/** Chat 客户端的文件附件：别的协议装不下，发出时换成一句占位文字。 */
+export interface FilePart {
+  kind: "file";
+  mediaType: string;
+  data: string;
+  // 只给了 OpenAI 文件 id 时是那个 id。
+  url: string;
+}
+
+export type Part = TextPart | ThinkingPart | ToolCallPart | ToolResultPart | ImagePart | FilePart;
 
 export interface Message {
   role: "user" | "assistant";
@@ -54,6 +73,19 @@ export interface Tool {
 export type ToolChoice = "" | "auto" | "none" | "required" | `name:${string}`;
 
 export type Effort = "" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** 客户端要的回答形状（结构化输出）：按 schema 的 JSON，或任意 JSON 对象。 */
+export type Format = { type: "json_object" } | SchemaFormat;
+
+export interface SchemaFormat {
+  type: "json_schema";
+  // OpenAI 系要名字；客户端的协议没有名字时用 "response"。
+  name: string;
+  description: string;
+  schema: unknown;
+  // 客户端没说为 null。
+  strict: boolean | null;
+}
 
 export interface GatewayRequest {
   model: string;
@@ -77,6 +109,8 @@ export interface GatewayRequest {
   parallel: boolean | null;
   // Anthropic 客户端的 metadata（Claude Code 的 user_id），只转给 Anthropic 上游。
   metadata: unknown;
+  // 结构化输出；null 为普通文字。
+  format: Format | null;
 }
 
 export type StopReason = "stop" | "length" | "tool" | "filter";
@@ -161,6 +195,79 @@ export function argsOf(part: ToolCallPart): string {
   return part.args.trim() === "" ? "{}" : part.args;
 }
 
+/** data: 地址读成内嵌图片，别的地址原样留着。 */
+export function imagePart(url: string): ImagePart {
+  if (url.startsWith("data:")) {
+    const comma = url.indexOf(",");
+    if (comma !== -1) {
+      const meta = url.slice(5, comma);
+      return {
+        kind: "image",
+        mediaType: meta.replace(/;base64$/, ""),
+        data: url.slice(comma + 1),
+        url: "",
+      };
+    }
+  }
+  return { kind: "image", mediaType: "", data: "", url };
+}
+
+/** 图片写成 OpenAI 的 image_url：按地址的原样，内嵌的拼成 data: 地址。 */
+export function dataUrl(part: ImagePart | FilePart): string {
+  if (part.url !== "" && part.data === "") return part.url;
+  return `data:${part.mediaType};base64,${part.data}`;
+}
+
+/** 协议装不下的附件说一句它在：内嵌的没有地址可给。 */
+export function attachmentText(part: FilePart): string {
+  return part.url === ""
+    ? `[attachment ${part.mediaType}]`
+    : `[attachment ${part.mediaType}: ${part.url}]`;
+}
+
+/** JSON 里的字符串字段；不是字符串的算空。 */
+export function stringOf(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** Anthropic image 块的 source：base64 带 media_type，或按地址。 */
+export function sourceImage(source: Record<string, unknown>): ImagePart {
+  return {
+    kind: "image",
+    mediaType: stringOf(source.media_type),
+    data: stringOf(source.data),
+    url: stringOf(source.url),
+  };
+}
+
+export interface ToolOutput {
+  text: string;
+  images: ImagePart[];
+}
+
+/**
+ * 工具结果的文字与其中的图片：Anthropic tool_result 里的 image 块，Chat tool 消息里的 image_url 段。
+ * Anthropic 的 document 块不读，丢掉。
+ */
+export function toolOutput(value: unknown): ToolOutput {
+  const text = stringOrText(value);
+  if (!Array.isArray(value)) return { text, images: [] };
+  const images = value.flatMap((block): ImagePart[] => {
+    if (!isRecord(block)) return [];
+    if (block.type === "image" && isRecord(block.source)) {
+      const image = sourceImage(block.source);
+      return image.data === "" && image.url === "" ? [] : [image];
+    }
+    if (block.type === "image_url" || block.type === "input_image") {
+      // 字符串，或 {url}。
+      const url = stringOf(isRecord(block.image_url) ? block.image_url.url : block.image_url);
+      return url === "" ? [] : [imagePart(url)];
+    }
+    return [];
+  });
+  return { text, images };
+}
+
 export function textOf(parts: Part[]): string {
   return parts.map((part) => (part.kind === "text" ? part.text : "")).join("");
 }
@@ -211,6 +318,46 @@ export function joinSplitCalls(messages: Message[]): Message[] {
   return out;
 }
 
+/** 给要求回放推理、这一轮却没有推理的上游的推理：一个空格。 */
+export const NO_REASONING = " ";
+
+/**
+ * 上游要把每轮的推理发回去：DeepSeek 的模型，按模型名认（不看域名）。思考模式下工具调用那一轮
+ * 没有推理，它整个请求都拒（"The reasoning_content in the thinking mode must be passed back"）。
+ */
+export function replaysThinking(model: string): boolean {
+  return model.toLowerCase().includes("deepseek");
+}
+
+export const FORMAT_NAME = "response";
+
+/**
+ * OpenAI 的回答形状：Responses 的 text.format（{type, name, schema, strict, description}）
+ * 或 Chat 的 response_format（{type, json_schema: {…}}）。type text 是默认，读成 null。
+ */
+export function openAIFormat(value: unknown): Format | null {
+  if (!isRecord(value)) return null;
+  if (value.type === "json_object") return { type: "json_object" };
+  if (value.type !== "json_schema") return null;
+  const spec = isRecord(value.json_schema) ? value.json_schema : value;
+  // 没有形状的 schema 就是任意 JSON 对象。
+  if (spec.schema === undefined || spec.schema === null) return { type: "json_object" };
+  return {
+    type: "json_schema",
+    name: stringOf(spec.name) || FORMAT_NAME,
+    description: stringOf(spec.description),
+    schema: spec.schema,
+    strict: typeof spec.strict === "boolean" ? spec.strict : null,
+  };
+}
+
+/** 回答形状用话说出来：给接口问不了这种形状的模型（Anthropic 只收带 schema 的）。 */
+export function formatInstruction(format: Format): string {
+  return format.type === "json_schema"
+    ? `Respond with a single JSON value and nothing else, matching this JSON schema:\n${JSON.stringify(format.schema)}.`
+    : "Respond with a single JSON object and nothing else.";
+}
+
 /** 各协议的推理力度名字统一成这几档。 */
 export function effortOf(value: unknown): Effort {
   const effort = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -223,6 +370,19 @@ export function effortOf(value: unknown): Effort {
     effort === "max"
     ? effort
     : "";
+}
+
+/** 力度换成 Anthropic 的思考预算。 */
+export function budgetOf(effort: Effort): number {
+  const budgets: Record<Effort, number> = {
+    "": 10_000,
+    low: 4096,
+    medium: 10_000,
+    high: 24_000,
+    xhigh: 32_000,
+    max: 32_000,
+  };
+  return budgets[effort];
 }
 
 /** Anthropic 的思考预算换成力度。 */
@@ -241,7 +401,7 @@ export function estimateInputTokens(request: GatewayRequest): number {
   for (const message of request.messages) {
     for (const part of message.parts) {
       if (part.kind === "tool_call") total += bytes(part.args) + bytes(part.name);
-      else total += bytes(part.text);
+      else if (part.kind !== "image" && part.kind !== "file") total += bytes(part.text);
     }
   }
   for (const tool of request.tools) {

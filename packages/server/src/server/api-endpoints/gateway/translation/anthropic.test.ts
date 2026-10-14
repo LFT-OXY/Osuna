@@ -9,7 +9,7 @@ import {
   usageFromAnthropic,
   usageToAnthropic,
 } from "./anthropic.js";
-import { ChatDecoder, parseChatRequest, renderChat } from "./chat.js";
+import { ChatDecoder, buildChatRequest, parseChatRequest, renderChat } from "./chat.js";
 import { ReplyCollector, type GatewayRequest, type Message, type Part } from "./ir.js";
 
 /*
@@ -36,6 +36,7 @@ function request(messages: Message[]): GatewayRequest {
     thinkOff: false,
     parallel: null,
     metadata: null,
+    format: null,
   };
 }
 
@@ -44,7 +45,7 @@ function call(id: string): Part {
 }
 
 function result(id: string, output: string): Part {
-  return { kind: "tool_result", callId: id, text: output, isError: false };
+  return { kind: "tool_result", callId: id, text: output, isError: false, images: [] };
 }
 
 function text(value: string): Part {
@@ -65,10 +66,18 @@ interface SentMessage {
   content: SentBlock[];
 }
 
+/** 发出的消息去掉缓存标记：配对的用例只看形状，标记另有用例。 */
+function unmarked(messages: unknown): SentMessage[] {
+  return JSON.parse(
+    JSON.stringify(messages, (key, value: unknown) =>
+      key === "cache_control" ? undefined : value,
+    ),
+  ) as SentMessage[];
+}
+
 /** 角色序列，带上调用与回答的 id：「user assistant(A) user[A]」。 */
 function messagesTrace(messages: Message[]): { trace: string; sent: SentMessage[] } {
-  const sent = buildAnthropicRequest(request(messages), "claude-sonnet-4-5")
-    .messages as SentMessage[];
+  const sent = unmarked(buildAnthropicRequest(request(messages), "claude-sonnet-4-5").messages);
   const trace = sent
     .map((message) => {
       const calls = message.content.flatMap((block) =>
@@ -203,7 +212,7 @@ describe("mending the tool exchange of a Messages request (magpie anthropic_tool
         { role: "user", content: "go on" },
       ],
     });
-    const sent = buildAnthropicRequest(parsed, "m1").messages as SentMessage[];
+    const sent = unmarked(buildAnthropicRequest(parsed, "m1").messages);
     expect(anthropicValid(sent)).toBe(true);
     expect(sent).toEqual([
       { role: "user", content: [{ type: "text", text: "run it" }] },
@@ -256,7 +265,7 @@ describe("call ids Claude Code can read (magpie devin_tool_ids_test.go)", () => 
     });
     expect(parsed.messages.flatMap((message) => message.parts)).toEqual([
       { kind: "tool_call", id: "Bash:0#1", name: "run", args: "{}" },
-      { kind: "tool_result", callId: "Bash:0#1", text: "ok", isError: false },
+      { kind: "tool_result", callId: "Bash:0#1", text: "ok", isError: false, images: [] },
     ]);
   });
 });
@@ -416,6 +425,514 @@ describe("stop reasons from Anthropic to Chat (magpie stopFromAnthropic / stopTo
     ]).finish();
     expect((renderChat(reply, "m").choices as { finish_reason: string }[])[0]?.finish_reason).toBe(
       finish,
+    );
+  });
+});
+
+describe("prompt cache marks on a request built for Anthropic (magpie anthropic.go anthropicBody)", () => {
+  const EPHEMERAL = { type: "ephemeral" };
+  const tools = [
+    { name: "Read", description: "Reads", schema: { type: "object" } },
+    { name: "Bash", description: "Runs", schema: { type: "object" } },
+  ];
+
+  test("the system prompt and the last message's last block that is not thinking are marked; the tools are not", () => {
+    const built = buildAnthropicRequest(
+      {
+        ...request([]),
+        system: "be brief",
+        tools,
+        messages: [
+          { role: "user", parts: [text("hi")] },
+          {
+            role: "assistant",
+            parts: [text("ok"), { kind: "thinking", text: "hmm", signature: "c2ln" }],
+          },
+        ],
+      },
+      "claude-sonnet-4-5",
+    );
+    expect(built.system).toEqual([{ type: "text", text: "be brief", cache_control: EPHEMERAL }]);
+    expect(built.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "ok", cache_control: EPHEMERAL },
+          { type: "thinking", thinking: "hmm", signature: "c2ln" },
+        ],
+      },
+    ]);
+    expect(built.tools).toEqual([
+      { name: "Read", description: "Reads", input_schema: { type: "object" } },
+      { name: "Bash", description: "Runs", input_schema: { type: "object" } },
+    ]);
+  });
+
+  test("without a system prompt the last tool is marked in its place", () => {
+    const built = buildAnthropicRequest(
+      { ...request([{ role: "user", parts: [text("hi")] }]), tools },
+      "claude-sonnet-4-5",
+    );
+    expect(built.system).toBeUndefined();
+    expect(built.tools).toEqual([
+      { name: "Read", description: "Reads", input_schema: { type: "object" } },
+      {
+        name: "Bash",
+        description: "Runs",
+        input_schema: { type: "object" },
+        cache_control: EPHEMERAL,
+      },
+    ]);
+    expect(built.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "hi", cache_control: EPHEMERAL }] },
+    ]);
+  });
+});
+
+describe("thinking on a request built for Anthropic (magpie anthropic.go anthropicBody)", () => {
+  function built(model: string, fields: Partial<GatewayRequest>) {
+    const out = buildAnthropicRequest(
+      { ...request([{ role: "user", parts: [text("hi")] }]), temperature: 0.7, ...fields },
+      model,
+    );
+    return {
+      thinking: out.thinking,
+      output_config: out.output_config,
+      max_tokens: out.max_tokens,
+      temperature: out.temperature,
+    };
+  }
+
+  test("a Claude from 4.6 on thinks adaptively, shows its thinking and takes the effort", () => {
+    expect(built("claude-opus-5-5", { thinking: true, effort: "high" })).toEqual({
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort: "high" },
+      max_tokens: 16_384,
+      temperature: undefined,
+    });
+  });
+
+  test("Opus and Sonnet 4.6 have no xhigh and are asked max", () => {
+    expect(built("claude-sonnet-4-6", { thinking: true, effort: "xhigh" }).output_config).toEqual({
+      effort: "max",
+    });
+    expect(built("claude-opus-4-7", { thinking: true, effort: "xhigh" }).output_config).toEqual({
+      effort: "xhigh",
+    });
+  });
+
+  test("another model is given the effort's budget, with room left for the answer", () => {
+    expect(built("deepseek-chat", { thinking: true, effort: "high" })).toEqual({
+      thinking: { type: "enabled", budget_tokens: 24_000 },
+      output_config: undefined,
+      max_tokens: 28_096,
+      temperature: undefined,
+    });
+    expect(
+      built("claude-sonnet-4-5", { thinking: true, effort: "medium", maxTokens: 8000 }),
+    ).toEqual({
+      thinking: { type: "enabled", budget_tokens: 6976 },
+      output_config: undefined,
+      max_tokens: 8000,
+      temperature: undefined,
+    });
+  });
+
+  test("a cap too small to think in is sent without thinking, at the client's temperature", () => {
+    expect(built("claude-sonnet-4-5", { thinking: true, effort: "low", maxTokens: 1024 })).toEqual({
+      thinking: undefined,
+      output_config: undefined,
+      max_tokens: 1024,
+      temperature: 0.7,
+    });
+  });
+
+  test("reasoning turned off is thinking disabled", () => {
+    expect(built("claude-sonnet-4-5", { thinkOff: true }).thinking).toEqual({ type: "disabled" });
+  });
+
+  test("a translated request that never mentioned thinking says nothing of it, to any model", () => {
+    // 跟 magpie：只有直通才对别家模型补 disabled（fitAnthropicBody）。
+    expect(built("glm-4.6", {}).thinking).toBeUndefined();
+    expect(built("claude-sonnet-4-5", {}).thinking).toBeUndefined();
+  });
+});
+
+describe("magpie's Anthropic image sources (anthropic_image_source_test.go)", () => {
+  const PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  test.each([
+    [
+      "base64",
+      { kind: "image", mediaType: "image/png", data: PNG, url: "" },
+      { type: "base64", media_type: "image/png", data: PNG },
+    ],
+    [
+      "a data URL beside its data",
+      { kind: "image", mediaType: "image/png", data: PNG, url: `data:image/png;base64,${PNG}` },
+      { type: "base64", media_type: "image/png", data: PNG },
+    ],
+    [
+      "url",
+      { kind: "image", mediaType: "", data: "", url: "https://example.test/screenshot.png" },
+      { type: "url", url: "https://example.test/screenshot.png" },
+    ],
+  ] as const)(
+    "%s carries only its own source fields, in the message and in a tool result",
+    (_name, image, source) => {
+      const built = unmarked(
+        buildAnthropicRequest(
+          request([
+            { role: "user", parts: [{ ...image }] },
+            { role: "assistant", parts: [call("A")] },
+            { role: "user", parts: [{ ...result("A", ""), images: [{ ...image }] }] },
+          ]),
+          "claude-sonnet-4-5",
+        ).messages,
+      );
+      expect(built[0]?.content).toEqual([{ type: "image", source }]);
+      expect(built[2]?.content).toEqual([
+        { type: "tool_result", tool_use_id: "A", content: [{ type: "image", source }] },
+      ]);
+    },
+  );
+});
+
+describe("images in a Chat request asked of an Anthropic endpoint", () => {
+  const PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  test("a data URL is an inline image with its media type and any other URL an image by URL", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "look" },
+            { type: "image_url", image_url: { url: `data:image/png;base64,${PNG}` } },
+            { type: "image_url", image_url: { url: "https://example.com/cat.jpg" } },
+          ],
+        },
+      ],
+    });
+    expect(unmarked(buildAnthropicRequest(parsed, "m").messages)).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "look" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: PNG } },
+          { type: "image", source: { type: "url", url: "https://example.com/cat.jpg" } },
+        ],
+      },
+    ]);
+  });
+
+  test("a tool message's images go inside its tool_result beside the text", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [
+        { role: "user", content: "shoot" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_1", type: "function", function: { name: "Shot", arguments: "{}" } },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            { type: "text", text: "taken" },
+            { type: "image_url", image_url: { url: "https://example.com/s.png" } },
+          ],
+        },
+      ],
+    });
+    expect(unmarked(buildAnthropicRequest(parsed, "m").messages)[2]).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "call_1",
+          content: [
+            { type: "text", text: "taken" },
+            { type: "image", source: { type: "url", url: "https://example.com/s.png" } },
+          ],
+        },
+      ],
+    });
+  });
+});
+
+describe("magpie's Chat file parts (attachments_test.go TestChatFilePart)", () => {
+  test("a data URL, bare base64 and a file id each reach Messages as a line naming the attachment", () => {
+    const parsed = parseChatRequest(
+      JSON.parse(`{"model":"m","messages":[{"role":"user","content":[
+		{"type":"text","text":"Transcribe every page."},
+		{"type":"file","file":{"filename":"excerpt.pdf","file_data":"data:application/pdf;base64,UERG"}},
+		{"type":"file","file":{"filename":"notes.pdf","file_data":"QkFSRQ=="}},
+		{"type":"file","file":{"file_id":"file-abc","filename":"x.pdf"}}]}]}`),
+    );
+    expect(parsed.messages[0]?.parts).toEqual([
+      { kind: "text", text: "Transcribe every page." },
+      { kind: "file", mediaType: "application/pdf", data: "UERG", url: "" },
+      { kind: "file", mediaType: "application/pdf", data: "QkFSRQ==", url: "" },
+      { kind: "file", mediaType: "application/pdf", data: "", url: "file-abc" },
+    ]);
+    expect(unmarked(buildAnthropicRequest(parsed, "m").messages)[0]?.content).toEqual([
+      { type: "text", text: "Transcribe every page." },
+      { type: "text", text: "[attachment application/pdf]" },
+      { type: "text", text: "[attachment application/pdf]" },
+      { type: "text", text: "[attachment application/pdf: file-abc]" },
+    ]);
+  });
+});
+
+describe("file attachments in a Chat request asked of an Anthropic endpoint", () => {
+  test("a file part becomes a line saying an attachment was there, by its type and any file id", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "read these" },
+            {
+              type: "file",
+              file: { filename: "a.pdf", file_data: "data:application/pdf;base64,JVBERi0x" },
+            },
+            { type: "file", file: { filename: "notes.txt", file_data: "aGk=" } },
+            { type: "file", file: { filename: "b.pdf", file_id: "file-abc" } },
+            { type: "file", file: { file_id: "file-xyz" } },
+          ],
+        },
+      ],
+    });
+    expect(unmarked(buildAnthropicRequest(parsed, "m").messages)).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "read these" },
+          { type: "text", text: "[attachment application/pdf]" },
+          { type: "text", text: "[attachment text/plain]" },
+          { type: "text", text: "[attachment application/pdf: file-abc]" },
+          { type: "text", text: "[attachment application/octet-stream: file-xyz]" },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("structured output across Anthropic and Chat (magpie format_test.go)", () => {
+  // OpenAI SDK 为文档里的 CalendarEvent 发的 schema：strict，每个属性必填。
+  const CALENDAR = {
+    type: "object",
+    properties: {
+      name: { title: "Name", type: "string" },
+      date: { title: "Date", type: "string" },
+      participants: { items: { type: "string" }, title: "Participants", type: "array" },
+    },
+    required: ["name", "date", "participants"],
+    title: "CalendarEvent",
+    additionalProperties: false,
+  };
+  const ASK = [{ role: "user", content: "Alice and Bob are going to a science fair on Friday." }];
+
+  test("chat.completions.parse to Messages asks for the schema in output_config.format", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [{ role: "system", content: "Extract the event information." }, ...ASK],
+      response_format: {
+        type: "json_schema",
+        json_schema: { schema: CALENDAR, name: "CalendarEvent", strict: true },
+      },
+    });
+    const built = buildAnthropicRequest(parsed, "claude-sonnet-4-5");
+    expect(built.output_config).toEqual({ format: { type: "json_schema", schema: CALENDAR } });
+    expect(built.system).toEqual([
+      {
+        type: "text",
+        text: "Extract the event information.",
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+  });
+
+  test("any JSON object, which Messages can't be asked for, is said in the system prompt", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [{ role: "user", content: "List three colors as JSON." }],
+      response_format: { type: "json_object" },
+    });
+    const built = buildAnthropicRequest(parsed, "claude-sonnet-4-5");
+    expect(built.output_config).toBeUndefined();
+    expect(built.system).toEqual([
+      {
+        type: "text",
+        text: "Respond with a single JSON object and nothing else.",
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+  });
+
+  test("the schema goes beside the effort a Claude thinks at", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      max_tokens: 1024,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "high", format: { type: "json_schema", schema: CALENDAR } },
+      messages: ASK,
+    });
+    expect(buildAnthropicRequest(parsed, "claude-opus-5-5").output_config).toEqual({
+      effort: "high",
+      format: { type: "json_schema", schema: CALENDAR },
+    });
+  });
+
+  test("Anthropic's schema to a Chat upstream is a json_schema response_format named response", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      max_tokens: 1024,
+      messages: ASK,
+      output_config: { format: { type: "json_schema", schema: CALENDAR } },
+    });
+    expect(buildChatRequest(parsed, "gpt-4o-mini").response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "response", schema: CALENDAR },
+    });
+  });
+
+  test("a Chat format goes on to a Chat upstream as it was, and a schema of no shape is any JSON object", () => {
+    const named = parseChatRequest({
+      model: "m",
+      messages: ASK,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "CalendarEvent",
+          description: "An event",
+          schema: CALENDAR,
+          strict: true,
+        },
+      },
+    });
+    expect(buildChatRequest(named, "m").response_format).toEqual({
+      type: "json_schema",
+      json_schema: {
+        name: "CalendarEvent",
+        description: "An event",
+        schema: CALENDAR,
+        strict: true,
+      },
+    });
+    const shapeless = parseChatRequest({
+      model: "m",
+      messages: ASK,
+      response_format: { type: "json_schema", json_schema: { name: "x" } },
+    });
+    expect(buildChatRequest(shapeless, "m").response_format).toEqual({ type: "json_object" });
+    const plain = parseChatRequest({
+      model: "m",
+      messages: ASK,
+      response_format: { type: "text" },
+    });
+    expect(buildChatRequest(plain, "m").response_format).toBeUndefined();
+  });
+});
+
+describe("earlier thinking in a Chat request asked of an Anthropic endpoint (magpie deepseek_anthropic_thinking_test.go)", () => {
+  const chat = {
+    model: "m",
+    reasoning_effort: "high",
+    tools: [
+      {
+        type: "function",
+        function: { name: "get_time", parameters: { type: "object", properties: {} } },
+      },
+    ],
+    messages: [
+      { role: "user", content: "what time is it? twice" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          { id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_1", content: "12:00" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          { id: "call_2", type: "function", function: { name: "get_time", arguments: "{}" } },
+        ],
+        reasoning_content: "Once more.",
+      },
+      { role: "tool", tool_call_id: "call_2", content: "12:01" },
+    ],
+  };
+  const thinking = (model: string) =>
+    unmarked(buildAnthropicRequest(parseChatRequest(chat), model).messages)
+      .flatMap((message) => message.content)
+      .filter((block) => block.type === "thinking");
+
+  test("DeepSeek gets a call with no thinking after a block holding a space, and its own reasoning as unsigned thinking", () => {
+    expect(thinking("deepseek-flash")).toEqual([
+      { type: "thinking", thinking: " " },
+      { type: "thinking", thinking: "Once more." },
+    ]);
+  });
+
+  test("another model is sent no unsigned thinking", () => {
+    expect(thinking("glm-5.2")).toEqual([]);
+  });
+
+  test("Claude's signed thinking goes back to Anthropic as it came", () => {
+    const parsed = parseAnthropicRequest({
+      model: "m",
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Greeting.", signature: "c2ln" },
+            { type: "text", text: "Hello" },
+          ],
+        },
+        { role: "user", content: "again" },
+      ],
+    });
+    expect(unmarked(buildAnthropicRequest(parsed, "claude-sonnet-4-5").messages)[1]).toEqual({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "Greeting.", signature: "c2ln" },
+        { type: "text", text: "Hello" },
+      ],
+    });
+  });
+});
+
+describe("magpie's chat-to-anthropic upstream body (testdata/upstream_bodies)", () => {
+  test("a Chat request with an image, a tool exchange and an effort reaches Messages as magpie builds it", () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const parsed = parseChatRequest(
+      JSON.parse(`{"model":"fake/m1","messages":[{"role":"system","content":"be brief"},{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,${png}"}}]},
+ {"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"Read","arguments":"{\\"path\\":\\"/x\\"}"}}]},
+ {"role":"tool","tool_call_id":"call_1","content":"file \\"body\\"\\n"},{"role":"user","content":"go on é"}],
+ "tools":[{"type":"function","function":{"name":"Read","description":"Reads","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}],
+ "tool_choice":"auto","reasoning_effort":"high","temperature":1,"stop":["\\n\\n"],"stream":false,"user":"u"}`),
+    );
+    const built = buildAnthropicRequest({ ...parsed, stream: true }, "m1");
+    // magpie 逐字节比对（Go 的键按字母序）；这里按值比对。
+    expect(built).toEqual(
+      JSON.parse(
+        `{"max_tokens":28096,"messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"${png}"}}]},{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"Read","input":{"path":"/x"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"file \\"body\\"\\n"},{"type":"text","text":"go on é","cache_control":{"type":"ephemeral"}}]}],"model":"m1","stop_sequences":["\\n\\n"],"stream":true,"system":[{"type":"text","text":"be brief","cache_control":{"type":"ephemeral"}}],"thinking":{"budget_tokens":24000,"type":"enabled"},"tools":[{"description":"Reads","input_schema":{"type":"object","properties":{"path":{"type":"string"}}},"name":"Read"}]}`,
+      ),
     );
   });
 });

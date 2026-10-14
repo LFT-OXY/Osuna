@@ -8,14 +8,23 @@ import {
   RequestShapeError,
   TOOL_RESULT_RECEIVED,
   argsOf,
+  attachmentText,
+  dataUrl,
   effortOf,
+  imagePart,
   joinSplitCalls,
   newId,
+  NO_REASONING,
+  openAIFormat,
   parseArgs,
   promptTokens,
+  replaysThinking,
+  stringOf,
   stringOrText,
   textOf,
+  toolOutput,
   type EmitEvent,
+  type Format,
   type GatewayRequest,
   type Message,
   type Part,
@@ -24,6 +33,7 @@ import {
   type StreamEvent,
   type Tool,
   type ToolChoice,
+  type ToolResultPart,
   type Usage,
 } from "./ir.js";
 import { sseEvent } from "./sse.js";
@@ -72,6 +82,7 @@ export function parseChatRequest(body: unknown): GatewayRequest {
       body.reasoning_effort.trim().toLowerCase() === "none",
     parallel: typeof body.parallel_tool_calls === "boolean" ? body.parallel_tool_calls : null,
     metadata: null,
+    format: openAIFormat(body.response_format),
   };
 }
 
@@ -100,7 +111,7 @@ function parseChatMessage(message: Record<string, unknown>): Message | null {
           {
             kind: "tool_result",
             callId: typeof message.tool_call_id === "string" ? message.tool_call_id : "",
-            text: stringOrText(message.content),
+            ...toolOutput(message.content),
             isError: false,
           },
         ],
@@ -120,15 +131,72 @@ function chatToolCall(call: Record<string, unknown>): Part {
   };
 }
 
-/** 字符串，或分段数组里的文字段。 */
+/** 字符串，或分段数组里的文字、图片与文件段。 */
 function chatParts(content: unknown): Part[] {
   if (typeof content === "string") return content === "" ? [] : [{ kind: "text", text: content }];
   if (!Array.isArray(content)) return [];
-  return content.flatMap((item): Part[] =>
-    isRecord(item) && item.type === "text" && typeof item.text === "string"
-      ? [{ kind: "text", text: item.text }]
-      : [],
-  );
+  return content.flatMap((item): Part[] => {
+    if (!isRecord(item)) return [];
+    if (item.type === "text" && typeof item.text === "string") {
+      return [{ kind: "text", text: item.text }];
+    }
+    if (item.type === "image_url" && isRecord(item.image_url)) {
+      const url = item.image_url.url;
+      return typeof url === "string" ? [imagePart(url)] : [];
+    }
+    if (item.type === "file" && isRecord(item.file)) return chatFile(item.file);
+    return [];
+  });
+}
+
+// 按扩展名认文件段常见的类型（magpie 用系统的类型表）；认不出的算二进制。
+const FILE_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".csv": "text/csv",
+  ".tsv": "text/tab-separated-values",
+  ".json": "application/json",
+  ".xml": "application/xml",
+  ".yaml": "application/yaml",
+  ".yml": "application/yaml",
+  ".html": "text/html",
+  ".rtf": "application/rtf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".zip": "application/zip",
+};
+
+/**
+ * Chat 的文件段（PDF 之类）：别的协议装不下，发出时换成一句占位文字，免得模型当作读过了来回答。
+ * 内容是 data: 地址或光秃秃的 base64；只给了 OpenAI 文件 id 的记下那个 id。
+ */
+function chatFile(file: Record<string, unknown>): Part[] {
+  const data = stringOf(file.file_data);
+  const name = stringOf(file.filename).toLowerCase();
+  const byName = FILE_TYPES[name.slice(name.lastIndexOf("."))] ?? "";
+  const fallback = byName || "application/octet-stream";
+  if (data.startsWith("data:")) {
+    const inline = imagePart(data);
+    if (inline.data !== "") {
+      return [
+        { kind: "file", mediaType: inline.mediaType || fallback, data: inline.data, url: "" },
+      ];
+    }
+  } else if (data !== "") {
+    return [{ kind: "file", mediaType: fallback, data, url: "" }];
+  }
+  const id = stringOf(file.file_id);
+  return id === "" ? [] : [{ kind: "file", mediaType: fallback, data: "", url: id }];
 }
 
 function parseChatTools(tools: unknown): Tool[] {
@@ -162,10 +230,7 @@ function parseStop(stop: unknown): string[] {
 export function buildChatRequest(request: GatewayRequest, model: string): Record<string, unknown> {
   const messages: ChatMessage[] = [];
   if (request.system !== "") messages.push({ role: "system", content: request.system });
-  for (const message of joinSplitCalls(request.messages)) {
-    if (message.role === "assistant") messages.push(chatAssistant(message));
-    else messages.push(...chatUser(message));
-  }
+  messages.push(...chatMessages({ messages: request.messages, replay: replaysThinking(model) }));
   const out: Record<string, unknown> = {
     model,
     messages: pairToolMessages(messages),
@@ -179,7 +244,17 @@ export function buildChatRequest(request: GatewayRequest, model: string): Record
   const effort = chatEffort(request);
   if (effort) out.reasoning_effort = effort;
   if (request.tools.length > 0) Object.assign(out, chatTools(request));
+  if (request.format) out.response_format = chatFormat(request.format);
   return out;
+}
+
+function chatFormat(format: Format): Record<string, unknown> {
+  if (format.type === "json_object") return { type: "json_object" };
+  const spec: Record<string, unknown> = { name: format.name };
+  if (format.description !== "") spec.description = format.description;
+  spec.schema = format.schema;
+  if (format.strict !== null) spec.strict = format.strict;
+  return { type: "json_schema", json_schema: spec };
 }
 
 /** 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。 */
@@ -207,20 +282,109 @@ function chatAssistant(message: Message): ChatMessage {
   return out;
 }
 
-/** 一轮的工具结果排在它自己的文字前面：tool 消息必须紧跟发起调用的 assistant 消息（Kimi 否则 400）。 */
-function chatUser(message: Message): ChatMessage[] {
-  const tools: ChatMessage[] = [];
-  let text = "";
-  let hasText = false;
+type ChatContent = Record<string, unknown>;
+
+/**
+ * 一轮的工具结果排在它自己的文字前面：tool 消息必须紧跟发起调用的 assistant 消息（Kimi 否则 400）。
+ * tool 消息只装文字：工具返回的图片放进紧接着的 user 消息，有用户自己的话就放在它开头
+ * （有的模型的对话模板不收两条相邻的 user 消息）。
+ * replay：上游要回放推理（DeepSeek），每轮的推理写进 reasoning_content；调用工具、或回答工具结果的一轮
+ * 没有推理的写一个空格，否则它整个请求都拒。
+ */
+function chatMessages(input: { messages: Message[]; replay: boolean }): ChatMessage[] {
+  const { replay } = input;
+  const out: ChatMessage[] = [];
+  const names = new Map<string, string>();
+  let seen: ChatContent[] = [];
+  // 最后发出的是工具结果，后面没有用户自己的话。
+  let afterTool = false;
+  for (const message of joinSplitCalls(input.messages)) {
+    if (message.role === "assistant") {
+      if (seen.length > 0) out.push({ role: "user", content: seen });
+      seen = [];
+      const assistant = chatAssistant(message);
+      let called = false;
+      for (const part of message.parts) {
+        if (part.kind !== "tool_call") continue;
+        called = true;
+        names.set(part.id, part.name);
+      }
+      const think = message.parts
+        .map((part) => (part.kind === "thinking" ? part.text : ""))
+        .join("");
+      if (replay && think !== "") assistant.reasoning_content = think;
+      else if (replay && (called || afterTool)) assistant.reasoning_content = NO_REASONING;
+      afterTool = false;
+      out.push(assistant);
+      continue;
+    }
+    const turn = chatUserTurn(message, names);
+    out.push(...turn.tools);
+    seen.push(...turn.images);
+    afterTool = turn.tools.length > 0 && turn.content.length === 0 && seen.length === 0;
+    if (turn.content.length === 0) continue;
+    const content = [...seen, ...turn.content];
+    const plain = turn.plain && seen.length === 0;
+    seen = [];
+    out.push({
+      role: "user",
+      content: plain ? content.map((item) => String(item.text)).join("") : content,
+    });
+  }
+  if (seen.length > 0) out.push({ role: "user", content: seen });
+  return out;
+}
+
+interface ChatUserTurn {
+  tools: ChatMessage[];
+  content: ChatContent[];
+  // 只有文字：写成一个字符串。
+  plain: boolean;
+  // 工具返回的图片，连同说明是谁的那句话。
+  images: ChatContent[];
+}
+
+function chatUserTurn(message: Message, names: Map<string, string>): ChatUserTurn {
+  const turn: ChatUserTurn = { tools: [], content: [], plain: true, images: [] };
   for (const part of message.parts) {
-    if (part.kind === "tool_result") {
-      tools.push({ role: "tool", tool_call_id: part.callId, content: part.text });
-    } else if (part.kind === "text") {
-      text += part.text;
-      hasText = true;
+    switch (part.kind) {
+      case "text":
+        turn.content.push({ type: "text", text: part.text });
+        break;
+      case "file":
+        turn.content.push({ type: "text", text: attachmentText(part) });
+        break;
+      case "image":
+        turn.plain = false;
+        turn.content.push({ type: "image_url", image_url: { url: dataUrl(part) } });
+        break;
+      case "tool_result":
+        turn.tools.push({ role: "tool", tool_call_id: part.callId, content: withImageNote(part) });
+        turn.images.push(...seenImages(part, names.get(part.callId)));
+        break;
+      default:
     }
   }
-  return hasText ? [...tools, { role: "user", content: text }] : tools;
+  return turn;
+}
+
+function withImageNote(part: ToolResultPart): string {
+  const count = part.images.length;
+  if (count === 0) return part.text;
+  const note =
+    count === 1
+      ? "[The tool returned an image; it follows in the next message.]"
+      : `[The tool returned ${count} images; they follow in the next message.]`;
+  return part.text.trim() === "" ? note : `${part.text}\n\n${note}`;
+}
+
+function seenImages(part: ToolResultPart, name: string | undefined): ChatContent[] {
+  if (part.images.length === 0) return [];
+  const of = name ? `${name} (tool call ${part.callId})` : `tool call ${part.callId}`;
+  return [
+    { type: "text", text: `[From the result of ${of}:]` },
+    ...part.images.map((image) => ({ type: "image_url", image_url: { url: dataUrl(image) } })),
+  ];
 }
 
 function chatTools(request: GatewayRequest): Record<string, unknown> {
@@ -378,15 +542,24 @@ function stopToChat(stop: StopReason): string {
   return reasons[stop];
 }
 
+// 回复文首一段思考的起止标签：没装推理解析的开源模型、MiniMax 用 <think>，Gemini 用 <thought>。
+const THOUGHT_TAGS: Record<string, string> = { "<think>": "</think>", "<thought>": "</thought>" };
+
 /**
  * Chat 流 → 中间事件。工具调用按 index 分片拼接，同一 id 重复出现（有的中转站每片都带）仍是同一个调用；
- * 只认第一个读得出 index 的 choice，读不出 index 的片不选也不拒。
+ * 只认第一个读得出 index 的 choice，读不出 index 的片不选也不拒。文首的 <think> / <thought> 段算推理。
  */
 export class ChatDecoder {
   private started = false;
   private tool = -1;
   private toolId = "";
   private choice: number | null = null;
+  // 还可能是标签开头、先扣着的文字。
+  private lead = "";
+  // 正在标签里：这是收尾的标签。
+  private thoughtClose: string | null = null;
+  // 正文已经开始，不再找标签。
+  private past = false;
 
   decode(data: string, emit: EmitEvent): void {
     if (data.trim() === "[DONE]") return;
@@ -433,13 +606,68 @@ export class ChatDecoder {
     );
     if (think) emit({ kind: "think", text: think });
     if (typeof delta.content === "string" && delta.content !== "") {
-      emit({ kind: "text", text: delta.content });
+      this.text(delta.content, emit);
     }
     const calls = Array.isArray(delta.tool_calls) ? delta.tool_calls.filter(isRecord) : [];
+    if (calls.length > 0) this.end(emit);
     calls.forEach((call, position) => this.toolCall(call, position, emit));
     if (typeof choice.finish_reason === "string" && choice.finish_reason !== "") {
+      this.end(emit);
       emit({ kind: "stop", stop: stopFromChat(choice.finish_reason) });
     }
+  }
+
+  /** 文字一段段到，标签可能被切开：可能是标签开头的先扣着，标签里的算推理。 */
+  private text(piece: string, emit: EmitEvent): void {
+    let rest: string | null = piece;
+    if (!this.past && this.thoughtClose === null) rest = this.openTag(piece);
+    if (rest !== null && this.thoughtClose !== null) {
+      rest = this.inThought({ piece: rest, close: this.thoughtClose, emit });
+    }
+    if (rest) emit({ kind: "text", text: rest });
+  }
+
+  /** 文首还没定：攒着看是不是开标签。返回标签后（或确定不是标签时）的文字，还要再等时为 null。 */
+  private openTag(piece: string): string | null {
+    this.lead += piece;
+    const lead = this.lead.replace(/^[ \n]+/, "");
+    const opens = Object.keys(THOUGHT_TAGS);
+    if (opens.some((open) => lead.length < open.length && open.startsWith(lead))) return null;
+    const open = opens.find((tag) => lead.startsWith(tag));
+    const held = this.lead;
+    this.lead = "";
+    if (!open) {
+      this.past = true;
+      return held;
+    }
+    this.thoughtClose = THOUGHT_TAGS[open]!;
+    return lead.slice(open.length);
+  }
+
+  /** 标签里的是推理；返回收尾标签之后的正文，标签还没收尾时为 null。 */
+  private inThought(input: { piece: string; close: string; emit: EmitEvent }): string | null {
+    const { close, emit } = input;
+    const text = this.lead + input.piece;
+    this.lead = "";
+    const at = text.indexOf(close);
+    if (at === -1) {
+      // 结尾可能是收尾标签的开头，先扣着。
+      const cut = text.length - partialTagAtEnd({ text, tag: close });
+      if (cut > 0) emit({ kind: "think", text: text.slice(0, cut) });
+      this.lead = text.slice(cut);
+      return null;
+    }
+    if (at > 0) emit({ kind: "think", text: text.slice(0, at) });
+    this.thoughtClose = null;
+    this.past = true;
+    return text.slice(at + close.length).replace(/^\n+/, "");
+  }
+
+  /** 交出为看标签而扣着的文字：流结束、或接着是工具调用时。 */
+  end(emit: EmitEvent): void {
+    if (this.lead === "") return;
+    emit({ kind: this.thoughtClose === null ? "text" : "think", text: this.lead });
+    this.lead = "";
   }
 
   /** 新 index 或新 id 开始下一个调用；同一 index 的片、或重复已开调用的 id，接在它后面。 */
@@ -456,6 +684,15 @@ export class ChatDecoder {
       emit({ kind: "tool_args", text: fn.arguments });
     }
   }
+}
+
+/** text 结尾有几个字符是 tag 的开头。 */
+function partialTagAtEnd(input: { text: string; tag: string }): number {
+  const { text, tag } = input;
+  for (let length = Math.min(tag.length - 1, text.length); length > 0; length--) {
+    if (text.endsWith(tag.slice(0, length))) return length;
+  }
+  return 0;
 }
 
 /** 数字或数字字符串的 index；没有、null、读不懂的不算。1.0 与 1 是同一个。 */

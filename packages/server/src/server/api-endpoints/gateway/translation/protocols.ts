@@ -22,6 +22,8 @@ import type { EmitEvent, GatewayRequest, Reply, StreamEvent, Usage } from "./ir.
 
 export interface StreamDecoder {
   decode(data: string, emit: EmitEvent): void;
+  // 流结束：交出还扣着的内容。
+  end?(emit: EmitEvent): void;
 }
 
 export interface StreamEncoder {

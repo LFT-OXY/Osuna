@@ -116,7 +116,7 @@ function storedEndpoint(input: {
 
 /**
  * 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。
- * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3。
+ * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3 与 qwen3-coder。
  */
 async function start(
   options: {
@@ -161,7 +161,7 @@ async function start(
                 slug: "relay-c",
                 name: "Relay C",
                 baseUrls: [{ format: "openai_chat", url: `${options.chatUpstream.url}/v1` }],
-                models: ["deepseek-v3"],
+                models: ["deepseek-v3", "qwen3-coder"],
               }),
             ]
           : []),
@@ -261,9 +261,11 @@ describe("who may use the gateway", () => {
   test("the daemon password does not apply and bodies over 100 kb go through", async () => {
     const upstream = await startUpstream();
     const { gateway } = await start({ upstreamA: upstream, password: "daemon-secret" });
+    // 带上思考设置：发给非 Claude 模型时请求体就不用改，到达上游的与发出的逐字节一样。
     const body = JSON.stringify({
       model: "kimi-k2",
       max_tokens: 10,
+      thinking: { type: "enabled", budget_tokens: 1024 },
       messages: [{ role: "user", content: "x".repeat(300_000) }],
     });
 
@@ -339,8 +341,9 @@ describe("passing requests through to an endpoint that speaks the agent's format
       });
     };
     const { gateway } = await start({ upstreamA: upstream });
-    // 空格、键序与 cache_control 都要原样到达上游。
+    // 空格、键序与 cache_control 都要原样到达上游；带上思考设置，非 Claude 模型也不用改。
     const body = `{"model":  "relay-a/kimi-k2", "stream": true,"max_tokens":32,
+      "thinking":{"type":"enabled","budget_tokens":1024},
       "system":[{"type":"text","text":"sys","cache_control":{"type":"ephemeral"}}],
       "messages":[{"role":"user","content":"hi"}]}`;
 
@@ -451,10 +454,12 @@ describe("passing requests through to an endpoint that speaks the agent's format
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    // 映射到的不是 Claude：请求没提思考，告诉它思考关着。
     expect(JSON.parse(upstreamB.requests[0]!.body.toString())).toEqual({
       model: "glm-4.6",
       max_tokens: 1,
       messages: [],
+      thinking: { type: "disabled" },
     });
   });
 
@@ -603,6 +608,8 @@ describe("translating requests for an endpoint that speaks another format", () =
               function: { name: "Bash", arguments: '{"command":"pwd"}' },
             },
           ],
+          // DeepSeek 要每个工具轮都带推理，没有的给一个空格。
+          reasoning_content: " ",
         },
         { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
         { role: "user", content: "now list them" },
@@ -705,6 +712,7 @@ describe("translating requests for an endpoint that speaks another format", () =
                 function: { name: "Bash", arguments: '{"command":"pwd"}' },
               },
             ],
+            reasoning_content: " ",
           },
           { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
           { role: "user", content: "now list them" },
@@ -804,6 +812,97 @@ describe("translating requests for an endpoint that speaks another format", () =
     // 「1234」「12345678」「Bash」「{}」共 18 字节，/ 4 取整。
     expect(await estimated.json()).toEqual({ input_tokens: 4 });
     expect(chat.requests).toHaveLength(0);
+  });
+});
+
+describe("thinking between Claude Code and an endpoint", () => {
+  test("a Chat endpoint's reasoning, as a field or a leading <think> block, reaches Claude Code as thinking as it streams", async () => {
+    const chat = await startUpstream();
+    chat.respond = (request, res) => {
+      const tagged = JSON.parse(request.body.toString()).model === "qwen3-coder";
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const deltas = tagged
+        ? [{ content: "<think>Look " }, { content: "first.</think>\n\nDone." }]
+        : [{ reasoning_content: "Look " }, { reasoning_content: "first." }, { content: "Done." }];
+      for (const delta of deltas) {
+        res.write(`data: ${JSON.stringify({ id: "c1", choices: [{ index: 0, delta }] })}\n\n`);
+      }
+      res.end(
+        `data: ${JSON.stringify({ id: "c1", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+      );
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+    const ask = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 1024,
+          stream: true,
+          thinking: { type: "enabled", budget_tokens: 1024 },
+          messages: [{ role: "user", content: "go" }],
+        }),
+      );
+      return sseData(await response.text()).filter((event) =>
+        String((event as { type: string }).type).startsWith("content_block_"),
+      );
+    };
+
+    for (const model of ["deepseek-v3", "qwen3-coder"]) {
+      const blocks = await ask(model);
+      expect(
+        blocks.filter((event) => (event as { type: string }).type === "content_block_start"),
+      ).toEqual([
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        },
+        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+      ]);
+      const said = (kind: string) =>
+        blocks
+          .map((event) => (event as { delta?: Record<string, string> }).delta)
+          .filter((delta) => delta?.type === kind)
+          .map((delta) => delta![kind === "thinking_delta" ? "thinking" : "text"])
+          .join("");
+      expect(said("thinking_delta")).toBe("Look first.");
+      expect(said("text_delta")).toBe("Done.");
+    }
+  });
+
+  test("Claude's signed thinking from earlier turns is left out for a Chat endpoint and passed through to an Anthropic one", async () => {
+    const upstream = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ upstreamA: upstream, chatUpstream: chat });
+    const conversation = (model: string) => ({
+      model,
+      max_tokens: 2048,
+      thinking: { type: "enabled", budget_tokens: 1024 },
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "A greeting.", signature: "EqQBCkgIBxAB" },
+            { type: "text", text: "Hello" },
+          ],
+        },
+        { role: "user", content: "again" },
+      ],
+    });
+
+    await (
+      await fetch(`${gateway}/v1/messages`, claudeRequest(conversation("qwen3-coder")))
+    ).text();
+    await (await fetch(`${gateway}/v1/messages`, claudeRequest(conversation("kimi-k2")))).text();
+
+    const toChat = JSON.parse(chat.requests[0]!.body.toString()) as { messages: unknown[] };
+    expect(toChat.messages[1]).toEqual({ role: "assistant", content: "Hello" });
+    expect(JSON.parse(upstream.requests[0]!.body.toString()).messages[1]).toEqual(
+      conversation("kimi-k2").messages[1],
+    );
   });
 });
 

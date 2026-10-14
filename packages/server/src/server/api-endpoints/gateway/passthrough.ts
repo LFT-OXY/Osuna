@@ -1,9 +1,14 @@
+// fitAnthropicBody 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { StoredApiEndpoint } from "../store.js";
-import { describeNetworkError } from "../upstream-http.js";
+import { describeNetworkError, isRecord, parseJson } from "../upstream-http.js";
+import { isAnthropicModel, thinkingOnToolTurns } from "./translation/anthropic.js";
+import { replaysThinking } from "./translation/ir.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import {
   ANSWERED_BY_HEADER,
@@ -15,7 +20,8 @@ import {
 } from "./upstream-call.js";
 
 /*
- * 同协议直通的一次尝试：请求体除模型名外逐字节原样发给上游，认证头换成这家的真实 key。
+ * 同协议直通的一次尝试：请求体除模型名（与发给别家模型的 Anthropic 请求的几处思考字段）外
+ * 逐字节原样发给上游，认证头换成这家的真实 key。
  * 开口之后边收边发，上游断流就断开 Agent 的连接，由 CLI 自己报错。
  */
 
@@ -68,10 +74,7 @@ export async function attemptEndpoint(input: {
     suffix: input.pathSuffix,
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
-  const body =
-    input.upstreamModel === input.requestedModel
-      ? input.body
-      : Buffer.from(replaceModel(input.body.toString("utf8"), input.upstreamModel));
+  const body = upstreamBody(input);
 
   const opened = await openUpstream({
     res,
@@ -148,9 +151,55 @@ class CacheReadTap {
   }
 }
 
+/** 发给上游的请求体：换模型名；Anthropic 的对话请求再按上游模型改几处（count_tokens 不改）。 */
+function upstreamBody(input: {
+  format: ApiEndpointRequestFormat;
+  pathSuffix?: string;
+  body: Buffer;
+  requestedModel: string;
+  upstreamModel: string;
+}): Buffer {
+  const fits = input.format === "anthropic_messages" && input.pathSuffix === undefined;
+  if (input.upstreamModel === input.requestedModel && !fits) return input.body;
+  let text = input.body.toString("utf8");
+  if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
+  if (fits) text = fitAnthropicBody(text, input.upstreamModel);
+  return Buffer.from(text);
+}
+
 /** 只替换顶层 model 的值，其余字节不动（键序、空白、cache_control 都原样）。 */
 function replaceModel(text: string, model: string): string {
   return applyEdits(text, modify(text, ["model"], model, {}));
+}
+
+/**
+ * 直通给 Anthropic 地址、上游模型不是 Claude 时改的几处，只动这几个字段，其余字节原样：
+ * Claude Code 认不出的模型名会带上自适应思考与 output_config.effort，别家不认，去掉后由模型按自己的默认想；
+ * 请求根本没提思考的（起标题之类的小请求）说思考关着：别家默认会想，白花 token。
+ * DeepSeek 还要每个工具轮都带思考块（thinkingOnToolTurns）。
+ */
+export function fitAnthropicBody(text: string, model: string): string {
+  if (isAnthropicModel(model)) return text;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  let out = text;
+  const edit = (path: (string | number)[], value: unknown) => {
+    out = applyEdits(out, modify(out, path, value, {}));
+  };
+  const thinking = isRecord(body.thinking) ? body.thinking : null;
+  if (body.thinking === undefined) edit(["thinking"], { type: "disabled" });
+  else if (thinking?.type === "adaptive") edit(["thinking"], undefined);
+  const config = isRecord(body.output_config) ? body.output_config : null;
+  if (config && config.effort !== undefined) {
+    const rest = Object.keys(config).filter((key) => key !== "effort");
+    edit(rest.length === 0 ? ["output_config"] : ["output_config", "effort"], undefined);
+  }
+  if (replaysThinking(model) && Array.isArray(body.messages)) {
+    for (const [index, content] of thinkingOnToolTurns(body.messages)) {
+      edit(["messages", index, "content"], content);
+    }
+  }
+  return out;
 }
 
 function upstreamHeaders(input: {

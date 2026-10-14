@@ -124,9 +124,9 @@ daemon 内置一个本机中转站替两个 CLI 转发请求：CLI 配置文件�
 
 - R-C1 三种协议经 server 内部的中间格式互转，每种协议一个文件负责解析请求、构建请求、解码流、编码流、渲染整份回复；上游一律流式请求，Agent 未要流式时攒齐再回；回复里的模型名回 Agent 请求时写的名字。中间格式类型不进 `packages/protocol`。
 - R-C2 支持：文字、工具调用与 `tool_choice`、三协议的工具配对修补（Responses 直通前也做）、本轮思考实时翻译、base64 与 URL 图片（URL 原样转发不下载，Responses 只给 `file_id` 的报 400）、结束原因与用量映射、结构化输出字段互转（Anthropic 无 schema 的改写进 system）、翻成 Anthropic 时三处自动 `cache_control`、`count_tokens` 非 Anthropic 上游本地估算（字节 / 4）。
-- R-C3 历史思考只回原厂：Anthropic 签名块只回 Anthropic、Responses 加密推理只回 Responses、无签名文字丢弃；模型名含 `deepseek` 时按 magpie 补回放。解码 Chat 回复时文首 `<think>` / `<thought>` 拆成思考块。发给非 Claude 模型的 Anthropic 请求剥掉 adaptive thinking / effort，未提 `thinking` 时补 disabled。
+- R-C3 历史思考只回原厂：Anthropic 签名块只回 Anthropic、Responses 加密推理只回 Responses、无签名文字丢弃；模型名含 `deepseek` 时按 magpie 补回放（直通与翻译两条路都做）。解码 Chat 回复时文首 `<think>` / `<thought>` 拆成思考块。直通发给非 Claude 模型的 Anthropic 请求剥掉 adaptive thinking 与 `output_config.effort`，交给模型自己的默认；Agent 原请求根本没提 `thinking` 时补 disabled（06 票用户决定）。翻译成 Anthropic 的请求跟 magpie 不补 disabled。
 - R-C4 文件附件照 magpie：Anthropic `document` 与 Responses `input_file` 丢弃，Chat `file` 换成 `[attachment <mime>]` 占位文字。联网搜索：翻译时剔除服务端工具、解码时跳过 `server_tool_use`，不代搜。
-- R-C5 同协议直通只换模型名与认证、读用量与错误、保留客户端 `cache_control`；不做按厂商名的改写，不做「记住被拒」重发；上游 400 原文按 R-B12 包装交给 Agent。
+- R-C5 同协议直通只换模型名与认证、读用量与错误、保留客户端 `cache_control`；不做按厂商名的改写（例外：R-C3 里发给非 Claude 模型的思考字段与 DeepSeek 回放，只用 jsonc 改这几处），不做「记住被拒」重发；上游 400 原文按 R-B12 包装交给 Agent。
 - R-C6 中转站代码作为 server 现有「第三方接口」模块下的一个 gateway 子模块，内部分协议转换、路由两部分与一个入口；借鉴 magpie 的文件头写 MIT 短式并指向根目录 `THIRD_PARTY_NOTICES`。
 
 ### D. 会话与提示（07 票）
@@ -186,7 +186,7 @@ daemon 内置一个本机中转站替两个 CLI 转发请求：CLI 配置文件�
 
 - [ ] 从 magpie 搬来的 JSON 夹具全部通过：三协议互转（请求与流式回复）、工具配对修补、思考块、`<think>` 拆解、图片、文件占位、结构化输出、`cache_control`、stop / usage 映射、DeepSeek 回放。夹具文件头与 `THIRD_PARTY_NOTICES` 注明来源。
 - [ ] 端到端：Claude Code 协议请求经假 OpenAI Chat 上游与假 Responses 上游各回一份流式回复；Codex 协议请求经假 Anthropic 上游回一份流式回复；非流式请求攒齐后一次返回；`count_tokens` 对非 Anthropic 上游返回本地估算。
-- [ ] 直通请求只改模型名与认证头，其它字段（含客户端 `cache_control`）与原请求逐字节一致；上游 400 原文按 R-B12 包装返回。（e2e）
+- [ ] 直通请求只改模型名与认证头（发给非 Claude 模型的 Anthropic 请求另按 R-C3 改思考字段），其它字段（含客户端 `cache_control`）与原请求逐字节一致；上游 400 原文按 R-B12 包装返回。（e2e）
 
 ### 会话与提示
 
