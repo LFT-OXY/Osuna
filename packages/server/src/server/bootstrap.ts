@@ -157,6 +157,7 @@ import {
   createApiEndpointGateway,
   type ApiEndpointGatewayOverrides,
 } from "./api-endpoints/gateway/gateway.js";
+import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
@@ -819,11 +820,14 @@ export async function createPaseoDaemon(
 
   // Local CLIs reach third-party endpoints through this; gated by loopback and its own token,
   // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
+  // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
+  const apiEndpointCooldowns = new EndpointCooldowns({ logger });
   app.use(
     API_ENDPOINT_GATEWAY_PATH,
     createApiEndpointGateway({
       paseoHome: config.paseoHome,
       logger,
+      cooldowns: apiEndpointCooldowns,
       overrides: config.apiEndpoints,
     }),
   );
@@ -972,6 +976,7 @@ export async function createPaseoDaemon(
   const apiEndpointService = new ApiEndpointService({
     paseoHome: config.paseoHome,
     logger,
+    cooldowns: apiEndpointCooldowns,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })

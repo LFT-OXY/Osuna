@@ -33,21 +33,29 @@ const beta = endpoint({
   models: [{ id: "kimi-k2" }, { id: "glm-4.6" }, { id: "moonshotai/kimi-k2" }],
 });
 
+/** 期望的候选：第一家是用户选的，后面是有同名模型、开着的其他接口。 */
+function route(...candidates: [StoredApiEndpoint, string][]) {
+  return {
+    ok: true,
+    candidates: candidates.map(([target, upstreamModel]) => ({ endpoint: target, upstreamModel })),
+  };
+}
+
 describe("routing a requested model name to an endpoint", () => {
   test("slug/model goes straight to that endpoint and sends the bare model name", () => {
     expect(
       resolveGatewayRoute({ state: state([alpha, beta]), agent: "claude", model: "beta/kimi-k2" }),
-    ).toEqual({ ok: true, endpoint: beta, upstreamModel: "kimi-k2" });
+    ).toEqual(route([beta, "kimi-k2"], [alpha, "kimi-k2"]));
   });
 
   test("a bare model name goes to the earliest enabled endpoint that selected it", () => {
     const closedAlpha = { ...alpha, enabled: false };
     expect(
       resolveGatewayRoute({ state: state([alpha, beta]), agent: "codex", model: "kimi-k2" }),
-    ).toEqual({ ok: true, endpoint: alpha, upstreamModel: "kimi-k2" });
+    ).toEqual(route([alpha, "kimi-k2"], [beta, "kimi-k2"]));
     expect(
       resolveGatewayRoute({ state: state([closedAlpha, beta]), agent: "codex", model: "kimi-k2" }),
-    ).toEqual({ ok: true, endpoint: beta, upstreamModel: "kimi-k2" });
+    ).toEqual(route([beta, "kimi-k2"]));
   });
 
   test("a bare model name that itself contains a slash is matched whole", () => {
@@ -57,7 +65,7 @@ describe("routing a requested model name to an endpoint", () => {
         agent: "codex",
         model: "moonshotai/kimi-k2",
       }),
-    ).toEqual({ ok: true, endpoint: beta, upstreamModel: "moonshotai/kimi-k2" });
+    ).toEqual(route([beta, "moonshotai/kimi-k2"]));
   });
 
   test("a Claude tier name is translated by the first endpoint that maps that tier", () => {
@@ -68,7 +76,7 @@ describe("routing a requested model name to an endpoint", () => {
         agent: "claude",
         model: "claude-haiku-4-5-20251001",
       }),
-    ).toEqual({ ok: true, endpoint: mapped, upstreamModel: "glm-4.6" });
+    ).toEqual(route([mapped, "glm-4.6"]));
   });
 
   test("a selected Claude model is sent as is even when a tier mapping exists elsewhere", () => {
@@ -84,7 +92,7 @@ describe("routing a requested model name to an endpoint", () => {
         agent: "claude",
         model: "claude-sonnet-4-5",
       }),
-    ).toEqual({ ok: true, endpoint: selectsSonnet, upstreamModel: "claude-sonnet-4-5" });
+    ).toEqual(route([selectsSonnet, "claude-sonnet-4-5"]));
   });
 
   test("Codex requests never go through the Claude tier mapping", () => {
@@ -109,10 +117,26 @@ describe("routing a requested model name to an endpoint", () => {
         agent: "claude",
         model: "beta/kimi-k2",
       }),
-    ).toEqual({ ok: true, endpoint: alpha, upstreamModel: "kimi-k2" });
+    ).toEqual(route([alpha, "kimi-k2"]));
     expect(
       resolveGatewayRoute({ state: state([alpha]), agent: "claude", model: "gone/kimi-k2" }),
-    ).toEqual({ ok: true, endpoint: alpha, upstreamModel: "kimi-k2" });
+    ).toEqual(route([alpha, "kimi-k2"]));
+  });
+
+  test("the same model at the other enabled endpoints follows, in creation order", () => {
+    const gamma = endpoint({ id: "ep_c", slug: "gamma", models: [{ id: "kimi-k2" }] });
+    const closedGamma = { ...gamma, id: "ep_d", slug: "delta", enabled: false };
+    expect(
+      resolveGatewayRoute({
+        state: state([alpha, closedGamma, beta, gamma]),
+        agent: "claude",
+        model: "gamma/kimi-k2",
+      }),
+    ).toEqual(route([gamma, "kimi-k2"], [alpha, "kimi-k2"], [beta, "kimi-k2"]));
+    const mapped = { ...alpha, modelMapping: { haiku: "glm-4.6" } };
+    expect(
+      resolveGatewayRoute({ state: state([mapped, beta]), agent: "claude", model: "haiku" }),
+    ).toEqual(route([mapped, "glm-4.6"], [beta, "glm-4.6"]));
   });
 
   test("a model no enabled endpoint offers is an error", () => {

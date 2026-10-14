@@ -73,6 +73,18 @@ export const ApiEndpointAgentSettingsSchema = z.object({
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
+/**
+ * 自动切换给接口的状态。`state` 是字符串：cooling_down（冷却中，`until` 是恢复时刻）、
+ * needs_check（key 无效或无权限，`until` 为 null，编辑这家接口后恢复）；`reason` 是失败分类
+ * （credit、quota、rate、other、auth）。只记在 daemon 内存里，重启清零。
+ */
+export const ApiEndpointCooldownSchema = z.object({
+  state: z.string(),
+  reason: z.string(),
+  until: z.string().nullable(),
+});
+export type ApiEndpointCooldown = z.infer<typeof ApiEndpointCooldownSchema>;
+
 export const ApiEndpointSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -86,6 +98,8 @@ export const ApiEndpointSchema = z.object({
   baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
   // 接口开关：关着即「已关闭」，对所有 Agent 生效。
   enabled: z.boolean().optional(),
+  // 没有或为 null 即可用；老 daemon 不发。
+  cooldown: ApiEndpointCooldownSchema.nullable().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 

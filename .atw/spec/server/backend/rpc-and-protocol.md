@@ -713,7 +713,7 @@ const signal = AbortSignal.any([input.signal, timeout]); // input.signal = clien
 
 ## Scenario: a local HTTP route that relays CLI traffic with a host secret
 
-Reference implementation: the API endpoint gateway (api-endpoint-auto-switch ticket 02), `server/api-endpoints/gateway/`. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
+Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tickets 02 and 04), `server/api-endpoints/gateway/`. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
 
 ### 1. Scope / Trigger
 
@@ -721,9 +721,11 @@ Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tic
 
 ### 2. Signatures
 
-- `createApiEndpointGateway({ paseoHome, logger, overrides?: { gatewayHeaderTimeoutMs? } }): RequestHandler`, mounted in `bootstrap.ts` with `app.use(API_ENDPOINT_GATEWAY_PATH, …)` (`/api-endpoint-gateway`) **before** `createRequireBearerMiddleware` and the global `express.json()`.
+- `createApiEndpointGateway({ paseoHome, logger, cooldowns: EndpointCooldowns, overrides?: { gatewayHeaderTimeoutMs?, gatewayRetryPauseMs? } }): RequestHandler`, mounted in `bootstrap.ts` with `app.use(API_ENDPOINT_GATEWAY_PATH, …)` (`/api-endpoint-gateway`) **before** `createRequireBearerMiddleware` and the global `express.json()`.
 - Paths under the prefix: `POST /v1/messages` (Anthropic shape), `POST /v1/responses` (OpenAI Responses shape), `GET /v1/models`, `GET|HEAD /api/hello`. Claude Code's base URL is the prefix, Codex's is prefix + `/v1`; both land on the same paths.
-- `resolveGatewayRoute({ state, agent, model }): { ok: true, endpoint, upstreamModel } | { ok: false, message }` in `gateway/routing.ts` is pure; test it directly.
+- `resolveGatewayRoute({ state, agent, model }): { ok: true, candidates: GatewayCandidate[] } | { ok: false, message }` in `gateway/routing.ts` is pure; test it directly. `candidates[0]` is the user's choice (slug direct, else whole name, else bare name, else Claude tier mapping); the rest are the other enabled endpoints that selected the same upstream model name, in creation order. The model name never changes across candidates.
+- `EndpointCooldowns` (`gateway/cooldown.ts`) is created once in `bootstrap.ts` and passed to both the gateway and `ApiEndpointService` (`ApiEndpointServiceOptions.cooldowns`): `markFailed(report): EndpointRest | null`, `restOf(endpointId, model)`, `endpointRest(endpointId)` (list), `served(endpointId, model)`, `clear(endpointId)`, `clearNeedsCheck(endpointId)`. Memory only; a restarted daemon has none.
+- Pure helpers with their own unit tests: `gateway/failure.ts` (`FAILURE_WORDS` — magpie's 20 regexes, `failure`, `endpointFailure`, `retryable`, `modelRetired`, `modelRefused`, `requestRefused`, `lateRests`), `gateway/cooldown.ts` (`COOLDOWN` — 13 constants, `retryAfter`, `resetsAt`, `passing`, `quotaHeld`), `gateway/affinity.ts` (`AFFINITY`, `affinityWhy` — the 12-step table, `turnOf`, `conversationId`, `ConversationSticks`). Their headers carry the MIT short notice pointing at root `THIRD_PARTY_NOTICES`.
 
 ### 3. Contracts
 
@@ -732,6 +734,13 @@ Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tic
 - Passthrough: the request body is read whole (64 MB cap) to find `model`; only the top-level `model` value is replaced with `jsonc-parser` `modify` + `applyEdits`, so every other byte, `cache_control` included, reaches the upstream unchanged. Client `authorization`, `x-api-key`, hop-by-hop, `host`, `content-length`, `accept-encoding` and `x-forwarded-*` are dropped; `accept-encoding: identity` and the real key are added (Anthropic addresses get both `Authorization: Bearer` and `x-api-key`). The query string is forwarded (`?beta=true`).
 - Upstream URL: `anthropic_messages` base + `/v1/messages`; `openai_responses` base (already ending in `/v1`) + `/responses`.
 - Every response after an endpoint is chosen carries `x-osuna-api-endpoint: <slug>`. The slug, not the name: Node throws on non-Latin-1 header values and names can be Chinese.
+- Failover (ticket 04). The plan for one request: drop candidates that need a check (`why: "auth"`), ready ones first, then only the cooling one that is back soonest (magpie restLast + probeOne), then `ConversationSticks.order` moves last time's answerer to the front when the conversation is within a turn, or its cache read ≥ 1024 tokens less than 5 minutes ago, and it is not cooling. Conversation key: `<agent>|<requested model>|<conversationId>`; `conversationId` reads `x-claude-code-session-id`, `thread-id`, `thread_id`, `session-id`, `session_id`, `x-client-request-id`, else hashes the first user message.
+- "Before the first byte" means before the first body chunk: a 2xx whose body closes before any chunk is a 502 failure and still switches. After the first chunk the gateway pipes, never switches, destroys the agent's socket if the upstream breaks, and cools that endpoint (`lateRests`).
+- Retryable failure (`retryable`) → `markFailed` → next candidate, logging `info` `"API endpoint gateway switched endpoints"` `{ from, to, model, failure, status, until }`. Every failed attempt also logs `warn` `"API endpoint returned an error"` `{ endpoint: slug, status }`. Cooldown start/end log `"API endpoint is cooling down"` `{ endpoint: name, model?, failure, status, until }` and `"API endpoint cooldown ended"` (timer, `served`, `clear`). No key ever.
+- Cooldown by class: credit 30 min; quota = reset time in the error, else `Retry-After`, else 15 min, capped 8 days; rate 1 min doubling to 30 min (doubles only when limited again within 30 min of the last one ending; a vendor time ≥ that wins); other (5xx, header timeout, network) 1 min doubling to 10 min until it answers; auth (401/403 not explained by credit/quota words, a retired or unserved model, or region) = needs check with `until: null`. Not cooled: proxy failures and `requestRefused` (400/422 shape, unapproved client, region — switch only). A model the key does not serve (`modelRefused`) or a quota error saying other models still work cools `"<endpointId>/<model>"` only, which the endpoint list does not show.
+- The last candidate: on 408/5xx/529 it is asked again after 1 s, 2 s (twice); on a short 429 rate limit up to three times; never when the wait would exceed 8 s, never after a header timeout. Then it is cooled like the others.
+- Every candidate cooling for quota/credit after a 429/402 with the vendor's words (`quotaHeld`): no upstream request; the last candidate's stored error, `Retry-After` = seconds until the earliest is back. All candidates needing a check: the last one's stored error. Other cooldowns still probe the soonest-back endpoint.
+- Endpoint list (`ApiEndpointService.toWire`): `cooldown?: { state: "cooling_down" | "needs_check", reason, until: ISO | null } | null` from `endpointRest`. `set_endpoint_state { clearCooldown: true }` → `clear`; `save` of an existing endpoint → `clear` when the key or addresses changed, else `clearNeedsCheck`; `delete` → `clear`.
 
 ### 4. Validation & Error Matrix
 
@@ -744,21 +753,28 @@ All errors are wrapped in the agent's protocol (`gateway/agent-errors.ts`): `/v1
 | Body over 64 MB | 413 | — |
 | Body has no string `model` | 400 | `The request has no model` |
 | No enabled endpoint offers the model | 404 | `No enabled API endpoint offers the model "<model>"` |
-| Routed endpoint has no address in the agent's format (until translation, ticket 05) | 502 | `<name>: no address for this agent's request format` |
-| Upstream status ≥ 400 | same status | `<name>: <upstream message, key redacted, 300 chars>`; upstream `error.type` / `error.code` kept; `retry-after` and `*ratelimit*reset*` headers copied |
+| No candidate has an address in the agent's format (until translation, ticket 05) | 502 | `<name>: no address for this agent's request format` |
+| No candidate has a stored key | 500 | `<name>: the API key is missing` |
+| Upstream status ≥ 400, not retryable (e.g. context too long, plain 400) | same status, no switch, no cooldown | `<name>: <upstream message, key redacted, 300 chars>`; upstream `error.type` / `error.code` kept; `retry-after` and `*ratelimit*reset*` headers copied |
+| Retryable failure, another candidate left | — | switch; the agent sees only the next candidate's answer |
+| Retryable failure on the last candidate | same status | as above, plus ` (available again at HH:MM)` (local time, date when not today) for credit/quota/rate; a 429 without `Retry-After` gets one from the cooldown |
 | No response headers within `gatewayHeaderTimeoutMs` (default 10 min) | 504 | `<name>: no response headers within <s>s` |
 | Connection error before headers | 502 | `<name>: <origin>: <network error>` |
+| 2xx closed before the first body chunk | 502 | `<name>: <origin>: the connection closed before the reply began` |
+| All candidates held out of quota/credit, or all need a check | stored status | `<last name>: <stored upstream message>` + reset text; `Retry-After` when held |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: `relay-a/kimi-k2` → endpoint `relay-a`, body sent with `"model":"kimi-k2"`, SSE chunks arrive one by one.
-- Base: a bare name that two endpoints selected goes to the earlier one; a slug whose endpoint is closed, deleted, or did not select the model falls back to the bare name; `moonshotai/kimi-k2` selected as a whole name is not split.
+- Base: a bare name that two endpoints selected goes to the earlier one; a slug whose endpoint is closed, deleted, or did not select the model falls back to the bare name; `moonshotai/kimi-k2` selected as a whole name is not split. A 429 from A with B also offering the model: B answers with `x-osuna-api-endpoint: relay-b`, A shows `cooling_down` in the list.
 - Bad: mounting after the bearer middleware — with a daemon password set, every CLI request is compared against the password and gets 401.
+- Bad: cooling an endpoint for a 400 the request itself caused ("Extra inputs are not permitted"). Every endpoint refuses the same tool schema, so each would cool in turn and the list would show them all cooling; `requestRefused` switches without cooling.
 
 ### 6. Tests Required
 
-- `gateway/routing.test.ts`: slug direct, bare name by creation order, slashed bare name, tier mapping (Claude only), selected Claude model sent as is, closed/deleted slug falls back, nothing found.
-- `daemon-e2e/api-endpoint-gateway.e2e.test.ts` (local only; not in `test:integration`): 401 without/with wrong token, 403 through a proxy header, works with a daemon password and a 300 kB body, token file created 0600 and deleted, byte-exact passthrough and progressive streaming, non-streaming reply whole, wrapped 429/400/503 with `Retry-After`, 504 on header timeout, no real key in log lines or responses, `/v1/models` dedup.
+- `gateway/routing.test.ts`: slug direct, bare name by creation order, slashed bare name, tier mapping (Claude only), selected Claude model sent as is, closed/deleted slug falls back, same-named followers in creation order, nothing found.
+- `gateway/failure.test.ts`, `cooldown.test.ts`, `affinity.test.ts`: each of the 20 regexes hits and misses; `failure` order; auth mapping; `retryable` table; 13 constants; each cooldown class and its doubling; `retryAfter` header forms; written reset times; `passing`; `quotaHeld`; each of the 12 affinity steps; turn counting for both wires; conversation ids.
+- `daemon-e2e/api-endpoint-gateway.e2e.test.ts` (local only; not in `test:integration`): 401 without/with wrong token, 403 through a proxy header, works with a daemon password and a 300 kB body, token file created 0600 and deleted, byte-exact passthrough and progressive streaming, non-streaming reply whole, wrapped 429/400/503 with `Retry-After`, 504 on header timeout, no real key in log lines or responses, `/v1/models` dedup; switch on 429/402/503/header timeout/pre-byte close, no switch on a context-too-long 400, switch without cooling on a shape 400, broken stream after the first byte, cooling skipped until `clearCooldown`, 401 → needs check until the connection is edited, model-only edit keeps a cooldown, all held out of quota, restart clears cooldowns, log lines, stickiness within a turn and on a warm cache.
 
 ### 7. Wrong vs Correct
 

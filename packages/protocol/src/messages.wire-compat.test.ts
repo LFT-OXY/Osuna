@@ -575,6 +575,7 @@ test("a host-wide API endpoint list still parses as the single-endpoint projecti
             { format: "openai_responses", url: "https://relay.example/v1" },
           ],
           enabled: true,
+          cooldown: { state: "cooling_down", reason: "rate", until: "2026-10-14T12:01:00.000Z" },
           models: [{ id: "gpt-5" }],
           defaultModelId: "gpt-5",
           hasApiKey: true,

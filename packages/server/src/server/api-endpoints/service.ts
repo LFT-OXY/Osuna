@@ -9,6 +9,7 @@ import {
   type ApiEndpoint,
   type ApiEndpointAgentSettings,
   type ApiEndpointBaseUrl,
+  type ApiEndpointCooldown,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
   type ApiEndpointModel,
@@ -36,6 +37,7 @@ import {
   type CodexConfigTakeover,
 } from "./codex-config-patch.js";
 import { buildCodexModelCatalog } from "./codex-model-catalog.js";
+import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import {
   readOptionalFile,
@@ -138,6 +140,8 @@ export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput
 export interface ApiEndpointServiceOptions {
   paseoHome: string;
   logger: pino.Logger;
+  // 中转站记下的冷却；列表显示它，「立刻恢复」、编辑连接与删除清掉它。
+  cooldowns: EndpointCooldowns;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
@@ -216,6 +220,7 @@ export class ApiEndpointService {
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
+  private readonly cooldowns: EndpointCooldowns;
   private queue: Promise<unknown> = Promise.resolve();
   private gateway: GatewayAddress = { kind: "pending" };
 
@@ -231,6 +236,7 @@ export class ApiEndpointService {
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
     this.beforeConfigRecheck = options.beforeConfigRecheck;
+    this.cooldowns = options.cooldowns;
   }
 
   /**
@@ -368,6 +374,14 @@ export class ApiEndpointService {
           keys: apiKey ? { [endpoint.id]: apiKey } : {},
         },
       );
+      // 编辑过这家接口就解除「需要检查」；改了连接（key 或地址）时冷却也是旧连接的，一并清掉。
+      if (existing) {
+        const connectionEdited =
+          apiKey !== undefined ||
+          JSON.stringify(existing.baseUrls) !== JSON.stringify(endpoint.baseUrls);
+        if (connectionEdited) this.cooldowns.clear(existing.id);
+        else this.cooldowns.clearNeedsCheck(existing.id);
+      }
       return this.toWire(next, endpoint, supported);
     });
   }
@@ -385,6 +399,7 @@ export class ApiEndpointService {
         endpoints: state.endpoints.filter((endpoint) => endpoint.id !== endpointId),
       });
       this.store.removeApiKey(endpointId);
+      this.cooldowns.clear(endpointId);
       return { activeEndpointId: agentTargetEndpoint(next, supported)?.id ?? null };
     });
   }
@@ -455,10 +470,7 @@ export class ApiEndpointService {
     });
   }
 
-  /**
-   * 接口开关与「立刻恢复」。关掉开关按默认模型失踪规则处理各 Agent。
-   * 冷却还没有实现（04 票），「立刻恢复」目前没有可清的。
-   */
+  /** 接口开关与「立刻恢复」。关掉开关按默认模型失踪规则处理各 Agent。 */
   setEndpointState(input: ApiEndpointStateInput): Promise<void> {
     return this.exclusive(async () => {
       const state = this.readState();
@@ -466,6 +478,7 @@ export class ApiEndpointService {
       if (!endpoint) {
         throw new ApiEndpointRequestError("not_found", "API endpoint not found");
       }
+      if (input.clearCooldown) this.cooldowns.clear(endpoint.id);
       if (input.enabled === undefined || input.enabled === endpoint.enabled) return;
       await this.commit(state, {
         ...state,
@@ -1013,6 +1026,18 @@ export class ApiEndpointService {
       ...(endpoint.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
       enabled: endpoint.enabled,
       hasApiKey: this.store.getApiKey(endpoint.id) !== null,
+      cooldown: this.cooldownOf(endpoint.id),
+    };
+  }
+
+  /** 整家接口的冷却；只冷却了某个模型的不算。 */
+  private cooldownOf(endpointId: string): ApiEndpointCooldown | null {
+    const rest = this.cooldowns.endpointRest(endpointId);
+    if (!rest) return null;
+    return {
+      state: rest.why === "auth" ? "needs_check" : "cooling_down",
+      reason: rest.why,
+      until: rest.until === null ? null : new Date(rest.until).toISOString(),
     };
   }
 

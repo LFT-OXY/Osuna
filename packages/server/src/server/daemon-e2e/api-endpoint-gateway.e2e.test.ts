@@ -45,6 +45,8 @@ interface Harness {
   gateway: string;
   endpointsDir: string;
   logLines: string[];
+  // 同一个 home 再起一个 daemon（先关掉旧的），中转站地址随新端口。
+  restart: () => Promise<{ daemon: TestPaseoDaemon; gateway: string }>;
 }
 
 const servers: Server[] = [];
@@ -118,6 +120,7 @@ async function start(
     upstreamB?: FakeUpstream;
     password?: string;
     headerTimeoutMs?: number;
+    retryPauseMs?: number;
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -161,25 +164,36 @@ async function start(
 
   const logLines: string[] = [];
   const logger = pino({ level: "debug" }, { write: (line: string) => logLines.push(line) });
-  const daemon = await createTestPaseoDaemon({
-    paseoHomeRoot: root,
-    logger,
-    ...(options.password ? { auth: { password: hashDaemonPassword(options.password) } } : {}),
-    apiEndpoints: {
-      env: {
-        CLAUDE_CONFIG_DIR: path.join(root, "claude"),
-        CODEX_HOME: path.join(root, "codex"),
+  const launch = async () => {
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      // home 在 tempRoots 里统一删；重启要沿用它。
+      cleanup: false,
+      logger,
+      ...(options.password ? { auth: { password: hashDaemonPassword(options.password) } } : {}),
+      apiEndpoints: {
+        env: {
+          CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+          CODEX_HOME: path.join(root, "codex"),
+        },
+        homeDir: root,
+        // 最后一家的原地重试只等很短的时间，测试不必真等一两秒。
+        gatewayRetryPauseMs: options.retryPauseMs ?? 10,
+        ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
       },
-      homeDir: root,
-      ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
-    },
-  });
-  daemons.push(daemon);
+    });
+    daemons.push(daemon);
+    return { daemon, gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway` };
+  };
+  const first = await launch();
   return {
-    daemon,
-    gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`,
+    ...first,
     endpointsDir,
     logLines,
+    restart: async () => {
+      await first.daemon.close();
+      return launch();
+    },
   };
 }
 
@@ -455,9 +469,10 @@ describe("when the endpoint fails", () => {
     };
     const { gateway, logLines } = await start({ upstreamA: upstream });
 
+    // 只有 A 选了 gpt-5.5：没有别家可换。
     const response = await fetch(
       `${gateway}/v1/messages`,
-      claudeRequest({ model: "relay-a/kimi-k2", max_tokens: 1, messages: [] }),
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
     );
     const text = await response.text();
 
@@ -465,14 +480,23 @@ describe("when the endpoint fails", () => {
     expect(response.headers.get("retry-after")).toBe("30");
     expect(response.headers.get("anthropic-ratelimit-requests-reset")).toBe("2026-10-14T12:00:30Z");
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
-    expect(JSON.parse(text)).toEqual({
-      type: "error",
-      error: { type: "rate_limit_error", message: "Relay A: Slow down, key *** is busy" },
-    });
+    const body = JSON.parse(text) as { type: string; error: { type: string; message: string } };
+    expect(body.type).toBe("error");
+    expect(body.error.type).toBe("rate_limit_error");
+    // 限流判出了恢复时间，附在原文后面。
+    expect(body.error.message).toMatch(
+      /^Relay A: Slow down, key \*\*\* is busy \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}\)$/,
+    );
+    // Retry-After 是 30 秒，超过原地重试肯等的 8 秒：只问了一次。
+    expect(upstream.requests).toHaveLength(1);
     expect(logLines.join("\n")).not.toContain(KEY_A);
   });
 
-  test.each([400, 503])("a %i comes back to Codex in OpenAI shape", async (status) => {
+  test.each([
+    // 400 不值得再问；503 是最后一家，稍等后原地再问两次。
+    { status: 400, asked: 1 },
+    { status: 503, asked: 3 },
+  ])("a $status comes back to Codex in OpenAI shape", async ({ status, asked }) => {
     const upstream = await startUpstream();
     upstream.respond = (_request, res) => {
       res.writeHead(status, { "content-type": "application/json" });
@@ -490,6 +514,7 @@ describe("when the endpoint fails", () => {
     expect(await response.json()).toEqual({
       error: { message: "Relay A: upstream says no", type: "bad", code: "x1", param: null },
     });
+    expect(upstream.requests).toHaveLength(asked);
   });
 
   test("an endpoint that sends no response headers in time is a server error", async () => {
@@ -499,10 +524,12 @@ describe("when the endpoint fails", () => {
 
     const response = await fetch(
       `${gateway}/v1/messages`,
-      claudeRequest({ model: "relay-a/kimi-k2", max_tokens: 1, messages: [] }),
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
     );
 
     expect(response.status).toBe(504);
+    // 等不到响应头不原地重试：真实的等待是 10 分钟。
+    expect(upstream.requests).toHaveLength(1);
     expect(await response.json()).toEqual({
       type: "error",
       error: { type: "api_error", message: "Relay A: no response headers within 0.3s" },
@@ -519,7 +546,7 @@ describe("when the endpoint fails", () => {
 
     const response = await fetch(
       `${gateway}/v1/messages`,
-      claudeRequest({ model: "relay-a/kimi-k2", max_tokens: 1, messages: [] }),
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
     );
     const text = await response.text();
 
@@ -532,6 +559,372 @@ describe("when the endpoint fails", () => {
     expect(logLines.some((line) => line.includes("API endpoint returned an error"))).toBe(true);
     expect(logLines.join("\n")).not.toContain(KEY_A);
     expect(logLines.join("\n")).not.toContain(KEY_B);
+  });
+});
+
+async function connectTo(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+  const client = new DaemonClient({
+    url: `ws://127.0.0.1:${daemon.port}/ws`,
+    appVersion: "0.15.1",
+  });
+  clients.push(client);
+  await client.connect();
+  await client.fetchAgents({ subscribe: {} });
+  return client;
+}
+
+async function cooldownOf(client: DaemonClient, endpointId: string) {
+  const list = await client.apiEndpointList("claude");
+  return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.cooldown ?? null;
+}
+
+/** 一段 Anthropic 流式回复；`cacheRead` 是这次从厂商缓存读到的 token 数。 */
+function streamReply(res: ServerResponse, input: { text?: string; cacheRead?: number } = {}) {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  const usage = { input_tokens: 10, cache_read_input_tokens: input.cacheRead ?? 0 };
+  res.write(
+    `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { usage } })}\n\n`,
+  );
+  res.write(
+    `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: input.text ?? "hi" } })}\n\n`,
+  );
+  res.end(`event: message_stop\ndata: {"type":"message_stop"}\n\n`);
+}
+
+function failWith(
+  res: ServerResponse,
+  input: { status: number; message: string; headers?: Record<string, string> },
+) {
+  res.writeHead(input.status, { "content-type": "application/json", ...input.headers });
+  res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: input.message } }));
+}
+
+function receivedModel(request: RecordedRequest | undefined): unknown {
+  return (JSON.parse(request?.body.toString() ?? "{}") as { model?: unknown }).model;
+}
+
+/** 两家都选了 kimi-k2：A 是用户选的（最早建的），B 在它之后。 */
+async function twoRelays(options: { headerTimeoutMs?: number } = {}) {
+  const upstreamA = await startUpstream();
+  const upstreamB = await startUpstream();
+  upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
+  const harness = await start({ upstreamA, upstreamB, ...options });
+  const ask = (body: Record<string, unknown> = {}) =>
+    fetch(
+      `${harness.gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        ...body,
+      }),
+    );
+  return { ...harness, upstreamA, upstreamB, ask };
+}
+
+describe("switching to another endpoint when one fails", () => {
+  test.each([
+    { failure: "a rate limit", reason: "rate", status: 429, message: "Rate limit exceeded" },
+    { failure: "no credit", reason: "credit", status: 402, message: "Insufficient balance" },
+    { failure: "a server error", reason: "other", status: 503, message: "upstream busy" },
+  ])(
+    "$failure before the first byte goes to the next endpoint with the same model",
+    async ({ reason, status, message }) => {
+      const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+      upstreamA.respond = (_request, res) => failWith(res, { status, message });
+
+      const response = await ask();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      expect(await response.text()).toContain("from B");
+      expect(upstreamA.requests).toHaveLength(1);
+      expect(receivedModel(upstreamB.requests[0])).toBe("kimi-k2");
+      expect(upstreamB.requests[0]?.headers.authorization).toBe(`Bearer ${KEY_B}`);
+
+      const client = await connectTo(daemon);
+      expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down", reason });
+      expect(await cooldownOf(client, "ep_b")).toBeNull();
+      const switched = logLines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .find((line) => line.msg === "API endpoint gateway switched endpoints");
+      expect(switched).toMatchObject({ from: "Relay A", to: "Relay B", failure: reason });
+      expect(typeof switched?.until).toBe("string");
+    },
+  );
+
+  test("no response headers in time is a server error and goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({ headerTimeoutMs: 300 });
+    upstreamA.respond = () => {};
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("a request the endpoint could not read goes to the next one without cooling the first", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "Extra inputs are not permitted" });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test("an error the next endpoint could not fix either is not passed on to it", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "prompt is too long: 210000 tokens > 200000" });
+
+    const response = await ask();
+
+    expect(response.status).toBe(400);
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await response.json()).toMatchObject({
+      error: { message: "Relay A: prompt is too long: 210000 tokens > 200000" },
+    });
+  });
+
+  test("after the first byte it stays: the broken stream reaches the agent and the endpoint cools down", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(`event: message_start\ndata: {"type":"message_start","message":{}}\n\n`);
+      setTimeout(() => res.destroy(), 50);
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await expect(response.text()).rejects.toThrow();
+    expect(upstreamB.requests).toHaveLength(0);
+    const client = await connectTo(daemon);
+    await expect.poll(() => cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
+  });
+
+  test("an endpoint that broke off before the first byte is switched away from", async () => {
+    const { upstreamA, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.flushHeaders();
+      setTimeout(() => res.destroy(), 50);
+    };
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+  });
+
+  test("a cooling endpoint is skipped until it is brought back by hand", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask()).text();
+    const client = await connectTo(daemon);
+    const cooldown = await cooldownOf(client, "ep_a");
+    expect(cooldown).toMatchObject({ state: "cooling_down", reason: "other" });
+    expect(Date.parse(cooldown?.until ?? "")).toBeGreaterThan(Date.now());
+
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const whileCooling = await ask();
+    expect(whileCooling.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await whileCooling.text();
+    expect(upstreamA.requests).toHaveLength(1);
+
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    const afterRecovery = await ask();
+    expect(afterRecovery.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await afterRecovery.text()).toContain("from A");
+    expect(upstreamB.requests).toHaveLength(2);
+    expect(logLines.some((line) => line.includes("API endpoint cooldown ended"))).toBe(true);
+  });
+
+  test("a bad key needs checking: it is not asked again until its connection is edited", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 401, message: "invalid key" });
+    await (await ask()).text();
+    const client = await connectTo(daemon);
+    expect(await cooldownOf(client, "ep_a")).toEqual({
+      state: "needs_check",
+      reason: "auth",
+      until: null,
+    });
+
+    await (await ask()).text();
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(2);
+
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: "ep_a",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: upstreamA.url }],
+      apiKey: "sk-fixed-key",
+      models: [{ id: "kimi-k2" }, { id: "gpt-5.5" }],
+    });
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const fixed = await ask();
+    expect(fixed.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(upstreamA.requests.at(-1)?.headers.authorization).toBe("Bearer sk-fixed-key");
+    await fixed.text();
+  });
+
+  test("with every endpoint out of quota the last one's error comes back, and none is asked until one is back", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 429, message: "You exceeded your current quota" });
+    upstreamB.respond = (_request, res) =>
+      failWith(res, { status: 429, message: "B: monthly quota used up" });
+
+    const first = await ask();
+    expect(first.status).toBe(429);
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(((await first.json()) as { error: { message: string } }).error.message).toMatch(
+      /^Relay B: B: monthly quota used up \(available again at /,
+    );
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+
+    const held = await ask();
+    expect(held.status).toBe(429);
+    expect(held.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(800);
+    expect(((await held.json()) as { error: { message: string } }).error.message).toMatch(
+      /^Relay B: B: monthly quota used up \(available again at /,
+    );
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("any edit of the endpoint lifts needing a check, but editing only its models keeps a cooldown", async () => {
+    const { upstreamA, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    const saveModels = () =>
+      client.apiEndpointSave({
+        provider: "claude",
+        endpointId: "ep_a",
+        name: "Relay A",
+        baseUrls: [
+          { format: "anthropic_messages", url: upstreamA.url },
+          { format: "openai_responses", url: `${upstreamA.url}/v1` },
+        ],
+        models: [{ id: "kimi-k2" }],
+      });
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask()).text();
+    await saveModels();
+    expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
+
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => failWith(res, { status: 403, message: "forbidden" });
+    await (await ask()).text();
+    expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "needs_check" });
+    await saveModels();
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+  });
+
+  test("cooldowns live in memory only: a restarted daemon starts with none", async () => {
+    const { upstreamA, ask, daemon, restart } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 402, message: "no credit" });
+    await (await ask()).text();
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({ reason: "credit" });
+
+    const next = await restart();
+
+    expect(await cooldownOf(await connectTo(next.daemon), "ep_a")).toBeNull();
+  });
+
+  test("the log has one line per switch and per cooldown, with the endpoint name and never a key", async () => {
+    const { upstreamA, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 429, message: `quota used up for ${KEY_A}` });
+    await (await ask()).text();
+    await (
+      await connectTo(daemon)
+    ).apiEndpointSetEndpointState({
+      endpointId: "ep_a",
+      clearCooldown: true,
+    });
+
+    const lines = logLines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const about = (msg: string) => lines.filter((line) => line.msg === msg);
+    expect(about("API endpoint is cooling down")).toEqual([
+      expect.objectContaining({ endpoint: "Relay A", failure: "quota", until: expect.any(String) }),
+    ]);
+    expect(about("API endpoint gateway switched endpoints")).toEqual([
+      expect.objectContaining({ from: "Relay A", to: "Relay B", failure: "quota" }),
+    ]);
+    expect(about("API endpoint cooldown ended")).toEqual([
+      expect.objectContaining({ endpoint: "Relay A", failure: "quota" }),
+    ]);
+    expect(logLines.join("\n")).not.toContain(KEY_A);
+    expect(logLines.join("\n")).not.toContain(KEY_B);
+  });
+});
+
+describe("a conversation stays where it was answered", () => {
+  const userSays = (text: string) => ({ role: "user", content: text });
+  const toolCall = {
+    role: "assistant",
+    content: [{ type: "tool_use", id: "t1", name: "Read", input: {} }],
+  };
+  const toolResult = {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "t1", content: "file" }],
+  };
+
+  test("within a turn it stays with the endpoint that took over; a new turn goes back to the user's choice", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask({ messages: [userSays("hi")] })).text();
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const sameTurn = await ask({ messages: [userSays("hi"), toolCall, toolResult] });
+    expect(sameTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await sameTurn.text();
+
+    const newTurn = await ask({
+      messages: [
+        userSays("hi"),
+        toolCall,
+        toolResult,
+        { role: "assistant", content: "ok" },
+        userSays("next"),
+      ],
+    });
+    expect(newTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await newTurn.text();
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+
+  test("a new turn stays with it while its cache is warm", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    upstreamB.respond = (_request, res) => streamReply(res, { text: "from B", cacheRead: 2048 });
+    await (await ask({ messages: [userSays("hi")] })).text();
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const newTurn = await ask({
+      messages: [userSays("hi"), { role: "assistant", content: "hello" }, userSays("more")],
+    });
+
+    expect(newTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await newTurn.text();
+    expect(upstreamA.requests).toHaveLength(1);
   });
 });
 

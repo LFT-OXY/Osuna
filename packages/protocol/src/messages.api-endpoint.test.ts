@@ -462,6 +462,31 @@ describe("host-wide API endpoints", () => {
     expect(SessionOutboundMessageSchema.parse(available)).toEqual(available);
   });
 
+  it("parses endpoints cooling down, needing a check, and available", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-h5",
+        provider: "claude",
+        endpoints: [
+          {
+            ...hostWideEndpoint,
+            cooldown: { state: "cooling_down", reason: "quota", until: "2026-10-14T12:15:00.000Z" },
+          },
+          {
+            ...hostWideEndpoint,
+            id: "ep_2",
+            cooldown: { state: "needs_check", reason: "auth", until: null },
+          },
+          { ...hostWideEndpoint, id: "ep_3", cooldown: null },
+        ],
+        activeEndpointId: null,
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
   it("parses set_agent_settings request and response", () => {
     const request = {
       type: "provider.api_endpoint.set_agent_settings.request" as const,
