@@ -25,6 +25,7 @@ const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
 const CODEX_TOKEN = "gateway-token-codex-0123456789";
 const KEY_A = "sk-real-key-alpha-SECRET";
 const KEY_B = "sk-real-key-beta-SECRET";
+const KEY_C = "sk-real-key-gamma-SECRET";
 
 interface RecordedRequest {
   method: string;
@@ -113,11 +114,15 @@ function storedEndpoint(input: {
   };
 }
 
-/** 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。 */
+/**
+ * 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。
+ * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3。
+ */
 async function start(
   options: {
     upstreamA?: FakeUpstream;
     upstreamB?: FakeUpstream;
+    chatUpstream?: FakeUpstream;
     password?: string;
     headerTimeoutMs?: number;
     retryPauseMs?: number;
@@ -149,13 +154,24 @@ async function start(
           baseUrls: [{ format: "anthropic_messages", url: urlB }],
           models: ["kimi-k2", "glm-4.6"],
         }),
+        ...(options.chatUpstream
+          ? [
+              storedEndpoint({
+                id: "ep_c",
+                slug: "relay-c",
+                name: "Relay C",
+                baseUrls: [{ format: "openai_chat", url: `${options.chatUpstream.url}/v1` }],
+                models: ["deepseek-v3"],
+              }),
+            ]
+          : []),
       ],
       agents: {
         claude: { enabled: true, defaultModelId: "kimi-k2" },
         codex: { enabled: true, defaultModelId: "gpt-5.5" },
       },
     },
-    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B } },
+    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C } },
     "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
   };
   for (const [name, value] of Object.entries(files)) {
@@ -387,6 +403,37 @@ describe("passing requests through to an endpoint that speaks the agent's format
     expect(received.headers["thread-id"]).toBe("thread-1");
   });
 
+  test("a Codex request with a call left unanswered reaches the Responses address mended", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "run it" }] },
+      { type: "function_call", call_id: "call_lone", name: "shell", arguments: "{}" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "go on" }] },
+    ];
+
+    const response = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.5", input }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(upstream.requests[0]!.body.toString())).toEqual({
+      model: "gpt-5.5",
+      input: [
+        input[0],
+        input[1],
+        {
+          type: "function_call_output",
+          call_id: "call_lone",
+          output: "[The result of this tool call is unavailable: the turn was interrupted.]",
+        },
+        input[2],
+      ],
+    });
+  });
+
   test("a Claude tier name is sent as the model the endpoint maps it to", async () => {
     const upstreamB = await startUpstream();
     const { gateway, endpointsDir } = await start({ upstreamB });
@@ -430,8 +477,338 @@ describe("passing requests through to an endpoint that speaks the agent's format
   });
 });
 
+/** 假 Chat 上游的流式回复：一段文字、一个带参数的工具调用、以工具调用结束、最后报用量。 */
+function chatStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const chunk of [
+    {
+      id: "chatcmpl-42",
+      model: "deepseek-v3-0324",
+      choices: [{ index: 0, delta: { role: "assistant", content: "Let me " } }],
+    },
+    { id: "chatcmpl-42", choices: [{ index: 0, delta: { content: "look." } }] },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_ls",
+                type: "function",
+                function: { name: "Bash", arguments: "" },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"command":' } }] } },
+      ],
+    },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] } },
+      ],
+    },
+    { id: "chatcmpl-42", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+    {
+      id: "chatcmpl-42",
+      choices: [],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        prompt_tokens_details: { cached_tokens: 100 },
+      },
+    },
+  ]) {
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+  res.end("data: [DONE]\n\n");
+}
+
+/** Claude Code 一轮对话的请求：系统提示、多轮、工具定义与调用、工具结果、tool_choice。 */
+function claudeConversation(stream: boolean) {
+  return {
+    model: "deepseek-v3",
+    max_tokens: 2048,
+    stream,
+    system: [{ type: "text", text: "You are Claude Code.", cache_control: { type: "ephemeral" } }],
+    messages: [
+      { role: "user", content: "list files" },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "pwd" } }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_1", content: "/repo" },
+          { type: "text", text: "now list them" },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: "Bash",
+        description: "Run a command",
+        input_schema: { type: "object", properties: { command: { type: "string" } } },
+      },
+    ],
+    tool_choice: { type: "auto" },
+  };
+}
+
+/** SSE 原文里每个事件的 data。 */
+function sseData(text: string): unknown[] {
+  return text
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)) as unknown);
+}
+
+describe("translating requests for an endpoint that speaks another format", () => {
+  test("a Claude Code request reaches a Chat-only endpoint translated and the stream comes back as Anthropic events", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(claudeConversation(true)),
+    );
+    const text = await response.text();
+
+    const received = chat.requests[0]!;
+    expect(received.url).toBe("/v1/chat/completions");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(received.headers["x-api-key"]).toBeUndefined();
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "deepseek-v3",
+      messages: [
+        { role: "system", content: "You are Claude Code." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "toolu_1",
+              type: "function",
+              function: { name: "Bash", arguments: '{"command":"pwd"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
+        { role: "user", content: "now list them" },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      max_tokens: 2048,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "Bash",
+            description: "Run a command",
+            parameters: { type: "object", properties: { command: { type: "string" } } },
+          },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(text).toContain("event: message_start\ndata: ");
+    expect(sseData(text)).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_42",
+          type: "message",
+          role: "assistant",
+          model: "deepseek-v3",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me " } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "look." } },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":' },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '"ls"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("a request that did not ask to stream is still streamed upstream and comes back whole", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(false), model: "relay-c/deepseek-v3" }),
+    );
+
+    // 和流式请求翻出来的一样：Agent 没要流式，上游照样流式请求。
+    expect(chat.requests[0]!.body.toString()).toBe(
+      JSON.stringify({
+        model: "deepseek-v3",
+        messages: [
+          { role: "system", content: "You are Claude Code." },
+          { role: "user", content: "list files" },
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "toolu_1",
+                type: "function",
+                function: { name: "Bash", arguments: '{"command":"pwd"}' },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
+          { role: "user", content: "now list them" },
+        ],
+        stream: true,
+        stream_options: { include_usage: true },
+        max_tokens: 2048,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Bash",
+              description: "Run a command",
+              parameters: { type: "object", properties: { command: { type: "string" } } },
+            },
+          },
+        ],
+        tool_choice: "auto",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(await response.json()).toEqual({
+      id: "msg_42",
+      type: "message",
+      role: "assistant",
+      model: "relay-c/deepseek-v3",
+      content: [
+        { type: "text", text: "Let me look." },
+        { type: "tool_use", id: "call_ls", name: "Bash", input: { command: "ls" } },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 20,
+        output_tokens: 30,
+        cache_read_input_tokens: 100,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("a Chat endpoint's error before the reply comes back under its name in Anthropic shape", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "messages: tool_call_id is not found" } }));
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "Relay C: messages: tool_call_id is not found",
+      },
+    });
+  });
+
+  test("count_tokens is passed to an Anthropic address and estimated locally for any other", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"input_tokens":4242}');
+    };
+    const chat = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream, chatUpstream: chat });
+    const counted = (model: string) =>
+      fetch(
+        `${gateway}/v1/messages/count_tokens?beta=true`,
+        claudeRequest({
+          model,
+          system: "1234",
+          messages: [{ role: "user", content: "12345678" }],
+          tools: [{ name: "Bash", description: "", input_schema: {} }],
+        }),
+      );
+
+    const passed = await counted("kimi-k2");
+    const estimated = await counted("deepseek-v3");
+
+    expect(passed.status).toBe(200);
+    expect(passed.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await passed.json()).toEqual({ input_tokens: 4242 });
+    expect(upstream.requests[0]?.url).toBe("/v1/messages/count_tokens?beta=true");
+    expect(JSON.parse(upstream.requests[0]!.body.toString())).toEqual({
+      model: "kimi-k2",
+      system: "1234",
+      messages: [{ role: "user", content: "12345678" }],
+      tools: [{ name: "Bash", description: "", input_schema: {} }],
+    });
+    expect(estimated.status).toBe(200);
+    expect(estimated.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    // 「1234」「12345678」「Bash」「{}」共 18 字节，/ 4 取整。
+    expect(await estimated.json()).toEqual({ input_tokens: 4 });
+    expect(chat.requests).toHaveLength(0);
+  });
+});
+
 describe("when the endpoint fails", () => {
-  test("an endpoint without the agent's own format address is refused until translation exists", async () => {
+  test("an endpoint Codex could only reach by translation is refused until Responses translation exists", async () => {
     const { gateway } = await start();
 
     const response = await fetch(`${gateway}/v1/responses`, {

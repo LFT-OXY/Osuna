@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointState, StoredApiEndpoint } from "../store.js";
-import { resolveGatewayRoute } from "./routing.js";
+import { chooseRequestFormat, resolveGatewayRoute } from "./routing.js";
 
 function endpoint(
   input: Pick<StoredApiEndpoint, "id" | "slug"> & Partial<StoredApiEndpoint>,
@@ -147,5 +147,60 @@ describe("routing a requested model name to an endpoint", () => {
         model: "beta/glm-4.6",
       }),
     ).toEqual({ ok: false, message: 'No enabled API endpoint offers the model "beta/glm-4.6"' });
+  });
+});
+
+describe("which request format an endpoint is asked in", () => {
+  test("an endpoint with the agent's own format address is passed through", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "openai_responses",
+        model: "gpt-5.5",
+        formats: ["openai_chat", "openai_responses", "anthropic_messages"],
+      }),
+    ).toBe("openai_responses");
+  });
+
+  test("a Claude model goes to the Anthropic address even when the agent's own format is there", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "openai_responses",
+        model: "relay-a/claude-sonnet-4-5",
+        formats: ["openai_responses", "anthropic_messages"],
+      }),
+    ).toBe("anthropic_messages");
+  });
+
+  test("without the agent's own format it is translated to Chat first", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "kimi-k2",
+        formats: ["openai_responses", "openai_chat"],
+      }),
+    ).toBe("openai_chat");
+  });
+
+  test("then Responses, then Anthropic", () => {
+    expect(
+      chooseRequestFormat({
+        agentFormat: "anthropic_messages",
+        model: "kimi-k2",
+        formats: ["openai_responses"],
+      }),
+    ).toBe("openai_responses");
+    expect(
+      chooseRequestFormat({
+        agentFormat: "openai_responses",
+        model: "kimi-k2",
+        formats: ["anthropic_messages"],
+      }),
+    ).toBe("anthropic_messages");
+  });
+
+  test("an endpoint with no address at all is asked in none", () => {
+    expect(
+      chooseRequestFormat({ agentFormat: "anthropic_messages", model: "kimi-k2", formats: [] }),
+    ).toBeNull();
   });
 });

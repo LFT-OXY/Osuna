@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { extractHttpBearerToken } from "../../auth.js";
 import { usableModels } from "../host-endpoints.js";
 import {
@@ -15,13 +16,14 @@ import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } from "./cooldown.js";
 import { endpointFailure, lateRests, retryable } from "./failure.js";
-import {
-  ANSWERED_BY_HEADER,
-  attemptEndpoint,
-  sendFailedAttempt,
-  type FailedAttempt,
-} from "./passthrough.js";
-import { resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
+import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
+import { chooseRequestFormat, resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
+import { attemptTranslated } from "./translated.js";
+import { parseAnthropicRequest } from "./translation/anthropic.js";
+import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
+import { protocolOf, translatable } from "./translation/protocols.js";
+import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
+import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./upstream-call.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
@@ -29,6 +31,8 @@ import { resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
  * 挂在 daemon 密码中间件与全局 JSON 解析之前：请求体自己读，不受 100 kb 上限。
  * 两道门：只收本机回环来源（经代理转来的不算），且口令是某个 Agent 的；口令同时说明是哪个 Agent。
  * 每次请求都重读接口与口令文件，接口页的改动立刻生效。
+ *
+ * 每家接口按 chooseRequestFormat 挑格式：有 Agent 自己格式的地址就直通，否则经中间格式翻译过去。
  *
  * 自动切换：用户选的那家在开口前失败（额度、欠费、限流、服务器错误、超时）时，按创建顺序换到下一家
  * 有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
@@ -40,6 +44,8 @@ export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
 const DEFAULT_HEADER_TIMEOUT_MS = 10 * 60 * 1000;
 // Claude Code 带图的长上下文也只有几 MB；再大多半是出了错。
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024;
+
+const COUNT_TOKENS_PATH = "/v1/messages/count_tokens";
 
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const PROXY_HEADERS = ["forwarded", "x-forwarded-for", "x-real-ip"];
@@ -103,7 +109,8 @@ export function createApiEndpointGateway(options: {
       return;
     }
     const target = req.method === "POST" ? agentPath(req.path) : null;
-    if (!target) {
+    const counting = req.method === "POST" && req.path === COUNT_TOKENS_PATH;
+    if (!target && !counting) {
       sendAgentError({
         res,
         wire,
@@ -111,20 +118,21 @@ export function createApiEndpointGateway(options: {
       });
       return;
     }
-    void handleAgentRequest({ req, res, agent, store, logger, failover, ...target }).catch(
-      (error: unknown) => {
-        logger.error({ err: error }, "API endpoint gateway request crashed");
-        if (!res.headersSent) {
-          sendAgentError({
-            res,
-            wire,
-            error: { status: 500, message: "API endpoint gateway error" },
-          });
-        } else {
-          res.destroy();
-        }
-      },
-    );
+    const handled = target
+      ? handleAgentRequest({ req, res, agent, store, logger, failover, ...target })
+      : countTokens({ req, res, agent, store, logger, failover });
+    void handled.catch((error: unknown) => {
+      logger.error({ err: error }, "API endpoint gateway request crashed");
+      if (!res.headersSent) {
+        sendAgentError({
+          res,
+          wire,
+          error: { status: 500, message: "API endpoint gateway error" },
+        });
+      } else {
+        res.destroy();
+      }
+    });
   };
 }
 
@@ -135,10 +143,125 @@ interface Failover {
   retryPauseMs: number;
 }
 
-/** 能直通的候选：这家有 Agent 自己格式的地址与 key（协议转换在工单 05）。 */
-interface PassableCandidate extends GatewayCandidate {
+/** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
+async function routeAgentRequest(input: {
+  req: Request;
+  res: Response;
+  wire: AgentWire;
+  agent: ApiEndpointProvider;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+}): Promise<{
+  body: Buffer;
+  parsed: unknown;
+  model: string;
+  candidates: GatewayCandidate[];
+} | null> {
+  const { res, wire } = input;
+  const reply = (status: number, message: string) =>
+    sendAgentError({ res, wire, error: { status, message } });
+  const body = await readBody(input.req, MAX_REQUEST_BODY_BYTES);
+  if (body === null) {
+    reply(413, "The request body is too large for the API endpoint gateway");
+    return null;
+  }
+  const parsed = parseJson(body.toString("utf8"));
+  const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
+  if (model === null) {
+    reply(400, "The request has no model");
+    return null;
+  }
+  const state = readState({ res, wire, store: input.store, logger: input.logger });
+  if (!state) return null;
+  const route = resolveGatewayRoute({ state, agent: input.agent, model });
+  if (!route.ok) {
+    reply(404, route.message);
+    return null;
+  }
+  return { body, parsed, model, candidates: route.candidates };
+}
+
+/**
+ * Claude Code 的 count_tokens：用户选的那家（冷却中、需要检查的跳过）有 Anthropic 地址就转给它，
+ * 没有、或它数不了（报错、连不上）就按字节数 / 4 本地估算。数 token 不换家、不冷却。
+ */
+async function countTokens(input: {
+  req: Request;
+  res: Response;
+  agent: ApiEndpointProvider;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+}): Promise<void> {
+  const { res } = input;
+  const wire = "anthropic";
+  const routed = await routeAgentRequest({ ...input, wire });
+  if (!routed) return;
+  const { body, parsed, model, candidates } = routed;
+  const { cooldowns } = input.failover;
+  const counter =
+    candidates.find(
+      (candidate) => cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel) === null,
+    ) ?? candidates[0];
+  if (!counter || (await countOnEndpoint({ ...input, body, model, counter }))) return;
+  try {
+    const request = parseAnthropicRequest(parsed);
+    res
+      .status(200)
+      .set(ANSWERED_BY_HEADER, counter.endpoint.slug)
+      .json({ input_tokens: estimateInputTokens(request) });
+  } catch (error) {
+    if (!(error instanceof RequestShapeError)) throw error;
+    sendAgentError({ res, wire, error: { status: 400, message: error.message } });
+  }
+}
+
+/** 转给这家的 Anthropic 地址数；它答了（或 Agent 走了）为 true，要本地估算为 false。 */
+async function countOnEndpoint(input: {
+  req: Request;
+  res: Response;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+  body: Buffer;
+  model: string;
+  counter: GatewayCandidate;
+}): Promise<boolean> {
+  const { endpoint } = input.counter;
+  const baseUrl = endpoint.baseUrls.find((entry) => entry.format === "anthropic_messages")?.url;
+  const apiKey = input.store.getApiKey(endpoint.id);
+  if (baseUrl === undefined || apiKey === null) return false;
+  const outcome = await attemptEndpoint({
+    req: input.req,
+    res: input.res,
+    format: "anthropic_messages",
+    pathSuffix: "/count_tokens",
+    endpoint,
+    baseUrl,
+    apiKey,
+    body: input.body,
+    requestedModel: input.model,
+    upstreamModel: input.counter.upstreamModel,
+    headerTimeoutMs: input.failover.headerTimeoutMs,
+  });
+  if (outcome.kind === "answered") await outcome.finished;
+  if (outcome.kind !== "failed") return true;
+  input.logger.debug(
+    { endpoint: endpoint.slug, status: outcome.status },
+    "API endpoint could not count tokens; estimating",
+  );
+  return false;
+}
+
+/**
+ * 能问的候选：这次用哪种格式问它、那个格式的地址与 key。Agent 自己的格式即直通；
+ * 别的格式带上读成中间格式的请求，翻译过去。
+ */
+interface AskableCandidate extends GatewayCandidate {
+  format: ApiEndpointRequestFormat;
   baseUrl: string;
   apiKey: string;
+  translated: GatewayRequest | null;
 }
 
 async function handleAgentRequest(input: {
@@ -151,41 +274,34 @@ async function handleAgentRequest(input: {
   logger: pino.Logger;
   failover: Failover;
 }): Promise<void> {
-  const { req, res, wire, store, logger } = input;
+  const { req, res, wire, store } = input;
   const reply = (status: number, message: string, headers?: Record<string, string>) =>
     sendAgentError({ res, wire, error: { status, message }, headers });
 
-  const body = await readBody(req, MAX_REQUEST_BODY_BYTES);
-  if (body === null) {
-    reply(413, "The request body is too large for the API endpoint gateway");
+  const routed = await routeAgentRequest(input);
+  if (!routed) return;
+  const { body, parsed, model, candidates } = routed;
+  let passable: AskableCandidate[];
+  try {
+    passable = askableCandidates({
+      candidates,
+      format: input.format,
+      parsed,
+      store,
+    });
+  } catch (error) {
+    if (!(error instanceof RequestShapeError)) throw error;
+    reply(400, error.message);
     return;
   }
-  const parsed = parseJson(body.toString("utf8"));
-  const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
-  if (model === null) {
-    reply(400, "The request has no model");
-    return;
-  }
-  const state = readState({ res, wire, store, logger });
-  if (!state) return;
-
-  const route = resolveGatewayRoute({ state, agent: input.agent, model });
-  if (!route.ok) {
-    reply(404, route.message);
-    return;
-  }
-  const passable = route.candidates.flatMap((candidate): PassableCandidate[] => {
-    const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === input.format)?.url;
-    const apiKey = store.getApiKey(candidate.endpoint.id);
-    return baseUrl !== undefined && apiKey !== null ? [{ ...candidate, baseUrl, apiKey }] : [];
-  });
-  const chosen = route.candidates[0];
+  const chosen = candidates[0];
   if (passable.length === 0 && chosen) {
     const answeredBy = { [ANSWERED_BY_HEADER]: chosen.endpoint.slug };
-    const hasAddress = chosen.endpoint.baseUrls.some((entry) => entry.format === input.format);
-    if (hasAddress) reply(500, `${chosen.endpoint.name}: the API key is missing`, answeredBy);
-    else
+    if (askableFormat(chosen, input.format)) {
+      reply(500, `${chosen.endpoint.name}: the API key is missing`, answeredBy);
+    } else {
       reply(502, `${chosen.endpoint.name}: no address for this agent's request format`, answeredBy);
+    }
     return;
   }
 
@@ -200,11 +316,61 @@ async function handleAgentRequest(input: {
     sendRest({ res, wire, ...planned });
     return;
   }
-  await askInTurn({ ...input, body, model, conversation, plan: planned.plan });
+  await askInTurn({
+    ...input,
+    body: mendedBody(input.format, body),
+    model,
+    conversation,
+    plan: planned.plan,
+  });
+}
+
+/** 这家用哪种格式问：只在 Agent 自己的格式与已有翻译的格式里挑（chooseRequestFormat）。 */
+function askableFormat(
+  candidate: GatewayCandidate,
+  agentFormat: ApiEndpointRequestFormat,
+): ApiEndpointRequestFormat | null {
+  return chooseRequestFormat({
+    agentFormat,
+    model: candidate.upstreamModel,
+    formats: candidate.endpoint.baseUrls
+      .map((entry) => entry.format)
+      .filter((format) => format === agentFormat || translatable(agentFormat, format)),
+  });
+}
+
+/** 有地址、有 key、有能用的格式的候选；要翻译时把 Agent 的请求读成中间格式（读不懂抛 RequestShapeError）。 */
+function askableCandidates(input: {
+  candidates: GatewayCandidate[];
+  format: ApiEndpointRequestFormat;
+  parsed: unknown;
+  store: ApiEndpointStore;
+}): AskableCandidate[] {
+  let translated: GatewayRequest | null = null;
+  const translatedRequest = () => {
+    translated ??= protocolOf(input.format).parse(input.parsed);
+    return translated;
+  };
+  return input.candidates.flatMap((candidate): AskableCandidate[] => {
+    const format = askableFormat(candidate, input.format);
+    const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+    const apiKey = input.store.getApiKey(candidate.endpoint.id);
+    if (format === null || baseUrl === undefined || apiKey === null) return [];
+    const request = format === input.format ? null : translatedRequest();
+    return [{ ...candidate, format, baseUrl, apiKey, translated: request }];
+  });
+}
+
+/** Responses 请求直通前先修补工具往来（夹在一串里的项、没有调用的结果、没有结果的调用）；没什么可改时原样不动。 */
+function mendedBody(format: ApiEndpointRequestFormat, body: Buffer): Buffer {
+  if (format !== "openai_responses") return body;
+  const text = body.toString("utf8");
+  const mended = pairToolItems(orphanedToolOutputs(joinToolRuns(text)));
+  return mended === text ? body : Buffer.from(mended);
 }
 
 type PlannedAttempts =
-  | { kind: "ask"; plan: PassableCandidate[] }
+  | { kind: "ask"; plan: AskableCandidate[] }
   | { kind: "rest"; candidate: GatewayCandidate; rest: EndpointRest; backAt?: number };
 
 /**
@@ -212,7 +378,7 @@ type PlannedAttempts =
  * 再按粘性把上次回答者挪到前面。都需要检查、或全都因额度用完在冷却时不问，交出记着的错误。
  */
 function planAttempts(input: {
-  passable: PassableCandidate[];
+  passable: AskableCandidate[];
   failover: Failover;
   conversation: string;
   within: boolean;
@@ -256,7 +422,7 @@ async function askInTurn(input: {
   body: Buffer;
   model: string;
   conversation: string;
-  plan: PassableCandidate[];
+  plan: AskableCandidate[];
 }): Promise<void> {
   const { res, wire, logger, plan } = input;
   const { cooldowns, sticks } = input.failover;
@@ -326,34 +492,24 @@ async function askInTurn(input: {
 }
 
 type SettledAttempt =
-  | Exclude<Awaited<ReturnType<typeof attemptEndpoint>>, FailedAttempt>
+  | Exclude<AttemptOutcome, FailedAttempt>
   | { kind: "failed"; failed: FailedAttempt };
 
 /** 问一家；它是最后一家且只是一时忙或限流时，稍等后原地再问（magpie 的 passing）。 */
 async function askUntilSettled(input: {
   req: Request;
   res: Response;
+  wire: AgentWire;
   body: Buffer;
   model: string;
-  candidate: PassableCandidate;
+  candidate: AskableCandidate;
   last: boolean;
   format: AgentPath["format"];
   failover: Failover;
 }): Promise<SettledAttempt> {
-  const { candidate, res } = input;
+  const { res } = input;
   for (let again = 0; ; again++) {
-    const outcome = await attemptEndpoint({
-      req: input.req,
-      res,
-      format: input.format,
-      endpoint: candidate.endpoint,
-      baseUrl: candidate.baseUrl,
-      apiKey: candidate.apiKey,
-      body: input.body,
-      requestedModel: input.model,
-      upstreamModel: candidate.upstreamModel,
-      headerTimeoutMs: input.failover.headerTimeoutMs,
-    });
+    const outcome = await askEndpoint(input);
     if (outcome.kind !== "failed") return outcome;
     const pause =
       input.last && !outcome.timedOut && retryable(outcome.status, outcome.text)
@@ -370,6 +526,39 @@ async function askUntilSettled(input: {
     await new Promise((resolve) => setTimeout(resolve, pause.waitMs));
     if (res.destroyed) return { kind: "gone" };
   }
+}
+
+/** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
+function askEndpoint(input: {
+  req: Request;
+  res: Response;
+  wire: AgentWire;
+  body: Buffer;
+  model: string;
+  candidate: AskableCandidate;
+  format: AgentPath["format"];
+  failover: Failover;
+}): Promise<AttemptOutcome> {
+  const { candidate } = input;
+  const target = {
+    res: input.res,
+    endpoint: candidate.endpoint,
+    baseUrl: candidate.baseUrl,
+    apiKey: candidate.apiKey,
+    requestedModel: input.model,
+    upstreamModel: candidate.upstreamModel,
+    headerTimeoutMs: input.failover.headerTimeoutMs,
+  };
+  if (candidate.translated === null) {
+    return attemptEndpoint({ ...target, req: input.req, format: input.format, body: input.body });
+  }
+  return attemptTranslated({
+    ...target,
+    wire: input.wire,
+    from: input.format,
+    to: candidate.format,
+    request: candidate.translated,
+  });
 }
 
 /** 把一次失败记进冷却：判错读上游原文，全在冷却时交出的是打过码的原文。 */

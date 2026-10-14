@@ -1,6 +1,10 @@
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/provider.go 的 MessagesFirst、internal/gateway/gateway.go 的 usable）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import {
   API_ENDPOINT_MODEL_TIERS,
   type ApiEndpointModelTier,
+  type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from "../store.js";
 
@@ -83,4 +87,37 @@ function chooseEndpoint(input: {
     }
   }
   return null;
+}
+
+// 没有 Agent 自己格式的地址时，按这个顺序取第一个能用的格式翻译过去。
+const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
+  "openai_chat",
+  "openai_responses",
+  "anthropic_messages",
+];
+
+/** 斜杠后的名字以 claude 开头（magpie 的 claudeModel）。 */
+function isClaudeModel(model: string): boolean {
+  return model
+    .slice(model.lastIndexOf("/") + 1)
+    .toLowerCase()
+    .startsWith("claude");
+}
+
+/**
+ * 这次向这家接口用哪种格式请求（照 magpie 的 usable + MessagesFirst）：
+ * Claude 模型且有 Anthropic 地址一律走 Anthropic，保住缓存标记与思考；
+ * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic 取第一个翻译过去。
+ */
+export function chooseRequestFormat(input: {
+  agentFormat: ApiEndpointRequestFormat;
+  model: string;
+  formats: readonly ApiEndpointRequestFormat[];
+}): ApiEndpointRequestFormat | null {
+  const { formats } = input;
+  if (isClaudeModel(input.model) && formats.includes("anthropic_messages")) {
+    return "anthropic_messages";
+  }
+  if (formats.includes(input.agentFormat)) return input.agentFormat;
+  return TRANSLATION_ORDER.find((format) => formats.includes(format)) ?? null;
 }
