@@ -20,29 +20,23 @@ import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hoo
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
 import type { AgentModelDefinition } from "../agent/agent-sdk-types.js";
-import {
-  codexVersionAtLeast,
-  normalizeOpenAICompatibleBaseUrl,
-  probeCodexVersion,
-} from "../agent/providers/codex-app-server-agent.js";
-import type { ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
+import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 import {
   applyClaudeApiEndpoint,
-  buildClaudeEndpointEnv,
   inspectClaudeSettings,
   restoreClaudeOfficial,
+  type ClaudeGatewayWiring,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
-import { buildCodexAuthCommand } from "./codex-auth-command.js";
 import {
   applyCodexApiEndpoint,
   inspectCodexConfig,
   removeCodexProviderTable,
-  replaceCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
-  type CodexProviderTable,
 } from "./codex-config-patch.js";
+import { buildCodexModelCatalog } from "./codex-model-catalog.js";
+import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import {
   readOptionalFile,
   writeConfigFileGuarded,
@@ -78,7 +72,8 @@ export type ApiEndpointErrorCode =
   | "config_unparsable"
   // 写入时文件一直在被别人改，重试三次后放弃，什么都没写。
   | "config_conflict"
-  | "codex_version_unsupported"
+  // daemon 内置中转站用不了，总开关打不开。
+  | GatewayUnavailableCode
   // endpoints.json 读不懂；什么都不写。
   | "endpoints_unparsable"
   // 没有开着且已选模型的接口，总开关打不开。
@@ -86,11 +81,10 @@ export type ApiEndpointErrorCode =
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
+// Codex 的自定义 provider 地址要带上它，Claude Code 的不带。
+const CODEX_GATEWAY_SUFFIX = "/v1";
 // 测试连接要等模型真正回一句话，比列出模型慢。
 const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
-
-// auth.command 从这个版本开始才有（ADR 0004）。
-const CODEX_AUTH_COMMAND_MIN_VERSION: readonly [number, number, number] = [0, 118, 0];
 
 export class ApiEndpointRequestError extends Error {
   readonly code: ApiEndpointErrorCode;
@@ -148,8 +142,6 @@ export interface ApiEndpointServiceOptions {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   now?: () => Date;
-  // 提供方当前生效的启动设置（含 config.json 里配置的命令）；目前只用来跑 `codex --version` 检查版本。
-  providerRuntimeSettings: (provider: ApiEndpointProvider) => ProviderRuntimeSettings | undefined;
   // 某个 Agent 的总开关、默认模型、可用模型或指向的接口变了之后调用；daemon 据此刷新该提供方的快照。
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
   // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
@@ -162,32 +154,47 @@ export interface ApiEndpointServiceOptions {
 }
 
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
-type ApiEndpointHealthCode =
-  | "modified_externally"
-  | "config_unparsable"
-  | "codex_version_unsupported"
-  // 跑不了 `codex --version`，例如找不到 codex；App 显示 daemon 原文。
-  | "codex_unavailable"
-  | "codex_profile_override";
+type ApiEndpointHealthCode = "modified_externally" | "config_unparsable" | "codex_profile_override";
 
 interface HealthIssue extends ApiEndpointHealthIssue {
   code: ApiEndpointHealthCode;
+}
+
+/** 中转站用不了的原因：daemon 不在 TCP 上监听，或还没绑定端口。列表与拒绝打开总开关用同一个 code。 */
+type GatewayUnavailableCode = "gateway_requires_tcp" | "gateway_not_ready";
+
+interface GatewayUnavailableIssue extends ApiEndpointHealthIssue {
+  code: GatewayUnavailableCode;
 }
 
 /** health 为空即正常；cliBaseUrl 只在官方模式下给出。 */
 export type ApiEndpointListResult = Required<
   Pick<
     ApiEndpointListResponse["payload"],
-    "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount" | "agents"
+    | "endpoints"
+    | "activeEndpointId"
+    | "health"
+    | "cliBaseUrl"
+    | "runningSessionCount"
+    | "agents"
+    | "gatewayUnavailable"
   >
 >;
 
-/** 本票里 CLI 直接指向的那家：持有默认模型的开着接口里最早建的一家，地址按投影取。 */
-interface CliTarget {
-  endpoint: StoredApiEndpoint;
-  baseUrl: string;
-  defaultModelId: string;
+/**
+ * 总开关开着时 CLI 配置里写的一切：daemon 中转站地址、该 Agent 的口令、新会话的起始模型。
+ * Claude 原样写；Codex 地址补 /v1，另写模型目录路径。
+ */
+type CliWiring = ClaudeGatewayWiring;
+
+/** CLI 配置里上次写进去的中转站地址与口令。 */
+interface WrittenGateway {
+  url: string;
+  token: string;
 }
+
+/** daemon 绑定端口之后才知道中转站地址；不在 TCP 上监听时没有地址。 */
+type GatewayAddress = { kind: "pending" } | { kind: "bound"; url: string } | { kind: "socket" };
 
 interface ApiEndpointFileStatus {
   health: HealthIssue[];
@@ -195,7 +202,7 @@ interface ApiEndpointFileStatus {
 }
 
 /**
- * 管理第三方接口，并在启用/切回时改写 CLI 自身的配置文件（ADR 0004）。
+ * 管理第三方接口，并在总开关打开/关掉时改写 CLI 自身的配置文件，让它指向 daemon 内置中转站（ADR 0004、0007）。
  * 所有变更串行执行：改文件是「读—算—写」，并发的两次切换会互相覆盖接管记录。
  */
 export class ApiEndpointService {
@@ -204,15 +211,13 @@ export class ApiEndpointService {
   private readonly env: NodeJS.ProcessEnv;
   private readonly homeDir: string;
   private readonly now: () => Date;
-  private readonly providerRuntimeSettings: (
-    provider: ApiEndpointProvider,
-  ) => ProviderRuntimeSettings | undefined;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private queue: Promise<unknown> = Promise.resolve();
+  private gateway: GatewayAddress = { kind: "pending" };
 
   constructor(options: ApiEndpointServiceOptions) {
     this.store = new ApiEndpointStore(options.paseoHome);
@@ -220,7 +225,6 @@ export class ApiEndpointService {
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());
-    this.providerRuntimeSettings = options.providerRuntimeSettings;
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
@@ -236,17 +240,48 @@ export class ApiEndpointService {
   async list(provider: string): Promise<ApiEndpointListResult> {
     const supported = requireProvider(provider);
     const state = this.readState();
-    const target = cliTarget(state, supported);
-    const status =
-      supported === "codex" ? await this.inspectCodex(target) : this.inspectClaude(target);
+    const enabled = state.agents[supported].enabled;
+    const status = supported === "codex" ? this.inspectCodex(enabled) : this.inspectClaude(enabled);
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
-      activeEndpointId: target?.endpoint.id ?? null,
+      activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
       agents: state.agents,
       health: status.health,
-      cliBaseUrl: target ? null : status.baseUrl,
+      cliBaseUrl: enabled ? null : status.baseUrl,
       runningSessionCount: this.countLiveSessions(supported),
+      gatewayUnavailable: this.gatewayUnavailable(),
     };
+  }
+
+  /**
+   * daemon 绑定端口之后调用；`url` 为 null 表示不在 TCP 上监听，中转站用不了，总开关打不开。
+   * 开着总开关的 Agent 没有口令就补一个（旧数据换算来的从没经历「从关到开」），
+   * CLI 配置里的中转站地址或口令不是现在的就重写，其它内容不动；Codex 的模型目录跟着补齐。
+   * 官方模式下清掉旧版本留下的专用表与 key 文件。出错只记日志，不挡 daemon 启动。
+   */
+  attachGateway(url: string | null): Promise<void> {
+    return this.exclusive(() => {
+      this.gateway = url === null ? { kind: "socket" } : { kind: "bound", url };
+      const state = this.readStateForSnapshot();
+      if (!state) return;
+      const current = this.store.readGatewayTokens();
+      // 前后是同一个状态：只给开着却没有口令的补上。
+      const tokens = nextGatewayTokens(state, state, current);
+      if (!sameTokens(tokens, current)) this.store.writeGatewayTokens(tokens);
+      if (url === null) {
+        if (API_ENDPOINT_PROVIDERS.some((provider) => state.agents[provider].enabled)) {
+          this.logger.warn("API endpoints are on, but the daemon listens on a socket");
+        }
+        return;
+      }
+      for (const provider of API_ENDPOINT_PROVIDERS) {
+        try {
+          this.reconcileCli(state, provider, tokens, url);
+        } catch (error) {
+          this.logger.error({ err: error, provider }, "Failed to point the CLI at the gateway");
+        }
+      }
+    });
   }
 
   activeEndpointId(provider: string): string | null {
@@ -440,8 +475,9 @@ export class ApiEndpointService {
   }
 
   /**
-   * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 CLI 配置跟上（改不成就整个不保存），
-   * 最后写 key 与 endpoints.json，并通知设置有变的 Agent。返回落下的状态。
+   * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
+   * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
+   * 口令跟着总开关走：从关到开换一个新口令，开着却没有就补一个，关掉即作废。
    */
   private async commit(
     previous: ApiEndpointState,
@@ -453,41 +489,54 @@ export class ApiEndpointService {
     } = {},
   ): Promise<ApiEndpointState> {
     const next = settleAgentSettings(proposed);
-    const keys = options.keys ?? {};
-    const keyOf = (id: string) => keys[id] ?? this.store.getApiKey(id);
-
-    const changed = API_ENDPOINT_PROVIDERS.filter(
-      (provider) =>
-        provider === options.rewrite ||
-        cliFingerprint(previous, provider, keyOf) !== cliFingerprint(next, provider, keyOf),
-    );
-    for (const provider of changed) {
-      if (provider === "codex" && !cliTarget(previous, "codex") && cliTarget(next, "codex")) {
-        await this.requireCodexAuthCommand();
+    for (const provider of API_ENDPOINT_PROVIDERS) {
+      if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
+        this.requireGateway();
       }
     }
+    const previousTokens = this.store.readGatewayTokens();
+    const tokens = nextGatewayTokens(previous, next, previousTokens);
+
+    // 不在 TCP 上监听、CLI 配置也从没指向过中转站的开着的 Agent：没有地址可写，留到下次以 TCP 启动时对账；
+    // 打开总开关在上面已经拒绝，这里只放过关接口、删模型这类连带改动。
+    const unreachable = (provider: ApiEndpointProvider) =>
+      next.agents[provider].enabled && this.gatewayUrlFor(provider) === null;
+    const changed = API_ENDPOINT_PROVIDERS.filter(
+      (provider) =>
+        !unreachable(provider) &&
+        (provider === options.rewrite ||
+          this.cliFingerprint(previous, provider, previousTokens) !==
+            this.cliFingerprint(next, provider, tokens)),
+    );
+    const catalogBefore = this.store.readCodexModelCatalog();
+    const catalog = next.agents.codex.enabled ? buildCodexModelCatalog(next) : null;
     const synced: ApiEndpointProvider[] = [];
     try {
+      // 先有目录文件，config.toml 才指向它。
+      if (catalog !== null && catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalog);
       for (const provider of changed) {
-        this.syncCli(provider, cliTarget(next, provider), keyOf);
+        this.syncCli(provider, this.cliWiring(next, provider, tokens));
         synced.push(provider);
       }
-      this.syncCodexProviderTable(previous, next, keyOf);
     } catch (error) {
-      // 另一个 Agent 已经改好的 CLI 配置退回去，状态整个不保存。
+      // 已经改好的 CLI 配置和目录退回去，状态整个不保存。
       for (const provider of synced) {
         try {
-          this.syncCli(provider, cliTarget(previous, provider), (id) => this.store.getApiKey(id));
+          this.syncCli(provider, this.cliWiring(previous, provider, previousTokens));
         } catch (revertError) {
           this.logger.error({ err: revertError, provider }, "Failed to revert CLI config");
         }
       }
+      if (catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalogBefore);
       throw error;
     }
+    if (catalog === null && catalogBefore !== null) this.store.writeCodexModelCatalog(null);
 
-    for (const [id, apiKey] of Object.entries(keys)) this.store.setApiKey(id, apiKey);
+    for (const [id, apiKey] of Object.entries(options.keys ?? {})) {
+      this.store.setApiKey(id, apiKey);
+    }
     this.store.writeState(next);
-    this.syncGatewayTokens(previous, next);
+    if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
@@ -496,67 +545,120 @@ export class ApiEndpointService {
     return next;
   }
 
-  /**
-   * 中转站口令跟着总开关走：从关到开换一个新口令，开着却没有口令（旧数据换算来的）补一个，关掉即删除。
-   */
-  private syncGatewayTokens(previous: ApiEndpointState, next: ApiEndpointState): void {
-    const current = this.store.readGatewayTokens();
-    const tokens: GatewayTokens = {};
-    for (const provider of API_ENDPOINT_PROVIDERS) {
-      if (!next.agents[provider].enabled) continue;
-      const existing = current[provider];
-      tokens[provider] =
-        previous.agents[provider].enabled && existing
-          ? existing
-          : randomBytes(32).toString("base64url");
-    }
-    if (JSON.stringify(tokens) !== JSON.stringify(current)) this.store.writeGatewayTokens(tokens);
-  }
-
-  private syncCli(
-    provider: ApiEndpointProvider,
-    target: CliTarget | null,
-    keyOf: (id: string) => string | null,
-  ): void {
-    if (!target) {
+  private syncCli(provider: ApiEndpointProvider, wiring: CliWiring | null): void {
+    if (!wiring) {
       this.restoreOfficial(provider);
-      return;
-    }
-    const apiKey = keyOf(target.endpoint.id);
-    if (apiKey === null) {
-      throw new ApiEndpointRequestError("not_found", "API key for this endpoint is missing");
-    }
-    if (provider === "codex") {
-      this.writeCodexEndpoint(target, apiKey);
+    } else if (provider === "codex") {
+      this.writeCodexEndpoint(wiring);
     } else {
-      this.writeClaudeEndpoint(target, apiKey);
+      this.writeClaudeEndpoint(wiring);
     }
   }
 
   /**
-   * 官方模式下 config.toml 里仍留着上次那家的专用表，旧 Codex 会话恢复时用它：
-   * 那家被删就拿掉表和 key 文件；那家的名称、地址或 key 变了就刷新。
+   * 启动时的对账：开着的 Agent 只在 CLI 配置里的中转站地址或口令不是现在的时才重写，
+   * 用户手改的其它负责的键留给健康检查报告；官方模式下清掉旧版本留下的东西。
    */
-  private syncCodexProviderTable(
-    previous: ApiEndpointState,
-    next: ApiEndpointState,
-    keyOf: (id: string) => string | null,
+  private reconcileCli(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+    tokens: GatewayTokens,
+    url: string,
   ): void {
-    if (cliTarget(next, "codex")) return;
-    const ownerId = this.store.readCodexTakeover().providerTable?.endpointId;
-    if (!ownerId) return;
-    const owner = findEndpoint(next, ownerId);
-    if (!owner) {
-      this.removeCodexProviderTable(ownerId);
+    const wiring = this.cliWiring(state, provider, tokens);
+    if (provider === "codex") {
+      const catalog = wiring ? buildCodexModelCatalog(state) : null;
+      if (catalog !== this.store.readCodexModelCatalog()) {
+        this.store.writeCodexModelCatalog(catalog);
+      }
+    }
+    if (!wiring) {
+      if (provider === "codex") this.removeLegacyCodexLeftovers();
       return;
     }
-    const before = findEndpoint(previous, ownerId);
-    const apiKey = keyOf(ownerId);
-    const tableOf = (endpoint: StoredApiEndpoint | null) =>
-      endpoint ? JSON.stringify([endpoint.name, projectedBaseUrl(endpoint, "codex")]) : null;
-    const keyChanged = apiKey !== this.store.getApiKey(ownerId);
-    if (apiKey === null || (tableOf(before) === tableOf(owner) && !keyChanged)) return;
-    this.refreshCodexProviderTable(owner, apiKey);
+    const written = this.writtenGateway(provider);
+    if (written?.url === url && written.token === wiring.token) return;
+    this.syncCli(provider, wiring);
+    this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
+  }
+
+  /** 没有接管、或记录是旧版本直接指向接口时写的（地址不是中转站）为 null。 */
+  private writtenGateway(provider: ApiEndpointProvider): WrittenGateway | null {
+    if (provider === "claude") {
+      const env = this.store.readClaudeTakeover().takeover?.env;
+      const url = env?.ANTHROPIC_BASE_URL?.written;
+      const token = env?.ANTHROPIC_AUTH_TOKEN?.written;
+      return url?.endsWith(API_ENDPOINT_GATEWAY_PATH) && token ? { url, token } : null;
+    }
+    const table = this.store.readCodexTakeover().takeover?.table;
+    if (!table?.baseUrl.endsWith(CODEX_GATEWAY_SUFFIX)) return null;
+    return {
+      url: table.baseUrl.slice(0, -CODEX_GATEWAY_SUFFIX.length),
+      token: table.bearerToken,
+    };
+  }
+
+  /** 写进 CLI 配置的中转站地址：绑定的地址；不在 TCP 上监听时沿用上次写进去的。 */
+  private gatewayUrlFor(provider: ApiEndpointProvider): string | null {
+    if (this.gateway.kind === "bound") return this.gateway.url;
+    return this.writtenGateway(provider)?.url ?? null;
+  }
+
+  private cliWiring(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+    tokens: GatewayTokens,
+  ): CliWiring | null {
+    const agent = state.agents[provider];
+    if (!agent.enabled || agent.defaultModelId === null) return null;
+    const baseUrl = this.gatewayUrlFor(provider);
+    const token = tokens[provider];
+    if (baseUrl === null) throw this.gatewayError();
+    // nextGatewayTokens 给每个开着的 Agent 都发了口令。
+    if (token === undefined) throw new Error(`No gateway token for ${provider}`);
+    return { baseUrl, token, model: agent.defaultModelId };
+  }
+
+  /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
+  private cliFingerprint(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+    tokens: GatewayTokens,
+  ): string {
+    const agent = state.agents[provider];
+    if (!agent.enabled || agent.defaultModelId === null) return "official";
+    return JSON.stringify([
+      this.gatewayUrlFor(provider),
+      tokens[provider] ?? null,
+      agent.defaultModelId,
+    ]);
+  }
+
+  private gatewayUnavailable(): GatewayUnavailableIssue | null {
+    switch (this.gateway.kind) {
+      case "bound":
+        return null;
+      case "socket":
+        return {
+          code: "gateway_requires_tcp",
+          message:
+            "The daemon listens on a socket, and the API endpoint gateway needs a TCP port. Set the daemon to listen on a TCP address to use API endpoints",
+        };
+      case "pending":
+        return { code: "gateway_not_ready", message: "The daemon has not finished starting" };
+    }
+  }
+
+  private requireGateway(): void {
+    if (this.gateway.kind !== "bound") throw this.gatewayError();
+  }
+
+  private gatewayError(): ApiEndpointRequestError {
+    const issue = this.gatewayUnavailable() ?? {
+      code: "gateway_not_ready",
+      message: "The daemon has not finished starting",
+    };
+    return new ApiEndpointRequestError(issue.code, issue.message);
   }
 
   /** 读不懂时记一条错误日志，按 endpoints_unparsable 拒绝请求。 */
@@ -677,16 +779,9 @@ export class ApiEndpointService {
     }
   }
 
-  private writeClaudeEndpoint(target: CliTarget, apiKey: string): void {
-    const { endpoint } = target;
+  private writeClaudeEndpoint(wiring: CliWiring): void {
     const settingsPath = this.resolveClaudeSettingsPath();
     const record = this.store.readClaudeTakeover();
-    const env = buildClaudeEndpointEnv({
-      baseUrl: target.baseUrl,
-      apiKey,
-      defaultModelId: target.defaultModelId,
-      modelMapping: endpoint.modelMapping,
-    });
     // 这次首次改写做出的副本；比对不通过重试时收回，免得留下多份。
     let createdBackup: string | null = null;
     this.writeConfigFile<{ takeover: ClaudeSettingsTakeover; current: Buffer | null }>({
@@ -694,7 +789,7 @@ export class ApiEndpointService {
       compute: (text, current) => {
         const result = applyClaudeApiEndpoint({
           text,
-          env,
+          wiring,
           takeover: record.takeover,
         });
         if (result.kind === "unparsable") throw unparsable(settingsPath, result.message);
@@ -719,10 +814,7 @@ export class ApiEndpointService {
         createdBackup = null;
       },
     });
-    this.logger.info(
-      { settingsPath, endpointId: endpoint.id },
-      "Claude settings switched to API endpoint",
-    );
+    this.logger.info({ settingsPath }, "Claude settings pointed at the API endpoint gateway");
   }
 
   private restoreClaudeOfficial(): void {
@@ -746,34 +838,24 @@ export class ApiEndpointService {
     this.logger.info({ settingsPath }, "Claude settings restored to Official");
   }
 
-  private async requireCodexAuthCommand(): Promise<void> {
-    const versionOutput = await probeCodexVersion(this.providerRuntimeSettings("codex"));
-    if (!codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) {
-      throw new ApiEndpointRequestError(
-        "codex_version_unsupported",
-        codexVersionUnsupportedMessage(versionOutput),
-      );
-    }
-  }
-
   /**
-   * 先算好 config.toml 的新内容（解析失败就什么都不写），再写 key 文件和接管记录，重读比对通过后替换 config.toml。
-   * config.toml 替换不成时 key 文件和接管记录都退回切换前的样子。
+   * 先算好 config.toml 的新内容（解析失败就什么都不写），再写接管记录，重读比对通过后替换 config.toml。
+   * config.toml 替换不成时接管记录退回切换前的样子。
    */
-  private writeCodexEndpoint(target: CliTarget, apiKey: string): void {
-    const { endpoint } = target;
+  private writeCodexEndpoint(wiring: CliWiring): void {
     const configPath = this.resolveCodexConfigPath();
     const record = this.store.readCodexTakeover();
-    const table = this.buildCodexProviderTable(endpoint.name, target.baseUrl);
-    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
     let createdBackup: string | null = null;
     this.writeConfigFile<{ takeover: CodexConfigTakeover; current: Buffer | null }>({
       filePath: configPath,
       compute: (text, current) => {
         const result = applyCodexApiEndpoint({
           text,
-          model: target.defaultModelId,
-          table,
+          wiring: {
+            ...wiring,
+            baseUrl: `${wiring.baseUrl}${CODEX_GATEWAY_SUFFIX}`,
+            catalogPath: this.store.codexModelCatalogPath,
+          },
           takeover: record.takeover,
         });
         if (result.kind === "unparsable") throw unparsable(configPath, result.message);
@@ -786,69 +868,21 @@ export class ApiEndpointService {
         if (!record.backup) {
           createdBackup = this.store.writeCodexConfigBackup(current, this.now());
         }
-        this.store.writeCodexKeyFile(apiKey);
         this.store.writeCodexTakeover({
           takeover,
-          providerTable: { endpointId: endpoint.id },
           backup: record.backup ?? { path: createdBackup },
         });
       },
       rollback: () => {
         this.store.writeCodexTakeover(record);
-        this.store.writeCodexKeyFile(previousKey);
         if (createdBackup) this.store.discardBackup(createdBackup);
         createdBackup = null;
       },
     });
-    this.logger.info(
-      { configPath, endpointId: endpoint.id },
-      "Codex config switched to API endpoint",
-    );
-  }
-
-  private refreshCodexProviderTable(endpoint: StoredApiEndpoint, apiKey: string): void {
-    const configPath = this.resolveCodexConfigPath();
-    const table = this.buildCodexProviderTable(endpoint.name, projectedBaseUrl(endpoint, "codex"));
-    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
-    const refreshed = this.writeConfigFile({
-      filePath: configPath,
-      compute: (text) => {
-        const result = replaceCodexProviderTable({
-          text,
-          table,
-        });
-        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
-        // 文件已经不在了：专用表也就不在了，没什么可刷新的。
-        if (result.kind === "missing") return { change: { kind: "keep" }, value: false };
-        return { change: { kind: "write", text: result.text }, value: true };
-      },
-      commit: (writesTable) => {
-        if (writesTable) this.store.writeCodexKeyFile(apiKey);
-      },
-      rollback: () => this.store.writeCodexKeyFile(previousKey),
-    });
-    if (!refreshed) return;
-    this.logger.info(
-      { configPath, endpointId: endpoint.id },
-      "Codex API endpoint provider table refreshed",
-    );
-  }
-
-  private buildCodexProviderTable(name: string, rawBaseUrl: string): CodexProviderTable {
-    // 保存时已校验过 URL，这里归一化不会落空；落空就是数据坏了，直接报错。
-    const baseUrl = normalizeOpenAICompatibleBaseUrl(rawBaseUrl);
-    if (baseUrl === null) {
-      throw new ApiEndpointRequestError("invalid_input", "Base URL is empty");
-    }
-    return {
-      name,
-      baseUrl,
-      auth: buildCodexAuthCommand({
-        platform: process.platform,
-        keyFilePath: this.store.codexKeyFilePath,
-        systemRoot: this.env.SystemRoot,
-      }),
-    };
+    // 旧版本写的 auth.command 已经随专用表一起换掉，它读的 key 文件没用了。
+    // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+    this.store.removeLegacyCodexKeyFile();
+    this.logger.info({ configPath }, "Codex config pointed at the API endpoint gateway");
   }
 
   private restoreCodexOfficial(): void {
@@ -861,30 +895,34 @@ export class ApiEndpointService {
       compute: (text) => {
         const result = restoreCodexOfficial({ text, takeover });
         if (result.kind === "unparsable") throw unparsable(configPath, result.message);
-        const change: ConfigFileChange =
-          result.kind === "patched" ? { kind: "write", text: result.text } : { kind: "keep" };
+        let change: ConfigFileChange = { kind: "keep" };
+        if (result.kind === "patched") change = { kind: "write", text: result.text };
+        if (result.kind === "delete") change = { kind: "delete" };
         return { change, value: null };
       },
-      // 专用表和 key 文件都留着，第三方模式下的 Codex 会话还能恢复。
       commit: () => this.store.writeCodexTakeover({ ...record, takeover: null }),
       rollback: () => this.store.writeCodexTakeover(record),
     });
+    this.store.removeLegacyCodexKeyFile();
     this.logger.info({ configPath }, "Codex config restored to Official");
   }
 
-  /** 删除的是专用表当前所属的接口时，拿掉专用表和 key 文件。调用前已切回官方。 */
-  private removeCodexProviderTable(endpointId: string): void {
+  /**
+   * v0.15 切回官方时把专用表和 key 文件留着给旧会话恢复用；现在官方就是官方，启动时拿掉。
+   * 专用 provider id 只有 Osuna 会写，文件里有它就是留下的。
+   * COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+   */
+  private removeLegacyCodexLeftovers(): void {
     const record = this.store.readCodexTakeover();
-    if (record.providerTable?.endpointId !== endpointId) return;
+    if (record.takeover) return;
     const configPath = this.resolveCodexConfigPath();
-    const previousKey = readOptionalFile(this.store.codexKeyFilePath);
     this.writeConfigFile({
       filePath: configPath,
       compute: (text) => {
         const result = removeCodexProviderTable({ text });
         if (result.kind === "unparsable") throw unparsable(configPath, result.message);
         let change: ConfigFileChange = { kind: "keep" };
-        if (result.kind === "patched") {
+        if (result.kind === "patched" && result.text !== text) {
           // 接管前没有这个文件、现在又只剩 Osuna 写的东西：删掉，回到原样。
           change =
             result.text === "" && record.backup?.path === null
@@ -893,16 +931,10 @@ export class ApiEndpointService {
         }
         return { change, value: null };
       },
-      commit: () => {
-        this.store.writeCodexKeyFile(null);
-        this.store.writeCodexTakeover({ ...record, providerTable: null });
-      },
-      rollback: () => {
-        this.store.writeCodexTakeover(record);
-        this.store.writeCodexKeyFile(previousKey);
-      },
+      commit: () => undefined,
+      rollback: () => undefined,
     });
-    this.logger.info({ configPath, endpointId }, "Codex API endpoint provider table removed");
+    this.store.removeLegacyCodexKeyFile();
   }
 
   /** 冲突保护见 writeConfigFileGuarded；三次都没写成就报 config_conflict。 */
@@ -929,11 +961,11 @@ export class ApiEndpointService {
     return result.value;
   }
 
-  private inspectClaude(active: CliTarget | null): ApiEndpointFileStatus {
+  private inspectClaude(enabled: boolean): ApiEndpointFileStatus {
     const settingsPath = this.resolveClaudeSettingsPath();
     const result = inspectClaudeSettings({
       text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
-      takeover: active ? this.store.readClaudeTakeover().takeover : null,
+      takeover: enabled ? this.store.readClaudeTakeover().takeover : null,
     });
     if (result.kind === "unparsable") {
       return { health: [unparsableIssue(settingsPath, result.message)], baseUrl: null };
@@ -944,50 +976,24 @@ export class ApiEndpointService {
     };
   }
 
-  private async inspectCodex(active: CliTarget | null): Promise<ApiEndpointFileStatus> {
+  private inspectCodex(enabled: boolean): ApiEndpointFileStatus {
     const configPath = this.resolveCodexConfigPath();
     const result = inspectCodexConfig({
       text: readOptionalFile(configPath)?.toString("utf8") ?? null,
-      takeover: active ? this.store.readCodexTakeover().takeover : null,
-      table: active ? this.buildCodexProviderTable(active.endpoint.name, active.baseUrl) : null,
+      takeover: enabled ? this.store.readCodexTakeover().takeover : null,
     });
-    const health: HealthIssue[] = [];
-    let baseUrl: string | null = null;
     if (result.kind === "unparsable") {
-      health.push(unparsableIssue(configPath, result.message));
-    } else {
-      health.push(...modifiedExternallyIssues(configPath, result.modifiedKeys));
-      if (result.profileOverride) {
-        const { profile, keys } = result.profileOverride;
-        health.push({
-          code: "codex_profile_override",
-          message: `${configPath} selects profile "${profile}", and [profiles.${profile}] sets ${keys.join(", ")}, which overrides the API endpoint`,
-        });
-      }
-      baseUrl = result.baseUrl;
+      return { health: [unparsableIssue(configPath, result.message)], baseUrl: null };
     }
-    // Codex 被降级到不认 auth.command 的版本时，启用中的接口已经不能用了。
-    if (active) {
-      const issue = await this.checkCodexVersion();
-      if (issue) health.push(issue);
+    const health = modifiedExternallyIssues(configPath, result.modifiedKeys);
+    if (result.profileOverride) {
+      const { profile, keys } = result.profileOverride;
+      health.push({
+        code: "codex_profile_override",
+        message: `${configPath} selects profile "${profile}", and [profiles.${profile}] sets ${keys.join(", ")}, which overrides the API endpoint`,
+      });
     }
-    return { health, baseUrl };
-  }
-
-  private async checkCodexVersion(): Promise<HealthIssue | null> {
-    let versionOutput: string;
-    try {
-      versionOutput = await probeCodexVersion(this.providerRuntimeSettings("codex"));
-    } catch (error) {
-      // 探测失败不是「版本不足」：原因照实报出，列表照常返回。
-      const reason = error instanceof Error ? error.message : String(error);
-      return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
-    }
-    if (codexVersionAtLeast(versionOutput, CODEX_AUTH_COMMAND_MIN_VERSION)) return null;
-    return {
-      code: "codex_version_unsupported",
-      message: codexVersionUnsupportedMessage(versionOutput),
-    };
+    return { health, baseUrl: result.baseUrl };
   }
 
   /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
@@ -1032,30 +1038,29 @@ function requireProvider(provider: string): ApiEndpointProvider {
   return supported;
 }
 
-function cliTarget(state: ApiEndpointState, provider: ApiEndpointProvider): CliTarget | null {
-  const endpoint = agentTargetEndpoint(state, provider);
-  const defaultModelId = state.agents[provider].defaultModelId;
-  if (!endpoint || defaultModelId === null) return null;
-  return { endpoint, baseUrl: projectedBaseUrl(endpoint, provider), defaultModelId };
+/**
+ * 总开关打开的 Agent 都有口令：从关到开换一个新的，一直开着的沿用，开着却没有（旧数据换算来的）补一个；
+ * 关着的没有口令，旧口令即作废。
+ */
+function nextGatewayTokens(
+  previous: ApiEndpointState,
+  next: ApiEndpointState,
+  current: GatewayTokens,
+): GatewayTokens {
+  const tokens: GatewayTokens = {};
+  for (const provider of API_ENDPOINT_PROVIDERS) {
+    if (!next.agents[provider].enabled) continue;
+    const existing = current[provider];
+    tokens[provider] =
+      previous.agents[provider].enabled && existing
+        ? existing
+        : randomBytes(32).toString("base64url");
+  }
+  return tokens;
 }
 
-/** CLI 配置里会写进去的一切；前后不同才改写文件。 */
-function cliFingerprint(
-  state: ApiEndpointState,
-  provider: ApiEndpointProvider,
-  keyOf: (id: string) => string | null,
-): string {
-  const target = cliTarget(state, provider);
-  if (!target) return "official";
-  const { endpoint } = target;
-  return JSON.stringify([
-    endpoint.id,
-    endpoint.name,
-    target.baseUrl,
-    target.defaultModelId,
-    endpoint.modelMapping ?? null,
-    keyOf(endpoint.id),
-  ]);
+function sameTokens(a: GatewayTokens, b: GatewayTokens): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /** 快照里该 Agent 的一切：模型列表、默认模型、当前接口；前后不同才通知刷新。 */
@@ -1300,8 +1305,4 @@ function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue
       message: `${filePath} was changed outside Osuna: ${keys.join(", ")}`,
     },
   ];
-}
-
-function codexVersionUnsupportedMessage(versionOutput: string): string {
-  return `API endpoints need Codex ${CODEX_AUTH_COMMAND_MIN_VERSION.join(".")} or later, which reads the API key through auth.command. Found: ${versionOutput}`;
 }

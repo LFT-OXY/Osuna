@@ -53,6 +53,7 @@ export function apiEndpointErrorMessageKey(error: ApiEndpointError): string | nu
   if (error.code === "config_conflict") {
     return "settings.providers.apiEndpoints.configConflict";
   }
+  // COMPAT(codexVersionUnsupported): v0.15 daemons still send it; added after v0.15.0, remove after 2027-04-14.
   if (error.code === "codex_version_unsupported") {
     return "settings.providers.apiEndpoints.codexVersionUnsupported";
   }
@@ -71,6 +72,7 @@ export function apiEndpointErrorMessageKey(error: ApiEndpointError): string | nu
 const HEALTH_MESSAGE_KEYS: Readonly<Record<string, string>> = {
   modified_externally: "settings.providers.apiEndpoints.health.modifiedExternally",
   config_unparsable: "settings.providers.apiEndpoints.health.unparsable",
+  // COMPAT(codexVersionUnsupported): v0.15 daemons still send it; added after v0.15.0, remove after 2027-04-14.
   codex_version_unsupported: "settings.providers.apiEndpoints.codexVersionUnsupported",
   codex_profile_override: "settings.providers.apiEndpoints.health.codexProfileOverride",
 };

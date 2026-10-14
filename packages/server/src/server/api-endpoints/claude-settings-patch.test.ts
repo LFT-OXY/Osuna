@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   applyClaudeApiEndpoint,
-  buildClaudeEndpointEnv,
   inspectClaudeSettings,
   restoreClaudeOfficial,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 
-const RELAY_ENV = buildClaudeEndpointEnv({
-  baseUrl: "https://relay.example/api",
-  apiKey: "sk-relay",
-  defaultModelId: "relay/sonnet",
-});
+const GATEWAY = {
+  baseUrl: "http://127.0.0.1:6767/api-endpoint-gateway",
+  token: "gw-token",
+  model: "kimi-k2",
+};
 
 // Claude Code 与终端 hooks 安装器都按 JSON.stringify(…, 2) 写这份文件，这是最常见的形状。
 const USER_SETTINGS = `{
@@ -47,7 +46,7 @@ const USER_SETTINGS = `{
 `;
 
 function apply(text: string | null, takeover: ClaudeSettingsTakeover | null = null) {
-  const result = applyClaudeApiEndpoint({ text, env: RELAY_ENV, takeover });
+  const result = applyClaudeApiEndpoint({ text, wiring: GATEWAY, takeover });
   if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
   return result;
 }
@@ -58,37 +57,8 @@ function restore(text: string | null, takeover: ClaudeSettingsTakeover) {
   return result.text;
 }
 
-describe("buildClaudeEndpointEnv", () => {
-  it("writes the token, blanks the API key, and sets the default model", () => {
-    expect(RELAY_ENV).toEqual({
-      ANTHROPIC_BASE_URL: "https://relay.example/api",
-      ANTHROPIC_AUTH_TOKEN: "sk-relay",
-      ANTHROPIC_API_KEY: "",
-      ANTHROPIC_MODEL: "relay/sonnet",
-    });
-  });
-
-  it("writes only the mapped tiers", () => {
-    expect(
-      buildClaudeEndpointEnv({
-        baseUrl: "https://relay.example/api",
-        apiKey: "sk-relay",
-        defaultModelId: "relay/sonnet",
-        modelMapping: { opus: "relay/opus", haiku: "relay/haiku" },
-      }),
-    ).toEqual({
-      ANTHROPIC_BASE_URL: "https://relay.example/api",
-      ANTHROPIC_AUTH_TOKEN: "sk-relay",
-      ANTHROPIC_API_KEY: "",
-      ANTHROPIC_MODEL: "relay/sonnet",
-      ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/opus",
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: "relay/haiku",
-    });
-  });
-});
-
 describe("applyClaudeApiEndpoint", () => {
-  it("changes only the owned env keys and the WebSearch deny entry", () => {
+  it("changes only the owned env keys, the top-level model, and the WebSearch deny entry", () => {
     const { text } = apply(USER_SETTINGS);
 
     expect(text).toBe(`{
@@ -119,12 +89,12 @@ describe("applyClaudeApiEndpoint", () => {
   },
   "env": {
     "DISABLE_TELEMETRY": "1",
-    "ANTHROPIC_BASE_URL": "https://relay.example/api",
-    "ANTHROPIC_AUTH_TOKEN": "sk-relay",
-    "ANTHROPIC_API_KEY": "",
-    "ANTHROPIC_MODEL": "relay/sonnet"
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:6767/api-endpoint-gateway",
+    "ANTHROPIC_AUTH_TOKEN": "gw-token",
+    "ANTHROPIC_API_KEY": ""
   },
-  "theme": "dark"
+  "theme": "dark",
+  "model": "kimi-k2"
 }
 `);
   });
@@ -133,17 +103,22 @@ describe("applyClaudeApiEndpoint", () => {
     const { text, takeover } = apply(null);
 
     expect(JSON.parse(text)).toEqual({
-      env: RELAY_ENV,
+      env: {
+        ANTHROPIC_BASE_URL: GATEWAY.baseUrl,
+        ANTHROPIC_AUTH_TOKEN: "gw-token",
+        ANTHROPIC_API_KEY: "",
+      },
       permissions: { deny: ["WebSearch"] },
+      model: "kimi-k2",
     });
     expect(takeover).toEqual({
       originalFile: { kind: "absent" },
       env: {
-        ANTHROPIC_BASE_URL: { original: { present: false }, written: "https://relay.example/api" },
-        ANTHROPIC_AUTH_TOKEN: { original: { present: false }, written: "sk-relay" },
+        ANTHROPIC_BASE_URL: { original: { present: false }, written: GATEWAY.baseUrl },
+        ANTHROPIC_AUTH_TOKEN: { original: { present: false }, written: "gw-token" },
         ANTHROPIC_API_KEY: { original: { present: false }, written: "" },
-        ANTHROPIC_MODEL: { original: { present: false }, written: "relay/sonnet" },
       },
+      model: { original: { present: false }, written: "kimi-k2" },
       envCreated: true,
       webSearchDeny: { added: true, permissionsCreated: true, denyCreated: true },
     });
@@ -169,7 +144,7 @@ describe("applyClaudeApiEndpoint", () => {
       value: "sk-mine",
     });
     expect(takeover.env.ANTHROPIC_API_KEY?.original).toEqual({ present: true, value: "" });
-    expect(takeover.env.ANTHROPIC_MODEL?.original).toEqual({ present: false });
+    expect(takeover.env.ANTHROPIC_MODEL).toBeUndefined();
     expect(takeover.envCreated).toBe(false);
   });
 
@@ -203,80 +178,98 @@ describe("applyClaudeApiEndpoint", () => {
     expect(reapplied.takeover).toEqual(first.takeover);
   });
 
-  it("keeps the originals from the first takeover when switching endpoints", () => {
+  it("keeps the originals from the first takeover when the gateway moves", () => {
     const handWritten = `{
   "env": {
     "ANTHROPIC_BASE_URL": "https://mine.example"
-  }
+  },
+  "model": "opus"
 }
 `;
     const first = apply(handWritten);
     const second = applyClaudeApiEndpoint({
       text: first.text,
-      env: buildClaudeEndpointEnv({
-        baseUrl: "https://other.example",
-        apiKey: "sk-other",
-        defaultModelId: "other/model",
-      }),
+      wiring: { baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway", token: "t2", model: "glm" },
       takeover: first.takeover,
     });
     if (second.kind !== "patched") throw new Error("expected patch");
 
     expect(second.takeover.env.ANTHROPIC_BASE_URL).toEqual({
       original: { present: true, value: "https://mine.example" },
-      written: "https://other.example",
+      written: "http://127.0.0.1:7000/api-endpoint-gateway",
+    });
+    expect(second.takeover.model).toEqual({
+      original: { present: true, value: "opus" },
+      written: "glm",
     });
     expect(restore(second.text, second.takeover)).toBe(handWritten);
   });
 
-  it("restores a key the new endpoint no longer owns", () => {
-    const first = apply(USER_SETTINGS);
-    const { ANTHROPIC_MODEL: _dropped, ...withoutModel } = RELAY_ENV;
-    const second = applyClaudeApiEndpoint({
-      text: first.text,
-      env: withoutModel,
-      takeover: first.takeover,
-    });
-    if (second.kind !== "patched") throw new Error("expected patch");
-
-    expect(JSON.parse(second.text).env.ANTHROPIC_MODEL).toBeUndefined();
-    expect(Object.keys(second.takeover.env)).not.toContain("ANTHROPIC_MODEL");
-  });
-
-  it("gives a tier back to the user's own value once it is no longer mapped", () => {
+  it("removes the model and tier variables that would outrank /model, and restores them", () => {
     const handWritten = `{
   "env": {
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "my-opus"
+    "ANTHROPIC_MODEL": "my-model",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "my-opus",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "my-sonnet",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "my-haiku",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "my-fable",
+    "ANTHROPIC_SMALL_FAST_MODEL": "my-fast",
+    "DISABLE_TELEMETRY": "1"
   }
 }
 `;
-    const mapped = applyClaudeApiEndpoint({
-      text: handWritten,
-      env: buildClaudeEndpointEnv({
-        baseUrl: "https://relay.example/api",
-        apiKey: "sk-relay",
-        defaultModelId: "relay/sonnet",
-        modelMapping: { opus: "relay/opus", fable: "relay/fable" },
-      }),
-      takeover: null,
-    });
-    if (mapped.kind !== "patched") throw new Error("expected patch");
-    expect(JSON.parse(mapped.text).env).toMatchObject({
-      ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/opus",
-      ANTHROPIC_DEFAULT_FABLE_MODEL: "relay/fable",
-    });
+    const { text, takeover } = apply(handWritten);
 
-    const unmapped = applyClaudeApiEndpoint({
-      text: mapped.text,
-      env: RELAY_ENV,
-      takeover: mapped.takeover,
+    expect(JSON.parse(text).env).toEqual({
+      DISABLE_TELEMETRY: "1",
+      ANTHROPIC_BASE_URL: GATEWAY.baseUrl,
+      ANTHROPIC_AUTH_TOKEN: "gw-token",
+      ANTHROPIC_API_KEY: "",
     });
-    if (unmapped.kind !== "patched") throw new Error("expected patch");
-    const env = JSON.parse(unmapped.text).env;
-    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("my-opus");
-    expect(env.ANTHROPIC_DEFAULT_FABLE_MODEL).toBeUndefined();
+    expect(takeover.env.ANTHROPIC_SMALL_FAST_MODEL).toEqual({
+      original: { present: true, value: "my-fast" },
+      written: null,
+    });
+    // 没写过的就不记：接管前没有的变量不归 Osuna 管。
+    expect(apply(USER_SETTINGS).takeover.env.ANTHROPIC_MODEL).toBeUndefined();
+    // 值都回来了；删掉再放回的键排到 env 末尾，jsonc 改不回原来的位置。
+    expect(JSON.parse(restore(text, takeover))).toEqual(JSON.parse(handWritten));
+  });
 
-    expect(restore(mapped.text, mapped.takeover)).toBe(handWritten);
+  it("takes over a file written by the per-endpoint version and restores what was there before", () => {
+    // v0.15 写的：直接指向接口，ANTHROPIC_MODEL 与档位变量是 Osuna 写的，原来没有。
+    const legacyText = USER_SETTINGS.replace(
+      `"Read(./.env)"\n`,
+      `"Read(./.env)",\n      "WebSearch"\n`,
+    ).replace(
+      `"DISABLE_TELEMETRY": "1"\n`,
+      `"DISABLE_TELEMETRY": "1",
+    "ANTHROPIC_BASE_URL": "https://relay.example/api",
+    "ANTHROPIC_AUTH_TOKEN": "sk-relay",
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_MODEL": "relay/sonnet",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "relay/opus"\n`,
+    );
+    const absent = { present: false } as const;
+    const legacyTakeover: ClaudeSettingsTakeover = {
+      originalFile: { kind: "content" },
+      env: {
+        ANTHROPIC_BASE_URL: { original: absent, written: "https://relay.example/api" },
+        ANTHROPIC_AUTH_TOKEN: { original: absent, written: "sk-relay" },
+        ANTHROPIC_API_KEY: { original: absent, written: "" },
+        ANTHROPIC_MODEL: { original: absent, written: "relay/sonnet" },
+        ANTHROPIC_DEFAULT_OPUS_MODEL: { original: absent, written: "relay/opus" },
+      },
+      envCreated: false,
+      webSearchDeny: { added: true, permissionsCreated: false, denyCreated: false },
+    };
+
+    const next = apply(legacyText, legacyTakeover);
+
+    const env = JSON.parse(next.text).env;
+    expect(env.ANTHROPIC_MODEL).toBeUndefined();
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
+    expect(restore(next.text, next.takeover)).toBe(USER_SETTINGS);
   });
 
   it("follows the file's own indentation for inserted keys", () => {
@@ -295,7 +288,7 @@ describe("applyClaudeApiEndpoint", () => {
     ["an env that is not an object", `{ "env": "oops" }`],
     ["a permissions.deny that is not an array", `{ "permissions": { "deny": "WebSearch" } }`],
   ])("refuses to patch %s", (_label, text) => {
-    const result = applyClaudeApiEndpoint({ text, env: RELAY_ENV, takeover: null });
+    const result = applyClaudeApiEndpoint({ text, wiring: GATEWAY, takeover: null });
     expect(result.kind).toBe("unparsable");
   });
 });
@@ -372,12 +365,19 @@ describe("inspectClaudeSettings", () => {
   it("names the owned keys that no longer hold what was written", () => {
     const { text, takeover } = apply(USER_SETTINGS);
     const edited = text
-      .replace('"https://relay.example/api"', '"https://other-tool.example"')
-      .replace('"ANTHROPIC_MODEL": "relay/sonnet"', '"X": "1"');
-    expect(inspect(edited, takeover).modifiedKeys).toEqual([
-      "env.ANTHROPIC_BASE_URL",
-      "env.ANTHROPIC_MODEL",
-    ]);
+      .replace(`"${GATEWAY.baseUrl}"`, '"https://other-tool.example"')
+      .replace('"model": "kimi-k2"', '"model": "opus"');
+    expect(inspect(edited, takeover).modifiedKeys).toEqual(["env.ANTHROPIC_BASE_URL", "model"]);
+  });
+
+  it("counts a removed variable that came back as modified", () => {
+    const { text, takeover } = apply('{ "env": { "ANTHROPIC_MODEL": "my-model" } }\n');
+    expect(inspect(text, takeover).modifiedKeys).toEqual([]);
+    const readded = text.replace(
+      `"ANTHROPIC_API_KEY": ""`,
+      `"ANTHROPIC_API_KEY": "", "ANTHROPIC_MODEL": "x"`,
+    );
+    expect(inspect(readded, takeover).modifiedKeys).toEqual(["env.ANTHROPIC_MODEL"]);
   });
 
   it("does not count edits to keys it doesn't own", () => {
@@ -407,7 +407,7 @@ describe("inspectClaudeSettings", () => {
       "env.ANTHROPIC_BASE_URL",
       "env.ANTHROPIC_AUTH_TOKEN",
       "env.ANTHROPIC_API_KEY",
-      "env.ANTHROPIC_MODEL",
+      "model",
       'permissions.deny "WebSearch"',
     ]);
   });

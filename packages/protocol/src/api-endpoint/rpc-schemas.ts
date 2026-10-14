@@ -128,7 +128,8 @@ export type ApiEndpointModeMismatch = z.infer<typeof ApiEndpointModeMismatchSche
 
 /**
  * CLI 配置文件的一条健康问题，列表查询时读真实文件得出。`code` 是字符串：
- * modified_externally、config_unparsable、codex_version_unsupported、codex_profile_override。
+ * modified_externally、config_unparsable、codex_profile_override；
+ * v0.15 及以前的 daemon 还会发 codex_version_unsupported。
  */
 export const ApiEndpointHealthIssueSchema = z.object({
   code: z.string(),
@@ -142,6 +143,8 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
  * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
  * `runningSessionCount` 是该提供方下还活着的 Agent session 数（初始化中、空闲、运行中），
  * 切换或改写配置会影响到它们；App 写进确认框。
+ * `gatewayUnavailable` 非空时 daemon 内置中转站用不了（如 daemon 以 socket 监听，code 为 gateway_requires_tcp），
+ * 「使用第三方接口」总开关打不开；老 daemon 不发。
  */
 export const ApiEndpointListResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.list.response"),
@@ -154,6 +157,7 @@ export const ApiEndpointListResponseSchema = z.object({
     cliBaseUrl: z.string().nullable().optional(),
     runningSessionCount: z.number().optional(),
     agents: z.record(z.string(), ApiEndpointAgentSettingsSchema).optional(),
+    gatewayUnavailable: ApiEndpointHealthIssueSchema.nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

@@ -2,8 +2,11 @@ import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import { z } from "zod";
 
 /*
- * Codex 的 config.toml 补丁（规则见 ADR 0004）：用 toml-eslint-parser 拿到节点的精确位置，
+ * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007）：用 toml-eslint-parser 拿到节点的精确位置，
  * 按位置拼接文本，其余字节不动；每次拼完再解析一遍，拼不出合法文件就整个拒绝。
+ *
+ * 负责的键：顶层 model_provider / model / model_catalog_json，以及整张专用表
+ * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）。切回官方时三个顶层键还原、专用表删除。
  */
 
 /**
@@ -14,7 +17,9 @@ export const CODEX_API_ENDPOINT_PROVIDER_ID = "osuna_api_endpoint";
 
 const TOML_VERSION = "1.0";
 const BOM = "\uFEFF";
-const TOP_LEVEL_KEYS = ["model_provider", "model"] as const;
+const TOP_LEVEL_KEYS = ["model_provider", "model", "model_catalog_json"] as const;
+// 专用表的 name：Codex 在状态与报错里显示它。
+const PROVIDER_TABLE_NAME = "Osuna";
 type TopLevelKey = (typeof TOP_LEVEL_KEYS)[number];
 
 // raw 是原值在文件里的写法（含引号），恢复时原样放回。
@@ -24,23 +29,28 @@ const CodexOriginalValueSchema = z.discriminatedUnion("present", [
 ]);
 type CodexOriginalValue = z.infer<typeof CodexOriginalValueSchema>;
 
-/** 接管记录：顶层负责的键接管前的写法，以及上次写入的值（检测外部改动用）。 */
+const CodexProviderTableRecordSchema = z.object({ baseUrl: z.string(), bearerToken: z.string() });
+type CodexProviderTableRecord = z.infer<typeof CodexProviderTableRecordSchema>;
+
+/**
+ * 接管记录：顶层负责的键接管前的写法，以及上次写入的值（检测外部改动用）。
+ * v0.15 的记录没有 table 与 fileCreated（那时专用表用 auth.command 读 key）。
+ */
 export const CodexConfigTakeoverSchema = z.object({
   keys: z.record(z.string(), z.object({ original: CodexOriginalValueSchema, written: z.string() })),
+  // 专用表上次写入的地址与口令。
+  table: CodexProviderTableRecordSchema.optional(),
+  // 接管前文件不存在：切回官方后只剩 Osuna 写的东西时把文件删掉。
+  fileCreated: z.boolean().optional(),
 });
 export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 
-export interface CodexAuthCommand {
-  command: string;
-  args: string[];
-  timeoutMs: number;
-}
-
-export interface CodexProviderTable {
-  name: string;
-  // 已按自定义 Codex 提供方的规则归一化（以 /v1 结尾）。
+/** CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。 */
+export interface CodexGatewayWiring {
   baseUrl: string;
-  auth: CodexAuthCommand;
+  token: string;
+  model: string;
+  catalogPath: string;
 }
 
 export type CodexConfigPatchResult =
@@ -52,19 +62,23 @@ export type CodexConfigEditResult =
   | { kind: "missing" }
   | { kind: "unparsable"; message: string };
 
+export type CodexConfigRestoreResult =
+  | CodexConfigEditResult
+  // 接管前文件不存在，恢复后又什么都不剩：把文件删掉。
+  | { kind: "delete" };
+
 interface Unparsable {
   kind: "unparsable";
   message: string;
 }
 
 /**
- * 把第三方接口写进 config.toml：顶层 model_provider / model 原地替换或插入，专用表整块放到文件末尾。
+ * 把中转站写进 config.toml：顶层负责的键原地替换或插入，专用表整块放到文件末尾。
  * `takeover` 为 null 表示首次接管；已接管时沿用其中的原值。`text` 为 null 表示文件不存在。
  */
 export function applyCodexApiEndpoint(input: {
   text: string | null;
-  model: string;
-  table: CodexProviderTable;
+  wiring: CodexGatewayWiring;
   takeover: CodexConfigTakeover | null;
 }): CodexConfigPatchResult {
   const [bom, baseText] = splitBom(input.text ?? "");
@@ -72,10 +86,13 @@ export function applyCodexApiEndpoint(input: {
   if (parsed.kind === "unparsable") return parsed;
 
   const eol = detectEol(baseText);
+  const { wiring } = input;
   const values: Record<TopLevelKey, string> = {
     model_provider: CODEX_API_ENDPOINT_PROVIDER_ID,
-    model: input.model,
+    model: wiring.model,
+    model_catalog_json: wiring.catalogPath,
   };
+  const table: CodexProviderTableRecord = { baseUrl: wiring.baseUrl, bearerToken: wiring.token };
   const keys: CodexConfigTakeover["keys"] = {};
   for (const key of TOP_LEVEL_KEYS) {
     const node = findTopLevelKeyValue(parsed.program, key);
@@ -89,45 +106,30 @@ export function applyCodexApiEndpoint(input: {
   for (const key of TOP_LEVEL_KEYS) {
     text = setTopLevelValue({ text, key, raw: tomlString(values[key]), eol });
   }
-  text = appendProviderTable({ text: removeProviderTables(text), table: input.table, eol });
+  // 旧版本写的 auth.command 子表一并拿掉。
+  text = appendProviderTable({ text: removeProviderTables(text), table, eol });
+  // COMPAT(codexLegacyProviderTable): v0.15 的记录没有 fileCreated，按文件原本存在处理；remove after 2027-04-14.
+  const fileCreated = input.takeover ? (input.takeover.fileCreated ?? false) : input.text === null;
 
   const failure = verify(
     text,
     (value) =>
-      value.model_provider === CODEX_API_ENDPOINT_PROVIDER_ID &&
-      value.model === input.model &&
-      holdsProviderTable(value, input.table),
+      TOP_LEVEL_KEYS.every((key) => value[key] === values[key]) && holdsProviderTable(value, table),
   );
-  return failure ?? { kind: "patched", text: bom + text, takeover: { keys } };
-}
-
-/** 只重写专用表，不动顶层键：官方模式下编辑专用表所属的接口时用，旧会话恢复时拿到的是新配置。 */
-export function replaceCodexProviderTable(input: {
-  text: string | null;
-  table: CodexProviderTable;
-}): CodexConfigEditResult {
-  if (input.text === null) return { kind: "missing" };
-  const [bom, original] = splitBom(input.text);
-  const parsed = parseConfig(original);
-  if (parsed.kind === "unparsable") return parsed;
-  const text = appendProviderTable({
-    text: removeProviderTables(original),
-    table: input.table,
-    eol: detectEol(original),
-  });
   return (
-    verify(text, (value) => holdsProviderTable(value, input.table)) ?? {
+    failure ?? {
       kind: "patched",
       text: bom + text,
+      takeover: { keys, table, fileCreated },
     }
   );
 }
 
-/** 切回官方：把顶层负责的键恢复成接管前的写法；专用表保留。 */
+/** 切回官方：把顶层负责的键恢复成接管前的写法，删掉专用表。 */
 export function restoreCodexOfficial(input: {
   text: string | null;
   takeover: CodexConfigTakeover;
-}): CodexConfigEditResult {
+}): CodexConfigRestoreResult {
   if (input.text === null) return { kind: "missing" };
   const [bom, original] = splitBom(input.text);
   const parsed = parseConfig(original);
@@ -142,10 +144,14 @@ export function restoreCodexOfficial(input: {
       ? setTopLevelValue({ text, key, raw: record.original.raw, eol })
       : removeTopLevelKey(text, key);
   }
-  return verify(text, () => true) ?? { kind: "patched", text: bom + text };
+  text = removeProviderTables(text);
+  const failure = verify(text, () => true);
+  if (failure) return failure;
+  if (text === "" && input.takeover.fileCreated) return { kind: "delete" };
+  return { kind: "patched", text: text === "" ? "" : bom + text };
 }
 
-/** 删除接口时拿掉专用表，连同追加时补的那个空行。 */
+/** 拿掉专用表，连同追加时补的那个空行：清理旧版本在官方模式下留着的表。 */
 export function removeCodexProviderTable(input: { text: string | null }): CodexConfigEditResult {
   if (input.text === null) return { kind: "missing" };
   const [bom, original] = splitBom(input.text);
@@ -181,7 +187,6 @@ export type CodexConfigInspection =
 export function inspectCodexConfig(input: {
   text: string | null;
   takeover: CodexConfigTakeover | null;
-  table: CodexProviderTable | null;
 }): CodexConfigInspection {
   let value: Record<string, unknown> = {};
   if (input.text !== null) {
@@ -195,7 +200,8 @@ export function inspectCodexConfig(input: {
     const record = input.takeover?.keys[key];
     if (record && value[key] !== record.written) modifiedKeys.push(key);
   }
-  if (input.table && !holdsProviderTable(value, input.table)) {
+  const table = input.takeover?.table;
+  if (table && !holdsProviderTable(value, table)) {
     modifiedKeys.push(`model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`);
   }
 
@@ -283,23 +289,19 @@ function verify(
   return isRecord(value) && holds(value) ? null : { kind: "unparsable", message: unsafe };
 }
 
-/** 专用表整张都归 Osuna：每个写入的字段都要和这次的接口一致。 */
-function holdsProviderTable(value: Record<string, unknown>, table: CodexProviderTable): boolean {
+/** 专用表整张都归 Osuna：每个写入的字段都要和这次写的一致。 */
+function holdsProviderTable(
+  value: Record<string, unknown>,
+  table: CodexProviderTableRecord,
+): boolean {
   const providers = value.model_providers;
   const written = isRecord(providers) ? providers[CODEX_API_ENDPOINT_PROVIDER_ID] : undefined;
-  if (!isRecord(written) || !isRecord(written.auth)) return false;
-  const { auth } = written;
-  const argsMatch =
-    Array.isArray(auth.args) &&
-    auth.args.length === table.auth.args.length &&
-    auth.args.every((arg, index) => arg === table.auth.args[index]);
   return (
-    written.name === table.name &&
+    isRecord(written) &&
+    written.name === PROVIDER_TABLE_NAME &&
     written.base_url === table.baseUrl &&
     written.wire_api === "responses" &&
-    auth.command === table.auth.command &&
-    argsMatch &&
-    auth.timeout_ms === table.auth.timeoutMs
+    written.experimental_bearer_token === table.bearerToken
   );
 }
 
@@ -380,20 +382,17 @@ function removeProviderTables(text: string): string {
 
 function appendProviderTable(input: {
   text: string;
-  table: CodexProviderTable;
+  table: CodexProviderTableRecord;
   eol: string;
 }): string {
   const { text, table, eol } = input;
+  // 口令明文：它不是用户的 key，只在本机回环有效，关总开关即作废（ADR 0007）。
   const block = [
     `[model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}]`,
-    `name = ${tomlString(table.name)}`,
+    `name = ${tomlString(PROVIDER_TABLE_NAME)}`,
     `base_url = ${tomlString(table.baseUrl)}`,
     `wire_api = "responses"`,
-    "",
-    `[model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}.auth]`,
-    `command = ${tomlString(table.auth.command)}`,
-    `args = [${table.auth.args.map(tomlString).join(", ")}]`,
-    `timeout_ms = ${table.auth.timeoutMs}`,
+    `experimental_bearer_token = ${tomlString(table.bearerToken)}`,
     "",
   ].join(eol);
   if (text === "") return block;

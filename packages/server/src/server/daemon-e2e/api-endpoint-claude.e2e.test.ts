@@ -99,6 +99,18 @@ describe("Claude API endpoint over the daemon RPC", () => {
     return saved.endpoint.id;
   }
 
+  function gatewayUrl(): string {
+    return `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+  }
+
+  async function gatewayTokens(): Promise<Record<string, string>> {
+    const text = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json"),
+      "utf8",
+    ).catch(() => '{"tokens":{}}');
+    return (JSON.parse(text) as { tokens: Record<string, string> }).tokens;
+  }
+
   test("advertises the capability", () => {
     expect(client.getLastServerInfoMessage()?.features?.apiEndpoints).toBe(true);
   });
@@ -129,17 +141,21 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const activated = await client.apiEndpointSetActive("claude", endpointId);
     expect(activated).toMatchObject({ activeEndpointId: endpointId, error: null });
 
-    const switched = JSON.parse(await readFile(settingsPath, "utf8"));
-    expect(switched).toEqual({
+    // 只指向 daemon 中转站：地址、口令、起始模型；真实 key 不出现。
+    const token = (await gatewayTokens()).claude;
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const switchedText = await readFile(settingsPath, "utf8");
+    expect(switchedText).not.toContain(SECRET);
+    expect(JSON.parse(switchedText)).toEqual({
       permissions: { allow: ["Bash(npm run *)"], deny: ["WebSearch"] },
       hooks: { Stop: [] },
       enabledPlugins: { "demo@market": true },
       env: {
-        ANTHROPIC_BASE_URL: "https://relay.example/api",
-        ANTHROPIC_AUTH_TOKEN: SECRET,
+        ANTHROPIC_BASE_URL: gatewayUrl(),
+        ANTHROPIC_AUTH_TOKEN: token,
         ANTHROPIC_API_KEY: "",
-        ANTHROPIC_MODEL: "relay/sonnet",
       },
+      model: "relay/sonnet",
     });
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
 
@@ -152,6 +168,54 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const official = await client.apiEndpointSetActive("claude", null);
     expect(official).toMatchObject({ activeEndpointId: null, error: null });
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+    // 两个 Agent 都关着：口令文件不留。
+    await expect(
+      stat(path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("the token works only while the switch is on", async () => {
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("claude", endpointId);
+    const token = JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN;
+    const hello = () =>
+      fetch(`${gatewayUrl()}/api/hello`, { headers: { authorization: `Bearer ${token}` } });
+
+    expect((await hello()).status).toBe(200);
+    await client.apiEndpointSetActive("claude", null);
+    expect((await hello()).status).toBe(401);
+
+    // 再打开换一个新口令。
+    await client.apiEndpointSetActive("claude", endpointId);
+    const next = JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN;
+    expect(next).not.toBe(token);
+    expect((await hello()).status).toBe(401);
+  });
+
+  test("model variables that would outrank /model are taken out and put back on Official", async () => {
+    const handWritten = `{
+  "env": {
+    "ANTHROPIC_MODEL": "my-model",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "my-opus",
+    "ANTHROPIC_SMALL_FAST_MODEL": "my-fast"
+  },
+  "model": "opus"
+}
+`;
+    await writeFile(settingsPath, handWritten);
+    const endpointId = await createEndpoint();
+
+    await client.apiEndpointSetActive("claude", endpointId);
+    const switched = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(switched.model).toBe("relay/sonnet");
+    expect(Object.keys(switched.env)).toEqual([
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_API_KEY",
+    ]);
+
+    await client.apiEndpointSetActive("claude", null);
+    expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual(JSON.parse(handWritten));
   });
 
   test("an absent settings.json is created on switch, removed on Official, and never backed up", async () => {
@@ -159,7 +223,9 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const endpointId = await createEndpoint();
 
     await client.apiEndpointSetActive("claude", endpointId);
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL).toBe(
+      gatewayUrl(),
+    );
 
     // 编辑启用中的接口会再写一次；这时的文件是 Osuna 自己写的，不能当成「原件」备份。
     await client.apiEndpointSave({
@@ -167,9 +233,10 @@ describe("Claude API endpoint over the daemon RPC", () => {
       endpointId,
       name: "Relay",
       baseUrl: "https://relay.example/api",
-      models: [{ id: "relay/sonnet" }],
-      defaultModelId: "relay/sonnet",
+      models: [{ id: "relay/haiku" }],
+      defaultModelId: "relay/haiku",
     });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("relay/haiku");
     const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
     expect(await readdir(backupsDir).catch(() => [])).toEqual([]);
 
@@ -207,7 +274,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(JSON.stringify(await client.apiEndpointList("claude"))).not.toContain(SECRET);
 
     await client.apiEndpointSetActive("claude", endpointId);
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
+    expect(await readFile(settingsPath, "utf8")).not.toContain(SECRET);
 
     const keysPath = path.join(daemon.paseoHome, "api-endpoints", "keys.json");
     if (process.platform !== "win32") {
@@ -219,22 +286,31 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(daemonConfig).not.toContain(SECRET);
   });
 
-  test("editing the active endpoint rewrites the file right away", async () => {
+  test("a new default model rewrites the file right away; the endpoint's address and key don't", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("claude", endpointId);
+    const switched = await readFile(settingsPath, "utf8");
 
     await client.apiEndpointSave({
       provider: "claude",
       endpointId,
       name: "Relay",
-      baseUrl: "https://relay.example/api",
+      baseUrl: "https://moved.example/api",
+      apiKey: "sk-rotated",
+      models: [{ id: "relay/sonnet" }, { id: "relay/haiku" }],
+      defaultModelId: "relay/sonnet",
+    });
+    expect(await readFile(settingsPath, "utf8")).toBe(switched);
+
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrl: "https://moved.example/api",
       models: [{ id: "relay/sonnet" }, { id: "relay/haiku" }],
       defaultModelId: "relay/haiku",
     });
-
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_MODEL).toBe(
-      "relay/haiku",
-    );
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("relay/haiku");
   });
 
   test("deleting the active endpoint switches back to Official first", async () => {
@@ -254,7 +330,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const switched = await readFile(settingsPath, "utf8");
     await writeFile(
       settingsPath,
-      switched.replace('"https://relay.example/api"', '"https://other-tool.example"'),
+      switched.replace(`"${gatewayUrl()}"`, '"https://other-tool.example"'),
     );
 
     expect(await client.apiEndpointDelete("claude", endpointId)).toMatchObject({
@@ -307,7 +383,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     await writeFile(
       settingsPath,
-      otherKeyEdited.replace('"https://relay.example/api"', '"https://other-tool.example"'),
+      otherKeyEdited.replace(`"${gatewayUrl()}"`, '"https://other-tool.example"'),
     );
     const listed = await client.apiEndpointList("claude");
     expect(listed.activeEndpointId).toBe(endpointId);
@@ -323,10 +399,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("claude", endpointId);
     const switched = await readFile(settingsPath, "utf8");
-    const modified = switched.replace(
-      '"https://relay.example/api"',
-      '"https://other-tool.example"',
-    );
+    const modified = switched.replace(`"${gatewayUrl()}"`, '"https://other-tool.example"');
     await writeFile(settingsPath, modified);
 
     // 「重新应用」就是再启用一次当前接口。
@@ -375,7 +448,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     const written = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(written.theme).toBe("dark");
-    expect(written.env.ANTHROPIC_AUTH_TOKEN).toBe(SECRET);
+    expect(written.env.ANTHROPIC_BASE_URL).toBe(gatewayUrl());
     // 首次改写的完整副本只留一份：重算前做的那份随回滚收回。
     const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
     const backups = await readdir(backupsDir);

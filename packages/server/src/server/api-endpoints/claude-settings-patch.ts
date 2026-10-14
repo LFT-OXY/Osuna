@@ -1,20 +1,26 @@
 import { applyEdits, modify, type FormattingOptions, type JSONPath } from "jsonc-parser";
 import { z } from "zod";
-import {
-  API_ENDPOINT_MODEL_TIERS,
-  type ApiEndpointModelMapping,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
  * 规则见 docs/adr/0004-api-endpoint-rewrites-cli-config.md，思路参考 cc-switch（MIT）的 live/ 模块。
  *
- * 负责的键：
- * - env 下的 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY（置空）/ ANTHROPIC_MODEL；
- * - env 下用户映射了的 ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL，没映射的档位不写；
+ * 负责的键（ADR 0007 改了写什么）：
+ * - env 下的 ANTHROPIC_BASE_URL（daemon 中转站）/ ANTHROPIC_AUTH_TOKEN（中转站口令）/ ANTHROPIC_API_KEY（置空）；
+ * - 顶层 model：新会话的起始模型。不写 env.ANTHROPIC_MODEL，它会盖过会话里 /model 的选择；
+ * - env 下的 ANTHROPIC_MODEL、ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL、ANTHROPIC_SMALL_FAST_MODEL：
+ *   接管时有就记下并删掉（档位由中转站按各家映射翻译），切回官方时放回；
  * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，第三方接口不支持，
  *   Claude Code 没有关它的环境变量，只能用权限规则。用户自己写的同名规则不归 Osuna 所有。
  */
+
+/** 接管期间不能留在 env 里的变量。 */
+const REMOVED_ENV_KEYS = [
+  "ANTHROPIC_MODEL",
+  ...API_ENDPOINT_MODEL_TIERS.map((tier) => `ANTHROPIC_DEFAULT_${tier.toUpperCase()}_MODEL`),
+  "ANTHROPIC_SMALL_FAST_MODEL",
+];
 
 const WEB_SEARCH_RULE = "WebSearch";
 
@@ -35,7 +41,13 @@ type OriginalFile = z.infer<typeof OriginalFileSchema>;
 /** 接管记录：每个负责的键接管前的原值，以及上次写入的值（检测外部改动用）。 */
 export const ClaudeSettingsTakeoverSchema = z.object({
   originalFile: OriginalFileSchema,
-  env: z.record(z.string(), z.object({ original: OriginalValueSchema, written: z.string() })),
+  // written 为 null：Osuna 把这个键删掉了。
+  env: z.record(
+    z.string(),
+    z.object({ original: OriginalValueSchema, written: z.string().nullable() }),
+  ),
+  // 顶层 model；v0.15 及以前不写它，旧记录里没有。
+  model: z.object({ original: OriginalValueSchema, written: z.string() }).optional(),
   // 接管前没有 env 对象；恢复后 env 变空就整个删掉。
   envCreated: z.boolean(),
   webSearchDeny: z.object({
@@ -57,34 +69,21 @@ export type ClaudeSettingsRestoreResult =
   | { kind: "missing" }
   | { kind: "unparsable"; message: string };
 
-export function buildClaudeEndpointEnv(input: {
+/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型。 */
+export interface ClaudeGatewayWiring {
   baseUrl: string;
-  apiKey: string;
-  defaultModelId: string;
-  modelMapping?: ApiEndpointModelMapping;
-}): Record<string, string> {
-  const env: Record<string, string> = {
-    ANTHROPIC_BASE_URL: input.baseUrl,
-    ANTHROPIC_AUTH_TOKEN: input.apiKey,
-    // 登录态或环境里残留的 API key 会和 token 冲突，置空并纳入负责的键。
-    ANTHROPIC_API_KEY: "",
-    ANTHROPIC_MODEL: input.defaultModelId,
-  };
-  for (const tier of API_ENDPOINT_MODEL_TIERS) {
-    const modelId = input.modelMapping?.[tier];
-    if (modelId) env[`ANTHROPIC_DEFAULT_${tier.toUpperCase()}_MODEL`] = modelId;
-  }
-  return env;
+  token: string;
+  model: string;
 }
 
 /**
- * 把第三方接口写进 settings.json。`takeover` 为 null 表示首次接管；
+ * 把中转站写进 settings.json。`takeover` 为 null 表示首次接管；
  * 已接管时沿用其中的原值，只更新写入值，这样切回官方总能回到接管前的样子。
  * `text` 为 null 表示文件不存在。
  */
 export function applyClaudeApiEndpoint(input: {
   text: string | null;
-  env: Record<string, string>;
+  wiring: ClaudeGatewayWiring;
   takeover: ClaudeSettingsTakeover | null;
 }): ClaudeSettingsPatchResult {
   const baseText = input.text === null || input.text.trim() === "" ? "{}\n" : input.text;
@@ -96,22 +95,24 @@ export function applyClaudeApiEndpoint(input: {
   let text = baseText;
   const envRecords: ClaudeSettingsTakeover["env"] = {};
 
-  for (const [key, value] of Object.entries(input.env)) {
-    const previous = input.takeover?.env[key];
-    const original: OriginalValue =
-      previous?.original ??
-      (envObject && Object.hasOwn(envObject, key)
-        ? { present: true, value: envObject[key] }
-        : { present: false });
+  const env = gatewayEnv(input.wiring, envObject, input.takeover);
+  for (const [key, value] of Object.entries(env)) {
+    const original = input.takeover?.env[key]?.original ?? originalValue(envObject, key);
     envRecords[key] = { original, written: value };
-    text = edit(text, ["env", key], value, formatting);
+    text = edit(text, ["env", key], value ?? undefined, formatting);
   }
 
   // 上次接管过、这次不再写的键：恢复原值并放弃所有权。
   for (const [key, record] of Object.entries(input.takeover?.env ?? {})) {
-    if (Object.hasOwn(input.env, key)) continue;
+    if (Object.hasOwn(env, key)) continue;
     text = restoreValue(text, ["env", key], record.original, formatting);
   }
+
+  const model = {
+    original: input.takeover?.model?.original ?? originalValue(parsed.settings, "model"),
+    written: input.wiring.model,
+  };
+  text = edit(text, ["model"], input.wiring.model, formatting);
 
   const webSearchDeny = ensureWebSearchDenied(text, parsed.settings, input.takeover, formatting);
   text = webSearchDeny.text;
@@ -122,10 +123,38 @@ export function applyClaudeApiEndpoint(input: {
     takeover: {
       originalFile: input.takeover?.originalFile ?? classifyOriginalFile(input.text),
       env: envRecords,
+      model,
       envCreated: input.takeover?.envCreated ?? envObject === undefined,
       webSearchDeny: webSearchDeny.record,
     },
   };
+}
+
+/** 这次要写的 env：值为 null 的是要删掉的键。接管前没有、之后也没出现的不记，不归 Osuna 管。 */
+function gatewayEnv(
+  wiring: ClaudeGatewayWiring,
+  envObject: Record<string, unknown> | undefined,
+  takeover: ClaudeSettingsTakeover | null,
+): Record<string, string | null> {
+  const env: Record<string, string | null> = {
+    ANTHROPIC_BASE_URL: wiring.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: wiring.token,
+    // 登录态或环境里残留的 API key 会和 token 冲突，置空并纳入负责的键。
+    ANTHROPIC_API_KEY: "",
+  };
+  for (const key of REMOVED_ENV_KEYS) {
+    if (originalValue(envObject, key).present || takeover?.env[key]) env[key] = null;
+  }
+  return env;
+}
+
+function originalValue<T extends object>(
+  container: T | undefined,
+  key: keyof T & string,
+): OriginalValue {
+  return container !== undefined && Object.hasOwn(container, key)
+    ? { present: true, value: container[key] }
+    : { present: false };
 }
 
 /** 切回官方：把负责的键恢复成接管前的值，删掉接管时新建出来的空容器。 */
@@ -141,6 +170,9 @@ export function restoreClaudeOfficial(input: {
   let text = input.text;
   for (const [key, record] of Object.entries(input.takeover.env)) {
     text = restoreValue(text, ["env", key], record.original, formatting);
+  }
+  if (input.takeover.model) {
+    text = restoreValue(text, ["model"], input.takeover.model.original, formatting);
   }
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
@@ -196,8 +228,10 @@ export function inspectClaudeSettings(input: {
   }
   const modifiedKeys: string[] = [];
   for (const [key, record] of Object.entries(input.takeover?.env ?? {})) {
-    if (settings.env?.[key] !== record.written) modifiedKeys.push(`env.${key}`);
+    if ((settings.env?.[key] ?? null) !== record.written) modifiedKeys.push(`env.${key}`);
   }
+  const model = input.takeover?.model;
+  if (model && settings.model !== model.written) modifiedKeys.push("model");
   if (
     input.takeover?.webSearchDeny.added &&
     !settings.permissions?.deny?.includes(WEB_SEARCH_RULE)
@@ -220,6 +254,7 @@ function classifyOriginalFile(text: string | null): OriginalFile {
 
 interface ParsedSettings {
   env?: Record<string, unknown>;
+  model?: unknown;
   permissions?: { deny?: unknown[] };
 }
 

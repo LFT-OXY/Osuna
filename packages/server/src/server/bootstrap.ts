@@ -282,6 +282,18 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
   ).toString();
 }
 
+/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
+function createApiEndpointGatewayUrl(listenTarget: ListenTarget | null): string | null {
+  if (!listenTarget || listenTarget.type !== "tcp") {
+    return null;
+  }
+  const host = resolveAgentMcpClientHost(listenTarget.host);
+  return new URL(
+    API_ENDPOINT_GATEWAY_PATH,
+    `http://${formatHostForHttpUrl(host)}:${listenTarget.port}`,
+  ).toString();
+}
+
 function createTerminalActivityUrl(listenTarget: ListenTarget | null): string | null {
   if (!listenTarget || listenTarget.type !== "tcp") {
     return null;
@@ -960,7 +972,6 @@ export async function createPaseoDaemon(
   const apiEndpointService = new ApiEndpointService({
     paseoHome: config.paseoHome,
     logger,
-    providerRuntimeSettings: (provider) => providerSnapshotManager.getRuntimeSettings(provider),
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
@@ -1720,6 +1731,12 @@ export async function createPaseoDaemon(
           mainStarted = true;
           const logAndResolve = async () => {
             boundListenTarget = resolveBoundListenTarget(listenTarget, httpServer);
+            // 端口可能和上次不同：CLI 配置里的中转站地址跟上，旧数据补口令。
+            await apiEndpointService
+              .attachGateway(createApiEndpointGatewayUrl(boundListenTarget))
+              .catch((error: unknown) => {
+                logger.error({ err: error }, "Failed to attach the API endpoint gateway");
+              });
             const mcpBaseUrl = createAgentMcpBaseUrl(boundListenTarget);
             agentMcpBaseUrl =
               !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;

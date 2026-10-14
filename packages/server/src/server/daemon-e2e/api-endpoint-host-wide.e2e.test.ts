@@ -311,7 +311,7 @@ describe("the Use API endpoints switch", () => {
   });
 
   test("turning it on without a default model picks the first model of the earliest endpoint that is on", async () => {
-    const { client, settingsPath } = await start();
+    const { client, settingsPath, daemon } = await start();
     const off = await saveEndpoint(client, "Off", ["z0"]);
     await client.apiEndpointSetEndpointState({ endpointId: off, enabled: false });
     await saveEndpoint(client, "Empty", []);
@@ -324,24 +324,23 @@ describe("the Use API endpoints switch", () => {
     const listed = await client.apiEndpointList("claude");
     expect(listed.activeEndpointId).toBe(relay);
     expect(listed.agents?.codex).toEqual({ enabled: false, defaultModelId: null });
-    // 本票里 CLI 仍直接指向那一家。
-    const env = JSON.parse(await readFile(settingsPath, "utf8")).env;
-    expect(env).toMatchObject({
-      ANTHROPIC_BASE_URL: "https://relay.example",
-      ANTHROPIC_AUTH_TOKEN: "sk-Relay",
-      ANTHROPIC_MODEL: "m1",
-    });
+    // CLI 指向 daemon 中转站，默认模型写成起始模型；用哪家由中转站按模型名决定。
+    const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBe(gateway);
+    expect(settings.model).toBe("m1");
 
-    // 选另一家的模型做默认：CLI 跟着换家。
+    // 选另一家的模型做默认：只换起始模型。
     const chosen = await client.apiEndpointSetAgentSettings({
       provider: "claude",
       enabled: true,
       defaultModelId: "l1",
     });
     expect(chosen.agent).toEqual({ enabled: true, defaultModelId: "l1" });
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL).toBe(
-      "https://later.example",
-    );
+    expect(JSON.parse(await readFile(settingsPath, "utf8"))).toMatchObject({
+      env: { ANTHROPIC_BASE_URL: gateway },
+      model: "l1",
+    });
 
     // 关接口里的模型不能当默认。
     const rejected = await client.apiEndpointSetAgentSettings({
@@ -408,10 +407,7 @@ describe("a default model that goes missing", () => {
       // B 也有同名模型，默认模型不变。
       codex: { enabled: true, defaultModelId: "shared" },
     });
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env).toMatchObject({
-      ANTHROPIC_BASE_URL: "https://b.example",
-      ANTHROPIC_MODEL: "b-only",
-    });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b-only");
 
     // 一个能用的模型都不剩：两个 Agent 都回官方，CLI 配置还原。
     expect((await client.apiEndpointDelete("codex", b)).activeEndpointId).toBeNull();
@@ -525,9 +521,7 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
       claude: { enabled: true, defaultModelId: "b1" },
       codex: { enabled: true, defaultModelId: "a1" },
     });
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL).toBe(
-      "https://b.example",
-    );
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b1");
 
     expect(await client.apiEndpointSetActive("claude", null)).toMatchObject({
       activeEndpointId: null,

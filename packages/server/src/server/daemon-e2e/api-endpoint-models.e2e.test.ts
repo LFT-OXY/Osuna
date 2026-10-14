@@ -196,7 +196,7 @@ describe("API endpoint models over the daemon RPC", () => {
     expect((await client.apiEndpointCancel("fetch-to-cancel")).cancelled).toBe(false);
   });
 
-  test("writes only the mapped tiers and gives them back on Official", async () => {
+  test("keeps the tier mapping on the endpoint and takes tier variables out of settings.json", async () => {
     const endpointId = await saveEndpoint();
     const listed = await client.apiEndpointList("claude");
     expect(listed.endpoints[0]?.modelMapping).toEqual({
@@ -204,29 +204,15 @@ describe("API endpoint models over the daemon RPC", () => {
       fable: "relay/sonnet",
     });
 
+    // 档位由中转站按这家的映射翻译；settings.json 里用户自己的档位变量接管期间拿掉。
     await client.apiEndpointSetActive("claude", endpointId);
-    const env = JSON.parse(await readFile(settingsPath, "utf8")).env;
-    expect(env).toMatchObject({
-      ANTHROPIC_MODEL: "relay/sonnet",
-      ANTHROPIC_DEFAULT_OPUS_MODEL: "relay/opus",
-      ANTHROPIC_DEFAULT_FABLE_MODEL: "relay/sonnet",
-    });
-    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBeUndefined();
-    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBeUndefined();
-
-    // 编辑启用中的接口、去掉 opus 映射：该档位回到用户自己的值。
-    await client.apiEndpointSave({
-      provider: "claude",
-      endpointId,
-      name: "Relay",
-      baseUrl: upstream.baseUrl,
-      models: [{ id: "relay/opus" }, { id: "relay/sonnet" }],
-      defaultModelId: "relay/sonnet",
-      modelMapping: { fable: "relay/sonnet" },
-    });
-    expect(JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe(
-      "my-opus",
-    );
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(settings.model).toBe("relay/sonnet");
+    expect(Object.keys(settings.env)).toEqual([
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_API_KEY",
+    ]);
 
     await client.apiEndpointSetActive("claude", null);
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);

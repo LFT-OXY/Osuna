@@ -851,16 +851,17 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 
 ### 2. Signatures
 
-- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, and `runningSessionCount?: number`.
-- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, `runningSessionCount?: number`, and `gatewayUnavailable?: ApiEndpointHealthIssue | null` (api-endpoint-auto-switch ticket 03).
+- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (`ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount" | "agents" | "gatewayUnavailable">>`), `activeEndpointId(provider)` for the sync error path. Internal unions: `ApiEndpointHealthCode` for `health`, `GatewayUnavailableCode` for `gatewayUnavailable` and the refusal error.
 - Count: required option `ApiEndpointServiceOptions.countLiveSessions(provider) => number`, wired in bootstrap to `AgentManager.countLiveAgents(provider)` (non-internal agents of exactly that provider whose lifecycle is `initializing`, `idle`, or `running`).
 - App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
 
 ### 3. Contracts
 
-- Codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_version_unsupported` (active Codex endpoint and `codex --version` below 0.118.0), `codex_unavailable` (the probe itself failed; never reported as "outdated"), `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model`; reported in both modes so it shows before enabling).
+- Health codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model` / `model_catalog_json`; reported in both modes so it shows before enabling). v0.15 daemons also send `codex_version_unsupported` / `codex_unavailable`; ticket 03 dropped the Codex version check (no `auth.command` any more), and the app keeps the `codex_version_unsupported` key under `COMPAT(codexVersionUnsupported)`.
+- `gatewayUnavailable` is host state, not file health: `gateway_requires_tcp` (daemon listens on a socket or pipe) or `gateway_not_ready` (before the listener binds). Turning a switch on (`set_agent_settings`, old `set_active(id)`) is refused with the same `{ code, message }` as the error, so the app can explain the greyed-out switch from the list and the refusal alike.
 - `cliBaseUrl` is set only in Official: Claude `env.ANTHROPIC_BASE_URL`; Codex the effective provider (profile over top level, default `openai`), its `model_providers.<id>.base_url`, or `openai_base_url` for `openai`.
-- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same version check and conflict guard. "Switch to Official" is `set_active(null)`.
+- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same conflict guard. "Switch to Official" is `set_active(null)`.
 - New write error `config_conflict` (file kept changing during the write). The app localizes it and `modified_externally`, `config_unparsable` (health wording), `codex_profile_override`; other codes show the daemon message.
 - `runningSessionCount` counts live sessions, not only `running` ones: an idle Claude process re-reads `settings.json` on its next turn, so it is affected too. Custom providers that extend `claude` are not counted. The count answers "how many sessions does rewriting the CLI config touch", so it lives on the list and the app fetches the list again right before each confirmation.
 - The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim. A `null` count drops the session line from the confirmation and keeps the terminal line.
@@ -870,7 +871,7 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 - Owned key edited → `modified_externally`; other keys edited → no issue.
 - File deleted while an endpoint is active → every owned key listed as modified.
 - File does not parse → `config_unparsable` in `health`; the list itself still succeeds.
-- Codex binary missing → `codex_unavailable` in `health`; `list.error` stays null.
+- Daemon on a socket → `gatewayUnavailable.code = "gateway_requires_tcp"`, `list.error` stays null, switches already on stay on.
 
 ### 5. Good/Base/Bad Cases
 
@@ -881,27 +882,26 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 ### 6. Tests Required
 
 - Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
-- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
+- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; socket listener reports `gatewayUnavailable` and refuses turn-on; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
 - App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
-- Protocol: payload parses with health/cliBaseUrl/runningSessionCount and without them.
+- Protocol: payload parses with health/cliBaseUrl/runningSessionCount/gatewayUnavailable and without them.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```ts
-} catch (error) {
-  return { code: "codex_version_unsupported", message: String(error) }; // "update Codex" for a missing binary
-}
+// A host condition squeezed into file health: the app can't tell it from a broken settings.json,
+// and the refusal error carries a different code than the list.
+health.push({ code: "gateway_requires_tcp", message });
+throw new ApiEndpointRequestError("gateway_unavailable", message);
 ```
 
 #### Correct
 
 ```ts
-} catch (error) {
-  const reason = error instanceof Error ? error.message : String(error);
-  return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
-}
+return { ...result, gatewayUnavailable: this.gatewayUnavailable() }; // { code, message } | null
+throw new ApiEndpointRequestError(issue.code, issue.message); // same code as the list
 ```
 
 ## Scenario: a one-off timeline notice the daemon adds on resume

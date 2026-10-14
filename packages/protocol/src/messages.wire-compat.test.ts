@@ -582,6 +582,10 @@ test("a host-wide API endpoint list still parses as the single-endpoint projecti
       ],
       activeEndpointId: "ep_1",
       agents: { codex: { enabled: true, defaultModelId: "gpt-5" } },
+      gatewayUnavailable: {
+        code: "gateway_requires_tcp",
+        message: "The daemon listens on a socket",
+      },
       error: null,
     },
   };

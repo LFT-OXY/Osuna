@@ -11,15 +11,16 @@ import { AGENT_REQUEST_FORMAT, generateEndpointSlug } from "./host-endpoints.js"
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
+import { readOptionalFile } from "./config-file.js";
 
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
  * - endpoints.json：主机共用的接口与每个 Agent 的总开关、默认模型，不含 key；
  * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
- * - takeover-codex.json：config.toml 的接管记录，以及专用 provider 表当前属于哪个接口；
- * - codex-api-key：Codex 通过 auth.command 读取的 key，只有内容本身，没有换行；
- * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即删除；
+ * - takeover-codex.json：config.toml 的接管记录；
+ * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
+ * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即作废，都关着时文件删除；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
@@ -105,11 +106,10 @@ const ClaudeTakeoverFileSchema = z.object({
 });
 export type ClaudeTakeoverFile = z.infer<typeof ClaudeTakeoverFileSchema>;
 
+// v0.15 的记录另有 providerTable（官方模式下留着的专用表属于哪个接口），读时丢掉；那张表启动时清理。
 const CodexTakeoverFileSchema = z.object({
   // null：当前没有接管（官方模式）。
   takeover: CodexConfigTakeoverSchema.nullable(),
-  // config.toml 里的专用 provider 表写的是哪个接口；切回官方后仍在，删除该接口时连同 key 文件一起删。
-  providerTable: z.object({ endpointId: z.string() }).nullable(),
   backup: z.object({ path: z.string().nullable() }).nullable(),
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
@@ -119,7 +119,11 @@ const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string
 export type GatewayTokens = z.infer<typeof GatewayTokensFileSchema>["tokens"];
 
 const ENDPOINTS_FILE = "endpoints.json";
-const CODEX_KEY_FILE = "codex-api-key";
+const GATEWAY_TOKENS_FILE = "gateway-tokens.json";
+const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
+// v0.15 让 Codex 通过 auth.command 读 key 的文件；现在不再写，见到就删。
+// COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+const LEGACY_CODEX_KEY_FILE = "codex-api-key";
 
 export class ApiEndpointStore {
   private readonly root: string;
@@ -191,12 +195,17 @@ export class ApiEndpointStore {
   }
 
   readGatewayTokens(): GatewayTokens {
-    const raw = this.readJson("gateway-tokens.json");
+    const raw = this.readJson(GATEWAY_TOKENS_FILE);
     return raw === null ? {} : GatewayTokensFileSchema.parse(raw).tokens;
   }
 
+  /** 两个 Agent 都关着时没有口令，文件删掉。 */
   writeGatewayTokens(tokens: GatewayTokens): void {
-    this.writeJson("gateway-tokens.json", GatewayTokensFileSchema.parse({ tokens }));
+    if (Object.keys(tokens).length === 0) {
+      rmSync(path.join(this.root, GATEWAY_TOKENS_FILE), { force: true });
+      return;
+    }
+    this.writeJson(GATEWAY_TOKENS_FILE, GatewayTokensFileSchema.parse({ tokens }));
   }
 
   readClaudeTakeover(): ClaudeTakeoverFile {
@@ -210,26 +219,32 @@ export class ApiEndpointStore {
 
   readCodexTakeover(): CodexTakeoverFile {
     const raw = this.readJson("takeover-codex.json");
-    return raw === null
-      ? { takeover: null, providerTable: null, backup: null }
-      : CodexTakeoverFileSchema.parse(raw);
+    return raw === null ? { takeover: null, backup: null } : CodexTakeoverFileSchema.parse(raw);
   }
 
   writeCodexTakeover(file: CodexTakeoverFile): void {
     this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
   }
 
-  get codexKeyFilePath(): string {
-    return path.join(this.root, CODEX_KEY_FILE);
+  get codexModelCatalogPath(): string {
+    return path.join(this.root, CODEX_MODEL_CATALOG_FILE);
+  }
+
+  readCodexModelCatalog(): string | null {
+    return readOptionalFile(this.codexModelCatalogPath)?.toString("utf8") ?? null;
   }
 
   /** null 表示删掉。 */
-  writeCodexKeyFile(bytes: string | Buffer | null): void {
-    if (bytes === null) {
-      rmSync(this.codexKeyFilePath, { force: true });
+  writeCodexModelCatalog(text: string | null): void {
+    if (text === null) {
+      rmSync(this.codexModelCatalogPath, { force: true });
       return;
     }
-    writePrivateFileAtomicSync(this.codexKeyFilePath, bytes);
+    writePrivateFileAtomicSync(this.codexModelCatalogPath, text);
+  }
+
+  removeLegacyCodexKeyFile(): void {
+    rmSync(path.join(this.root, LEGACY_CODEX_KEY_FILE), { force: true });
   }
 
   private writeBackup(input: {

@@ -5,12 +5,14 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
 import { hashDaemonPassword } from "../auth.js";
+import { createPaseoDaemon } from "../bootstrap.js";
+import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
@@ -546,4 +548,308 @@ describe("model list and warm-up", () => {
     expect(list.data.map((model) => model.id)).toEqual(["kimi-k2", "gpt-5.5", "glm-4.6"]);
     expect(hello.status).toBe(200);
   });
+});
+
+describe("the CLI configs follow the gateway across daemon starts", () => {
+  const USER_SETTINGS = `{\n  "theme": "dark"\n}\n`;
+  const USER_CONFIG = `# mine\napproval_policy = "never"\n`;
+
+  interface Home {
+    root: string;
+    endpointsDir: string;
+    settingsPath: string;
+    configPath: string;
+  }
+
+  async function prepareHome(files: Record<string, unknown> = {}): Promise<Home> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-gw-start-"));
+    tempRoots.push(root);
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    await mkdir(endpointsDir, { recursive: true });
+    for (const [name, value] of Object.entries(files)) {
+      const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      await writeFile(path.join(endpointsDir, name), text);
+    }
+    await mkdir(path.join(root, "claude"), { recursive: true });
+    await mkdir(path.join(root, "codex"), { recursive: true });
+    const settingsPath = path.join(root, "claude", "settings.json");
+    const configPath = path.join(root, "codex", "config.toml");
+    await writeFile(settingsPath, USER_SETTINGS);
+    await writeFile(configPath, USER_CONFIG);
+    return { root, endpointsDir, settingsPath, configPath };
+  }
+
+  function apiEndpointsConfig(home: Home) {
+    return {
+      env: {
+        CLAUDE_CONFIG_DIR: path.join(home.root, "claude"),
+        CODEX_HOME: path.join(home.root, "codex"),
+      },
+      homeDir: home.root,
+    };
+  }
+
+  async function connect(url: string): Promise<DaemonClient> {
+    const client = new DaemonClient({ url, appVersion: "0.15.1" });
+    clients.push(client);
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+    return client;
+  }
+
+  async function tokens(home: Home): Promise<Record<string, string>> {
+    const text = await readFile(path.join(home.endpointsDir, "gateway-tokens.json"), "utf8");
+    return (JSON.parse(text) as { tokens: Record<string, string> }).tokens;
+  }
+
+  /** 拿一个此刻没人用、也不是 `taken` 的端口。 */
+  async function freePort(taken: number): Promise<number> {
+    const server = createNetServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    return port === taken ? freePort(taken) : port;
+  }
+
+  const SEEDED_ENDPOINT = storedEndpoint({
+    id: "ep_a",
+    slug: "relay-a",
+    name: "Relay A",
+    baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:9" }],
+    models: ["kimi-k2"],
+  });
+
+  test("a restart on another port rewrites the gateway address in both configs and nothing else", async () => {
+    const home = await prepareHome();
+    const first = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      cleanup: false,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    const client = await connect(`ws://127.0.0.1:${first.port}/ws`);
+    await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: "https://a.example" }],
+      apiKey: KEY_A,
+      models: [{ id: "kimi-k2" }],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+    const settingsBefore = await readFile(home.settingsPath, "utf8");
+    const configBefore = await readFile(home.configPath, "utf8");
+    const tokensBefore = await tokens(home);
+    const nextPort = await freePort(first.port);
+    await client.close();
+    await first.close();
+
+    const second = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      listenPort: nextPort,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(second);
+
+    const moved = (text: string) =>
+      text.replaceAll(`127.0.0.1:${first.port}/`, `127.0.0.1:${nextPort}/`);
+    expect(settingsBefore).toContain(`127.0.0.1:${first.port}/api-endpoint-gateway`);
+    expect(await readFile(home.settingsPath, "utf8")).toBe(moved(settingsBefore));
+    expect(configBefore).toContain(`127.0.0.1:${first.port}/api-endpoint-gateway/v1`);
+    expect(await readFile(home.configPath, "utf8")).toBe(moved(configBefore));
+    expect(await tokens(home)).toEqual(tokensBefore);
+  });
+
+  test("agents that were on before the gateway existed get a token and point at the gateway on start", async () => {
+    // 旧数据换算来的：总开关开着，却没有口令，CLI 配置也还没指向中转站。
+    const home = await prepareHome({
+      "endpoints.json": {
+        endpoints: [SEEDED_ENDPOINT],
+        agents: {
+          claude: { enabled: true, defaultModelId: "kimi-k2" },
+          codex: { enabled: true, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A } },
+    });
+
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(daemon);
+
+    const { claude, codex } = await tokens(home);
+    expect(claude).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+    expect(JSON.parse(await readFile(home.settingsPath, "utf8"))).toEqual({
+      theme: "dark",
+      env: { ANTHROPIC_BASE_URL: gateway, ANTHROPIC_AUTH_TOKEN: claude, ANTHROPIC_API_KEY: "" },
+      permissions: { deny: ["WebSearch"] },
+      model: "kimi-k2",
+    });
+    const config = await readFile(home.configPath, "utf8");
+    expect(config).toContain(`base_url = "${gateway}/v1"`);
+    expect(config).toContain(`experimental_bearer_token = "${codex}"`);
+    const catalog = JSON.parse(
+      await readFile(path.join(home.endpointsDir, "codex-models.json"), "utf8"),
+    ) as { models: Array<{ slug: string }> };
+    expect(catalog.models.map((model) => model.slug)).toEqual(["kimi-k2", "relay-a/kimi-k2"]);
+    const hello = await fetch(`${gateway}/api/hello`, {
+      headers: { authorization: `Bearer ${claude}` },
+    });
+    expect(hello.status).toBe(200);
+  });
+
+  test("the dedicated table and key file an older version left behind on Official are removed on start", async () => {
+    const legacyTable = `
+[model_providers.osuna_api_endpoint]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "responses"
+
+[model_providers.osuna_api_endpoint.auth]
+command = "/bin/cat"
+args = ["/somewhere/codex-api-key"]
+timeout_ms = 5000
+`;
+    const home = await prepareHome({
+      "endpoints.json": {
+        endpoints: [SEEDED_ENDPOINT],
+        agents: {
+          claude: { enabled: false, defaultModelId: null },
+          codex: { enabled: false, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A } },
+      "codex-api-key": KEY_A,
+      "takeover-codex.json": {
+        takeover: null,
+        providerTable: { endpointId: "ep_a" },
+        backup: { path: null },
+      },
+    });
+    await writeFile(home.configPath, `${USER_CONFIG}${legacyTable}`);
+
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(daemon);
+
+    expect(await readFile(home.configPath, "utf8")).toBe(USER_CONFIG);
+    await expect(stat(path.join(home.endpointsDir, "codex-api-key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  // unix socket 监听只在 POSIX 上有。
+  test.skipIf(process.platform === "win32")(
+    "a daemon listening on a socket refuses to turn the switch on and says why",
+    async () => {
+      const home = await prepareHome({
+        "endpoints.json": {
+          endpoints: [
+            SEEDED_ENDPOINT,
+            storedEndpoint({
+              id: "ep_b",
+              slug: "relay-b",
+              name: "Relay B",
+              baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:9" }],
+              models: ["glm-4.6"],
+            }),
+          ],
+          agents: {
+            claude: { enabled: true, defaultModelId: "kimi-k2" },
+            codex: { enabled: false, defaultModelId: null },
+          },
+        },
+        "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B } },
+        "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN } },
+        "takeover-claude.json": {
+          takeover: {
+            originalFile: { kind: "content" },
+            env: {
+              ANTHROPIC_BASE_URL: {
+                original: { present: false },
+                written: "https://relay.example",
+              },
+              ANTHROPIC_AUTH_TOKEN: { original: { present: false }, written: KEY_A },
+            },
+            envCreated: true,
+            webSearchDeny: { added: false, permissionsCreated: false, denyCreated: false },
+          },
+          backup: { path: null },
+        },
+      });
+      const socketPath = path.join(home.root, "d.sock");
+      const staticDir = path.join(home.root, "static");
+      await mkdir(staticDir);
+      const paseoHome = path.join(home.root, ".paseo");
+      const daemon = await createPaseoDaemon(
+        {
+          listen: socketPath,
+          paseoHome,
+          corsAllowedOrigins: [],
+          hostnames: true,
+          mcpEnabled: false,
+          staticDir,
+          mcpDebug: false,
+          agentClients: createTestAgentClients(),
+          agentStoragePath: path.join(paseoHome, "agents"),
+          relayEnabled: false,
+          appBaseUrl: "https://app.paseo.sh",
+          openai: undefined,
+          speech: undefined,
+          usage: {
+            roots: { claude: [], codex: [], pi: [], omp: [] },
+            pricing: { autoUpdate: false },
+          },
+          apiEndpoints: apiEndpointsConfig(home),
+        },
+        pino({ level: "silent" }),
+      );
+      await daemon.start();
+      try {
+        const client = await connect(`ws+unix://${socketPath}:/ws`);
+
+        const reason = {
+          code: "gateway_requires_tcp",
+          message: expect.stringContaining("socket"),
+        };
+        // 已经开着的总开关照旧开着，列表说明为什么不可用；CLI 配置不动。
+        const listed = await client.apiEndpointList("claude");
+        expect(listed.agents?.claude?.enabled).toBe(true);
+        expect(listed.gatewayUnavailable).toEqual(reason);
+        expect(await readFile(home.settingsPath, "utf8")).toBe(USER_SETTINGS);
+
+        const turnedOn = await client.apiEndpointSetAgentSettings({
+          provider: "codex",
+          enabled: true,
+        });
+        expect(turnedOn.error).toEqual(reason);
+        expect((await client.apiEndpointSetActive("codex", "ep_a")).error?.code).toBe(
+          "gateway_requires_tcp",
+        );
+        expect((await client.apiEndpointList("codex")).agents?.codex?.enabled).toBe(false);
+        expect(await readFile(home.configPath, "utf8")).toBe(USER_CONFIG);
+
+        // 关掉一家接口照常可以；Claude 的默认模型换家，但它的 CLI 配置从没指向过中转站（记录里是旧版本
+        // 直接写的第三方地址），没有地址可写：不动它，口令更不能写到第三方地址那里。
+        const off = await client.apiEndpointSetEndpointState({
+          endpointId: "ep_a",
+          enabled: false,
+        });
+        expect(off.error).toBeNull();
+        expect((await client.apiEndpointList("claude")).agents?.claude).toEqual({
+          enabled: true,
+          defaultModelId: "glm-4.6",
+        });
+        expect(await readFile(home.settingsPath, "utf8")).toBe(USER_SETTINGS);
+      } finally {
+        await daemon.stop().catch(() => undefined);
+        await daemon.agentManager.flush().catch(() => undefined);
+      }
+    },
+  );
 });

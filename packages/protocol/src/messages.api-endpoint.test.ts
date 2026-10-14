@@ -439,6 +439,29 @@ describe("host-wide API endpoints", () => {
     expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
   });
 
+  it("parses a list response that says why the gateway can't be used, and one without it", () => {
+    const base = {
+      requestId: "req-h4",
+      provider: "codex",
+      endpoints: [hostWideEndpoint],
+      activeEndpointId: null,
+      error: null,
+    };
+    const unavailable = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        ...base,
+        gatewayUnavailable: { code: "gateway_requires_tcp", message: "socket" },
+      },
+    };
+    const available = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: { ...base, gatewayUnavailable: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(unavailable)).toEqual(unavailable);
+    expect(SessionOutboundMessageSchema.parse(available)).toEqual(available);
+  });
+
   it("parses set_agent_settings request and response", () => {
     const request = {
       type: "provider.api_endpoint.set_agent_settings.request" as const,
