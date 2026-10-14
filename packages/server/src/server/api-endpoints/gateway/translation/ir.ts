@@ -67,6 +67,18 @@ export interface Tool {
   description: string;
   // 参数的 JSON schema；客户端没给时为 null。
   schema: unknown;
+  // 客户端要求参数严格照 schema。
+  strict: boolean;
+}
+
+/**
+ * Codex 的命名空间工具与自由文本（custom）工具：给模型时按扁平名、当作函数，
+ * 模型的调用写回 Codex 时按这里还原成它认得的调用。
+ */
+export interface NamedTool {
+  namespace: string;
+  name: string;
+  custom: boolean;
 }
 
 /** 空为没说；`name:<工具名>` 为点名某个工具。 */
@@ -111,6 +123,8 @@ export interface GatewayRequest {
   metadata: unknown;
   // 结构化输出；null 为普通文字。
   format: Format | null;
+  // 按扁平名索引的 Codex 命名空间工具与自由文本工具；别的协议的客户端没有。
+  named: Record<string, NamedTool>;
 }
 
 export type StopReason = "stop" | "length" | "tool" | "filter";
@@ -370,6 +384,12 @@ export function effortOf(value: unknown): Effort {
     effort === "max"
     ? effort
     : "";
+}
+
+/** 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。 */
+export function openAIEffort(request: GatewayRequest): string | null {
+  if (request.effort === "") return null;
+  return request.effort === "xhigh" || request.effort === "max" ? "high" : request.effort;
 }
 
 /** 力度换成 Anthropic 的思考预算。 */

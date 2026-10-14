@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fitAnthropicBody } from "./passthrough.js";
+import { fitAnthropicBody, fitResponsesBody } from "./passthrough.js";
 
 /*
  * 直通给 Anthropic 地址的请求体，按这家的模型改的几处；其余字节原样。
@@ -104,5 +104,68 @@ describe("a Claude Code conversation passed through to DeepSeek's Anthropic endp
 
   test("another vendor's model is sent the conversation as it came", () => {
     expect(fitAnthropicBody(conversation("glm-5.2"), "glm-5.2")).toBe(conversation("glm-5.2"));
+  });
+});
+
+describe("a Codex request passed through to a DeepSeek model's Responses endpoint (magpie reasoning_passthrough_test.go)", () => {
+  const codex = (reasoning: string) =>
+    `{"model":"deepseek-v4.1-flash", "stream":true,"store":false,"reasoning":{"effort":"max","summary":"auto"},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"fix the login bug"}]},${reasoning},{"type":"function_call","call_id":"call_1","name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"},{"type":"function_call_output","call_id":"call_1","output":"main.go"}]}`;
+  const reasoningText = (body: string) =>
+    (JSON.parse(body) as { input: { type: string; content?: { text: string }[] }[] }).input.find(
+      (item) => item.type === "reasoning",
+    )?.content?.[0]?.text;
+
+  test("a reasoning item with only a summary gets the summary as its text, the rest of the body as it was", () => {
+    const fitted = fitResponsesBody(
+      codex(
+        `{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Looking at main.go"}],"content":null,"encrypted_content":null}`,
+      ),
+      "deepseek-v4.1-flash",
+    );
+    expect(reasoningText(fitted)).toBe("Looking at main.go");
+    expect(fitted.startsWith(`{"model":"deepseek-v4.1-flash", "stream":true,`)).toBe(true);
+  });
+
+  test("an empty reasoning item gets a space, and its own reasoning text goes back as it was", () => {
+    expect(
+      reasoningText(
+        fitResponsesBody(
+          codex(
+            `{"type":"reasoning","id":"rs_2","summary":[],"content":null,"encrypted_content":null}`,
+          ),
+          "deepseek-v4.1-flash",
+        ),
+      ),
+    ).toBe(" ");
+    const own = codex(
+      `{"type":"reasoning","id":"rs_3","summary":[],"content":[{"type":"reasoning_text","text":"I should list the files first."}],"encrypted_content":null}`,
+    );
+    expect(fitResponsesBody(own, "deepseek-v4.1-flash")).toBe(own);
+  });
+
+  test("only the reasoning item's content changes when nothing has to move; a step that has to lead with reasoning is reordered", () => {
+    const filled = fitResponsesBody(
+      codex(`{"type":"reasoning","id":"rs_2", "summary":[],"content":null}`),
+      "deepseek-v4.1-flash",
+    );
+    expect(filled).toContain(`"id":"rs_2", "summary":[],"content":[`);
+    const bare = `{"model":"deepseek-v4.1-flash","input":[{"type":"message","role":"user","content":"ls"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Looking."}]},{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"Need ls."}]},{"type":"function_call","call_id":"c1","name":"sh","arguments":"{}"},{"type":"function_call_output","call_id":"c1","output":"ok"}]}`;
+    const order = (
+      JSON.parse(fitResponsesBody(bare, "deepseek-v4.1-flash")) as {
+        input: { type: string; role?: string }[];
+      }
+    ).input.map((item) => item.role ?? item.type);
+    expect(order).toEqual([
+      "user",
+      "reasoning",
+      "assistant",
+      "function_call",
+      "function_call_output",
+    ]);
+  });
+
+  test("another vendor's model is sent the request as it came", () => {
+    const body = codex(`{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}`);
+    expect(fitResponsesBody(body, "gpt-5.4")).toBe(body);
   });
 });

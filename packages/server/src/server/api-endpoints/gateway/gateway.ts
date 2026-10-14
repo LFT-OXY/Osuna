@@ -21,7 +21,7 @@ import { chooseRequestFormat, resolveGatewayRoute, type GatewayCandidate } from 
 import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
-import { protocolOf, translatable } from "./translation/protocols.js";
+import { protocolOf } from "./translation/protocols.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./upstream-call.js";
 
@@ -281,12 +281,15 @@ async function handleAgentRequest(input: {
   const routed = await routeAgentRequest(input);
   if (!routed) return;
   const { body, parsed, model, candidates } = routed;
+  const mended = mendedBody(input.format, body);
+  // 翻译读的是修补过的请求，和直通发出去的一样。
+  const translatable = mended === body ? parsed : parseJson(mended.toString("utf8"));
   let passable: AskableCandidate[];
   try {
     passable = askableCandidates({
       candidates,
       format: input.format,
-      parsed,
+      parsed: translatable,
       store,
     });
   } catch (error) {
@@ -318,14 +321,14 @@ async function handleAgentRequest(input: {
   }
   await askInTurn({
     ...input,
-    body: mendedBody(input.format, body),
+    body: mended,
     model,
     conversation,
     plan: planned.plan,
   });
 }
 
-/** 这家用哪种格式问：只在 Agent 自己的格式与已有翻译的格式里挑（chooseRequestFormat）。 */
+/** 这家用哪种格式问（chooseRequestFormat）。 */
 function askableFormat(
   candidate: GatewayCandidate,
   agentFormat: ApiEndpointRequestFormat,
@@ -333,32 +336,46 @@ function askableFormat(
   return chooseRequestFormat({
     agentFormat,
     model: candidate.upstreamModel,
-    formats: candidate.endpoint.baseUrls
-      .map((entry) => entry.format)
-      .filter((format) => format === agentFormat || translatable(agentFormat, format)),
+    formats: candidate.endpoint.baseUrls.map((entry) => entry.format),
   });
 }
 
-/** 有地址、有 key、有能用的格式的候选；要翻译时把 Agent 的请求读成中间格式（读不懂抛 RequestShapeError）。 */
+/**
+ * 有地址、有 key、有能用的格式的候选；要翻译时把 Agent 的请求读成中间格式。
+ * 读不懂（或翻不过去，如只给 file_id 的图片）的只跳过要翻译的候选；没有一家能问时抛出那个 RequestShapeError。
+ */
 function askableCandidates(input: {
   candidates: GatewayCandidate[];
   format: ApiEndpointRequestFormat;
   parsed: unknown;
   store: ApiEndpointStore;
 }): AskableCandidate[] {
-  let translated: GatewayRequest | null = null;
-  const translatedRequest = () => {
-    translated ??= protocolOf(input.format).parse(input.parsed);
-    return translated;
-  };
-  return input.candidates.flatMap((candidate): AskableCandidate[] => {
+  const reachable = input.candidates.flatMap((candidate) => {
     const format = askableFormat(candidate, input.format);
     const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
     const apiKey = input.store.getApiKey(candidate.endpoint.id);
     if (format === null || baseUrl === undefined || apiKey === null) return [];
-    const request = format === input.format ? null : translatedRequest();
-    return [{ ...candidate, format, baseUrl, apiKey, translated: request }];
+    return [{ ...candidate, format, baseUrl, apiKey }];
   });
+  const translating = reachable.some((candidate) => candidate.format !== input.format);
+  const translation = translating ? readTranslated(input) : null;
+  const askable = reachable.flatMap((candidate): AskableCandidate[] => {
+    if (candidate.format === input.format) return [{ ...candidate, translated: null }];
+    return translation?.ok ? [{ ...candidate, translated: translation.request }] : [];
+  });
+  if (askable.length === 0 && translation && !translation.ok) throw translation.error;
+  return askable;
+}
+
+type Translation = { ok: true; request: GatewayRequest } | { ok: false; error: RequestShapeError };
+
+function readTranslated(input: { format: ApiEndpointRequestFormat; parsed: unknown }): Translation {
+  try {
+    return { ok: true, request: protocolOf(input.format).parse(input.parsed) };
+  } catch (error) {
+    if (!(error instanceof RequestShapeError)) throw error;
+    return { ok: false, error };
+  }
 }
 
 /** Responses 请求直通前先修补工具往来（夹在一串里的项、没有调用的结果、没有结果的调用）；没什么可改时原样不动。 */

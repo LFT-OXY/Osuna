@@ -15,6 +15,7 @@ import {
   joinSplitCalls,
   newId,
   NO_REASONING,
+  openAIEffort,
   openAIFormat,
   parseArgs,
   promptTokens,
@@ -83,6 +84,7 @@ export function parseChatRequest(body: unknown): GatewayRequest {
     parallel: typeof body.parallel_tool_calls === "boolean" ? body.parallel_tool_calls : null,
     metadata: null,
     format: openAIFormat(body.response_format),
+    named: {},
   };
 }
 
@@ -209,6 +211,7 @@ function parseChatTools(tools: unknown): Tool[] {
         name: String(fn.name ?? ""),
         description: typeof fn.description === "string" ? fn.description : "",
         schema: fn.parameters ?? null,
+        strict: fn.strict === true,
       },
     ];
   });
@@ -241,7 +244,7 @@ export function buildChatRequest(request: GatewayRequest, model: string): Record
   if (request.temperature !== null) out.temperature = request.temperature;
   if (request.topP !== null) out.top_p = request.topP;
   if (request.stop.length > 0) out.stop = request.stop;
-  const effort = chatEffort(request);
+  const effort = openAIEffort(request);
   if (effort) out.reasoning_effort = effort;
   if (request.tools.length > 0) Object.assign(out, chatTools(request));
   if (request.format) out.response_format = chatFormat(request.format);
@@ -255,12 +258,6 @@ function chatFormat(format: Format): Record<string, unknown> {
   spec.schema = format.schema;
   if (format.strict !== null) spec.strict = format.strict;
   return { type: "json_schema", json_schema: spec };
-}
-
-/** 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。 */
-function chatEffort(request: GatewayRequest): string | null {
-  if (request.effort === "") return null;
-  return request.effort === "xhigh" || request.effort === "max" ? "high" : request.effort;
 }
 
 function chatAssistant(message: Message): ChatMessage {

@@ -66,6 +66,7 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
         : null,
     metadata: body.metadata ?? null,
     format: parseFormat(body.output_config),
+    named: {},
     ...parseThinking(body),
   };
 }
@@ -132,6 +133,7 @@ function parseTools(tools: unknown): Tool[] {
         name: String(tool.name ?? ""),
         description: typeof tool.description === "string" ? tool.description : "",
         schema: tool.input_schema ?? null,
+        strict: false,
       },
     ];
   });

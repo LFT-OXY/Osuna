@@ -88,6 +88,7 @@ async function streamReply(input: {
   endpoint: StoredApiEndpoint;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
+  request: GatewayRequest;
   requestedModel: string;
   response: IncomingMessage;
   first: Buffer | null;
@@ -101,6 +102,7 @@ async function streamReply(input: {
   const encoder = protocolOf(input.from).encoder({
     model: input.requestedModel,
     write: (text) => res.write(text),
+    request: input.request,
   });
   const decoder = protocolOf(input.to).decoder();
   const emit = (event: StreamEvent) => encoder.event(event);
@@ -125,6 +127,7 @@ async function wholeReply(input: {
   endpoint: StoredApiEndpoint;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
+  request: GatewayRequest;
   requestedModel: string;
   response: IncomingMessage;
   first: Buffer | null;
@@ -152,7 +155,12 @@ async function wholeReply(input: {
     return { kind: "broken", message: failure };
   }
   const reply = collector.finish();
-  res.status(200).set(headers).json(protocolOf(input.from).render(reply, input.requestedModel));
+  res
+    .status(200)
+    .set(headers)
+    .json(
+      protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
+    );
   return { kind: "complete", cacheRead: reply.usage.cacheRead };
 }
 

@@ -16,7 +16,8 @@ stickiness are ported to TypeScript from magpie's internal/gateway
   packages/server/src/server/api-endpoints/gateway/affinity.ts
 
 The gateway's protocol translation (the shared intermediate format, Anthropic
-Messages, OpenAI Chat, tool-pairing repair, SSE reading) is ported from
+Messages, OpenAI Chat, OpenAI Responses, tool-pairing repair, SSE reading) is
+ported from
 magpie's internal/gateway (ir.go, anthropic.go, chat.go, responses.go, sse.go,
 gateway.go), and its tests reuse cases from magpie's
 anthropic_tool_pairing_test.go, chat_tool_pairing_test.go,
@@ -24,9 +25,13 @@ pair_tool_items_test.go, orphan_tool_output_test.go, translate_stream_test.go,
 devin_tool_ids_test.go, anthropic_cache_ttl_test.go, stop_context_test.go,
 minimax_think_test.go, format_test.go, reasoning_replay_test.go,
 deepseek_anthropic_thinking_test.go, anthropic_image_source_test.go,
-attachments_test.go and upstream_bytes_test.go. The pass-through request's
-thinking fixes for other vendors' models (thinkingOffUnlessAsked,
-withThinkingOnToolTurns in anthropic.go) are ported into passthrough.ts:
+attachments_test.go, upstream_bytes_test.go, namespace_test.go,
+codex_custom_tools_test.go, agent_message_test.go, codex_developer_cache_test.go,
+tool_strict_test.go, responses_file_id_test.go, responses_cache_write_test.go,
+reasoning_state_responses_test.go, reasoning_passthrough_test.go and
+deepseek_step_lead_test.go. The pass-through request's thinking fixes for other
+vendors' models (thinkingOffUnlessAsked, withThinkingOnToolTurns in
+anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
 
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts

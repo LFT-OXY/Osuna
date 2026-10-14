@@ -117,12 +117,14 @@ function storedEndpoint(input: {
 /**
  * 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。
  * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3 与 qwen3-coder。
+ * 给了 responsesUpstream 时再加 D：只有 OpenAI Responses 地址，选了 grok-4。
  */
 async function start(
   options: {
     upstreamA?: FakeUpstream;
     upstreamB?: FakeUpstream;
     chatUpstream?: FakeUpstream;
+    responsesUpstream?: FakeUpstream;
     password?: string;
     headerTimeoutMs?: number;
     retryPauseMs?: number;
@@ -165,13 +167,26 @@ async function start(
               }),
             ]
           : []),
+        ...(options.responsesUpstream
+          ? [
+              storedEndpoint({
+                id: "ep_d",
+                slug: "relay-d",
+                name: "Relay D",
+                baseUrls: [
+                  { format: "openai_responses", url: `${options.responsesUpstream.url}/v1` },
+                ],
+                models: ["grok-4"],
+              }),
+            ]
+          : []),
       ],
       agents: {
         claude: { enabled: true, defaultModelId: "kimi-k2" },
         codex: { enabled: true, defaultModelId: "gpt-5.5" },
       },
     },
-    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C } },
+    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C, ep_d: KEY_C } },
     "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
   };
   for (const [name, value] of Object.entries(files)) {
@@ -906,28 +921,442 @@ describe("thinking between Claude Code and an endpoint", () => {
   });
 });
 
-describe("when the endpoint fails", () => {
-  test("an endpoint Codex could only reach by translation is refused until Responses translation exists", async () => {
-    const { gateway } = await start();
+function codexRequest(body: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
 
-    const response = await fetch(`${gateway}/v1/responses`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "glm-4.6", input: "hi" }),
+/** Codex 一轮对话的请求：指令、多轮、工具定义与调用、工具结果、tool_choice。 */
+function codexConversation(model: string, stream: boolean) {
+  return {
+    model,
+    instructions: "You are Codex.",
+    stream,
+    store: false,
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "list files" }] },
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "exec_command",
+        arguments: '{"cmd":"pwd"}',
+      },
+      { type: "function_call_output", call_id: "call_1", output: "/repo" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "now list them" }] },
+    ],
+    tools: [
+      {
+        type: "function",
+        name: "exec_command",
+        description: "Run a command",
+        strict: false,
+        parameters: { type: "object", properties: { cmd: { type: "string" } } },
+      },
+    ],
+    tool_choice: "auto",
+  };
+}
+
+function anthropicStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of [
+    {
+      type: "message_start",
+      message: {
+        id: "msg_7",
+        type: "message",
+        role: "assistant",
+        model: "glm-4.6-0915",
+        content: [],
+        usage: { input_tokens: 20, output_tokens: 0, cache_read_input_tokens: 100 },
+      },
+    },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me look." } },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "tool_use", id: "toolu_ls", name: "exec_command", input: {} },
+    },
+    {
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"cmd":"ls"}' },
+    },
+    { type: "content_block_stop", index: 1 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: "tool_use" },
+      usage: { output_tokens: 30 },
+    },
+    { type: "message_stop" },
+  ]) {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  res.end();
+}
+
+function responsesStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of [
+    {
+      type: "response.created",
+      response: { id: "resp_9", model: "grok-4-0709", status: "in_progress" },
+    },
+    {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+    },
+    { type: "response.output_text.delta", item_id: "msg_1", delta: "Let me look." },
+    {
+      type: "response.output_item.added",
+      output_index: 1,
+      item: { id: "fc_1", type: "function_call", call_id: "call_ls", name: "Bash", arguments: "" },
+    },
+    { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"command":' },
+    {
+      type: "response.function_call_arguments.done",
+      item_id: "fc_1",
+      arguments: '{"command":"ls"}',
+    },
+    {
+      type: "response.output_item.done",
+      output_index: 1,
+      item: {
+        id: "fc_1",
+        type: "function_call",
+        call_id: "call_ls",
+        name: "Bash",
+        arguments: '{"command":"ls"}',
+      },
+    },
+    {
+      type: "response.completed",
+      response: {
+        id: "resp_9",
+        status: "completed",
+        output: [],
+        usage: {
+          input_tokens: 120,
+          output_tokens: 30,
+          input_tokens_details: { cached_tokens: 100 },
+        },
+      },
+    },
+  ]) {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  res.end();
+}
+
+/** Codex 流里的 response.completed 带的整份回复。 */
+function completedResponse(text: string): Record<string, unknown> {
+  const events = sseData(text) as Record<string, unknown>[];
+  return events.find((event) => event.type === "response.completed")!.response as Record<
+    string,
+    unknown
+  >;
+}
+
+const CODEX_ANSWER = [
+  {
+    id: expect.stringMatching(/^msg_/),
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Let me look.", annotations: [], logprobs: [] }],
+  },
+];
+
+describe("translating for Codex, and to an endpoint that speaks only Responses", () => {
+  test("a Codex request reaches an Anthropic-only endpoint translated and the stream comes back as Responses events", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const text = await response.text();
+
+    const received = anthropic.requests[0]!;
+    expect(received.url).toBe("/v1/messages");
+    expect(received.headers["x-api-key"]).toBe(KEY_B);
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "glm-4.6",
+      stream: true,
+      max_tokens: 16384,
+      system: [{ type: "text", text: "You are Codex.", cache_control: { type: "ephemeral" } }],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "list files" }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "call_1", name: "exec_command", input: { cmd: "pwd" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "call_1", content: "/repo" },
+            { type: "text", text: "now list them", cache_control: { type: "ephemeral" } },
+          ],
+        },
+      ],
+      tools: [
+        {
+          name: "exec_command",
+          description: "Run a command",
+          input_schema: { type: "object", properties: { cmd: { type: "string" } } },
+        },
+      ],
+      // auto 是 Anthropic 的默认，不写。
     });
-
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(text).toContain("event: response.created\ndata: ");
+    expect(completedResponse(text)).toMatchObject({
+      id: "resp_msg_7",
+      status: "completed",
+      model: "glm-4.6",
+      output: [
+        ...CODEX_ANSWER,
+        {
+          id: expect.stringMatching(/^fc_/),
+          type: "function_call",
+          status: "completed",
+          call_id: "toolu_ls",
+          name: "exec_command",
+          arguments: '{"cmd":"ls"}',
+        },
+      ],
+      usage: {
+        input_tokens: 120,
+        output_tokens: 30,
+        total_tokens: 150,
+        input_tokens_details: { cached_tokens: 100, cache_write_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    });
+  });
+
+  test("a Codex request reaches a Chat-only endpoint translated; streamed and whole replies come back in Responses shape", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const streamed = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("qwen3-coder", true)),
+    );
+    const text = await streamed.text();
+    const whole = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("qwen3-coder", false)),
+    );
+
+    const received = chat.requests[0]!;
+    expect(received.url).toBe("/v1/chat/completions");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "qwen3-coder",
+      messages: [
+        { role: "system", content: "You are Codex." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "exec_command", arguments: '{"cmd":"pwd"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "/repo" },
+        { role: "user", content: "now list them" },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "exec_command",
+            description: "Run a command",
+            parameters: { type: "object", properties: { cmd: { type: "string" } } },
+          },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    // 没要流式的也照样流式问上游。
+    expect(chat.requests[1]!.body.toString()).toBe(received.body.toString());
+    const call = {
+      id: expect.stringMatching(/^fc_/),
+      type: "function_call",
+      status: "completed",
+      call_id: "call_ls",
+      name: "Bash",
+      arguments: '{"command":"ls"}',
+    };
+    const answer = {
+      status: "completed",
+      model: "qwen3-coder",
+      usage: { input_tokens: 120, output_tokens: 30, input_tokens_details: { cached_tokens: 100 } },
+    };
+    expect(streamed.status).toBe(200);
+    const completed = completedResponse(text);
+    expect(completed).toMatchObject({ id: "resp_chatcmpl-42", ...answer });
+    expect(completed.output).toEqual([...CODEX_ANSWER, call]);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    const body = (await whole.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ object: "response", ...answer });
+    // 整份回复里的文字没有 logprobs。
+    expect(body.output).toEqual([
+      {
+        ...CODEX_ANSWER[0],
+        content: [{ type: "output_text", text: "Let me look.", annotations: [] }],
+      },
+      call,
+    ]);
+  });
+
+  test("a Claude Code request reaches a Responses-only endpoint translated and the stream comes back as Anthropic events", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => responsesStream(res);
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
+    );
+    const text = await response.text();
+
+    const received = responses.requests[0]!;
+    expect(received.url).toBe("/v1/responses");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(received.headers["x-api-key"]).toBeUndefined();
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "grok-4",
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "list files" }] },
+        { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: '{"command":"pwd"}' },
+        { type: "function_call_output", call_id: "toolu_1", output: "/repo" },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "now list them" }] },
+      ],
+      stream: true,
+      store: false,
+      instructions: "You are Claude Code.",
+      max_output_tokens: 2048,
+      tools: [
+        {
+          type: "function",
+          name: "Bash",
+          description: "Run a command",
+          strict: false,
+          parameters: { type: "object", properties: { command: { type: "string" } } },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-d");
+    expect(sseData(text)).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_resp_9",
+          type: "message",
+          role: "assistant",
+          model: "grok-4",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Let me look." },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("an image given only as a file_id cannot be translated: a 400 in OpenAI shape, no endpoint asked", async () => {
+    const anthropic = await startUpstream();
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({
+        model: "glm-4.6",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              { type: "input_text", text: "what is this" },
+              { type: "input_image", file_id: "file-abc" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(anthropic.requests).toHaveLength(0);
     expect(await response.json()).toEqual({
       error: {
-        message: "Relay B: no address for this agent's request format",
-        type: "api_error",
+        message:
+          "The latest message has an image given only as an OpenAI file_id, which this API endpoint cannot open; send the image itself",
+        type: "invalid_request_error",
         code: null,
         param: null,
       },
     });
   });
+});
 
+describe("when the endpoint fails", () => {
   test("its status, its message under the endpoint name and Retry-After come back in Anthropic shape", async () => {
     const upstream = await startUpstream();
     upstream.respond = (_request, res) => {

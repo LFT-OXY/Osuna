@@ -1,4 +1,4 @@
-// fitAnthropicBody 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns）
+// fitAnthropicBody、fitResponsesBody 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
@@ -9,6 +9,7 @@ import type { StoredApiEndpoint } from "../store.js";
 import { describeNetworkError, isRecord, parseJson } from "../upstream-http.js";
 import { isAnthropicModel, thinkingOnToolTurns } from "./translation/anthropic.js";
 import { replaysThinking } from "./translation/ir.js";
+import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import {
   ANSWERED_BY_HEADER,
@@ -20,7 +21,8 @@ import {
 } from "./upstream-call.js";
 
 /*
- * 同协议直通的一次尝试：请求体除模型名（与发给别家模型的 Anthropic 请求的几处思考字段）外
+ * 同协议直通的一次尝试：请求体除模型名（与发给别家模型的 Anthropic 请求的几处思考字段、
+ * 发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
  * 开口之后边收边发，上游断流就断开 Agent 的连接，由 CLI 自己报错。
  */
@@ -151,7 +153,7 @@ class CacheReadTap {
   }
 }
 
-/** 发给上游的请求体：换模型名；Anthropic 的对话请求再按上游模型改几处（count_tokens 不改）。 */
+/** 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型改几处（count_tokens 不改）。 */
 function upstreamBody(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
@@ -159,11 +161,17 @@ function upstreamBody(input: {
   requestedModel: string;
   upstreamModel: string;
 }): Buffer {
-  const fits = input.format === "anthropic_messages" && input.pathSuffix === undefined;
+  const fits =
+    (input.format === "anthropic_messages" || input.format === "openai_responses") &&
+    input.pathSuffix === undefined;
   if (input.upstreamModel === input.requestedModel && !fits) return input.body;
   let text = input.body.toString("utf8");
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
-  if (fits) text = fitAnthropicBody(text, input.upstreamModel);
+  if (fits && input.format === "anthropic_messages") {
+    text = fitAnthropicBody(text, input.upstreamModel);
+  } else if (fits) {
+    text = fitResponsesBody(text, input.upstreamModel);
+  }
   return Buffer.from(text);
 }
 
@@ -199,6 +207,28 @@ export function fitAnthropicBody(text: string, model: string): string {
       edit(["messages", index, "content"], content);
     }
   }
+  return out;
+}
+
+/**
+ * 直通给 DeepSeek 模型的 Responses 请求：每个推理项都要有推理文字、每一步以推理开头，否则整个请求被拒
+ * （"The `reasoning_text` in the thinking mode must be passed back"）。只改要改的推理项，挪了项才换掉整个 input。
+ */
+export function fitResponsesBody(text: string, model: string): string {
+  if (!replaysThinking(model)) return text;
+  const body = parseJson(text);
+  const original = isRecord(body) ? body.input : undefined;
+  if (!Array.isArray(original)) return text;
+  const replayed = replayedReasoningInput(original);
+  if (replayed === null) return text;
+  if (replayed.reordered) return applyEdits(text, modify(text, ["input"], replayed.input, {}));
+  // 只补了推理文字：只改那几项的 content。
+  let out = text;
+  replayed.input.forEach((item, index) => {
+    if (item !== original[index] && isRecord(item)) {
+      out = applyEdits(out, modify(out, ["input", index, "content"], item.content, {}));
+    }
+  });
   return out;
 }
 

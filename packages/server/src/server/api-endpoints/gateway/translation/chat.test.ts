@@ -115,6 +115,7 @@ function request(messages: Message[]): GatewayRequest {
     parallel: null,
     metadata: null,
     format: null,
+    named: {},
   };
 }
 
