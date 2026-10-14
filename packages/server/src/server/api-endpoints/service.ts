@@ -16,6 +16,7 @@ import {
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
   type ApiEndpointRef,
+  type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
@@ -66,7 +67,7 @@ import {
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
-import { detectUpstreamFormats } from "./upstream-detect.js";
+import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { fetchUpstreamModels, type UpstreamFailureCode } from "./upstream-models.js";
 
 export type ApiEndpointErrorCode =
@@ -114,6 +115,8 @@ export interface ApiEndpointSaveInput {
   models: ApiEndpointModel[];
   defaultModelId?: string;
   modelMapping?: ApiEndpointModelMapping;
+  // undefined：保留这家已有的手动添加模型。
+  manualModels?: ApiEndpointModel[];
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -133,10 +136,13 @@ export interface ApiEndpointUpstreamInput {
   endpointId?: string;
   baseUrl: string;
   apiKey?: string;
+  // 新客户端按「地址 + 格式」请求；不带时按 provider 走 CLI 自己的格式。
+  format?: string;
 }
 
 export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput {
-  modelId: string;
+  // 按格式测试时可省，daemon 自己挑。
+  modelId?: string;
 }
 
 export interface ApiEndpointServiceOptions {
@@ -710,17 +716,35 @@ export class ApiEndpointService {
     signal: AbortSignal,
   ): Promise<ApiEndpointModel[]> {
     const supported = requireProvider(provider);
+    const format = input.format === undefined ? null : requireFormat(input.format);
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
     const result = await fetchUpstreamModels({
-      provider: supported,
+      provider: format === null ? supported : providerWithListingHeaders(format),
       baseUrl,
       apiKey,
       signal,
       timeoutMs: this.upstreamTimeoutMs,
     });
     if (!result.ok) throw new ApiEndpointRequestError(result.error.code, result.error.message);
+    if (format !== null && input.endpointId) {
+      await this.keepCatalog(input.endpointId, result.models);
+    }
     return result.models;
+  }
+
+  /** 记下这家的上游清单；只动清单，不影响路由、模型目录与 CLI 配置。拉取期间被删的接口不再写回。 */
+  private keepCatalog(endpointId: string, models: ApiEndpointModel[]): Promise<void> {
+    return this.exclusive(() => {
+      const state = this.readState();
+      const endpoint = findEndpoint(state, endpointId);
+      if (!endpoint) return;
+      const catalog = { fetchedAt: this.now().toISOString(), models };
+      this.store.writeState({
+        ...state,
+        endpoints: withEndpoint(state.endpoints, { ...endpoint, catalog }),
+      });
+    });
   }
 
   /**
@@ -733,7 +757,10 @@ export class ApiEndpointService {
     signal: AbortSignal,
   ): Promise<ApiEndpointTestConnectionResult> {
     const supported = requireProvider(provider);
-    const modelId = input.modelId.trim();
+    if (input.format !== undefined) {
+      return this.testFormat(requireFormat(input.format), input, signal);
+    }
+    const modelId = input.modelId?.trim();
     if (!modelId) {
       throw new ApiEndpointRequestError("invalid_input", "A model is required");
     }
@@ -753,6 +780,76 @@ export class ApiEndpointService {
       throw new ApiEndpointRequestError("cancelled", "Request cancelled");
     }
     return outcome.result;
+  }
+
+  /** 按一种请求格式向一个地址发最小请求；上游回 401 / 403 时结论的 code 是 auth_failed。 */
+  private async testFormat(
+    format: ApiEndpointRequestFormat,
+    input: ApiEndpointTestConnectionInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointTestConnectionResult> {
+    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const apiKey = this.resolveRequestKey(input);
+    const startedAt = performance.now();
+    const elapsed = () => Math.round(performance.now() - startedAt);
+    let modelId = input.modelId?.trim() || this.probeModelFromEndpoint(input.endpointId, format);
+    if (!modelId) {
+      // 这家还没选模型也没拉过清单：先列一次（不花钱）再挑。
+      const listed = await fetchUpstreamModels({
+        provider: providerWithListingHeaders(format),
+        baseUrl,
+        apiKey,
+        signal,
+        timeoutMs: this.upstreamTimeoutMs,
+      });
+      if (!listed.ok) {
+        if (listed.error.code === "cancelled") {
+          throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+        }
+        const status = listed.error.status ?? null;
+        const code = status === 401 || status === 403 ? "auth_failed" : listed.error.code;
+        return {
+          ok: false,
+          status,
+          durationMs: elapsed(),
+          error: { code, message: listed.error.message },
+        };
+      }
+      modelId = pickProbeModel(
+        listed.models.map((model) => model.id),
+        format,
+      );
+    }
+    const detection = await probeUpstreamFormat({
+      format,
+      baseUrl,
+      apiKey,
+      modelId: modelId ?? null,
+      signal,
+      timeoutMs: this.connectionTestTimeoutMs,
+    });
+    if (signal.aborted) throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+    return testResultOf(detection, elapsed());
+  }
+
+  /** 从这家已选的模型、再从上游清单里挑一个适合该格式的；都没有时为 null。 */
+  private probeModelFromEndpoint(
+    endpointId: string | undefined,
+    format: ApiEndpointRequestFormat,
+  ): string | null {
+    if (!endpointId) return null;
+    const endpoint = findEndpoint(this.readState(), endpointId);
+    if (!endpoint) return null;
+    return (
+      pickProbeModel(
+        endpoint.models.map((model) => model.id),
+        format,
+      ) ??
+      pickProbeModel(
+        (endpoint.catalog?.models ?? []).map((model) => model.id),
+        format,
+      )
+    );
   }
 
   /**
@@ -1052,6 +1149,8 @@ export class ApiEndpointService {
       enabled: endpoint.enabled,
       hasApiKey: this.store.getApiKey(endpoint.id) !== null,
       cooldown: this.cooldownOf(endpoint.id),
+      ...(endpoint.catalog ? { catalog: endpoint.catalog } : {}),
+      ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
     };
   }
 
@@ -1170,6 +1269,7 @@ function buildEndpoint(input: {
 }): StoredApiEndpoint {
   const { state, existing, fields } = input;
   const legacyDefaultModelId = fields.legacyDefaultModelId ?? existing?.legacyDefaultModelId;
+  const manualModels = fields.manualModels ?? existing?.manualModels;
   return {
     id: existing?.id ?? `ep_${randomUUID()}`,
     slug:
@@ -1178,6 +1278,9 @@ function buildEndpoint(input: {
     ...fields,
     enabled: existing?.enabled ?? input.enabledWhenNew,
     ...(legacyDefaultModelId ? { legacyDefaultModelId } : {}),
+    // 上游清单只由拉取模型改，保存时沿用。
+    ...(existing?.catalog ? { catalog: existing.catalog } : {}),
+    ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
@@ -1185,7 +1288,7 @@ function buildEndpoint(input: {
 
 type EndpointFields = Pick<
   StoredApiEndpoint,
-  "name" | "baseUrls" | "models" | "modelMapping" | "legacyDefaultModelId"
+  "name" | "baseUrls" | "models" | "modelMapping" | "legacyDefaultModelId" | "manualModels"
 >;
 
 /** 新客户端：地址按格式给，模型可以一个都没选，任何格式的接口都能配档位映射。 */
@@ -1216,7 +1319,14 @@ function validateFields(
   }
   const models = validateModels(input.models);
   const modelMapping = validateModelMapping(input.modelMapping, models);
-  return { name, baseUrls, models, ...(modelMapping ? { modelMapping } : {}) };
+  return {
+    name,
+    baseUrls,
+    models,
+    ...(modelMapping ? { modelMapping } : {}),
+    // 带了（哪怕是空数组）就整份替换。
+    ...(input.manualModels ? { manualModels: validateModels(input.manualModels) } : {}),
+  };
 }
 
 /**
@@ -1318,6 +1428,35 @@ function keepValidMapping(
     if (modelId && models.some((model) => model.id === modelId)) kept[tier] = modelId;
   }
   return Object.keys(kept).length === 0 ? undefined : kept;
+}
+
+function requireFormat(format: string): ApiEndpointRequestFormat {
+  const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
+  if (!known) {
+    throw new ApiEndpointRequestError("invalid_input", `Unknown request format '${format}'`);
+  }
+  return known;
+}
+
+/**
+ * fetchUpstreamModels 按 provider 决定认证头：Anthropic 地址两种都带（照 claude），
+ * OpenAI 两种只带 Bearer（照 codex）。
+ */
+function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpointProvider {
+  return format === "anthropic_messages" ? "claude" : "codex";
+}
+
+/** 按格式测试的结论换成测试连接的结果；没收到响应的是连不上。 */
+function testResultOf(
+  detection: ApiEndpointFormatDetection,
+  durationMs: number,
+): ApiEndpointTestConnectionResult {
+  const { httpStatus: status, message } = detection;
+  if (detection.status === "ok") return { ok: true, status, durationMs, error: null };
+  let code: "auth_failed" | "upstream_unreachable" | "upstream_error" = "upstream_error";
+  if (detection.status === "auth_failed") code = "auth_failed";
+  else if (status === null) code = "upstream_unreachable";
+  return { ok: false, status, durationMs, error: { code, message: message ?? "" } };
 }
 
 /** 去掉末尾斜杠，和 CLI 自己拼路径的方式一致。 */

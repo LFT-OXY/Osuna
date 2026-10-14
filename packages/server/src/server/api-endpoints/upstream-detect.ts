@@ -134,7 +134,7 @@ export async function detectUpstreamFormats(input: {
         format,
         baseUrl: urls[format],
         apiKey: input.apiKey,
-        modelId: pickModel(modelIds, format),
+        modelId: pickProbeModel(modelIds, format),
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
       }),
@@ -208,9 +208,9 @@ const OPENAI_MODEL = /^(gpt|o1|o3|o4|codex)/i;
 
 /**
  * 给一种格式挑要问的模型（magpie 的 detectModel）：Anthropic 问 Claude 模型，Responses 问 OpenAI 模型，
- * Chat 问非 Claude 的；挑不到就取第一个。
+ * Chat 问非 Claude 的；挑不到就取第一个。详情页按格式测试连接也用它挑。
  */
-function pickModel(ids: string[], format: ApiEndpointRequestFormat): string | null {
+export function pickProbeModel(ids: string[], format: ApiEndpointRequestFormat): string | null {
   const madeFor = (id: string): boolean => {
     const bare = id.slice(id.lastIndexOf("/") + 1);
     if (format === "anthropic_messages") return isClaudeModel(id);

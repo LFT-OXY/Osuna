@@ -28,6 +28,8 @@ import { readOptionalFile } from "./config-file.js";
 export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
+const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
+
 const StoredBaseUrlSchema = z.object({
   format: z.enum(API_ENDPOINT_REQUEST_FORMATS),
   url: z.string(),
@@ -40,13 +42,17 @@ const StoredApiEndpointSchema = z.object({
   name: z.string(),
   // 每种格式最多一个，按 API_ENDPOINT_REQUEST_FORMATS 的顺序，至少一个。
   baseUrls: z.array(StoredBaseUrlSchema).min(1),
-  models: z.array(z.object({ id: z.string(), label: z.string().optional() })),
+  models: z.array(StoredModelSchema),
   // 每档都是 models 里的一个。
   modelMapping: ApiEndpointModelMappingSchema.optional(),
   // 接口开关，对所有 Agent 生效。
   enabled: z.boolean(),
   // 只给老客户端投影用：老表单上次为这家选的默认模型（迁移时取旧 defaultModelId）。
   legacyDefaultModelId: z.string().optional(),
+  // 上次按格式向上游列出的模型，只供详情页挑选；路由与模型目录只看 models。
+  catalog: z.object({ fetchedAt: z.string(), models: z.array(StoredModelSchema) }).optional(),
+  // 用户手动添加的模型名，开没开都留着。
+  manualModels: z.array(StoredModelSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -66,7 +72,7 @@ const LegacyEndpointsFileSchema = z.object({
       provider: z.enum(API_ENDPOINT_PROVIDERS),
       name: z.string(),
       baseUrl: z.string(),
-      models: z.array(z.object({ id: z.string(), label: z.string().optional() })),
+      models: z.array(StoredModelSchema),
       defaultModelId: z.string(),
       modelMapping: ApiEndpointModelMappingSchema.optional(),
       createdAt: z.string(),

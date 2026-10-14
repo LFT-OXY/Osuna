@@ -27,8 +27,15 @@ export const RELAY_KEY = "sk-e2e-relay";
 
 export interface FakeRelay {
   origin: string;
-  // 收到的请求，按到达顺序；只记路径与认证头。
-  requests: { method: string; url: string; authorization: string | undefined }[];
+  // 收到的请求，按到达顺序；只记路径、认证头与请求体里的模型名。
+  requests: {
+    method: string;
+    url: string;
+    authorization: string | undefined;
+    model: string | undefined;
+  }[];
+  // /good 列出的模型；用例可以改它模拟上游清单变化。
+  goodModels: string[];
   close(): Promise<void>;
 }
 
@@ -38,15 +45,22 @@ function send(response: ServerResponse, status: number, body: unknown) {
 
 /**
  * 路径前缀决定这家的行为：
- * - /good：列出模型；Anthropic 与 Chat 能对话，Responses 没有（404）。
+ * - /good：列出 goodModels；Anthropic 与 Chat 能对话，Responses 没有（404）。
+ * - /many：列出 MANY_MODELS（两百多个、跨家族），给详情页截图用。
+ * - /slow：列模型一直不回，详情页停在加载中。
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * 任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
-  const relay: Omit<FakeRelay, "close"> = { origin: "", requests: [] };
+  const relay: Omit<FakeRelay, "close"> = {
+    origin: "",
+    requests: [],
+    goodModels: ["claude-sonnet-4-5", "gpt-5"],
+  };
   const server: Server = createServer((request, response) => {
-    request.resume();
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
       const url = request.url ?? "";
       const headers: IncomingHttpHeaders = request.headers;
@@ -54,15 +68,21 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         method: request.method ?? "",
         url,
         authorization: headers.authorization,
+        model: modelOf(Buffer.concat(chunks).toString("utf8")),
       });
       if (headers.authorization !== `Bearer ${RELAY_KEY}`) {
         send(response, 401, { error: { message: "Invalid API key" } });
         return;
       }
       if (request.method === "GET" && url === "/good/v1/models") {
-        send(response, 200, { data: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] });
+        send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
         return;
       }
+      if (request.method === "GET" && url === "/many/v1/models") {
+        send(response, 200, { data: MANY_MODELS.map((id) => ({ id })) });
+        return;
+      }
+      if (url === "/slow/v1/models") return;
       if (url === "/good/v1/messages") {
         send(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
         return;
@@ -84,16 +104,63 @@ export async function startFakeRelay(): Promise<FakeRelay> {
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   relay.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return {
-    origin: relay.origin,
-    requests: relay.requests,
+  // 返回同一个对象：用例改 goodModels、清 requests 都直接作用到假中转站上。
+  return Object.assign(relay, {
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();
         server.close(() => resolve());
       }),
-  };
+  });
 }
+
+function modelOf(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as { model?: unknown };
+    return typeof parsed.model === "string" ? parsed.model : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// 两百多个模型：常见家族各若干，外加一大批认不出的，详情页截图看左右两栏的滚动。
+export const MANY_MODELS: string[] = [
+  "claude-opus-4-1",
+  "claude-sonnet-4-5",
+  "claude-haiku-4-5",
+  "claude-3-7-sonnet",
+  "claude-opus-4",
+  "claude-3-5-haiku",
+  ...Array.from({ length: 11 }, (_, index) => `gpt-5.${index}`),
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemma-3-27b",
+  "gemini-exp",
+  "gemini-2.5-flash-lite",
+  "gemma-3-12b",
+  "deepseek-chat",
+  "deepseek-reasoner",
+  "deepseek-v3.1",
+  "deepseek-v3.2-exp",
+  "kimi-k2",
+  "kimi-k2-turbo",
+  "moonshot-v1-8k",
+  "glm-4.6",
+  "glm-4.5",
+  "glm-4.5-air",
+  "glm-4.5v",
+  ...Array.from({ length: 12 }, (_, index) => `qwen3-coder-${index + 1}`),
+  "grok-4",
+  "grok-code-fast-1",
+  "mistral-large",
+  "codestral-latest",
+  "MiniMax-M2",
+  ...Array.from(
+    { length: 170 },
+    (_, index) => `vendor/model-${String(index + 1).padStart(3, "0")}`,
+  ),
+];
 
 interface ApiEndpointSeedClient {
   connect(): Promise<void>;
@@ -112,6 +179,12 @@ interface ApiEndpointSeedClient {
     provider: string;
     enabled: boolean;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
+  apiEndpointFetchModels(options: {
+    provider: string;
+    endpointId?: string;
+    baseUrl: string;
+    format?: string;
+  }): Promise<{ models: ApiEndpointModel[]; error: { code: string; message: string } | null }>;
   apiEndpointDetectFormats(options: {
     endpointId?: string;
     baseUrl: string;
@@ -126,13 +199,13 @@ export async function connectApiEndpointClient(): Promise<ApiEndpointSeedClient>
 /** 存一家主机级接口（新客户端写法，存好即开着），返回它的 id。 */
 export async function seedApiEndpoint(
   client: ApiEndpointSeedClient,
-  input: { name: string; baseUrls: ApiEndpointBaseUrl[]; models: string[] },
+  input: { name: string; baseUrls: ApiEndpointBaseUrl[]; models: string[]; apiKey?: string },
 ): Promise<string> {
   const saved = await client.apiEndpointSave({
     provider: "claude",
     name: input.name,
     baseUrls: input.baseUrls,
-    apiKey: RELAY_KEY,
+    apiKey: input.apiKey ?? RELAY_KEY,
     models: input.models.map((id) => ({ id })),
   });
   if (!saved.endpoint) throw new Error(`Saving ${input.name} failed: ${saved.error?.message}`);

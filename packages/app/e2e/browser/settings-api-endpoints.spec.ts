@@ -306,4 +306,234 @@ test.describe("Settings API endpoints", () => {
     const list = await client.apiEndpointList("claude");
     expect(list.endpoints.find((endpoint) => endpoint.id === broke)?.cooldown).toBeNull();
   });
+
+  test("fetched models start off, a family turns on and off at once, and a refetch keeps the choice", async ({
+    page,
+  }) => {
+    relay.goodModels = ["claude-sonnet-4-5", "claude-haiku-4-5", "gpt-5"];
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+    });
+    await openEndpointDetail(page, endpointId);
+    const models = page.getByTestId("api-endpoint-models-section").filter({ visible: true });
+
+    await test.step("opening the page fetches the list, every model off", async () => {
+      await expect(models.getByTestId("api-endpoint-model-family-claude")).toContainText("0/2");
+      await expect(models.getByTestId("api-endpoint-model-family-gpt")).toContainText("0/1");
+      await expect(modelSwitch(page, "claude-sonnet-4-5")).not.toBeChecked();
+      await expect(modelSwitch(page, "claude-haiku-4-5")).not.toBeChecked();
+      expect(await selectedModelsOf(endpointId)).toEqual([]);
+    });
+
+    await test.step("Select all turns the family on and becomes Select none", async () => {
+      const selectAll = models.getByTestId("api-endpoint-family-select-all");
+      await expect(selectAll).toHaveText("Select all");
+      await selectAll.click();
+      await expect(selectAll).toHaveText("Select none");
+      await expect(modelSwitch(page, "claude-haiku-4-5")).toBeChecked();
+      await expect
+        .poll(selectedModelsReader(endpointId))
+        .toEqual(["claude-sonnet-4-5", "claude-haiku-4-5"]);
+      await selectAll.click();
+      await expect(selectAll).toHaveText("Select all");
+      await expect.poll(selectedModelsReader(endpointId)).toEqual([]);
+    });
+
+    await test.step("a model added by hand is on and stays after it is switched off", async () => {
+      await modelSwitch(page, "claude-sonnet-4-5").click();
+      await models.getByTestId("api-endpoint-models-add").click();
+      await page.getByTestId("api-endpoint-models-add-input").fill("secret-model");
+      await page.getByTestId("api-endpoint-models-add-submit").click();
+      await models.getByTestId("api-endpoint-model-family-other").click();
+      await expect(modelSwitch(page, "secret-model")).toBeChecked();
+      await modelSwitch(page, "secret-model").click();
+      await expect(modelSwitch(page, "secret-model")).not.toBeChecked();
+      await expect
+        .poll(selectedAndManualReader(endpointId))
+        .toEqual([["claude-sonnet-4-5"], ["secret-model"]]);
+    });
+
+    await test.step("a refetch adds new models off, keeps the choice and marks what is gone", async () => {
+      relay.goodModels = ["claude-haiku-4-5", "gpt-5", "gpt-5-mini"];
+      await models.getByTestId("api-endpoint-models-refetch").click();
+      await expect(models.getByTestId("api-endpoint-model-family-gpt")).toContainText("0/2");
+      await expect(page.getByTestId("api-endpoint-model-gone-secret-model")).toHaveCount(0);
+      await expect(modelSwitch(page, "secret-model")).not.toBeChecked();
+      await models.getByTestId("api-endpoint-model-family-claude").click();
+      await expect(modelSwitch(page, "claude-sonnet-4-5")).toBeChecked();
+      await expect(page.getByTestId("api-endpoint-model-gone-claude-sonnet-4-5")).toHaveText(
+        "No longer in the upstream list",
+      );
+      await expect(page.getByTestId("api-endpoint-model-gone-claude-haiku-4-5")).toHaveCount(0);
+    });
+
+    await test.step("a search keeps only families with a match", async () => {
+      await models.getByTestId("api-endpoint-models-search").fill("mini");
+      await expect(models.getByTestId("api-endpoint-model-family-gpt")).toContainText("0/2");
+      await expect(models.getByTestId("api-endpoint-model-family-claude")).toHaveCount(0);
+      await expect(modelSwitch(page, "gpt-5-mini")).toBeVisible();
+      await expect(modelSwitch(page, "gpt-5")).toHaveCount(0);
+      await models.getByTestId("api-endpoint-models-search").fill("nothing-like-this");
+      await expect(models.getByTestId("api-endpoint-models-no-matches")).toBeVisible();
+    });
+  });
+
+  test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
+    page,
+  }) => {
+    relay.goodModels = ["claude-sonnet-4-5", "claude-haiku-4-5", "gpt-5"];
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "gpt-5"],
+    });
+    await openEndpointDetail(page, endpointId);
+
+    await page.getByTestId("api-endpoint-mapping-opus-trigger").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-mapping-opus-option-unmapped")).toHaveText(
+      "Don't map",
+    );
+    await expect(page.getByTestId("api-endpoint-mapping-opus-option-gpt-5")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-mapping-opus-option-claude-haiku-4-5")).toHaveCount(
+      0,
+    );
+    await page.getByTestId("api-endpoint-mapping-opus-option-claude-sonnet-4-5").click();
+    await expect
+      .poll(async () => (await client.apiEndpointList("claude")).endpoints[0]?.modelMapping)
+      .toEqual({ opus: "claude-sonnet-4-5" });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    relay.requests.length = 0;
+    expect(await sendThroughGateway("opus")).toBe(200);
+    expect(
+      relay.requests.filter((request) => request.method === "POST").map((request) => request.model),
+    ).toEqual(["claude-sonnet-4-5"]);
+  });
+
+  test("Test connection shows one result per address, and a rejected key reads Key rejected", async ({
+    page,
+  }) => {
+    const good = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+        { format: "openai_responses", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["claude-sonnet-4-5", "gpt-5"],
+    });
+    const wrongKey = await seedApiEndpoint(client, {
+      name: "Wrong key",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+      apiKey: "sk-wrong",
+    });
+
+    await openEndpointDetail(page, good);
+    await page.getByTestId("api-endpoint-test-connection").filter({ visible: true }).click();
+    await expect(testResult(page, "anthropic_messages")).toHaveText(/^Connected · \d+ ms$/);
+    await expect(testResult(page, "openai_chat")).toHaveText(/^Connected · \d+ ms$/);
+    await expect(testResult(page, "openai_responses")).toContainText("Couldn't connect");
+    await expect(
+      page.getByTestId("api-endpoint-test-reason-openai_responses").filter({ visible: true }),
+    ).toContainText("HTTP 404");
+
+    await page.getByTestId("settings-api-endpoints-breadcrumb").filter({ visible: true }).click();
+    await openEndpointRow(page, wrongKey);
+    await page.getByTestId("api-endpoint-test-connection").filter({ visible: true }).click();
+    await expect(testResult(page, "anthropic_messages")).toContainText("Key rejected");
+    await expect(testResult(page, "openai_chat")).toHaveCount(0);
+  });
+
+  test("deleting an endpoint says what happens to each agent's default model, then it is gone", async ({
+    page,
+  }) => {
+    const first = await seedApiEndpoint(client, {
+      name: "First relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const second = await seedApiEndpoint(client, {
+      name: "Second relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["gpt-5"],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.accept();
+    });
+
+    await test.step("the default model moves to the next endpoint's model", async () => {
+      await openEndpointDetail(page, first);
+      await deleteFromMenu(page);
+      await expect.poll(countOf(dialogs)).toBe(1);
+      expect(dialogs[0]).toBe(
+        "Delete First relay?\n\nFirst relay's models will be removed from every agent's model list.\nClaude's default model will change from claude-sonnet-4-5 to gpt-5.",
+      );
+      await expect(page.getByTestId("api-endpoints-list").filter({ visible: true })).toBeVisible();
+      await expect(row(page, first)).toHaveCount(0);
+      const list = await client.apiEndpointList("claude");
+      expect(list.agents?.claude).toEqual({ enabled: true, defaultModelId: "gpt-5" });
+    });
+
+    await test.step("deleting the last endpoint sends the agent back to official", async () => {
+      await openEndpointRow(page, second);
+      await deleteFromMenu(page);
+      await expect.poll(countOf(dialogs)).toBe(2);
+      expect(dialogs[1]).toBe(
+        "Delete Second relay?\n\nSecond relay's models will be removed from every agent's model list.\nClaude will go back to official.",
+      );
+      await expect(row(page, second)).toHaveCount(0);
+      const list = await client.apiEndpointList("claude");
+      expect(list.agents?.claude?.enabled).toBe(false);
+    });
+  });
 });
+
+async function openEndpointRow(page: Page, endpointId: string): Promise<void> {
+  await row(page, endpointId).click();
+  await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
+}
+
+async function openEndpointDetail(page: Page, endpointId: string): Promise<void> {
+  await openApiEndpointsPage(page);
+  await openEndpointRow(page, endpointId);
+}
+
+async function deleteFromMenu(page: Page): Promise<void> {
+  await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
+  await page.getByTestId("api-endpoint-detail-delete").click();
+}
+
+function modelSwitch(page: Page, modelId: string): Locator {
+  return page.getByTestId(`api-endpoint-model-switch-${modelId}`).filter({ visible: true });
+}
+
+function testResult(page: Page, format: string): Locator {
+  return page.getByTestId(`api-endpoint-test-result-${format}`).filter({ visible: true });
+}
+
+function ids(models: { id: string }[] | undefined): string[] {
+  return (models ?? []).map((model) => model.id);
+}
+
+async function selectedModelsOf(endpointId: string): Promise<string[]> {
+  const list = await client.apiEndpointList("claude");
+  return ids(list.endpoints.find((endpoint) => endpoint.id === endpointId)?.models);
+}
+
+function selectedModelsReader(endpointId: string): () => Promise<string[]> {
+  return () => selectedModelsOf(endpointId);
+}
+
+function selectedAndManualReader(endpointId: string): () => Promise<string[][]> {
+  return async () => {
+    const list = await client.apiEndpointList("claude");
+    const endpoint = list.endpoints.find((entry) => entry.id === endpointId);
+    return [ids(endpoint?.models), ids(endpoint?.manualModels)];
+  };
+}

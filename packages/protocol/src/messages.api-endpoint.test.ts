@@ -439,6 +439,51 @@ describe("host-wide API endpoints", () => {
     expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
   });
 
+  it("parses an endpoint with its upstream list and hand-added models, and a save that carries them", () => {
+    const response = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: {
+        requestId: "req-h5",
+        endpoint: {
+          ...hostWideEndpoint,
+          catalog: { fetchedAt: "2026-10-14T08:00:00.000Z", models: [{ id: "gpt-5" }] },
+          manualModels: [{ id: "hidden-model" }],
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+    const request = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-h6",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "OpenRouter",
+      baseUrls: [{ format: "openai_chat", url: "https://openrouter.ai/api/v1" }],
+      models: [{ id: "hidden-model" }],
+      manualModels: [{ id: "hidden-model" }],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
+  it("parses fetch_models and test_connection by base URL and format, without a model to test", () => {
+    for (const type of [
+      "provider.api_endpoint.fetch_models.request",
+      "provider.api_endpoint.test_connection.request",
+    ] as const) {
+      const request = {
+        type,
+        requestId: `req-${type}`,
+        provider: "claude",
+        endpointId: "ep_1",
+        baseUrl: "https://openrouter.ai/api/v1",
+        format: "openai_chat",
+      };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    }
+  });
+
   it("parses a list response that says why the gateway can't be used, and one without it", () => {
     const base = {
       requestId: "req-h4",

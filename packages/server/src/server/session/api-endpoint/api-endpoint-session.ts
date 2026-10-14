@@ -127,6 +127,7 @@ export class ApiEndpointSession {
         models: request.models,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
+        ...(request.manualModels !== undefined ? { manualModels: request.manualModels } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -248,6 +249,7 @@ export class ApiEndpointSession {
           ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+          ...(request.format !== undefined ? { format: request.format } : {}),
         },
         signal,
       );
@@ -281,7 +283,8 @@ export class ApiEndpointSession {
           ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
-          modelId: request.modelId,
+          ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
+          ...(request.format !== undefined ? { format: request.format } : {}),
         },
         signal,
       );

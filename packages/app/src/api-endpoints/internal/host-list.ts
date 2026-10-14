@@ -134,3 +134,32 @@ export function agentsReturningToOfficial(input: {
     .filter(([, agent]) => agent.enabled)
     .map(([provider]) => provider);
 }
+
+export type AgentSettlement =
+  | { provider: string; kind: "kept" }
+  | { provider: string; kind: "defaultChanged"; from: string | null; to: string }
+  | { provider: string; kind: "official" };
+
+/**
+ * 某次改动（删接口、关接口、关模型）之后各个开着总开关的 Agent 会怎样，照 daemon 的默认模型失踪规则：
+ * 默认模型还在开着接口的已选模型里就不变，否则改成最早开着接口的第一个已选模型，一个都不剩就回官方。
+ * `endpoints` 是改动之后的列表。
+ */
+export function previewAgentSettlements(input: {
+  endpoints: ApiEndpoint[];
+  agents: Record<string, ApiEndpointAgentSettings>;
+}): AgentSettlement[] {
+  const usable = input.endpoints
+    .filter((endpoint) => endpoint.enabled !== false)
+    .flatMap((endpoint) => endpoint.models.map((model) => model.id));
+  const first = usable[0];
+  return Object.entries(input.agents)
+    .filter(([, agent]) => agent.enabled)
+    .map(([provider, agent]): AgentSettlement => {
+      if (agent.defaultModelId !== null && usable.includes(agent.defaultModelId)) {
+        return { provider, kind: "kept" };
+      }
+      if (first === undefined) return { provider, kind: "official" };
+      return { provider, kind: "defaultChanged", from: agent.defaultModelId, to: first };
+    });
+}

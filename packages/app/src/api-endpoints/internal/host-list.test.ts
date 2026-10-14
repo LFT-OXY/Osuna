@@ -5,6 +5,7 @@ import {
   endpointRowStatus,
   endpointSummary,
   groupHostEndpoints,
+  previewAgentSettlements,
   selectHostEndpointsState,
 } from "./host-list";
 
@@ -184,5 +185,35 @@ describe("agentsReturningToOfficial", () => {
     expect(agentsReturningToOfficial({ endpoints: othersOff, agents, switchedOffId: "a" })).toEqual(
       ["claude"],
     );
+  });
+});
+
+describe("previewAgentSettlements", () => {
+  const agents = {
+    claude: { enabled: true, defaultModelId: "glm-4.6" },
+    codex: { enabled: true, defaultModelId: "gpt-5" },
+    copilot: { enabled: false, defaultModelId: null },
+  };
+
+  it("keeps a default that is still offered and moves a missing one to the earliest endpoint's first model", () => {
+    const after = [
+      endpoint({ id: "off", enabled: false, models: [{ id: "gpt-5" }] }),
+      endpoint({ id: "a", models: [{ id: "kimi-k2" }, { id: "glm-4.6" }] }),
+      endpoint({ id: "b", models: [{ id: "deepseek-chat" }] }),
+    ];
+
+    expect(previewAgentSettlements({ endpoints: after, agents })).toEqual([
+      { provider: "claude", kind: "kept" },
+      { provider: "codex", kind: "defaultChanged", from: "gpt-5", to: "kimi-k2" },
+    ]);
+  });
+
+  it("sends every agent that is on back to official when no model is left", () => {
+    const after = [endpoint({ id: "a", models: [] })];
+
+    expect(previewAgentSettlements({ endpoints: after, agents })).toEqual([
+      { provider: "claude", kind: "official" },
+      { provider: "codex", kind: "official" },
+    ]);
   });
 });

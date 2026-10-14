@@ -242,3 +242,143 @@ describe("API endpoint models over the daemon RPC", () => {
     expect(codex.error?.code).toBe("invalid_input");
   });
 });
+
+describe("API endpoint models by base URL and request format", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: FakeUpstream;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-catalog-"));
+    tempRoots.push(root);
+    upstream = await startUpstream();
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.12.1" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function saveHostEndpoint(): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.baseUrl },
+        { format: "openai_chat", url: `${upstream.baseUrl}/v1` },
+      ],
+      apiKey: SAVED_KEY,
+      models: [],
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  test("a fetch for a saved endpoint keeps the upstream list on it, with when it was fetched", async () => {
+    const endpointId = await saveHostEndpoint();
+    const before = Date.now();
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.baseUrl,
+      format: "anthropic_messages",
+    });
+
+    expect(fetched.error).toBeNull();
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBe(SAVED_KEY);
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    expect(endpoint?.catalog?.models).toEqual([
+      { id: "relay/opus", label: "Relay Opus" },
+      { id: "relay/sonnet" },
+    ]);
+    expect(Date.parse(endpoint?.catalog?.fetchedAt ?? "")).toBeGreaterThanOrEqual(before - 1000);
+    expect(endpoint?.models).toEqual([]);
+  });
+
+  test("an OpenAI format lists with the bearer key alone", async () => {
+    const endpointId = await saveHostEndpoint();
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.baseUrl}/v1`,
+      format: "openai_chat",
+    });
+
+    expect(fetched.error).toBeNull();
+    const answered = upstream.requests.find((request) => request.url === "/api/v1/models");
+    expect(answered?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+    expect(answered?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("a failed fetch leaves the kept list alone", async () => {
+    const endpointId = await saveHostEndpoint();
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.baseUrl,
+      format: "anthropic_messages",
+    });
+    const kept = (await client.apiEndpointList("claude")).endpoints[0]?.catalog;
+
+    const failed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.baseUrl,
+      apiKey: "sk-wrong",
+      format: "anthropic_messages",
+    });
+
+    expect(failed.error?.code).toBe("upstream_error");
+    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog).toEqual(kept);
+  });
+
+  test("models added by hand stay on the endpoint through saves that leave them out", async () => {
+    const endpointId = await saveHostEndpoint();
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.baseUrl,
+      format: "anthropic_messages",
+    });
+    const withManual = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.baseUrl }],
+      models: [{ id: "relay/opus" }, { id: "hidden-model" }],
+      manualModels: [{ id: " hidden-model " }, { id: "off-by-hand" }],
+    });
+    expect(withManual.endpoint?.manualModels).toEqual([
+      { id: "hidden-model" },
+      { id: "off-by-hand" },
+    ]);
+
+    // 编辑连接的弹窗不带 manualModels：手动添加的模型与拉回来的清单都留着。
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.baseUrl }],
+      models: [{ id: "relay/opus" }, { id: "hidden-model" }],
+    });
+
+    expect(edited.endpoint?.manualModels).toEqual([{ id: "hidden-model" }, { id: "off-by-hand" }]);
+    expect(edited.endpoint?.catalog?.models.map((model) => model.id)).toEqual([
+      "relay/opus",
+      "relay/sonnet",
+    ]);
+  });
+});

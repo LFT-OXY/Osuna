@@ -1235,3 +1235,57 @@ Handlers do not throw across the socket. They catch at the handler boundary, map
 - Deriving a response type by hand instead of from the protocol schema.
 - Checking `server_info.features` on the daemon side, or adding a defensive fallback path for old clients instead of a tagged shim.
 - Putting GitHub-specific enums into a `checkout.forge.*` name; forge-neutral names carry forge-neutral shapes only.
+
+## Scenario: fetch_models and test_connection by base URL and request format
+
+Reference implementation: api-endpoint-auto-switch ticket 09 (`ApiEndpointService.fetchModels` / `testFormat` / `keepCatalog` in `server/api-endpoints/service.ts`, `pickProbeModel` / `probeUpstreamFormat` in `upstream-detect.ts`). The endpoint detail page asks per address; old clients keep asking per provider.
+
+### 1. Scope / Trigger
+
+- Request contract change on two existing RPCs plus two new optional fields on `ApiEndpoint`, and a new field persisted in `endpoints.json`.
+
+### 2. Signatures
+
+- `fetch_models.request` adds `format?: string`. `test_connection.request` adds `format?: string` and makes `modelId` optional.
+- `ApiEndpoint` adds `catalog?: { fetchedAt: string; models: ApiEndpointModel[] }` and `manualModels?: ApiEndpointModel[]`; `save.request` adds `manualModels?`.
+- Service: `fetchModels(provider, { endpointId?, baseUrl, apiKey?, format? }, signal)`; `testConnection(provider, { ..., modelId?, format? }, signal)` routes to `testFormat(format, input, signal)` when `format` is set.
+
+### 3. Contracts
+
+- `format` set → `provider` is ignored; listing headers follow the format (`anthropic_messages` → Bearer + `x-api-key` + `anthropic-version`, OpenAI formats → Bearer only, via `providerWithListingHeaders`). No `format` → the old per-provider behaviour, read-only.
+- `fetch_models` with `format` **and** `endpointId` succeeds → the list is stored as that endpoint's `catalog` with `fetchedAt = now`, inside the mutation queue, writing only `endpoints.json` (no CLI, catalog or token change). A failed fetch leaves the stored catalog alone; an endpoint deleted meanwhile is not written back.
+- `test_connection` with `format`: model = `modelId`, else `pickProbeModel` over the endpoint's selected models, then its catalog, else one upstream listing. The probe is `probeUpstreamFormat` (same path, body and shape check as auto-detect). Result codes inside `result.error`: 401/403 → `auth_failed`; no response → `upstream_unreachable` with `status: null`; anything else → `upstream_error`. A rejected listing returns `auth_failed` / the listing code without probing.
+- `save`: `manualModels` given (even `[]`) replaces the endpoint's list; omitted keeps it (the connection dialog and old clients omit it). `catalog` is never written by `save`; `buildEndpoint` carries it over.
+- Routing, the Codex model catalog and `usableModels` read only `models`; `catalog` and `manualModels` exist for the detail page.
+
+### 4. Validation & Error Matrix
+
+- Unknown `format` → `invalid_input`. No key and no saved key → `invalid_input`, nothing sent. Cancel → `cancelled` (top-level `error`, `result: null`).
+
+### 5. Good/Base/Bad Cases
+
+- Good: endpoint with Anthropic + Responses addresses, models `[gpt-5, claude-sonnet-4-5]` → Anthropic probe asks `claude-sonnet-4-5`, Responses asks `gpt-5`.
+- Base: nothing selected, no catalog → `GET <base>/v1/models` then one probe.
+- Bad: persisting the catalog from an old client's provider-mode fetch — the old form expects `fetch_models` to be read-only.
+
+### 6. Tests Required
+
+- `daemon-e2e/api-endpoint-models.e2e.test.ts` ("by base URL and request format"): catalog kept with `fetchedAt`; OpenAI format sends no `x-api-key`; failed fetch keeps the old catalog; `manualModels` survive a save that omits them and the catalog survives a connection edit.
+- `daemon-e2e/api-endpoint-test-connection.e2e.test.ts` (same describe name): per-format model pick, `auth_failed` on 401, list-then-probe with nothing selected, 404 in another format → `upstream_error`.
+- `messages.api-endpoint.test.ts`: endpoint with `catalog` / `manualModels`, save with `manualModels`, both requests with `format` and no `modelId`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// A fetch without endpointId (trying an unsaved address) has nowhere to store the list.
+if (input.format !== undefined) await this.keepCatalog(input.endpointId!, models);
+```
+
+#### Correct
+
+```ts
+if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId, result.models);
+```
+

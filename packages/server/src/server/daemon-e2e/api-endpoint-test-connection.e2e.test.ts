@@ -30,7 +30,7 @@ function sendJson(response: ServerResponse, status: number, body: unknown) {
 }
 
 /**
- * /claude 下是 Anthropic Messages，/codex/v1 下是 OpenAI Responses，/chat-only/v1 只有 Chat Completions。
+ * /claude 下是 Anthropic Messages（也能列模型），/codex/v1 下是 OpenAI Responses，/chat-only/v1 只有 Chat Completions。
  * 只认两把 key；模型 `missing` 当作不存在。
  */
 async function startUpstream(): Promise<FakeUpstream> {
@@ -62,6 +62,12 @@ async function startUpstream(): Promise<FakeUpstream> {
         } else {
           sendJson(response, 200, { type: "message", content: [{ type: "text", text: "p" }] });
         }
+        return;
+      }
+      if (request.url === "/claude/v1/models") {
+        if (authorized)
+          sendJson(response, 200, { data: [{ id: "gpt-5" }, { id: "claude-opus-4" }] });
+        else sendJson(response, 401, { error: { message: "invalid x-api-key" } });
         return;
       }
       if (request.url === "/codex/v1/responses" && authorized) {
@@ -221,5 +227,120 @@ describe("API endpoint connection test over the daemon RPC", () => {
 
     expect((await client.apiEndpointCancel("test-to-cancel")).cancelled).toBe(true);
     expect(await pending).toMatchObject({ result: null, error: { code: "cancelled" } });
+  });
+});
+
+describe("API endpoint connection test by base URL and request format", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: FakeUpstream;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-test-format-"));
+    tempRoots.push(root);
+    upstream = await startUpstream();
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") }, homeDir: root },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.12.1" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function saveHostEndpoint(models: string[]): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${upstream.origin}/claude` },
+        { format: "openai_responses", url: `${upstream.origin}/codex/v1` },
+      ],
+      apiKey: SAVED_KEY,
+      models: models.map((id) => ({ id })),
+    });
+    if (!saved.endpoint) throw new Error(`Expected a saved endpoint: ${saved.error?.message}`);
+    return saved.endpoint.id;
+  }
+
+  test("each address is asked in its own format, with a selected model that suits it", async () => {
+    const endpointId = await saveHostEndpoint(["gpt-5", "claude-sonnet-4-5"]);
+
+    const anthropic = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+    const responses = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/codex/v1`,
+      format: "openai_responses",
+    });
+
+    expect(anthropic).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(responses).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(upstream.requests.map((request) => [request.url, request.body.model])).toEqual([
+      ["/claude/v1/messages", "claude-sonnet-4-5"],
+      ["/codex/v1/responses", "gpt-5"],
+    ]);
+  });
+
+  test("a rejected key is told apart as auth_failed", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: "sk-wrong",
+      modelId: "claude-sonnet-4-5",
+      format: "anthropic_messages",
+    });
+
+    expect(tested).toMatchObject({
+      error: null,
+      result: { ok: false, status: 401, error: { code: "auth_failed" } },
+    });
+    expect(JSON.stringify(tested)).not.toContain("sk-wrong");
+  });
+
+  test("with no model selected it lists the upstream models first and asks with one of them", async () => {
+    const endpointId = await saveHostEndpoint([]);
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/claude/v1/models",
+      "/claude/v1/messages",
+    ]);
+    expect(upstream.requests[1]?.body.model).toBe("claude-opus-4");
+  });
+
+  test("an address that answers nothing in that format is a failure with the reason", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/codex/v1`,
+      apiKey: TYPED_KEY,
+      modelId: "gpt-5",
+      format: "openai_chat",
+    });
+
+    expect(tested).toMatchObject({
+      error: null,
+      result: { ok: false, status: 404, error: { code: "upstream_error" } },
+    });
   });
 });

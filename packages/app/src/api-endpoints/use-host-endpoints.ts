@@ -25,7 +25,7 @@ import {
 import { createUpstreamRequestId, linkAbortToCancel } from "./internal/upstream-request";
 
 // 接口是主机共用的，按哪个 provider 查列表都一样；和 Claude Code 页共用同一份缓存。
-const LIST_PROVIDER = "claude";
+export const LIST_PROVIDER = "claude";
 // 冷却倒计时与中转站随时改的冷却状态靠它跟上；daemon 不推送接口变化。
 const LIST_REFRESH_MS = 30_000;
 

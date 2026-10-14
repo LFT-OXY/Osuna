@@ -11,8 +11,8 @@ interface SettingsSectionProps {
    * paragraph between the header and the card is wrong (docs/design.md §7).
    */
   info?: ReactNode;
-  /** A count after the title, dimmer than it, e.g. how many rows the card lists. */
-  count?: number;
+  /** A count after the title, dimmer than it, e.g. how many rows the card lists, or "3 / 12". */
+  count?: number | string;
   trailing?: ReactNode;
   testID?: string;
   style?: StyleProp<ViewStyle>;

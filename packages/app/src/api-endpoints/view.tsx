@@ -4,20 +4,28 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointAgentSettings,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ScreenTitle } from "@/components/headers/screen-title";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
+import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointFormSheet } from "./form-sheet";
 import { ApiEndpointsListSection, NoticeCard } from "./host-list-section";
 import { ApiEndpointsSection } from "./index";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
+import { ApiEndpointMappingSection } from "./mapping-section";
+import { ApiEndpointModelsSection } from "./models-section";
 import type { ApiEndpointFormSeed } from "./internal/form-model";
 import { useApiEndpoints } from "./use-api-endpoints";
+import { useEndpointDetail } from "./use-endpoint-detail";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
 /*
@@ -208,7 +216,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   );
 }
 
-/** 接口详情页。本票只有「连接」区；模型、档位映射与头部操作在 09 票补上。 */
+/** 接口详情页：头部、连接、模型（按家族挑选）、Claude 档位映射。 */
 export function ApiEndpointDetailPage({
   serverId,
   endpointId,
@@ -253,14 +261,23 @@ function ApiEndpointDetailContent({
   if (state.status === "error") {
     return <NoticeCard text={state.message} testID="api-endpoint-detail-error" />;
   }
-  if (!endpoint) {
+  if (!endpoint || state.status !== "ready") {
     return (
       <NoticeCard text={t("settings.apiEndpoints.loading")} testID="api-endpoint-detail-loading" />
     );
   }
   return (
     <View testID="api-endpoint-detail">
-      <ApiEndpointConnectionSection endpoint={endpoint} onEdit={handleEdit} />
+      {/* 按接口加 key：换到另一家时草稿、测试结果、搜索词一起清掉。 */}
+      <ApiEndpointDetailSections
+        key={endpoint.id}
+        serverId={serverId}
+        endpoint={endpoint}
+        allEndpoints={state.endpoints}
+        agents={state.agents}
+        hostEndpoints={endpoints}
+        onEdit={handleEdit}
+      />
       <ConnectionSheet
         sheet={sheet}
         endpoints={endpoints}
@@ -268,6 +285,83 @@ function ApiEndpointDetailContent({
         onClose={handleClose}
       />
     </View>
+  );
+}
+
+function ApiEndpointDetailSections({
+  serverId,
+  endpoint,
+  allEndpoints,
+  agents,
+  hostEndpoints,
+  onEdit,
+}: {
+  serverId: string;
+  endpoint: ApiEndpoint;
+  allEndpoints: ApiEndpoint[];
+  agents: Record<string, ApiEndpointAgentSettings>;
+  hostEndpoints: UseHostEndpointsResult;
+  onEdit: () => void;
+}) {
+  const { t } = useTranslation();
+  const now = useClock();
+  const detail = useEndpointDetail({ serverId, endpoint, endpoints: allEndpoints, agents });
+  // 头部操作、删除、模型与映射保存的失败共用头部下面一个提示（docs/design.md：每处一个 Alert）。
+  let pageError: { title: string; message: string } | null = null;
+  if (detail.deleteError !== null) {
+    pageError = {
+      title: t("settings.apiEndpoints.detail.deleteFailed", { name: endpoint.name }),
+      message: detail.deleteError,
+    };
+  } else if (detail.saveError !== null) {
+    pageError = { title: t("settings.apiEndpoints.detail.saveFailed"), message: detail.saveError };
+  } else if (hostEndpoints.actionError !== null) {
+    pageError = { title: hostEndpoints.actionError, message: "" };
+  }
+  return (
+    <>
+      <ApiEndpointDetailHeader
+        endpoint={endpoint}
+        now={now}
+        isPending={hostEndpoints.pendingEndpointId === endpoint.id}
+        isTesting={detail.isTesting}
+        isDeleting={detail.isDeleting}
+        onToggle={hostEndpoints.setEnabled}
+        onResume={hostEndpoints.resume}
+        onTest={detail.testConnection}
+        onEdit={onEdit}
+        onDelete={detail.remove}
+      />
+      {pageError ? (
+        <View style={styles.pageError}>
+          <Alert
+            variant="error"
+            size="sm"
+            title={pageError.title}
+            description={pageError.message || undefined}
+            testID="api-endpoint-detail-error-alert"
+          />
+        </View>
+      ) : null}
+      <ApiEndpointConnectionSection
+        endpoint={endpoint}
+        testResults={detail.testResults}
+        onEdit={onEdit}
+      />
+      <ApiEndpointModelsSection
+        source={detail.source}
+        fetchState={detail.fetchState}
+        now={now}
+        onFetch={detail.fetchModels}
+        onChange={detail.changeModels}
+        onAdd={detail.addModel}
+      />
+      <ApiEndpointMappingSection
+        models={detail.source.models}
+        mapping={detail.modelMapping}
+        onChange={detail.changeMapping}
+      />
+    </>
   );
 }
 
@@ -331,6 +425,9 @@ function EndpointBreadcrumb({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  pageError: {
+    marginBottom: theme.spacing[6],
+  },
   breadcrumb: {
     flexDirection: "row",
     alignItems: "center",

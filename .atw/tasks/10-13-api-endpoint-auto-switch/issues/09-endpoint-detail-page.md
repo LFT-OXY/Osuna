@@ -4,22 +4,25 @@
 
 **Blocked by:** 08
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] UI: 详情页 / 已拉取 200+ 模型 / 桌面 1280 — 左栏家族目录不滚出卡片、右栏可滚；每行是小开关不是勾选框；模型名普通字体；关着的模型名变淡；当前家族浅灰底。
-- [ ] UI: 详情页 / 搜索命中跨家族 / 桌面 1280 — 左栏只剩有命中的家族且计数照旧，右栏显示当前家族命中项；无结果有提示。
-- [ ] UI: 详情页 / 模型区加载中与拉取失败 / 桌面 1280 — 加载态与失败原因可见、不发生布局跳动。
-- [ ] 拉回来的模型默认全关；某家族「全选」后该组全开、再点变「全不选」。重新拉取后已勾选保留，上游不再提供的带「上游清单里没有了」小字；手动添加的模型保留并可开关。（Playwright + e2e）
-- [ ] 档位映射四个下拉只列本接口已选模型 +「不映射」；保存后 Claude Code 里选 opus 的请求经中转站被翻成映射模型。（Playwright + e2e）
-- [ ] 「测试连接」对每个已填地址各显示一个结果，401 显示「key 无效」。（Playwright，假上游）
-- [ ] 删除确认框写明「会从所有 Agent 的可选模型里去掉」及各 Agent 默认模型将改成什么或将回到官方；确认后列表里消失、daemon 按失踪规则级联。（Playwright + e2e）
-- [ ] 拉模型与测试连接消息按「地址 + 格式」工作，现有 `api-endpoint-models` / `api-endpoint-test-connection` e2e 保留并增加按格式用例。
-- [ ] 家族识别对照 `ui-direction.md` 的前缀表有单元测试；厂商图标文件在 `THIRD_PARTY_NOTICES` 里注明来源。
-- [ ] 所有新文案九种语言齐全，资源测试通过。
+- [x] UI: 详情页 / 已拉取 200+ 模型 / 桌面 1280 — 左栏家族目录不滚出卡片、右栏可滚；每行是小开关不是勾选框；模型名普通字体；关着的模型名变淡；当前家族浅灰底。
+- [x] UI: 详情页 / 搜索命中跨家族 / 桌面 1280 — 左栏只剩有命中的家族且计数照旧，右栏显示当前家族命中项；无结果有提示。
+- [x] UI: 详情页 / 模型区加载中与拉取失败 / 桌面 1280 — 加载态与失败原因可见、不发生布局跳动。
+- [x] 拉回来的模型默认全关；某家族「全选」后该组全开、再点变「全不选」。重新拉取后已勾选保留，上游不再提供的带「上游清单里没有了」小字；手动添加的模型保留并可开关。（Playwright + e2e）
+- [x] 档位映射四个下拉只列本接口已选模型 +「不映射」；保存后 Claude Code 里选 opus 的请求经中转站被翻成映射模型。（Playwright + e2e）
+- [x] 「测试连接」对每个已填地址各显示一个结果，401 显示「key 无效」。（Playwright，假上游）
+- [x] 删除确认框写明「会从所有 Agent 的可选模型里去掉」及各 Agent 默认模型将改成什么或将回到官方；确认后列表里消失、daemon 按失踪规则级联。（Playwright + e2e）
+- [x] 拉模型与测试连接消息按「地址 + 格式」工作，现有 `api-endpoint-models` / `api-endpoint-test-connection` e2e 保留并增加按格式用例。
+- [x] 家族识别对照 `ui-direction.md` 的前缀表有单元测试；厂商图标文件在 `THIRD_PARTY_NOTICES` 里注明来源。
+- [x] 所有新文案九种语言齐全，资源测试通过。
 
 ## Comments
 
 - 08 票已落下：详情路由 `settings/hosts/[serverId]/api-endpoints/[endpointId]`、桌面面包屑「第三方接口 / 名称」（`ApiEndpointsBreadcrumb`）、「连接」区（`api-endpoints/connection-section.tsx`：三种格式地址、未填显示「未填，不用这种格式」、打码 key、「编辑」打开编辑连接弹窗）。本票在它们之上补头部、模型区、档位映射与删除，不重做。
 - 按格式测试连接复用 server `api-endpoints/upstream-detect.ts` 的 `probeUpstreamFormat`（`FORMAT_PROBES`），不要再照 `upstream-connection.ts` 的 `PROTOCOLS` 复制一份；检测结果的 `auth_failed` 即「key 无效」。
 - 「需要检查」目前一律显示「key 无效，需要检查」：冷却的 `reason` 对 401 与 403 都是 `auth`，区分不了无权限；详情徽标要分开说时得先改 daemon。
+- 09 票已落下：上游清单与手动添加的模型由 daemon 存在每家接口上（`catalog` / `manualModels`），详情页的「拉取于」「上游清单里没有了」「手动添加的保留」都读它；契约见 `.atw/spec/server/backend/rpc-and-protocol.md`「fetch_models and test_connection by base URL and request format」。
+- 「拉取于 just now」是英文：共用的 `formatTimeAgo` 还没本地化，归 `10-13-zh-relative-time-and-plan-labels` 任务。
+- 聊天模型选择器（10 票）可复用 `api-endpoints/internal/model-families.ts` 与 `model-family-icon.tsx` 给模型名配家族图标。
 

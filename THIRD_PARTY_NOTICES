@@ -52,6 +52,17 @@ smallest request) follows magpie's internal/provider/detect.go and test.go:
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
 
+The settings page's model families (which model name prefix belongs to which
+vendor) follow magpie's internal/agent/icons.go, and the vendor logos are
+magpie's internal/gui/assets/icons/ (claude-color, openai, gemini-color,
+deepseek-color, xai, kimi, zhipu-color, qwen-color, mistral-color,
+minimax-color, mimocode, stepfun-color), with width, height, style and
+<title> removed:
+
+  packages/app/src/api-endpoints/internal/model-families.ts
+  packages/app/src/assets/model-family-icons.ts
+  packages/app/src/assets/model-family-icons/*.svg
+
 MIT License
 
 Copyright (c) 2026 yetone
