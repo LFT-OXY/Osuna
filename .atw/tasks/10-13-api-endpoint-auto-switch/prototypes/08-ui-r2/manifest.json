@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "project": "Osuna · 第三方接口（magpie 式三层）",
+  "brief": "第三方接口单独成页、整台电脑共用：列表页每家一个总开关；详情页管连接、拉取上游模型并按 Claude / GPT / Gemini 等分组挑选、Claude 档位映射；Claude Code / Codex 页只剩「使用第三方接口」总开关和默认模型。同一个方向的四个画面，依次是用户会走的顺序。",
+  "round": "08-03",
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状：Claude Code 页里的接口区",
+      "concept": "现在接口挂在每个 Agent 页面里，单选启用。",
+      "typography": "沿用 Osuna 设置页",
+      "palette": [
+        "#fafafa",
+        "#ffffff",
+        "#e4e4e7",
+        "#1b4ed8"
+      ],
+      "traits": [
+        "接口按 Agent 分开存",
+        "一次只能用一家"
+      ],
+      "kind": "html",
+      "source": "baseline.html",
+      "baseline": true
+    },
+    {
+      "id": "list",
+      "name": "1 第三方接口列表页",
+      "concept": "侧栏新增「第三方接口」；所有接口在这里，每家一个总开关，关掉的收进「已关闭」。",
+      "typography": "沿用「提供方」列表页的行样式",
+      "palette": [
+        "#ffffff",
+        "#1b4ed8",
+        "#3e704a",
+        "#7b5d39",
+        "#9d433b"
+      ],
+      "traits": [
+        "每行：支持的格式 · 地址 · 已选几个模型",
+        "冷却中 / 需要检查直接写在行里",
+        "右上角 + 添加"
+      ],
+      "kind": "html",
+      "source": "list.html"
+    },
+    {
+      "id": "form",
+      "name": "2 添加接口",
+      "concept": "key 只填一次；贴一个地址点「自动检测」，三种请求格式（Anthropic / OpenAI Chat / OpenAI Responses）能用的地址自动填上，可手改，留空就不用。",
+      "typography": "沿用现有接口表单",
+      "palette": [
+        "#ffffff",
+        "#f4f4f5",
+        "#1b4ed8"
+      ],
+      "traits": [
+        "一家一把 key，可有多个格式地址",
+        "自动检测 = 三种格式各发一个最小测试请求",
+        "保存后进详情页拉模型"
+      ],
+      "kind": "html",
+      "source": "form.html"
+    },
+    {
+      "id": "detail",
+      "name": "3 接口详情：拉取并按家族挑模型",
+      "concept": "连接区列出三种格式各自的地址和共用的 key；拉回来的模型按家族分组，默认不选，每组一键全选。",
+      "typography": "沿用「提供方」详情页",
+      "palette": [
+        "#ffffff",
+        "#1b4ed8",
+        "#e8f0ff",
+        "#3e704a"
+      ],
+      "traits": [
+        "说明每次请求怎么挑格式",
+        "Claude / GPT 展开，其余分组收起",
+        "可以滚动看到下半截"
+      ],
+      "kind": "html",
+      "source": "detail.html"
+    },
+    {
+      "id": "detail2",
+      "name": "3b 接口详情（滚到底部）",
+      "concept": "其余家族分组收起时的样子，以及最下面的 Claude 档位映射。",
+      "typography": "同上",
+      "palette": [
+        "#ffffff",
+        "#1b4ed8"
+      ],
+      "traits": [
+        "收起的组只占一行",
+        "档位映射：opus / sonnet / haiku / fable 各对应哪个模型"
+      ],
+      "kind": "image",
+      "source": "detail-2.png"
+    },
+    {
+      "id": "agent",
+      "name": "4 Claude Code 页",
+      "concept": "Agent 页只剩一个总开关、默认模型，和一个跳到接口列表页的入口。",
+      "typography": "沿用提供方详情页",
+      "palette": [
+        "#ffffff",
+        "#1b4ed8",
+        "#e4e4e7"
+      ],
+      "traits": [
+        "打开就能用所有开着的接口",
+        "入口行显示几家开着、谁在冷却"
+      ],
+      "kind": "html",
+      "source": "agent.html"
+    }
+  ]
+}

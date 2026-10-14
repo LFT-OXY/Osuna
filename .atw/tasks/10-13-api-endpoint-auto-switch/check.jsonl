@@ -1,0 +1,31 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "server 包后端规范总索引；中转站、路由、协议转换、迁移都在 server 实现"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包前端规范总索引；新「第三方接口」页、弹窗、详情页、Agent 页与模型选择器"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件写法；设置页沿用现有组件与密度"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "接口列表、冷却状态、总开关在客户端的状态设计"}
+{"file": ".atw/spec/app/frontend/styling.md", "reason": "Unistyles 用法；禁止 useUnistyles"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "前端测试写法；Playwright 浏览器用例与资源测试"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "protocol → server → app 三层改动的影响面核对"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/ui-direction.md", "reason": "08 票定稿的界面结构、控件、状态词、用户喜好与验收重点；正式界面按它实现"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/adr-draft.md", "reason": "ADR 0007 定稿依据；相对 ADR 0004 改了什么、保留了什么"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/research/decisions.md", "reason": "十轮访谈的全部决定与推翻记录；需求有歧义时查依据"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/research/magpie-port-inventory.md", "reason": "判错正则、冷却常量、粘性判定、IR 结构、三协议五件套签名、夹具清单、MIT 声明；单元测试对照清单"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/research/slash-model-ids.md", "reason": "Claude Code / Codex 对模型名、口令认证、model_catalog_json 字段的实际行为"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/research/daemon-http-host.md", "reason": "daemon HTTP 服务挂中转站要改的四处：密码中间件、JSON 上限、流式转发、端口比对"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/research/session-request-identity.md", "reason": "请求对应回会话的请求头名与兼容旧名"}
+{"file": ".atw/tasks/10-13-api-endpoint-auto-switch/map-issues/09-adr-and-doc-rewrites.md", "reason": "13 项文档改写清单的逐项表；验收照它核对"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "保留的文件编辑规则：只写自有键、还原原值、原子写、解析失败不写、外部改动检测；本次要标 superseded in part"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、能力标记门控、COMPAT 标签规则；老 App 投影是长期功能不打标签"}
+{"file": "docs/rpc-namespacing.md", "reason": "新增 RPC 的命名规则"}
+{"file": "docs/data-model.md", "reason": "文件持久化、Zod 校验、原子写、无迁移程序的约定；第 9 节要重写"}
+{"file": "docs/glossary.md", "reason": "现有 API endpoint、Custom provider 词条与界面用词规则；本次重写并新增词条"}
+{"file": "docs/i18n.md", "reason": "文案走翻译键、英文为源、zh-CN 守卫表的规则"}
+{"file": "docs/design.md", "reason": "设计系统：开关、层级、密度、对齐、禁止项"}
+{"file": "docs/forms.md", "reason": "添加 / 编辑弹窗的表单架构与加载态门控"}
+{"file": "docs/custom-providers.md", "reason": "自定义提供方与现有接口接线说明；三处要改写，extends 条目地址被盖掉要写明"}
+{"file": "docs/testing.md", "reason": "真实依赖优先、单文件跑测、决定性要求"}
+{"file": "docs/ad-hoc-daemon-testing.md", "reason": "隔离 daemon 端到端测试的起法；主接缝"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "上游错误分类、包装式报错与日志的写法"}
+{"file": ".atw/spec/server/backend/logging.md", "reason": "换家 / 冷却写 daemon 日志的格式要求"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "endpoints.json / keys.json / 口令文件 / 模型目录文件的读写与 0600"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "RPC 处理器与协议 schema 扩展的写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "server 单元测试与 daemon-e2e 的写法"}
