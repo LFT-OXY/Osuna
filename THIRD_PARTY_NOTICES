@@ -47,6 +47,11 @@ MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go):
 
   packages/server/src/server/api-endpoints/gateway/routing.ts
 
+Request-format auto-detection (each format's base URL, the model asked, the
+smallest request) follows magpie's internal/provider/detect.go and test.go:
+
+  packages/server/src/server/api-endpoints/upstream-detect.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

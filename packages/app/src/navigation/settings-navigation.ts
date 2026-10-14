@@ -16,7 +16,8 @@ export type SettingsView =
   | { kind: "section"; section: SettingsSectionSlug }
   | { kind: "host"; serverId: string; section: HostSectionSlug }
   | { kind: "project"; serverId: string; projectId: string }
-  | { kind: "provider"; serverId: string; provider: string };
+  | { kind: "provider"; serverId: string; provider: string }
+  | { kind: "apiEndpoint"; serverId: string; endpointId: string };
 
 export function openHostOverview(serverId: string): void {
   router.push(buildSettingsHostSectionRoute(serverId, "host"));
@@ -42,5 +43,8 @@ export function returnFromSettings(view: SettingsView): void {
   if (view.kind === "plugin") parent = buildSettingsHostSectionRoute(view.serverId, "plugins");
   if (view.kind === "project") parent = buildProjectsSettingsRoute(view.serverId);
   if (view.kind === "provider") parent = buildSettingsHostSectionRoute(view.serverId, "providers");
+  if (view.kind === "apiEndpoint") {
+    parent = buildSettingsHostSectionRoute(view.serverId, "api-endpoints");
+  }
   router.dismissTo(parent as Href);
 }

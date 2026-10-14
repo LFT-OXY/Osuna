@@ -88,6 +88,8 @@ import {
   ApiEndpointCancelResponseSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointDeleteResponseSchema,
+  ApiEndpointDetectFormatsRequestSchema,
+  ApiEndpointDetectFormatsResponseSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointListRequestSchema,
@@ -3536,6 +3538,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
+  ApiEndpointDetectFormatsRequestSchema,
   ApiEndpointCancelRequestSchema,
 ]);
 
@@ -3897,7 +3900,7 @@ export const ServerInfoStatusPayloadSchema = z
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
         // COMPAT(apiEndpointGateway): added in v0.16.0, remove gate after 2027-04-14.
-        // 第三方接口主机共用：列表带 agents、baseUrls、enabled，支持 set_agent_settings 与 set_endpoint_state。
+        // 第三方接口主机共用：列表带 agents、baseUrls、enabled，支持 set_agent_settings、set_endpoint_state 与 detect_formats。
         apiEndpointGateway: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7301,6 +7304,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,
+  ApiEndpointDetectFormatsResponseSchema,
   ApiEndpointCancelResponseSchema,
 ]);
 

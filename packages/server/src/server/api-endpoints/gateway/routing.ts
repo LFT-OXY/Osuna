@@ -97,7 +97,7 @@ const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
 ];
 
 /** 斜杠后的名字以 claude 开头（magpie 的 claudeModel）。 */
-function isClaudeModel(model: string): boolean {
+export function isClaudeModel(model: string): boolean {
   return model
     .slice(model.lastIndexOf("/") + 1)
     .toLowerCase()

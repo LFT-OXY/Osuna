@@ -1,0 +1,136 @@
+import {
+  API_ENDPOINT_REQUEST_FORMATS,
+  type ApiEndpoint,
+  type ApiEndpointAgentSettings,
+  type ApiEndpointListResponse,
+  type ApiEndpointRequestFormat,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+
+/*
+ * 「第三方接口」页的纯计算：接口是主机共用的，列表按接口开关分两组，每行的状态与摘要从列表响应里得出。
+ * 列表响应带的老客户端投影字段（provider、baseUrl、defaultModelId、activeEndpointId）这里一律不读。
+ */
+
+type ListPayload = ApiEndpointListResponse["payload"];
+
+export type HostEndpointsLoadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | {
+      status: "ready";
+      endpoints: ApiEndpoint[];
+      agents: Record<string, ApiEndpointAgentSettings>;
+    };
+
+export function selectHostEndpointsState(input: {
+  data: ListPayload | undefined;
+  error: Error | null;
+}): HostEndpointsLoadState {
+  if (input.data?.error) return { status: "error", message: input.data.error.message };
+  if (input.data) {
+    return { status: "ready", endpoints: input.data.endpoints, agents: input.data.agents ?? {} };
+  }
+  if (input.error) return { status: "error", message: input.error.message };
+  return { status: "loading" };
+}
+
+/** 列表里这一家；还没加载完、出错或已被删除时为 null。 */
+export function findHostEndpoint(
+  state: HostEndpointsLoadState,
+  endpointId: string,
+): ApiEndpoint | null {
+  if (state.status !== "ready") return null;
+  return state.endpoints.find((endpoint) => endpoint.id === endpointId) ?? null;
+}
+
+export interface HostEndpointGroups {
+  enabled: ApiEndpoint[];
+  disabled: ApiEndpoint[];
+}
+
+/** 接口开关开着的在「已开启」，关着的在「已关闭」；组内按创建顺序。 */
+export function groupHostEndpoints(endpoints: ApiEndpoint[]): HostEndpointGroups {
+  return {
+    enabled: endpoints.filter((endpoint) => endpoint.enabled !== false),
+    disabled: endpoints.filter((endpoint) => endpoint.enabled === false),
+  };
+}
+
+export interface CooldownRemaining {
+  unit: "minutes" | "hours";
+  value: number;
+}
+
+export type EndpointRowStatus =
+  | { kind: "available"; tone: "success" }
+  | { kind: "cooling"; tone: "warning"; remaining: CooldownRemaining }
+  | { kind: "needsCheck"; tone: "danger" }
+  | { kind: "disabled"; tone: "muted" };
+
+const MINUTE_MS = 60_000;
+
+/** 关着就是「已关闭」，不管冷却；冷却剩余时间向上取整，满一小时改按小时。 */
+export function endpointRowStatus(endpoint: ApiEndpoint, now: Date): EndpointRowStatus {
+  if (endpoint.enabled === false) return { kind: "disabled", tone: "muted" };
+  const cooldown = endpoint.cooldown;
+  if (cooldown?.state === "needs_check") return { kind: "needsCheck", tone: "danger" };
+  if (cooldown?.state === "cooling_down" && cooldown.until !== null) {
+    const minutes = Math.max(
+      1,
+      Math.ceil((Date.parse(cooldown.until) - now.getTime()) / MINUTE_MS),
+    );
+    const remaining: CooldownRemaining =
+      minutes < 60
+        ? { unit: "minutes", value: minutes }
+        : { unit: "hours", value: Math.ceil(minutes / 60) };
+    return { kind: "cooling", tone: "warning", remaining };
+  }
+  return { kind: "available", tone: "success" };
+}
+
+export interface EndpointSummary {
+  // 这家填了地址的格式，按固定顺序；认不出的格式不列。
+  formats: ApiEndpointRequestFormat[];
+  // 第一个地址的主机名。
+  host: string | null;
+  modelCount: number;
+}
+
+export function endpointSummary(endpoint: ApiEndpoint): EndpointSummary {
+  // 页面只在主机声明 apiEndpointGateway 时打开，列表一定带 baseUrls。
+  const baseUrls = endpoint.baseUrls ?? [];
+  return {
+    formats: API_ENDPOINT_REQUEST_FORMATS.filter((format) =>
+      baseUrls.some((entry) => entry.format === format),
+    ),
+    host: hostOf(baseUrls[0]?.url ?? ""),
+    modelCount: endpoint.models.length,
+  };
+}
+
+const URL_HOST = /^[a-z]+:\/\/([^/?#:]+)/i;
+
+function hostOf(url: string): string | null {
+  return URL_HOST.exec(url.trim())?.[1] ?? null;
+}
+
+/**
+ * 关掉这家接口后会回到官方的 Agent：总开关开着，而剩下开着的接口一个已选模型都没有
+ * （默认模型失踪时 daemon 会改用别的可用模型，只有一个都不剩才回官方）。
+ */
+export function agentsReturningToOfficial(input: {
+  endpoints: ApiEndpoint[];
+  agents: Record<string, ApiEndpointAgentSettings>;
+  switchedOffId: string;
+}): string[] {
+  const stillUsable = input.endpoints.some(
+    (endpoint) =>
+      endpoint.id !== input.switchedOffId &&
+      endpoint.enabled !== false &&
+      endpoint.models.length > 0,
+  );
+  if (stillUsable) return [];
+  return Object.entries(input.agents)
+    .filter(([, agent]) => agent.enabled)
+    .map(([provider]) => provider);
+}

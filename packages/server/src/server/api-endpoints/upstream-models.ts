@@ -24,6 +24,8 @@ export type UpstreamFailureCode =
 export interface UpstreamFailure {
   code: UpstreamFailureCode;
   message: string;
+  // 上游回了非 404 / 405 的错误状态码时带上，自动检测据此认出 key 无效。
+  status?: number;
 }
 
 export type UpstreamModelsResult =
@@ -159,7 +161,11 @@ function summarize(attempts: FailedAttempt[], redact: (text: string) => string):
       attempt.kind === "http" && attempt.status !== 404 && attempt.status !== 405,
   );
   if (httpError) {
-    return { code: "upstream_error", message: redact(describeAttempt(httpError)) };
+    return {
+      code: "upstream_error",
+      message: redact(describeAttempt(httpError)),
+      status: httpError.status,
+    };
   }
   if (attempts.every((attempt) => attempt.kind === "network")) {
     return {

@@ -22,6 +22,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
+      | "provider.api_endpoint.detect_formats.request"
       | "provider.api_endpoint.cancel.request";
   }
 >;
@@ -73,6 +74,8 @@ export class ApiEndpointSession {
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
         return this.handleTestConnection(request, connectionSignal);
+      case "provider.api_endpoint.detect_formats.request":
+        return this.handleDetectFormats(request, connectionSignal);
       case "provider.api_endpoint.cancel.request":
         return this.handleCancel(request);
     }
@@ -292,6 +295,38 @@ export class ApiEndpointSession {
         payload: {
           requestId: request.requestId,
           result: null,
+          error: this.toWireError(error, request),
+        },
+      });
+    } finally {
+      release();
+    }
+  }
+
+  private async handleDetectFormats(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.detect_formats.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    try {
+      const results = await this.service.detectFormats(
+        {
+          ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
+          baseUrl: request.baseUrl,
+          ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+        },
+        signal,
+      );
+      this.host.emit({
+        type: "provider.api_endpoint.detect_formats.response",
+        payload: { requestId: request.requestId, results, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.detect_formats.response",
+        payload: {
+          requestId: request.requestId,
+          results: [],
           error: this.toWireError(error, request),
         },
       });

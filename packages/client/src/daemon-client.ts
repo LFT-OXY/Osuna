@@ -677,6 +677,10 @@ type ApiEndpointTestConnectionPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.test_connection.response" }
 >["payload"];
+type ApiEndpointDetectFormatsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.detect_formats.response" }
+>["payload"];
 type ApiEndpointCancelPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.cancel.response" }
@@ -699,6 +703,11 @@ export type ApiEndpointSetEndpointStateOptions = Omit<
 
 export type ApiEndpointFetchModelsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.fetch_models.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointDetectFormatsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_formats.request" }>,
   "type" | "requestId"
 >;
 
@@ -6357,6 +6366,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.test_connection.request", ...options },
+    });
+  }
+
+  /** 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  async apiEndpointDetectFormats(
+    options: ApiEndpointDetectFormatsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointDetectFormatsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.detect_formats.request", ...options },
     });
   }
 

@@ -66,10 +66,17 @@ const zhCNEnglishAllowlist = {
     "usage.planUsage.strip.windows.fiveHour",
     "settings.providers.apiEndpoints.form.baseUrl",
     "settings.providers.apiEndpoints.form.apiKey",
+    "settings.apiEndpoints.form.apiKey",
     "settings.providers.version.value",
     "settings.providers.version.update",
   ],
-  brands: ["sidebar.help.appName", "panels.sessionHistory.row.paseo"],
+  brands: [
+    "sidebar.help.appName",
+    "panels.sessionHistory.row.paseo",
+    "settings.apiEndpoints.formats.anthropic_messages",
+    "settings.apiEndpoints.formats.openai_chat",
+    "settings.apiEndpoints.formats.openai_responses",
+  ],
   namedThemes: [
     "settings.appearance.theme.options.zinc",
     "settings.appearance.theme.options.midnight",

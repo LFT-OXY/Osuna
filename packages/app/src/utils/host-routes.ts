@@ -523,6 +523,7 @@ export const HOST_SECTION_SLUGS = [
   "metadata",
   "workspaces",
   "providers",
+  "api-endpoints",
   "usage",
   "terminals",
   "plugins",
@@ -595,6 +596,13 @@ export function buildProviderSettingsRoute(serverId: string, provider: string) {
     throw new Error("buildProviderSettingsRoute requires a serverId and provider");
   }
   return `/settings/hosts/${encodeSegment(serverId)}/providers/${encodeSegment(provider)}` as const;
+}
+
+export function buildApiEndpointSettingsRoute(serverId: string, endpointId: string) {
+  if (!serverId.trim() || !endpointId.trim()) {
+    throw new Error("buildApiEndpointSettingsRoute requires a serverId and endpointId");
+  }
+  return `/settings/hosts/${encodeSegment(serverId)}/api-endpoints/${encodeSegment(endpointId)}` as const;
 }
 
 export function normalizeProjectSettingsRouteId(value: string | string[] | undefined): string {

@@ -10,6 +10,7 @@ import {
   type ApiEndpointAgentSettings,
   type ApiEndpointBaseUrl,
   type ApiEndpointCooldown,
+  type ApiEndpointFormatDetection,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
   type ApiEndpointModel,
@@ -65,6 +66,7 @@ import {
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
+import { detectUpstreamFormats } from "./upstream-detect.js";
 import { fetchUpstreamModels, type UpstreamFailureCode } from "./upstream-models.js";
 
 export type ApiEndpointErrorCode =
@@ -751,6 +753,29 @@ export class ApiEndpointService {
       throw new ApiEndpointRequestError("cancelled", "Request cancelled");
     }
     return outcome.result;
+  }
+
+  /**
+   * 自动检测：从一个地址推出三种格式各自的地址，各发一条最小请求。和拉取模型一样只读、不进串行队列。
+   * 每种格式的结论（含失败）放在返回值里；请求本身不成立或被取消才抛 ApiEndpointRequestError。
+   */
+  async detectFormats(
+    input: ApiEndpointUpstreamInput,
+    signal: AbortSignal,
+  ): Promise<ApiEndpointFormatDetection[]> {
+    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const apiKey = this.resolveRequestKey(input);
+    const outcome = await detectUpstreamFormats({
+      baseUrl,
+      apiKey,
+      signal,
+      modelsTimeoutMs: this.upstreamTimeoutMs,
+      probeTimeoutMs: this.connectionTestTimeoutMs,
+    });
+    if (outcome.kind === "cancelled") {
+      throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+    }
+    return outcome.results;
   }
 
   /** 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。key 从不回给客户端。 */

@@ -160,6 +160,7 @@ const INBOUND_PERMISSION = {
   // 会用已保存的 key 向上游发请求，和保存同一级。
   "provider.api_endpoint.fetch_models.request": "daemon.manage",
   "provider.api_endpoint.test_connection.request": "daemon.manage",
+  "provider.api_endpoint.detect_formats.request": "daemon.manage",
   "provider.api_endpoint.cancel.request": "daemon.manage",
   "usage.list_reports.request": "daemon.read",
   provider_diagnostic_request: "daemon.read",
@@ -404,6 +405,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.set_endpoint_state.response": "daemon.manage",
   "provider.api_endpoint.fetch_models.response": "daemon.manage",
   "provider.api_endpoint.test_connection.response": "daemon.manage",
+  "provider.api_endpoint.detect_formats.response": "daemon.manage",
   "provider.api_endpoint.cancel.response": "daemon.manage",
   "usage.list_reports.update": "daemon.read",
   "usage.list_reports.response": "daemon.read",

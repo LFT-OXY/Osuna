@@ -16,3 +16,10 @@
 - [ ] 拉模型与测试连接消息按「地址 + 格式」工作，现有 `api-endpoint-models` / `api-endpoint-test-connection` e2e 保留并增加按格式用例。
 - [ ] 家族识别对照 `ui-direction.md` 的前缀表有单元测试；厂商图标文件在 `THIRD_PARTY_NOTICES` 里注明来源。
 - [ ] 所有新文案九种语言齐全，资源测试通过。
+
+## Comments
+
+- 08 票已落下：详情路由 `settings/hosts/[serverId]/api-endpoints/[endpointId]`、桌面面包屑「第三方接口 / 名称」（`ApiEndpointsBreadcrumb`）、「连接」区（`api-endpoints/connection-section.tsx`：三种格式地址、未填显示「未填，不用这种格式」、打码 key、「编辑」打开编辑连接弹窗）。本票在它们之上补头部、模型区、档位映射与删除，不重做。
+- 按格式测试连接复用 server `api-endpoints/upstream-detect.ts` 的 `probeUpstreamFormat`（`FORMAT_PROBES`），不要再照 `upstream-connection.ts` 的 `PROTOCOLS` 复制一份；检测结果的 `auth_failed` 即「key 无效」。
+- 「需要检查」目前一律显示「key 无效，需要检查」：冷却的 `reason` 对 401 与 403 都是 `auth`，区分不了无权限；详情徽标要分开说时得先改 daemon。
+

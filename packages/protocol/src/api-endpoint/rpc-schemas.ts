@@ -334,6 +334,45 @@ export const ApiEndpointFetchModelsResponseSchema = z.object({
 export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
 
 /**
+ * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，先向上游列出模型挑一个，
+ * 再按每种格式各发一条最小对话请求。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ */
+export const ApiEndpointDetectFormatsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_formats.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  baseUrl: z.string(),
+  apiKey: z.string().optional(),
+});
+export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
+
+/**
+ * 一种格式的检测结果。`status` 是字符串：ok（检测通过）、auth_failed（上游回 401 / 403，key 无效）、
+ * not_detected（其余失败，原因在 `message`）。`url` 是这种格式的建议地址；`httpStatus` 没收到响应时为 null。
+ */
+export const ApiEndpointFormatDetectionSchema = z.object({
+  format: z.string(),
+  url: z.string(),
+  status: z.string(),
+  httpStatus: z.number().nullable(),
+  message: z.string().nullable(),
+});
+export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
+
+/** 请求本身被拒（缺 key、地址无效、找不到接口、被取消）时 `results` 为空，原因在 `error`。 */
+export const ApiEndpointDetectFormatsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_formats.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ApiEndpointFormatDetectionSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointDetectFormatsResponse = z.infer<
+  typeof ApiEndpointDetectFormatsResponseSchema
+>;
+
+/**
  * 取消同一连接上还在进行的上游请求；被取消的请求照常回一条 error.code 为 cancelled 的响应。
  * `cancelled: false` 表示那条请求已经结束或不存在。
  */

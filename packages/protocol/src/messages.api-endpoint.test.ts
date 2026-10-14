@@ -543,6 +543,48 @@ describe("host-wide API endpoints", () => {
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
 
+  it("parses detect_formats with a saved key, and per-format results including unknown ones", () => {
+    const request = {
+      type: "provider.api_endpoint.detect_formats.request" as const,
+      requestId: "req-h6",
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+
+    const response = {
+      type: "provider.api_endpoint.detect_formats.response" as const,
+      payload: {
+        requestId: "req-h6",
+        results: [
+          {
+            format: "anthropic_messages",
+            url: "https://relay.example",
+            status: "ok",
+            httpStatus: 200,
+            message: null,
+          },
+          {
+            format: "openai_chat",
+            url: "https://relay.example/v1",
+            status: "auth_failed",
+            httpStatus: 401,
+            message: "HTTP 401: invalid key",
+          },
+          {
+            format: "a_future_format",
+            url: "https://relay.example/future",
+            status: "a_future_status",
+            httpStatus: null,
+            message: "connection refused",
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
   it("parses a host that advertises apiEndpointGateway, and an older one without it", () => {
     const base = { status: "server_info" as const, serverId: "srv_1" };
     const current = ServerInfoStatusPayloadSchema.parse({

@@ -908,6 +908,8 @@ function RootStack() {
       <Stack.Screen name="settings/hosts/[serverId]/projects/[projectId]" />
       <Stack.Screen name="settings/hosts/[serverId]/providers/index" />
       <Stack.Screen name="settings/hosts/[serverId]/providers/[provider]" />
+      <Stack.Screen name="settings/hosts/[serverId]/api-endpoints/index" />
+      <Stack.Screen name="settings/hosts/[serverId]/api-endpoints/[endpointId]" />
     </ThemedStack>
   );
 }
