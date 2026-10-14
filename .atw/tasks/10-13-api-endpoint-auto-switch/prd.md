@@ -107,18 +107,18 @@ daemon 内置一个本机中转站替两个 CLI 转发请求：CLI 配置文件�
 
 ### B. 中转站（02、05 票）
 
-- R-B1 挂在 daemon 现有 HTTP 监听的 `/api-endpoint-gateway` 前缀下（Codex 加 `/v1`），应答 `/v1/messages`、`/v1/messages/count_tokens`、`/v1/responses`、`/v1/models`、`/api/hello`；绕开 daemon 密码中间件与全局 JSON 解析上限，请求体与响应体都流式。中继不暴露它。
-- R-B2 只接受回环来源 + 正确口令。每个 Agent 一个随机口令兼身份，存 `$PASEO_HOME/api-endpoints/gateway-tokens.json`（0600）；总开关从关到开时生成，关时作废。真实 key 只在 daemon 内替换进上游请求，不出现在任何 CLI 配置文件与日志里。
+- R-B1 挂在 daemon 现有 HTTP 监听的 `/api-endpoint-gateway` 前缀下（Codex 加 `/v1`），应答 `/v1/messages`、`/v1/messages/count_tokens`、`/v1/responses`、`/v1/models`、`/api/hello`；绕开 daemon 密码中间件与全局 JSON 解析上限，响应体流式。请求体由中转站自己整体读入（要读出模型名并改写，上限 64 MB，超出回 413），不受 100 kb 限制。中继不暴露它（中继只接 WebSocket，不走 HTTP 路由）。
+- R-B2 只接受回环来源 + 正确口令：非回环或带 `Forwarded` / `X-Forwarded-For` / `X-Real-IP`（经代理转来）回 403，无口令或错口令回 401；口令可放 `Authorization: Bearer` 或 `x-api-key`，`/api/hello` 同样要口令。每个 Agent 一个随机口令兼身份，存 `$PASEO_HOME/api-endpoints/gateway-tokens.json`（0600）；总开关从关到开时生成，关时作废。真实 key 只在 daemon 内替换进上游请求，不出现在任何 CLI 配置文件与日志里。
 - R-B3 Claude Code 接管写法：`ANTHROPIC_BASE_URL`（中转站）、`ANTHROPIC_AUTH_TOKEN`（口令）、`ANTHROPIC_API_KEY` 置空、顶层 `model`（默认模型）；不写 `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_*_MODEL`、`ANTHROPIC_SMALL_FAST_MODEL`，接管时存在则记录并删除、切回官方时还原。WebSearch deny 照旧。
 - R-B4 Codex 接管写法：顶层 `model_provider = "osuna_api_endpoint"`、`model`、`model_catalog_json`（指向 `$PASEO_HOME/api-endpoints/codex-models.json`）；专用表写 `base_url`（中转站 `/v1`）、`wire_api = "responses"`、`experimental_bearer_token`（口令明文）。去掉 `auth.command`、`codex-api-key` 文件与 Codex 最低版本检查。目录文件列去重后的光秃秃模型名（可见）与各家 `slug/模型名`（隐藏），在接口、已选模型或任一开关变化时重新生成，切回官方时删除并还原该键。
 - R-B5 ADR 0004 的文件编辑规则全部保留：只写自有键、记录与还原原值、原子写、解析失败不写、改名前重读、外部改动检测、`jsonc-parser` 与 TOML 节点拼接；用户手写的其它配置一字不动。
 - R-B6 daemon 启动绑定端口后比对接管记录里的中转站网址，不一致则重写 CLI 配置；非 TCP 监听（socket / 管道）时「使用第三方接口」总开关不可打开并说明原因；daemon 未运行时不做额外处理。
-- R-B7 路由：`slug/模型名` 直达该家，该家已删除 / 已关闭 / 冷却中视同不可用、按同名换家；光秃秃模型名按创建顺序找开着的、已选该模型的第一家，Claude 档位名按各家映射翻译；都找不到报错给 Agent。
+- R-B7 路由：`slug/模型名` 直达该家，该家已删除 / 已关闭 / 冷却中 / 没选这个模型视同不可用、按同名换家；整个名字是某家已选的模型时（模型名本身可带斜杠）按光秃秃模型名处理；光秃秃模型名按创建顺序找开着的、已选该模型的第一家，Claude 档位名（只对 Claude Code）在没有任何开着的接口选了这个名字时，取第一家映射了该档位的接口、换成映射到的模型；都找不到回 404、按 Agent 协议包装。
 - R-B8 自动切换只在上游响应首字节前发生、只换同名模型、按创建顺序跳过已关闭 / 冷却中 / 已删除的接口；首字后不再换家，流中断的错误原样交给 Agent 且那家照样冷却。每次换家与进入 / 退出冷却都写一行 daemon 日志（接口名、失败分类、恢复时间），不进对话。
 - R-B9 判错与冷却照 magpie（`research/magpie-port-inventory.md`）：欠费 30 分钟；额度用完按厂商重置时间、没给 15 分钟；限流 1 分钟起翻倍最长 30 分钟；其他服务器错误 1 分钟起翻倍最长 10 分钟；key 无效 / 无权限标「需要检查」，直到用户编辑这家接口；全部冷却时把最后一家的错误交给 Agent。冷却只记内存，daemon 重启清零；「立刻恢复」清掉这家的冷却。
 - R-B10 粘性照 magpie auto 模式：同一轮留在接手那家；新一轮回到用户选的那家，除非接手那家 5 分钟内缓存命中 ≥ 1024 token 则继续用到缓存冷掉；冷却中的不粘。会话对应读 Claude 的 `x-claude-code-session-id`、Codex 的 `thread-id` / `session-id`（兼容 `thread_id` / `session_id` / `x-client-request-id`）。
 - R-B11 每次请求挑格式：这家有 Agent 自己格式的地址就直通；Claude 模型且有 Anthropic 地址时一律走 Anthropic；否则翻译到第一个可用格式（Claude 模型 Anthropic 优先，其余 Chat → Responses → Anthropic）。
-- R-B12 等上游响应头最长 10 分钟，超时按服务器错误冷却换家。换不了家时状态码照抄，错误文字为「<接口名>: <上游原文>」并按 Agent 协议包装、附重置时间、带回 `Retry-After`；响应加 `x-osuna-api-endpoint` 头。不另记用量。
+- R-B12 等上游响应头最长 10 分钟，超时按服务器错误冷却换家。换不了家时状态码照抄，错误文字为「<接口名>: <上游原文>」并按 Agent 协议包装、附重置时间、带回 `Retry-After` 与含 `ratelimit`+`reset` 的头；选定接口之后的每个响应（含报错）加 `x-osuna-api-endpoint` 头，值是接口标识（接口名可能含中文，放不进 HTTP 头）。直通时请求 `accept-encoding: identity`，Anthropic 地址同时带 `Authorization: Bearer` 与 `x-api-key`。不另记用量。
 
 ### C. 协议转换（03、06 票）
 

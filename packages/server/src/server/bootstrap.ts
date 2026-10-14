@@ -152,6 +152,11 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
+import {
+  API_ENDPOINT_GATEWAY_PATH,
+  createApiEndpointGateway,
+  type ApiEndpointGatewayOverrides,
+} from "./api-endpoints/gateway/gateway.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
@@ -466,7 +471,8 @@ export interface PaseoDaemonConfig {
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
-  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
+  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck"> &
+    ApiEndpointGatewayOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
   log?: PersistedConfig["log"];
@@ -797,6 +803,17 @@ export async function createPaseoDaemon(
     "/api/terminal-activity",
     express.json(),
     createTerminalActivityRouteHandler(terminalManager),
+  );
+
+  // Local CLIs reach third-party endpoints through this; gated by loopback and its own token,
+  // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
+  app.use(
+    API_ENDPOINT_GATEWAY_PATH,
+    createApiEndpointGateway({
+      paseoHome: config.paseoHome,
+      logger,
+      overrides: config.apiEndpoints,
+    }),
   );
 
   // Serve the bundled browser web UI when enabled. Mounted after service-proxy

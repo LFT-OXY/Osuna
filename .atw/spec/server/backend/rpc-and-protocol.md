@@ -711,6 +711,73 @@ const signal = AbortSignal.any([input.signal, timeout]); // input.signal = clien
 // catch: input.signal.aborted → cancelled; timeout.aborted → upstream_timeout
 ```
 
+## Scenario: a local HTTP route that relays CLI traffic with a host secret
+
+Reference implementation: the API endpoint gateway (api-endpoint-auto-switch ticket 02), `server/api-endpoints/gateway/`. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
+
+### 1. Scope / Trigger
+
+- A CLI the daemon configured must reach a third-party upstream, and the upstream's real key must stay inside the daemon. The CLI holds only a daemon-issued token.
+
+### 2. Signatures
+
+- `createApiEndpointGateway({ paseoHome, logger, overrides?: { gatewayHeaderTimeoutMs? } }): RequestHandler`, mounted in `bootstrap.ts` with `app.use(API_ENDPOINT_GATEWAY_PATH, …)` (`/api-endpoint-gateway`) **before** `createRequireBearerMiddleware` and the global `express.json()`.
+- Paths under the prefix: `POST /v1/messages` (Anthropic shape), `POST /v1/responses` (OpenAI Responses shape), `GET /v1/models`, `GET|HEAD /api/hello`. Claude Code's base URL is the prefix, Codex's is prefix + `/v1`; both land on the same paths.
+- `resolveGatewayRoute({ state, agent, model }): { ok: true, endpoint, upstreamModel } | { ok: false, message }` in `gateway/routing.ts` is pure; test it directly.
+
+### 3. Contracts
+
+- Token file `$PASEO_HOME/api-endpoints/gateway-tokens.json` `{ tokens: { [provider]: token } }` (0600, `ApiEndpointStore.readGatewayTokens` / `writeGatewayTokens`). `ApiEndpointService.commit` syncs it after `writeState`: switch off → on issues `randomBytes(32).toString("base64url")`, on with no token issues one, on → on keeps it, off deletes it.
+- The gateway reads `endpoints.json`, `keys.json` and the token file on every request, so endpoint edits take effect without a hook.
+- Passthrough: the request body is read whole (64 MB cap) to find `model`; only the top-level `model` value is replaced with `jsonc-parser` `modify` + `applyEdits`, so every other byte, `cache_control` included, reaches the upstream unchanged. Client `authorization`, `x-api-key`, hop-by-hop, `host`, `content-length`, `accept-encoding` and `x-forwarded-*` are dropped; `accept-encoding: identity` and the real key are added (Anthropic addresses get both `Authorization: Bearer` and `x-api-key`). The query string is forwarded (`?beta=true`).
+- Upstream URL: `anthropic_messages` base + `/v1/messages`; `openai_responses` base (already ending in `/v1`) + `/responses`.
+- Every response after an endpoint is chosen carries `x-osuna-api-endpoint: <slug>`. The slug, not the name: Node throws on non-Latin-1 header values and names can be Chinese.
+
+### 4. Validation & Error Matrix
+
+All errors are wrapped in the agent's protocol (`gateway/agent-errors.ts`): `/v1/messages` or an `anthropic-version` header → `{ type: "error", error: { type, message } }`; otherwise `{ error: { message, type, code, param: null } }`. `type` defaults by status (400 `invalid_request_error`, 401 `authentication_error`, 403 `permission_error`, 404 `not_found_error`, 413 `request_too_large`, 429 `rate_limit_error`, 529 `overloaded_error`, other 5xx `api_error`).
+
+| Condition | Status | Message |
+|---|---|---|
+| Socket not loopback, or `Forwarded` / `X-Forwarded-For` / `X-Real-IP` present | 403 | `The API endpoint gateway only accepts local requests` |
+| No token, or matches no agent (`timingSafeEqual`) | 401 | `Invalid API endpoint gateway token` |
+| Body over 64 MB | 413 | — |
+| Body has no string `model` | 400 | `The request has no model` |
+| No enabled endpoint offers the model | 404 | `No enabled API endpoint offers the model "<model>"` |
+| Routed endpoint has no address in the agent's format (until translation, ticket 05) | 502 | `<name>: no address for this agent's request format` |
+| Upstream status ≥ 400 | same status | `<name>: <upstream message, key redacted, 300 chars>`; upstream `error.type` / `error.code` kept; `retry-after` and `*ratelimit*reset*` headers copied |
+| No response headers within `gatewayHeaderTimeoutMs` (default 10 min) | 504 | `<name>: no response headers within <s>s` |
+| Connection error before headers | 502 | `<name>: <origin>: <network error>` |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `relay-a/kimi-k2` → endpoint `relay-a`, body sent with `"model":"kimi-k2"`, SSE chunks arrive one by one.
+- Base: a bare name that two endpoints selected goes to the earlier one; a slug whose endpoint is closed, deleted, or did not select the model falls back to the bare name; `moonshotai/kimi-k2` selected as a whole name is not split.
+- Bad: mounting after the bearer middleware — with a daemon password set, every CLI request is compared against the password and gets 401.
+
+### 6. Tests Required
+
+- `gateway/routing.test.ts`: slug direct, bare name by creation order, slashed bare name, tier mapping (Claude only), selected Claude model sent as is, closed/deleted slug falls back, nothing found.
+- `daemon-e2e/api-endpoint-gateway.e2e.test.ts` (local only; not in `test:integration`): 401 without/with wrong token, 403 through a proxy header, works with a daemon password and a 300 kB body, token file created 0600 and deleted, byte-exact passthrough and progressive streaming, non-streaming reply whole, wrapped 429/400/503 with `Retry-After`, 504 on header timeout, no real key in log lines or responses, `/v1/models` dedup.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const json = JSON.parse(body); json.model = upstreamModel;
+upstream.end(JSON.stringify(json)); // reorders nothing, but drops formatting and can change number spelling
+```
+
+#### Correct
+
+```ts
+const text = body.toString("utf8");
+upstream.end(applyEdits(text, modify(text, ["model"], upstreamModel, {})));
+```
+
+Use `node:http` / `node:https`, not `fetch`: undici decompresses the body behind your back and caps the wait for response headers at 5 minutes, below the 10-minute contract.
+
 ## Scenario: host state that replaces a provider's model catalogue
 
 Reference implementation: the active API endpoint (api-endpoint ticket 05). Reuse this shape for any host-side mode that decides which models a provider may run.

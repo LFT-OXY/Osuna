@@ -19,6 +19,7 @@ import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录，以及专用 provider 表当前属于哪个接口；
  * - codex-api-key：Codex 通过 auth.command 读取的 key，只有内容本身，没有换行；
+ * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即删除；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
@@ -113,6 +114,10 @@ const CodexTakeoverFileSchema = z.object({
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 
+// 按 provider 存；没有条目即该 Agent 没有口令（总开关关着）。
+const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string()) });
+export type GatewayTokens = z.infer<typeof GatewayTokensFileSchema>["tokens"];
+
 const ENDPOINTS_FILE = "endpoints.json";
 const CODEX_KEY_FILE = "codex-api-key";
 
@@ -183,6 +188,15 @@ export class ApiEndpointStore {
 
   getApiKey(id: string): string | null {
     return this.readKeys()[id] ?? null;
+  }
+
+  readGatewayTokens(): GatewayTokens {
+    const raw = this.readJson("gateway-tokens.json");
+    return raw === null ? {} : GatewayTokensFileSchema.parse(raw).tokens;
+  }
+
+  writeGatewayTokens(tokens: GatewayTokens): void {
+    this.writeJson("gateway-tokens.json", GatewayTokensFileSchema.parse({ tokens }));
   }
 
   readClaudeTakeover(): ClaudeTakeoverFile {

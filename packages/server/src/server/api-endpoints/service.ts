@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import type pino from "pino";
@@ -65,6 +65,7 @@ import {
   ApiEndpointsFileUnparsableError,
   type ApiEndpointProvider,
   type ApiEndpointState,
+  type GatewayTokens,
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
@@ -486,12 +487,30 @@ export class ApiEndpointService {
 
     for (const [id, apiKey] of Object.entries(keys)) this.store.setApiKey(id, apiKey);
     this.store.writeState(next);
+    this.syncGatewayTokens(previous, next);
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
       }
     }
     return next;
+  }
+
+  /**
+   * 中转站口令跟着总开关走：从关到开换一个新口令，开着却没有口令（旧数据换算来的）补一个，关掉即删除。
+   */
+  private syncGatewayTokens(previous: ApiEndpointState, next: ApiEndpointState): void {
+    const current = this.store.readGatewayTokens();
+    const tokens: GatewayTokens = {};
+    for (const provider of API_ENDPOINT_PROVIDERS) {
+      if (!next.agents[provider].enabled) continue;
+      const existing = current[provider];
+      tokens[provider] =
+        previous.agents[provider].enabled && existing
+          ? existing
+          : randomBytes(32).toString("base64url");
+    }
+    if (JSON.stringify(tokens) !== JSON.stringify(current)) this.store.writeGatewayTokens(tokens);
   }
 
   private syncCli(

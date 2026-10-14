@@ -1,6 +1,6 @@
 # 03 — CLI 改指向中转站
 
-**What to build:** 某个 Agent 的「使用第三方接口」总开关从关到开时，生成该 Agent 的口令，Claude Code 的 `settings.json` 写 `ANTHROPIC_BASE_URL`（中转站）、`ANTHROPIC_AUTH_TOKEN`（口令）、`ANTHROPIC_API_KEY` 置空、顶层 `model`（默认模型），不写 `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_*_MODEL`、`ANTHROPIC_SMALL_FAST_MODEL`（存在则记录并删除）；Codex 的 `config.toml` 写顶层 `model_provider`、`model`、`model_catalog_json`，专用表写 `base_url`（中转站 `/v1`）、`wire_api = "responses"`、`experimental_bearer_token`（口令明文），去掉 `auth.command`、`codex-api-key` 文件与最低版本检查。Codex 模型目录文件列去重后的光秃秃模型名（可见）与各家 `标识/模型名`（隐藏），接口、已选模型、任一开关变化即重新生成。关总开关时全部还原、口令作废、目录文件删除。daemon 启动绑定端口后比对接管记录里的网址，不一致则重写；非 TCP 监听时拒绝打开总开关并说明。ADR 0004 的文件编辑规则全部保留。对应 prd R-B2～R-B6。
+**What to build:** 某个 Agent 的「使用第三方接口」总开关从关到开时，生成该 Agent 的口令，Claude Code 的 `settings.json` 写 `ANTHROPIC_BASE_URL`（中转站）、`ANTHROPIC_AUTH_TOKEN`（口令）、`ANTHROPIC_API_KEY` 置空、顶层 `model`（默认模型），不写 `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_*_MODEL`、`ANTHROPIC_SMALL_FAST_MODEL`（存在则记录并删除）；Codex 的 `config.toml` 写顶层 `model_provider`、`model`、`model_catalog_json`，专用表写 `base_url`（中转站 `/v1`）、`wire_api = "responses"`、`experimental_bearer_token`（口令明文），去掉 `auth.command`、`codex-api-key` 文件与最低版本检查。Codex 模型目录文件列去重后的光秃秃模型名（可见）与各家 `标识/模型名`（隐藏），接口、已选模型、任一开关变化即重新生成。关总开关时全部还原、口令作废、目录文件删除。daemon 启动绑定端口后比对接管记录里的网址，不一致则重写；旧数据换算来的「总开关开着」的 Agent 从没经历「从关到开」，没有口令（02 只在设置写入时补），启动这一步要先补口令再写配置；非 TCP 监听时拒绝打开总开关并说明。ADR 0004 的文件编辑规则全部保留。对应 prd R-B2～R-B6。
 
 **Blocked by:** 02
 **Status:** ready-for-agent
