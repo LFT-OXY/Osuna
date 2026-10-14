@@ -4,12 +4,12 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 用旧格式 `endpoints.json`（两个 Agent 各若干接口、各有一家「当前启用」）启动 daemon：列表返回主机级接口，原启用的两家开着、两个 Agent 总开关打开、默认模型等于旧默认模型，其余已关闭；地址落在对应格式栏（claude → Anthropic，codex → OpenAI Responses）；首次写入后文件变为新格式、旧字段消失；损坏的文件不被改写也不被删除，日志有报错。（e2e）
-- [ ] 总开关只在至少一家接口「开着且已选至少一个模型」时允许打开（接口全关、唯一开着的一家一个模型都没勾，两种拒绝各一例）；打开且未选默认模型时自动得到最早建的开着接口的第一个已选模型。（e2e）
-- [ ] 默认模型失踪统一规则：删除接口、关接口开关、关模型小开关后，默认模型改成最早开着接口的第一个已选模型；一个能用的模型都不剩时该 Agent 总开关自动关、CLI 配置还原。（e2e）
-- [ ] 不带 `features.apiEndpointGateway` 的客户端：`list` 得到单接口投影、模型列表只有去重后的光秃秃模型名、`isModelListAuthoritative` 随总开关；`set_active(id)` 打开总开关、开这一家、不关别的；`set_active(null)` 关总开关；老 `save` 的 `baseUrl` 按 provider 落进对应格式栏；`delete` 按失踪规则级联。（e2e）
-- [ ] `packages/protocol` 的接口消息测试与 wire-compat 测试通过：新字段全部可选，旧消息样本仍能解析；新消息命名符合 `docs/rpc-namespacing.md`。
-- [ ] 现有 App 界面在本票之后行为不变（它还没有新能力标记，走投影）：现有 `api-endpoint-*` 四个 e2e 与 App 接口组件测试全部通过。
-- [ ] 每家接口有自动生成、锁定、不出现在任何响应可见字段里的标识；每家 key 单独存放、权限 0600。
+- [x] 用旧格式 `endpoints.json`（两个 Agent 各若干接口、各有一家「当前启用」）启动 daemon：列表返回主机级接口，原启用的两家开着、两个 Agent 总开关打开、默认模型等于旧默认模型，其余已关闭；地址落在对应格式栏（claude → Anthropic，codex → OpenAI Responses）；首次写入后文件变为新格式、旧字段消失；损坏的文件不被改写也不被删除，日志有报错。（e2e）
+- [x] 总开关只在至少一家接口「开着且已选至少一个模型」时允许打开（接口全关、唯一开着的一家一个模型都没勾，两种拒绝各一例）；打开且未选默认模型时自动得到最早建的开着接口的第一个已选模型。（e2e）
+- [x] 默认模型失踪统一规则：删除接口、关接口开关、关模型小开关后，默认模型改成最早开着接口的第一个已选模型；一个能用的模型都不剩时该 Agent 总开关自动关、CLI 配置还原。（e2e）
+- [x] 不带 `features.apiEndpointGateway` 的客户端：`list` 得到单接口投影、模型列表只有去重后的光秃秃模型名、`isModelListAuthoritative` 随总开关；`set_active(id)` 打开总开关、开这一家、不关别的；`set_active(null)` 关总开关；老 `save` 的 `baseUrl` 按 provider 落进对应格式栏；`delete` 按失踪规则级联。（e2e）
+- [x] `packages/protocol` 的接口消息测试与 wire-compat 测试通过：新字段全部可选，旧消息样本仍能解析；新消息命名符合 `docs/rpc-namespacing.md`。
+- [x] 现有 App 界面在本票之后行为不变（它还没有新能力标记，走投影）：现有 `api-endpoint-*` 四个 e2e 与 App 接口组件测试全部通过。
+- [x] 每家接口有自动生成、锁定、不出现在任何响应可见字段里的标识；每家 key 单独存放、权限 0600。

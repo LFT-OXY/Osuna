@@ -1,5 +1,8 @@
 import type pino from "pino";
-import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointAgentSettings,
+  ApiEndpointError,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import { ApiEndpointRequestError, type ApiEndpointService } from "../../api-endpoints/service.js";
 
@@ -15,6 +18,8 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.save.request"
       | "provider.api_endpoint.delete.request"
       | "provider.api_endpoint.set_active.request"
+      | "provider.api_endpoint.set_agent_settings.request"
+      | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.cancel.request";
@@ -60,6 +65,10 @@ export class ApiEndpointSession {
         return this.handleDelete(request);
       case "provider.api_endpoint.set_active.request":
         return this.handleSetActive(request);
+      case "provider.api_endpoint.set_agent_settings.request":
+        return this.handleSetAgentSettings(request);
+      case "provider.api_endpoint.set_endpoint_state.request":
+        return this.handleSetEndpointState(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
@@ -109,10 +118,11 @@ export class ApiEndpointSession {
       const endpoint = await this.service.save(request.provider, {
         ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
         name: request.name,
-        baseUrl: request.baseUrl,
+        ...(request.baseUrl !== undefined ? { baseUrl: request.baseUrl } : {}),
+        ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
         ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
         models: request.models,
-        defaultModelId: request.defaultModelId,
+        ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
       });
       this.host.emit({
@@ -171,6 +181,56 @@ export class ApiEndpointSession {
         },
       });
     }
+  }
+
+  private async handleSetAgentSettings(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_agent_settings.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const agent = await this.service.setAgentSettings(request.provider, {
+        enabled: request.enabled,
+        ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
+      });
+      this.host.emit({
+        type: "provider.api_endpoint.set_agent_settings.response",
+        payload: { requestId: request.requestId, provider: request.provider, agent, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.set_agent_settings.response",
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          agent: this.currentAgentSettings(request.provider),
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handleSetEndpointState(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_endpoint_state.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setEndpointState({
+        endpointId: request.endpointId,
+        ...(request.enabled !== undefined ? { enabled: request.enabled } : {}),
+        ...(request.clearCooldown !== undefined ? { clearCooldown: request.clearCooldown } : {}),
+      });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_endpoint_state.response",
+      payload: { requestId: request.requestId, endpointId: request.endpointId, error },
+    });
   }
 
   private async handleFetchModels(
@@ -268,6 +328,16 @@ export class ApiEndpointSession {
   private currentActive(provider: string): string | null {
     try {
       return this.service.activeEndpointId(provider);
+    } catch (error) {
+      if (error instanceof ApiEndpointRequestError) return null;
+      throw error;
+    }
+  }
+
+  /** 失败后设置保持原样，回报真实的当前设置；读不到时为 null。 */
+  private currentAgentSettings(provider: string): ApiEndpointAgentSettings | null {
+    try {
+      return this.service.agentSettings(provider);
     } catch (error) {
       if (error instanceof ApiEndpointRequestError) return null;
       throw error;

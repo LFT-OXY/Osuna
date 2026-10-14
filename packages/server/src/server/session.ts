@@ -3058,7 +3058,7 @@ export class Session {
       case "provider.upgrade.request":
         return this.providerCatalogSession.handleProviderUpgradeRequest(msg);
       default:
-        return undefined;
+        return this.dispatchApiEndpointMessage(msg);
     }
   }
 
@@ -3102,23 +3102,14 @@ export class Session {
     }
   }
 
-  private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
+  private dispatchApiEndpointMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
-      case "list_commands_request":
-        await this.handleListCommandsRequest(msg);
-        return;
-      case "usage.report.get.request":
-      case "usage.sessions.list.request":
-      case "usage.pricing.list.request":
-      case "usage.pricing.refresh.request":
-      case "usage.agent.get.request":
-      case "usage.agent.turns.list.request":
-        await this.handleUsageRequest(msg);
-        return;
       case "provider.api_endpoint.list.request":
       case "provider.api_endpoint.save.request":
       case "provider.api_endpoint.delete.request":
       case "provider.api_endpoint.set_active.request":
+      case "provider.api_endpoint.set_agent_settings.request":
+      case "provider.api_endpoint.set_endpoint_state.request":
       case "provider.api_endpoint.fetch_models.request":
       case "provider.api_endpoint.test_connection.request":
       case "provider.api_endpoint.cancel.request":
@@ -3133,9 +3124,26 @@ export class Session {
               code: "api_endpoints_unavailable",
             },
           });
-          return;
+          return Promise.resolve();
         }
-        await this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
+        return this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
+      default:
+        return undefined;
+    }
+  }
+
+  private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
+    switch (msg.type) {
+      case "list_commands_request":
+        await this.handleListCommandsRequest(msg);
+        return;
+      case "usage.report.get.request":
+      case "usage.sessions.list.request":
+      case "usage.pricing.list.request":
+      case "usage.pricing.refresh.request":
+      case "usage.agent.get.request":
+      case "usage.agent.turns.list.request":
+        await this.handleUsageRequest(msg);
         return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);

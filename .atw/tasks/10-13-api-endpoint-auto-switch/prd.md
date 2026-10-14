@@ -98,12 +98,12 @@ daemon 内置一个本机中转站替两个 CLI 转发请求：CLI 配置文件�
 
 ### A. 数据与迁移（04 票、08 票修订）
 
-- R-A1 `endpoints.json` 改为主机级接口：`slug`（自动生成、锁定、不显示）、`name`、三个可选格式地址（至少一个）、`models`（已选）、`modelMapping`（Claude 档位，可空）、`enabled`（接口开关）、创建顺序；`keys.json` 一家一把 key。去掉 `provider`、`defaultModelId`、`active`。
-- R-A2 每个 Agent（claude、codex）一组 `{ enabled: 使用第三方接口总开关, defaultModelId: 光秃秃模型名 }`。总开关只在至少一家接口开着**且已选至少一个模型**时允许打开；打开时没选默认模型则自动取最早建的开着接口的第一个已选模型；总开关关 = 官方，CLI 配置按现有逻辑还原、口令作废。
+- R-A1 `endpoints.json` 改为主机级接口：`slug`（自动生成、锁定、不显示）、`name`、三个可选格式地址（至少一个）、`models`（已选）、`modelMapping`（Claude 档位，可空）、`enabled`（接口开关）、创建顺序；`keys.json` 一家一把 key。去掉 `provider`、`defaultModelId`、`active`。例外（01 票实现时用户同意）：每家另存隐藏字段 `legacyDefaultModelId`，只供 R-A6 的老客户端投影使用（老表单上次为这家选的默认模型，迁移时取旧 `defaultModelId`），其它任何逻辑不读它。线上格式地址为 `baseUrls: [{ format, url }]`，格式是字符串。
+- R-A2 每个 Agent（claude、codex）一组 `{ enabled: 使用第三方接口总开关, defaultModelId: 光秃秃模型名 }`。总开关只在至少一家接口开着**且已选至少一个模型**时允许打开；打开时没选默认模型则自动取最早建的开着接口的第一个已选模型；总开关关 = 官方，CLI 配置按现有逻辑还原、口令作废；关总开关从不被拒，请求里带的默认模型被忽略、已存的默认模型保留。
 - R-A3 旧格式读时换算、写时升级，不另建迁移程序：旧 `baseUrl` 按旧 `provider` 填进格式地址（claude → Anthropic，codex → OpenAI Responses）；某 Agent 旧「当前启用」的接口 → 开着，该 Agent 总开关打开、默认模型取它旧的 `defaultModelId`；其余旧接口 → 已关闭。旧字段读时接受、忽略；解析失败报错，不写不删。
 - R-A4 默认模型失踪统一规则（删除接口、关掉接口开关、关掉模型小开关三种操作同样处理）：某 Agent 的默认模型在所有开着接口的已选模型里都找不到时，改成最早建的开着接口的第一个已选模型；一个能用的模型都不剩时该 Agent 总开关自动关、回官方。只有「会导致某个 Agent 回官方」的操作才弹确认框，写明「<Agent> 将回到官方」；删除接口的确认框另写明默认模型会改成什么。
-- R-A5 协议 `provider.api_endpoint.*` 原地扩展，新字段全部可选；`server_info.features.apiEndpointGateway` 作为能力标记。新增请求：设置总开关与默认模型；接口开关 + 立刻恢复冷却；自动检测格式地址。`fetch_models` / `test_connection` 改为按「地址 + 格式」。命名遵守 `docs/rpc-namespacing.md`。
-- R-A6 无能力标记的客户端（含官方 Paseo 手机 App）得到单接口投影（规则见 08 票 Answer「老 App 投影修订」）：模型列表只含去重后的光秃秃模型名、`isModelListAuthoritative` 随总开关；老 `set_active(id)` 不关别的接口。这层是长期功能，不打 COMPAT 标签。
+- R-A5 协议 `provider.api_endpoint.*` 原地扩展，新字段全部可选；`server_info.features.apiEndpointGateway` 作为能力标记。新增请求：设置总开关与默认模型（`provider.api_endpoint.set_agent_settings`，01 票）；接口开关 + 立刻恢复冷却（`provider.api_endpoint.set_endpoint_state`，字段 `enabled` / `clearCooldown`，01 票；冷却在 04 票之前无可清）；自动检测格式地址。列表响应新增可选 `agents`（按 provider 的总开关与默认模型）与每家 `baseUrls`、`enabled`；`save` 请求新增可选 `baseUrls`，带它时 `baseUrl` / `defaultModelId` 可省、`models` 可为空。`fetch_models` / `test_connection` 改为按「地址 + 格式」。命名遵守 `docs/rpc-namespacing.md`。
+- R-A6 无能力标记的客户端（含官方 Paseo 手机 App）得到单接口投影（规则见 08 票 Answer「老 App 投影修订」）：模型列表只含去重后的光秃秃模型名、`isModelListAuthoritative` 随总开关；老 `set_active(id)` 不关别的接口。这层是长期功能，不打 COMPAT 标签。01 票实现时定下的细节：投影的 `defaultModelId` 依次取「总开关开着且这家有的 Agent 默认模型」「`legacyDefaultModelId`」「第一个已选模型」，老 `set_active(id)` 的默认模型同样取它；老 `set_active` 一律重写 CLI 配置（老 App 的「重新应用」就是再启用一次）；老 `save` 新建的接口默认关（和以前「保存不启用」一样），新客户端 `save` 新建的默认开；老 `save` 编辑该 Agent 正指向的那家时，表单的默认模型成为该 Agent 的默认模型；Codex 老表单保存时保留这家已有的档位映射。03 票之前 CLI 直接指向的地址是「该 Agent 自己格式的地址，没有才取第一个」。
 
 ### B. 中转站（02、05 票）
 

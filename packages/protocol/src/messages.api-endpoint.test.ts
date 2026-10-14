@@ -395,3 +395,117 @@ describe("timeline notification apiEndpointModeMismatch", () => {
     expect(AgentTimelineItemPayloadSchema.parse(notification)).toEqual(notification);
   });
 });
+
+// 主机级接口（apiEndpointGateway）：新字段全部可选，老客户端照旧读投影字段。
+describe("host-wide API endpoints", () => {
+  const hostWideEndpoint = {
+    ...ENDPOINT,
+    baseUrls: [
+      { format: "anthropic_messages", url: "https://openrouter.ai/api" },
+      { format: "openai_chat", url: "https://openrouter.ai/api/v1" },
+      { format: "a_future_format", url: "https://openrouter.ai/future" },
+    ],
+    enabled: false,
+  };
+
+  it("parses a list response that carries every agent's switch and default model", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-h1",
+        provider: "claude",
+        endpoints: [hostWideEndpoint],
+        activeEndpointId: null,
+        agents: {
+          claude: { enabled: true, defaultModelId: "z-ai/glm-4.6" },
+          codex: { enabled: false, defaultModelId: null },
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses a save request with format base URLs and no default model", () => {
+    const request = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-h2",
+      provider: "claude",
+      name: "OpenRouter",
+      apiKey: "sk-secret",
+      baseUrls: [{ format: "openai_chat", url: "https://openrouter.ai/api/v1" }],
+      models: [],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
+  it("parses set_agent_settings request and response", () => {
+    const request = {
+      type: "provider.api_endpoint.set_agent_settings.request" as const,
+      requestId: "req-h3",
+      provider: "codex",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const withoutDefault = { ...request, enabled: false, defaultModelId: undefined };
+    expect(SessionInboundMessageSchema.parse(withoutDefault)).toMatchObject({ enabled: false });
+
+    const response = {
+      type: "provider.api_endpoint.set_agent_settings.response" as const,
+      payload: {
+        requestId: "req-h3",
+        provider: "codex",
+        agent: { enabled: true, defaultModelId: "gpt-5" },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const rejected = {
+      ...response,
+      payload: {
+        ...response.payload,
+        agent: { enabled: false, defaultModelId: null },
+        error: { code: "no_usable_model", message: "No endpoint is on with a model selected" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(rejected)).toEqual(rejected);
+  });
+
+  it("parses set_endpoint_state for the switch and for resuming now", () => {
+    const toggle = {
+      type: "provider.api_endpoint.set_endpoint_state.request" as const,
+      requestId: "req-h4",
+      endpointId: "ep_1",
+      enabled: false,
+    };
+    expect(SessionInboundMessageSchema.parse(toggle)).toEqual(toggle);
+    const resume = {
+      type: "provider.api_endpoint.set_endpoint_state.request" as const,
+      requestId: "req-h5",
+      endpointId: "ep_1",
+      clearCooldown: true,
+    };
+    expect(SessionInboundMessageSchema.parse(resume)).toEqual(resume);
+
+    const response = {
+      type: "provider.api_endpoint.set_endpoint_state.response" as const,
+      payload: { requestId: "req-h4", endpointId: "ep_1", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses a host that advertises apiEndpointGateway, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpoints: true, apiEndpointGateway: true },
+    });
+    expect(current.features?.apiEndpointGateway).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpoints: true },
+    });
+    expect(older.features?.apiEndpointGateway).toBeUndefined();
+  });
+});

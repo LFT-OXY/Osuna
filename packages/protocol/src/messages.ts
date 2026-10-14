@@ -98,6 +98,10 @@ import {
   ApiEndpointSaveResponseSchema,
   ApiEndpointSetActiveRequestSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointSetAgentSettingsRequestSchema,
+  ApiEndpointSetAgentSettingsResponseSchema,
+  ApiEndpointSetEndpointStateRequestSchema,
+  ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
@@ -3528,6 +3532,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveRequestSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointSetActiveRequestSchema,
+  ApiEndpointSetAgentSettingsRequestSchema,
+  ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointCancelRequestSchema,
@@ -3890,6 +3896,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
+        // COMPAT(apiEndpointGateway): added in v0.16.0, remove gate after 2027-04-14.
+        // 第三方接口主机共用：列表带 agents、baseUrls、enabled，支持 set_agent_settings 与 set_endpoint_state。
+        apiEndpointGateway: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
@@ -7288,6 +7297,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveResponseSchema,
   ApiEndpointDeleteResponseSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointSetAgentSettingsResponseSchema,
+  ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,
   ApiEndpointCancelResponseSchema,

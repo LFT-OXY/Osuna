@@ -90,14 +90,17 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     );
   });
 
-  async function createEndpoint(name = "Relay"): Promise<string> {
+  async function createEndpoint(
+    name = "Relay",
+    models: string[] = ["relay/gpt", "relay/mini"],
+  ): Promise<string> {
     const saved = await client.apiEndpointSave({
       provider: "codex",
       name,
       baseUrl: "https://relay.example/api/",
       apiKey: SECRET,
-      models: [{ id: "relay/gpt" }, { id: "relay/mini" }],
-      defaultModelId: "relay/gpt",
+      models: models.map((id) => ({ id })),
+      defaultModelId: models[0]!,
     });
     expect(saved.error).toBeNull();
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
@@ -410,7 +413,8 @@ timeout_ms = 5000
   test("keeps the mode when config.toml cannot be replaced", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
-    const other = await createEndpoint("Other");
+    // 模型名与第一家不同：同名模型的接口按创建顺序走第一家，切过去不会改写文件。
+    const other = await createEndpoint("Other", ["other/gpt"]);
     // 目录只读：原子替换失败，状态和 key 文件都要停在切换前。
     await chmod(codexHome, 0o500);
     try {

@@ -162,7 +162,7 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict 
 ### 2. Signatures
 
 - Pure patch: `applyClaudeApiEndpoint({ text: string | null, env, takeover }) → { kind: "patched", text, takeover } | { kind: "unparsable", message }` and `restoreClaudeOfficial({ text, takeover }) → patched | { kind: "delete" } | { kind: "missing" } | unparsable` in `claude-settings-patch.ts`. No I/O.
-- Store: `ApiEndpointStore` (`store.ts`): endpoints, keys, `readClaudeTakeover` / `writeClaudeTakeover`, `writeClaudeSettingsBackup(bytes, at)`.
+- Store: `ApiEndpointStore` (`store.ts`): `readState()` / `writeState(state)` for `endpoints.json` (see the next scenario), `getApiKey` / `setApiKey` / `removeApiKey`, `readClaudeTakeover` / `writeClaudeTakeover`, `writeClaudeSettingsBackup(bytes, at)`.
 - Service: `ApiEndpointService` (`service.ts`) resolves the path (`resolveAgentHookConfigPath(claudeAgentHookProvider, { env, homeDir })`, so `CLAUDE_CONFIG_DIR` wins), serializes every mutation through one promise queue, and does the file I/O.
 - Codex pure patch (`codex-config-patch.ts`): `applyCodexApiEndpoint({ text, model, table, takeover }) → patched { text, takeover } | unparsable`, `restoreCodexOfficial({ text, takeover })`, `replaceCodexProviderTable({ text, table })`, `removeCodexProviderTable({ text })`, the last three → `patched | missing | unparsable`. `buildCodexAuthCommand({ platform, keyFilePath, systemRoot? }) → { command, args, timeoutMs }` in `codex-auth-command.ts`.
 - Codex path: `resolveCodexConfigPath()` takes the directory of the Codex hooks installer path (`CODEX_HOME` wins) plus `config.toml`.
@@ -178,10 +178,10 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict 
 - The backup is taken once per file lifetime: `backup: null` = never rewritten, `{ path: null }` = the file did not exist at the first write. Never back up a file the daemon already wrote.
 - The CLI file is replaced atomically with its previous mode bits (new file: `0600`, because it now holds a token). `writePrivateFileAtomicSync` is wrong here: it forces `0600` on the file and `0700` on `~/.claude`.
 - Codex: edit TOML by splicing text at `toml-eslint-parser` node ranges, never by re-serializing. `original` for a top-level key is `{ present: true, raw }`, the value's source text with its quotes. Every edit re-parses its output and checks the written values; failure is `unparsable`.
-- Codex switch order: compute the patch (nothing written on `unparsable`) → commit writes `codex-api-key` then `takeover-codex.json` → re-read check → replace `config.toml`. A failed check or replace writes back the previous takeover record and the previous key bytes (or deletes the key file); `setActiveEndpointId` runs only after success.
-- Delete of the active endpoint: restore Official and clear the active id, then remove the Codex table. If the second step fails (`config_conflict`), the endpoint stays, the mode stays Official, and `onActiveEndpointChanged` still fires (`finally`), so the snapshot matches.
+- Codex switch order: compute the patch (nothing written on `unparsable`) → commit writes `codex-api-key` then `takeover-codex.json` → re-read check → replace `config.toml`. A failed check or replace writes back the previous takeover record and the previous key bytes (or deletes the key file); `endpoints.json` is written only after every CLI file succeeded (`commit`, next scenario).
+- Delete of the endpoint an agent points at: the settle rule moves that agent to another endpoint or to Official, the CLI files follow, then `syncCodexProviderTable` removes a Codex table whose owner is gone. Any CLI failure (`config_conflict`) leaves `endpoints.json` and the key untouched, so the endpoint and the mode stay.
 - Health is read on `list` only, never by a watcher: owned keys vs `written` (Claude `env.*`, the WebSearch deny entry the daemon added; Codex `model_provider`, `model`, and every field of the dedicated table). Other keys never count.
-- `providerTable.endpointId` outlives Official. Saving that endpoint while Official calls `replaceCodexProviderTable` and rewrites the key file; deleting it removes the table and the key file, and deletes `config.toml` when nothing is left and `backup.path === null`.
+- `providerTable.endpointId` outlives Official. While Codex is Official, a change to that endpoint's name, projected base URL or key calls `replaceCodexProviderTable` and rewrites the key file; deleting it removes the table and the key file, and deletes `config.toml` when nothing is left and `backup.path === null`.
 
 ### 4. Validation & Error Matrix
 
@@ -238,6 +238,69 @@ this.writeConfigFile({
   },
   rollback: () => { store.writeClaudeTakeover(record); /* and discard createdBackup */ },
 });
+```
+
+## Scenario: host-wide API endpoints and the old-client projection
+
+Reference implementation: api-endpoint-auto-switch ticket 01 (`server/api-endpoints/store.ts`, `host-endpoints.ts`, `service.ts`). Endpoints are shared by the whole host; each agent (claude, codex) has a switch and a bare default model. Old clients, including the official Paseo app, see a single-endpoint projection.
+
+### 1. Scope / Trigger
+
+- `endpoints.json` changed shape (v0.15.0 per-provider file → host-wide file) with no migration program, and a protocol response carries both a new shape and a projection.
+
+### 2. Signatures
+
+- `ApiEndpointStore.readState(): ApiEndpointState` — `{ endpoints: StoredApiEndpoint[]; agents: Record<"claude" | "codex", { enabled; defaultModelId: string | null }> }`. Reads the current shape, else converts the legacy shape in memory (`upgradeLegacyFile`), else throws `ApiEndpointsFileUnparsableError`. Never writes.
+- `writeState(state)` always writes the current shape; the first write upgrades a legacy file.
+- Pure rules (`host-endpoints.ts`): `generateEndpointSlug(name, taken)`, `usableModels(state)`, `settleAgentSettings(state)`, `agentTargetEndpoint(state, provider)`, `projectedBaseUrl(endpoint, provider)`, `projectedDefaultModelId(agent, endpoint)`, `findEndpoint(state, id)`.
+- Service mutations all go through `commit(previous, proposed, { keys?, rewrite? })`.
+
+### 3. Contracts
+
+- Stored endpoint: `id`, `slug` (generated from the name, locked, never in a response), `name`, `baseUrls: [{ format: "anthropic_messages" | "openai_chat" | "openai_responses", url }]` (one per format, canonical order, at least one), `models`, `modelMapping?` (any format), `enabled`, `legacyDefaultModelId?`, `createdAt`, `updatedAt`. Array order is creation order.
+- `legacyDefaultModelId` exists only for the projection: what the old form last chose for this endpoint (migrated from the old `defaultModelId`). Nothing else reads it.
+- Legacy conversion: `baseUrl` goes under the old provider's own format (claude → `anthropic_messages`, codex → `openai_responses`); an endpoint active for some agent is `enabled`, that agent's switch is on with the old endpoint's `defaultModelId`; the rest are off.
+- `commit`: `settleAgentSettings` (an enabled agent whose default is not usable gets the earliest enabled endpoint's first model; nothing usable → switch off) → for each agent whose CLI fingerprint changed (or `rewrite`), rewrite or restore its CLI file; a Codex off→on transition checks the Codex version first → `syncCodexProviderTable` → write keys → `writeState` → `onActiveEndpointChanged(provider)` for agents whose model list, default or target changed. A CLI failure reverts the agents already rewritten and persists nothing.
+- Until ticket 03 the CLI points straight at `agentTargetEndpoint` (earliest enabled endpoint holding the default), using `projectedBaseUrl` (the agent's own format, else the first URL) and the real key.
+- Projection per requesting provider: `provider` = that provider, `baseUrl` = `projectedBaseUrl`, `defaultModelId` = agent default if the switch is on and this endpoint has it, else `legacyDefaultModelId` if still selected, else first model; `activeEndpointId` = `agentTargetEndpoint`. The provider snapshot lists `usableModels` (deduped by id) only while the switch is on, which makes `isModelListAuthoritative` follow the switch.
+- Old `save` (no `baseUrls`): `baseUrl` replaces only the agent's own format URL; a new endpoint is created off; editing the endpoint the agent points at sets the agent default to the form's `defaultModelId`; a Codex form keeps the existing tier mapping. New `save` (`baseUrls`): models may be empty, a new endpoint is created on, the switch is changed elsewhere.
+- Old `set_active(id)`: endpoint on, switch on, default = projected default; other endpoints stay on (turning them off would move the other agent). Always rewrites the CLI file (`rewrite`), because the old app's "re-apply" is `set_active` on the current endpoint. `set_active(null)`: switch off.
+- `set_agent_settings`: on requires a usable model, keeps the current default when still usable; off ignores `defaultModelId` and is never refused. `set_endpoint_state`: `enabled` flips the switch; `clearCooldown` is accepted and has nothing to clear until ticket 04.
+
+### 4. Validation & Error Matrix
+
+- `endpoints.json` not JSON or neither shape → `ApiEndpointsFileUnparsableError` → service logs `"API endpoints file could not be parsed"` at error level and answers `endpoints_unparsable`; nothing written or deleted. The snapshot path treats it as Official.
+- Switch on with no enabled endpoint that has a selected model → `no_usable_model`.
+- Default model not among usable models while turning on → `invalid_input`.
+- Old `set_active` on an endpoint with no models → `no_usable_model`.
+- New save: unknown format, two URLs of one format, no URL → `invalid_input`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: legacy file with both agents active → list shows both switches on, the two active endpoints on and the rest off, file bytes unchanged until the first write.
+- Base: two endpoints both select `shared`; deleting the first keeps the default `shared` and moves the CLI to the second.
+- Bad: old `set_active(B)` when an earlier enabled endpoint A also selects the projected default → `activeEndpointId` stays A. Correct by the projection rule; give B different model names in a test that needs a real switch.
+
+### 6. Tests Required
+
+- `daemon-e2e/api-endpoint-host-wide.e2e.test.ts`: legacy read (agents, enabled, baseUrls, active ids, file untouched); first write upgrades and drops `active` / `provider` / `baseUrl` / `defaultModelId`, slugs `relay-a`, `relay-b`, `api-1`, `relay-a-2`; corrupt file kept and logged; no `slug` or key in responses, `keys.json` `0600`; switch refusals and auto default; missing-default rule for delete, endpoint off and model removal, CLI restored when nothing is left; projection list, `set_active`, old save, deduped snapshot.
+- The four older `api-endpoint-*` e2e files still pass unchanged except the Codex rollback fixture noted in Bad.
+- `packages/protocol`: `messages.api-endpoint.test.ts` (new fields, both new messages, feature flag) and `messages.wire-compat.test.ts` (an old-client copy of the list schema parses a host-wide response).
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Writes endpoints.json first: a CLI conflict leaves the state saying "on" while the file says Official.
+this.store.writeState(next);
+this.syncCli("claude", cliTarget(next, "claude"), keyOf);
+```
+
+#### Correct
+
+```ts
+const next = await this.commit(state, proposed, { keys }); // settle → CLI files → keys → state → notify
 ```
 
 ## Anti-patterns
