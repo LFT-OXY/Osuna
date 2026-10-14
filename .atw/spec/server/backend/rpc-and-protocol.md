@@ -832,7 +832,8 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 ### 2. Signatures
 
 - `ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null` in `server/agent/agent-sdk-types.ts`; `null` means "use the provider's catalogue".
-- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: the active endpoint's checked models with real ids, `isDefault` on the endpoint's default model.
+- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: while the agent's switch is on, the enabled endpoints' selected models deduped by bare name (`usableModels`), `isDefault` on the agent's default model.
+- `ApiEndpointService.activeModelGroups(provider): ApiEndpointModelGroup[] | null` (api-endpoint-auto-switch ticket 10), built on `endpointModelGroups(state)` in `host-endpoints.ts`: one `{ name, models }` per enabled endpoint with selected models, creation order; model `id` is `<slug>/<model>` (a name collision with another endpoint's slugged id keeps the first), `label` the bare name, `isDefault` only on the first group holding the agent's default. Published as `ProviderSnapshotEntry.apiEndpointModelGroups?` through `ProviderSnapshotManagerOptions.apiEndpointModelGroups: ApiEndpointModelGroupsLookup`; the type is the protocol's `ApiEndpointModelGroup` (`protocol/src/agent-types.ts`), re-exported from `agent-sdk-types.ts`.
 - Injected twice from `bootstrap.ts`: `ProviderSnapshotManagerOptions.modelOverride` and `AgentManagerOptions.modelOverride`.
 - `ApiEndpointServiceOptions.onActiveEndpointChanged(provider)` → `providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] })`, with `.catch` logging `{ err }`.
 - Wire: `ProviderSnapshotEntry.isModelListAuthoritative?: boolean` in `packages/protocol/src/messages.ts` and both hand-written `ProviderSnapshotEntry` interfaces (`protocol/src/agent-types.ts`, `server/agent/agent-sdk-types.ts`).
@@ -845,6 +846,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 - The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint. Detecting an external change does not refresh: the override reads the store, which an outside edit to the CLI file does not touch, so a refresh would publish the same list.
 - `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager` and `agentManager`, declared later, and run only after startup.
 - The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
+- `models` stays bare for old clients (the old-app projection); only `apiEndpointModelGroups` carries slugs, so a new client picks a specific endpoint and an old one routes by creation order. This is the one place a slug leaves the daemon, and only inside an opaque model id; no response has a `slug` field. `agentFingerprint` includes the groups, so selecting a model on a second endpoint or renaming an endpoint republishes the snapshot even when the bare list is unchanged.
 
 ### 4. Validation & Error Matrix
 
@@ -855,6 +857,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 ### 5. Good/Base/Bad Cases
 
 - Good: activate → snapshot lists only `relay/*`, `isModelListAuthoritative: true`; a create with no model runs `relay/haiku`.
+- Good: endpoints A `[shared, a1]` and B `[b1, shared]`, default `b1` → `models` `[shared, a1, b1*]`, groups `A: [a/shared, a/a1]`, `B: [b/b1*, b/shared]`.
 - Base: back to Official → the next refresh publishes the provider's own catalogue and drops the field.
 - Bad: replacing models only in the snapshot — the picker looks right, but `paseo run` with no `--model` still sends `claude-opus-*` to the relay.
 
@@ -862,7 +865,8 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 
 - Daemon E2E (`daemon-e2e/api-endpoint-claude.e2e.test.ts` "provider snapshot follows…", `api-endpoint-codex.e2e.test.ts`): `expect.poll` the snapshot after activate / edit / Official / delete; `createAgent` with no model asserts `agent.model` is the endpoint's default id.
 - Unit (`provider-snapshot-manager.test.ts`): override replaces rows the catalogue returned, runs `resolveConfiguredModel`, sets and clears the flag; a real `ClaudeAgentClient` on a temp `settings.json` (version injected, `isAvailable` overridden, no CLI run) proves the settings rows disappear.
-- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field.
+- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field; likewise `apiEndpointModelGroups`.
+- Daemon E2E (`api-endpoint-host-wide.e2e.test.ts` "the model list has each model name once…"): groups, ids, labels and the single `isDefault` while on; field absent after the switch goes off.
 
 ### 7. Wrong vs Correct
 
@@ -897,7 +901,7 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 - Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, `runningSessionCount?: number`, and `gatewayUnavailable?: ApiEndpointHealthIssue | null` (api-endpoint-auto-switch ticket 03).
 - Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (`ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount" | "agents" | "gatewayUnavailable">>`), `activeEndpointId(provider)` for the sync error path. Internal unions: `ApiEndpointHealthCode` for `health`, `GatewayUnavailableCode` for `gatewayUnavailable` and the refusal error.
 - Count: required option `ApiEndpointServiceOptions.countLiveSessions(provider) => number`, wired in bootstrap to `AgentManager.countLiveAgents(provider)` (non-internal agents of exactly that provider whose lifecycle is `initializing`, `idle`, or `running`).
-- App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
+- App: the new app shows no `health` (ticket 10 removed the old per-agent section and its Alert); it reads only `gatewayUnavailable`, through `selectAgentApiEndpointsView` in `api-endpoints/internal/agent-settings.ts`, to grey out the switch and say why. Old clients still render `health`.
 
 ### 3. Contracts
 
@@ -918,15 +922,15 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 
 ### 5. Good/Base/Bad Cases
 
-- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the panel shows one error Alert with Re-apply and Switch to Official.
-- Base: Official with a hand-written relay → no Alert, the Official row says where the CLI's own settings point.
+- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the list reports `modified_externally`; an old client's panel shows one error Alert with Re-apply and Switch to Official.
+- Base: Official with a hand-written relay → no issue, `cliBaseUrl` says where the CLI's own settings point (old clients show it on the Official row).
 - Bad: a watcher that rewrites the file when it changes (ADR 0004: never overwrite silently).
 
 ### 6. Tests Required
 
 - Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
 - Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; socket listener reports `gatewayUnavailable` and refuses turn-on; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
-- App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
+- App: `agent-settings.test.ts` (switch blocked by `gatewayUnavailable` or no usable endpoint, never while on).
 - Protocol: payload parses with health/cliBaseUrl/runningSessionCount/gatewayUnavailable and without them.
 
 ### 7. Wrong vs Correct

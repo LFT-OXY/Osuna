@@ -190,3 +190,33 @@ export function resolveInitialModelBrowserView({
 
   return { kind: "all" };
 }
+
+export type ModelListItem =
+  | { kind: "group"; key: string; name: string }
+  | { kind: "row"; key: string; row: ProviderSelectionModelRow };
+
+/**
+ * 模型列表的条目。第三方接口启用时（每行都带接口）在单个提供方的视图里每家接口一个组标题，
+ * 组按创建顺序排，组内保留传进来的顺序（搜索时即命中排名）；其余情况原样平铺。
+ */
+export function buildModelListItems(
+  rows: ProviderSelectionModelRow[],
+  options: { groupByApiEndpoint: boolean },
+): ModelListItem[] {
+  const groups = new Map<number, { name: string; rows: ProviderSelectionModelRow[] }>();
+  for (const row of rows) {
+    const group = row.apiEndpointGroup;
+    if (!options.groupByApiEndpoint || !group) {
+      return rows.map((entry) => ({ kind: "row", key: entry.favoriteKey, row: entry }));
+    }
+    const bucket = groups.get(group.index) ?? { name: group.name, rows: [] };
+    bucket.rows.push(row);
+    groups.set(group.index, bucket);
+  }
+  const items: ModelListItem[] = [];
+  for (const [index, bucket] of [...groups.entries()].sort(([a], [b]) => a - b)) {
+    items.push({ kind: "group", key: `group:${index}`, name: bucket.name });
+    for (const row of bucket.rows) items.push({ kind: "row", key: row.favoriteKey, row });
+  }
+  return items;
+}

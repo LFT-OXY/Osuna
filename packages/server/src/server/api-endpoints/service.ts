@@ -22,7 +22,7 @@ import {
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
-import type { AgentModelDefinition } from "../agent/agent-sdk-types.js";
+import type { AgentModelDefinition, ApiEndpointModelGroup } from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 import {
   applyClaudeApiEndpoint,
@@ -55,6 +55,8 @@ import {
   projectedBaseUrl,
   projectedDefaultModelId,
   settleAgentSettings,
+  endpointModelGroups,
+  type EndpointGroupModel,
   usableModels,
 } from "./host-endpoints.js";
 import {
@@ -338,6 +340,30 @@ export class ApiEndpointService {
       label: model.label ?? model.id,
       isDefault: model.id === agent.defaultModelId,
     }));
+  }
+
+  /**
+   * 总开关开着时按接口分组的可选模型，给新客户端的聊天模型选择器；label 是光秃秃的模型名，
+   * isDefault 标在含默认模型的第一家上。官方模式、不支持的提供方或文件读不懂时返回 null。
+   */
+  activeModelGroups(provider: string): ApiEndpointModelGroup[] | null {
+    const state = this.readStateForSnapshot();
+    const supported = findProvider(provider);
+    if (!state || !supported) return null;
+    const agent = state.agents[supported];
+    if (!agent.enabled) return null;
+    const agentProvider = supported;
+    let defaultMarked = false;
+    function toDefinition({ id, model }: EndpointGroupModel): AgentModelDefinition {
+      const isDefault = !defaultMarked && model.id === agent.defaultModelId;
+      if (isDefault) defaultMarked = true;
+      const label = model.label ?? model.id;
+      return { provider: agentProvider, id, label, isDefault };
+    }
+    return endpointModelGroups(state).map((group) => {
+      const models = group.models.map(toDefinition);
+      return { name: group.endpoint.name, models };
+    });
   }
 
   save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
@@ -1221,6 +1247,10 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.defaultModelId,
     usableModels(state),
     target ? [target.id, target.name] : null,
+    endpointModelGroups(state).map((group) => [
+      group.endpoint.name,
+      group.models.map((entry) => [entry.id, entry.model.label]),
+    ]),
   ]);
 }
 

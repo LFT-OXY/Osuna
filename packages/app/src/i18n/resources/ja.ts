@@ -2567,6 +2567,30 @@ export const ja: TranslationResources = {
         none: "マッピングしない",
         pickTitle: "{{tier}} のモデル",
       },
+      agent: {
+        title: "サードパーティ API",
+        useSwitch: "サードパーティ API を使う",
+        useHint:
+          "オンにすると、{{agent}} は「サードパーティ API」ページでオンになっているエンドポイントの選択済みモデルを使えます。オフにすると公式に戻ります。",
+        noUsableEndpoint:
+          "先に「サードパーティ API」ページでエンドポイントをオンにし、モデルを選択してください。",
+        gatewayRequiresTcp:
+          "デーモンがソケットで待ち受けているため、内蔵ゲートウェイを使えません。TCP ポートで待ち受けるとオンにできます。",
+        gatewayNotReady:
+          "内蔵ゲートウェイを起動しています。しばらくしてからもう一度お試しください。",
+        defaultModel: "既定のモデル",
+        defaultModelHint:
+          "ターミナルの新しいセッションと最初の新規チャットはこのモデルで始まります。",
+        defaultModelPick: "{{agent}} の既定のモデル",
+        manage: "サードパーティ API を管理",
+        summaryOn_one: "{{count}} 件オン",
+        summaryOn_other: "{{count}} 件オン",
+        summaryCooling_minutes_one: "{{name}} はクールダウン中、{{count}} 分後に復帰",
+        summaryCooling_minutes_other: "{{name}} はクールダウン中、{{count}} 分後に復帰",
+        summaryCooling_hours_one: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
+        summaryCooling_hours_other: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
+        saveFailed: "{{agent}} のサードパーティ API 設定を変更できませんでした",
+      },
     },
     hostSections: {
       projects: "プロジェクト",

@@ -2,6 +2,7 @@ import type {
   AgentMode,
   AgentModelDefinition,
   AgentProvider,
+  ApiEndpointModelGroup,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
@@ -23,6 +24,13 @@ export interface ProviderSelectionModelRow {
   modelLabel: string;
   description?: string;
   isDefault?: boolean;
+  // 第三方接口启用时这一行所属的接口：组标题是接口名，index 是创建顺序。
+  apiEndpointGroup?: ApiEndpointRowGroup;
+}
+
+export interface ApiEndpointRowGroup {
+  name: string;
+  index: number;
 }
 
 function buildModelRowKey(provider: string, modelId: string): string {
@@ -100,10 +108,47 @@ function buildModelSelection(
   return { kind: "models", rows: buildModelRows(provider, providerLabel, selectableModels) };
 }
 
+/**
+ * 选择器与新建表单可选的模型：第三方接口启用时是按接口展开的 `接口标识/模型名`（同名模型各家一条），
+ * 否则是快照里的 models。没有条目或条目还没有模型时为 null。
+ */
+export function selectableEntryModels(
+  entry: ProviderSnapshotEntry | null | undefined,
+): AgentModelDefinition[] | null {
+  if (!entry) return null;
+  const groupedModels = entry.apiEndpointModelGroups?.flatMap((group) => group.models);
+  return filterSelectableModels(groupedModels ?? entry.models ?? null);
+}
+
+function buildApiEndpointGroupRows(
+  provider: string,
+  providerLabel: string,
+  groups: ApiEndpointModelGroup[],
+): ProviderSelectionModelRow[] {
+  return groups.flatMap((group, index) => {
+    const models = filterSelectableModels(group.models) ?? [];
+    return models.map((model) => ({
+      favoriteKey: buildModelRowKey(provider, model.id),
+      provider,
+      providerLabel,
+      modelId: model.id,
+      modelLabel: model.label,
+      // 不显示 id：它带着接口标识。
+      description: model.description,
+      isDefault: model.isDefault,
+      apiEndpointGroup: { name: group.name, index },
+    }));
+  });
+}
+
 function buildEntryModelSelection(
   entry: ProviderSnapshotEntry,
   label: string,
 ): ProviderModelSelection {
+  const groups = entry.apiEndpointModelGroups;
+  if (groups && groups.length > 0) {
+    return { kind: "models", rows: buildApiEndpointGroupRows(entry.provider, label, groups) };
+  }
   if ((entry.models?.length ?? 0) > 0) {
     return buildModelSelection(entry.provider, label, entry.models ?? null);
   }
@@ -239,6 +284,17 @@ export function resolveSelectedModelLabel(input: {
   );
 }
 
+/** 会话里记的模型 id 在界面上的名字；第三方接口的 `接口标识/模型名` 读作光秃秃的模型名。 */
+export function resolveSnapshotModelLabel(
+  entries: readonly ProviderSnapshotEntry[] | undefined,
+  provider: string,
+  modelId: string,
+): string {
+  const entry = entries?.find((candidate) => candidate.provider === provider);
+  const models = selectableEntryModels(entry);
+  return models?.find((model) => model.id === modelId)?.label ?? modelId;
+}
+
 export function buildSelectedTriggerLabel(modelLabel: string): string {
   return modelLabel;
 }
@@ -248,7 +304,8 @@ export function buildSelectedTriggerLabel(modelLabel: string): string {
  * label ships on several providers at once.
  */
 export function buildProviderQualifiedDescription(row: ProviderSelectionModelRow): string {
-  return row.description ? `${row.providerLabel} · ${row.description}` : row.providerLabel;
+  const detail = row.apiEndpointGroup?.name ?? row.description;
+  return detail ? `${row.providerLabel} · ${detail}` : row.providerLabel;
 }
 
 export function matchesModelSearch(
@@ -259,7 +316,13 @@ export function matchesModelSearch(
 }
 
 function getModelRowSearchFields(row: ProviderSelectionModelRow): string[] {
-  return [row.modelLabel, row.modelId, row.providerLabel, row.description ?? ""];
+  return [
+    row.modelLabel,
+    row.modelId,
+    row.providerLabel,
+    row.description ?? "",
+    row.apiEndpointGroup?.name ?? "",
+  ];
 }
 
 export function scoreModelRow(row: ProviderSelectionModelRow, normalizedQuery: string) {

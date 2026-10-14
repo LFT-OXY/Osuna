@@ -51,6 +51,38 @@ export function usableModels(state: ApiEndpointState): ApiEndpointModel[] {
   return models;
 }
 
+export interface EndpointGroupModel {
+  // 会话内部用的 `接口标识/模型名`。
+  id: string;
+  model: ApiEndpointModel;
+}
+
+export interface EndpointModelGroup {
+  endpoint: StoredApiEndpoint;
+  models: EndpointGroupModel[];
+}
+
+/**
+ * 聊天模型选择器的分组：每家开着且选了模型的接口一组，按创建顺序；同名模型在各家各出现一次。
+ * 模型名本身带斜杠时可能和别家的 `标识/模型名` 撞上，同一个 id 只留最早的一条。
+ */
+export function endpointModelGroups(state: ApiEndpointState): EndpointModelGroup[] {
+  const seen = new Set<string>();
+  const groups: EndpointModelGroup[] = [];
+  for (const endpoint of state.endpoints) {
+    if (!endpoint.enabled) continue;
+    const models: EndpointGroupModel[] = [];
+    for (const model of endpoint.models) {
+      const id = `${endpoint.slug}/${model.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      models.push({ id, model });
+    }
+    if (models.length > 0) groups.push({ endpoint, models });
+  }
+  return groups;
+}
+
 /**
  * 默认模型失踪规则：打开着总开关的 Agent，默认模型不在可用模型里时改成最早开着接口的第一个已选模型；
  * 一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。

@@ -2597,6 +2597,29 @@ export const es: TranslationResources = {
         none: "Sin asignar",
         pickTitle: "Modelo para {{tier}}",
       },
+      agent: {
+        title: "Endpoints de API",
+        useSwitch: "Usar endpoints de API",
+        useHint:
+          "Si lo activas, {{agent}} puede usar los modelos seleccionados de los endpoints activos en Endpoints de API. Desactívalo para volver al oficial.",
+        noUsableEndpoint:
+          "Primero activa un endpoint en Endpoints de API y selecciona sus modelos.",
+        gatewayRequiresTcp:
+          "El daemon escucha en un socket, así que la pasarela integrada no puede funcionar. Haz que escuche en un puerto TCP para activarlo.",
+        gatewayNotReady:
+          "La pasarela integrada todavía se está iniciando. Inténtalo de nuevo en un momento.",
+        defaultModel: "Modelo predeterminado",
+        defaultModelHint: "Las sesiones nuevas de terminal y el primer chat nuevo empiezan con él.",
+        defaultModelPick: "Modelo predeterminado de {{agent}}",
+        manage: "Gestionar endpoints de API",
+        summaryOn_one: "{{count}} activo",
+        summaryOn_other: "{{count}} activos",
+        summaryCooling_minutes_one: "{{name}} en enfriamiento, vuelve en {{count}} minuto",
+        summaryCooling_minutes_other: "{{name}} en enfriamiento, vuelve en {{count}} minutos",
+        summaryCooling_hours_one: "{{name}} en enfriamiento, vuelve en {{count}} hora",
+        summaryCooling_hours_other: "{{name}} en enfriamiento, vuelve en {{count}} horas",
+        saveFailed: "No se pudo cambiar la configuración de endpoints de API de {{agent}}",
+      },
     },
     hostSections: {
       projects: "Proyectos",

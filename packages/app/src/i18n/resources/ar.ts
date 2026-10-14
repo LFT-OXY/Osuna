@@ -2545,6 +2545,27 @@ export const ar: TranslationResources = {
         none: "بدون ربط",
         pickTitle: "نموذج {{tier}}",
       },
+      agent: {
+        title: "واجهات API الخارجية",
+        useSwitch: "استخدام واجهات API الخارجية",
+        useHint:
+          "عند التشغيل، يمكن لـ {{agent}} استخدام النماذج المحددة من نقاط الوصول المشغّلة في صفحة واجهات API الخارجية. أوقفه للعودة إلى الرسمي.",
+        noUsableEndpoint: "شغّل أولًا نقطة وصول في صفحة واجهات API الخارجية وحدد نماذجها.",
+        gatewayRequiresTcp:
+          "الخدمة الخلفية تستمع على مقبس، لذا لا يمكن تشغيل البوابة المدمجة. اجعلها تستمع على منفذ TCP لتشغيل هذا.",
+        gatewayNotReady: "البوابة المدمجة ما زالت تبدأ. حاول مرة أخرى بعد لحظة.",
+        defaultModel: "النموذج الافتراضي",
+        defaultModelHint: "تبدأ به جلسات الطرفية الجديدة وأول محادثة جديدة.",
+        defaultModelPick: "النموذج الافتراضي لـ {{agent}}",
+        manage: "إدارة واجهات API الخارجية",
+        summaryOn_one: "{{count}} مشغّلة",
+        summaryOn_other: "{{count}} مشغّلة",
+        summaryCooling_minutes_one: "{{name}} في فترة تهدئة، تعود بعد {{count}} دقيقة",
+        summaryCooling_minutes_other: "{{name}} في فترة تهدئة، تعود بعد {{count}} دقيقة",
+        summaryCooling_hours_one: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
+        summaryCooling_hours_other: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
+        saveFailed: "تعذّر تغيير إعدادات واجهات API الخارجية لـ {{agent}}",
+      },
     },
     hostSections: {
       projects: "المشاريع",

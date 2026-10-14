@@ -46,6 +46,7 @@ describe("selectHostEndpointsState", () => {
       status: "ready",
       endpoints: [endpoint({ id: "a" })],
       agents: { claude: { enabled: true, defaultModelId: "claude-sonnet-4-5" } },
+      gatewayUnavailable: null,
     });
   });
 

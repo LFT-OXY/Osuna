@@ -2597,6 +2597,30 @@ export const fr: TranslationResources = {
         none: "Aucune correspondance",
         pickTitle: "Modèle pour {{tier}}",
       },
+      agent: {
+        title: "Points d'accès API",
+        useSwitch: "Utiliser les points d'accès API",
+        useHint:
+          "Activé, {{agent}} peut utiliser les modèles sélectionnés des points d'accès activés dans Points d'accès API. Désactivez-le pour revenir à l'officiel.",
+        noUsableEndpoint:
+          "Activez d'abord un point d'accès dans Points d'accès API et sélectionnez ses modèles.",
+        gatewayRequiresTcp:
+          "Le daemon écoute sur un socket, la passerelle intégrée ne peut donc pas fonctionner. Faites-le écouter sur un port TCP pour l'activer.",
+        gatewayNotReady: "La passerelle intégrée démarre encore. Réessayez dans un instant.",
+        defaultModel: "Modèle par défaut",
+        defaultModelHint:
+          "Les nouvelles sessions du terminal et la première nouvelle discussion démarrent avec lui.",
+        defaultModelPick: "Modèle par défaut de {{agent}}",
+        manage: "Gérer les points d'accès API",
+        summaryOn_one: "{{count}} activé",
+        summaryOn_other: "{{count}} activés",
+        summaryCooling_minutes_one: "{{name}} en refroidissement, de retour dans {{count}} minute",
+        summaryCooling_minutes_other:
+          "{{name}} en refroidissement, de retour dans {{count}} minutes",
+        summaryCooling_hours_one: "{{name}} en refroidissement, de retour dans {{count}} heure",
+        summaryCooling_hours_other: "{{name}} en refroidissement, de retour dans {{count}} heures",
+        saveFailed: "Impossible de modifier les réglages des points d'accès API de {{agent}}",
+      },
     },
     hostSections: {
       projects: "Projets",

@@ -2,6 +2,7 @@ import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,
   type ApiEndpointAgentSettings,
+  type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -20,6 +21,8 @@ export type HostEndpointsLoadState =
       status: "ready";
       endpoints: ApiEndpoint[];
       agents: Record<string, ApiEndpointAgentSettings>;
+      // 非空时中转站用不了（如 daemon 以 socket 监听），总开关打不开。
+      gatewayUnavailable: ApiEndpointHealthIssue | null;
     };
 
 export function selectHostEndpointsState(input: {
@@ -28,7 +31,12 @@ export function selectHostEndpointsState(input: {
 }): HostEndpointsLoadState {
   if (input.data?.error) return { status: "error", message: input.data.error.message };
   if (input.data) {
-    return { status: "ready", endpoints: input.data.endpoints, agents: input.data.agents ?? {} };
+    return {
+      status: "ready",
+      endpoints: input.data.endpoints,
+      agents: input.data.agents ?? {},
+      gatewayUnavailable: input.data.gatewayUnavailable ?? null,
+    };
   }
   if (input.error) return { status: "error", message: input.error.message };
   return { status: "loading" };

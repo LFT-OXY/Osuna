@@ -2558,6 +2558,27 @@ export const ko: TranslationResources = {
         none: "매핑 안 함",
         pickTitle: "{{tier}} 모델",
       },
+      agent: {
+        title: "서드파티 API",
+        useSwitch: "서드파티 API 사용",
+        useHint:
+          "켜면 {{agent}}에서 「서드파티 API」 페이지에서 켜 둔 엔드포인트의 선택된 모델을 쓸 수 있습니다. 끄면 공식으로 돌아갑니다.",
+        noUsableEndpoint: "먼저 「서드파티 API」 페이지에서 엔드포인트를 켜고 모델을 선택하세요.",
+        gatewayRequiresTcp:
+          "데몬이 소켓으로 수신하고 있어 내장 게이트웨이를 쓸 수 없습니다. TCP 포트로 수신하도록 바꾸면 켤 수 있습니다.",
+        gatewayNotReady: "내장 게이트웨이가 아직 시작 중입니다. 잠시 후 다시 시도하세요.",
+        defaultModel: "기본 모델",
+        defaultModelHint: "터미널의 새 세션과 첫 새 채팅이 이 모델로 시작합니다.",
+        defaultModelPick: "{{agent}} 기본 모델",
+        manage: "서드파티 API 관리",
+        summaryOn_one: "{{count}}개 켜짐",
+        summaryOn_other: "{{count}}개 켜짐",
+        summaryCooling_minutes_one: "{{name}} 쿨다운 중, {{count}}분 후 복구",
+        summaryCooling_minutes_other: "{{name}} 쿨다운 중, {{count}}분 후 복구",
+        summaryCooling_hours_one: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
+        summaryCooling_hours_other: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
+        saveFailed: "{{agent}}의 서드파티 API 설정을 바꾸지 못했습니다",
+      },
     },
     hostSections: {
       projects: "프로젝트",

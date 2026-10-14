@@ -10,6 +10,7 @@ import {
   type ProviderPreferences,
 } from "@/hooks/use-form-preferences";
 import { findModelByReference } from "./model-catalog";
+import { supportsApiEndpoints } from "@/api-endpoints";
 
 export interface FormInitialValues {
   provider?: AgentProvider;
@@ -472,6 +473,15 @@ export function resolveFormStateFromProviderModels(
       ...remembered,
       provider,
       models: availableModels,
+      endpointChoicesOnly: false,
+    });
+  } else if (provider !== null && availableModels !== null && supportsApiEndpoints(provider)) {
+    // 官方模式下，用第三方接口时记下的 `接口标识/模型名` 官方 CLI 认不出，同样改用默认模型。
+    remembered = replaceUnlistedRememberedModel({
+      ...remembered,
+      provider,
+      models: availableModels,
+      endpointChoicesOnly: true,
     });
   }
 
@@ -501,26 +511,30 @@ interface RememberedFormValues {
 interface ReplaceUnlistedRememberedModelInput extends RememberedFormValues {
   provider: AgentProvider;
   models: AgentModelDefinition[];
+  // true：只换带斜杠的（第三方接口的 `接口标识/模型名`），官方模型名不带斜杠。
+  endpointChoicesOnly: boolean;
 }
 
 /**
- * 权威列表（第三方接口启用时）不认识的记忆模型发出去只会被拒绝，这次解析改用列表的默认模型。
- * 只换解析用的副本，偏好本身不改，切回官方后照旧生效。
+ * 权威列表（第三方接口启用时）不认识的记忆模型发出去只会被拒绝，这次解析改用列表的默认模型；
+ * 官方模式下只这样处理第三方接口时记下的 `接口标识/模型名`。
+ * 只换解析用的副本，偏好本身不改，切换模式后照旧生效。
  */
 function replaceUnlistedRememberedModel(
   input: ReplaceUnlistedRememberedModelInput,
 ): RememberedFormValues {
-  const { provider, models, initialValues, preferences } = input;
+  const { provider, models, initialValues, preferences, endpointChoicesOnly } = input;
   let nextInitialValues = initialValues;
   if (initialValues) {
-    const model = resolveListedOrDefaultModelId(models, initialValues.model);
+    const model = resolveListedOrDefaultModelId(models, initialValues.model, endpointChoicesOnly);
     nextInitialValues = { ...initialValues, model };
   }
   const unchangedPreferences = { initialValues: nextInitialValues, preferences };
   if (!preferences) return unchangedPreferences;
   const providerPrefs = preferences.providerPreferences?.[provider];
   if (!providerPrefs) return unchangedPreferences;
-  const model = resolveListedOrDefaultModelId(models, providerPrefs.model) ?? undefined;
+  const model =
+    resolveListedOrDefaultModelId(models, providerPrefs.model, endpointChoicesOnly) ?? undefined;
   const providerPreferences = {
     ...preferences.providerPreferences,
     [provider]: { ...providerPrefs, model },
@@ -532,9 +546,11 @@ function replaceUnlistedRememberedModel(
 function resolveListedOrDefaultModelId(
   models: AgentModelDefinition[],
   modelId: string | null | undefined,
+  endpointChoicesOnly: boolean,
 ): string | null | undefined {
   const normalized = normalizeSelectedModelId(modelId);
   if (!normalized) return modelId;
+  if (endpointChoicesOnly && !normalized.includes("/")) return modelId;
   return resolveCanonicalModelId(models, normalized) || resolveDefaultModelId(models);
 }
 
@@ -709,10 +725,11 @@ function moveOffUnlistedModel(
 ): AgentFormReducerState {
   const provider = state.form.provider;
   if (!provider) return state;
-  if (!action.authoritativeModelProviders.has(provider)) return state;
+  const endpointChoicesOnly = !action.authoritativeModelProviders.has(provider);
+  if (endpointChoicesOnly && !supportsApiEndpoints(provider)) return state;
   const models = action.providerModelsByProvider.get(provider);
   if (!models) return state;
-  const model = resolveListedOrDefaultModelId(models, state.form.model);
+  const model = resolveListedOrDefaultModelId(models, state.form.model, endpointChoicesOnly);
   const keepsCurrentModel = !model || model === state.form.model;
   if (keepsCurrentModel) return state;
   const providerPrefs = action.preferences?.providerPreferences?.[provider];

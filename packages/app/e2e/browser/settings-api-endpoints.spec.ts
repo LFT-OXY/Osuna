@@ -12,9 +12,28 @@ import {
   startFakeRelay,
   type FakeRelay,
 } from "../support/helpers/api-endpoints";
+import { readFile } from "node:fs/promises";
+import {
+  closeModelPicker,
+  expectComposerModel,
+  expectModelRowSelected,
+  openModelPicker,
+  selectModelRow,
+} from "../support/helpers/agent-profiles";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
+import { gotoWorkspace } from "../support/helpers/launcher";
+import { expectSavedSelection } from "../support/helpers/model-memory";
+import { openGlobalNewWorkspaceComposer } from "../support/helpers/new-workspace";
+import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
-import { openSettingsHost, openSettingsHostSection } from "../support/helpers/settings";
+import {
+  expectProviderDetail,
+  expectProvidersList,
+  openSettingsHost,
+  openSettingsHostSection,
+  providerRow,
+} from "../support/helpers/settings";
+import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { buildApiEndpointSettingsRoute } from "@/utils/host-routes";
 
 // 打开总开关会改写 CLI 自己的配置：指到临时目录，绝不碰开发者的 ~/.claude 与 ~/.codex。
@@ -493,6 +512,329 @@ test.describe("Settings API endpoints", () => {
     });
   });
 });
+
+test.describe("API endpoints on the Claude Code page and in the model selector", () => {
+  test("the switch, the default model and the manage row replace the old radio rows", async ({
+    page,
+  }) => {
+    const relayA = await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "gpt-5"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Kimi",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/broke` }],
+      models: ["kimi-k2"],
+    });
+    // Kimi 只有它有 kimi-k2：经中转站回 402 欠费后冷却 30 分钟，入口行要点名它。
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "claude-sonnet-4-5",
+    });
+    expect(await sendThroughGateway("kimi-k2")).toBe(402);
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+
+    await openClaudeCodePage(page);
+    const section = agentSection(page);
+
+    await test.step("off: the switch explains itself and the default model is hidden", async () => {
+      await expect(section.getByTestId("agent-api-endpoints-switch-hint")).toHaveText(
+        "When on, Claude can use the selected models of the endpoints that are on in API endpoints. Turn it off to go back to official.",
+      );
+      await expect(section.getByTestId("agent-api-endpoints-default-model")).toHaveCount(0);
+      await expect(section.getByTestId("agent-api-endpoints-summary")).toHaveText(
+        "2 on·Kimi cooling down, back in 30 minutes",
+      );
+      await expect(page.getByTestId("api-endpoints-use-official")).toHaveCount(0);
+      await expect(page.locator('[data-testid^="api-endpoint-use-"]')).toHaveCount(0);
+    });
+
+    await test.step("on: the CLI points at the gateway with the default model", async () => {
+      await section.getByTestId("agent-api-endpoints-switch").click();
+      await expect(defaultModelTrigger(page)).toHaveText("claude-sonnet-4-5");
+      const settings = await readClaudeSettings();
+      expect(settings.env?.ANTHROPIC_BASE_URL).toContain("/api-endpoint-gateway");
+      expect(settings.model).toBe("claude-sonnet-4-5");
+    });
+
+    await test.step("the default model offers each selected model once", async () => {
+      await defaultModelTrigger(page).click();
+      for (const modelId of ["claude-sonnet-4-5", "gpt-5", "kimi-k2"]) {
+        await expect(
+          page.getByTestId(`agent-api-endpoints-default-option-${modelId}`),
+        ).toBeVisible();
+      }
+      await page.getByTestId("agent-api-endpoints-default-option-gpt-5").click();
+      await expect(defaultModelTrigger(page)).toHaveText("gpt-5");
+      await expect.poll(claudeSettingsModel).toBe("gpt-5");
+    });
+
+    await test.step("switching Relay A off moves the default model, and the page follows", async () => {
+      await section.getByTestId("agent-api-endpoints-manage").click();
+      await expect(page.getByTestId("api-endpoints-list").filter({ visible: true })).toBeVisible();
+      await page.getByTestId(`api-endpoint-switch-${relayA}`).filter({ visible: true }).click();
+      await expect(group(page, "disabled")).toContainText("Relay A");
+      await page.goBack();
+      await expect(defaultModelTrigger(page)).toHaveText("kimi-k2");
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-summary")).toHaveText(
+        "1 on·Kimi cooling down, back in 30 minutes",
+      );
+    });
+
+    await test.step("off again: the CLI is official and the default model is hidden", async () => {
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-default-model")).toHaveCount(
+        0,
+      );
+      await expect.poll(claudeSettingsBaseUrl).toBeUndefined();
+    });
+  });
+
+  test("the switch cannot be turned on until an endpoint that is on has a model", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Empty relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+    });
+    await openClaudeCodePage(page);
+    const section = agentSection(page);
+    await expect(section.getByTestId("agent-api-endpoints-switch-hint")).toHaveText(
+      "Turn on an endpoint in API endpoints and select its models first.",
+    );
+    await expect(section.getByTestId("agent-api-endpoints-switch")).toBeDisabled();
+  });
+
+  test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "kimi-k2"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5", "claude-sonnet-4-5"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    });
+    const workspace = await seedWorkspace({ repoPrefix: "api-endpoint-selector-" });
+    try {
+      await carryPreferencesAcrossReloads(page);
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await keepPreferencesForNextLoad(page, { provider: "claude" });
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await openGlobalNewWorkspaceComposer(page);
+
+      await test.step("a new chat with nothing remembered starts on the default model", async () => {
+        await expectComposerModel(page, "gpt-5");
+        await openModelPicker(page);
+      });
+
+      await test.step("each endpoint is a group, a shared name shows under both", async () => {
+        const picker = page.getByTestId("combobox-desktop-container");
+        await expect(picker.locator('[data-testid^="model-endpoint-group-"]')).toHaveText([
+          "Relay A",
+          "Relay B",
+        ]);
+        for (const modelId of ["relay-a/claude-sonnet-4-5", "relay-b/claude-sonnet-4-5"]) {
+          await expect(picker.getByTestId(`model-row-claude-${modelId}`)).toHaveText(
+            "claude-sonnet-4-5",
+          );
+        }
+        await expect(picker).not.toContainText("relay-");
+      });
+
+      await test.step("picking Relay B's model keeps Relay B and shows the bare name", async () => {
+        await selectModelRow(page, { provider: "claude", modelId: "relay-b/claude-sonnet-4-5" });
+        await expectComposerModel(page, "claude-sonnet-4-5");
+        await openModelPicker(page);
+        await expectModelRowSelected(page, {
+          provider: "claude",
+          modelId: "relay-b/claude-sonnet-4-5",
+        });
+        await expect(
+          page
+            .getByTestId("combobox-desktop-container")
+            .getByTestId("model-row-claude-relay-a/claude-sonnet-4-5"),
+        ).toHaveAttribute("aria-selected", "false");
+        await closeModelPicker(page);
+      });
+
+      await test.step("the next new chat starts on the remembered choice", async () => {
+        await expectSavedSelection(page, "claude", "relay-b/claude-sonnet-4-5");
+        await keepPreferencesForNextLoad(page, "current");
+        await gotoWorkspace(page, workspace.workspaceId);
+        await waitForSidebarHydration(page);
+        await openGlobalNewWorkspaceComposer(page);
+        await expectComposerModel(page, "claude-sonnet-4-5");
+        await openModelPicker(page);
+        await expectModelRowSelected(page, {
+          provider: "claude",
+          modelId: "relay-b/claude-sonnet-4-5",
+        });
+      });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("Codex gets the same section, and its model selector is grouped the same way", async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5", "kimi-k2"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "gpt-5"],
+    });
+
+    await test.step("the Codex page turns the switch on and points Codex at the gateway", async () => {
+      await openAgentPage(page, "codex");
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+      await expect(defaultModelTrigger(page)).toHaveText("gpt-5");
+      await expect.poll(readCodexConfig).toContain('model_provider = "osuna_api_endpoint"');
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-summary")).toHaveText(
+        "2 on",
+      );
+    });
+
+    const workspace = await seedWorkspace({ repoPrefix: "api-endpoint-codex-selector-" });
+    try {
+      await carryPreferencesAcrossReloads(page);
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await keepPreferencesForNextLoad(page, { provider: "codex" });
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await openGlobalNewWorkspaceComposer(page);
+
+      await test.step("the picker lists each endpoint as a group", async () => {
+        await expectComposerModel(page, "gpt-5");
+        await openModelPicker(page);
+        const picker = page.getByTestId("combobox-desktop-container");
+        await expect(picker.locator('[data-testid^="model-endpoint-group-"]')).toHaveText([
+          "Relay A",
+          "Relay B",
+        ]);
+        await expect(picker.getByTestId("model-row-codex-relay-b/gpt-5")).toHaveText("gpt-5");
+        await expect(picker).not.toContainText("relay-");
+        await selectModelRow(page, { provider: "codex", modelId: "relay-b/gpt-5" });
+        await expectComposerModel(page, "gpt-5");
+        await openModelPicker(page);
+        await expectModelRowSelected(page, { provider: "codex", modelId: "relay-b/gpt-5" });
+      });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+});
+
+const CARRIED_PREFERENCES_KEY = "e2e-api-endpoints-carried-preferences";
+
+/**
+ * 测试夹具每次加载页面都把新建对话的记忆改回 mock 提供方；这个脚本注册在它之后，
+ * 把 keepPreferencesForNextLoad 存下的记忆再写回去，模拟重开 App 后记忆还在。
+ */
+async function carryPreferencesAcrossReloads(page: Page): Promise<void> {
+  await page.addInitScript((key) => {
+    const carried = sessionStorage.getItem(key);
+    if (carried) localStorage.setItem("@paseo:create-agent-preferences", carried);
+  }, CARRIED_PREFERENCES_KEY);
+}
+
+function serializePreferences(preferences: { provider: string } | "current"): string | null {
+  if (preferences === "current") return null;
+  return JSON.stringify(preferences);
+}
+
+/** "current" 是 App 自己当前存下的记忆。 */
+async function keepPreferencesForNextLoad(
+  page: Page,
+  preferences: { provider: string } | "current",
+): Promise<void> {
+  await page.evaluate(
+    ({ key, value }) => {
+      const carried = value ?? localStorage.getItem("@paseo:create-agent-preferences") ?? "";
+      sessionStorage.setItem(key, carried);
+    },
+    { key: CARRIED_PREFERENCES_KEY, value: serializePreferences(preferences) },
+  );
+}
+
+async function openClaudeCodePage(page: Page): Promise<void> {
+  await openAgentPage(page, "claude");
+}
+
+async function openAgentPage(page: Page, provider: "claude" | "codex"): Promise<void> {
+  const serverId = getServerId();
+  await gotoAppShell(page);
+  await openSettings(page);
+  await openSettingsHost(page, serverId);
+  await openSettingsHostSection(page, serverId, "providers");
+  await expectProvidersList(page, serverId);
+  await providerRow(page, provider).click();
+  await expectProviderDetail(page, serverId, provider);
+  await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeVisible();
+}
+
+async function readCodexConfig(): Promise<string> {
+  try {
+    return await readFile(path.join(cliHome, "codex", "config.toml"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
+}
+
+function agentSection(page: Page): Locator {
+  return page.getByTestId("agent-api-endpoints").filter({ visible: true });
+}
+
+function defaultModelTrigger(page: Page): Locator {
+  return agentSection(page).getByTestId("agent-api-endpoints-default-model-trigger");
+}
+
+interface ClaudeSettingsFile {
+  model?: string;
+  env?: Record<string, string>;
+}
+
+/** 测试用临时目录里的 Claude Code 配置；还没写过时为空。 */
+async function readClaudeSettings(): Promise<ClaudeSettingsFile> {
+  let text: string;
+  try {
+    text = await readFile(path.join(cliHome, "claude", "settings.json"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  return JSON.parse(text) as ClaudeSettingsFile;
+}
+
+async function claudeSettingsModel(): Promise<string | undefined> {
+  return (await readClaudeSettings()).model;
+}
+
+async function claudeSettingsBaseUrl(): Promise<string | undefined> {
+  return (await readClaudeSettings()).env?.ANTHROPIC_BASE_URL;
+}
 
 async function openEndpointRow(page: Page, endpointId: string): Promise<void> {
   await row(page, endpointId).click();

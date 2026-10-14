@@ -114,6 +114,16 @@ export function normalizeAgentModelCatalog(models: AgentModelDefinition[]): Agen
   return unique.length === models.length ? models : unique;
 }
 
+/**
+ * 「使用第三方接口」打开时，一家开着的接口与它的已选模型，按创建顺序排列。
+ * 模型的 id 是会话内部用的 `接口标识/模型名`，只当不透明的值发回 daemon；label 是光秃秃的模型名。
+ * models 里的 isDefault 标在含默认模型的第一家上。
+ */
+export interface ApiEndpointModelGroup {
+  name: string;
+  models: AgentModelDefinition[];
+}
+
 export interface ProviderSnapshotEntry {
   provider: AgentProvider;
   status: ProviderStatus;
@@ -133,6 +143,8 @@ export interface ProviderSnapshotEntry {
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint?: ApiEndpointRef;
+  // 总开关开着时按接口分组的可选模型（见 ApiEndpointModelGroup）；官方模式下没有。
+  apiEndpointModelGroups?: ApiEndpointModelGroup[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }

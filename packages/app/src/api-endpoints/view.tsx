@@ -16,23 +16,21 @@ import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
 import { ApiEndpointDetailHeader } from "./detail-header";
-import { ApiEndpointFormSheet } from "./form-sheet";
 import { ApiEndpointsListSection, NoticeCard } from "./host-list-section";
-import { ApiEndpointsSection } from "./index";
+import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
+import { selectAgentApiEndpointsView } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelsSection } from "./models-section";
-import type { ApiEndpointFormSeed } from "./internal/form-model";
-import { useApiEndpoints } from "./use-api-endpoints";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
 /*
- * 运行时接线：客户端、查询、确认框、toast。surface（index.tsx）保持纯 props，方便 jsdom 测试。
- * 调用方负责能力门控：只在主机声明了 apiEndpoints、provider 受支持时渲染。
+ * 运行时接线：客户端、查询、确认框。各区块组件（*-section.tsx）保持纯 props。
  */
 
+/** Claude Code / Codex 提供方页的「第三方接口」区。调用方只在 provider 受支持时渲染。 */
 export function ApiEndpointsView({
   serverId,
   provider,
@@ -42,56 +40,72 @@ export function ApiEndpointsView({
   provider: string;
   providerLabel: string;
 }) {
-  const {
-    state,
-    busy,
-    actionError,
-    dismissActionError,
-    activate,
-    reapply,
-    remove,
-    save,
-    fetchModels,
-    testConnection,
-  } = useApiEndpoints({
-    serverId,
-    provider,
-    providerLabel,
-  });
-  const [form, setForm] = useState<ApiEndpointFormSeed | null>(null);
-
-  const handleAdd = useCallback(() => setForm({ mode: "create", provider }), [provider]);
-  const handleEdit = useCallback(
-    (endpoint: ApiEndpoint) => setForm({ mode: "edit", provider, endpoint }),
-    [provider],
-  );
-  const handleCloseForm = useCallback(() => setForm(null), []);
-
+  const { t } = useTranslation();
+  const supported = useHostFeatureAvailability(serverId, "apiEndpointGateway");
+  if (supported !== true) {
+    // 主机太旧时请用户更新，不保留旧的单选界面（docs/protocol-compatibility.md）。
+    const noticeKey =
+      supported === null ? "settings.apiEndpoints.unavailable" : "settings.apiEndpoints.updateHost";
+    return <AgentNotice text={t(noticeKey)} />;
+  }
   return (
-    <>
-      <ApiEndpointsSection
-        providerLabel={providerLabel}
-        state={state}
-        busy={busy}
-        actionError={actionError}
-        onDismissError={dismissActionError}
-        onActivate={activate}
-        onReapply={reapply}
-        onAdd={handleAdd}
-        onEdit={handleEdit}
-        onDelete={remove}
-      />
-      {form ? (
-        <ApiEndpointFormSheet
-          key={form.mode === "edit" ? `edit-${form.endpoint.id}` : "create"}
-          seed={form}
-          onSave={save}
-          onFetchModels={fetchModels}
-          onTestConnection={testConnection}
-          onClose={handleCloseForm}
-        />
-      ) : null}
-    </>
+    <AgentApiEndpoints serverId={serverId} provider={provider} providerLabel={providerLabel} />
+  );
+}
+
+function AgentNotice({ text }: { text: string }) {
+  return (
+    <AgentApiEndpointsFrame>
+      <NoticeCard text={text} testID="agent-api-endpoints-notice" />
+    </AgentApiEndpointsFrame>
+  );
+}
+
+function AgentApiEndpoints({
+  serverId,
+  provider,
+  providerLabel,
+}: {
+  serverId: string;
+  provider: string;
+  providerLabel: string;
+}) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const now = useClock();
+  const endpoints = useHostEndpoints(serverId);
+  const { state, setAgentSettings } = endpoints;
+
+  const handleToggle = useCallback(
+    (enabled: boolean) => setAgentSettings(provider, { enabled }),
+    [provider, setAgentSettings],
+  );
+  const handleDefaultModelChange = useCallback(
+    (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
+    [provider, setAgentSettings],
+  );
+  const handleManage = useCallback(
+    () => router.push(buildSettingsHostSectionRoute(serverId, "api-endpoints")),
+    [router, serverId],
+  );
+
+  if (state.status === "loading") {
+    return <AgentNotice text={t("settings.apiEndpoints.loading")} />;
+  }
+  if (state.status === "error") {
+    return <AgentNotice text={state.message} />;
+  }
+  return (
+    <AgentApiEndpointsSection
+      providerLabel={providerLabel}
+      view={selectAgentApiEndpointsView({ state, provider, now })}
+      busy={endpoints.pendingAgent === provider}
+      actionError={endpoints.actionError}
+      onDismissError={endpoints.dismissActionError}
+      onToggle={handleToggle}
+      onDefaultModelChange={handleDefaultModelChange}
+      onManage={handleManage}
+    />
   );
 }
 

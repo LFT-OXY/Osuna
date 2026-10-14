@@ -2608,6 +2608,27 @@ export const en = {
         none: "Don't map",
         pickTitle: "Model for {{tier}}",
       },
+      agent: {
+        title: "API endpoints",
+        useSwitch: "Use API endpoints",
+        useHint:
+          "When on, {{agent}} can use the selected models of the endpoints that are on in API endpoints. Turn it off to go back to official.",
+        noUsableEndpoint: "Turn on an endpoint in API endpoints and select its models first.",
+        gatewayRequiresTcp:
+          "The daemon is listening on a socket, so the built-in gateway can't run. Make it listen on a TCP port to turn this on.",
+        gatewayNotReady: "The built-in gateway is still starting. Try again in a moment.",
+        defaultModel: "Default model",
+        defaultModelHint: "New terminal sessions and the first new chat start with it.",
+        defaultModelPick: "Default model for {{agent}}",
+        manage: "Manage API endpoints",
+        summaryOn_one: "{{count}} on",
+        summaryOn_other: "{{count}} on",
+        summaryCooling_minutes_one: "{{name}} cooling down, back in {{count}} minute",
+        summaryCooling_minutes_other: "{{name}} cooling down, back in {{count}} minutes",
+        summaryCooling_hours_one: "{{name}} cooling down, back in {{count}} hour",
+        summaryCooling_hours_other: "{{name}} cooling down, back in {{count}} hours",
+        saveFailed: "Couldn't change the API endpoint settings for {{agent}}",
+      },
     },
     hostSections: {
       projects: "Projects",

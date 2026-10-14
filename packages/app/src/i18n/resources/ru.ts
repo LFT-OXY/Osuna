@@ -2579,6 +2579,28 @@ export const ru: TranslationResources = {
         none: "Не сопоставлять",
         pickTitle: "Модель для {{tier}}",
       },
+      agent: {
+        title: "Сторонние API",
+        useSwitch: "Использовать сторонние API",
+        useHint:
+          "Когда включено, {{agent}} может использовать выбранные модели включённых эндпоинтов со страницы «Сторонние API». Выключите, чтобы вернуться к официальному.",
+        noUsableEndpoint:
+          "Сначала включите эндпоинт на странице «Сторонние API» и выберите его модели.",
+        gatewayRequiresTcp:
+          "Демон слушает сокет, поэтому встроенный шлюз не может работать. Чтобы включить это, настройте прослушивание TCP-порта.",
+        gatewayNotReady: "Встроенный шлюз ещё запускается. Повторите попытку чуть позже.",
+        defaultModel: "Модель по умолчанию",
+        defaultModelHint: "С неё начинаются новые сессии терминала и первый новый чат.",
+        defaultModelPick: "Модель по умолчанию для {{agent}}",
+        manage: "Управлять сторонними API",
+        summaryOn_one: "{{count}} включён",
+        summaryOn_other: "{{count}} включено",
+        summaryCooling_minutes_one: "{{name}} остывает, вернётся через {{count}} минуту",
+        summaryCooling_minutes_other: "{{name}} остывает, вернётся через {{count}} минуты",
+        summaryCooling_hours_one: "{{name}} остывает, вернётся через {{count}} час",
+        summaryCooling_hours_other: "{{name}} остывает, вернётся через {{count}} часа",
+        saveFailed: "Не удалось изменить настройки сторонних API для {{agent}}",
+      },
     },
     hostSections: {
       projects: "Проекты",

@@ -2583,6 +2583,28 @@ export const ptBR: TranslationResources = {
         none: "Não mapear",
         pickTitle: "Modelo para {{tier}}",
       },
+      agent: {
+        title: "Endpoints de API",
+        useSwitch: "Usar endpoints de API",
+        useHint:
+          "Quando ativado, {{agent}} pode usar os modelos selecionados dos endpoints ativos em Endpoints de API. Desative para voltar ao oficial.",
+        noUsableEndpoint:
+          "Primeiro ative um endpoint em Endpoints de API e selecione os modelos dele.",
+        gatewayRequiresTcp:
+          "O daemon está escutando em um socket, então o gateway embutido não pode rodar. Faça-o escutar em uma porta TCP para ativar isto.",
+        gatewayNotReady: "O gateway embutido ainda está iniciando. Tente de novo em instantes.",
+        defaultModel: "Modelo padrão",
+        defaultModelHint: "Novas sessões de terminal e o primeiro chat novo começam com ele.",
+        defaultModelPick: "Modelo padrão do {{agent}}",
+        manage: "Gerenciar endpoints de API",
+        summaryOn_one: "{{count}} ativo",
+        summaryOn_other: "{{count}} ativos",
+        summaryCooling_minutes_one: "{{name}} em resfriamento, volta em {{count}} minuto",
+        summaryCooling_minutes_other: "{{name}} em resfriamento, volta em {{count}} minutos",
+        summaryCooling_hours_one: "{{name}} em resfriamento, volta em {{count}} hora",
+        summaryCooling_hours_other: "{{name}} em resfriamento, volta em {{count}} horas",
+        saveFailed: "Não foi possível mudar as configurações de endpoints de API do {{agent}}",
+      },
     },
     hostSections: {
       projects: "Projetos",

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
+import type { AgentModelDefinition } from "@getpaseo/protocol/agent-types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
@@ -595,6 +596,30 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
     });
     await expect.poll(claudeModels, { timeout: 10_000 }).toEqual(["shared", "a1", "b1 *"]);
     expect((await claudeEntry())?.isModelListAuthoritative).toBe(true);
+    // 新客户端的选择器按接口分组：同名模型在两家各一条，id 带接口标识，label 是光秃秃的模型名。
+    function describeGroup(group: { name: string; models: AgentModelDefinition[] }) {
+      return {
+        name: group.name,
+        models: group.models.map((model) => [model.id, model.label, model.isDefault]),
+      };
+    }
+    const groups = (await claudeEntry())?.apiEndpointModelGroups ?? [];
+    expect(groups.map(describeGroup)).toEqual([
+      {
+        name: "A",
+        models: [
+          ["a/shared", "shared", false],
+          ["a/a1", "a1", false],
+        ],
+      },
+      {
+        name: "B",
+        models: [
+          ["b/b1", "b1", true],
+          ["b/shared", "shared", false],
+        ],
+      },
+    ]);
 
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     await expect
@@ -602,5 +627,6 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
         timeout: 10_000,
       })
       .toBeUndefined();
+    expect((await claudeEntry())?.apiEndpointModelGroups).toBeUndefined();
   });
 });

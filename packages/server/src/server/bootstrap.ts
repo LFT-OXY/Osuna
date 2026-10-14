@@ -1008,6 +1008,7 @@ export async function createPaseoDaemon(
       extraClients: config.agentClients,
       modelOverride: apiEndpointModelOverride,
       activeApiEndpoint: apiEndpointMode.active,
+      apiEndpointModelGroups: (provider) => apiEndpointService.activeModelGroups(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;

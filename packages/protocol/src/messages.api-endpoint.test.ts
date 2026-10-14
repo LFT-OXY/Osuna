@@ -375,6 +375,27 @@ describe("providers snapshot activeApiEndpoint", () => {
   });
 });
 
+describe("providers snapshot apiEndpointModelGroups", () => {
+  const entry = { provider: "claude", status: "ready" as const, enabled: true };
+
+  it("parses the models grouped by endpoint, with the slashed id kept opaque", () => {
+    const groups = [
+      {
+        name: "Relay A",
+        models: [{ provider: "claude", id: "relay-a/kimi-k2", label: "kimi-k2", isDefault: true }],
+      },
+    ];
+    expect(
+      ProviderSnapshotEntrySchema.parse({ ...entry, apiEndpointModelGroups: groups })
+        .apiEndpointModelGroups,
+    ).toEqual(groups);
+  });
+
+  it("reads an older host without the field as ungrouped", () => {
+    expect(ProviderSnapshotEntrySchema.parse(entry).apiEndpointModelGroups).toBeUndefined();
+  });
+});
+
 describe("timeline notification apiEndpointModeMismatch", () => {
   const notification = {
     type: "notification" as const,

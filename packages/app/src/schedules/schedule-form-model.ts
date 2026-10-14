@@ -10,8 +10,9 @@ import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
+  selectableEntryModels,
 } from "@/provider-selection/provider-selection";
-import { filterSelectableModels, findModelByReference } from "@/provider-selection/model-catalog";
+import { findModelByReference } from "@/provider-selection/model-catalog";
 import {
   buildAuthoritativeModelProviders,
   buildProviderDefinitionMapForStatuses,
@@ -229,7 +230,7 @@ function resolveProjectDisplay(input: {
 function buildProviderModelsByProvider(entries: ProviderSnapshotEntry[]): ProviderModelsByProvider {
   const map: ProviderModelsByProvider = new Map();
   for (const entry of entries) {
-    map.set(entry.provider, filterSelectableModels(entry.models ?? null));
+    map.set(entry.provider, selectableEntryModels(entry));
   }
   return map;
 }
@@ -255,7 +256,7 @@ function resolveAvailableModels(
   entries: readonly ProviderSnapshotEntry[],
   provider: AgentProvider | null,
 ): AgentModelDefinition[] | null {
-  return filterSelectableModels(resolveSelectedEntry(entries, provider)?.models ?? null);
+  return selectableEntryModels(resolveSelectedEntry(entries, provider));
 }
 
 function resolveEffectiveModel(
@@ -844,7 +845,7 @@ function canonicalizeThinkingDrafts(
   entries: readonly ProviderSnapshotEntry[],
 ): void {
   for (const entry of entries) {
-    const models = filterSelectableModels(entry.models ?? null);
+    const models = selectableEntryModels(entry);
     if (!models) {
       continue;
     }

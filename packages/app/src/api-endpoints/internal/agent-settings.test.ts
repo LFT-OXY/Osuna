@@ -1,0 +1,119 @@
+import { describe, expect, it } from "vitest";
+import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { selectAgentApiEndpointsView } from "./agent-settings";
+
+const NOW = new Date("2026-10-14T12:00:00.000Z");
+
+function endpoint(overrides: Partial<ApiEndpoint> & { id: string }): ApiEndpoint {
+  return {
+    provider: "claude",
+    name: overrides.id,
+    baseUrl: "https://relay.example",
+    baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+    models: [{ id: "claude-sonnet-4-5" }],
+    defaultModelId: "claude-sonnet-4-5",
+    hasApiKey: true,
+    enabled: true,
+    cooldown: null,
+    ...overrides,
+  };
+}
+
+function view(input: {
+  endpoints: ApiEndpoint[];
+  enabled?: boolean;
+  defaultModelId?: string | null;
+  gatewayUnavailable?: { code: string; message: string } | null;
+}) {
+  return selectAgentApiEndpointsView({
+    state: {
+      status: "ready",
+      endpoints: input.endpoints,
+      agents: {
+        claude: { enabled: input.enabled ?? false, defaultModelId: input.defaultModelId ?? null },
+      },
+      gatewayUnavailable: input.gatewayUnavailable ?? null,
+    },
+    provider: "claude",
+    now: NOW,
+  });
+}
+
+describe("the Use API endpoints switch on an agent page", () => {
+  it("can be turned on when an endpoint that is on has a model selected", () => {
+    expect(view({ endpoints: [endpoint({ id: "a" })] })).toMatchObject({
+      enabled: false,
+      enableBlockedBy: null,
+    });
+  });
+
+  it("cannot be turned on while every endpoint is off or has no model selected", () => {
+    expect(view({ endpoints: [] }).enableBlockedBy).toEqual({ kind: "noUsableEndpoint" });
+    expect(
+      view({
+        endpoints: [endpoint({ id: "a", enabled: false }), endpoint({ id: "b", models: [] })],
+      }).enableBlockedBy,
+    ).toEqual({ kind: "noUsableEndpoint" });
+  });
+
+  it("cannot be turned on while the gateway is unavailable, and says why", () => {
+    const issue = { code: "gateway_requires_tcp", message: "needs TCP" };
+    expect(
+      view({ endpoints: [endpoint({ id: "a" })], gatewayUnavailable: issue }).enableBlockedBy,
+    ).toEqual({ kind: "gateway", issue });
+  });
+
+  it("can always be turned off", () => {
+    expect(view({ endpoints: [], enabled: true }).enableBlockedBy).toBeNull();
+  });
+});
+
+describe("the default model on an agent page", () => {
+  it("lists each selected model of the endpoints that are on once, in creation order", () => {
+    const result = view({
+      enabled: true,
+      defaultModelId: "b1",
+      endpoints: [
+        endpoint({ id: "a", models: [{ id: "shared" }, { id: "a1" }] }),
+        endpoint({ id: "off", enabled: false, models: [{ id: "off1" }] }),
+        endpoint({ id: "b", models: [{ id: "b1" }, { id: "shared" }] }),
+      ],
+    });
+    expect(result.modelOptions).toEqual(["shared", "a1", "b1"]);
+    expect(result.defaultModelId).toBe("b1");
+  });
+});
+
+describe("the manage API endpoints summary", () => {
+  it("counts the endpoints that are on and names the one cooling down that recovers first", () => {
+    const result = view({
+      endpoints: [
+        endpoint({ id: "a" }),
+        endpoint({
+          id: "Kimi",
+          cooldown: { state: "cooling_down", reason: "quota", until: "2026-10-14T12:12:00.000Z" },
+        }),
+        endpoint({
+          id: "c",
+          cooldown: { state: "cooling_down", reason: "rate", until: "2026-10-14T12:40:00.000Z" },
+        }),
+        endpoint({
+          id: "off",
+          enabled: false,
+          cooldown: { state: "cooling_down", reason: "rate", until: "2026-10-14T12:01:00.000Z" },
+        }),
+      ],
+    });
+    expect(result.summary).toEqual({
+      enabledCount: 3,
+      cooling: { name: "Kimi", remaining: { unit: "minutes", value: 12 } },
+    });
+  });
+
+  it("has no cooling part when nothing is cooling down", () => {
+    expect(view({ endpoints: [endpoint({ id: "a" })] }).summary).toEqual({
+      enabledCount: 1,
+      cooling: null,
+    });
+  });
+});

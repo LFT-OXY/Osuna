@@ -178,6 +178,7 @@ interface ApiEndpointSeedClient {
   apiEndpointSetAgentSettings(options: {
     provider: string;
     enabled: boolean;
+    defaultModelId?: string;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
   apiEndpointFetchModels(options: {
     provider: string;

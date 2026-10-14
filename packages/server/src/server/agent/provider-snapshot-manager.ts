@@ -20,6 +20,7 @@ import {
   type AgentProvider,
   type FetchCatalogOptions,
   type ActiveApiEndpointLookup,
+  type ApiEndpointModelGroupsLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -137,6 +138,7 @@ export interface ProviderSnapshotManagerOptions {
   openCodeBridge?: OpenCodeBridge;
   modelOverride?: ProviderModelOverride;
   activeApiEndpoint?: ActiveApiEndpointLookup;
+  apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
 }
 
 interface ProviderSnapshotRefreshOptions {
@@ -266,6 +268,7 @@ export class ProviderSnapshotManager {
   private readonly extraClients: Partial<Record<AgentProvider, AgentClient>>;
   private readonly modelOverride?: ProviderModelOverride;
   private readonly activeApiEndpoint?: ActiveApiEndpointLookup;
+  private readonly apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -292,6 +295,7 @@ export class ProviderSnapshotManager {
     this.extraClients = options.extraClients ?? {};
     this.modelOverride = options.modelOverride;
     this.activeApiEndpoint = options.activeApiEndpoint;
+    this.apiEndpointModelGroups = options.apiEndpointModelGroups;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -1100,6 +1104,7 @@ export class ProviderSnapshotManager {
       const catalogModels = overriddenModels ?? catalog.models;
       const isModelListAuthoritative = overriddenModels ? true : undefined;
       const activeApiEndpoint = this.activeApiEndpoint?.(provider) ?? undefined;
+      const apiEndpointModelGroups = this.apiEndpointModelGroups?.(provider) ?? undefined;
       const models = normalizeAgentModelCatalog(catalogModels);
       if (models.length !== catalogModels.length) {
         this.logger.warn(
@@ -1116,6 +1121,7 @@ export class ProviderSnapshotManager {
         models,
         isModelListAuthoritative,
         activeApiEndpoint,
+        apiEndpointModelGroups,
         modes: catalog.modes,
         version,
         fetchedAt: new Date().toISOString(),

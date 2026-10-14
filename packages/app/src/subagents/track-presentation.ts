@@ -212,16 +212,17 @@ function subagentTiming(subagent: DispatchSubagent, bucket: DispatchRowBucket): 
 function subagentSubtitle(
   t: TFunction,
   subagent: DispatchSubagent,
-  providerLabelOf: (provider: string) => string,
+  labels: DispatchRowLabels,
 ): string {
   if (subagent.row.kind === "provider") {
     return buildSubagentRowPresentationData(subagent.row).subtitle;
   }
   const archivedSuffix = subagent.archived ? t("subagents.dispatchArchived") : null;
   const detachedSuffix = subagent.detached ? t("subagents.dispatchDetached") : null;
+  const provider = subagent.row.provider;
   return joinParts([
-    providerLabelOf(subagent.row.provider),
-    subagent.model,
+    labels.providerLabelOf(provider),
+    subagent.model === null ? null : labels.modelLabelOf(provider, subagent.model),
     subagent.modeLabel,
     archivedSuffix,
     detachedSuffix,
@@ -239,18 +240,26 @@ function openTarget(row: SubagentRow): DispatchOpenTarget {
  * Paseo 子智能体的标题取 `create_agent` 入参的 title，后来被改名，行上仍是派发时写的任务；
  * provider 子智能体没有入参，与 track 一样先取 description。
  */
+export interface DispatchRowLabels {
+  providerLabelOf: (provider: string) => string;
+  // 第三方接口的 `接口标识/模型名` 读作光秃秃的模型名。
+  modelLabelOf: (provider: string, modelId: string) => string;
+}
+
 export function buildDispatchRowPresentation({
   t,
   state,
-  providerLabelOf,
+  labels,
 }: {
   t: TFunction;
   state: DispatchRowState;
-  providerLabelOf: (provider: string) => string;
+  labels: DispatchRowLabels;
 }): DispatchRowPresentation {
   if (state.kind === "starting") {
-    const { provider, model, modeId } = state.input;
-    const providerLabel = provider ? providerLabelOf(provider) : null;
+    const { provider, modeId } = state.input;
+    const providerLabel = provider ? labels.providerLabelOf(provider) : null;
+    let model = state.input.model;
+    if (provider && model) model = labels.modelLabelOf(provider, model);
     return {
       key: state.key,
       open: null,
@@ -267,7 +276,7 @@ export function buildDispatchRowPresentation({
   const pendingTool = bucket === "needs_input" ? subagent.pendingPermissionName : null;
   const subtitle = pendingTool
     ? t("subagents.dispatchWaitingForApproval", { tool: pendingTool })
-    : subagentSubtitle(t, subagent, providerLabelOf);
+    : subagentSubtitle(t, subagent, labels);
   const callTitle = state.kind === "subagent" ? resolveRowLabel(state.input.title) : null;
   const label = callTitle ?? buildSubagentRowPresentationData(subagent.row).label;
   const tone = pendingTool ? "warning" : "default";

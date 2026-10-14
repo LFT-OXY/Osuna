@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type {
   ApiEndpoint,
   ApiEndpointListResponse,
+  ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useFetchQuery } from "@/data/query";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
@@ -33,6 +34,12 @@ export function hostEndpointsQueryKey(serverId: string) {
   return ["api-endpoints", serverId, LIST_PROVIDER] as const;
 }
 
+/** 「使用第三方接口」总开关与默认模型的一次修改。 */
+export type AgentSettingsChange = Pick<
+  ApiEndpointSetAgentSettingsRequest,
+  "enabled" | "defaultModelId"
+>;
+
 export interface UseHostEndpointsResult {
   state: HostEndpointsLoadState;
   // 正在切换开关或「立刻恢复」的那一家。
@@ -42,6 +49,10 @@ export interface UseHostEndpointsResult {
   dismissActionError: () => void;
   setEnabled: (endpoint: ApiEndpoint, enabled: boolean) => void;
   resume: (endpoint: ApiEndpoint) => void;
+  // 正在改总开关或默认模型的 Agent。
+  pendingAgent: string | null;
+  // 改失败的原因在 actionError 里。
+  setAgentSettings: (provider: string, settings: AgentSettingsChange) => void;
   save: (request: ConnectionSaveRequest) => Promise<ConnectionSaveResult>;
   detect: (
     request: ConnectionDetectRequest,
@@ -57,6 +68,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   const [pendingEndpointId, setPendingEndpointId] = useState<string | null>(null);
+  const [pendingAgent, setPendingAgent] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const queryKey = useMemo(() => hostEndpointsQueryKey(serverId), [serverId]);
 
@@ -149,6 +161,26 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [runStateChange],
   );
 
+  const setAgentSettings = useCallback(
+    (provider: string, settings: AgentSettingsChange) => {
+      if (!client) return;
+      void (async () => {
+        setPendingAgent(provider);
+        setActionError(null);
+        try {
+          const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
+          if (result.error) setActionError(result.error.message);
+        } catch (error) {
+          setActionError(toErrorMessage(error));
+        } finally {
+          await refresh();
+          setPendingAgent(null);
+        }
+      })();
+    },
+    [client, refresh],
+  );
+
   const save = useCallback(
     async (request: ConnectionSaveRequest): Promise<ConnectionSaveResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -198,6 +230,8 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     dismissActionError,
     setEnabled,
     resume,
+    pendingAgent,
+    setAgentSettings,
     save,
     detect,
   };

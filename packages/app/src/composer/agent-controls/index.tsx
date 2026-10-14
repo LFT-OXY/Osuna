@@ -26,8 +26,8 @@ import {
   groupProviderMenuEntries,
   type ProviderMenuGroups,
   type ProviderSelectorProvider,
+  selectableEntryModels,
 } from "@/provider-selection/provider-selection";
-import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { useSessionStore } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { resolveProviderDefinition, resolveProviderLabel } from "@/utils/provider-definitions";
@@ -1510,7 +1510,7 @@ export const AgentControls = memo(function AgentControls({
     [snapshotEntries, agent?.provider],
   );
 
-  const models = filterSelectableModels(snapshotSelectedEntry?.models ?? null);
+  const models = selectableEntryModels(snapshotSelectedEntry);
   const selectedProviderIsLoading = snapshotSelectedEntry?.status === "loading";
 
   const agentProviderDefinitions = useMemo(

@@ -12,6 +12,7 @@ import {
   resolveModelBrowserScrolling,
   scopeModelBrowserProviders,
   selectProviderViewProfileRows,
+  buildModelListItems,
 } from "./model-browser-view";
 
 function provider(
@@ -427,5 +428,45 @@ describe("model browser scoped to the selected provider", () => {
         scope: "allProviders",
       }),
     ).toEqual(claudeView);
+  });
+});
+
+describe("model list items grouped by API endpoint", () => {
+  function grouped(modelId: string, name: string, index: number): ProviderSelectionModelRow {
+    return {
+      favoriteKey: `claude:${modelId}`,
+      provider: "claude",
+      providerLabel: "Claude Code",
+      modelId,
+      modelLabel: modelId.slice(modelId.indexOf("/") + 1),
+      apiEndpointGroup: { name, index },
+    };
+  }
+
+  it("rows without a group stay a plain list", () => {
+    const rows = [modelRow("codex", "Codex", "gpt-5.4", "GPT-5.4")];
+    expect(buildModelListItems(rows, { groupByApiEndpoint: true })).toEqual([
+      { kind: "row", key: "codex:gpt-5.4", row: rows[0] },
+    ]);
+  });
+
+  it("cross-provider results stay flat even when rows belong to endpoints", () => {
+    const rows = [grouped("a/shared", "A", 0)];
+    expect(buildModelListItems(rows, { groupByApiEndpoint: false })).toEqual([
+      { kind: "row", key: "claude:a/shared", row: rows[0] },
+    ]);
+  });
+
+  it("each endpoint gets a heading, in creation order even after search ranking", () => {
+    const rows = [
+      grouped("b/shared", "B", 1),
+      grouped("a/shared", "A", 0),
+      grouped("a/a1", "A", 0),
+    ];
+    expect(
+      buildModelListItems(rows, { groupByApiEndpoint: true }).map((item) =>
+        item.kind === "group" ? `# ${item.name}` : item.row.modelId,
+      ),
+    ).toEqual(["# A", "a/shared", "a/a1", "# B", "b/shared"]);
   });
 });
