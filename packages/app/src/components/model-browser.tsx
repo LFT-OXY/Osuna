@@ -45,8 +45,6 @@ import { isNative, isWeb } from "@/constants/platform";
 import {
   buildProviderQualifiedDescription,
   buildSelectedTriggerLabel,
-  getAllProviderModelRows,
-  getProviderModelRows,
   resolveSelectedModelLabel,
   type ProviderSelectionModelRow,
   type ProviderSelectorProvider,
@@ -63,17 +61,13 @@ import {
   scopeModelBrowserProviders,
   selectProviderViewProfileRows,
   buildModelListItems,
+  resolveModelBrowserDesktopHeight,
   type ModelBrowserScope,
   type ModelBrowserView,
   type ModelListItem,
 } from "@/components/model-browser-view";
 import { modelFamilyOf } from "@/api-endpoints";
 import { ModelFamilyIcon } from "@/api-endpoints/model-family-icon";
-
-const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
-const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 400;
-const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 80;
-const DESKTOP_MODEL_ROW_HEIGHT = 40;
 
 const ThemedAlertTriangle = withUnistyles(AlertTriangle);
 const ThemedCheck = withUnistyles(Check);
@@ -252,28 +246,6 @@ function iconButtonStyle({ hovered, pressed }: PressableStateCallbackType & { ho
   ];
 }
 
-function countModelsInView(view: ModelBrowserView, providers: ProviderSelectorProvider[]): number {
-  if (view.kind === "all") {
-    return getAllProviderModelRows(providers).length;
-  }
-  const provider = providers.find((entry) => entry.id === view.providerId);
-  return provider?.modelSelection.kind === "models" ? getProviderModelRows(provider).length : 0;
-}
-
-function resolveDesktopFixedHeight(
-  view: ModelBrowserView,
-  providers: ProviderSelectorProvider[],
-): number {
-  const modelCount = countModelsInView(view, providers);
-  return Math.min(
-    Math.max(
-      DESKTOP_PROVIDER_VIEW_MIN_HEIGHT,
-      DESKTOP_PROVIDER_VIEW_BASE_HEIGHT + modelCount * DESKTOP_MODEL_ROW_HEIGHT,
-    ),
-    DESKTOP_PROVIDER_VIEW_MAX_HEIGHT,
-  );
-}
-
 export function useModelBrowser({
   providers: allProviders,
   selectedProvider,
@@ -417,8 +389,14 @@ export function useModelBrowser({
   }, [selectedModelLabel, t]);
 
   const desktopFixedHeight = useMemo(
-    () => resolveDesktopFixedHeight(view, providers),
-    [providers, view],
+    () =>
+      resolveModelBrowserDesktopHeight({
+        view,
+        providers,
+        profileRows: profiles?.rows ?? null,
+        scope,
+      }),
+    [profiles, providers, scope, view],
   );
 
   return {
