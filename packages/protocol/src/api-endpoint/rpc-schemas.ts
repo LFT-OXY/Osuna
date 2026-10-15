@@ -136,8 +136,8 @@ export const ApiEndpointRefSchema = z.object({
 export type ApiEndpointRef = z.infer<typeof ApiEndpointRefSchema>;
 
 /**
- * 恢复的会话创建时所处的模式与当前模式不同，挂在时间线的 notification 上，App 据此本地化。
- * null 即「官方」；name 为 null 表示该接口已被删除。
+ * 恢复的会话创建时所处的模式与当前模式不同，挂在时间线的 notification 上。
+ * null 即「官方」；name 为 null 表示该接口已被删除。v0.16 起 daemon 不再发送，schema 留着让老消息照常解析。
  */
 export const ApiEndpointCreatedRefSchema = z.object({
   id: z.string(),

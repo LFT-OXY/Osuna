@@ -64,13 +64,9 @@ function sourceTimelineItem(item: StreamItem): AgentTimelineItem | null {
     case "todo_list":
       return { type: "todo", items: item.items };
     case "notification":
-      if (item.sourceType === "error") return { type: "error", message: item.message };
-      return {
-        type: "notification",
-        level: item.level,
-        message: item.message,
-        apiEndpointModeMismatch: item.apiEndpointModeMismatch,
-      };
+      return item.sourceType === "error"
+        ? { type: "error", message: item.message }
+        : { type: "notification", level: item.level, message: item.message };
     case "compaction":
       return {
         type: "compaction",

@@ -10,10 +10,7 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
-import type {
-  ApiEndpointModeMismatch,
-  ApiEndpointRef,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
@@ -419,7 +416,6 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
-      apiEndpointModeMismatch?: ApiEndpointModeMismatch;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;
@@ -783,12 +779,6 @@ export type ActiveApiEndpointLookup = (provider: AgentProvider) => ApiEndpointRe
 export type ApiEndpointModelGroupsLookup = (
   provider: AgentProvider,
 ) => ApiEndpointModelGroup[] | null;
-
-/** 会话按创建时的模式记录接口 id，恢复时对照当前模式；接口已删除时 endpointName 为 null。 */
-export interface ApiEndpointModeSource {
-  active: ActiveApiEndpointLookup;
-  endpointName(provider: AgentProvider, endpointId: string): string | null;
-}
 
 export interface ResolveAgentDefaultModeInput {
   config: AgentSessionConfig;

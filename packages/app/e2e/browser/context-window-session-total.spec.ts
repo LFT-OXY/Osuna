@@ -92,7 +92,7 @@ test("the context details add the agent's session total and API endpoint to its 
       "Session span1h 30m",
     ]);
     await expect(card.getByTestId("context-window-api-endpoint")).toHaveText(
-      "Using the API endpoint Acme Gateway. This quota doesn't reflect actual usage.",
+      "Using API endpoints. This quota doesn't reflect actual usage.",
     );
     await expect(card.getByText("Plan usage", { exact: true })).toBeVisible();
     await expect(
@@ -175,7 +175,7 @@ test("the context details are in Chinese when the interface is", async ({
     "会话跨度1h 30m",
   ]);
   await expect(card.getByTestId("context-window-api-endpoint")).toHaveText(
-    "当前使用第三方接口 Acme Gateway，此额度不代表实际消耗。",
+    "已启用第三方接口，此额度不代表实际消耗。",
   );
   await expect(card.getByText("套餐用量", { exact: true })).toBeVisible();
   await expect(

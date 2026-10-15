@@ -951,64 +951,56 @@ return { ...result, gatewayUnavailable: this.gatewayUnavailable() }; // { code, 
 throw new ApiEndpointRequestError(issue.code, issue.message); // same code as the list
 ```
 
-## Scenario: a one-off timeline notice the daemon adds on resume
+## Scenario: retiring a timeline notice the daemon used to add
 
-Reference implementation: the API endpoint mode notice (api-endpoint ticket 08). Reuse the shape when resuming a session should tell the user something the provider history can't.
+Reference: the API endpoint mode notice, added in api-endpoint ticket 08 and removed in api-endpoint-auto-switch ticket 11. Sessions no longer remember the mode they were created in: the gateway routes by model name, and when no endpoint can serve a request the agent shows the wrapped error in the conversation.
 
 ### 1. Scope / Trigger
 
-- A persisted agent carries host state from its creation (here: which API endpoint was active), and resuming it under different host state deserves a warning in the conversation. The text must be localized, but timeline items are daemon-authored.
+- A daemon-authored `notification` field is no longer produced, but the protocol has to keep parsing it and timelines already persisted on disk still carry it.
 
 ### 2. Signatures
 
-- Record: `StoredAgentRecord.apiEndpointId?: string` (`agent-storage.ts`), `ManagedAgentBase.apiEndpointId?: string`, projected by `toStoredAgentRecord` and carried by `dispatchStoredAgentState`, reload, and `registerSession({ apiEndpointId })`.
-- Port: `ApiEndpointModeSource { active(provider): ApiEndpointRef | null; endpointName(provider, id): string | null }` in `agent-sdk-types.ts`, wired in `bootstrap.ts` to `ApiEndpointService.activeEndpoint` / `endpointName`; `AgentManagerOptions.apiEndpointMode`.
-- Builder: `buildApiEndpointModeNotice({ modes, provider, createdIn: string | null }) → notification | null` in `server/agent/api-endpoint-mode-notice.ts`.
-- Wire: `notification.apiEndpointModeMismatch?: { createdIn: ApiEndpointCreatedRef | null; current: ApiEndpointRef | null }` (`ApiEndpointCreatedRef.name` is `null` for a deleted endpoint) in `protocol/src/api-endpoint/rpc-schemas.ts`, on the `messages.ts` timeline union and both hand-written `AgentTimelineItem` types.
-- `resumeAgentFromPersistence(handle, overrides, agentId, options: { …, apiEndpointId?: string | null })`: the caller's value is used only when no record exists under `agentId` (`session.ts` `resume_agent_request` resumes under a new id and passes the matched record's mode).
+- Wire, kept and never sent: `notification.apiEndpointModeMismatch?: ApiEndpointModeMismatch` (`protocol/src/messages.ts` timeline union, `protocol/src/agent-types.ts`, `ApiEndpointModeMismatchSchema` in `protocol/src/api-endpoint/rpc-schemas.ts`). The server's own `AgentTimelineItem` (`agent-sdk-types.ts`) no longer has the field.
+- Gone: `StoredAgentRecord.apiEndpointId`, `ManagedAgentBase.apiEndpointId`, `ApiEndpointModeSource`, `AgentManagerOptions.apiEndpointMode`, `buildApiEndpointModeNotice`, `ApiEndpointService.endpointName`, and the `options.apiEndpointId` argument of `resumeAgentFromPersistence`.
+- App: `reduceTimelineEvent` in `app/src/types/stream.ts` returns the state unchanged for a `notification` carrying `apiEndpointModeMismatch` (tagged `COMPAT(apiEndpointGateway)`).
 
 ### 3. Contracts
 
-- Stamp at create and import with `active(provider)?.id`; absent means Official, including records written before the field existed. Resume never rewrites it.
-- Creation mode on resume: record by id → `record.apiEndpointId ?? null`; else the caller's value; else unknown → stamp the current mode and queue nothing.
-- The notice is queued after `registerSession` and appended by `hydrateTimelineFromProvider` after the history rows, so it lands at the end of the conversation, not before the replayed history. `appendTimelineItem` is fine: `registerSession` already touched `updatedAt` on this resume.
-- Not queued for `purpose: "history"` (viewing an archived session). Dropped when a deep-equal notice is already in the retained timeline: `closeAgent` keeps `timelineStore`, so an in-process re-resume would otherwise add a second copy. After a daemon restart the timeline is rebuilt and one notice appears again — "once per resume" by design; nothing extra is persisted.
-- `message` is the English fallback for old clients; the app renders `apiEndpointModeMismatch` through `describeApiEndpointModeMismatch` (`app/src/api-endpoints/internal/notices.ts`, exported from `@/api-endpoints`), which returns `null` for Official→Official and the app keeps `message`.
+- Resume does not compare or record any host mode; nothing is queued or appended after `hydrateTimelineFromProvider`.
+- A record file written by an older daemon with `apiEndpointId` still loads: `STORED_AGENT_SCHEMA` is a plain `z.object`, so the key is stripped on read and dropped on the next write. No migration.
+- A notice an older daemon already appended to a durable timeline (or a v0.15 host still sends) is not shown by the new app.
 
 ### 4. Validation & Error Matrix
 
-- Provider without endpoint support (`findProvider` misses) → `active` returns null, record has no field → no notice.
-- Created under an endpoint since deleted → `createdIn: { id, name: null }`, "…an API endpoint that has since been deleted…".
-- Record without a persistence handle → `ensureAgentLoaded` creates a new provider session with the same id; it is stamped with the current mode, no notice (a new session is not a continuation).
-- No `apiEndpointMode` injected (unit suites) → nothing stamped, nothing queued.
+- Record with `apiEndpointId` naming a deleted endpoint → loads, resumes, no notification, a prompt completes.
+- Timeline row with `apiEndpointModeMismatch` → dropped by the app reducer; other notifications render `message` as before.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: created on endpoint "Relay", switched to Official, daemon restarted → fetching the timeline resumes it and ends with one warning naming "Relay".
-- Base: created and resumed in the same mode → no notice; record keeps its field.
-- Bad: appending the notice right after `resumeSession` — history hydration then replays the provider log after it, and the warning sits above the conversation it is about.
+- Good: drop the producer, keep the optional wire field with a comment saying it is no longer sent, filter legacy rows at the one reducer that turns timeline items into stream items.
+- Base: old app against a new daemon → never receives the field, renders nothing new.
+- Bad: removing the field from the protocol schema — an old daemon's message then fails to parse in a new app.
 
 ### 6. Tests Required
 
-- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "an agent session remembers…"): record has `apiEndpointId` under an endpoint and none under Official or for Codex; restart → exactly one notice with the full `apiEndpointModeMismatch`, still one after a second fetch and after `agentManager.closeAgent` + fetch; old/Official record resumed under an endpoint → `createdIn: null`; deleted endpoint → `name: null`; archived agent fetched after restart → no notice.
-- Protocol (`messages.api-endpoint.test.ts`): notification parses with and without the field; snapshot entry with and without `activeApiEndpoint`.
-- App (`api-endpoints/internal/notices.test.ts`): every created/current combination → key and params; `undefined` and Official→Official → `null`.
+- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "a resumed agent session says nothing about the API endpoint mode"): a new record has no `apiEndpointId`; a record patched with the id of a deleted endpoint, after a restart, has no notification and finishes a prompt.
+- App (`types/stream.test.ts` "drops the API endpoint mode notice an older host left in the timeline"): hydrating such a row yields `[]`.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```ts
-// Localizing on the daemon, or a one-shot flag persisted on the record.
-item = { type: "notification", level: "warning", message: t("…") };
+// Stops parsing what an older daemon sends.
+z.object({ type: z.literal("notification"), level, message }).strict();
 ```
 
 #### Correct
 
 ```ts
-// Structured facts for the app, English for old clients, queued until history is in.
-const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provider, createdIn });
-if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
+// v0.16 起 daemon 不再发送；字段留着让老消息照常解析。
+apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
 ```
 
 ## Scenario: optional snapshot field filled by a best-effort probe

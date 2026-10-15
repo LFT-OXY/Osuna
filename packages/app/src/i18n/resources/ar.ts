@@ -252,18 +252,6 @@ export const ar: TranslationResources = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API {{created}}، لكن الوضع الحالي هو الرسمي. قد لا تتمكن من المتابعة.",
-      deletedToOfficial:
-        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API حُذفت لاحقًا، لكن الوضع الحالي هو الرسمي. قد لا تتمكن من المتابعة.",
-      officialToEndpoint:
-        "أُنشئت هذه الجلسة في الوضع الرسمي، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
-      endpointToEndpoint:
-        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API {{created}}، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
-      deletedToEndpoint:
-        "أُنشئت هذه الجلسة باستخدام نقطة نهاية API حُذفت لاحقًا، لكن الوضع الحالي هو نقطة نهاية API {{current}}. قد لا تتمكن من المتابعة.",
-    },
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
@@ -3828,7 +3816,7 @@ export const ar: TranslationResources = {
       cell: "{{day}} · {{tokens}} رمز",
     },
     planUsage: {
-      apiEndpointNote: "تستخدم نقطة نهاية API {{name}}. هذه الحصة لا تعكس الاستهلاك الفعلي.",
+      apiEndpointsOnNote: "تستخدم نقاط نهاية API. هذه الحصة لا تعكس الاستهلاك الفعلي.",
       title: "استهلاك الخطة",
       options: "خيارات استهلاك الخطة",
       refreshFailed: "تعذّر تحديث استهلاك الخطة",

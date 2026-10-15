@@ -45,15 +45,9 @@ only the last handle. Three rules make it safe without a migration.
 Add the field to `docs/data-model.md` in the same change, including the sentence
 that says what readers do when it is missing.
 
-### Adding a field that records host state at creation
+### Removing a field from the agent record
 
-`apiEndpointId` on the agent record (api-endpoint ticket 08) records the API
-endpoint active when the session was created. Unlike `providerSessionIds` it is
-set once and never updated.
-
-- **Absent is a real value.** Missing means Official for old and new records alike, so an Official session writes nothing; no `null`, no backfill.
-- **Every path that rebuilds a `ManagedAgent` carries it:** `registerSession` options (create, import, resume, reload), `dispatchStoredAgentState` for closed records, and `toStoredAgentRecord`. A path that forgets it silently turns the session into "Official" on the next persist.
-- The resume comparison and the notice it produces are in [RPC and Protocol](./rpc-and-protocol.md#scenario-a-one-off-timeline-notice-the-daemon-adds-on-resume).
+`STORED_AGENT_SCHEMA` (`agent-storage.ts`) is a plain `z.object`, so a key it no longer declares is stripped on read and disappears on the next write. Removing a field needs no migration: drop it from the schema, from `ManagedAgentBase`, from `toStoredAgentRecord`, and from every `registerSession` caller. The daemon E2E for the removal writes the old key into a record file and checks the agent still resumes (`apiEndpointId`, removed in api-endpoint-auto-switch ticket 11; see [RPC and Protocol](./rpc-and-protocol.md#scenario-retiring-a-timeline-notice-the-daemon-used-to-add)).
 
 ### Bringing a stored agent back is not activity
 
@@ -65,7 +59,7 @@ in `e9d32a17d`).
 - **Pass `restoring: true` to `registerSession`** from any path that brings a known agent back. `resumeAgentFromPersistence` and `reloadAgentSession` do; create and import do not. Without it registration calls `touchUpdatedAt`, the stamp is persisted, and workspace `statusEnteredAt` is re-derived from persisted `updatedAt` on the next daemon start, so the sidebar's "last used" is rewritten permanently.
 - **Carry attention in, do not let it default.** `ensureAgentLoaded` passes `{ ...extractTimestamps(record), attention: extractAttention(record) }`. A resume that omits `attention` starts with `{ requiresAttention: false }` and persists it: the chat drops out of Ready to review without the user opening it.
 - **Read a record's last-updated time with `resolveStoredAgentUpdatedAt(record)`** (`persistence-hooks.ts`), never `record.updatedAt` or `record.lastActivityAt` alone. Renaming, labelling, unarchiving, marking unread, and clearing attention move `updatedAt` on an unloaded agent without touching `lastActivityAt`. A payload built from the older of the two is dropped by the client (`acceptAgentDirectoryUpdate` rejects state that goes backwards), which is how an unread dot gets stuck.
-- Osuna's resume-by-handle path in `session.ts` resumes into a new id and passes only `apiEndpointId`. It has no stored timestamps or attention to carry, and `restoring: true` still applies to it through `resumeAgentFromPersistence`.
+- Osuna's resume-by-handle path in `session.ts` resumes into a new id with no options. It has no stored timestamps or attention to carry, and `restoring: true` still applies to it through `resumeAgentFromPersistence`.
 - Test: `agent-loading.test.ts` "resuming a stored agent keeps its unread flag and its last-activity time" asserts the stored record and the live agent after `ensureAgentLoaded`. A new resume path gets the same assertions.
 
 ### Gotcha: a cursor file that fails to parse replays everything

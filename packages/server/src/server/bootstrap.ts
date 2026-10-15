@@ -186,12 +186,7 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
-import type {
-  AgentClient,
-  AgentModelDefinition,
-  AgentProvider,
-  ApiEndpointModeSource,
-} from "./agent/agent-sdk-types.js";
+import type { AgentClient, AgentModelDefinition, AgentProvider } from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
   AgentSkillSelection,
@@ -991,10 +986,6 @@ export async function createPaseoDaemon(
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
     return apiEndpointService.activeModels(provider);
   }
-  const apiEndpointMode: ApiEndpointModeSource = {
-    active: (provider) => apiEndpointService.activeEndpoint(provider),
-    endpointName: (provider, endpointId) => apiEndpointService.endpointName(provider, endpointId),
-  };
   const agentProviderRuntime = await createAgentProviderRuntime({
     paseoHome: config.paseoHome,
     logger,
@@ -1007,7 +998,7 @@ export async function createPaseoDaemon(
       isDev: config.isDev === true,
       extraClients: config.agentClients,
       modelOverride: apiEndpointModelOverride,
-      activeApiEndpoint: apiEndpointMode.active,
+      activeApiEndpoint: (provider) => apiEndpointService.activeEndpoint(provider),
       apiEndpointModelGroups: (provider) => apiEndpointService.activeModelGroups(provider),
     },
   });
@@ -1038,7 +1029,6 @@ export async function createPaseoDaemon(
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     modelOverride: apiEndpointModelOverride,
-    apiEndpointMode,
     logger,
   });
   providerSnapshotManager.setCreateAgentsPredictor((provider, clientCapabilities) =>

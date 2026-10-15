@@ -2268,11 +2268,7 @@ describe("notification timeline items", () => {
     ]);
   });
 
-  it("keeps the API endpoint modes of a resumed session for localized rendering", () => {
-    const apiEndpointModeMismatch = {
-      createdIn: { id: "ep_1", name: "Relay" },
-      current: null,
-    };
+  it("drops the API endpoint mode notice an older host left in the timeline", () => {
     const state = hydrateStreamState(
       [
         {
@@ -2283,7 +2279,7 @@ describe("notification timeline items", () => {
               type: "notification",
               level: "warning",
               message: "This session was created with the API endpoint Relay",
-              apiEndpointModeMismatch,
+              apiEndpointModeMismatch: { createdIn: { id: "ep_1", name: "Relay" }, current: null },
             },
           },
           timestamp: new Date("2026-09-30T10:00:00.000Z"),
@@ -2292,9 +2288,7 @@ describe("notification timeline items", () => {
       { source: "canonical" },
     );
 
-    expect(state).toMatchObject([
-      { kind: "notification", level: "warning", apiEndpointModeMismatch },
-    ]);
+    expect(state).toEqual([]);
   });
 
   it("keeps repeated notifications with the same text in the same millisecond", () => {

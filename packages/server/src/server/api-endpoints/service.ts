@@ -317,13 +317,6 @@ export class ApiEndpointService {
     return endpoint ? { id: endpoint.id, name: endpoint.name } : null;
   }
 
-  /** 已删除的接口返回 null。 */
-  endpointName(provider: string, endpointId: string): string | null {
-    if (!findProvider(provider)) return null;
-    const state = this.readStateForSnapshot();
-    return (state && findEndpoint(state, endpointId)?.name) ?? null;
-  }
-
   /**
    * 总开关开着时，所有开着的接口的已选模型（按 id 去重），默认模型即该 Agent 的默认模型。
    * 官方模式、不支持的提供方或文件读不懂时返回 null，模型目录照旧。

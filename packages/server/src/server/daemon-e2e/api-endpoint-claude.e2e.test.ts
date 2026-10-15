@@ -661,7 +661,7 @@ describe("provider snapshot follows the Claude API endpoint mode", () => {
   });
 });
 
-describe("an agent session remembers the Claude API endpoint mode it was created in", () => {
+describe("a resumed agent session says nothing about the API endpoint mode", () => {
   let root: string;
   let daemon: TestPaseoDaemon | null;
   let client: DaemonClient | null;
@@ -715,16 +715,20 @@ describe("an agent session remembers the Claude API endpoint mode it was created
     return saved.endpoint.id;
   }
 
-  async function readAgentRecord(agentId: string): Promise<Record<string, unknown>> {
-    if (!daemon) throw new Error("Expected a running daemon");
-    const agentsDir = path.join(daemon.paseoHome, "agents");
+  // daemon 停着时也要能找到记录，所以按 PASEO_HOME 的固定位置找。
+  async function agentRecordPath(agentId: string): Promise<string> {
+    const agentsDir = path.join(root, ".paseo", "agents");
     const files = await readdir(agentsDir, { recursive: true });
     const file = files.find((candidate) => path.basename(candidate) === `${agentId}.json`);
     if (!file) throw new Error(`No record for ${agentId}`);
-    return JSON.parse(await readFile(path.join(agentsDir, file), "utf8"));
+    return path.join(agentsDir, file);
   }
 
-  async function modeNotices(active: DaemonClient, agentId: string) {
+  async function readAgentRecord(agentId: string): Promise<Record<string, unknown>> {
+    return JSON.parse(await readFile(await agentRecordPath(agentId), "utf8"));
+  }
+
+  async function notifications(active: DaemonClient, agentId: string) {
     const timeline = await active.fetchAgentTimeline(agentId, {
       direction: "tail",
       limit: 0,
@@ -735,109 +739,38 @@ describe("an agent session remembers the Claude API endpoint mode it was created
       .filter((item) => item.type === "notification");
   }
 
-  test("the record keeps the endpoint id; Official leaves the field out", async () => {
+  test("the record does not store which endpoint was on", async () => {
     const active = await startDaemon();
     const endpointId = await createEndpoint(active);
     expect(await active.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
-    const relayAgent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
-    expect(await active.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
-    const officialAgent = await active.createAgent({ provider: "claude", cwd, title: "Official" });
-    // Codex 没启用接口：它的会话也按「官方」记录。
-    const codexAgent = await active.createAgent({ provider: "codex", cwd, title: "Codex" });
+    const agent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
 
-    await expect
-      .poll(async () => (await readAgentRecord(relayAgent.id)).apiEndpointId)
-      .toBe(endpointId);
-    expect(await readAgentRecord(officialAgent.id)).not.toHaveProperty("apiEndpointId");
-    expect(await readAgentRecord(codexAgent.id)).not.toHaveProperty("apiEndpointId");
+    await expect.poll(async () => (await readAgentRecord(agent.id)).id).toBe(agent.id);
+    expect(await readAgentRecord(agent.id)).not.toHaveProperty("apiEndpointId");
   });
 
-  test("resuming a session created with an endpoint while on Official shows one notice", async () => {
+  test("an old record naming a deleted endpoint resumes without a notice and keeps working", async () => {
     let active = await startDaemon();
     const endpointId = await createEndpoint(active);
     expect(await active.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
     const agent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
-    expect(await active.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
-    // 还在内存里的会话不算恢复，不提示。
-    expect(await modeNotices(active, agent.id)).toEqual([]);
-    await stopDaemon();
-
-    active = await startDaemon();
-    const expected = [
-      {
-        type: "notification",
-        level: "warning",
-        message:
-          'This session was created with the API endpoint "Relay", but the current mode is Official. It may not be able to continue.',
-        apiEndpointModeMismatch: { createdIn: { id: endpointId, name: "Relay" }, current: null },
-      },
-    ];
-    expect(await modeNotices(active, agent.id)).toEqual(expected);
-    // 同一次恢复里再取时间线，不再追加。
-    expect(await modeNotices(active, agent.id)).toEqual(expected);
-    // 关闭后在同一进程里再恢复：时间线原样保留，不重复提示。
-    await daemon?.daemon.agentManager.closeAgent(agent.id);
-    expect(await modeNotices(active, agent.id)).toEqual(expected);
-    // 恢复不改写创建时的模式。
-    expect((await readAgentRecord(agent.id)).apiEndpointId).toBe(endpointId);
-  });
-
-  test("an old record without the field counts as Official; the same mode shows nothing", async () => {
-    let active = await startDaemon();
-    const endpointId = await createEndpoint(active);
-    const officialAgent = await active.createAgent({ provider: "claude", cwd, title: "Official" });
-    expect(await active.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
-    const relayAgent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
-    // 官方模式写出的记录和字段出现之前的老记录一样，都没有 apiEndpointId。
-    await expect
-      .poll(async () => (await readAgentRecord(relayAgent.id)).apiEndpointId)
-      .toBe(endpointId);
-    expect(await readAgentRecord(officialAgent.id)).not.toHaveProperty("apiEndpointId");
-    await stopDaemon();
-
-    active = await startDaemon();
-    expect(await modeNotices(active, officialAgent.id)).toEqual([
-      {
-        type: "notification",
-        level: "warning",
-        message:
-          'This session was created on Official, but the current mode is the API endpoint "Relay". It may not be able to continue.',
-        apiEndpointModeMismatch: { createdIn: null, current: { id: endpointId, name: "Relay" } },
-      },
-    ]);
-    expect(await modeNotices(active, relayAgent.id)).toEqual([]);
-  });
-
-  test("viewing the history of an archived session shows no notice", async () => {
-    let active = await startDaemon();
-    const endpointId = await createEndpoint(active);
-    expect(await active.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
-    const agent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
-    expect(await active.apiEndpointSetActive("claude", null)).toMatchObject({ error: null });
-    await active.archiveAgent(agent.id);
-    await stopDaemon();
-
-    active = await startDaemon();
-    expect(await modeNotices(active, agent.id)).toEqual([]);
-  });
-
-  test("a deleted endpoint is reported without a name", async () => {
-    let active = await startDaemon();
-    const endpointId = await createEndpoint(active);
-    expect(await active.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
-    const agent = await active.createAgent({ provider: "claude", cwd, title: "Relay" });
+    await expect.poll(async () => (await readAgentRecord(agent.id)).id).toBe(agent.id);
     expect(await active.apiEndpointDelete("claude", endpointId)).toMatchObject({ error: null });
     await stopDaemon();
 
+    // 老版本写下的记录带着创建时的接口 id。
+    const record = await readAgentRecord(agent.id);
+    await writeFile(
+      await agentRecordPath(agent.id),
+      JSON.stringify({ ...record, apiEndpointId: endpointId }),
+    );
+
     active = await startDaemon();
-    expect(await modeNotices(active, agent.id)).toEqual([
-      {
-        type: "notification",
-        level: "warning",
-        message:
-          "This session was created with an API endpoint that has since been deleted, but the current mode is Official. It may not be able to continue.",
-        apiEndpointModeMismatch: { createdIn: { id: endpointId, name: null }, current: null },
-      },
-    ]);
+    expect(await notifications(active, agent.id)).toEqual([]);
+    await active.sendMessage(agent.id, "hello again");
+    const finished = await active.waitForFinish(agent.id, 30000);
+    expect(finished.status).toBe("idle");
+    expect(finished.final?.lastError).toBeUndefined();
+    expect(await notifications(active, agent.id)).toEqual([]);
   });
 });

@@ -254,18 +254,6 @@ export const ja: TranslationResources = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は公式です。続行できない可能性があります。",
-      deletedToOfficial:
-        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は公式です。続行できない可能性があります。",
-      officialToEndpoint:
-        "このセッションは公式で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
-      endpointToEndpoint:
-        "このセッションは API エンドポイント {{created}} で作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
-      deletedToEndpoint:
-        "このセッションは削除済みの API エンドポイントで作成されましたが、現在は API エンドポイント {{current}} です。続行できない可能性があります。",
-    },
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
@@ -3869,8 +3857,7 @@ export const ja: TranslationResources = {
       cell: "{{day}} · {{tokens}} トークン",
     },
     planUsage: {
-      apiEndpointNote:
-        "API エンドポイント {{name}} を使用中です。この枠は実際の消費量を表しません。",
+      apiEndpointsOnNote: "API エンドポイントを使用中です。この枠は実際の消費量を表しません。",
       title: "プラン使用量",
       options: "プラン使用量のオプション",
       refreshFailed: "プラン使用量を更新できません",

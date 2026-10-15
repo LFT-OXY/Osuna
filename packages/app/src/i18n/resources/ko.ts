@@ -252,18 +252,6 @@ export const ko: TranslationResources = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "이 세션은 API 엔드포인트 {{created}}에서 만들어졌지만 현재는 공식입니다. 계속할 수 없을 수 있습니다.",
-      deletedToOfficial:
-        "이 세션은 삭제된 API 엔드포인트에서 만들어졌지만 현재는 공식입니다. 계속할 수 없을 수 있습니다.",
-      officialToEndpoint:
-        "이 세션은 공식에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
-      endpointToEndpoint:
-        "이 세션은 API 엔드포인트 {{created}}에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
-      deletedToEndpoint:
-        "이 세션은 삭제된 API 엔드포인트에서 만들어졌지만 현재는 API 엔드포인트 {{current}}입니다. 계속할 수 없을 수 있습니다.",
-    },
     empty: "이 에이전트와 대화를 시작하세요...",
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
@@ -3848,8 +3836,8 @@ export const ko: TranslationResources = {
       cell: "{{day}} · {{tokens}} 토큰",
     },
     planUsage: {
-      apiEndpointNote:
-        "API 엔드포인트 {{name}}을(를) 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
+      apiEndpointsOnNote:
+        "API 엔드포인트를 사용 중입니다. 이 한도는 실제 사용량을 나타내지 않습니다.",
       title: "플랜 사용량",
       options: "플랜 사용량 옵션",
       refreshFailed: "플랜 사용량을 새로고침할 수 없습니다",

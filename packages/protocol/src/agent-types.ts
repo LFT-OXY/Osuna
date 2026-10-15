@@ -402,6 +402,7 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
+      // v0.16 起 daemon 不再发送；字段留着让老消息照常解析。
       apiEndpointModeMismatch?: ApiEndpointModeMismatch;
     }
   | CompactionTimelineItem

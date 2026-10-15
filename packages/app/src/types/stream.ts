@@ -5,7 +5,6 @@ import type {
   ToolCallDetail,
 } from "@getpaseo/protocol/agent-types";
 import { timelineItemIdentity } from "@getpaseo/protocol/timeline-identity";
-import type { ApiEndpointModeMismatch } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { AgentAttachment, AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { extractTaskEntriesFromToolCall } from "../utils/tool-call-parsers";
@@ -787,8 +786,6 @@ export interface NotificationItem {
   timestamp: Date;
   level: NotificationLevel;
   message: string;
-  // 恢复的会话创建时的模式与当前不同；有它时按它本地化，message 是 daemon 的英文原文。
-  apiEndpointModeMismatch?: ApiEndpointModeMismatch;
 }
 
 export interface CompactionItem {
@@ -1560,6 +1557,9 @@ function reduceTimelineEvent(
       return finalizeActiveThoughts(appendNotification(state, notification));
     }
     case "notification": {
+      // COMPAT(apiEndpointGateway): added in v0.16.0, remove after 2027-04-14.
+      // 旧主机恢复会话时写进时间线的模式提示；会话不再记创建时的模式，这条提示不再显示。
+      if (item.apiEndpointModeMismatch) return state;
       const notification: NotificationItem = {
         kind: "notification",
         sourceType: "notification",
@@ -1568,7 +1568,6 @@ function reduceTimelineEvent(
         timestamp,
         level: item.level,
         message: item.message,
-        apiEndpointModeMismatch: item.apiEndpointModeMismatch,
       };
       return finalizeActiveThoughts(appendNotification(state, notification));
     }

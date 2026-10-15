@@ -797,7 +797,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     type: z.literal("notification"),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
-    // 有它时 App 按它本地化，message 是给老客户端的英文原文。
+    // v0.16 起 daemon 不再发送（会话不再记创建时的模式）；字段留着让老消息照常解析。
     apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
   }),
   z.object({

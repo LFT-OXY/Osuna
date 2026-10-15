@@ -248,18 +248,6 @@ export const en = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "This session was created with the API endpoint {{created}}, but the current mode is Official. It may not be able to continue.",
-      deletedToOfficial:
-        "This session was created with an API endpoint that has since been deleted, but the current mode is Official. It may not be able to continue.",
-      officialToEndpoint:
-        "This session was created on Official, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
-      endpointToEndpoint:
-        "This session was created with the API endpoint {{created}}, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
-      deletedToEndpoint:
-        "This session was created with an API endpoint that has since been deleted, but the current mode is the API endpoint {{current}}. It may not be able to continue.",
-    },
     empty: "Start chatting with this agent...",
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",
@@ -3959,7 +3947,7 @@ export const en = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
-      apiEndpointNote: "Using the API endpoint {{name}}. This quota doesn't reflect actual usage.",
+      apiEndpointsOnNote: "Using API endpoints. This quota doesn't reflect actual usage.",
       title: "Plan usage",
       options: "Plan usage options",
       refreshFailed: "Unable to refresh plan usage",

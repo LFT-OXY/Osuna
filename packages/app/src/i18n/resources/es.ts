@@ -255,18 +255,6 @@ export const es: TranslationResources = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "Esta sesión se creó con el endpoint de API {{created}}, pero el modo actual es Oficial. Es posible que no pueda continuar.",
-      deletedToOfficial:
-        "Esta sesión se creó con un endpoint de API que ya se eliminó, pero el modo actual es Oficial. Es posible que no pueda continuar.",
-      officialToEndpoint:
-        "Esta sesión se creó en Oficial, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
-      endpointToEndpoint:
-        "Esta sesión se creó con el endpoint de API {{created}}, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
-      deletedToEndpoint:
-        "Esta sesión se creó con un endpoint de API que ya se eliminó, pero el modo actual es el endpoint de API {{current}}. Es posible que no pueda continuar.",
-    },
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",
@@ -3911,7 +3899,7 @@ export const es: TranslationResources = {
       cell: "{{day}} · {{tokens}} tokens",
     },
     planUsage: {
-      apiEndpointNote: "Usando el endpoint de API {{name}}. Esta cuota no refleja el consumo real.",
+      apiEndpointsOnNote: "Usando endpoints de API. Esta cuota no refleja el consumo real.",
       title: "Uso del plan",
       options: "Opciones de uso del plan",
       refreshFailed: "No se pudo actualizar el uso del plan",
