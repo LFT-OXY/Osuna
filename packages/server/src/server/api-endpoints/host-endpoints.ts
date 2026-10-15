@@ -9,6 +9,7 @@ import {
   type ApiEndpointState,
   type StoredApiEndpoint,
 } from "./store.js";
+import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 
 /*
  * 主机级接口的规则：都是对 endpoints.json 内容的纯计算，读写与 CLI 配置改写在 service 里。
@@ -20,6 +21,15 @@ export const AGENT_REQUEST_FORMAT: Record<ApiEndpointProvider, ApiEndpointReques
   claude: "anthropic_messages",
   codex: "openai_responses",
 };
+
+/**
+ * 老格式的 baseUrl 落进该 Agent 自己的格式时的地址。0.15 存的 Codex 地址可以不带 /v1，
+ * 写 config.toml 时才补上；中转站直接按存的地址拼路径，所以迁移和老 save 都在这里补。
+ */
+export function legacyAgentBaseUrl(provider: ApiEndpointProvider, url: string): string {
+  if (AGENT_REQUEST_FORMAT[provider] !== "openai_responses") return url;
+  return normalizeOpenAICompatibleBaseUrl(url) ?? url;
+}
 
 /** 从名称生成主机内唯一的标识：小写字母、数字、横杠；生成不出来用 api-N。 */
 export function generateEndpointSlug(name: string, taken: ReadonlySet<string>): string {

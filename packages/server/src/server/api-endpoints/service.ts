@@ -54,6 +54,7 @@ import {
   agentTargetEndpoint,
   findEndpoint,
   generateEndpointSlug,
+  legacyAgentBaseUrl,
   projectedBaseUrl,
   projectedDefaultModelId,
   settleAgentSettings,
@@ -1506,7 +1507,7 @@ function validateLegacyFields(
   if (input.baseUrl === undefined || input.defaultModelId === undefined) {
     throw new ApiEndpointRequestError("invalid_input", "Base URL is required");
   }
-  const url = normalizeBaseUrl(input.baseUrl);
+  const url = legacyAgentBaseUrl(provider, normalizeBaseUrl(input.baseUrl));
   const format = AGENT_REQUEST_FORMAT[provider];
   const others = (existing?.baseUrls ?? []).filter((entry) => entry.format !== format);
   const baseUrls = API_ENDPOINT_REQUEST_FORMATS.flatMap((candidate) => {
