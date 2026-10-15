@@ -7,7 +7,11 @@ import {
   ApiEndpointModelMappingSchema,
   type ApiEndpointAgentSettings,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { AGENT_REQUEST_FORMAT, generateEndpointSlug } from "./host-endpoints.js";
+import {
+  AGENT_REQUEST_FORMAT,
+  generateEndpointSlug,
+  legacyAgentBaseUrl,
+} from "./host-endpoints.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
@@ -320,7 +324,12 @@ function upgradeLegacyFile(file: LegacyEndpointsFile): ApiEndpointState {
       id: legacy.id,
       slug,
       name: legacy.name,
-      baseUrls: [{ format: AGENT_REQUEST_FORMAT[legacy.provider], url: legacy.baseUrl }],
+      baseUrls: [
+        {
+          format: AGENT_REQUEST_FORMAT[legacy.provider],
+          url: legacyAgentBaseUrl(legacy.provider, legacy.baseUrl),
+        },
+      ],
       models: legacy.models,
       ...(legacy.modelMapping ? { modelMapping: legacy.modelMapping } : {}),
       enabled: activeIds.has(legacy.id),

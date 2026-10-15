@@ -170,7 +170,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
       {
         id: "ep_d",
         enabled: true,
-        baseUrls: [{ format: "openai_responses", url: "https://d.example" }],
+        // 0.15 的 Codex 地址可以不带 /v1，写 config.toml 时才补；中转站按带 /v1 的地址拼路径。
+        baseUrls: [{ format: "openai_responses", url: "https://d.example/v1" }],
       },
     ]);
     expect(claude.endpoints[0]).toMatchObject({
@@ -557,6 +558,19 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
         { format: "anthropic_messages", url: "https://relay.example" },
         { format: "openai_responses", url: "https://relay.example/v1" },
       ],
+    });
+
+    const bareFromCodex = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Bare",
+      baseUrl: "https://bare.example",
+      apiKey: "sk-bare",
+      models: [{ id: "b1" }],
+      defaultModelId: "b1",
+    });
+    expect(bareFromCodex.endpoint).toMatchObject({
+      baseUrl: "https://bare.example/v1",
+      baseUrls: [{ format: "openai_responses", url: "https://bare.example/v1" }],
     });
 
     // 老客户端新建的接口要等 set_active 才开，和以前「保存不启用」一样。
