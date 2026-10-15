@@ -9,7 +9,7 @@
 - [x] ADR 0007 落盘，内容与 `adr-draft.md` 一致，无中文审稿提示残留；ADR 0004 标注与删改到位，保留的规则在 0007 里只链接不重述。
 - [x] `docs/custom-providers.md` 三处、`docs/glossary.md` 词条、`docs/data-model.md` 两处、`docs/protocol-compatibility.md`（如有清单）按 `map-issues/09-adr-and-doc-rewrites.md` 的表逐项改完，表中每行在票内勾掉。
 - [x] `THIRD_PARTY_NOTICES` 列出全部借鉴文件、搬来的夹具目录与厂商图标目录，与仓库实际一致。
-- [ ] `npm run format:files` 跑过改动的文档；`npm run typecheck`、`npm run lint` 通过；CI 全绿（Nix 两项常红不计）。
+- [x] `npm run format:files` 跑过改动的文档；`npm run typecheck`、`npm run lint` 通过；CI 全绿（Nix 两项常红不计）。手动触发的 CI 运行 38672543465 共 19 项全部通过。
 
 ## 09 票文档清单逐项
 
