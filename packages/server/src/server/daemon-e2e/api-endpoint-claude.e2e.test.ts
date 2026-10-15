@@ -156,6 +156,13 @@ describe("Claude API endpoint over the daemon RPC", () => {
         ANTHROPIC_API_KEY: "",
       },
       model: "relay/sonnet",
+      // 终端 /model 列出这家的已选模型：`标识/模型名`、模型名、接口名。
+      modelPicker: {
+        options: [
+          { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
+          { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
+        ],
+      },
     });
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
 
@@ -311,6 +318,91 @@ describe("Claude API endpoint over the daemon RPC", () => {
       defaultModelId: "relay/haiku",
     });
     expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("relay/haiku");
+  });
+
+  test("modelPicker follows the selected models and the endpoint switches; Official removes it", async () => {
+    const relayId = await createEndpoint();
+    const backup = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Backup",
+      baseUrl: "https://backup.example/v1",
+      apiKey: "sk-backup",
+      models: [{ id: "gpt-6" }],
+      defaultModelId: "gpt-6",
+    });
+    const backupId = backup.endpoint?.id;
+    if (!backupId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("claude", relayId);
+    await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: true });
+    const picker = async () => JSON.parse(await readFile(settingsPath, "utf8")).modelPicker;
+
+    expect(await picker()).toEqual({
+      options: [
+        { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
+        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
+        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+      ],
+    });
+
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: relayId,
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "relay/haiku" }],
+      defaultModelId: "relay/haiku",
+    });
+    expect(await picker()).toEqual({
+      options: [
+        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
+        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+      ],
+    });
+
+    await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: false });
+    expect(await picker()).toEqual({
+      options: [{ model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" }],
+    });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("a modelPicker the user wrote stays as it is while switched and after Official", async () => {
+    const withPicker = USER_SETTINGS.replace(
+      `  "enabledPlugins": {`,
+      `  "modelPicker": {
+    "options": [
+      {
+        "model": "opus",
+        "label": "Mine"
+      }
+    ]
+  },
+  "enabledPlugins": {`,
+    );
+    await writeFile(settingsPath, withPicker);
+    const endpointId = await createEndpoint();
+
+    await client.apiEndpointSetActive("claude", endpointId);
+    const switched = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(switched.modelPicker).toEqual({ options: [{ model: "opus", label: "Mine" }] });
+    expect(switched.model).toBe("relay/sonnet");
+
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "relay/haiku" }],
+      defaultModelId: "relay/haiku",
+    });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).modelPicker).toEqual({
+      options: [{ model: "opus", label: "Mine" }],
+    });
+
+    await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(withPicker);
   });
 
   test("deleting the active endpoint switches back to Official first", async () => {

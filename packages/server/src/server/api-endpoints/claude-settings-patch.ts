@@ -1,3 +1,6 @@
+// modelPicker 的归属规则移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { applyEdits, modify, type FormattingOptions, type JSONPath } from "jsonc-parser";
 import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -13,6 +16,8 @@ import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-sc
  *   接管时有就记下并删掉（档位由中转站按各家映射翻译），切回官方时放回；
  * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，第三方接口不支持，
  *   Claude Code 没有关它的环境变量，只能用权限规则。用户自己写的同名规则不归 Osuna 所有。
+ * - 顶层 modelPicker：终端 /model 列出各家接口的已选模型（Claude Code v2.1.242 起，只读用户设置）。
+ *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
  */
 
 /** 接管期间不能留在 env 里的变量。 */
@@ -38,6 +43,13 @@ const OriginalFileSchema = z.discriminatedUnion("kind", [
 ]);
 type OriginalFile = z.infer<typeof OriginalFileSchema>;
 
+const ModelPickerOptionSchema = z.object({
+  model: z.string(),
+  label: z.string(),
+  description: z.string(),
+});
+export type ClaudeModelPickerOption = z.infer<typeof ModelPickerOptionSchema>;
+
 /** 接管记录：每个负责的键接管前的原值，以及上次写入的值（检测外部改动用）。 */
 export const ClaudeSettingsTakeoverSchema = z.object({
   originalFile: OriginalFileSchema,
@@ -55,6 +67,9 @@ export const ClaudeSettingsTakeoverSchema = z.object({
     permissionsCreated: z.boolean(),
     denyCreated: z.boolean(),
   }),
+  // 文件里现在的 modelPicker 是 Osuna 写的才有 written；为 null 时文件里的（如果有）是用户的。
+  // COMPAT(claudeModelPickerRecord): 工单 17 以前的记录没有它，按没写过处理；remove after 2027-04-15.
+  modelPicker: z.object({ written: z.array(ModelPickerOptionSchema).nullable() }).optional(),
 });
 export type ClaudeSettingsTakeover = z.infer<typeof ClaudeSettingsTakeoverSchema>;
 
@@ -69,11 +84,12 @@ export type ClaudeSettingsRestoreResult =
   | { kind: "missing" }
   | { kind: "unparsable"; message: string };
 
-/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型。 */
+/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型。 */
 export interface ClaudeGatewayWiring {
   baseUrl: string;
   token: string;
   model: string;
+  modelPicker: ClaudeModelPickerOption[];
 }
 
 /**
@@ -117,6 +133,15 @@ export function applyClaudeApiEndpoint(input: {
   const webSearchDeny = ensureWebSearchDenied(text, parsed.settings, input.takeover, formatting);
   text = webSearchDeny.text;
 
+  const modelPicker = writeModelPicker({
+    text,
+    before: parsed.settings,
+    options: input.wiring.modelPicker,
+    takeover: input.takeover,
+    formatting,
+  });
+  text = modelPicker.text;
+
   return {
     kind: "patched",
     text,
@@ -126,7 +151,37 @@ export function applyClaudeApiEndpoint(input: {
       model,
       envCreated: input.takeover?.envCreated ?? envObject === undefined,
       webSearchDeny: webSearchDeny.record,
+      modelPicker: modelPicker.record,
     },
+  };
+}
+
+interface ModelPickerPatch {
+  text: string;
+  record: NonNullable<ClaudeSettingsTakeover["modelPicker"]>;
+}
+
+/** 上次是 Osuna 写的就覆盖或删掉；文件里有一份却不是 Osuna 写的，是用户的，原样留着。 */
+function writeModelPicker(input: {
+  text: string;
+  before: ParsedSettings;
+  options: ClaudeModelPickerOption[];
+  takeover: ClaudeSettingsTakeover | null;
+  formatting: FormattingOptions;
+}): ModelPickerPatch {
+  const { text, options, formatting } = input;
+  const isOurs = Boolean(input.takeover?.modelPicker?.written);
+  const hasPicker = Object.hasOwn(input.before, "modelPicker");
+  if (hasPicker && !isOurs) return { text, record: { written: null } };
+  if (options.length === 0) {
+    return {
+      text: hasPicker ? edit(text, ["modelPicker"], undefined, formatting) : text,
+      record: { written: null },
+    };
+  }
+  return {
+    text: edit(text, ["modelPicker"], { options }, formatting),
+    record: { written: options },
   };
 }
 
@@ -177,6 +232,9 @@ export function restoreClaudeOfficial(input: {
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
   }
+  if (input.takeover.modelPicker?.written) {
+    text = edit(text, ["modelPicker"], undefined, formatting);
+  }
 
   const { webSearchDeny } = input.takeover;
   if (webSearchDeny.added) {
@@ -226,21 +284,27 @@ export function inspectClaudeSettings(input: {
     if (parsed.kind === "unparsable") return parsed;
     settings = parsed.settings;
   }
-  const modifiedKeys: string[] = [];
-  for (const [key, record] of Object.entries(input.takeover?.env ?? {})) {
-    if ((settings.env?.[key] ?? null) !== record.written) modifiedKeys.push(`env.${key}`);
-  }
-  const model = input.takeover?.model;
-  if (model && settings.model !== model.written) modifiedKeys.push("model");
-  if (
-    input.takeover?.webSearchDeny.added &&
-    !settings.permissions?.deny?.includes(WEB_SEARCH_RULE)
-  ) {
-    modifiedKeys.push(WEB_SEARCH_DENY_LABEL);
-  }
+  const modifiedKeys = input.takeover ? modifiedOwnedKeys(settings, input.takeover) : [];
   const rawBaseUrl = settings.env?.ANTHROPIC_BASE_URL;
   const baseUrl = typeof rawBaseUrl === "string" ? rawBaseUrl.trim() : "";
   return { kind: "parsed", modifiedKeys, baseUrl: baseUrl === "" ? null : baseUrl };
+}
+
+function modifiedOwnedKeys(settings: ParsedSettings, takeover: ClaudeSettingsTakeover): string[] {
+  const modifiedKeys: string[] = [];
+  for (const [key, record] of Object.entries(takeover.env)) {
+    if ((settings.env?.[key] ?? null) !== record.written) modifiedKeys.push(`env.${key}`);
+  }
+  if (takeover.model && settings.model !== takeover.model.written) modifiedKeys.push("model");
+  const pickerWritten = takeover.modelPicker?.written;
+  const isPickerChanged =
+    pickerWritten != null &&
+    JSON.stringify(settings.modelPicker) !== JSON.stringify({ options: pickerWritten });
+  if (isPickerChanged) modifiedKeys.push("modelPicker");
+  if (takeover.webSearchDeny.added && !settings.permissions?.deny?.includes(WEB_SEARCH_RULE)) {
+    modifiedKeys.push(WEB_SEARCH_DENY_LABEL);
+  }
+  return modifiedKeys;
 }
 
 function classifyOriginalFile(text: string | null): OriginalFile {
@@ -255,6 +319,7 @@ function classifyOriginalFile(text: string | null): OriginalFile {
 interface ParsedSettings {
   env?: Record<string, unknown>;
   model?: unknown;
+  modelPicker?: unknown;
   permissions?: { deny?: unknown[] };
 }
 

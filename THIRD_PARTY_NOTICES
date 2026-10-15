@@ -75,6 +75,12 @@ smallest request) follows magpie's internal/provider/detect.go and test.go:
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
 
+Who owns the modelPicker in Claude Code's settings.json (the user's is left
+alone; magpie's own is rewritten, or dropped when it has no rows) follows
+writePicker and dropPicker in magpie's internal/agent/claude.go:
+
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+
 The settings page's model families (which model name prefix belongs to which
 vendor) follow magpie's internal/agent/icons.go, and the vendor logos are
 magpie's internal/gui/assets/icons/ (claude-color, openai, gemini-color,

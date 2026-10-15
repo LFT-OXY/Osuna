@@ -29,6 +29,7 @@ import {
   inspectClaudeSettings,
   restoreClaudeOfficial,
   type ClaudeGatewayWiring,
+  type ClaudeModelPickerOption,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 import {
@@ -618,7 +619,12 @@ export class ApiEndpointService {
       return;
     }
     const written = this.writtenGateway(provider);
-    if (written?.url === url && written.token === wiring.token) return;
+    // COMPAT(claudeModelPickerRecord): added after v0.15.0, remove after 2027-04-15.
+    // 工单 17 以前的接管记录没有 modelPicker：补写一次，终端 /model 才列出接口模型。
+    const isPickerUnrecorded =
+      provider === "claude" && this.store.readClaudeTakeover().takeover?.modelPicker === undefined;
+    const isUpToDate = written?.url === url && written.token === wiring.token;
+    if (isUpToDate && !isPickerUnrecorded) return;
     this.syncCli(provider, wiring);
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
@@ -657,7 +663,12 @@ export class ApiEndpointService {
     if (baseUrl === null) throw this.gatewayError();
     // nextGatewayTokens 给每个开着的 Agent 都发了口令。
     if (token === undefined) throw new Error(`No gateway token for ${provider}`);
-    return { baseUrl, token, model: agent.defaultModelId };
+    return {
+      baseUrl,
+      token,
+      model: agent.defaultModelId,
+      modelPicker: cliModelPicker(state, provider),
+    };
   }
 
   /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
@@ -672,6 +683,7 @@ export class ApiEndpointService {
       this.gatewayUrlFor(provider),
       tokens[provider] ?? null,
       agent.defaultModelId,
+      cliModelPicker(state, provider),
     ]);
   }
 
@@ -1259,6 +1271,24 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
       group.models.map((entry) => [entry.id, entry.model.label]),
     ]),
   ]);
+}
+
+/**
+ * Claude Code 终端 /model 里的接口模型：与聊天模型选择器同样的分组和顺序，每行直达那一家。
+ * Codex 的模型列表在单独的目录文件里，不进 config.toml。
+ */
+function cliModelPicker(
+  state: ApiEndpointState,
+  provider: ApiEndpointProvider,
+): ClaudeModelPickerOption[] {
+  if (provider !== "claude") return [];
+  return endpointModelGroups(state).flatMap((group) =>
+    group.models.map(({ id, model }) => ({
+      model: id,
+      label: model.label ?? model.id,
+      description: group.endpoint.name,
+    })),
+  );
 }
 
 /** 打开总开关后的设置；没有可用模型或指定的默认模型不可用时拒绝。 */

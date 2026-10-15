@@ -2157,6 +2157,48 @@ describe("the CLI configs follow the gateway across daemon starts", () => {
     expect(await tokens(home)).toEqual(tokensBefore);
   });
 
+  test("a takeover from before modelPicker was written gets it on start, and nothing else changes", async () => {
+    const home = await prepareHome();
+    const first = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      cleanup: false,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    const client = await connect(`ws://127.0.0.1:${first.port}/ws`);
+    await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: "https://a.example" }],
+      apiKey: KEY_A,
+      models: [{ id: "kimi-k2" }],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const settingsBefore = await readFile(home.settingsPath, "utf8");
+    await client.close();
+    await first.close();
+
+    // 工单 17 以前的样子：settings.json 与接管记录里都没有 modelPicker。
+    const settings = JSON.parse(settingsBefore);
+    expect(settings.modelPicker).toEqual({
+      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+    });
+    delete settings.modelPicker;
+    await writeFile(home.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+    const recordPath = path.join(home.endpointsDir, "takeover-claude.json");
+    const record = JSON.parse(await readFile(recordPath, "utf8"));
+    delete record.takeover.modelPicker;
+    await writeFile(recordPath, JSON.stringify(record, null, 2));
+
+    const second = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      listenPort: first.port,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(second);
+
+    expect(await readFile(home.settingsPath, "utf8")).toBe(settingsBefore);
+  });
+
   test("agents that were on before the gateway existed get a token and point at the gateway on start", async () => {
     // 旧数据换算来的：总开关开着，却没有口令，CLI 配置也还没指向中转站。
     const home = await prepareHome({
@@ -2185,6 +2227,9 @@ describe("the CLI configs follow the gateway across daemon starts", () => {
       env: { ANTHROPIC_BASE_URL: gateway, ANTHROPIC_AUTH_TOKEN: claude, ANTHROPIC_API_KEY: "" },
       permissions: { deny: ["WebSearch"] },
       model: "kimi-k2",
+      modelPicker: {
+        options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+      },
     });
     const config = await readFile(home.configPath, "utf8");
     expect(config).toContain(`base_url = "${gateway}/v1"`);

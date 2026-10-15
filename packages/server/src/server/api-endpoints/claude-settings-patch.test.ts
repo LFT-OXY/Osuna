@@ -10,7 +10,14 @@ const GATEWAY = {
   baseUrl: "http://127.0.0.1:6767/api-endpoint-gateway",
   token: "gw-token",
   model: "kimi-k2",
+  modelPicker: [],
 };
+
+// 两家接口各一个已选模型：/model 里的两行。
+const PICKER = [
+  { model: "relay/kimi-k2", label: "kimi-k2", description: "Relay" },
+  { model: "backup/gpt-6", label: "GPT 6", description: "Backup" },
+];
 
 // Claude Code 与终端 hooks 安装器都按 JSON.stringify(…, 2) 写这份文件，这是最常见的形状。
 const USER_SETTINGS = `{
@@ -47,6 +54,16 @@ const USER_SETTINGS = `{
 
 function apply(text: string | null, takeover: ClaudeSettingsTakeover | null = null) {
   const result = applyClaudeApiEndpoint({ text, wiring: GATEWAY, takeover });
+  if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+  return result;
+}
+
+function applyPicker(
+  text: string | null,
+  modelPicker: typeof PICKER,
+  takeover: ClaudeSettingsTakeover | null = null,
+) {
+  const result = applyClaudeApiEndpoint({ text, wiring: { ...GATEWAY, modelPicker }, takeover });
   if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
   return result;
 }
@@ -121,6 +138,7 @@ describe("applyClaudeApiEndpoint", () => {
       model: { original: { present: false }, written: "kimi-k2" },
       envCreated: true,
       webSearchDeny: { added: true, permissionsCreated: true, denyCreated: true },
+      modelPicker: { written: null },
     });
   });
 
@@ -189,7 +207,12 @@ describe("applyClaudeApiEndpoint", () => {
     const first = apply(handWritten);
     const second = applyClaudeApiEndpoint({
       text: first.text,
-      wiring: { baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway", token: "t2", model: "glm" },
+      wiring: {
+        baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway",
+        token: "t2",
+        model: "glm",
+        modelPicker: [],
+      },
       takeover: first.takeover,
     });
     if (second.kind !== "patched") throw new Error("expected patch");
@@ -280,6 +303,91 @@ describe("applyClaudeApiEndpoint", () => {
     const { text } = apply(fourSpaces);
     expect(text).toContain(`\n    "env": {\n        "ANTHROPIC_BASE_URL"`);
     expect(text.startsWith(`{\n    "theme": "dark",\n`)).toBe(true);
+  });
+
+  it("lists every endpoint model in modelPicker and leaves the rest of the file alone", () => {
+    const { text, takeover } = applyPicker('{\n  "theme": "dark"\n}\n', PICKER);
+
+    expect(text).toBe(`{
+  "theme": "dark",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:6767/api-endpoint-gateway",
+    "ANTHROPIC_AUTH_TOKEN": "gw-token",
+    "ANTHROPIC_API_KEY": ""
+  },
+  "model": "kimi-k2",
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  },
+  "modelPicker": {
+    "options": [
+      {
+        "model": "relay/kimi-k2",
+        "label": "kimi-k2",
+        "description": "Relay"
+      },
+      {
+        "model": "backup/gpt-6",
+        "label": "GPT 6",
+        "description": "Backup"
+      }
+    ]
+  }
+}
+`);
+    expect(takeover.modelPicker).toEqual({ written: PICKER });
+  });
+
+  it("never touches a modelPicker the user wrote, while switched and after Official", () => {
+    const handWritten = `{
+  "modelPicker": {
+    "options": [
+      {
+        "model": "opus"
+      }
+    ]
+  }
+}
+`;
+    const first = applyPicker(handWritten, PICKER);
+    expect(JSON.parse(first.text).modelPicker).toEqual({ options: [{ model: "opus" }] });
+    expect(first.takeover.modelPicker).toEqual({ written: null });
+
+    const again = applyPicker(first.text, PICKER.slice(1), first.takeover);
+    expect(JSON.parse(again.text).modelPicker).toEqual({ options: [{ model: "opus" }] });
+    expect(restore(again.text, again.takeover)).toBe(handWritten);
+  });
+
+  it("rewrites its own modelPicker as the models change and drops it when none are left", () => {
+    const first = applyPicker(USER_SETTINGS, PICKER);
+
+    const fewer = applyPicker(first.text, PICKER.slice(1), first.takeover);
+    expect(JSON.parse(fewer.text).modelPicker).toEqual({ options: PICKER.slice(1) });
+    expect(fewer.takeover.modelPicker).toEqual({ written: PICKER.slice(1) });
+
+    const none = applyPicker(fewer.text, [], fewer.takeover);
+    expect(JSON.parse(none.text).modelPicker).toBeUndefined();
+    expect(none.takeover.modelPicker).toEqual({ written: null });
+    expect(restore(none.text, none.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("removes its own modelPicker on Official and returns the file to its exact bytes", () => {
+    const { text, takeover } = applyPicker(USER_SETTINGS, PICKER);
+    expect(restore(text, takeover)).toBe(USER_SETTINGS);
+
+    const fromEmpty = applyPicker("{}\n", PICKER);
+    expect(restore(fromEmpty.text, fromEmpty.takeover)).toBe("{}\n");
+  });
+
+  it("writes modelPicker over a record from before it was owned, when the file has none", () => {
+    const { text, takeover } = apply(USER_SETTINGS);
+    const { modelPicker: _omitted, ...legacy } = takeover;
+
+    const next = applyPicker(text, PICKER, legacy);
+    expect(JSON.parse(next.text).modelPicker).toEqual({ options: PICKER });
+    expect(restore(next.text, next.takeover)).toBe(USER_SETTINGS);
   });
 
   it.each([
@@ -399,6 +507,17 @@ describe("inspectClaudeSettings", () => {
     const userOwned = apply('{ "permissions": { "deny": ["WebSearch"] } }\n');
     const removed = userOwned.text.replace(`"WebSearch"`, `"Read(./x)"`);
     expect(inspect(removed, userOwned.takeover).modifiedKeys).toEqual([]);
+  });
+
+  it("counts its own modelPicker as modified once it no longer holds what was written", () => {
+    const ours = applyPicker(USER_SETTINGS, PICKER);
+    expect(inspect(ours.text, ours.takeover).modifiedKeys).toEqual([]);
+    const edited = ours.text.replace(`"label": "GPT 6"`, `"label": "Mine"`);
+    expect(inspect(edited, ours.takeover).modifiedKeys).toEqual(["modelPicker"]);
+
+    const userOwned = applyPicker('{ "modelPicker": { "options": [] } }\n', PICKER);
+    const changed = userOwned.text.replace(`"options": []`, `"options": [{ "model": "x" }]`);
+    expect(inspect(changed, userOwned.takeover).modifiedKeys).toEqual([]);
   });
 
   it("counts every owned key as modified when the file is gone", () => {
