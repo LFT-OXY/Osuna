@@ -64,8 +64,6 @@ const zhCNEnglishAllowlist = {
     "desktop.daemon.status.pid",
     "desktop.updates.callout.downloadProgress",
     "usage.planUsage.strip.windows.fiveHour",
-    "settings.providers.apiEndpoints.form.baseUrl",
-    "settings.providers.apiEndpoints.form.apiKey",
     "settings.apiEndpoints.form.apiKey",
     "settings.providers.version.value",
     "settings.providers.version.update",
@@ -101,7 +99,6 @@ const zhCNEnglishAllowlist = {
     "settings.host.terminalProfiles.namePlaceholder",
     "settings.host.terminalProfiles.commandPlaceholder",
     "settings.host.terminalProfiles.argsPlaceholder",
-    "settings.providers.apiEndpoints.form.namePlaceholder",
   ],
   languageOptions: ["settings.general.language.options.en"],
 } satisfies Record<string, readonly string[]>;
@@ -137,8 +134,6 @@ const zhCNRetiredTermPattern =
 // 值里的英文是配置键名、斜杠命令或占位示例，原样保留
 const zhCNRetiredTermExemptKeys = [
   ...zhCNEnglishAllowlist.placeholders,
-  "settings.providers.apiEndpoints.health.codexProfileOverride",
-  "settings.providers.apiEndpoints.form.mappingHint",
   "settings.project.metadata.commitMessagePlaceholder",
 ];
 
@@ -439,6 +434,28 @@ describe("translation resources", () => {
     expect(findInterpolationMismatches(ptBR)).toEqual([]);
     expect(findInterpolationMismatches(ru)).toEqual([]);
     expect(findInterpolationMismatches(zhCN)).toEqual([]);
+  });
+
+  it("keeps only the inherited-endpoint notice from the per-provider API endpoint copy", () => {
+    expect(Object.keys(en.settings.providers.apiEndpoints).sort()).toEqual([
+      "inheritedDescription",
+      "inheritedTitle",
+    ]);
+  });
+
+  it("uses the API endpoint terms in zh-CN", () => {
+    const apiEndpoints = zhCN.settings.apiEndpoints;
+    expect(apiEndpoints.status.available).toBe("可用");
+    expect(apiEndpoints.status.coolingWord).toBe("冷却中");
+    expect(apiEndpoints.status.needsCheckWord).toBe("需要检查");
+    expect(apiEndpoints.status.disabled).toBe("已关闭");
+    expect(apiEndpoints.groups.disabled).toBe("已关闭");
+    expect(apiEndpoints.agent.useSwitch).toBe("使用第三方接口");
+    expect(apiEndpoints.agent.defaultModel).toBe("默认模型");
+    expect(apiEndpoints.form.addressHint).toBe(
+      "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
+    );
+    expect(zhCN.settings.hostSections.apiEndpoints).toBe("第三方接口");
   });
 
   it("keeps reported Spanish settings and scripts labels clean", () => {

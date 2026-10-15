@@ -257,24 +257,24 @@ function EndpointRow({
                 </Text>
                 <ProviderStatusLine status={statusLine}>
                   <RestingStateText status={status} />
+                  {status.kind === "cooling" ? (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onPress={handleResume}
+                      loading={isPending}
+                      accessibilityLabel={t("settings.apiEndpoints.resumeNowLabel", {
+                        name: endpoint.name,
+                      })}
+                      testID="api-endpoint-resume"
+                    >
+                      {t("settings.apiEndpoints.resumeNow")}
+                    </Button>
+                  ) : null}
                 </ProviderStatusLine>
               </View>
             </View>
             <View style={styles.trailingControls}>
-              {status.kind === "cooling" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={handleResume}
-                  loading={isPending}
-                  accessibilityLabel={t("settings.apiEndpoints.resumeNowLabel", {
-                    name: endpoint.name,
-                  })}
-                  testID="api-endpoint-resume"
-                >
-                  {t("settings.apiEndpoints.resumeNow")}
-                </Button>
-              ) : null}
               <Switch
                 value={enabled}
                 onValueChange={handleToggle}

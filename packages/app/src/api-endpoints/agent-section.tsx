@@ -249,7 +249,7 @@ const styles = StyleSheet.create((theme) => ({
   summary: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: theme.spacing[1.5],
     minWidth: 0,
   },
   rowHovered: {
