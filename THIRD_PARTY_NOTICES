@@ -1,7 +1,7 @@
 Third-party notices
 
-This project includes code ported from the following third-party software.
-Each ported file says so in its header and points here.
+This project includes code ported or copied from the following third-party
+software. Each such file says so in its header and points here.
 
 --------------------------------------------------------------------------------
 magpie — https://github.com/yetone/magpie
@@ -9,11 +9,18 @@ magpie — https://github.com/yetone/magpie
 
 The API endpoint gateway's failure classification, cooldowns, and conversation
 stickiness are ported to TypeScript from magpie's internal/gateway
-(routing.go, fallback.go, affinity.go, gateway.go, prompt.go):
+(routing.go, fallback.go, affinity.go, gateway.go, prompt.go), and so are
+the order the gateway asks endpoints in and the retry of the last one
+(restLast, probeOne, passing in fallback.go). Their tests take magpie's
+constants and the vendor error texts quoted in its source comments:
 
   packages/server/src/server/api-endpoints/gateway/failure.ts
   packages/server/src/server/api-endpoints/gateway/cooldown.ts
   packages/server/src/server/api-endpoints/gateway/affinity.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/cooldown.test.ts
+  packages/server/src/server/api-endpoints/gateway/affinity.test.ts
 
 The gateway's protocol translation (the shared intermediate format, Anthropic
 Messages, OpenAI Chat, OpenAI Responses, tool-pairing repair, SSE reading) is
@@ -60,6 +67,7 @@ minimax-color, mimocode, stepfun-color), with width, height, style and
 <title> removed:
 
   packages/app/src/api-endpoints/internal/model-families.ts
+  packages/app/src/api-endpoints/internal/model-families.test.ts
   packages/app/src/assets/model-family-icons.ts
   packages/app/src/assets/model-family-icons/*.svg
 
@@ -84,3 +92,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+OpenAI Codex — https://github.com/openai/codex
+--------------------------------------------------------------------------------
+
+The base instructions Codex gives a model it does not know are copied verbatim
+from codex-rs/models-manager/prompt.md (commit 90f00bd) into the Codex model
+catalog the daemon writes for API endpoint models:
+
+  packages/server/src/server/api-endpoints/codex-base-instructions.ts
+
+Copyright 2025 OpenAI. Licensed under the Apache License, Version 2.0, whose
+full text is in this repository's LICENSE.

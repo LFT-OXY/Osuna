@@ -10,7 +10,7 @@ import {
 } from "./cooldown.js";
 
 /*
- * 冷却照 magpie（research/magpie-port-inventory.md 第 2 节）：时长常量、各分类的冷却时长、
+ * 冷却照 magpie（MIT，THIRD_PARTY_NOTICES；research/magpie-port-inventory.md 第 2 节）：时长常量、各分类的冷却时长、
  * 限流与服务器错误的翻倍、厂商自己说的时间、最后一家的原地重试、全在冷却时不再请求。
  */
 

@@ -141,6 +141,7 @@ of that replay model.
 - [ ] Constants defined in one place
 - [ ] Similar patterns follow same structure
 - [ ] Reducer/action transitions live in one reducer or command dispatcher
+- [ ] Anything ported or copied from another project has its header and a `THIRD_PARTY_NOTICES` entry ([server quality guidelines](../server/backend/quality-guidelines.md#daemon-specific-rules))
 
 ---
 

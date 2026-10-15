@@ -1,3 +1,6 @@
+// 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { timingSafeEqual } from "node:crypto";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";

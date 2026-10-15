@@ -9,7 +9,7 @@ import {
 } from "./affinity.js";
 
 /*
- * 粘性照 magpie 的 auto 模式（research/magpie-port-inventory.md 第 3 节）：
+ * 粘性照 magpie（MIT，THIRD_PARTY_NOTICES）的 auto 模式（research/magpie-port-inventory.md 第 3 节）：
  * 12 步判定逐条一例，轮次计数与对话识别各几例，再看候选怎么重排。
  */
 

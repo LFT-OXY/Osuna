@@ -1,6 +1,6 @@
 /*
  * Codex 给未知模型用的基础指令，原样取自 openai/codex 的 codex-rs/models-manager/prompt.md
- * （提交 90f00bd，2026-10-13），Apache License 2.0，Copyright 2025 OpenAI。
+ * （提交 90f00bd，2026-10-13），Apache License 2.0，Copyright 2025 OpenAI；声明见本仓库 THIRD_PARTY_NOTICES。
  * 模型目录里每个条目都必须带指令，否则 Codex 整个目录读不进来；第三方模型用这份，和不写目录时 Codex 自己的回退一致。
  * Codex 换了这份提示词时照着更新。
  */

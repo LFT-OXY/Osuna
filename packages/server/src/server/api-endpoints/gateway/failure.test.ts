@@ -11,7 +11,7 @@ import {
 } from "./failure.js";
 
 /*
- * 判错照 magpie（research/magpie-port-inventory.md 第 1 节）：每条正则一正一反，
+ * 判错照 magpie（MIT，THIRD_PARTY_NOTICES；research/magpie-port-inventory.md 第 1 节）：每条正则一正一反，
  * 归类顺序、换不换下一家、只冷却模型的判定各有例子；例子取自 magpie 源码注释里的厂商原话。
  */
 
