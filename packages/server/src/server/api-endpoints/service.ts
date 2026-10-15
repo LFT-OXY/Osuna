@@ -24,12 +24,12 @@ import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claud
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
 import type { AgentModelDefinition, ApiEndpointModelGroup } from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
+import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
   restoreClaudeOfficial,
   type ClaudeGatewayWiring,
-  type ClaudeModelPickerOption,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 import {
@@ -72,7 +72,13 @@ import {
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
-import { fetchUpstreamModels, type UpstreamFailureCode } from "./upstream-models.js";
+import { mergeModelFacts, type ModelFacts } from "./model-facts.js";
+import { ModelsDevCatalog } from "./models-dev.js";
+import {
+  fetchUpstreamModels,
+  type ListedModel,
+  type UpstreamFailureCode,
+} from "./upstream-models.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
@@ -164,6 +170,8 @@ export interface ApiEndpointServiceOptions {
   countLiveSessions: (provider: ApiEndpointProvider) => number;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
+  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 总开关开着）；缺省不下载。
+  isModelsDevAutoUpdate?: () => boolean;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
@@ -233,6 +241,7 @@ export class ApiEndpointService {
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
+  private readonly modelsDev: ModelsDevCatalog;
   private queue: Promise<unknown> = Promise.resolve();
   private gateway: GatewayAddress = { kind: "pending" };
 
@@ -249,6 +258,17 @@ export class ApiEndpointService {
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
+    const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
+    this.modelsDev = new ModelsDevCatalog({
+      filePath: this.store.modelsDevPath,
+      logger: this.logger,
+      isAllowed: () =>
+        isModelsDevAutoUpdate() && this.readStateForSnapshot()?.agents.claude.enabled === true,
+      onUpdated: () => {
+        void this.refreshClaudeHints();
+      },
+    });
+    this.modelsDev.start();
   }
 
   /**
@@ -579,12 +599,18 @@ export class ApiEndpointService {
     }
     this.store.writeState(next);
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
+    this.announceCommitted(previous, next);
+    return next;
+  }
+
+  /** 通知设置有变的 Agent；刚打开 Claude Code 总开关时让 models.dev 马上检查一次。 */
+  private announceCommitted(previous: ApiEndpointState, next: ApiEndpointState): void {
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
       }
     }
-    return next;
+    if (!previous.agents.claude.enabled && next.agents.claude.enabled) this.modelsDev.wake();
   }
 
   private syncCli(provider: ApiEndpointProvider, wiring: CliWiring | null): void {
@@ -619,12 +645,15 @@ export class ApiEndpointService {
       return;
     }
     const written = this.writtenGateway(provider);
+    const claudeTakeover = provider === "claude" ? this.store.readClaudeTakeover().takeover : null;
     // COMPAT(claudeModelPickerRecord): added after v0.15.0, remove after 2027-04-15.
     // 工单 17 以前的接管记录没有 modelPicker：补写一次，终端 /model 才列出接口模型。
-    const isPickerUnrecorded =
-      provider === "claude" && this.store.readClaudeTakeover().takeover?.modelPicker === undefined;
+    const isPickerUnrecorded = provider === "claude" && claudeTakeover?.modelPicker === undefined;
+    // COMPAT(claudeModelHintRecord): added after v0.15.0, remove after 2027-04-15.
+    // 工单 18 以前的接管记录没有 hintEnv：补写一次模型提示。
+    const isHintUnrecorded = provider === "claude" && claudeTakeover?.hintEnv === undefined;
     const isUpToDate = written?.url === url && written.token === wiring.token;
-    if (isUpToDate && !isPickerUnrecorded) return;
+    if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded) return;
     this.syncCli(provider, wiring);
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
@@ -663,12 +692,77 @@ export class ApiEndpointService {
     if (baseUrl === null) throw this.gatewayError();
     // nextGatewayTokens 给每个开着的 Agent 都发了口令。
     if (token === undefined) throw new Error(`No gateway token for ${provider}`);
-    return {
-      baseUrl,
-      token,
-      model: agent.defaultModelId,
-      modelPicker: cliModelPicker(state, provider),
+    return { baseUrl, token, ...this.cliModels(state, provider, agent.defaultModelId) };
+  }
+
+  /**
+   * CLI 看到的起始模型；Claude Code 另有终端 /model 里的接口模型（与聊天模型选择器同样的分组和顺序，每行直达那一家）
+   * 和按已知模型资料算出的提示。Codex 的模型列表在单独的目录文件里，不进 config.toml。
+   */
+  private cliModels(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+    defaultModelId: string,
+  ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv"> {
+    if (provider !== "claude") return { model: defaultModelId, modelPicker: [], hintEnv: {} };
+    const start: ClaudeHintModel = {
+      id: defaultModelId,
+      facts: this.startModelFacts(state, defaultModelId),
     };
+    const rows = endpointModelGroups(state).flatMap((group) =>
+      group.models.map(({ id, model }) => ({
+        hint: { id, facts: this.modelFacts(group.endpoint, model.id) },
+        label: model.label ?? model.id,
+        description: group.endpoint.name,
+      })),
+    );
+    return {
+      model: markOneMillion(start),
+      modelPicker: rows.map((row) => ({
+        model: markOneMillion(row.hint),
+        label: row.label,
+        description: row.description,
+      })),
+      hintEnv: claudeHintEnv({ start, listed: rows.map((row) => row.hint) }),
+    };
+  }
+
+  /** 起始模型是不带接口标识的模型名，中转站先发给最早开着、选了它的那家：资料也按那家查。 */
+  private startModelFacts(state: ApiEndpointState, modelId: string): ModelFacts {
+    const endpoint = state.endpoints.find(
+      (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
+    );
+    return endpoint ? this.modelFacts(endpoint, modelId) : this.modelsDev.facts(modelId);
+  }
+
+  /** 这家上游清单给的在前，models.dev 补上没给的。 */
+  private modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
+    const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
+    return mergeModelFacts(listed, this.modelsDev.facts(modelId));
+  }
+
+  /**
+   * 模型资料变了（models.dev 更新、上游清单重拉）：开着的 Claude Code 跟着重写。
+   * 负责的键被外部改过时不动，留给健康检查和用户；写不成只记日志，不挡调用方。
+   */
+  private rewriteClaudeHints(state: ApiEndpointState): void {
+    if (!state.agents.claude.enabled || this.gatewayUrlFor("claude") === null) return;
+    if (this.inspectClaude(true).health.length > 0) {
+      this.logger.info("Claude settings changed outside Osuna; model hints left as they are");
+      return;
+    }
+    try {
+      this.syncCli("claude", this.cliWiring(state, "claude", this.store.readGatewayTokens()));
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to rewrite the Claude model hints");
+    }
+  }
+
+  private refreshClaudeHints(): Promise<void> {
+    return this.exclusive(() => {
+      const state = this.readStateForSnapshot();
+      if (state) this.rewriteClaudeHints(state);
+    });
   }
 
   /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
@@ -682,8 +776,7 @@ export class ApiEndpointService {
     return JSON.stringify([
       this.gatewayUrlFor(provider),
       tokens[provider] ?? null,
-      agent.defaultModelId,
-      cliModelPicker(state, provider),
+      this.cliModels(state, provider, agent.defaultModelId),
     ]);
   }
 
@@ -762,20 +855,30 @@ export class ApiEndpointService {
     if (format !== null && input.endpointId) {
       await this.keepCatalog(input.endpointId, result.models);
     }
-    return result.models;
+    return result.models.map(toWireModel);
   }
 
-  /** 记下这家的上游清单；只动清单，不影响路由、模型目录与 CLI 配置。拉取期间被删的接口不再写回。 */
-  private keepCatalog(endpointId: string, models: ApiEndpointModel[]): Promise<void> {
+  /**
+   * 记下这家的上游清单，不影响路由与模型目录。拉取期间被删的接口不再写回。
+   * 清单带的模型资料改变了 Claude Code 的模型提示时，跟着重写 settings.json。
+   */
+  private keepCatalog(endpointId: string, models: ListedModel[]): Promise<void> {
     return this.exclusive(() => {
       const state = this.readState();
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint) return;
       const catalog = { fetchedAt: this.now().toISOString(), models };
-      this.store.writeState({
+      const next = {
         ...state,
         endpoints: withEndpoint(state.endpoints, { ...endpoint, catalog }),
-      });
+      };
+      this.store.writeState(next);
+      const tokens = this.store.readGatewayTokens();
+      if (
+        this.cliFingerprint(state, "claude", tokens) !== this.cliFingerprint(next, "claude", tokens)
+      ) {
+        this.rewriteClaudeHints(next);
+      }
     });
   }
 
@@ -1194,7 +1297,14 @@ export class ApiEndpointService {
       enabled: endpoint.enabled,
       hasApiKey: this.store.getApiKey(endpoint.id) !== null,
       cooldown: this.cooldownOf(endpoint.id),
-      ...(endpoint.catalog ? { catalog: endpoint.catalog } : {}),
+      ...(endpoint.catalog
+        ? {
+            catalog: {
+              fetchedAt: endpoint.catalog.fetchedAt,
+              models: endpoint.catalog.models.map(toWireModel),
+            },
+          }
+        : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
     };
   }
@@ -1273,22 +1383,9 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
   ]);
 }
 
-/**
- * Claude Code 终端 /model 里的接口模型：与聊天模型选择器同样的分组和顺序，每行直达那一家。
- * Codex 的模型列表在单独的目录文件里，不进 config.toml。
- */
-function cliModelPicker(
-  state: ApiEndpointState,
-  provider: ApiEndpointProvider,
-): ClaudeModelPickerOption[] {
-  if (provider !== "claude") return [];
-  return endpointModelGroups(state).flatMap((group) =>
-    group.models.map(({ id, model }) => ({
-      model: id,
-      label: model.label ?? model.id,
-      description: group.endpoint.name,
-    })),
-  );
+/** 上游清单里的模型资料只留在 daemon 里；发给客户端的只有 id 和显示名。 */
+function toWireModel(model: ListedModel): ApiEndpointModel {
+  return model.label === undefined ? { id: model.id } : { id: model.id, label: model.label };
 }
 
 /** 打开总开关后的设置；没有可用模型或指定的默认模型不可用时拒绝。 */

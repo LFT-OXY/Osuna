@@ -1,4 +1,6 @@
 import { writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -864,5 +866,158 @@ describe("a resumed agent session says nothing about the API endpoint mode", () 
     expect(finished.status).toBe("idle");
     expect(finished.final?.lastError).toBeUndefined();
     expect(await notifications(active, agent.id)).toEqual([]);
+  });
+});
+
+// 工单 18：Claude Code 不认识接口模型，Osuna 按已知资料告诉它上下文、回复上限与思考档位。
+describe("Claude Code is told what the endpoint models can do", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let settingsPath: string;
+  let upstream: Server | null;
+
+  // daemon 启动前放好的 models.dev 缓存（测试 daemon 关着自动更新，不会真的去下载）。
+  const MODELS_DEV_CACHE = {
+    fetchedAt: "2026-10-15T00:00:00.000Z",
+    etag: null,
+    models: {
+      "gpt-6-sol": { context: 922_000, output: 128_000, efforts: ["low", "high", "xhigh", "max"] },
+      "deepseek-v4-pro": { context: 1_000_000, output: 384_000, efforts: ["high", "max"] },
+      "claude-opus-5-5": { context: 1_000_000, output: 128_000, efforts: ["low", "max"] },
+    },
+  };
+
+  async function start(initialSettings: string): Promise<void> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-hints-"));
+    tempRoots.push(root);
+    const claudeConfigDir = path.join(root, "claude");
+    settingsPath = path.join(claudeConfigDir, "settings.json");
+    await mkdir(claudeConfigDir, { recursive: true });
+    await writeFile(settingsPath, initialSettings);
+    const cacheDir = path.join(root, "home", ".paseo", "api-endpoints");
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(path.join(cacheDir, "models-dev.json"), JSON.stringify(MODELS_DEV_CACHE));
+    daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: path.join(root, "home"),
+      apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
+    });
+    client = await connect(daemon);
+  }
+
+  beforeEach(() => {
+    upstream = null;
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    if (upstream) {
+      upstream.closeAllConnections();
+      await new Promise((resolve) => upstream?.close(resolve));
+    }
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function switchOn(baseUrl = "https://relay.example/api"): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl,
+      apiKey: SECRET,
+      models: [{ id: "gpt-6-sol" }, { id: "deepseek-v4-pro" }, { id: "claude-opus-5-5" }],
+      defaultModelId: "gpt-6-sol",
+    });
+    const endpointId = saved.endpoint?.id;
+    if (!endpointId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("claude", endpointId);
+    return endpointId;
+  }
+
+  async function settings() {
+    return JSON.parse(await readFile(settingsPath, "utf8"));
+  }
+
+  test("marks [1m], writes the three hints, and Official returns the file to its bytes", async () => {
+    await start(USER_SETTINGS);
+    await switchOn();
+
+    const switched = await settings();
+    expect(switched.model).toBe("gpt-6-sol");
+    expect(switched.modelPicker.options.map((row: { model: string }) => row.model)).toEqual([
+      "relay/gpt-6-sol",
+      "relay/deepseek-v4-pro[1m]",
+      "relay/claude-opus-5-5[1m]",
+    ]);
+    expect(switched.env).toMatchObject({
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
+      CLAUDE_CODE_MODEL_CAPABILITIES:
+        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,max_effort",
+    });
+    // 这几个值不算 Osuna 负责的键，健康检查不会因为它们报「被外部改动」。
+    expect((await client.apiEndpointList("claude")).health ?? []).toEqual([]);
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("a value the user set stays as it is while switched and after Official", async () => {
+    const own = USER_SETTINGS.replace(
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example"`,
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"`,
+    );
+    await start(own);
+    await switchOn();
+
+    const switched = await settings();
+    expect(switched.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("64000");
+    expect(switched.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
+
+    await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  test("numbers the endpoint's own model list gives win over models.dev and rewrite the file", async () => {
+    await start(USER_SETTINGS);
+    upstream = createServer((request, response) => {
+      if (request.url !== "/api/v1/models") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: [{ id: "gpt-6-sol", max_input_tokens: 1_050_000, max_tokens: 128_000 }],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    const endpointId = await switchOn(baseUrl);
+    expect((await settings()).env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl,
+      format: "anthropic_messages",
+    });
+    // 这些数只留在 daemon 里，不发给客户端。
+    expect(fetched.models).toEqual([{ id: "gpt-6-sol" }]);
+    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog?.models).toEqual([
+      { id: "gpt-6-sol" },
+    ]);
+
+    // 起始模型现在已知 105 万：带 [1m]，上下文那一项就不写了。
+    const refreshed = await settings();
+    expect(refreshed.model).toBe("gpt-6-sol[1m]");
+    expect(refreshed.modelPicker.options[0].model).toBe("relay/gpt-6-sol[1m]");
+    expect(refreshed.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined();
+
+    await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 });

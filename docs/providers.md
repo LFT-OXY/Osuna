@@ -188,7 +188,7 @@ cannot turn a ready entry into an error. A provider whose catalog probe already 
 `ProviderCatalog.installedVersion` so the manager does not run it twice (Claude does this).
 An unreadable version omits the field and never changes the entry's status.
 `provider.version.check.request` compares that `version` with the npm `latest` of the manifest's
-`npmPackage`; the request is described in [usage.md](usage.md#the-one-outbound-request).
+`npmPackage`; the request is described in [usage.md](usage.md#outbound-requests).
 `provider.upgrade.request` runs the CLI's upgrade subcommand, then refreshes that entry and forgets
 its cached `latest` whether the command succeeded or not, so the next check compares the new
 `version`. Appended launch args are dropped for the upgrade: placed before the subcommand, a CLI reads

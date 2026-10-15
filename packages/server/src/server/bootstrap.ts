@@ -981,6 +981,9 @@ export async function createPaseoDaemon(
     },
     // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
     countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
+    // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
+    isModelsDevAutoUpdate: () =>
+      resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {

@@ -11,6 +11,14 @@ const GATEWAY = {
   token: "gw-token",
   model: "kimi-k2",
   modelPicker: [],
+  hintEnv: {},
+};
+
+// 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
+const HINTS = {
+  CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
+  CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
+  CLAUDE_CODE_MODEL_CAPABILITIES: "kimi-k2=effort,xhigh_effort",
 };
 
 // 两家接口各一个已选模型：/model 里的两行。
@@ -66,6 +74,23 @@ function applyPicker(
   const result = applyClaudeApiEndpoint({ text, wiring: { ...GATEWAY, modelPicker }, takeover });
   if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
   return result;
+}
+
+function applyHints(
+  text: string | null,
+  hintEnv: Partial<typeof HINTS>,
+  takeover: ClaudeSettingsTakeover | null = null,
+) {
+  const result = applyClaudeApiEndpoint({ text, wiring: { ...GATEWAY, hintEnv }, takeover });
+  if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+  return result;
+}
+
+/** 换掉 env 里一个键的值，模拟用户手改。 */
+function setEnv(text: string, key: string, value: string): string {
+  const settings = JSON.parse(text) as { env: Record<string, string> };
+  settings.env[key] = value;
+  return `${JSON.stringify(settings, null, 2)}\n`;
 }
 
 function restore(text: string | null, takeover: ClaudeSettingsTakeover) {
@@ -139,6 +164,7 @@ describe("applyClaudeApiEndpoint", () => {
       envCreated: true,
       webSearchDeny: { added: true, permissionsCreated: true, denyCreated: true },
       modelPicker: { written: null },
+      hintEnv: {},
     });
   });
 
@@ -212,6 +238,7 @@ describe("applyClaudeApiEndpoint", () => {
         token: "t2",
         model: "glm",
         modelPicker: [],
+        hintEnv: {},
       },
       takeover: first.takeover,
     });
@@ -390,6 +417,63 @@ describe("applyClaudeApiEndpoint", () => {
     expect(restore(next.text, next.takeover)).toBe(USER_SETTINGS);
   });
 
+  it("writes the model hints into env and takes only its own out on Official", () => {
+    const { text, takeover } = applyHints(USER_SETTINGS, HINTS);
+    expect(JSON.parse(text).env).toEqual({
+      DISABLE_TELEMETRY: "1",
+      ANTHROPIC_BASE_URL: GATEWAY.baseUrl,
+      ANTHROPIC_AUTH_TOKEN: GATEWAY.token,
+      ANTHROPIC_API_KEY: "",
+      ...HINTS,
+    });
+    expect(takeover.hintEnv).toEqual(HINTS);
+    expect(restore(text, takeover)).toBe(USER_SETTINGS);
+
+    const fromEmpty = applyHints("{}\n", HINTS);
+    expect(restore(fromEmpty.text, fromEmpty.takeover)).toBe("{}\n");
+  });
+
+  it("never touches a hint the user set, while switched and after Official", () => {
+    const own = setEnv(USER_SETTINGS, "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "64000");
+    const first = applyHints(own, HINTS);
+    expect(JSON.parse(first.text).env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("64000");
+    expect(first.takeover.hintEnv).toEqual({
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
+      CLAUDE_CODE_MODEL_CAPABILITIES: "kimi-k2=effort,xhigh_effort",
+    });
+
+    const again = applyHints(first.text, HINTS, first.takeover);
+    expect(JSON.parse(again.text).env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("64000");
+    expect(restore(again.text, again.takeover)).toBe(own);
+  });
+
+  it("rewrites its own hints as they change and removes one that is no longer known", () => {
+    const first = applyHints(USER_SETTINGS, HINTS);
+    const next = applyHints(
+      first.text,
+      { CLAUDE_CODE_MODEL_CAPABILITIES: "kimi-k2=effort" },
+      first.takeover,
+    );
+    const env = JSON.parse(next.text).env;
+    expect(env.CLAUDE_CODE_MODEL_CAPABILITIES).toBe("kimi-k2=effort");
+    expect(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined();
+    expect(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBeUndefined();
+    expect(next.takeover.hintEnv).toEqual({ CLAUDE_CODE_MODEL_CAPABILITIES: "kimi-k2=effort" });
+    expect(restore(next.text, next.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("a hint the user changed after Osuna wrote it is theirs from then on", () => {
+    const first = applyHints(USER_SETTINGS, HINTS);
+    const edited = setEnv(first.text, "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "50000");
+
+    const again = applyHints(edited, HINTS, first.takeover);
+    expect(JSON.parse(again.text).env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("50000");
+    expect(again.takeover.hintEnv?.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBeUndefined();
+
+    const restored = JSON.parse(restore(again.text, again.takeover)).env;
+    expect(restored).toEqual({ DISABLE_TELEMETRY: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "50000" });
+  });
+
   it.each([
     ["invalid JSON", `{ "env": { "A": "1", } }`],
     ["a top-level array", `[]`],
@@ -518,6 +602,12 @@ describe("inspectClaudeSettings", () => {
     const userOwned = applyPicker('{ "modelPicker": { "options": [] } }\n', PICKER);
     const changed = userOwned.text.replace(`"options": []`, `"options": [{ "model": "x" }]`);
     expect(inspect(changed, userOwned.takeover).modifiedKeys).toEqual([]);
+  });
+
+  it("does not count a hint the user changed: it is theirs, not a conflict", () => {
+    const { text, takeover } = applyHints(USER_SETTINGS, HINTS);
+    const edited = setEnv(text, "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "50000");
+    expect(inspectClaudeSettings({ text: edited, takeover })).toMatchObject({ modifiedKeys: [] });
   });
 
   it("counts every owned key as modified when the file is gone", () => {

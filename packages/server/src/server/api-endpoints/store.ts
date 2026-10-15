@@ -12,6 +12,7 @@ import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 import { readOptionalFile } from "./config-file.js";
+import { ModelFactsSchema } from "./model-facts.js";
 
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
@@ -20,6 +21,7 @@ import { readOptionalFile } from "./config-file.js";
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
+ * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示用；
  * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即作废，都关着时文件删除；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
@@ -29,6 +31,9 @@ export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
 const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
+
+// 上游清单里的模型多带列表给的上下文、回复上限与思考档位；只留在 daemon 里，投影给客户端时去掉。
+const StoredCatalogModelSchema = StoredModelSchema.extend({ facts: ModelFactsSchema.optional() });
 
 const StoredBaseUrlSchema = z.object({
   format: z.enum(API_ENDPOINT_REQUEST_FORMATS),
@@ -50,7 +55,9 @@ const StoredApiEndpointSchema = z.object({
   // 只给老客户端投影用：老表单上次为这家选的默认模型（迁移时取旧 defaultModelId）。
   legacyDefaultModelId: z.string().optional(),
   // 上次按格式向上游列出的模型，只供详情页挑选；路由与模型目录只看 models。
-  catalog: z.object({ fetchedAt: z.string(), models: z.array(StoredModelSchema) }).optional(),
+  catalog: z
+    .object({ fetchedAt: z.string(), models: z.array(StoredCatalogModelSchema) })
+    .optional(),
   // 用户手动添加的模型名，开没开都留着。
   manualModels: z.array(StoredModelSchema).optional(),
   createdAt: z.string(),
@@ -230,6 +237,10 @@ export class ApiEndpointStore {
 
   writeCodexTakeover(file: CodexTakeoverFile): void {
     this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
+  }
+
+  get modelsDevPath(): string {
+    return path.join(this.root, "models-dev.json");
   }
 
   get codexModelCatalogPath(): string {

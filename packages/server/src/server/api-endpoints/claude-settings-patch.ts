@@ -4,6 +4,7 @@
 import { applyEdits, modify, type FormattingOptions, type JSONPath } from "jsonc-parser";
 import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -18,6 +19,8 @@ import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-sc
  *   Claude Code 没有关它的环境变量，只能用权限规则。用户自己写的同名规则不归 Osuna 所有。
  * - 顶层 modelPicker：终端 /model 列出各家接口的已选模型（Claude Code v2.1.242 起，只读用户设置）。
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
+ * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
+ *   键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，不碰也不删。
  */
 
 /** 接管期间不能留在 env 里的变量。 */
@@ -70,6 +73,9 @@ export const ClaudeSettingsTakeoverSchema = z.object({
   // 文件里现在的 modelPicker 是 Osuna 写的才有 written；为 null 时文件里的（如果有）是用户的。
   // COMPAT(claudeModelPickerRecord): 工单 17 以前的记录没有它，按没写过处理；remove after 2027-04-15.
   modelPicker: z.object({ written: z.array(ModelPickerOptionSchema).nullable() }).optional(),
+  // Osuna 写着的模型提示：文件里的值等于这里记的才算 Osuna 的。
+  // COMPAT(claudeModelHintRecord): 工单 18 以前的记录没有它，按没写过处理；remove after 2027-04-15.
+  hintEnv: z.record(z.string(), z.string()).optional(),
 });
 export type ClaudeSettingsTakeover = z.infer<typeof ClaudeSettingsTakeoverSchema>;
 
@@ -84,12 +90,13 @@ export type ClaudeSettingsRestoreResult =
   | { kind: "missing" }
   | { kind: "unparsable"; message: string };
 
-/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型。 */
+/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示。 */
 export interface ClaudeGatewayWiring {
   baseUrl: string;
   token: string;
   model: string;
   modelPicker: ClaudeModelPickerOption[];
+  hintEnv: ClaudeHintEnv;
 }
 
 /**
@@ -133,6 +140,15 @@ export function applyClaudeApiEndpoint(input: {
   const webSearchDeny = ensureWebSearchDenied(text, parsed.settings, input.takeover, formatting);
   text = webSearchDeny.text;
 
+  const hintEnv = writeHintEnv({
+    text,
+    envObject,
+    hints: input.wiring.hintEnv,
+    takeover: input.takeover,
+    formatting,
+  });
+  text = hintEnv.text;
+
   const modelPicker = writeModelPicker({
     text,
     before: parsed.settings,
@@ -152,8 +168,39 @@ export function applyClaudeApiEndpoint(input: {
       envCreated: input.takeover?.envCreated ?? envObject === undefined,
       webSearchDeny: webSearchDeny.record,
       modelPicker: modelPicker.record,
+      hintEnv: hintEnv.record,
     },
   };
+}
+
+interface HintEnvPatch {
+  text: string;
+  record: NonNullable<ClaudeSettingsTakeover["hintEnv"]>;
+}
+
+/** 每个提示键：文件里没有、或还是 Osuna 上次写的值，才归 Osuna 写或删；记下这次写着的。 */
+function writeHintEnv(input: {
+  text: string;
+  envObject: Record<string, unknown> | undefined;
+  hints: ClaudeHintEnv;
+  takeover: ClaudeSettingsTakeover | null;
+  formatting: FormattingOptions;
+}): HintEnvPatch {
+  let { text } = input;
+  const record: Record<string, string> = {};
+  for (const key of CLAUDE_HINT_ENV_KEYS) {
+    const current = input.envObject?.[key];
+    const isOurs = current !== undefined && current === input.takeover?.hintEnv?.[key];
+    if (current !== undefined && !isOurs) continue;
+    const value = input.hints[key];
+    if (value !== undefined) {
+      text = edit(text, ["env", key], value, input.formatting);
+      record[key] = value;
+    } else if (isOurs) {
+      text = edit(text, ["env", key], undefined, input.formatting);
+    }
+  }
+  return { text, record };
 }
 
 interface ModelPickerPatch {
@@ -229,6 +276,7 @@ export function restoreClaudeOfficial(input: {
   if (input.takeover.model) {
     text = restoreValue(text, ["model"], input.takeover.model.original, formatting);
   }
+  text = removeOwnHints(text, input.takeover, formatting);
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
   }
@@ -259,6 +307,20 @@ export function restoreClaudeOfficial(input: {
   }
 
   return { kind: "patched", text };
+}
+
+/** 还是 Osuna 写的那个值的提示键删掉；用户改过的归用户，留着。 */
+function removeOwnHints(
+  text: string,
+  takeover: ClaudeSettingsTakeover,
+  formatting: FormattingOptions,
+): string {
+  let next = text;
+  const env = readSettings(text).env;
+  for (const [key, written] of Object.entries(takeover.hintEnv ?? {})) {
+    if (env?.[key] === written) next = edit(next, ["env", key], undefined, formatting);
+  }
+  return next;
 }
 
 export type ClaudeSettingsInspection =

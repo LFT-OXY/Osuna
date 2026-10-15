@@ -81,6 +81,18 @@ writePicker and dropPicker in magpie's internal/agent/claude.go:
 
   packages/server/src/server/api-endpoints/claude-settings-patch.ts
 
+What Claude Code is told about an endpoint model it doesn't know (the [1m]
+mark, CLAUDE_CODE_MAX_CONTEXT_TOKENS, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
+CLAUDE_CODE_MODEL_CAPABILITIES, and leaving a value the user set alone)
+follows claude1M, claudeWindow, claudeOutput, claudeCaps and
+claudeCapabilities in magpie's internal/agent/claude.go; how a model is
+looked up in the models.dev catalog (the bare id, the value most providers
+give) follows bareID, found, mostGiven, mostListed and window in magpie's
+internal/catalog/catalog.go:
+
+  packages/server/src/server/api-endpoints/claude-model-hints.ts
+  packages/server/src/server/api-endpoints/model-facts.ts
+
 The settings page's model families (which model name prefix belongs to which
 vendor) follow magpie's internal/agent/icons.go, and the vendor logos are
 magpie's internal/gui/assets/icons/ (claude-color, openai, gemini-color,

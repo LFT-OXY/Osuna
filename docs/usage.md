@@ -119,28 +119,38 @@ cache-write rate, or OpenAI's priority and flex tiers. Sessions that use them
 are estimated low. Reasoning tokens are counted inside output and never priced
 separately.
 
-## The one outbound request
+## Outbound requests
 
-This is the only network request the daemon makes on its own initiative. It is
-a plain GET to `raw.githubusercontent.com` for that one public file: no
-authentication, no query string, no request body, nothing about you or your
-machine beyond the IP and user agent any HTTP request carries. Everything else
-the daemon fetches is either something you asked for, such as the CLI update
-check below, or a connection you turned on.
+The daemon makes two network requests on its own initiative, both plain GETs for
+one public file: no authentication, no query string, no request body, nothing
+about you or your machine beyond the IP and user agent any HTTP request carries.
+Everything else the daemon fetches is either something you asked for, such as
+the CLI update check below, or a connection you turned on.
 
-It runs 30 seconds after start and every 24 hours after that. It skips the
-request when the table it already fetched is younger than a day; a daemon still
-running on the built-in snapshot always asks, however recent that snapshot's own
-date is. The request is
-conditional (`If-None-Match`), so an unchanged file costs a 304 rather than 2.7
-MB. It times out after 15 seconds; a failure is logged at `info`, retried an
-hour later, and never replaces the table you already have.
+| File                                           | Fetched when                             | Used for                                                                                 |
+| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| The price table on `raw.githubusercontent.com` | Always                                   | Pricing usage                                                                            |
+| `models.dev/api.json`                          | Claude Code is switched to API endpoints | Telling Claude Code each endpoint model's context window, reply length and effort levels |
 
-Turn it off with `features.usage.pricing.autoUpdate: false` in `config.json`, or
-`PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices from
-the built-in snapshot and your own prices, and never fetches the table —
-including on a host that has no network at all. The switch covers the automatic
-check only: "Refresh now" in the price table still fetches when you press it.
+Each runs 30 seconds after start and every 24 hours after that, and skips the
+request while the copy it already fetched is younger than a day. A daemon still
+running on the built-in price snapshot always asks, however recent that
+snapshot's own date is; models.dev has no snapshot, and turning Claude Code's
+API endpoint switch on checks it right away. Both requests are conditional
+(`If-None-Match`), so an unchanged file costs a 304 rather than 2.7 or 5.7 MB.
+They time out after 15 seconds; a failure is logged at `info`, retried an hour
+later, and never replaces the copy you already have. The daemon keeps the
+models.dev answer slimmed to three numbers per model in
+`$PASEO_HOME/api-endpoints/models-dev.json`.
+
+Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
+or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
+from the built-in snapshot and your own prices, tells Claude Code what an
+endpoint's own model list says and what a models.dev copy fetched earlier says,
+and fetches neither file — including on a host
+that has no network at all. The switch covers the automatic check only:
+"Refresh now" in the price table still fetches the price table when you press
+it.
 
 The CLI update check runs only when you ask for it. Opening Settings →
 Providers, or pressing refresh on a provider there, makes the daemon look up the
