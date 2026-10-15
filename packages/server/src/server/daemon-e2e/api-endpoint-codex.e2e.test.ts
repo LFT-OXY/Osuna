@@ -168,6 +168,30 @@ experimental_bearer_token = "${token}"
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
+  test("every catalog entry offers four reasoning levels and defaults to the one nearest the user's effort", async () => {
+    await writeFile(configPath, `model_reasoning_effort = "none"\n${USER_CONFIG}`);
+    await createEndpointWithBaseUrls("Relay", ["relay/gpt"]);
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true })).error,
+    ).toBeNull();
+
+    const { models } = JSON.parse(await readFile(catalogPath(), "utf8")) as {
+      models: Array<Record<string, unknown>>;
+    };
+    expect(models.map((model) => model.visibility)).toEqual(["list", "hide"]);
+    for (const model of models) {
+      expect(model).toMatchObject({
+        default_reasoning_level: "low",
+        supports_reasoning_summaries: true,
+      });
+      expect(
+        (model.supported_reasoning_levels as Array<{ effort: string }>).map(
+          (level) => level.effort,
+        ),
+      ).toEqual(["low", "medium", "high", "xhigh"]);
+    }
+  });
+
   test("the model catalog follows the selected models, the endpoint switches, and the agent switch", async () => {
     const endpointId = await createEndpointWithBaseUrls("Relay", ["relay/gpt", "relay/mini"]);
     expect(

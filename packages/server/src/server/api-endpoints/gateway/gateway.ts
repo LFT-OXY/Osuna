@@ -20,6 +20,7 @@ import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } from "./cooldown.js";
 import { endpointFailure, lateRests, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
+import { RefusedShapes, type ShapeRefusals } from "./refusals.js";
 import { chooseRequestFormat, resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
 import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
@@ -39,6 +40,7 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  *
  * 自动切换：用户选的那家在开口前失败（额度、欠费、限流、服务器错误、超时）时，按创建顺序换到下一家
  * 有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
+ * 换家之前先看是不是不思考的写法被拒（effort none、关思考）：是就在同一家换写法重问一次，也只记在内存里。
  */
 
 export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
@@ -77,6 +79,7 @@ export function createApiEndpointGateway(options: {
   const failover: Failover = {
     cooldowns: options.cooldowns,
     sticks: new ConversationSticks(),
+    refusals: new RefusedShapes(),
     headerTimeoutMs: options.overrides?.gatewayHeaderTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
   };
@@ -142,6 +145,7 @@ export function createApiEndpointGateway(options: {
 interface Failover {
   cooldowns: EndpointCooldowns;
   sticks: ConversationSticks;
+  refusals: RefusedShapes;
   headerTimeoutMs: number;
   retryPauseMs: number;
 }
@@ -520,6 +524,7 @@ async function askUntilSettled(input: {
   req: Request;
   res: Response;
   wire: AgentWire;
+  logger: pino.Logger;
   body: Buffer;
   model: string;
   candidate: AskableCandidate;
@@ -553,6 +558,7 @@ function askEndpoint(input: {
   req: Request;
   res: Response;
   wire: AgentWire;
+  logger: pino.Logger;
   body: Buffer;
   model: string;
   candidate: AskableCandidate;
@@ -560,6 +566,19 @@ function askEndpoint(input: {
   failover: Failover;
 }): Promise<AttemptOutcome> {
   const { candidate } = input;
+  const { refusals } = input.failover;
+  const endpointId = candidate.endpoint.id;
+  const model = candidate.upstreamModel;
+  const refused: ShapeRefusals = {
+    has: (shape) => refusals.has(endpointId, model, shape),
+    add: (shape) => {
+      refusals.add(endpointId, model, shape);
+      input.logger.info(
+        { endpoint: candidate.endpoint.name, model, refused: shape },
+        "API endpoint refused reasoning off; asking it again with reasoning on",
+      );
+    },
+  };
   const target = {
     res: input.res,
     endpoint: candidate.endpoint,
@@ -568,6 +587,7 @@ function askEndpoint(input: {
     requestedModel: input.model,
     upstreamModel: candidate.upstreamModel,
     headerTimeoutMs: input.failover.headerTimeoutMs,
+    refusals: refused,
   };
   if (candidate.translated === null) {
     return attemptEndpoint({ ...target, req: input.req, format: input.format, body: input.body });

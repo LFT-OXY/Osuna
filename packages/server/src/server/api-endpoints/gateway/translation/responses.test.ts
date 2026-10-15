@@ -10,6 +10,7 @@ import {
   ReplyCollector,
   RequestShapeError,
   emptyUsage,
+  thinkingBackOn,
   type GatewayRequest,
   type StreamEvent,
 } from "./ir.js";
@@ -1053,5 +1054,56 @@ describe("reasoning replayed to a DeepSeek model on a Responses upstream", () =>
     expect(JSON.stringify(buildResponsesRequest(parsed, "gpt-5.4"))).not.toContain(
       "reasoning_text",
     );
+  });
+});
+
+describe("Codex turning reasoning off, asked of another API", () => {
+  const codexOff = parseResponsesRequest({
+    model: "gpt-6.1-sol",
+    input: "hi",
+    reasoning: { effort: "none", summary: "auto" },
+  });
+
+  test("effort none goes to a Chat or Responses endpoint as none", () => {
+    expect(buildChatRequest(codexOff, "gpt-6.1-sol").reasoning_effort).toBe("none");
+    expect(buildResponsesRequest(codexOff, "gpt-6.1-sol").reasoning).toEqual({
+      effort: "none",
+      summary: "auto",
+    });
+  });
+
+  test("turned back on, it goes at low", () => {
+    expect(buildChatRequest(thinkingBackOn(codexOff), "gpt-6.1-sol").reasoning_effort).toBe("low");
+    expect(buildResponsesRequest(thinkingBackOn(codexOff), "gpt-6.1-sol").reasoning).toEqual({
+      effort: "low",
+      summary: "auto",
+    });
+  });
+
+  test("Claude Code's thinking turned off goes to a Chat endpoint with no effort, as before", () => {
+    const claudeOff = parseAnthropicRequest({
+      model: "gpt-6.1-sol",
+      max_tokens: 64,
+      thinking: { type: "disabled" },
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(buildChatRequest(claudeOff, "gpt-6.1-sol").reasoning_effort).toBeUndefined();
+  });
+
+  test("Claude Code's thinking turned off, turned back on for an always-thinking model, thinks at the least", () => {
+    const claudeOff = parseAnthropicRequest({
+      model: "glm-5.3",
+      max_tokens: 8000,
+      thinking: { type: "disabled" },
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(buildAnthropicRequest(thinkingBackOn(claudeOff), "glm-5.3").thinking).toEqual({
+      type: "enabled",
+      budget_tokens: 4096,
+    });
+    expect(buildAnthropicRequest(thinkingBackOn(claudeOff), "claude-opus-5-5")).toMatchObject({
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort: "low" },
+    });
   });
 });

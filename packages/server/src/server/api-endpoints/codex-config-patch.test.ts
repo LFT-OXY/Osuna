@@ -5,6 +5,7 @@ import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  readCodexReasoningEffort,
   removeCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
@@ -532,5 +533,20 @@ base_url = "https://other.example/v1"
 
   it("reports a file that does not parse", () => {
     expect(inspectCodexConfig({ text: "model = ", takeover: null }).kind).toBe("unparsable");
+  });
+});
+
+describe("readCodexReasoningEffort", () => {
+  it("reads the top-level effort, not a profile's", () => {
+    const text =
+      'model_reasoning_effort = "none"\n\n[profiles.deep]\nmodel_reasoning_effort = "xhigh"\n';
+    expect(readCodexReasoningEffort(text)).toBe("none");
+  });
+
+  it("is null when the file is missing, says nothing, or cannot be read", () => {
+    expect(readCodexReasoningEffort(null)).toBeNull();
+    expect(readCodexReasoningEffort('model = "gpt-5.5"\n')).toBeNull();
+    expect(readCodexReasoningEffort("model_reasoning_effort = 3\n")).toBeNull();
+    expect(readCodexReasoningEffort("model_reasoning_effort = \n")).toBeNull();
   });
 });

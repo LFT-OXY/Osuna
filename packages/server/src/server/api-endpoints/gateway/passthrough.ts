@@ -1,4 +1,4 @@
-// fitAnthropicBody、fitResponsesBody 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText）
+// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
@@ -7,10 +7,16 @@ import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { StoredApiEndpoint } from "../store.js";
 import { describeNetworkError, isRecord, parseJson } from "../upstream-http.js";
-import { isAnthropicModel, thinkingOnToolTurns } from "./translation/anthropic.js";
+import {
+  isAnthropicModel,
+  thinkingLeftOn,
+  thinkingOffAsTaken,
+  thinkingOnToolTurns,
+} from "./translation/anthropic.js";
 import { replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import { noteRefusal, type ShapeRefusals } from "./refusals.js";
 import {
   ANSWERED_BY_HEADER,
   openUpstream,
@@ -21,9 +27,9 @@ import {
 } from "./upstream-call.js";
 
 /*
- * 同协议直通的一次尝试：请求体除模型名（与发给别家模型的 Anthropic 请求的几处思考字段、
- * 发给 DeepSeek 的 Responses 请求的推理项）外
+ * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
+ * 不思考的写法上游不收（effort none、关思考）时，开口前在同一家换写法重问一次，并记住。
  * 开口之后边收边发，上游断流就断开 Agent 的连接，由 CLI 自己报错。
  */
 
@@ -67,8 +73,10 @@ export async function attemptEndpoint(input: {
   requestedModel: string;
   upstreamModel: string;
   headerTimeoutMs: number;
+  // 这家的这个模型不收哪些不思考的写法；count_tokens 不用。
+  refusals?: ShapeRefusals;
 }): Promise<AttemptOutcome> {
-  const { res, apiKey } = input;
+  const { res, apiKey, refusals } = input;
   const { originalUrl } = input.req;
   const url = upstreamUrl({
     baseUrl: input.baseUrl,
@@ -76,16 +84,29 @@ export async function attemptEndpoint(input: {
     suffix: input.pathSuffix,
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
+  const open = (body: Buffer) =>
+    openUpstream({
+      res,
+      url,
+      headers: upstreamHeaders({ headers: input.req.headers, apiKey, format: input.format }),
+      body,
+      apiKey,
+      headerTimeoutMs: input.headerTimeoutMs,
+    });
   const body = upstreamBody(input);
-
-  const opened = await openUpstream({
-    res,
-    url,
-    headers: upstreamHeaders({ headers: input.req.headers, apiKey, format: input.format }),
-    body,
-    apiKey,
-    headerTimeoutMs: input.headerTimeoutMs,
-  });
+  let opened = await open(body);
+  if (
+    opened.kind === "failed" &&
+    refusals &&
+    noteRefusal({
+      refusals,
+      format: input.format,
+      body: parseJson(body.toString("utf8")),
+      failed: opened,
+    })
+  ) {
+    opened = await open(upstreamBody(input));
+  }
   if (opened.kind !== "opened") return opened;
   const { response, first } = opened;
   res.writeHead(opened.status, {
@@ -153,13 +174,17 @@ class CacheReadTap {
   }
 }
 
-/** 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型改几处（count_tokens 不改）。 */
+/**
+ * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处
+ * （count_tokens 不改）。
+ */
 function upstreamBody(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
+  refusals?: ShapeRefusals;
 }): Buffer {
   const fits =
     (input.format === "anthropic_messages" || input.format === "openai_responses") &&
@@ -169,10 +194,40 @@ function upstreamBody(input: {
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
   if (fits && input.format === "anthropic_messages") {
     text = fitAnthropicBody(text, input.upstreamModel);
+    text = fitThinkingOff({
+      text,
+      model: input.upstreamModel,
+      leftOn: input.refusals?.has("thinkingOff") ?? false,
+    });
   } else if (fits) {
     text = fitResponsesBody(text, input.upstreamModel);
+    if (input.refusals?.has("none")) text = noneAsLow(text);
   }
   return Buffer.from(text);
+}
+
+/**
+ * 关思考的 Anthropic 请求按上游 Claude 收的写法改（thinkingOffAsTaken）；这家说过这个模型关不了思考的，
+ * 改成交给模型自己想（thinkingLeftOn）。只改 thinking、output_config、max_tokens 三处，其余字节原样。
+ */
+export function fitThinkingOff(input: { text: string; model: string; leftOn: boolean }): string {
+  const { text, model } = input;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  const fitted = input.leftOn ? thinkingLeftOn(body, model) : thinkingOffAsTaken(body, model);
+  let out = text;
+  for (const key of ["thinking", "output_config", "max_tokens"]) {
+    if (fitted[key] !== body[key]) out = applyEdits(out, modify(out, [key], fitted[key], {}));
+  }
+  return out;
+}
+
+/** 这家不收 effort none：Responses 请求的 none 改成 low。 */
+function noneAsLow(text: string): string {
+  const body = parseJson(text);
+  const reasoning = isRecord(body) && isRecord(body.reasoning) ? body.reasoning : null;
+  if (reasoning?.effort !== "none") return text;
+  return applyEdits(text, modify(text, ["reasoning", "effort"], "low", {}));
 }
 
 /** 只替换顶层 model 的值，其余字节不动（键序、空白、cache_control 都原样）。 */

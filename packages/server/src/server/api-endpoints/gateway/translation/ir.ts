@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes } from "node:crypto";
@@ -386,10 +386,20 @@ export function effortOf(value: unknown): Effort {
     : "";
 }
 
-/** 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。 */
+/**
+ * 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。
+ * 客户端用 OpenAI 的 effort none 关推理（effortOf 读成 low，Anthropic 的 disabled 不带力度）时照原样发 none；
+ * 上游不收再由中转站用 thinkingBackOn 重发。
+ */
 export function openAIEffort(request: GatewayRequest): string | null {
+  if (request.thinkOff && request.effort !== "") return "none";
   if (request.effort === "") return null;
   return request.effort === "xhigh" || request.effort === "max" ? "high" : request.effort;
+}
+
+/** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */
+export function thinkingBackOn(request: GatewayRequest): GatewayRequest {
+  return { ...request, thinkOff: false, effort: request.effort === "" ? "low" : request.effort };
 }
 
 /** 力度换成 Anthropic 的思考预算。 */

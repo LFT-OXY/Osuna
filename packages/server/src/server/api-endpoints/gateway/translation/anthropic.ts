@@ -241,7 +241,7 @@ export function buildAnthropicRequest(
     const choice = anthropicToolChoice(request);
     if (choice) out.tool_choice = choice;
   }
-  return out;
+  return thinkingOffAsTaken(out, model);
 }
 
 const EPHEMERAL = { type: "ephemeral" };
@@ -376,6 +376,121 @@ function adaptiveOnly(model: string): boolean {
 function noXhigh(model: string): boolean {
   const version = claudeVersionOf(model);
   return version?.major === 4 && version.minor === 6;
+}
+
+// 中转站怎么拼都能读出 Claude 的系列与版本：claude-sonnet-5-5、sonnet-5.5、anthropic.claude-sonnet-5-5-v1:0、claude-fable-5-1。
+const CLAUDE_LINE =
+  /(?:^|[^a-z0-9])(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)/;
+
+/**
+ * 一个 Claude 怎么收「关思考」（magpie thinkingOffOf，照 Anthropic 自己的规则）：taken 任何档位都收 disabled；
+ * upToHigh 只在 high 及以下收（Opus 5、Haiku 5.5）；betweenTools 不收 disabled、要 between_tools（Sonnet 5.5）；
+ * never 关不掉（Opus 5.5、Fable 5、Mythos 5）。认不出、或比这些新的系列为 unknown，原样发。
+ */
+type ThinkingOff = "unknown" | "taken" | "upToHigh" | "betweenTools" | "never";
+
+function thinkingOffOf(model: string): ThinkingOff {
+  const match = CLAUDE_LINE.exec(model.toLowerCase());
+  if (!match) return "unknown";
+  const family = match[1];
+  const major = Number(match[2]);
+  const minor = Number(match[3] ?? 0);
+  if (family === "fable" || family === "mythos") return major === 5 ? "never" : "unknown";
+  if (major < 5) return "taken";
+  if (major === 5 && minor === 0) return family === "opus" ? "upToHigh" : "taken";
+  if (major === 5 && minor === 5) {
+    if (family === "sonnet") return "betweenTools";
+    return family === "opus" ? "never" : "upToHigh";
+  }
+  return "unknown";
+}
+
+// 不带 thinking 的 Claude 照样自适应地想：给很短的回答上限再加这么多（magpie classifierRoom，Claude Code 也这样给）。
+const THINKING_ROOM = 2048;
+
+/**
+ * 关思考（disabled 或 between_tools）的请求，换成上游这个 Claude 收的写法（magpie thinkingOffAsTaken）。
+ * Claude Code 的自动模式判定与后台小查询会关思考，经中转站发给 Sonnet 5.5 / Opus 5.5 就被拒；
+ * Codex 的 effort none 翻译过来也是关思考。别的请求、别家与老的 Claude 原样返回同一个对象。
+ */
+export function thinkingOffAsTaken(
+  body: Record<string, unknown>,
+  model: string,
+): Record<string, unknown> {
+  const off = thinkingOff(body);
+  if (off === null) return body;
+  const aboveHigh = off.effort === "xhigh" || off.effort === "max";
+  switch (thinkingOffOf(model)) {
+    case "taken":
+      return off.type === "disabled"
+        ? body
+        : withThinking(body, { thinking: { type: "disabled" }, effort: "" });
+    case "upToHigh":
+      if (off.type === "disabled" && !aboveHigh) return body;
+      return withThinking(body, {
+        thinking: { type: "disabled" },
+        effort: aboveHigh ? "high" : "",
+      });
+    case "betweenTools":
+      // between_tools 不收别的字段（display、budget_tokens）。
+      if (off.type === "between_tools" && off.alone && !aboveHigh) return body;
+      return withThinking(body, {
+        thinking: { type: "between_tools" },
+        effort: aboveHigh ? "high" : "",
+      });
+    case "never":
+      return withThinking(body, { thinking: null, effort: off.effort === "" ? "low" : "" });
+    case "unknown":
+      return body;
+  }
+}
+
+/**
+ * 上游说这个模型关不了思考：去掉关思考，交给模型自己想；Claude 再按最低档想（magpie withoutThinkingOff）。
+ * 不关思考的请求原样返回同一个对象。
+ */
+export function thinkingLeftOn(
+  body: Record<string, unknown>,
+  model: string,
+): Record<string, unknown> {
+  const off = thinkingOff(body);
+  if (off === null) return body;
+  const claude = isAnthropicModel(model) || CLAUDE_LINE.test(model.toLowerCase());
+  return withThinking(body, { thinking: null, effort: claude && off.effort === "" ? "low" : "" });
+}
+
+function thinkingOff(
+  body: Record<string, unknown>,
+): { type: "disabled" | "between_tools"; alone: boolean; effort: string } | null {
+  const thinking = isRecord(body.thinking) ? body.thinking : null;
+  const type = thinking?.type;
+  if (type !== "disabled" && type !== "between_tools") return null;
+  const config = isRecord(body.output_config) ? body.output_config : null;
+  const effort = typeof config?.effort === "string" ? config.effort : "";
+  return { type, alone: Object.keys(thinking ?? {}).length === 1, effort };
+}
+
+/** `thinking` 为 null 时去掉思考字段，并给很短的回答上限留出想的余地；`effort` 非空时写进 output_config。 */
+function withThinking(
+  body: Record<string, unknown>,
+  change: { thinking: Record<string, unknown> | null; effort: string },
+): Record<string, unknown> {
+  const { thinking, effort } = change;
+  const out = { ...body };
+  if (thinking) {
+    out.thinking = thinking;
+  } else {
+    delete out.thinking;
+    const maxTokens = body.max_tokens;
+    if (typeof maxTokens === "number" && maxTokens > 0 && maxTokens < THINKING_ROOM) {
+      out.max_tokens = maxTokens + THINKING_ROOM;
+    }
+  }
+  if (effort !== "") {
+    const config = isRecord(body.output_config) ? body.output_config : {};
+    out.output_config = { ...config, effort };
+  }
+  return out;
 }
 
 /** 图片按 Anthropic 的写法：内嵌的给 base64，按地址的给地址。 */

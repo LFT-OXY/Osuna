@@ -178,6 +178,15 @@ export type CodexConfigInspection =
     }
   | Unparsable;
 
+/** 顶层的 model_reasoning_effort（Codex 新会话的推理档位）；没设、不是字符串或文件读不出为 null。 */
+export function readCodexReasoningEffort(text: string | null): string | null {
+  if (text === null) return null;
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return null;
+  const effort = parsed.value.model_reasoning_effort;
+  return typeof effort === "string" ? effort : null;
+}
+
 /**
  * 读真实文件判断健康状态。`takeover` 与 `table` 是启用中的接口上次写入的内容，官方模式下都为 null。
  * profile 只认 Codex 0.118–0.133 的旧写法：顶层 `profile` 选中 `[profiles.<name>]`，覆盖顶层键。

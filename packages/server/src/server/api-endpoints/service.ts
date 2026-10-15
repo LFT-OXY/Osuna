@@ -34,6 +34,7 @@ import {
 import {
   applyCodexApiEndpoint,
   inspectCodexConfig,
+  readCodexReasoningEffort,
   removeCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
@@ -549,7 +550,7 @@ export class ApiEndpointService {
             this.cliFingerprint(next, provider, tokens)),
     );
     const catalogBefore = this.store.readCodexModelCatalog();
-    const catalog = next.agents.codex.enabled ? buildCodexModelCatalog(next) : null;
+    const catalog = next.agents.codex.enabled ? this.codexModelCatalog(next) : null;
     const synced: ApiEndpointProvider[] = [];
     try {
       // 先有目录文件，config.toml 才指向它。
@@ -607,7 +608,7 @@ export class ApiEndpointService {
   ): void {
     const wiring = this.cliWiring(state, provider, tokens);
     if (provider === "codex") {
-      const catalog = wiring ? buildCodexModelCatalog(state) : null;
+      const catalog = wiring ? this.codexModelCatalog(state) : null;
       if (catalog !== this.store.readCodexModelCatalog()) {
         this.store.writeCodexModelCatalog(catalog);
       }
@@ -923,6 +924,19 @@ export class ApiEndpointService {
       homeDir: this.homeDir,
     });
     return path.join(path.dirname(hooksPath), "config.toml");
+  }
+
+  /** 目录的默认档跟着用户 config.toml 的 model_reasoning_effort；只在重新生成目录时读，读不出按没设。 */
+  private codexModelCatalog(state: ApiEndpointState): string {
+    let effort: string | null = null;
+    try {
+      effort = readCodexReasoningEffort(
+        readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null,
+      );
+    } catch (error) {
+      this.logger.warn({ err: error }, "Could not read Codex reasoning effort");
+    }
+    return buildCodexModelCatalog(state, effort);
   }
 
   private restoreOfficial(provider: ApiEndpointProvider): void {

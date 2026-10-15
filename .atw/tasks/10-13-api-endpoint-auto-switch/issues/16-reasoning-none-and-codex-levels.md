@@ -18,15 +18,17 @@
 
 借鉴的代码在文件头写 MIT 短式（R-C6）。对应 prd R-B4、R-C3、R-C5。
 
+实现备注：判定与内存记录在 `gateway/refusals.ts`（`refusedShape`、`noteRefusal`、`RefusedShapes`），写法换算在 `translation/anthropic.ts`（`thinkingOffAsTaken`、`thinkingLeftOn`）与 `ir.ts`（`openAIEffort` 照发 none、`thinkingBackOn`）。照 magpie 多出的表外细节：去掉 thinking 的 Claude 回答上限不足 2048 时加 2048；老 Claude 收到 `between_tools` 改成 `disabled`。直通的「不能关思考」兜底照 magpie `withoutThinkingOff` 去掉关思考交给模型（Claude 另加 effort low），翻译照 `thinkingBackOn` 打开思考用 low。同一模型并发的请求即使已记住也照样重问一次；每次记住写一行 info 日志。档位说明文字取自 Codex 自带目录。本机 Codex 0.162 用 `codex debug models` 读生成的目录，四个条目（含隐藏）都读进来了，四档、默认 low。
+
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 生成的 Codex 目录：每个条目（可见与隐藏）都带四档、`supports_reasoning_summaries = true`，默认档按 `model_reasoning_effort` 取（none → low、xhigh → xhigh、未设 → medium），Codex 仍能读进整份目录（沿用 03 票的目录 e2e）。（单元 + e2e）
-- [ ] 假上游对 `none` 回列出档位的 400：中转站在同一家用 `low` 重发并成功；同一家同一模型的下一个请求直接发 `low`；上游接受 `none` 时发出的就是 `none`。直通与翻译各测一次。（单元 + 假上游 e2e）
-- [ ] 关思考的请求发往 claude-sonnet-5-5 / claude-opus-5-5 / claude-opus-5 / claude-opus-4-8 时，上游收到的分别是上表的写法；Claude Code 直通请求与 Codex 翻译请求各测一次。（单元 + 假上游 e2e）
-- [ ] 假上游回「不能关思考」的 400：重发时思考打开、用最低档，并被记住。（单元）
-- [ ] 不关思考的请求，上游收到的内容与改动前一致。（单元）
+- [x] 生成的 Codex 目录：每个条目（可见与隐藏）都带四档、`supports_reasoning_summaries = true`，默认档按 `model_reasoning_effort` 取（none → low、xhigh → xhigh、未设 → medium），Codex 仍能读进整份目录（沿用 03 票的目录 e2e）。（单元 + e2e）
+- [x] 假上游对 `none` 回列出档位的 400：中转站在同一家用 `low` 重发并成功；同一家同一模型的下一个请求直接发 `low`；上游接受 `none` 时发出的就是 `none`。直通与翻译各测一次。（单元 + 假上游 e2e）
+- [x] 关思考的请求发往 claude-sonnet-5-5 / claude-opus-5-5 / claude-opus-5 / claude-opus-4-8 时，上游收到的分别是上表的写法；Claude Code 直通请求与 Codex 翻译请求各测一次。（单元 + 假上游 e2e）
+- [x] 假上游回「不能关思考」的 400：重发时思考打开、用最低档，并被记住。（单元）
+- [x] 不关思考的请求，上游收到的内容与改动前一致。（单元）
 
 ## Comments
 

@@ -6,6 +6,7 @@ import {
   buildAnthropicRequest,
   parseAnthropicRequest,
   renderAnthropic,
+  thinkingOffAsTaken,
   usageFromAnthropic,
   usageToAnthropic,
 } from "./anthropic.js";
@@ -14,7 +15,8 @@ import { ReplyCollector, type GatewayRequest, type Message, type Part } from "./
 
 /*
  * Anthropic Messages 这一侧的翻译。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
- * anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go。
+ * anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、
+ * thinking_off_test.go。
  */
 
 const INTERRUPTED = "[The result of this tool call is unavailable: the turn was interrupted.]";
@@ -557,6 +559,153 @@ describe("thinking on a request built for Anthropic (magpie anthropic.go anthrop
     // 跟 magpie：只有直通才对别家模型补 disabled（fitAnthropicBody）。
     expect(built("glm-4.6", {}).thinking).toBeUndefined();
     expect(built("claude-sonnet-4-5", {}).thinking).toBeUndefined();
+  });
+});
+
+describe("thinking turned off as each Claude takes it (magpie thinking_off_test.go)", () => {
+  const off = (fields: Record<string, unknown>) => ({
+    max_tokens: 64,
+    thinking: { type: "disabled" },
+    messages: [],
+    ...fields,
+  });
+
+  test.each([
+    {
+      name: "Sonnet 5.5 is sent between_tools",
+      model: "claude-sonnet-5-5",
+      body: off({}),
+      sent: { max_tokens: 64, thinking: { type: "between_tools" }, messages: [] },
+    },
+    {
+      name: "Sonnet 5.5 at xhigh is asked high",
+      model: "claude-sonnet-5-5",
+      body: off({ output_config: { effort: "xhigh" } }),
+      sent: {
+        max_tokens: 64,
+        thinking: { type: "between_tools" },
+        messages: [],
+        output_config: { effort: "high" },
+      },
+    },
+    {
+      name: "Sonnet 5.5's between_tools takes no other field",
+      model: "claude-sonnet-5-5",
+      body: off({ thinking: { type: "between_tools", display: "omitted" } }),
+      sent: { max_tokens: 64, thinking: { type: "between_tools" }, messages: [] },
+    },
+    {
+      name: "a relay's sonnet-5.5",
+      model: "sonnet-5.5",
+      body: off({}),
+      sent: { max_tokens: 64, thinking: { type: "between_tools" }, messages: [] },
+    },
+    {
+      name: "Opus 5.5 is sent no thinking, at effort low, with room to think",
+      model: "claude-opus-5-5",
+      body: off({}),
+      sent: { max_tokens: 64 + 2048, messages: [], output_config: { effort: "low" } },
+    },
+    {
+      name: "Opus 5.5 keeps an effort asked",
+      model: "claude-opus-5-5",
+      body: off({ max_tokens: 8000, output_config: { effort: "high" } }),
+      sent: { max_tokens: 8000, messages: [], output_config: { effort: "high" } },
+    },
+    {
+      name: "Fable 5.1 is sent no thinking",
+      model: "claude-fable-5-1",
+      body: off({ max_tokens: 256 }),
+      sent: { max_tokens: 256 + 2048, messages: [], output_config: { effort: "low" } },
+    },
+    {
+      name: "Mythos 5.1 is sent no thinking",
+      model: "claude-mythos-5-1",
+      body: off({ max_tokens: 4096 }),
+      sent: { max_tokens: 4096, messages: [], output_config: { effort: "low" } },
+    },
+    {
+      name: "Opus 5 off at max is asked high",
+      model: "claude-opus-5",
+      body: off({ output_config: { effort: "max" } }),
+      sent: {
+        max_tokens: 64,
+        thinking: { type: "disabled" },
+        messages: [],
+        output_config: { effort: "high" },
+      },
+    },
+    {
+      name: "Haiku 5.5 off at xhigh is asked high",
+      model: "claude-haiku-5-5",
+      body: off({ output_config: { effort: "xhigh" } }),
+      sent: {
+        max_tokens: 64,
+        thinking: { type: "disabled" },
+        messages: [],
+        output_config: { effort: "high" },
+      },
+    },
+    {
+      name: "between_tools to Sonnet 5 goes as disabled",
+      model: "claude-sonnet-5",
+      body: off({ thinking: { type: "between_tools" } }),
+      sent: { max_tokens: 64, thinking: { type: "disabled" }, messages: [] },
+    },
+    {
+      name: "between_tools to Opus 5.5 goes as no thinking",
+      model: "claude-opus-5-5",
+      body: off({ thinking: { type: "between_tools" } }),
+      sent: { max_tokens: 64 + 2048, messages: [], output_config: { effort: "low" } },
+    },
+  ])("$name", ({ model, body, sent }) => {
+    expect(thinkingOffAsTaken(body, model)).toEqual(sent);
+  });
+
+  test.each([
+    { model: "deepseek-v4-pro", body: off({}) },
+    { model: "glm-5.3", body: off({ output_config: { effort: "max" } }) },
+    { model: "kimi-k2.5", body: off({ thinking: { type: "between_tools" } }) },
+    { model: "claude-sonnet-5", body: off({ output_config: { effort: "max" } }) },
+    { model: "claude-opus-5", body: off({ output_config: { effort: "high" } }) },
+    { model: "claude-haiku-5-5", body: off({}) },
+    { model: "claude-opus-4-8", body: off({ output_config: { effort: "max" } }) },
+    { model: "claude-sonnet-4-6", body: off({}) },
+    { model: "claude-haiku-4-5-20251001", body: off({}) },
+    { model: "claude-3-7-sonnet-20250219", body: off({}) },
+    { model: "claude-sonnet-5-20261001", body: off({}) },
+    // 想着的、或没提思考的 Sonnet 5.5：没什么可关的。
+    {
+      model: "claude-sonnet-5-5",
+      body: off({ thinking: { type: "adaptive" }, output_config: { effort: "max" } }),
+    },
+    { model: "claude-sonnet-5-5", body: { max_tokens: 64, messages: [] } },
+    {
+      model: "claude-sonnet-5-5",
+      body: off({ thinking: { type: "between_tools" }, output_config: { effort: "high" } }),
+    },
+    // 比这些规则新的系列。
+    { model: "claude-sonnet-6", body: off({}) },
+  ])("$model goes as it was sent: $body.thinking", ({ model, body }) => {
+    expect(thinkingOffAsTaken(body, model)).toBe(body);
+  });
+
+  test("a Codex request with reasoning off reaches each Claude in the shape it takes", () => {
+    const codexOff = (model: string) =>
+      buildAnthropicRequest(
+        {
+          ...request([{ role: "user", parts: [text("hi")] }]),
+          effort: "low",
+          thinking: true,
+          thinkOff: true,
+        },
+        model,
+      );
+    expect(codexOff("claude-sonnet-5-5")).toMatchObject({ thinking: { type: "between_tools" } });
+    expect(codexOff("claude-opus-5-5").thinking).toBeUndefined();
+    expect(codexOff("claude-opus-5-5").output_config).toEqual({ effort: "low" });
+    expect(codexOff("claude-opus-5")).toMatchObject({ thinking: { type: "disabled" } });
+    expect(codexOff("claude-opus-4-8")).toMatchObject({ thinking: { type: "disabled" } });
   });
 });
 

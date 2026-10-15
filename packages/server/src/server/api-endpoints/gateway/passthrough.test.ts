@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fitAnthropicBody, fitResponsesBody } from "./passthrough.js";
+import { fitAnthropicBody, fitResponsesBody, fitThinkingOff } from "./passthrough.js";
 
 /*
  * 直通给 Anthropic 地址的请求体，按这家的模型改的几处；其余字节原样。
@@ -43,6 +43,54 @@ describe("a Claude Code request passed through to another vendor's model", () =>
     const disabled = `{"model":"kimi-k2","thinking":{"type":"disabled"},"messages":[]}`;
     expect(fitAnthropicBody(enabled, "kimi-k2")).toBe(enabled);
     expect(fitAnthropicBody(disabled, "kimi-k2")).toBe(disabled);
+  });
+});
+
+describe("a Claude Code request turning thinking off, passed through to a Claude", () => {
+  test("Sonnet 5.5 gets between_tools, the rest byte for byte", () => {
+    const body = `{"model":"claude-sonnet-5-5", "max_tokens" : 64,"thinking":{"type":"disabled"},"system":[{"type":"text","text":"sys","cache_control":{"type":"ephemeral"}}],"messages":[]}`;
+    expect(fitThinkingOff({ text: body, model: "claude-sonnet-5-5", leftOn: false })).toBe(
+      `{"model":"claude-sonnet-5-5", "max_tokens" : 64,"thinking":{"type":"between_tools"},"system":[{"type":"text","text":"sys","cache_control":{"type":"ephemeral"}}],"messages":[]}`,
+    );
+  });
+
+  test("Opus 5.5 gets no thinking, effort low and room to think", () => {
+    const body = `{"model":"claude-opus-5-5","max_tokens":64,"thinking":{"type":"disabled"},"messages":[]}`;
+    expect(
+      JSON.parse(fitThinkingOff({ text: body, model: "claude-opus-5-5", leftOn: false })),
+    ).toEqual({
+      model: "claude-opus-5-5",
+      max_tokens: 2112,
+      messages: [],
+      output_config: { effort: "low" },
+    });
+  });
+
+  test("a request that thinks, or a Claude that takes disabled, goes byte for byte", () => {
+    const thinking = `{"model":"claude-sonnet-5-5", "thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[]}`;
+    const untold = `{"model":"claude-opus-5-5","max_tokens":64,"messages":[]}`;
+    const older = `{"model":"claude-opus-4-8", "thinking":{"type":"disabled"},"messages":[]}`;
+    expect(fitThinkingOff({ text: thinking, model: "claude-sonnet-5-5", leftOn: false })).toBe(
+      thinking,
+    );
+    expect(fitThinkingOff({ text: untold, model: "claude-opus-5-5", leftOn: false })).toBe(untold);
+    expect(fitThinkingOff({ text: older, model: "claude-opus-4-8", leftOn: false })).toBe(older);
+  });
+
+  test("a model the endpoint said cannot stop thinking is left to think, a Claude at its lowest", () => {
+    const glm = `{"model":"glm-5.3","max_tokens":8000,"thinking":{"type":"disabled"},"messages":[]}`;
+    const claude = `{"model":"claude-opus-6","max_tokens":8000,"thinking":{"type":"disabled"},"messages":[]}`;
+    expect(fitThinkingOff({ text: glm, model: "glm-5.3", leftOn: true })).toBe(
+      `{"model":"glm-5.3","max_tokens":8000,"messages":[]}`,
+    );
+    expect(
+      JSON.parse(fitThinkingOff({ text: claude, model: "claude-opus-6", leftOn: true })),
+    ).toEqual({
+      model: "claude-opus-6",
+      max_tokens: 8000,
+      messages: [],
+      output_config: { effort: "low" },
+    });
   });
 });
 

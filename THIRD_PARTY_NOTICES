@@ -49,6 +49,22 @@ anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
   packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
   packages/server/src/server/api-endpoints/gateway/translation/*.test.ts
 
+Reasoning turned off, sent the way each model takes it: thinkingOffOf,
+thinkingOffAsTaken and withoutThinkingOff in anthropic.go, thinkingBackOn in
+wire_effort.go, and the refusal words (alwaysThinks, refusesThinkingOff,
+thinkingOffRefused in anthropic.go; mandatoryReasoning, effortLevelsNamed,
+noneQuoted in gateway.go) with the retry at the lowest level in gateway.go.
+Their tests reuse cases from thinking_off_test.go, sub2api_think_off_test.go
+and gateway_test.go. The Codex catalog's default reasoning level follows
+ModelDefault in internal/codexcat/codexcat.go and NearestEffort in
+internal/catalog/catalog.go:
+
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
 MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go):
 
@@ -102,6 +118,11 @@ from codex-rs/models-manager/prompt.md (commit 90f00bd) into the Codex model
 catalog the daemon writes for API endpoint models:
 
   packages/server/src/server/api-endpoints/codex-base-instructions.ts
+
+The descriptions of the four reasoning levels in that catalog are copied from
+codex-rs/models-manager/models.json (same commit):
+
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
 
 Copyright 2025 OpenAI. Licensed under the Apache License, Version 2.0, whose
 full text is in this repository's LICENSE.

@@ -19,6 +19,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 /*
  * 中转站直通（工单 02）：真实 daemon + 本机假上游。CLI 这一侧用 fetch 扮演，
  * 带上 gateway-tokens.json 里的口令，就像 CLI 读自己的配置文件那样。
+ * 「不思考」被拒的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go 与 gateway_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -1353,6 +1354,205 @@ describe("translating for Codex, and to an endpoint that speaks only Responses",
         param: null,
       },
     });
+  });
+});
+
+/** 换掉几家接口的已选模型；中转站每次请求都重读 endpoints.json。 */
+async function selectModels(endpointsDir: string, models: Record<string, string[]>) {
+  const endpointsPath = path.join(endpointsDir, "endpoints.json");
+  const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+    endpoints: { id: string; models: { id: string }[] }[];
+  };
+  for (const endpoint of file.endpoints) {
+    const selected = models[endpoint.id];
+    if (selected) endpoint.models = selected.map((id) => ({ id }));
+  }
+  await writeFile(endpointsPath, JSON.stringify(file));
+}
+
+function receivedBody(request: RecordedRequest | undefined): Record<string, unknown> {
+  return JSON.parse(request?.body.toString() ?? "{}") as Record<string, unknown>;
+}
+
+const NONE_REFUSED = `{"type":"error","error":{"type":"invalid_request_error","message":"gpt-6.1-sol does not support reasoning effort \\"none\\"; use low, medium, high, xhigh or max"}}`;
+const ALWAYS_THINKS = `{"type":"error","error":{"type":"1210","message":"GLM-5.3 always engages in thinking; use low, high, or max"}}`;
+
+function refuse(res: ServerResponse, body: string) {
+  res.writeHead(400, { "content-type": "application/json" });
+  res.end(body);
+}
+
+describe("reasoning turned off, sent the way each model takes it", () => {
+  test("a Responses endpoint refusing effort none is asked again at low, and from then on", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      const body = receivedBody(request);
+      const effort = (body.reasoning as { effort?: string } | undefined)?.effort;
+      if (body.model === "gpt-6.1-sol" && effort === "none") refuse(res, NONE_REFUSED);
+      else res.writeHead(200, { "content-type": "application/json" }).end("{}");
+    };
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["gpt-6.1-sol", "gpt-5.5"] });
+    const ask = (model: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+    const efforts = () =>
+      upstream.requests.splice(0).map((request) => {
+        const body = receivedBody(request);
+        return `${String(body.model)} ${(body.reasoning as { effort: string }).effort}`;
+      });
+
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol none", "gpt-6.1-sol low"]);
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol low"]);
+    expect((await ask("gpt-5.5")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-5.5 none"]);
+  });
+
+  test("a Chat endpoint refusing a translated effort none is asked again at low, and from then on", async () => {
+    const chat = await startUpstream();
+    chat.respond = (request, res) => {
+      const body = receivedBody(request);
+      if (body.model === "gpt-6.1-sol" && body.reasoning_effort === "none") {
+        refuse(res, NONE_REFUSED);
+      } else {
+        chatStream(res);
+      }
+    };
+    const { gateway, endpointsDir } = await start({ chatUpstream: chat });
+    await selectModels(endpointsDir, { ep_c: ["gpt-6.1-sol", "qwen3-coder"] });
+    const ask = (model: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+    const efforts = () =>
+      chat.requests.splice(0).map((request) => {
+        const body = receivedBody(request);
+        return `${String(body.model)} ${String(body.reasoning_effort)}`;
+      });
+
+    const first = await ask("gpt-6.1-sol");
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ status: "completed" });
+    expect(efforts()).toEqual(["gpt-6.1-sol none", "gpt-6.1-sol low"]);
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol low"]);
+    expect((await ask("qwen3-coder")).status).toBe(200);
+    expect(efforts()).toEqual(["qwen3-coder none"]);
+  });
+
+  test("Claude Code and Codex turning thinking off reach each Claude in the shape it takes", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const { gateway, endpointsDir } = await start({ upstreamB: anthropic });
+    const models = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"];
+    await selectModels(endpointsDir, { ep_b: models });
+    const thinkingOf = (request: RecordedRequest | undefined) => {
+      const body = receivedBody(request);
+      return {
+        thinking: body.thinking,
+        effort: (body.output_config as { effort?: string })?.effort,
+      };
+    };
+    const expected = [
+      { thinking: { type: "between_tools" }, effort: undefined },
+      { thinking: undefined, effort: "low" },
+      { thinking: { type: "disabled" }, effort: undefined },
+      { thinking: { type: "disabled" }, effort: undefined },
+    ];
+
+    for (const model of models) {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 64,
+          thinking: { type: "disabled" },
+          messages: [{ role: "user", content: "Is this action safe?" }],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    expect(anthropic.requests.splice(0).map(thinkingOf)).toEqual(expected);
+
+    for (const model of models) {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    expect(anthropic.requests.splice(0).map(thinkingOf)).toEqual(expected);
+  });
+
+  test("a translated request a model that always thinks refuses is asked again thinking at its least", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (request, res) => {
+      const thinking = receivedBody(request).thinking as { type?: string } | undefined;
+      if (thinking?.type === "disabled") refuse(res, ALWAYS_THINKS);
+      else anthropicStream(res);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+    const ask = () =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({
+          model: "glm-4.6",
+          input: "hi",
+          stream: false,
+          reasoning: { effort: "none" },
+        }),
+      );
+
+    expect((await ask()).status).toBe(200);
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "disabled" },
+      { type: "enabled", budget_tokens: 4096 },
+    ]);
+    expect((await ask()).status).toBe(200);
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "enabled", budget_tokens: 4096 },
+    ]);
+  });
+
+  test("a model that always thinks is asked again with its thinking left on, and from then on", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (request, res) => {
+      const thinking = receivedBody(request).thinking as { type?: string } | undefined;
+      if (thinking?.type === "disabled") refuse(res, ALWAYS_THINKS);
+      else streamReply(res);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+    // Claude Code 起标题的请求没提思考：发给别家模型时补上 disabled（R-C3），GLM 不收。
+    const ask = () =>
+      fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model: "glm-4.6",
+          max_tokens: 64,
+          messages: [{ role: "user", content: "Title this" }],
+        }),
+      );
+
+    const first = await ask();
+    expect(first.status).toBe(200);
+    await first.text();
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "disabled" },
+      undefined,
+    ]);
+    const second = await ask();
+    expect(second.status).toBe(200);
+    await second.text();
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      undefined,
+    ]);
   });
 });
 

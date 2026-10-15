@@ -38,8 +38,12 @@ interface CatalogEntry {
   [field: string]: unknown;
 }
 
-function entries(state: ApiEndpointState): CatalogEntry[] {
-  return (JSON.parse(buildCodexModelCatalog(state)) as { models: CatalogEntry[] }).models;
+function entries(
+  state: ApiEndpointState,
+  options: { reasoningEffort?: string | null } = {},
+): CatalogEntry[] {
+  const catalog = buildCodexModelCatalog(state, options.reasoningEffort ?? null);
+  return (JSON.parse(catalog) as { models: CatalogEntry[] }).models;
 }
 
 describe("buildCodexModelCatalog", () => {
@@ -61,7 +65,6 @@ describe("buildCodexModelCatalog", () => {
     const [first] = entries(STATE);
 
     expect(first).toMatchObject({
-      supported_reasoning_levels: [],
       shell_type: "unified_exec",
       supported_in_api: true,
       priority: 1,
@@ -69,7 +72,6 @@ describe("buildCodexModelCatalog", () => {
       truncation_policy: { mode: "bytes", limit: 10_000 },
       experimental_supported_tools: [],
       supports_parallel_tool_calls: true,
-      supports_reasoning_summaries: false,
     });
     expect(first?.base_instructions).toEqual(
       expect.stringContaining("You are a coding agent running in the Codex CLI"),
@@ -91,4 +93,35 @@ describe("buildCodexModelCatalog", () => {
       "relay-b/relay-a/kimi-k2",
     ]);
   });
+
+  it("offers four reasoning levels and reasoning summaries on every entry, listed or hidden", () => {
+    for (const entry of entries(STATE)) {
+      expect(entry.supported_reasoning_levels).toEqual([
+        { effort: "low", description: "Fast responses with lighter reasoning" },
+        { effort: "medium", description: "Balances speed and reasoning depth for everyday tasks" },
+        { effort: "high", description: "Greater reasoning depth for complex problems" },
+        { effort: "xhigh", description: "Extra high reasoning depth for complex problems" },
+      ]);
+      expect(entry.supports_reasoning_summaries).toBe(true);
+    }
+  });
+
+  it.each([
+    { configured: null, level: "medium" },
+    { configured: "none", level: "low" },
+    { configured: "minimal", level: "low" },
+    { configured: "low", level: "low" },
+    { configured: "high", level: "high" },
+    { configured: "xhigh", level: "xhigh" },
+    { configured: "max", level: "xhigh" },
+    { configured: "turbo", level: "medium" },
+  ])(
+    "defaults every entry to the level nearest model_reasoning_effort $configured: $level",
+    ({ configured, level }) => {
+      const levels = entries(STATE, { reasoningEffort: configured }).map(
+        (entry) => entry.default_reasoning_level,
+      );
+      expect(new Set(levels)).toEqual(new Set([level]));
+    },
+  );
 });

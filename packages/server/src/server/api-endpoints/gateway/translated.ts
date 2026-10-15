@@ -1,3 +1,6 @@
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type { IncomingMessage } from "node:http";
 import { StringDecoder } from "node:string_decoder";
 import type { Response } from "express";
@@ -5,7 +8,14 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
-import { ReplyCollector, type GatewayRequest, type StreamEvent } from "./translation/ir.js";
+import { noteRefusal, type RefusedShape, type ShapeRefusals } from "./refusals.js";
+import {
+  ReplyCollector,
+  openAIEffort,
+  thinkingBackOn,
+  type GatewayRequest,
+  type StreamEvent,
+} from "./translation/ir.js";
 import { protocolOf } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import {
@@ -22,6 +32,7 @@ import {
  * 翻译后的一次尝试：Agent 的请求经中间格式翻成这家能用的格式，上游一律流式请求；
  * 回复解码后按 Agent 的协议编码，Agent 要流式就边收边发，不要就攒齐渲染成整份回复。
  * 开口前的失败与直通一样交回中转站换家；开口之后不再换家。
+ * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -39,27 +50,39 @@ export async function attemptTranslated(input: {
   requestedModel: string;
   upstreamModel: string;
   headerTimeoutMs: number;
+  // 这家的这个模型不收哪些不思考的写法。
+  refusals: ShapeRefusals;
 }): Promise<AttemptOutcome> {
-  const { res, apiKey, to } = input;
-  const body = protocolOf(to).build({ ...input.request, stream: true }, input.upstreamModel);
+  const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
-  const opened = await openUpstream({
-    res,
-    url,
-    headers: {
-      "content-type": "application/json",
-      accept: "text/event-stream",
-      // 要上游不压缩：错误体要读出原文。
-      "accept-encoding": "identity",
-      authorization: `Bearer ${apiKey}`,
-      ...(to === "anthropic_messages"
-        ? { "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION }
-        : {}),
-    },
-    body: Buffer.from(JSON.stringify(body)),
-    apiKey,
-    headerTimeoutMs: input.headerTimeoutMs,
-  });
+  const open = (body: Record<string, unknown>) =>
+    openUpstream({
+      res,
+      url,
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        // 要上游不压缩：错误体要读出原文。
+        "accept-encoding": "identity",
+        authorization: `Bearer ${apiKey}`,
+        ...(to === "anthropic_messages"
+          ? { "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION }
+          : {}),
+      },
+      body: Buffer.from(JSON.stringify(body)),
+      apiKey,
+      headerTimeoutMs: input.headerTimeoutMs,
+    });
+  const build = () =>
+    protocolOf(to).build(
+      { ...allowedReasoning({ request: input.request, to, refusals }), stream: true },
+      input.upstreamModel,
+    );
+  const body = build();
+  let opened = await open(body);
+  if (opened.kind === "failed" && noteRefusal({ refusals, format: to, body, failed: opened })) {
+    opened = await open(build());
+  }
   if (opened.kind !== "opened") return opened;
   const { response, first } = opened;
   if (!isEventStream(response, first)) {
@@ -75,6 +98,19 @@ export async function attemptTranslated(input: {
     ? streamReply({ ...input, response, first })
     : wholeReply({ ...input, response, first });
   return { kind: "answered", finished };
+}
+
+/** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */
+function allowedReasoning(input: {
+  request: GatewayRequest;
+  to: ApiEndpointRequestFormat;
+  refusals: ShapeRefusals;
+}): GatewayRequest {
+  const { request, to, refusals } = input;
+  const anthropic = to === "anthropic_messages";
+  const off = anthropic ? request.thinkOff : openAIEffort(request) === "none";
+  const shape: RefusedShape = anthropic ? "thinkingOff" : "none";
+  return off && refusals.has(shape) ? thinkingBackOn(request) : request;
 }
 
 function isEventStream(response: IncomingMessage, first: Buffer | null): boolean {
