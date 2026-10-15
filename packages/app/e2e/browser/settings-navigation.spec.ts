@@ -40,6 +40,9 @@ import {
   expectSettingsHostPickerLabel,
   openSettingsHostSection,
   removeCurrentHostFromSettings,
+  readSettingsSidebarScrollTop,
+  startSettingsSidebarScrollSampler,
+  stopSettingsSidebarScrollSampler,
 } from "../support/helpers/settings";
 import { getServerId } from "../support/helpers/server-id";
 import { expectAppRoute } from "../support/helpers/route-assertions";
@@ -174,6 +177,69 @@ test.describe("Settings sidebar navigation", () => {
 
     await page.keyboard.press("Escape");
     await expect(page).not.toHaveURL(/\/settings(\/|$)/);
+  });
+});
+
+test.describe("Settings sidebar scroll position", () => {
+  // 矮窗口让左栏一定出现滚动条。
+  test.use({ viewport: { width: 1280, height: 560 } });
+
+  test("keeps the sidebar where the user scrolled it across sections, hosts, and visits", async ({
+    page,
+  }) => {
+    const primaryServerId = getServerId();
+    const secondaryServerId = "srv_e2e_settings_scroll_secondary";
+    const endpoint = `127.0.0.1:${getE2EDaemonPort()}`;
+
+    await seedSavedSettingsHosts(page, [
+      { serverId: primaryServerId, label: "First horse", endpoint },
+      { serverId: secondaryServerId, label: "Stable horse", endpoint },
+    ]);
+    await gotoAppShell(page);
+    await openSettings(page);
+
+    const sidebar = page.getByTestId("settings-sidebar");
+    const aboutRow = sidebar.getByRole("button", { name: "About", exact: true });
+    await aboutRow.evaluate((row) => row.scrollIntoView({ block: "start" }));
+    const scrolledTo = await readSettingsSidebarScrollTop(page);
+    expect(scrolledTo).toBeGreaterThan(0);
+    await expect(aboutRow).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId("settings-host-section-api-endpoints")).toBeInViewport({
+      ratio: 1,
+    });
+
+    await startSettingsSidebarScrollSampler(page);
+    const expectSidebarKept = async () => {
+      await expect.poll(() => readSettingsSidebarScrollTop(page)).toBe(scrolledTo);
+    };
+
+    await test.step("an app section", async () => {
+      await openSettingsSection(page, "about");
+      await expectAboutContent(page);
+      await expectSidebarKept();
+    });
+
+    await test.step("a host section", async () => {
+      await openSettingsHostSection(page, primaryServerId, "api-endpoints");
+      await expectSidebarKept();
+    });
+
+    await test.step("another host", async () => {
+      await selectSettingsHost(page, secondaryServerId);
+      await expectAppRoute(page, buildSettingsHostSectionRoute(secondaryServerId, "api-endpoints"));
+      await expectSidebarKept();
+    });
+
+    await test.step("leaving settings and coming back", async () => {
+      await clickSettingsBackToWorkspace(page);
+      await expect(page).not.toHaveURL(/\/settings(\/|$)/);
+      await openSettings(page);
+      await expectSidebarKept();
+    });
+
+    const samples = await stopSettingsSidebarScrollSampler(page);
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.filter((value) => value !== scrolledTo)).toEqual([]);
   });
 });
 

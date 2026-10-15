@@ -9,6 +9,12 @@ import {
   buildSettingsSectionRoute,
 } from "@/utils/host-routes";
 
+declare global {
+  interface Window {
+    __settingsSidebarScrollSampler?: { samples: number[]; stopped: boolean };
+  }
+}
+
 const DISABLE_DEFAULT_SEED_ONCE_KEY = "@paseo:e2e-disable-default-seed-once";
 const SEED_NONCE_KEY = "@paseo:e2e-seed-nonce";
 const REGISTRY_KEY = "@paseo:daemon-registry";
@@ -525,4 +531,41 @@ export async function removeHostFromHostPage(page: Page, serverId: string): Prom
 export async function expectHostOnlineWithoutError(page: Page): Promise<void> {
   await expect(page.getByTestId("host-page-identity")).toContainText("Online");
   await expect(page.getByTestId("host-connection-error")).toHaveCount(0);
+}
+
+export function readSettingsSidebarScrollTop(page: Page): Promise<number> {
+  return page
+    .getByTestId("settings-sidebar-scroll-body")
+    .evaluate((body) => Math.round(body.scrollTop));
+}
+
+// 每一帧记下每个可见左栏的位置：哪怕新挂载的左栏只闪回顶部一帧也会被记到。
+export async function startSettingsSidebarScrollSampler(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const sampler: NonNullable<Window["__settingsSidebarScrollSampler"]> = {
+      samples: [],
+      stopped: false,
+    };
+    window.__settingsSidebarScrollSampler = sampler;
+    const sample = () => {
+      if (sampler.stopped) return;
+      const bodies = document.querySelectorAll<HTMLElement>(
+        '[data-testid="settings-sidebar-scroll-body"]',
+      );
+      for (const body of bodies) {
+        if (body.clientHeight > 0) sampler.samples.push(Math.round(body.scrollTop));
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+}
+
+export function stopSettingsSidebarScrollSampler(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const sampler = window.__settingsSidebarScrollSampler;
+    if (!sampler) return [];
+    sampler.stopped = true;
+    return sampler.samples;
+  });
 }
