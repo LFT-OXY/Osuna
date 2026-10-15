@@ -6,9 +6,9 @@
 **Status:** ready-for-human
 **Impl:** ready
 
-- [ ] 在设置里录入至少两家真实接口、自动检测通过、拉取并勾选模型；打开 Claude Code 与 Codex 的总开关。
-- [ ] Claude Code：终端新会话从默认模型开始并正常回复；`/model` 能选到接口模型并回复；Osuna 对话里选某家的模型正常回复。
-- [ ] Codex：终端新会话正常回复；`/model` 列表含接口模型且无每轮警告；Osuna 对话里选某家的模型正常回复。
-- [ ] 至少一次跨格式（Claude Code 走 OpenAI 格式接口，或 Codex 走 Anthropic 格式接口）正常回复，含一次工具调用。
-- [ ] 关掉两个总开关后 `settings.json` 与 `config.toml` 恢复原样，口令文件与模型目录文件消失。
+- [x] 在设置里录入至少两家真实接口、自动检测通过、拉取并勾选模型；打开 Claude Code 与 Codex 的总开关。
+- [x] Claude Code：终端新会话从默认模型开始并正常回复；`/model` 能选到接口模型并回复；Osuna 对话里选某家的模型正常回复。
+- [x] Codex：终端新会话正常回复；`/model` 列表含接口模型且无每轮警告；Osuna 对话里选某家的模型正常回复。
+- [x] 至少一次跨格式（Claude Code 走 OpenAI 格式接口，或 Codex 走 Anthropic 格式接口）正常回复，含一次工具调用。
+- [x] 关掉两个总开关后 `settings.json` 与 `config.toml` 恢复原样，口令文件与模型目录文件消失。
 - [ ] PR 以 merge commit 并入 main；原生端（iOS / Android）实机验收免验（手机端用官方 App，不改）。
