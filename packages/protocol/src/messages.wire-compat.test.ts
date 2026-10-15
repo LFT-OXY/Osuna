@@ -534,3 +534,68 @@ test("usage login errors are additive and older reports still parse", () => {
   expect(SessionOutboundMessageSchema.parse(newMessage)).toEqual(newMessage);
   expect(legacy.parse(newMessage)).toEqual(oldMessage);
 });
+
+// Copied from v0.15.0: the API endpoint list response an old client (and the official Paseo app) parses.
+const LegacyApiEndpointListResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: z.string(),
+    endpoints: z.array(
+      z.object({
+        id: z.string(),
+        provider: z.string(),
+        name: z.string(),
+        baseUrl: z.string(),
+        models: z.array(z.object({ id: z.string(), label: z.string().optional() })),
+        defaultModelId: z.string(),
+        modelMapping: z.record(z.string(), z.string()).optional(),
+        hasApiKey: z.boolean(),
+      }),
+    ),
+    activeEndpointId: z.string().nullable(),
+    error: z.object({ code: z.string(), message: z.string() }).nullable(),
+  }),
+});
+
+test("a host-wide API endpoint list still parses as the single-endpoint projection on old clients", () => {
+  const response = {
+    type: "provider.api_endpoint.list.response",
+    payload: {
+      requestId: "req-1",
+      provider: "codex",
+      endpoints: [
+        {
+          id: "ep_1",
+          provider: "codex",
+          name: "Relay",
+          baseUrl: "https://relay.example/v1",
+          baseUrls: [
+            { format: "anthropic_messages", url: "https://relay.example" },
+            { format: "openai_responses", url: "https://relay.example/v1" },
+          ],
+          enabled: true,
+          cooldown: { state: "cooling_down", reason: "rate", until: "2026-10-14T12:01:00.000Z" },
+          models: [{ id: "gpt-5" }],
+          defaultModelId: "gpt-5",
+          hasApiKey: true,
+        },
+      ],
+      activeEndpointId: "ep_1",
+      agents: { codex: { enabled: true, defaultModelId: "gpt-5" } },
+      gatewayUnavailable: {
+        code: "gateway_requires_tcp",
+        message: "The daemon listens on a socket",
+      },
+      error: null,
+    },
+  };
+
+  expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  const oldClient = LegacyApiEndpointListResponseSchema.parse(response);
+  expect(oldClient.payload.endpoints[0]).toMatchObject({
+    baseUrl: "https://relay.example/v1",
+    defaultModelId: "gpt-5",
+  });
+  expect(oldClient.payload.activeEndpointId).toBe("ep_1");
+});

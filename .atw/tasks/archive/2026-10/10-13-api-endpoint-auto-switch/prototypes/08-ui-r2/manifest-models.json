@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "project": "Osuna · 接口详情的模型列表",
+  "brief": "接口详情页里「拉回来的模型」怎么排：同一份数据（236 个模型，按 Claude / GPT / Gemini 等分组，已选 14 个），三种样子。分组标题都换成了厂商图标 + 已选数 + 全选，模型名用普通字体。",
+  "round": "08-04",
+  "candidates": [
+    {"id": "now", "name": "现在这版：方框勾选", "concept": "上一轮的样子：一行一个、等宽字体、蓝色方框。", "typography": "等宽字体模型名", "palette": ["#ffffff", "#1b4ed8"], "traits": ["行高、很长", "像终端"], "kind": "image", "source": "detail-2.png", "baseline": true},
+    {"id": "a", "name": "A 小胶囊平铺", "concept": "每组的模型排成可点的小胶囊，选中的浅蓝底带勾，一屏看得多。", "typography": "系统字体 13px", "palette": ["#ffffff", "#1b4ed8", "#e4e4e7"], "traits": ["最紧凑", "选中 / 没选一眼分清", "名字长短不一，不如列表整齐"], "kind": "image", "source": "models-a.png"},
+    {"id": "b", "name": "B 紧凑列表 + 小开关", "concept": "一行一个，但行变矮；右边是 Osuna 自己的开关，没选的字变淡。", "typography": "系统字体 14px", "palette": ["#ffffff", "#1b4ed8", "#a1a1aa"], "traits": ["和其他设置页最像", "整齐", "还是偏长，组里超过 7 个先收起"], "kind": "image", "source": "models-b.png"},
+    {"id": "c", "name": "C 左边家族、右边模型", "concept": "卡片分两栏：左边家族目录带已选数，点哪个家族右边只显示它的模型。", "typography": "系统字体 14px", "palette": ["#ffffff", "#1b4ed8", "#d4d4d8"], "traits": ["家族多时最不乱", "所有家族的已选数一眼看全", "一次只看一个家族"], "kind": "image", "source": "models-c.png"}
+  ]
+}

@@ -10,8 +10,8 @@ import { buildProviderDefinitions } from "@/utils/provider-definitions";
 import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
+  selectableEntryModels,
 } from "@/provider-selection/provider-selection";
-import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { OptimisticFormPreferences } from "@/create-agent-preferences/optimistic-preferences";
 import { applyAgentProfilePreferences } from "@/create-agent-preferences/preferences";
 import { useProvidersSnapshot } from "./use-providers-snapshot";
@@ -102,7 +102,7 @@ function buildAllProviderModels(
 ): Map<string, AgentModelDefinition[]> {
   const map = new Map<string, AgentModelDefinition[]>();
   for (const entry of snapshotEntries ?? []) {
-    map.set(entry.provider, filterSelectableModels(entry.models ?? []) ?? []);
+    map.set(entry.provider, selectableEntryModels(entry) ?? []);
   }
   return map;
 }
@@ -112,10 +112,7 @@ function buildProviderModelsByProvider(
 ): ProviderModelsByProvider {
   const map: ProviderModelsByProvider = new Map();
   for (const entry of snapshotEntries ?? []) {
-    map.set(
-      entry.provider,
-      entry.status === "ready" ? filterSelectableModels(entry.models ?? null) : null,
-    );
+    map.set(entry.provider, entry.status === "ready" ? selectableEntryModels(entry) : null);
   }
   return map;
 }
@@ -242,9 +239,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         : null,
     [formState.provider, snapshotEntries],
   );
-  const snapshotSelectedProviderModels = filterSelectableModels(
-    snapshotSelectedEntry?.models ?? null,
-  );
+  const snapshotSelectedProviderModels = selectableEntryModels(snapshotSelectedEntry);
   const selectedProviderIsLoading = snapshotSelectedEntry?.status === "loading";
   const snapshotSelectedProviderModes = resolveSelectedProviderModes({
     selectedEntry: snapshotSelectedEntry,

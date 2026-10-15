@@ -88,6 +88,8 @@ import {
   ApiEndpointCancelResponseSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointDeleteResponseSchema,
+  ApiEndpointDetectFormatsRequestSchema,
+  ApiEndpointDetectFormatsResponseSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointListRequestSchema,
@@ -98,6 +100,10 @@ import {
   ApiEndpointSaveResponseSchema,
   ApiEndpointSetActiveRequestSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointSetAgentSettingsRequestSchema,
+  ApiEndpointSetAgentSettingsResponseSchema,
+  ApiEndpointSetEndpointStateRequestSchema,
+  ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
@@ -311,6 +317,7 @@ export type MutableDaemonConfigPatch = z.infer<typeof MutableDaemonConfigPatchSc
 import type {
   AgentCapabilityFlags,
   AgentModelDefinition,
+  ApiEndpointModelGroup,
   AgentMode,
   AgentPermissionRequest,
   AgentPermissionResponse,
@@ -401,6 +408,11 @@ const AgentModelDefinitionSchema = z.object({
   defaultThinkingOptionId: z.string().optional(),
 }) satisfies z.ZodType<AgentModelDefinition>;
 
+const ApiEndpointModelGroupSchema = z.object({
+  name: z.string(),
+  models: z.array(AgentModelDefinitionSchema),
+}) satisfies z.ZodType<ApiEndpointModelGroup>;
+
 export const ProviderSnapshotEntrySchema = z.object({
   provider: AgentProviderSchema,
   status: ProviderStatusSchema,
@@ -421,6 +433,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   isModelListAuthoritative: z.boolean().optional(),
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint: ApiEndpointRefSchema.optional(),
+  // 总开关开着时按接口分组的可选模型，id 为不透明的 `接口标识/模型名`；老客户端不读，只看 models。
+  apiEndpointModelGroups: z.array(ApiEndpointModelGroupSchema).optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version: z.string().optional(),
 });
@@ -783,7 +797,7 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     type: z.literal("notification"),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
-    // 有它时 App 按它本地化，message 是给老客户端的英文原文。
+    // v0.16 起 daemon 不再发送（会话不再记创建时的模式）；字段留着让老消息照常解析。
     apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
   }),
   z.object({
@@ -3528,8 +3542,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveRequestSchema,
   ApiEndpointDeleteRequestSchema,
   ApiEndpointSetActiveRequestSchema,
+  ApiEndpointSetAgentSettingsRequestSchema,
+  ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
+  ApiEndpointDetectFormatsRequestSchema,
   ApiEndpointCancelRequestSchema,
 ]);
 
@@ -3890,6 +3907,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(apiEndpoints): added in v0.13.0, remove gate after 2027-03-30.
         // daemon 支持 provider.api_endpoint.*：保存第三方接口并改写 CLI 自身配置来切换。
         apiEndpoints: z.boolean().optional(),
+        // COMPAT(apiEndpointGateway): added in v0.16.0, remove gate after 2027-04-14.
+        // 第三方接口主机共用：列表带 agents、baseUrls、enabled，支持 set_agent_settings、set_endpoint_state 与 detect_formats。
+        apiEndpointGateway: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
@@ -7288,8 +7308,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSaveResponseSchema,
   ApiEndpointDeleteResponseSchema,
   ApiEndpointSetActiveResponseSchema,
+  ApiEndpointSetAgentSettingsResponseSchema,
+  ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,
+  ApiEndpointDetectFormatsResponseSchema,
   ApiEndpointCancelResponseSchema,
 ]);
 

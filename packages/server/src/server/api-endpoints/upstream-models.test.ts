@@ -118,6 +118,91 @@ describe("fetchUpstreamModels", () => {
     }
   });
 
+  test("keeps the window, reply length and effort levels a list gives, in each vendor's shape", async () => {
+    const upstream = await startUpstream({
+      "/v1/models": {
+        status: 200,
+        body: {
+          data: [
+            // Anthropic：max_input_tokens / max_tokens / capabilities.effort
+            {
+              id: "anthropic-shaped",
+              max_input_tokens: 1_000_000,
+              max_tokens: 128_000,
+              capabilities: {
+                effort: {
+                  supported: true,
+                  low: { supported: true },
+                  medium: { supported: true },
+                  high: { supported: true },
+                  xhigh: { supported: false },
+                  max: { supported: true },
+                },
+              },
+            },
+            // OpenRouter：context_length / top_provider.max_completion_tokens
+            {
+              id: "openrouter-shaped",
+              context_length: 262_144,
+              top_provider: { max_completion_tokens: 65_536 },
+            },
+            // 网关类：max_output_tokens / supported_reasoning_levels
+            {
+              id: "gateway-shaped",
+              context_length: 400_000,
+              max_output_tokens: 128_000,
+              supported_reasoning_levels: [{ effort: "low" }, "high"],
+            },
+            // 没有 max_input_tokens 的 max_tokens 说不清是什么，不算；窗口太小的也不算。
+            { id: "unclear", max_tokens: 4096, context_length: 512 },
+          ],
+        },
+      },
+    });
+
+    const result = await run({ provider: "claude", baseUrl: upstream.baseUrl });
+
+    expect(result).toEqual({
+      ok: true,
+      models: [
+        {
+          id: "anthropic-shaped",
+          facts: { context: 1_000_000, output: 128_000, efforts: ["low", "medium", "high", "max"] },
+        },
+        { id: "openrouter-shaped", facts: { context: 262_144, output: 65_536 } },
+        {
+          id: "gateway-shaped",
+          facts: { context: 400_000, output: 128_000, efforts: ["low", "high"] },
+        },
+        { id: "unclear" },
+      ],
+    });
+  });
+
+  test("keeps context_window and supported_reasoning_levels from Codex's models[]", async () => {
+    const upstream = await startUpstream({
+      "/models": {
+        status: 200,
+        body: {
+          models: [
+            {
+              slug: "gpt-6-sol",
+              context_window: 272_000,
+              supported_reasoning_levels: [{ effort: "medium" }, { effort: "xhigh" }],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await run({ provider: "codex", baseUrl: upstream.baseUrl });
+
+    expect(result).toEqual({
+      ok: true,
+      models: [{ id: "gpt-6-sol", facts: { context: 272_000, efforts: ["medium", "xhigh"] } }],
+    });
+  });
+
   test("follows has_more / last_id pages", async () => {
     const upstream = await startUpstream({
       "/v1/models": {

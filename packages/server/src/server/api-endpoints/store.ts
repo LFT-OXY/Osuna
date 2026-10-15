@@ -1,18 +1,28 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { ApiEndpointModelMappingSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  API_ENDPOINT_REQUEST_FORMATS,
+  ApiEndpointAgentSettingsSchema,
+  ApiEndpointModelMappingSchema,
+  type ApiEndpointAgentSettings,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { AGENT_REQUEST_FORMAT, generateEndpointSlug } from "./host-endpoints.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
+import { readOptionalFile } from "./config-file.js";
+import { ModelFactsSchema } from "./model-facts.js";
 
 /*
  * $PASEO_HOME/api-endpoints/ 下的私有文件，全部 0600：
- * - endpoints.json：接口本身与每个提供方当前启用的接口，不含 key；
+ * - endpoints.json：主机共用的接口与每个 Agent 的总开关、默认模型，不含 key；
  * - keys.json：API key，只有 daemon 读，任何 RPC 都不返回；
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
- * - takeover-codex.json：config.toml 的接管记录，以及专用 provider 表当前属于哪个接口；
- * - codex-api-key：Codex 通过 auth.command 读取的 key，只有内容本身，没有换行；
+ * - takeover-codex.json：config.toml 的接管记录；
+ * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
+ * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示用；
+ * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即作废，都关着时文件删除；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
@@ -20,25 +30,83 @@ import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
+const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
+
+// 上游清单里的模型多带列表给的上下文、回复上限与思考档位；只留在 daemon 里，投影给客户端时去掉。
+const StoredCatalogModelSchema = StoredModelSchema.extend({ facts: ModelFactsSchema.optional() });
+
+const StoredBaseUrlSchema = z.object({
+  format: z.enum(API_ENDPOINT_REQUEST_FORMATS),
+  url: z.string(),
+});
+
 const StoredApiEndpointSchema = z.object({
   id: z.string(),
-  provider: z.enum(API_ENDPOINT_PROVIDERS),
+  // 从名称生成、建好即锁定，只在 Osuna 内部使用，任何响应都不带。
+  slug: z.string(),
   name: z.string(),
-  baseUrl: z.string(),
-  models: z.array(z.object({ id: z.string(), label: z.string().optional() })),
-  defaultModelId: z.string(),
-  // 只有 Claude 接口有；每档都是 models 里的一个。
+  // 每种格式最多一个，按 API_ENDPOINT_REQUEST_FORMATS 的顺序，至少一个。
+  baseUrls: z.array(StoredBaseUrlSchema).min(1),
+  models: z.array(StoredModelSchema),
+  // 每档都是 models 里的一个。
   modelMapping: ApiEndpointModelMappingSchema.optional(),
+  // 接口开关，对所有 Agent 生效。
+  enabled: z.boolean(),
+  // 只给老客户端投影用：老表单上次为这家选的默认模型（迁移时取旧 defaultModelId）。
+  legacyDefaultModelId: z.string().optional(),
+  // 上次按格式向上游列出的模型，只供详情页挑选；路由与模型目录只看 models。
+  catalog: z
+    .object({ fetchedAt: z.string(), models: z.array(StoredCatalogModelSchema) })
+    .optional(),
+  // 用户手动添加的模型名，开没开都留着。
+  manualModels: z.array(StoredModelSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type StoredApiEndpoint = z.infer<typeof StoredApiEndpointSchema>;
 
 const EndpointsFileSchema = z.object({
+  // 数组顺序即创建顺序。
   endpoints: z.array(StoredApiEndpointSchema),
+  agents: z.record(z.string(), ApiEndpointAgentSettingsSchema),
+});
+
+/** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
+const LegacyEndpointsFileSchema = z.object({
+  endpoints: z.array(
+    z.object({
+      id: z.string(),
+      provider: z.enum(API_ENDPOINT_PROVIDERS),
+      name: z.string(),
+      baseUrl: z.string(),
+      models: z.array(StoredModelSchema),
+      defaultModelId: z.string(),
+      modelMapping: ApiEndpointModelMappingSchema.optional(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    }),
+  ),
   active: z.record(z.string(), z.string()),
 });
-type EndpointsFile = z.infer<typeof EndpointsFileSchema>;
+type LegacyEndpointsFile = z.infer<typeof LegacyEndpointsFileSchema>;
+
+export interface ApiEndpointState {
+  endpoints: StoredApiEndpoint[];
+  agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
+}
+
+const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
+
+/** endpoints.json 存在却读不懂；这时什么都不写，免得把用户的接口覆盖掉。 */
+export class ApiEndpointsFileUnparsableError extends Error {
+  readonly filePath: string;
+
+  constructor(filePath: string, detail: string) {
+    super(`${filePath} could not be parsed: ${detail}`);
+    this.name = "ApiEndpointsFileUnparsableError";
+    this.filePath = filePath;
+  }
+}
 
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
 
@@ -51,16 +119,24 @@ const ClaudeTakeoverFileSchema = z.object({
 });
 export type ClaudeTakeoverFile = z.infer<typeof ClaudeTakeoverFileSchema>;
 
+// v0.15 的记录另有 providerTable（官方模式下留着的专用表属于哪个接口），读时丢掉；那张表启动时清理。
 const CodexTakeoverFileSchema = z.object({
   // null：当前没有接管（官方模式）。
   takeover: CodexConfigTakeoverSchema.nullable(),
-  // config.toml 里的专用 provider 表写的是哪个接口；切回官方后仍在，删除该接口时连同 key 文件一起删。
-  providerTable: z.object({ endpointId: z.string() }).nullable(),
   backup: z.object({ path: z.string().nullable() }).nullable(),
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 
-const CODEX_KEY_FILE = "codex-api-key";
+// 按 provider 存；没有条目即该 Agent 没有口令（总开关关着）。
+const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string()) });
+export type GatewayTokens = z.infer<typeof GatewayTokensFileSchema>["tokens"];
+
+const ENDPOINTS_FILE = "endpoints.json";
+const GATEWAY_TOKENS_FILE = "gateway-tokens.json";
+const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
+// v0.15 让 Codex 通过 auth.command 读 key 的文件；现在不再写，见到就删。
+// COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+const LEGACY_CODEX_KEY_FILE = "codex-api-key";
 
 export class ApiEndpointStore {
   private readonly root: string;
@@ -83,56 +159,66 @@ export class ApiEndpointStore {
     rmSync(backupPath, { force: true });
   }
 
-  listEndpoints(provider: ApiEndpointProvider): StoredApiEndpoint[] {
-    return this.readEndpoints().endpoints.filter((endpoint) => endpoint.provider === provider);
-  }
-
-  getEndpoint(provider: ApiEndpointProvider, id: string): StoredApiEndpoint | null {
-    return this.listEndpoints(provider).find((endpoint) => endpoint.id === id) ?? null;
-  }
-
-  getActiveEndpointId(provider: ApiEndpointProvider): string | null {
-    return this.readEndpoints().active[provider] ?? null;
-  }
-
-  setActiveEndpointId(provider: ApiEndpointProvider, id: string | null): void {
-    const file = this.readEndpoints();
-    const active = { ...file.active };
-    if (id === null) {
-      delete active[provider];
-    } else {
-      active[provider] = id;
+  readState(): ApiEndpointState {
+    const filePath = path.join(this.root, ENDPOINTS_FILE);
+    let raw: unknown;
+    try {
+      raw = this.readJson(ENDPOINTS_FILE);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new ApiEndpointsFileUnparsableError(filePath, error.message);
+      }
+      throw error;
     }
-    this.writeEndpoints({ ...file, active });
-  }
-
-  /** key 为 undefined 表示保留已存的 key。 */
-  upsertEndpoint(endpoint: StoredApiEndpoint, apiKey: string | undefined): void {
-    if (apiKey !== undefined) {
-      const keys = this.readKeys();
-      this.writeKeys({ ...keys, [endpoint.id]: apiKey });
+    if (raw === null) {
+      return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
-    const file = this.readEndpoints();
-    const index = file.endpoints.findIndex((existing) => existing.id === endpoint.id);
-    const endpoints =
-      index === -1 ? [...file.endpoints, endpoint] : file.endpoints.with(index, endpoint);
-    this.writeEndpoints({ ...file, endpoints });
+    const current = EndpointsFileSchema.safeParse(raw);
+    if (current.success) {
+      const { agents } = current.data;
+      return {
+        endpoints: current.data.endpoints,
+        agents: {
+          claude: agents.claude ?? OFFICIAL_AGENT,
+          codex: agents.codex ?? OFFICIAL_AGENT,
+        },
+      };
+    }
+    const legacy = LegacyEndpointsFileSchema.safeParse(raw);
+    if (legacy.success) return upgradeLegacyFile(legacy.data);
+    throw new ApiEndpointsFileUnparsableError(filePath, current.error.message);
   }
 
-  removeEndpoint(provider: ApiEndpointProvider, id: string): void {
-    const file = this.readEndpoints();
-    this.writeEndpoints({
-      ...file,
-      endpoints: file.endpoints.filter(
-        (endpoint) => !(endpoint.provider === provider && endpoint.id === id),
-      ),
-    });
+  /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。 */
+  writeState(state: ApiEndpointState): void {
+    this.writeJson(ENDPOINTS_FILE, EndpointsFileSchema.parse(state));
+  }
+
+  setApiKey(id: string, apiKey: string): void {
+    this.writeKeys({ ...this.readKeys(), [id]: apiKey });
+  }
+
+  removeApiKey(id: string): void {
     const { [id]: _removed, ...keys } = this.readKeys();
     this.writeKeys(keys);
   }
 
   getApiKey(id: string): string | null {
     return this.readKeys()[id] ?? null;
+  }
+
+  readGatewayTokens(): GatewayTokens {
+    const raw = this.readJson(GATEWAY_TOKENS_FILE);
+    return raw === null ? {} : GatewayTokensFileSchema.parse(raw).tokens;
+  }
+
+  /** 两个 Agent 都关着时没有口令，文件删掉。 */
+  writeGatewayTokens(tokens: GatewayTokens): void {
+    if (Object.keys(tokens).length === 0) {
+      rmSync(path.join(this.root, GATEWAY_TOKENS_FILE), { force: true });
+      return;
+    }
+    this.writeJson(GATEWAY_TOKENS_FILE, GatewayTokensFileSchema.parse({ tokens }));
   }
 
   readClaudeTakeover(): ClaudeTakeoverFile {
@@ -146,26 +232,36 @@ export class ApiEndpointStore {
 
   readCodexTakeover(): CodexTakeoverFile {
     const raw = this.readJson("takeover-codex.json");
-    return raw === null
-      ? { takeover: null, providerTable: null, backup: null }
-      : CodexTakeoverFileSchema.parse(raw);
+    return raw === null ? { takeover: null, backup: null } : CodexTakeoverFileSchema.parse(raw);
   }
 
   writeCodexTakeover(file: CodexTakeoverFile): void {
     this.writeJson("takeover-codex.json", CodexTakeoverFileSchema.parse(file));
   }
 
-  get codexKeyFilePath(): string {
-    return path.join(this.root, CODEX_KEY_FILE);
+  get modelsDevPath(): string {
+    return path.join(this.root, "models-dev.json");
+  }
+
+  get codexModelCatalogPath(): string {
+    return path.join(this.root, CODEX_MODEL_CATALOG_FILE);
+  }
+
+  readCodexModelCatalog(): string | null {
+    return readOptionalFile(this.codexModelCatalogPath)?.toString("utf8") ?? null;
   }
 
   /** null 表示删掉。 */
-  writeCodexKeyFile(bytes: string | Buffer | null): void {
-    if (bytes === null) {
-      rmSync(this.codexKeyFilePath, { force: true });
+  writeCodexModelCatalog(text: string | null): void {
+    if (text === null) {
+      rmSync(this.codexModelCatalogPath, { force: true });
       return;
     }
-    writePrivateFileAtomicSync(this.codexKeyFilePath, bytes);
+    writePrivateFileAtomicSync(this.codexModelCatalogPath, text);
+  }
+
+  removeLegacyCodexKeyFile(): void {
+    rmSync(path.join(this.root, LEGACY_CODEX_KEY_FILE), { force: true });
   }
 
   private writeBackup(input: {
@@ -183,15 +279,6 @@ export class ApiEndpointStore {
     );
     writePrivateFileAtomicSync(backupPath, input.bytes);
     return backupPath;
-  }
-
-  private readEndpoints(): EndpointsFile {
-    const raw = this.readJson("endpoints.json");
-    return raw === null ? { endpoints: [], active: {} } : EndpointsFileSchema.parse(raw);
-  }
-
-  private writeEndpoints(file: EndpointsFile): void {
-    this.writeJson("endpoints.json", EndpointsFileSchema.parse(file));
   }
 
   private readKeys(): Record<string, string> {
@@ -217,4 +304,37 @@ export class ApiEndpointStore {
   private writeJson(name: string, value: unknown): void {
     writePrivateFileAtomicSync(path.join(this.root, name), `${JSON.stringify(value, null, 2)}\n`);
   }
+}
+
+/**
+ * 旧格式换算：baseUrl 按旧 provider 落进对应格式；某 Agent 当前启用的接口开着、该 Agent 总开关打开、
+ * 默认模型取那家旧的默认模型；其余旧接口关着，和迁移前「只是存着」一样。
+ */
+function upgradeLegacyFile(file: LegacyEndpointsFile): ApiEndpointState {
+  const activeIds = new Set(Object.values(file.active));
+  const slugs = new Set<string>();
+  const endpoints = file.endpoints.map((legacy): StoredApiEndpoint => {
+    const slug = generateEndpointSlug(legacy.name, slugs);
+    slugs.add(slug);
+    return {
+      id: legacy.id,
+      slug,
+      name: legacy.name,
+      baseUrls: [{ format: AGENT_REQUEST_FORMAT[legacy.provider], url: legacy.baseUrl }],
+      models: legacy.models,
+      ...(legacy.modelMapping ? { modelMapping: legacy.modelMapping } : {}),
+      enabled: activeIds.has(legacy.id),
+      legacyDefaultModelId: legacy.defaultModelId,
+      createdAt: legacy.createdAt,
+      updatedAt: legacy.updatedAt,
+    };
+  });
+  const agents = { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT };
+  for (const provider of API_ENDPOINT_PROVIDERS) {
+    const active = file.endpoints.find(
+      (legacy) => legacy.provider === provider && legacy.id === file.active[provider],
+    );
+    if (active) agents[provider] = { enabled: true, defaultModelId: active.defaultModelId };
+  }
+  return { endpoints, agents };
 }

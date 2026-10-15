@@ -44,6 +44,7 @@ type HostSection =
   | "metadata"
   | "workspaces"
   | "providers"
+  | "api-endpoints"
   | "usage"
   | "terminals"
   | "plugins"

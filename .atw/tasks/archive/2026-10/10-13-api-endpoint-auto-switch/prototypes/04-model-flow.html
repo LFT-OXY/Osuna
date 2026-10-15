@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>第三方接口：接口、开关、默认模型、兜底名单是怎么串起来的</title>
+<style>
+  :root { --ink:#1f2328; --muted:#6b7280; --line:#d0d7de; --a:#e8f1ff; --b:#eaf7ea; --c:#fff4e5; --warn:#fde8e8; --gw:#f3e8ff; }
+  body { font: 15px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; color: var(--ink); margin: 0; padding: 32px; background: #fafbfc; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 40px 0 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p.lead { color: var(--muted); margin: 0 0 16px; }
+  .row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 12px; min-width: 200px; flex: 1; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fff; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card small { color: var(--muted); }
+  .a { background: var(--a); } .b { background: var(--b); } .c { background: var(--c); } .gw { background: var(--gw); } .warn { background: var(--warn); }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  .arrow { display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--muted); min-width: 36px; }
+  .tag { display: inline-block; border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 20px; background: #eef; color: #335; margin-left: 6px; }
+  .on { background: #d7f5dc; color: #14532d; } .off { background: #eee; color: #666; } .cool { background: #fde8e8; color: #7f1d1d; }
+  code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .note { background: #fffbe6; border: 1px solid #f3e4a0; border-radius: 8px; padding: 10px 14px; margin-top: 14px; }
+  .sw { display:inline-block; width:34px; height:18px; border-radius:9px; background:#ccc; vertical-align:middle; position:relative; margin-right:8px; }
+  .sw::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; }
+  .sw.on { background:#22c55e; } .sw.on::after { left:18px; }
+  .dim { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>第三方接口：接口、开关、默认模型、兜底名单是怎么串起来的</h1>
+<p class="lead">只为说明思路，不是最终界面。三张图对应你问的三个问题。</p>
+
+<h2>图 1 · 为什么模型名前面要带接口标识</h2>
+<p class="lead">国内的中转站大多卖同一批模型，两家接口里经常有一模一样的模型名。</p>
+<div class="row">
+  <div class="col">
+    <div class="card a"><h3>接口 A <small>标识 relay-a</small></h3>
+      <ul><li>claude-sonnet-4-5</li><li>gpt-5</li></ul></div>
+    <div class="card b"><h3>接口 B <small>标识 relay-b</small></h3>
+      <ul><li>claude-sonnet-4-5</li><li>kimi-k2.5</li></ul></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="col">
+    <div class="card"><h3>Claude Code 发请求时只带一个字符串</h3>
+      <p>它只会说「我要用 <code>claude-sonnet-4-5</code>」，不会说「我要 B 家的」。</p>
+      <p class="dim">Claude Code 和 Codex 都是别人家的程序，Osuna 改不了它们的做法。</p></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="col">
+    <div class="card warn"><h3>只写模型名：中转站只能猜</h3>
+      <p>A 和 B 都有这个模型，中转站不知道你想走哪家，只能默认挑第一家。你在模型选择器里「选 B 家的」这件事就传不过去。</p></div>
+    <div class="card gw"><h3>写成 relay-b/claude-sonnet-4-5：一眼就知道</h3>
+      <p>中转站看到前缀，直接走 B 家，再把前缀去掉发给 B。</p>
+      <p class="dim">这个带前缀的名字只会出现在终端里的 <code>/model</code> 命令和 CLI 配置文件里；Osuna 的界面上按接口分组显示，不露前缀。</p></div>
+  </div>
+</div>
+
+<h2>图 2 · 开关、模型选择器、默认模型各管什么</h2>
+<p class="lead">开关决定「这家的模型能不能选」；默认模型只决定「一个全新的会话从哪个模型开始」。</p>
+<div class="row">
+  <div class="col">
+    <div class="card"><h3>电脑上保存的接口（两个 Agent 共用）</h3>
+      <div class="card a" style="margin-top:8px"><b>接口 A</b> 勾选的模型：claude-sonnet-4-5、gpt-5<br><small>这家自己的默认：claude-sonnet-4-5</small></div>
+      <div class="card b" style="margin-top:8px"><b>接口 B</b> 勾选的模型：claude-sonnet-4-5、kimi-k2.5<br><small>这家自己的默认：kimi-k2.5</small></div>
+      <div class="card c" style="margin-top:8px"><b>接口 C</b> 勾选的模型：deepseek-v4<br><small>这家自己的默认：deepseek-v4</small></div>
+    </div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="col">
+    <div class="card"><h3>Claude Code 的设置</h3>
+      <p><span class="sw on"></span>接口 A <span class="tag on">已开启</span></p>
+      <p><span class="sw on"></span>接口 B <span class="tag on">已开启</span></p>
+      <p><span class="sw"></span>接口 C <span class="tag off">关闭</span></p>
+      <p><b>默认模型：</b>B / kimi-k2.5</p>
+      <p class="dim">开关全关 = 回到「官方」，Claude Code 用自己原来的登录。</p></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="col">
+    <div class="card"><h3>模型选择器里看到的</h3>
+      <p><b>接口 A</b></p><ul><li>claude-sonnet-4-5</li><li>gpt-5</li></ul>
+      <p><b>接口 B</b></p><ul><li>claude-sonnet-4-5</li><li>kimi-k2.5 <span class="tag">默认</span></li></ul>
+      <p class="dim">接口 C 关着，所以不出现。开着的两家的模型都能随时选。</p></div>
+    <div class="card"><h3>「默认模型」什么时候起作用</h3>
+      <ul>
+        <li><b>终端里直接敲 <code>claude</code></b>：它必须从某一个具体模型开始，这个模型就是写进它配置文件里的「默认模型」。</li>
+        <li><b>Osuna 里新建对话</b>：Osuna 会记住你上次选的模型；只有第一次、或者上次选的模型已经不在列表里时，才退回「默认模型」。</li>
+      </ul>
+      <p class="dim">所以开关管「哪些能选」，默认模型管「没选之前先用哪个」，两者不冲突。</p></div>
+  </div>
+</div>
+<div class="note">如果你不想多一个「默认模型」下拉框，也有一个更省事的做法：默认模型自动取「开着的接口里最早建的那家」自己的默认模型。省一个控件，代价是你想换起始模型时得去改那家接口的默认，或者调整开关。</div>
+
+<h2>图 3 · 兜底名单是接口自己的，每一项写明「哪家 / 哪个模型」</h2>
+<p class="lead">某家接口额度用尽时，中转站在回复第一个字之前，按这家的兜底名单换一家重发。</p>
+<div class="row">
+  <div class="col">
+    <div class="card a"><h3>接口 A 的兜底名单</h3>
+      <ol style="margin:6px 0 0;padding-left:18px">
+        <li>接口 B / claude-sonnet-4-5</li>
+        <li>接口 C / deepseek-v4</li>
+      </ol>
+      <p class="dim">每项都要写明模型：B 家不一定有 A 家同名的模型，所以不能只写「换到 B」。</p>
+      <p class="dim">每项只能从那家接口<b>勾选过的模型</b>里挑：勾选过的才是你确认它真的有的，手填容易拼错。</p></div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="col">
+    <div class="card">
+      <p>1. 你这段对话选的是 <b>A / gpt-5</b></p>
+      <p>2. 中转站发给 A，A 回「额度用完」 <span class="tag cool">A 冷却 15 分钟</span></p>
+      <p>3. 中转站查 A 的兜底名单，第一项是 <b>B / claude-sonnet-4-5</b></p>
+      <p>4. 改发给 B，用 B 的这个模型回答；对话里加一行「本轮由接口 B 的 claude-sonnet-4-5 回答」</p>
+      <p>5. 下一轮回到你选的 A（A 还在冷却就继续用 B）</p>
+      <p class="dim">兜底名单为空的接口用尽了就不换，直接把错误交给 Agent。</p></div>
+  </div>
+</div>
+<div class="note">删掉接口 B、或在 B 里取消勾选某个模型时，所有兜底名单里引用它的那一项自动消失，不用你手动去清。</div>
+</body>
+</html>

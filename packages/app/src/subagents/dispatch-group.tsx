@@ -33,6 +33,7 @@ import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 import type { AgentToolCallItem } from "@/types/stream";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
+import { resolveSnapshotModelLabel } from "@/provider-selection/provider-selection";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { formatDuration } from "@/utils/time";
 import { useProviderSubagentStore } from "./provider-store";
@@ -306,8 +307,12 @@ function DispatchGroupCard({
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const { entries } = useProvidersSnapshot(serverId);
-  const providerLabelOf = useCallback(
-    (provider: string) => resolveProviderLabel(provider, entries),
+  const labels = useMemo(
+    () => ({
+      providerLabelOf: (provider: string) => resolveProviderLabel(provider, entries),
+      modelLabelOf: (provider: string, modelId: string) =>
+        resolveSnapshotModelLabel(entries, provider, modelId),
+    }),
     [entries],
   );
   const header = useMemo(() => buildDispatchGroupHeaderPresentation(t, rows), [rows, t]);
@@ -348,7 +353,7 @@ function DispatchGroupCard({
             <DispatchGroupRow
               key={row.key}
               serverId={serverId}
-              presentation={buildDispatchRowPresentation({ t, state: row, providerLabelOf })}
+              presentation={buildDispatchRowPresentation({ t, state: row, labels })}
               onOpen={onOpen}
             />
           ))}

@@ -1,0 +1,2398 @@
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
+import pino from "pino";
+import { afterEach, describe, expect, test } from "vitest";
+import { hashDaemonPassword } from "../auth.js";
+import { createPaseoDaemon } from "../bootstrap.js";
+import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
+import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
+
+/*
+ * 中转站直通（工单 02）：真实 daemon + 本机假上游。CLI 这一侧用 fetch 扮演，
+ * 带上 gateway-tokens.json 里的口令，就像 CLI 读自己的配置文件那样。
+ * 「不思考」被拒的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go 与 gateway_test.go。
+ */
+
+const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
+const CODEX_TOKEN = "gateway-token-codex-0123456789";
+const KEY_A = "sk-real-key-alpha-SECRET";
+const KEY_B = "sk-real-key-beta-SECRET";
+const KEY_C = "sk-real-key-gamma-SECRET";
+
+interface RecordedRequest {
+  method: string;
+  url: string;
+  headers: IncomingHttpHeaders;
+  body: Buffer;
+}
+
+interface FakeUpstream {
+  url: string;
+  requests: RecordedRequest[];
+  // 每个请求怎么回；默认 200 空 JSON。
+  respond: (request: RecordedRequest, res: ServerResponse) => void;
+}
+
+interface Harness {
+  daemon: TestPaseoDaemon;
+  gateway: string;
+  endpointsDir: string;
+  logLines: string[];
+  // 同一个 home 再起一个 daemon（先关掉旧的），中转站地址随新端口。
+  restart: () => Promise<{ daemon: TestPaseoDaemon; gateway: string }>;
+}
+
+const servers: Server[] = [];
+const tempRoots: string[] = [];
+const daemons: TestPaseoDaemon[] = [];
+const clients: DaemonClient[] = [];
+
+afterEach(async () => {
+  for (const client of clients.splice(0)) await client.close();
+  for (const daemon of daemons.splice(0)) await daemon.close();
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+async function startUpstream(): Promise<FakeUpstream> {
+  const upstream: FakeUpstream = {
+    url: "",
+    requests: [],
+    respond: (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    },
+  };
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      const request = {
+        method: req.method ?? "",
+        url: req.url ?? "",
+        headers: req.headers,
+        body: Buffer.concat(chunks),
+      };
+      upstream.requests.push(request);
+      upstream.respond(request, res);
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+function storedEndpoint(input: {
+  id: string;
+  slug: string;
+  name: string;
+  baseUrls: { format: string; url: string }[];
+  models: string[];
+  enabled?: boolean;
+}) {
+  return {
+    id: input.id,
+    slug: input.slug,
+    name: input.name,
+    baseUrls: input.baseUrls,
+    models: input.models.map((id) => ({ id })),
+    enabled: input.enabled ?? true,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  };
+}
+
+/**
+ * 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。
+ * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3 与 qwen3-coder。
+ * 给了 responsesUpstream 时再加 D：只有 OpenAI Responses 地址，选了 grok-4。
+ */
+async function start(
+  options: {
+    upstreamA?: FakeUpstream;
+    upstreamB?: FakeUpstream;
+    chatUpstream?: FakeUpstream;
+    responsesUpstream?: FakeUpstream;
+    password?: string;
+    headerTimeoutMs?: number;
+    retryPauseMs?: number;
+  } = {},
+): Promise<Harness> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
+  tempRoots.push(root);
+  const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+  await mkdir(endpointsDir, { recursive: true });
+  const urlA = options.upstreamA?.url ?? "http://127.0.0.1:9";
+  const urlB = options.upstreamB?.url ?? "http://127.0.0.1:9";
+  const files = {
+    "endpoints.json": {
+      endpoints: [
+        storedEndpoint({
+          id: "ep_a",
+          slug: "relay-a",
+          name: "Relay A",
+          baseUrls: [
+            { format: "anthropic_messages", url: urlA },
+            { format: "openai_responses", url: `${urlA}/v1` },
+          ],
+          models: ["kimi-k2", "gpt-5.5"],
+        }),
+        storedEndpoint({
+          id: "ep_b",
+          slug: "relay-b",
+          name: "Relay B",
+          baseUrls: [{ format: "anthropic_messages", url: urlB }],
+          models: ["kimi-k2", "glm-4.6"],
+        }),
+        ...(options.chatUpstream
+          ? [
+              storedEndpoint({
+                id: "ep_c",
+                slug: "relay-c",
+                name: "Relay C",
+                baseUrls: [{ format: "openai_chat", url: `${options.chatUpstream.url}/v1` }],
+                models: ["deepseek-v3", "qwen3-coder"],
+              }),
+            ]
+          : []),
+        ...(options.responsesUpstream
+          ? [
+              storedEndpoint({
+                id: "ep_d",
+                slug: "relay-d",
+                name: "Relay D",
+                baseUrls: [
+                  { format: "openai_responses", url: `${options.responsesUpstream.url}/v1` },
+                ],
+                models: ["grok-4"],
+              }),
+            ]
+          : []),
+      ],
+      agents: {
+        claude: { enabled: true, defaultModelId: "kimi-k2" },
+        codex: { enabled: true, defaultModelId: "gpt-5.5" },
+      },
+    },
+    "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C, ep_d: KEY_C } },
+    "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
+  };
+  for (const [name, value] of Object.entries(files)) {
+    await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
+  }
+
+  const logLines: string[] = [];
+  const logger = pino({ level: "debug" }, { write: (line: string) => logLines.push(line) });
+  const launch = async () => {
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      // home 在 tempRoots 里统一删；重启要沿用它。
+      cleanup: false,
+      logger,
+      ...(options.password ? { auth: { password: hashDaemonPassword(options.password) } } : {}),
+      apiEndpoints: {
+        env: {
+          CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+          CODEX_HOME: path.join(root, "codex"),
+        },
+        homeDir: root,
+        // 最后一家的原地重试只等很短的时间，测试不必真等一两秒。
+        gatewayRetryPauseMs: options.retryPauseMs ?? 10,
+        ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
+      },
+    });
+    daemons.push(daemon);
+    return { daemon, gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway` };
+  };
+  const first = await launch();
+  return {
+    ...first,
+    endpointsDir,
+    logLines,
+    restart: async () => {
+      await first.daemon.close();
+      return launch();
+    },
+  };
+}
+
+function claudeRequest(body: unknown, token = CLAUDE_TOKEN): RequestInit {
+  return {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "claude-code-20250219",
+      "x-claude-code-session-id": "session-1",
+    },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  };
+}
+
+describe("who may use the gateway", () => {
+  test("requests without the token or with a wrong one are refused", async () => {
+    const { gateway } = await start();
+
+    const missing = await fetch(`${gateway}/api/hello`);
+    const wrong = await fetch(`${gateway}/api/hello`, {
+      headers: { authorization: "Bearer not-the-token" },
+    });
+
+    expect(missing.status).toBe(401);
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toEqual({
+      error: {
+        message: "Invalid API endpoint gateway token",
+        type: "authentication_error",
+        code: null,
+        param: null,
+      },
+    });
+  });
+
+  test("a request that came through a proxy is not local and is refused", async () => {
+    const { gateway } = await start();
+
+    const proxied = await fetch(`${gateway}/api/hello`, {
+      headers: { authorization: `Bearer ${CLAUDE_TOKEN}`, "x-forwarded-for": "203.0.113.9" },
+    });
+
+    expect(proxied.status).toBe(403);
+  });
+
+  test("the daemon password does not apply and bodies over 100 kb go through", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream, password: "daemon-secret" });
+    // 带上思考设置：发给非 Claude 模型时请求体就不用改，到达上游的与发出的逐字节一样。
+    const body = JSON.stringify({
+      model: "kimi-k2",
+      max_tokens: 10,
+      thinking: { type: "enabled", budget_tokens: 1024 },
+      messages: [{ role: "user", content: "x".repeat(300_000) }],
+    });
+
+    const hello = await fetch(`${gateway}/api/hello`, {
+      headers: { authorization: `Bearer ${CLAUDE_TOKEN}` },
+    });
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(body));
+
+    expect(hello.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(upstream.requests[0]?.body.toString()).toBe(body);
+  });
+
+  test("turning an agent on creates its private token and turning it off deletes it", async () => {
+    const { daemon, endpointsDir } = await start();
+    const tokensPath = path.join(endpointsDir, "gateway-tokens.json");
+    await writeFile(tokensPath, JSON.stringify({ tokens: {} }));
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.15.1",
+    });
+    clients.push(client);
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const afterOn = JSON.parse(await readFile(tokensPath, "utf8")) as {
+      tokens: Record<string, string>;
+    };
+    const mode = (await stat(tokensPath)).mode & 0o777;
+
+    const acceptedWhileOn = await fetch(
+      `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/api/hello`,
+      {
+        headers: { authorization: `Bearer ${afterOn.tokens.claude}` },
+      },
+    );
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    const afterOff = JSON.parse(await readFile(tokensPath, "utf8")) as {
+      tokens: Record<string, string>;
+    };
+    const refusedAfter = await fetch(
+      `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/api/hello`,
+      {
+        headers: { authorization: `Bearer ${afterOn.tokens.claude}` },
+      },
+    );
+
+    expect(afterOn.tokens.claude).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(mode).toBe(0o600);
+    expect(acceptedWhileOn.status).toBe(200);
+    // Codex 一直开着：补上的口令在之后的改动里保持不变。
+    expect(afterOn.tokens.codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(afterOff.tokens).toEqual({ codex: afterOn.tokens.codex });
+    expect(refusedAfter.status).toBe(401);
+  });
+});
+
+describe("passing requests through to an endpoint that speaks the agent's format", () => {
+  test("Claude requests reach the Anthropic address unchanged apart from the model and auth, and stream back", async () => {
+    const upstream = await startUpstream();
+    let releaseRest: () => void = () => {};
+    const restReleased = new Promise<void>((resolve) => {
+      releaseRest = resolve;
+    });
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream", "request-id": "req_1" });
+      res.write('event: message_start\ndata: {"type":"message_start"}\n\n');
+      void restReleased.then(() => {
+        res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+        return undefined;
+      });
+    };
+    const { gateway } = await start({ upstreamA: upstream });
+    // 空格、键序与 cache_control 都要原样到达上游；带上思考设置，非 Claude 模型也不用改。
+    const body = `{"model":  "relay-a/kimi-k2", "stream": true,"max_tokens":32,
+      "thinking":{"type":"enabled","budget_tokens":1024},
+      "system":[{"type":"text","text":"sys","cache_control":{"type":"ephemeral"}}],
+      "messages":[{"role":"user","content":"hi"}]}`;
+
+    const response = await fetch(`${gateway}/v1/messages?beta=true`, claudeRequest(body));
+    const reader = response.body!.getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+    releaseRest();
+    let rest = "";
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += new TextDecoder().decode(chunk.value);
+    }
+
+    const received = upstream.requests[0]!;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    expect(response.headers.get("request-id")).toBe("req_1");
+    expect(first).toBe('event: message_start\ndata: {"type":"message_start"}\n\n');
+    expect(rest).toBe('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+    expect(received.method).toBe("POST");
+    expect(received.url).toBe("/v1/messages?beta=true");
+    expect(received.body.toString()).toBe(body.replace('"relay-a/kimi-k2"', '"kimi-k2"'));
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_A}`);
+    expect(received.headers["x-api-key"]).toBe(KEY_A);
+    expect(received.headers["anthropic-version"]).toBe("2023-06-01");
+    expect(received.headers["anthropic-beta"]).toBe("claude-code-20250219");
+    expect(received.headers["x-claude-code-session-id"]).toBe("session-1");
+  });
+
+  test("Codex requests reach the Responses address and a non-streaming reply comes back whole", async () => {
+    const upstream = await startUpstream();
+    const reply = { id: "resp_1", object: "response", output: [], model: "gpt-5.5" };
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(reply));
+    };
+    const { gateway } = await start({ upstreamA: upstream });
+    const body = JSON.stringify({ model: "gpt-5.5", input: "hi", stream: false });
+
+    const response = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CODEX_TOKEN}`,
+        "content-type": "application/json",
+        "thread-id": "thread-1",
+      },
+      body,
+    });
+
+    const received = upstream.requests[0]!;
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await response.json()).toEqual(reply);
+    expect(received.url).toBe("/v1/responses");
+    expect(received.body.toString()).toBe(body);
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_A}`);
+    expect(received.headers["x-api-key"]).toBeUndefined();
+    expect(received.headers["thread-id"]).toBe("thread-1");
+  });
+
+  test("a Codex request with a call left unanswered reaches the Responses address mended", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "run it" }] },
+      { type: "function_call", call_id: "call_lone", name: "shell", arguments: "{}" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "go on" }] },
+    ];
+
+    const response = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.5", input }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(upstream.requests[0]!.body.toString())).toEqual({
+      model: "gpt-5.5",
+      input: [
+        input[0],
+        input[1],
+        {
+          type: "function_call_output",
+          call_id: "call_lone",
+          output: "[The result of this tool call is unavailable: the turn was interrupted.]",
+        },
+        input[2],
+      ],
+    });
+  });
+
+  test("a Claude tier name is sent as the model the endpoint maps it to", async () => {
+    const upstreamB = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamB });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { modelMapping?: Record<string, string> }[];
+    };
+    file.endpoints[1]!.modelMapping = { haiku: "glm-4.6" };
+    await writeFile(endpointsPath, JSON.stringify(file));
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [] }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    // 映射到的不是 Claude：请求没提思考，告诉它思考关着。
+    expect(JSON.parse(upstreamB.requests[0]!.body.toString())).toEqual({
+      model: "glm-4.6",
+      max_tokens: 1,
+      messages: [],
+      thinking: { type: "disabled" },
+    });
+  });
+
+  test("a model no enabled endpoint offers is an error in the agent's format", async () => {
+    const { gateway } = await start();
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "no-such-model", max_tokens: 1, messages: [] }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "not_found_error",
+        message: 'No enabled API endpoint offers the model "no-such-model"',
+      },
+    });
+  });
+});
+
+/** 假 Chat 上游的流式回复：一段文字、一个带参数的工具调用、以工具调用结束、最后报用量。 */
+function chatStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const chunk of [
+    {
+      id: "chatcmpl-42",
+      model: "deepseek-v3-0324",
+      choices: [{ index: 0, delta: { role: "assistant", content: "Let me " } }],
+    },
+    { id: "chatcmpl-42", choices: [{ index: 0, delta: { content: "look." } }] },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_ls",
+                type: "function",
+                function: { name: "Bash", arguments: "" },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"command":' } }] } },
+      ],
+    },
+    {
+      id: "chatcmpl-42",
+      choices: [
+        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] } },
+      ],
+    },
+    { id: "chatcmpl-42", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+    {
+      id: "chatcmpl-42",
+      choices: [],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        prompt_tokens_details: { cached_tokens: 100 },
+      },
+    },
+  ]) {
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+  res.end("data: [DONE]\n\n");
+}
+
+/** Claude Code 一轮对话的请求：系统提示、多轮、工具定义与调用、工具结果、tool_choice。 */
+function claudeConversation(stream: boolean) {
+  return {
+    model: "deepseek-v3",
+    max_tokens: 2048,
+    stream,
+    system: [{ type: "text", text: "You are Claude Code.", cache_control: { type: "ephemeral" } }],
+    messages: [
+      { role: "user", content: "list files" },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "pwd" } }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_1", content: "/repo" },
+          { type: "text", text: "now list them" },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: "Bash",
+        description: "Run a command",
+        input_schema: { type: "object", properties: { command: { type: "string" } } },
+      },
+    ],
+    tool_choice: { type: "auto" },
+  };
+}
+
+/** SSE 原文里每个事件的 data。 */
+function sseData(text: string): unknown[] {
+  return text
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)) as unknown);
+}
+
+describe("translating requests for an endpoint that speaks another format", () => {
+  test("a Claude Code request reaches a Chat-only endpoint translated and the stream comes back as Anthropic events", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(claudeConversation(true)),
+    );
+    const text = await response.text();
+
+    const received = chat.requests[0]!;
+    expect(received.url).toBe("/v1/chat/completions");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(received.headers["x-api-key"]).toBeUndefined();
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "deepseek-v3",
+      messages: [
+        { role: "system", content: "You are Claude Code." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "toolu_1",
+              type: "function",
+              function: { name: "Bash", arguments: '{"command":"pwd"}' },
+            },
+          ],
+          // DeepSeek 要每个工具轮都带推理，没有的给一个空格。
+          reasoning_content: " ",
+        },
+        { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
+        { role: "user", content: "now list them" },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      max_tokens: 2048,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "Bash",
+            description: "Run a command",
+            parameters: { type: "object", properties: { command: { type: "string" } } },
+          },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(text).toContain("event: message_start\ndata: ");
+    expect(sseData(text)).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_42",
+          type: "message",
+          role: "assistant",
+          model: "deepseek-v3",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me " } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "look." } },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":' },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '"ls"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("a request that did not ask to stream is still streamed upstream and comes back whole", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(false), model: "relay-c/deepseek-v3" }),
+    );
+
+    // 和流式请求翻出来的一样：Agent 没要流式，上游照样流式请求。
+    expect(chat.requests[0]!.body.toString()).toBe(
+      JSON.stringify({
+        model: "deepseek-v3",
+        messages: [
+          { role: "system", content: "You are Claude Code." },
+          { role: "user", content: "list files" },
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "toolu_1",
+                type: "function",
+                function: { name: "Bash", arguments: '{"command":"pwd"}' },
+              },
+            ],
+            reasoning_content: " ",
+          },
+          { role: "tool", tool_call_id: "toolu_1", content: "/repo" },
+          { role: "user", content: "now list them" },
+        ],
+        stream: true,
+        stream_options: { include_usage: true },
+        max_tokens: 2048,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Bash",
+              description: "Run a command",
+              parameters: { type: "object", properties: { command: { type: "string" } } },
+            },
+          },
+        ],
+        tool_choice: "auto",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(await response.json()).toEqual({
+      id: "msg_42",
+      type: "message",
+      role: "assistant",
+      model: "relay-c/deepseek-v3",
+      content: [
+        { type: "text", text: "Let me look." },
+        { type: "tool_use", id: "call_ls", name: "Bash", input: { command: "ls" } },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 20,
+        output_tokens: 30,
+        cache_read_input_tokens: 100,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("a Chat endpoint's error before the reply comes back under its name in Anthropic shape", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "messages: tool_call_id is not found" } }));
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "Relay C: messages: tool_call_id is not found",
+      },
+    });
+  });
+
+  test("count_tokens is passed to an Anthropic address and estimated locally for any other", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"input_tokens":4242}');
+    };
+    const chat = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream, chatUpstream: chat });
+    const counted = (model: string) =>
+      fetch(
+        `${gateway}/v1/messages/count_tokens?beta=true`,
+        claudeRequest({
+          model,
+          system: "1234",
+          messages: [{ role: "user", content: "12345678" }],
+          tools: [{ name: "Bash", description: "", input_schema: {} }],
+        }),
+      );
+
+    const passed = await counted("kimi-k2");
+    const estimated = await counted("deepseek-v3");
+
+    expect(passed.status).toBe(200);
+    expect(passed.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await passed.json()).toEqual({ input_tokens: 4242 });
+    expect(upstream.requests[0]?.url).toBe("/v1/messages/count_tokens?beta=true");
+    expect(JSON.parse(upstream.requests[0]!.body.toString())).toEqual({
+      model: "kimi-k2",
+      system: "1234",
+      messages: [{ role: "user", content: "12345678" }],
+      tools: [{ name: "Bash", description: "", input_schema: {} }],
+    });
+    expect(estimated.status).toBe(200);
+    expect(estimated.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    // 「1234」「12345678」「Bash」「{}」共 18 字节，/ 4 取整。
+    expect(await estimated.json()).toEqual({ input_tokens: 4 });
+    expect(chat.requests).toHaveLength(0);
+  });
+});
+
+describe("thinking between Claude Code and an endpoint", () => {
+  test("a Chat endpoint's reasoning, as a field or a leading <think> block, reaches Claude Code as thinking as it streams", async () => {
+    const chat = await startUpstream();
+    chat.respond = (request, res) => {
+      const tagged = JSON.parse(request.body.toString()).model === "qwen3-coder";
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const deltas = tagged
+        ? [{ content: "<think>Look " }, { content: "first.</think>\n\nDone." }]
+        : [{ reasoning_content: "Look " }, { reasoning_content: "first." }, { content: "Done." }];
+      for (const delta of deltas) {
+        res.write(`data: ${JSON.stringify({ id: "c1", choices: [{ index: 0, delta }] })}\n\n`);
+      }
+      res.end(
+        `data: ${JSON.stringify({ id: "c1", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+      );
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+    const ask = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 1024,
+          stream: true,
+          thinking: { type: "enabled", budget_tokens: 1024 },
+          messages: [{ role: "user", content: "go" }],
+        }),
+      );
+      return sseData(await response.text()).filter((event) =>
+        String((event as { type: string }).type).startsWith("content_block_"),
+      );
+    };
+
+    for (const model of ["deepseek-v3", "qwen3-coder"]) {
+      const blocks = await ask(model);
+      expect(
+        blocks.filter((event) => (event as { type: string }).type === "content_block_start"),
+      ).toEqual([
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        },
+        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+      ]);
+      const said = (kind: string) =>
+        blocks
+          .map((event) => (event as { delta?: Record<string, string> }).delta)
+          .filter((delta) => delta?.type === kind)
+          .map((delta) => delta![kind === "thinking_delta" ? "thinking" : "text"])
+          .join("");
+      expect(said("thinking_delta")).toBe("Look first.");
+      expect(said("text_delta")).toBe("Done.");
+    }
+  });
+
+  test("Claude's signed thinking from earlier turns is left out for a Chat endpoint and passed through to an Anthropic one", async () => {
+    const upstream = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ upstreamA: upstream, chatUpstream: chat });
+    const conversation = (model: string) => ({
+      model,
+      max_tokens: 2048,
+      thinking: { type: "enabled", budget_tokens: 1024 },
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "A greeting.", signature: "EqQBCkgIBxAB" },
+            { type: "text", text: "Hello" },
+          ],
+        },
+        { role: "user", content: "again" },
+      ],
+    });
+
+    await (
+      await fetch(`${gateway}/v1/messages`, claudeRequest(conversation("qwen3-coder")))
+    ).text();
+    await (await fetch(`${gateway}/v1/messages`, claudeRequest(conversation("kimi-k2")))).text();
+
+    const toChat = JSON.parse(chat.requests[0]!.body.toString()) as { messages: unknown[] };
+    expect(toChat.messages[1]).toEqual({ role: "assistant", content: "Hello" });
+    expect(JSON.parse(upstream.requests[0]!.body.toString()).messages[1]).toEqual(
+      conversation("kimi-k2").messages[1],
+    );
+  });
+});
+
+function codexRequest(body: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+/** Codex 一轮对话的请求：指令、多轮、工具定义与调用、工具结果、tool_choice。 */
+function codexConversation(model: string, stream: boolean) {
+  return {
+    model,
+    instructions: "You are Codex.",
+    stream,
+    store: false,
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "list files" }] },
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "exec_command",
+        arguments: '{"cmd":"pwd"}',
+      },
+      { type: "function_call_output", call_id: "call_1", output: "/repo" },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "now list them" }] },
+    ],
+    tools: [
+      {
+        type: "function",
+        name: "exec_command",
+        description: "Run a command",
+        strict: false,
+        parameters: { type: "object", properties: { cmd: { type: "string" } } },
+      },
+    ],
+    tool_choice: "auto",
+  };
+}
+
+function anthropicStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of [
+    {
+      type: "message_start",
+      message: {
+        id: "msg_7",
+        type: "message",
+        role: "assistant",
+        model: "glm-4.6-0915",
+        content: [],
+        usage: { input_tokens: 20, output_tokens: 0, cache_read_input_tokens: 100 },
+      },
+    },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me look." } },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "content_block_start",
+      index: 1,
+      content_block: { type: "tool_use", id: "toolu_ls", name: "exec_command", input: {} },
+    },
+    {
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"cmd":"ls"}' },
+    },
+    { type: "content_block_stop", index: 1 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: "tool_use" },
+      usage: { output_tokens: 30 },
+    },
+    { type: "message_stop" },
+  ]) {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  res.end();
+}
+
+function responsesStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of [
+    {
+      type: "response.created",
+      response: { id: "resp_9", model: "grok-4-0709", status: "in_progress" },
+    },
+    {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+    },
+    { type: "response.output_text.delta", item_id: "msg_1", delta: "Let me look." },
+    {
+      type: "response.output_item.added",
+      output_index: 1,
+      item: { id: "fc_1", type: "function_call", call_id: "call_ls", name: "Bash", arguments: "" },
+    },
+    { type: "response.function_call_arguments.delta", item_id: "fc_1", delta: '{"command":' },
+    {
+      type: "response.function_call_arguments.done",
+      item_id: "fc_1",
+      arguments: '{"command":"ls"}',
+    },
+    {
+      type: "response.output_item.done",
+      output_index: 1,
+      item: {
+        id: "fc_1",
+        type: "function_call",
+        call_id: "call_ls",
+        name: "Bash",
+        arguments: '{"command":"ls"}',
+      },
+    },
+    {
+      type: "response.completed",
+      response: {
+        id: "resp_9",
+        status: "completed",
+        output: [],
+        usage: {
+          input_tokens: 120,
+          output_tokens: 30,
+          input_tokens_details: { cached_tokens: 100 },
+        },
+      },
+    },
+  ]) {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  res.end();
+}
+
+/** Codex 流里的 response.completed 带的整份回复。 */
+function completedResponse(text: string): Record<string, unknown> {
+  const events = sseData(text) as Record<string, unknown>[];
+  return events.find((event) => event.type === "response.completed")!.response as Record<
+    string,
+    unknown
+  >;
+}
+
+const CODEX_ANSWER = [
+  {
+    id: expect.stringMatching(/^msg_/),
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Let me look.", annotations: [], logprobs: [] }],
+  },
+];
+
+describe("translating for Codex, and to an endpoint that speaks only Responses", () => {
+  test("a Codex request reaches an Anthropic-only endpoint translated and the stream comes back as Responses events", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const text = await response.text();
+
+    const received = anthropic.requests[0]!;
+    expect(received.url).toBe("/v1/messages");
+    expect(received.headers["x-api-key"]).toBe(KEY_B);
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "glm-4.6",
+      stream: true,
+      max_tokens: 16384,
+      system: [{ type: "text", text: "You are Codex.", cache_control: { type: "ephemeral" } }],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "list files" }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "call_1", name: "exec_command", input: { cmd: "pwd" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "call_1", content: "/repo" },
+            { type: "text", text: "now list them", cache_control: { type: "ephemeral" } },
+          ],
+        },
+      ],
+      tools: [
+        {
+          name: "exec_command",
+          description: "Run a command",
+          input_schema: { type: "object", properties: { cmd: { type: "string" } } },
+        },
+      ],
+      // auto 是 Anthropic 的默认，不写。
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(text).toContain("event: response.created\ndata: ");
+    expect(completedResponse(text)).toMatchObject({
+      id: "resp_msg_7",
+      status: "completed",
+      model: "glm-4.6",
+      output: [
+        ...CODEX_ANSWER,
+        {
+          id: expect.stringMatching(/^fc_/),
+          type: "function_call",
+          status: "completed",
+          call_id: "toolu_ls",
+          name: "exec_command",
+          arguments: '{"cmd":"ls"}',
+        },
+      ],
+      usage: {
+        input_tokens: 120,
+        output_tokens: 30,
+        total_tokens: 150,
+        input_tokens_details: { cached_tokens: 100, cache_write_tokens: 0 },
+        output_tokens_details: { reasoning_tokens: 0 },
+      },
+    });
+  });
+
+  test("a Codex request reaches a Chat-only endpoint translated; streamed and whole replies come back in Responses shape", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const streamed = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("qwen3-coder", true)),
+    );
+    const text = await streamed.text();
+    const whole = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("qwen3-coder", false)),
+    );
+
+    const received = chat.requests[0]!;
+    expect(received.url).toBe("/v1/chat/completions");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "qwen3-coder",
+      messages: [
+        { role: "system", content: "You are Codex." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "exec_command", arguments: '{"cmd":"pwd"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "/repo" },
+        { role: "user", content: "now list them" },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "exec_command",
+            description: "Run a command",
+            parameters: { type: "object", properties: { cmd: { type: "string" } } },
+          },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    // 没要流式的也照样流式问上游。
+    expect(chat.requests[1]!.body.toString()).toBe(received.body.toString());
+    const call = {
+      id: expect.stringMatching(/^fc_/),
+      type: "function_call",
+      status: "completed",
+      call_id: "call_ls",
+      name: "Bash",
+      arguments: '{"command":"ls"}',
+    };
+    const answer = {
+      status: "completed",
+      model: "qwen3-coder",
+      usage: { input_tokens: 120, output_tokens: 30, input_tokens_details: { cached_tokens: 100 } },
+    };
+    expect(streamed.status).toBe(200);
+    const completed = completedResponse(text);
+    expect(completed).toMatchObject({ id: "resp_chatcmpl-42", ...answer });
+    expect(completed.output).toEqual([...CODEX_ANSWER, call]);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    const body = (await whole.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ object: "response", ...answer });
+    // 整份回复里的文字没有 logprobs。
+    expect(body.output).toEqual([
+      {
+        ...CODEX_ANSWER[0],
+        content: [{ type: "output_text", text: "Let me look.", annotations: [] }],
+      },
+      call,
+    ]);
+  });
+
+  test("a Claude Code request reaches a Responses-only endpoint translated and the stream comes back as Anthropic events", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => responsesStream(res);
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
+    );
+    const text = await response.text();
+
+    const received = responses.requests[0]!;
+    expect(received.url).toBe("/v1/responses");
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(received.headers["x-api-key"]).toBeUndefined();
+    expect(JSON.parse(received.body.toString())).toEqual({
+      model: "grok-4",
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "list files" }] },
+        { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: '{"command":"pwd"}' },
+        { type: "function_call_output", call_id: "toolu_1", output: "/repo" },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "now list them" }] },
+      ],
+      stream: true,
+      store: false,
+      instructions: "You are Claude Code.",
+      max_output_tokens: 2048,
+      tools: [
+        {
+          type: "function",
+          name: "Bash",
+          description: "Run a command",
+          strict: false,
+          parameters: { type: "object", properties: { command: { type: "string" } } },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-d");
+    expect(sseData(text)).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_resp_9",
+          type: "message",
+          role: "assistant",
+          model: "grok-4",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Let me look." },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("an image given only as a file_id cannot be translated: a 400 in OpenAI shape, no endpoint asked", async () => {
+    const anthropic = await startUpstream();
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({
+        model: "glm-4.6",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              { type: "input_text", text: "what is this" },
+              { type: "input_image", file_id: "file-abc" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(anthropic.requests).toHaveLength(0);
+    expect(await response.json()).toEqual({
+      error: {
+        message:
+          "The latest message has an image given only as an OpenAI file_id, which this API endpoint cannot open; send the image itself",
+        type: "invalid_request_error",
+        code: null,
+        param: null,
+      },
+    });
+  });
+});
+
+/** 换掉几家接口的已选模型；中转站每次请求都重读 endpoints.json。 */
+async function selectModels(endpointsDir: string, models: Record<string, string[]>) {
+  const endpointsPath = path.join(endpointsDir, "endpoints.json");
+  const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+    endpoints: { id: string; models: { id: string }[] }[];
+  };
+  for (const endpoint of file.endpoints) {
+    const selected = models[endpoint.id];
+    if (selected) endpoint.models = selected.map((id) => ({ id }));
+  }
+  await writeFile(endpointsPath, JSON.stringify(file));
+}
+
+function receivedBody(request: RecordedRequest | undefined): Record<string, unknown> {
+  return JSON.parse(request?.body.toString() ?? "{}") as Record<string, unknown>;
+}
+
+const NONE_REFUSED = `{"type":"error","error":{"type":"invalid_request_error","message":"gpt-6.1-sol does not support reasoning effort \\"none\\"; use low, medium, high, xhigh or max"}}`;
+const ALWAYS_THINKS = `{"type":"error","error":{"type":"1210","message":"GLM-5.3 always engages in thinking; use low, high, or max"}}`;
+
+function refuse(res: ServerResponse, body: string) {
+  res.writeHead(400, { "content-type": "application/json" });
+  res.end(body);
+}
+
+describe("reasoning turned off, sent the way each model takes it", () => {
+  test("a Responses endpoint refusing effort none is asked again at low, and from then on", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      const body = receivedBody(request);
+      const effort = (body.reasoning as { effort?: string } | undefined)?.effort;
+      if (body.model === "gpt-6.1-sol" && effort === "none") refuse(res, NONE_REFUSED);
+      else res.writeHead(200, { "content-type": "application/json" }).end("{}");
+    };
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["gpt-6.1-sol", "gpt-5.5"] });
+    const ask = (model: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+    const efforts = () =>
+      upstream.requests.splice(0).map((request) => {
+        const body = receivedBody(request);
+        return `${String(body.model)} ${(body.reasoning as { effort: string }).effort}`;
+      });
+
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol none", "gpt-6.1-sol low"]);
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol low"]);
+    expect((await ask("gpt-5.5")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-5.5 none"]);
+  });
+
+  test("a Chat endpoint refusing a translated effort none is asked again at low, and from then on", async () => {
+    const chat = await startUpstream();
+    chat.respond = (request, res) => {
+      const body = receivedBody(request);
+      if (body.model === "gpt-6.1-sol" && body.reasoning_effort === "none") {
+        refuse(res, NONE_REFUSED);
+      } else {
+        chatStream(res);
+      }
+    };
+    const { gateway, endpointsDir } = await start({ chatUpstream: chat });
+    await selectModels(endpointsDir, { ep_c: ["gpt-6.1-sol", "qwen3-coder"] });
+    const ask = (model: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+    const efforts = () =>
+      chat.requests.splice(0).map((request) => {
+        const body = receivedBody(request);
+        return `${String(body.model)} ${String(body.reasoning_effort)}`;
+      });
+
+    const first = await ask("gpt-6.1-sol");
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ status: "completed" });
+    expect(efforts()).toEqual(["gpt-6.1-sol none", "gpt-6.1-sol low"]);
+    expect((await ask("gpt-6.1-sol")).status).toBe(200);
+    expect(efforts()).toEqual(["gpt-6.1-sol low"]);
+    expect((await ask("qwen3-coder")).status).toBe(200);
+    expect(efforts()).toEqual(["qwen3-coder none"]);
+  });
+
+  test("Claude Code and Codex turning thinking off reach each Claude in the shape it takes", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const { gateway, endpointsDir } = await start({ upstreamB: anthropic });
+    const models = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"];
+    await selectModels(endpointsDir, { ep_b: models });
+    const thinkingOf = (request: RecordedRequest | undefined) => {
+      const body = receivedBody(request);
+      return {
+        thinking: body.thinking,
+        effort: (body.output_config as { effort?: string })?.effort,
+      };
+    };
+    const expected = [
+      { thinking: { type: "between_tools" }, effort: undefined },
+      { thinking: undefined, effort: "low" },
+      { thinking: { type: "disabled" }, effort: undefined },
+      { thinking: { type: "disabled" }, effort: undefined },
+    ];
+
+    for (const model of models) {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 64,
+          thinking: { type: "disabled" },
+          messages: [{ role: "user", content: "Is this action safe?" }],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    expect(anthropic.requests.splice(0).map(thinkingOf)).toEqual(expected);
+
+    for (const model of models) {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input: "hi", stream: false, reasoning: { effort: "none" } }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    expect(anthropic.requests.splice(0).map(thinkingOf)).toEqual(expected);
+  });
+
+  test("a translated request a model that always thinks refuses is asked again thinking at its least", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (request, res) => {
+      const thinking = receivedBody(request).thinking as { type?: string } | undefined;
+      if (thinking?.type === "disabled") refuse(res, ALWAYS_THINKS);
+      else anthropicStream(res);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+    const ask = () =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({
+          model: "glm-4.6",
+          input: "hi",
+          stream: false,
+          reasoning: { effort: "none" },
+        }),
+      );
+
+    expect((await ask()).status).toBe(200);
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "disabled" },
+      { type: "enabled", budget_tokens: 4096 },
+    ]);
+    expect((await ask()).status).toBe(200);
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "enabled", budget_tokens: 4096 },
+    ]);
+  });
+
+  test("a model that always thinks is asked again with its thinking left on, and from then on", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (request, res) => {
+      const thinking = receivedBody(request).thinking as { type?: string } | undefined;
+      if (thinking?.type === "disabled") refuse(res, ALWAYS_THINKS);
+      else streamReply(res);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+    // Claude Code 起标题的请求没提思考：发给别家模型时补上 disabled（R-C3），GLM 不收。
+    const ask = () =>
+      fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model: "glm-4.6",
+          max_tokens: 64,
+          messages: [{ role: "user", content: "Title this" }],
+        }),
+      );
+
+    const first = await ask();
+    expect(first.status).toBe(200);
+    await first.text();
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      { type: "disabled" },
+      undefined,
+    ]);
+    const second = await ask();
+    expect(second.status).toBe(200);
+    await second.text();
+    expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
+      undefined,
+    ]);
+  });
+});
+
+describe("when the endpoint fails", () => {
+  test("its status, its message under the endpoint name and Retry-After come back in Anthropic shape", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(429, {
+        "content-type": "application/json",
+        "retry-after": "30",
+        "anthropic-ratelimit-requests-reset": "2026-10-14T12:00:30Z",
+      });
+      res.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "rate_limit_error", message: `Slow down, key ${KEY_A} is busy` },
+        }),
+      );
+    };
+    const { gateway, logLines } = await start({ upstreamA: upstream });
+
+    // 只有 A 选了 gpt-5.5：没有别家可换。
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("30");
+    expect(response.headers.get("anthropic-ratelimit-requests-reset")).toBe("2026-10-14T12:00:30Z");
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    const body = JSON.parse(text) as { type: string; error: { type: string; message: string } };
+    expect(body.type).toBe("error");
+    expect(body.error.type).toBe("rate_limit_error");
+    // 限流判出了恢复时间，附在原文后面。
+    expect(body.error.message).toMatch(
+      /^Relay A: Slow down, key \*\*\* is busy \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}\)$/,
+    );
+    // Retry-After 是 30 秒，超过原地重试肯等的 8 秒：只问了一次。
+    expect(upstream.requests).toHaveLength(1);
+    expect(logLines.join("\n")).not.toContain(KEY_A);
+  });
+
+  test.each([
+    // 400 不值得再问；503 是最后一家，稍等后原地再问两次。
+    { status: 400, asked: 1 },
+    { status: 503, asked: 3 },
+  ])("a $status comes back to Codex in OpenAI shape", async ({ status, asked }) => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "upstream says no", type: "bad", code: "x1" } }));
+    };
+    const { gateway } = await start({ upstreamA: upstream });
+
+    const response = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${CODEX_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.5", input: "hi" }),
+    });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({
+      error: { message: "Relay A: upstream says no", type: "bad", code: "x1", param: null },
+    });
+    expect(upstream.requests).toHaveLength(asked);
+  });
+
+  test("an endpoint that sends no response headers in time is a server error", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = () => {};
+    const { gateway } = await start({ upstreamA: upstream, headerTimeoutMs: 300 });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
+    );
+
+    expect(response.status).toBe(504);
+    // 等不到响应头不原地重试：真实的等待是 10 分钟。
+    expect(upstream.requests).toHaveLength(1);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: "Relay A: no response headers within 0.3s" },
+    });
+  });
+
+  test("the real keys never reach the daemon log or a response", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      res.writeHead(401, { "content-type": "text/plain" });
+      res.end(`bad key ${String(request.headers.authorization)}`);
+    };
+    const { gateway, logLines } = await start({ upstreamA: upstream });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "gpt-5.5", max_tokens: 1, messages: [] }),
+    );
+    const text = await response.text();
+
+    expect(upstream.requests[0]?.headers.authorization).toBe(`Bearer ${KEY_A}`);
+    expect(JSON.parse(text)).toEqual({
+      type: "error",
+      error: { type: "authentication_error", message: "Relay A: bad key Bearer ***" },
+    });
+    // 日志里确有这次失败的记录，下面「不含 key」的断言才有意义。
+    expect(logLines.some((line) => line.includes("API endpoint returned an error"))).toBe(true);
+    expect(logLines.join("\n")).not.toContain(KEY_A);
+    expect(logLines.join("\n")).not.toContain(KEY_B);
+  });
+});
+
+async function connectTo(daemon: TestPaseoDaemon): Promise<DaemonClient> {
+  const client = new DaemonClient({
+    url: `ws://127.0.0.1:${daemon.port}/ws`,
+    appVersion: "0.15.1",
+  });
+  clients.push(client);
+  await client.connect();
+  await client.fetchAgents({ subscribe: {} });
+  return client;
+}
+
+async function cooldownOf(client: DaemonClient, endpointId: string) {
+  const list = await client.apiEndpointList("claude");
+  return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.cooldown ?? null;
+}
+
+/** 一段 Anthropic 流式回复；`cacheRead` 是这次从厂商缓存读到的 token 数。 */
+function streamReply(res: ServerResponse, input: { text?: string; cacheRead?: number } = {}) {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  const usage = { input_tokens: 10, cache_read_input_tokens: input.cacheRead ?? 0 };
+  res.write(
+    `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { usage } })}\n\n`,
+  );
+  res.write(
+    `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: input.text ?? "hi" } })}\n\n`,
+  );
+  res.end(`event: message_stop\ndata: {"type":"message_stop"}\n\n`);
+}
+
+function failWith(
+  res: ServerResponse,
+  input: { status: number; message: string; headers?: Record<string, string> },
+) {
+  res.writeHead(input.status, { "content-type": "application/json", ...input.headers });
+  res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: input.message } }));
+}
+
+function receivedModel(request: RecordedRequest | undefined): unknown {
+  return (JSON.parse(request?.body.toString() ?? "{}") as { model?: unknown }).model;
+}
+
+/** 两家都选了 kimi-k2：A 是用户选的（最早建的），B 在它之后。 */
+async function twoRelays(options: { headerTimeoutMs?: number } = {}) {
+  const upstreamA = await startUpstream();
+  const upstreamB = await startUpstream();
+  upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
+  const harness = await start({ upstreamA, upstreamB, ...options });
+  const ask = (body: Record<string, unknown> = {}) =>
+    fetch(
+      `${harness.gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        ...body,
+      }),
+    );
+  return { ...harness, upstreamA, upstreamB, ask };
+}
+
+describe("switching to another endpoint when one fails", () => {
+  test.each([
+    { failure: "a rate limit", reason: "rate", status: 429, message: "Rate limit exceeded" },
+    { failure: "no credit", reason: "credit", status: 402, message: "Insufficient balance" },
+    { failure: "a server error", reason: "other", status: 503, message: "upstream busy" },
+  ])(
+    "$failure before the first byte goes to the next endpoint with the same model",
+    async ({ reason, status, message }) => {
+      const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+      upstreamA.respond = (_request, res) => failWith(res, { status, message });
+
+      const response = await ask();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      expect(await response.text()).toContain("from B");
+      expect(upstreamA.requests).toHaveLength(1);
+      expect(receivedModel(upstreamB.requests[0])).toBe("kimi-k2");
+      expect(upstreamB.requests[0]?.headers.authorization).toBe(`Bearer ${KEY_B}`);
+
+      const client = await connectTo(daemon);
+      expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down", reason });
+      expect(await cooldownOf(client, "ep_b")).toBeNull();
+      const switched = logLines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .find((line) => line.msg === "API endpoint gateway switched endpoints");
+      expect(switched).toMatchObject({ from: "Relay A", to: "Relay B", failure: reason });
+      expect(typeof switched?.until).toBe("string");
+    },
+  );
+
+  test("no response headers in time is a server error and goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({ headerTimeoutMs: 300 });
+    upstreamA.respond = () => {};
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("a request the endpoint could not read goes to the next one without cooling the first", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "Extra inputs are not permitted" });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test("an error the next endpoint could not fix either is not passed on to it", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "prompt is too long: 210000 tokens > 200000" });
+
+    const response = await ask();
+
+    expect(response.status).toBe(400);
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await response.json()).toMatchObject({
+      error: { message: "Relay A: prompt is too long: 210000 tokens > 200000" },
+    });
+  });
+
+  test("after the first byte it stays: the broken stream reaches the agent and the endpoint cools down", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(`event: message_start\ndata: {"type":"message_start","message":{}}\n\n`);
+      setTimeout(() => res.destroy(), 50);
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await expect(response.text()).rejects.toThrow();
+    expect(upstreamB.requests).toHaveLength(0);
+    const client = await connectTo(daemon);
+    await expect.poll(() => cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
+  });
+
+  test("an endpoint that broke off before the first byte is switched away from", async () => {
+    const { upstreamA, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.flushHeaders();
+      setTimeout(() => res.destroy(), 50);
+    };
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+  });
+
+  test("a cooling endpoint is skipped until it is brought back by hand", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask()).text();
+    const client = await connectTo(daemon);
+    const cooldown = await cooldownOf(client, "ep_a");
+    expect(cooldown).toMatchObject({ state: "cooling_down", reason: "other" });
+    expect(Date.parse(cooldown?.until ?? "")).toBeGreaterThan(Date.now());
+
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const whileCooling = await ask();
+    expect(whileCooling.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await whileCooling.text();
+    expect(upstreamA.requests).toHaveLength(1);
+
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    const afterRecovery = await ask();
+    expect(afterRecovery.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await afterRecovery.text()).toContain("from A");
+    expect(upstreamB.requests).toHaveLength(2);
+    expect(logLines.some((line) => line.includes("API endpoint cooldown ended"))).toBe(true);
+  });
+
+  test("a bad key needs checking: it is not asked again until its connection is edited", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 401, message: "invalid key" });
+    await (await ask()).text();
+    const client = await connectTo(daemon);
+    expect(await cooldownOf(client, "ep_a")).toEqual({
+      state: "needs_check",
+      reason: "auth",
+      until: null,
+    });
+
+    await (await ask()).text();
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(2);
+
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: "ep_a",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: upstreamA.url }],
+      apiKey: "sk-fixed-key",
+      models: [{ id: "kimi-k2" }, { id: "gpt-5.5" }],
+    });
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const fixed = await ask();
+    expect(fixed.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(upstreamA.requests.at(-1)?.headers.authorization).toBe("Bearer sk-fixed-key");
+    await fixed.text();
+  });
+
+  test("with every endpoint out of quota the last one's error comes back, and none is asked until one is back", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 429, message: "You exceeded your current quota" });
+    upstreamB.respond = (_request, res) =>
+      failWith(res, { status: 429, message: "B: monthly quota used up" });
+
+    const first = await ask();
+    expect(first.status).toBe(429);
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(((await first.json()) as { error: { message: string } }).error.message).toMatch(
+      /^Relay B: B: monthly quota used up \(available again at /,
+    );
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+
+    const held = await ask();
+    expect(held.status).toBe(429);
+    expect(held.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(800);
+    expect(((await held.json()) as { error: { message: string } }).error.message).toMatch(
+      /^Relay B: B: monthly quota used up \(available again at /,
+    );
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("any edit of the endpoint lifts needing a check, but editing only its models keeps a cooldown", async () => {
+    const { upstreamA, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    const saveModels = () =>
+      client.apiEndpointSave({
+        provider: "claude",
+        endpointId: "ep_a",
+        name: "Relay A",
+        baseUrls: [
+          { format: "anthropic_messages", url: upstreamA.url },
+          { format: "openai_responses", url: `${upstreamA.url}/v1` },
+        ],
+        models: [{ id: "kimi-k2" }],
+      });
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask()).text();
+    await saveModels();
+    expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
+
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => failWith(res, { status: 403, message: "forbidden" });
+    await (await ask()).text();
+    expect(await cooldownOf(client, "ep_a")).toMatchObject({ state: "needs_check" });
+    await saveModels();
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+  });
+
+  test("cooldowns live in memory only: a restarted daemon starts with none", async () => {
+    const { upstreamA, ask, daemon, restart } = await twoRelays();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 402, message: "no credit" });
+    await (await ask()).text();
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({ reason: "credit" });
+
+    const next = await restart();
+
+    expect(await cooldownOf(await connectTo(next.daemon), "ep_a")).toBeNull();
+  });
+
+  test("the log has one line per switch and per cooldown, with the endpoint name and never a key", async () => {
+    const { upstreamA, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 429, message: `quota used up for ${KEY_A}` });
+    await (await ask()).text();
+    await (
+      await connectTo(daemon)
+    ).apiEndpointSetEndpointState({
+      endpointId: "ep_a",
+      clearCooldown: true,
+    });
+
+    const lines = logLines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const about = (msg: string) => lines.filter((line) => line.msg === msg);
+    expect(about("API endpoint is cooling down")).toEqual([
+      expect.objectContaining({ endpoint: "Relay A", failure: "quota", until: expect.any(String) }),
+    ]);
+    expect(about("API endpoint gateway switched endpoints")).toEqual([
+      expect.objectContaining({ from: "Relay A", to: "Relay B", failure: "quota" }),
+    ]);
+    expect(about("API endpoint cooldown ended")).toEqual([
+      expect.objectContaining({ endpoint: "Relay A", failure: "quota" }),
+    ]);
+    expect(logLines.join("\n")).not.toContain(KEY_A);
+    expect(logLines.join("\n")).not.toContain(KEY_B);
+  });
+});
+
+describe("a conversation stays where it was answered", () => {
+  const userSays = (text: string) => ({ role: "user", content: text });
+  const toolCall = {
+    role: "assistant",
+    content: [{ type: "tool_use", id: "t1", name: "Read", input: {} }],
+  };
+  const toolResult = {
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "t1", content: "file" }],
+  };
+
+  test("within a turn it stays with the endpoint that took over; a new turn goes back to the user's choice", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    await (await ask({ messages: [userSays("hi")] })).text();
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const sameTurn = await ask({ messages: [userSays("hi"), toolCall, toolResult] });
+    expect(sameTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await sameTurn.text();
+
+    const newTurn = await ask({
+      messages: [
+        userSays("hi"),
+        toolCall,
+        toolResult,
+        { role: "assistant", content: "ok" },
+        userSays("next"),
+      ],
+    });
+    expect(newTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await newTurn.text();
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+
+  test("a new turn stays with it while its cache is warm", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const client = await connectTo(daemon);
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    upstreamB.respond = (_request, res) => streamReply(res, { text: "from B", cacheRead: 2048 });
+    await (await ask({ messages: [userSays("hi")] })).text();
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const newTurn = await ask({
+      messages: [userSays("hi"), { role: "assistant", content: "hello" }, userSays("more")],
+    });
+
+    expect(newTurn.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await newTurn.text();
+    expect(upstreamA.requests).toHaveLength(1);
+  });
+});
+
+describe("model list and warm-up", () => {
+  test("/v1/models lists each enabled endpoint's selected model once, and /api/hello answers", async () => {
+    const { gateway } = await start();
+    const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
+
+    const models = await fetch(`${gateway}/v1/models`, { headers });
+    const hello = await fetch(`${gateway}/api/hello`, { headers });
+
+    expect(models.status).toBe(200);
+    const list = (await models.json()) as { data: { id: string }[] };
+    expect(list.data.map((model) => model.id)).toEqual(["kimi-k2", "gpt-5.5", "glm-4.6"]);
+    expect(hello.status).toBe(200);
+  });
+});
+
+describe("the CLI configs follow the gateway across daemon starts", () => {
+  const USER_SETTINGS = `{\n  "theme": "dark"\n}\n`;
+  const USER_CONFIG = `# mine\napproval_policy = "never"\n`;
+
+  interface Home {
+    root: string;
+    endpointsDir: string;
+    settingsPath: string;
+    configPath: string;
+  }
+
+  async function prepareHome(files: Record<string, unknown> = {}): Promise<Home> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-gw-start-"));
+    tempRoots.push(root);
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    await mkdir(endpointsDir, { recursive: true });
+    for (const [name, value] of Object.entries(files)) {
+      const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      await writeFile(path.join(endpointsDir, name), text);
+    }
+    await mkdir(path.join(root, "claude"), { recursive: true });
+    await mkdir(path.join(root, "codex"), { recursive: true });
+    const settingsPath = path.join(root, "claude", "settings.json");
+    const configPath = path.join(root, "codex", "config.toml");
+    await writeFile(settingsPath, USER_SETTINGS);
+    await writeFile(configPath, USER_CONFIG);
+    return { root, endpointsDir, settingsPath, configPath };
+  }
+
+  function apiEndpointsConfig(home: Home) {
+    return {
+      env: {
+        CLAUDE_CONFIG_DIR: path.join(home.root, "claude"),
+        CODEX_HOME: path.join(home.root, "codex"),
+      },
+      homeDir: home.root,
+    };
+  }
+
+  async function connect(url: string): Promise<DaemonClient> {
+    const client = new DaemonClient({ url, appVersion: "0.15.1" });
+    clients.push(client);
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+    return client;
+  }
+
+  async function tokens(home: Home): Promise<Record<string, string>> {
+    const text = await readFile(path.join(home.endpointsDir, "gateway-tokens.json"), "utf8");
+    return (JSON.parse(text) as { tokens: Record<string, string> }).tokens;
+  }
+
+  /** 拿一个此刻没人用、也不是 `taken` 的端口。 */
+  async function freePort(taken: number): Promise<number> {
+    const server = createNetServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    return port === taken ? freePort(taken) : port;
+  }
+
+  const SEEDED_ENDPOINT = storedEndpoint({
+    id: "ep_a",
+    slug: "relay-a",
+    name: "Relay A",
+    baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:9" }],
+    models: ["kimi-k2"],
+  });
+
+  test("a restart on another port rewrites the gateway address in both configs and nothing else", async () => {
+    const home = await prepareHome();
+    const first = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      cleanup: false,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    const client = await connect(`ws://127.0.0.1:${first.port}/ws`);
+    await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: "https://a.example" }],
+      apiKey: KEY_A,
+      models: [{ id: "kimi-k2" }],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+    const settingsBefore = await readFile(home.settingsPath, "utf8");
+    const configBefore = await readFile(home.configPath, "utf8");
+    const tokensBefore = await tokens(home);
+    const nextPort = await freePort(first.port);
+    await client.close();
+    await first.close();
+
+    const second = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      listenPort: nextPort,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(second);
+
+    const moved = (text: string) =>
+      text.replaceAll(`127.0.0.1:${first.port}/`, `127.0.0.1:${nextPort}/`);
+    expect(settingsBefore).toContain(`127.0.0.1:${first.port}/api-endpoint-gateway`);
+    expect(await readFile(home.settingsPath, "utf8")).toBe(moved(settingsBefore));
+    expect(configBefore).toContain(`127.0.0.1:${first.port}/api-endpoint-gateway/v1`);
+    expect(await readFile(home.configPath, "utf8")).toBe(moved(configBefore));
+    expect(await tokens(home)).toEqual(tokensBefore);
+  });
+
+  test("a takeover from before modelPicker was written gets it on start, and nothing else changes", async () => {
+    const home = await prepareHome();
+    const first = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      cleanup: false,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    const client = await connect(`ws://127.0.0.1:${first.port}/ws`);
+    await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: "https://a.example" }],
+      apiKey: KEY_A,
+      models: [{ id: "kimi-k2" }],
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const settingsBefore = await readFile(home.settingsPath, "utf8");
+    await client.close();
+    await first.close();
+
+    // 工单 17 以前的样子：settings.json 与接管记录里都没有 modelPicker。
+    const settings = JSON.parse(settingsBefore);
+    expect(settings.modelPicker).toEqual({
+      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+    });
+    delete settings.modelPicker;
+    await writeFile(home.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+    const recordPath = path.join(home.endpointsDir, "takeover-claude.json");
+    const record = JSON.parse(await readFile(recordPath, "utf8"));
+    delete record.takeover.modelPicker;
+    await writeFile(recordPath, JSON.stringify(record, null, 2));
+
+    const second = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      listenPort: first.port,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(second);
+
+    expect(await readFile(home.settingsPath, "utf8")).toBe(settingsBefore);
+  });
+
+  test("agents that were on before the gateway existed get a token and point at the gateway on start", async () => {
+    // 旧数据换算来的：总开关开着，却没有口令，CLI 配置也还没指向中转站。
+    const home = await prepareHome({
+      "endpoints.json": {
+        endpoints: [SEEDED_ENDPOINT],
+        agents: {
+          claude: { enabled: true, defaultModelId: "kimi-k2" },
+          codex: { enabled: true, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A } },
+    });
+
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(daemon);
+
+    const { claude, codex } = await tokens(home);
+    expect(claude).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+    expect(JSON.parse(await readFile(home.settingsPath, "utf8"))).toEqual({
+      theme: "dark",
+      env: { ANTHROPIC_BASE_URL: gateway, ANTHROPIC_AUTH_TOKEN: claude, ANTHROPIC_API_KEY: "" },
+      permissions: { deny: ["WebSearch"] },
+      model: "kimi-k2",
+      modelPicker: {
+        options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+      },
+    });
+    const config = await readFile(home.configPath, "utf8");
+    expect(config).toContain(`base_url = "${gateway}/v1"`);
+    expect(config).toContain(`experimental_bearer_token = "${codex}"`);
+    const catalog = JSON.parse(
+      await readFile(path.join(home.endpointsDir, "codex-models.json"), "utf8"),
+    ) as { models: Array<{ slug: string }> };
+    expect(catalog.models.map((model) => model.slug)).toEqual(["kimi-k2", "relay-a/kimi-k2"]);
+    const hello = await fetch(`${gateway}/api/hello`, {
+      headers: { authorization: `Bearer ${claude}` },
+    });
+    expect(hello.status).toBe(200);
+  });
+
+  test("the dedicated table and key file an older version left behind on Official are removed on start", async () => {
+    const legacyTable = `
+[model_providers.osuna_api_endpoint]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "responses"
+
+[model_providers.osuna_api_endpoint.auth]
+command = "/bin/cat"
+args = ["/somewhere/codex-api-key"]
+timeout_ms = 5000
+`;
+    const home = await prepareHome({
+      "endpoints.json": {
+        endpoints: [SEEDED_ENDPOINT],
+        agents: {
+          claude: { enabled: false, defaultModelId: null },
+          codex: { enabled: false, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A } },
+      "codex-api-key": KEY_A,
+      "takeover-codex.json": {
+        takeover: null,
+        providerTable: { endpointId: "ep_a" },
+        backup: { path: null },
+      },
+    });
+    await writeFile(home.configPath, `${USER_CONFIG}${legacyTable}`);
+
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(daemon);
+
+    expect(await readFile(home.configPath, "utf8")).toBe(USER_CONFIG);
+    await expect(stat(path.join(home.endpointsDir, "codex-api-key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  // unix socket 监听只在 POSIX 上有。
+  test.skipIf(process.platform === "win32")(
+    "a daemon listening on a socket refuses to turn the switch on and says why",
+    async () => {
+      const home = await prepareHome({
+        "endpoints.json": {
+          endpoints: [
+            SEEDED_ENDPOINT,
+            storedEndpoint({
+              id: "ep_b",
+              slug: "relay-b",
+              name: "Relay B",
+              baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:9" }],
+              models: ["glm-4.6"],
+            }),
+          ],
+          agents: {
+            claude: { enabled: true, defaultModelId: "kimi-k2" },
+            codex: { enabled: false, defaultModelId: null },
+          },
+        },
+        "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B } },
+        "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN } },
+        "takeover-claude.json": {
+          takeover: {
+            originalFile: { kind: "content" },
+            env: {
+              ANTHROPIC_BASE_URL: {
+                original: { present: false },
+                written: "https://relay.example",
+              },
+              ANTHROPIC_AUTH_TOKEN: { original: { present: false }, written: KEY_A },
+            },
+            envCreated: true,
+            webSearchDeny: { added: false, permissionsCreated: false, denyCreated: false },
+          },
+          backup: { path: null },
+        },
+      });
+      const socketPath = path.join(home.root, "d.sock");
+      const staticDir = path.join(home.root, "static");
+      await mkdir(staticDir);
+      const paseoHome = path.join(home.root, ".paseo");
+      const daemon = await createPaseoDaemon(
+        {
+          listen: socketPath,
+          paseoHome,
+          corsAllowedOrigins: [],
+          hostnames: true,
+          mcpEnabled: false,
+          staticDir,
+          mcpDebug: false,
+          agentClients: createTestAgentClients(),
+          agentStoragePath: path.join(paseoHome, "agents"),
+          relayEnabled: false,
+          appBaseUrl: "https://app.paseo.sh",
+          openai: undefined,
+          speech: undefined,
+          usage: {
+            roots: { claude: [], codex: [], pi: [], omp: [] },
+            pricing: { autoUpdate: false },
+          },
+          apiEndpoints: apiEndpointsConfig(home),
+        },
+        pino({ level: "silent" }),
+      );
+      await daemon.start();
+      try {
+        const client = await connect(`ws+unix://${socketPath}:/ws`);
+
+        const reason = {
+          code: "gateway_requires_tcp",
+          message: expect.stringContaining("socket"),
+        };
+        // 已经开着的总开关照旧开着，列表说明为什么不可用；CLI 配置不动。
+        const listed = await client.apiEndpointList("claude");
+        expect(listed.agents?.claude?.enabled).toBe(true);
+        expect(listed.gatewayUnavailable).toEqual(reason);
+        expect(await readFile(home.settingsPath, "utf8")).toBe(USER_SETTINGS);
+
+        const turnedOn = await client.apiEndpointSetAgentSettings({
+          provider: "codex",
+          enabled: true,
+        });
+        expect(turnedOn.error).toEqual(reason);
+        expect((await client.apiEndpointSetActive("codex", "ep_a")).error?.code).toBe(
+          "gateway_requires_tcp",
+        );
+        expect((await client.apiEndpointList("codex")).agents?.codex?.enabled).toBe(false);
+        expect(await readFile(home.configPath, "utf8")).toBe(USER_CONFIG);
+
+        // 关掉一家接口照常可以；Claude 的默认模型换家，但它的 CLI 配置从没指向过中转站（记录里是旧版本
+        // 直接写的第三方地址），没有地址可写：不动它，口令更不能写到第三方地址那里。
+        const off = await client.apiEndpointSetEndpointState({
+          endpointId: "ep_a",
+          enabled: false,
+        });
+        expect(off.error).toBeNull();
+        expect((await client.apiEndpointList("claude")).agents?.claude).toEqual({
+          enabled: true,
+          defaultModelId: "glm-4.6",
+        });
+        expect(await readFile(home.settingsPath, "utf8")).toBe(USER_SETTINGS);
+      } finally {
+        await daemon.stop().catch(() => undefined);
+        await daemon.agentManager.flush().catch(() => undefined);
+      }
+    },
+  );
+});

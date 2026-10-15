@@ -1,6 +1,6 @@
 # @getpaseo/server — Daemon Guidelines
 
-The daemon is a single Node.js process under `packages/server/src/`. It owns agent lifecycle, the WebSocket session API, file-based persistence in `$PASEO_HOME`, terminals, and the MCP/tool catalog. There is no HTTP REST API and no database: clients talk over one WebSocket session, and state is JSON on disk.
+The daemon is a single Node.js process under `packages/server/src/`. It owns agent lifecycle, the WebSocket session API, file-based persistence in `$PASEO_HOME`, terminals, and the MCP/tool catalog. There is no HTTP REST API and no database: clients talk over one WebSocket session, and state is JSON on disk. The few HTTP routes are for local callers with their own tokens (terminal activity, agent MCP, the API endpoint gateway — see [RPC and Protocol](./rpc-and-protocol.md)).
 
 Read these repo docs before the guides below. The guides distill them and add the daemon-specific shape; they do not replace them.
 

@@ -5,23 +5,22 @@ import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  readCodexReasoningEffort,
   removeCodexProviderTable,
-  replaceCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
-  type CodexProviderTable,
+  type CodexGatewayWiring,
 } from "./codex-config-patch.js";
 
 const ID = CODEX_API_ENDPOINT_PROVIDER_ID;
 
-const RELAY_TABLE: CodexProviderTable = {
-  name: "Relay",
-  baseUrl: "https://relay.example/v1",
-  auth: {
-    command: "/bin/cat",
-    args: ["/home/me/.paseo/api-endpoints/codex-api-key"],
-    timeoutMs: 5000,
-  },
+const CATALOG = "/home/me/.paseo/api-endpoints/codex-models.json";
+
+const GATEWAY: CodexGatewayWiring = {
+  baseUrl: "http://127.0.0.1:6767/api-endpoint-gateway/v1",
+  token: "gw-token",
+  model: "relay/gpt",
+  catalogPath: CATALOG,
 };
 
 // 用户手写的 config.toml：注释、行尾注释、引号风格、带空格的项目路径、自己的中转站，全都不能动。
@@ -40,28 +39,24 @@ base_url = "https://mine.example/v1"
 `;
 
 const RELAY_BLOCK = `[model_providers.${ID}]
-name = "Relay"
-base_url = "https://relay.example/v1"
+name = "Osuna"
+base_url = "http://127.0.0.1:6767/api-endpoint-gateway/v1"
 wire_api = "responses"
-
-[model_providers.${ID}.auth]
-command = "/bin/cat"
-args = ["/home/me/.paseo/api-endpoints/codex-api-key"]
-timeout_ms = 5000
+experimental_bearer_token = "gw-token"
 `;
+
+const CATALOG_LINE = `model_catalog_json = ${JSON.stringify(CATALOG)}`;
 
 interface ApplyInput {
   text: string | null;
   takeover: CodexConfigTakeover | null;
-  model?: string;
-  table?: CodexProviderTable;
+  wiring?: Partial<CodexGatewayWiring>;
 }
 
 function applyWith(input: ApplyInput) {
   const result = applyCodexApiEndpoint({
     text: input.text,
-    model: input.model ?? "relay/gpt",
-    table: input.table ?? RELAY_TABLE,
+    wiring: { ...GATEWAY, ...input.wiring },
     takeover: input.takeover,
   });
   if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
@@ -99,6 +94,7 @@ describe("applyCodexApiEndpoint", () => {
 model = "relay/gpt"   # the one I like
 model_provider = "${ID}"
 approval_policy = "on-request"
+${CATALOG_LINE}
 
 # projects
 [projects."/Users/me/My Code"]
@@ -121,6 +117,7 @@ web_search = true
     expect(text).toBe(`approval_policy = "never"
 model_provider = "${ID}"
 model = "relay/gpt"
+${CATALOG_LINE}
 
 [features]
 web_search = true
@@ -136,6 +133,7 @@ web_search = true
 
     expect(text).toBe(`model_provider = "${ID}"
 model = "relay/gpt"
+${CATALOG_LINE}
 # tables only
 [features]
 web_search = true
@@ -148,11 +146,17 @@ ${RELAY_BLOCK}`);
 
     expect(text).toBe(`model_provider = "${ID}"
 model = "relay/gpt"
+${CATALOG_LINE}
 
 ${RELAY_BLOCK}`);
-    expect(takeover.keys).toEqual({
-      model_provider: { original: { present: false }, written: ID },
-      model: { original: { present: false }, written: "relay/gpt" },
+    expect(takeover).toEqual({
+      keys: {
+        model_provider: { original: { present: false }, written: ID },
+        model: { original: { present: false }, written: "relay/gpt" },
+        model_catalog_json: { original: { present: false }, written: CATALOG },
+      },
+      table: { baseUrl: GATEWAY.baseUrl, bearerToken: "gw-token" },
+      fileCreated: true,
     });
   });
 
@@ -160,7 +164,7 @@ ${RELAY_BLOCK}`);
     const { text } = apply(`model = "a"\r\n\r\n[features]\r\nx = true\r\n`);
 
     expect(text).toBe(
-      `model = "relay/gpt"\r\nmodel_provider = "${ID}"\r\n\r\n[features]\r\nx = true\r\n\r\n${RELAY_BLOCK.replaceAll("\n", "\r\n")}`,
+      `model = "relay/gpt"\r\nmodel_provider = "${ID}"\r\n${CATALOG_LINE}\r\n\r\n[features]\r\nx = true\r\n\r\n${RELAY_BLOCK.replaceAll("\n", "\r\n")}`,
     );
   });
 
@@ -168,7 +172,7 @@ ${RELAY_BLOCK}`);
     const { text, takeover } = apply(`\uFEFF[features]\nweb_search = true\n`);
 
     expect(text.startsWith(`\uFEFFmodel_provider = "${ID}"\n`)).toBe(true);
-    expect(removeTable(restore(text, takeover))).toBe(`\uFEFF[features]\nweb_search = true\n`);
+    expect(restore(text, takeover)).toBe(`\uFEFF[features]\nweb_search = true\n`);
   });
 
   it("records the original values as written, quotes included", () => {
@@ -177,7 +181,9 @@ ${RELAY_BLOCK}`);
     expect(takeover.keys).toEqual({
       model_provider: { original: { present: true, raw: '"mine"' }, written: ID },
       model: { original: { present: true, raw: "'gpt-5.1-codex'" }, written: "relay/gpt" },
+      model_catalog_json: { original: { present: false }, written: CATALOG },
     });
+    expect(takeover.fileCreated).toBe(false);
   });
 
   it("is stable: applying again yields the same bytes and keeps the first originals", () => {
@@ -188,70 +194,74 @@ ${RELAY_BLOCK}`);
     expect(second.takeover).toEqual(first.takeover);
   });
 
-  it("switching to another endpoint rewrites the table and keeps the first originals", () => {
+  it("moving the gateway rewrites the table and keeps the first originals", () => {
     const first = apply(USER_CONFIG);
-    const other: CodexProviderTable = {
-      ...RELAY_TABLE,
-      name: "Other",
-      baseUrl: "https://other/v1",
-    };
     const second = applyWith({
       text: first.text,
       takeover: first.takeover,
-      model: "other/model",
-      table: other,
+      wiring: {
+        baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway/v1",
+        token: "t2",
+        model: "glm",
+      },
     });
 
     expect(toValue(second.text)).toMatchObject({
-      model: "other/model",
+      model: "glm",
       model_provider: ID,
+      model_catalog_json: CATALOG,
       model_providers: {
         mine: { name: "Mine", base_url: "https://mine.example/v1" },
-        [ID]: { name: "Other", base_url: "https://other/v1" },
+        [ID]: {
+          base_url: "http://127.0.0.1:7000/api-endpoint-gateway/v1",
+          experimental_bearer_token: "t2",
+        },
       },
     });
     expect(second.takeover.keys.model?.original).toEqual({ present: true, raw: "'gpt-5.1-codex'" });
-    const otherBlock = RELAY_BLOCK.replace('"Relay"', '"Other"').replace(
-      "https://relay.example/v1",
-      "https://other/v1",
-    );
-    expect(restore(second.text, second.takeover)).toBe(`${USER_CONFIG}\n${otherBlock}`);
+    expect(second.takeover.table).toEqual({
+      baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway/v1",
+      bearerToken: "t2",
+    });
+    expect(restore(second.text, second.takeover)).toBe(USER_CONFIG);
+  });
+
+  it("replaces the auth.command table written by the per-endpoint version", () => {
+    const legacy = `${USER_CONFIG}
+[model_providers.${ID}]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "responses"
+
+[model_providers.${ID}.auth]
+command = "/bin/cat"
+args = ["/home/me/.paseo/api-endpoints/codex-api-key"]
+timeout_ms = 5000
+`;
+    const { text, takeover } = apply(legacy);
+
+    expect(text.endsWith(`\n${RELAY_BLOCK}`)).toBe(true);
+    expect(text).not.toContain("auth");
+    expect(restore(text, takeover)).toBe(USER_CONFIG);
   });
 
   it("escapes values that TOML strings cannot hold verbatim", () => {
     const { text } = applyWith({
       text: null,
       takeover: null,
-      table: {
-        name: 'Quote " back\\slash \u007f',
-        baseUrl: "https://relay.example/v1",
-        auth: {
-          command: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-          args: ["-Command", "[Console]::Out.Write('C:\\Users\\O''Brien\\key')"],
-          timeoutMs: 15000,
-        },
-      },
+      wiring: { model: 'Quote " back\\slash \u007f', catalogPath: "C:\\Users\\me\\models.json" },
     });
 
     expect(toValue(text)).toMatchObject({
-      model_providers: {
-        [ID]: {
-          name: 'Quote " back\\slash \u007f',
-          auth: {
-            command: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-            args: ["-Command", "[Console]::Out.Write('C:\\Users\\O''Brien\\key')"],
-            timeout_ms: 15000,
-          },
-        },
-      },
+      model: 'Quote " back\\slash \u007f',
+      model_catalog_json: "C:\\Users\\me\\models.json",
     });
   });
 
   it("refuses a file that does not parse", () => {
     const result = applyCodexApiEndpoint({
       text: `model = "a"\nmodel = "b"\n`,
-      model: "relay/gpt",
-      table: RELAY_TABLE,
+      wiring: GATEWAY,
       takeover: null,
     });
 
@@ -262,8 +272,7 @@ ${RELAY_BLOCK}`);
     // 内联表不能再用 [model_providers.x] 追加子表；硬写会得到一份 Codex 读不了的文件。
     const result = applyCodexApiEndpoint({
       text: `model_providers = { mine = { name = "Mine" } }\n`,
-      model: "relay/gpt",
-      table: RELAY_TABLE,
+      wiring: GATEWAY,
       takeover: null,
     });
 
@@ -273,8 +282,7 @@ ${RELAY_BLOCK}`);
   it("refuses model_provider written as something other than a string", () => {
     const result = applyCodexApiEndpoint({
       text: `[model_provider]\nx = 1\n`,
-      model: "relay/gpt",
-      table: RELAY_TABLE,
+      wiring: GATEWAY,
       takeover: null,
     });
 
@@ -283,10 +291,10 @@ ${RELAY_BLOCK}`);
 });
 
 describe("restoreCodexOfficial", () => {
-  it("restores the top-level keys byte for byte and keeps the dedicated table", () => {
+  it("returns the file to its exact bytes, dedicated table included", () => {
     const { text, takeover } = apply(USER_CONFIG);
 
-    expect(restore(text, takeover)).toBe(`${USER_CONFIG}\n${RELAY_BLOCK}`);
+    expect(restore(text, takeover)).toBe(USER_CONFIG);
   });
 
   it("removes keys that were absent before", () => {
@@ -297,18 +305,27 @@ web_search = true
 `;
     const { text, takeover } = apply(original);
 
-    expect(restore(text, takeover)).toBe(`${original}\n${RELAY_BLOCK}`);
+    expect(restore(text, takeover)).toBe(original);
   });
 
   it("removes keys inserted at the very top and on a last line without a newline", () => {
     const top = `# tables only\n[features]\nweb_search = true\n`;
     const topApplied = apply(top);
-    expect(restore(topApplied.text, topApplied.takeover)).toBe(`${top}\n${RELAY_BLOCK}`);
+    expect(restore(topApplied.text, topApplied.takeover)).toBe(top);
 
     // 没有结尾换行的单行文件：键插在它后面，恢复时连同前面补的换行一起拿走。
     const bare = `model = "a"`;
     const bareApplied = apply(bare);
-    expect(removeTable(restore(bareApplied.text, bareApplied.takeover))).toBe(`${bare}\n`);
+    expect(restore(bareApplied.text, bareApplied.takeover)).toBe(`${bare}\n`);
+  });
+
+  it("keeps edits the user made to other keys while it was on", () => {
+    const { text, takeover } = apply(USER_CONFIG);
+    const edited = text.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`);
+
+    expect(restore(edited, takeover)).toBe(
+      USER_CONFIG.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`),
+    );
   });
 
   it("puts back an original key the user deleted in the meantime", () => {
@@ -316,6 +333,14 @@ web_search = true
     const withoutModel = text.replace(`model = "relay/gpt"   # the one I like\n`, "");
 
     expect(toValue(restore(withoutModel, takeover))).toMatchObject({ model: "gpt-5.1-codex" });
+  });
+
+  it("asks for the file to be deleted when it did not exist and nothing else was added", () => {
+    const { text, takeover } = apply(null);
+    expect(restoreCodexOfficial({ text, takeover })).toEqual({ kind: "delete" });
+
+    const withUserKey = `approval_policy = "never"\n${text}`;
+    expect(restore(withUserKey, takeover)).toBe(`approval_policy = "never"\n`);
   });
 
   it("reports a missing file instead of writing one", () => {
@@ -331,42 +356,17 @@ web_search = true
   });
 });
 
-describe("replaceCodexProviderTable", () => {
-  it("rewrites only the dedicated table while Official", () => {
-    const { text, takeover } = apply(USER_CONFIG);
-    const official = restore(text, takeover);
-    const rotated: CodexProviderTable = { ...RELAY_TABLE, baseUrl: "https://moved.example/v1" };
-
-    const result = replaceCodexProviderTable({ text: official, table: rotated });
-
-    expect(result).toEqual({
-      kind: "patched",
-      text: `${USER_CONFIG}\n${RELAY_BLOCK.replace("https://relay.example/v1", "https://moved.example/v1")}`,
-    });
-  });
-
-  it("reports a missing file instead of writing one", () => {
-    expect(replaceCodexProviderTable({ text: null, table: RELAY_TABLE })).toEqual({
-      kind: "missing",
-    });
-  });
-});
-
 describe("removeCodexProviderTable", () => {
-  it("removes the dedicated table and the blank line added before it", () => {
-    const { text, takeover } = apply(USER_CONFIG);
-
-    expect(removeTable(restore(text, takeover))).toBe(USER_CONFIG);
+  it("removes a table left behind by the per-endpoint version and the blank line before it", () => {
+    expect(removeTable(`${USER_CONFIG}\n${RELAY_BLOCK}`)).toBe(USER_CONFIG);
   });
 
   it("leaves a file without the table untouched", () => {
     expect(removeTable(USER_CONFIG)).toBe(USER_CONFIG);
   });
 
-  it("empties a file that held only what the daemon wrote", () => {
-    const { text, takeover } = apply(null);
-
-    expect(removeTable(restore(text, takeover))).toBe("");
+  it("empties a file that held only the table", () => {
+    expect(removeTable(RELAY_BLOCK)).toBe("");
   });
 });
 
@@ -408,14 +408,10 @@ describe("the dedicated provider id", () => {
         wire_api: "responses",
       },
       [ID]: {
-        name: "Relay",
-        base_url: "https://relay.example/v1",
+        name: "Osuna",
+        base_url: "http://127.0.0.1:6767/api-endpoint-gateway/v1",
         wire_api: "responses",
-        auth: {
-          command: "/bin/cat",
-          args: ["/home/me/.paseo/api-endpoints/codex-api-key"],
-          timeout_ms: 5000,
-        },
+        experimental_bearer_token: "gw-token",
       },
     });
   });
@@ -438,50 +434,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe("inspectCodexConfig", () => {
-  function inspect(
-    text: string | null,
-    active: { takeover: CodexConfigTakeover; table: CodexProviderTable } | null,
-  ) {
-    const result = inspectCodexConfig({
-      text,
-      takeover: active?.takeover ?? null,
-      table: active?.table ?? null,
-    });
+  function inspect(text: string | null, takeover: CodexConfigTakeover | null) {
+    const result = inspectCodexConfig({ text, takeover });
     if (result.kind !== "parsed") throw new Error(`Expected a parsed file, got ${result.kind}`);
     return result;
   }
 
   it("finds nothing modified right after the switch", () => {
     const { text, takeover } = apply(USER_CONFIG);
-    expect(inspect(text, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([]);
+    expect(inspect(text, takeover).modifiedKeys).toEqual([]);
   });
 
   it("names the owned keys and the dedicated table when they no longer hold what was written", () => {
     const { text, takeover } = apply(USER_CONFIG);
     const edited = text
       .replace(`model = "relay/gpt"`, `model = "gpt-5"`)
-      .replace(`base_url = "https://relay.example/v1"`, `base_url = "https://other.example/v1"`);
-    expect(inspect(edited, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
-      "model",
-      `model_providers.${ID}`,
-    ]);
+      .replace(`experimental_bearer_token = "gw-token"`, `experimental_bearer_token = "x"`);
+    expect(inspect(edited, takeover).modifiedKeys).toEqual(["model", `model_providers.${ID}`]);
 
     const tableEdits: Array<[string, string]> = [
       [`wire_api = "responses"`, `wire_api = "chat"`],
-      ["timeout_ms = 5000", "timeout_ms = 9000"],
-      [`name = "Relay"`, `name = "Renamed"`],
+      [`base_url = "http://127.0.0.1:6767`, `base_url = "http://127.0.0.1:1`],
+      [`name = "Osuna"`, `name = "Renamed"`],
     ];
     for (const [written, replacement] of tableEdits) {
       const tampered = text.replace(written, replacement);
-      expect(inspect(tampered, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
-        `model_providers.${ID}`,
-      ]);
+      expect(inspect(tampered, takeover).modifiedKeys).toEqual([`model_providers.${ID}`]);
     }
 
     const withoutProvider = text.replace(`model_provider = "${ID}"\n`, "");
-    expect(inspect(withoutProvider, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
-      "model_provider",
-    ]);
+    expect(inspect(withoutProvider, takeover).modifiedKeys).toEqual(["model_provider"]);
+
+    const withoutCatalog = text.replace(`${CATALOG_LINE}\n`, "");
+    expect(inspect(withoutCatalog, takeover).modifiedKeys).toEqual(["model_catalog_json"]);
   });
 
   it("does not count edits to keys it doesn't own", () => {
@@ -489,14 +474,15 @@ describe("inspectCodexConfig", () => {
     const edited = text
       .replace(`approval_policy = "on-request"`, `approval_policy = "never"`)
       .replace(`base_url = "https://mine.example/v1"`, `base_url = "https://mine2.example/v1"`);
-    expect(inspect(edited, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([]);
+    expect(inspect(edited, takeover).modifiedKeys).toEqual([]);
   });
 
   it("counts everything it owns as modified when the file is gone", () => {
     const { takeover } = apply(USER_CONFIG);
-    expect(inspect(null, { takeover, table: RELAY_TABLE }).modifiedKeys).toEqual([
+    expect(inspect(null, takeover).modifiedKeys).toEqual([
       "model_provider",
       "model",
+      "model_catalog_json",
       `model_providers.${ID}`,
     ]);
   });
@@ -546,8 +532,21 @@ base_url = "https://other.example/v1"
   });
 
   it("reports a file that does not parse", () => {
-    expect(inspectCodexConfig({ text: "model = ", takeover: null, table: null }).kind).toBe(
-      "unparsable",
-    );
+    expect(inspectCodexConfig({ text: "model = ", takeover: null }).kind).toBe("unparsable");
+  });
+});
+
+describe("readCodexReasoningEffort", () => {
+  it("reads the top-level effort, not a profile's", () => {
+    const text =
+      'model_reasoning_effort = "none"\n\n[profiles.deep]\nmodel_reasoning_effort = "xhigh"\n';
+    expect(readCodexReasoningEffort(text)).toBe("none");
+  });
+
+  it("is null when the file is missing, says nothing, or cannot be read", () => {
+    expect(readCodexReasoningEffort(null)).toBeNull();
+    expect(readCodexReasoningEffort('model = "gpt-5.5"\n')).toBeNull();
+    expect(readCodexReasoningEffort("model_reasoning_effort = 3\n")).toBeNull();
+    expect(readCodexReasoningEffort("model_reasoning_effort = \n")).toBeNull();
   });
 });

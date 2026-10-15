@@ -12,6 +12,8 @@ import {
   resolveModelBrowserScrolling,
   scopeModelBrowserProviders,
   selectProviderViewProfileRows,
+  buildModelListItems,
+  resolveModelBrowserDesktopHeight,
 } from "./model-browser-view";
 
 function provider(
@@ -427,5 +429,107 @@ describe("model browser scoped to the selected provider", () => {
         scope: "allProviders",
       }),
     ).toEqual(claudeView);
+  });
+});
+
+describe("model list items grouped by API endpoint", () => {
+  function grouped(modelId: string, name: string, index: number): ProviderSelectionModelRow {
+    return {
+      favoriteKey: `claude:${modelId}`,
+      provider: "claude",
+      providerLabel: "Claude Code",
+      modelId,
+      modelLabel: modelId.slice(modelId.indexOf("/") + 1),
+      apiEndpointGroup: { name, index },
+    };
+  }
+
+  it("rows without a group stay a plain list", () => {
+    const rows = [modelRow("codex", "Codex", "gpt-5.4", "GPT-5.4")];
+    expect(buildModelListItems(rows, { groupByApiEndpoint: true })).toEqual([
+      { kind: "row", key: "codex:gpt-5.4", row: rows[0] },
+    ]);
+  });
+
+  it("cross-provider results stay flat even when rows belong to endpoints", () => {
+    const rows = [grouped("a/shared", "A", 0)];
+    expect(buildModelListItems(rows, { groupByApiEndpoint: false })).toEqual([
+      { kind: "row", key: "claude:a/shared", row: rows[0] },
+    ]);
+  });
+
+  it("each endpoint gets a heading, in creation order even after search ranking", () => {
+    const rows = [
+      grouped("b/shared", "B", 1),
+      grouped("a/shared", "A", 0),
+      grouped("a/a1", "A", 0),
+    ];
+    expect(
+      buildModelListItems(rows, { groupByApiEndpoint: true }).map((item) =>
+        item.kind === "group" ? `# ${item.name}` : item.row.modelId,
+      ),
+    ).toEqual(["# A", "a/shared", "a/a1", "# B", "b/shared"]);
+  });
+});
+
+describe("desktop model picker height", () => {
+  function endpointRow(modelId: string): ProviderSelectionModelRow {
+    return {
+      ...modelRow("claude", "Claude Code", modelId, modelId),
+      apiEndpointGroup: { name: "Relay", index: 0 },
+    };
+  }
+  function officialRow(modelId: string): ProviderSelectionModelRow {
+    return modelRow("claude", "Claude Code", modelId, modelId);
+  }
+  const claudeView = {
+    kind: "provider" as const,
+    providerId: "claude",
+    providerLabel: "Claude Code",
+  };
+  function heightFor(
+    rows: ProviderSelectionModelRow[],
+    profileRows: { provider: string }[] | null,
+  ): number {
+    return resolveModelBrowserDesktopHeight({
+      view: claudeView,
+      providers: [provider("claude", "Claude Code", rows)],
+      profileRows,
+      scope: "allProviders",
+    });
+  }
+  const fourEndpointModels = ["a", "b", "c", "d"].map(endpointRow);
+
+  // 下限是 1280 桌面 Web 上量出的内容总高：标题与搜索 83、列表上下留白 36、
+  // 「创建 Agent 配置」行 36、配置区标题 27 + 每个配置 36 + 分隔线 1、接口组标题 27、模型行 40；
+  // 上限多给不到一行，免得底部空出一截。
+  it("fits one endpoint with four models and the create-profile row without scrolling", () => {
+    const height = heightFor(fourEndpointModels, []);
+    expect(height).toBeGreaterThanOrEqual(342);
+    expect(height).toBeLessThan(342 + 40);
+  });
+
+  it("makes room for the profiles of this provider only", () => {
+    const height = heightFor(fourEndpointModels.slice(0, 3), [
+      { provider: "claude" },
+      { provider: "codex" },
+    ]);
+    expect(height).toBeGreaterThanOrEqual(330);
+    expect(height).toBeLessThan(330 + 40);
+  });
+
+  it("official Claude Code with its long model list stays at the 400 cap", () => {
+    const rows = Array.from({ length: 17 }, (_, i) => officialRow(`m${i}`));
+    expect(heightFor(rows, [])).toBe(400);
+  });
+
+  it("stays within the 220 floor and 400 cap", () => {
+    expect(heightFor([officialRow("a")], null)).toBe(220);
+    expect(
+      heightFor(
+        Array.from({ length: 12 }, (_, i) => endpointRow(`m${i}`)),
+        null,
+      ),
+    ).toBe(400);
   });
 });

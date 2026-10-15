@@ -105,15 +105,15 @@ Required fields for custom providers:
 
 See [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai-compatible-endpoint) below for the dedicated Codex example.
 
-A custom provider only sets the environment of the agent sessions Paseo starts for its own row. To move Claude Code or Codex itself onto a third-party endpoint, add an **API endpoint** in that provider's settings instead ([glossary](glossary.md), [ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md)).
+A custom provider only sets the environment of the agent sessions Paseo starts for its own row. To move Claude Code or Codex itself onto third-party endpoints, add them under **Settings › API endpoints** and turn on **Use API endpoints** in that provider's settings instead ([glossary](glossary.md), [ADR 0007](adr/0007-api-endpoints-route-through-daemon-gateway.md)).
 
-### While an API endpoint is active
+### While Claude Code or Codex uses API endpoints
 
-**Claude:** the active endpoint lives in `settings.json` `env` ([ADR 0004](adr/0004-api-endpoint-rewrites-cli-config.md) lists the keys), and that outranks the process environment. So every custom provider that extends `"claude"` reaches the active endpoint with its key, whatever its own `env` says. Its own model list still picks the session's model, so those IDs have to exist on that endpoint, while aliases like `opus` and background tasks use the endpoint's mapped tiers. The `"WebSearch"` deny rule the endpoint adds applies to it too. Its row in the provider list says which endpoint it goes through. Switch Claude Code back to Official to give these providers their own `env` again.
+The CLI config then points at the daemon's gateway, not at any endpoint ([ADR 0007](adr/0007-api-endpoints-route-through-daemon-gateway.md) lists the keys).
 
-**Codex:** a custom provider with `OPENAI_BASE_URL` sets its own `model_provider` per request ([What Paseo wires up](#what-paseo-wires-up)), so it keeps its own endpoint. One without `OPENAI_BASE_URL` reads the top-level `model_provider` from `config.toml` and follows the active endpoint. Model IDs in its `models` have to exist on that endpoint.
+**Claude:** the gateway URL and token live in `settings.json` `env`, and that outranks the process environment. So every custom provider that extends `"claude"` goes through the gateway, whatever its own `env` says, including an `ANTHROPIC_BASE_URL` of its own. Its own model list still picks the session's model, so each ID has to be a model selected on an endpoint that is on. The gateway sends a bare model name to the first such endpoint in creation order, and translates `opus`, `sonnet`, `haiku`, and `fable` through each endpoint's tier mapping. The `"WebSearch"` deny rule applies to it too. Turn off **Use API endpoints** for Claude Code to give these providers their own `env` again.
 
-The switch confirmation counts running sessions of `claude` and `codex` only. Sessions of custom providers are not in that number.
+**Codex:** a custom provider with `OPENAI_BASE_URL` sets its own `model_provider` per request ([What Paseo wires up](#what-paseo-wires-up)), so it keeps its own endpoint. One without `OPENAI_BASE_URL` reads the top-level `model_provider` from `config.toml` and goes through the gateway. Model IDs in its `models` have to be selected on an endpoint that is on.
 
 ---
 
@@ -205,7 +205,7 @@ The switch confirmation counts running sessions of `claude` and `codex` only. Se
 }
 ```
 
-### API endpoints
+### Base URLs
 
 | Mode                            | Base URL                                                    |
 | ------------------------------- | ----------------------------------------------------------- |
@@ -213,6 +213,8 @@ The switch confirmation counts running sessions of `claude` and `codex` only. Se
 | Pay-as-you-go (no subscription) | `https://dashscope-intl.aliyuncs.com/apps/anthropic`        |
 
 For pay-as-you-go, use `ANTHROPIC_API_KEY` with a standard Model Studio key (`sk-xxxxx`) instead of `ANTHROPIC_AUTH_TOKEN`.
+
+To use either one as an **API endpoint**, put its URL in the Anthropic base URL field.
 
 ### Available models
 
@@ -751,7 +753,7 @@ The built-in `claude` provider appends concrete model IDs from `~/.claude/settin
 
 This lets users who already configured Claude Code for Bedrock, OpenRouter, ollama, Z.AI, or another Anthropic-compatible gateway select the exact model ID in Paseo. Explicit model IDs are passed unchanged to Claude Code, even when the same string is a compatibility alias for a built-in model. When `agents.providers.claude.models` is set it **replaces** both the hardcoded first-party Claude list and any settings.json-discovered entries; use `agents.providers.claude.additionalModels` to keep the first-party list and append curated entries on top.
 
-While a Claude Code or Codex API endpoint is active, that provider's model list is exactly the models picked for the endpoint. settings.json discovery, `models`, and `additionalModels` for that provider come back when you switch to Official.
+While **Use API endpoints** is on for Claude Code or Codex, that provider's model list is the selected models of every endpoint that is on, grouped by endpoint. settings.json discovery, `models`, and `additionalModels` for that provider come back when you turn it off.
 
 ### Gotcha: `extends: "claude"` with third-party endpoints
 

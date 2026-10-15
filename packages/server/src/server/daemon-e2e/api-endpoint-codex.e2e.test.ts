@@ -39,16 +39,13 @@ async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
   return client;
 }
 
-// 假 codex 只会打印 codex-version 文件里的版本号；运行真的 codex 不在测试范围内。
-// 它是 sh 脚本：Windows 上 execCommand 不经 shell 执行绝对路径，跑不了 .cmd，所以这组只在 POSIX 上跑；
-// Windows 上读 key 的命令由 codex-auth-command.test.ts 在 CI 的 Windows 任务里验证。
+// 目录只读与 0600 权限的用例依赖 POSIX 权限位。
 describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemon RPC", () => {
   let daemon: TestPaseoDaemon;
   let client: DaemonClient;
   let codexHome: string;
   let configPath: string;
   let authPath: string;
-  let versionPath: string;
   // 改写配置时、替换文件前调用，模拟别的工具同时在改这份文件。
   let onRecheck: ((filePath: string) => void) | null;
 
@@ -63,21 +60,12 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     await writeFile(configPath, USER_CONFIG);
     await writeFile(authPath, AUTH_JSON);
 
-    const binDir = path.join(root, "bin");
-    await mkdir(binDir);
-    versionPath = path.join(binDir, "codex-version");
-    await writeFile(versionPath, "codex-cli 0.130.0\n");
-    const fakeCodex = path.join(binDir, "codex");
-    await writeFile(fakeCodex, `#!/bin/sh\ncat "$(dirname "$0")/codex-version"\n`);
-    await chmod(fakeCodex, 0o755);
-
     daemon = await createTestPaseoDaemon({
       apiEndpoints: {
         env: { CODEX_HOME: codexHome },
         homeDir: root,
         beforeConfigRecheck: (filePath) => onRecheck?.(filePath),
       },
-      providerOverrides: { codex: { command: [fakeCodex] } },
     });
     client = await connect(daemon);
   });
@@ -90,34 +78,55 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     );
   });
 
-  async function createEndpoint(name = "Relay"): Promise<string> {
+  async function createEndpoint(
+    name = "Relay",
+    models: string[] = ["relay/gpt", "relay/mini"],
+  ): Promise<string> {
     const saved = await client.apiEndpointSave({
       provider: "codex",
       name,
       baseUrl: "https://relay.example/api/",
       apiKey: SECRET,
-      models: [{ id: "relay/gpt" }, { id: "relay/mini" }],
-      defaultModelId: "relay/gpt",
+      models: models.map((id) => ({ id })),
+      defaultModelId: models[0]!,
     });
     expect(saved.error).toBeNull();
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
     return saved.endpoint.id;
   }
 
-  function keyFilePath(): string {
-    return path.join(daemon.paseoHome, "api-endpoints", "codex-api-key");
+  function catalogPath(): string {
+    return path.join(daemon.paseoHome, "api-endpoints", "codex-models.json");
   }
 
-  test("activate → Official rewrites only the owned keys and never touches auth.json", async () => {
+  async function catalog(): Promise<string[]> {
+    const parsed = JSON.parse(await readFile(catalogPath(), "utf8")) as {
+      models: Array<{ slug: string; visibility: string }>;
+    };
+    return parsed.models.map((model) => `${model.slug} ${model.visibility}`);
+  }
+
+  async function codexToken(): Promise<string | undefined> {
+    const text = await readFile(
+      path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json"),
+      "utf8",
+    ).catch(() => '{"tokens":{}}');
+    return (JSON.parse(text) as { tokens: Record<string, string> }).tokens.codex;
+  }
+
+  test("activate → Official writes only the owned keys and table, then puts the file back", async () => {
     const endpointId = await createEndpoint();
     expect(JSON.stringify(await client.apiEndpointList("codex"))).not.toContain(SECRET);
 
     const activated = await client.apiEndpointSetActive("codex", endpointId);
     expect(activated).toMatchObject({ activeEndpointId: endpointId, error: null });
 
+    const token = await codexToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(await readFile(configPath, "utf8")).toBe(`# my codex config
 model = "relay/gpt" # default
 model_provider = "${ID}"
+model_catalog_json = ${JSON.stringify(catalogPath())}
 
 [projects."/Users/me/My Code"]
 trust_level = "trusted"
@@ -127,18 +136,22 @@ name = "Mine"
 base_url = "https://mine.example/v1"
 
 [model_providers.${ID}]
-name = "Relay"
-base_url = "https://relay.example/api/v1"
+name = "Osuna"
+base_url = "http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1"
 wire_api = "responses"
-
-[model_providers.${ID}.auth]
-command = "/bin/cat"
-args = [${JSON.stringify(keyFilePath())}]
-timeout_ms = 5000
+experimental_bearer_token = "${token}"
 `);
-    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
-    expect((await stat(keyFilePath())).mode & 0o777).toBe(0o600);
+    expect(await catalog()).toEqual([
+      "relay/gpt list",
+      "relay/mini list",
+      "relay/relay/gpt hide",
+      "relay/relay/mini hide",
+    ]);
+    expect((await stat(catalogPath())).mode & 0o777).toBe(0o600);
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
+    expect(await readdir(path.join(daemon.paseoHome, "api-endpoints"))).not.toContain(
+      "codex-api-key",
+    );
 
     // 首次改写前留了一份完整副本。
     const backupsDir = path.join(daemon.paseoHome, "api-endpoints", "backups");
@@ -149,13 +162,81 @@ timeout_ms = 5000
     const official = await client.apiEndpointSetActive("codex", null);
     expect(official).toMatchObject({ activeEndpointId: null, error: null });
 
-    // 顶层键回到原样，专用表保留，第三方模式下的会话还能恢复。
-    const restored = await readFile(configPath, "utf8");
-    expect(restored.startsWith(USER_CONFIG)).toBe(true);
-    expect(restored).toContain(`[model_providers.${ID}]`);
-    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await codexToken()).toBeUndefined();
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
+
+  test("every catalog entry offers four reasoning levels and defaults to the one nearest the user's effort", async () => {
+    await writeFile(configPath, `model_reasoning_effort = "none"\n${USER_CONFIG}`);
+    await createEndpointWithBaseUrls("Relay", ["relay/gpt"]);
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true })).error,
+    ).toBeNull();
+
+    const { models } = JSON.parse(await readFile(catalogPath(), "utf8")) as {
+      models: Array<Record<string, unknown>>;
+    };
+    expect(models.map((model) => model.visibility)).toEqual(["list", "hide"]);
+    for (const model of models) {
+      expect(model).toMatchObject({
+        default_reasoning_level: "low",
+        supports_reasoning_summaries: true,
+      });
+      expect(
+        (model.supported_reasoning_levels as Array<{ effort: string }>).map(
+          (level) => level.effort,
+        ),
+      ).toEqual(["low", "medium", "high", "xhigh"]);
+    }
+  });
+
+  test("the model catalog follows the selected models, the endpoint switches, and the agent switch", async () => {
+    const endpointId = await createEndpointWithBaseUrls("Relay", ["relay/gpt", "relay/mini"]);
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true })).error,
+    ).toBeNull();
+    const config = await readFile(configPath, "utf8");
+
+    await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "relay/gpt" }, { id: "relay/new" }],
+      defaultModelId: "relay/gpt",
+    });
+    expect(await catalog()).toEqual([
+      "relay/gpt list",
+      "relay/new list",
+      "relay/relay/gpt hide",
+      "relay/relay/new hide",
+    ]);
+
+    const other = await createEndpointWithBaseUrls("Other", ["glm"]);
+    expect(await catalog()).toContain("glm list");
+    await client.apiEndpointSetEndpointState({ endpointId: other, enabled: false });
+    expect(await catalog()).not.toContain("glm list");
+    // 目录变了，config.toml 不用动。
+    expect(await readFile(configPath, "utf8")).toBe(config);
+
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+    await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+  });
+
+  async function createEndpointWithBaseUrls(name: string, models: string[]): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name,
+      baseUrls: [{ format: "openai_responses", url: `https://${name.toLowerCase()}.example/v1` }],
+      apiKey: SECRET,
+      models: models.map((id) => ({ id })),
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
 
   test("the model picker lists only the endpoint's models while it is active", async () => {
     async function codexModels(): Promise<string[] | null> {
@@ -175,7 +256,7 @@ timeout_ms = 5000
     await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
   });
 
-  test("deleting the endpoint removes the dedicated table and the key file", async () => {
+  test("deleting the last endpoint switches back to Official and puts the file back", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
 
@@ -183,30 +264,8 @@ timeout_ms = 5000
 
     expect(deleted).toMatchObject({ activeEndpointId: null, error: null });
     expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
-    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
-  });
-
-  test("deleting an endpoint that isn't active removes only its own dedicated table", async () => {
-    const owner = await createEndpoint();
-    await client.apiEndpointSetActive("codex", owner);
-    await client.apiEndpointSetActive("codex", null);
-    const officialConfig = await readFile(configPath, "utf8");
-    const other = await createEndpoint("Other");
-
-    // 专用表不属于它：文件和 key 文件都不动。
-    expect(await client.apiEndpointDelete("codex", other)).toMatchObject({
-      activeEndpointId: null,
-      error: null,
-    });
-    expect(await readFile(configPath, "utf8")).toBe(officialConfig);
-    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
-
-    // 专用表的主人：只拿掉这张表，用户自己的 [model_providers.mine] 留着。
-    expect(await client.apiEndpointDelete("codex", owner)).toMatchObject({ error: null });
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
-    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
-    expect((await client.apiEndpointList("codex")).endpoints).toEqual([]);
   });
 
   test("deleting the active endpoint restores the original values after an outside change", async () => {
@@ -227,6 +286,7 @@ timeout_ms = 5000
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
     const switched = await readFile(configPath, "utf8");
+    const catalogBefore = await catalog();
     let changes = 0;
     onRecheck = (filePath) => {
       changes += 1;
@@ -240,7 +300,7 @@ timeout_ms = 5000
     const listed = await client.apiEndpointList("codex");
     expect(listed.activeEndpointId).toBe(endpointId);
     expect(listed.endpoints.map((endpoint) => endpoint.id)).toEqual([endpointId]);
-    expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
+    expect(await catalog()).toEqual(catalogBefore);
   });
 
   test("an absent config.toml is created on switch and removed with the endpoint", async () => {
@@ -255,59 +315,29 @@ timeout_ms = 5000
     await expect(stat(configPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("editing the active endpoint rewrites config.toml and the key file right away", async () => {
+  test("a new default model rewrites config.toml; the endpoint's address and key don't", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
+    const switched = await readFile(configPath, "utf8");
 
     await client.apiEndpointSave({
       provider: "codex",
       endpointId,
       name: "Relay",
-      baseUrl: "https://relay.example/v1",
+      baseUrl: "https://moved.example/v1",
       apiKey: "sk-rotated",
       models: [{ id: "relay/gpt" }, { id: "relay/mini" }],
-      defaultModelId: "relay/mini",
-    });
-
-    const config = await readFile(configPath, "utf8");
-    expect(config).toContain(`model = "relay/mini" # default`);
-    expect(config).toContain(`base_url = "https://relay.example/v1"`);
-    expect(await readFile(keyFilePath(), "utf8")).toBe("sk-rotated");
-  });
-
-  test("editing the endpoint that owns the table while Official refreshes only the table and key", async () => {
-    const endpointId = await createEndpoint();
-    await client.apiEndpointSetActive("codex", endpointId);
-    await client.apiEndpointSetActive("codex", null);
-
-    await client.apiEndpointSave({
-      provider: "codex",
-      endpointId,
-      name: "Relay",
-      baseUrl: "https://moved.example",
-      apiKey: "sk-rotated",
-      models: [{ id: "relay/gpt" }],
       defaultModelId: "relay/gpt",
     });
+    expect(await readFile(configPath, "utf8")).toBe(switched);
+    expect(await readFile(configPath, "utf8")).not.toContain("sk-rotated");
 
-    const config = await readFile(configPath, "utf8");
-    expect(config.startsWith(USER_CONFIG)).toBe(true);
-    expect(config).toContain(`base_url = "https://moved.example/v1"`);
-    expect(await readFile(keyFilePath(), "utf8")).toBe("sk-rotated");
-    expect((await client.apiEndpointList("codex")).activeEndpointId).toBeNull();
-  });
-
-  test("refuses to enable when Codex is older than 0.118.0", async () => {
-    await writeFile(versionPath, "codex-cli 0.117.9\n");
-    const endpointId = await createEndpoint();
-
-    const activated = await client.apiEndpointSetActive("codex", endpointId);
-
-    expect(activated.activeEndpointId).toBeNull();
-    expect(activated.error?.code).toBe("codex_version_unsupported");
-    expect(activated.error?.message).toContain("0.118.0");
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
-    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      defaultModelId: "relay/mini",
+    });
+    expect(await readFile(configPath, "utf8")).toContain(`model = "relay/mini" # default`);
   });
 
   test("refuses to write anything when config.toml does not parse", async () => {
@@ -320,7 +350,7 @@ timeout_ms = 5000
     expect(activated.activeEndpointId).toBeNull();
     expect(activated.error?.code).toBe("config_unparsable");
     expect(await readFile(configPath, "utf8")).toBe(broken);
-    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("an owned key changed outside Osuna shows as modified; re-apply writes it back", async () => {
@@ -369,29 +399,7 @@ timeout_ms = 5000
     expect((await client.apiEndpointList("codex")).health).toEqual([expected]);
   });
 
-  test("reports a Codex downgraded below 0.118.0 while an endpoint is active", async () => {
-    const endpointId = await createEndpoint();
-    await client.apiEndpointSetActive("codex", endpointId);
-    await writeFile(versionPath, "codex-cli 0.117.0\n");
-
-    expect((await client.apiEndpointList("codex")).health).toEqual([
-      { code: "codex_version_unsupported", message: expect.stringContaining("0.117.0") },
-    ]);
-  });
-
-  test("reports a Codex that can't be run, not as an outdated one", async () => {
-    const endpointId = await createEndpoint();
-    await client.apiEndpointSetActive("codex", endpointId);
-    await rm(path.join(path.dirname(versionPath), "codex"));
-
-    const listed = await client.apiEndpointList("codex");
-    expect(listed.error).toBeNull();
-    expect(listed.health).toEqual([
-      { code: "codex_unavailable", message: expect.stringContaining("codex --version") },
-    ]);
-  });
-
-  test("a config.toml that keeps changing is a conflict: neither the key file nor the mode moves", async () => {
+  test("a config.toml that keeps changing is a conflict: neither the catalog nor the mode moves", async () => {
     const endpointId = await createEndpoint();
     let changes = 0;
     onRecheck = (filePath) => {
@@ -403,15 +411,18 @@ timeout_ms = 5000
 
     expect(activated).toMatchObject({ activeEndpointId: null, error: { code: "config_conflict" } });
     expect(await readFile(configPath, "utf8")).toBe(`${USER_CONFIG}# rev 3\n`);
-    await expect(stat(keyFilePath())).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await codexToken()).toBeUndefined();
     expect((await client.apiEndpointList("codex")).activeEndpointId).toBeNull();
   });
 
   test("keeps the mode when config.toml cannot be replaced", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
-    const other = await createEndpoint("Other");
-    // 目录只读：原子替换失败，状态和 key 文件都要停在切换前。
+    // 模型名与第一家不同：默认模型换成它，config.toml 的 model 要改写。
+    const other = await createEndpoint("Other", ["other/gpt"]);
+    const catalogBefore = await catalog();
+    // 目录只读：原子替换失败，状态和模型目录都要停在切换前。
     await chmod(codexHome, 0o500);
     try {
       const switched = await client.apiEndpointSetActive("codex", other);
@@ -419,7 +430,7 @@ timeout_ms = 5000
       expect(switched.activeEndpointId).toBe(endpointId);
       expect(switched.error).not.toBeNull();
       expect((await client.apiEndpointList("codex")).activeEndpointId).toBe(endpointId);
-      expect(await readFile(keyFilePath(), "utf8")).toBe(SECRET);
+      expect(await catalog()).toEqual(catalogBefore);
     } finally {
       await chmod(codexHome, 0o700);
     }

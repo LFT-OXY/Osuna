@@ -711,6 +711,121 @@ const signal = AbortSignal.any([input.signal, timeout]); // input.signal = clien
 // catch: input.signal.aborted → cancelled; timeout.aborted → upstream_timeout
 ```
 
+## Scenario: a local HTTP route that relays CLI traffic with a host secret
+
+Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tickets 02 and 04–07), `server/api-endpoints/gateway/`. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
+
+### 1. Scope / Trigger
+
+- A CLI the daemon configured must reach a third-party upstream, and the upstream's real key must stay inside the daemon. The CLI holds only a daemon-issued token.
+
+### 2. Signatures
+
+- `createApiEndpointGateway({ paseoHome, logger, cooldowns: EndpointCooldowns, overrides?: { gatewayHeaderTimeoutMs?, gatewayRetryPauseMs? } }): RequestHandler`, mounted in `bootstrap.ts` with `app.use(API_ENDPOINT_GATEWAY_PATH, …)` (`/api-endpoint-gateway`) **before** `createRequireBearerMiddleware` and the global `express.json()`.
+- Paths under the prefix: `POST /v1/messages` (Anthropic shape), `POST /v1/messages/count_tokens`, `POST /v1/responses` (OpenAI Responses shape), `GET /v1/models`, `GET|HEAD /api/hello`. Claude Code's base URL is the prefix, Codex's is prefix + `/v1`; both land on the same paths.
+- `resolveGatewayRoute({ state, agent, model }): { ok: true, candidates: GatewayCandidate[] } | { ok: false, message }` in `gateway/routing.ts` is pure; test it directly. `candidates[0]` is the user's choice (slug direct, else whole name, else bare name, else Claude tier mapping); the rest are the other enabled endpoints that selected the same upstream model name, in creation order. The model name never changes across candidates.
+- `chooseRequestFormat({ agentFormat, model, formats }): ApiEndpointRequestFormat | null` in `gateway/routing.ts` (pure): a Claude model (name after the last `/` starts with `claude`) goes to `anthropic_messages` whenever the endpoint has it, even over the agent's own format (decision U5: keeps cache marks and thinking); else the agent's own format (passthrough); else the first of `openai_chat` → `openai_responses` → `anthropic_messages`. All three formats translate to each other (ticket 07), so the gateway passes every address the endpoint has.
+- Translation (tickets 05–07): `gateway/translation/` holds the intermediate format and one file per protocol. `ir.ts` (`GatewayRequest`, `Part`, `Tool` with `strict`, `NamedTool`, `StreamEvent`, `Usage`, `Reply`, `ReplyCollector`, `RequestShapeError`, `estimateInputTokens`, `openAIEffort`, `thinkingBackOn`), `anthropic.ts`, `chat.ts` and `responses.ts` (each `parse*Request`, `build*Request`, `*Decoder`, `*Encoder`, `render*`; `responses.ts` also the three tool-exchange repairs, `replayedReasoningInput`, `usageFromResponses` / `usageToResponses`), `sse.ts` (`SseReader`, `sseEvent`), `protocols.ts` (`protocolOf(format)`: a complete `Record<ApiEndpointRequestFormat, Protocol>`). `Protocol.encoder({ model, write, request })` and `Protocol.render(reply, { model, request })` get the agent's parsed request: the Responses side needs `request.named` to write Codex's namespaced and custom tool calls back; Anthropic and Chat ignore it. These types never go into `packages/protocol`.
+- `gateway/upstream-call.ts` (`openUpstream`, `upstreamUrl`, `readLimited`, `FailedAttempt`, `AttemptOutcome`, `ANSWERED_BY_HEADER`) is shared by `passthrough.ts` (`attemptEndpoint`) and `translated.ts` (`attemptTranslated`); both return `AttemptOutcome`, so failover treats them the same.
+- `EndpointCooldowns` (`gateway/cooldown.ts`) is created once in `bootstrap.ts` and passed to both the gateway and `ApiEndpointService` (`ApiEndpointServiceOptions.cooldowns`): `markFailed(report): EndpointRest | null`, `restOf(endpointId, model)`, `endpointRest(endpointId)` (list), `served(endpointId, model)`, `clear(endpointId)`, `clearNeedsCheck(endpointId)`. Memory only; a restarted daemon has none.
+- Pure helpers with their own unit tests: `gateway/failure.ts` (`FAILURE_WORDS` — magpie's 20 regexes, `failure`, `endpointFailure`, `retryable`, `modelRetired`, `modelRefused`, `requestRefused`, `lateRests`), `gateway/cooldown.ts` (`COOLDOWN` — 13 constants, `retryAfter`, `resetsAt`, `passing`, `quotaHeld`), `gateway/affinity.ts` (`AFFINITY`, `affinityWhy` — the 12-step table, `turnOf`, `conversationId`, `ConversationSticks`), `gateway/refusals.ts` (`REFUSAL_WORDS`, `refusedShape`, `noteRefusal`, `RefusedShapes`). Their headers carry the MIT short notice pointing at root `THIRD_PARTY_NOTICES`.
+
+### 3. Contracts
+
+- Token file `$PASEO_HOME/api-endpoints/gateway-tokens.json` `{ tokens: { [provider]: token } }` (0600, `ApiEndpointStore.readGatewayTokens` / `writeGatewayTokens`). `ApiEndpointService.commit` syncs it after `writeState`: switch off → on issues `randomBytes(32).toString("base64url")`, on with no token issues one, on → on keeps it, off deletes it.
+- The gateway reads `endpoints.json`, `keys.json` and the token file on every request, so endpoint edits take effect without a hook.
+- Passthrough: the request body is read whole (64 MB cap) to find `model`; only the top-level `model` value is replaced with `jsonc-parser` `modify` + `applyEdits`, so every other byte, `cache_control` included, reaches the upstream unchanged — except the Anthropic fixes below. Client `authorization`, `x-api-key`, hop-by-hop, `host`, `content-length`, `accept-encoding` and `x-forwarded-*` are dropped; `accept-encoding: identity` and the real key are added (Anthropic addresses get both `Authorization: Bearer` and `x-api-key`). The query string is forwarded (`?beta=true`).
+- Anthropic passthrough to another vendor's model (ticket 06): `fitAnthropicBody(text, upstreamModel): string` in `passthrough.ts`, applied by `upstreamBody` to `/v1/messages` only (never `count_tokens`), edits with `jsonc-parser` so the rest stays byte for byte. Nothing changes when `isAnthropicModel(upstreamModel)` (`/(?:^|[/.:-])claude-/i`). Otherwise: `thinking` absent → append `{"type":"disabled"}` (vendors think by default; Claude Code's title requests carry none); `thinking.type === "adaptive"` → remove `thinking` (the model's own default decides — user's decision, not "disabled"); `output_config.effort` → removed (the whole `output_config` when nothing else is in it, `format` kept); `enabled` / `disabled` go as sent. Model name containing `deepseek` (case-insensitive, name only, never the host) → `thinkingOnToolTurns(messages)` from `translation/anthropic.ts`: an assistant message with a `tool_use`, or right after a user message made only of `tool_result`s, that has no thinking block gets `{"type":"thinking","thinking":" "}` first; `redacted_thinking` becomes that block (dropped when the message already has thinking). This is the one vendor-name rewrite passthrough does (R-C5's exception).
+- Reasoning off, as each model takes it (ticket 16, magpie `thinkingOffOf` / `thinkingOffAsTaken` / `withoutThinkingOff` / `thinkingBackOn`, user's decision 2026-10-15).
+  - `thinkingOffAsTaken(body, model): body` in `translation/anthropic.ts` (pure; returns the same object when nothing changes) runs on every built Anthropic body and, through `fitThinkingOff({ text, model, leftOn })` in `passthrough.ts`, on every `/v1/messages` passthrough after `fitAnthropicBody` (jsonc edits of `thinking`, `output_config`, `max_tokens` only). It acts only on `thinking.type` `disabled` / `between_tools`, keyed by `CLAUDE_LINE` (family + version, any relay spelling): Sonnet 5.5 → `{type:"between_tools"}` alone, effort `xhigh`/`max` → `high`; Opus 5.5, Fable 5.x, Mythos 5.x → no `thinking`, effort `low` when none was set, `max_tokens` < 2048 gets +2048 (magpie `classifierRoom`: it still thinks adaptively); Opus 5, Haiku 5.5 → `disabled`, effort above high → `high`; 4.x and earlier, Sonnet 5, Haiku 5 → `disabled` (a `between_tools` they don't take becomes `disabled`); other vendors and unknown or later lines → as sent.
+  - Refusal retry (`gateway/refusals.ts`): `refusedShape({ format, body, status, text }): "none" | "thinkingOff" | null` reads a 400 against the body actually sent. `none`: OpenAI body effort `none` and the text matches both `effortLevelsNamed` (`\blow\b\W+(?:medium|high)\b`) and `noneQuoted`. `thinkingOff`: Anthropic body turns thinking off and the text matches `alwaysThinks` (decoded through `wordsOf`), `mandatoryReasoning`, `thinkingOffRefused`, or the `none` rule. `noteRefusal` records it in `RefusedShapes` (`Failover.refusals`, key endpoint id + upstream model + shape, memory only) and the attempt asks the same endpoint once more before returning — so this runs before the R-B8 switch decision and before the last-endpoint in-place retry; a second refusal is handled by the normal rules. A shape already recorded is still retried (concurrent first requests both went out the old way). Each record logs `info` `"API endpoint refused reasoning off; asking it again with reasoning on"` `{ endpoint: name, model, refused }`.
+  - What a recorded refusal changes: passthrough Responses `reasoning.effort` `none` → `low` (`noneAsLow`); passthrough Anthropic → `thinkingLeftOn` (drop the thinking-off, model decides; a Claude also gets effort `low` when none was set, plus the +2048 room); translated → `thinkingBackOn(request)` (`thinkOff: false`, effort `low` when empty), applied by `allowedReasoning` only when the built body would carry the refused shape. R-C3's `disabled` added for non-Claude models falls under the same fallback.
+- Upstream URL (`upstreamUrl`): `anthropic_messages` base + `/v1/messages`; OpenAI bases already end in `/v1`: `openai_chat` + `/chat/completions`, `openai_responses` + `/responses`.
+- Responses passthrough runs `joinToolRuns` → `orphanedToolOutputs` → `pairToolItems` on the raw body first (magpie's order); a body with nothing to mend is sent byte for byte. A translation reads the mended body too.
+- Responses passthrough to a model whose name contains `deepseek` (ticket 07): `fitResponsesBody(text, upstreamModel)` in `passthrough.ts` (applied by `upstreamBody`) uses `replayedReasoningInput(input): { input, reordered } | null`. A `reasoning` item with no non-empty `reasoning_text` gets `content: [{type:"reasoning_text", text: <summary text or " ">}]` (sealed `encrypted_content` kept); then every model step (run of reasoning / assistant message / `*_call`) that makes a call or follows a `*_output` must lead with a reasoning item — its own first one moved ahead, else a `" "` one (`reasonFirst`, magpie #1592/#1822). Only filled → jsonc edits `["input", i, "content"]` alone; reordered → the whole `input` value is replaced; nothing to do → byte for byte.
+- Translated attempt: the agent's body is parsed once into `GatewayRequest` (only when some reachable candidate needs translation). A `RequestShapeError` drops only the candidates that need translation; passthrough candidates are still asked, and the 400 is answered only when no candidate is left (`askableCandidates` / `readTranslated` in `gateway.ts`; magpie instead answers 400 when it reaches such a candidate — implementer's choice, recorded in ticket 07). The body is then built for the target format with `stream: true` always, sent with `content-type: application/json`, `accept: text/event-stream`, `accept-encoding: identity`, `Authorization: Bearer <key>` (Anthropic targets also `x-api-key` and `anthropic-version: 2023-06-01`); the agent's other headers are not forwarded. The upstream SSE is decoded event by event; a streaming agent gets each event re-encoded at once (`content-type: text/event-stream; charset=utf-8`), a non-streaming agent gets one `render*` JSON after the stream ends. The `model` in every translated reply is the name the agent asked for (`relay-c/deepseek-v3`, `opus`), never the upstream's. Chat requests: system blocks joined into one `system` message, tool results before the turn's own text, `pairToolMessages` mends the exchange, `stream_options.include_usage`, `reasoning_effort` with `xhigh`/`max` lowered to `high`; a client's own effort `none` goes as `none` (`openAIEffort`: `thinkOff && effort !== ""` — `effortOf` reads `none` as `low`, Anthropic `disabled` carries no effort, so Claude Code's thinking off still goes to Chat/Responses with no effort). Anthropic requests: `pairToolBlocks`, then thinking and cache marks (below). Foreign call ids reach Claude Code as `mp_` + base64url and come back decoded.
+- Translation details (ticket 06, magpie's `anthropicBody` / `buildChat` / `chatDecoder`):
+  - Anthropic build: `cache_control: {type:"ephemeral"}` on the last message's last non-thinking block, on `system` (sent as one text block), and on the last tool only when there is no system prompt. Thinking: `thinkOff` → `{type:"disabled"}`, then the whole body goes through `thinkingOffAsTaken` (below); asked to think and the model is a Claude ≥ 4.6 (`CLAUDE_VERSION`) → `{type:"adaptive", display:"summarized"}` + `output_config.effort` (`xhigh` → `max` on 4.6); else, when `maxTokens` is 0 or > 2048, `{type:"enabled", budget_tokens: budgetOf(effort)}` (low 4096 / medium 10000 / high 24000 / xhigh,max 32000), capped at `maxTokens − 1024` when the client gave one, otherwise `max_tokens` raised to budget + 4096; `temperature` / `top_p` only when not thinking. A translated request that never mentioned thinking gets no `thinking` field, for any model (magpie adds `disabled` only on passthrough).
+  - Images: `ImagePart { mediaType, data, url }` — base64, or a URL forwarded as is (never fetched). Chat `image_url` data URLs parse to base64. Tool-result images: inside `tool_result.content` beside the text for Anthropic; for Chat the tool message says `[The tool returned an image; it follows in the next message.]` and the images go in the next user message after `[From the result of <tool> (tool call <id>):]`.
+  - Files: Anthropic `document` blocks (message or tool result) are dropped. Chat `file` parts → `FilePart` (MIME from the data URL, else the `FILE_TYPES` extension table in `chat.ts` — no MIME dependency, unknown → `application/octet-stream`; a `file_id` is kept in `url`) and are sent as the text `[attachment <mime>]` / `[attachment <mime>: <file id>]`.
+  - Structured output: `GatewayRequest.format: Format | null`, `Format = {type:"json_object"} | SchemaFormat`. Read from Anthropic `output_config.format` (json_schema only, named `response`) and Chat `response_format` (`openAIFormat`; a schema-less json_schema is json_object, `text` is null). Chat gets `response_format`; Anthropic gets `output_config.format {type, schema}` beside any effort, and json_object as `Respond with a single JSON object and nothing else.` appended to the system prompt. A refusal is not retried.
+  - DeepSeek replay (`replaysThinking(model)`, name contains `deepseek`): Chat assistant turns carry `reasoning_content` = their thinking text, or `" "` on a turn that calls tools or answers tool results; Anthropic sends unsigned thinking as `{type:"thinking", thinking}` and runs `thinkingOnToolTurns`. Every other model gets no unsigned thinking; signed thinking goes only to Anthropic.
+    - Responses (ticket 07, magpie `responses.go`). Parse: `instructions` + `system`/`developer` messages before the first reply → `system`; a `developer`/`system` message after any reply stays in place as a user `<system-reminder>\n…\n</system-reminder>` (keeps the system prompt, and so Anthropic's cache prefix, stable); `agent_message` → user turn; adjacent same-role messages merged; `reasoning` → thinking text from `reasoning_text`, else the summary — `encrypted_content` is never read (Responses → Responses is always passthrough, so sealed reasoning only ever reaches Responses); `input_file` dropped; `input_image` with only a `file_id` → `RequestShapeError` when it is in the last input item, dropped in earlier ones. Tools: `function`; `custom` (Codex's freeform tools) offered as a function taking one `input` string (description gains the input rule and grammar) and its history call read as `{"input": …}`; `namespace` tools flattened to `<namespace>__<name>` (> 64 chars → first 55 + `_` + 8 hex of sha256); boolean `encrypted` marks stripped from schemas; `web_search` and other server tools dropped; `tool_search` and Responses Lite `additional_tools` are not handled (Osuna's Codex catalog enables neither). `GatewayRequest.named[flat] = { namespace, name, custom }`. `tool_choice`: strings, `{type:"function", name}`, `allowed_tools` (mode `auto`/`required` else `RequestShapeError`; filters tools and `named`). `text.format` → `format`; `reasoning` present → `thinking`, its effort via `effortOf`, `"none"` → `thinkOff`; `service_tier` is not carried. Build: `{model, input, stream, store:false}` + `instructions`, `max_output_tokens`, `temperature`/`top_p`, `text.format`, `reasoning: {effort (openAIEffort), summary:"auto"}` or `{summary:"auto"}` when only thinking, tools with `strict` always written, `tool_choice`, `parallel_tool_calls`. Thinking goes only to a DeepSeek model, as `reasoning` items with `reasonFirst`. Decode: call arguments are emitted when the call is done, preferring the fuller of streamed deltas and the done event's (`pickArgs`, magpie #613); `response.incomplete` → `length` / `filter`; a call streamed or listed → `tool`; `response.failed`, `error` events and any event carrying `error` → error. Encode for Codex: `response.created` + `response.in_progress`, items opened/closed with `output_item.added/done`, `sequence_number` from 0, model is the asked name, `response.completed` / `response.incomplete` with usage (`input_tokens` = prompt incl. cache, `cached_tokens`, `cache_write_tokens`), errors as `response.failed`. A namespaced call goes back with `name`, `namespace` and `encrypted_function_args: []`; a custom tool's call goes back as `custom_tool_call` (`ctc_` id) with `input` and no argument delta events.
+  - Chat decoding: a leading `<think>…</think>` or `<thought>…</thought>` in `content` (after spaces/newlines) is emitted as `think` events, tags split across chunks included; text that only starts like a tag is held. `StreamDecoder.end?(emit)` hands back what is held; `translated.ts` calls it after `SseReader.end()` on both the streaming and whole-reply paths — a decoder that holds text must implement it.
+- A 2xx that is not an event stream (no `text/event-stream` content type and the first chunk does not start with `data:`, `event:` or `:`) is a pre-first-byte 502 failure: it switches and cools like a server error.
+- `count_tokens`: routed like `/v1/messages`; the first candidate not cooling (else the first) is asked at its Anthropic address + `/v1/messages/count_tokens` (query kept) and its answer piped back; with no Anthropic address, or any failure there, the gateway answers `{ input_tokens: estimateInputTokens(request) }` (UTF-8 bytes of system, texts, call args and names, tool names, descriptions and schemas, ÷ 4, floored). Counting never switches or cools.
+- Every response after an endpoint is chosen carries `x-osuna-api-endpoint: <slug>`. The slug, not the name: Node throws on non-Latin-1 header values and names can be Chinese.
+- Failover (ticket 04). The plan for one request: drop candidates that need a check (`why: "auth"`), ready ones first, then only the cooling one that is back soonest (magpie restLast + probeOne), then `ConversationSticks.order` moves last time's answerer to the front when the conversation is within a turn, or its cache read ≥ 1024 tokens less than 5 minutes ago, and it is not cooling. Conversation key: `<agent>|<requested model>|<conversationId>`; `conversationId` reads `x-claude-code-session-id`, `thread-id`, `thread_id`, `session-id`, `session_id`, `x-client-request-id`, else hashes the first user message.
+- "Before the first byte" means before the first body chunk: a 2xx whose body closes before any chunk is a 502 failure and still switches. After the first chunk the gateway pipes, never switches, destroys the agent's socket if the upstream breaks, and cools that endpoint (`lateRests`).
+- Retryable failure (`retryable`) → `markFailed` → next candidate, logging `info` `"API endpoint gateway switched endpoints"` `{ from, to, model, failure, status, until }`. Every failed attempt also logs `warn` `"API endpoint returned an error"` `{ endpoint: slug, status }`. Cooldown start/end log `"API endpoint is cooling down"` `{ endpoint: name, model?, failure, status, until }` and `"API endpoint cooldown ended"` (timer, `served`, `clear`). No key ever.
+- Cooldown by class: credit 30 min; quota = reset time in the error, else `Retry-After`, else 15 min, capped 8 days; rate 1 min doubling to 30 min (doubles only when limited again within 30 min of the last one ending; a vendor time ≥ that wins); other (5xx, header timeout, network) 1 min doubling to 10 min until it answers; auth (401/403 not explained by credit/quota words, a retired or unserved model, or region) = needs check with `until: null`. Not cooled: proxy failures and `requestRefused` (400/422 shape, unapproved client, region — switch only). A model the key does not serve (`modelRefused`) or a quota error saying other models still work cools `"<endpointId>/<model>"` only, which the endpoint list does not show.
+- The last candidate: on 408/5xx/529 it is asked again after 1 s, 2 s (twice); on a short 429 rate limit up to three times; never when the wait would exceed 8 s, never after a header timeout. Then it is cooled like the others.
+- Every candidate cooling for quota/credit after a 429/402 with the vendor's words (`quotaHeld`): no upstream request; the last candidate's stored error, `Retry-After` = seconds until the earliest is back. All candidates needing a check: the last one's stored error. Other cooldowns still probe the soonest-back endpoint.
+- Endpoint list (`ApiEndpointService.toWire`): `cooldown?: { state: "cooling_down" | "needs_check", reason, until: ISO | null } | null` from `endpointRest`. `set_endpoint_state { clearCooldown: true }` → `clear`; `save` of an existing endpoint → `clear` when the key or addresses changed, else `clearNeedsCheck`; `delete` → `clear`.
+
+### 4. Validation & Error Matrix
+
+All errors are wrapped in the agent's protocol (`gateway/agent-errors.ts`): `/v1/messages` or an `anthropic-version` header → `{ type: "error", error: { type, message } }`; otherwise `{ error: { message, type, code, param: null } }`. `type` defaults by status (400 `invalid_request_error`, 401 `authentication_error`, 403 `permission_error`, 404 `not_found_error`, 413 `request_too_large`, 429 `rate_limit_error`, 529 `overloaded_error`, other 5xx `api_error`).
+
+| Condition | Status | Message |
+|---|---|---|
+| Socket not loopback, or `Forwarded` / `X-Forwarded-For` / `X-Real-IP` present | 403 | `The API endpoint gateway only accepts local requests` |
+| No token, or matches no agent (`timingSafeEqual`) | 401 | `Invalid API endpoint gateway token` |
+| Body over 64 MB | 413 | — |
+| Body has no string `model` | 400 | `The request has no model` |
+| No enabled endpoint offers the model | 404 | `No enabled API endpoint offers the model "<model>"` |
+| The chosen candidate has no address at all | 502 | `<name>: no address for this agent's request format` |
+| Body needs translation, is not that protocol's shape (e.g. no `messages` array, bad `allowed_tools` mode), and no passthrough candidate is left | 400 | `invalid request: messages must be an array` / `invalid allowed_tools mode "<mode>"` |
+| Codex's last input item has an `input_image` with only a `file_id`, and every candidate needs translation | 400 | `The latest message has an image given only as an OpenAI file_id, which this API endpoint cannot open; send the image itself` |
+| Translated non-streaming reply: upstream broke off, or said only an error | 502 | `<name>: <network error or upstream error message>` |
+| No candidate has a stored key | 500 | `<name>: the API key is missing` |
+| Upstream status ≥ 400, not retryable (e.g. context too long, plain 400) | same status, no switch, no cooldown | `<name>: <upstream message, key redacted, 300 chars>`; upstream `error.type` / `error.code` kept; `retry-after` and `*ratelimit*reset*` headers copied |
+| Retryable failure, another candidate left | — | switch; the agent sees only the next candidate's answer |
+| Retryable failure on the last candidate | same status | as above, plus ` (available again at HH:MM)` (local time, date when not today) for credit/quota/rate; a 429 without `Retry-After` gets one from the cooldown |
+| No response headers within `gatewayHeaderTimeoutMs` (default 10 min) | 504 | `<name>: no response headers within <s>s` |
+| Connection error before headers | 502 | `<name>: <origin>: <network error>` |
+| 2xx closed before the first body chunk | 502 | `<name>: <origin>: the connection closed before the reply began` |
+| All candidates held out of quota/credit, or all need a check | stored status | `<last name>: <stored upstream message>` + reset text; `Retry-After` when held |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `relay-a/kimi-k2` → endpoint `relay-a`, body sent with `"model":"kimi-k2"`, SSE chunks arrive one by one.
+- Base: a bare name that two endpoints selected goes to the earlier one; a slug whose endpoint is closed, deleted, or did not select the model falls back to the bare name; `moonshotai/kimi-k2` selected as a whole name is not split. A 429 from A with B also offering the model: B answers with `x-osuna-api-endpoint: relay-b`, A shows `cooling_down` in the list.
+- Good (translation): Claude Code asks `deepseek-v3`, only `relay-c` (Chat address) selected it → upstream gets `POST /v1/chat/completions` with the Chat body, the agent gets Anthropic `message_start` … `message_stop` with `model: "deepseek-v3"`, `stop_reason: "tool_use"`, usage input = prompt − cached.
+- Good (ticket 07): Codex asks `glm-4.6`, only `relay-b` (Anthropic address) selected it → upstream gets `/v1/messages` with `system` from `instructions`, the agent gets `response.created` … `response.completed` with a `function_call` item and `model: "glm-4.6"`. Claude Code asks `grok-4` on a Responses-only endpoint → `/v1/responses` with `store: false`, `instructions`, `strict: false` tools, answered as Anthropic events.
+- Base (ticket 06): Claude Code asks `relay-b/glm-4.6` with `thinking: {type:"adaptive"}` and `output_config.effort` → GLM gets neither field and thinks by its own default; the same session's title request (no `thinking`) gets `thinking: {type:"disabled"}`. A Claude model gets the body untouched.
+- Bad: mounting after the bearer middleware — with a daemon password set, every CLI request is compared against the password and gets 401.
+- Bad: cooling an endpoint for a 400 the request itself caused ("Extra inputs are not permitted"). Every endpoint refuses the same tool schema, so each would cool in turn and the list would show them all cooling; `requestRefused` switches without cooling.
+
+### 6. Tests Required
+
+- `gateway/routing.test.ts`: slug direct, bare name by creation order, slashed bare name, tier mapping (Claude only), selected Claude model sent as is, closed/deleted slug falls back, same-named followers in creation order, nothing found.
+- `gateway/failure.test.ts`, `cooldown.test.ts`, `affinity.test.ts`: each of the 20 regexes hits and misses; `failure` order; auth mapping; `retryable` table; 13 constants; each cooldown class and its doubling; `retryAfter` header forms; written reset times; `passing`; `quotaHeld`; each of the 12 affinity steps; turn counting for both wires; conversation ids.
+- `gateway/routing.test.ts` also: format choice — passthrough, Claude model to Anthropic over the agent's own, Chat first, then Responses, then Anthropic, no address.
+- `gateway/translation/{anthropic,chat,responses}.test.ts`: magpie cases — Anthropic and Chat tool pairing (synthetic results, orphan results as text/user, duplicates, thinking-only turn, whole session), `pairToolItems` / `orphanedToolOutputs` / `joinToolRuns` with byte-for-byte no-ops, Chat stream decoding (first choice only, index forms, repeated ids, reasoning under two names, error chunk), Chat → Anthropic events in full, stop maps both ways, usage maps (cache split, DeepSeek/Moonshot/Anthropic cache names), call-id encoding, magpie's `anthropic-to-chat` and `chat-to-anthropic` upstream bodies (compared by value). Ticket 06 adds: `<think>`/`<thought>` cases from `minimax_think_test.go` (one character a chunk, a later tag is text, `<thin` is text, held text handed back by `end`), the three cache marks, thinking build (adaptive + effort, 4.6 max, budget and raised `max_tokens`, cap ≤ 2048 keeps temperature, `thinkOff`, no field when unasked), images both ways and in tool results, `anthropic_image_source_test.go` source fields, `document` dropped, `TestChatFilePart` placeholders, structured output from `format_test.go`, DeepSeek replay on Chat (`reasoning_content` text / `" "`) and on Anthropic (`" "` + unsigned text), signed thinking kept for Anthropic, live reasoning → `thinking_delta`, web search tool left out.
+- `gateway/translation/responses.test.ts` (ticket 07): magpie's `responses-to-anthropic`, `responses-to-chat` (minus `service_tier`) and `anthropic-to-responses` upstream bodies by value; namespaced tools offered flat, unsealed and in `named`, long names cut to 64 and distinct, a namespaced history call by flat name; custom tool description/schema and history call; `allowed_tools` filter and bad mode; web search dropped; `agent_message`; a later developer message as a system reminder with the system unchanged; `strict` from Chat/Anthropic; file_id image refused in the latest turn, dropped earlier; `input_file` dropped; usage cache read/write round trip; sealed stream → summary thinking + call with done arguments, no `encrypted_content` anywhere, also through `AnthropicEncoder`; incomplete → length/filter; failed / error / shapeless error; Codex event sequence with `sequence_number`, completed output and usage; namespaced and custom calls streamed and rendered; error → `response.failed`; context-window stop → `incomplete`; structured output Responses ↔ Chat/Anthropic; DeepSeek `replayedReasoningInput` cases from `deepseek_step_lead_test.go` and translated `reasonFirst` (other models get no `reasoning_text`).
+- `gateway/refusals.test.ts` (ticket 16): `none` read from Responses and Chat bodies; not read off a 500, a non-none effort, levels without a quoted none, a sentence's "None"; `thinkingOff` read from magpie's GLM 1210 (plain and `\u`-escaped Chinese), OpenRouter mandatory, Opus 5.5 `thinking.type.disabled`, DashScope, Ark and the none text, for `disabled` and `between_tools`; not for a thinking body or another 400; `RefusedShapes` keyed by endpoint, model and shape. `translation/anthropic.test.ts` adds magpie's `thinking_off_test.go` table (both `TestThinkingOffAsTheModelTakesIt` and `…LeavesOtherModelsAlone`, the latter asserting the same object back) and a Codex none built for four Claudes; `responses.test.ts` adds none → Chat/Responses `none`, `thinkingBackOn` → `low`, Claude Code off → Chat with no effort, back on → GLM budget 4096 / Opus 5.5 adaptive + low.
+- `gateway/passthrough.test.ts`: `fitThinkingOff` — Sonnet 5.5 `between_tools` byte for byte elsewhere, Opus 5.5 no thinking + low + room, thinking / untold / 4.8 bodies byte for byte, `leftOn` for GLM (thinking removed) and an unknown Claude (+ effort low). `fitResponsesBody` — summary becomes text with the body head unchanged, empty item gets `" "`, own text untouched, only `content` edited when nothing moves, reorder when a step said something before its reasoning, a non-DeepSeek model byte for byte. `fitAnthropicBody` — Claude byte for byte; adaptive + effort removed with the rest byte for byte; `format` kept beside a removed effort; no `thinking` → disabled; enabled / disabled untouched; magpie's DeepSeek conversation (redacted → space, tool turns get a space block, signed thinking kept) and the same body to GLM byte for byte.
+- `daemon-e2e/api-endpoint-gateway.e2e.test.ts` (local only; not in `test:integration`): 401 without/with wrong token, 403 through a proxy header, works with a daemon password and a 300 kB body, token file created 0600 and deleted, byte-exact passthrough and progressive streaming, non-streaming reply whole, wrapped 429/400/503 with `Retry-After`, 504 on header timeout, no real key in log lines or responses, `/v1/models` dedup; switch on 429/402/503/header timeout/pre-byte close, no switch on a context-too-long 400, switch without cooling on a shape 400, broken stream after the first byte, cooling skipped until `clearCooldown`, 401 → needs check until the connection is edited, model-only edit keeps a cooldown, all held out of quota, restart clears cooldowns, log lines, stickiness within a turn and on a warm cache; Claude Code → Chat-only endpoint translated with the full upstream body and full Anthropic event list, non-streaming agent streamed upstream and answered whole, Chat 400 wrapped under the name, `count_tokens` passed to an Anthropic address and estimated for a Chat one, a Codex lone call mended before Responses passthrough; a Chat endpoint's `reasoning_content` and leading `<think>` both reach Claude Code as a thinking block then text; Claude's signed thinking left out for a Chat endpoint and passed through to an Anthropic one; a tier mapped to a non-Claude model gets `thinking: disabled`; tool turns to `deepseek-v3` carry `reasoning_content: " "`; Codex → Anthropic-only endpoint (full upstream body, Responses events, completed usage), Codex → Chat-only streamed and whole, Claude Code → Responses-only endpoint (full upstream body, full Anthropic event list), file_id image → 400 in OpenAI shape with no upstream request. Passthrough bodies in the byte-exact tests carry `thinking: enabled` so a non-Claude model needs no edit. Ticket 16 adds "reasoning turned off, sent the way each model takes it": Responses passthrough refusing none → `none` then `low`, next request `low`, another model still `none`; the same through a Chat endpoint (translated); Claude Code passthrough and Codex translated thinking-off to Sonnet 5.5 / Opus 5.5 / Opus 5 / Opus 4.8 reach the upstream as the table says; GLM refusing R-C3's added `disabled` → retried without thinking and remembered; a translated Codex none to GLM refused → retried with `enabled` budget 4096 and remembered.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const json = JSON.parse(body); json.model = upstreamModel;
+upstream.end(JSON.stringify(json)); // reorders nothing, but drops formatting and can change number spelling
+```
+
+#### Correct
+
+```ts
+const text = body.toString("utf8");
+upstream.end(applyEdits(text, modify(text, ["model"], upstreamModel, {})));
+```
+
+Use `node:http` / `node:https`, not `fetch`: undici decompresses the body behind your back and caps the wait for response headers at 5 minutes, below the 10-minute contract.
+
 ## Scenario: host state that replaces a provider's model catalogue
 
 Reference implementation: the active API endpoint (api-endpoint ticket 05). Reuse this shape for any host-side mode that decides which models a provider may run.
@@ -722,7 +837,8 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 ### 2. Signatures
 
 - `ProviderModelOverride = (provider: AgentProvider) => AgentModelDefinition[] | null` in `server/agent/agent-sdk-types.ts`; `null` means "use the provider's catalogue".
-- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: the active endpoint's checked models with real ids, `isDefault` on the endpoint's default model.
+- `ApiEndpointService.activeModels(provider: string): AgentModelDefinition[] | null` is the single source: while the agent's switch is on, the enabled endpoints' selected models deduped by bare name (`usableModels`), `isDefault` on the agent's default model.
+- `ApiEndpointService.activeModelGroups(provider): ApiEndpointModelGroup[] | null` (api-endpoint-auto-switch ticket 10), built on `endpointModelGroups(state)` in `host-endpoints.ts`: one `{ name, models }` per enabled endpoint with selected models, creation order; model `id` is `<slug>/<model>` (a name collision with another endpoint's slugged id keeps the first), `label` the bare name, `isDefault` only on the first group holding the agent's default. Published as `ProviderSnapshotEntry.apiEndpointModelGroups?` through `ProviderSnapshotManagerOptions.apiEndpointModelGroups: ApiEndpointModelGroupsLookup`; the type is the protocol's `ApiEndpointModelGroup` (`protocol/src/agent-types.ts`), re-exported from `agent-sdk-types.ts`.
 - Injected twice from `bootstrap.ts`: `ProviderSnapshotManagerOptions.modelOverride` and `AgentManagerOptions.modelOverride`.
 - `ApiEndpointServiceOptions.onActiveEndpointChanged(provider)` → `providerSnapshotManager.refreshSettingsSnapshot({ providers: [provider] })`, with `.catch` logging `{ err }`.
 - Wire: `ProviderSnapshotEntry.isModelListAuthoritative?: boolean` in `packages/protocol/src/messages.ts` and both hand-written `ProviderSnapshotEntry` interfaces (`protocol/src/agent-types.ts`, `server/agent/agent-sdk-types.ts`).
@@ -735,6 +851,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 - The override reads the store on every call; there is no cache to invalidate. The refresh only republishes. Refresh after: activate, back to Official, save of the active endpoint, delete of the active endpoint. Detecting an external change does not refresh: the override reads the store, which an outside edit to the CLI file does not touch, so a refresh would publish the same list.
 - `ApiEndpointService` is constructed before `createAgentProviderRuntime` and the `AgentManager`; its callbacks close over `providerSnapshotManager` and `agentManager`, declared later, and run only after startup.
 - The field is optional and needs no capability gate: an old host never sends it and the app treats absence as non-authoritative; an old app ignores it.
+- `models` stays bare for old clients (the old-app projection); only `apiEndpointModelGroups` carries slugs, so a new client picks a specific endpoint and an old one routes by creation order. This is the one place a slug leaves the daemon, and only inside an opaque model id; no response has a `slug` field. `agentFingerprint` includes the groups, so selecting a model on a second endpoint or renaming an endpoint republishes the snapshot even when the bare list is unchanged.
 
 ### 4. Validation & Error Matrix
 
@@ -745,6 +862,7 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 ### 5. Good/Base/Bad Cases
 
 - Good: activate → snapshot lists only `relay/*`, `isModelListAuthoritative: true`; a create with no model runs `relay/haiku`.
+- Good: endpoints A `[shared, a1]` and B `[b1, shared]`, default `b1` → `models` `[shared, a1, b1*]`, groups `A: [a/shared, a/a1]`, `B: [b/b1*, b/shared]`.
 - Base: back to Official → the next refresh publishes the provider's own catalogue and drops the field.
 - Bad: replacing models only in the snapshot — the picker looks right, but `paseo run` with no `--model` still sends `claude-opus-*` to the relay.
 
@@ -752,7 +870,8 @@ Reference implementation: the active API endpoint (api-endpoint ticket 05). Reus
 
 - Daemon E2E (`daemon-e2e/api-endpoint-claude.e2e.test.ts` "provider snapshot follows…", `api-endpoint-codex.e2e.test.ts`): `expect.poll` the snapshot after activate / edit / Official / delete; `createAgent` with no model asserts `agent.model` is the endpoint's default id.
 - Unit (`provider-snapshot-manager.test.ts`): override replaces rows the catalogue returned, runs `resolveConfiguredModel`, sets and clears the flag; a real `ClaudeAgentClient` on a temp `settings.json` (version injected, `isAvailable` overridden, no CLI run) proves the settings rows disappear.
-- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field.
+- Protocol (`messages.api-endpoint.test.ts`): entry parses with and without the field; likewise `apiEndpointModelGroups`.
+- Daemon E2E (`api-endpoint-host-wide.e2e.test.ts` "the model list has each model name once…"): groups, ids, labels and the single `isDefault` while on; field absent after the switch goes off.
 
 ### 7. Wrong vs Correct
 
@@ -784,16 +903,17 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 
 ### 2. Signatures
 
-- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, and `runningSessionCount?: number`.
-- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (async; `ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount">>`), `activeEndpointId(provider)` for the sync error path. Internal `ApiEndpointHealthCode` union.
+- Wire (`protocol/src/api-endpoint/rpc-schemas.ts`): `ApiEndpointHealthIssueSchema = { code: string, message: string }`; list payload adds `health?: ApiEndpointHealthIssue[]`, `cliBaseUrl?: string | null`, `runningSessionCount?: number`, and `gatewayUnavailable?: ApiEndpointHealthIssue | null` (api-endpoint-auto-switch ticket 03).
+- Service: `ApiEndpointService.list(provider): Promise<ApiEndpointListResult>` (`ApiEndpointListResult` is `Required<Pick<payload, "endpoints" | "activeEndpointId" | "health" | "cliBaseUrl" | "runningSessionCount" | "agents" | "gatewayUnavailable">>`), `activeEndpointId(provider)` for the sync error path. Internal unions: `ApiEndpointHealthCode` for `health`, `GatewayUnavailableCode` for `gatewayUnavailable` and the refusal error.
 - Count: required option `ApiEndpointServiceOptions.countLiveSessions(provider) => number`, wired in bootstrap to `AgentManager.countLiveAgents(provider)` (non-internal agents of exactly that provider whose lifecycle is `initializing`, `idle`, or `running`).
-- App: `selectApiEndpointHealthView(state) → { alert: { variant, issues, activeEndpoint } | null, officialTarget }`, `apiEndpointHealthMessageKey(issue)` in `api-endpoints/internal/section-state.ts`.
+- App: the new app shows no `health` (ticket 10 removed the old per-agent section and its Alert); it reads only `gatewayUnavailable`, through `selectAgentApiEndpointsView` in `api-endpoints/internal/agent-settings.ts`, to grey out the switch and say why. Old clients still render `health`.
 
 ### 3. Contracts
 
-- Codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_version_unsupported` (active Codex endpoint and `codex --version` below 0.118.0), `codex_unavailable` (the probe itself failed; never reported as "outdated"), `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model`; reported in both modes so it shows before enabling).
+- Health codes: `modified_externally` (an owned key no longer holds `written`; message names the keys), `config_unparsable`, `codex_profile_override` (legacy top-level `profile` whose `[profiles.<name>]` sets `model_provider` / `model` / `model_catalog_json`; reported in both modes so it shows before enabling). v0.15 daemons also send `codex_version_unsupported` / `codex_unavailable`; ticket 03 dropped the Codex version check (no `auth.command` any more), and the app keeps the `codex_version_unsupported` key under `COMPAT(codexVersionUnsupported)`.
+- `gatewayUnavailable` is host state, not file health: `gateway_requires_tcp` (daemon listens on a socket or pipe) or `gateway_not_ready` (before the listener binds). Turning a switch on (`set_agent_settings`, old `set_active(id)`) is refused with the same `{ code, message }` as the error, so the app can explain the greyed-out switch from the list and the refusal alike.
 - `cliBaseUrl` is set only in Official: Claude `env.ANTHROPIC_BASE_URL`; Codex the effective provider (profile over top level, default `openai`), its `model_providers.<id>.base_url`, or `openai_base_url` for `openai`.
-- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same version check and conflict guard. "Switch to Official" is `set_active(null)`.
+- Re-apply has no RPC of its own: it is `set_active` with the active id, so it runs the same conflict guard. "Switch to Official" is `set_active(null)`.
 - New write error `config_conflict` (file kept changing during the write). The app localizes it and `modified_externally`, `config_unparsable` (health wording), `codex_profile_override`; other codes show the daemon message.
 - `runningSessionCount` counts live sessions, not only `running` ones: an idle Claude process re-reads `settings.json` on its next turn, so it is affected too. Custom providers that extend `claude` are not counted. The count answers "how many sessions does rewriting the CLI config touch", so it lives on the list and the app fetches the list again right before each confirmation.
 - The app reads the optional fields with `?? []` / `?? null`: the protocol keeps new fields optional, so this default is permanent, not a COMPAT shim. A `null` count drops the session line from the confirmation and keeps the terminal line.
@@ -803,98 +923,89 @@ Reference implementation: `provider.api_endpoint.list` health (api-endpoint tick
 - Owned key edited → `modified_externally`; other keys edited → no issue.
 - File deleted while an endpoint is active → every owned key listed as modified.
 - File does not parse → `config_unparsable` in `health`; the list itself still succeeds.
-- Codex binary missing → `codex_unavailable` in `health`; `list.error` stays null.
+- Daemon on a socket → `gatewayUnavailable.code = "gateway_requires_tcp"`, `list.error` stays null, switches already on stay on.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the panel shows one error Alert with Re-apply and Switch to Official.
-- Base: Official with a hand-written relay → no Alert, the Official row says where the CLI's own settings point.
+- Good: another tool rewrites `env.ANTHROPIC_BASE_URL` → the list reports `modified_externally`; an old client's panel shows one error Alert with Re-apply and Switch to Official.
+- Base: Official with a hand-written relay → no issue, `cliBaseUrl` says where the CLI's own settings point (old clients show it on the Official row).
 - Bad: a watcher that rewrites the file when it changes (ADR 0004: never overwrite silently).
 
 ### 6. Tests Required
 
 - Pure: `inspectClaudeSettings` / `inspectCodexConfig` cases in the patch tests (owned vs other keys, deleted file, WebSearch entry only when added, every table field, legacy profile, base URL resolution).
-- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; downgraded and missing Codex; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
-- App: `section-state.test.ts` for the view derivation; `index.test.tsx` for the Alert buttons and the Official hint.
-- Protocol: payload parses with health/cliBaseUrl/runningSessionCount and without them.
+- Daemon: modified → re-apply → clean; modified → Official restores originals; `cliBaseUrl` in Official only; socket listener reports `gatewayUnavailable` and refuses turn-on; `runningSessionCount` counts two Claude agents and not the Codex one, and drops after `archiveAgent`.
+- App: `agent-settings.test.ts` (switch blocked by `gatewayUnavailable` or no usable endpoint, never while on).
+- Protocol: payload parses with health/cliBaseUrl/runningSessionCount/gatewayUnavailable and without them.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```ts
-} catch (error) {
-  return { code: "codex_version_unsupported", message: String(error) }; // "update Codex" for a missing binary
-}
+// A host condition squeezed into file health: the app can't tell it from a broken settings.json,
+// and the refusal error carries a different code than the list.
+health.push({ code: "gateway_requires_tcp", message });
+throw new ApiEndpointRequestError("gateway_unavailable", message);
 ```
 
 #### Correct
 
 ```ts
-} catch (error) {
-  const reason = error instanceof Error ? error.message : String(error);
-  return { code: "codex_unavailable", message: `Couldn't run codex --version: ${reason}` };
-}
+return { ...result, gatewayUnavailable: this.gatewayUnavailable() }; // { code, message } | null
+throw new ApiEndpointRequestError(issue.code, issue.message); // same code as the list
 ```
 
-## Scenario: a one-off timeline notice the daemon adds on resume
+## Scenario: retiring a timeline notice the daemon used to add
 
-Reference implementation: the API endpoint mode notice (api-endpoint ticket 08). Reuse the shape when resuming a session should tell the user something the provider history can't.
+Reference: the API endpoint mode notice, added in api-endpoint ticket 08 and removed in api-endpoint-auto-switch ticket 11. Sessions no longer remember the mode they were created in: the gateway routes by model name, and when no endpoint can serve a request the agent shows the wrapped error in the conversation.
 
 ### 1. Scope / Trigger
 
-- A persisted agent carries host state from its creation (here: which API endpoint was active), and resuming it under different host state deserves a warning in the conversation. The text must be localized, but timeline items are daemon-authored.
+- A daemon-authored `notification` field is no longer produced, but the protocol has to keep parsing it and timelines already persisted on disk still carry it.
 
 ### 2. Signatures
 
-- Record: `StoredAgentRecord.apiEndpointId?: string` (`agent-storage.ts`), `ManagedAgentBase.apiEndpointId?: string`, projected by `toStoredAgentRecord` and carried by `dispatchStoredAgentState`, reload, and `registerSession({ apiEndpointId })`.
-- Port: `ApiEndpointModeSource { active(provider): ApiEndpointRef | null; endpointName(provider, id): string | null }` in `agent-sdk-types.ts`, wired in `bootstrap.ts` to `ApiEndpointService.activeEndpoint` / `endpointName`; `AgentManagerOptions.apiEndpointMode`.
-- Builder: `buildApiEndpointModeNotice({ modes, provider, createdIn: string | null }) → notification | null` in `server/agent/api-endpoint-mode-notice.ts`.
-- Wire: `notification.apiEndpointModeMismatch?: { createdIn: ApiEndpointCreatedRef | null; current: ApiEndpointRef | null }` (`ApiEndpointCreatedRef.name` is `null` for a deleted endpoint) in `protocol/src/api-endpoint/rpc-schemas.ts`, on the `messages.ts` timeline union and both hand-written `AgentTimelineItem` types.
-- `resumeAgentFromPersistence(handle, overrides, agentId, options: { …, apiEndpointId?: string | null })`: the caller's value is used only when no record exists under `agentId` (`session.ts` `resume_agent_request` resumes under a new id and passes the matched record's mode).
+- Wire, kept and never sent: `notification.apiEndpointModeMismatch?: ApiEndpointModeMismatch` (`protocol/src/messages.ts` timeline union, `protocol/src/agent-types.ts`, `ApiEndpointModeMismatchSchema` in `protocol/src/api-endpoint/rpc-schemas.ts`). The server's own `AgentTimelineItem` (`agent-sdk-types.ts`) no longer has the field.
+- Gone: `StoredAgentRecord.apiEndpointId`, `ManagedAgentBase.apiEndpointId`, `ApiEndpointModeSource`, `AgentManagerOptions.apiEndpointMode`, `buildApiEndpointModeNotice`, `ApiEndpointService.endpointName`, and the `options.apiEndpointId` argument of `resumeAgentFromPersistence`.
+- App: `reduceTimelineEvent` in `app/src/types/stream.ts` returns the state unchanged for a `notification` carrying `apiEndpointModeMismatch` (tagged `COMPAT(apiEndpointGateway)`).
 
 ### 3. Contracts
 
-- Stamp at create and import with `active(provider)?.id`; absent means Official, including records written before the field existed. Resume never rewrites it.
-- Creation mode on resume: record by id → `record.apiEndpointId ?? null`; else the caller's value; else unknown → stamp the current mode and queue nothing.
-- The notice is queued after `registerSession` and appended by `hydrateTimelineFromProvider` after the history rows, so it lands at the end of the conversation, not before the replayed history. `appendTimelineItem` is fine: `registerSession` already touched `updatedAt` on this resume.
-- Not queued for `purpose: "history"` (viewing an archived session). Dropped when a deep-equal notice is already in the retained timeline: `closeAgent` keeps `timelineStore`, so an in-process re-resume would otherwise add a second copy. After a daemon restart the timeline is rebuilt and one notice appears again — "once per resume" by design; nothing extra is persisted.
-- `message` is the English fallback for old clients; the app renders `apiEndpointModeMismatch` through `describeApiEndpointModeMismatch` (`app/src/api-endpoints/internal/notices.ts`, exported from `@/api-endpoints`), which returns `null` for Official→Official and the app keeps `message`.
+- Resume does not compare or record any host mode; nothing is queued or appended after `hydrateTimelineFromProvider`.
+- A record file written by an older daemon with `apiEndpointId` still loads: `STORED_AGENT_SCHEMA` is a plain `z.object`, so the key is stripped on read and dropped on the next write. No migration.
+- A notice an older daemon already appended to a durable timeline (or a v0.15 host still sends) is not shown by the new app.
 
 ### 4. Validation & Error Matrix
 
-- Provider without endpoint support (`findProvider` misses) → `active` returns null, record has no field → no notice.
-- Created under an endpoint since deleted → `createdIn: { id, name: null }`, "…an API endpoint that has since been deleted…".
-- Record without a persistence handle → `ensureAgentLoaded` creates a new provider session with the same id; it is stamped with the current mode, no notice (a new session is not a continuation).
-- No `apiEndpointMode` injected (unit suites) → nothing stamped, nothing queued.
+- Record with `apiEndpointId` naming a deleted endpoint → loads, resumes, no notification, a prompt completes.
+- Timeline row with `apiEndpointModeMismatch` → dropped by the app reducer; other notifications render `message` as before.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: created on endpoint "Relay", switched to Official, daemon restarted → fetching the timeline resumes it and ends with one warning naming "Relay".
-- Base: created and resumed in the same mode → no notice; record keeps its field.
-- Bad: appending the notice right after `resumeSession` — history hydration then replays the provider log after it, and the warning sits above the conversation it is about.
+- Good: drop the producer, keep the optional wire field with a comment saying it is no longer sent, filter legacy rows at the one reducer that turns timeline items into stream items.
+- Base: old app against a new daemon → never receives the field, renders nothing new.
+- Bad: removing the field from the protocol schema — an old daemon's message then fails to parse in a new app.
 
 ### 6. Tests Required
 
-- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "an agent session remembers…"): record has `apiEndpointId` under an endpoint and none under Official or for Codex; restart → exactly one notice with the full `apiEndpointModeMismatch`, still one after a second fetch and after `agentManager.closeAgent` + fetch; old/Official record resumed under an endpoint → `createdIn: null`; deleted endpoint → `name: null`; archived agent fetched after restart → no notice.
-- Protocol (`messages.api-endpoint.test.ts`): notification parses with and without the field; snapshot entry with and without `activeApiEndpoint`.
-- App (`api-endpoints/internal/notices.test.ts`): every created/current combination → key and params; `undefined` and Official→Official → `null`.
+- Daemon E2E (`api-endpoint-claude.e2e.test.ts` "a resumed agent session says nothing about the API endpoint mode"): a new record has no `apiEndpointId`; a record patched with the id of a deleted endpoint, after a restart, has no notification and finishes a prompt.
+- App (`types/stream.test.ts` "drops the API endpoint mode notice an older host left in the timeline"): hydrating such a row yields `[]`.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```ts
-// Localizing on the daemon, or a one-shot flag persisted on the record.
-item = { type: "notification", level: "warning", message: t("…") };
+// Stops parsing what an older daemon sends.
+z.object({ type: z.literal("notification"), level, message }).strict();
 ```
 
 #### Correct
 
 ```ts
-// Structured facts for the app, English for old clients, queued until history is in.
-const notice = buildApiEndpointModeNotice({ modes: this.apiEndpointMode, provider, createdIn });
-if (notice) this.pendingApiEndpointModeNotices.set(agentId, notice);
+// v0.16 起 daemon 不再发送；字段留着让老消息照常解析。
+apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
 ```
 
 ## Scenario: optional snapshot field filled by a best-effort probe
@@ -1125,3 +1236,57 @@ Handlers do not throw across the socket. They catch at the handler boundary, map
 - Deriving a response type by hand instead of from the protocol schema.
 - Checking `server_info.features` on the daemon side, or adding a defensive fallback path for old clients instead of a tagged shim.
 - Putting GitHub-specific enums into a `checkout.forge.*` name; forge-neutral names carry forge-neutral shapes only.
+
+## Scenario: fetch_models and test_connection by base URL and request format
+
+Reference implementation: api-endpoint-auto-switch ticket 09 (`ApiEndpointService.fetchModels` / `testFormat` / `keepCatalog` in `server/api-endpoints/service.ts`, `pickProbeModel` / `probeUpstreamFormat` in `upstream-detect.ts`). The endpoint detail page asks per address; old clients keep asking per provider.
+
+### 1. Scope / Trigger
+
+- Request contract change on two existing RPCs plus two new optional fields on `ApiEndpoint`, and a new field persisted in `endpoints.json`.
+
+### 2. Signatures
+
+- `fetch_models.request` adds `format?: string`. `test_connection.request` adds `format?: string` and makes `modelId` optional.
+- `ApiEndpoint` adds `catalog?: { fetchedAt: string; models: ApiEndpointModel[] }` and `manualModels?: ApiEndpointModel[]`; `save.request` adds `manualModels?`.
+- Service: `fetchModels(provider, { endpointId?, baseUrl, apiKey?, format? }, signal)`; `testConnection(provider, { ..., modelId?, format? }, signal)` routes to `testFormat(format, input, signal)` when `format` is set.
+
+### 3. Contracts
+
+- `format` set → `provider` is ignored; listing headers follow the format (`anthropic_messages` → Bearer + `x-api-key` + `anthropic-version`, OpenAI formats → Bearer only, via `providerWithListingHeaders`). No `format` → the old per-provider behaviour, read-only.
+- `fetch_models` with `format` **and** `endpointId` succeeds → the list is stored as that endpoint's `catalog` with `fetchedAt = now`, inside the mutation queue, writing only `endpoints.json` (no CLI, catalog or token change). A failed fetch leaves the stored catalog alone; an endpoint deleted meanwhile is not written back.
+- `test_connection` with `format`: model = `modelId`, else `pickProbeModel` over the endpoint's selected models, then its catalog, else one upstream listing. The probe is `probeUpstreamFormat` (same path, body and shape check as auto-detect). Result codes inside `result.error`: 401/403 → `auth_failed`; no response → `upstream_unreachable` with `status: null`; anything else → `upstream_error`. A rejected listing returns `auth_failed` / the listing code without probing.
+- `save`: `manualModels` given (even `[]`) replaces the endpoint's list; omitted keeps it (the connection dialog and old clients omit it). `catalog` is never written by `save`; `buildEndpoint` carries it over.
+- Routing, the Codex model catalog and `usableModels` read only `models`; `catalog` and `manualModels` exist for the detail page.
+
+### 4. Validation & Error Matrix
+
+- Unknown `format` → `invalid_input`. No key and no saved key → `invalid_input`, nothing sent. Cancel → `cancelled` (top-level `error`, `result: null`).
+
+### 5. Good/Base/Bad Cases
+
+- Good: endpoint with Anthropic + Responses addresses, models `[gpt-5, claude-sonnet-4-5]` → Anthropic probe asks `claude-sonnet-4-5`, Responses asks `gpt-5`.
+- Base: nothing selected, no catalog → `GET <base>/v1/models` then one probe.
+- Bad: persisting the catalog from an old client's provider-mode fetch — the old form expects `fetch_models` to be read-only.
+
+### 6. Tests Required
+
+- `daemon-e2e/api-endpoint-models.e2e.test.ts` ("by base URL and request format"): catalog kept with `fetchedAt`; OpenAI format sends no `x-api-key`; failed fetch keeps the old catalog; `manualModels` survive a save that omits them and the catalog survives a connection edit.
+- `daemon-e2e/api-endpoint-test-connection.e2e.test.ts` (same describe name): per-format model pick, `auth_failed` on 401, list-then-probe with nothing selected, 404 in another format → `upstream_error`.
+- `messages.api-endpoint.test.ts`: endpoint with `catalog` / `manualModels`, save with `manualModels`, both requests with `format` and no `modelId`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// A fetch without endpointId (trying an unsaved address) has nowhere to store the list.
+if (input.format !== undefined) await this.keepCatalog(input.endpointId!, models);
+```
+
+#### Correct
+
+```ts
+if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId, result.models);
+```
+

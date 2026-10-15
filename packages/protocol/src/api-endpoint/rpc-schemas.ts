@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 /*
- * 第三方接口（API endpoint）：Claude Code / Codex 在「官方」和一个保存的第三方接口之间切换。
- * provider 用字符串而非枚举，以后支持更多提供方时老客户端照常解析。
+ * 第三方接口（API endpoint）：整台主机共用的上游连接；每个 Agent（Claude Code / Codex）一个
+ * 「使用第三方接口」总开关与一个默认模型。provider 用字符串而非枚举，以后支持更多提供方时老客户端照常解析。
  * API key 只会出现在 save 请求里；任何响应都只带 hasApiKey。
+ *
+ * 老客户端（含官方 Paseo 手机 App）不认识主机级字段，只读单接口投影：每个接口的 provider / baseUrl /
+ * defaultModelId 与 activeEndpointId 都按请求的 provider 换算。新字段全部可选，
+ * 新客户端在 server_info.features.apiEndpointGateway 为 true 时才读它们。
  */
 
 export const ApiEndpointModelSchema = z.object({
@@ -44,6 +48,50 @@ export const ApiEndpointModelMappingSchema = z.object({
 });
 export type ApiEndpointModelMapping = z.infer<typeof ApiEndpointModelMappingSchema>;
 
+/**
+ * 请求格式：发给上游的请求用哪种协议格式，与模型家族无关。线上是字符串，
+ * 以后新增格式时老客户端照常解析；daemon 只认下面三种。
+ */
+export const API_ENDPOINT_REQUEST_FORMATS = [
+  "anthropic_messages",
+  "openai_chat",
+  "openai_responses",
+] as const;
+export type ApiEndpointRequestFormat = (typeof API_ENDPOINT_REQUEST_FORMATS)[number];
+
+/** 一种请求格式的地址；一家接口每种格式最多一个，至少一个。 */
+export const ApiEndpointBaseUrlSchema = z.object({
+  format: z.string(),
+  url: z.string(),
+});
+export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
+
+/** 每个 Agent 的设置：enabled 为「使用第三方接口」总开关；defaultModelId 是不带接口标识的模型名。 */
+export const ApiEndpointAgentSettingsSchema = z.object({
+  enabled: z.boolean(),
+  defaultModelId: z.string().nullable(),
+});
+export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
+
+/**
+ * 自动切换给接口的状态。`state` 是字符串：cooling_down（冷却中，`until` 是恢复时刻）、
+ * needs_check（key 无效或无权限，`until` 为 null，编辑这家接口后恢复）；`reason` 是失败分类
+ * （credit、quota、rate、other、auth）。只记在 daemon 内存里，重启清零。
+ */
+export const ApiEndpointCooldownSchema = z.object({
+  state: z.string(),
+  reason: z.string(),
+  until: z.string().nullable(),
+});
+export type ApiEndpointCooldown = z.infer<typeof ApiEndpointCooldownSchema>;
+
+/** daemon 上次向上游列出的模型（详情页按格式拉取后记下）；只用来挑选，不等于已选。 */
+export const ApiEndpointModelCatalogSchema = z.object({
+  fetchedAt: z.string(),
+  models: z.array(ApiEndpointModelSchema),
+});
+export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSchema>;
+
 export const ApiEndpointSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -53,6 +101,16 @@ export const ApiEndpointSchema = z.object({
   defaultModelId: z.string(),
   modelMapping: ApiEndpointModelMappingSchema.optional(),
   hasApiKey: z.boolean(),
+  // 主机级字段；老 daemon 不发。baseUrl 是其中按 provider 选出的一个。
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
+  // 接口开关：关着即「已关闭」，对所有 Agent 生效。
+  enabled: z.boolean().optional(),
+  // 没有或为 null 即可用；老 daemon 不发。
+  cooldown: ApiEndpointCooldownSchema.nullable().optional(),
+  // 上次拉回来的上游清单；还没拉过时没有。
+  catalog: ApiEndpointModelCatalogSchema.optional(),
+  // 用户手动添加的模型名，不管开没开都留在清单里。
+  manualModels: z.array(ApiEndpointModelSchema).optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -78,8 +136,8 @@ export const ApiEndpointRefSchema = z.object({
 export type ApiEndpointRef = z.infer<typeof ApiEndpointRefSchema>;
 
 /**
- * 恢复的会话创建时所处的模式与当前模式不同，挂在时间线的 notification 上，App 据此本地化。
- * null 即「官方」；name 为 null 表示该接口已被删除。
+ * 恢复的会话创建时所处的模式与当前模式不同，挂在时间线的 notification 上。
+ * null 即「官方」；name 为 null 表示该接口已被删除。v0.16 起 daemon 不再发送，schema 留着让老消息照常解析。
  */
 export const ApiEndpointCreatedRefSchema = z.object({
   id: z.string(),
@@ -95,7 +153,8 @@ export type ApiEndpointModeMismatch = z.infer<typeof ApiEndpointModeMismatchSche
 
 /**
  * CLI 配置文件的一条健康问题，列表查询时读真实文件得出。`code` 是字符串：
- * modified_externally、config_unparsable、codex_version_unsupported、codex_profile_override。
+ * modified_externally、config_unparsable、codex_profile_override；
+ * v0.15 及以前的 daemon 还会发 codex_version_unsupported。
  */
 export const ApiEndpointHealthIssueSchema = z.object({
   code: z.string(),
@@ -104,10 +163,13 @@ export const ApiEndpointHealthIssueSchema = z.object({
 export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema>;
 
 /**
- * `activeEndpointId: null` 表示「官方」。`health` 为空即正常；
+ * `activeEndpointId: null` 表示「官方」；否则是持有该 Agent 默认模型、开着的接口里最早建的一家（投影）。
+ * `agents` 是每个 Agent 的设置，按 provider 索引；老 daemon 不发。`health` 为空即正常；
  * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
  * `runningSessionCount` 是该提供方下还活着的 Agent session 数（初始化中、空闲、运行中），
  * 切换或改写配置会影响到它们；App 写进确认框。
+ * `gatewayUnavailable` 非空时 daemon 内置中转站用不了（如 daemon 以 socket 监听，code 为 gateway_requires_tcp），
+ * 「使用第三方接口」总开关打不开；老 daemon 不发。
  */
 export const ApiEndpointListResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.list.response"),
@@ -119,6 +181,8 @@ export const ApiEndpointListResponseSchema = z.object({
     health: z.array(ApiEndpointHealthIssueSchema).optional(),
     cliBaseUrl: z.string().nullable().optional(),
     runningSessionCount: z.number().optional(),
+    agents: z.record(z.string(), ApiEndpointAgentSettingsSchema).optional(),
+    gatewayUnavailable: ApiEndpointHealthIssueSchema.nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -127,6 +191,10 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
 /**
  * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key；
  * 新建时 apiKey 必填。modelMapping 每次都整份提交，省略即不映射。
+ *
+ * 新客户端带 baseUrls，不带 baseUrl / defaultModelId，models 可以为空；接口开关不在这里改。
+ * 老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
+ * manualModels 省略即保留这家已有的手动添加模型；拉回来的上游清单只由 fetch_models 改。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -134,11 +202,13 @@ export const ApiEndpointSaveRequestSchema = z.object({
   provider: z.string(),
   endpointId: z.string().optional(),
   name: z.string(),
-  baseUrl: z.string(),
+  baseUrl: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
   apiKey: z.string().optional(),
   models: z.array(ApiEndpointModelSchema),
-  defaultModelId: z.string(),
+  defaultModelId: z.string().optional(),
   modelMapping: ApiEndpointModelMappingSchema.optional(),
+  manualModels: z.array(ApiEndpointModelSchema).optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -152,7 +222,10 @@ export const ApiEndpointSaveResponseSchema = z.object({
 });
 export type ApiEndpointSaveResponse = z.infer<typeof ApiEndpointSaveResponseSchema>;
 
-/** 删除当前启用的接口时，daemon 先切回官方再删除。 */
+/**
+ * 接口是主机共用的，删除对所有 Agent 生效；provider 只用来换算响应里的 activeEndpointId。
+ * 某个 Agent 的默认模型因此找不到时改成别的可用模型，一个都不剩就回到官方。
+ */
 export const ApiEndpointDeleteRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.delete.request"),
   requestId: z.string(),
@@ -171,7 +244,10 @@ export const ApiEndpointDeleteResponseSchema = z.object({
 });
 export type ApiEndpointDeleteResponse = z.infer<typeof ApiEndpointDeleteResponseSchema>;
 
-/** `endpointId: null` 表示切回「官方」。 */
+/**
+ * 老客户端的切换：`endpointId` 打开该 Agent 的总开关并确保这家开着（不关别的接口），
+ * `null` 关掉总开关（官方）。新客户端用 set_agent_settings 与 set_endpoint_state。
+ */
 export const ApiEndpointSetActiveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_active.request"),
   requestId: z.string(),
@@ -191,8 +267,68 @@ export const ApiEndpointSetActiveResponseSchema = z.object({
 export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveResponseSchema>;
 
 /**
+ * 设置一个 Agent 的「使用第三方接口」总开关与默认模型。只在至少一家接口开着且已选模型时能打开；
+ * 打开时省略 defaultModelId 就保留当前的（还能用的话），否则取最早建的开着接口的第一个已选模型；
+ * 关掉时忽略 defaultModelId，从不被拒。失败时 `agent` 是该 Agent 未变的设置。
+ */
+export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_agent_settings.request"),
+  requestId: z.string(),
+  provider: z.string(),
+  enabled: z.boolean(),
+  defaultModelId: z.string().optional(),
+});
+export type ApiEndpointSetAgentSettingsRequest = z.infer<
+  typeof ApiEndpointSetAgentSettingsRequestSchema
+>;
+
+export const ApiEndpointSetAgentSettingsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_agent_settings.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: z.string(),
+    agent: ApiEndpointAgentSettingsSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetAgentSettingsResponse = z.infer<
+  typeof ApiEndpointSetAgentSettingsResponseSchema
+>;
+
+/**
+ * 一家接口的状态：`enabled` 是接口开关（对所有 Agent 生效）；`clearCooldown` 是「立刻恢复」，
+ * 清掉这家的冷却。关掉开关可能让某个 Agent 的默认模型改变或回到官方，规则同删除。
+ */
+export const ApiEndpointSetEndpointStateRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_state.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+  enabled: z.boolean().optional(),
+  clearCooldown: z.boolean().optional(),
+});
+export type ApiEndpointSetEndpointStateRequest = z.infer<
+  typeof ApiEndpointSetEndpointStateRequestSchema
+>;
+
+export const ApiEndpointSetEndpointStateResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_state.response"),
+  payload: z.object({
+    requestId: z.string(),
+    endpointId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetEndpointStateResponse = z.infer<
+  typeof ApiEndpointSetEndpointStateResponseSchema
+>;
+
+/**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、
  * 省略 apiKey（或留空），就用已保存的 key。可以用 cancel 按 requestId 取消。
+ *
+ * 新客户端带 `format`：baseUrl 是这种请求格式的地址，认证头按格式给，provider 不再起作用；
+ * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`）。
+ * 老客户端不带 format，按 provider 走 CLI 自己的格式，只读不记。
  */
 export const ApiEndpointFetchModelsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.fetch_models.request"),
@@ -201,6 +337,7 @@ export const ApiEndpointFetchModelsRequestSchema = z.object({
   endpointId: z.string().optional(),
   baseUrl: z.string(),
   apiKey: z.string().optional(),
+  format: z.string().optional(),
 });
 export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
 
@@ -213,6 +350,45 @@ export const ApiEndpointFetchModelsResponseSchema = z.object({
   }),
 });
 export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
+
+/**
+ * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，先向上游列出模型挑一个，
+ * 再按每种格式各发一条最小对话请求。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ */
+export const ApiEndpointDetectFormatsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_formats.request"),
+  requestId: z.string(),
+  endpointId: z.string().optional(),
+  baseUrl: z.string(),
+  apiKey: z.string().optional(),
+});
+export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
+
+/**
+ * 一种格式的检测结果。`status` 是字符串：ok（检测通过）、auth_failed（上游回 401 / 403，key 无效）、
+ * not_detected（其余失败，原因在 `message`）。`url` 是这种格式的建议地址；`httpStatus` 没收到响应时为 null。
+ */
+export const ApiEndpointFormatDetectionSchema = z.object({
+  format: z.string(),
+  url: z.string(),
+  status: z.string(),
+  httpStatus: z.number().nullable(),
+  message: z.string().nullable(),
+});
+export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
+
+/** 请求本身被拒（缺 key、地址无效、找不到接口、被取消）时 `results` 为空，原因在 `error`。 */
+export const ApiEndpointDetectFormatsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.detect_formats.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ApiEndpointFormatDetectionSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointDetectFormatsResponse = z.infer<
+  typeof ApiEndpointDetectFormatsResponseSchema
+>;
 
 /**
  * 取消同一连接上还在进行的上游请求；被取消的请求照常回一条 error.code 为 cancelled 的响应。
@@ -237,6 +413,10 @@ export type ApiEndpointCancelResponse = z.infer<typeof ApiEndpointCancelResponse
 /**
  * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求（Claude 走 Anthropic Messages，
  * Codex 走 OpenAI Responses）。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ *
+ * 新客户端带 `format`：按这种请求格式向 baseUrl 发最小请求，provider 不再起作用；
+ * 省略 modelId 时 daemon 从这家已选的模型、上游清单里挑一个适合该格式的，都没有就先向上游列一次。
+ * 上游回 401 / 403 时结果的 error.code 是 auth_failed（key 无效）。老客户端不带 format，modelId 必填。
  */
 export const ApiEndpointTestConnectionRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.test_connection.request"),
@@ -245,7 +425,8 @@ export const ApiEndpointTestConnectionRequestSchema = z.object({
   endpointId: z.string().optional(),
   baseUrl: z.string(),
   apiKey: z.string().optional(),
-  modelId: z.string(),
+  modelId: z.string().optional(),
+  format: z.string().optional(),
 });
 export type ApiEndpointTestConnectionRequest = z.infer<
   typeof ApiEndpointTestConnectionRequestSchema
@@ -253,7 +434,7 @@ export type ApiEndpointTestConnectionRequest = z.infer<
 
 /**
  * 上游给出的结论。`status` 是 HTTP 状态码，没收到响应（连不上、超时）时为 null；
- * `error` 是上游侧的失败，code 如 upstream_error、protocol_unsupported。
+ * `error` 是上游侧的失败，code 如 upstream_error、protocol_unsupported；按格式测试时 key 被拒是 auth_failed。
  */
 export const ApiEndpointTestConnectionResultSchema = z.object({
   ok: z.boolean(),

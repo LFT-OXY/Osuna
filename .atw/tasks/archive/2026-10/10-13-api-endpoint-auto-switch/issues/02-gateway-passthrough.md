@@ -1,0 +1,15 @@
+# 02 — 中转站直通转发与路由
+
+**What to build:** daemon 在现有 HTTP 监听的 `/api-endpoint-gateway` 前缀下挂出中转站（Codex 用 `/v1`），应答 `/v1/messages`、`/v1/responses`、`/v1/models`、`/api/hello`（`count_tokens` 归 05）。只接受回环来源 + 正确口令；每个 Agent 一个随机口令兼身份，存 0600 文件（本票只生成与校验，写进 CLI 配置归 03）。请求是 Agent 自己格式且目标接口有该格式地址时，只换模型名与认证头原样流式转发，响应流式回传并加 `x-osuna-api-endpoint` 头（值为接口标识，实现时改：接口名可含中文，放不进响应头）；换不了家时状态码照抄，错误文字「<接口名>: <上游原文>」按 Agent 协议包装、带回 `Retry-After`；等上游响应头最长 10 分钟。路由：`标识/模型名` 直达该家；光秃秃模型名按创建顺序找开着且已选该模型的第一家；Claude 档位名按各家映射翻译；都找不到报错。对应 prd R-B1、R-B2（口令部分）、R-B7、R-B12、R-C5。
+
+**Blocked by:** 01
+**Status:** ready-for-agent
+**Impl:** done
+
+- [x] 中转站只应答回环来源且口令正确的请求：非回环来源、错口令、无口令各得到 401 / 403；daemon 密码中间件不拦它；超过 100 kb 的请求体能通过；中继连接访问不到它。（e2e）实现备注：非回环只用代理头（`X-Forwarded-For`）做了 e2e，测试 daemon 只监听 127.0.0.1，真实非回环地址连不上它；中继只把连接接到 WebSocket（`relay-transport.ts` → `attachExternalSocket`），不经 HTTP 路由，未写 e2e。
+- [x] 起假 Anthropic 上游与假 Responses 上游：Claude 格式请求到有 Anthropic 地址的接口、Codex 格式请求到有 Responses 地址的接口，上游收到的请求除模型名与认证头外与原请求逐字节一致，客户端 `cache_control` 保留；回复逐块流式到达、带 `x-osuna-api-endpoint: <接口标识>`；Agent 未要流式时攒齐一次返回。（e2e）
+- [x] 上游回 400 / 429 / 5xx 时（本票无换家），客户端收到同样状态码、错误文字为「<接口名>: <上游原文>」且形状符合 Agent 协议、`Retry-After` 照抄。（e2e）
+- [x] 上游 10 分钟不回响应头按服务器错误处理（测试用可调超时）。（e2e）
+- [x] 五种路由各有用例：`标识/模型名` 直达；光秃秃模型名按创建顺序取第一家开着且已选的；Claude 档位名按映射翻译（无映射原样发）；已关闭 / 已删除的标识视同不可用；都找不到返回 Agent 协议形状的错误。（单元）
+- [x] `/v1/models` 返回去重后的光秃秃模型名；`/api/hello` 返回成功。（e2e）
+- [x] 真实 key 只出现在发给上游的请求头里，不出现在日志与任何响应中。（e2e 检查日志文件）

@@ -1,11 +1,8 @@
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import type {
-  ApiEndpointModeMismatch,
-  ApiEndpointRef,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
- * 第三方接口在别处的提示：套餐用量、继承 claude 的自定义提供方、恢复会话。
+ * 第三方接口在别处的提示：套餐用量、继承 claude 的自定义提供方。
  * 当前模式取自提供方快照的 activeApiEndpoint；老主机不发这个字段，按「官方」处理。
  */
 
@@ -32,39 +29,4 @@ export function selectInheritedApiEndpoint(input: {
   if (input.provider === "claude") return null;
   if (input.extendsProvider !== "claude") return null;
   return selectActiveApiEndpoint(input.entries, "claude");
-}
-
-export interface ApiEndpointModeNoticeText {
-  key: string;
-  params: Record<string, string>;
-}
-
-const SESSION_MODE_KEY = "agentStream.apiEndpointMode";
-
-/**
- * 恢复的会话创建时的模式与当前不同。不是这类提示（undefined），或两边都是官方（daemon 不会发），
- * 返回 null，调用方显示原文。
- */
-export function describeApiEndpointModeMismatch(
-  mismatch: ApiEndpointModeMismatch | undefined,
-): ApiEndpointModeNoticeText | null {
-  if (!mismatch) return null;
-  const { createdIn, current } = mismatch;
-  if (current === null) {
-    if (createdIn === null) return null;
-    if (createdIn.name === null) {
-      return { key: `${SESSION_MODE_KEY}.deletedToOfficial`, params: {} };
-    }
-    return { key: `${SESSION_MODE_KEY}.endpointToOfficial`, params: { created: createdIn.name } };
-  }
-  if (createdIn === null) {
-    return { key: `${SESSION_MODE_KEY}.officialToEndpoint`, params: { current: current.name } };
-  }
-  if (createdIn.name === null) {
-    return { key: `${SESSION_MODE_KEY}.deletedToEndpoint`, params: { current: current.name } };
-  }
-  return {
-    key: `${SESSION_MODE_KEY}.endpointToEndpoint`,
-    params: { created: createdIn.name, current: current.name },
-  };
 }

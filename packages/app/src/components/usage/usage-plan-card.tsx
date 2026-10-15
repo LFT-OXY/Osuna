@@ -125,7 +125,7 @@ function PlanUsageReports({
   return (
     <View style={styles.reports}>
       {reports.map((entry, index) => {
-        const activeApiEndpoint = selectActiveApiEndpoint(entries, entry.sourceId);
+        const usesApiEndpoints = selectActiveApiEndpoint(entries, entry.sourceId) !== null;
         return (
           <Fragment key={entry.id}>
             {index > 0 ? <View style={styles.divider} /> : null}
@@ -137,10 +137,8 @@ function PlanUsageReports({
               pinnable={inSidebar}
               refreshable
             />
-            {activeApiEndpoint ? (
-              <Text style={styles.note}>
-                {t("usage.planUsage.apiEndpointNote", { name: activeApiEndpoint.name })}
-              </Text>
+            {usesApiEndpoints ? (
+              <Text style={styles.note}>{t("usage.planUsage.apiEndpointsOnNote")}</Text>
             ) : null}
           </Fragment>
         );

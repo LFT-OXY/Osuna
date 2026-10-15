@@ -42,7 +42,6 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
-import { describeApiEndpointModeMismatch } from "@/api-endpoints";
 import type { StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
@@ -969,12 +968,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           case "tool_call":
             return renderToolCallItem(layoutItem, item);
 
-          case "notification": {
-            let message = item.message;
-            const modeNotice = describeApiEndpointModeMismatch(item.apiEndpointModeMismatch);
-            if (modeNotice) message = t(modeNotice.key, modeNotice.params);
-            return <Notification level={item.level} message={message} />;
-          }
+          case "notification":
+            return <Notification level={item.level} message={item.message} />;
 
           case "todo_list":
             return <TodoListCard items={item.items} activity={item.activity} />;
@@ -1004,7 +999,6 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         renderThoughtItem,
         renderToolCallItem,
         resolvedServerId,
-        t,
       ],
     );
 

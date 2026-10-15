@@ -361,6 +361,11 @@ describe("dispatch group presentation", () => {
 
   const CALL_INPUT = { title: "Write tests", provider: "codex", model: "gpt-5.4", modeId: "auto" };
   const providerLabel = (provider: string) => (provider === "codex" ? "Codex" : provider);
+  const LABELS = {
+    providerLabelOf: providerLabel,
+    modelLabelOf: (_provider: string, modelId: string) =>
+      modelId === "relay-b/gpt-5" ? "gpt-5" : modelId,
+  };
 
   function subagent(
     overrides: Partial<PaseoSubagentRow> & Pick<PaseoSubagentRow, "id">,
@@ -456,9 +461,7 @@ describe("dispatch group presentation", () => {
   });
 
   it("draws a starting row from the call input and does not open it", () => {
-    expect(
-      buildDispatchRowPresentation({ t: i18n.t, state: starting, providerLabelOf: providerLabel }),
-    ).toEqual({
+    expect(buildDispatchRowPresentation({ t: i18n.t, state: starting, labels: LABELS })).toEqual({
       key: "call-s",
       open: null,
       provider: "codex",
@@ -474,7 +477,7 @@ describe("dispatch group presentation", () => {
     const presentation = buildDispatchRowPresentation({
       t: i18n.t,
       state: subagent({ id: "a", title: "Write tests", status: "running" }),
-      providerLabelOf: providerLabel,
+      labels: LABELS,
     });
 
     expect(presentation).toMatchObject({
@@ -486,12 +489,21 @@ describe("dispatch group presentation", () => {
     });
   });
 
+  it("names an API endpoint model by its bare name, never the slashed id", () => {
+    const presentation = buildDispatchRowPresentation({
+      t: i18n.t,
+      state: subagent({ id: "a", status: "running" }, { model: "relay-b/gpt-5" }),
+      labels: LABELS,
+    });
+    expect(presentation.subtitle).toBe("Codex · gpt-5 · Auto");
+  });
+
   it("swaps the subtitle for the pending tool while it waits for approval", () => {
     expect(
       buildDispatchRowPresentation({
         t: i18n.t,
         state: subagent({ id: "a", pendingPermissionCount: 1 }, { pendingPermissionName: "Bash" }),
-        providerLabelOf: providerLabel,
+        labels: LABELS,
       }),
     ).toMatchObject({
       subtitle: "Waiting for approval · Bash",
@@ -505,7 +517,7 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({
         t: i18n.t,
         state: subagent({ id: "a" }),
-        providerLabelOf: providerLabel,
+        labels: LABELS,
       }).timing,
     ).toEqual({ kind: "frozen", durationMs: 125_000 });
   });
@@ -514,12 +526,12 @@ describe("dispatch group presentation", () => {
     const archived = buildDispatchRowPresentation({
       t: i18n.t,
       state: subagent({ id: "a" }, { archived: true }),
-      providerLabelOf: providerLabel,
+      labels: LABELS,
     });
     const detached = buildDispatchRowPresentation({
       t: i18n.t,
       state: subagent({ id: "b" }, { detached: true }),
-      providerLabelOf: providerLabel,
+      labels: LABELS,
     });
 
     expect(archived).toMatchObject({
@@ -533,10 +545,9 @@ describe("dispatch group presentation", () => {
   it("names the row after the dispatched task even once the child is renamed", () => {
     const renamed = subagent({ id: "a", title: "Renamed later" });
 
-    expect(
-      buildDispatchRowPresentation({ t: i18n.t, state: renamed, providerLabelOf: providerLabel })
-        .label,
-    ).toBe("Write tests");
+    expect(buildDispatchRowPresentation({ t: i18n.t, state: renamed, labels: LABELS }).label).toBe(
+      "Write tests",
+    );
   });
 
   it("names a provider row after its task, shows the provider's subtitle, and opens read-only", () => {
@@ -544,7 +555,7 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({
         t: i18n.t,
         state: providerSubagent(),
-        providerLabelOf: providerLabel,
+        labels: LABELS,
       }),
     ).toEqual({
       key: "toolu_1:toolu_1",
@@ -563,7 +574,7 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({
         t: i18n.t,
         state: providerSubagent({ pendingPermissionCount: 1 }, { pendingPermissionName: "Write" }),
-        providerLabelOf: providerLabel,
+        labels: LABELS,
       }),
     ).toMatchObject({
       subtitle: "Waiting for approval · Write",
@@ -577,7 +588,7 @@ describe("dispatch group presentation", () => {
       buildDispatchRowPresentation({
         t: i18n.t,
         state: providerSubagent({ description: null, subtitle: null }),
-        providerLabelOf: providerLabel,
+        labels: LABELS,
       }),
     ).toMatchObject({ label: "Explore", subtitle: "" });
   });
@@ -587,7 +598,7 @@ describe("dispatch group presentation", () => {
     const failed = providerSubagent({ status: "failed" });
 
     expect(
-      buildDispatchRowPresentation({ t: i18n.t, state: completed, providerLabelOf: providerLabel }),
+      buildDispatchRowPresentation({ t: i18n.t, state: completed, labels: LABELS }),
     ).toMatchObject({ bucket: "done", timing: { kind: "frozen", durationMs: 42_000 } });
     expect(buildDispatchGroupHeaderPresentation(i18n.t, [completed, failed]).segments).toEqual([
       { bucket: "failed", text: "1 failed" },

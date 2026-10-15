@@ -152,6 +152,12 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { createUsageAgentBridge } from "./usage/agent-sessions.js";
 import { UsageService } from "./usage/service.js";
+import {
+  API_ENDPOINT_GATEWAY_PATH,
+  createApiEndpointGateway,
+  type ApiEndpointGatewayOverrides,
+} from "./api-endpoints/gateway/gateway.js";
+import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
@@ -180,12 +186,7 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
-import type {
-  AgentClient,
-  AgentModelDefinition,
-  AgentProvider,
-  ApiEndpointModeSource,
-} from "./agent/agent-sdk-types.js";
+import type { AgentClient, AgentModelDefinition, AgentProvider } from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
   AgentSkillSelection,
@@ -273,6 +274,18 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
   const host = resolveAgentMcpClientHost(listenTarget.host);
   return new URL(
     "/mcp/agents",
+    `http://${formatHostForHttpUrl(host)}:${listenTarget.port}`,
+  ).toString();
+}
+
+/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
+function createApiEndpointGatewayUrl(listenTarget: ListenTarget | null): string | null {
+  if (!listenTarget || listenTarget.type !== "tcp") {
+    return null;
+  }
+  const host = resolveAgentMcpClientHost(listenTarget.host);
+  return new URL(
+    API_ENDPOINT_GATEWAY_PATH,
     `http://${formatHostForHttpUrl(host)}:${listenTarget.port}`,
   ).toString();
 }
@@ -466,7 +479,8 @@ export interface PaseoDaemonConfig {
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
-  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck">;
+  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck"> &
+    ApiEndpointGatewayOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
   log?: PersistedConfig["log"];
@@ -799,6 +813,20 @@ export async function createPaseoDaemon(
     createTerminalActivityRouteHandler(terminalManager),
   );
 
+  // Local CLIs reach third-party endpoints through this; gated by loopback and its own token,
+  // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
+  // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
+  const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  app.use(
+    API_ENDPOINT_GATEWAY_PATH,
+    createApiEndpointGateway({
+      paseoHome: config.paseoHome,
+      logger,
+      cooldowns: apiEndpointCooldowns,
+      overrides: config.apiEndpoints,
+    }),
+  );
+
   // Serve the bundled browser web UI when enabled. Mounted after service-proxy
   // classification and host/CORS handling, but before daemon bearer auth, so
   // static app files load without the daemon password while API/WebSocket calls
@@ -943,7 +971,7 @@ export async function createPaseoDaemon(
   const apiEndpointService = new ApiEndpointService({
     paseoHome: config.paseoHome,
     logger,
-    providerRuntimeSettings: (provider) => providerSnapshotManager.getRuntimeSettings(provider),
+    cooldowns: apiEndpointCooldowns,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
@@ -953,15 +981,14 @@ export async function createPaseoDaemon(
     },
     // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
     countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
+    // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
+    isModelsDevAutoUpdate: () =>
+      resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
     return apiEndpointService.activeModels(provider);
   }
-  const apiEndpointMode: ApiEndpointModeSource = {
-    active: (provider) => apiEndpointService.activeEndpoint(provider),
-    endpointName: (provider, endpointId) => apiEndpointService.endpointName(provider, endpointId),
-  };
   const agentProviderRuntime = await createAgentProviderRuntime({
     paseoHome: config.paseoHome,
     logger,
@@ -974,7 +1001,8 @@ export async function createPaseoDaemon(
       isDev: config.isDev === true,
       extraClients: config.agentClients,
       modelOverride: apiEndpointModelOverride,
-      activeApiEndpoint: apiEndpointMode.active,
+      activeApiEndpoint: (provider) => apiEndpointService.activeEndpoint(provider),
+      apiEndpointModelGroups: (provider) => apiEndpointService.activeModelGroups(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;
@@ -1004,7 +1032,6 @@ export async function createPaseoDaemon(
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     modelOverride: apiEndpointModelOverride,
-    apiEndpointMode,
     logger,
   });
   providerSnapshotManager.setCreateAgentsPredictor((provider, clientCapabilities) =>
@@ -1703,6 +1730,12 @@ export async function createPaseoDaemon(
           mainStarted = true;
           const logAndResolve = async () => {
             boundListenTarget = resolveBoundListenTarget(listenTarget, httpServer);
+            // 端口可能和上次不同：CLI 配置里的中转站地址跟上，旧数据补口令。
+            await apiEndpointService
+              .attachGateway(createApiEndpointGatewayUrl(boundListenTarget))
+              .catch((error: unknown) => {
+                logger.error({ err: error }, "Failed to attach the API endpoint gateway");
+              });
             const mcpBaseUrl = createAgentMcpBaseUrl(boundListenTarget);
             agentMcpBaseUrl =
               !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;

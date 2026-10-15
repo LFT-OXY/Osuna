@@ -190,3 +190,105 @@ export function resolveInitialModelBrowserView({
 
   return { kind: "all" };
 }
+
+export type ModelListItem =
+  | { kind: "group"; key: string; name: string }
+  | { kind: "row"; key: string; row: ProviderSelectionModelRow };
+
+/**
+ * 模型列表的条目。第三方接口启用时（每行都带接口）在单个提供方的视图里每家接口一个组标题，
+ * 组按创建顺序排，组内保留传进来的顺序（搜索时即命中排名）；其余情况原样平铺。
+ */
+export function buildModelListItems(
+  rows: ProviderSelectionModelRow[],
+  options: { groupByApiEndpoint: boolean },
+): ModelListItem[] {
+  const groups = new Map<number, { name: string; rows: ProviderSelectionModelRow[] }>();
+  for (const row of rows) {
+    const group = row.apiEndpointGroup;
+    if (!options.groupByApiEndpoint || !group) {
+      return rows.map((entry) => ({ kind: "row", key: entry.favoriteKey, row: entry }));
+    }
+    const bucket = groups.get(group.index) ?? { name: group.name, rows: [] };
+    bucket.rows.push(row);
+    groups.set(group.index, bucket);
+  }
+  const items: ModelListItem[] = [];
+  for (const [index, bucket] of [...groups.entries()].sort(([a], [b]) => a - b)) {
+    items.push({ kind: "group", key: `group:${index}`, name: bucket.name });
+    for (const row of bucket.rows) items.push({ kind: "row", key: row.favoriteKey, row });
+  }
+  return items;
+}
+
+const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
+const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 400;
+// 标题与搜索框，加列表上下留白。
+const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 120;
+const DESKTOP_MODEL_ROW_HEIGHT = 40;
+const DESKTOP_SECTION_HEADING_HEIGHT = 28;
+const DESKTOP_PROFILE_ROW_HEIGHT = 36;
+
+function measureModelList(view: ModelBrowserView, providers: ProviderSelectorProvider[]): number {
+  if (view.kind === "all") {
+    return getAllProviderModelRows(providers).length * DESKTOP_MODEL_ROW_HEIGHT;
+  }
+  const provider = providers.find((entry) => entry.id === view.providerId);
+  if (provider?.modelSelection.kind !== "models") {
+    return 0;
+  }
+  // 提供方视图按接口分组渲染，组标题也占一行。
+  const items = buildModelListItems(getProviderModelRows(provider), { groupByApiEndpoint: true });
+  let height = 0;
+  for (const item of items) {
+    height += item.kind === "group" ? DESKTOP_SECTION_HEADING_HEIGHT : DESKTOP_MODEL_ROW_HEIGHT;
+  }
+  return height;
+}
+
+/** 提供方视图顶部的配置区：没有配置时只有「创建 Agent 配置」一行，有配置时是标题加每个配置一行。 */
+function measureProfilesSection({
+  view,
+  profileRows,
+  scope,
+}: {
+  view: ModelBrowserView;
+  profileRows: readonly { provider: string }[] | null;
+  scope: ModelBrowserScope;
+}): number {
+  if (profileRows === null || view.kind !== "provider") {
+    return 0;
+  }
+  const profileCount = selectProviderViewProfileRows({
+    rows: profileRows,
+    providerId: view.providerId,
+    scope,
+  }).length;
+  if (profileCount === 0) {
+    return DESKTOP_PROFILE_ROW_HEIGHT;
+  }
+  return DESKTOP_SECTION_HEADING_HEIGHT + profileCount * DESKTOP_PROFILE_ROW_HEIGHT;
+}
+
+/**
+ * 桌面弹框打开时定下的固定高度，按搜索词为空时的内容估算；弹框开着时高度不随搜索变。
+ * `profileRows` 为 null 表示不显示配置区。
+ */
+export function resolveModelBrowserDesktopHeight({
+  view,
+  providers,
+  profileRows,
+  scope,
+}: {
+  view: ModelBrowserView;
+  providers: ProviderSelectorProvider[];
+  profileRows: readonly { provider: string }[] | null;
+  scope: ModelBrowserScope;
+}): number {
+  const contentHeight =
+    measureModelList(view, providers) + measureProfilesSection({ view, profileRows, scope });
+  return Math.min(
+    Math.max(DESKTOP_PROVIDER_VIEW_MIN_HEIGHT, DESKTOP_PROVIDER_VIEW_BASE_HEIGHT + contentHeight),
+    DESKTOP_PROVIDER_VIEW_MAX_HEIGHT,
+  );
+}

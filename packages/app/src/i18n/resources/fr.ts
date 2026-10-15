@@ -256,18 +256,6 @@ export const fr: TranslationResources = {
     },
   },
   agentStream: {
-    apiEndpointMode: {
-      endpointToOfficial:
-        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
-      deletedToOfficial:
-        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est Officiel. Elle risque de ne pas pouvoir continuer.",
-      officialToEndpoint:
-        "Cette session a été créée en mode Officiel, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
-      endpointToEndpoint:
-        "Cette session a été créée avec l'endpoint d'API {{created}}, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
-      deletedToEndpoint:
-        "Cette session a été créée avec un endpoint d'API supprimé depuis, mais le mode actuel est l'endpoint d'API {{current}}. Elle risque de ne pas pouvoir continuer.",
-    },
     empty: "Commencez à discuter avec cet agent…",
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
@@ -2462,6 +2450,166 @@ export const fr: TranslationResources = {
       sentDescription: "Osuna a transmis la notification au système d’exploitation.",
       sendFailedTitle: "Impossible d’envoyer la notification de test",
     },
+    apiEndpoints: {
+      info: "Les endpoints d'API sont partagés par tout cet ordinateur. Activez « Utiliser les endpoints d'API » dans les réglages de Claude Code ou de Codex pour utiliser les modèles choisis sur les endpoints activés ici. Désactiver un endpoint empêche tous les agents de l'utiliser.",
+      groups: {
+        enabled: "Activés",
+        disabled: "Désactivés",
+      },
+      add: "Ajouter un endpoint d'API",
+      empty: "Aucun endpoint d'API pour l'instant",
+      allOff: "Tous les endpoints d'API sont désactivés.",
+      loading: "Chargement des endpoints d'API...",
+      unavailable: "Connectez-vous à cet hôte pour gérer ses endpoints d'API.",
+      updateHost:
+        "Mettez à jour Osuna sur cet hôte pour gérer des endpoints d'API partagés par tous les agents.",
+      endpointDetails: "Détails de {{name}}, {{status}}",
+      endpointSwitch: "Utiliser {{name}}",
+      resumeNow: "Reprendre maintenant",
+      resumeNowLabel: "Reprendre {{name}} maintenant",
+      listSeparator: ", ",
+      formats: {
+        anthropic_messages: "Anthropic",
+        openai_chat: "OpenAI Chat",
+        openai_responses: "OpenAI Responses",
+      },
+      status: {
+        available: "Disponible",
+        coolingWord: "En pause",
+        needsCheckWord: "À vérifier",
+        summary: "{{summary}}",
+        modelCount_one: "{{count}} modèle choisi",
+        modelCount_other: "{{count}} modèles choisis",
+        disabled: "Désactivés",
+        cooling_minutes_one: "En pause, de retour dans {{count}} minute",
+        cooling_minutes_other: "En pause, de retour dans {{count}} minutes",
+        cooling_hours_one: "En pause, de retour dans {{count}} heure",
+        cooling_hours_other: "En pause, de retour dans {{count}} heures",
+        needsCheck: "Clé refusée, à vérifier",
+      },
+      switchOff: {
+        title: "Désactiver {{name}} ?",
+        returnsToOfficial: "{{agent}} repassera sur Officiel.",
+        message: "Aucun autre endpoint activé n'a de modèles choisis.",
+        confirm: "Désactiver",
+      },
+      form: {
+        createTitle: "Ajouter un endpoint d'API",
+        editTitle: "Modifier la connexion",
+        name: "Nom",
+        namePlaceholder: "p. ex. Mon relais",
+        apiKey: "Clé d'API",
+        apiKeySavedPlaceholder: "Laissez vide pour garder la clé enregistrée",
+        keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        address: "Adresse",
+        addressHint:
+          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent.",
+        detect: "Détecter",
+        urlInvalid: "Saisissez une adresse commençant par http:// ou https://",
+        formatUrl: {
+          anthropic_messages: "URL de base Anthropic",
+          openai_chat: "URL de base OpenAI Chat",
+          openai_responses: "URL de base OpenAI Responses",
+        },
+        notDetectedPlaceholder: "Non détecté. Laissez vide pour ne pas utiliser ce format",
+        detection: {
+          ok: "Détecté",
+          not_detected: "Non détecté",
+          auth_failed: "Clé refusée",
+        },
+        footer:
+          "La clé se saisit une seule fois et sert aux trois formats. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+        saveAndFetch: "Enregistrer et récupérer les modèles",
+        save: "Enregistrer",
+      },
+      detail: {
+        connection: "Connexion",
+        connectionInfo:
+          "Une clé pour les trois formats. À chaque requête : si cet endpoint a le format propre de l'agent, la requête passe telle quelle ; les modèles Claude passent par l'adresse Anthropic dès qu'il y en a une, pour garder le cache des prompts ; sinon Osuna traduit.",
+        edit: "Modifier",
+        formatNotSet: "Non renseignée, ce format n'est pas utilisé",
+        noKey: "Non enregistrée",
+        testConnection: "Tester la connexion",
+        menu: "Autres actions pour {{name}}",
+        delete: "Supprimer",
+        deleting: "Suppression…",
+        saveFailed: "Impossible d’enregistrer la modification",
+        deleteFailed: "Impossible de supprimer {{name}}",
+        test: {
+          testing: "Test en cours…",
+          ok: "Connecté · {{ms}} ms",
+          authFailed: "Clé refusée",
+          failed: "Connexion impossible",
+        },
+        deleteConfirm: {
+          title: "Supprimer {{name}} ?",
+          removed:
+            "Les modèles de {{name}} seront retirés de la liste des modèles de tous les agents.",
+          defaultChanged: "Le modèle par défaut de {{agent}} passera de {{from}} à {{to}}.",
+          confirm: "Supprimer",
+        },
+      },
+      models: {
+        title: "Modèles",
+        count: "{{selected}} sélectionnés / {{total}} au total",
+        fetchedAt: "Récupérés {{time}}",
+        refetch: "Récupérer à nouveau",
+        fetching: "Récupération…",
+        add: "Ajouter à la main",
+        addPlaceholder: "Nom du modèle, p. ex. claude-opus-4-1",
+        addSubmit: "Ajouter",
+        adding: "Ajout…",
+        search: "Rechercher des modèles",
+        searchPlaceholder: "Rechercher parmi {{total}} modèles",
+        loading: "Récupération des modèles auprès de l’amont…",
+        fetchFailed: "Impossible de récupérer la liste des modèles",
+        empty: "Aucun modèle pour l’instant. Récupérez-les à nouveau ou ajoutez-en un à la main.",
+        noMatches: "Aucun modèle ne correspond à « {{query}} »",
+        familyCount: "{{selected}} / {{total}} sélectionnés",
+        selectAll: "Tout sélectionner",
+        selectNone: "Tout désélectionner",
+        goneUpstream: "N’est plus dans la liste amont",
+        modelSwitch: "Utiliser {{model}}",
+        family: {
+          qwen: "Qwen",
+          other: "Autres",
+        },
+        offConfirm: {
+          title: "Désactiver ces modèles ?",
+          confirm: "Désactiver",
+        },
+      },
+      mapping: {
+        title: "Correspondance des niveaux Claude (facultatif)",
+        info: "Quand Claude Code choisit opus, sonnet, haiku ou fable et que la requête passe par cet endpoint, le modèle de droite est envoyé à la place. Les niveaux sans correspondance sont envoyés tels quels.",
+        none: "Aucune correspondance",
+        pickTitle: "Modèle pour {{tier}}",
+      },
+      agent: {
+        title: "Points d'accès API",
+        useSwitch: "Utiliser les points d'accès API",
+        useHint:
+          "Activé, {{agent}} peut utiliser les modèles sélectionnés des points d'accès activés dans Points d'accès API. Désactivez-le pour revenir à l'officiel.",
+        noUsableEndpoint:
+          "Activez d'abord un point d'accès dans Points d'accès API et sélectionnez ses modèles.",
+        gatewayRequiresTcp:
+          "Le daemon écoute sur un socket, la passerelle intégrée ne peut donc pas fonctionner. Faites-le écouter sur un port TCP pour l'activer.",
+        gatewayNotReady: "La passerelle intégrée démarre encore. Réessayez dans un instant.",
+        defaultModel: "Modèle par défaut",
+        defaultModelHint:
+          "Les nouvelles sessions du terminal et la première nouvelle discussion démarrent avec lui.",
+        defaultModelPick: "Modèle par défaut de {{agent}}",
+        manage: "Gérer les points d'accès API",
+        summaryOn_one: "{{count}} activé",
+        summaryOn_other: "{{count}} activés",
+        summaryCooling_minutes_one: "{{name}} en refroidissement, de retour dans {{count}} minute",
+        summaryCooling_minutes_other:
+          "{{name}} en refroidissement, de retour dans {{count}} minutes",
+        summaryCooling_hours_one: "{{name}} en refroidissement, de retour dans {{count}} heure",
+        summaryCooling_hours_other: "{{name}} en refroidissement, de retour dans {{count}} heures",
+        saveFailed: "Impossible de modifier les réglages des points d'accès API de {{agent}}",
+      },
+    },
     hostSections: {
       projects: "Projets",
       connections: "Connexions",
@@ -2469,6 +2617,7 @@ export const fr: TranslationResources = {
       metadata: "Métadonnées",
       workspaces: "Espaces de travail",
       providers: "Fournisseurs",
+      apiEndpoints: "Endpoints d'API",
       usage: "Table des prix",
       terminals: "Terminaux",
       plugins: "Plugins",
@@ -3338,112 +3487,9 @@ export const fr: TranslationResources = {
         docsFor: "Documentation officielle de {{name}}",
       },
       apiEndpoints: {
-        title: "Endpoint d'API",
-        add: "Ajouter",
-        addAccessibility: "Ajouter un endpoint d'API",
-        loading: "Chargement des endpoints d'API…",
-        loadFailed: "Impossible de charger les endpoints d'API",
-        official: "Officiel",
-        officialHint: "La configuration propre à {{name}}, en général votre abonnement",
-        inUse: "Utilisé",
-        use: "Utiliser",
-        useAccessibility: "Utiliser {{name}}",
-        editAccessibility: "Modifier {{name}}",
-        deleteAccessibility: "Supprimer {{name}}",
-        modelCount_one: "{{count}} modèle",
-        modelCount_other: "{{count}} modèles",
-        switchTitle: "Basculer {{provider}} vers {{name}} ?",
-        switchOfficialTitle: "Remettre {{provider}} sur Officiel ?",
-        switchMessage: "Cela réécrit le fichier de configuration de {{provider}}.",
-        switchConfirm: "Basculer",
-        delete: "Supprimer",
-        deleteTitle: "Supprimer {{name}} ?",
-        deleteMessage: "Son URL, sa clé d'API et ses modèles sont supprimés de cet hôte.",
-        deleteActiveMessage:
-          "Il est utilisé : {{provider}} repasse d'abord sur Officiel, puis il est supprimé.",
-        saveActiveTitle: "Enregistrer les modifications de {{name}} ?",
-        saveActiveMessage:
-          "Il est utilisé : le fichier de configuration de {{provider}} est réécrit tout de suite avec les modifications.",
-        saveActiveConfirm: "Enregistrer",
-        impact: {
-          sessions:
-            "Sessions {{provider}} en cours qui passent tout de suite à la nouvelle configuration : {{count}}",
-          sessionsMaybe: "Sessions {{provider}} en cours qui peuvent être affectées : {{count}}",
-          noSessions: "Aucune session {{provider}} en cours.",
-          terminal: "{{provider}} dans votre terminal bascule aussi.",
-        },
-        codexVersionUnsupported:
-          "Mettez à jour Codex vers la version 0.118.0 ou ultérieure pour utiliser un endpoint d'API.",
-        configUnparsable:
-          "Le fichier de configuration de {{provider}} n'a pas pu être analysé ; rien n'a été modifié.",
-        configConflict:
-          "Le fichier de réglages de {{provider}} a changé en continu pendant qu'Osuna l'écrivait, donc rien n'a été modifié. Réessayez.",
-        health: {
-          modifiedExternally:
-            "Le fichier de réglages de {{provider}} a été modifié en dehors d'Osuna",
-          unparsable:
-            "Le fichier de réglages de {{provider}} est illisible. Osuna n'y écrira pas tant qu'il n'est pas corrigé.",
-          codexProfileOverride:
-            "Un profil Codex remplace l'endpoint d'API, donc le changement risque de ne pas s'appliquer. Retirez model_provider et model de ce profil, ou ne le sélectionnez plus.",
-          officialTarget: "Les réglages propres de {{provider}} pointent vers {{url}}",
-          reapply: "Réappliquer",
-          switchToOfficial: "Revenir à Officiel",
-          reapplyTitle: "Réappliquer {{name}} à {{provider}} ?",
-          reapplyMessage:
-            "L'endpoint est réécrit dans le fichier de réglages de {{provider}}, ce qui remplace les modifications externes des clés gérées par Osuna.",
-        },
         inheritedTitle: "Utilise aussi l'endpoint d'API {{name}} de Claude Code",
         inheritedDescription:
           "L'env du settings.json de Claude prime sur l'environnement de ce fournisseur.",
-        form: {
-          createTitle: "Nouvel endpoint d'API",
-          editTitle: "Modifier l'endpoint d'API",
-          name: "Nom",
-          namePlaceholder: "OpenRouter",
-          baseUrl: "URL de base",
-          baseUrlInvalid: "Saisissez une URL commençant par http:// ou https://",
-          apiKey: "Clé d'API",
-          apiKeyPlaceholder: "Collez la clé d'API",
-          apiKeySavedPlaceholder: "Enregistrée. Laissez vide pour la conserver",
-          models: "Modèles",
-          modelsHint:
-            "Récupérez la liste de ce point de terminaison et cochez les modèles à utiliser.",
-          fetchModels: "Récupérer les modèles",
-          refetchModels: "Récupérer à nouveau",
-          searchModels: "Rechercher des modèles ({{count}})",
-          clearSearch: "Effacer la recherche",
-          noUpstreamModels:
-            "Le point de terminaison n'a renvoyé aucun modèle. Ajoutez les ID de modèle à la main ci-dessous.",
-          noMatchingModels: "Aucun modèle correspondant",
-          moreModelsHidden: "Non affichés : {{count}}. Recherchez pour affiner la liste.",
-          modelsUnsupported:
-            "Ce point de terminaison ne sait pas lister les modèles. Ajoutez les ID de modèle à la main ci-dessous.",
-          fetchTimeout: "Le point de terminaison n'a pas répondu à temps.",
-          testConnection: "Tester la connexion",
-          testHint:
-            "Envoie un court message avec le modèle choisi depuis cet hôte. Seul le point de terminaison est vérifié : les problèmes côté CLI, comme un conflit de connexion Claude, n'apparaissent qu'à la première vraie conversation. Dans ce cas, essayez /logout dans le terminal.",
-          testPick: "Choisir un modèle à tester",
-          testing: "Test en cours...",
-          testMenuTitle: "Tester avec",
-          testSucceeded: "Connecté",
-          testFailed: "Échec",
-          testProtocolUnsupported:
-            "Cette adresse ne fournit pas l'API {{protocol}} dont {{provider}} a besoin. Vérifiez l'URL de base ou utilisez un point de terminaison qui la prend en charge.",
-          selectedModels: "Modèles utilisés",
-          modelIdPlaceholder: "Ajouter un ID de modèle à la main",
-          addModel: "Ajouter",
-          noModels: "Cochez ou ajoutez au moins un modèle",
-          default: "Par défaut",
-          makeDefault: "Définir par défaut",
-          removeModel: "Retirer {{id}}",
-          mapping: "Correspondance des modèles (facultatif)",
-          mappingHint:
-            "Les alias comme /model opus dans le terminal et les tâches en arrière-plan utilisent le modèle associé. Les niveaux sans correspondance ne sont pas écrits.",
-          mappingTitle: "Associer {{tier}} à",
-          unmapped: "Aucune correspondance",
-          save: "Enregistrer",
-          saving: "Enregistrement…",
-        },
       },
     },
     project: {
@@ -3759,8 +3805,8 @@ export const fr: TranslationResources = {
       cell: "{{day}} · {{tokens}} jetons",
     },
     planUsage: {
-      apiEndpointNote:
-        "Endpoint d'API {{name}} utilisé. Ce quota ne reflète pas la consommation réelle.",
+      apiEndpointsOnNote:
+        "Endpoints d'API utilisés. Ce quota ne reflète pas la consommation réelle.",
       title: "Consommation du forfait",
       options: "Options de consommation du forfait",
       refreshFailed: "Impossible d'actualiser la consommation du forfait",

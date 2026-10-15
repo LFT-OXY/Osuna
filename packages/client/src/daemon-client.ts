@@ -660,6 +660,14 @@ type ApiEndpointSetActivePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_active.response" }
 >["payload"];
+type ApiEndpointSetAgentSettingsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_agent_settings.response" }
+>["payload"];
+type ApiEndpointSetEndpointStatePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_endpoint_state.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -668,6 +676,10 @@ type ApiEndpointFetchModelsPayload = Extract<
 type ApiEndpointTestConnectionPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.test_connection.response" }
+>["payload"];
+type ApiEndpointDetectFormatsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.detect_formats.response" }
 >["payload"];
 type ApiEndpointCancelPayload = Extract<
   SessionOutboundMessage,
@@ -679,8 +691,23 @@ export type ApiEndpointSaveOptions = Omit<
   "type" | "requestId"
 >;
 
+export type ApiEndpointSetAgentSettingsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_agent_settings.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetEndpointStateOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_endpoint_state.request" }>,
+  "type" | "requestId"
+>;
+
 export type ApiEndpointFetchModelsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.fetch_models.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointDetectFormatsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_formats.request" }>,
   "type" | "requestId"
 >;
 
@@ -6298,6 +6325,28 @@ export class DaemonClient {
     });
   }
 
+  /** 设置一个 Agent 的「使用第三方接口」总开关与默认模型。 */
+  async apiEndpointSetAgentSettings(
+    options: ApiEndpointSetAgentSettingsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetAgentSettingsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_agent_settings.request", ...options },
+    });
+  }
+
+  /** 接口开关与「立刻恢复」。 */
+  async apiEndpointSetEndpointState(
+    options: ApiEndpointSetEndpointStateOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetEndpointStatePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_endpoint_state.request", ...options },
+    });
+  }
+
   /** 省略 apiKey 并带 endpointId 时用已保存的 key。传入 requestId 才能用 apiEndpointCancel 取消。 */
   async apiEndpointFetchModels(
     options: ApiEndpointFetchModelsOptions,
@@ -6317,6 +6366,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.test_connection.request", ...options },
+    });
+  }
+
+  /** 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  async apiEndpointDetectFormats(
+    options: ApiEndpointDetectFormatsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointDetectFormatsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.detect_formats.request", ...options },
     });
   }
 

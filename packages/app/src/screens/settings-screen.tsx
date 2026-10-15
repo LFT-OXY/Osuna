@@ -34,6 +34,7 @@ import {
   PanelLeft,
   MessageSquare,
   ChevronRight,
+  Plug,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Row, type RowRenderState } from "@/components/ui/row";
@@ -122,6 +123,11 @@ import { PluginSettingsContent } from "@/plugins/settings";
 import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { ProviderDetailBackHeader, ProvidersBreadcrumb } from "@/screens/settings/providers-header";
+import {
+  ApiEndpointDetailPage,
+  ApiEndpointsBreadcrumb,
+  ApiEndpointsPage,
+} from "@/api-endpoints/view";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
@@ -241,6 +247,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
   { id: "workspaces", labelKey: "settings.hostSections.workspaces", icon: FolderGit2 },
   { id: "providers", labelKey: "settings.hostSections.providers", icon: Boxes },
+  { id: "api-endpoints", labelKey: "settings.hostSections.apiEndpoints", icon: Plug },
   { id: "usage", labelKey: "settings.hostSections.usage", icon: CircleDollarSign },
   { id: "terminals", labelKey: "settings.hostSections.terminals", icon: SquareTerminal },
   { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Blocks },
@@ -265,6 +272,8 @@ function renderHostSettingsContent(
       return <HostWorkspacesPage serverId={view.serverId} />;
     case "providers":
       return <HostProvidersPage serverId={view.serverId} requestedProvider={null} />;
+    case "api-endpoints":
+      return <ApiEndpointsPage serverId={view.serverId} />;
     case "usage":
       return <HostPriceTablePage serverId={view.serverId} />;
     case "terminals":
@@ -916,6 +925,7 @@ function SettingsSidebar({
   if (view.kind === "host") selectedHostSection = view.section;
   if (view.kind === "project") selectedHostSection = "projects";
   if (view.kind === "provider") selectedHostSection = "providers";
+  if (view.kind === "apiEndpoint") selectedHostSection = "api-endpoints";
   if (view.kind === "plugin") selectedHostSection = "plugins";
 
   const sidebarBody = (
@@ -1033,16 +1043,29 @@ function DetailHeaderIcon({ icon }: { icon: ComponentType<{ size: number; color:
 }
 
 type ProviderSettingsView = Extract<SettingsView, { kind: "provider" }>;
+type ApiEndpointSettingsView = Extract<SettingsView, { kind: "apiEndpoint" }>;
 
 function DesktopDetailTitle({
   title,
   providerView,
+  apiEndpointView,
   onBack,
 }: {
   title: string;
   providerView: ProviderSettingsView | null;
+  apiEndpointView: ApiEndpointSettingsView | null;
   onBack: () => void;
 }) {
+  if (apiEndpointView) {
+    return (
+      <ApiEndpointsBreadcrumb
+        serverId={apiEndpointView.serverId}
+        endpointId={apiEndpointView.endpointId}
+        sectionTitle={title}
+        onPressParent={onBack}
+      />
+    );
+  }
   if (providerView) {
     return (
       <ProvidersBreadcrumb
@@ -1244,11 +1267,13 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
   const handleSelectHost = useCallback(
     (serverId: string) => {
       setSelectedSettingsHostServerId(serverId);
-      if (view.kind === "project" || view.kind === "provider") {
-        const target = buildSettingsHostSectionRoute(
-          serverId,
-          view.kind === "project" ? "projects" : "providers",
-        );
+      if (view.kind === "project" || view.kind === "provider" || view.kind === "apiEndpoint") {
+        const sections = {
+          project: "projects",
+          provider: "providers",
+          apiEndpoint: "api-endpoints",
+        } as const;
+        const target = buildSettingsHostSectionRoute(serverId, sections[view.kind]);
         if (isCompactLayout) {
           router.push(target);
         } else {
@@ -1341,12 +1366,17 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
     if (view.kind === "provider") {
       return { title: t("settings.hostSections.providers"), Icon: Boxes };
     }
+    if (view.kind === "apiEndpoint") {
+      return { title: t("settings.hostSections.apiEndpoints"), Icon: Plug };
+    }
     return null;
   })();
 
   const content: ReactNode = (() => {
     if (view.kind === "provider")
       return <HostProvidersPage serverId={view.serverId} requestedProvider={view.provider} />;
+    if (view.kind === "apiEndpoint")
+      return <ApiEndpointDetailPage serverId={view.serverId} endpointId={view.endpointId} />;
     if (view.kind === "plugin")
       return (
         <PluginSettingsContent
@@ -1418,6 +1448,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
 
   // 提供方详情占满内容区，页头换成它自己的面包屑 / 顶栏。
   const providerView = view.kind === "provider" ? view : null;
+  const apiEndpointView = view.kind === "apiEndpoint" ? view : null;
 
   const desktopDetailHeaderLeft = detailHeader ? (
     <>
@@ -1427,6 +1458,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
       <DesktopDetailTitle
         title={detailHeader.title}
         providerView={providerView}
+        apiEndpointView={apiEndpointView}
         onBack={handleBackFromDetail}
       />
       {detailHeader.titleAccessory}

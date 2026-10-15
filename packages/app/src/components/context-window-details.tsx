@@ -192,7 +192,7 @@ function SessionTotalSection({
   );
 }
 
-/** 该提供方当前启用的第三方接口；套餐额度这时不代表实际消耗。 */
+/** 该提供方用着第三方接口时，套餐额度不代表实际消耗。 */
 function ActiveApiEndpointNote({
   serverId,
   provider,
@@ -202,11 +202,10 @@ function ActiveApiEndpointNote({
 }) {
   const { t } = useTranslation();
   const { entries } = useProvidersSnapshot(serverId, { enabled: provider !== null });
-  const activeApiEndpoint = selectActiveApiEndpoint(entries, provider);
-  if (!activeApiEndpoint) return null;
+  if (selectActiveApiEndpoint(entries, provider) === null) return null;
   return (
     <UiText variant="caption" color="foregroundMuted" testID="context-window-api-endpoint">
-      {t("usage.planUsage.apiEndpointNote", { name: activeApiEndpoint.name })}
+      {t("usage.planUsage.apiEndpointsOnNote")}
     </UiText>
   );
 }

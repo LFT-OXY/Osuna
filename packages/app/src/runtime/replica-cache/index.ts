@@ -4,7 +4,6 @@ import {
   AgentTimelineItemPayloadSchema,
   WorkspaceGitHubRuntimePayloadSchema,
 } from "@getpaseo/protocol/messages";
-import { ApiEndpointModeMismatchSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import type { PluginTimelineData } from "@getpaseo/plugin";
 import {
@@ -146,7 +145,6 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
     sourceType: z.enum(["error", "notification"]),
     level: z.enum(["info", "warning", "error"]),
     message: z.string(),
-    apiEndpointModeMismatch: ApiEndpointModeMismatchSchema.optional(),
   }),
   z.strictObject({
     ...TimelineItemBaseShape,
@@ -469,7 +467,6 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         sourceType: item.sourceType,
         level: item.level,
         message: item.message,
-        apiEndpointModeMismatch: item.apiEndpointModeMismatch,
       };
     case "compaction":
       return {
@@ -560,7 +557,6 @@ function deserializeBuiltinTimelineItem(
         sourceType: item.sourceType,
         level: item.level,
         message: item.message,
-        apiEndpointModeMismatch: item.apiEndpointModeMismatch,
       };
     case "compaction":
       return {

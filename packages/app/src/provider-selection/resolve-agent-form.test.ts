@@ -855,6 +855,25 @@ describe("authoritative model lists (an API endpoint is active)", () => {
     expect(opened.form.model).toBe("relay/sonnet");
   });
 
+  it("back on Official, a remembered endpoint choice falls back to the default", () => {
+    // 第三方接口时选过 `接口标识/模型名`，总开关关掉后官方 CLI 认不出它。
+    const officialModels: AgentModelDefinition[] = [
+      { provider: "claude", id: "claude-opus-5-5", label: "Opus", isDefault: true },
+    ];
+    const opened = resolveAgentForm(makeState(), {
+      type: "COMPLETE_RESOLUTION",
+      initialValues: undefined,
+      preferences: {
+        provider: "claude",
+        providerPreferences: { claude: { model: "relay-b/claude-sonnet-4-5" } },
+      },
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", officialModels]]),
+      authoritativeModelProviders: new Set<AgentProvider>(),
+      allowedProviderMap: claudeProviderMap,
+    });
+    expect(opened.form.model).toBe("claude-opus-5-5");
+  });
+
   it("moves an open draft off a model the newly authoritative list lacks", () => {
     const official = {
       type: "INPUTS_CHANGED" as const,
@@ -884,6 +903,36 @@ describe("authoritative model lists (an API endpoint is active)", () => {
       authoritativeModelProviders: ENDPOINT_ACTIVE,
     });
     expect(switched.form.model).toBe("relay/haiku");
+  });
+
+  it("moves an open draft off an endpoint choice when the switch goes back to Official", () => {
+    const endpoint = {
+      type: "INPUTS_CHANGED" as const,
+      serverId: "host",
+      isVisible: true,
+      isCreateFlow: true,
+      isPreferencesLoading: false,
+      hasSnapshot: true,
+      initialValues: undefined,
+      preferences: {
+        provider: "claude",
+        providerPreferences: { claude: { model: "relay/sonnet" } },
+      },
+      allowedProviderMap: claudeProviderMap,
+      providerModelsByProvider: makeProviderModelsByProvider([["claude", RELAY_MODELS]]),
+      authoritativeModelProviders: ENDPOINT_ACTIVE,
+    };
+    const draft = resolveAgentForm(makeState(), endpoint);
+    expect(draft.form.model).toBe("relay/sonnet");
+
+    const official = resolveAgentForm(draft, {
+      ...endpoint,
+      providerModelsByProvider: makeProviderModelsByProvider([
+        ["claude", [{ provider: "claude", id: "claude-opus-5-5", label: "Opus", isDefault: true }]],
+      ]),
+      authoritativeModelProviders: new Set<AgentProvider>(),
+    });
+    expect(official.form.model).toBe("claude-opus-5-5");
   });
 
   it("marks only providers whose snapshot says the list is authoritative", () => {

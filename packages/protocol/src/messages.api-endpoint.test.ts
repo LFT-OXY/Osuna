@@ -375,6 +375,27 @@ describe("providers snapshot activeApiEndpoint", () => {
   });
 });
 
+describe("providers snapshot apiEndpointModelGroups", () => {
+  const entry = { provider: "claude", status: "ready" as const, enabled: true };
+
+  it("parses the models grouped by endpoint, with the slashed id kept opaque", () => {
+    const groups = [
+      {
+        name: "Relay A",
+        models: [{ provider: "claude", id: "relay-a/kimi-k2", label: "kimi-k2", isDefault: true }],
+      },
+    ];
+    expect(
+      ProviderSnapshotEntrySchema.parse({ ...entry, apiEndpointModelGroups: groups })
+        .apiEndpointModelGroups,
+    ).toEqual(groups);
+  });
+
+  it("reads an older host without the field as ungrouped", () => {
+    expect(ProviderSnapshotEntrySchema.parse(entry).apiEndpointModelGroups).toBeUndefined();
+  });
+});
+
 describe("timeline notification apiEndpointModeMismatch", () => {
   const notification = {
     type: "notification" as const,
@@ -393,5 +414,254 @@ describe("timeline notification apiEndpointModeMismatch", () => {
 
   it("parses a notification from an older host without the field", () => {
     expect(AgentTimelineItemPayloadSchema.parse(notification)).toEqual(notification);
+  });
+});
+
+// 主机级接口（apiEndpointGateway）：新字段全部可选，老客户端照旧读投影字段。
+describe("host-wide API endpoints", () => {
+  const hostWideEndpoint = {
+    ...ENDPOINT,
+    baseUrls: [
+      { format: "anthropic_messages", url: "https://openrouter.ai/api" },
+      { format: "openai_chat", url: "https://openrouter.ai/api/v1" },
+      { format: "a_future_format", url: "https://openrouter.ai/future" },
+    ],
+    enabled: false,
+  };
+
+  it("parses a list response that carries every agent's switch and default model", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-h1",
+        provider: "claude",
+        endpoints: [hostWideEndpoint],
+        activeEndpointId: null,
+        agents: {
+          claude: { enabled: true, defaultModelId: "z-ai/glm-4.6" },
+          codex: { enabled: false, defaultModelId: null },
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses a save request with format base URLs and no default model", () => {
+    const request = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-h2",
+      provider: "claude",
+      name: "OpenRouter",
+      apiKey: "sk-secret",
+      baseUrls: [{ format: "openai_chat", url: "https://openrouter.ai/api/v1" }],
+      models: [],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
+  it("parses an endpoint with its upstream list and hand-added models, and a save that carries them", () => {
+    const response = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: {
+        requestId: "req-h5",
+        endpoint: {
+          ...hostWideEndpoint,
+          catalog: { fetchedAt: "2026-10-14T08:00:00.000Z", models: [{ id: "gpt-5" }] },
+          manualModels: [{ id: "hidden-model" }],
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+    const request = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-h6",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "OpenRouter",
+      baseUrls: [{ format: "openai_chat", url: "https://openrouter.ai/api/v1" }],
+      models: [{ id: "hidden-model" }],
+      manualModels: [{ id: "hidden-model" }],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
+  it("parses fetch_models and test_connection by base URL and format, without a model to test", () => {
+    for (const type of [
+      "provider.api_endpoint.fetch_models.request",
+      "provider.api_endpoint.test_connection.request",
+    ] as const) {
+      const request = {
+        type,
+        requestId: `req-${type}`,
+        provider: "claude",
+        endpointId: "ep_1",
+        baseUrl: "https://openrouter.ai/api/v1",
+        format: "openai_chat",
+      };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    }
+  });
+
+  it("parses a list response that says why the gateway can't be used, and one without it", () => {
+    const base = {
+      requestId: "req-h4",
+      provider: "codex",
+      endpoints: [hostWideEndpoint],
+      activeEndpointId: null,
+      error: null,
+    };
+    const unavailable = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        ...base,
+        gatewayUnavailable: { code: "gateway_requires_tcp", message: "socket" },
+      },
+    };
+    const available = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: { ...base, gatewayUnavailable: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(unavailable)).toEqual(unavailable);
+    expect(SessionOutboundMessageSchema.parse(available)).toEqual(available);
+  });
+
+  it("parses endpoints cooling down, needing a check, and available", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-h5",
+        provider: "claude",
+        endpoints: [
+          {
+            ...hostWideEndpoint,
+            cooldown: { state: "cooling_down", reason: "quota", until: "2026-10-14T12:15:00.000Z" },
+          },
+          {
+            ...hostWideEndpoint,
+            id: "ep_2",
+            cooldown: { state: "needs_check", reason: "auth", until: null },
+          },
+          { ...hostWideEndpoint, id: "ep_3", cooldown: null },
+        ],
+        activeEndpointId: null,
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses set_agent_settings request and response", () => {
+    const request = {
+      type: "provider.api_endpoint.set_agent_settings.request" as const,
+      requestId: "req-h3",
+      provider: "codex",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const withoutDefault = { ...request, enabled: false, defaultModelId: undefined };
+    expect(SessionInboundMessageSchema.parse(withoutDefault)).toMatchObject({ enabled: false });
+
+    const response = {
+      type: "provider.api_endpoint.set_agent_settings.response" as const,
+      payload: {
+        requestId: "req-h3",
+        provider: "codex",
+        agent: { enabled: true, defaultModelId: "gpt-5" },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const rejected = {
+      ...response,
+      payload: {
+        ...response.payload,
+        agent: { enabled: false, defaultModelId: null },
+        error: { code: "no_usable_model", message: "No endpoint is on with a model selected" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(rejected)).toEqual(rejected);
+  });
+
+  it("parses set_endpoint_state for the switch and for resuming now", () => {
+    const toggle = {
+      type: "provider.api_endpoint.set_endpoint_state.request" as const,
+      requestId: "req-h4",
+      endpointId: "ep_1",
+      enabled: false,
+    };
+    expect(SessionInboundMessageSchema.parse(toggle)).toEqual(toggle);
+    const resume = {
+      type: "provider.api_endpoint.set_endpoint_state.request" as const,
+      requestId: "req-h5",
+      endpointId: "ep_1",
+      clearCooldown: true,
+    };
+    expect(SessionInboundMessageSchema.parse(resume)).toEqual(resume);
+
+    const response = {
+      type: "provider.api_endpoint.set_endpoint_state.response" as const,
+      payload: { requestId: "req-h4", endpointId: "ep_1", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses detect_formats with a saved key, and per-format results including unknown ones", () => {
+    const request = {
+      type: "provider.api_endpoint.detect_formats.request" as const,
+      requestId: "req-h6",
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+
+    const response = {
+      type: "provider.api_endpoint.detect_formats.response" as const,
+      payload: {
+        requestId: "req-h6",
+        results: [
+          {
+            format: "anthropic_messages",
+            url: "https://relay.example",
+            status: "ok",
+            httpStatus: 200,
+            message: null,
+          },
+          {
+            format: "openai_chat",
+            url: "https://relay.example/v1",
+            status: "auth_failed",
+            httpStatus: 401,
+            message: "HTTP 401: invalid key",
+          },
+          {
+            format: "a_future_format",
+            url: "https://relay.example/future",
+            status: "a_future_status",
+            httpStatus: null,
+            message: "connection refused",
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
+
+  it("parses a host that advertises apiEndpointGateway, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpoints: true, apiEndpointGateway: true },
+    });
+    expect(current.features?.apiEndpointGateway).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpoints: true },
+    });
+    expect(older.features?.apiEndpointGateway).toBeUndefined();
   });
 });

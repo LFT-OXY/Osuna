@@ -45,8 +45,6 @@ import { isNative, isWeb } from "@/constants/platform";
 import {
   buildProviderQualifiedDescription,
   buildSelectedTriggerLabel,
-  getAllProviderModelRows,
-  getProviderModelRows,
   resolveSelectedModelLabel,
   type ProviderSelectionModelRow,
   type ProviderSelectorProvider,
@@ -62,14 +60,14 @@ import {
   followSelectedProviderView,
   scopeModelBrowserProviders,
   selectProviderViewProfileRows,
+  buildModelListItems,
+  resolveModelBrowserDesktopHeight,
   type ModelBrowserScope,
   type ModelBrowserView,
+  type ModelListItem,
 } from "@/components/model-browser-view";
-
-const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
-const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 400;
-const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 80;
-const DESKTOP_MODEL_ROW_HEIGHT = 40;
+import { modelFamilyOf } from "@/api-endpoints";
+import { ModelFamilyIcon } from "@/api-endpoints/model-family-icon";
 
 const ThemedAlertTriangle = withUnistyles(AlertTriangle);
 const ThemedCheck = withUnistyles(Check);
@@ -248,28 +246,6 @@ function iconButtonStyle({ hovered, pressed }: PressableStateCallbackType & { ho
   ];
 }
 
-function countModelsInView(view: ModelBrowserView, providers: ProviderSelectorProvider[]): number {
-  if (view.kind === "all") {
-    return getAllProviderModelRows(providers).length;
-  }
-  const provider = providers.find((entry) => entry.id === view.providerId);
-  return provider?.modelSelection.kind === "models" ? getProviderModelRows(provider).length : 0;
-}
-
-function resolveDesktopFixedHeight(
-  view: ModelBrowserView,
-  providers: ProviderSelectorProvider[],
-): number {
-  const modelCount = countModelsInView(view, providers);
-  return Math.min(
-    Math.max(
-      DESKTOP_PROVIDER_VIEW_MIN_HEIGHT,
-      DESKTOP_PROVIDER_VIEW_BASE_HEIGHT + modelCount * DESKTOP_MODEL_ROW_HEIGHT,
-    ),
-    DESKTOP_PROVIDER_VIEW_MAX_HEIGHT,
-  );
-}
-
 export function useModelBrowser({
   providers: allProviders,
   selectedProvider,
@@ -413,8 +389,14 @@ export function useModelBrowser({
   }, [selectedModelLabel, t]);
 
   const desktopFixedHeight = useMemo(
-    () => resolveDesktopFixedHeight(view, providers),
-    [providers, view],
+    () =>
+      resolveModelBrowserDesktopHeight({
+        view,
+        providers,
+        profileRows: profiles?.rows ?? null,
+        scope,
+      }),
+    [profiles, providers, scope, view],
   );
 
   return {
@@ -697,16 +679,20 @@ function ModelRow({
 }) {
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
+  const isEndpointRow = row.apiEndpointGroup !== undefined;
   const leadingSlot = useMemo(
-    () => (
-      <ModelProviderGlyph
-        provider={row.provider}
-        serverId={serverId}
-        size={ICON_SIZE.sm}
-        tone="brand"
-      />
-    ),
-    [row.provider, serverId],
+    () =>
+      isEndpointRow ? (
+        <ModelFamilyIcon family={modelFamilyOf(row.modelId)} size={ICON_SIZE.sm} />
+      ) : (
+        <ModelProviderGlyph
+          provider={row.provider}
+          serverId={serverId}
+          size={ICON_SIZE.sm}
+          tone="brand"
+        />
+      ),
+    [isEndpointRow, row.modelId, row.provider, serverId],
   );
 
   const description = showProviderLabel ? buildProviderQualifiedDescription(row) : row.description;
@@ -1110,21 +1096,21 @@ function IndependentScrollBoundary({ children }: { children: React.ReactElement 
 }
 
 function IndependentModelList({
-  rows,
+  items,
   renderItem,
   header,
 }: {
-  rows: ProviderSelectionModelRow[];
-  renderItem: ({ item }: { item: ProviderSelectionModelRow }) => React.ReactElement;
+  items: ModelListItem[];
+  renderItem: ({ item }: { item: ModelListItem }) => React.ReactElement;
   header?: React.ReactElement;
 }) {
   return (
     <IndependentScrollBoundary>
       <FlatList
-        data={rows}
+        data={items}
         renderItem={renderItem}
         ListHeaderComponent={header}
-        keyExtractor={getModelRowKey}
+        keyExtractor={getModelListItemKey}
         style={styles.virtualizedModelList}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -1137,8 +1123,19 @@ function IndependentModelList({
   );
 }
 
-function getModelRowKey(row: ProviderSelectionModelRow): string {
-  return row.favoriteKey;
+function getModelListItemKey(item: ModelListItem): string {
+  return item.key;
+}
+
+/** 第三方接口启用时模型按接口分组，组标题是接口名。 */
+function ApiEndpointGroupHeading({ name }: { name: string }) {
+  return (
+    <View style={styles.sectionHeading} testID={`model-endpoint-group-${name}`}>
+      <Text style={styles.sectionHeadingText} numberOfLines={1}>
+        {name}
+      </Text>
+    </View>
+  );
 }
 
 function IndependentProviderList({ children }: { children: React.ReactNode }) {
@@ -1169,6 +1166,7 @@ function ModelRowList({
   selectedModel,
   onSelect,
   showProviderLabel = false,
+  groupByApiEndpoint = false,
   header,
   scrolling,
   profiledLookup,
@@ -1177,6 +1175,8 @@ function ModelRowList({
   onEditProfiles,
 }: {
   rows: ProviderSelectionModelRow[];
+  // 只在单个提供方的视图里分组；跨提供方的搜索结果平铺，接口名写在描述里。
+  groupByApiEndpoint?: boolean;
   serverId: string | null;
   selectedProvider: string;
   selectedModel: string;
@@ -1190,20 +1190,27 @@ function ModelRowList({
   onEditProfiles?: () => void;
 }) {
   const isCompact = useIsCompactFormFactor();
+  const items = useMemo(
+    () => buildModelListItems(rows, { groupByApiEndpoint }),
+    [groupByApiEndpoint, rows],
+  );
   const renderItem = useCallback(
-    ({ item }: { item: ProviderSelectionModelRow }) => (
-      <SelectableModelRow
-        row={item}
-        serverId={serverId}
-        isSelected={item.provider === selectedProvider && item.modelId === selectedModel}
-        showProviderLabel={showProviderLabel}
-        onSelect={onSelect}
-        profiledRows={profiledLookup.get(`${item.provider}:${item.modelId}`) ?? []}
-        onCreateProfile={onCreateProfile}
-        onEditProfile={onEditProfile}
-        onEditProfiles={onEditProfiles}
-      />
-    ),
+    ({ item }: { item: ModelListItem }) =>
+      item.kind === "group" ? (
+        <ApiEndpointGroupHeading name={item.name} />
+      ) : (
+        <SelectableModelRow
+          row={item.row}
+          serverId={serverId}
+          isSelected={item.row.provider === selectedProvider && item.row.modelId === selectedModel}
+          showProviderLabel={showProviderLabel}
+          onSelect={onSelect}
+          profiledRows={profiledLookup.get(`${item.row.provider}:${item.row.modelId}`) ?? []}
+          onCreateProfile={onCreateProfile}
+          onEditProfile={onEditProfile}
+          onEditProfiles={onEditProfiles}
+        />
+      ),
     [
       onEditProfile,
       onEditProfiles,
@@ -1216,19 +1223,17 @@ function ModelRowList({
       showProviderLabel,
     ],
   );
-  const keyExtractor = useCallback((row: ProviderSelectionModelRow) => row.favoriteKey, []);
-
   if (scrolling === "independent") {
-    return <IndependentModelList rows={rows} renderItem={renderItem} header={header} />;
+    return <IndependentModelList items={items} renderItem={renderItem} header={header} />;
   }
 
   if (isCompact && isNative) {
     return (
       <SheetFlatList
-        data={rows}
+        data={items}
         renderItem={renderItem}
         ListHeaderComponent={header}
-        keyExtractor={keyExtractor}
+        keyExtractor={getModelListItemKey}
         style={styles.virtualizedModelList}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -1240,8 +1245,8 @@ function ModelRowList({
   return (
     <View>
       {header}
-      {rows.map((row) => (
-        <View key={row.favoriteKey}>{renderItem({ item: row })}</View>
+      {items.map((item) => (
+        <View key={item.key}>{renderItem({ item })}</View>
       ))}
     </View>
   );
@@ -1389,6 +1394,7 @@ function ProviderModelBrowserContent({
       selectedProvider={selectedProvider}
       selectedModel={selectedModel}
       onSelect={onSelect}
+      groupByApiEndpoint
       header={profileHeader}
       scrolling={scrolling}
       profiledLookup={profiledLookup}

@@ -1,0 +1,146 @@
+Third-party notices
+
+This project includes code ported or copied from the following third-party
+software. Each such file says so in its header and points here.
+
+--------------------------------------------------------------------------------
+magpie — https://github.com/yetone/magpie
+--------------------------------------------------------------------------------
+
+The API endpoint gateway's failure classification, cooldowns, and conversation
+stickiness are ported to TypeScript from magpie's internal/gateway
+(routing.go, fallback.go, affinity.go, gateway.go, prompt.go), and so are
+the order the gateway asks endpoints in and the retry of the last one
+(restLast, probeOne, passing in fallback.go). Their tests take magpie's
+constants and the vendor error texts quoted in its source comments:
+
+  packages/server/src/server/api-endpoints/gateway/failure.ts
+  packages/server/src/server/api-endpoints/gateway/cooldown.ts
+  packages/server/src/server/api-endpoints/gateway/affinity.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/cooldown.test.ts
+  packages/server/src/server/api-endpoints/gateway/affinity.test.ts
+
+The gateway's protocol translation (the shared intermediate format, Anthropic
+Messages, OpenAI Chat, OpenAI Responses, tool-pairing repair, SSE reading) is
+ported from
+magpie's internal/gateway (ir.go, anthropic.go, chat.go, responses.go, sse.go,
+gateway.go), and its tests reuse cases from magpie's
+anthropic_tool_pairing_test.go, chat_tool_pairing_test.go,
+pair_tool_items_test.go, orphan_tool_output_test.go, translate_stream_test.go,
+devin_tool_ids_test.go, anthropic_cache_ttl_test.go, stop_context_test.go,
+minimax_think_test.go, format_test.go, reasoning_replay_test.go,
+deepseek_anthropic_thinking_test.go, anthropic_image_source_test.go,
+attachments_test.go, upstream_bytes_test.go, namespace_test.go,
+codex_custom_tools_test.go, agent_message_test.go, codex_developer_cache_test.go,
+tool_strict_test.go, responses_file_id_test.go, responses_cache_write_test.go,
+reasoning_state_responses_test.go, reasoning_passthrough_test.go and
+deepseek_step_lead_test.go. The pass-through request's thinking fixes for other
+vendors' models (thinkingOffUnlessAsked, withThinkingOnToolTurns in
+anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
+
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/sse.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/*.test.ts
+
+Reasoning turned off, sent the way each model takes it: thinkingOffOf,
+thinkingOffAsTaken and withoutThinkingOff in anthropic.go, thinkingBackOn in
+wire_effort.go, and the refusal words (alwaysThinks, refusesThinkingOff,
+thinkingOffRefused in anthropic.go; mandatoryReasoning, effortLevelsNamed,
+noneQuoted in gateway.go) with the retry at the lowest level in gateway.go.
+Their tests reuse cases from thinking_off_test.go, sub2api_think_off_test.go
+and gateway_test.go. The Codex catalog's default reasoning level follows
+ModelDefault in internal/codexcat/codexcat.go and NearestEffort in
+internal/catalog/catalog.go:
+
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+The request-format choice (chooseRequestFormat) follows magpie's usable and
+MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go):
+
+  packages/server/src/server/api-endpoints/gateway/routing.ts
+
+Request-format auto-detection (each format's base URL, the model asked, the
+smallest request) follows magpie's internal/provider/detect.go and test.go:
+
+  packages/server/src/server/api-endpoints/upstream-detect.ts
+
+Who owns the modelPicker in Claude Code's settings.json (the user's is left
+alone; magpie's own is rewritten, or dropped when it has no rows) follows
+writePicker and dropPicker in magpie's internal/agent/claude.go:
+
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+
+What Claude Code is told about an endpoint model it doesn't know (the [1m]
+mark, CLAUDE_CODE_MAX_CONTEXT_TOKENS, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
+CLAUDE_CODE_MODEL_CAPABILITIES, and leaving a value the user set alone)
+follows claude1M, claudeWindow, claudeOutput, claudeCaps and
+claudeCapabilities in magpie's internal/agent/claude.go; how a model is
+looked up in the models.dev catalog (the bare id, the value most providers
+give) follows bareID, found, mostGiven, mostListed and window in magpie's
+internal/catalog/catalog.go:
+
+  packages/server/src/server/api-endpoints/claude-model-hints.ts
+  packages/server/src/server/api-endpoints/model-facts.ts
+
+The settings page's model families (which model name prefix belongs to which
+vendor) follow magpie's internal/agent/icons.go, and the vendor logos are
+magpie's internal/gui/assets/icons/ (claude-color, openai, gemini-color,
+deepseek-color, xai, kimi, zhipu-color, qwen-color, mistral-color,
+minimax-color, mimocode, stepfun-color), with width, height, style and
+<title> removed:
+
+  packages/app/src/api-endpoints/internal/model-families.ts
+  packages/app/src/api-endpoints/internal/model-families.test.ts
+  packages/app/src/assets/model-family-icons.ts
+  packages/app/src/assets/model-family-icons/*.svg
+
+MIT License
+
+Copyright (c) 2026 yetone
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+OpenAI Codex — https://github.com/openai/codex
+--------------------------------------------------------------------------------
+
+The base instructions Codex gives a model it does not know are copied verbatim
+from codex-rs/models-manager/prompt.md (commit 90f00bd) into the Codex model
+catalog the daemon writes for API endpoint models:
+
+  packages/server/src/server/api-endpoints/codex-base-instructions.ts
+
+The descriptions of the four reasoning levels in that catalog are copied from
+codex-rs/models-manager/models.json (same commit):
+
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+
+Copyright 2025 OpenAI. Licensed under the Apache License, Version 2.0, whose
+full text is in this repository's LICENSE.

@@ -104,7 +104,6 @@ export function toStoredAgentRecord(
       : null,
     internal: options?.internal,
     owner: agent.owner,
-    apiEndpointId: agent.apiEndpointId,
   } satisfies StoredAgentRecord;
 }
 

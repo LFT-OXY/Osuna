@@ -11,7 +11,9 @@ import {
   groupProviderMenuEntries,
   matchesModelSearch,
   resolveSelectedModelLabel,
+  resolveSnapshotModelLabel,
   resolveSubmissionReadiness,
+  selectableEntryModels,
 } from "./provider-selection";
 
 describe("combined model selector data", () => {
@@ -502,3 +504,88 @@ function getAllModelLabels(providers: ReturnType<typeof buildSelectableProviderS
       : [],
   );
 }
+
+describe("models grouped by API endpoint", () => {
+  // 总开关开着时快照同时带光秃秃的 models（老客户端看）与按接口分组的 apiEndpointModelGroups。
+  const entry: ProviderSnapshotEntry = {
+    provider: "claude",
+    status: "ready",
+    enabled: true,
+    label: "Claude Code",
+    models: [
+      { provider: "claude", id: "shared", label: "shared", isDefault: true },
+      { provider: "claude", id: "kimi-k2", label: "kimi-k2" },
+    ],
+    isModelListAuthoritative: true,
+    apiEndpointModelGroups: [
+      {
+        name: "Relay A",
+        models: [
+          { provider: "claude", id: "relay-a/shared", label: "shared", isDefault: true },
+          { provider: "claude", id: "relay-a/kimi-k2", label: "kimi-k2" },
+        ],
+      },
+      {
+        name: "Relay B",
+        models: [{ provider: "claude", id: "relay-b/shared", label: "shared" }],
+      },
+    ],
+  };
+
+  it("the selectable models are the grouped ones, one per endpoint for a shared name", () => {
+    expect(selectableEntryModels(entry)?.map((model) => model.id)).toEqual([
+      "relay-a/shared",
+      "relay-a/kimi-k2",
+      "relay-b/shared",
+    ]);
+    const official = { ...entry, apiEndpointModelGroups: undefined };
+    expect(selectableEntryModels(official)?.map((model) => model.id)).toEqual([
+      "shared",
+      "kimi-k2",
+    ]);
+  });
+
+  it("rows carry their endpoint group and never show the slashed id", () => {
+    const [provider] = buildSelectableProviderSelectorProviders([entry]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(
+      rows.map((row) => [row.modelId, row.modelLabel, row.description, row.apiEndpointGroup]),
+    ).toEqual([
+      ["relay-a/shared", "shared", undefined, { name: "Relay A", index: 0 }],
+      ["relay-a/kimi-k2", "kimi-k2", undefined, { name: "Relay A", index: 0 }],
+      ["relay-b/shared", "shared", undefined, { name: "Relay B", index: 1 }],
+    ]);
+  });
+
+  it("the selected label is the bare model name", () => {
+    const providers = buildSelectableProviderSelectorProviders([entry]);
+    expect(
+      resolveSelectedModelLabel({
+        providers,
+        selectedProvider: "claude",
+        selectedModel: "relay-b/shared",
+        isLoading: false,
+      }),
+    ).toBe("shared");
+  });
+
+  it("cross-provider results name the endpoint instead of the id", () => {
+    const [provider] = buildSelectableProviderSelectorProviders([entry]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(buildProviderQualifiedDescription(rows[2])).toBe("Claude Code · Relay B");
+  });
+
+  it("a session's endpoint model id reads as the bare name elsewhere in the app", () => {
+    expect(resolveSnapshotModelLabel([entry], "claude", "relay-b/shared")).toBe("shared");
+    expect(resolveSnapshotModelLabel([entry], "claude", "unknown")).toBe("unknown");
+    expect(resolveSnapshotModelLabel(undefined, "claude", "relay-b/shared")).toBe("relay-b/shared");
+  });
+
+  it("searching an endpoint name finds its models", () => {
+    const [provider] = buildSelectableProviderSelectorProviders([entry]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(filterAndRankModelRows(rows, "relay b").map((row) => row.modelId)).toEqual([
+      "relay-b/shared",
+    ]);
+  });
+});

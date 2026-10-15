@@ -3,20 +3,19 @@ import type {
   AgentFeatureSelect,
   AgentFeatureToggle,
   AgentProviderNotice,
+  ApiEndpointModelGroup,
   AgentTaskItem,
   JsonValue,
   ProviderOptions,
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
-import type {
-  ApiEndpointModeMismatch,
-  ApiEndpointRef,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 export type {
+  ApiEndpointModelGroup,
   AgentFeature,
   AgentFeatureSelect,
   AgentFeatureToggle,
@@ -147,6 +146,8 @@ export interface ProviderSnapshotEntry {
   isModelListAuthoritative?: boolean;
   // 当前启用的第三方接口；官方模式下没有。
   activeApiEndpoint?: ApiEndpointRef;
+  // 总开关开着时按接口分组的可选模型；官方模式下没有。
+  apiEndpointModelGroups?: ApiEndpointModelGroup[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }
@@ -415,7 +416,6 @@ export type AgentTimelineItem =
       type: "notification";
       level: "info" | "warning" | "error";
       message: string;
-      apiEndpointModeMismatch?: ApiEndpointModeMismatch;
     }
   | CompactionTimelineItem
   | PluginTimelineItem;
@@ -775,11 +775,10 @@ export type ProviderModelOverride = (provider: AgentProvider) => AgentModelDefin
 /** 当前启用的第三方接口；官方模式或不支持的提供方为 null。 */
 export type ActiveApiEndpointLookup = (provider: AgentProvider) => ApiEndpointRef | null;
 
-/** 会话按创建时的模式记录接口 id，恢复时对照当前模式；接口已删除时 endpointName 为 null。 */
-export interface ApiEndpointModeSource {
-  active: ActiveApiEndpointLookup;
-  endpointName(provider: AgentProvider, endpointId: string): string | null;
-}
+/** 总开关开着时按接口分组的可选模型；官方模式或不支持的提供方为 null。 */
+export type ApiEndpointModelGroupsLookup = (
+  provider: AgentProvider,
+) => ApiEndpointModelGroup[] | null;
 
 export interface ResolveAgentDefaultModeInput {
   config: AgentSessionConfig;

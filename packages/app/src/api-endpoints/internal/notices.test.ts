@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import {
-  describeApiEndpointModeMismatch,
-  selectActiveApiEndpoint,
-  selectInheritedApiEndpoint,
-} from "./notices";
+import { selectActiveApiEndpoint, selectInheritedApiEndpoint } from "./notices";
 
 const RELAY = { id: "ep_1", name: "Relay" };
 
@@ -62,49 +58,5 @@ describe("selectInheritedApiEndpoint", () => {
         entries: [entry("codex", RELAY), entry("my-codex")],
       }),
     ).toBeNull();
-  });
-});
-
-describe("describeApiEndpointModeMismatch", () => {
-  const prefix = "agentStream.apiEndpointMode";
-
-  it("names the endpoint a session was created with when it's now Official", () => {
-    expect(describeApiEndpointModeMismatch({ createdIn: RELAY, current: null })).toEqual({
-      key: `${prefix}.endpointToOfficial`,
-      params: { created: "Relay" },
-    });
-  });
-
-  it("says the endpoint was deleted when the name is gone", () => {
-    expect(
-      describeApiEndpointModeMismatch({ createdIn: { id: "ep_1", name: null }, current: null }),
-    ).toEqual({ key: `${prefix}.deletedToOfficial`, params: {} });
-    expect(
-      describeApiEndpointModeMismatch({
-        createdIn: { id: "ep_1", name: null },
-        current: { id: "ep_2", name: "Other" },
-      }),
-    ).toEqual({ key: `${prefix}.deletedToEndpoint`, params: { current: "Other" } });
-  });
-
-  it("names the current endpoint for a session created on Official", () => {
-    expect(describeApiEndpointModeMismatch({ createdIn: null, current: RELAY })).toEqual({
-      key: `${prefix}.officialToEndpoint`,
-      params: { current: "Relay" },
-    });
-  });
-
-  it("leaves the daemon's text for other notifications and when both sides are Official", () => {
-    expect(describeApiEndpointModeMismatch(undefined)).toBeNull();
-    expect(describeApiEndpointModeMismatch({ createdIn: null, current: null })).toBeNull();
-  });
-
-  it("names both endpoints when a session moves between two of them", () => {
-    expect(
-      describeApiEndpointModeMismatch({ createdIn: RELAY, current: { id: "ep_2", name: "Other" } }),
-    ).toEqual({
-      key: `${prefix}.endpointToEndpoint`,
-      params: { created: "Relay", current: "Other" },
-    });
   });
 });

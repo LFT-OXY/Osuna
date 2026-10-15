@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "project": "Osuna · 第三方接口自动切换",
+  "brief": "Claude Code 提供方详情页的「第三方接口」区：整台电脑共用的接口、本 Agent 的开关与默认模型、每家的协议与状态（可用 / 冷却中 / 需要检查 / 已暂停）。三种排法同一份数据，只换结构。",
+  "round": "08-01",
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状：单选启用",
+      "concept": "现在的样子：官方加每家一行，只能「使用」其中一家。",
+      "typography": "沿用 Osuna 设置页：系统无衬线 14px 正文，地址用等宽",
+      "palette": ["#fafafa", "#ffffff", "#e4e4e7", "#1b4ed8", "#3e704a"],
+      "traits": ["一次只能用一家", "没有状态", "编辑删除平铺在行尾"],
+      "kind": "html",
+      "source": "baseline.html",
+      "baseline": true
+    },
+    {
+      "id": "a",
+      "name": "A 一张卡片列到底",
+      "concept": "一眼看全：每家一行，名字、协议、状态和开关都在明面上，其余操作收进「⋯」。",
+      "typography": "沿用 Osuna 设置页：系统无衬线 14px 正文，地址用等宽",
+      "palette": ["#ffffff", "#e4e4e7", "#1b4ed8", "#7b5d39", "#9d433b"],
+      "traits": ["默认模型放卡片第一行", "状态用彩色小标签", "编辑/暂停/恢复/删除在「⋯」菜单（图中展开了 Kimi 那一行的菜单）"],
+      "kind": "html",
+      "source": "a.html"
+    },
+    {
+      "id": "b",
+      "name": "B 拆成上下两块",
+      "concept": "把「这个 Agent 用哪几家」和「大家共用的接口」分开管。",
+      "typography": "沿用 Osuna 设置页：系统无衬线 14px 正文，地址用等宽",
+      "palette": ["#ffffff", "#e4e4e7", "#1b4ed8", "#7b5d39", "#9d433b"],
+      "traits": ["上块只有开关和默认模型", "下块管状态和操作，并写出哪些 Agent 在用", "同一家接口出现两次"],
+      "kind": "html",
+      "source": "b.html"
+    },
+    {
+      "id": "c",
+      "name": "C 每行可以点开",
+      "concept": "平时最清爽，一家一行；要看细节或操作时点开那一行。",
+      "typography": "沿用 Osuna 设置页：系统无衬线 14px 正文，地址用等宽",
+      "palette": ["#ffffff", "#e4e4e7", "#1b4ed8", "#7b5d39", "#71717a"],
+      "traits": ["收起时只有名字、状态、开关", "点开显示协议、地址、模型、恢复时间和按钮（图中点开了 Kimi）", "看细节要多点一下"],
+      "kind": "html",
+      "source": "c.html"
+    }
+  ]
+}
