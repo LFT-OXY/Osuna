@@ -1049,3 +1049,26 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 - worktree ~/.paseo/worktrees/0x9u2djy/curvy-gorilla 这次没有被自动归档，本机与远端的分支 merge-upstream-v0-11-all 也还在，留给维护者处理；本机 arm64 安装包在 ~/Downloads/osuna-v0.11.2-merge-backup/ 有备份
 - 后续任务：10-11-muse-antigravity-osuna-gaps、10-11-opencode-v2-osuna-gaps、10-13-zh-relative-time-and-plan-labels
 - ATW 有 0.6.0 可升级
+
+
+## Session 35: 第三方接口自动切换：真实 CLI 验收、开 PR #17 并归档
+<!-- atw-session: v=2 fp=661c3120bcf59e83 -->
+
+**Date**: 2026-10-15
+**Task**: 第三方接口自动切换：真实 CLI 验收、开 PR #17 并归档
+**Package**: app
+**Branch**: `research-multi-provider-gateway-failover`
+
+### Summary
+
+重编 server dist 后用隔离环境（6769 端口、/tmp/osuna-acceptance 下的临时 CLAUDE_CONFIG_DIR / CODEX_HOME）启动 dev 桌面端，用户完成工单 14 的真实 CLI 验收 1～5 项；核对关开关后 settings.json 与备份逐字节相同，config.toml 只剩 Codex 自己写的推理档位与钩子信任记录，gateway-tokens.json、codex-models.json 已删除。推送分支并开 PR #17（第 6 项 merge commit 待合并后完成），因合并后 worktree 会被自动删除，先关工单 14 并归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b260bf904` | chore(atw): 工单 14 勾上真实 CLI 验收项（1～5） |
+
+### Status
+
+[OK] **Completed**

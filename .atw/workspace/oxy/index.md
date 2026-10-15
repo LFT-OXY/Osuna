@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
-- **Last Active**: 2026-10-13
+- **Total Sessions**: 35
+- **Last Active**: 2026-10-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1051 | Active |
+| `journal-1.md` | ~1074 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-10-15 | 第三方接口自动切换：真实 CLI 验收、开 PR #17 并归档 | `b260bf904` | `research-multi-provider-gateway-failover` |
 | 34 | 2026-10-13 | 合并上游 v0.11.2：PR #16 并入 main 后的收尾——关闭工单 15 与任务归档 | `1826fde6b`, `f3f3a766e`, `8d42692e9`, `000e8ac2e` | `main` |
 | 33 | 2026-10-13 | 合并上游 v0.11.2：工单 15 并入前的收尾——本机 macOS 包核对、docs/release.md、PR #16 正文 | `0c80ca6d4`, `7d81b5d53` | `merge-upstream-v0-11-all` |
 | 32 | 2026-10-11 | 合并上游 v0.10.3：PR #15 并入 main 后的收尾——关闭工单 07 与任务归档 | `a8002a587`, `2e527cb23` | `main` |
