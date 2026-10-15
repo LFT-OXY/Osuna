@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type PressableStateCallbackType,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -892,6 +900,9 @@ interface SettingsSidebarProps {
   layout: "desktop" | "mobile";
 }
 
+// 每个栏目是独立路由，换栏目时左栏会重新挂载；位置记在模块里，应用本次运行内一直有效。
+let rememberedSidebarScrollY = 0;
+
 function SettingsSidebar({
   view,
   onSelectSection,
@@ -920,6 +931,19 @@ function SettingsSidebar({
     () => [{ flex: 1 }, isDesktop ? { paddingTop: insets.top } : null],
     [insets.top, isDesktop],
   );
+  const scrollBodyRef = useRef<ScrollView>(null);
+  const [initialScrollOffset] = useState(() => ({ x: 0, y: rememberedSidebarScrollY }));
+  // react-native-web 不认 contentOffset，在首帧绘制前滚回去，避免先闪到顶部。
+  useLayoutEffect(() => {
+    if (!isWeb) return;
+    scrollBodyRef.current?.scrollTo({ y: rememberedSidebarScrollY, animated: false });
+  }, []);
+  const handleScrollBodyScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // 离开的旧页被隐藏时，web 会补发一次尺寸为 0、位置为 0 的滚动事件，不能把它记下来。
+    const { width, height } = event.nativeEvent.layoutMeasurement;
+    if (width <= 0 || height <= 0) return;
+    rememberedSidebarScrollY = event.nativeEvent.contentOffset.y;
+  }, []);
   const selectedSectionId = view.kind === "section" ? view.section : null;
   let selectedHostSection: HostSectionSlug | null = null;
   if (view.kind === "host") selectedHostSection = view.section;
@@ -1019,7 +1043,11 @@ function SettingsSidebar({
             />
           </View>
           <ScrollView
+            ref={scrollBodyRef}
             style={sidebarStyles.scrollBody}
+            contentOffset={initialScrollOffset}
+            onScroll={handleScrollBodyScroll}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
             testID="settings-sidebar-scroll-body"
           >

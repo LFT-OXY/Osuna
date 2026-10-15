@@ -1,0 +1,5 @@
+{"file": ".atw/spec/app/frontend/index.md", "reason": "app 包前端规范总索引；改动在设置页左栏"}
+{"file": ".atw/spec/app/frontend/component-guidelines.md", "reason": "组件写法；SettingsSidebar 内的 ScrollView 改动"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "滚动位置只存内存、应用本次运行期间有效，不持久化"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "前端测试写法；切换栏目后左栏滚动位置保持的用例"}
+{"file": "docs/expo-router.md", "reason": "设置栏目必须保持独立同级路由，不得合并路由拓扑"}
