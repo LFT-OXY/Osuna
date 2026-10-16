@@ -1,3 +1,6 @@
+// 同一个模型的写法与相近名字的例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 internal/provider/group.go
+// 的 sameModel 注释与 closest.go 的 Closest。
+
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointState, StoredApiEndpoint } from "../store.js";
 import { chooseRequestFormat, resolveGatewayRoute, sameModel } from "./routing.js";

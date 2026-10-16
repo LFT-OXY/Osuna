@@ -12,7 +12,7 @@ import { isRecord, parseJson } from "../upstream-http.js";
  */
 
 const MEMORY_KINDS = new Set(["memory_consolidation", "memgen", "memory"]);
-const REVIEW_KINDS = new Set(["guardian", "auto_review", "guardian_review"]);
+const REVIEW_KIND = "guardian";
 const REVIEW_MODEL = "codex-auto-review";
 
 function header(headers: IncomingHttpHeaders, name: string): string {
@@ -27,7 +27,9 @@ function callKind(headers: IncomingHttpHeaders): string {
   if (header(headers, "x-openai-memgen-request")) return "memgen";
   const metadata = parseJson(header(headers, "x-codex-turn-metadata"));
   const source = isRecord(metadata) ? metadata.thread_source : undefined;
-  return typeof source === "string" && source !== "user" && source !== "subagent" ? source : "";
+  if (typeof source !== "string") return "";
+  const ownTurn = source === "user" || source === "subagent";
+  return ownTurn ? "" : source;
 }
 
 export class CodexLastTurn {
@@ -41,7 +43,7 @@ export class CodexLastTurn {
   /** 记忆整理或 auto-review 找不到模型时改问的模型；不是这类请求、或还没有上一轮时为 null。 */
   standIn(headers: IncomingHttpHeaders, asked: string): string | null {
     const kind = callKind(headers);
-    const sideCall = MEMORY_KINDS.has(kind) || REVIEW_KINDS.has(kind) || asked === REVIEW_MODEL;
+    const sideCall = MEMORY_KINDS.has(kind) || kind === REVIEW_KIND || asked === REVIEW_MODEL;
     if (!sideCall || this.model === asked) return null;
     return this.model;
   }

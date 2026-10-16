@@ -225,8 +225,9 @@ function routeModel(input: {
     return route;
   }
   const standIn = agent === "codex" ? codexTurns.standIn(req.headers, model) : null;
-  const instead = standIn === null ? null : resolveGatewayRoute({ state, agent, model: standIn });
-  return instead?.ok ? instead : route;
+  if (standIn === null) return route;
+  const instead = resolveGatewayRoute({ state, agent, model: standIn });
+  return instead.ok ? instead : route;
 }
 
 /**

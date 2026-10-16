@@ -72,7 +72,8 @@ export function sameModel(id: string): string {
   }
   key = chars.join("");
   const cut = Math.max(key.lastIndexOf("-"), key.lastIndexOf("@"));
-  return cut > 0 && isSnapshotDate(key.slice(cut + 1)) ? key.slice(0, cut) : key;
+  if (cut <= 0 || !isSnapshotDate(key.slice(cut + 1))) return key;
+  return key.slice(0, cut);
 }
 
 function isDigit(char: string | undefined): boolean {
@@ -84,8 +85,12 @@ function isSnapshotDate(text: string): boolean {
   if (!/^\d+$/.test(text)) return false;
   if (text.length === 8) return text.startsWith("20");
   if (text.length !== 6) return false;
-  const [yy, mm, dd] = [0, 2, 4].map((at) => Number(text.slice(at, at + 2)));
-  return yy! >= 23 && yy! <= 39 && mm! >= 1 && mm! <= 12 && dd! >= 1 && dd! <= 31;
+  const yy = Number(text.slice(0, 2));
+  const mm = Number(text.slice(2, 4));
+  const dd = Number(text.slice(4, 6));
+  const arkYear = yy >= 23 && yy <= 39;
+  const realDay = mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
+  return arkYear && realDay;
 }
 
 /** 这家怎么写这个模型：写法完全相同的优先，否则第一个只差写法的；没选为 null。 */
@@ -108,8 +113,10 @@ function chooseEndpoint(input: {
   if (bare !== null) {
     const slug = model.slice(0, slash);
     const named = enabled.find((endpoint) => endpoint.slug === slug);
-    const upstreamModel = named ? listedAs(named, bare) : null;
-    if (named && upstreamModel !== null) return { endpoint: named, upstreamModel };
+    if (named) {
+      const upstreamModel = listedAs(named, bare);
+      if (upstreamModel !== null) return { endpoint: named, upstreamModel };
+    }
   }
   for (const name of bare === null ? [model] : [model, bare]) {
     const endpoint = enabled.find((entry) => entry.models.some((listed) => listed.id === name));
@@ -132,7 +139,7 @@ function chooseEndpoint(input: {
 /** 找不到模型时的说法：附上最接近的三个 id（magpie 的 unknownModel）。 */
 function unknownModel(state: ApiEndpointState, asked: string): string {
   const message = `No enabled API endpoint offers the model "${asked}"`;
-  const near = closestModels(state, asked, 3);
+  const near = closestModels({ state, asked, n: 3 });
   return near.length > 0 ? `${message}; did you mean ${near.join(", ")}?` : message;
 }
 
@@ -146,20 +153,22 @@ function nameWords(text: string): string[] {
  * 显示名里有这个词得 4 分、id 里有得 3 分、只在接口标识或名称里有得 1 分；
  * 只靠接口名对上的不算；连起来的整个名字出现在显示名或 id 里再加 4 分。
  */
-function closestModels(state: ApiEndpointState, asked: string, n: number): string[] {
-  const words = nameWords(asked);
+function closestModels(input: { state: ApiEndpointState; asked: string; n: number }): string[] {
+  const words = nameWords(input.asked);
   if (words.length === 0) return [];
   const hits: { id: string; score: number }[] = [];
-  for (const endpoint of state.endpoints) {
+  for (const endpoint of input.state.endpoints) {
     if (!endpoint.enabled) continue;
-    const from = new Set([...nameWords(endpoint.slug), ...nameWords(endpoint.name)]);
+    const endpointWords = [...nameWords(endpoint.slug), ...nameWords(endpoint.name)];
+    const from = new Set(endpointWords);
     for (const entry of endpoint.models) {
       const score = closeness({ words, label: entry.label ?? "", id: entry.id, from });
       if (score !== null) hits.push({ id: entry.id, score });
     }
   }
   hits.sort((a, b) => b.score - a.score);
-  return [...new Set(hits.map((hit) => hit.id))].slice(0, n);
+  const ids = new Set(hits.map((hit) => hit.id));
+  return [...ids].slice(0, input.n);
 }
 
 /** 一个模型离要的名字多近；没有一个词对上它自己的显示名或 id 为 null。 */
