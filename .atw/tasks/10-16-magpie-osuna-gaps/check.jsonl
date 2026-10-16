@@ -1,0 +1,8 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范：中转站、用量、CLI 配置改写都在 server"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "界面规范：接口页、提供方设置页、用量页"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议、daemon、app 三层一起改时的检查点"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/research/gap-summary.md", "reason": "25 个功能块与子任务的对应、每块碰到的规矩"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/research/decisions.md", "reason": "9 轮访谈的决定与依据，判断子任务是否越界"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/research/subscription-ban-risk.md", "reason": "子任务 8、9 的条款、封号风险与身份边界"}
+{"file": "docs/protocol-compatibility.md", "reason": "旧客户端（官方 Paseo 手机 App）兼容规则"}
+{"file": "docs/testing.md", "reason": "测试标准：行为测试、确定性、可失败操作的三态"}
