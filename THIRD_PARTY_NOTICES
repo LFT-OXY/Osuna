@@ -45,7 +45,11 @@ reads (usageSniffer in sniff.go). Holding a reply's frames until its first
 content (holdWriter.scan, streamEvent and holdMost in fallback.go), the status
 an error in a stream stands for (streamStatus in fallback.go), and what an empty
 reply is and is told as (emptyReply, answersNothing in gateway.go) are ported
-into upstream-call.ts and failure.ts:
+into upstream-call.ts and failure.ts. Keeping a streaming agent alive while its
+reply has not opened (keepAlive, keepQuiet in fallback.go; keepaliveEvery,
+keepaliveLongest in gateway.go) is ported into keepalive.ts, and the error told
+in a stream whose headers already went out (streamFailure in gateway.go) into
+agent-errors.ts:
 
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
@@ -56,6 +60,8 @@ into upstream-call.ts and failure.ts:
   packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
   packages/server/src/server/api-endpoints/gateway/reply-tap.ts
   packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
   packages/server/src/server/api-endpoints/gateway/translation/*.test.ts
 
 Reasoning turned off, sent the way each model takes it: thinkingOffOf,

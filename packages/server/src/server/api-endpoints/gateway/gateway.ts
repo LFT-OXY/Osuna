@@ -20,6 +20,7 @@ import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } from "./cooldown.js";
 import { endpointFailure, lateRests, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
+import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
 import { RefusedShapes, type ShapeRefusals } from "./refusals.js";
 import { chooseRequestFormat, resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
 import { attemptTranslated } from "./translated.js";
@@ -42,6 +43,7 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 按创建顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
  * 空回复先在同一家再问一次，还空就换下一家；空回复怪不到这家，不冷却（magpie #1221）。
  * 换家之前先看是不是不思考的写法被拒（effort none、关思考）：是就在同一家换写法重问一次，也只记在内存里。
+ * 要流式的请求等开口时有保活（keepalive.ts）；保活发出响应头之后再失败，错误在流里交给 Agent。
  */
 
 export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
@@ -57,9 +59,11 @@ const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const PROXY_HEADERS = ["forwarded", "x-forwarded-for", "x-real-ip"];
 
 export interface ApiEndpointGatewayOverrides {
-  // 只给测试缩短等上游响应头的时间与最后一家原地重试前的等待。
+  // 只给测试缩短等上游响应头的时间、最后一家原地重试前的等待、保活的间隔与上游毫无动静多久停止保活。
   gatewayHeaderTimeoutMs?: number;
   gatewayRetryPauseMs?: number;
+  gatewayKeepAliveMs?: number;
+  gatewayKeepAliveQuietMs?: number;
 }
 
 /** 每种 Agent 自己说的请求格式，按请求路径认。 */
@@ -83,6 +87,8 @@ export function createApiEndpointGateway(options: {
     refusals: new RefusedShapes(),
     headerTimeoutMs: options.overrides?.gatewayHeaderTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
+    keepAliveMs: options.overrides?.gatewayKeepAliveMs ?? KEEPALIVE_EVERY_MS,
+    keepAliveQuietMs: options.overrides?.gatewayKeepAliveQuietMs ?? KEEPALIVE_QUIET_MOST_MS,
   };
 
   return (req, res) => {
@@ -149,6 +155,8 @@ interface Failover {
   refusals: RefusedShapes;
   headerTimeoutMs: number;
   retryPauseMs: number;
+  keepAliveMs: number;
+  keepAliveQuietMs: number;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -283,6 +291,7 @@ async function handleAgentRequest(input: {
   failover: Failover;
 }): Promise<void> {
   const { req, res, wire, store } = input;
+  const since = Date.now();
   const reply = (status: number, message: string, headers?: Record<string, string>) =>
     sendAgentError({ res, wire, error: { status, message }, headers });
 
@@ -327,13 +336,26 @@ async function handleAgentRequest(input: {
     sendRest({ res, wire, ...planned });
     return;
   }
-  await askInTurn({
-    ...input,
-    body: mended,
-    model,
-    conversation,
-    plan: planned.plan,
+  const keepAlive = new AgentKeepAlive({
+    res,
+    wire,
+    since,
+    streams: isRecord(parsed) && parsed.stream === true,
+    everyMs: input.failover.keepAliveMs,
+    quietMostMs: input.failover.keepAliveQuietMs,
   });
+  try {
+    await askInTurn({
+      ...input,
+      body: mended,
+      model,
+      conversation,
+      plan: planned.plan,
+      keepAlive,
+    });
+  } finally {
+    keepAlive.stop();
+  }
 }
 
 /** 这家用哪种格式问（chooseRequestFormat）。 */
@@ -448,6 +470,7 @@ async function askInTurn(input: {
   model: string;
   conversation: string;
   plan: AskableCandidate[];
+  keepAlive: AgentKeepAlive;
 }): Promise<void> {
   const { res, wire, logger, plan } = input;
   const { cooldowns, sticks } = input.failover;
@@ -536,6 +559,7 @@ async function askUntilSettled(input: {
   last: boolean;
   format: AgentPath["format"];
   failover: Failover;
+  keepAlive: AgentKeepAlive;
 }): Promise<SettledAttempt> {
   const { res } = input;
   let askedEmptyAgain = false;
@@ -577,6 +601,7 @@ function askEndpoint(input: {
   candidate: AskableCandidate;
   format: AgentPath["format"];
   failover: Failover;
+  keepAlive: AgentKeepAlive;
 }): Promise<AttemptOutcome> {
   const { candidate } = input;
   const { refusals } = input.failover;
@@ -601,6 +626,7 @@ function askEndpoint(input: {
     upstreamModel: candidate.upstreamModel,
     headerTimeoutMs: input.failover.headerTimeoutMs,
     refusals: refused,
+    keepAlive: input.keepAlive,
   };
   if (candidate.translated === null) {
     return attemptEndpoint({ ...target, req: input.req, format: input.format, body: input.body });

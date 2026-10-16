@@ -8,6 +8,7 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import type { AgentKeepAlive } from "./keepalive.js";
 import { noteRefusal, type RefusedShape, type ShapeRefusals } from "./refusals.js";
 import {
   ReplyCollector,
@@ -53,6 +54,7 @@ export async function attemptTranslated(input: {
   headerTimeoutMs: number;
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
+  keepAlive: AgentKeepAlive;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
@@ -74,6 +76,7 @@ export async function attemptTranslated(input: {
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
+      onHeard: () => input.keepAlive.heard(),
     });
   const build = () =>
     protocolOf(to).build(
@@ -95,6 +98,7 @@ export async function attemptTranslated(input: {
       detail: `${url.origin}: the reply was not a stream: ${extractErrorDetail(text, apiKey)}`,
     });
   }
+  input.keepAlive.stop();
   const finished = input.request.stream
     ? streamReply({ ...input, response, held, ended })
     : wholeReply({ ...input, response, held, ended });
@@ -137,11 +141,14 @@ async function streamReply(input: {
   ended: boolean;
 }): Promise<AnswerEnd> {
   const { res } = input;
-  res.writeHead(200, {
-    "content-type": "text/event-stream; charset=utf-8",
-    "cache-control": "no-cache",
-    [ANSWERED_BY_HEADER]: input.endpoint.slug,
-  });
+  // 保活已经回了 200 与响应头：接着在同一个流里写。
+  if (!res.headersSent) {
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      [ANSWERED_BY_HEADER]: input.endpoint.slug,
+    });
+  }
   const encoder = protocolOf(input.from).encoder({
     model: input.requestedModel,
     write: (text) => res.write(text),

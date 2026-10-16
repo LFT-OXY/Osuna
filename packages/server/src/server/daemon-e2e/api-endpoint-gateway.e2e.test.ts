@@ -137,6 +137,8 @@ async function start(
     password?: string;
     headerTimeoutMs?: number;
     retryPauseMs?: number;
+    keepAliveMs?: number;
+    keepAliveQuietMs?: number;
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -220,6 +222,8 @@ async function start(
         // 最后一家的原地重试只等很短的时间，测试不必真等一两秒。
         gatewayRetryPauseMs: options.retryPauseMs ?? 10,
         ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
+        ...(options.keepAliveMs ? { gatewayKeepAliveMs: options.keepAliveMs } : {}),
+        ...(options.keepAliveQuietMs ? { gatewayKeepAliveQuietMs: options.keepAliveQuietMs } : {}),
       },
     });
     daemons.push(daemon);
@@ -1741,7 +1745,9 @@ function receivedModel(request: RecordedRequest | undefined): unknown {
 }
 
 /** 两家都选了 kimi-k2：A 是用户选的（最早建的），B 在它之后。 */
-async function twoRelays(options: { headerTimeoutMs?: number } = {}) {
+async function twoRelays(
+  options: { headerTimeoutMs?: number; keepAliveMs?: number; keepAliveQuietMs?: number } = {},
+) {
   const upstreamA = await startUpstream();
   const upstreamB = await startUpstream();
   upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
@@ -2313,6 +2319,308 @@ function emptyAnthropicStream(res: ServerResponse): void {
   );
   res.end(sseFrame({ type: "message_stop" }));
 }
+
+/** 读 Agent 收到的流，直到读到的原文里 `needle` 出现了 `times` 次；返回读到的原文与接着读的 reader。 */
+async function readUntil(response: Response, needle: string, times = 1) {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  while (text.split(needle).length - 1 < times) {
+    const chunk = await reader.read();
+    if (chunk.done) throw new Error(`stream ended before ${times} × ${needle}: ${text}`);
+    text += decoder.decode(chunk.value, { stream: true });
+  }
+  const rest = async () => {
+    let more = "";
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) return more;
+      more += decoder.decode(chunk.value, { stream: true });
+    }
+  };
+  return { text, rest };
+}
+
+/** 上游的回复由测试放行：先回 `before`（可以是空）再等，放行后回 `after`。 */
+function heldUpstream(
+  before: (res: ServerResponse) => void,
+  after: (res: ServerResponse) => void,
+): { respond: FakeUpstream["respond"]; release: () => void } {
+  let release: () => void = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    respond: (_request, res) => {
+      before(res);
+      void released.then(() => {
+        after(res);
+        return undefined;
+      });
+    },
+    release: () => release(),
+  };
+}
+
+describe("the agent is kept alive while the reply has not opened", () => {
+  test("Claude Code gets a 200 event stream and pings while it waits, then the reply in order", async () => {
+    const { upstreamA, ask } = await twoRelays({ keepAliveMs: 30 });
+    const held = heldUpstream(
+      (res) => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.write(sseFrame({ type: "message_start", message: { id: "msg_slow" } }));
+      },
+      (res) => {
+        res.write(
+          sseFrame({
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "at last" },
+          }),
+        );
+        res.end(sseFrame({ type: "message_stop" }));
+      },
+    );
+    upstreamA.respond = held.respond;
+
+    const response = await ask();
+    const { text, rest } = await readUntil(response, "event: ping", 2);
+    held.release();
+    const all = text + (await rest());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(text).not.toContain("msg_slow");
+    // 放行前读到的全是 ping（至少两个，可能多一个刚好挤进同一段）。
+    expect(new Set(sseData(text).map((event) => JSON.stringify(event)))).toEqual(
+      new Set(['{"type":"ping"}']),
+    );
+    expect(all.lastIndexOf("event: ping")).toBeLessThan(all.indexOf("msg_slow"));
+    expect(all.indexOf("msg_slow")).toBeLessThan(all.indexOf("at last"));
+    expect(all).toContain("message_stop");
+  });
+
+  test("a translated reply follows the pings in the same stream", async () => {
+    const chat = await startUpstream();
+    const held = heldUpstream(
+      (res) => res.writeHead(200, { "content-type": "text/event-stream" }),
+      (res) => {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "translated" } }] })}\n\n`,
+        );
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
+        );
+        res.end("data: [DONE]\n\n");
+      },
+    );
+    chat.respond = held.respond;
+    const { gateway } = await start({ chatUpstream: chat, keepAliveMs: 30 });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "deepseek-v3",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+    const { text, rest } = await readUntil(response, "event: ping");
+    held.release();
+    const all = text + (await rest());
+
+    expect(response.status).toBe(200);
+    expect(all.indexOf("event: message_start")).toBeGreaterThan(all.lastIndexOf("event: ping"));
+    expect(all).toContain("translated");
+    expect(all).toContain("event: message_stop");
+  });
+
+  test("Codex is kept alive with response.in_progress events that carry data", async () => {
+    const { upstreamA, gateway } = await twoRelays({ keepAliveMs: 30 });
+    const held = heldUpstream(
+      (res) => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.write(sseFrame({ type: "response.created", response: { id: "resp_slow" } }));
+      },
+      (res) => {
+        res.write(
+          sseFrame({ type: "response.output_text.delta", item_id: "msg_1", delta: "at last" }),
+        );
+        res.end(
+          sseFrame({
+            type: "response.completed",
+            response: { id: "resp_slow", status: "completed", output: [] },
+          }),
+        );
+      },
+    );
+    upstreamA.respond = held.respond;
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+    const { text, rest } = await readUntil(response, "event: response.in_progress", 2);
+    held.release();
+    const all = text + (await rest());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    // Codex 不认注释行：没有以冒号开头的行。
+    expect(text.split("\n").filter((line) => line.startsWith(":"))).toEqual([]);
+    const kept = sseData(text) as Record<string, unknown>[];
+    expect(kept.length).toBeGreaterThanOrEqual(2);
+    for (const event of kept) {
+      expect(event).toEqual({
+        type: "response.in_progress",
+        response: { object: "response", status: "in_progress", output: [] },
+      });
+    }
+    expect(all.indexOf("resp_slow")).toBeGreaterThan(
+      all.lastIndexOf("event: response.in_progress"),
+    );
+    expect(all.indexOf("resp_slow")).toBeLessThan(all.indexOf("at last"));
+    expect(completedResponse(all)).toMatchObject({ id: "resp_slow", status: "completed" });
+  });
+
+  test("when every endpoint fails after the keepalive began, the error comes in the stream", async () => {
+    const claude = await twoRelays({ keepAliveMs: 30 });
+    const codex = await twoRelays({ keepAliveMs: 30 });
+    const fails = (res: ServerResponse) => failWith(res, { status: 503, message: "upstream busy" });
+    const releases: (() => void)[] = [];
+    for (const relays of [claude, codex]) {
+      const held = heldUpstream(() => {}, fails);
+      relays.upstreamA.respond = held.respond;
+      relays.upstreamB.respond = (_request, res) => fails(res);
+      releases.push(held.release);
+    }
+
+    const toClaude = await claude.ask();
+    const claudeKept = await readUntil(toClaude, "event: ping");
+    releases[0]?.();
+    const toCodex = await fetch(
+      `${codex.gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+    const codexKept = await readUntil(toCodex, "event: response.in_progress");
+    releases[1]?.();
+    const claudeEvents = sseData(claudeKept.text + (await claudeKept.rest()));
+    const codexEvents = sseData(codexKept.text + (await codexKept.rest()));
+
+    expect(toClaude.status).toBe(200);
+    expect(claudeEvents.at(-1)).toEqual({
+      type: "error",
+      error: { type: "api_error", message: "Relay B: upstream busy" },
+    });
+    expect(toCodex.status).toBe(200);
+    expect(codexEvents.at(-1)).toEqual({
+      type: "response.failed",
+      response: {
+        object: "response",
+        status: "failed",
+        error: { code: "server_error", message: "Relay B: upstream busy" },
+      },
+    });
+    expect(claude.upstreamB.requests.length).toBeGreaterThan(0);
+  });
+
+  test("empty replies after the keepalive began end the stream with the empty reply error", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({ keepAliveMs: 30 });
+    const held = heldUpstream(() => {}, emptyAnthropicStream);
+    upstreamA.respond = held.respond;
+    upstreamB.respond = (_request, res) => emptyAnthropicStream(res);
+
+    const response = await ask();
+    const kept = await readUntil(response, "event: ping");
+    held.release();
+    const events = sseData(kept.text + (await kept.rest()));
+
+    expect(response.status).toBe(200);
+    expect(events.at(-1)).toEqual({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: "Relay B: an empty reply (the model answered nothing; try again)",
+      },
+    });
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+
+  test("a failure before the keepalive begins still comes back with its status and Retry-After", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({ keepAliveMs: 5000 });
+    const limited = (res: ServerResponse) =>
+      failWith(res, { status: 429, message: "slow down", headers: { "retry-after": "30" } });
+    upstreamA.respond = (_request, res) => limited(res);
+    upstreamB.respond = upstreamA.respond;
+
+    const response = await ask();
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("30");
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({
+      type: "error",
+      error: { message: expect.stringContaining("Relay B: slow down") },
+    });
+  });
+
+  test("the keepalive stops once the endpoint has said nothing for too long", async () => {
+    const { upstreamA, ask } = await twoRelays({ keepAliveMs: 20, keepAliveQuietMs: 100 });
+    upstreamA.respond = () => {};
+
+    const response = await ask();
+    const reader = response.body!.getReader();
+    const readFor = async (ms: number) => {
+      let text = "";
+      const until = Date.now() + ms;
+      for (;;) {
+        const left = until - Date.now();
+        if (left <= 0) return text;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), left)),
+        ]);
+        if (chunk === null) return text;
+        if (chunk.done) throw new Error("the stream ended");
+        text += new TextDecoder().decode(chunk.value);
+      }
+    };
+    const whileHeard = await readFor(400);
+    const afterwards = await readFor(300);
+    void reader.cancel();
+
+    expect(response.status).toBe(200);
+    expect(whileHeard).toContain("event: ping");
+    expect(afterwards).toBe("");
+  });
+
+  test("a request that did not ask to stream is not kept alive", async () => {
+    const { upstreamA, ask } = await twoRelays({ keepAliveMs: 20 });
+    const held = heldUpstream(
+      () => {},
+      (res) =>
+        res.writeHead(200, { "content-type": "application/json" }).end(
+          JSON.stringify({
+            type: "message",
+            role: "assistant",
+            content: [{ type: "text", text: "whole" }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+        ),
+    );
+    upstreamA.respond = held.respond;
+
+    const asked = ask({ stream: false });
+    setTimeout(() => held.release(), 150);
+    const response = await asked;
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toMatchObject({ content: [{ type: "text", text: "whole" }] });
+  });
+});
 
 describe("a conversation stays where it was answered", () => {
   const userSays = (text: string) => ({ role: "user", content: text });

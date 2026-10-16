@@ -1,8 +1,15 @@
+// 保活之后在流里报错移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 streamFailure）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type { Response } from "express";
+import { sseEvent } from "./translation/sse.js";
 
 /*
  * 中转站给 Agent 的报错一律按 Agent 自己的协议包装，CLI 才会把文字显示在对话里：
  * Anthropic 是 {"type":"error","error":{type,message}}，OpenAI 是 {"error":{message,type,code,param}}。
+ * 保活已经回了 200 与事件流的响应头时，状态码说不出了，改发流里的错误事件（magpie 的 streamFailure）：
+ * Claude Code 收到 api_error（它会改发不流式的请求），Codex 收到 response.failed 加 server_error（它会重问整轮，
+ * 原因带到最终报错里）。
  */
 
 export type AgentWire = "anthropic" | "openai";
@@ -44,6 +51,10 @@ export function sendAgentError(input: {
   headers?: Record<string, string | string[]>;
 }): void {
   const { res, wire, error } = input;
+  if (res.headersSent) {
+    sendStreamError({ res, wire, message: error.message });
+    return;
+  }
   const type = error.type ?? errorTypeForStatus(error.status);
   const body =
     wire === "anthropic"
@@ -51,4 +62,20 @@ export function sendAgentError(input: {
       : { error: { message: error.message, type, code: error.code ?? null, param: null } };
   if (input.headers) res.set(input.headers);
   res.status(error.status).json(body);
+}
+
+function sendStreamError(input: { res: Response; wire: AgentWire; message: string }): void {
+  const { message } = input;
+  const event =
+    input.wire === "anthropic"
+      ? { type: "error", error: { type: "api_error", message } }
+      : {
+          type: "response.failed",
+          response: {
+            object: "response",
+            status: "failed",
+            error: { code: "server_error", message },
+          },
+        };
+  input.res.end(sseEvent(event.type, event));
 }

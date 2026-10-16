@@ -110,8 +110,11 @@ export async function openUpstream(input: {
   headerTimeoutMs: number;
   // 按哪种协议读回复、认开口；null 时第一段字节就算开口（count_tokens 的回复不是对话）。
   reads: ApiEndpointRequestFormat | null;
+  // 上游有动静（发出请求、开口前收到字节）时告诉保活。
+  onHeard?: () => void;
 }): Promise<OpenedUpstream | FailedAttempt | { kind: "gone" }> {
   const { res, url, apiKey } = input;
+  input.onHeard?.();
   const outcome = await sendUpstream(input);
   if (res.destroyed) return { kind: "gone" };
 
@@ -134,7 +137,7 @@ export async function openUpstream(input: {
     return failedByUpstream({ status, response, text, apiKey });
   }
 
-  const opening = await awaitOpening(response, input.reads);
+  const opening = await awaitOpening({ response, reads: input.reads, onHeard: input.onHeard });
   if (res.destroyed) return { kind: "gone" };
   switch (opening.kind) {
     case "open":
@@ -209,10 +212,12 @@ export function failedBySelf(input: {
  * 等上游开口：边收边按协议读，扣住第一段内容之前的字节。之前出错、断开、或回复收完却是空回复，
  * 都还能换家；出错时不再读这家的回复。
  */
-function awaitOpening(
-  response: IncomingMessage,
-  reads: ApiEndpointRequestFormat | null,
-): Promise<Opening> {
+function awaitOpening(input: {
+  response: IncomingMessage;
+  reads: ApiEndpointRequestFormat | null;
+  onHeard?: () => void;
+}): Promise<Opening> {
+  const { response, reads } = input;
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let bytes = 0;
@@ -231,6 +236,7 @@ function awaitOpening(
       tap,
     });
     const onData = (chunk: Buffer) => {
+      input.onHeard?.();
       chunks.push(chunk);
       bytes += chunk.length;
       if (reads !== null) {

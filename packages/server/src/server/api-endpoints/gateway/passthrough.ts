@@ -16,6 +16,7 @@ import {
 import { replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import type { AgentKeepAlive } from "./keepalive.js";
 import { noteRefusal, type ShapeRefusals } from "./refusals.js";
 import { ReplyTap } from "./reply-tap.js";
 import {
@@ -78,6 +79,8 @@ export async function attemptEndpoint(input: {
   headerTimeoutMs: number;
   // 这家的这个模型不收哪些不思考的写法；count_tokens 不用。
   refusals?: ShapeRefusals;
+  // count_tokens 不保活。
+  keepAlive?: AgentKeepAlive;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, refusals } = input;
   const { originalUrl } = input.req;
@@ -96,6 +99,7 @@ export async function attemptEndpoint(input: {
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: input.pathSuffix === undefined ? input.format : null,
+      onHeard: () => input.keepAlive?.heard(),
     });
   const body = upstreamBody(input);
   let opened = await open(body);
@@ -112,10 +116,14 @@ export async function attemptEndpoint(input: {
     opened = await open(upstreamBody(input));
   }
   if (opened.kind !== "opened") return opened;
-  res.writeHead(opened.status, {
-    ...responseHeaders(opened.response.headers),
-    [ANSWERED_BY_HEADER]: input.endpoint.slug,
-  });
+  input.keepAlive?.stop();
+  // 保活已经回了 200 与响应头：接着在同一个流里交出回复。
+  if (!res.headersSent) {
+    res.writeHead(opened.status, {
+      ...responseHeaders(opened.response.headers),
+      [ANSWERED_BY_HEADER]: input.endpoint.slug,
+    });
+  }
   return { kind: "answered", finished: relay({ opened, res }) };
 }
 
