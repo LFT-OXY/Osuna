@@ -1,0 +1,185 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Claude Code / Codex 的接入方式：官方与第三方",
+    "locale": "zh-CN",
+    "output": ".archify/lifecycle-provider-mode-20261016-024643/provider-mode.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:LFT-OXY/Osuna.git",
+      "link_mode": "local-only",
+      "revision": "29b3a0fdf1947c39c50253fc0fb84f7f8b325d4d"
+    }
+  },
+  "lanes": [
+    { "id": "main", "label": "接入方式" },
+    { "id": "waiting", "label": "打不开或连不上" },
+    { "id": "recovery", "label": "daemon 启动对账" }
+  ],
+  "states": [
+    {
+      "id": "official",
+      "type": "start",
+      "label": "官方",
+      "sublabel": "CLI 自己的设置",
+      "tag": "通常是订阅登录",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "sources": [{ "path": "docs/glossary.md", "line": 48 }]
+    },
+    {
+      "id": "checking",
+      "type": "decision",
+      "label": "检查能否打开",
+      "sublabel": "可用模型 + TCP",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 1392,
+          "end_line": 1416
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 799,
+          "end_line": 801
+        }
+      ]
+    },
+    {
+      "id": "writing",
+      "type": "active",
+      "label": "改写 CLI 配置",
+      "sublabel": "地址 + 口令 + 模型",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 562,
+          "end_line": 590
+        }
+      ]
+    },
+    {
+      "id": "thirdparty",
+      "type": "success",
+      "label": "第三方接口",
+      "sublabel": "全部请求走中转站",
+      "tag": "官方不可达",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "sources": [
+        { "path": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "line": 9 }
+      ]
+    },
+    {
+      "id": "restoring",
+      "type": "active",
+      "label": "还原官方",
+      "sublabel": "原值写回，口令作废",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 1104,
+          "end_line": 1123
+        }
+      ]
+    },
+    {
+      "id": "kept",
+      "type": "failure",
+      "label": "保持官方",
+      "sublabel": "被拒或写入已回滚",
+      "lane": "waiting",
+      "col": 1,
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 576,
+          "end_line": 590
+        }
+      ]
+    },
+    {
+      "id": "daemondown",
+      "type": "waiting",
+      "label": "daemon 没运行",
+      "sublabel": "CLI 报连接被拒",
+      "lane": "waiting",
+      "col": 4,
+      "sources": [
+        { "path": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "line": 41 }
+      ]
+    },
+    {
+      "id": "reconcile",
+      "type": "active",
+      "label": "启动对账",
+      "sublabel": "端口变了就重写地址",
+      "lane": "recovery",
+      "col": 3,
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 301,
+          "end_line": 324
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    { "from": "official", "to": "checking", "label": "打开开关" },
+    { "from": "checking", "to": "writing", "label": "满足" },
+    { "from": "writing", "to": "thirdparty", "label": "写好" },
+    { "from": "thirdparty", "to": "restoring", "label": "关掉或无模型" },
+    {
+      "from": "restoring",
+      "to": "official",
+      "label": "还原完成",
+      "variant": "emphasis",
+      "route": "top-channel"
+    },
+    { "from": "checking", "to": "kept", "label": "不满足", "variant": "security" },
+    { "from": "writing", "to": "kept", "label": "写入失败", "variant": "security" },
+    { "from": "kept", "to": "official", "label": "开关不变", "variant": "dashed" },
+    { "from": "thirdparty", "to": "daemondown", "label": "daemon 停止", "variant": "security" },
+    { "from": "daemondown", "to": "reconcile", "label": "再启动", "variant": "dashed" },
+    { "from": "reconcile", "to": "thirdparty", "label": "已对齐", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "第三方状态下官方走不通",
+      "items": [
+        "CLI 配置指向本机中转站，请求不会再到官方服务，中转站也不会转给官方",
+        "要用订阅账号，只能把开关关掉回到官方"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "自动回到官方的唯一情况",
+      "items": [
+        "所有接口都关掉、或已选模型全被取消时，开关自动关闭并还原官方",
+        "单个接口失败、冷却、全部失败都不会触发回官方"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "配置被别的工具改动",
+      "items": [
+        "设置页会提示「在 Osuna 之外被改过」，可以重新应用或切回官方",
+        "这个检查只在读取状态时做，不会后台监视文件"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,236 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "单个第三方接口在网关里的状态",
+    "locale": "zh-CN",
+    "output": ".archify/lifecycle-endpoint-status-20261016-024643/endpoint-status.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:LFT-OXY/Osuna.git",
+      "link_mode": "local-only",
+      "revision": "29b3a0fdf1947c39c50253fc0fb84f7f8b325d4d"
+    }
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "可用"
+    },
+    {
+      "id": "waiting",
+      "label": "冷却中"
+    },
+    {
+      "id": "recovery",
+      "label": "需要检查"
+    },
+    {
+      "id": "terminal",
+      "label": "已关闭"
+    }
+  ],
+  "states": [
+    {
+      "id": "created",
+      "type": "start",
+      "label": "新建接口",
+      "sublabel": "选好模型",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "available",
+      "type": "success",
+      "label": "可用",
+      "sublabel": "可被选中、可被切换到",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "sources": [
+        {
+          "path": "docs/glossary.md",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "id": "asking",
+      "type": "active",
+      "label": "正在被问",
+      "sublabel": "开口前失败可换家",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/gateway.ts",
+          "line": 439,
+          "end_line": 520
+        }
+      ]
+    },
+    {
+      "id": "answered",
+      "type": "success",
+      "label": "答完",
+      "sublabel": "清冷却，记粘性",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/cooldown.ts",
+          "line": 338,
+          "end_line": 345
+        }
+      ]
+    },
+    {
+      "id": "cooling",
+      "type": "waiting",
+      "label": "冷却中",
+      "sublabel": "额度、欠费、限流、故障",
+      "tag": "只在内存",
+      "lane": "waiting",
+      "col": 2,
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/cooldown.ts",
+          "line": 272,
+          "end_line": 337
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/failure.ts",
+          "line": 112,
+          "end_line": 138
+        }
+      ]
+    },
+    {
+      "id": "needscheck",
+      "type": "failure",
+      "label": "需要检查",
+      "sublabel": "key 被拒 401 / 403",
+      "lane": "recovery",
+      "col": 2,
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/failure.ts",
+          "line": 129,
+          "end_line": 138
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/cooldown.ts",
+          "line": 346,
+          "end_line": 349
+        }
+      ]
+    },
+    {
+      "id": "off",
+      "type": "neutral",
+      "label": "已关闭",
+      "sublabel": "接口开关关",
+      "tag": "切换也不用它",
+      "lane": "terminal",
+      "col": 0,
+      "sources": [
+        {
+          "path": "docs/glossary.md",
+          "line": 47
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "from": "created",
+      "to": "available",
+      "label": "开关开"
+    },
+    {
+      "from": "available",
+      "to": "asking",
+      "label": "被选中"
+    },
+    {
+      "from": "asking",
+      "to": "answered",
+      "label": "成功"
+    },
+    {
+      "from": "answered",
+      "to": "available",
+      "label": "回到可用",
+      "variant": "emphasis",
+      "route": "top-channel"
+    },
+    {
+      "from": "asking",
+      "to": "cooling",
+      "label": "开口前失败",
+      "variant": "security"
+    },
+    {
+      "from": "cooling",
+      "to": "available",
+      "label": "到点 / 立刻恢复",
+      "variant": "dashed"
+    },
+    {
+      "from": "cooling",
+      "to": "asking",
+      "label": "最后才试探",
+      "variant": "dashed"
+    },
+    {
+      "from": "asking",
+      "to": "needscheck",
+      "label": "key 被拒",
+      "variant": "security"
+    },
+    {
+      "from": "needscheck",
+      "to": "available",
+      "label": "编辑接口",
+      "variant": "dashed"
+    },
+    {
+      "from": "available",
+      "to": "off",
+      "label": "关闭开关"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "冷却多久",
+      "items": [
+        "限流：1 分钟起，冷却刚过又被限流就翻倍，最长 30 分钟；厂商给的时间更长就用它",
+        "额度用完：按错误里写的重置时间，其次 Retry-After，都没有就 15 分钟，最长 8 天；欠费 30 分钟",
+        "其他故障（5xx、超时、断流）：1 分钟起翻倍，最长 10 分钟",
+        "只是这把 key 不提供某个模型：只冷却这个模型，这家其他模型照常"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "冷却中的接口怎么被用",
+      "items": [
+        "排顺序时放到最后，只留最早恢复的一家去试探",
+        "所有候选都在额度冷却：不问上游，直接交出记着的错误和恢复时间",
+        "冷却只存在 daemon 内存里，daemon 重启全部清零",
+        "已关闭的接口重新打开后回到可用"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "不进冷却的失败",
+      "items": [
+        "上下文超长：哪家都装不下，原样交给 CLI 去压缩",
+        "请求格式被拒、地区不支持：换下一家问，但不怪这家"
+      ]
+    }
+  ]
+}

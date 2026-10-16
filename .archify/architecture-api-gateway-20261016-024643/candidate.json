@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "第三方接口与官方订阅：网关总体架构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-api-gateway-20261016-024643/api-gateway.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:LFT-OXY/Osuna.git",
+      "link_mode": "local-only",
+      "revision": "29b3a0fdf1947c39c50253fc0fb84f7f8b325d4d"
+    }
+  },
+  "components": [
+    {
+      "id": "settings",
+      "type": "frontend",
+      "label": "设置页",
+      "sublabel": "使用第三方接口 开关",
+      "pos": [20, 40],
+      "size": [160, 64],
+      "sources": [{ "path": "docs/glossary.md", "line": 48, "label": "Use API endpoints" }]
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "接口服务",
+      "sublabel": "ApiEndpointService",
+      "tag": "改动串行执行",
+      "pos": [587, 40],
+      "size": [200, 64],
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 504,
+          "end_line": 521,
+          "label": "setAgentSettings"
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/service.ts",
+          "line": 545,
+          "end_line": 606,
+          "label": "commit"
+        }
+      ]
+    },
+    {
+      "id": "cliconf",
+      "type": "database",
+      "label": "CLI 配置文件",
+      "sublabel": "settings.json / config.toml",
+      "pos": [360, 200],
+      "size": [190, 64],
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/claude-settings-patch.ts",
+          "line": 236,
+          "end_line": 250,
+          "label": "Claude env"
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/codex-config-patch.ts",
+          "line": 84,
+          "end_line": 95,
+          "label": "Codex 专用表"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "database",
+      "label": "接口存储",
+      "sublabel": "endpoints / keys / tokens",
+      "tag": "0600 私有文件",
+      "pos": [820, 200],
+      "size": [200, 64],
+      "sources": [
+        { "path": "packages/server/src/server/api-endpoints/store.ts", "line": 21, "end_line": 32 }
+      ]
+    },
+    {
+      "id": "user",
+      "type": "external",
+      "label": "你",
+      "sublabel": "Osuna 聊天 / 终端",
+      "pos": [20, 360],
+      "size": [140, 64]
+    },
+    {
+      "id": "cli",
+      "type": "backend",
+      "label": "Claude Code / Codex",
+      "sublabel": "CLI 进程",
+      "pos": [360, 360],
+      "size": [190, 64],
+      "sources": [
+        { "path": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "line": 9 }
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "security",
+      "label": "内置中转站",
+      "sublabel": "/api-endpoint-gateway",
+      "tag": "仅本机 + 口令",
+      "pos": [820, 360],
+      "size": [200, 64],
+      "sources": [
+        {
+          "path": "packages/server/src/server/bootstrap.ts",
+          "line": 815,
+          "end_line": 828,
+          "label": "挂载"
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/gateway.ts",
+          "line": 71,
+          "end_line": 145,
+          "label": "入口"
+        }
+      ]
+    },
+    {
+      "id": "third",
+      "type": "cloud",
+      "label": "第三方接口",
+      "sublabel": "按创建顺序，同名模型可换",
+      "pos": [1200, 360],
+      "size": [200, 64],
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/routing.ts",
+          "line": 40,
+          "end_line": 91
+        }
+      ]
+    },
+    {
+      "id": "official",
+      "type": "cloud",
+      "label": "官方服务",
+      "sublabel": "Anthropic / OpenAI",
+      "tag": "CLI 自己的订阅登录",
+      "pos": [360, 520],
+      "size": [190, 64],
+      "sources": [{ "path": "docs/glossary.md", "line": 45, "label": "official 定义" }]
+    },
+    {
+      "id": "cooldown",
+      "type": "database",
+      "label": "冷却与粘性",
+      "sublabel": "daemon 内存，重启清零",
+      "pos": [820, 520],
+      "size": [200, 64],
+      "sources": [
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/cooldown.ts",
+          "line": 17,
+          "end_line": 21
+        },
+        {
+          "path": "packages/server/src/server/api-endpoints/gateway/affinity.ts",
+          "line": 5,
+          "end_line": 9
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Osuna daemon 进程", "wraps": ["service", "gateway", "cooldown"] }
+  ],
+  "connections": [
+    { "id": "user-opens-switch", "from": "user", "to": "settings", "label": "打开 / 关闭开关" },
+    {
+      "id": "settings-to-service",
+      "from": "settings",
+      "to": "service",
+      "label": "开关 + 默认模型"
+    },
+    {
+      "id": "service-writes-cli",
+      "from": "service",
+      "to": "cliconf",
+      "label": "改写地址、口令、模型"
+    },
+    { "id": "service-writes-store", "from": "service", "to": "store", "label": "存开关、发口令" },
+    {
+      "id": "user-to-cli",
+      "from": "user",
+      "to": "cli",
+      "label": "发消息 / 运行",
+      "variant": "emphasis"
+    },
+    { "id": "cli-reads-config", "from": "cliconf", "to": "cli", "label": "启动时读取" },
+    {
+      "id": "cli-to-gateway",
+      "from": "cli",
+      "to": "gateway",
+      "label": "开关开：全部请求 + 口令",
+      "variant": "emphasis"
+    },
+    { "id": "store-to-gateway", "from": "store", "to": "gateway", "label": "每次请求重读" },
+    {
+      "id": "gateway-to-third",
+      "from": "gateway",
+      "to": "third",
+      "label": "换真实 key 转发",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gateway-cooldown",
+      "from": "gateway",
+      "to": "cooldown",
+      "label": "记失败、记谁答的",
+      "variant": "dashed"
+    },
+    {
+      "id": "cli-to-official",
+      "from": "cli",
+      "to": "official",
+      "label": "开关关：直连官方",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "开关打开时，官方订阅走不通",
+      "items": [
+        "CLI 配置里的地址换成本机中转站，聊天和终端里的每个请求都只发给第三方接口",
+        "中转站里没有通往官方服务的路：所有接口都失败时，错误原样交给 CLI 显示",
+        "订阅登录没被删除，只是不用；Claude 的 WebSearch 被禁用，因为它在 Anthropic 服务器上执行"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "自动切换只在第三方接口之间",
+      "items": [
+        "只换到「开着、勾选了同一个模型名」的其他接口，模型名不变",
+        "只在上游开始回复之前换；回复开始后断掉不再换",
+        "所有接口关掉或模型全取消勾选时，开关自动关掉、退回官方"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "开关关闭时",
+      "items": [
+        "CLI 配置的原值写回，中转站口令作废，请求走 CLI 自己的设置（通常是订阅登录）",
+        "之前用第三方模型的会话回到官方后会收到 model not found",
+        "开关打开期间 daemon 必须运行，否则 CLI 只会报连接被拒"
+      ]
+    }
+  ]
+}
