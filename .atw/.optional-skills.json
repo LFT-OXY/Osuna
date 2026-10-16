@@ -35,6 +35,27 @@
         ".agents/skills",
         ".claude/skills"
       ]
+    },
+    "archify": {
+      "version": "3.0",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "onetake": {
+      "version": "1.0.1",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
+    },
+    "show-me": {
+      "version": "1.0.1",
+      "roots": [
+        ".agents/skills",
+        ".claude/skills"
+      ]
     }
   }
 }
