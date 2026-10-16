@@ -1971,6 +1971,25 @@ const EXEC_TOOL = {
   parameters: { type: "object", properties: {} },
 };
 
+// ToolSearch 答了一个延后加载的工具：工具结果里只有 tool_reference。
+const TOOL_SEARCH_MESSAGES = [
+  { role: "user", content: "find the docs tool" },
+  {
+    role: "assistant",
+    content: [{ type: "tool_use", id: "toolu_1", name: "ToolSearch", input: { query: "docs" } }],
+  },
+  {
+    role: "user",
+    content: [
+      {
+        type: "tool_result",
+        tool_use_id: "toolu_1",
+        content: [{ type: "tool_reference", tool_name: "mcp__docs__search" }],
+      },
+    ],
+  },
+];
+
 interface FieldRefusal {
   field: string;
   agent: "claude" | "codex";
@@ -2029,6 +2048,14 @@ const PASSED_THROUGH_REFUSALS: FieldRefusal[] = [
     status: 422,
     refusal: DEFERRED_REFUSED,
     has: mentions("tool_removal"),
+  },
+  {
+    field: "toolResultRefs",
+    agent: "claude",
+    extra: { messages: TOOL_SEARCH_MESSAGES },
+    status: 422,
+    refusal: REFS_ONLY_REFUSED,
+    has: (body) => !mentions("is loaded and can be called now")(body),
   },
   {
     field: "toolStrict",
@@ -2094,6 +2121,31 @@ const PASSED_THROUGH_SETUPS = {
   },
 };
 
+/** 翻译时 A 与另一家都只有这个格式的地址：另一家是 B（Anthropic）、D（Responses）或 C（Chat）。 */
+const TRANSLATED_SETUPS = {
+  anthropic: {
+    answer: anthropicStream,
+    options: (other: FakeUpstream) => ({ upstreamB: other }),
+    otherId: "ep_b",
+    address: (upstream: FakeUpstream) => ({ format: "anthropic_messages", url: upstream.url }),
+  },
+  responses: {
+    answer: responsesStream,
+    options: (other: FakeUpstream) => ({ responsesUpstream: other }),
+    otherId: "ep_d",
+    address: (upstream: FakeUpstream) => ({
+      format: "openai_responses",
+      url: `${upstream.url}/v1`,
+    }),
+  },
+  chat: {
+    answer: chatStream,
+    options: (other: FakeUpstream) => ({ chatUpstream: other }),
+    otherId: "ep_c",
+    address: (upstream: FakeUpstream) => ({ format: "openai_chat", url: `${upstream.url}/v1` }),
+  },
+};
+
 describe("a refused field left out at the same endpoint", () => {
   test.each(PASSED_THROUGH_REFUSALS)(
     "$field passed through: asked again without it, and from then on for that endpoint's model only",
@@ -2119,9 +2171,9 @@ describe("a refused field left out at the same endpoint", () => {
       expect(sent(upstreamA)).toEqual([false]);
 
       await ask({ gateway: harness.gateway, model: sameEndpoint });
-      expect(sent(upstreamA)[0]).toBe(true);
+      expect(sent(upstreamA)).toEqual([true, false]);
       await ask({ gateway: harness.gateway, model: otherEndpoint });
-      expect(sent(other)[0]).toBe(true);
+      expect(sent(other)).toEqual([true, false]);
 
       expect(
         gatewayLog(
@@ -2145,7 +2197,7 @@ describe("a refused field left out at the same endpoint", () => {
       field: "display",
       agent: "codex",
       to: "anthropic",
-      model: "claude-sonnet-4-6",
+      models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-sonnet-5-5"],
       extra: { reasoning: { effort: "high" } },
       status: 400,
       refusal: ADAPTIVE_DISPLAY_REFUSED,
@@ -2155,7 +2207,7 @@ describe("a refused field left out at the same endpoint", () => {
       field: "sampling",
       agent: "codex",
       to: "anthropic",
-      model: "glm-4.6",
+      models: ["glm-4.6", "glm-4.5", "glm-4.7"],
       extra: { temperature: 0 },
       status: 400,
       refusal: SAMPLING_REFUSED,
@@ -2165,7 +2217,7 @@ describe("a refused field left out at the same endpoint", () => {
       field: "toolStrict",
       agent: "claude",
       to: "responses",
-      model: "grok-4",
+      models: ["grok-4", "grok-4-fast", "grok-3"],
       extra: { tools: [{ name: "Read", input_schema: { type: "object", properties: {} } }] },
       status: 400,
       refusal: STRICT_REFUSED,
@@ -2175,37 +2227,49 @@ describe("a refused field left out at the same endpoint", () => {
       field: "imageTool",
       agent: "codex",
       to: "chat",
-      model: "deepseek-v3",
+      models: ["deepseek-v3", "qwen3-coder", "kimi-k2.5"],
       extra: { tools: [EXEC_TOOL, IMAGE_TOOL] },
       status: 400,
       refusal: BARE_400,
       has: mentions("image_gen__imagegen"),
     },
   ] as const)(
-    "$field translated for a $to endpoint: asked again without it, and from then on",
+    "$field translated for a $to endpoint: asked again without it, and from then on for that endpoint's model only",
     async (refused) => {
-      const upstream = await startUpstream();
-      const answers = { anthropic: anthropicStream, responses: responsesStream, chat: chatStream };
-      upstream.respond = refusing(refused, answers[refused.to]);
-      const options = {
-        anthropic: { upstreamB: upstream },
-        responses: { responsesUpstream: upstream },
-        chat: { chatUpstream: upstream },
-      };
-      const { gateway, endpointsDir } = await start(options[refused.to]);
-      if (refused.to === "anthropic") await selectModels(endpointsDir, { ep_b: [refused.model] });
-      const ask = async () => {
-        const response = await askAgent({ gateway, ...refused, extra: { ...refused.extra } });
+      const setup = TRANSLATED_SETUPS[refused.to];
+      const upstreamA = await startUpstream();
+      const other = await startUpstream();
+      upstreamA.respond = refusing(refused, setup.answer);
+      other.respond = refusing(refused, setup.answer);
+      const { gateway, endpointsDir } = await start(setup.options(other));
+      const [model, sameEndpoint, otherEndpoint] = refused.models;
+      // A 只留这个格式的地址：两家都要翻译；A 有两个模型，另一家有第三个。
+      await setBaseUrls(endpointsDir, { ep_a: [setup.address(upstreamA)] });
+      await selectModels(endpointsDir, {
+        ep_a: [model, sameEndpoint],
+        [setup.otherId]: [otherEndpoint],
+      });
+      const ask = async (asked: string) => {
+        const response = await askAgent({
+          gateway,
+          ...refused,
+          model: asked,
+          extra: { ...refused.extra },
+        });
         expect(response.status).toBe(200);
         await response.text();
       };
-      const sent = () =>
+      const sent = (upstream: FakeUpstream) =>
         upstream.requests.splice(0).map((request) => refused.has(receivedBody(request)));
 
-      await ask();
-      expect(sent()).toEqual([true, false]);
-      await ask();
-      expect(sent()).toEqual([false]);
+      await ask(model);
+      expect(sent(upstreamA)).toEqual([true, false]);
+      await ask(model);
+      expect(sent(upstreamA)).toEqual([false]);
+      await ask(sameEndpoint);
+      expect(sent(upstreamA)).toEqual([true, false]);
+      await ask(otherEndpoint);
+      expect(sent(other)).toEqual([true, false]);
     },
   );
 
@@ -2220,25 +2284,7 @@ describe("a refused field left out at the same endpoint", () => {
       res.end(REFS_ONLY_REFUSED);
     };
     const { gateway } = await start({ upstreamB: upstream });
-    const messages = [
-      { role: "user", content: "find the docs tool" },
-      {
-        role: "assistant",
-        content: [
-          { type: "tool_use", id: "toolu_1", name: "ToolSearch", input: { query: "docs" } },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: "toolu_1",
-            content: [{ type: "tool_reference", tool_name: "mcp__docs__search" }],
-          },
-        ],
-      },
-    ];
+    const messages = TOOL_SEARCH_MESSAGES;
 
     const response = await askAgent({
       gateway,
