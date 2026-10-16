@@ -11,7 +11,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：一家有 Anthropic 和 Chat 两个地址，Anthropic 地址回「这个模型不存在」。同一请求接着翻译成 Chat 格式，发到这家的 Chat 地址并成功；第二次请求直接走 Chat 地址；这家不冷却。
 - [ ] 所有格式都说没有时，只冷却这家的这个模型，换到下一家。
