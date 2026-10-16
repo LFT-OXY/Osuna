@@ -132,7 +132,8 @@ const BOTH_KEY_HEADERS_WORDS = [
 export function refusesBothKeyHeaders(input: { status: number; text: string }): boolean {
   if (input.status !== 401) return false;
   const text = input.text.toLowerCase();
-  if (!text.includes("x-api-key") || !text.includes("authorization")) return false;
+  const namesBoth = text.includes("x-api-key") && text.includes("authorization");
+  if (!namesBoth) return false;
   return BOTH_KEY_HEADERS_WORDS.some((words) => text.includes(words));
 }
 
@@ -161,6 +162,9 @@ export function keyHeaderValues(input: {
   return headers;
 }
 
+/** 问一次上游的结果（开口、失败、Agent 走了）里，要不要换头只看这些。 */
+export type AskedUpstream = { kind: "opened" | "gone" } | { kind: "failed"; status: number };
+
 // 两个头不能同时带时，先只带 Anthropic 自己的 x-api-key，再只带 Bearer（magpie 的 OneAuthOrder）。
 const ONE_KEY_HEADER_ORDER = [
   { keys: "xApiKey", learned: "bothKeyHeaders" },
@@ -171,14 +175,15 @@ const ONE_KEY_HEADER_ORDER = [
  * 两个头一起带被 401 拒：按顺序只带一个头各问一次，第一个不再被 401 / 403 拒的记住；都被拒时交出最后一次的失败，
  * 按原来的规则处理。不是这样被拒、或已经只带一个头的，原样交出 `failed`。
  */
-export async function askWithOneKeyHeader<T extends { kind: string; status?: number }>(input: {
+export async function askWithOneKeyHeader<T extends AskedUpstream>(input: {
   refusals: ShapeRefusals;
   sent: KeyHeaders;
   failed: FailedAttempt;
   ask: (keys: KeyHeaders) => Promise<T | FailedAttempt>;
 }): Promise<T | FailedAttempt> {
   const { failed } = input;
-  if (input.sent !== "both" || !refusesBothKeyHeaders(failed)) return failed;
+  if (input.sent !== "both") return failed;
+  if (!refusesBothKeyHeaders(failed)) return failed;
   let outcome: T | FailedAttempt = failed;
   for (const { keys, learned } of ONE_KEY_HEADER_ORDER) {
     outcome = await input.ask(keys);
@@ -191,7 +196,7 @@ export async function askWithOneKeyHeader<T extends { kind: string; status?: num
   return outcome;
 }
 
-function refusedAgain(outcome: { kind: string; status?: number }): boolean {
+function refusedAgain(outcome: AskedUpstream): boolean {
   if (outcome.kind !== "failed") return false;
   return outcome.status === 401 || outcome.status === 403;
 }
@@ -223,6 +228,11 @@ export class RefusedShapes {
 
   add(endpointId: string, model: string, shape: RefusedShape): void {
     this.refused.add(key(endpointId, model, shape));
+  }
+
+  forget(input: { endpointId: string; model: string; shapes: RefusedShape[] }): void {
+    for (const shape of input.shapes)
+      this.refused.delete(key(input.endpointId, input.model, shape));
   }
 }
 

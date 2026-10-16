@@ -1812,6 +1812,33 @@ describe("a refused shape asked again another way at the same endpoint", () => {
     ]);
   });
 
+  test("once every address has said so, the next ask starts again from the first address", async () => {
+    const upstream = await startUpstream();
+    let chatServes = false;
+    upstream.respond = (request, res) => {
+      if (chatServes && request.url === "/v1/chat/completions") {
+        chatStream(res);
+        return;
+      }
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end(NO_MODEL_ENDPOINTS);
+    };
+    const { gateway, endpointsDir } = await start({ upstreamB: upstream });
+    await setBaseUrls(endpointsDir, { ep_b: anthropicAndChat(upstream) });
+    const paths = () => upstream.requests.splice(0).map((request) => request.url);
+
+    const refused = await claudeAsk(gateway, "glm-4.6");
+    expect(refused.status).toBe(400);
+    await refused.text();
+    expect(paths()).toEqual(["/v1/messages", "/v1/chat/completions"]);
+
+    chatServes = true;
+    const served = await claudeAsk(gateway, "glm-4.6");
+    expect(served.status).toBe(200);
+    expect(await served.text()).toContain("Let me ");
+    expect(paths()).toEqual(["/v1/messages", "/v1/chat/completions"]);
+  });
+
   test("an endpoint refusing both key headers together is asked with x-api-key alone, and from then on", async () => {
     const upstream = await startUpstream();
     upstream.respond = (request, res) => {
@@ -1823,7 +1850,7 @@ describe("a refused shape asked again another way at the same endpoint", () => {
         streamReply(res);
       }
     };
-    const { gateway, daemon, logLines } = await start({ upstreamB: upstream });
+    const { gateway, daemon, logLines, restart } = await start({ upstreamB: upstream });
     const keysSent = () =>
       upstream.requests.splice(0).map((request) => ({
         authorization: request.headers.authorization,
@@ -1852,6 +1879,16 @@ describe("a refused shape asked again another way at the same endpoint", () => {
         model: "glm-4.6",
         refused: "bothKeyHeaders",
       }),
+    ]);
+
+    // 记住的写法只在内存里：重启后又先两个头都带。
+    const next = await restart();
+    const again = await claudeAsk(next.gateway, "glm-4.6");
+    expect(again.status).toBe(200);
+    await again.text();
+    expect(keysSent()).toEqual([
+      { authorization: `Bearer ${KEY_B}`, xApiKey: KEY_B },
+      { authorization: undefined, xApiKey: KEY_B },
     ]);
   });
 

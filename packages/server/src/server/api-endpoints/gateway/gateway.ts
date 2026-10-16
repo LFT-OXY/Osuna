@@ -411,24 +411,31 @@ function askableFormat(input: {
   refusals: RefusedShapes;
 }): ApiEndpointRequestFormat | null {
   const { candidate } = input;
-  const formats = candidate.endpoint.baseUrls.map((entry) => entry.format);
-  const left = formatsLeft({ ...input, formats });
+  const formats = formatsOf(candidate);
+  const left = formatsLeft(input);
+  // 并发的请求可能刚好把所有格式都记上：照常挑，交给冷却。
+  const offered = left.length > 0 ? left : formats;
   return chooseRequestFormat({
     agentFormat: input.agentFormat,
     model: candidate.upstreamModel,
-    formats: left.length > 0 ? left : formats,
+    formats: offered,
   });
+}
+
+function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
+  return candidate.endpoint.baseUrls.map((entry) => entry.format);
 }
 
 /** 这家还没说过不提供这个模型的格式。 */
 function formatsLeft(input: {
   candidate: GatewayCandidate;
-  formats: ApiEndpointRequestFormat[];
   refusals: RefusedShapes;
 }): ApiEndpointRequestFormat[] {
   const { id } = input.candidate.endpoint;
   const model = input.candidate.upstreamModel;
-  return input.formats.filter((format) => !input.refusals.has(id, model, formatShape(format)));
+  return formatsOf(input.candidate).filter(
+    (format) => !input.refusals.has(id, model, formatShape(format)),
+  );
 }
 
 /**
@@ -682,20 +689,27 @@ async function askEndpoint(input: EndpointAsk): Promise<AttemptOutcome> {
     if (!refusesFormat(outcome)) return outcome;
     const refused = shapeRefusals({ ...input, candidate });
     refused.add(formatShape(candidate.format));
+    const { refusals } = input.failover;
+    if (formatsLeft({ candidate, refusals }).length === 0) {
+      // 所有格式都说没有：照原规则只冷却这个模型；忘掉这些格式，冷却结束后从头再问。
+      const shapes = formatsOf(candidate).map(formatShape);
+      refusals.forget({
+        endpointId: candidate.endpoint.id,
+        model: candidate.upstreamModel,
+        shapes,
+      });
+      return outcome;
+    }
     const next = nextFormat({ ...input, candidate });
     if (next === null) return outcome;
     candidate = next;
   }
 }
 
-/** 这家下一个还没说过没有这个模型的格式；没有、或要翻译却翻不过去时为 null。 */
+/** 这家下一个还没说过没有这个模型的格式；要翻译却翻不过去时为 null。 */
 function nextFormat(input: EndpointAsk): AskableCandidate | null {
   const { candidate } = input;
-  const formats = formatsLeft({
-    candidate,
-    formats: candidate.endpoint.baseUrls.map((entry) => entry.format),
-    refusals: input.failover.refusals,
-  });
+  const formats = formatsLeft({ candidate, refusals: input.failover.refusals });
   const format = chooseRequestFormat({
     agentFormat: input.format,
     model: candidate.upstreamModel,
@@ -705,10 +719,11 @@ function nextFormat(input: EndpointAsk): AskableCandidate | null {
   if (format === null || baseUrl === undefined) return null;
   if (format === input.format) return { ...candidate, format, baseUrl, translated: null };
   const translation = readTranslated({ format: input.format, parsed: input.parsed });
-  return translation.ok ? { ...candidate, format, baseUrl, translated: translation.request } : null;
+  if (!translation.ok) return null;
+  return { ...candidate, format, baseUrl, translated: translation.request };
 }
 
-/** 这家的这个模型不收哪些写法；记住一种就写一行 info 日志。 */
+/** 这家的这个模型不收哪些写法；新记住一种就写一行 info 日志。 */
 function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   const { candidate } = input;
   const { refusals } = input.failover;
@@ -717,6 +732,8 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   return {
     has: (shape) => refusals.has(endpointId, model, shape),
     add: (shape) => {
+      // 并发的请求可能都按旧写法发出、都被拒：日志只在第一次记住时写。
+      if (refusals.has(endpointId, model, shape)) return;
       refusals.add(endpointId, model, shape);
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },

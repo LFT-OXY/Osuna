@@ -72,14 +72,7 @@ export async function attemptTranslated(input: {
     openUpstream({
       res,
       url,
-      headers: {
-        "content-type": "application/json",
-        accept: "text/event-stream",
-        // 要上游不压缩：错误体要读出原文。
-        "accept-encoding": "identity",
-        ...keyHeaderValues({ apiKey, keys }),
-        ...(to === "anthropic_messages" ? { "anthropic-version": ANTHROPIC_VERSION } : {}),
-      },
+      headers: translatedHeaders({ apiKey, keys, to }),
       body: Buffer.from(JSON.stringify(body)),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -120,6 +113,22 @@ export async function attemptTranslated(input: {
     ? streamReply({ ...input, response, held, ended })
     : wholeReply({ ...input, response, held, ended });
   return { kind: "answered", finished };
+}
+
+function translatedHeaders(input: {
+  apiKey: string;
+  keys: KeyHeaders;
+  to: ApiEndpointRequestFormat;
+}): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "text/event-stream",
+    // 要上游不压缩：错误体要读出原文。
+    "accept-encoding": "identity",
+    ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }),
+  };
+  if (input.to === "anthropic_messages") headers["anthropic-version"] = ANTHROPIC_VERSION;
+  return headers;
 }
 
 /** 上游整份回复的原文：开口时已经收完的就是扣下的那些。 */
