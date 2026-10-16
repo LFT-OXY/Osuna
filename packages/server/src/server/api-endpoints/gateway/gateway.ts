@@ -17,12 +17,18 @@ import {
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { CodexLastTurn } from "./codex-side-calls.js";
 import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } from "./cooldown.js";
 import { endpointFailure, lateRests, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
 import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
 import { RefusedShapes, type ShapeRefusals } from "./refusals.js";
-import { chooseRequestFormat, resolveGatewayRoute, type GatewayCandidate } from "./routing.js";
+import {
+  chooseRequestFormat,
+  resolveGatewayRoute,
+  type GatewayCandidate,
+  type GatewayRoute,
+} from "./routing.js";
 import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
@@ -85,6 +91,7 @@ export function createApiEndpointGateway(options: {
     cooldowns: options.cooldowns,
     sticks: new ConversationSticks(),
     refusals: new RefusedShapes(),
+    codexTurns: new CodexLastTurn(),
     headerTimeoutMs: options.overrides?.gatewayHeaderTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
     keepAliveMs: options.overrides?.gatewayKeepAliveMs ?? KEEPALIVE_EVERY_MS,
@@ -153,6 +160,7 @@ interface Failover {
   cooldowns: EndpointCooldowns;
   sticks: ConversationSticks;
   refusals: RefusedShapes;
+  codexTurns: CodexLastTurn;
   headerTimeoutMs: number;
   retryPauseMs: number;
   keepAliveMs: number;
@@ -167,6 +175,7 @@ async function routeAgentRequest(input: {
   agent: ApiEndpointProvider;
   store: ApiEndpointStore;
   logger: pino.Logger;
+  failover: Failover;
 }): Promise<{
   body: Buffer;
   parsed: unknown;
@@ -189,12 +198,35 @@ async function routeAgentRequest(input: {
   }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
-  const route = resolveGatewayRoute({ state, agent: input.agent, model });
+  const route = routeModel({ ...input, state, model });
   if (!route.ok) {
     reply(404, route.message);
     return null;
   }
   return { body, parsed, model, candidates: route.candidates };
+}
+
+/**
+ * 按模型名找候选。Codex 的记忆整理与 auto-review 找不到模型时，改用 Codex 上一轮对话用的模型找；
+ * 找得到的 Codex 对话轮记下它问的模型。请求里的模型名不变，发给每家时照常换成候选的写法。
+ */
+function routeModel(input: {
+  req: Request;
+  agent: ApiEndpointProvider;
+  state: ApiEndpointState;
+  model: string;
+  failover: Failover;
+}): GatewayRoute {
+  const { req, agent, state, model } = input;
+  const { codexTurns } = input.failover;
+  const route = resolveGatewayRoute({ state, agent, model });
+  if (route.ok) {
+    if (agent === "codex") codexTurns.asked(req.headers, model);
+    return route;
+  }
+  const standIn = agent === "codex" ? codexTurns.standIn(req.headers, model) : null;
+  const instead = standIn === null ? null : resolveGatewayRoute({ state, agent, model: standIn });
+  return instead?.ok ? instead : route;
 }
 
 /**

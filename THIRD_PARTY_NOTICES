@@ -81,9 +81,16 @@ internal/catalog/catalog.go:
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
 The request-format choice (chooseRequestFormat) follows magpie's usable and
-MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go):
+MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
+which names are the same model (sameModel in internal/provider/group.go) and
+the closest ids a model not found names (Closest in internal/provider/closest.go,
+unknownModel in internal/gateway/unknown_model.go) are ported from magpie too,
+and so is sending Codex's memory and auto-review calls to the model of its last
+turn (internal/gateway/codex_memory.go, callKind in codex_backend.go):
 
   packages/server/src/server/api-endpoints/gateway/routing.ts
+  packages/server/src/server/api-endpoints/gateway/routing.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-side-calls.ts
 
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:

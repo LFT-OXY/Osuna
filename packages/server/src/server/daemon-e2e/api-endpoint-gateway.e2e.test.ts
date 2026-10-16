@@ -532,6 +532,104 @@ describe("passing requests through to an endpoint that speaks the agent's format
       },
     });
   });
+
+  test("a model not offered names the closest ids, in OpenAI shape for Codex", async () => {
+    const { gateway } = await start();
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k3", input: "hi", stream: false }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: {
+        message: 'No enabled API endpoint offers the model "kimi-k3"; did you mean kimi-k2?',
+        type: "not_found_error",
+        code: null,
+        param: null,
+      },
+    });
+  });
+});
+
+describe("names that differ only in how a model is written", () => {
+  test("switch to each other, and each endpoint is sent the name it lists", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "upstream busy" });
+    upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
+    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB });
+    await selectModels(endpointsDir, {
+      ep_a: ["claude-opus-4.6"],
+      ep_b: ["anthropic/claude-opus-4-6-20260115"],
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "claude-opus-4-6",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["claude-opus-4.6"]);
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["anthropic/claude-opus-4-6-20260115"]);
+  });
+});
+
+describe("Codex's auto-review and memory calls on a model no endpoint offers", () => {
+  async function codexRelay() {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => answerResponsesWhole(res);
+    const harness = await start({ upstreamA: upstream });
+    const ask = (model: string, headers: Record<string, string> = {}) =>
+      fetch(`${harness.gateway}/v1/responses`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CODEX_TOKEN}`,
+          "content-type": "application/json",
+          "thread-id": "thread-1",
+          ...headers,
+        },
+        body: JSON.stringify({ model, input: "hi", stream: false }),
+      });
+    return { ...harness, upstream, ask };
+  }
+
+  test("go to the model the conversation's last turn was answered on", async () => {
+    const { upstream, ask } = await codexRelay();
+
+    expect((await ask("gpt-5.5")).status).toBe(200);
+    const review = await ask("codex-auto-review");
+    const guardian = await ask("gpt-5.6-terra", { "x-openai-subagent": "guardian" });
+    const memory = await ask("gpt-5.6-luna", { "x-openai-subagent": "memory_consolidation" });
+
+    expect([review.status, guardian.status, memory.status]).toEqual([200, 200, 200]);
+    expect(upstream.requests.map(receivedModel)).toEqual([
+      "gpt-5.5",
+      "gpt-5.5",
+      "gpt-5.5",
+      "gpt-5.5",
+    ]);
+  });
+
+  test("with no turn before them they are a model not found, as is any other call", async () => {
+    const { upstream, ask } = await codexRelay();
+
+    expect((await ask("codex-auto-review")).status).toBe(404);
+    expect((await ask("gpt-5.6-terra", { "x-openai-subagent": "guardian" })).status).toBe(404);
+    expect((await ask("gpt-5.5")).status).toBe(200);
+    // 不是记忆整理或 auto-review 的请求照常找不到。
+    expect((await ask("gpt-5.6-terra")).status).toBe(404);
+    expect((await ask("gpt-5.6-terra", { "x-openai-subagent": "review" })).status).toBe(404);
+    expect(upstream.requests.map(receivedModel)).toEqual(["gpt-5.5"]);
+  });
 });
 
 /** 假 Chat 上游的流式回复：一段文字、一个带参数的工具调用、以工具调用结束、最后报用量。 */
