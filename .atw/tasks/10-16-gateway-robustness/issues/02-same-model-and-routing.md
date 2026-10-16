@@ -15,7 +15,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：CLI 请求 `claude-opus-4-6`，第一家列的是 `claude-opus-4.6`，第二家列的是 `anthropic/claude-opus-4-6-20260115`。第一家失败后换到第二家，两家各自收到自己列出的写法。
 - [ ] 用「接口标识/模型」指定的那家排第一；斜杠前不是接口标识的名字，按厂商前缀归一。
