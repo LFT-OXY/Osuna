@@ -1,4 +1,4 @@
-// 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、answersNothing）
+// 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、repliesCounted、uncounted、answersNothing）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
@@ -61,7 +61,7 @@ export interface FailedAttempt {
 
 /**
  * 失败从哪来：上游报错或连不上（error）；等响应头超时（timeout，不原地重试，真实的等待是 10 分钟）；
- * 空回复（empty，回复按协议说完了，却没有任何内容、也没计输出 token）。
+ * 空回复（empty，Anthropic 或 Responses 的回复说完了，却没有任何内容、一个 token 也没计）。
  */
 export type FailureCause = "error" | "timeout" | "empty";
 
@@ -259,7 +259,7 @@ function awaitOpening(
       const reply = tap?.end() ?? null;
       const failed = reply ? failedBeforeContent(reply) : null;
       if (failed) settle(failed);
-      else if (reply && isEmptyReply(reply)) settle({ kind: "empty" });
+      else if (reply && isEmptyReply(reply, reads)) settle({ kind: "empty" });
       else settle(open(true));
     };
     const onClose = () => settle({ kind: "broken" });
@@ -277,17 +277,17 @@ function failedBeforeContent(reply: TappedReply): Opening | null {
 }
 
 /**
- * 空回复：按协议说了结束原因，却没有内容、没计输出 token；被截断（length）与拒答（filter）的不算
- * （magpie 的 answersNothing）。没说结束原因的（HTML 页、`{}`）读不出是不是本协议的回复，不算。
+ * 空回复（magpie 的 repliesCounted、uncounted、answersNothing）：Anthropic 与 Responses 的回复一定计 token，
+ * 什么都没说、一个 token 也没计的才是空回复；Claude 自己以空回复结束一轮时计了提示词，仍是回答。
+ * Chat 的回复不一定计 token，从不算空。被截断（length）与拒答（filter）的不算。
+ * 没说结束原因的（HTML 页、`{}`）读不出是不是本协议的回复，也不算，归工单 18。
  */
-function isEmptyReply(reply: TappedReply): boolean {
-  return (
-    reply.stop !== null &&
-    reply.content.length === 0 &&
-    reply.usage.output === 0 &&
-    reply.stop !== "length" &&
-    reply.stop !== "filter"
-  );
+function isEmptyReply(reply: TappedReply, format: ApiEndpointRequestFormat): boolean {
+  const { usage } = reply;
+  const repliesCounted = format === "anthropic_messages" || format === "openai_responses";
+  const uncounted = usage.input + usage.output + usage.cacheRead + usage.cacheWrite === 0;
+  const answersNothing = reply.stop !== null && reply.stop !== "length" && reply.stop !== "filter";
+  return repliesCounted && uncounted && reply.content.length === 0 && answersNothing;
 }
 
 async function sendUpstream(input: {

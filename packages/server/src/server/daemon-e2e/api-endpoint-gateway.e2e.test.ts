@@ -2165,9 +2165,7 @@ describe("the reply opens at its first content", () => {
   });
 
   test("when every endpoint replies empty the agent gets an empty reply error in its own shape, streamed or not", async () => {
-    const upstreamA = await startUpstream();
-    const upstreamB = await startUpstream();
-    const chat = await startUpstream();
+    const { upstreamA, upstreamB, gateway } = await twoRelays();
     const whole = (res: ServerResponse) =>
       res.writeHead(200, { "content-type": "application/json" }).end(
         JSON.stringify({
@@ -2175,24 +2173,12 @@ describe("the reply opens at its first content", () => {
           role: "assistant",
           content: [],
           stop_reason: "end_turn",
-          usage: { input_tokens: 5, output_tokens: 0 },
+          usage: { input_tokens: 0, output_tokens: 0 },
         }),
       );
     upstreamA.respond = (request, res) =>
       receivedBody(request).stream ? emptyAnthropicStream(res) : whole(res);
     upstreamB.respond = upstreamA.respond;
-    chat.respond = (_request, res) => {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      res.write(
-        `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant" } }] })}\n\n`,
-      );
-      res.write(
-        `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
-      );
-      res.end("data: [DONE]\n\n");
-    };
-    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB, chatUpstream: chat });
-    await selectModels(endpointsDir, { ep_c: ["kimi-k2"] });
     const ask = (stream: boolean) =>
       fetch(
         `${gateway}/v1/messages`,
@@ -2208,17 +2194,69 @@ describe("the reply opens at its first content", () => {
       const response = await ask(stream);
 
       expect(response.status).toBe(502);
-      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
       expect(await response.json()).toEqual({
         type: "error",
         error: {
           type: "api_error",
-          message: "Relay C: an empty reply (the model answered nothing; try again)",
+          message: "Relay B: an empty reply (the model answered nothing; try again)",
         },
       });
-      const asked = [upstreamA, upstreamB, chat].map((upstream) => upstream.requests.splice(0));
-      expect(asked.map((requests) => requests.length)).toEqual([2, 2, 2]);
+      const asked = [upstreamA, upstreamB].map((upstream) => upstream.requests.splice(0));
+      expect(asked.map((requests) => requests.length)).toEqual([2, 2]);
     }
+  });
+
+  test("a reply that counted its prompt, or a Chat reply, is an answer however little it said (magpie)", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    // Claude 在工具结果之后自己以空回复结束一轮：计了提示词，是回答。
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        sseFrame({
+          type: "message_start",
+          message: { id: "msg_said_nothing", usage: { input_tokens: 5, output_tokens: 0 } },
+        }),
+      );
+      res.write(sseFrame({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: {} }));
+      res.end(sseFrame({ type: "message_stop" }));
+    };
+
+    const counted = await ask();
+
+    expect(counted.status).toBe(200);
+    expect(counted.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await counted.text()).toContain("msg_said_nothing");
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(0);
+
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant" } }] })}\n\n`,
+      );
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
+      );
+      res.end("data: [DONE]\n\n");
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const silent = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "deepseek-v3",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(silent.status).toBe(200);
+    expect(silent.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(await silent.text()).toContain("message_stop");
+    expect(chat.requests).toHaveLength(1);
   });
 
   test("Codex gets the empty reply error in OpenAI shape when every endpoint replies empty", async () => {
@@ -2233,7 +2271,7 @@ describe("the reply opens at its first content", () => {
             id: "resp_empty",
             status: "completed",
             output: [],
-            usage: { input_tokens: 5, output_tokens: 0 },
+            usage: { input_tokens: 0, output_tokens: 0 },
           },
         }),
       );
@@ -2260,11 +2298,11 @@ describe("the reply opens at its first content", () => {
   });
 });
 
-/** 一段什么都没说、也没计输出 token 的 Anthropic 流式回复。 */
+/** 一段什么都没说、一个 token 也没计的 Anthropic 流式回复（magpie 的空回复）。 */
 function emptyAnthropicStream(res: ServerResponse): void {
   res.writeHead(200, { "content-type": "text/event-stream" });
   res.write(
-    sseFrame({ type: "message_start", message: { usage: { input_tokens: 5, output_tokens: 0 } } }),
+    sseFrame({ type: "message_start", message: { usage: { input_tokens: 0, output_tokens: 0 } } }),
   );
   res.write(
     sseFrame({
