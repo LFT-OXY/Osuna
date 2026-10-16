@@ -1,13 +1,20 @@
+// 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、answersNothing）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import https from "node:https";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { describeNetworkError, extractErrorDetail, isRecord, parseJson } from "../upstream-http.js";
 import type { AgentError } from "./agent-errors.js";
+import { streamStatus } from "./failure.js";
+import { ReplyTap, type TappedReply } from "./reply-tap.js";
 
 /*
- * 向一家接口发出请求、等它开口：直通与翻译共用。上游开口（响应头加第一段回复）之前的失败
- * 不写给 Agent，交回中转站决定换不换家；开口之后怎么转给 Agent 由调用方决定。
+ * 向一家接口发出请求、等它开口：直通与翻译共用。开口是回复里出现第一段真内容（文字、思考或工具调用），
+ * 按上游的协议认；在那之前的帧（message_start、response.created、ping……）扣在这里，开口时原样交出。
+ * 开口之前的失败（出错、断开、空回复）不写给 Agent，交回中转站决定换不换家；开口之后怎么转给 Agent
+ * 由调用方决定。
  * 用 node:http 而不是 fetch：fetch 会替我们解压、把等响应头的时间限死在 5 分钟。
  */
 
@@ -15,6 +22,11 @@ import type { AgentError } from "./agent-errors.js";
 export const ANSWERED_BY_HEADER = "x-osuna-api-endpoint";
 
 const MAX_ERROR_BODY_BYTES = 1024 * 1024;
+// 开口前最多扣这么多（magpie 的 holdMost），再多就当开口：只有帧不会这么长。
+const MAX_HELD_BYTES = 1024 * 1024;
+
+// 空回复交给 Agent 的说法（magpie 的 emptyReply）。
+export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
 // Anthropic 地址按 Claude Code 的规则拼 /v1/messages；OpenAI 两种地址按 SDK 的规则以 /v1 结尾。
 const UPSTREAM_PATHS: Record<ApiEndpointRequestFormat, string> = {
@@ -44,9 +56,14 @@ export interface FailedAttempt {
   // 给 Agent 看的上游原文，key 已打码。
   detail: string;
   upstreamError: Pick<AgentError, "type" | "code">;
-  // 等响应头超时：不原地重试，真实的等待是 10 分钟。
-  timedOut: boolean;
+  cause: FailureCause;
 }
+
+/**
+ * 失败从哪来：上游报错或连不上（error）；等响应头超时（timeout，不原地重试，真实的等待是 10 分钟）；
+ * 空回复（empty，回复按协议说完了，却没有任何内容、也没计输出 token）。
+ */
+export type FailureCause = "error" | "timeout" | "empty";
 
 /** 开口之后回复怎么结束的：完整（带这次的缓存命中 token 数）、上游断流、Agent 先走了。 */
 export type AnswerEnd =
@@ -59,12 +76,17 @@ export type AttemptOutcome =
   | FailedAttempt
   | { kind: "gone" };
 
-/** 上游开了口：2xx 响应头到了，第一段回复也到了（或者回复是空的）。 */
+/** 上游开了口：2xx 响应头到了，第一段内容也到了（或者回复在那之前就收完了，且不是空回复）。 */
 export interface OpenedUpstream {
   kind: "opened";
   response: IncomingMessage;
   status: number;
-  first: Buffer | null;
+  // 开口前扣下的字节，按收到的顺序；调用方先交出它们，再接着读 response。
+  held: Buffer;
+  // 回复在开口时已经收完：response 不会再有数据。
+  ended: boolean;
+  // 读过 held 的那个 ReplyTap，接着喂后面的字节；不按协议读（count_tokens）时为 null。
+  tap: ReplyTap | null;
 }
 
 type UpstreamOutcome =
@@ -72,7 +94,12 @@ type UpstreamOutcome =
   | { kind: "timeout" }
   | { kind: "failed"; error: unknown };
 
-type FirstChunk = { kind: "chunk"; chunk: Buffer } | { kind: "end" } | { kind: "broken" };
+type Opening =
+  | { kind: "open"; held: Buffer; ended: boolean; tap: ReplyTap | null }
+  // 开口前出错：报错那个事件的原文。
+  | { kind: "error"; raw: string }
+  | { kind: "empty" }
+  | { kind: "broken" };
 
 export async function openUpstream(input: {
   res: Response;
@@ -81,6 +108,8 @@ export async function openUpstream(input: {
   body: Buffer;
   apiKey: string;
   headerTimeoutMs: number;
+  // 按哪种协议读回复、认开口；null 时第一段字节就算开口（count_tokens 的回复不是对话）。
+  reads: ApiEndpointRequestFormat | null;
 }): Promise<OpenedUpstream | FailedAttempt | { kind: "gone" }> {
   const { res, url, apiKey } = input;
   const outcome = await sendUpstream(input);
@@ -90,39 +119,48 @@ export async function openUpstream(input: {
     return failedBySelf({
       status: 504,
       detail: `no response headers within ${input.headerTimeoutMs / 1000}s`,
-      timedOut: true,
+      cause: "timeout",
     });
   }
   if (outcome.kind === "failed") {
     const detail = `${url.origin}: ${describeNetworkError(outcome.error)}`;
-    return failedBySelf({ status: 502, detail: detail.replaceAll(apiKey, "***"), timedOut: false });
+    return failedBySelf({ status: 502, detail: detail.replaceAll(apiKey, "***") });
   }
 
   const { response } = outcome;
   const status = response.statusCode ?? 502;
   if (status >= 400) {
     const text = await readLimited({ stream: response, first: null });
-    return {
-      kind: "failed",
-      status,
-      headers: response.headers,
-      text,
-      detail: extractErrorDetail(text, apiKey) || `HTTP ${status}`,
-      upstreamError: readUpstreamError(text),
-      timedOut: false,
-    };
+    return failedByUpstream({ status, response, text, apiKey });
   }
 
-  const first = await firstChunk(response);
+  const opening = await awaitOpening(response, input.reads);
   if (res.destroyed) return { kind: "gone" };
-  if (first.kind === "broken") {
-    return failedBySelf({
-      status: 502,
-      detail: `${url.origin}: the connection closed before the reply began`,
-      timedOut: false,
-    });
+  switch (opening.kind) {
+    case "open":
+      return {
+        kind: "opened",
+        response,
+        status,
+        held: opening.held,
+        ended: opening.ended,
+        tap: opening.tap,
+      };
+    case "error":
+      return failedByUpstream({
+        status: streamStatus(opening.raw),
+        response,
+        text: opening.raw,
+        apiKey,
+      });
+    case "empty":
+      return failedBySelf({ status: 502, detail: EMPTY_REPLY, cause: "empty" });
+    case "broken":
+      return failedBySelf({
+        status: 502,
+        detail: `${url.origin}: the connection closed before the reply began`,
+      });
   }
-  return { kind: "opened", response, status, first: first.kind === "chunk" ? first.chunk : null };
 }
 
 /** 上游的回复是事件流：响应头这样说，或回复以 data: / event: / 注释行开头。 */
@@ -131,11 +169,30 @@ export function isEventStream(response: IncomingMessage, first: Buffer | null): 
   return first !== null && /^\s*(data:|event:|:)/.test(first.toString("utf8", 0, 64));
 }
 
-/** 中转站自己判的失败（超时、连不上、开口前断开）：没有上游错误体，判错就读这段描述。 */
+/** 上游自己说的失败：错误体，或开口前流里的错误事件；判错读原文 `text`。 */
+function failedByUpstream(input: {
+  status: number;
+  response: IncomingMessage;
+  text: string;
+  apiKey: string;
+}): FailedAttempt {
+  const { status, text } = input;
+  return {
+    kind: "failed",
+    status,
+    headers: input.response.headers,
+    text,
+    detail: extractErrorDetail(text, input.apiKey) || `HTTP ${status}`,
+    upstreamError: readUpstreamError(text),
+    cause: "error",
+  };
+}
+
+/** 中转站自己判的失败（超时、连不上、开口前断开、空回复）：没有上游错误体，判错就读这段描述。 */
 export function failedBySelf(input: {
   status: number;
   detail: string;
-  timedOut: boolean;
+  cause?: Exclude<FailureCause, "error">;
 }): FailedAttempt {
   return {
     kind: "failed",
@@ -144,31 +201,93 @@ export function failedBySelf(input: {
     text: input.detail,
     detail: input.detail,
     upstreamError: {},
-    timedOut: input.timedOut,
+    cause: input.cause ?? "error",
   };
 }
 
-/** 等上游回复的第一段：拿到之前断开的还能换家。 */
-function firstChunk(response: IncomingMessage): Promise<FirstChunk> {
+/**
+ * 等上游开口：边收边按协议读，扣住第一段内容之前的字节。之前出错、断开、或回复收完却是空回复，
+ * 都还能换家；出错时不再读这家的回复。
+ */
+function awaitOpening(
+  response: IncomingMessage,
+  reads: ApiEndpointRequestFormat | null,
+): Promise<Opening> {
   return new Promise((resolve) => {
-    const settle = (result: FirstChunk) => {
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let tap: ReplyTap | null = null;
+    const settle = (result: Opening) => {
       response.off("data", onData);
       response.off("end", onEnd);
       response.off("close", onClose);
       response.off("error", onClose);
       resolve(result);
     };
+    const open = (ended: boolean): Opening => ({
+      kind: "open",
+      held: Buffer.concat(chunks),
+      ended,
+      tap,
+    });
     const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      bytes += chunk.length;
+      if (reads !== null) {
+        tap ??= new ReplyTap({ format: reads, stream: isEventStream(response, chunk) });
+        tap.feed(chunk);
+        const reply = tap.soFar();
+        const failed = failedBeforeContent(reply);
+        if (failed) {
+          response.destroy();
+          settle(failed);
+          return;
+        }
+        const saidSomething = reply.content.length > 0;
+        const heldTooMuch = bytes > MAX_HELD_BYTES;
+        if (!saidSomething && !heldTooMuch) return;
+      }
       response.pause();
-      settle({ kind: "chunk", chunk });
+      settle(open(false));
     };
-    const onEnd = () => settle({ kind: "end" });
+    const onEnd = () => {
+      if (reads === null) {
+        settle(open(true));
+        return;
+      }
+      // 一个字节都没有的回复照原样交出（不是本协议回复的 2xx 归工单 18）。
+      const reply = tap?.end() ?? null;
+      const failed = reply ? failedBeforeContent(reply) : null;
+      if (failed) settle(failed);
+      else if (reply && isEmptyReply(reply)) settle({ kind: "empty" });
+      else settle(open(true));
+    };
     const onClose = () => settle({ kind: "broken" });
     response.on("data", onData);
     response.once("end", onEnd);
     response.once("close", onClose);
     response.once("error", onClose);
   });
+}
+
+/** 还没有内容就报了错。 */
+function failedBeforeContent(reply: TappedReply): Opening | null {
+  if (reply.error === null || reply.content.length > 0) return null;
+  return { kind: "error", raw: reply.error.raw };
+}
+
+/**
+ * 空回复：按协议说了结束原因，却没有内容、没计输出 token；被截断（length）与拒答（filter）的不算
+ * （magpie 的 answersNothing）。没说结束原因的（HTML 页、`{}`）读不出是不是本协议的回复，不算。
+ */
+function isEmptyReply(reply: TappedReply): boolean {
+  return (
+    reply.stop !== null &&
+    reply.content.length === 0 &&
+    reply.usage.output === 0 &&
+    reply.stop !== "length" &&
+    reply.stop !== "filter"
+  );
 }
 
 async function sendUpstream(input: {

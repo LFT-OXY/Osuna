@@ -32,7 +32,7 @@ import {
 /*
  * 翻译后的一次尝试：Agent 的请求经中间格式翻成这家能用的格式，上游一律流式请求；
  * 回复解码后按 Agent 的协议编码，Agent 要流式就边收边发，不要就攒齐渲染成整份回复。
- * 开口前的失败与直通一样交回中转站换家；开口之后不再换家。
+ * 开口（第一段内容）前的失败与直通一样交回中转站换家；开口之后不再换家。
  * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住。
  */
 
@@ -73,6 +73,7 @@ export async function attemptTranslated(input: {
       body: Buffer.from(JSON.stringify(body)),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
+      reads: to,
     });
   const build = () =>
     protocolOf(to).build(
@@ -85,20 +86,29 @@ export async function attemptTranslated(input: {
     opened = await open(build());
   }
   if (opened.kind !== "opened") return opened;
-  const { response, first } = opened;
-  if (!isEventStream(response, first)) {
+  const { response, held, ended } = opened;
+  if (!isEventStream(response, held)) {
     // 上游没理会 stream: true：读不出事件，当作开口前失败换家。
-    const text = await readLimited({ stream: response, first });
+    const text = await wholeText({ response, held, ended });
     return failedBySelf({
       status: 502,
       detail: `${url.origin}: the reply was not a stream: ${extractErrorDetail(text, apiKey)}`,
-      timedOut: false,
     });
   }
   const finished = input.request.stream
-    ? streamReply({ ...input, response, first })
-    : wholeReply({ ...input, response, first });
+    ? streamReply({ ...input, response, held, ended })
+    : wholeReply({ ...input, response, held, ended });
   return { kind: "answered", finished };
+}
+
+/** 上游整份回复的原文：开口时已经收完的就是扣下的那些。 */
+function wholeText(input: {
+  response: IncomingMessage;
+  held: Buffer;
+  ended: boolean;
+}): Promise<string> {
+  if (input.ended) return Promise.resolve(input.held.toString("utf8"));
+  return readLimited({ stream: input.response, first: input.held });
 }
 
 /** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */
@@ -123,7 +133,8 @@ async function streamReply(input: {
   request: GatewayRequest;
   requestedModel: string;
   response: IncomingMessage;
-  first: Buffer | null;
+  held: Buffer;
+  ended: boolean;
 }): Promise<AnswerEnd> {
   const { res } = input;
   res.writeHead(200, {
@@ -162,7 +173,8 @@ async function wholeReply(input: {
   request: GatewayRequest;
   requestedModel: string;
   response: IncomingMessage;
-  first: Buffer | null;
+  held: Buffer;
+  ended: boolean;
 }): Promise<AnswerEnd> {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
@@ -196,16 +208,21 @@ async function wholeReply(input: {
   return { kind: "complete", cacheRead: reply.usage.cacheRead };
 }
 
-/** 读上游的流直到结束；字符可能被切在两段之间，按 UTF-8 接好再交出去。 */
+/** 读上游的流直到结束（从开口时扣下的字节读起）；字符可能被切在两段之间，按 UTF-8 接好再交出去。 */
 function readStream(input: {
   res: Response;
   response: IncomingMessage;
-  first: Buffer | null;
+  held: Buffer;
+  ended: boolean;
   onText: (text: string) => void;
 }): Promise<StreamEnd> {
   const { response, res } = input;
   const utf8 = new StringDecoder("utf8");
-  if (input.first) input.onText(utf8.write(input.first));
+  input.onText(utf8.write(input.held));
+  if (input.ended) {
+    input.onText(utf8.end());
+    return Promise.resolve({ kind: "ended" });
+  }
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;

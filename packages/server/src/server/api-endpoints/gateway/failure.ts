@@ -176,6 +176,21 @@ export function requestRefused(status: number, rawBody: string): boolean {
   return [W.shape, W.refused, W.region].some((words) => words.test(body));
 }
 
+/**
+ * 流里的错误事件（或 2xx 里包着的错误）代表哪个状态码，判错与冷却照它走（magpie 的 streamStatus）。
+ * 对话超长排在额度之前：「context_length_exceeded」里的 exceeded 会被当成额度。
+ */
+export function streamStatus(rawMessage: string): number {
+  const message = wordsOf(rawMessage);
+  if (tooLong(400, message)) return 400;
+  if (/overloaded/i.test(message)) return 529;
+  if (W.credit.test(message) && !/rate/i.test(message)) return 402;
+  if (/rate_limit|rate limit|too many/i.test(message) || W.quota.test(message)) return 429;
+  if (W.unserved.test(message)) return 400;
+  if (/invalid|context_length|too long/i.test(message)) return 400;
+  return 502;
+}
+
 /** 回复开始后断掉时这家要不要冷却：对话超长、厂商拒收或保护机制导致的不怪这家。 */
 export function lateRests(message: string): boolean {
   return !tooLong(400, message) && !W.refused.test(message) && !W.protection.test(message);

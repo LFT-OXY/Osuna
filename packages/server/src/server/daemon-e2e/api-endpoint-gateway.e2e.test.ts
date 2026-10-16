@@ -38,7 +38,7 @@ interface RecordedRequest {
 interface FakeUpstream {
   url: string;
   requests: RecordedRequest[];
-  // 每个请求怎么回；默认 200 空 JSON。
+  // 每个请求怎么回；默认 200 和一份只说了「ok」的整份 Anthropic 回复。
   respond: (request: RecordedRequest, res: ServerResponse) => void;
 }
 
@@ -72,7 +72,15 @@ async function startUpstream(): Promise<FakeUpstream> {
     requests: [],
     respond: (_request, res) => {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end("{}");
+      res.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
     },
   };
   const server = createServer((req, res) => {
@@ -341,6 +349,27 @@ describe("who may use the gateway", () => {
   });
 });
 
+/** 一份只说了「ok」的整份 Responses 回复。 */
+const RESPONSES_WHOLE = {
+  object: "response",
+  status: "completed",
+  output: [
+    {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "ok" }],
+    },
+  ],
+  usage: { input_tokens: 1, output_tokens: 1 },
+};
+
+function answerResponsesWhole(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(RESPONSES_WHOLE));
+}
+
+const OPENING_DELTA =
+  'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n';
+
 describe("passing requests through to an endpoint that speaks the agent's format", () => {
   test("Claude requests reach the Anthropic address unchanged apart from the model and auth, and stream back", async () => {
     const upstream = await startUpstream();
@@ -351,6 +380,7 @@ describe("passing requests through to an endpoint that speaks the agent's format
     upstream.respond = (_request, res) => {
       res.writeHead(200, { "content-type": "text/event-stream", "request-id": "req_1" });
       res.write('event: message_start\ndata: {"type":"message_start"}\n\n');
+      res.write(OPENING_DELTA);
       void restReleased.then(() => {
         res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
         return undefined;
@@ -379,7 +409,8 @@ describe("passing requests through to an endpoint that speaks the agent's format
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
     expect(response.headers.get("content-type")).toBe("text/event-stream");
     expect(response.headers.get("request-id")).toBe("req_1");
-    expect(first).toBe('event: message_start\ndata: {"type":"message_start"}\n\n');
+    // 开口前扣下的 message_start 在第一段内容到达时一起发出。
+    expect(first).toBe(`event: message_start\ndata: {"type":"message_start"}\n\n${OPENING_DELTA}`);
     expect(rest).toBe('event: message_stop\ndata: {"type":"message_stop"}\n\n');
     expect(received.method).toBe("POST");
     expect(received.url).toBe("/v1/messages?beta=true");
@@ -393,7 +424,7 @@ describe("passing requests through to an endpoint that speaks the agent's format
 
   test("Codex requests reach the Responses address and a non-streaming reply comes back whole", async () => {
     const upstream = await startUpstream();
-    const reply = { id: "resp_1", object: "response", output: [], model: "gpt-5.5" };
+    const reply = { ...RESPONSES_WHOLE, id: "resp_1", model: "gpt-5.5" };
     upstream.respond = (_request, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(reply));
@@ -424,6 +455,7 @@ describe("passing requests through to an endpoint that speaks the agent's format
 
   test("a Codex request with a call left unanswered reaches the Responses address mended", async () => {
     const upstream = await startUpstream();
+    upstream.respond = (_request, res) => answerResponsesWhole(res);
     const { gateway } = await start({ upstreamA: upstream });
     const input = [
       { type: "message", role: "user", content: [{ type: "input_text", text: "run it" }] },
@@ -1389,7 +1421,7 @@ describe("reasoning turned off, sent the way each model takes it", () => {
       const body = receivedBody(request);
       const effort = (body.reasoning as { effort?: string } | undefined)?.effort;
       if (body.model === "gpt-6.1-sol" && effort === "none") refuse(res, NONE_REFUSED);
-      else res.writeHead(200, { "content-type": "application/json" }).end("{}");
+      else answerResponsesWhole(res);
     };
     const { gateway, endpointsDir } = await start({ upstreamA: upstream });
     await selectModels(endpointsDir, { ep_a: ["gpt-6.1-sol", "gpt-5.5"] });
@@ -1797,11 +1829,12 @@ describe("switching to another endpoint when one fails", () => {
     });
   });
 
-  test("after the first byte it stays: the broken stream reaches the agent and the endpoint cools down", async () => {
+  test("once the reply opened it stays: the broken stream reaches the agent and the endpoint cools down", async () => {
     const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
     upstreamA.respond = (_request, res) => {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write(`event: message_start\ndata: {"type":"message_start","message":{}}\n\n`);
+      res.write(OPENING_DELTA);
       setTimeout(() => res.destroy(), 50);
     };
 
@@ -1976,6 +2009,272 @@ describe("switching to another endpoint when one fails", () => {
     expect(logLines.join("\n")).not.toContain(KEY_B);
   });
 });
+
+/** 一个 SSE 事件的原文，带 `event:` 行。 */
+function sseFrame(event: { type: string } & Record<string, unknown>): string {
+  return `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
+describe("the reply opens at its first content", () => {
+  test("a stream that only began before an overloaded error goes to the next endpoint, and the agent sees none of it", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        sseFrame({
+          type: "message_start",
+          message: { id: "msg_from_a", usage: { input_tokens: 9 } },
+        }),
+      );
+      res.write(sseFrame({ type: "ping" }));
+      res.end(
+        sseFrame({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }),
+      );
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    const text = await response.text();
+    expect(text).toContain("from B");
+    expect(text).not.toContain("msg_from_a");
+    expect(text).not.toContain("Overloaded");
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({
+      state: "cooling_down",
+    });
+  });
+
+  test("Codex: a stream that only said response.created before failing goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, gateway, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        sseFrame({
+          type: "response.created",
+          response: { id: "resp_from_a", status: "in_progress" },
+        }),
+      );
+      res.end(
+        sseFrame({
+          type: "response.failed",
+          response: {
+            id: "resp_from_a",
+            status: "failed",
+            error: { code: "server_error", message: "The server is overloaded" },
+          },
+        }),
+      );
+    };
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    const text = await response.text();
+    expect(text).not.toContain("resp_from_a");
+    expect(text).not.toContain("overloaded");
+    expect(completedResponse(text).output).toEqual([
+      expect.objectContaining({
+        type: "message",
+        content: [expect.objectContaining({ type: "output_text", text: "from B" })],
+      }),
+    ]);
+    expect(upstreamA.requests[0]?.url).toBe("/v1/responses");
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({
+      state: "cooling_down",
+      reason: "other",
+    });
+  });
+
+  test("thinking opens the reply: it reaches the agent as it comes, and an error after it stays", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    let releaseError: () => void = () => {};
+    const errorReleased = new Promise<void>((resolve) => {
+      releaseError = resolve;
+    });
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(sseFrame({ type: "message_start", message: { id: "msg_from_a" } }));
+      res.write(
+        sseFrame({
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        }),
+      );
+      res.write(
+        sseFrame({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "Let me think." },
+        }),
+      );
+      void errorReleased.then(() => {
+        res.end(
+          sseFrame({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }),
+        );
+        return undefined;
+      });
+    };
+
+    const response = await ask();
+    const reader = response.body!.getReader();
+    let shown = "";
+    while (!shown.includes("Let me think.")) {
+      shown += new TextDecoder().decode((await reader.read()).value);
+    }
+    releaseError();
+    let rest = "";
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += new TextDecoder().decode(chunk.value);
+    }
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(shown).toContain("msg_from_a");
+    expect(rest).toContain("overloaded_error");
+    expect(upstreamB.requests).toHaveLength(0);
+  });
+
+  test("an empty reply is asked again at the same endpoint, then at the next, which does not cool down", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => emptyAnthropicStream(res);
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(2);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+    const switched = logLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((line) => line.msg === "API endpoint gateway switched endpoints");
+    expect(switched).toEqual([
+      expect.objectContaining({ from: "Relay A", to: "Relay B", failure: "empty" }),
+    ]);
+  });
+
+  test("when every endpoint replies empty the agent gets an empty reply error in its own shape, streamed or not", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    const chat = await startUpstream();
+    const whole = (res: ServerResponse) =>
+      res.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 5, output_tokens: 0 },
+        }),
+      );
+    upstreamA.respond = (request, res) =>
+      receivedBody(request).stream ? emptyAnthropicStream(res) : whole(res);
+    upstreamB.respond = upstreamA.respond;
+    chat.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: "assistant" } }] })}\n\n`,
+      );
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\n`,
+      );
+      res.end("data: [DONE]\n\n");
+    };
+    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB, chatUpstream: chat });
+    await selectModels(endpointsDir, { ep_c: ["kimi-k2"] });
+    const ask = (stream: boolean) =>
+      fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model: "kimi-k2",
+          stream,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+
+    for (const stream of [true, false]) {
+      const response = await ask(stream);
+
+      expect(response.status).toBe(502);
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+      expect(await response.json()).toEqual({
+        type: "error",
+        error: {
+          type: "api_error",
+          message: "Relay C: an empty reply (the model answered nothing; try again)",
+        },
+      });
+      const asked = [upstreamA, upstreamB, chat].map((upstream) => upstream.requests.splice(0));
+      expect(asked.map((requests) => requests.length)).toEqual([2, 2, 2]);
+    }
+  });
+
+  test("Codex gets the empty reply error in OpenAI shape when every endpoint replies empty", async () => {
+    const { upstreamA, upstreamB, gateway } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(sseFrame({ type: "response.created", response: { id: "resp_empty" } }));
+      res.end(
+        sseFrame({
+          type: "response.completed",
+          response: {
+            id: "resp_empty",
+            status: "completed",
+            output: [],
+            usage: { input_tokens: 5, output_tokens: 0 },
+          },
+        }),
+      );
+    };
+    upstreamB.respond = (_request, res) => emptyAnthropicStream(res);
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.json()).toEqual({
+      error: {
+        message: "Relay B: an empty reply (the model answered nothing; try again)",
+        type: "api_error",
+        code: null,
+        param: null,
+      },
+    });
+    expect(upstreamA.requests).toHaveLength(2);
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+});
+
+/** 一段什么都没说、也没计输出 token 的 Anthropic 流式回复。 */
+function emptyAnthropicStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.write(
+    sseFrame({ type: "message_start", message: { usage: { input_tokens: 5, output_tokens: 0 } } }),
+  );
+  res.write(
+    sseFrame({
+      type: "message_delta",
+      delta: { stop_reason: "end_turn" },
+      usage: { output_tokens: 0 },
+    }),
+  );
+  res.end(sseFrame({ type: "message_stop" }));
+}
 
 describe("a conversation stays where it was answered", () => {
   const userSays = (text: string) => ({ role: "user", content: text });

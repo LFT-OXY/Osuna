@@ -38,8 +38,9 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  *
  * 每家接口按 chooseRequestFormat 挑格式：有 Agent 自己格式的地址就直通，否则经中间格式翻译过去。
  *
- * 自动切换：用户选的那家在开口前失败（额度、欠费、限流、服务器错误、超时）时，按创建顺序换到下一家
- * 有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
+ * 自动切换：用户选的那家在开口（回复里出现第一段内容）前失败（额度、欠费、限流、服务器错误、超时）时，
+ * 按创建顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
+ * 空回复先在同一家再问一次，还空就换下一家；空回复怪不到这家，不冷却（magpie #1221）。
  * 换家之前先看是不是不思考的写法被拒（effort none、关思考）：是就在同一家换写法重问一次，也只记在内存里。
  */
 
@@ -488,14 +489,16 @@ async function askInTurn(input: {
       });
       return;
     }
-    const rest = markFailed({ cooldowns, candidate, failed });
+    // 空回复怪不到这家，不冷却。
+    let rest: EndpointRest | null = null;
+    if (failed.cause !== "empty") rest = markFailed({ cooldowns, candidate, failed });
     if (next) {
       logger.info(
         {
           from: candidate.endpoint.name,
           to: next.endpoint.name,
           model: candidate.upstreamModel,
-          failure: rest?.why ?? endpointFailure(failed.status, failed.text),
+          failure: switchedFailure(failed, rest),
           status: failed.status,
           until: rest?.until ? new Date(rest.until).toISOString() : null,
         },
@@ -519,7 +522,9 @@ type SettledAttempt =
   | Exclude<AttemptOutcome, FailedAttempt>
   | { kind: "failed"; failed: FailedAttempt };
 
-/** 问一家；它是最后一家且只是一时忙或限流时，稍等后原地再问（magpie 的 passing）。 */
+/**
+ * 问一家；回了空回复就马上再问一次。它是最后一家且只是一时忙或限流时，稍等后原地再问（magpie 的 passing）。
+ */
 async function askUntilSettled(input: {
   req: Request;
   res: Response;
@@ -533,11 +538,18 @@ async function askUntilSettled(input: {
   failover: Failover;
 }): Promise<SettledAttempt> {
   const { res } = input;
-  for (let again = 0; ; again++) {
+  let askedEmptyAgain = false;
+  let again = 0;
+  for (;;) {
     const outcome = await askEndpoint(input);
     if (outcome.kind !== "failed") return outcome;
+    if (outcome.cause === "empty") {
+      if (askedEmptyAgain) return { kind: "failed", failed: outcome };
+      askedEmptyAgain = true;
+      continue;
+    }
     const pause =
-      input.last && !outcome.timedOut && retryable(outcome.status, outcome.text)
+      input.last && outcome.cause !== "timeout" && retryable(outcome.status, outcome.text)
         ? passing({
             status: outcome.status,
             headers: outcome.headers,
@@ -548,6 +560,7 @@ async function askUntilSettled(input: {
           })
         : { again: false, waitMs: 0 };
     if (!pause.again) return { kind: "failed", failed: outcome };
+    again++;
     await new Promise((resolve) => setTimeout(resolve, pause.waitMs));
     if (res.destroyed) return { kind: "gone" };
   }
@@ -599,6 +612,12 @@ function askEndpoint(input: {
     to: candidate.format,
     request: candidate.translated,
   });
+}
+
+/** 换家日志里的失败原因：空回复，或冷却的分类。 */
+function switchedFailure(failed: FailedAttempt, rest: EndpointRest | null): string {
+  if (failed.cause === "empty") return "empty";
+  return rest?.why ?? endpointFailure(failed.status, failed.text);
 }
 
 /** 把一次失败记进冷却：判错读上游原文，全在冷却时交出的是打过码的原文。 */

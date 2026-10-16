@@ -7,6 +7,7 @@ import {
   modelRefused,
   modelRetired,
   retryable,
+  streamStatus,
   wordsOf,
 } from "./failure.js";
 
@@ -198,5 +199,23 @@ describe("whether another endpoint is worth asking", () => {
     expect(lateRests("prompt is too long")).toBe(false);
     expect(lateRests("Illegal API invocation from an unapproved channel")).toBe(false);
     expect(lateRests("response protection is unavailable")).toBe(false);
+  });
+});
+
+describe("the status an error inside a stream stands for", () => {
+  test.each([
+    {
+      said: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      status: 529,
+    },
+    { said: '{"error":{"code":"context_length_exceeded","message":"input exceeds"}}', status: 400 },
+    { said: '{"error":{"message":"Insufficient balance"}}', status: 402 },
+    { said: '{"error":{"type":"rate_limit_error","message":"slow down"}}', status: 429 },
+    { said: '{"error":{"message":"You exceeded your current quota"}}', status: 429 },
+    { said: '{"error":{"message":"model gpt-9 does not exist"}}', status: 400 },
+    { said: '{"error":{"type":"invalid_request_error","message":"bad"}}', status: 400 },
+    { said: '{"error":{"code":"server_error","message":"Something went wrong"}}', status: 502 },
+  ])("$said is $status", ({ said, status }) => {
+    expect(streamStatus(said)).toBe(status);
   });
 });

@@ -1,12 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import {
-  ReplyTap,
-  fitAnthropicBody,
-  fitResponsesBody,
-  fitThinkingOff,
-  type TappedReply,
-} from "./passthrough.js";
+import { fitAnthropicBody, fitResponsesBody, fitThinkingOff } from "./passthrough.js";
+import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import { sseEvent } from "./translation/sse.js";
 
 /*
@@ -380,7 +375,11 @@ describe("reading an Anthropic stream passed through", () => {
       content: [],
       stop: null,
       ended: false,
-      error: { message: "Overloaded", code: "overloaded_error" },
+      error: {
+        message: "Overloaded",
+        code: "overloaded_error",
+        raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      },
       usage,
     });
     expect(
@@ -521,7 +520,11 @@ describe("reading a Chat stream passed through", () => {
       content: [],
       stop: null,
       ended: false,
-      error: { message: "upstream overloaded", code: null },
+      error: {
+        message: "upstream overloaded",
+        code: null,
+        raw: '{"error":{"message":"upstream overloaded"}}',
+      },
       usage: NO_USAGE,
     });
     expect(read({ id: "chatcmpl-3", choices: [{ index: 0, delta: { content: "Half" } }] })).toEqual(
@@ -622,7 +625,11 @@ describe("reading a Responses stream passed through", () => {
       content: [],
       stop: null,
       ended: false,
-      error: { message: "overloaded", code: "server_error" },
+      error: {
+        message: "overloaded",
+        code: "server_error",
+        raw: '{"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"overloaded"}}}',
+      },
       usage: NO_USAGE,
     });
     expect(read()).toEqual({ content: [], stop: null, ended: false, error: null, usage: NO_USAGE });
@@ -807,7 +814,11 @@ describe("reading a reply passed through whole", () => {
       content: [],
       stop: null,
       ended: false,
-      error: { message: "Overloaded", code: "overloaded_error" },
+      error: {
+        message: "Overloaded",
+        code: "overloaded_error",
+        raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      },
       usage: NO_USAGE,
     });
     expect(
@@ -818,7 +829,11 @@ describe("reading a reply passed through whole", () => {
       content: [],
       stop: null,
       ended: false,
-      error: { message: "quota exhausted", code: "insufficient_quota" },
+      error: {
+        message: "quota exhausted",
+        code: "insufficient_quota",
+        raw: '{"error":{"message":"quota exhausted","code":"insufficient_quota"}}',
+      },
       usage: NO_USAGE,
     });
   });
