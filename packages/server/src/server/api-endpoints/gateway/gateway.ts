@@ -1,4 +1,4 @@
-// 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go）
+// 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { timingSafeEqual } from "node:crypto";
@@ -22,7 +22,13 @@ import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } fr
 import { endpointFailure, lateRests, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
 import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
-import { RefusedShapes, type ShapeRefusals } from "./refusals.js";
+import {
+  RefusedShapes,
+  formatShape,
+  refusalNote,
+  refusesFormat,
+  type ShapeRefusals,
+} from "./refusals.js";
 import {
   chooseRequestFormat,
   resolveGatewayRoute,
@@ -48,7 +54,8 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 自动切换：用户选的那家在开口（回复里出现第一段内容）前失败（额度、欠费、限流、服务器错误、超时）时，
  * 按创建顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
  * 空回复先在同一家再问一次，还空就换下一家；空回复怪不到这家，不冷却（magpie #1221）。
- * 换家之前先看是不是不思考的写法被拒（effort none、关思考）：是就在同一家换写法重问一次，也只记在内存里。
+ * 换家之前先看是不是拒收（不思考的写法、这个格式的地址没有这个模型、两个认证头不能同时带）：
+ * 是就在同一家换写法重问（换格式时按格式顺序问下一个地址，要翻译就翻译），也只记在内存里。
  * 要流式的请求等开口时有保活（keepalive.ts）；保活发出响应头之后再失败，错误在流里交给 Agent。
  */
 
@@ -334,6 +341,7 @@ async function handleAgentRequest(input: {
   const mended = mendedBody(input.format, body);
   // 翻译读的是修补过的请求，和直通发出去的一样。
   const translatable = mended === body ? parsed : parseJson(mended.toString("utf8"));
+  const { refusals } = input.failover;
   let passable: AskableCandidate[];
   try {
     passable = askableCandidates({
@@ -341,6 +349,7 @@ async function handleAgentRequest(input: {
       format: input.format,
       parsed: translatable,
       store,
+      refusals,
     });
   } catch (error) {
     if (!(error instanceof RequestShapeError)) throw error;
@@ -350,7 +359,7 @@ async function handleAgentRequest(input: {
   const chosen = candidates[0];
   if (passable.length === 0 && chosen) {
     const answeredBy = { [ANSWERED_BY_HEADER]: chosen.endpoint.slug };
-    if (askableFormat(chosen, input.format)) {
+    if (askableFormat({ candidate: chosen, agentFormat: input.format, refusals })) {
       reply(500, `${chosen.endpoint.name}: the API key is missing`, answeredBy);
     } else {
       reply(502, `${chosen.endpoint.name}: no address for this agent's request format`, answeredBy);
@@ -381,6 +390,7 @@ async function handleAgentRequest(input: {
     await askInTurn({
       ...input,
       body: mended,
+      parsed: translatable,
       model,
       conversation,
       plan: planned.plan,
@@ -391,16 +401,34 @@ async function handleAgentRequest(input: {
   }
 }
 
-/** 这家用哪种格式问（chooseRequestFormat）。 */
-function askableFormat(
-  candidate: GatewayCandidate,
-  agentFormat: ApiEndpointRequestFormat,
-): ApiEndpointRequestFormat | null {
+/**
+ * 这家用哪种格式问（chooseRequestFormat），跳过说过不提供这个模型的格式。所有格式都说过时照常挑：
+ * 这家的这个模型已经冷却，冷却结束后从头再问。
+ */
+function askableFormat(input: {
+  candidate: GatewayCandidate;
+  agentFormat: ApiEndpointRequestFormat;
+  refusals: RefusedShapes;
+}): ApiEndpointRequestFormat | null {
+  const { candidate } = input;
+  const formats = candidate.endpoint.baseUrls.map((entry) => entry.format);
+  const left = formatsLeft({ ...input, formats });
   return chooseRequestFormat({
-    agentFormat,
+    agentFormat: input.agentFormat,
     model: candidate.upstreamModel,
-    formats: candidate.endpoint.baseUrls.map((entry) => entry.format),
+    formats: left.length > 0 ? left : formats,
   });
+}
+
+/** 这家还没说过不提供这个模型的格式。 */
+function formatsLeft(input: {
+  candidate: GatewayCandidate;
+  formats: ApiEndpointRequestFormat[];
+  refusals: RefusedShapes;
+}): ApiEndpointRequestFormat[] {
+  const { id } = input.candidate.endpoint;
+  const model = input.candidate.upstreamModel;
+  return input.formats.filter((format) => !input.refusals.has(id, model, formatShape(format)));
 }
 
 /**
@@ -412,9 +440,11 @@ function askableCandidates(input: {
   format: ApiEndpointRequestFormat;
   parsed: unknown;
   store: ApiEndpointStore;
+  refusals: RefusedShapes;
 }): AskableCandidate[] {
+  const { refusals } = input;
   const reachable = input.candidates.flatMap((candidate) => {
-    const format = askableFormat(candidate, input.format);
+    const format = askableFormat({ candidate, agentFormat: input.format, refusals });
     const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
     const apiKey = input.store.getApiKey(candidate.endpoint.id);
     if (format === null || baseUrl === undefined || apiKey === null) return [];
@@ -500,6 +530,8 @@ async function askInTurn(input: {
   logger: pino.Logger;
   failover: Failover;
   body: Buffer;
+  // 修补过的请求读出来的样子：换到要翻译的格式时读成中间格式。
+  parsed: unknown;
   model: string;
   conversation: string;
   plan: AskableCandidate[];
@@ -587,6 +619,7 @@ async function askUntilSettled(input: {
   wire: AgentWire;
   logger: pino.Logger;
   body: Buffer;
+  parsed: unknown;
   model: string;
   candidate: AskableCandidate;
   last: boolean;
@@ -623,33 +656,80 @@ async function askUntilSettled(input: {
   }
 }
 
-/** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
-function askEndpoint(input: {
+interface EndpointAsk {
   req: Request;
   res: Response;
   wire: AgentWire;
   logger: pino.Logger;
   body: Buffer;
+  parsed: unknown;
   model: string;
   candidate: AskableCandidate;
   format: AgentPath["format"];
   failover: Failover;
   keepAlive: AgentKeepAlive;
-}): Promise<AttemptOutcome> {
+}
+
+/**
+ * 问一家，直到它不再说这个格式的地址没有这个模型：说了就记住，按格式顺序换这家的下一个地址再问
+ * （要翻译就翻译）。所有格式都说没有、或剩下的格式翻不过去时，交出最后一次的失败，按原来的规则只冷却这个模型。
+ */
+async function askEndpoint(input: EndpointAsk): Promise<AttemptOutcome> {
+  let { candidate } = input;
+  for (;;) {
+    const outcome = await askOnce({ ...input, candidate });
+    if (outcome.kind !== "failed") return outcome;
+    if (!refusesFormat(outcome)) return outcome;
+    const refused = shapeRefusals({ ...input, candidate });
+    refused.add(formatShape(candidate.format));
+    const next = nextFormat({ ...input, candidate });
+    if (next === null) return outcome;
+    candidate = next;
+  }
+}
+
+/** 这家下一个还没说过没有这个模型的格式；没有、或要翻译却翻不过去时为 null。 */
+function nextFormat(input: EndpointAsk): AskableCandidate | null {
+  const { candidate } = input;
+  const formats = formatsLeft({
+    candidate,
+    formats: candidate.endpoint.baseUrls.map((entry) => entry.format),
+    refusals: input.failover.refusals,
+  });
+  const format = chooseRequestFormat({
+    agentFormat: input.format,
+    model: candidate.upstreamModel,
+    formats,
+  });
+  const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+  if (format === null || baseUrl === undefined) return null;
+  if (format === input.format) return { ...candidate, format, baseUrl, translated: null };
+  const translation = readTranslated({ format: input.format, parsed: input.parsed });
+  return translation.ok ? { ...candidate, format, baseUrl, translated: translation.request } : null;
+}
+
+/** 这家的这个模型不收哪些写法；记住一种就写一行 info 日志。 */
+function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   const { candidate } = input;
   const { refusals } = input.failover;
   const endpointId = candidate.endpoint.id;
   const model = candidate.upstreamModel;
-  const refused: ShapeRefusals = {
+  return {
     has: (shape) => refusals.has(endpointId, model, shape),
     add: (shape) => {
       refusals.add(endpointId, model, shape);
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },
-        "API endpoint refused reasoning off; asking it again with reasoning on",
+        refusalNote(shape),
       );
     },
   };
+}
+
+/** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
+function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
+  const { candidate } = input;
+  const refused = shapeRefusals(input);
   const target = {
     res: input.res,
     endpoint: candidate.endpoint,

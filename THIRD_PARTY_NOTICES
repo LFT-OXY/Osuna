@@ -80,6 +80,24 @@ internal/catalog/catalog.go:
   packages/server/src/server/api-endpoints/codex-model-catalog.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+A model an address does not serve in its format, asked at the endpoint's next
+format (wrongEndpoint and markUnfit in internal/gateway/gateway.go), and an
+endpoint refusing both key headers, asked with x-api-key alone and then Bearer
+alone (BothAuthRefused and OneAuthOrder in internal/catalog/authheader.go,
+RetryOneAuth in internal/provider/authheader.go). Their tests reuse cases from
+gateway_test.go (TestWrongEndpoint,
+TestAnthropicClientFallsBackPastCopilotNoEndpoints),
+tools_need_responses_test.go and internal/provider/authheader_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/api-endpoints/gateway/failure.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
 MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
 which names are the same model (sameModel in internal/provider/group.go) and

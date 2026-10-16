@@ -81,6 +81,13 @@ const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: s
     hits: ["model is not available in the current token plan", "model_not_found", "模型不存在"],
     misses: ["invalid api key"],
   },
+  wrongFormat: {
+    hits: [
+      "no model endpoints available given user constraints",
+      "Model does not support this protocol.",
+    ],
+    misses: ["The requested model is not supported."],
+  },
   retired: {
     hits: ['{"type":"ModelDeprecated"}', "The model gpt-4-0314 has been deprecated"],
     misses: ["deprecated header"],
@@ -192,6 +199,9 @@ describe("whether another endpoint is worth asking", () => {
     expect(modelRefused(404, "model_not_found")).toBe(true);
     expect(modelRefused(403, "model not available, quota exceeded")).toBe(false);
     expect(modelRefused(429, "model_not_found")).toBe(false);
+    // 这个地址不提供、别的格式的地址也许提供：所有格式都这样说时也只冷却这个模型。
+    expect(modelRefused(400, "no model endpoints available given user constraints")).toBe(true);
+    expect(retryable(400, "no model endpoints available given user constraints")).toBe(true);
   });
 
   test("a reply that broke off rests its endpoint unless the conversation or a filter was the cause", () => {

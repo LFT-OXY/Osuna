@@ -19,7 +19,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 /*
  * 中转站直通（工单 02）：真实 daemon + 本机假上游。CLI 这一侧用 fetch 扮演，
  * 带上 gateway-tokens.json 里的口令，就像 CLI 读自己的配置文件那样。
- * 「不思考」被拒的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go 与 gateway_test.go。
+ * 拒收的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go、gateway_test.go
+ * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）与 internal/provider/authheader_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -1687,6 +1688,207 @@ describe("reasoning turned off, sent the way each model takes it", () => {
     expect(anthropic.requests.splice(0).map((request) => receivedBody(request).thinking)).toEqual([
       undefined,
     ]);
+  });
+});
+
+async function setBaseUrls(
+  endpointsDir: string,
+  baseUrls: Record<string, { format: string; url: string }[]>,
+) {
+  const endpointsPath = path.join(endpointsDir, "endpoints.json");
+  const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+    endpoints: { id: string; baseUrls: unknown }[];
+  };
+  for (const endpoint of file.endpoints) {
+    const urls = baseUrls[endpoint.id];
+    if (urls) endpoint.baseUrls = urls;
+  }
+  await writeFile(endpointsPath, JSON.stringify(file));
+}
+
+/** 同一个上游上的 Anthropic 与 Chat 两个地址。 */
+function anthropicAndChat(upstream: FakeUpstream) {
+  return [
+    { format: "anthropic_messages", url: upstream.url },
+    { format: "openai_chat", url: `${upstream.url}/v1` },
+  ];
+}
+
+// Copilot 的 /v1/messages 不提供只在 Chat 上的模型时说的话（magpie #754）。
+const NO_MODEL_ENDPOINTS = "no model endpoints available given user constraints\n";
+const BOTH_KEY_HEADERS_REFUSED = `{"error":{"type":"authentication_error","message":"鉴权 header， x-api-key 和 Authorization 不可以同时存在"}}`;
+
+function gatewayLog(logLines: string[], msg: string): Record<string, unknown>[] {
+  return logLines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((line) => line.msg === msg);
+}
+
+describe("a refused shape asked again another way at the same endpoint", () => {
+  function claudeAsk(gateway: string, model: string) {
+    return fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model,
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+  }
+
+  test("an Anthropic address without the model sends the request on to the endpoint's Chat address, and from then on", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      if (request.url === "/v1/messages") {
+        res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+        res.end(NO_MODEL_ENDPOINTS);
+      } else {
+        chatStream(res);
+      }
+    };
+    const { gateway, endpointsDir, daemon, logLines, restart } = await start({
+      upstreamB: upstream,
+    });
+    await setBaseUrls(endpointsDir, { ep_b: anthropicAndChat(upstream) });
+    const paths = () => upstream.requests.splice(0).map((request) => request.url);
+
+    const first = await claudeAsk(gateway, "glm-4.6");
+    expect(first.status).toBe(200);
+    expect(await first.text()).toContain("Let me ");
+    expect(paths()).toEqual(["/v1/messages", "/v1/chat/completions"]);
+    const second = await claudeAsk(gateway, "glm-4.6");
+    expect(second.status).toBe(200);
+    await second.text();
+    expect(paths()).toEqual(["/v1/chat/completions"]);
+
+    expect(await cooldownOf(await connectTo(daemon), "ep_b")).toBeNull();
+    expect(gatewayLog(logLines, "API endpoint gateway switched endpoints")).toEqual([]);
+    expect(
+      gatewayLog(
+        logLines,
+        "API endpoint does not serve this model in this format; asking its next format",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: 30,
+        endpoint: "Relay B",
+        model: "glm-4.6",
+        refused: "format:anthropic_messages",
+      }),
+    ]);
+
+    // 记住的写法只在内存里：重启后又先问 Anthropic 地址。
+    const next = await restart();
+    const again = await claudeAsk(next.gateway, "glm-4.6");
+    expect(again.status).toBe(200);
+    await again.text();
+    expect(paths()).toEqual(["/v1/messages", "/v1/chat/completions"]);
+  });
+
+  test("when every address says it has no such model, only that model cools and the next endpoint answers", async () => {
+    const { upstreamA, upstreamB, ask, endpointsDir, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end(NO_MODEL_ENDPOINTS);
+    };
+    await setBaseUrls(endpointsDir, { ep_a: anthropicAndChat(upstreamA) });
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(upstreamA.requests.map((request) => request.url)).toEqual([
+      "/v1/messages",
+      "/v1/chat/completions",
+    ]);
+    expect(gatewayLog(logLines, "API endpoint is cooling down")).toEqual([
+      expect.objectContaining({ endpoint: "Relay A", model: "kimi-k2" }),
+    ]);
+    expect(gatewayLog(logLines, "API endpoint gateway switched endpoints")).toEqual([
+      expect.objectContaining({ from: "Relay A", to: "Relay B", model: "kimi-k2" }),
+    ]);
+  });
+
+  test("an endpoint refusing both key headers together is asked with x-api-key alone, and from then on", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      const { authorization } = request.headers;
+      if (authorization !== undefined && request.headers["x-api-key"] !== undefined) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(BOTH_KEY_HEADERS_REFUSED);
+      } else {
+        streamReply(res);
+      }
+    };
+    const { gateway, daemon, logLines } = await start({ upstreamB: upstream });
+    const keysSent = () =>
+      upstream.requests.splice(0).map((request) => ({
+        authorization: request.headers.authorization,
+        xApiKey: request.headers["x-api-key"],
+      }));
+
+    const first = await claudeAsk(gateway, "glm-4.6");
+    expect(first.status).toBe(200);
+    expect(await first.text()).toContain("hi");
+    expect(keysSent()).toEqual([
+      { authorization: `Bearer ${KEY_B}`, xApiKey: KEY_B },
+      { authorization: undefined, xApiKey: KEY_B },
+    ]);
+    const second = await claudeAsk(gateway, "glm-4.6");
+    expect(second.status).toBe(200);
+    await second.text();
+    expect(keysSent()).toEqual([{ authorization: undefined, xApiKey: KEY_B }]);
+
+    expect(await cooldownOf(await connectTo(daemon), "ep_b")).toBeNull();
+    expect(
+      gatewayLog(logLines, "API endpoint takes its key in one header only; sending it that way"),
+    ).toEqual([
+      expect.objectContaining({
+        level: 30,
+        endpoint: "Relay B",
+        model: "glm-4.6",
+        refused: "bothKeyHeaders",
+      }),
+    ]);
+  });
+
+  test("a translated request is asked with Bearer alone when x-api-key alone is refused too", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      const { authorization } = request.headers;
+      const xApiKey = request.headers["x-api-key"];
+      if (authorization !== undefined && xApiKey !== undefined) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(BOTH_KEY_HEADERS_REFUSED);
+      } else if (authorization === undefined) {
+        failWith(res, { status: 401, message: "missing bearer" });
+      } else {
+        anthropicStream(res);
+      }
+    };
+    const { gateway, daemon } = await start({ upstreamB: upstream });
+    const ask = () =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model: "glm-4.6", input: "hi", stream: false }),
+      );
+    const keysSent = () =>
+      upstream.requests
+        .splice(0)
+        .map((request) => [request.headers.authorization, request.headers["x-api-key"]]);
+
+    expect((await ask()).status).toBe(200);
+    expect(keysSent()).toEqual([
+      [`Bearer ${KEY_B}`, KEY_B],
+      [undefined, KEY_B],
+      [`Bearer ${KEY_B}`, undefined],
+    ]);
+    expect((await ask()).status).toBe(200);
+    expect(keysSent()).toEqual([[`Bearer ${KEY_B}`, undefined]]);
+    expect(await cooldownOf(await connectTo(daemon), "ep_b")).toBeNull();
   });
 });
 

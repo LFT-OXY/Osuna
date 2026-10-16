@@ -48,6 +48,9 @@ export const FAILURE_WORDS = {
   // 这把 key / 这个套餐不提供这个模型。
   unserved:
     /model.{0,80}(not (supported|accessible|available|found|enabled|allowed)|unsupported|does ?n[o']t exist|unknown|invalid)|(no such|unknown|invalid|unsupported) model|model_not_found|模型.{0,12}(不存在|不支持|无权|未开通)/i,
+  // 这个格式的地址不提供这个模型，别的格式的地址也许提供（magpie 的 wrongEndpoint）。
+  wrongFormat:
+    /not a chat model|not supported in (?:the |\/)v1\/(?:chat\/completions|responses)|only supported in \/?v1\/responses|use \/?v1\/(?:completions|responses|chat\/completions)|not accessible via the|unsupported_api_for_model|no model endpoints available given user constraints|is not supported for format|does not support this protocol|requires responses/i,
   // 模型已退役。
   retired:
     /"ModelDeprecated"|model_deprecated|model.{0,80}(has been|was|is now|is) (deprecated|retired|discontinued|decommissioned|sunset)/i,
@@ -144,7 +147,9 @@ export function retryable(status: number, rawBody: string): boolean {
   if ([401, 402, 403, 404, 408, 429].includes(status) || status >= 500) return true;
   if (modelRetired(status, body)) return true;
   if (status === 400 || status === 422) {
-    return [W.quota, W.unserved, W.refused, W.shape, W.region].some((words) => words.test(body));
+    return [W.quota, W.unserved, W.wrongFormat, W.refused, W.shape, W.region].some((words) =>
+      words.test(body),
+    );
   }
   return false;
 }
@@ -162,7 +167,8 @@ export function modelRefused(status: number, rawBody: string): boolean {
   if (modelRetired(status, rawBody)) return true;
   if (![400, 403, 404, 422].includes(status)) return false;
   const body = wordsOf(rawBody);
-  return W.unserved.test(body) && !W.quota.test(body) && !W.refused.test(body);
+  const unserved = W.unserved.test(body) || W.wrongFormat.test(body);
+  return unserved && !W.quota.test(body) && !W.refused.test(body);
 }
 
 /**

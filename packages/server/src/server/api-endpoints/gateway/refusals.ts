@@ -1,18 +1,27 @@
-// 拒绝判定移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 alwaysThinks、refusesThinkingOff、thinkingOffRefused，gateway.go 的 mandatoryReasoning、effortLevelsNamed、noneQuoted）
+// 拒绝判定移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 alwaysThinks、refusesThinkingOff、thinkingOffRefused，gateway.go 的 mandatoryReasoning、effortLevelsNamed、noneQuoted、wrongEndpoint、markUnfit，internal/catalog/authheader.go 的 BothAuthRefused、OneAuthOrder，internal/provider/authheader.go 的 RetryOneAuth）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord } from "../upstream-http.js";
-import { wordsOf } from "./failure.js";
+import { FAILURE_WORDS, wordsOf } from "./failure.js";
+import type { FailedAttempt } from "./upstream-call.js";
 
 /*
- * 上游不收「不思考」的写法：OpenAI 格式的 effort none，或 Anthropic 格式的关思考。
- * 中转站在第一段到达前、换家判断之前，用 low（或打开思考）在同一家重问一次，并记住这家的这个模型不收，
+ * 上游不收的写法（拒收）：OpenAI 格式的 effort none、Anthropic 格式的关思考、这个格式的地址不提供这个模型、
+ * 两个认证头不能同时带。中转站在开口前、换家判断之前，换一种写法在同一家重问，并记住这家的这个模型不收，
  * 以后直接换写法发。记录只在内存里，daemon 重启清零（和冷却一样）。
  */
 
-/** none：不收 effort none；thinkingOff：不让关思考。 */
-export type RefusedShape = "none" | "thinkingOff";
+/**
+ * none：不收 effort none；thinkingOff：不让关思考；`format:<格式>`：这个格式的地址不提供这个模型；
+ * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）。
+ */
+export type RefusedShape =
+  | "none"
+  | "thinkingOff"
+  | `format:${ApiEndpointRequestFormat}`
+  | "bothKeyHeaders"
+  | "xApiKeyAlone";
 
 const REFUSAL_WORDS = {
   // 列出它收的档位，如 Command Code 的 `expected one of "low"|"medium"|…`。
@@ -81,6 +90,121 @@ export function noteRefusal(input: {
   if (shape === null) return false;
   input.refusals.add(shape);
   return true;
+}
+
+/** 这个格式的地址说不提供这个模型（magpie 的 wrongEndpoint）：同一家别的格式的地址也许提供。 */
+export function refusesFormat(input: { status: number; text: string }): boolean {
+  const clientError = input.status >= 400 && input.status < 500;
+  return clientError && FAILURE_WORDS.wrongFormat.test(wordsOf(input.text));
+}
+
+export function formatShape(format: ApiEndpointRequestFormat): RefusedShape {
+  return `format:${format}`;
+}
+
+// 两个头一起带被拒时说的话：两个头名都在，再加一句「不能同时」（magpie 的 BothAuthRefused）。
+const BOTH_KEY_HEADERS_WORDS = [
+  "同时",
+  "并存",
+  "共存",
+  "只能使用一个",
+  "只能选择一个",
+  "只能有一个",
+  "cannot both",
+  "can't both",
+  "can not both",
+  "cannot be both",
+  "not both",
+  "together",
+  "at the same time",
+  "simultaneous",
+  "mutually exclusive",
+  "only one of",
+  "only one auth",
+  "only one header",
+  "both present",
+  "both be present",
+  "both provided",
+  "both be provided",
+];
+
+/** 401 说 x-api-key 和 Authorization 不能同时带。 */
+export function refusesBothKeyHeaders(input: { status: number; text: string }): boolean {
+  if (input.status !== 401) return false;
+  const text = input.text.toLowerCase();
+  if (!text.includes("x-api-key") || !text.includes("authorization")) return false;
+  return BOTH_KEY_HEADERS_WORDS.some((words) => text.includes(words));
+}
+
+/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer。 */
+export type KeyHeaders = "both" | "xApiKey" | "bearer";
+
+/** 发给这家时 key 放哪：OpenAI 格式只放 Bearer；Anthropic 地址两个都放，这家说过不能同时带的只放它收的那个。 */
+export function keyHeadersFor(input: {
+  format: ApiEndpointRequestFormat;
+  refusals: ShapeRefusals | undefined;
+}): KeyHeaders {
+  const { refusals } = input;
+  if (input.format !== "anthropic_messages") return "bearer";
+  if (refusals?.has("xApiKeyAlone")) return "bearer";
+  return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
+}
+
+export function keyHeaderValues(input: {
+  apiKey: string;
+  keys: KeyHeaders;
+}): Record<string, string> {
+  const { apiKey, keys } = input;
+  const headers: Record<string, string> = {};
+  if (keys !== "xApiKey") headers.authorization = `Bearer ${apiKey}`;
+  if (keys !== "bearer") headers["x-api-key"] = apiKey;
+  return headers;
+}
+
+// 两个头不能同时带时，先只带 Anthropic 自己的 x-api-key，再只带 Bearer（magpie 的 OneAuthOrder）。
+const ONE_KEY_HEADER_ORDER = [
+  { keys: "xApiKey", learned: "bothKeyHeaders" },
+  { keys: "bearer", learned: "xApiKeyAlone" },
+] as const;
+
+/**
+ * 两个头一起带被 401 拒：按顺序只带一个头各问一次，第一个不再被 401 / 403 拒的记住；都被拒时交出最后一次的失败，
+ * 按原来的规则处理。不是这样被拒、或已经只带一个头的，原样交出 `failed`。
+ */
+export async function askWithOneKeyHeader<T extends { kind: string; status?: number }>(input: {
+  refusals: ShapeRefusals;
+  sent: KeyHeaders;
+  failed: FailedAttempt;
+  ask: (keys: KeyHeaders) => Promise<T | FailedAttempt>;
+}): Promise<T | FailedAttempt> {
+  const { failed } = input;
+  if (input.sent !== "both" || !refusesBothKeyHeaders(failed)) return failed;
+  let outcome: T | FailedAttempt = failed;
+  for (const { keys, learned } of ONE_KEY_HEADER_ORDER) {
+    outcome = await input.ask(keys);
+    if (outcome.kind === "gone") return outcome;
+    if (!refusedAgain(outcome)) {
+      input.refusals.add(learned);
+      return outcome;
+    }
+  }
+  return outcome;
+}
+
+function refusedAgain(outcome: { kind: string; status?: number }): boolean {
+  if (outcome.kind !== "failed") return false;
+  return outcome.status === 401 || outcome.status === 403;
+}
+
+/** 记住一种写法时写的 info 日志。 */
+export function refusalNote(shape: RefusedShape): string {
+  if (shape.startsWith("format:")) {
+    return "API endpoint does not serve this model in this format; asking its next format";
+  }
+  if (shape === "bothKeyHeaders" || shape === "xApiKeyAlone") {
+    return "API endpoint takes its key in one header only; sending it that way";
+  }
+  return "API endpoint refused reasoning off; asking it again with reasoning on";
 }
 
 /** 这次问的那家的那个模型：直通与翻译读它决定怎么发，被拒时记进去。 */

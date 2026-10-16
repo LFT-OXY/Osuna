@@ -17,7 +17,14 @@ import { replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import type { AgentKeepAlive } from "./keepalive.js";
-import { noteRefusal, type ShapeRefusals } from "./refusals.js";
+import {
+  askWithOneKeyHeader,
+  keyHeaderValues,
+  keyHeadersFor,
+  noteRefusal,
+  type KeyHeaders,
+  type ShapeRefusals,
+} from "./refusals.js";
 import { ReplyTap } from "./reply-tap.js";
 import {
   ANSWERED_BY_HEADER,
@@ -32,7 +39,7 @@ import {
 /*
  * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
- * 不思考的写法上游不收（effort none、关思考）时，开口前在同一家换写法重问一次，并记住。
+ * 不思考的写法上游不收（effort none、关思考）、或两个认证头不能同时带时，开口前在同一家换写法重问，并记住。
  * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，
  * 由 CLI 自己报错。
  */
@@ -90,11 +97,12 @@ export async function attemptEndpoint(input: {
     suffix: input.pathSuffix,
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
-  const open = (body: Buffer) =>
+  const sends = () => keyHeadersFor({ format: input.format, refusals });
+  const open = (body: Buffer, keys: KeyHeaders = sends()) =>
     openUpstream({
       res,
       url,
-      headers: upstreamHeaders({ headers: input.req.headers, apiKey, format: input.format }),
+      headers: upstreamHeaders({ headers: input.req.headers, apiKey, keys }),
       body,
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -102,7 +110,16 @@ export async function attemptEndpoint(input: {
       onHeard: () => input.keepAlive?.heard(),
     });
   const body = upstreamBody(input);
-  let opened = await open(body);
+  const keys = sends();
+  let opened = await open(body, keys);
+  if (opened.kind === "failed" && refusals) {
+    opened = await askWithOneKeyHeader({
+      refusals,
+      sent: keys,
+      failed: opened,
+      ask: (alone) => open(body, alone),
+    });
+  }
   if (
     opened.kind === "failed" &&
     refusals &&
@@ -281,19 +298,15 @@ export function fitResponsesBody(text: string, model: string): string {
 function upstreamHeaders(input: {
   headers: IncomingHttpHeaders;
   apiKey: string;
-  format: ApiEndpointRequestFormat;
+  keys: KeyHeaders;
 }): Record<string, string | string[]> {
-  const { apiKey, format } = input;
   const out: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(input.headers)) {
     if (value !== undefined && !DROPPED_REQUEST_HEADERS.has(name)) out[name] = value;
   }
   // 要上游不压缩：错误体要读出原文，回复原样转给 Agent。
   out["accept-encoding"] = "identity";
-  out.authorization = `Bearer ${apiKey}`;
-  // Anthropic 兼容网关有的只认 x-api-key；两种都带。
-  if (format === "anthropic_messages") out["x-api-key"] = apiKey;
-  return out;
+  return { ...out, ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }) };
 }
 
 function responseHeaders(headers: IncomingHttpHeaders): Record<string, string | string[]> {
