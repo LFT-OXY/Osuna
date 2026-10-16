@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -10,14 +10,21 @@ import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
+  askRefitted,
   askWithOneKeyHeader,
+  askWithoutImageTool,
   keyHeaderValues,
   keyHeadersFor,
-  noteRefusal,
   type KeyHeaders,
   type RefusedShape,
   type ShapeRefusals,
 } from "./refusals.js";
+import {
+  requestOffersImageTool,
+  takesImageTool,
+  withoutImageToolRequest,
+  withoutRefusedFields,
+} from "./refused-fields.js";
 import {
   ReplyCollector,
   openAIEffort,
@@ -43,7 +50,7 @@ import {
  * 回复解码后按 Agent 的协议编码，Agent 要流式就边收边发，不要就攒齐渲染成整份回复。
  * 开口（第一段内容）前的失败与直通一样交回中转站换家；开口之后不再换家。
  * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住；
- * 两个认证头不能同时带时只带一个重问，也记住。
+ * 两个认证头不能同时带时只带一个重问，也记住；不收请求里的某个字段时去掉它重问，也记住。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -68,22 +75,19 @@ export async function attemptTranslated(input: {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
   const sends = () => keyHeadersFor({ format: to, refusals });
-  const open = (body: Record<string, unknown>, keys: KeyHeaders = sends()) =>
+  const open = (body: string, keys: KeyHeaders = sends()) =>
     openUpstream({
       res,
       url,
       headers: translatedHeaders({ apiKey, keys, to }),
-      body: Buffer.from(JSON.stringify(body)),
+      body: Buffer.from(body),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
       onHeard: () => input.keepAlive.heard(),
     });
-  const build = () =>
-    protocolOf(to).build(
-      { ...allowedReasoning({ request: input.request, to, refusals }), stream: true },
-      input.upstreamModel,
-    );
+  const build = (asked: ShapeRefusals = refusals) =>
+    upstreamBody({ request: input.request, to, model: input.upstreamModel, refusals: asked });
   const body = build();
   const keys = sends();
   let opened = await open(body, keys);
@@ -95,9 +99,22 @@ export async function attemptTranslated(input: {
       ask: (alone) => open(body, alone),
     });
   }
-  if (opened.kind === "failed" && noteRefusal({ refusals, format: to, body, failed: opened })) {
-    opened = await open(build());
-  }
+  const refitted = await askRefitted({
+    refusals,
+    format: to,
+    sent: body,
+    outcome: opened,
+    refit: build,
+    ask: open,
+  });
+  const sentImageTool = !refusals.has("imageTool") && requestOffersImageTool(input.request);
+  const mayRefuseImageTool = sentImageTool && !takesImageTool(input.baseUrl);
+  opened = await askWithoutImageTool({
+    refusals,
+    offered: mayRefuseImageTool,
+    outcome: refitted.outcome,
+    ask: (without) => open(build(without)),
+  });
   if (opened.kind !== "opened") return opened;
   const { response, held, ended } = opened;
   if (!isEventStream(response, held)) {
@@ -139,6 +156,25 @@ function wholeText(input: {
 }): Promise<string> {
   if (input.ended) return Promise.resolve(input.held.toString("utf8"));
   return readLimited({ stream: input.response, first: input.held });
+}
+
+/** 发给上游的请求体（JSON）：按这家这个模型不收的写法改过请求，翻好后再去掉它不收的字段。 */
+function upstreamBody(input: {
+  request: GatewayRequest;
+  to: ApiEndpointRequestFormat;
+  model: string;
+  refusals: ShapeRefusals;
+}): string {
+  const { to, refusals } = input;
+  let request = allowedReasoning({ request: input.request, to, refusals });
+  if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
+  const built = protocolOf(to).build({ ...request, stream: true }, input.model);
+  const body = withoutRefusedFields({
+    format: to,
+    body: built,
+    refused: (field) => refusals.has(field),
+  });
+  return JSON.stringify(body);
 }
 
 /** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */

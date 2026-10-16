@@ -89,6 +89,9 @@ export interface OpenedUpstream {
   tap: ReplyTap | null;
 }
 
+/** 问一次上游开口前的结果：开了口、失败、Agent 先走了。 */
+export type UpstreamOpening = OpenedUpstream | FailedAttempt | { kind: "gone" };
+
 type UpstreamOutcome =
   | { kind: "response"; response: IncomingMessage }
   | { kind: "timeout" }
@@ -112,7 +115,7 @@ export async function openUpstream(input: {
   reads: ApiEndpointRequestFormat | null;
   // 上游有动静（发出请求、开口前收到字节）时告诉保活。
   onHeard?: () => void;
-}): Promise<OpenedUpstream | FailedAttempt | { kind: "gone" }> {
+}): Promise<UpstreamOpening> {
   const { res, url, apiKey } = input;
   input.onHeard?.();
   const outcome = await sendUpstream(input);

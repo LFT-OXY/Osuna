@@ -290,6 +290,11 @@ export function textOf(parts: Part[]): string {
   return parts.map((part) => (part.kind === "text" ? part.text : "")).join("");
 }
 
+/** 告诉模型 ToolSearch 加载的这个工具已经能用了（tool_reference 不能原样发时）。 */
+export function toolLoadedText(name: string): string {
+  return `Tool ${name} is loaded and can be called now.`;
+}
+
 /**
  * 字符串，或 {type:"text"} 块的数组（Anthropic 的 system、工具结果……），读成一段文字。
  * Claude Code 的 tool_reference（ToolSearch 加载延后的工具）告诉模型工具已经能用了。
@@ -308,7 +313,7 @@ export function stringOrText(value: unknown): string {
       out += block.text;
     } else if (type === "tool_reference") {
       if (out !== "") out += "\n";
-      out += `Tool ${String(block.tool_name)} is loaded and can be called now.`;
+      out += toolLoadedText(String(block.tool_name));
     }
   }
   return out;

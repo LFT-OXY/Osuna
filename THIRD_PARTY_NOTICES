@@ -98,6 +98,27 @@ tools_need_responses_test.go and internal/provider/authheader_test.go:
   packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+A field an endpoint refuses, left out when the same endpoint is asked again:
+auto mode's safeguards and the thinking display (refuseShapes,
+withoutRefusedShapes and withDisplay in internal/gateway/anthropic_shapes.go),
+deprecated sampling (samplingDeprecated, withoutSampling in anthropic.go),
+Claude Code's deferred-tool blocks and a tool result holding only
+tool_reference blocks (withoutDeferredTools, withRefsSaid in
+anthropic_shapes.go), a tool's strict (toolStrictRefusal, withoutToolStrict in
+strict_refused.go), and Codex's image tool after a bare 400 (withoutImageTool,
+withoutImageToolReq, mayDropImageTool in image_tool.go, the retries in
+gateway.go). Their tests reuse cases from safeguards_refused_test.go,
+thinking_display_test.go, anthropic_shapes_test.go, thinking_off_test.go,
+deferred_tools_test.go, tool_reference_result_test.go, strict_refused_test.go,
+image_tool_test.go and testdata/codex_image_gen_tool.json:
+
+  packages/server/src/server/api-endpoints/gateway/refused-fields.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.test.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
 MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
 which names are the same model (sameModel in internal/provider/group.go) and

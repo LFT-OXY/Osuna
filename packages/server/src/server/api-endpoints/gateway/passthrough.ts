@@ -1,4 +1,4 @@
-// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问）
+// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问与 attempt 里去掉拒收字段、画图工具的重问）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -18,13 +18,15 @@ import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
+  askRefitted,
   askWithOneKeyHeader,
+  askWithoutImageTool,
   keyHeaderValues,
   keyHeadersFor,
-  noteRefusal,
   type KeyHeaders,
   type ShapeRefusals,
 } from "./refusals.js";
+import { offersImageTool, takesImageTool, withoutRefusedFields } from "./refused-fields.js";
 import { ReplyTap } from "./reply-tap.js";
 import {
   ANSWERED_BY_HEADER,
@@ -39,7 +41,8 @@ import {
 /*
  * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
- * 不思考的写法上游不收（effort none、关思考）、或两个认证头不能同时带时，开口前在同一家换写法重问，并记住。
+ * 不思考的写法上游不收（effort none、关思考）、两个认证头不能同时带、或不收请求里的某个字段时，
+ * 开口前在同一家换写法重问，并记住。
  * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，
  * 由 CLI 自己报错。
  */
@@ -120,17 +123,24 @@ export async function attemptEndpoint(input: {
       ask: (alone) => open(body, alone),
     });
   }
-  if (
-    opened.kind === "failed" &&
-    refusals &&
-    noteRefusal({
+  if (refusals) {
+    const refitted = await askRefitted({
       refusals,
       format: input.format,
-      body: parseJson(body.toString("utf8")),
-      failed: opened,
-    })
-  ) {
-    opened = await open(upstreamBody(input));
+      sent: body.toString("utf8"),
+      outcome: opened,
+      refit: () => upstreamBody(input).toString("utf8"),
+      ask: (text) => open(Buffer.from(text)),
+    });
+    const sentImageTool =
+      input.format === "openai_responses" && offersImageTool(parseJson(refitted.sent));
+    const mayRefuseImageTool = sentImageTool && !takesImageTool(input.baseUrl);
+    opened = await askWithoutImageTool({
+      refusals,
+      offered: mayRefuseImageTool,
+      outcome: refitted.outcome,
+      ask: (without) => open(upstreamBody({ ...input, refusals: without })),
+    });
   }
   if (opened.kind !== "opened") return opened;
   input.keepAlive?.stop();
@@ -183,8 +193,8 @@ function relay(input: { opened: OpenedUpstream; res: Response }): Promise<Answer
 }
 
 /**
- * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处
- * （count_tokens 不改）。
+ * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处，
+ * 对话请求都去掉这家这个模型不收的字段（count_tokens 不改）。
  */
 function upstreamBody(input: {
   format: ApiEndpointRequestFormat;
@@ -194,10 +204,10 @@ function upstreamBody(input: {
   upstreamModel: string;
   refusals?: ShapeRefusals;
 }): Buffer {
+  const conversation = input.pathSuffix === undefined;
   const fits =
-    (input.format === "anthropic_messages" || input.format === "openai_responses") &&
-    input.pathSuffix === undefined;
-  if (input.upstreamModel === input.requestedModel && !fits) return input.body;
+    (input.format === "anthropic_messages" || input.format === "openai_responses") && conversation;
+  if (input.upstreamModel === input.requestedModel && !conversation) return input.body;
   let text = input.body.toString("utf8");
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
   if (fits && input.format === "anthropic_messages") {
@@ -211,7 +221,31 @@ function upstreamBody(input: {
     text = fitResponsesBody(text, input.upstreamModel);
     if (input.refusals?.has("none")) text = noneAsLow(text);
   }
+  // count_tokens 不带 refusals，也不改。
+  const refusals = conversation ? input.refusals : undefined;
+  if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
   return Buffer.from(text);
+}
+
+/** 去掉这家这个模型不收的字段：只改变了的顶层字段，其余字节原样。 */
+function withoutRefusedText(input: {
+  text: string;
+  format: ApiEndpointRequestFormat;
+  refusals: ShapeRefusals;
+}): string {
+  const body = parseJson(input.text);
+  if (!isRecord(body)) return input.text;
+  const { refusals } = input;
+  const fitted = withoutRefusedFields({
+    format: input.format,
+    body,
+    refused: (field) => refusals.has(field),
+  });
+  let out = input.text;
+  for (const key of new Set([...Object.keys(body), ...Object.keys(fitted)])) {
+    if (fitted[key] !== body[key]) out = applyEdits(out, modify(out, [key], fitted[key], {}));
+  }
+  return out;
 }
 
 /**

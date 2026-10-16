@@ -20,7 +20,9 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 中转站直通（工单 02）：真实 daemon + 本机假上游。CLI 这一侧用 fetch 扮演，
  * 带上 gateway-tokens.json 里的口令，就像 CLI 读自己的配置文件那样。
  * 拒收的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go、gateway_test.go
- * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）与 internal/provider/authheader_test.go。
+ * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
+ * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
+ * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -1926,6 +1928,385 @@ describe("a refused shape asked again another way at the same endpoint", () => {
     expect((await ask()).status).toBe(200);
     expect(keysSent()).toEqual([[`Bearer ${KEY_B}`, undefined]]);
     expect(await cooldownOf(await connectTo(daemon), "ep_b")).toBeNull();
+  });
+});
+
+// 上游不收请求里的字段时说的话：magpie 的 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、
+// deferred_tools_test.go、tool_reference_result_test.go、strict_refused_test.go 与 image_tool_test.go。
+const SAFEGUARDS_REFUSED = `{"error":{"message":"safeguards: Extra inputs are not permitted","type":"invalid_request_error"}}`;
+const DISPLAY_REFUSED = `{"type":"error","error":{"type":"invalid_request_error","message":"thinking.enabled.display: Extra inputs are not permitted"}}`;
+const ADAPTIVE_DISPLAY_REFUSED = `{"type":"error","error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Extra inputs are not permitted"}}`;
+const SAMPLING_REFUSED =
+  '"`temperature` is deprecated for this model. (tid: 2026101003072022550024879833267)"';
+const DEFERRED_REFUSED = `{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[1].content: unknown variant \`tool_removal\`, expected one of \`text\`, \`image\`, \`document\`, \`thinking\`, \`server_tool_use\`, \`tool_use\`, \`tool_result\`, \`web_search_tool_result\`, \`tool_addition\` at line 1 column 233","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}`;
+const REFS_ONLY_REFUSED =
+  "Failed to deserialize the JSON body into the target type: messages[2]: missing field `content` at line 38 column 3";
+const STRICT_REFUSED = `{"error":{"message":"Unsupported Responses API field: tools[0].strict","type":"invalid_request_error"}}`;
+const BARE_400 = `{"error":{"message":"bad response status code 400","type":"invalid_request_error"}}`;
+
+// Codex 0.160.0 给的画图工具（magpie testdata/codex_image_gen_tool.json，描述从略）。
+const IMAGE_TOOL = {
+  type: "namespace",
+  name: "image_gen",
+  description: "Tools in the image_gen namespace.",
+  tools: [
+    {
+      type: "function",
+      name: "imagegen",
+      description: "The `image_gen.imagegen` tool enables image generation from descriptions.",
+      strict: false,
+      parameters: {
+        type: "object",
+        properties: { prompt: { type: "string" } },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  ],
+};
+const EXEC_TOOL = {
+  type: "function",
+  name: "exec_command",
+  strict: false,
+  parameters: { type: "object", properties: {} },
+};
+
+interface FieldRefusal {
+  field: string;
+  agent: "claude" | "codex";
+  // 请求里多出的这一项，上游不收。
+  extra: Record<string, unknown>;
+  status: number;
+  refusal: string;
+  // 上游收到的请求体还带着这一项。
+  has: (body: Record<string, unknown>) => boolean;
+}
+
+function mentions(word: string): (body: Record<string, unknown>) => boolean {
+  return (body) => JSON.stringify(body).includes(word);
+}
+
+const PASSED_THROUGH_REFUSALS: FieldRefusal[] = [
+  {
+    field: "safeguards",
+    agent: "claude",
+    extra: { safeguards: { dangerous_tool_use: { enabled: true } } },
+    status: 400,
+    refusal: SAFEGUARDS_REFUSED,
+    has: (body) => body.safeguards !== undefined,
+  },
+  {
+    field: "display",
+    agent: "claude",
+    extra: { thinking: { type: "enabled", budget_tokens: 1024, display: "updates" } },
+    status: 400,
+    refusal: DISPLAY_REFUSED,
+    has: mentions('"display"'),
+  },
+  {
+    field: "sampling",
+    agent: "claude",
+    extra: { temperature: 0 },
+    status: 400,
+    refusal: SAMPLING_REFUSED,
+    has: (body) => body.temperature !== undefined,
+  },
+  {
+    field: "deferredTools",
+    agent: "claude",
+    extra: {
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "user",
+          content: [
+            { type: "tool_removal", tool: { type: "tool_reference", name: "Gone" } },
+            { type: "text", text: "go on" },
+          ],
+        },
+      ],
+    },
+    status: 422,
+    refusal: DEFERRED_REFUSED,
+    has: mentions("tool_removal"),
+  },
+  {
+    field: "toolStrict",
+    agent: "codex",
+    extra: { tools: [EXEC_TOOL] },
+    status: 400,
+    refusal: STRICT_REFUSED,
+    has: mentions('"strict"'),
+  },
+  {
+    field: "imageTool",
+    agent: "codex",
+    extra: { tools: [{ ...EXEC_TOOL, strict: undefined }, IMAGE_TOOL] },
+    status: 400,
+    refusal: BARE_400,
+    has: mentions('"image_gen"'),
+  },
+];
+
+function askAgent(input: {
+  gateway: string;
+  agent: "claude" | "codex";
+  model: string;
+  extra: Record<string, unknown>;
+}): Promise<Response> {
+  const { gateway, model } = input;
+  if (input.agent === "codex") {
+    const body = { model, input: "hi", stream: false, ...input.extra };
+    return fetch(`${gateway}/v1/responses`, codexRequest(body));
+  }
+  const messages = [{ role: "user", content: "hi" }];
+  const body = { model, stream: true, max_tokens: 32, messages, ...input.extra };
+  return fetch(`${gateway}/v1/messages`, claudeRequest(body));
+}
+
+/** 带着那一项就拒收、否则答一句的上游。 */
+function refusing(refused: FieldRefusal, answer: (res: ServerResponse) => void) {
+  return (request: RecordedRequest, res: ServerResponse) => {
+    if (!refused.has(receivedBody(request))) {
+      answer(res);
+      return;
+    }
+    res.writeHead(refused.status, { "content-type": "application/json" });
+    res.end(refused.refusal);
+  };
+}
+
+/**
+ * 直通时谁学会、谁不受影响。Claude Code：A 的 kimi-k2 学会，A 的 gpt-5.5、B 的 glm-4.6 不受影响；
+ * Codex：A 的 Responses 地址上的 gpt-5.5 学会，A 的 kimi-k2、D 的 grok-4 不受影响。
+ */
+const PASSED_THROUGH_SETUPS = {
+  claude: {
+    answer: streamReply,
+    start: (upstreamA: FakeUpstream, other: FakeUpstream) => start({ upstreamA, upstreamB: other }),
+    models: ["kimi-k2", "gpt-5.5", "glm-4.6"],
+  },
+  codex: {
+    answer: answerResponsesWhole,
+    start: (upstreamA: FakeUpstream, other: FakeUpstream) =>
+      start({ upstreamA, responsesUpstream: other }),
+    models: ["gpt-5.5", "kimi-k2", "grok-4"],
+  },
+};
+
+describe("a refused field left out at the same endpoint", () => {
+  test.each(PASSED_THROUGH_REFUSALS)(
+    "$field passed through: asked again without it, and from then on for that endpoint's model only",
+    async (refused) => {
+      const setup = PASSED_THROUGH_SETUPS[refused.agent];
+      const upstreamA = await startUpstream();
+      const other = await startUpstream();
+      upstreamA.respond = refusing(refused, setup.answer);
+      other.respond = refusing(refused, setup.answer);
+      const harness = await setup.start(upstreamA, other);
+      const [model, sameEndpoint, otherEndpoint] = setup.models;
+      const ask = async (input: { gateway: string; model: string }) => {
+        const response = await askAgent({ ...input, agent: refused.agent, extra: refused.extra });
+        expect(response.status).toBe(200);
+        await response.text();
+      };
+      const sent = (upstream: FakeUpstream) =>
+        upstream.requests.splice(0).map((request) => refused.has(receivedBody(request)));
+
+      await ask({ gateway: harness.gateway, model });
+      expect(sent(upstreamA)).toEqual([true, false]);
+      await ask({ gateway: harness.gateway, model });
+      expect(sent(upstreamA)).toEqual([false]);
+
+      await ask({ gateway: harness.gateway, model: sameEndpoint });
+      expect(sent(upstreamA)[0]).toBe(true);
+      await ask({ gateway: harness.gateway, model: otherEndpoint });
+      expect(sent(other)[0]).toBe(true);
+
+      expect(
+        gatewayLog(
+          harness.logLines,
+          "API endpoint refused a field of the request; asking it again without it",
+        ),
+      ).toContainEqual(
+        expect.objectContaining({ level: 30, endpoint: "Relay A", model, refused: refused.field }),
+      );
+      expect(gatewayLog(harness.logLines, "API endpoint gateway switched endpoints")).toEqual([]);
+
+      // 记住的写法只在内存里：重启后又先带着它问。
+      const next = await harness.restart();
+      await ask({ gateway: next.gateway, model });
+      expect(sent(upstreamA)).toEqual([true, false]);
+    },
+  );
+
+  test.each([
+    {
+      field: "display",
+      agent: "codex",
+      to: "anthropic",
+      model: "claude-sonnet-4-6",
+      extra: { reasoning: { effort: "high" } },
+      status: 400,
+      refusal: ADAPTIVE_DISPLAY_REFUSED,
+      has: mentions('"display"'),
+    },
+    {
+      field: "sampling",
+      agent: "codex",
+      to: "anthropic",
+      model: "glm-4.6",
+      extra: { temperature: 0 },
+      status: 400,
+      refusal: SAMPLING_REFUSED,
+      has: (body: Record<string, unknown>) => body.temperature !== undefined,
+    },
+    {
+      field: "toolStrict",
+      agent: "claude",
+      to: "responses",
+      model: "grok-4",
+      extra: { tools: [{ name: "Read", input_schema: { type: "object", properties: {} } }] },
+      status: 400,
+      refusal: STRICT_REFUSED,
+      has: mentions('"strict"'),
+    },
+    {
+      field: "imageTool",
+      agent: "codex",
+      to: "chat",
+      model: "deepseek-v3",
+      extra: { tools: [EXEC_TOOL, IMAGE_TOOL] },
+      status: 400,
+      refusal: BARE_400,
+      has: mentions("image_gen__imagegen"),
+    },
+  ] as const)(
+    "$field translated for a $to endpoint: asked again without it, and from then on",
+    async (refused) => {
+      const upstream = await startUpstream();
+      const answers = { anthropic: anthropicStream, responses: responsesStream, chat: chatStream };
+      upstream.respond = refusing(refused, answers[refused.to]);
+      const options = {
+        anthropic: { upstreamB: upstream },
+        responses: { responsesUpstream: upstream },
+        chat: { chatUpstream: upstream },
+      };
+      const { gateway, endpointsDir } = await start(options[refused.to]);
+      if (refused.to === "anthropic") await selectModels(endpointsDir, { ep_b: [refused.model] });
+      const ask = async () => {
+        const response = await askAgent({ gateway, ...refused, extra: { ...refused.extra } });
+        expect(response.status).toBe(200);
+        await response.text();
+      };
+      const sent = () =>
+        upstream.requests.splice(0).map((request) => refused.has(receivedBody(request)));
+
+      await ask();
+      expect(sent()).toEqual([true, false]);
+      await ask();
+      expect(sent()).toEqual([false]);
+    },
+  );
+
+  test("a tool result holding only tool references gets a text block naming the tools, the pairing kept", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      if (request.body.toString().includes("is loaded and can be called now")) {
+        streamReply(res);
+        return;
+      }
+      res.writeHead(422, { "content-type": "text/plain" });
+      res.end(REFS_ONLY_REFUSED);
+    };
+    const { gateway } = await start({ upstreamB: upstream });
+    const messages = [
+      { role: "user", content: "find the docs tool" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "toolu_1", name: "ToolSearch", input: { query: "docs" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_1",
+            content: [{ type: "tool_reference", tool_name: "mcp__docs__search" }],
+          },
+        ],
+      },
+    ];
+
+    const response = await askAgent({
+      gateway,
+      agent: "claude",
+      model: "glm-4.6",
+      extra: { messages },
+    });
+    expect(response.status).toBe(200);
+    await response.text();
+
+    expect(upstream.requests.map((request) => receivedBody(request).messages)).toEqual([
+      messages,
+      [
+        messages[0],
+        messages[1],
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: [
+                { type: "text", text: "Tool mcp__docs__search is loaded and can be called now." },
+                { type: "tool_reference", tool_name: "mcp__docs__search" },
+              ],
+            },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  test("asked again without it and refused still, the request goes on to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask, logLines } = await twoRelays();
+    upstreamA.respond = (request, res) => {
+      if (receivedBody(request).safeguards !== undefined) refuse(res, SAFEGUARDS_REFUSED);
+      else failWith(res, { status: 503, message: "upstream busy" });
+    };
+
+    const response = await ask({ safeguards: { dangerous_tool_use: { enabled: true } } });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from B");
+    expect(upstreamA.requests.map((request) => receivedBody(request).safeguards)).toEqual([
+      { dangerous_tool_use: { enabled: true } },
+      undefined,
+    ]);
+    expect(receivedBody(upstreamB.requests[0]).safeguards).toEqual({
+      dangerous_tool_use: { enabled: true },
+    });
+    expect(gatewayLog(logLines, "API endpoint gateway switched endpoints")).toEqual([
+      expect.objectContaining({ from: "Relay A", to: "Relay B", model: "kimi-k2" }),
+    ]);
+  });
+
+  test("Codex's image tool refused again without it is offered again next time", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => refuse(res, BARE_400);
+    const { gateway } = await start({ upstreamA: upstream });
+    const ask = () =>
+      askAgent({ gateway, agent: "codex", model: "gpt-5.5", extra: { tools: [IMAGE_TOOL] } });
+    const offered = () =>
+      upstream.requests.splice(0).map((request) => mentions('"image_gen"')(receivedBody(request)));
+
+    expect((await ask()).status).toBe(400);
+    expect(offered()).toEqual([true, false]);
+    expect((await ask()).status).toBe(400);
+    expect(offered()).toEqual([true, false]);
   });
 });
 

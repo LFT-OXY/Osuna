@@ -1,27 +1,30 @@
-// 拒绝判定移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 alwaysThinks、refusesThinkingOff、thinkingOffRefused，gateway.go 的 mandatoryReasoning、effortLevelsNamed、noneQuoted、wrongEndpoint、markUnfit，internal/catalog/authheader.go 的 BothAuthRefused、OneAuthOrder，internal/provider/authheader.go 的 RetryOneAuth）
+// 拒绝判定移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 alwaysThinks、refusesThinkingOff、thinkingOffRefused，gateway.go 的 mandatoryReasoning、effortLevelsNamed、noneQuoted、wrongEndpoint、markUnfit 与 attempt、forwardTranslated 里画图工具的重问，internal/catalog/authheader.go 的 BothAuthRefused、OneAuthOrder，internal/provider/authheader.go 的 RetryOneAuth）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { isRecord } from "../upstream-http.js";
+import { isRecord, parseJson } from "../upstream-http.js";
 import { FAILURE_WORDS, wordsOf } from "./failure.js";
-import type { FailedAttempt } from "./upstream-call.js";
+import { refusedFields, refusesContent, type DroppedField } from "./refused-fields.js";
+import type { FailedAttempt, UpstreamOpening } from "./upstream-call.js";
 
 /*
  * 上游不收的写法（拒收）：OpenAI 格式的 effort none、Anthropic 格式的关思考、这个格式的地址不提供这个模型、
- * 两个认证头不能同时带。中转站在开口前、换家判断之前，换一种写法在同一家重问，并记住这家的这个模型不收，
+ * 两个认证头不能同时带、请求里的某个字段（refused-fields.ts）。中转站在开口前、换家判断之前，换一种写法在同一家重问，并记住这家的这个模型不收，
  * 以后直接换写法发。记录只在内存里，daemon 重启清零（和冷却一样）。
  */
 
 /**
  * none：不收 effort none；thinkingOff：不让关思考；`format:<格式>`：这个格式的地址不提供这个模型；
- * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）。
+ * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）；
+ * 其余是不收、要去掉的字段（DroppedField）。
  */
 export type RefusedShape =
   | "none"
   | "thinkingOff"
   | `format:${ApiEndpointRequestFormat}`
   | "bothKeyHeaders"
-  | "xApiKeyAlone";
+  | "xApiKeyAlone"
+  | DroppedField;
 
 const REFUSAL_WORDS = {
   // 列出它收的档位，如 Command Code 的 `expected one of "low"|"medium"|…`。
@@ -76,7 +79,7 @@ function openAIEffortOf(format: ApiEndpointRequestFormat, body: Record<string, u
 }
 
 /**
- * 发出去的 `body` 被拒，是因为不思考的写法：记进 `refusals`，返回 true，调用方在同一家换写法重问一次。
+ * 发出去的 `body` 被拒，是因为不思考的写法或它带着的字段：记进 `refusals`，返回 true，调用方在同一家换写法重问。
  * 同一模型并发的请求可能都按旧写法发出，所以已经记过的也照样重问。
  */
 export function noteRefusal(input: {
@@ -86,10 +89,77 @@ export function noteRefusal(input: {
   failed: { status: number; text: string };
 }): boolean {
   const { failed } = input;
-  const shape = refusedShape({ ...input, status: failed.status, text: failed.text });
-  if (shape === null) return false;
-  input.refusals.add(shape);
-  return true;
+  const read = { ...input, status: failed.status, text: failed.text };
+  const shapes: RefusedShape[] = refusedFields(read);
+  const shape = refusedShape(read);
+  if (shape !== null) shapes.push(shape);
+  for (const refused of shapes) input.refusals.add(refused);
+  return shapes.length > 0;
+}
+
+/** 按记住的写法重问之后：最后一次的结果，与最后一次发出的请求体。 */
+export interface RefittedAsk {
+  outcome: UpstreamOpening;
+  sent: string;
+}
+
+/**
+ * 被拒是因为认得出的写法（noteRefusal）：记下后按新写法在同一家重问；新写法又因为另一种写法被拒时接着记、接着问。
+ * 每次重问的请求体都和上一次不同，所以问的次数有限；认不出、或改不出新请求体时交出这次的失败，按原来的规则处理。
+ */
+export async function askRefitted(input: {
+  refusals: ShapeRefusals;
+  format: ApiEndpointRequestFormat;
+  sent: string;
+  outcome: UpstreamOpening;
+  // 按现在记住的写法重新做的请求体。
+  refit: () => string;
+  ask: (body: string) => Promise<UpstreamOpening>;
+}): Promise<RefittedAsk> {
+  let { outcome, sent } = input;
+  while (outcome.kind === "failed") {
+    const noted = noteRefusal({
+      refusals: input.refusals,
+      format: input.format,
+      body: parseJson(sent),
+      failed: outcome,
+    });
+    if (!noted) break;
+    const next = input.refit();
+    if (next === sent) break;
+    sent = next;
+    outcome = await input.ask(sent);
+  }
+  return { outcome, sent };
+}
+
+/** 认得出的拒收之外，同一家的 400 / 422 不说原因：不是「这个格式的地址没有这个模型」。 */
+function refusesBare(failed: FailedAttempt): boolean {
+  return refusesContent(failed.status) && !refusesFormat(failed);
+}
+
+/**
+ * Codex 的画图工具：不认命名空间的厂商回一个不说原因的 400（magpie #949）。这次的请求带着它、这家又不是 OpenAI 自己的地址时，
+ * 去掉它在同一家重问一次；重问开了口才记住，以后不发。重问仍失败就交出那次的失败，按原来的规则处理。
+ */
+export async function askWithoutImageTool(input: {
+  refusals: ShapeRefusals;
+  // 这次发出的请求带着画图工具，且这家可能不收（不是 OpenAI 自己的地址）。
+  offered: boolean;
+  outcome: UpstreamOpening;
+  ask: (refusals: ShapeRefusals) => Promise<UpstreamOpening>;
+}): Promise<UpstreamOpening> {
+  const { outcome, refusals } = input;
+  if (outcome.kind !== "failed") return outcome;
+  const bareRefusal = input.offered && refusesBare(outcome);
+  if (!bareRefusal) return outcome;
+  const without: ShapeRefusals = {
+    has: (shape) => shape === "imageTool" || refusals.has(shape),
+    add: (shape) => refusals.add(shape),
+  };
+  const retried = await input.ask(without);
+  if (retried.kind === "opened") refusals.add("imageTool");
+  return retried;
 }
 
 /** 这个格式的地址说不提供这个模型（magpie 的 wrongEndpoint）：同一家别的格式的地址也许提供。 */
@@ -209,7 +279,10 @@ export function refusalNote(shape: RefusedShape): string {
   if (shape === "bothKeyHeaders" || shape === "xApiKeyAlone") {
     return "API endpoint takes its key in one header only; sending it that way";
   }
-  return "API endpoint refused reasoning off; asking it again with reasoning on";
+  if (shape === "none" || shape === "thinkingOff") {
+    return "API endpoint refused reasoning off; asking it again with reasoning on";
+  }
+  return "API endpoint refused a field of the request; asking it again without it";
 }
 
 /** 这次问的那家的那个模型：直通与翻译读它决定怎么发，被拒时记进去。 */
