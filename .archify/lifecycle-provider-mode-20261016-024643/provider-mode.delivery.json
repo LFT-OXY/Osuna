@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "d7179b30-2530-40e5-ac3b-76b47c4fcdfe",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "/Users/oxy/Documents/code/My/Osuna/.archify/lifecycle-provider-mode-20261016-024643/candidate.json",
+  "output": "/Users/oxy/Documents/code/My/Osuna/.archify/lifecycle-provider-mode-20261016-024643/provider-mode.html",
+  "specification": {
+    "sha256": "3671fa63de805efede814602ed9b4eb09b0337981439319477ce161f5423e75c",
+    "bytes": 5423
+  },
+  "artifact": {
+    "sha256": "6e73cd6729accab767726aeb64d10611bff2d2445ce832642bd16a86f6f27a05",
+    "bytes": 764350
+  }
+}

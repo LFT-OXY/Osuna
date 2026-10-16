@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "d6bdd10d-7e47-4b76-9e55-8138c677f287",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "/Users/oxy/Documents/code/My/Osuna/.archify/lifecycle-endpoint-status-20261016-024643/candidate.json",
+  "output": "/Users/oxy/Documents/code/My/Osuna/.archify/lifecycle-endpoint-status-20261016-024643/endpoint-status.html",
+  "specification": {
+    "sha256": "051ad8d2c27f8eb00dc56aab50d241da7819249a209ef93808b2981d14681a66",
+    "bytes": 5687
+  },
+  "artifact": {
+    "sha256": "5865198e8f40ce8906aeab1f0ba3c2a31c16409ca2e9027f3dc8a434539eafb6",
+    "bytes": 763170
+  }
+}

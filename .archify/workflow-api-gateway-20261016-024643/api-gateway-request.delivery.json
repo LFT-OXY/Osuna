@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "f2be5f86-6868-431b-aecf-2615fc4dad3f",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/oxy/Documents/code/My/Osuna/.archify/workflow-api-gateway-20261016-024643/candidate.json",
+  "output": "/Users/oxy/Documents/code/My/Osuna/.archify/workflow-api-gateway-20261016-024643/api-gateway-request.html",
+  "specification": {
+    "sha256": "bde59bc7bbc4dd565cfcfa1f1bc86faa53543ed538641e79ddacff88f48a82f8",
+    "bytes": 9386
+  },
+  "artifact": {
+    "sha256": "bbb98013f0918e285e3b72be40222b1fed8ae60dd630e7b1accd7f636a88e1a3",
+    "bytes": 773576
+  }
+}
