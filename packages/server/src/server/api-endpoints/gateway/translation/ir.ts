@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes } from "node:crypto";
@@ -150,8 +150,12 @@ export type StreamEvent =
   | { kind: "tool_start"; id: string; name: string }
   // 参数 JSON 的一段。
   | { kind: "tool_args"; text: string }
+  // 中间格式不带的工具项（服务端工具、Codex 自己的 apply_patch 之类）：只说明回复里有它，编码器不写出。
+  | { kind: "other_tool" }
   | { kind: "stop"; stop: StopReason }
   | { kind: "usage"; usage: Usage }
+  // 上游发了结束标记：Anthropic 的 message_stop、Chat 的 [DONE]、Responses 的 completed 或 incomplete。
+  | { kind: "done" }
   | { kind: "error"; message: string; code: string | null };
 
 export type EmitEvent = (event: StreamEvent) => void;
@@ -332,6 +336,11 @@ export function joinSplitCalls(messages: Message[]): Message[] {
   return out;
 }
 
+/** 回复里这一类块或项是工具：调用、工具结果、服务端工具（magpie 的 streamPart.said）。 */
+export function callsTool(type: string): boolean {
+  return type.includes("call") || type.includes("tool") || type.startsWith("mcp_");
+}
+
 /** 给要求回放推理、这一轮却没有推理的上游的推理：一个空格。 */
 export const NO_REASONING = " ";
 
@@ -457,6 +466,9 @@ export class ReplyCollector {
         return;
       case "usage":
         addUsage(this.reply.usage, event.usage);
+        return;
+      case "done":
+      case "other_tool":
         return;
       case "error":
         this.error = { message: event.message, code: event.code };

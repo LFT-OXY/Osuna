@@ -21,6 +21,7 @@ import { SseReader } from "./translation/sse.js";
 import {
   ANSWERED_BY_HEADER,
   failedBySelf,
+  isEventStream,
   openUpstream,
   readLimited,
   upstreamUrl,
@@ -111,11 +112,6 @@ function allowedReasoning(input: {
   const off = anthropic ? request.thinkOff : openAIEffort(request) === "none";
   const shape: RefusedShape = anthropic ? "thinkingOff" : "none";
   return off && refusals.has(shape) ? thinkingBackOn(request) : request;
-}
-
-function isEventStream(response: IncomingMessage, first: Buffer | null): boolean {
-  if (String(response.headers["content-type"] ?? "").includes("text/event-stream")) return true;
-  return first !== null && /^\s*(data:|event:|:)/.test(first.toString("utf8", 0, 64));
 }
 
 /** Agent 要流式：解码一个事件就编码一个事件写给它。上游断流就断开 Agent 的连接，由 CLI 自己报错。 */

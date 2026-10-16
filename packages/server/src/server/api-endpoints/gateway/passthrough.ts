@@ -1,7 +1,8 @@
-// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问）
+// fitAnthropicBody、fitResponsesBody、被拒重问与直通回复的读法（整份回复的上限、签名不算内容）移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问，sniff.go，fallback.go 的 anthropicDeltaSays）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
+import { StringDecoder } from "node:string_decoder";
 import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -13,12 +14,22 @@ import {
   thinkingOffAsTaken,
   thinkingOnToolTurns,
 } from "./translation/anthropic.js";
-import { replaysThinking } from "./translation/ir.js";
+import {
+  addUsage,
+  emptyUsage,
+  replaysThinking,
+  type StopReason,
+  type StreamEvent,
+  type Usage,
+} from "./translation/ir.js";
+import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { replayedReasoningInput } from "./translation/responses.js";
+import { SseReader } from "./translation/sse.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { noteRefusal, type ShapeRefusals } from "./refusals.js";
 import {
   ANSWERED_BY_HEADER,
+  isEventStream,
   openUpstream,
   upstreamUrl,
   type AnswerEnd,
@@ -30,7 +41,7 @@ import {
  * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
  * 不思考的写法上游不收（effort none、关思考）时，开口前在同一家换写法重问一次，并记住。
- * 开口之后边收边发，上游断流就断开 Agent 的连接，由 CLI 自己报错。
+ * 开口之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，由 CLI 自己报错。
  */
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -117,30 +128,35 @@ export async function attemptEndpoint(input: {
     res.end();
     return { kind: "answered", finished: Promise.resolve({ kind: "complete", cacheRead: 0 }) };
   }
-  return { kind: "answered", finished: relay({ response, res, first }) };
+  return { kind: "answered", finished: relay({ response, res, first, format: input.format }) };
 }
 
-/** 开口之后边收边发，顺带读出回复里的缓存命中 token 数（粘性要用）。 */
+/** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存命中 token 数）。 */
 function relay(input: {
   response: IncomingMessage;
   res: Response;
   first: Buffer;
+  format: ApiEndpointRequestFormat;
 }): Promise<AnswerEnd> {
-  const { response, res } = input;
-  const usage = new CacheReadTap();
-  usage.feed(input.first);
-  res.write(input.first);
+  const { response, res, first } = input;
+  const tap = new ReplyTap({ format: input.format, stream: isEventStream(response, first) });
+  tap.feed(first);
+  res.write(first);
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;
   });
   return new Promise((resolve) => {
-    response.on("data", (chunk: Buffer) => usage.feed(chunk));
-    response.once("end", () => resolve({ kind: "complete", cacheRead: usage.cacheRead }));
+    const complete = () => {
+      const { usage } = tap.end();
+      resolve({ kind: "complete", cacheRead: usage.cacheRead });
+    };
+    response.on("data", (chunk: Buffer) => tap.feed(chunk));
+    response.once("end", complete);
     const broke = (error?: Error) => {
       // 上游已经收完：Agent 这时离开也算答完了（end 可能因为没人读而不再发出）。
       if (response.complete) {
-        resolve({ kind: "complete", cacheRead: usage.cacheRead });
+        complete();
         return;
       }
       if (agentGone) {
@@ -157,20 +173,115 @@ function relay(input: {
   });
 }
 
+/** 直通回复里出现过的内容。 */
+export type ReplyContent = "text" | "thinking" | "tool_call";
+
+/** 直通回复里读出来的东西。 */
+export interface TappedReply {
+  // 出现过的内容，按第一次出现的先后。
+  content: ReplyContent[];
+  // 上游说的结束原因；拒答是 filter。没说为 null。
+  stop: StopReason | null;
+  // 上游发了结束标记（StreamEvent 的 done）。
+  ended: boolean;
+  error: { message: string; code: string | null } | null;
+  usage: Usage;
+}
+
+// 整份回复最多攒这么多来读（magpie sniff.go 的上限），再大的不读。
+const MAX_WHOLE_REPLY_BYTES = 8 * 1024 * 1024;
+
+type Reading =
+  // 一个字可能被切在两段之间：utf8 接好再交给事件读取。
+  | { kind: "stream"; events: SseReader; utf8: StringDecoder }
+  | { kind: "whole"; chunks: Buffer[]; bytes: number }
+  // 不再读：整份回复超过了上限，或回复已经读完。
+  | { kind: "none" };
+
 /**
- * 从回复里读缓存命中的 token 数：Anthropic 的 cache_read_input_tokens，OpenAI 的 cached_tokens。
- * 流式与非流式都按文字扫，跨段的数字靠留下上一段的尾巴接上；取最大的一个。
+ * 直通回复边转边读，一个字节也不改，交给翻译用的同一个解码器去认：
+ * 流式回复一个事件一个事件读；整份回复（不流式）攒齐了，照它流出来时的事件读。
  */
-class CacheReadTap {
-  cacheRead = 0;
-  private tail = "";
+export class ReplyTap {
+  private readonly reply: TappedReply = {
+    content: [],
+    stop: null,
+    ended: false,
+    error: null,
+    usage: emptyUsage(),
+  };
+  private readonly decoder: StreamDecoder;
+  private reading: Reading;
+
+  constructor(input: { format: ApiEndpointRequestFormat; stream: boolean }) {
+    this.decoder = protocolOf(input.format).decoder();
+    if (input.stream) {
+      const events = new SseReader((data) => this.decoder.decode(data, (event) => this.add(event)));
+      this.reading = { kind: "stream", events, utf8: new StringDecoder("utf8") };
+    } else {
+      this.reading = { kind: "whole", chunks: [], bytes: 0 };
+    }
+  }
 
   feed(chunk: Buffer): void {
-    const text = this.tail + chunk.toString("utf8");
-    for (const match of text.matchAll(/"(?:cache_read_input_tokens|cached_tokens)"\s*:\s*(\d+)/g)) {
-      this.cacheRead = Math.max(this.cacheRead, Number(match[1]));
+    const { reading } = this;
+    if (reading.kind === "stream") {
+      reading.events.feed(reading.utf8.write(chunk));
+    } else if (reading.kind === "whole") {
+      reading.bytes += chunk.length;
+      if (reading.bytes > MAX_WHOLE_REPLY_BYTES) this.reading = { kind: "none" };
+      else reading.chunks.push(chunk);
     }
-    this.tail = text.slice(-64);
+  }
+
+  /** 回复收完了：交出还扣着的，返回读到的。再调一次只返回读到的。 */
+  end(): TappedReply {
+    const { reading } = this;
+    this.reading = { kind: "none" };
+    const add = (event: StreamEvent) => this.add(event);
+    if (reading.kind === "stream") {
+      reading.events.feed(reading.utf8.end());
+      reading.events.end();
+      this.decoder.end?.(add);
+    } else if (reading.kind === "whole") {
+      const text = Buffer.concat(reading.chunks).toString("utf8");
+      this.decoder.whole(parseJson(text), add);
+    }
+    return this.reply;
+  }
+
+  private add(event: StreamEvent): void {
+    switch (event.kind) {
+      case "start":
+      case "usage":
+        addUsage(this.reply.usage, event.usage);
+        return;
+      case "stop":
+        this.reply.stop = event.stop;
+        return;
+      case "done":
+        this.reply.ended = true;
+        return;
+      case "error":
+        this.reply.error = { message: event.message, code: event.code };
+        return;
+      case "text":
+        if (event.text !== "") this.addContent("text");
+        return;
+      case "think":
+        if (event.text !== "") this.addContent("thinking");
+        return;
+      case "tool_start":
+      case "other_tool":
+        this.addContent("tool_call");
+        return;
+      default:
+      // think_start、tool_args 不是新的内容；签名也不算（magpie 的 anthropicDeltaSays）。
+    }
+  }
+
+  private addContent(content: ReplyContent): void {
+    if (!this.reply.content.includes(content)) this.reply.content.push(content);
   }
 }
 

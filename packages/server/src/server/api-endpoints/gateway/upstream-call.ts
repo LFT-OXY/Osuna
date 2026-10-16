@@ -125,6 +125,12 @@ export async function openUpstream(input: {
   return { kind: "opened", response, status, first: first.kind === "chunk" ? first.chunk : null };
 }
 
+/** 上游的回复是事件流：响应头这样说，或回复以 data: / event: / 注释行开头。 */
+export function isEventStream(response: IncomingMessage, first: Buffer | null): boolean {
+  if (String(response.headers["content-type"] ?? "").includes("text/event-stream")) return true;
+  return first !== null && /^\s*(data:|event:|:)/.test(first.toString("utf8", 0, 64));
+}
+
 /** 中转站自己判的失败（超时、连不上、开口前断开）：没有上游错误体，判错就读这段描述。 */
 export function failedBySelf(input: {
   status: number;

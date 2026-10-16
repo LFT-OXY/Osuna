@@ -29,6 +29,8 @@ import {
 
 export interface StreamDecoder {
   decode(data: string, emit: EmitEvent): void;
+  // 上游没流式、给了整份回复：照它流出来时的事件读一遍。
+  whole(body: unknown, emit: EmitEvent): void;
   // 流结束：交出还扣着的内容。
   end?(emit: EmitEvent): void;
 }

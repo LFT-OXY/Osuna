@@ -38,7 +38,10 @@ tool_strict_test.go, responses_file_id_test.go, responses_cache_write_test.go,
 reasoning_state_responses_test.go, reasoning_passthrough_test.go and
 deepseek_step_lead_test.go. The pass-through request's thinking fixes for other
 vendors' models (thinkingOffUnlessAsked, withThinkingOnToolTurns in
-anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
+anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts,
+and so is the reading of a pass-through reply: what counts as said
+(streamPart.said and anthropicDeltaSays in fallback.go) and the 8 MB of a reply
+that came whole it reads (usageSniffer in sniff.go):
 
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts

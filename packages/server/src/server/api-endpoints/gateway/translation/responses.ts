@@ -11,6 +11,7 @@ import {
   TOOL_RESULT_RECEIVED,
   argsOf,
   attachmentText,
+  callsTool,
   dataUrl,
   effortOf,
   imagePart,
@@ -844,7 +845,27 @@ export class ResponsesDecoder {
 
   decode(data: string, emit: EmitEvent): void {
     const event = parseJson(data);
-    if (!isRecord(event)) return;
+    if (isRecord(event)) this.event(event, emit);
+  }
+
+  /** 整份回复（不流式）：照它流出来时的事件读一遍。错误体照一个事件读。 */
+  whole(body: unknown, emit: EmitEvent): void {
+    if (!isRecord(body)) return;
+    if (!Array.isArray(body.output)) {
+      this.event(body, emit);
+      return;
+    }
+    this.event({ type: "response.created", response: body }, emit);
+    for (const item of body.output.filter(isRecord)) {
+      this.event({ type: "response.output_item.added", item }, emit);
+      for (const delta of itemDeltas(item)) this.event(delta, emit);
+      this.event({ type: "response.output_item.done", item }, emit);
+    }
+    // 完成、截断还是失败，finished 按 status 认。
+    this.event({ type: "response.completed", response: body }, emit);
+  }
+
+  private event(event: Record<string, unknown>, emit: EmitEvent): void {
     const item = isRecord(event.item) ? event.item : {};
     const response = isRecord(event.response) ? event.response : {};
     switch (event.type) {
@@ -894,12 +915,17 @@ export class ResponsesDecoder {
 
   private itemAdded(item: Record<string, unknown>, emit: EmitEvent): void {
     this.endCall(emit);
-    if (item.type === "function_call") {
+    const type = stringOf(item.type);
+    if (type === "function_call") {
       this.called = true;
       this.calling = true;
       emit({ kind: "tool_start", id: stringOf(item.call_id), name: stringOf(item.name) });
-    } else if (item.type === "reasoning") {
+    } else if (type === "reasoning") {
       emit({ kind: "think_start" });
+    } else if (callsTool(type)) {
+      // Codex 自己的调用（apply_patch 之类）也等客户端去调；服务端工具不用。
+      if (CALL_TYPES.has(type)) this.called = true;
+      emit({ kind: "other_tool" });
     }
   }
 
@@ -940,6 +966,7 @@ export class ResponsesDecoder {
     }
     emit({ kind: "stop", stop });
     emit({ kind: "usage", usage: usageFromResponses(response.usage) });
+    emit({ kind: "done" });
   }
 
   private endCall(emit: EmitEvent): void {
@@ -953,9 +980,30 @@ export class ResponsesDecoder {
 }
 
 function listsCall(output: unknown): boolean {
-  return (
-    Array.isArray(output) && output.some((item) => isRecord(item) && item.type === "function_call")
-  );
+  return Array.isArray(output) && output.some((item) => CALL_TYPES.has(typeOf(item)));
+}
+
+/** 整份回复里一项说的话，写成流里的 delta 事件：消息的文字，推理的摘要与文字。 */
+function itemDeltas(item: Record<string, unknown>): Record<string, unknown>[] {
+  const parts = (key: string) => {
+    const value = item[key];
+    return Array.isArray(value) ? value.filter(isRecord) : [];
+  };
+  if (item.type === "message") {
+    return parts("content")
+      .filter((part) => part.type === "output_text")
+      .map((part) => ({ type: "response.output_text.delta", delta: part.text }));
+  }
+  if (item.type !== "reasoning") return [];
+  const summaries = parts("summary").map((part) => ({
+    type: "response.reasoning_summary_text.delta",
+    delta: part.text,
+  }));
+  const texts = parts("content").map((part) => ({
+    type: "response.reasoning_text.delta",
+    delta: part.text,
+  }));
+  return [...summaries, ...texts];
 }
 
 /** 流出来的参数与完成事件给的参数里更全的一个，JSON 优先。 */

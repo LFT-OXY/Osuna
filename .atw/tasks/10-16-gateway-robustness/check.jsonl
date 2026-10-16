@@ -1,0 +1,12 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 规范入口：中转站与接口存储都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "已下线记录文件（缓存语义、原子写、Zod）与 .bak/.bad 回退要守的存储规则"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "中转站回给 CLI 的错误形状，含保活后的流内错误与拒答"}
+{"file": ".atw/spec/server/backend/logging.md", "reason": "记住拒收写法、已下线、.bak 回退各写一行日志的写法"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端夹具、假实现与注入时钟、单文件跑法"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "daemon 的禁用写法与验证命令"}
+{"file": ".atw/spec/guides/code-reuse-thinking-guide.md", "reason": "在现有拒收重问、判错词表、冷却、粘性上扩展，不另起一套"}
+{"file": ".atw/tasks/10-16-gateway-robustness/research/decisions.md", "reason": "三轮访谈的决定与依据、核实过的代码事实、两个 CLI 的超时与出错行为"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "被新 ADR 取代的规则：拒收不重发、厂商例外、开口按第一个字节"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "已下线模型触发重写 Claude 模型选择列表与 Codex 目录时要守的文件改写规则"}
+{"file": "docs/glossary.md", "reason": "自动切换、拒答、拒收、已下线模型的用词，实现后要与行为一致"}
+{"file": "docs/testing.md", "reason": "两类测试、确定性、不靠真实时间"}

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { fitAnthropicBody, fitResponsesBody, fitThinkingOff } from "./passthrough.js";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  ReplyTap,
+  fitAnthropicBody,
+  fitResponsesBody,
+  fitThinkingOff,
+  type TappedReply,
+} from "./passthrough.js";
+import { sseEvent } from "./translation/sse.js";
 
 /*
  * 直通给 Anthropic 地址的请求体，按这家的模型改的几处；其余字节原样。
@@ -215,5 +223,623 @@ describe("a Codex request passed through to a DeepSeek model's Responses endpoin
   test("another vendor's model is sent the request as it came", () => {
     const body = codex(`{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}`);
     expect(fitResponsesBody(body, "gpt-5.4")).toBe(body);
+  });
+});
+
+/*
+ * 直通回复边转边读：喂给读取器的是上游原样的字节，按段到达；段的边界可以落在事件、数字或一个汉字中间。
+ */
+
+/** 按字节位置切成几段。 */
+function cutAt(text: string, offsets: number[]): Buffer[] {
+  const bytes = Buffer.from(text);
+  return [0, ...offsets].map((start, index) => bytes.subarray(start, offsets[index]));
+}
+
+/** `piece` 在 `text` 里第一次出现处再往后 `into` 个字节：切在数字或汉字中间用。 */
+function inside(text: string, piece: string, into: number): number {
+  return Buffer.from(text).indexOf(piece) + into;
+}
+
+function tapped(input: {
+  format: ApiEndpointRequestFormat;
+  stream: boolean;
+  chunks: Buffer[];
+}): TappedReply {
+  const tap = new ReplyTap({ format: input.format, stream: input.stream });
+  for (const chunk of input.chunks) tap.feed(chunk);
+  return tap.end();
+}
+
+const NO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  cacheWrite1h: 0,
+  reasoning: 0,
+};
+
+describe("reading an Anthropic stream passed through", () => {
+  test("thinking, text and a tool call, the stop reason, the end and the cache, read across cut chunks", () => {
+    const stream = [
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_1",
+          usage: {
+            input_tokens: 12,
+            cache_read_input_tokens: 2048,
+            cache_creation_input_tokens: 300,
+            cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 },
+          },
+        },
+      }),
+      sseEvent("ping", { type: "ping" }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "thinking", thinking: "" },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "先读文件" },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "text", text: "" },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "text_delta", text: "你好" },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 1 }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "tool_use", id: "toolu_1", name: "Read", input: {} },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "input_json_delta", partial_json: '{"path":"a.ts"}' },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 2 }),
+      sseEvent("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use" },
+        usage: { output_tokens: 42 },
+      }),
+      sseEvent("message_stop", { type: "message_stop" }),
+    ].join("");
+
+    const reply = tapped({
+      format: "anthropic_messages",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "2048", 2),
+        inside(stream, "你好", 1),
+        inside(stream, '"tool_use"},', 4),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 12,
+        output: 42,
+        cacheRead: 2048,
+        cacheWrite: 300,
+        cacheWrite1h: 200,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a refusal before any content, an error event, and a stream that stops short; a ping is no content", () => {
+    const opening =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: { id: "msg_2", usage: { input_tokens: 5 } },
+      }) + sseEvent("ping", { type: "ping" });
+    const read = (rest: string) =>
+      tapped({ format: "anthropic_messages", stream: true, chunks: [Buffer.from(opening + rest)] });
+    const usage = {
+      input: 5,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cacheWrite1h: 0,
+      reasoning: 0,
+    };
+
+    expect(
+      read(
+        sseEvent("message_delta", {
+          type: "message_delta",
+          delta: { stop_reason: "refusal" },
+          usage: { output_tokens: 0 },
+        }) + sseEvent("message_stop", { type: "message_stop" }),
+      ),
+    ).toEqual({ content: [], stop: "filter", ended: true, error: null, usage });
+    expect(
+      read(
+        sseEvent("error", {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        }),
+      ),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: { message: "Overloaded", code: "overloaded_error" },
+      usage,
+    });
+    expect(
+      read(
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Half an ans" },
+        }),
+      ),
+    ).toEqual({ content: ["text"], stop: null, ended: false, error: null, usage });
+    expect(read("")).toEqual({ content: [], stop: null, ended: false, error: null, usage });
+  });
+});
+
+describe("what counts as said in an Anthropic stream (magpie fallback.go streamPart.said)", () => {
+  const read = (...events: string[]) =>
+    tapped({ format: "anthropic_messages", stream: true, chunks: [Buffer.from(events.join(""))] });
+
+  test("a thinking block with only its signature says nothing", () => {
+    expect(
+      read(
+        sseEvent("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        }),
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "signature_delta", signature: "EqQBCkgIBxAB" },
+        }),
+        sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+      ),
+    ).toEqual({ content: [], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+
+  test("a server tool's call is a tool call", () => {
+    expect(
+      read(
+        sseEvent("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "server_tool_use",
+            id: "srvtoolu_1",
+            name: "web_search",
+            input: {},
+          },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+});
+
+describe("reading a Chat stream passed through", () => {
+  const chunk = (data: Record<string, unknown>) => sseEvent(null, data);
+
+  test("reasoning, text and a tool call, the stop reason, [DONE] and the cache, read across cut chunks", () => {
+    const stream = [
+      chunk({
+        id: "chatcmpl-1",
+        choices: [{ index: 0, delta: { role: "assistant", reasoning_content: "先看看" } }],
+      }),
+      chunk({ id: "chatcmpl-1", choices: [{ index: 0, delta: { content: "好的" } }] }),
+      chunk({
+        id: "chatcmpl-1",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_1",
+                  type: "function",
+                  function: { name: "read", arguments: '{"path":"a.ts"}' },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      chunk({ id: "chatcmpl-1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] }),
+      chunk({
+        id: "chatcmpl-1",
+        choices: [],
+        usage: {
+          prompt_tokens: 3000,
+          completion_tokens: 40,
+          prompt_tokens_details: { cached_tokens: 2048, cache_write_tokens: 500 },
+        },
+      }),
+      sseEvent(null, "[DONE]"),
+    ].join("");
+
+    const reply = tapped({
+      format: "openai_chat",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "好的", 2),
+        inside(stream, "2048", 1),
+        inside(stream, "[DONE]", 3),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 452,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 500,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a content filter stop, an error chunk, and a stream without [DONE]", () => {
+    const read = (...chunks: Record<string, unknown>[]) =>
+      tapped({
+        format: "openai_chat",
+        stream: true,
+        chunks: [Buffer.from(chunks.map(chunk).join(""))],
+      });
+
+    expect(
+      read({
+        id: "chatcmpl-2",
+        choices: [{ index: 0, delta: {}, finish_reason: "content_filter" }],
+      }),
+    ).toEqual({ content: [], stop: "filter", ended: false, error: null, usage: NO_USAGE });
+    expect(read({ error: { message: "upstream overloaded" } })).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: { message: "upstream overloaded", code: null },
+      usage: NO_USAGE,
+    });
+    expect(read({ id: "chatcmpl-3", choices: [{ index: 0, delta: { content: "Half" } }] })).toEqual(
+      { content: ["text"], stop: null, ended: false, error: null, usage: NO_USAGE },
+    );
+  });
+});
+
+describe("reading a Responses stream passed through", () => {
+  const event = (type: string, data: Record<string, unknown>) => sseEvent(type, { type, ...data });
+  const created = event("response.created", {
+    response: { id: "resp_1", status: "in_progress", output: [] },
+  });
+  const read = (...events: string[]) =>
+    tapped({
+      format: "openai_responses",
+      stream: true,
+      chunks: [Buffer.from(created + events.join(""))],
+    });
+
+  test("reasoning, text and a call, the stop reason, the completed response and the cache, read across cut chunks", () => {
+    const call = { id: "fc_1", type: "function_call", call_id: "call_1", name: "shell" };
+    const stream = [
+      created,
+      event("response.in_progress", { response: { id: "resp_1", status: "in_progress" } }),
+      event("response.output_item.added", {
+        output_index: 0,
+        item: { id: "rs_1", type: "reasoning", summary: [] },
+      }),
+      event("response.reasoning_summary_text.delta", { item_id: "rs_1", delta: "**看一下文件**" }),
+      event("response.output_item.added", {
+        output_index: 1,
+        item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+      }),
+      event("response.output_text.delta", { item_id: "msg_1", delta: "好的" }),
+      event("response.output_item.added", { output_index: 2, item: { ...call, arguments: "" } }),
+      event("response.function_call_arguments.delta", { item_id: "fc_1", delta: '{"cmd":"ls"}' }),
+      event("response.output_item.done", {
+        output_index: 2,
+        item: { ...call, arguments: '{"cmd":"ls"}' },
+      }),
+      event("response.completed", {
+        response: {
+          id: "resp_1",
+          status: "completed",
+          output: [],
+          usage: {
+            input_tokens: 3000,
+            output_tokens: 40,
+            input_tokens_details: { cached_tokens: 2048, cache_write_tokens: 500 },
+            output_tokens_details: { reasoning_tokens: 12 },
+          },
+        },
+      }),
+    ].join("");
+
+    const reply = tapped({
+      format: "openai_responses",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "response.created", 5),
+        inside(stream, "好的", 4),
+        inside(stream, "2048", 3),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 452,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 500,
+        cacheWrite1h: 0,
+        reasoning: 12,
+      },
+    });
+  });
+
+  test("a reply cut short by the content filter, a failed response, and one that only began", () => {
+    expect(
+      read(
+        event("response.incomplete", {
+          response: { status: "incomplete", incomplete_details: { reason: "content_filter" } },
+        }),
+      ),
+    ).toEqual({ content: [], stop: "filter", ended: true, error: null, usage: NO_USAGE });
+    expect(
+      read(
+        event("response.failed", {
+          response: { status: "failed", error: { code: "server_error", message: "overloaded" } },
+        }),
+      ),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: { message: "overloaded", code: "server_error" },
+      usage: NO_USAGE,
+    });
+    expect(read()).toEqual({ content: [], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+
+  test("Codex's own call (apply_patch) is a tool call it stops for; a server tool's call is a tool call", () => {
+    const patch = {
+      id: "ctc_1",
+      type: "custom_tool_call",
+      call_id: "call_2",
+      name: "apply_patch",
+      input: "*** Begin Patch",
+    };
+    expect(
+      read(
+        event("response.output_item.added", { output_index: 0, item: { ...patch, input: "" } }),
+        event("response.custom_tool_call_input.delta", {
+          item_id: "ctc_1",
+          delta: "*** Begin Patch",
+        }),
+        event("response.output_item.done", { output_index: 0, item: patch }),
+        event("response.completed", {
+          response: { id: "resp_1", status: "completed", output: [] },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: "tool", ended: true, error: null, usage: NO_USAGE });
+    expect(
+      read(
+        event("response.output_item.added", {
+          output_index: 0,
+          item: { id: "ws_1", type: "web_search_call", status: "in_progress" },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+});
+
+describe("reading a reply passed through whole", () => {
+  // 切在正中间：整份回复要攒齐了才读。
+  const whole = (format: ApiEndpointRequestFormat, body: unknown) => {
+    const text = JSON.stringify(body);
+    return tapped({ format, stream: false, chunks: cutAt(text, [Buffer.byteLength(text) >> 1]) });
+  };
+
+  test("it is read as its stream would be, in each format", () => {
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_9",
+        type: "message",
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "先读文件", signature: "EqQB" },
+          { type: "text", text: "好的" },
+          { type: "tool_use", id: "toolu_9", name: "Read", input: { path: "a.ts" } },
+        ],
+        stop_reason: "tool_use",
+        usage: {
+          input_tokens: 12,
+          output_tokens: 3,
+          cache_read_input_tokens: 2048,
+          cache_creation_input_tokens: 300,
+        },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 12,
+        output: 3,
+        cacheRead: 2048,
+        cacheWrite: 300,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+    expect(
+      whole("openai_responses", {
+        id: "resp_9",
+        object: "response",
+        status: "completed",
+        output: [
+          {
+            id: "rs_9",
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "**看一下**" }],
+          },
+          {
+            id: "msg_9",
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "好的" }],
+          },
+          {
+            id: "ctc_9",
+            type: "custom_tool_call",
+            call_id: "call_9",
+            name: "apply_patch",
+            input: "*** Begin Patch",
+          },
+        ],
+        usage: {
+          input_tokens: 3000,
+          output_tokens: 40,
+          input_tokens_details: { cached_tokens: 2048 },
+        },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 952,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+    // DeepSeek 的缓存命中字段。
+    expect(
+      whole("openai_chat", {
+        id: "chatcmpl-9",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              reasoning_content: "先看看",
+              content: "好的",
+              tool_calls: [
+                { id: "call_9", type: "function", function: { name: "read", arguments: "{}" } },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 3000, completion_tokens: 40, prompt_cache_hit_tokens: 2048 },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 952,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a refusal and an error that came whole", () => {
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_10",
+        type: "message",
+        role: "assistant",
+        content: [],
+        stop_reason: "refusal",
+        usage: { input_tokens: 5, output_tokens: 0 },
+      }),
+    ).toEqual({
+      content: [],
+      stop: "filter",
+      ended: true,
+      error: null,
+      usage: { ...NO_USAGE, input: 5 },
+    });
+    expect(
+      whole("anthropic_messages", {
+        type: "error",
+        error: { type: "overloaded_error", message: "Overloaded" },
+      }),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: { message: "Overloaded", code: "overloaded_error" },
+      usage: NO_USAGE,
+    });
+    expect(
+      whole("openai_responses", {
+        error: { message: "quota exhausted", code: "insufficient_quota" },
+      }),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: { message: "quota exhausted", code: "insufficient_quota" },
+      usage: NO_USAGE,
+    });
+  });
+
+  test("a body that is not JSON, or bigger than 8 MB (magpie sniff.go), is not read", () => {
+    const unread = { content: [], stop: null, ended: false, error: null, usage: NO_USAGE };
+    expect(
+      tapped({
+        format: "anthropic_messages",
+        stream: false,
+        chunks: [Buffer.from("<html><title>Just a moment...</title></html>")],
+      }),
+    ).toEqual(unread);
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_11",
+        type: "message",
+        content: [{ type: "text", text: "x".repeat(8 * 1024 * 1024) }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, cache_read_input_tokens: 2048 },
+      }),
+    ).toEqual(unread);
   });
 });

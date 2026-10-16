@@ -559,9 +559,32 @@ export class ChatDecoder {
   private past = false;
 
   decode(data: string, emit: EmitEvent): void {
-    if (data.trim() === "[DONE]") return;
+    if (data.trim() === "[DONE]") {
+      emit({ kind: "done" });
+      return;
+    }
     const chunk = parseJson(data);
-    if (!isRecord(chunk)) return;
+    if (isRecord(chunk)) this.read(chunk, emit);
+  }
+
+  /** 整份回复（不流式）：每个 choice 的 message 就是只有一片的流里的 delta。错误体照一片读。 */
+  whole(body: unknown, emit: EmitEvent): void {
+    if (!isRecord(body)) return;
+    if (!Array.isArray(body.choices)) {
+      this.read(body, emit);
+      return;
+    }
+    const choices = body.choices.filter(isRecord).map((choice) => ({
+      index: choice.index,
+      delta: choice.message,
+      finish_reason: choice.finish_reason,
+    }));
+    this.read({ ...body, choices }, emit);
+    this.end(emit);
+    emit({ kind: "done" });
+  }
+
+  private read(chunk: Record<string, unknown>, emit: EmitEvent): void {
     if (chunk.error !== undefined && chunk.error !== null) {
       emit({ kind: "error", message: chatErrorMessage(chunk.error), code: null });
       return;

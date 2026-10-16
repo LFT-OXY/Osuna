@@ -10,6 +10,7 @@ import {
   argsOf,
   attachmentText,
   budgetOf,
+  callsTool,
   effortOf,
   effortOfBudget,
   FORMAT_NAME,
@@ -712,7 +713,7 @@ function stopToAnthropic(stop: StopReason): string {
 }
 
 /**
- * Anthropic 事件流 → 中间事件。跳过 Anthropic 服务端工具（联网搜索）的块；
+ * Anthropic 事件流 → 中间事件。Anthropic 服务端工具（联网搜索）的块只报一个 other_tool，内容跳过；
  * tool_use 的 start 已带完整 input 时（中转站常见）就用它，不再等 input_json_delta。
  */
 export class AnthropicDecoder {
@@ -721,7 +722,27 @@ export class AnthropicDecoder {
 
   decode(data: string, emit: EmitEvent): void {
     const event = parseJson(data);
-    if (!isRecord(event)) return;
+    if (isRecord(event)) this.event(event, emit);
+  }
+
+  /** 整份回复（不流式）：照它流出来时的事件读一遍。错误体本身就是 error 事件的样子。 */
+  whole(body: unknown, emit: EmitEvent): void {
+    if (!isRecord(body)) return;
+    if (body.type === "error") {
+      this.event(body, emit);
+      return;
+    }
+    this.event({ type: "message_start", message: body }, emit);
+    const blocks = Array.isArray(body.content) ? body.content : [];
+    blocks.forEach((block, index) => {
+      this.event({ type: "content_block_start", index, content_block: block }, emit);
+    });
+    const delta = { stop_reason: body.stop_reason };
+    this.event({ type: "message_delta", delta, usage: body.usage }, emit);
+    this.event({ type: "message_stop" }, emit);
+  }
+
+  private event(event: Record<string, unknown>, emit: EmitEvent): void {
     const index = typeof event.index === "number" ? event.index : -1;
     switch (event.type) {
       case "message_start":
@@ -735,6 +756,9 @@ export class AnthropicDecoder {
         return;
       case "message_delta":
         emitMessageDelta(event, emit);
+        return;
+      case "message_stop":
+        emit({ kind: "done" });
         return;
       case "error":
         emit({ kind: "error", ...errorOf(event.error) });
@@ -772,6 +796,7 @@ export class AnthropicDecoder {
         }
         return;
       default:
+        if (callsTool(String(block.type))) emit({ kind: "other_tool" });
     }
   }
 
