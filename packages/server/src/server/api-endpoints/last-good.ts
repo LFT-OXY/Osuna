@@ -3,12 +3,14 @@
 
 import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
 import type pino from "pino";
+import { isErrnoException } from "../pid-lock.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 
 /*
  * daemon 自己的 JSON 状态文件（接口清单、key、中转站口令）写坏时用上一份好的：
  * - 每次写入前，把现在那份（读得懂时）存成 <文件>.bak；
  * - 读到坏文件而 .bak 读得懂时，坏的那份另存为 <文件>.bad-<时间>，用 .bak 的内容放回原处继续服务，记一行警告；
+ *   另存或放回失败（磁盘满、目录只读、占用超过 0.5 秒）也照样用 .bak 服务，只是警告换一句；
  * - .bak 也坏（或没有）时照旧抛出原来的错误，什么都不写也不删。
  * 文件不存在就是没有，不看 .bak：原子改名只会留下旧的或新的，不会留下空缺，不在了就是被有意删掉的。
  * 只有 daemon 写这些文件，不加跨进程锁。
@@ -37,6 +39,9 @@ export const NODE_DATA_FILE_SYSTEM: DataFileSystem = {
 // 占着文件的多是别的读或改名，几毫秒就完：每 10 毫秒再试，最多 50 回，合计 0.5 秒（magpie 的 tries、pause）。
 const BUSY_TRIES = 50;
 const BUSY_PAUSE_MS = 10;
+
+/** 坏文件坏在哪（magpie 的 describe）；日志只写这个，不写解析错误：JSON 的报错会引用原文，keys.json 里是 key。 */
+export type BadFileReason = "empty" | "zero_bytes" | "not_json" | "schema_mismatch";
 
 export interface LastGoodFileOptions<T> {
   filePath: string;
@@ -76,14 +81,26 @@ export class LastGoodFile<T> {
     if (bak === null) throw current.error;
     const lastGood = this.tryParse(bak);
     if (!lastGood.ok) throw current.error;
-    const badPath = this.keepBad(bytes);
-    this.writeBytes(this.filePath, bak);
-    // 不带解析错误：JSON 的报错会引用一段原文，keys.json 里是 key。
-    this.logger.warn(
-      { filePath: this.filePath, badPath },
-      "API endpoint data file could not be parsed; its last good copy was put back",
-    );
+    this.putBack({ bad: bytes, bak, why: current.why });
     return lastGood.value;
+  }
+
+  /** 尽力而为：失败只记警告，调用方照样拿到 .bak 的内容。 */
+  private putBack(input: { bad: Buffer; bak: Buffer; why: BadFileReason }): void {
+    const { filePath } = this;
+    try {
+      const badPath = this.keepBad(input.bad);
+      this.writeBytes(filePath, input.bak);
+      this.logger.warn(
+        { filePath, why: input.why, badPath },
+        "API endpoint data file could not be parsed; its last good copy was put back",
+      );
+    } catch (error) {
+      this.logger.warn(
+        { filePath, why: input.why, err: error },
+        "API endpoint data file could not be parsed; serving its last good copy, which could not be put back",
+      );
+    }
   }
 
   /** 先把现在那份存成 .bak（读不懂的另存为 .bad-<时间>），再整份替换；json 由调用方按自己的 schema 校验过。 */
@@ -120,10 +137,16 @@ export class LastGoodFile<T> {
   }
 
   private tryParse(bytes: Buffer): ParseOutcome<T> {
+    let raw: unknown;
     try {
-      return { ok: true, value: this.parse(JSON.parse(bytes.toString("utf8")) as unknown) };
+      raw = JSON.parse(bytes.toString("utf8"));
     } catch (error) {
-      return { ok: false, error };
+      return { ok: false, error, why: unparsedReason(bytes) };
+    }
+    try {
+      return { ok: true, value: this.parse(raw) };
+    } catch (error) {
+      return { ok: false, error, why: "schema_mismatch" };
     }
   }
 
@@ -131,7 +154,7 @@ export class LastGoodFile<T> {
     try {
       return whileBusy(this.fileSystem, () => this.fileSystem.readFile(filePath));
     } catch (error) {
-      if (errorCode(error) === "ENOENT") return null;
+      if (isMissing(error)) return null;
       throw error;
     }
   }
@@ -143,7 +166,16 @@ export class LastGoodFile<T> {
   }
 }
 
-type ParseOutcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
+type ParseOutcome<T> = { ok: true; value: T } | { ok: false; error: unknown; why: BadFileReason };
+
+/** 机器写到一半断电会留下整份长度、字节全是 0 的文件（magpie #1505）。 */
+function unparsedReason(bytes: Buffer): BadFileReason {
+  const hasBytes = bytes.length > 0;
+  const allZero = bytes.every((byte) => byte === 0);
+  if (hasBytes && allZero) return "zero_bytes";
+  if (bytes.toString("utf8").trim() === "") return "empty";
+  return "not_json";
+}
 
 /** Windows 上除了「不存在」以外的失败都当作被占用，隔一会儿再试；别的系统上改名是原子的，不重试。 */
 function whileBusy<T>(fileSystem: DataFileSystem, attempt: () => T): T {
@@ -151,15 +183,14 @@ function whileBusy<T>(fileSystem: DataFileSystem, attempt: () => T): T {
     try {
       return attempt();
     } catch (error) {
-      const mayBeBusy = fileSystem.platform === "win32" && errorCode(error) !== "ENOENT";
+      const onWindows = fileSystem.platform === "win32";
+      const mayBeBusy = onWindows && !isMissing(error);
       if (!mayBeBusy || tries >= BUSY_TRIES) throw error;
       fileSystem.pause(BUSY_PAUSE_MS);
     }
   }
 }
 
-function errorCode(error: unknown): string | undefined {
-  return error instanceof Error && "code" in error && typeof error.code === "string"
-    ? error.code
-    : undefined;
+function isMissing(error: unknown): boolean {
+  return isErrnoException(error) && error.code === "ENOENT";
 }

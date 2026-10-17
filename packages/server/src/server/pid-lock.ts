@@ -26,7 +26,7 @@ function parsePidLockInfo(raw: unknown): PidLockInfo | null {
   return result.success ? result.data : null;
 }
 
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && "code" in err;
 }
 

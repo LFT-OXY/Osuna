@@ -5253,6 +5253,14 @@ async function filesOf(endpointsDir: string, name: string): Promise<string[]> {
   return names.filter((entry) => entry.startsWith(name)).sort();
 }
 
+/** 「坏文件已用 .bak 放回」那行警告；只取固定的几个字段，不带解析错误。 */
+function putBackWarnings(logLines: string[]) {
+  return gatewayLog(
+    logLines,
+    "API endpoint data file could not be parsed; its last good copy was put back",
+  ).map(({ level, filePath, why, badPath, err }) => ({ level, filePath, why, badPath, err }));
+}
+
 const BAD_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
 
 function claudeAskKimi(gateway: string): Promise<Response> {
@@ -5293,18 +5301,19 @@ describe("a data file written badly is served from its last good copy (magpie la
     const badName = files[1]!;
     expect(badName.replace("endpoints.json.bad-", "")).toMatch(BAD_STAMP);
     expect(await readFile(path.join(endpointsDir, badName), "utf8")).toBe("{ not json");
-    const warnings = gatewayLog(
-      logLines,
-      "API endpoint data file could not be parsed; its last good copy was put back",
-    ).map(({ level, filePath, badPath }) => ({ level, filePath, badPath }));
-    expect(warnings).toEqual([
-      { level: 40, filePath: endpointsPath, badPath: path.join(endpointsDir, badName) },
+    expect(putBackWarnings(logLines)).toEqual([
+      {
+        level: 40,
+        filePath: endpointsPath,
+        why: "not_json",
+        badPath: path.join(endpointsDir, badName),
+      },
     ]);
   });
 
   test("keys.json: the request goes out with the key from the .bak", async () => {
     const upstreamA = await startUpstream();
-    const { gateway, endpointsDir } = await start({ upstreamA });
+    const { gateway, endpointsDir, logLines } = await start({ upstreamA });
     const keysPath = path.join(endpointsDir, "keys.json");
     const good = await readFile(keysPath, "utf8");
     await writeFile(`${keysPath}.bak`, good);
@@ -5320,11 +5329,14 @@ describe("a data file written badly is served from its last good copy (magpie la
     expect([files[0], files[2]]).toEqual(["keys.json", "keys.json.bak"]);
     expect(files[1]!.replace("keys.json.bad-", "")).toMatch(BAD_STAMP);
     expect(await readFile(path.join(endpointsDir, files[1]!), "utf8")).toBe("");
+    expect(putBackWarnings(logLines)).toEqual([
+      { level: 40, filePath: keysPath, why: "empty", badPath: path.join(endpointsDir, files[1]!) },
+    ]);
   });
 
   test("gateway-tokens.json: the CLI's token is still accepted from the .bak", async () => {
     const upstreamA = await startUpstream();
-    const { gateway, endpointsDir } = await start({ upstreamA });
+    const { gateway, endpointsDir, logLines } = await start({ upstreamA });
     const tokensPath = path.join(endpointsDir, "gateway-tokens.json");
     const good = await readFile(tokensPath, "utf8");
     await writeFile(`${tokensPath}.bak`, good);
@@ -5341,6 +5353,14 @@ describe("a data file written badly is served from its last good copy (magpie la
     expect(await readFile(path.join(endpointsDir, files[1]!), "utf8")).toBe(
       '{"tokens": {"claude": ',
     );
+    expect(putBackWarnings(logLines)).toEqual([
+      {
+        level: 40,
+        filePath: tokensPath,
+        why: "not_json",
+        badPath: path.join(endpointsDir, files[1]!),
+      },
+    ]);
   });
 
   test("with the .bak bad too it is an error as before, and nothing is written or removed", async () => {
