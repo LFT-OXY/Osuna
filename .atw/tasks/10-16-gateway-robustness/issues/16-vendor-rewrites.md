@@ -14,10 +14,16 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 在直通和翻译套件里，把接口地址设成官方域名，各家的改写都生效；同一请求发到中转服务的地址时，请求体不变。
-- [ ] Grok 经任意地址：CLI 收到的工具参数是整数；工具 schema 的正则按 magpie 改写。
-- [ ] 没有别的按厂商改写：用一份不属于这四家的夹具，断言请求体不变。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 在直通和翻译套件里，把接口地址设成官方域名，各家的改写都生效；同一请求发到中转服务的地址时，请求体不变。
+- [x] Grok 经任意地址：CLI 收到的工具参数是整数；工具 schema 的正则按 magpie 改写。
+- [x] 没有别的按厂商改写：用一份不属于这四家的夹具，断言请求体不变。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 25 条；明细 01·B22、B47、B51。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

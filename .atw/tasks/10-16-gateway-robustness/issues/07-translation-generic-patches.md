@@ -15,12 +15,21 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：Codex 请求翻译成 Chat 格式、Anthropic 格式时，上游都收到 `prompt_cache_key` 等四个字段（Chat 上游收哪几个照 magpie）。
-- [ ] 资料里有 xhigh 档的模型收到 xhigh；没有 xhigh 档的模型，按 magpie 的规则收到最接近的档位。
-- [ ] 请求没给回复上限、翻译成 Messages 格式时，`max_tokens` 等于模型公布的上限；资料里没有时是 16384。
-- [ ] 其余四种修补，在翻译套件里各有用例。
-- [ ] 第 15 张直接复用本张的模型资料查询，不另写一份。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：Codex 请求翻译成 Chat 格式、Anthropic 格式时，上游都收到 `prompt_cache_key` 等四个字段（Chat 上游收哪几个照 magpie）。
+- [x] 资料里有 xhigh 档的模型收到 xhigh；没有 xhigh 档的模型，按 magpie 的规则收到最接近的档位。
+- [x] 请求没给回复上限、翻译成 Messages 格式时，`max_tokens` 等于模型公布的上限；资料里没有时是 16384。
+- [x] 其余四种修补，在翻译套件里各有用例。
+- [x] 第 15 张直接复用本张的模型资料查询，不另写一份。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 21 条；明细 01·B17、B34、B41、B43、B51、B55、B56。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。
+
+- 第 1 条：照 magpie 做，Chat 上游只收 `prompt_cache_key`，Anthropic 上游四项都不收（responses.test.ts「an Anthropic upstream gets none of them」）——与原文「都收到」不同，用户 2026-10-17 认可，见 spec rpc-and-protocol.md 工单 07 一节。
+- 第 4 条：`configuration_update` 没做（用户 2026-10-17 决定，需要时另开票）；`reasoning_details` 只从 Chat 客户端历史读，Osuna 目前没有 Chat 客户端，暂时触发不到（用户认可）。其余修补有用例。

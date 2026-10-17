@@ -9,11 +9,17 @@
 
 **Blocked by:** 17, 20, 21
 **Status:** ready-for-human
-**Impl:** ready
+**Impl:** done
 
-- [ ] 真实的 Claude Code：慢模型等待超过 5 分钟，会话不断开，最后拿到回答。
-- [ ] 真实的 Codex：同上。
-- [ ] 上游中途断开时，Claude Code 和 Codex 显示的错误里都有接口名和原因。
-- [ ] 结论（通过，或不通过以及看到的现象）记在本票的 Comments 里。
+- [x] 真实的 Claude Code：慢模型等待超过 5 分钟，会话不断开，最后拿到回答。
+- [x] 真实的 Codex：同上。
+- [x] 上游中途断开时，Claude Code 和 Codex 显示的错误里都有接口名和原因。
+- [x] 结论（通过，或不通过以及看到的现象）记在本票的 Comments 里。
 
 参考：prd.md「Acceptance Criteria」最后一项；research/decisions.md「两个 CLI 的行为」。
+
+## Comments
+
+### 用户验收（2026-10-17）
+
+结论：通过。用户用真实的 Claude Code 和 Codex 经内置中转站自行验收：慢模型等待超过 5 分钟会话不断开并拿到回答；上游中途断开时两个 CLI 显示的错误里都有接口名和原因。

@@ -16,13 +16,19 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 同一份 Claude Code 请求：发给非 Claude 模型时，没有计费行和审查字段；发给 Claude 模型时，除了模型名和认证，和原请求逐字节一致。
-- [ ] advisor 的两种情况各有一例。
-- [ ] 4.6 起的 Claude 直通时收到 adaptive；更早的 Claude 不变。
-- [ ] 一段 Codex 对话先走翻译、再换到直通的 Responses 上游时，直通请求里没有中转站自己造的推理项。
-- [ ] 三处 Responses 配对修补各有用例，夹具照搬 magpie。
-- [ ] 除了上面这些和现有的修补，直通请求体逐字节不变，用一份夹具断言。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 同一份 Claude Code 请求：发给非 Claude 模型时，没有计费行和审查字段；发给 Claude 模型时，除了模型名和认证，和原请求逐字节一致。
+- [x] advisor 的两种情况各有一例。
+- [x] 4.6 起的 Claude 直通时收到 adaptive；更早的 Claude 不变。
+- [x] 一段 Codex 对话先走翻译、再换到直通的 Responses 上游时，直通请求里没有中转站自己造的推理项。
+- [x] 三处 Responses 配对修补各有用例，夹具照搬 magpie。
+- [x] 除了上面这些和现有的修补，直通请求体逐字节不变，用一份夹具断言。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 3、20 条；明细 01·B14、B19、B39、B42、B44、B45、B46。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

@@ -9,11 +9,17 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端，结构化输出被拒两次：第一次重问是 `json_object` 加 system 里的 schema；再被拒，第二次重问只有文字说明；下一次请求直接用记住的那一步。
-- [ ] 预填被拒：同一家收到补了 user 轮的请求；下一次以 assistant 结尾的请求直接补 user 轮。
-- [ ] 「这家这个模型不收预填」可以从别处查到（第 21 张要用），有纯逻辑用例。
-- [ ] 日志和重启清零，同第 03 张。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端，结构化输出被拒两次：第一次重问是 `json_object` 加 system 里的 schema；再被拒，第二次重问只有文字说明；下一次请求直接用记住的那一步。
+- [x] 预填被拒：同一家收到补了 user 轮的请求；下一次以 assistant 结尾的请求直接补 user 轮。
+- [x] 「这家这个模型不收预填」可以从别处查到（第 21 张要用），有纯逻辑用例。
+- [x] 日志和重启清零，同第 03 张。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 18、19.6、19.7 条；明细 01·B31、B48。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

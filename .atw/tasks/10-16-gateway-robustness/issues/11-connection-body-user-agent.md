@@ -10,11 +10,17 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：假上游第一次在复用的连接上直接关闭，中转站在新连接上重发并成功；这家不冷却。
-- [ ] zstd、gzip 压缩的请求体，直通和翻译各一例都成功；上游收到的是解开后的请求体，没有 Content-Encoding。
-- [ ] 其他编码回 415；解开后超过 64 MB 回 413，文字里提到 `/compact`。
-- [ ] 直通和翻译时，上游收到的都是 CLI 自己的 User-Agent；CLI 没带时，上游收到 `Osuna/<版本>`。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：假上游第一次在复用的连接上直接关闭，中转站在新连接上重发并成功；这家不冷却。
+- [x] zstd、gzip 压缩的请求体，直通和翻译各一例都成功；上游收到的是解开后的请求体，没有 Content-Encoding。
+- [x] 其他编码回 415；解开后超过 64 MB 回 413，文字里提到 `/compact`。
+- [x] 直通和翻译时，上游收到的都是 CLI 自己的 User-Agent；CLI 没带时，上游收到 `Osuna/<版本>`。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 44–46 条；明细 01·A33、A36、C28。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

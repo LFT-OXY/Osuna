@@ -27,13 +27,19 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 新 ADR 存在，逐条写明取代了 ADR 0007 的哪几句、新增了哪些规则，以及 Q3 的取舍和实现时定下的三点。
-- [ ] ADR 0007 里对应的几处，标出被新 ADR 取代。
-- [ ] 术语表四个词条和最终行为一致，不一致的地方已经改过。
-- [ ] `THIRD_PARTY_NOTICES` 覆盖本子任务新借鉴 magpie 的文件，这些文件头都有 MIT 声明。
-- [ ] 总任务 prd.md 第 15 条后有指向新 ADR 的说明。
-- [ ] `packages/protocol` 没有改动，旧客户端照常工作。
-- [ ] `npm run typecheck`、`npm run lint` 通过；改过的文件用 `npm run format:files` 整理过。
-- [ ] 推到远端后 CI 通过，已知常红的 Nix 两项除外。
+- [x] 新 ADR 存在，逐条写明取代了 ADR 0007 的哪几句、新增了哪些规则，以及 Q3 的取舍和实现时定下的三点。
+- [x] ADR 0007 里对应的几处，标出被新 ADR 取代。
+- [x] 术语表四个词条和最终行为一致，不一致的地方已经改过。
+- [x] `THIRD_PARTY_NOTICES` 覆盖本子任务新借鉴 magpie 的文件，这些文件头都有 MIT 声明。
+- [x] 总任务 prd.md 第 15 条后有指向新 ADR 的说明。
+- [x] `packages/protocol` 没有改动，旧客户端照常工作。
+- [x] `npm run typecheck`、`npm run lint` 通过；改过的文件用 `npm run format:files` 整理过。
+- [x] 推到远端后 CI 通过，已知常红的 Nix 两项除外。
 
 参考：prd.md 第 1–4、49 条。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

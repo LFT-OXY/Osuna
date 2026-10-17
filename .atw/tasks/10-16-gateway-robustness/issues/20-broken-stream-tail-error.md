@@ -20,13 +20,21 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端（翻译）：Anthropic 上游发了一半文字后干净断开。Claude Code 收到的流里没有 `message_stop`，而是一个空行加 `api_error` 事件，消息里有接口名、原因和「可以重试」字样。
-- [ ] Codex 的同样场景，收到 `response.failed`。
-- [ ] 直通断流（连接中断）：CLI 收到的是错误事件，而不是连接被掐断。
-- [ ] Chat 上游没有 `[DONE]` 但已经说完：照常算完整。
-- [ ] 不流式的请求断流：回 502 并附上原因。
-- [ ] 现有「开口后断流就交给 Agent 并冷却」的用例，按新行为改写，不删除。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端（翻译）：Anthropic 上游发了一半文字后干净断开。Claude Code 收到的流里没有 `message_stop`，而是一个空行加 `api_error` 事件，消息里有接口名、原因和「可以重试」字样。
+- [x] Codex 的同样场景，收到 `response.failed`。
+- [x] 直通断流（连接中断）：CLI 收到的是错误事件，而不是连接被掐断。
+- [x] Chat 上游没有 `[DONE]` 但已经说完：照常算完整。
+- [x] 不流式的请求断流：回 502 并附上原因。
+- [x] 现有「开口后断流就交给 Agent 并冷却」的用例，按新行为改写，不删除。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 40、42、43 条；明细 01·B10、B12、C26。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。
+
+- 第 1 条：Claude Code + Anthropic 上游必走直通，字面上的「翻译」场景造不出来；由直通用例（ended short of message_stop gets an error event after a blank line）加翻译用例（Responses 上游 ended short gets api_error）合起来覆盖。

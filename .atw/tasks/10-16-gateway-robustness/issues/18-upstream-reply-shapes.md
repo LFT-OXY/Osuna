@@ -11,11 +11,17 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：上游回一整份 JSON，CLI 收到它要的事件流，内容一致。
-- [ ] 直通和翻译各一例：上游回 HTML 登录页，就换到下一家，这家冷却；日志和最后的错误里有页面标题。
-- [ ] 流里的厂商错误转给 CLI 时，type 和 code 保留；`invalid_request_error` 读成 400。
-- [ ] 智谱 200 信封的两种错误码各一例：一种按 401 处理（标「需要检查」），一种按 429 处理（冷却）。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：上游回一整份 JSON，CLI 收到它要的事件流，内容一致。
+- [x] 直通和翻译各一例：上游回 HTML 登录页，就换到下一家，这家冷却；日志和最后的错误里有页面标题。
+- [x] 流里的厂商错误转给 CLI 时，type 和 code 保留；`invalid_request_error` 读成 400。
+- [x] 智谱 200 信封的两种错误码各一例：一种按 401 处理（标「需要检查」），一种按 429 处理（冷却）。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 22 条、第 26 条（智谱部分）；明细 01·B08、B09、B12、02·A75。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。

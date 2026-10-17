@@ -9,12 +9,18 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 流式和整份各一例：CLI 收到的 JSON 外面没有 ```。
-- [ ] 没要求 JSON 的回复，里面的 ``` 原样保留。
-- [ ] 三种文字写法各一例：CLI 收到真正的工具调用事件，参数正确。
-- [ ] 请求里没给工具时，同样的文字原样保留。
-- [ ] 测试夹具照搬 magpie。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 流式和整份各一例：CLI 收到的 JSON 外面没有 ```。
+- [x] 没要求 JSON 的回复，里面的 ``` 原样保留。
+- [x] 三种文字写法各一例：CLI 收到真正的工具调用事件，参数正确。
+- [x] 请求里没给工具时，同样的文字原样保留。
+- [x] 测试夹具照搬 magpie。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 23、24 条；明细 01·B32、B52。
+
+## Comments
+
+### 核对记录（2026-10-17）
+
+逐条对照代码与测试核过；改到的测试文件在 packages/server 下逐个单跑全部通过；`npm run typecheck`、`npm run lint` 在 HEAD 5e5287609 上通过。
