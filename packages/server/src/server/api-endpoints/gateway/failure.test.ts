@@ -6,6 +6,7 @@ import {
   lateRests,
   modelRefused,
   modelRetired,
+  requestRefused,
   retryable,
   streamStatus,
   wordsOf,
@@ -15,6 +16,19 @@ import {
  * 判错照 magpie（MIT，THIRD_PARTY_NOTICES；research/magpie-port-inventory.md 第 1 节）：每条正则一正一反，
  * 归类顺序、换不换下一家、只冷却模型的判定各有例子；例子取自 magpie 源码注释里的厂商原话。
  */
+
+// magpie shape_fallback_test.go：Command Code 只带 trace id 的 400（#2313）。
+const COMMAND_CODE_BARE_400 =
+  '{"message":"invalid request error trace_id: 251c3c29761c17fdc459480ed9c68932","type":"invalid_request_error"}';
+// magpie factory_pool_rest_test.go：Factory 的 Standard 用完（#1979）。
+const FACTORY_STANDARD_OUT =
+  '{"error":{"message":"Factory: You\'ve reached your weekly standard usage limit (resets in 0h 19min). Switch to Droid Core or enable Extra Usage to continue."}}';
+// magpie cline_free_limit_test.go：Cline 免费模型当天额度用完（#1398）。
+const CLINE_FREE_LIMIT =
+  "Daily free limit reached on model deepseek/deepseek-v4-flash. Try again in 23h 59m";
+// magpie zcode_blocked_test.go：阿里云 ESA 防火墙挡在 zcode.z.ai 前面的 405 页面。
+const BLOCK_PAGE =
+  '<html><body><h1>Sorry, your request has been blocked due to unusual activity.</h1><a href="https://errors.aliyun.com/">details</a></body></html>';
 
 const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: string[] }> = {
   credit: {
@@ -115,6 +129,43 @@ const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: s
     hits: ["response protection is unavailable"],
     misses: ["protection enabled"],
   },
+  blocked: {
+    hits: [
+      "Sorry, your request has been blocked due to unusual activity",
+      '<a href="https://errors.aliyun.com/">',
+    ],
+    misses: ["the tool call was blocked by policy"],
+  },
+  unsaid: {
+    hits: [
+      COMMAND_CODE_BARE_400,
+      `Command Code: ${COMMAND_CODE_BARE_400}`,
+      "invalid request error trace_id: 251c3c29761c17fdc459480ed9c68932",
+    ],
+    misses: [
+      '{"message":"invalid request error trace_id: 251c3c29761c17fdc459480ed9c68932: messages.3.content too long"}',
+      "invalid request error trace_id: abc",
+    ],
+  },
+  zhipuResets: {
+    hits: [
+      "Usage limit reached for 5 hour. Your limit will reset at 2026-10-15 20:12",
+      "已达到 5 小时的使用上限。您的限额将在 2026-10-15 20:12:13 重置",
+    ],
+    misses: ["this model is retired at 2026-10-15 20:12:13"],
+  },
+  resetsIn: {
+    hits: ["weekly standard usage limit (resets in 0h 19min)", "resets in 3d 4h"],
+    misses: ["resets at 20:00"],
+  },
+  clineFreeLimit: {
+    hits: [CLINE_FREE_LIMIT],
+    misses: ["Daily limit reached"],
+  },
+  tryAgainIn: {
+    hits: ["Try again in 23h 59m"],
+    misses: ["try again later"],
+  },
 };
 
 describe("the vendor words magpie reads", () => {
@@ -151,6 +202,17 @@ describe("why a reply failed", () => {
     { status: 400, body: "You exceeded your current quota", expected: "quota" },
     { status: 429, body: "slow", expected: "rate" },
     { status: 503, body: "upstream unavailable", expected: "other" },
+    // 402 只说用量上限、没提钱：额度用完，不是欠费。
+    { status: 402, body: FACTORY_STANDARD_OUT, expected: "quota" },
+    {
+      status: 402,
+      body: '{"error":{"message":"Payment required: your subscription payment failed"}}',
+      expected: "credit",
+    },
+    { status: 402, body: "usage limit reached, add credit to continue", expected: "credit" },
+    { status: 402, body: '{"error":{"code":"insufficient_quota"}}', expected: "credit" },
+    { status: 429, body: CLINE_FREE_LIMIT, expected: "quota" },
+    { status: 405, body: BLOCK_PAGE, expected: "other" },
   ])("$status $body → $expected", ({ status, body, expected }) => {
     expect(failure(status, body)).toBe(expected);
   });
@@ -163,6 +225,8 @@ describe("why a reply failed", () => {
     expect(endpointFailure(401, '{"message":"Model glm-5-free is not supported"}')).toBe("other");
     expect(endpointFailure(403, "model is not available in the current token plan")).toBe("other");
     expect(endpointFailure(403, "User location is not supported for the API use.")).toBe("other");
+    // 防火墙挡的是这台机器的地址，不是 key。
+    expect(endpointFailure(403, BLOCK_PAGE)).toBe("other");
   });
 });
 
@@ -184,6 +248,52 @@ describe("whether another endpoint is worth asking", () => {
     expect(retryable(400, "Extra inputs are not permitted")).toBe(true);
     expect(retryable(400, "unsupported_country_region_territory")).toBe(true);
     expect(retryable(409, "quota exceeded")).toBe(false);
+  });
+
+  test("a vendor's firewall blocking this address is, at any error status", () => {
+    expect(retryable(405, BLOCK_PAGE)).toBe(true);
+    expect(retryable(400, BLOCK_PAGE)).toBe(true);
+    expect(retryable(405, "method not allowed")).toBe(false);
+  });
+
+  test("a 400 that says nothing but its trace id is, and rests nobody (Command Code)", () => {
+    const cases = [
+      { status: 400, body: COMMAND_CODE_BARE_400, expected: true },
+      { status: 400, body: `Command Code: ${COMMAND_CODE_BARE_400}`, expected: true },
+      {
+        status: 400,
+        body: '{"message":"{\\"message\\":\\"invalid request error trace_id: a050673b3298a747a15895803095bcf0\\",\\"type\\":\\"invalid_request_error\\"}\\n","type":"invalid_request_error"}',
+        expected: true,
+      },
+      {
+        status: 422,
+        body: '{"message":"{\\"message\\":\\"invalid request error trace_id: f9965636e3da815215348ef4ddf2ae63\\",\\"type\\":\\"invalid_request_error\\"}\\n","type":"server_error"}',
+        expected: true,
+      },
+      {
+        status: 400,
+        body: '{"message":"The input is longer than the model\'s context length trace_id: e811a6f10da868000cc12a043c07a73b","type":"invalid_request_error"}',
+        expected: false,
+      },
+      {
+        status: 400,
+        body: '{"error":{"message":"Invalid option: expected one of \\"low\\"|\\"medium\\"|\\"high\\"","type":"invalid_request_error","param":"reasoning_effort"}}',
+        expected: false,
+      },
+      {
+        status: 400,
+        body: '{"message":"invalid request error trace_id: 251c3c29761c17fdc459480ed9c68932: messages.3.content too long","type":"invalid_request_error"}',
+        expected: false,
+      },
+      { status: 200, body: COMMAND_CODE_BARE_400, expected: false },
+    ];
+    expect(
+      cases.map(({ status, body }) => ({
+        status,
+        body,
+        expected: retryable(status, body) && requestRefused(status, body),
+      })),
+    ).toEqual(cases);
   });
 
   test("a retired model is, at any of its statuses", () => {

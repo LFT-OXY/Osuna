@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   COOLDOWN,
   EndpointCooldowns,
+  heldClock,
   passing,
   quotaHeld,
   resetsAt,
@@ -30,11 +31,19 @@ const B = { id: "ep_b", name: "Relay B" };
 
 function fail(
   store: EndpointCooldowns,
-  input: { status: number; body?: string; headers?: Record<string, string>; endpoint?: typeof A },
+  input: {
+    status: number;
+    body?: string;
+    headers?: Record<string, string>;
+    endpoint?: typeof A;
+    model?: string;
+    baseUrl?: string;
+  },
 ) {
   return store.markFailed({
     endpoint: input.endpoint ?? A,
-    model: "kimi-k2",
+    model: input.model ?? "kimi-k2",
+    baseUrl: input.baseUrl ?? "https://relay-a.test/v1",
     status: input.status,
     headers: input.headers ?? {},
     body: input.body ?? "",
@@ -189,6 +198,78 @@ describe("how long an endpoint sits out", () => {
     expect(store.restOf("ep_a", "glm-4.6")).toBeNull();
   });
 
+  test("a 402 that says a usage limit and nothing of money is out of quota until it says, not out of credit", () => {
+    const { store } = cooldowns();
+    const factory =
+      '{"error":{"message":"Factory: You\'ve reached your weekly standard usage limit (resets in 0h 19min). Switch to Droid Core or enable Extra Usage to continue."}}';
+    expect(fail(store, { status: 402, body: factory })).toMatchObject({
+      why: "quota",
+      by: "resets",
+      until: START + 19 * MINUTE,
+    });
+    expect(
+      fail(store, {
+        status: 402,
+        body: '{"error":{"message":"Payment required: your subscription payment failed"}}',
+        endpoint: B,
+      }),
+    ).toMatchObject({ why: "credit", until: START + 30 * MINUTE });
+  });
+
+  test("Cline's free model out of its day rests that model alone, until the time it says", () => {
+    const { store } = cooldowns();
+    const said =
+      "Daily free limit reached on model deepseek/deepseek-v4-flash. Try again in 23h 59m";
+    const free = "cline-free/deepseek-v4.1-flash";
+    expect(
+      fail(store, {
+        status: 429,
+        body: JSON.stringify({ error: { message: said } }),
+        model: free,
+        baseUrl: "https://api.cline.bot/api/v1",
+      }),
+    ).toMatchObject({
+      why: "quota",
+      model: free,
+      by: "resets",
+      until: START + (23 * 60 + 59) * MINUTE,
+    });
+    expect(store.restOf("ep_a", free)).toMatchObject({ model: free });
+    expect(store.restOf("ep_a", "cline-free/mimo-v2.6-flash")).toBeNull();
+    expect(store.endpointRest("ep_a")).toBeNull();
+    // 别家说同样的话照旧冷却整家，恢复时间不按 Cline 的说法读。
+    expect(fail(store, { status: 429, body: said, model: free, endpoint: B })).toMatchObject({
+      model: null,
+      by: "quota",
+      until: START + 15 * MINUTE,
+    });
+  });
+
+  test("a model failing again after a sibling answered climbs its own ladder and rests alone", () => {
+    const { store, clock } = cooldowns();
+    const glm = "glm-4.6";
+    expect(fail(store, { status: 503 })).toMatchObject({ model: null, failures: 1 });
+    // 冷却结束后，同一家的另一个模型答上了：整家的失败次数清零，kimi-k2 自己的还留着。
+    clock.now += 2 * MINUTE;
+    store.served("ep_a", glm);
+    const second = fail(store, { status: 503 });
+    expect(second).toMatchObject({ model: "kimi-k2", failures: 2, until: clock.now + 2 * MINUTE });
+    expect(store.restOf("ep_a", glm)).toBeNull();
+    expect(store.endpointRest("ep_a")).toBeNull();
+    clock.now += 3 * MINUTE;
+    store.served("ep_a", glm);
+    expect(fail(store, { status: 503 })).toMatchObject({
+      model: "kimi-k2",
+      failures: 3,
+      until: clock.now + 4 * MINUTE,
+    });
+    expect(store.restOf("ep_a", glm)).toBeNull();
+    // 它自己答上了，自己的次数也清零。
+    clock.now += 5 * MINUTE;
+    store.served("ep_a", "kimi-k2");
+    expect(fail(store, { status: 503 })).toMatchObject({ model: null, failures: 1 });
+  });
+
   test("a rest ends on its own, when it answers, or when cleared by hand; and each is logged", () => {
     vi.useFakeTimers({ now: START });
     const lines: string[] = [];
@@ -253,6 +334,93 @@ describe("what the vendor says about when to try again", () => {
       10 * MINUTE,
     );
   });
+
+  test("Zhipu's 1308 and 1310 written without a zone, read in Beijing's time (magpie zhipu_resets_test.go)", () => {
+    const SECOND = 1_000;
+    const HOUR = 60 * MINUTE;
+    // 北京时间 16:25。
+    const player = Date.parse("2026-10-15T08:25:00Z");
+    const zaiPlayer = "Usage limit reached for 5 hour. Your limit will reset at 2026-10-15 20:12";
+    const zai1308 = "Usage limit reached for 5 hour. Your limit will reset at 2026-10-15 20:12:13";
+    const zai1310 = "Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-10 21:00:06";
+    const bigmodel = "已达到 5 小时的使用上限。您的限额将在 2026-10-15 20:12:13 重置";
+    const escapedBigmodel = JSON.stringify({ error: { code: "1308", message: bigmodel } }).replace(
+      /[一-鿿]/g,
+      (c) => `\\u${c.charCodeAt(0).toString(16)}`,
+    );
+    const cases = [
+      { body: zaiPlayer, now: player, wait: 3 * HOUR + 47 * MINUTE },
+      {
+        body: JSON.stringify({ error: { code: "1308", message: zaiPlayer } }),
+        now: player,
+        wait: 3 * HOUR + 47 * MINUTE,
+      },
+      {
+        body: JSON.stringify({ type: "error", error: { type: "1308", message: zai1308 } }),
+        now: player,
+        wait: 3 * HOUR + 47 * MINUTE + 13 * SECOND,
+      },
+      {
+        body: "Usage limit reached for 5 hour. Your limit will reset at 2026-09-22 01:18:11",
+        now: Date.parse("2026-09-21T17:17:32Z"),
+        wait: 39 * SECOND,
+      },
+      {
+        body: JSON.stringify({ error: { code: "1310", message: zai1310 } }),
+        now: Date.parse("2026-10-09T11:32:34Z"),
+        wait: 25 * HOUR + 27 * MINUTE + 32 * SECOND,
+      },
+      { body: bigmodel, now: player, wait: 3 * HOUR + 47 * MINUTE + 13 * SECOND },
+      { body: escapedBigmodel, now: player, wait: 3 * HOUR + 47 * MINUTE + 13 * SECOND },
+      // 截断的、自带时区的、不是真日期的、已过去的、超过一周的、别家不带时区的：都不读。
+      { body: zai1308.slice(0, -1), now: player, wait: 0 },
+      { body: zai1308.slice(0, -2), now: player, wait: 0 },
+      { body: zaiPlayer.slice(0, -1), now: player, wait: 0 },
+      { body: zaiPlayer.slice(0, zaiPlayer.indexOf(" 20:12")), now: player, wait: 0 },
+      { body: `${zai1308} UTC`, now: player, wait: 0 },
+      { body: `${zai1308}+00:00`, now: player, wait: 0 },
+      { body: `${zai1308}Z`, now: player, wait: 0 },
+      { body: zai1308.replace("2026-10-15", "2026-13-15"), now: player, wait: 0 },
+      { body: zai1308.replace("20:12:13", "25:12:13"), now: player, wait: 0 },
+      { body: zai1308, now: Date.parse("2026-10-15T12:13:00Z"), wait: 0 },
+      { body: zai1308, now: Date.parse("2026-10-07T00:00:00Z"), wait: 0 },
+      { body: "将在 2026-10-11 20:16:02 重置", now: player, wait: 0 },
+      { body: "this model is retired at 2026-10-15 20:12:13", now: player, wait: 0 },
+    ];
+    expect(cases.map(({ body, now }) => ({ body, now, wait: resetsAt(body, now) }))).toEqual(cases);
+  });
+
+  test("how long until it is back, written in days, hours and minutes", () => {
+    expect(resetsAt("weekly standard usage limit (resets in 0h 19min).", START)).toBe(19 * MINUTE);
+    expect(resetsAt("Droid Core usage limit (resets in 3d 4h).", START)).toBe(
+      (3 * 24 + 4) * 60 * MINUTE,
+    );
+    expect(resetsAt("resets in 45 minutes", START)).toBe(45 * MINUTE);
+    expect(resetsAt("resets in 8d", START)).toBe(0);
+    expect(resetsAt("resets in a while", START)).toBe(0);
+  });
+});
+
+describe("telling when it is back", () => {
+  test("the time with its offset, and the date when it is not today", () => {
+    const zone = process.env.TZ;
+    const told = (tz: string, at: string, now: string) => {
+      process.env.TZ = tz;
+      return heldClock(Date.parse(at), Date.parse(now));
+    };
+    try {
+      const now = "2026-10-15T08:25:00Z";
+      expect([
+        told("Asia/Shanghai", "2026-10-15T12:12:13Z", now),
+        told("Asia/Shanghai", "2026-10-16T01:00:00Z", now),
+        told("UTC", "2026-10-15T12:12:13Z", now),
+        told("America/St_Johns", "2026-10-15T12:12:13Z", now),
+      ]).toEqual(["20:12 UTC+8", "2026-10-16 09:00 UTC+8", "12:12 UTC+0", "09:42 UTC-2:30"]);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
 });
 
 describe("asking the last endpoint again after a moment", () => {
@@ -278,11 +446,14 @@ describe("asking the last endpoint again after a moment", () => {
 });
 
 describe("not asking at all while every endpoint is out of quota", () => {
-  test("held when each rests out of quota or credit for a 429 or 402 with the vendor's words", () => {
+  test("held when each rests out of quota or credit for a 429 or 402 with the vendor's words; the first one's words are given", () => {
     const { store, clock } = cooldowns();
+    clock.now += MINUTE;
     const a = fail(store, { status: 429, body: "quota exhausted" });
+    clock.now -= MINUTE;
     const b = fail(store, { status: 402, body: "no credit", endpoint: B });
-    expect(quotaHeld([a, b])).toEqual({ last: b, backAt: a?.until });
+    expect(quotaHeld([a, b])).toEqual({ first: a, backAt: a?.until });
+    expect(quotaHeld([b, a])).toEqual({ first: b, backAt: a?.until });
     clock.now += MINUTE;
     const c = fail(store, { status: 503, body: "busy" });
     expect(quotaHeld([c, b])).toBeNull();

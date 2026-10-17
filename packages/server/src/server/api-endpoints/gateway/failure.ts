@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go、gateway.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go、gateway.go，internal/provider/test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { parseJson } from "../upstream-http.js";
@@ -66,6 +66,21 @@ export const FAILURE_WORDS = {
     /\buser location is not supported for the api use\b|unsupported_country_region_territory|country, region,? or territory not supported/i,
   // ChatGPT 后端的「response protection is unavailable」：同样的历史在哪都一样失败。
   protection: /response protection is unavailable/i,
+  // 厂商的边缘防火墙挡了这台机器的地址（阿里云 ESA 挡在 zcode.z.ai 前面的 405 页面）：换条路的别家也许能答。
+  blocked: /request has been blocked|errors\.aliyun\.com/i,
+  // Command Code 只带 trace id、不说原因的 400（以前是 422）：同样的请求别家也许收，这家不冷却。
+  unsaid: /(^|"|\\"|: )invalid request error trace_id: [0-9a-f]{16,}(\\?"|\s*$)/i,
+  // 智谱 1308、1310 写的恢复时间，不带时区（按北京时间）；至少写到分钟。
+  zhipuResets:
+    /(?:\bYour limit will reset at|您的限额将在)\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(\s*\S{0,3})/i,
+  // 用天、小时、分钟写的还有多久恢复（Factory 402 的「resets in 0h 19min」）。
+  resetsIn:
+    /\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?/i,
+  // Cline 某个免费模型当天的额度用完：只是这个模型的。
+  clineFreeLimit: /free limit reached on model/i,
+  // Cline 免费模型额度用完时说的还有多久（「Try again in 23h 59m」），单位同 resetsIn。
+  tryAgainIn:
+    /\btry again in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?/i,
 } as const;
 
 const W = FAILURE_WORDS;
@@ -102,6 +117,15 @@ function overflowed(status: number, body: string): boolean {
   return (status === 400 || status === 413 || status === 422) && tooLong(status, body);
 }
 
+/**
+ * 402 只说用量上限、没提钱：是套餐的额度用完，不是欠费（magpie #1979，Factory 的 Standard 用完）。
+ */
+function quotaPaymentRequired(status: number, body: string): boolean {
+  const saysUsageLimit = W.usedUp.test(body);
+  const saysMoney = W.credit.test(body) || body.includes("insufficient_quota");
+  return status === 402 && saysUsageLimit && !saysMoney;
+}
+
 /** 429 只在说余额本身用完时才算欠费，否则多半是限流或额度。 */
 function outOfCredit(status: number, body: string): boolean {
   return (
@@ -116,6 +140,7 @@ export function failure(status: number, rawBody: string): FailureClass {
   if (status === 502 && W.proxyDown.test(rawBody)) return "proxy";
   const body = wordsOf(rawBody);
   if (overflowed(status, body)) return "other";
+  if (quotaPaymentRequired(status, body)) return "quota";
   if (outOfCredit(status, body)) return "credit";
   if (status === 429 && W.resetsWhen.test(body)) return "quota";
   if (status === 429 && W.rate.test(body) && !W.planned.test(body)) return "rate";
@@ -131,13 +156,14 @@ export function failure(status: number, rawBody: string): FailureClass {
 
 /**
  * 一家接口为什么失败：magpie 的分类之外，401 / 403 没说出别的原因时算 key 无效或无权限。
- * 模型下线、套餐不含这个模型、地区不支持都不是 key 的问题。
+ * 模型下线、套餐不含这个模型、地区不支持、防火墙挡了地址都不是 key 的问题。
  */
 export function endpointFailure(status: number, body: string): FailureClass {
   const why = failure(status, body);
   if (why !== "other" || (status !== 401 && status !== 403)) return why;
-  if (modelRefused(status, body) || W.region.test(wordsOf(body))) return "other";
-  return "auth";
+  const words = wordsOf(body);
+  const notTheKey = modelRefused(status, body) || W.region.test(words) || W.blocked.test(words);
+  return notTheKey ? "other" : "auth";
 }
 
 /** 值不值得换下一家：上下文超长哪家都装不下，交给 Agent 压缩；其余 4xx 只在词表说明原因时换。 */
@@ -146,10 +172,11 @@ export function retryable(status: number, rawBody: string): boolean {
   if (overflowed(status, body)) return false;
   if ([401, 402, 403, 404, 408, 429].includes(status) || status >= 500) return true;
   if (modelRetired(status, body)) return true;
+  // 防火墙挡了这个地址：别家走的是别的路。
+  if (status >= 400 && W.blocked.test(body)) return true;
   if (status === 400 || status === 422) {
-    return [W.quota, W.unserved, W.wrongFormat, W.refused, W.shape, W.region].some((words) =>
-      words.test(body),
-    );
+    const said = [W.quota, W.unserved, W.wrongFormat, W.refused, W.shape, W.unsaid, W.region];
+    return said.some((words) => words.test(body));
   }
   return false;
 }
@@ -172,14 +199,14 @@ export function modelRefused(status: number, rawBody: string): boolean {
 }
 
 /**
- * 请求本身被拒：厂商读不懂它的形状、拒收这个客户端、或不服务所在地区。换下一家问，但不怪这家，不冷却
- * （magpie 的 shape / refused）；否则一个被拒的工具定义会让每家都冷却。
+ * 请求本身被拒：厂商读不懂它的形状、只回 trace id 不说原因、拒收这个客户端、或不服务所在地区。换下一家问，
+ * 但不怪这家，不冷却（magpie 的 shape / unsaid / refused）；否则一个被拒的工具定义会让每家都冷却。
  */
 export function requestRefused(status: number, rawBody: string): boolean {
   if (status !== 400 && status !== 422) return false;
   const body = wordsOf(rawBody);
   if (W.quota.test(body) || modelRefused(status, rawBody)) return false;
-  return [W.shape, W.refused, W.region].some((words) => words.test(body));
+  return [W.shape, W.unsaid, W.refused, W.region].some((words) => words.test(body));
 }
 
 /**

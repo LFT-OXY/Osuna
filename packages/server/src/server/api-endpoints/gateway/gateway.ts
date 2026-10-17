@@ -20,7 +20,15 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
-import { COOLDOWN, EndpointCooldowns, passing, quotaHeld, type EndpointRest } from "./cooldown.js";
+import {
+  COOLDOWN,
+  EndpointCooldowns,
+  heldClock,
+  passing,
+  quotaHeld,
+  spentAfter,
+  type EndpointRest,
+} from "./cooldown.js";
 import { endpointFailure, lateRests, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
 import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
@@ -521,9 +529,9 @@ function planAttempts(input: {
     return { kind: "rest", candidate: lastPassable, rest: lastRest };
   }
   const held = ready.length === 0 ? quotaHeld(resting.map(restOf)) : null;
-  const heldBy = resting.at(-1);
+  const heldBy = resting[0];
   if (held && heldBy) {
-    return { kind: "rest", candidate: heldBy, rest: held.last, backAt: held.backAt };
+    return { kind: "rest", candidate: heldBy, rest: held.first, backAt: held.backAt };
   }
   const soonest = [...resting].sort(
     (a, b) => (restOf(a)?.until ?? Infinity) - (restOf(b)?.until ?? Infinity),
@@ -537,7 +545,10 @@ function planAttempts(input: {
   return { kind: "ask", plan };
 }
 
-/** 按顺序问：开口前失败且值得换就冷却这家、换下一家；最后一家的错误交给 Agent。 */
+/**
+ * 按顺序问：开口前失败且值得换就冷却这家、换下一家；最后一家的错误交给 Agent。
+ * 后面剩下的都因额度用完或欠费在冷却时，这家就当最后一家（原地重试、错误交给 Agent），不去问明知没额度的。
+ */
 async function askInTurn(input: {
   req: Request;
   res: Response;
@@ -555,8 +566,11 @@ async function askInTurn(input: {
 }): Promise<void> {
   const { res, wire, logger, plan } = input;
   const { cooldowns, sticks } = input.failover;
+  const restOf = (candidate: GatewayCandidate) =>
+    cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
   for (const [index, candidate] of plan.entries()) {
-    const next = plan[index + 1];
+    const remaining = plan.slice(index + 1);
+    const next = spentAfter(remaining.map(restOf)) ? undefined : remaining[0];
     const outcome = await askUntilSettled({ ...input, candidate, last: next === undefined });
     if (outcome.kind === "gone") return;
     if (outcome.kind === "answered") {
@@ -793,13 +807,14 @@ function switchedFailure(failed: FailedAttempt, rest: EndpointRest | null): stri
 /** 把一次失败记进冷却：判错读上游原文，全在冷却时交出的是打过码的原文。 */
 function markFailed(input: {
   cooldowns: EndpointCooldowns;
-  candidate: GatewayCandidate;
+  candidate: AskableCandidate;
   failed: Pick<FailedAttempt, "status" | "headers" | "text" | "detail">;
 }): EndpointRest | null {
   const { candidate, failed } = input;
   return input.cooldowns.markFailed({
     endpoint: candidate.endpoint,
     model: candidate.upstreamModel,
+    baseUrl: candidate.baseUrl,
     status: failed.status,
     headers: failed.headers,
     body: failed.text,
@@ -810,16 +825,8 @@ function markFailed(input: {
 /** 额度、欠费、限流判出了恢复时间：附在上游原文后面。 */
 function backAgainSuffix(rest: EndpointRest | null): string {
   const backed = rest?.why === "credit" || rest?.why === "quota" || rest?.why === "rate";
-  return backed && rest.until !== null ? ` (available again at ${formatBackAt(rest.until)})` : "";
-}
-
-/** 当天只写时分，否则带日期；用 daemon 所在机器的本地时间。 */
-function formatBackAt(at: number): string {
-  const back = new Date(at);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const time = `${pad(back.getHours())}:${pad(back.getMinutes())}`;
-  if (back.toDateString() === new Date().toDateString()) return time;
-  return `${back.getFullYear()}-${pad(back.getMonth() + 1)}-${pad(back.getDate())} ${time}`;
+  if (!backed || rest.until === null) return "";
+  return ` (available again at ${heldClock(rest.until, Date.now())})`;
 }
 
 /** 429 没带 Retry-After 时告诉 CLI 何时再问：这家冷却结束的时刻。 */

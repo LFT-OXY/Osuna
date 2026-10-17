@@ -2981,7 +2981,7 @@ describe("when the endpoint fails", () => {
     expect(body.error.type).toBe("rate_limit_error");
     // 限流判出了恢复时间，附在原文后面。
     expect(body.error.message).toMatch(
-      /^Relay A: Slow down, key \*\*\* is busy \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}\)$/,
+      /^Relay A: Slow down, key \*\*\* is busy \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2} UTC[+-]\d{1,2}(:\d{2})?\)$/,
     );
     // Retry-After 是 30 秒，超过原地重试肯等的 8 秒：只问了一次。
     expect(upstream.requests).toHaveLength(1);
@@ -3278,7 +3278,7 @@ describe("switching to another endpoint when one fails", () => {
     await fixed.text();
   });
 
-  test("with every endpoint out of quota the last one's error comes back, and none is asked until one is back", async () => {
+  test("with every endpoint out of quota the first one's error comes back with its zone, and none is asked until one is back", async () => {
     const { upstreamA, upstreamB, ask } = await twoRelays();
     upstreamA.respond = (_request, res) =>
       failWith(res, { status: 429, message: "You exceeded your current quota" });
@@ -3296,12 +3296,37 @@ describe("switching to another endpoint when one fails", () => {
 
     const held = await ask();
     expect(held.status).toBe(429);
-    expect(held.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(held.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
     expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(800);
     expect(((await held.json()) as { error: { message: string } }).error.message).toMatch(
-      /^Relay B: B: monthly quota used up \(available again at /,
+      /^Relay A: You exceeded your current quota \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2} UTC[+-]\d{1,2}(:\d{2})?\)$/,
     );
     expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("while the endpoint after it is out of quota, a busy endpoint is asked again in place and the other is not asked", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    // 先让 B 因额度冷却：A 不收这个写法（换家但不冷却），B 说额度用完。
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "Extra inputs are not permitted" });
+    upstreamB.respond = (_request, res) =>
+      failWith(res, { status: 429, message: "B: monthly quota used up" });
+    expect((await ask()).status).toBe(429);
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+
+    let busy = 1;
+    upstreamA.respond = (_request, res) => {
+      if (busy-- > 0) failWith(res, { status: 529, message: "Overloaded" });
+      else streamReply(res, { text: "from A" });
+    };
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await response.text()).toContain("from A");
+    expect(upstreamA.requests).toHaveLength(3);
     expect(upstreamB.requests).toHaveLength(1);
   });
 

@@ -9,9 +9,10 @@ magpie — https://github.com/yetone/magpie
 
 The API endpoint gateway's failure classification, cooldowns, and conversation
 stickiness are ported to TypeScript from magpie's internal/gateway
-(routing.go, fallback.go, affinity.go, gateway.go, prompt.go), and so are
+(routing.go, fallback.go, affinity.go, gateway.go, prompt.go; the firewall
+block page from internal/provider/test.go), and so are
 the order the gateway asks endpoints in and the retry of the last one
-(restLast, probeOne, passing in fallback.go). Their tests take magpie's
+(restLast, probeOne, passing, spentAfter in fallback.go). Their tests take magpie's
 constants and the vendor error texts quoted in its source comments:
 
   packages/server/src/server/api-endpoints/gateway/failure.ts
