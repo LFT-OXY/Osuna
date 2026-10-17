@@ -57,17 +57,28 @@ function isWebSearchTool(tool: unknown): boolean {
 }
 
 /**
- * 发给不会搜的那家的 Responses 请求：去掉 Codex 每轮都带的 web_search 工具、点名它的 tool_choice，
- * 以及历史里的 web_search_call 项（magpie 在客户端协议上重建请求时不读这一项，research/implementation-notes.md「05」）。
- * 一个工具都不剩时 tool_choice 也去掉。没有要改的就原样交回同一个对象。
+ * Responses 请求要了联网搜索：带着 web_search 工具，且 tool_choice 不是没列它的 allowed_tools
+ * （照 magpie searchAsked 与 responses.go 读 allowed_tools 的那段）。
+ */
+function asksResponsesWebSearch(body: Body): boolean {
+  const tools = Array.isArray(body.tools) ? body.tools : [];
+  if (!tools.some(isWebSearchTool)) return false;
+  const choice = body.tool_choice;
+  if (!isRecord(choice) || choice.type !== "allowed_tools") return true;
+  return Array.isArray(choice.tools) && choice.tools.some(isWebSearchTool);
+}
+
+/**
+ * 发给不会搜的那家的 Responses 请求：要了联网搜索时（asksResponsesWebSearch）去掉 web_search 工具、点名它的 tool_choice，
+ * 以及历史里的 web_search_call 项（magpie 只对这样的请求在客户端协议上重建，重建时不读这一项；research/implementation-notes.md「05」）。
+ * 一个工具都不剩时 tool_choice 也去掉。没要搜索的请求原样交回同一个对象，历史照留。
  */
 export function withoutResponsesWebSearch(body: Body): Body {
-  let out = body;
+  if (!asksResponsesWebSearch(body)) return body;
   const tools = Array.isArray(body.tools) ? body.tools : [];
   const kept = tools.filter((tool) => !isWebSearchTool(tool));
-  if (kept.length !== tools.length) {
-    out = kept.length > 0 ? { ...out, tools: kept } : withoutKeys(out, ["tools", "tool_choice"]);
-  }
+  let out =
+    kept.length > 0 ? { ...body, tools: kept } : withoutKeys(body, ["tools", "tool_choice"]);
   out = withoutWebSearchChoice(out);
   if (Array.isArray(body.input) && body.input.some(isWebSearchCall)) {
     out = { ...out, input: body.input.filter((item) => !isWebSearchCall(item)) };

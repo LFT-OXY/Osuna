@@ -20,7 +20,7 @@ The reason for all three is how Claude Code reads the reply. It runs a search as
 
 ## Codex
 
-The same switch governs Codex. Codex sends its `web_search` tool on every turn. An endpoint with the switch on receives it as sent; one with only an Anthropic URL gets it as Anthropic's server-side search tool, and the results are written back in Codex's shape. An endpoint with the switch off gets the request without the tool, and without a `tool_choice` that names it.
+The same switch governs Codex. Codex sends its `web_search` tool on every turn. An endpoint with the switch on receives it as sent; one with only an Anthropic URL gets it as Anthropic's server-side search tool, and the results are written back in Codex's shape. An endpoint with the switch off gets the request without the tool, and without a `tool_choice` that names it. It also gets the request without the `web_search_call` items of the history, as magpie does. This applies only when the request asks for the tool: `web_search` is among the tools and an `allowed_tools` choice does not leave it out. Otherwise the request goes as sent, history and all.
 
 Codex signed in with ChatGPT also has a standalone search call. For a ChatGPT model it goes to ChatGPT. For an endpoint model the gateway answers 200 with a short text saying the model cannot search the web, as magpie does without a search provider, because a 404 makes Codex end the turn.
 

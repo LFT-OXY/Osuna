@@ -7938,8 +7938,8 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
     };
   }
 
-  /** 两家都选了 kimi-k2、都只有 Responses 地址：A（先建的）打开了「自己能联网搜索」，B 没有。 */
-  async function twoResponsesRelays() {
+  /** 两家都选了 kimi-k2、都只有 Responses 地址（`aFormat` 改 A 的）：A（先建的）打开了「自己能联网搜索」，B 没有。 */
+  async function twoResponsesRelays(aFormat = "openai_responses") {
     const upstreams = { a: await startUpstream(), b: await startUpstream() };
     for (const upstream of Object.values(upstreams)) {
       upstream.respond = (_request, res) => answerResponsesWhole(res);
@@ -7953,7 +7953,11 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
         id: `ep_${key}`,
         slug: `relay-${key}`,
         name: `Relay ${key.toUpperCase()}`,
-        baseUrls: [{ format: "openai_responses", url: `${upstreams[key].url}/v1` }],
+        baseUrls: [
+          key === "a" && aFormat === "anthropic_messages"
+            ? { format: aFormat, url: upstreams[key].url }
+            : { format: "openai_responses", url: `${upstreams[key].url}/v1` },
+        ],
         models: ["kimi-k2"],
       });
       return key === "a" ? Object.assign(endpoint, { searchesWeb: true }) : endpoint;
@@ -8008,7 +8012,7 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
     expect(toB.input).toEqual([ASKED]);
   });
 
-  test("an endpoint that turns away any request offering web_search answers the turn once the tool is left out", async () => {
+  test("an endpoint without the switch that turns away any request offering web_search never receives it and answers the turn", async () => {
     const { upstreams, ask } = await twoResponsesRelays();
     upstreams.b.respond = (request, res) => {
       if (request.body.toString().includes("web_search")) {
@@ -8037,5 +8041,22 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
 
     expect(receivedBody(upstreams.b.requests[0]).input).toEqual([ASKED, ANSWERED, AGAIN]);
     expect(receivedBody(upstreams.a.requests[0]).input).toEqual(input);
+  });
+
+  test("an endpoint with the switch on but only an Anthropic URL gets the turn translated without the tool or the web_search_call", async () => {
+    const { upstreams, ask } = await twoResponsesRelays("anthropic_messages");
+    const input = [ASKED, SEARCHED, ANSWERED, AGAIN];
+
+    const response = await ask(codexTurn("relay-a/kimi-k2", { input }));
+
+    expect(response.status).toBe(200);
+    expect(upstreams.a.requests).toHaveLength(1);
+    expect(upstreams.a.requests[0]?.url).toBe("/v1/messages");
+    const toA = upstreams.a.requests[0]?.body.toString() ?? "";
+    expect(toA).not.toContain("web_search");
+    expect(toA).not.toContain("ws_1");
+    expect(receivedBody(upstreams.a.requests[0]).tools).toEqual([
+      expect.objectContaining({ name: "exec_command" }),
+    ]);
   });
 });
