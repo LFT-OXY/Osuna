@@ -67,14 +67,14 @@ $PASEO_HOME/
 ├── plugins/
 │   ├── sources.json                      # Managed kind and Git acquisition remote
 │   └── {pluginId}/{uuid}/                # Git checkout or npm package/lockfile/dependency tree
-├── api-endpoints/                       # API endpoints (ADR 0004, ADR 0007); every file is mode 0600
+├── api-endpoints/                       # API endpoints (ADR 0004, ADR 0007, ADR 0010); every file is mode 0600
 │   ├── endpoints.json                   # Host-wide endpoints and each provider's switch and default model, without keys
 │   ├── keys.json                        # API keys; no RPC ever returns them
 │   ├── takeover-claude.json             # Original values of the keys the daemon owns in Claude's settings.json
 │   ├── takeover-codex.json              # Same for Codex's config.toml, plus the gateway URL and token in the dedicated provider table
 │   ├── codex-models.json                # The model catalog Codex reads through model_catalog_json
 │   ├── models-dev.json                  # models.dev slimmed to each model's window, reply length and effort levels
-│   ├── gateway-tokens.json              # One gateway token per agent whose third-party switch is on
+│   ├── gateway-tokens.json              # One gateway token per agent that ever had its third-party switch on; it names the agent and survives the switch (ADR 0010)
 │   ├── retired-models.json              # Endpoint models whose vendor said they are retired, kept out of model lists for a week
 │   ├── {file}.bak                       # Last good copy of endpoints.json, keys.json and gateway-tokens.json
 │   ├── {file}.bad-{time}                # A copy of one of those three that failed to parse
@@ -746,7 +746,7 @@ The command list the provider's running process last reported, one entry per pro
 - Before each write, the file there now becomes `<file>.bak` when it parses. One that does not parse is copied to `<file>.bad-<time>` instead and the `.bak` is left alone.
 - A read of a file that does not parse, with a `.bak` that does, copies the bad file to `<file>.bad-<time>` (`<time>` is the ISO time with `:` as `-`; `-2`, `-3` when one already exists), puts the `.bak` bytes back in place, and logs one warning with `why` (`empty`, `zero_bytes`, `not_json`, `schema_mismatch`), never the parse error, which quotes the file. The daemon keeps serving the previous generation, which can be one change behind. When the copy or the put-back fails, the `.bak` is still served and the warning says it could not be put back.
 - With the `.bak` bad or missing too, the read fails as it did before: nothing is written or removed.
-- A missing file is no data; its `.bak` is not read. Removing `gateway-tokens.json` removes its `.bak` too, so revoked tokens never come back.
+- A missing file is no data; its `.bak` is not read. Removing `gateway-tokens.json` removes its `.bak` too, so removed tokens never come back.
 - The takeover records and the CLI's own `settings.json` and `config.toml` have no `.bak`: restoring a CLI config from an older record could write back wrong values, so they still fail to parse and nothing is written.
 - The daemon is the only writer, so there is no cross-process lock. On Windows, a read or rename that fails because another program holds the file is tried again every 10 ms, for at most 0.5 s.
 

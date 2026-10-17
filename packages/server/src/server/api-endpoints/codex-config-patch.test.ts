@@ -6,7 +6,7 @@ import {
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
   readCodexReasoningEffort,
-  removeCodexProviderTable,
+  refreshCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
   type CodexGatewayWiring,
@@ -74,11 +74,20 @@ function restore(text: string | null, takeover: CodexConfigTakeover) {
   return result.text;
 }
 
-function removeTable(text: string) {
-  const result = removeCodexProviderTable({ text });
-  if (result.kind !== "patched") throw new Error(`Expected a removal, got ${result.kind}`);
-  return result.text;
+/** 切回官方后留着的样子：Osuna 的服务商表照追加时的写法留在末尾。 */
+function withKeptTable(text: string, block = RELAY_BLOCK) {
+  return `${text}${text.endsWith("\n") ? "\n" : "\n\n"}${block}`;
 }
+
+function refreshTable(text: string | null, table = { baseUrl: MOVED_URL, bearerToken: "t2" }) {
+  return refreshCodexProviderTable({ text, table });
+}
+
+const MOVED_URL = "http://127.0.0.1:7000/api-endpoint-gateway/v1";
+const MOVED_BLOCK = RELAY_BLOCK.replace("127.0.0.1:6767", "127.0.0.1:7000").replace(
+  '"gw-token"',
+  '"t2"',
+);
 
 function toValue(text: string): Record<string, unknown> {
   const value: unknown = getStaticTOMLValue(parseTOML(text, { tomlVersion: "1.0" }));
@@ -172,7 +181,7 @@ ${RELAY_BLOCK}`);
     const { text, takeover } = apply(`\uFEFF[features]\nweb_search = true\n`);
 
     expect(text.startsWith(`\uFEFFmodel_provider = "${ID}"\n`)).toBe(true);
-    expect(restore(text, takeover)).toBe(`\uFEFF[features]\nweb_search = true\n`);
+    expect(restore(text, takeover)).toBe(withKeptTable(`\uFEFF[features]\nweb_search = true\n`));
   });
 
   it("records the original values as written, quotes included", () => {
@@ -223,7 +232,7 @@ ${RELAY_BLOCK}`);
       baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway/v1",
       bearerToken: "t2",
     });
-    expect(restore(second.text, second.takeover)).toBe(USER_CONFIG);
+    expect(restore(second.text, second.takeover)).toBe(withKeptTable(USER_CONFIG, MOVED_BLOCK));
   });
 
   it("replaces the auth.command table written by the per-endpoint version", () => {
@@ -242,7 +251,7 @@ timeout_ms = 5000
 
     expect(text.endsWith(`\n${RELAY_BLOCK}`)).toBe(true);
     expect(text).not.toContain("auth");
-    expect(restore(text, takeover)).toBe(USER_CONFIG);
+    expect(restore(text, takeover)).toBe(withKeptTable(USER_CONFIG));
   });
 
   it("escapes values that TOML strings cannot hold verbatim", () => {
@@ -291,10 +300,10 @@ timeout_ms = 5000
 });
 
 describe("restoreCodexOfficial", () => {
-  it("returns the file to its exact bytes, dedicated table included", () => {
+  it("returns the owned top-level keys to their exact bytes and keeps Osuna's provider table", () => {
     const { text, takeover } = apply(USER_CONFIG);
 
-    expect(restore(text, takeover)).toBe(USER_CONFIG);
+    expect(restore(text, takeover)).toBe(withKeptTable(USER_CONFIG));
   });
 
   it("removes keys that were absent before", () => {
@@ -305,18 +314,18 @@ web_search = true
 `;
     const { text, takeover } = apply(original);
 
-    expect(restore(text, takeover)).toBe(original);
+    expect(restore(text, takeover)).toBe(withKeptTable(original));
   });
 
   it("removes keys inserted at the very top and on a last line without a newline", () => {
     const top = `# tables only\n[features]\nweb_search = true\n`;
     const topApplied = apply(top);
-    expect(restore(topApplied.text, topApplied.takeover)).toBe(top);
+    expect(restore(topApplied.text, topApplied.takeover)).toBe(withKeptTable(top));
 
     // 没有结尾换行的单行文件：键插在它后面，恢复时连同前面补的换行一起拿走。
     const bare = `model = "a"`;
     const bareApplied = apply(bare);
-    expect(restore(bareApplied.text, bareApplied.takeover)).toBe(`${bare}\n`);
+    expect(restore(bareApplied.text, bareApplied.takeover)).toBe(withKeptTable(bare));
   });
 
   it("keeps edits the user made to other keys while it was on", () => {
@@ -324,7 +333,7 @@ web_search = true
     const edited = text.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`);
 
     expect(restore(edited, takeover)).toBe(
-      USER_CONFIG.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`),
+      withKeptTable(USER_CONFIG.replace(`trust_level = "trusted"`, `trust_level = "untrusted"`)),
     );
   });
 
@@ -335,12 +344,12 @@ web_search = true
     expect(toValue(restore(withoutModel, takeover))).toMatchObject({ model: "gpt-5.1-codex" });
   });
 
-  it("asks for the file to be deleted when it did not exist and nothing else was added", () => {
+  it("keeps a file it created, holding the table; deletes it only when nothing at all is left", () => {
     const { text, takeover } = apply(null);
-    expect(restoreCodexOfficial({ text, takeover })).toEqual({ kind: "delete" });
+    expect(restore(text, takeover)).toBe(RELAY_BLOCK);
 
-    const withUserKey = `approval_policy = "never"\n${text}`;
-    expect(restore(withUserKey, takeover)).toBe(`approval_policy = "never"\n`);
+    const withoutTable = text.slice(0, text.indexOf(`[model_providers.${ID}]`));
+    expect(restoreCodexOfficial({ text: withoutTable, takeover })).toEqual({ kind: "delete" });
   });
 
   it("reports a missing file instead of writing one", () => {
@@ -356,17 +365,46 @@ web_search = true
   });
 });
 
-describe("removeCodexProviderTable", () => {
-  it("removes a table left behind by the per-endpoint version and the blank line before it", () => {
-    expect(removeTable(`${USER_CONFIG}\n${RELAY_BLOCK}`)).toBe(USER_CONFIG);
+describe("refreshCodexProviderTable", () => {
+  it("points a kept table at the gateway's new address and token, nothing else moved", () => {
+    expect(refreshTable(withKeptTable(USER_CONFIG))).toEqual({
+      kind: "patched",
+      text: withKeptTable(USER_CONFIG, MOVED_BLOCK),
+    });
   });
 
-  it("leaves a file without the table untouched", () => {
-    expect(removeTable(USER_CONFIG)).toBe(USER_CONFIG);
+  it("leaves a table that already points there byte for byte", () => {
+    const kept = withKeptTable(USER_CONFIG, MOVED_BLOCK);
+
+    expect(refreshTable(kept)).toEqual({ kind: "patched", text: kept });
   });
 
-  it("empties a file that held only the table", () => {
-    expect(removeTable(RELAY_BLOCK)).toBe("");
+  it("turns the auth.command table an older version left on Official into the gateway's", () => {
+    const legacy = `${USER_CONFIG}
+[model_providers.${ID}]
+name = "Relay"
+base_url = "https://relay.example/v1"
+wire_api = "responses"
+
+[model_providers.${ID}.auth]
+command = "/bin/cat"
+args = ["/home/me/.paseo/api-endpoints/codex-api-key"]
+timeout_ms = 5000
+`;
+
+    expect(refreshTable(legacy)).toEqual({
+      kind: "patched",
+      text: withKeptTable(USER_CONFIG, MOVED_BLOCK),
+    });
+  });
+
+  it("never writes a table that is not there, or a file that is missing", () => {
+    expect(refreshTable(USER_CONFIG)).toEqual({ kind: "absent" });
+    expect(refreshTable(null)).toEqual({ kind: "absent" });
+  });
+
+  it("refuses a file that does not parse", () => {
+    expect(refreshTable("model = ").kind).toBe("unparsable");
   });
 });
 

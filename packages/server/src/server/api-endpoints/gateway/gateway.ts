@@ -3,14 +3,12 @@
 // 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { timingSafeEqual } from "node:crypto";
+import os from "node:os";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { extractHttpBearerToken } from "../../auth.js";
 import { usableModels } from "../host-endpoints.js";
 import {
-  API_ENDPOINT_PROVIDERS,
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
   type ApiEndpointProvider,
@@ -22,6 +20,7 @@ import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { judgeCaller } from "./callers.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -73,7 +72,8 @@ import {
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
  * Claude Code 的地址写到前缀为止，Codex 写到 `/v1`，两者落到同一组路径上。
  * 挂在 daemon 密码中间件与全局 JSON 解析之前：请求体自己读，不受 100 kb 上限。
- * 两道门：只收本机回环来源（经代理转来的不算），且口令是某个 Agent 的；口令同时说明是哪个 Agent。
+ * 认调用方（callers.ts，ADR 0010）：本机回环来的、不带转发头的请求一律收，网页发来的拒收；
+ * 口令只说明是哪个 Agent，对不上时按 User-Agent 认，再认不出按请求路径。
  * 每次请求都重读接口与口令文件，接口页的改动立刻生效。
  *
  * 每家接口按 chooseRequestFormat 挑格式：有 Agent 自己格式的地址就直通，否则经中间格式翻译过去。
@@ -102,9 +102,6 @@ const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024;
 
 const COUNT_TOKENS_PATH = "/v1/messages/count_tokens";
 
-const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-const PROXY_HEADERS = ["forwarded", "x-forwarded-for", "x-real-ip"];
-
 export interface ApiEndpointGatewayOverrides {
   // 只给测试缩短等上游响应头的时间、最后一家原地重试前的等待、保活的间隔与上游毫无动静多久停止保活。
   gatewayHeaderTimeoutMs?: number;
@@ -118,10 +115,10 @@ export interface ApiEndpointGatewayOverrides {
 /** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
 export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
 
-/** 每种 Agent 自己说的请求格式，按请求路径认。 */
+/** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */
 const AGENT_PATHS = {
-  "/v1/messages": { wire: "anthropic", format: "anthropic_messages" },
-  "/v1/responses": { wire: "openai", format: "openai_responses" },
+  "/v1/messages": { wire: "anthropic", format: "anthropic_messages", agent: "claude" },
+  "/v1/responses": { wire: "openai", format: "openai_responses", agent: "codex" },
 } as const;
 type AgentPath = (typeof AGENT_PATHS)[keyof typeof AGENT_PATHS];
 
@@ -154,21 +151,16 @@ export function createApiEndpointGateway(options: {
 
   return (req, res) => {
     const wire = wireOf(req);
-    if (!isLocalRequest(req)) {
-      sendAgentError({
-        res,
-        wire,
-        error: { status: 403, message: "The API endpoint gateway only accepts local requests" },
-      });
-      return;
-    }
-    const agent = authenticate(req, store);
-    if (agent === null) {
-      sendAgentError({
-        res,
-        wire,
-        error: { status: 401, message: "Invalid API endpoint gateway token" },
-      });
+    const caller = judgeCaller({
+      remoteAddress: req.socket.remoteAddress,
+      headers: req.headers,
+      tokens: store.readGatewayTokens(),
+      machineName: os.hostname(),
+      platform: process.platform,
+    });
+    if (caller.kind === "refused") {
+      logger.warn({ method: req.method, path: req.path }, caller.message);
+      sendAgentError({ res, wire, error: { status: caller.status, message: caller.message } });
       return;
     }
 
@@ -192,8 +184,19 @@ export function createApiEndpointGateway(options: {
       });
       return;
     }
+    // count_tokens 只有 Claude Code 发。
+    const agent = caller.agent ?? target?.agent ?? "claude";
     const handled = target
-      ? handleAgentRequest({ req, res, agent, store, logger, failover, ...target })
+      ? handleAgentRequest({
+          req,
+          res,
+          agent,
+          wire: target.wire,
+          format: target.format,
+          store,
+          logger,
+          failover,
+        })
       : countTokens({ req, res, agent, store, logger, failover });
     void handled.catch((error: unknown) => {
       logger.error({ err: error }, "API endpoint gateway request crashed");
@@ -1091,39 +1094,11 @@ function agentPath(path: string): AgentPath | null {
   return path === "/v1/messages" || path === "/v1/responses" ? AGENT_PATHS[path] : null;
 }
 
-/** 认不出路径时（鉴权失败、/v1/models）按请求头猜：带 anthropic-version 的是 Claude Code。 */
+/** 认不出路径时（拒收、/v1/models）按请求头猜：带 anthropic-version 的是 Claude Code。 */
 function wireOf(req: Request): AgentWire {
   const target = agentPath(req.path);
   if (target) return target.wire;
   return req.headers["anthropic-version"] ? "anthropic" : "openai";
-}
-
-function isLocalRequest(req: Request): boolean {
-  const address = req.socket.remoteAddress;
-  return (
-    address !== undefined &&
-    LOOPBACK_ADDRESSES.has(address) &&
-    PROXY_HEADERS.every((name) => req.headers[name] === undefined)
-  );
-}
-
-/** 口令在 Authorization: Bearer 或 x-api-key 里；对上的那个 Agent 就是来人。 */
-function authenticate(req: Request, store: ApiEndpointStore): ApiEndpointProvider | null {
-  const header = req.headers["x-api-key"];
-  const presented =
-    extractHttpBearerToken(req.header("authorization")) ??
-    (typeof header === "string" ? header : null);
-  if (presented === null) return null;
-  const tokens = store.readGatewayTokens();
-  const given = Buffer.from(presented);
-  return (
-    API_ENDPOINT_PROVIDERS.find((provider) => {
-      const expected = tokens[provider];
-      if (expected === undefined) return false;
-      const wanted = Buffer.from(expected);
-      return wanted.length === given.length && timingSafeEqual(wanted, given);
-    }) ?? null
-  );
 }
 
 function readState(input: {

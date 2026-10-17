@@ -321,35 +321,183 @@ function claudeRequest(body: unknown, token = CLAUDE_TOKEN): RequestInit {
   };
 }
 
-describe("who may use the gateway", () => {
-  test("requests without the token or with a wrong one are refused", async () => {
-    const { gateway } = await start();
+// ChatGPT 登录的 Codex、claude.ai 登录的 Claude Code 带来的令牌：都不是中转站的口令。
+const CHATGPT_TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJl";
+const CLAUDE_AI_TOKEN = "sk-ant-oat01-abcdefghijklmnopqrstuvwxyz";
+const CLAUDE_UA = "claude-cli/2.1.302 (external, cli)";
+const CODEX_UA = "codex_cli_rs/0.130.0 (Mac OS 26.0; arm64)";
 
-    const missing = await fetch(`${gateway}/api/hello`);
-    const wrong = await fetch(`${gateway}/api/hello`, {
-      headers: { authorization: "Bearer not-the-token" },
+/** 不经 fetch 发请求：fetch 不让改 Host 头，扮演 DNS 重绑定的网页要改。 */
+function rawRequest(input: {
+  url: string;
+  method?: string;
+  headers: Record<string, string>;
+  body?: string;
+}): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const sent = httpRequest(
+      input.url,
+      { method: input.method ?? "GET", headers: input.headers },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () =>
+          resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString() }),
+        );
+      },
+    );
+    sent.on("error", reject);
+    sent.end(input.body);
+  });
+}
+
+describe("who may use the gateway", () => {
+  /** B 把 Claude 的 haiku 档位映射到 glm-4.6（只对 Claude Code 生效）；A 的 Responses 地址整份回复。 */
+  async function startRecognising() {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => answerResponsesWhole(res);
+    const upstreamB = await startUpstream();
+    const harness = await start({ upstreamA, upstreamB });
+    const endpointsPath = path.join(harness.endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { modelMapping?: Record<string, string> }[];
+    };
+    file.endpoints[1]!.modelMapping = { haiku: "glm-4.6" };
+    await writeFile(endpointsPath, JSON.stringify(file));
+    const haiku = (headers: Record<string, string>) =>
+      fetch(`${harness.gateway}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          ...headers,
+        },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [] }),
+      });
+    const responses = (model: string, headers: Record<string, string>) =>
+      fetch(`${harness.gateway}/v1/responses`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "thread-id": "thread-1", ...headers },
+        body: JSON.stringify({ model, input: "hi", stream: false }),
+      });
+    return { ...harness, upstreamA, upstreamB, haiku, responses };
+  }
+
+  test("a local request with no token, a ChatGPT token or a claude.ai token is taken and told apart by its User-Agent", async () => {
+    const { haiku, responses, upstreamB } = await startRecognising();
+    const credentials: Record<string, string>[] = [
+      {},
+      { authorization: `Bearer ${CHATGPT_TOKEN}` },
+      { authorization: `Bearer ${CLAUDE_AI_TOKEN}` },
+      { "x-api-key": CLAUDE_AI_TOKEN },
+    ];
+
+    for (const credential of credentials) {
+      // Claude Code：档位名按映射发给 B。
+      const claude = await haiku({ ...credential, "user-agent": CLAUDE_UA });
+      expect(claude.status, JSON.stringify(credential)).toBe(200);
+      expect(claude.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      // Codex：auto-review 跟上一轮答的模型走。
+      expect((await responses("gpt-5.5", { ...credential, "user-agent": CODEX_UA })).status).toBe(
+        200,
+      );
+      const review = await responses("codex-auto-review", {
+        ...credential,
+        "user-agent": CODEX_UA,
+      });
+      expect(review.status, JSON.stringify(credential)).toBe(200);
+    }
+    expect(upstreamB.requests).toHaveLength(credentials.length);
+
+    // User-Agent 先于路径：Codex 发到 Anthropic 路径的档位名不映射，Claude Code 的 auto-review 不跟上一轮。
+    expect((await haiku({ "user-agent": CODEX_UA })).status).toBe(404);
+    expect((await responses("codex-auto-review", { "user-agent": CLAUDE_UA })).status).toBe(404);
+    // 都认不出时按路径：Anthropic 路径是 Claude Code，Responses 路径是 Codex。
+    expect((await haiku({ "user-agent": "curl/8.4.0" })).status).toBe(200);
+    expect((await responses("codex-auto-review", { "user-agent": "curl/8.4.0" })).status).toBe(200);
+  });
+
+  test("web pages and proxied requests are refused in the agent's format", async () => {
+    const { gateway, daemon, upstreamA, upstreamB } = await startRecognising();
+    const claudeBody = JSON.stringify({ model: "kimi-k2", max_tokens: 1, messages: [] });
+
+    const page = await fetch(`${gateway}/v1/messages`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLAUDE_TOKEN}`,
+        "anthropic-version": "2023-06-01",
+        "content-type": "text/plain;charset=UTF-8",
+        origin: "https://evil.example",
+      },
+      body: claudeBody,
+    });
+    expect(page.status).toBe(403);
+    expect(await page.json()).toEqual({
+      type: "error",
+      error: {
+        type: "permission_error",
+        message: "The API endpoint gateway doesn't answer the web page https://evil.example",
+      },
     });
 
-    expect(missing.status).toBe(401);
-    expect(wrong.status).toBe(401);
-    expect(await wrong.json()).toEqual({
+    const frame = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: { origin: "null", "content-type": "text/plain" },
+      body: JSON.stringify({ model: "gpt-5.5", input: "hi" }),
+    });
+    expect(frame.status).toBe(403);
+    expect(await frame.json()).toMatchObject({
+      error: { type: "permission_error", code: null, param: null },
+    });
+
+    const rebound = await rawRequest({
+      url: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/responses`,
+      method: "POST",
+      headers: {
+        host: `rebind.attacker.example:${daemon.port}`,
+        "user-agent": "Mozilla/5.0 (Macintosh) Chrome/140",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "content-type": "text/plain",
+      },
+      body: JSON.stringify({ model: "gpt-5.5", input: "hi" }),
+    });
+    expect(rebound.status).toBe(403);
+    expect(JSON.parse(rebound.body)).toEqual({
       error: {
-        message: "Invalid API endpoint gateway token",
-        type: "authentication_error",
+        message: `The API endpoint gateway doesn't answer a browser that reached it as rebind.attacker.example:${daemon.port} (a web site's name pointed at this computer): call it as localhost or 127.0.0.1`,
+        type: "permission_error",
         code: null,
         param: null,
       },
     });
-  });
 
-  test("a request that came through a proxy is not local and is refused", async () => {
-    const { gateway } = await start();
-
-    const proxied = await fetch(`${gateway}/api/hello`, {
-      headers: { authorization: `Bearer ${CLAUDE_TOKEN}`, "x-forwarded-for": "203.0.113.9" },
-    });
-
-    expect(proxied.status).toBe(403);
+    for (const name of [
+      "Forwarded",
+      "X-Forwarded-For",
+      "X-Real-IP",
+      "Cf-Connecting-IP",
+      "True-Client-IP",
+      "Tailscale-User-Login",
+    ]) {
+      const proxied = await fetch(`${gateway}/v1/messages`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CLAUDE_TOKEN}`,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          [name]: "203.0.113.9",
+        },
+        body: claudeBody,
+      });
+      expect(proxied.status, name).toBe(403);
+      expect(await proxied.json()).toMatchObject({
+        type: "error",
+        error: { type: "permission_error" },
+      });
+    }
+    expect(upstreamA.requests).toHaveLength(0);
+    expect(upstreamB.requests).toHaveLength(0);
   });
 
   test("the daemon password does not apply and bodies over 100 kb go through", async () => {
@@ -373,9 +521,10 @@ describe("who may use the gateway", () => {
     expect(upstream.requests[0]?.body.toString()).toBe(body);
   });
 
-  test("turning an agent on creates its private token and turning it off deletes it", async () => {
-    const { daemon, endpointsDir } = await start();
+  test("turning an agent off keeps its token, still honoured, and turning it on again writes the same one", async () => {
+    const { daemon, endpointsDir, haiku } = await startRecognising();
     const tokensPath = path.join(endpointsDir, "gateway-tokens.json");
+    const settingsPath = path.join(endpointsDir, "..", "..", "claude", "settings.json");
     await writeFile(tokensPath, JSON.stringify({ tokens: {} }));
     const client = new DaemonClient({
       url: `ws://127.0.0.1:${daemon.port}/ws`,
@@ -384,38 +533,36 @@ describe("who may use the gateway", () => {
     clients.push(client);
     await client.connect();
     await client.fetchAgents({ subscribe: {} });
+    const readTokens = async () =>
+      (JSON.parse(await readFile(tokensPath, "utf8")) as { tokens: Record<string, string> }).tokens;
+    const writtenToken = async () =>
+      (JSON.parse(await readFile(settingsPath, "utf8")) as { env: Record<string, string> }).env
+        .ANTHROPIC_AUTH_TOKEN;
 
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
-    const afterOn = JSON.parse(await readFile(tokensPath, "utf8")) as {
-      tokens: Record<string, string>;
-    };
+    const afterOn = await readTokens();
     const mode = (await stat(tokensPath)).mode & 0o777;
+    const writtenWhileOn = await writtenToken();
 
-    const acceptedWhileOn = await fetch(
-      `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/api/hello`,
-      {
-        headers: { authorization: `Bearer ${afterOn.tokens.claude}` },
-      },
-    );
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
-    const afterOff = JSON.parse(await readFile(tokensPath, "utf8")) as {
-      tokens: Record<string, string>;
-    };
-    const refusedAfter = await fetch(
-      `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/api/hello`,
-      {
-        headers: { authorization: `Bearer ${afterOn.tokens.claude}` },
-      },
-    );
+    const afterOff = await readTokens();
+    // 口令说是 Claude Code，压过说是 Codex 的 User-Agent：档位名照样映射。
+    const honouredAfterOff = await haiku({
+      authorization: `Bearer ${afterOn.claude}`,
+      "user-agent": CODEX_UA,
+    });
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
 
-    expect(afterOn.tokens.claude).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(afterOn.claude).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(mode).toBe(0o600);
-    expect(acceptedWhileOn.status).toBe(200);
+    expect(writtenWhileOn).toBe(afterOn.claude);
     // Codex 一直开着：补上的口令在之后的改动里保持不变。
-    expect(afterOn.tokens.codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(afterOff.tokens).toEqual({ codex: afterOn.tokens.codex });
-    expect(refusedAfter.status).toBe(401);
+    expect(afterOn.codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(afterOff).toEqual(afterOn);
+    expect(honouredAfterOff.status).toBe(200);
+    expect(await readTokens()).toEqual(afterOn);
+    expect(await writtenToken()).toBe(afterOn.claude);
   });
 });
 
@@ -4567,6 +4714,78 @@ describe("the CLI configs follow the gateway across daemon starts", () => {
     models: ["kimi-k2"],
   });
 
+  /** Osuna 的 Codex 服务商表，照追加时的写法。 */
+  function codexTable(port: number, token: string): string {
+    return `[model_providers.osuna_api_endpoint]
+name = "Osuna"
+base_url = "http://127.0.0.1:${port}/api-endpoint-gateway/v1"
+wire_api = "responses"
+experimental_bearer_token = "${token}"
+`;
+  }
+
+  test("Codex's table stays when its switch goes off, a restart on another port points it there, and its conversations are served", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => answerResponsesWhole(res);
+    const home = await prepareHome({
+      "endpoints.json": {
+        endpoints: [
+          storedEndpoint({
+            id: "ep_a",
+            slug: "relay-a",
+            name: "Relay A",
+            baseUrls: [{ format: "openai_responses", url: `${upstream.url}/v1` }],
+            models: ["kimi-k2"],
+          }),
+        ],
+        agents: {
+          claude: { enabled: false, defaultModelId: null },
+          codex: { enabled: true, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A } },
+    });
+    const first = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      cleanup: false,
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    const client = await connect(`ws://127.0.0.1:${first.port}/ws`);
+    const token = (await tokens(home)).codex!;
+
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false })).error,
+    ).toBeNull();
+    expect(await readFile(home.configPath, "utf8")).toBe(
+      `${USER_CONFIG}\n${codexTable(first.port, token)}`,
+    );
+    await client.close();
+    await first.close();
+
+    const second = await createTestPaseoDaemon({
+      paseoHomeRoot: home.root,
+      listenPort: await freePort(first.port),
+      apiEndpoints: apiEndpointsConfig(home),
+    });
+    daemons.push(second);
+
+    expect(await readFile(home.configPath, "utf8")).toBe(
+      `${USER_CONFIG}\n${codexTable(second.port, token)}`,
+    );
+    expect((await tokens(home)).codex).toBe(token);
+    // 记在 Osuna 服务商名下的对话续上时，Codex 按这张表带着口令发来。
+    const resumed = await fetch(
+      `http://127.0.0.1:${second.port}/api-endpoint-gateway/v1/responses`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: "kimi-k2", input: "hi", stream: false }),
+      },
+    );
+    expect(resumed.status).toBe(200);
+    expect(upstream.requests).toHaveLength(1);
+  });
+
   test("a restart on another port rewrites the gateway address in both configs and nothing else", async () => {
     const home = await prepareHome();
     const first = await createTestPaseoDaemon({
@@ -4694,7 +4913,7 @@ describe("the CLI configs follow the gateway across daemon starts", () => {
     expect(hello.status).toBe(200);
   });
 
-  test("the dedicated table and key file an older version left behind on Official are removed on start", async () => {
+  test("the dedicated table an older version left behind on Official is pointed at the gateway on start and its key file removed", async () => {
     const legacyTable = `
 [model_providers.osuna_api_endpoint]
 name = "Relay"
@@ -4730,7 +4949,11 @@ timeout_ms = 5000
     });
     daemons.push(daemon);
 
-    expect(await readFile(home.configPath, "utf8")).toBe(USER_CONFIG);
+    const { codex } = await tokens(home);
+    expect(codex).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await readFile(home.configPath, "utf8")).toBe(
+      `${USER_CONFIG}\n${codexTable(daemon.port, codex!)}`,
+    );
     await expect(stat(path.join(home.endpointsDir, "codex-api-key"))).rejects.toMatchObject({
       code: "ENOENT",
     });

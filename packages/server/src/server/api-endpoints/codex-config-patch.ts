@@ -2,11 +2,12 @@ import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import { z } from "zod";
 
 /*
- * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007）：用 toml-eslint-parser 拿到节点的精确位置，
+ * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007 与 0010）：用 toml-eslint-parser 拿到节点的精确位置，
  * 按位置拼接文本，其余字节不动；每次拼完再解析一遍，拼不出合法文件就整个拒绝。
  *
  * 负责的键：顶层 model_provider / model / model_catalog_json，以及整张专用表
- * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）。切回官方时三个顶层键还原、专用表删除。
+ * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）。切回官方时三个顶层键还原、专用表留着：
+ * 记在这个服务商名下的 Codex 对话关掉开关后还要能续（ADR 0010），daemon 每次启动按新端口改写它。
  */
 
 /**
@@ -30,7 +31,7 @@ const CodexOriginalValueSchema = z.discriminatedUnion("present", [
 type CodexOriginalValue = z.infer<typeof CodexOriginalValueSchema>;
 
 const CodexProviderTableRecordSchema = z.object({ baseUrl: z.string(), bearerToken: z.string() });
-type CodexProviderTableRecord = z.infer<typeof CodexProviderTableRecordSchema>;
+export type CodexProviderTableRecord = z.infer<typeof CodexProviderTableRecordSchema>;
 
 /**
  * 接管记录：顶层负责的键接管前的写法，以及上次写入的值（检测外部改动用）。
@@ -57,15 +58,19 @@ export type CodexConfigPatchResult =
   | { kind: "patched"; text: string; takeover: CodexConfigTakeover }
   | { kind: "unparsable"; message: string };
 
-export type CodexConfigEditResult =
+export type CodexConfigRestoreResult =
   | { kind: "patched"; text: string }
   | { kind: "missing" }
-  | { kind: "unparsable"; message: string };
-
-export type CodexConfigRestoreResult =
-  | CodexConfigEditResult
-  // 接管前文件不存在，恢复后又什么都不剩：把文件删掉。
+  | { kind: "unparsable"; message: string }
+  // 接管前文件不存在，恢复后又什么都不剩（用户连专用表也删了）：把文件删掉。
   | { kind: "delete" };
+
+export type CodexProviderTableRefreshResult =
+  // text 可能与原文相同：表已经指向这里。
+  | { kind: "patched"; text: string }
+  // 文件不存在或里面没有专用表：不写（用户删了就不再写回）。
+  | { kind: "absent" }
+  | Unparsable;
 
 interface Unparsable {
   kind: "unparsable";
@@ -125,7 +130,7 @@ export function applyCodexApiEndpoint(input: {
   );
 }
 
-/** 切回官方：把顶层负责的键恢复成接管前的写法，删掉专用表。 */
+/** 切回官方：把顶层负责的键恢复成接管前的写法，专用表留着。 */
 export function restoreCodexOfficial(input: {
   text: string | null;
   takeover: CodexConfigTakeover;
@@ -144,21 +149,35 @@ export function restoreCodexOfficial(input: {
       ? setTopLevelValue({ text, key, raw: record.original.raw, eol })
       : removeTopLevelKey(text, key);
   }
-  text = removeProviderTables(text);
+  // 文件是 Osuna 建的：顶层键拿掉后专用表前面的空行也是当初补的。
+  if (input.takeover.fileCreated) text = text.replace(/^(?:\r?\n)+/, "");
   const failure = verify(text, () => true);
   if (failure) return failure;
   if (text === "" && input.takeover.fileCreated) return { kind: "delete" };
   return { kind: "patched", text: text === "" ? "" : bom + text };
 }
 
-/** 拿掉专用表，连同追加时补的那个空行：清理旧版本在官方模式下留着的表。 */
-export function removeCodexProviderTable(input: { text: string | null }): CodexConfigEditResult {
-  if (input.text === null) return { kind: "missing" };
+/**
+ * 官方模式下留着的专用表改指现在的中转站地址与口令，放到文件末尾；旧版本（v0.15）留下的 auth.command 表一并换掉。
+ * 文件里没有这张表就什么都不写。
+ */
+export function refreshCodexProviderTable(input: {
+  text: string | null;
+  table: CodexProviderTableRecord;
+}): CodexProviderTableRefreshResult {
+  if (input.text === null) return { kind: "absent" };
   const [bom, original] = splitBom(input.text);
   const parsed = parseConfig(original);
   if (parsed.kind === "unparsable") return parsed;
-  const text = removeProviderTables(original);
-  return verify(text, () => true) ?? { kind: "patched", text: text === "" ? "" : bom + text };
+  if (!hasProviderTable(parsed.program)) return { kind: "absent" };
+  if (holdsProviderTable(parsed.value, input.table)) return { kind: "patched", text: input.text };
+  const text = appendProviderTable({
+    text: removeProviderTables(original),
+    table: input.table,
+    eol: detectEol(original),
+  });
+  const failure = verify(text, (value) => holdsProviderTable(value, input.table));
+  return failure ?? { kind: "patched", text: bom + text };
 }
 
 export interface CodexProfileOverride {
@@ -361,13 +380,21 @@ function removeTopLevelKey(text: string, key: TopLevelKey): string {
   return text.slice(0, start) + text.slice(skipEol(text, lineEnd));
 }
 
-function removeProviderTables(text: string): string {
-  const tables = parse(text).body[0].body.filter(
+function providerTables(program: AST.TOMLProgram): AST.TOMLTable[] {
+  return program.body[0].body.filter(
     (node): node is AST.TOMLTable =>
       node.type === "TOMLTable" &&
       node.resolvedKey[0] === "model_providers" &&
       node.resolvedKey[1] === CODEX_API_ENDPOINT_PROVIDER_ID,
   );
+}
+
+function hasProviderTable(program: AST.TOMLProgram): boolean {
+  return providerTables(program).length > 0;
+}
+
+function removeProviderTables(text: string): string {
+  const tables = providerTables(parse(text));
   if (tables.length === 0) return text;
 
   let result = text;
@@ -395,7 +422,7 @@ function appendProviderTable(input: {
   eol: string;
 }): string {
   const { text, table, eol } = input;
-  // 口令明文：它不是用户的 key，只在本机回环有效，关总开关即作废（ADR 0007）。
+  // 口令明文：它不是用户的 key，只用来认出是 Codex，中转站只收本机回环来的请求（ADR 0010）。
   const block = [
     `[model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}]`,
     `name = ${tomlString(PROVIDER_TABLE_NAME)}`,

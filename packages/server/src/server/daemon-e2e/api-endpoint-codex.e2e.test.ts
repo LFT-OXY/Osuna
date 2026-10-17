@@ -106,6 +106,17 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     return parsed.models.map((model) => `${model.slug} ${model.visibility}`);
   }
 
+  /** 切回官方后：顶层键还原，Osuna 的服务商表留在末尾（ADR 0010）。 */
+  async function keptConfig(base = USER_CONFIG): Promise<string> {
+    return `${base}
+[model_providers.${ID}]
+name = "Osuna"
+base_url = "http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1"
+wire_api = "responses"
+experimental_bearer_token = "${await codexToken()}"
+`;
+  }
+
   async function codexToken(): Promise<string | undefined> {
     const text = await readFile(
       path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json"),
@@ -114,7 +125,7 @@ describe.skipIf(process.platform === "win32")("Codex API endpoint over the daemo
     return (JSON.parse(text) as { tokens: Record<string, string> }).tokens.codex;
   }
 
-  test("activate → Official writes only the owned keys and table, then puts the file back", async () => {
+  test("activate → Official writes only the owned keys and table, then puts the keys back and keeps the table", async () => {
     const endpointId = await createEndpoint();
     expect(JSON.stringify(await client.apiEndpointList("codex"))).not.toContain(SECRET);
 
@@ -162,9 +173,10 @@ experimental_bearer_token = "${token}"
     const official = await client.apiEndpointSetActive("codex", null);
     expect(official).toMatchObject({ activeEndpointId: null, error: null });
 
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(configPath, "utf8")).toBe(await keptConfig());
     await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await codexToken()).toBeUndefined();
+    // 口令不作废：关掉后经这张表来的请求照样认得出是 Codex。
+    expect(await codexToken()).toBe(token);
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
@@ -223,7 +235,7 @@ experimental_bearer_token = "${token}"
 
     await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
     await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(configPath, "utf8")).toBe(await keptConfig());
   });
 
   async function createEndpointWithBaseUrls(name: string, models: string[]): Promise<string> {
@@ -256,14 +268,14 @@ experimental_bearer_token = "${token}"
     await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
   });
 
-  test("deleting the last endpoint switches back to Official and puts the file back", async () => {
+  test("deleting the last endpoint switches back to Official and puts the owned keys back", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);
 
     const deleted = await client.apiEndpointDelete("codex", endpointId);
 
     expect(deleted).toMatchObject({ activeEndpointId: null, error: null });
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(configPath, "utf8")).toBe(await keptConfig());
     await expect(stat(catalogPath())).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
@@ -279,7 +291,7 @@ experimental_bearer_token = "${token}"
       activeEndpointId: null,
       error: null,
     });
-    expect(await readFile(configPath, "utf8")).toBe(USER_CONFIG);
+    expect(await readFile(configPath, "utf8")).toBe(await keptConfig());
   });
 
   test("deleting the active endpoint while config.toml keeps changing deletes nothing", async () => {
@@ -303,7 +315,7 @@ experimental_bearer_token = "${token}"
     expect(await catalog()).toEqual(catalogBefore);
   });
 
-  test("an absent config.toml is created on switch and removed with the endpoint", async () => {
+  test("an absent config.toml is created on switch and keeps only Osuna's table after the endpoint is deleted", async () => {
     await rm(configPath);
     const endpointId = await createEndpoint();
 
@@ -312,7 +324,7 @@ experimental_bearer_token = "${token}"
     expect((await stat(configPath)).mode & 0o777).toBe(0o600);
 
     await client.apiEndpointDelete("codex", endpointId);
-    await expect(stat(configPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(configPath, "utf8")).toBe((await keptConfig("")).slice(1));
   });
 
   test("a new default model rewrites config.toml; the endpoint's address and key don't", async () => {

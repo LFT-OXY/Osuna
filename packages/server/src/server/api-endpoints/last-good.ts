@@ -110,7 +110,7 @@ export class LastGoodFile<T> {
     this.writeBytes(this.filePath, Buffer.from(`${JSON.stringify(json, null, 2)}\n`));
   }
 
-  /** 连同 .bak 一起删掉：删掉的内容（比如作废的口令）不该在文件写坏时回来。 */
+  /** 连同 .bak 一起删掉：删掉的内容不该在文件写坏时回来。 */
   remove(): void {
     rmSync(this.filePath, { force: true });
     rmSync(this.bakPath, { force: true });

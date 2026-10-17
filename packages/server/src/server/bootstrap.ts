@@ -777,6 +777,36 @@ export async function createPaseoDaemon(
   // route return 404 and never reach daemon APIs.
   app.use(serviceProxy.middleware());
 
+  // Local CLIs reach third-party endpoints through this; it takes loopback requests only and
+  // refuses web pages itself (DNS rebinding included, answered in the agent's own error shape),
+  // so it sits before the host allowlist, CORS and daemon auth, and it reads request bodies
+  // itself (no 100 kb JSON limit).
+  // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
+  const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
+  const apiEndpointRetiredModels = createRetiredModels({
+    config,
+    logger,
+    onChanged: () => {
+      void apiEndpointService.retiredModelsChanged().catch((error: unknown) => {
+        logger.warn({ err: error }, "Failed to rewrite the model lists after a retired model");
+      });
+    },
+  });
+  app.use(
+    API_ENDPOINT_GATEWAY_PATH,
+    createApiEndpointGateway({
+      paseoHome: config.paseoHome,
+      logger,
+      cooldowns: apiEndpointCooldowns,
+      retired: apiEndpointRetiredModels,
+      // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
+      modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
+      daemonVersion,
+      overrides: config.apiEndpoints,
+    }),
+  );
+
   // Host allowlist / DNS rebinding protection (vite-like semantics).
   // For non-TCP (unix sockets), skip host validation.
   if (listenTarget.type === "tcp") {
@@ -831,34 +861,6 @@ export async function createPaseoDaemon(
     "/api/terminal-activity",
     express.json(),
     createTerminalActivityRouteHandler(terminalManager),
-  );
-
-  // Local CLIs reach third-party endpoints through this; gated by loopback and its own token,
-  // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
-  // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
-  const apiEndpointCooldowns = new EndpointCooldowns({ logger });
-  // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
-  const apiEndpointRetiredModels = createRetiredModels({
-    config,
-    logger,
-    onChanged: () => {
-      void apiEndpointService.retiredModelsChanged().catch((error: unknown) => {
-        logger.warn({ err: error }, "Failed to rewrite the model lists after a retired model");
-      });
-    },
-  });
-  app.use(
-    API_ENDPOINT_GATEWAY_PATH,
-    createApiEndpointGateway({
-      paseoHome: config.paseoHome,
-      logger,
-      cooldowns: apiEndpointCooldowns,
-      retired: apiEndpointRetiredModels,
-      // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
-      modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
-      daemonVersion,
-      overrides: config.apiEndpoints,
-    }),
   );
 
   // Serve the bundled browser web UI when enabled. Mounted after service-proxy

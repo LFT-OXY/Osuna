@@ -177,13 +177,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
     const official = await client.apiEndpointSetActive("claude", null);
     expect(official).toMatchObject({ activeEndpointId: null, error: null });
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
-    // 两个 Agent 都关着：口令文件不留。
-    await expect(
-      stat(path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    // 口令不作废（ADR 0010）：关掉后还在跑的会话照样认得出是 Claude Code。
+    expect((await gatewayTokens()).claude).toBe(token);
   });
 
-  test("the token works only while the switch is on", async () => {
+  test("the token outlives the switch: still taken after Official, and written again unchanged", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("claude", endpointId);
     const token = JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN;
@@ -192,13 +190,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     expect((await hello()).status).toBe(200);
     await client.apiEndpointSetActive("claude", null);
-    expect((await hello()).status).toBe(401);
+    expect((await hello()).status).toBe(200);
 
-    // 再打开换一个新口令。
     await client.apiEndpointSetActive("claude", endpointId);
     const next = JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN;
-    expect(next).not.toBe(token);
-    expect((await hello()).status).toBe(401);
+    expect(next).toBe(token);
   });
 
   test("model variables that would outrank /model are taken out and put back on Official", async () => {

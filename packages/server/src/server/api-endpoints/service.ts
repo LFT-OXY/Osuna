@@ -36,7 +36,7 @@ import {
   applyCodexApiEndpoint,
   inspectCodexConfig,
   readCodexReasoningEffort,
-  removeCodexProviderTable,
+  refreshCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
 } from "./codex-config-patch.js";
@@ -301,7 +301,7 @@ export class ApiEndpointService {
    * daemon 绑定端口之后调用；`url` 为 null 表示不在 TCP 上监听，中转站用不了，总开关打不开。
    * 开着总开关的 Agent 没有口令就补一个（旧数据换算来的从没经历「从关到开」），
    * CLI 配置里的中转站地址或口令不是现在的就重写，其它内容不动；Codex 的模型目录跟着补齐。
-   * 官方模式下清掉旧版本留下的专用表与 key 文件。出错只记日志，不挡 daemon 启动。
+   * 关着的 Codex 留着的服务商表改指这次的端口（ADR 0010）。出错只记日志，不挡 daemon 启动。
    */
   attachGateway(url: string | null): Promise<void> {
     return this.exclusive(() => {
@@ -309,8 +309,7 @@ export class ApiEndpointService {
       const state = this.readStateForSnapshot();
       if (!state) return;
       const current = this.store.readGatewayTokens();
-      // 前后是同一个状态：只给开着却没有口令的补上。
-      const tokens = nextGatewayTokens(state, state, current);
+      const tokens = nextGatewayTokens(state, current);
       if (!sameTokens(tokens, current)) this.store.writeGatewayTokens(tokens);
       if (url === null) {
         if (API_ENDPOINT_PROVIDERS.some((provider) => state.agents[provider].enabled)) {
@@ -545,7 +544,7 @@ export class ApiEndpointService {
   /**
    * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
    * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
-   * 口令跟着总开关走：从关到开换一个新口令，开着却没有就补一个，关掉即作废。
+   * 开着却没有口令的补一个；口令关掉不作废（nextGatewayTokens）。
    */
   private async commit(
     previous: ApiEndpointState,
@@ -563,7 +562,7 @@ export class ApiEndpointService {
       }
     }
     const previousTokens = this.store.readGatewayTokens();
-    const tokens = nextGatewayTokens(previous, next, previousTokens);
+    const tokens = nextGatewayTokens(next, previousTokens);
 
     // 不在 TCP 上监听、CLI 配置也从没指向过中转站的开着的 Agent：没有地址可写，留到下次以 TCP 启动时对账；
     // 打开总开关在上面已经拒绝，这里只放过关接口、删模型这类连带改动。
@@ -631,7 +630,7 @@ export class ApiEndpointService {
 
   /**
    * 启动时的对账：开着的 Agent 只在 CLI 配置里的中转站地址或口令不是现在的时才重写，
-   * 用户手改的其它负责的键留给健康检查报告；官方模式下清掉旧版本留下的东西。
+   * 用户手改的其它负责的键留给健康检查报告；官方模式下的 Codex 只改留着的服务商表。
    */
   private reconcileCli(
     state: ApiEndpointState,
@@ -647,7 +646,7 @@ export class ApiEndpointService {
       }
     }
     if (!wiring) {
-      if (provider === "codex") this.removeLegacyCodexLeftovers();
+      if (provider === "codex") this.refreshKeptCodexTable(url);
       return;
     }
     const written = this.writtenGateway(provider);
@@ -1227,33 +1226,41 @@ export class ApiEndpointService {
   }
 
   /**
-   * v0.15 切回官方时把专用表和 key 文件留着给旧会话恢复用；现在官方就是官方，启动时拿掉。
-   * 专用 provider id 只有 Osuna 会写，文件里有它就是留下的。
-   * COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+   * 官方模式下留着的 Osuna 服务商表（ADR 0010）：记在它名下的 Codex 对话还要经中转站续，启动时改指这次的端口与 Codex 的口令。
+   * 文件里没有这张表就不写；旧版本（v0.15）留下的 auth.command 表同样换成指向中转站的。
+   * 从没发过 Codex 口令（旧版本关开关时作废了）就补一个，先落口令文件再替换 config.toml。
    */
-  private removeLegacyCodexLeftovers(): void {
+  private refreshKeptCodexTable(url: string): void {
     const record = this.store.readCodexTakeover();
     if (record.takeover) return;
     const configPath = this.resolveCodexConfigPath();
-    this.writeConfigFile({
+    const tokensBefore = this.store.readGatewayTokens();
+    const token = tokensBefore.codex ?? newGatewayToken();
+    const written = this.writeConfigFile({
       filePath: configPath,
       compute: (text) => {
-        const result = removeCodexProviderTable({ text });
+        const result = refreshCodexProviderTable({
+          text,
+          table: { baseUrl: `${url}${CODEX_GATEWAY_SUFFIX}`, bearerToken: token },
+        });
         if (result.kind === "unparsable") throw unparsable(configPath, result.message);
-        let change: ConfigFileChange = { kind: "keep" };
-        if (result.kind === "patched" && result.text !== text) {
-          // 接管前没有这个文件、现在又只剩 Osuna 写的东西：删掉，回到原样。
-          change =
-            result.text === "" && record.backup?.path === null
-              ? { kind: "delete" }
-              : { kind: "write", text: result.text };
-        }
-        return { change, value: null };
+        const change: ConfigFileChange =
+          result.kind === "patched" && result.text !== text
+            ? { kind: "write", text: result.text }
+            : { kind: "keep" };
+        return { change, value: change.kind === "write" };
       },
-      commit: () => undefined,
-      rollback: () => undefined,
+      commit: (changed) => {
+        if (changed && tokensBefore.codex === undefined) {
+          this.store.writeGatewayTokens({ ...tokensBefore, codex: token });
+        }
+      },
+      rollback: () => this.store.writeGatewayTokens(tokensBefore),
     });
+    // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
     this.store.removeLegacyCodexKeyFile();
+    if (written)
+      this.logger.info({ configPath }, "Kept Codex provider table pointed at the gateway");
   }
 
   /** 冲突保护见 writeConfigFileGuarded；三次都没写成就报 config_conflict。 */
@@ -1379,24 +1386,19 @@ function requireProvider(provider: string): ApiEndpointProvider {
 }
 
 /**
- * 总开关打开的 Agent 都有口令：从关到开换一个新的，一直开着的沿用，开着却没有（旧数据换算来的）补一个；
- * 关着的没有口令，旧口令即作废。
+ * 口令发了就一直用（ADR 0010）：开着却没有的补一个，关掉不作废，再打开沿用，
+ * 关掉后还在跑的会话和 CLI 配置里留着的口令照样认得出是哪个 Agent。
  */
-function nextGatewayTokens(
-  previous: ApiEndpointState,
-  next: ApiEndpointState,
-  current: GatewayTokens,
-): GatewayTokens {
-  const tokens: GatewayTokens = {};
+function nextGatewayTokens(next: ApiEndpointState, current: GatewayTokens): GatewayTokens {
+  const tokens: GatewayTokens = { ...current };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    if (!next.agents[provider].enabled) continue;
-    const existing = current[provider];
-    tokens[provider] =
-      previous.agents[provider].enabled && existing
-        ? existing
-        : randomBytes(32).toString("base64url");
+    if (next.agents[provider].enabled && !tokens[provider]) tokens[provider] = newGatewayToken();
   }
   return tokens;
+}
+
+function newGatewayToken(): string {
+  return randomBytes(32).toString("base64url");
 }
 
 function sameTokens(a: GatewayTokens, b: GatewayTokens): boolean {
