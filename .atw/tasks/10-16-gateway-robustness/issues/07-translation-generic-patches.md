@@ -13,7 +13,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：Codex 请求翻译成 Chat 格式、Anthropic 格式时，上游都收到 `prompt_cache_key` 等四个字段（Chat 上游收哪几个照 magpie）。
 - [ ] 资料里有 xhigh 档的模型收到 xhigh；没有 xhigh 档的模型，按 magpie 的规则收到最接近的档位。
