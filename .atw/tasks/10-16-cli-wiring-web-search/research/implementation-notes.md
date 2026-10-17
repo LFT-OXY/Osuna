@@ -137,6 +137,20 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 | 档位说明 | 一律空串 | low / medium / high / xhigh 用 Codex 自带目录的说明，别的空串 |
 | 回复上限 | 不写 | 不写：Codex 的 `ModelInfo` 没有这一项。资料里的 `output` 照旧只给 Claude Code 与中转站 |
 
+### 回复上限为什么不写（工单与 PRD 第 23 条要求写）
+
+【源码核实】openai/codex @ `ce0323f2f2d3b25e82806cd555237da3db4e1897`（2026-10-17，`git clone --depth 1` 到新的临时目录，只读）：
+
+- Codex 读 `model_catalog_json` 用 `serde_json::from_str::<ModelsResponse>`（`codex-rs/core/src/config/mod.rs:2198-2200`），`ModelsResponse` 只有 `models: Vec<ModelInfo>`（`codex-rs/protocol/src/openai_models.rs:851-857`）。
+- `ModelInfo` 的全部字段（`codex-rs/protocol/src/openai_models.rs:408-515`）里有 `context_window`、`max_context_window`、`auto_compact_token_limit`、`truncation_policy`，没有任何回复上限（max output / max tokens）字段。
+- 在 `protocol/src/openai_models.rs` 与 `models-manager/src` 里搜 `max_output`、`output_token`、`max_tokens`，只命中 `tool_output_token_limit`（`models-manager/src/config.rs:8`，用到 `model_info.rs:32`）：那是工具输出的截断长度，不是模型的回复上限。
+
+所以目录里没有地方写回复上限，写了 Codex 也不读；资料里的 `output` 照旧给 Claude Code 与中转站。10 号工单合并的清单是同一个 `ModelInfo` 格式，同样不写。
+
+### 旧缓存里没有看图这一项
+
+本次之前下载的 `models-dev.json`、之前拉的接口清单（`endpoints.json` 里的 `catalog`）都没有 `images`。在下次下载 models.dev（缓存满一天后）或重拉这家清单之前，这些模型的条目不写 `input_modalities`，Codex 按缺省（`default_input_modalities` 是文字加图片）当它们能看图，只收文字的模型这期间也会被当成能收图。
+
 ### 与 magpie 不同、要判断的地方
 
 - **查不到的照旧，不照 magpie 写成「不知道」**：工单要求查不到的保持现在的写法，所以逐项回退：上下文 272K、四档固定、不写 `input_modalities`（Codex 缺省当能看图，`default_input_modalities`）。magpie 对不知道的模型写 `["text"]`、不给档位、不写窗口。
