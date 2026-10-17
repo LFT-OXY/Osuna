@@ -612,7 +612,7 @@ async function askInTurn(input: {
         sticks.answered(input.conversation, {
           endpointId: candidate.endpoint.id,
           model: candidate.upstreamModel,
-          cacheRead: end.cacheRead,
+          usage: end.usage,
         });
       } else if (end.kind === "broken" && lateRests(end.message)) {
         markFailed({

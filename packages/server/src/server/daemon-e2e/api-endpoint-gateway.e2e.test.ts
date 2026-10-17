@@ -3093,10 +3093,17 @@ async function cooldownOf(client: DaemonClient, endpointId: string) {
   return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.cooldown ?? null;
 }
 
-/** 一段 Anthropic 流式回复；`cacheRead` 是这次从厂商缓存读到的 token 数。 */
-function streamReply(res: ServerResponse, input: { text?: string; cacheRead?: number } = {}) {
+/** 一段 Anthropic 流式回复；`cacheRead`、`cacheWrite` 是这次从厂商缓存读到、写进缓存的 token 数。 */
+function streamReply(
+  res: ServerResponse,
+  input: { text?: string; cacheRead?: number; cacheWrite?: number } = {},
+) {
   res.writeHead(200, { "content-type": "text/event-stream" });
-  const usage = { input_tokens: 10, cache_read_input_tokens: input.cacheRead ?? 0 };
+  const usage = {
+    input_tokens: 10,
+    cache_read_input_tokens: input.cacheRead ?? 0,
+    cache_creation_input_tokens: input.cacheWrite ?? 0,
+  };
   res.write(
     `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { usage } })}\n\n`,
   );
@@ -4110,7 +4117,81 @@ describe("a conversation stays where it was answered", () => {
     await newTurn.text();
     expect(upstreamA.requests).toHaveLength(1);
   });
+
+  /** A 先忙、B 接手第一轮（B 按 `answer` 回），A 恢复后问第二轮：返回第二轮由谁答。 */
+  async function secondTurnAfterB(input: {
+    answer: (res: ServerResponse) => void;
+    baseUrlsB?: (upstreamB: FakeUpstream) => { format: string; url: string }[];
+  }) {
+    const { upstreamA, upstreamB, ask, daemon, endpointsDir } = await twoRelays();
+    if (input.baseUrlsB) await setBaseUrls(endpointsDir, { ep_b: input.baseUrlsB(upstreamB) });
+    const client = await connectTo(daemon);
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    upstreamB.respond = (_request, res) => input.answer(res);
+    const first = await ask({ messages: [userSays("hi")] });
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await first.text();
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", clearCooldown: true });
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    const newTurn = await ask({
+      messages: [userSays("hi"), { role: "assistant", content: "hello" }, userSays("more")],
+    });
+    await newTurn.text();
+    return newTurn.headers.get("x-osuna-api-endpoint");
+  }
+
+  const chatOnly = (upstream: FakeUpstream) => [
+    { format: "openai_chat", url: `${upstream.url}/v1` },
+  ];
+
+  test("a first turn that only wrote the cache: the next turn stays to read it (pass-through)", async () => {
+    const answeredBy = await secondTurnAfterB({
+      answer: (res) => streamReply(res, { text: "from B", cacheWrite: 3000 }),
+    });
+    expect(answeredBy).toBe("relay-b");
+  });
+
+  test("a first turn that only wrote the cache: the next turn stays to read it (translated)", async () => {
+    const answeredBy = await secondTurnAfterB({
+      baseUrlsB: chatOnly,
+      answer: (res) =>
+        chatReply(res, {
+          prompt_tokens: 3000,
+          completion_tokens: 2,
+          prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 3000 },
+        }),
+    });
+    expect(answeredBy).toBe("relay-b");
+  });
+
+  test("a vendor that caches without saying so: the next turn stays where its prompt went", async () => {
+    const answeredBy = await secondTurnAfterB({
+      baseUrlsB: chatOnly,
+      answer: (res) => chatReply(res, { prompt_tokens: 3000, completion_tokens: 2 }),
+    });
+    expect(answeredBy).toBe("relay-b");
+  });
+
+  test("a prompt too small for a vendor to cache still goes back to the user's choice", async () => {
+    const answeredBy = await secondTurnAfterB({
+      baseUrlsB: chatOnly,
+      answer: (res) => chatReply(res, { prompt_tokens: 600, completion_tokens: 2 }),
+    });
+    expect(answeredBy).toBe("relay-a");
+  });
 });
+
+/** 假 Chat 上游的流式回复：说一句「from B」，以 stop 结束，最后报给的用量。 */
+function chatReply(res: ServerResponse, usage: Record<string, unknown>): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  const said = { id: "c1", choices: [{ index: 0, delta: { content: "from B" } }] };
+  const stop = { id: "c1", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] };
+  for (const chunk of [said, stop, { id: "c1", choices: [], usage }]) {
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+  res.end("data: [DONE]\n\n");
+}
 
 describe("model list and warm-up", () => {
   test("/v1/models lists each enabled endpoint's selected model once, and /api/hello answers", async () => {

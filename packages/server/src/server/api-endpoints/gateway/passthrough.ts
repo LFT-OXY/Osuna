@@ -17,7 +17,7 @@ import {
   thinkingOffAsTaken,
   thinkingOnToolTurns,
 } from "./translation/anthropic.js";
-import { replaysThinking } from "./translation/ir.js";
+import { emptyUsage, replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import {
@@ -187,14 +187,14 @@ export async function attemptEndpoint(input: {
   return { kind: "answered", finished: relay({ opened, res }) };
 }
 
-/** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存命中 token 数）。 */
+/** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存读写 token 数）。 */
 function relay(input: { opened: OpenedUpstream; res: Response }): Promise<AnswerEnd> {
   const { res } = input;
   const { response, held, tap } = input.opened;
-  const cacheRead = (reading: ReplyTap | null) => reading?.end().usage.cacheRead ?? 0;
+  const usage = (reading: ReplyTap | null) => reading?.end().usage ?? emptyUsage();
   if (input.opened.ended) {
     res.end(held);
-    return Promise.resolve({ kind: "complete", cacheRead: cacheRead(tap) });
+    return Promise.resolve({ kind: "complete", usage: usage(tap) });
   }
   res.write(held);
   let agentGone = false;
@@ -202,7 +202,7 @@ function relay(input: { opened: OpenedUpstream; res: Response }): Promise<Answer
     if (!res.writableFinished) agentGone = true;
   });
   return new Promise((resolve) => {
-    const complete = () => resolve({ kind: "complete", cacheRead: cacheRead(tap) });
+    const complete = () => resolve({ kind: "complete", usage: usage(tap) });
     response.on("data", (chunk: Buffer) => tap?.feed(chunk));
     response.once("end", complete);
     const broke = (error?: Error) => {

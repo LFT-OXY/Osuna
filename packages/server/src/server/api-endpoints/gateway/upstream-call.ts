@@ -14,6 +14,7 @@ import { describeNetworkError, extractErrorDetail, isRecord, parseJson } from ".
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
+import type { Usage } from "./translation/ir.js";
 
 /*
  * 向一家接口发出请求、等它开口：直通与翻译共用。开口是回复里出现第一段真内容（文字、思考或工具调用），
@@ -75,9 +76,9 @@ export interface FailedAttempt {
  */
 export type FailureCause = "error" | "timeout" | "empty";
 
-/** 开口之后回复怎么结束的：完整（带这次的缓存命中 token 数）、上游断流、Agent 先走了。 */
+/** 开口之后回复怎么结束的：完整（带这次的用量，粘性按它判断缓存）、上游断流、Agent 先走了。 */
 export type AnswerEnd =
-  | { kind: "complete"; cacheRead: number }
+  | { kind: "complete"; usage: Usage }
   | { kind: "broken"; message: string }
   | { kind: "gone" };
 

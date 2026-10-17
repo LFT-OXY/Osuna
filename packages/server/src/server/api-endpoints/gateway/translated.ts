@@ -283,7 +283,7 @@ async function streamReply(input: {
   fence.end();
   encoder.finish();
   res.end();
-  return { kind: "complete", cacheRead: encoder.usage().cacheRead };
+  return { kind: "complete", usage: encoder.usage() };
 }
 
 /** Agent 不要流式：攒齐整份回复再一次给它；只想了一下就出错的回复按出错交给它。 */
@@ -333,7 +333,7 @@ async function wholeReply(input: {
     .json(
       protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
     );
-  return { kind: "complete", cacheRead: reply.usage.cacheRead };
+  return { kind: "complete", usage: reply.usage };
 }
 
 /** 读上游的流直到结束（从开口时扣下的字节读起）；字符可能被切在两段之间，按 UTF-8 接好再交出去。 */

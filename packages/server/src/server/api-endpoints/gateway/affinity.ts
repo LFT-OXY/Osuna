@@ -1,15 +1,17 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/affinity.go、gateway.go、prompt.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/affinity.go 含 hourCache、gateway.go、prompt.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { createHash } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import { isRecord } from "../upstream-http.js";
 import type { AgentWire } from "./agent-errors.js";
+import type { Effort, Usage } from "./translation/ir.js";
 
 /*
  * 粘性（magpie 的 auto 模式）：一段对话上次由哪家接口回答，记在内存里。
  * 同一轮内（Agent 在回传工具结果）留在那家；新一轮回到用户选的那家，
- * 除非那家 5 分钟内缓存命中至少 1024 token，那就继续用到缓存冷掉；冷却中的不粘。
+ * 除非那家上次从缓存读到加写进缓存的至少 1024 token，那就继续用到缓存冷掉（5 分钟；写过 1 小时缓存的 1 小时）；
+ * 冷却中的不粘。写入也算：第一轮什么都没读、写了整份 prompt，下一轮留下来才读得到。
  */
 
 const MINUTE = 60_000;
@@ -19,6 +21,8 @@ export const AFFINITY = {
   cacheWorth: 1024,
   // Anthropic / OpenAI 最短的缓存存活。
   cacheCold: 5 * MINUTE,
+  // Anthropic 按 cache_control 的 ttl "1h" 写进去的缓存存活多久。
+  cacheHour: 60 * MINUTE,
   // 记住上次回答者多久。
   stickKeep: 24 * 60 * MINUTE,
   // 最多记多少段对话。
@@ -55,6 +59,10 @@ export interface AffinityInput {
   // 同一轮内：Agent 在回传工具结果。
   within: boolean;
   cacheRead: number;
+  // 上次写进缓存的；厂商不报读写时是那次发出的 prompt。
+  cacheWrite: number;
+  // 上次回答者那里还有够用的 1 小时缓存。
+  hourWarm: boolean;
   sinceAnsweredMs: number;
 }
 
@@ -69,8 +77,8 @@ export function affinityWhy(input: AffinityInput): AffinityWhy {
   if (input.mode === "session") return "session";
   if (input.within) return "turn";
   if (input.mode === "turn" || input.rotate) return "new-turn";
-  if (input.cacheRead < AFFINITY.cacheWorth) return "no-cache";
-  if (input.sinceAnsweredMs > AFFINITY.cacheCold) return "cold";
+  if (input.cacheRead + input.cacheWrite < AFFINITY.cacheWorth) return "no-cache";
+  if (input.sinceAnsweredMs > AFFINITY.cacheCold && !input.hourWarm) return "cold";
   return "cache";
 }
 
@@ -262,16 +270,64 @@ export function turnOf(wire: AgentWire, body: unknown): { turn: number; within: 
   return { turn, within };
 }
 
-interface Stick {
-  endpointId: string;
-  model: string;
+/** 粘性要的那部分用量。 */
+export type StickUsage = Pick<Usage, "input" | "cacheRead" | "cacheWrite" | "cacheWrite1h">;
+
+/**
+ * 厂商说要存 1 小时的那段 prompt（Anthropic 的 ephemeral_1h_input_tokens，加上它前面读到的：
+ * 1 小时的断点总在 5 分钟的之前）。最后一次写或读之后 1 小时内都算热；不报 1 小时写入的厂商永远没有。
+ */
+interface HourCache {
+  tokens: number;
   at: number;
-  cacheRead: number;
 }
 
+const NO_HOUR_CACHE: HourCache = { tokens: 0, at: 0 };
+
+/** 这次回复之后还存着 1 小时的：写了 1 小时的，存下读到的加写的；读满了原来那段的，续一小时；读少了（换了家、压缩过）就没了。 */
+function hourCacheAfter(input: { hour: HourCache; usage: StickUsage; now: number }): HourCache {
+  const { hour, usage, now } = input;
+  if (usage.cacheWrite1h > 0) return { tokens: usage.cacheRead + usage.cacheWrite1h, at: now };
+  const stillKept = hour.tokens > 0 && now - hour.at <= AFFINITY.cacheHour;
+  if (stillKept && usage.cacheRead >= hour.tokens) return { tokens: hour.tokens, at: now };
+  return NO_HOUR_CACHE;
+}
+
+function hourCacheWarm(hour: HourCache, now: number): boolean {
+  return hour.tokens >= AFFINITY.cacheWorth && now - hour.at <= AFFINITY.cacheHour;
+}
+
+/** 候选的推理档：magpie 路由组的成员固定在某一档；Osuna 的候选没有固定档，不带。 */
 interface StickyCandidate {
   endpoint: { id: string };
   upstreamModel: string;
+  effort?: Effort;
+}
+
+/** 回答这段对话的那家、它的模型与推理档。 */
+interface Answerer {
+  endpointId: string;
+  model: string;
+  effort?: Effort;
+}
+
+interface Stick extends Answerer {
+  at: number;
+  cacheRead: number;
+  cacheWrite: number;
+  hour: HourCache;
+}
+
+/** 上次回答者在候选里的位置，依次按接口 + 模型 + 推理档、接口 + 模型、接口找；都没有为 -1。 */
+function answererAt(candidates: StickyCandidate[], stick: Answerer): number {
+  const sameEndpoint = (c: StickyCandidate) => c.endpoint.id === stick.endpointId;
+  const sameModel = (c: StickyCandidate) => sameEndpoint(c) && c.upstreamModel === stick.model;
+  const sameEffort = (c: StickyCandidate) => sameModel(c) && c.effort === stick.effort;
+  for (const same of [sameEffort, sameModel, sameEndpoint]) {
+    const at = candidates.findIndex(same);
+    if (at >= 0) return at;
+  }
+  return -1;
 }
 
 export class ConversationSticks {
@@ -294,11 +350,7 @@ export class ConversationSticks {
     const stick = this.sticks.get(input.key);
     const sinceAnsweredMs = stick ? this.now() - stick.at : 0;
     const had = stick !== undefined && sinceAnsweredMs <= AFFINITY.stickKeep;
-    const sameModel = candidates.findIndex(
-      (c) => c.endpoint.id === stick?.endpointId && c.upstreamModel === stick.model,
-    );
-    const at =
-      sameModel >= 0 ? sameModel : candidates.findIndex((c) => c.endpoint.id === stick?.endpointId);
+    const at = stick ? answererAt(candidates, stick) : -1;
     const answerer = candidates[at];
     const why = affinityWhy({
       mode: "auto",
@@ -309,6 +361,8 @@ export class ConversationSticks {
       spent: false,
       within: input.within,
       cacheRead: stick?.cacheRead ?? 0,
+      cacheWrite: stick?.cacheWrite ?? 0,
+      hourWarm: stick !== undefined && hourCacheWarm(stick.hour, this.now()),
       sinceAnsweredMs,
     });
     const kept = why === "session" || why === "turn" || why === "cache";
@@ -316,10 +370,30 @@ export class ConversationSticks {
     return [answerer, ...candidates.filter((_, index) => index !== at)];
   }
 
-  /** 记下这段对话这次由谁答、缓存读了多少。 */
-  answered(key: string, answer: { endpointId: string; model: string; cacheRead: number }): void {
+  /**
+   * 记下这段对话这次由谁答、缓存读写了多少。悄悄缓存的厂商（OpenAI 的自动前缀缓存、Gemini）读写都不报，
+   * 它缓存里存着的就是这次发出的 prompt，算作写入，下一轮留下来读；一个 token 都没报的仍算没有缓存。
+   */
+  answered(key: string, answer: Answerer & { usage: StickUsage }): void {
+    const { usage, ...answerer } = answer;
+    const now = this.now();
+    const silent = usage.cacheRead === 0 && usage.cacheWrite === 0;
+    const last = this.sticks.get(key);
+    // 缓存是那家那个模型的：换了回答者，1 小时缓存从头算。
+    const sameAnswerer = last?.endpointId === answer.endpointId && last.model === answer.model;
+    const hour = hourCacheAfter({
+      hour: sameAnswerer ? last.hour : NO_HOUR_CACHE,
+      usage,
+      now,
+    });
     this.sticks.delete(key);
-    this.sticks.set(key, { ...answer, at: this.now() });
+    this.sticks.set(key, {
+      ...answerer,
+      at: now,
+      cacheRead: usage.cacheRead,
+      cacheWrite: silent ? usage.input : usage.cacheWrite,
+      hour,
+    });
     if (this.sticks.size > AFFINITY.sticksKept) {
       const oldest = this.sticks.keys().next().value;
       if (oldest !== undefined) this.sticks.delete(oldest);
