@@ -13,7 +13,9 @@ import {
   ApiEndpointsFileUnparsableError,
   type ApiEndpointProvider,
   type ApiEndpointState,
+  type StoredApiEndpoint,
 } from "../store.js";
+import type { ModelFacts } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
@@ -79,6 +81,9 @@ export interface ApiEndpointGatewayOverrides {
   gatewayKeepAliveQuietMs?: number;
 }
 
+/** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
+export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
+
 /** 每种 Agent 自己说的请求格式，按请求路径认。 */
 const AGENT_PATHS = {
   "/v1/messages": { wire: "anthropic", format: "anthropic_messages" },
@@ -90,6 +95,7 @@ export function createApiEndpointGateway(options: {
   paseoHome: string;
   logger: pino.Logger;
   cooldowns: EndpointCooldowns;
+  modelFacts: ModelFactsLookup;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const store = new ApiEndpointStore(options.paseoHome);
@@ -99,6 +105,7 @@ export function createApiEndpointGateway(options: {
     sticks: new ConversationSticks(),
     refusals: new RefusedShapes(),
     codexTurns: new CodexLastTurn(),
+    modelFacts: options.modelFacts,
     headerTimeoutMs: options.overrides?.gatewayHeaderTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
     keepAliveMs: options.overrides?.gatewayKeepAliveMs ?? KEEPALIVE_EVERY_MS,
@@ -168,6 +175,7 @@ interface Failover {
   sticks: ConversationSticks;
   refusals: RefusedShapes;
   codexTurns: CodexLastTurn;
+  modelFacts: ModelFactsLookup;
   headerTimeoutMs: number;
   retryPauseMs: number;
   keepAliveMs: number;
@@ -767,6 +775,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     from: input.format,
     to: candidate.format,
     request: candidate.translated,
+    facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
   });
 }
 

@@ -1,7 +1,10 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said，
+// decide.go 的 fitFor、internal/catalog/catalog.go 的 EffortRank 与 NearestEffort、maxoutput.go 的 askedOutput、internal/provider/models.go 的 OutputWithin）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes } from "node:crypto";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ModelFacts } from "../../model-facts.js";
 import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
@@ -121,6 +124,15 @@ export interface GatewayRequest {
   parallel: boolean | null;
   // Anthropic 客户端的 metadata（Claude Code 的 user_id），只转给 Anthropic 上游。
   metadata: unknown;
+  // 客户端的 prompt_cache_key（Codex 发它这段对话的 id）：OpenAI 与前面的中转服务按它把对话送到缓存所在处。
+  // 转给 Chat 与 Responses 上游；空为没给。
+  cacheKey: string;
+  // Responses 客户端的 include（要上游另外给的输出，如 Codex 的 reasoning.encrypted_content），只转给 Responses 上游。
+  include: string[];
+  // Responses 客户端的 client_metadata（Codex 的安装与会话 id，中转服务可能查），只转给 Responses 上游；null 为没给。
+  clientMetadata: unknown;
+  // Responses 客户端的 text 去掉 format（Codex 的 verbosity），只转给 Responses 上游；null 为没给。
+  text: Record<string, unknown> | null;
   // 结构化输出；null 为普通文字。
   format: Format | null;
   // 按扁平名索引的 Codex 命名空间工具与自由文本工具；别的协议的客户端没有。
@@ -406,14 +418,76 @@ export function effortOf(value: unknown): Effort {
 }
 
 /**
- * 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。
+ * OpenAI 格式的推理力度；档位已由 requestForModel 按模型适配。
  * 客户端用 OpenAI 的 effort none 关推理（effortOf 读成 low，Anthropic 的 disabled 不带力度）时照原样发 none；
  * 上游不收再由中转站用 thinkingBackOn 重发。
  */
 export function openAIEffort(request: GatewayRequest): string | null {
   if (request.thinkOff && request.effort !== "") return "none";
-  if (request.effort === "") return null;
-  return request.effort === "xhigh" || request.effort === "max" ? "high" : request.effort;
+  return request.effort === "" ? null : request.effort;
+}
+
+/** 各家说的推理档位，从弱到强（magpie EffortRank）。 */
+const EFFORT_RANK = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+// 中间格式能带的档位：模型资料里别的档位（minimal 之类）不挑。
+const EFFORTS: readonly Effort[] = ["low", "medium", "high", "xhigh", "max"];
+
+/**
+ * 模型自己的档位里离要的最近的一档，一样近取高的，不挑 none（magpie NearestEffort）。
+ * 档位不知道、本来就有要的这档时照要的。
+ */
+export function nearestEffort(want: Effort, levels: string[]): Effort {
+  const known = EFFORTS.filter((effort) => levels.includes(effort));
+  const at = EFFORT_RANK.indexOf(want);
+  if (known.length === 0 || at < 0 || known.includes(want)) return want;
+  let best = want;
+  let distance = EFFORT_RANK.length;
+  for (const level of known) {
+    const index = EFFORT_RANK.indexOf(level);
+    const gap = Math.abs(index - at);
+    const isTieUp = gap === distance && index > at;
+    if (gap < distance || isTieUp) {
+      best = level;
+      distance = gap;
+    }
+  }
+  return best;
+}
+
+/**
+ * 按模型资料改翻译出的请求（magpie forwardTranslated 的 fitFor、askedOutput 与 build 的 rejectTemp）：
+ * - 推理档位挑模型自己有的最近一档；档位不知道时，发给 OpenAI 格式的 xhigh、max 降到各家都收的 high。
+ * - Messages 必须给回复上限：请求没给时按模型公布的上限（不超过窗口）填，不知道才由构建用 16384。
+ * - 已知不收 temperature、top_p 的模型发 Chat、Responses 时不带；Claude 走 Messages 另有 refusesSampling。
+ */
+export function requestForModel(input: {
+  request: GatewayRequest;
+  to: ApiEndpointRequestFormat;
+  facts: ModelFacts;
+}): GatewayRequest {
+  const { request, facts } = input;
+  const messages = input.to === "anthropic_messages";
+  const levels = facts.efforts ?? [];
+  const effort = nearestEffort(request.effort, levels);
+  const unknownAboveHigh = levels.length === 0 && (effort === "xhigh" || effort === "max");
+  const capsEffort = !messages && unknownAboveHigh;
+  const fills = messages && request.maxTokens <= 0;
+  const dropsSampling = !messages && facts.takesSampling === false;
+  return {
+    ...request,
+    effort: capsEffort ? "high" : effort,
+    maxTokens: fills ? publishedOutput(facts) : request.maxTokens,
+    temperature: dropsSampling ? null : request.temperature,
+    topP: dropsSampling ? null : request.topP,
+  };
+}
+
+/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie OutputWithin）。 */
+function publishedOutput(facts: ModelFacts): number {
+  const output = facts.output ?? 0;
+  const context = facts.context ?? 0;
+  return context > 0 && output > context ? context : output;
 }
 
 /** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */

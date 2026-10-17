@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/chat.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/chat.go，chattidy.go 的 messageReasoning 与 reasoningText）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { isRecord, parseJson } from "../../upstream-http.js";
@@ -83,6 +83,10 @@ export function parseChatRequest(body: unknown): GatewayRequest {
       body.reasoning_effort.trim().toLowerCase() === "none",
     parallel: typeof body.parallel_tool_calls === "boolean" ? body.parallel_tool_calls : null,
     metadata: null,
+    cacheKey: stringOf(body.prompt_cache_key),
+    include: [],
+    clientMetadata: null,
+    text: null,
     format: openAIFormat(body.response_format),
     named: {},
   };
@@ -93,9 +97,7 @@ function parseChatMessage(message: Record<string, unknown>): Message | null {
     case "user":
       return { role: "user", parts: chatParts(message.content) };
     case "assistant": {
-      const reasoning = [message.reasoning_content, message.reasoning].find(
-        (value): value is string => typeof value === "string" && value !== "",
-      );
+      const reasoning = reasoningText(message);
       const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
       return {
         role: "assistant",
@@ -121,6 +123,22 @@ function parseChatMessage(message: Record<string, unknown>): Message | null {
     default:
       return null;
   }
+}
+
+/**
+ * Chat 客户端把上一轮的思考发回来的三种写法：reasoning_content（DeepSeek 的，多数客户端用）、reasoning（OpenRouter 的）、
+ * reasoning_details（OpenRouter 的结构化写法，每条取 text，没有就取 summary）。几种都在时按这个顺序取第一个。
+ */
+function reasoningText(message: Record<string, unknown>): string {
+  const plain = [message.reasoning_content, message.reasoning].find(
+    (value): value is string => typeof value === "string" && value !== "",
+  );
+  if (plain) return plain;
+  const details = Array.isArray(message.reasoning_details) ? message.reasoning_details : [];
+  return details
+    .filter(isRecord)
+    .map((detail) => stringOf(detail.text) || stringOf(detail.summary))
+    .join("");
 }
 
 function chatToolCall(call: Record<string, unknown>): Part {
@@ -239,6 +257,7 @@ export function buildChatRequest(request: GatewayRequest, model: string): Record
     messages: pairToolMessages(messages),
     stream: request.stream,
   };
+  if (request.cacheKey !== "") out.prompt_cache_key = request.cacheKey;
   if (request.stream) out.stream_options = { include_usage: true };
   if (request.maxTokens > 0) out.max_tokens = request.maxTokens;
   if (request.temperature !== null) out.temperature = request.temperature;
@@ -546,6 +565,12 @@ const THOUGHT_TAGS: Record<string, string> = { "<think>": "</think>", "<thought>
  * Chat 流 → 中间事件。工具调用按 index 分片拼接，同一 id 重复出现（有的中转站每片都带）仍是同一个调用；
  * 只认第一个读得出 index 的 choice，读不出 index 的片不选也不拒。文首的 <think> / <thought> 段算推理。
  */
+/** Vertex AI 的 OpenAI 兼容接口把 Gemini 的思考那段在 delta.extra_content.google.thought 里标出来。 */
+function marksThought(delta: Record<string, unknown>): boolean {
+  const extra = isRecord(delta.extra_content) ? delta.extra_content : {};
+  return isRecord(extra.google) && extra.google.thought === true;
+}
+
 export class ChatDecoder {
   private started = false;
   private tool = -1;
@@ -625,9 +650,9 @@ export class ChatDecoder {
       (value): value is string => typeof value === "string" && value !== "",
     );
     if (think) emit({ kind: "think", text: think });
-    if (typeof delta.content === "string" && delta.content !== "") {
-      this.text(delta.content, emit);
-    }
+    const content = typeof delta.content === "string" ? delta.content : "";
+    if (marksThought(delta)) this.markedThought(content, emit);
+    else if (content !== "") this.text(content, emit);
     const calls = Array.isArray(delta.tool_calls) ? delta.tool_calls.filter(isRecord) : [];
     if (calls.length > 0) this.end(emit);
     calls.forEach((call, position) => this.toolCall(call, position, emit));
@@ -635,6 +660,31 @@ export class ChatDecoder {
       this.end(emit);
       emit({ kind: "stop", stop: stopFromChat(choice.finish_reason) });
     }
+  }
+
+  /**
+   * Gemini 标成思考的一段（Vertex 与 AI Studio 的 extra_content.google.thought）是推理。AI Studio 可能还用 <thought> 包着、
+   * 只标开标签那一段（magpie #2098）：可能有标签时照正文那样读标签，标签里外都算推理，收尾标签就能在没标的下一段里找到。
+   */
+  private markedThought(piece: string, emit: EmitEvent): void {
+    if (piece === "") return;
+    if (!this.mayBeTagged(piece)) {
+      emit({ kind: "think", text: piece });
+      return;
+    }
+    this.text(piece, (event) => {
+      if (event.kind === "text") emit({ kind: "think", text: event.text });
+      else emit(event);
+    });
+  }
+
+  /** 正在标签里、扣着可能是标签的文字，或正文还没开始而这段以开标签（或它的开头）起头。 */
+  private mayBeTagged(piece: string): boolean {
+    if (this.thoughtClose !== null || this.lead !== "") return true;
+    if (this.past) return false;
+    const lead = piece.replace(/^[ \n]+/, "");
+    if (lead === "") return true;
+    return Object.keys(THOUGHT_TAGS).some((open) => lead.startsWith(open) || open.startsWith(lead));
   }
 
   /** 文字一段段到，标签可能被切开：可能是标签开头的先扣着，标签里的算推理。 */

@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go，phase.go 的 phaseOutput、heldMost）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { createHash } from "node:crypto";
@@ -269,6 +269,8 @@ export function parseResponsesRequest(body: unknown): GatewayRequest {
   const conversation = parseInput(body.input, stringOf(body.instructions));
   const offered = parseResponsesTools(body.tools);
   const chosen = parseResponsesToolChoice(body.tool_choice, offered);
+  const asked = Array.isArray(body.include) ? body.include : [];
+  const include = asked.filter((item): item is string => typeof item === "string");
   return {
     model: stringOf(body.model),
     system: conversation.system,
@@ -288,9 +290,21 @@ export function parseResponsesRequest(body: unknown): GatewayRequest {
     thinkOff: effort.trim().toLowerCase() === "none",
     parallel: typeof body.parallel_tool_calls === "boolean" ? body.parallel_tool_calls : null,
     metadata: null,
+    cacheKey: stringOf(body.prompt_cache_key),
+    include,
+    clientMetadata: body.client_metadata ?? null,
+    text: textOptions(body.text),
     format: openAIFormat(isRecord(body.text) ? body.text.format : null),
     named: chosen.named,
   };
+}
+
+/** text 里 format 以外的（verbosity）：format 另读成 Format，在各家自己的字段里问；普通文字的 format 留在原处（magpie textFormat）。 */
+function textOptions(text: unknown): Record<string, unknown> | null {
+  if (!isRecord(text)) return null;
+  if (openAIFormat(text.format) === null) return text;
+  const { format: _format, ...rest } = text;
+  return Object.keys(rest).length === 0 ? null : rest;
 }
 
 interface Conversation {
@@ -606,7 +620,10 @@ export function buildResponsesRequest(
     stream: request.stream,
     store: false,
   };
-  if (request.format) out.text = { format: responsesFormat(request.format) };
+  if (request.clientMetadata !== null) out.client_metadata = request.clientMetadata;
+  const text = request.format ? { format: responsesFormat(request.format) } : {};
+  if (request.text !== null || request.format) out.text = { ...request.text, ...text };
+  if (request.cacheKey !== "") out.prompt_cache_key = request.cacheKey;
   if (request.system !== "") out.instructions = request.system;
   if (request.maxTokens > 0) out.max_output_tokens = request.maxTokens;
   if (request.temperature !== null) out.temperature = request.temperature;
@@ -615,6 +632,22 @@ export function buildResponsesRequest(
   if (effort) out.reasoning = { effort, summary: "auto" };
   else if (request.thinking) out.reasoning = { summary: "auto" };
   if (request.tools.length > 0) Object.assign(out, responsesTools(request));
+  const include = includedFor({ include: request.include, reasons: out.reasoning !== undefined });
+  if (include.length > 0) out.include = include;
+  return out;
+}
+
+/**
+ * 客户端的 include 照没有中转站时那样发，去掉重复；封存的推理只在要推理时要，像 Codex 那样：
+ * OpenAI 不让不推理的模型给它（magpie buildResponses）。
+ */
+function includedFor(input: { include: string[]; reasons: boolean }): string[] {
+  const out: string[] = [];
+  for (const item of input.include) {
+    const sealedWithoutReasoning = item === "reasoning.encrypted_content" && !input.reasons;
+    if (item === "" || out.includes(item) || sealedWithoutReasoning) continue;
+    out.push(item);
+  }
   return out;
 }
 
@@ -1131,6 +1164,34 @@ function callTo(input: {
 
 type OpenItem = "text" | "thinking" | "tool_call" | null;
 
+/**
+ * assistant 消息的 phase，像 OpenAI 自己的模型那样：调用之前说的过程话是 commentary，结束这一轮的答复是 final_answer。
+ * Codex 把做完的一轮里的过程话和调用折进「Worked for …」，没有 phase 的消息当答复（magpie #2437）。
+ */
+type Phase = "commentary" | "final_answer";
+
+// 等着定 phase 的消息后面最多扣这么多事件；再多就不等了，消息不带 phase。
+const HELD_MOST = 512;
+
+interface HeldEvent {
+  type: string;
+  fields: Record<string, unknown>;
+}
+
+/**
+ * 给整份回复里的 assistant 消息标 phase：最后一个不是推理的项之前的是 commentary；
+ * 它本身是消息、且回复正常结束（completed）时是 final_answer。
+ */
+function phaseOutput(input: { output: Record<string, unknown>[]; completed: boolean }): void {
+  const { output } = input;
+  const last = output.findLastIndex((item) => item.type !== "reasoning");
+  output.forEach((item, index) => {
+    if (item.type !== "message") return;
+    if (index < last) item.phase = "commentary";
+    else if (index === last && input.completed) item.phase = "final_answer";
+  });
+}
+
 /** 中间事件 → Responses 流。Codex 从 output_item.done 读整项，从 response.completed 读用量。 */
 export class ResponsesEncoder {
   private readonly collector = new ReplyCollector();
@@ -1147,6 +1208,9 @@ export class ResponsesEncoder {
   // 上游开始了新的一段推理：下一段推理自成一项。
   private thinkNew = false;
   private call = { id: "", name: "" };
+  // 说完了、还不知道 phase 的消息，与扣在它后面的事件：等下一个不是推理的项或回复结束才定。
+  private heldMessage: Record<string, unknown> | null = null;
+  private held: HeldEvent[] = [];
 
   constructor(
     private readonly input: {
@@ -1228,6 +1292,7 @@ export class ResponsesEncoder {
         break;
       case "error":
         this.closeItem();
+        this.release(null);
         this.send("response.failed", {
           response: this.response("failed", {
             error: { code: event.code ?? "server_error", message: event.message },
@@ -1244,6 +1309,8 @@ export class ResponsesEncoder {
     this.closeItem();
     const reply = this.collector.finish();
     const { status, incomplete } = endingOf(reply.stop);
+    // 截断的回复不猜答复。
+    this.release(status === "completed" ? "final_answer" : null);
     this.send(status === "completed" ? "response.completed" : "response.incomplete", {
       response: this.response(status, {
         usage: usageToResponses(reply.usage),
@@ -1274,6 +1341,8 @@ export class ResponsesEncoder {
     item: Record<string, unknown>;
   }): void {
     this.closeItem();
+    // 推理之后才知道消息后面跟着什么。
+    if (input.kind !== "thinking") this.release("commentary");
     this.outputIndex++;
     this.open = input.kind;
     this.itemId = input.prefix + newId();
@@ -1303,6 +1372,9 @@ export class ResponsesEncoder {
         status: "completed",
         content: [part],
       };
+      // 它的 done 等后面的事件说出 phase 再发。
+      this.release("commentary");
+      this.heldMessage = item;
     } else if (this.open === "thinking") {
       const part = { type: "summary_text", text: this.text };
       this.send("response.reasoning_summary_text.done", {
@@ -1356,7 +1428,29 @@ export class ResponsesEncoder {
     return { ...responseShell({ ...shell, output: this.output }), ...extra };
   }
 
+  /** 有消息在等 phase 时扣着，否则马上写。 */
   private send(type: string, fields: Record<string, unknown>): void {
+    if (this.heldMessage === null) {
+      this.write(type, fields);
+      return;
+    }
+    this.held.push({ type, fields });
+    if (this.held.length > HELD_MOST) this.release(null);
+  }
+
+  /** 写出等着的消息与扣在它后面的事件；phase 为 null 时消息照原样不带 phase。 */
+  private release(phase: Phase | null): void {
+    const message = this.heldMessage;
+    if (message === null) return;
+    if (phase !== null) message.phase = phase;
+    const held = this.held;
+    this.heldMessage = null;
+    this.held = [];
+    for (const event of held) this.write(event.type, event.fields);
+  }
+
+  /** 序号按写出的顺序编。 */
+  private write(type: string, fields: Record<string, unknown>): void {
     const data = { type, sequence_number: this.sequence++, ...fields };
     this.input.write(sseEvent(type, data));
   }
@@ -1413,6 +1507,7 @@ export function renderResponses(
     }
   });
   const { status, incomplete } = endingOf(reply.stop);
+  phaseOutput({ output: items, completed: status === "completed" });
   const shell = responseShell({
     id: responseId(reply.id),
     createdAt: Math.floor(Date.now() / 1000),

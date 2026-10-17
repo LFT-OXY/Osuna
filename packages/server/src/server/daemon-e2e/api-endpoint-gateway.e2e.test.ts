@@ -127,6 +127,11 @@ function storedEndpoint(input: {
   };
 }
 
+function catalogOf(facts: Record<string, Record<string, unknown>>) {
+  const models = Object.entries(facts).map(([id, modelFacts]) => ({ id, facts: modelFacts }));
+  return { fetchedAt: "2026-10-15T00:00:00.000Z", models };
+}
+
 /**
  * 两家接口：A 有 Anthropic 与 Responses 地址，B 只有 Anthropic 地址；两个 Agent 都开着。
  * 给了 chatUpstream 时再加第三家 C：只有 OpenAI Chat 地址，选了 deepseek-v3 与 qwen3-coder。
@@ -143,6 +148,10 @@ async function start(
     retryPauseMs?: number;
     keepAliveMs?: number;
     keepAliveQuietMs?: number;
+    // 写进 models-dev.json 的模型资料（按模型名），不联网。
+    modelsDev?: Record<string, Record<string, unknown>>;
+    // B 的上游清单（catalog）里给的模型资料（按模型名）。
+    catalogB?: Record<string, Record<string, unknown>>;
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -164,13 +173,16 @@ async function start(
           ],
           models: ["kimi-k2", "gpt-5.5"],
         }),
-        storedEndpoint({
-          id: "ep_b",
-          slug: "relay-b",
-          name: "Relay B",
-          baseUrls: [{ format: "anthropic_messages", url: urlB }],
-          models: ["kimi-k2", "glm-4.6"],
-        }),
+        {
+          ...storedEndpoint({
+            id: "ep_b",
+            slug: "relay-b",
+            name: "Relay B",
+            baseUrls: [{ format: "anthropic_messages", url: urlB }],
+            models: ["kimi-k2", "glm-4.6"],
+          }),
+          ...(options.catalogB ? { catalog: catalogOf(options.catalogB) } : {}),
+        },
         ...(options.chatUpstream
           ? [
               storedEndpoint({
@@ -206,6 +218,10 @@ async function start(
   };
   for (const [name, value] of Object.entries(files)) {
     await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
+  }
+  if (options.modelsDev) {
+    const cache = { fetchedAt: "2026-10-15T00:00:00.000Z", etag: null, models: options.modelsDev };
+    await writeFile(path.join(endpointsDir, "models-dev.json"), JSON.stringify(cache));
   }
 
   const logLines: string[] = [];
@@ -1333,6 +1349,8 @@ const CODEX_ANSWER = [
     role: "assistant",
     status: "completed",
     content: [{ type: "output_text", text: "Let me look.", annotations: [], logprobs: [] }],
+    // 调用之前说的是过程话（工单 07，magpie phase.go）。
+    phase: "commentary",
   },
 ];
 
@@ -1491,6 +1509,109 @@ describe("translating for Codex, and to an endpoint that speaks only Responses",
       },
       call,
     ]);
+  });
+
+  test("Codex's cache key reaches a Chat endpoint, and each model's facts set its effort, reply limit and sampling (ticket 07)", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const { gateway } = await start({
+      chatUpstream: chat,
+      upstreamB: anthropic,
+      modelsDev: {
+        "qwen3-coder": { efforts: ["low", "high", "max"], takesSampling: false },
+        "glm-4.6": { context: 200_000, output: 131_072, efforts: ["low", "medium", "high"] },
+      },
+      // 这家自己的清单给的回复上限在 models.dev 的前面。
+      catalogB: { "glm-4.6": { output: 98_304 } },
+    });
+    const codexFields = {
+      prompt_cache_key: "thread-1",
+      include: ["reasoning.encrypted_content"],
+      client_metadata: { "x-codex-installation-id": "inst-1" },
+      text: { verbosity: "low" },
+      reasoning: { effort: "xhigh", summary: "auto" },
+      temperature: 0.3,
+    };
+    const ask = (model: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ ...codexConversation(model, true), ...codexFields }),
+      ).then((response) => response.text());
+
+    await ask("qwen3-coder");
+    await ask("glm-4.6");
+
+    const messages = {
+      chat: [
+        { role: "system", content: "You are Codex." },
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "exec_command", arguments: '{"cmd":"pwd"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "/repo" },
+        { role: "user", content: "now list them" },
+      ],
+    };
+    // Chat 上游照 magpie 只收 prompt_cache_key；xhigh 是 qwen3-coder 没有的档，取最近、一样近取高的 max；它不收采样参数。
+    expect(JSON.parse(chat.requests[0]!.body.toString())).toEqual({
+      model: "qwen3-coder",
+      messages: messages.chat,
+      stream: true,
+      prompt_cache_key: "thread-1",
+      stream_options: { include_usage: true },
+      reasoning_effort: "max",
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "exec_command",
+            description: "Run a command",
+            parameters: { type: "object", properties: { cmd: { type: "string" } } },
+          },
+        },
+      ],
+      tool_choice: "auto",
+    });
+    // Anthropic 上游照 magpie 不收那四项；没给回复上限，按这家清单公布的填；思考预算放在它下面。
+    expect(JSON.parse(anthropic.requests[0]!.body.toString())).toEqual({
+      model: "glm-4.6",
+      stream: true,
+      max_tokens: 98_304,
+      thinking: { type: "enabled", budget_tokens: 24_000 },
+      system: [{ type: "text", text: "You are Codex.", cache_control: { type: "ephemeral" } }],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "list files" }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "call_1", name: "exec_command", input: { cmd: "pwd" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "call_1", content: "/repo" },
+            { type: "text", text: "now list them", cache_control: { type: "ephemeral" } },
+          ],
+        },
+      ],
+      tools: [
+        {
+          name: "exec_command",
+          description: "Run a command",
+          input_schema: { type: "object", properties: { cmd: { type: "string" } } },
+        },
+      ],
+    });
   });
 
   test("a Claude Code request reaches a Responses-only endpoint translated and the stream comes back as Anthropic events", async () => {

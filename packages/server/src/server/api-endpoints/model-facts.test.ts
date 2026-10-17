@@ -9,6 +9,7 @@ const MODELS_DEV = {
         id: "gpt-6-sol",
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
         reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }],
+        temperature: false,
       },
     },
   },
@@ -18,11 +19,13 @@ const MODELS_DEV = {
         id: "gpt-6-sol",
         limit: { context: 1_000_000, output: 64_000 },
         reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
+        temperature: true,
       },
       "openai/gpt-6-sol": {
         id: "openai/gpt-6-sol",
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
         reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }],
+        temperature: false,
       },
       "kimi-k2.5": { id: "kimi-k2.5", limit: { context: 262_144, output: 98_304 } },
       // 小于 2048 的窗口是列表写错了，不算知道。
@@ -43,7 +46,17 @@ describe("models.dev facts", () => {
       context: 922_000,
       output: 128_000,
       efforts: ["low", "medium", "high", "xhigh", "max"],
+      takesSampling: false,
     });
+  });
+
+  test("takes temperature and top_p as most providers say, a tie as taken (magpie RejectsTemperature)", () => {
+    const index = indexModelsDev({
+      a: { models: { "m-tie": { temperature: false }, "m-yes": { temperature: true } } },
+      b: { models: { "m-tie": { temperature: true }, "m-yes": { temperature: "no" } } },
+    });
+    expect(lookupModelFacts(index, "m-tie")).toEqual({ takesSampling: true });
+    expect(lookupModelFacts(index, "m-yes")).toEqual({ takesSampling: true });
   });
 
   test("a tie goes to the smaller number and no efforts when none are listed", () => {

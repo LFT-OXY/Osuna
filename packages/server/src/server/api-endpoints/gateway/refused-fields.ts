@@ -1,9 +1,11 @@
-// 拒收字段的认法与改法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic_shapes.go 的 refuseShapes、withoutRefusedShapes、withDisplay、withoutDeferredTools、withRefsSaid，anthropic.go 的 samplingDeprecated、withoutSampling，strict_refused.go 的 toolStrictRefusal、withoutToolStrict，image_tool.go 的 withoutImageTool、withoutImageToolReq、mayDropImageTool）
+// 拒收字段的认法与改法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic_shapes.go 的 refuseShapes、withoutRefusedShapes、withDisplay、withoutDeferredTools、withRefsSaid，anthropic.go 的 samplingDeprecated、withoutSampling，strict_refused.go 的 toolStrictRefusal、withoutToolStrict，image_tool.go 的 withoutImageTool、withoutImageToolReq、mayDropImageTool，
+// gateway.go 的 cacheKeyField 与 refusesField，object_root.go 的 rootUnionRefusal、objectRootsBody、foldTools）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord } from "../upstream-http.js";
 import { toolLoadedText, type GatewayRequest } from "./translation/ir.js";
+import { objectRoot } from "./translation/object-root.js";
 
 /*
  * 上游不收请求里的某个字段（拒收）：在同一家去掉它重问，并记住这家的这个模型以后不发。
@@ -14,7 +16,8 @@ import { toolLoadedText, type GatewayRequest } from "./translation/ir.js";
  * safeguards：Claude Code 自动模式的审查字段；display：thinking.display 整个不收；
  * displayValue：summarized、omitted 以外的 display 值不收；sampling：temperature、top_p、top_k 已弃用；
  * deferredTools：消息里的延后加载工具块；toolResultRefs：只有 tool_reference 的工具结果；
- * toolStrict：工具的 strict；imageTool：Codex 的画图工具（命名空间 image_gen）。
+ * toolStrict：工具的 strict；imageTool：Codex 的画图工具（命名空间 image_gen）；cacheKey：Codex 的 prompt_cache_key；
+ * rootUnion：工具参数的根是 anyOf、oneOf 或 allOf（不去掉，包成根是 object 的 schema 重问）。
  */
 export type DroppedField =
   | "safeguards"
@@ -24,7 +27,9 @@ export type DroppedField =
   | "deferredTools"
   | "toolResultRefs"
   | "toolStrict"
-  | "imageTool";
+  | "imageTool"
+  | "cacheKey"
+  | "rootUnion";
 
 const FIELD_WORDS = {
   // Copilot 的 Messages API 不收自动模式的 safeguards（magpie #1756）。
@@ -43,6 +48,11 @@ const FIELD_WORDS = {
   // 值不对、schema 不合严格模式是别的错，不算。
   toolStrict:
     /(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra (?:fields?|inputs?|parameters?)|forbidden)[^\n{}]{0,120}?\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"`]+)?\.strict\b|\btools(?:\[\d+\]|\.\d+)(?:\.[^\s.'"`]+)?\.strict\b['"`]?[^\n{}]{0,40}?(?:unsupported|unknown|unrecognized|not (?:supported|allowed|permitted)|extra_forbidden|forbidden)|"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\][^{}]*"type"\s*:\s*"extra_forbidden"|"type"\s*:\s*"extra_forbidden"[^{}]*"loc"\s*:\s*\[\s*(?:"body"\s*,\s*)?"tools"\s*,\s*\d+\s*,\s*(?:"function"\s*,\s*)?"strict"\s*\]/i,
+  // 不认识的字段一律不收的厂商（Gemini 的「Unknown name」、Mistral 的 extra_forbidden）：原话里点了它的名（magpie refusesField）。
+  cacheKey: /\bprompt_cache_key\b/,
+  // xAI、Anthropic（经中转服务的 Chat）与照 OpenAI 校验工具的上游（magpie #1271、#646、#1493）。
+  rootUnion:
+    /tool parameter root must be an object type|does not support oneOf, allOf, or anyOf at the top level|schema must have type .object. and not have .oneOf.|schema must be a JSON Schema of .type: \\?"object\\?"./i,
 } as const;
 
 const W = FIELD_WORDS;
@@ -77,6 +87,8 @@ const ANTHROPIC_CHECKS: FieldCheck[] = [
 
 const OPENAI_CHECKS: FieldCheck[] = [
   { field: "toolStrict", words: W.toolStrict, sent: (body) => toolsHaveStrict(body.tools) },
+  { field: "cacheKey", words: W.cacheKey, sent: (body) => body.prompt_cache_key !== undefined },
+  { field: "rootUnion", words: W.rootUnion, sent: (body) => foldsTools(body) !== body },
 ];
 
 /** 上游拒收内容时用的状态码（magpie badRequest）。 */
@@ -111,6 +123,8 @@ export function withoutRefusedFields(input: {
     if (refused("toolStrict")) body = withoutToolStrict({ format: input.format, body });
     // 只有 Responses 的请求体有命名空间工具。
     if (refused("imageTool")) body = withoutImageTool(body);
+    if (refused("cacheKey")) body = withoutKeys(body, ["prompt_cache_key"]);
+    if (refused("rootUnion")) body = foldsTools(body);
     return body;
   }
   if (refused("deferredTools")) body = withoutDeferredTools(body);
@@ -309,6 +323,54 @@ function toolsWithoutStrict(input: { tools: unknown[]; chat: boolean }): unknown
     if (chatFunction) return { ...tool, function: withoutKeys(fn, ["strict"]) };
     return withoutKeys(tool, ["strict"]);
   });
+}
+
+/**
+ * Chat 的 tools[].function、Responses 的 tools[]（含命名空间里的）的参数根包成 object；
+ * 工具里没有联合（`Of"`）或都不用改时原样交回同一个对象。
+ */
+function foldsTools(body: Body): Body {
+  const { tools } = body;
+  if (!Array.isArray(tools) || !JSON.stringify(tools).includes('Of"')) return body;
+  const folded = toolsFolded(tools);
+  if (folded === tools) return body;
+  return { ...body, tools: folded };
+}
+
+function toolsFolded(tools: unknown[]): unknown[] {
+  let changed = false;
+  const out = tools.map((tool) => {
+    const next = toolFolded(tool);
+    changed ||= next !== tool;
+    return next;
+  });
+  return changed ? out : tools;
+}
+
+function toolFolded(tool: unknown): unknown {
+  if (!isRecord(tool)) return tool;
+  const nested = tool.tools;
+  if (tool.type === "namespace" && Array.isArray(nested)) {
+    const folded = toolsFolded(nested);
+    if (folded === nested) return tool;
+    return { ...tool, tools: folded };
+  }
+  const fn = tool.function;
+  if (isRecord(fn)) {
+    const folded = withParametersFolded(fn);
+    if (folded === fn) return tool;
+    return { ...tool, function: folded };
+  }
+  return withParametersFolded(tool);
+}
+
+/** 工具定义（Responses 的工具，或 Chat 的 function）的 parameters 根包成 object；不用改时交回同一个对象。 */
+function withParametersFolded(definition: Body): Body {
+  const { parameters } = definition;
+  if (!isRecord(parameters)) return definition;
+  const folded = objectRoot(parameters);
+  if (folded === parameters) return definition;
+  return { ...definition, parameters: folded };
 }
 
 function isImageTool(tool: unknown): boolean {

@@ -736,8 +736,11 @@ export class ApiEndpointService {
     return endpoint ? this.modelFacts(endpoint, modelId) : this.modelsDev.facts(modelId);
   }
 
-  /** 这家上游清单给的在前，models.dev 补上没给的。 */
-  private modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
+  /**
+   * 这家这个模型的资料：这家上游清单给的在前，models.dev 补上没给的。
+   * Claude Code 的模型提示与中转站（翻译时的档位、回复上限、采样参数，选路时的窗口）都按它查。
+   */
+  modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
     const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
     return mergeModelFacts(listed, this.modelsDev.facts(modelId));
   }

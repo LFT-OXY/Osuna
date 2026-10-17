@@ -823,6 +823,8 @@ export async function createPaseoDaemon(
       paseoHome: config.paseoHome,
       logger,
       cooldowns: apiEndpointCooldowns,
+      // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
+      modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
       overrides: config.apiEndpoints,
     }),
   );

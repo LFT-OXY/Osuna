@@ -308,6 +308,10 @@ describe("a translated request downgraded", () => {
     thinkOff: false,
     parallel: null,
     metadata: null,
+    cacheKey: "",
+    include: [],
+    clientMetadata: null,
+    text: null,
     format: { type: "json_schema", name: "probe", description: "", schema: SCHEMA, strict: null },
     named: {},
   };

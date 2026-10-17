@@ -293,6 +293,9 @@ export function refusalNote(shape: RefusedShape): string {
   if (shape === "prefill") {
     return "API endpoint refused a conversation ending with the assistant's message; it takes no prefill for this model";
   }
+  if (shape === "rootUnion") {
+    return "API endpoint refused a tool schema with a union at its root; asking it again with an object root";
+  }
   return "API endpoint refused a field of the request; asking it again without it";
 }
 

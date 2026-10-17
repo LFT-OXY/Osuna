@@ -1,18 +1,20 @@
 // 按模型名查 models.dev 的规则移植自 magpie（https://github.com/yetone/magpie，internal/catalog/catalog.go 的
-// bareID / found / mostGiven / mostListed / window）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+// bareID / found / mostGiven / mostListed / window，internal/provider/models.go 的 RejectsTemperature）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { z } from "zod";
 import { isRecord } from "./upstream-http.js";
 
 /*
- * 接口模型的已知数据：一次请求能装多少（上下文）、一次回复最多多长、能调哪些思考档位。
- * 不知道的字段不出现；Claude Code 的模型提示只写知道的。
+ * 接口模型的已知数据：一次请求能装多少（上下文）、一次回复最多多长、能调哪些思考档位、收不收 temperature 与 top_p。
+ * 不知道的字段不出现；Claude Code 的模型提示与中转站只用知道的。
  */
 
 export const ModelFactsSchema = z.object({
   context: z.number().optional(),
   output: z.number().optional(),
   efforts: z.array(z.string()).optional(),
+  // models.dev 的 temperature：false 是这个模型不收 temperature 与 top_p。
+  takesSampling: z.boolean().optional(),
 });
 export type ModelFacts = z.infer<typeof ModelFactsSchema>;
 
@@ -26,6 +28,7 @@ interface Votes {
   context: Map<number, number>;
   output: Map<number, number>;
   efforts: Map<string, number>;
+  sampling: Map<boolean, number>;
 }
 
 /** 同一个模型各家给的数可能不同：取给得最多的那个，打平取小的；档位打平取少的。 */
@@ -37,7 +40,12 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
     for (const [id, model] of Object.entries(provider.models)) {
       if (!isRecord(model)) continue;
       const key = bareModelId(id);
-      const entry = votes.get(key) ?? { context: new Map(), output: new Map(), efforts: new Map() };
+      const entry = votes.get(key) ?? {
+        context: new Map(),
+        output: new Map(),
+        efforts: new Map(),
+        sampling: new Map(),
+      };
       votes.set(key, entry);
       const limit = isRecord(model.limit) ? model.limit : {};
       const context = windowOf(limit);
@@ -46,6 +54,7 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
       if (output !== undefined) count(entry.output, output);
       const efforts = effortsOf(model.reasoning_options);
       if (efforts.length > 0) count(entry.efforts, efforts.join(","));
+      if (typeof model.temperature === "boolean") count(entry.sampling, model.temperature);
     }
   }
   const index: ModelsDevIndex = {};
@@ -57,6 +66,8 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
     if (output !== undefined) facts.output = output;
     const efforts = mostListed(entry.efforts);
     if (efforts !== undefined) facts.efforts = efforts.split(",");
+    const takesSampling = mostSaid(entry.sampling);
+    if (takesSampling !== undefined) facts.takesSampling = takesSampling;
     index[id] = facts;
   }
   return index;
@@ -76,10 +87,12 @@ export function mergeModelFacts(listed: ModelFacts | undefined, known: ModelFact
   const context = listed?.context ?? known.context;
   const output = listed?.output ?? known.output;
   const efforts = listed?.efforts ?? known.efforts;
+  const takesSampling = listed?.takesSampling ?? known.takesSampling;
   return {
     ...(context === undefined ? {} : { context }),
     ...(output === undefined ? {} : { output }),
     ...(efforts === undefined ? {} : { efforts }),
+    ...(takesSampling === undefined ? {} : { takesSampling }),
   };
 }
 
@@ -128,6 +141,12 @@ function mostGiven(tally: Map<number, number>): number | undefined {
     }
   }
   return best;
+}
+
+/** 多数说不收才算不收：打平算收，免得把收的模型的采样参数去掉。 */
+function mostSaid(tally: Map<boolean, number>): boolean | undefined {
+  if (tally.size === 0) return undefined;
+  return (tally.get(true) ?? 0) >= (tally.get(false) ?? 0);
 }
 
 function mostListed(tally: Map<string, number>): string | undefined {

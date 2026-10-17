@@ -5,6 +5,7 @@ import type { IncomingMessage } from "node:http";
 import { StringDecoder } from "node:string_decoder";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
@@ -29,6 +30,7 @@ import {
 import {
   ReplyCollector,
   openAIEffort,
+  requestForModel,
   thinkingBackOn,
   type GatewayRequest,
   type StreamEvent,
@@ -52,7 +54,7 @@ import {
  * 开口（第一段内容）前的失败与直通一样交回中转站换家；开口之后不再换家。
  * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住；
  * 两个认证头不能同时带时只带一个重问，也记住；不收请求里的某个字段时去掉它重问，也记住；
- * 不收结构化输出或预填时降级重问，也记住。
+ * 不收结构化输出或预填时降级重问，也记住。推理档位、回复上限与采样参数按这家这个模型的资料填（requestForModel）。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -69,6 +71,8 @@ export async function attemptTranslated(input: {
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
+  // 这家这个模型的资料（ModelFactsLookup）。
+  facts: ModelFacts;
   headerTimeoutMs: number;
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
@@ -94,6 +98,7 @@ export async function attemptTranslated(input: {
       from: input.from,
       to,
       model: input.upstreamModel,
+      facts: input.facts,
       refusals: asked,
     });
   const body = build();
@@ -172,6 +177,7 @@ function upstreamBody(input: {
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
+  facts: ModelFacts;
   refusals: ShapeRefusals;
 }): string {
   const { to, refusals } = input;
@@ -184,6 +190,7 @@ function upstreamBody(input: {
     // Chat、Responses 的 Agent 把末尾的 assistant 消息当作说完的一轮；Anthropic 的是它自己要的预填。
     lastIsTurn: input.from !== "anthropic_messages",
   });
+  request = requestForModel({ request, to, facts: input.facts });
   const built = protocolOf(to).build({ ...request, stream: true }, input.model);
   const body = withoutRefusedFields({
     format: to,

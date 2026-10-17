@@ -1,11 +1,20 @@
 import { describe, expect, test } from "vitest";
+import type { ModelFacts } from "../../model-facts.js";
 import { AnthropicEncoder, parseAnthropicRequest } from "./anthropic.js";
-import { ChatDecoder, buildChatRequest, usageFromChat } from "./chat.js";
-import type { GatewayRequest, Message, Part, StreamEvent } from "./ir.js";
+import { ChatDecoder, buildChatRequest, parseChatRequest, usageFromChat } from "./chat.js";
+import {
+  requestForModel,
+  type Effort,
+  type GatewayRequest,
+  type Message,
+  type Part,
+  type StreamEvent,
+} from "./ir.js";
 
 /*
  * OpenAI Chat 这一侧的翻译：Claude Code 的请求翻成 Chat 请求、Chat 流解码。
- * 例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 chat_tool_pairing_test.go 与 translate_stream_test.go。
+ * 例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 chat_tool_pairing_test.go、translate_stream_test.go、
+ * chat_inbound_reasoning_test.go 与 gemini_thought_tag_test.go。
  */
 
 describe("a Claude Code request asked of a Chat endpoint", () => {
@@ -114,6 +123,10 @@ function request(messages: Message[]): GatewayRequest {
     thinkOff: false,
     parallel: null,
     metadata: null,
+    cacheKey: "",
+    include: [],
+    clientMetadata: null,
+    text: null,
     format: null,
     named: {},
   };
@@ -856,5 +869,255 @@ describe("this turn's thinking and server tools between Claude Code and a Chat e
         function: { name: "Bash", description: "Run", parameters: { type: "object" } },
       },
     ]);
+  });
+});
+
+describe("a Chat request built for the model as its facts say (magpie fitFor, catalog.NearestEffort, RejectsTemperature)", () => {
+  function built(input: { effort: Effort; facts: ModelFacts }) {
+    const asked = {
+      ...request([{ role: "user", parts: [{ kind: "text", text: "hi" }] }]),
+      effort: input.effort,
+      thinking: true,
+      temperature: 0.2,
+      topP: 0.9,
+    };
+    const fitted = requestForModel({ request: asked, to: "openai_chat", facts: input.facts });
+    return buildChatRequest(fitted, "glm-5.3");
+  }
+
+  function body(extra: Record<string, unknown>): Record<string, unknown> {
+    return {
+      model: "glm-5.3",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+      temperature: 0.2,
+      top_p: 0.9,
+      ...extra,
+    };
+  }
+
+  test("a model listing xhigh is asked xhigh", () => {
+    const facts = { efforts: ["low", "medium", "high", "xhigh"] };
+    expect(built({ effort: "xhigh", facts })).toEqual(body({ reasoning_effort: "xhigh" }));
+  });
+
+  test("a model without the level asked gets its nearest, a tie going up", () => {
+    // GLM-5.3 只有 low、high、max（magpie fitEffort 的注释）。
+    const facts = { efforts: ["low", "high", "max"] };
+    expect(built({ effort: "xhigh", facts })).toEqual(body({ reasoning_effort: "max" }));
+    expect(built({ effort: "medium", facts })).toEqual(body({ reasoning_effort: "high" }));
+    expect(built({ effort: "low", facts })).toEqual(body({ reasoning_effort: "low" }));
+  });
+
+  test("never none, which only turning reasoning off asks", () => {
+    const facts = { efforts: ["none", "high"] };
+    expect(built({ effort: "low", facts })).toEqual(body({ reasoning_effort: "high" }));
+  });
+
+  test("a model whose levels are not known is asked no more than high", () => {
+    expect(built({ effort: "max", facts: {} })).toEqual(body({ reasoning_effort: "high" }));
+    expect(built({ effort: "medium", facts: {} })).toEqual(body({ reasoning_effort: "medium" }));
+  });
+
+  test("a model known to refuse temperature and top_p is sent neither; one that takes them or is unknown keeps them", () => {
+    const effort = "high";
+    expect(built({ effort, facts: { takesSampling: false } })).toEqual({
+      model: "glm-5.3",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      stream_options: { include_usage: true },
+      reasoning_effort: "high",
+    });
+    expect(built({ effort, facts: { takesSampling: true } })).toEqual(
+      body({ reasoning_effort: "high" }),
+    );
+    expect(built({ effort, facts: {} })).toEqual(body({ reasoning_effort: "high" }));
+  });
+});
+
+describe("an earlier turn's thinking in any of a Chat client's three spellings (magpie chat_inbound_reasoning_test.go)", () => {
+  const ASKED = { role: "user", content: "Read go.mod and bump the go directive." };
+  const CALL = {
+    id: "call_1",
+    type: "function",
+    function: { name: "read_file", arguments: '{"path":"go.mod"}' },
+  };
+  const RESULT = { role: "tool", tool_call_id: "call_1", content: "go 1.24\n" };
+
+  function assistantTurn(reasoning: Record<string, unknown>): Message {
+    const assistant = { role: "assistant", ...reasoning, tool_calls: [CALL] };
+    const parsed = parseChatRequest({ model: "m", messages: [ASKED, assistant, RESULT] });
+    return parsed.messages[1]!;
+  }
+
+  function thinkingThenCall(thought: string): Message {
+    return {
+      role: "assistant",
+      parts: [
+        { kind: "thinking", text: thought, signature: "" },
+        { kind: "tool_call", id: "call_1", name: "read_file", args: '{"path":"go.mod"}' },
+      ],
+    };
+  }
+
+  test.each([
+    ["reasoning_content", { reasoning_content: "go.mod has to be read before it is changed." }],
+    ["reasoning", { reasoning: "go.mod has to be read before it is changed." }],
+    [
+      "reasoning_details",
+      {
+        reasoning_details: [
+          {
+            type: "reasoning.text",
+            text: "go.mod has to be read before it is changed.",
+            signature: null,
+            format: "unknown",
+            index: 0,
+          },
+        ],
+      },
+    ],
+  ])("%s is read as the turn's thinking", (_name, reasoning) => {
+    expect(assistantTurn(reasoning)).toEqual(
+      thinkingThenCall("go.mod has to be read before it is changed."),
+    );
+  });
+
+  test("reasoning_details without text gives its summary", () => {
+    const details = { reasoning_details: [{ type: "reasoning.summary", summary: "Read first." }] };
+    expect(assistantTurn(details)).toEqual(thinkingThenCall("Read first."));
+  });
+
+  test("several spellings are one thinking, read in magpie's order", () => {
+    const parsed = parseChatRequest({
+      model: "m",
+      messages: [
+        ASKED,
+        {
+          role: "assistant",
+          reasoning_content: "the reasoning_content one",
+          reasoning: "the reasoning one",
+          reasoning_details: [{ type: "reasoning.text", text: "the reasoning_details one" }],
+          content: "done",
+        },
+      ],
+    });
+    expect(parsed.messages[1]).toEqual({
+      role: "assistant",
+      parts: [
+        { kind: "thinking", text: "the reasoning_content one", signature: "" },
+        { kind: "text", text: "done" },
+      ],
+    });
+  });
+});
+
+describe("Gemini's thoughts marked in a Chat stream's extra_content (magpie gemini_thought_tag_test.go TestChatMarkedThoughtTags)", () => {
+  function decoded(parts: [string, boolean][]): { think: string; text: string } {
+    const decoder = new ChatDecoder();
+    const out = { think: "", text: "" };
+    parts.forEach(([content, marked], index) => {
+      const delta: Record<string, unknown> = { content };
+      if (marked) delta.extra_content = { google: { thought: true } };
+      const choice: Record<string, unknown> = { index: 0, delta };
+      if (index === parts.length - 1) choice.finish_reason = "stop";
+      decoder.decode(JSON.stringify({ id: "x", choices: [choice] }), (event) => {
+        if (event.kind === "think") out.think += event.text;
+        if (event.kind === "text") out.text += event.text;
+      });
+    });
+    return out;
+  }
+
+  test.each<[string, [string, boolean][], string, string]>([
+    [
+      "close unmarked",
+      [
+        ["<thought>hm", true],
+        ["</thought>Hi", false],
+      ],
+      "hm",
+      "Hi",
+    ],
+    [
+      "more thought marked",
+      [
+        ["<thought>a", true],
+        ["b", true],
+        ["</thought>\nHi", false],
+      ],
+      "ab",
+      "Hi",
+    ],
+    [
+      "open split",
+      [
+        ["<tho", true],
+        ["ught>a", true],
+        ["</thought>Hi", false],
+      ],
+      "a",
+      "Hi",
+    ],
+    [
+      "close split",
+      [
+        ["<thought>a", true],
+        ["</tho", false],
+        ["ught>Hi", false],
+      ],
+      "a",
+      "Hi",
+    ],
+    [
+      "close marked",
+      [
+        ["<thought>a</thought>", true],
+        ["Hi", false],
+      ],
+      "a",
+      "Hi",
+    ],
+    [
+      "only the close",
+      [
+        ["<thought>a", true],
+        ["</thought>", false],
+        ["Hi", false],
+      ],
+      "a",
+      "Hi",
+    ],
+    [
+      "no tags",
+      [
+        ["**Plan**\n\nthink", true],
+        ["Hi", false],
+      ],
+      "**Plan**\n\nthink",
+      "Hi",
+    ],
+    [
+      "no tags, then a quoted tag",
+      [
+        ["think", true],
+        ["Use <thought> here", false],
+      ],
+      "think",
+      "Use <thought> here",
+    ],
+    [
+      "answer quotes a close",
+      [
+        ["think", true],
+        ["Hi", false],
+        [" </thought>", false],
+      ],
+      "think",
+      "Hi </thought>",
+    ],
+  ])("%s", (_name, parts, think, answer) => {
+    expect(decoded(parts)).toEqual({ think, text: answer });
   });
 });

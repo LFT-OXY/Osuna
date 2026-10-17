@@ -37,6 +37,7 @@ import {
   type Usage,
 } from "./ir.js";
 import { withoutSampling } from "../refused-fields.js";
+import { objectSchema } from "./object-root.js";
 import { sseEvent } from "./sse.js";
 
 /*
@@ -68,6 +69,10 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
         ? false
         : null,
     metadata: body.metadata ?? null,
+    cacheKey: "",
+    include: [],
+    clientMetadata: null,
+    text: null,
     format: anthropicFormat(body.output_config),
     named: {},
     ...parseThinking(body),
@@ -239,7 +244,8 @@ export function buildAnthropicRequest(
     const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
-      input_schema: tool.schema ?? { type: "object", properties: {} },
+      // 根是联合的 schema Anthropic 不收（"does not support oneOf, allOf, or anyOf at the top level"）。
+      input_schema: objectSchema(tool.schema) ?? { type: "object", properties: {} },
     }));
     // 有系统提示时工具不标：连同 Claude 登录自带的一个，不超过 Anthropic 的四个。
     if (system === "") tools.at(-1)!.cache_control = EPHEMERAL;

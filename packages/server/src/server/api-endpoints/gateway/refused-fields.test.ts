@@ -10,7 +10,9 @@ import {
  * 上游不收的字段：自动模式的审查字段、display、已弃用的采样参数、延后加载工具块、只剩 tool_reference 的工具结果、
  * 工具的 strict、Codex 的画图工具。厂商原话与改法照 magpie（MIT，THIRD_PARTY_NOTICES）的 safeguards_refused_test.go、
  * thinking_display_test.go、anthropic_shapes_test.go、thinking_off_test.go、deferred_tools_test.go、
- * tool_reference_result_test.go、strict_refused_test.go（TestToolStrictRefusalWordings）与 image_tool_test.go。
+ * tool_reference_result_test.go、strict_refused_test.go（TestToolStrictRefusalWordings）、image_tool_test.go，
+ * prompt_cache_test.go（TestPromptCacheKeyRefused）、object_root_test.go（rootUnionRefusals）与
+ * internal/provider/grok_test.go（TestGrokBodyObjectRoot）。
  */
 
 const SAFEGUARDS_REFUSED = `{"error":{"message":"safeguards: Extra inputs are not permitted","type":"invalid_request_error"}}`;
@@ -313,5 +315,138 @@ describe("Codex's image tool", () => {
     expect(dropped({ format: "openai_responses", body: alone, fields: ["imageTool"] })).toEqual({
       input: [],
     });
+  });
+});
+
+describe("Codex's prompt cache key refused (magpie prompt_cache_test.go TestPromptCacheKeyRefused)", () => {
+  const CACHE_KEY_REFUSED = `{"error":{"message":"Invalid JSON payload received. Unknown name \\"prompt_cache_key\\": Cannot find field."}}`;
+  const chat = { model: "m1", messages: [], prompt_cache_key: "thread-1" };
+
+  test("is read off a 400 that names it, for a body that has it", () => {
+    expect(readOff({ format: "openai_chat", body: chat, text: CACHE_KEY_REFUSED })).toEqual([
+      "cacheKey",
+    ]);
+    expect(
+      readOff({ format: "openai_responses", body: chat, text: CACHE_KEY_REFUSED, status: 422 }),
+    ).toEqual(["cacheKey"]);
+  });
+
+  test("is not read off a body without it, another error or a 429", () => {
+    const without = { model: "m1", messages: [] };
+    expect(readOff({ format: "openai_chat", body: without, text: CACHE_KEY_REFUSED })).toEqual([]);
+    const other = `{"error":{"message":"context too long"}}`;
+    expect(readOff({ format: "openai_chat", body: chat, text: other })).toEqual([]);
+    expect(
+      readOff({ format: "openai_chat", body: chat, text: CACHE_KEY_REFUSED, status: 429 }),
+    ).toEqual([]);
+  });
+
+  test("goes, the rest of the request as it was", () => {
+    expect(dropped({ format: "openai_chat", body: chat, fields: ["cacheKey"] })).toEqual({
+      model: "m1",
+      messages: [],
+    });
+  });
+});
+
+describe("a tool whose parameters are a union at the root refused (magpie object_root_test.go, grok_test.go TestGrokBodyObjectRoot)", () => {
+  const ROOT_UNION_REFUSALS = [
+    // AiHubMix 的 grok-4.7（2026-10-08，原样）。
+    `{"error":{"message":"Failed to start sampling: [invalid_client_tool_schema] mcp__codex_app__automation_update: tool parameter root must be an object type (root schema is an anyOf/oneOf union with a non-object branch) (tid: 2026100808425178410684649237042)","type":"upstream_error","param":"400","code":"bad_response_status_code"}}`,
+    // 照 OpenAI 那样校验的上游（magpie #1493）。
+    `{"error":{"message":"Invalid schema for function 'mcp__codex_app__automation_update': schema must have type 'object' and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level.","type":"invalid_request_error","param":"tools[1].parameters","code":"invalid_function_parameters"}}`,
+    // OpenAI 自己的 Responses API（2026-10-10，原样）。
+    '{\n  "error": {\n    "message": "Invalid schema for function \'mcp__codex_app__automation_update\': schema must be a JSON Schema of \'type: \\"object\\"\', got \'type: \\"None\\"\'.",\n    "type": "invalid_request_error",\n    "param": "tools[0].parameters",\n    "code": "invalid_function_parameters"\n  }\n}',
+  ];
+  const UPDATE = {
+    anyOf: [
+      {
+        type: "object",
+        properties: { id: { type: "string" }, prompt: { type: "string" } },
+        required: ["id", "prompt"],
+      },
+      { $ref: "#/$defs/pause" },
+      { type: "null" },
+    ],
+    $defs: {
+      pause: {
+        type: "object",
+        properties: { id: { type: "string" }, paused: { type: "boolean" } },
+        required: ["id"],
+      },
+    },
+  };
+  const PICK = { oneOf: [{ type: "object", properties: { a: { type: "string" } } }] };
+  const PLAIN = { type: "object", properties: { x: { type: "string" } } };
+  const responses = {
+    tools: [
+      { type: "function", name: "mcp__codex_app__automation_update", parameters: UPDATE },
+      {
+        type: "namespace",
+        name: "codex_app",
+        tools: [{ type: "function", name: "pick", parameters: PICK }],
+      },
+      { type: "function", name: "plain", parameters: PLAIN },
+    ],
+  };
+
+  test.each(ROOT_UNION_REFUSALS)("is read off %s, for a body that has one", (text) => {
+    expect(readOff({ format: "openai_responses", body: responses, text })).toEqual(["rootUnion"]);
+    const chat = { tools: [{ type: "function", function: { name: "u", parameters: UPDATE } }] };
+    expect(readOff({ format: "openai_chat", body: chat, text })).toEqual(["rootUnion"]);
+    const plain = { tools: [{ type: "function", name: "plain", parameters: PLAIN }] };
+    expect(readOff({ format: "openai_responses", body: plain, text })).toEqual([]);
+  });
+
+  test("is asked again with every function's parameters an object root, a namespace's included", () => {
+    expect(dropped({ format: "openai_responses", body: responses, fields: ["rootUnion"] })).toEqual(
+      {
+        tools: [
+          {
+            type: "function",
+            name: "mcp__codex_app__automation_update",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                prompt: { type: "string" },
+                paused: { type: "boolean" },
+              },
+              required: ["id"],
+              $defs: UPDATE.$defs,
+            },
+          },
+          {
+            type: "namespace",
+            name: "codex_app",
+            tools: [
+              {
+                type: "function",
+                name: "pick",
+                parameters: { type: "object", properties: { a: { type: "string" } } },
+              },
+            ],
+          },
+          { type: "function", name: "plain", parameters: PLAIN },
+        ],
+      },
+    );
+    const chat = { tools: [{ type: "function", function: { name: "pick", parameters: PICK } }] };
+    expect(dropped({ format: "openai_chat", body: chat, fields: ["rootUnion"] })).toEqual({
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "pick",
+            parameters: { type: "object", properties: { a: { type: "string" } } },
+          },
+        },
+      ],
+    });
+  });
+
+  test("an object root is left as it came", () => {
+    const plain = { tools: [{ type: "function", name: "plain", parameters: PLAIN }] };
+    expect(dropped({ format: "openai_responses", body: plain, fields: ["rootUnion"] })).toBe(plain);
   });
 });
