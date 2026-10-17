@@ -12,7 +12,7 @@
 
 **Blocked by:** 04
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 在直通和翻译套件里，把接口地址设成官方域名，各家的改写都生效；同一请求发到中转服务的地址时，请求体不变。
 - [ ] Grok 经任意地址：CLI 收到的工具参数是整数；工具 schema 的正则按 magpie 改写。
