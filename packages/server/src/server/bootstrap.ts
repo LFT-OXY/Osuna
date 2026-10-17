@@ -969,7 +969,8 @@ export async function createPaseoDaemon(
   // requests that don't match a registered script route.
   httpServer.on("upgrade", serviceProxy.upgradeHandler({ passthroughUnknown: true }));
   // Codex tries Responses over a WebSocket first; the gateway's ChatGPT backend path answers 426 so it
-  // moves to HTTP at once. Registered before the daemon's own WebSocket server, which would answer 400.
+  // moves to HTTP at once. Registered before the daemon's own WebSocket server, which skips a socket
+  // this has already answered and ended.
   httpServer.on("upgrade", (req, socket) => {
     answerChatGptWebSocket({ gatewayPath: API_ENDPOINT_GATEWAY_PATH, req, socket });
   });

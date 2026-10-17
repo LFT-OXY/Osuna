@@ -10,7 +10,7 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import type { AddressInfo } from "node:net";
+import { connect, type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -330,25 +330,35 @@ describe("Codex's ChatGPT requests through the gateway", () => {
     const chatgpt = await startBackend();
     const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
 
-    const status = await new Promise<number>((resolve, reject) => {
-      const sent = httpRequest(`${codexBase}/responses`, {
-        headers: codexHeaders({
-          connection: "Upgrade",
-          upgrade: "websocket",
-          "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-          "sec-websocket-version": "13",
-        }),
+    // 直接读 socket 上收到的全部字节，直到连接关闭：只能有 426 这一个回复，后面不能再跟 /ws 服务的 400。
+    const port = new URL(codexBase).port;
+    const raw = await new Promise<string>((resolve, reject) => {
+      const socket = connect(Number(port), "127.0.0.1", () => {
+        socket.write(
+          [
+            "GET /api-endpoint-gateway/backend-api/codex/responses HTTP/1.1",
+            `Host: 127.0.0.1:${port}`,
+            `Authorization: Bearer ${CHATGPT_TOKEN}`,
+            `User-Agent: ${CODEX_UA}`,
+            "Connection: Upgrade",
+            "Upgrade: websocket",
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version: 13",
+            "",
+            "",
+          ].join("\r\n"),
+        );
       });
-      sent.on("response", (response) => {
-        response.resume();
-        resolve(response.statusCode ?? 0);
+      let received = "";
+      socket.on("data", (chunk: Buffer) => {
+        received += chunk.toString("utf8");
       });
-      sent.on("upgrade", () => resolve(101));
-      sent.on("error", reject);
-      sent.end();
+      socket.on("close", () => resolve(received));
+      socket.on("error", reject);
     });
 
-    expect(status).toBe(426);
+    expect(raw.startsWith("HTTP/1.1 426 Upgrade Required\r\n")).toBe(true);
+    expect(raw.match(/HTTP\/1\.1 \d{3}/g)).toEqual(["HTTP/1.1 426"]);
     expect(chatgpt.requests).toHaveLength(0);
   });
 
@@ -385,6 +395,39 @@ describe("Codex's ChatGPT requests through the gateway", () => {
       "/backend-api/codex/models?client_version=0.130.0",
     ]);
     expect(openAi.requests).toHaveLength(2);
+  });
+
+  test("the OpenAI API refusing Codex's API key comes back as a 401 saying what to do", async () => {
+    const openAi = await startBackend();
+    openAi.respond = (_request, res) => {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(
+        '{"error":{"message":"Incorrect API key provided: sk-proj-***789.","type":"invalid_request_error","code":"invalid_api_key"}}',
+      );
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: "http://127.0.0.1:9/backend-api/codex",
+      openAiApiBaseUrl: `${openAi.url}/v1`,
+    });
+
+    const reply = await send({
+      url: `${codexBase}/responses`,
+      headers: {
+        authorization: "Bearer sk-proj-0123456789",
+        "user-agent": CODEX_UA,
+        "content-type": "application/json",
+        "content-length": "2",
+      },
+      body: Buffer.from("{}"),
+    });
+
+    expect(reply.status).toBe(401);
+    const error = JSON.parse(reply.body.toString("utf8")) as { error: { message: string } };
+    expect(error.error.message).toBe(
+      "OpenAI refused the API key Codex is signed in with (Incorrect API key provided: sk-proj-***789.). " +
+        "This is one of Codex's own models, which goes to OpenAI with Codex's own sign-in: " +
+        "pick an endpoint model (<endpoint>/<model>) in Codex, or sign Codex in with ChatGPT, or with an OpenAI API key",
+    );
   });
 
   test("ChatGPT out of reach is a 502 in OpenAI's shape", async () => {

@@ -174,9 +174,10 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 | 请求头 | `copyHeaders`：除 `hopHeader`（Connection、Keep-Alive、Proxy-Connection、Transfer-Encoding、Upgrade、Te、Trailer、Content-Length）、Host 与 magpie 的账号选择头外全带；另删 `Accept-Encoding` | 除同一组逐跳头与 Host 外全带，`Accept-Encoding` 与 `Content-Length` 也照带（见下） |
 | 请求体 | 读出来（解 zstd）、改条目 id、补搜索工具，发出前再压回 zstd | 一个字节不改，`req` 直接 pipe 给上游（工单要求原样） |
 | 回复 | 除逐跳头外的回复头照回，边收边回 | 同，`Content-Length` 也照回（字节没变） |
-| WebSocket | 处理函数里看 `Upgrade: websocket` 回 426 | daemon 的 `upgrade` 事件里回 426（`answerChatGptWebSocket`，`bootstrap.ts`）：Node 的握手不进 Express；挂在 daemon 自己的 WebSocket 服务之前，否则它先以 400 断开 |
+| WebSocket | 处理函数里看 `Upgrade: websocket` 回 426 | daemon 的 `upgrade` 事件里回 426（`answerChatGptWebSocket`，`bootstrap.ts`）：Node 的握手不进 Express。挂在 daemon 自己的 `/ws` 服务之前，`/ws` 跳过已经答完的 socket（见下） |
 | `Bearer sk-` | `apiKey`：`Authorization` 去掉 `Bearer ` 后以 `sk-` 开头，除 `/models` 外转 `https://api.openai.com/v1` + 原路径 | 照做（`chatgptTarget`） |
 | 认调用方 | 路由本身专给 Codex | `judgeCaller` 照旧先拦网页与转发；这组路径按路径认作 Codex（日志记 `agent: "codex"`），口令与 User-Agent 不影响它：原样转发用不到 Agent |
+| API key 被拒 | `codexKeyRefused`：转去 OpenAI API 的请求得到 401 时，改写成带 OpenAI 原话的说明 | 照做（`apiKeyRefusedMessage`），说明里的「选 magpie 的模型」换成「选接口模型（<endpoint>/<model>）」；ChatGPT 自己的 401、403 原样回 |
 | 连不上 | `codexUnreached`，502 | 502，OpenAI 形状，说明 ChatGPT 连不上、Codex 自带模型经中转站走 Codex 自己的登录 |
 
 ### `Bearer sk-` 的结论：照 magpie 转给 OpenAI API
@@ -186,10 +187,10 @@ ADR 0010 下 API key 登录写的是 Osuna 的 Codex 服务商表，不写 `open
 ### 比 magpie 少做的（都超出「原样转」）
 
 - 不删 `Accept-Encoding`、不把请求体解开再压回：magpie 这么做是为了从回复里读用量、改请求体；Osuna 这里只转发，Node 的 `http` 客户端不自动解压，回复按 ChatGPT 的编码原样回给 Codex。
-- 不做 magpie 对自带模型的请求体修补（`plainItemIDs`、`boundCallIDs`、`DeclareSearch`、`withoutUnreadable` 重问）、ChatGPT 断连重问（`edgeMayDrop`）、额度重置（`autoResetSignedIn`）、网页当 502（`notAnAPIReply`）、空错误补说明（`codexFailedEmpty`）、API key 被拒的说明（`codexKeyRefused`）：工单要求请求体与回复原样，401、403 原样回给 Codex。搜索工具补声明归 10 号工单（05 节）。
+- 不做 magpie 对自带模型的请求体修补（`plainItemIDs`、`boundCallIDs`、`DeclareSearch`、`withoutUnreadable` 重问）、ChatGPT 断连重问（`edgeMayDrop`）、额度重置（`autoResetSignedIn`）、网页当 502（`notAnAPIReply`）、空错误补说明（`codexFailedEmpty`）：工单要求请求体与回复原样，ChatGPT 的 401、403 原样回给 Codex。搜索工具补声明归 10 号工单（05 节）。
 - magpie 的标题、描述、预测小请求另转、子 Agent 换模型、禁用的自带模型、多号轮换：Osuna 没有这些设置（多号轮换在子任务 9）。
 - 模型清单合并、`/responses/compact` 与 `/alpha/search` 按模型分流归 10 号工单；本张一律原样转。
 
 ### WebSocket 426 的写法
 
-daemon 的 `ws` 服务（`path: "/ws"`）对路径不符的握手同步写 400 并断开。426 的监听挂在它前面、同步写完整个回复，`ws` 随后对已结束的 socket 再写会报错并销毁 socket，此时 426 已写进内核；e2e 用真实 daemon 验证 Codex 收到 426、假 ChatGPT 后端什么都没收到。
+daemon 的 `ws` 服务（`path: "/ws"`）原先用 `server` 选项自己挂 upgrade 监听，对路径不符的握手同步写 400 并销毁 socket，会和 426 抢同一个 socket。现在它改成 `noServer`，由 `websocket-server.ts` 自己挂 upgrade 监听：socket 已经结束或销毁（426 已经答完）就不碰，其余照旧交给 `wss.handleUpgrade`（路径不符照旧 400）；关闭时自己摘掉这个监听。e2e 直接读 socket 上的全部字节，断言只有一个 `HTTP/1.1 426`，后面没有 400。

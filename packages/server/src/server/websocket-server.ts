@@ -5,6 +5,7 @@ import { MessageReceipts } from "./message-receipts/index.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
+import type { Duplex } from "node:stream";
 import { getHostName } from "./host-name.js";
 import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -564,6 +565,8 @@ function requireWebSocketServices(params: {
 export class VoiceAssistantWebSocketServer {
   private readonly logger: pino.Logger;
   private readonly wss: WebSocketServer;
+  // 摘掉 /ws 的 upgrade 监听（noServer 下 wss.close() 不替我们摘）。
+  private detachUpgrade: () => void = () => {};
   private readonly pendingConnections: Map<WebSocketLike, PendingConnection> = new Map();
   private readonly sessions: Map<WebSocketLike, SessionConnection> = new Map();
   private readonly socketIdentities: Map<WebSocketLike, WebSocketConnectionIdentity> = new Map();
@@ -874,8 +877,10 @@ export class VoiceAssistantWebSocketServer {
     auth: DaemonAuthConfig | undefined,
   ): WebSocketServer {
     const password = auth?.password;
+    // noServer：自己挂 upgrade 监听，好跳过先挂的监听已经答完的握手（中转站 ChatGPT 后端路径的 426），
+    // 否则 ws 会对路径不符的握手再写一个 400，连带销毁那个 socket。
     const wss = new WebSocketServer({
-      server,
+      noServer: true,
       path: "/ws",
       handleProtocols: (protocols) => selectWebSocketProtocol(protocols, password),
       verifyClient: ({ req }, callback) => {
@@ -890,6 +895,12 @@ export class VoiceAssistantWebSocketServer {
     wss.on("connection", (ws, request) => {
       void this.attachAuthenticatedSocket(ws, request, password);
     });
+    const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      if (socket.writableEnded || socket.destroyed) return;
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    };
+    server.on("upgrade", onUpgrade);
+    this.detachUpgrade = () => server.off("upgrade", onUpgrade);
     return wss;
   }
 
@@ -1195,6 +1206,7 @@ export class VoiceAssistantWebSocketServer {
     this.sessions.clear();
     this.socketIdentities.clear();
     this.externalSessionsByKey.clear();
+    this.detachUpgrade();
     this.wss.close();
   }
 

@@ -1,5 +1,5 @@
 // ChatGPT 后端路径的原样转发移植自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend.go 的
-// CodexPath、codexBackend 的 WebSocket 426、codexUpstream 的转发地址与 apiKey、copyHeaders 与 hopHeader）
+// CodexPath、codexBackend 的 WebSocket 426、codexUpstream 的转发地址与 apiKey、codexKeyRefused、copyHeaders 与 hopHeader）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, {
@@ -11,7 +11,9 @@ import https from "node:https";
 import type { Duplex } from "node:stream";
 import type { Request, Response } from "express";
 import type pino from "pino";
+import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError } from "./agent-errors.js";
+import { readLimited } from "./upstream-call.js";
 
 /*
  * 用 ChatGPT 登录的 Codex 经顶层 openai_base_url 指到中转站的这组路径（ADR 0010）。
@@ -61,16 +63,37 @@ export function chatgptTarget(input: {
   bases: ChatGptBases;
 }): string {
   const tail = input.url.slice(CHATGPT_BACKEND_PATH.length);
-  const rest = tail.split("?")[0] ?? "";
-  const base =
-    signedInWithApiKey(input.authorization) && rest !== "/models"
-      ? input.bases.openAiApi
-      : input.bases.chatgpt;
+  const base = isForOpenAiApi(input) ? input.bases.openAiApi : input.bases.chatgpt;
   return `${base.replace(/\/+$/, "")}${tail}`;
 }
 
-function signedInWithApiKey(authorization: string | undefined): boolean {
+/** 带 API key（Bearer sk-）、又不是模型清单的请求转给 OpenAI API（magpie apiKey 与 codexUpstream）。 */
+export function isForOpenAiApi(input: { url: string; authorization: string | undefined }): boolean {
+  const rest = input.url.slice(CHATGPT_BACKEND_PATH.length).split("?")[0] ?? "";
+  return isSignedInWithApiKey(input.authorization) && rest !== "/models";
+}
+
+function isSignedInWithApiKey(authorization: string | undefined): boolean {
   return (authorization ?? "").replace(/^Bearer /, "").startsWith("sk-");
+}
+
+/**
+ * OpenAI 以 401 拒收 Codex 登录用的 API key 时告诉 Codex 的话（magpie codexKeyRefused）：
+ * 带上 OpenAI 自己的说法，说明 Codex 自带模型走的是 Codex 自己的登录、可以怎么办。
+ */
+export function apiKeyRefusedMessage(body: string): string {
+  const parsed = parseJson(body);
+  const error = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : null;
+  const said =
+    error && typeof error.message === "string" && error.message !== ""
+      ? error.message
+      : body.trim();
+  return (
+    `OpenAI refused the API key Codex is signed in with (${said}). ` +
+    "This is one of Codex's own models, which goes to OpenAI with Codex's own sign-in: " +
+    "pick an endpoint model (<endpoint>/<model>) in Codex, " +
+    "or sign Codex in with ChatGPT, or with an OpenAI API key"
+  );
 }
 
 /** 去掉逐跳头与 Host，其余原样（请求头、回复头都用它）。 */
@@ -88,22 +111,21 @@ export function isWebSocketHandshake(headers: IncomingHttpHeaders): boolean {
 
 /**
  * daemon 的 upgrade 事件：中转站 ChatGPT 后端路径上的 WebSocket 握手回 426，Codex 立刻改用 HTTP，
- * 不重试也不警告。返回是否答了；要在 daemon 自己的 WebSocket 服务之前挂上，否则它先以 400 断开。
+ * 不重试也不警告。要挂在 daemon 自己的 WebSocket 服务之前：它跳过已经答完（结束了）的 socket。
  */
 export function answerChatGptWebSocket(input: {
   gatewayPath: string;
   req: IncomingMessage;
   socket: Duplex;
-}): boolean {
+}): void {
   const path = (input.req.url ?? "").split("?")[0] ?? "";
-  const inGateway = path.startsWith(`${input.gatewayPath}/`);
-  const rest = inGateway ? chatgptBackendRest(path.slice(input.gatewayPath.length)) : null;
-  if (rest === null || !isWebSocketHandshake(input.req.headers)) return false;
+  const isInGateway = path.startsWith(`${input.gatewayPath}/`);
+  const rest = isInGateway ? chatgptBackendRest(path.slice(input.gatewayPath.length)) : null;
+  if (rest === null || !isWebSocketHandshake(input.req.headers)) return;
   const message = "Osuna's API endpoint gateway speaks HTTP";
   input.socket.end(
     `HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`,
   );
-  return true;
 }
 
 /** 原样转给 ChatGPT（或 API key 登录时的 OpenAI API），回复边收边回。 */
@@ -114,9 +136,9 @@ export function relayToChatGpt(input: {
   logger: pino.Logger;
 }): void {
   const { req, res } = input;
-  const target = new URL(
-    chatgptTarget({ url: req.url, authorization: req.headers.authorization, bases: input.bases }),
-  );
+  const signIn = { url: req.url, authorization: req.headers.authorization };
+  const isToOpenAiApi = isForOpenAiApi(signIn);
+  const target = new URL(chatgptTarget({ ...signIn, bases: input.bases }));
   const transport = target.protocol === "https:" ? https : http;
   const upstream: ClientRequest = transport.request(target, {
     method: req.method,
@@ -128,6 +150,11 @@ export function relayToChatGpt(input: {
   };
   res.once("close", abandon);
   upstream.once("response", (reply) => {
+    // ChatGPT 自己的 401、403 原样回；只有 OpenAI API 拒收 API key 的 401 照 magpie 改写成说明。
+    if (isToOpenAiApi && reply.statusCode === 401) {
+      void sendApiKeyRefused({ res, reply });
+      return;
+    }
     res.writeHead(reply.statusCode ?? 502, relayedHeaders(reply.headers));
     reply.pipe(res);
     reply.once("error", () => res.destroy());
@@ -151,4 +178,13 @@ export function relayToChatGpt(input: {
     });
   });
   req.pipe(upstream);
+}
+
+async function sendApiKeyRefused(input: { res: Response; reply: IncomingMessage }): Promise<void> {
+  const body = await readLimited({ stream: input.reply, first: null });
+  sendAgentError({
+    res: input.res,
+    wire: "openai",
+    error: { status: 401, message: apiKeyRefusedMessage(body) },
+  });
 }

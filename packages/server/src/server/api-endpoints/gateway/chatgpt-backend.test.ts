@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  apiKeyRefusedMessage,
   chatgptBackendRest,
   chatgptTarget,
   isWebSocketHandshake,
@@ -54,6 +55,20 @@ describe("where a ChatGPT backend request goes", () => {
         bases,
       }),
     ).toBe("https://chatgpt.com/backend-api/codex/models?client_version=1");
+  });
+});
+
+describe("the OpenAI API refusing Codex's API key", () => {
+  test("is told with OpenAI's own words, or its whole answer when it gives none", () => {
+    const advice =
+      "This is one of Codex's own models, which goes to OpenAI with Codex's own sign-in: " +
+      "pick an endpoint model (<endpoint>/<model>) in Codex, or sign Codex in with ChatGPT, or with an OpenAI API key";
+    expect(apiKeyRefusedMessage('{"error":{"message":"Incorrect API key provided"}}')).toBe(
+      `OpenAI refused the API key Codex is signed in with (Incorrect API key provided). ${advice}`,
+    );
+    expect(apiKeyRefusedMessage("  Unauthorized\n")).toBe(
+      `OpenAI refused the API key Codex is signed in with (Unauthorized). ${advice}`,
+    );
   });
 });
 
