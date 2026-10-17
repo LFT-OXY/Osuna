@@ -237,7 +237,7 @@ function relay(input: {
   const { response, held, tap } = input.opened;
   const usage = (reading: ReplyTap | null) => reading?.end().usage ?? emptyUsage();
   const sink = agentSink(input);
-  if (input.opened.ended) {
+  if (response.readableEnded) {
     sink.end(held);
     return Promise.resolve({ kind: "complete", usage: usage(tap) });
   }

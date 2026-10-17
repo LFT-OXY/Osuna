@@ -808,58 +808,67 @@ describe("Codex's auto-review and memory calls on a model no endpoint offers", (
 /** 假 Chat 上游的流式回复：一段文字、一个带参数的工具调用、以工具调用结束、最后报用量。 */
 function chatStream(res: ServerResponse): void {
   res.writeHead(200, { "content-type": "text/event-stream" });
-  for (const chunk of [
-    {
-      id: "chatcmpl-42",
-      model: "deepseek-v3-0324",
-      choices: [{ index: 0, delta: { role: "assistant", content: "Let me " } }],
-    },
-    { id: "chatcmpl-42", choices: [{ index: 0, delta: { content: "look." } }] },
-    {
-      id: "chatcmpl-42",
-      choices: [
-        {
-          index: 0,
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: "call_ls",
-                type: "function",
-                function: { name: "Bash", arguments: "" },
-              },
-            ],
-          },
-        },
-      ],
-    },
-    {
-      id: "chatcmpl-42",
-      choices: [
-        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"command":' } }] } },
-      ],
-    },
-    {
-      id: "chatcmpl-42",
-      choices: [
-        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] } },
-      ],
-    },
-    { id: "chatcmpl-42", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
-    {
-      id: "chatcmpl-42",
-      choices: [],
-      usage: {
-        prompt_tokens: 120,
-        completion_tokens: 30,
-        prompt_tokens_details: { cached_tokens: 100 },
-      },
-    },
-  ]) {
+  for (const chunk of CHAT_CHUNKS) {
     res.write(`data: ${JSON.stringify(chunk)}\n\n`);
   }
   res.end("data: [DONE]\n\n");
 }
+
+/** chatStream 的整个流一次写完（工单 18：开口那一段之后 end 不等人读就发出）。 */
+function chatStreamInOneWrite(res: ServerResponse): void {
+  const events = CHAT_CHUNKS.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.end(`${events.join("")}data: [DONE]\n\n`);
+}
+
+const CHAT_CHUNKS = [
+  {
+    id: "chatcmpl-42",
+    model: "deepseek-v3-0324",
+    choices: [{ index: 0, delta: { role: "assistant", content: "Let me " } }],
+  },
+  { id: "chatcmpl-42", choices: [{ index: 0, delta: { content: "look." } }] },
+  {
+    id: "chatcmpl-42",
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: "call_ls",
+              type: "function",
+              function: { name: "Bash", arguments: "" },
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "chatcmpl-42",
+    choices: [
+      { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"command":' } }] } },
+    ],
+  },
+  {
+    id: "chatcmpl-42",
+    choices: [
+      { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '"ls"}' } }] } },
+    ],
+  },
+  { id: "chatcmpl-42", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+  {
+    id: "chatcmpl-42",
+    choices: [],
+    usage: {
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      prompt_tokens_details: { cached_tokens: 100 },
+    },
+  },
+];
 
 /** Claude Code 一轮对话的请求：系统提示、多轮、工具定义与调用、工具结果、tool_choice。 */
 function claudeConversation(stream: boolean) {
@@ -900,6 +909,79 @@ function sseData(text: string): unknown[] {
     .filter((line) => line.startsWith("data: "))
     .map((line) => JSON.parse(line.slice(6)) as unknown);
 }
+
+/** chatStream 翻给 Claude Code 的事件流（每个事件的 data）。 */
+const CHAT_AS_ANTHROPIC_EVENTS = [
+  {
+    type: "message_start",
+    message: {
+      id: "msg_42",
+      type: "message",
+      role: "assistant",
+      model: "deepseek-v3",
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    },
+  },
+  { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me " } },
+  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "look." } },
+  { type: "content_block_stop", index: 0 },
+  {
+    type: "content_block_start",
+    index: 1,
+    content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+  },
+  {
+    type: "content_block_delta",
+    index: 1,
+    delta: { type: "input_json_delta", partial_json: '{"command":' },
+  },
+  {
+    type: "content_block_delta",
+    index: 1,
+    delta: { type: "input_json_delta", partial_json: '"ls"}' },
+  },
+  { type: "content_block_stop", index: 1 },
+  {
+    type: "message_delta",
+    delta: { stop_reason: "tool_use", stop_sequence: null },
+    usage: {
+      input_tokens: 20,
+      output_tokens: 30,
+      cache_read_input_tokens: 100,
+      cache_creation_input_tokens: 0,
+    },
+  },
+  { type: "message_stop" },
+];
+
+/** chatStream 翻给不要流式的 Claude Code 的整份回复（请求的是 relay-c/deepseek-v3）。 */
+const CHAT_AS_ANTHROPIC_WHOLE = {
+  id: "msg_42",
+  type: "message",
+  role: "assistant",
+  model: "relay-c/deepseek-v3",
+  content: [
+    { type: "text", text: "Let me look." },
+    { type: "tool_use", id: "call_ls", name: "Bash", input: { command: "ls" } },
+  ],
+  stop_reason: "tool_use",
+  stop_sequence: null,
+  usage: {
+    input_tokens: 20,
+    output_tokens: 30,
+    cache_read_input_tokens: 100,
+    cache_creation_input_tokens: 0,
+  },
+};
 
 describe("translating requests for an endpoint that speaks another format", () => {
   test("a Claude Code request reaches a Chat-only endpoint translated and the stream comes back as Anthropic events", async () => {
@@ -956,57 +1038,7 @@ describe("translating requests for an endpoint that speaks another format", () =
     expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
     expect(text).toContain("event: message_start\ndata: ");
-    expect(sseData(text)).toEqual([
-      {
-        type: "message_start",
-        message: {
-          id: "msg_42",
-          type: "message",
-          role: "assistant",
-          model: "deepseek-v3",
-          content: [],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: {
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_input_tokens: 0,
-            cache_creation_input_tokens: 0,
-          },
-        },
-      },
-      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me " } },
-      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "look." } },
-      { type: "content_block_stop", index: 0 },
-      {
-        type: "content_block_start",
-        index: 1,
-        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
-      },
-      {
-        type: "content_block_delta",
-        index: 1,
-        delta: { type: "input_json_delta", partial_json: '{"command":' },
-      },
-      {
-        type: "content_block_delta",
-        index: 1,
-        delta: { type: "input_json_delta", partial_json: '"ls"}' },
-      },
-      { type: "content_block_stop", index: 1 },
-      {
-        type: "message_delta",
-        delta: { stop_reason: "tool_use", stop_sequence: null },
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_read_input_tokens: 100,
-          cache_creation_input_tokens: 0,
-        },
-      },
-      { type: "message_stop" },
-    ]);
+    expect(sseData(text)).toEqual(CHAT_AS_ANTHROPIC_EVENTS);
   });
 
   test("a request that did not ask to stream is still streamed upstream and comes back whole", async () => {
@@ -1058,24 +1090,7 @@ describe("translating requests for an endpoint that speaks another format", () =
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
-    expect(await response.json()).toEqual({
-      id: "msg_42",
-      type: "message",
-      role: "assistant",
-      model: "relay-c/deepseek-v3",
-      content: [
-        { type: "text", text: "Let me look." },
-        { type: "tool_use", id: "call_ls", name: "Bash", input: { command: "ls" } },
-      ],
-      stop_reason: "tool_use",
-      stop_sequence: null,
-      usage: {
-        input_tokens: 20,
-        output_tokens: 30,
-        cache_read_input_tokens: 100,
-        cache_creation_input_tokens: 0,
-      },
-    });
+    expect(await response.json()).toEqual(CHAT_AS_ANTHROPIC_WHOLE);
   });
 
   test("a Chat endpoint's error before the reply comes back under its name in Anthropic shape", async () => {
@@ -5934,4 +5949,26 @@ describe("vendor rewrites, only for the four vendors", () => {
       expect(upstream.requests[0]!.body.toString()).toBe(VENDOR_TURN(sent));
     },
   );
+});
+
+describe("what an endpoint answers is read for what it is (ticket 18)", () => {
+  test("a translated stream the endpoint wrote in one go reaches the agent, streamed and whole", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStreamInOneWrite(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const streamed = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(claudeConversation(true)),
+    );
+    const whole = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(false), model: "relay-c/deepseek-v3" }),
+    );
+
+    expect(streamed.status).toBe(200);
+    expect(sseData(await streamed.text())).toEqual(CHAT_AS_ANTHROPIC_EVENTS);
+    expect(whole.status).toBe(200);
+    expect(await whole.json()).toEqual(CHAT_AS_ANTHROPIC_WHOLE);
+  });
 });

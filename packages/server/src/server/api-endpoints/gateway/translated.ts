@@ -150,10 +150,10 @@ export async function attemptTranslated(input: {
     ask: (without) => open(build(without)),
   });
   if (opened.kind !== "opened") return opened;
-  const { response, held, ended } = opened;
+  const { response, held } = opened;
   if (!isEventStream(response, held)) {
     // 上游没理会 stream: true：读不出事件，当作开口前失败换家。
-    const text = await wholeText({ response, held, ended });
+    const text = await wholeText({ response, held });
     return failedBySelf({
       status: 502,
       detail: `${url.origin}: the reply was not a stream: ${extractErrorDetail(text, apiKey)}`,
@@ -161,8 +161,8 @@ export async function attemptTranslated(input: {
   }
   input.keepAlive.stop();
   const finished = input.request.stream
-    ? streamReply({ ...input, response, held, ended })
-    : wholeReply({ ...input, response, held, ended });
+    ? streamReply({ ...input, response, held })
+    : wholeReply({ ...input, response, held });
   return { kind: "answered", finished };
 }
 
@@ -185,12 +185,8 @@ function translatedHeaders(input: {
 }
 
 /** 上游整份回复的原文：开口时已经收完的就是扣下的那些。 */
-function wholeText(input: {
-  response: IncomingMessage;
-  held: Buffer;
-  ended: boolean;
-}): Promise<string> {
-  if (input.ended) return Promise.resolve(input.held.toString("utf8"));
+function wholeText(input: { response: IncomingMessage; held: Buffer }): Promise<string> {
+  if (input.response.readableEnded) return Promise.resolve(input.held.toString("utf8"));
   return readLimited({ stream: input.response, first: input.held });
 }
 
@@ -265,7 +261,6 @@ async function streamReply(input: {
   upstreamModel: string;
   response: IncomingMessage;
   held: Buffer;
-  ended: boolean;
 }): Promise<AnswerEnd> {
   const { res } = input;
   // 保活已经回了 200 与响应头：接着在同一个流里写。
@@ -322,7 +317,6 @@ async function wholeReply(input: {
   upstreamModel: string;
   response: IncomingMessage;
   held: Buffer;
-  ended: boolean;
 }): Promise<AnswerEnd> {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
@@ -382,13 +376,12 @@ function readStream(input: {
   res: Response;
   response: IncomingMessage;
   held: Buffer;
-  ended: boolean;
   onText: (text: string) => void;
 }): Promise<StreamEnd> {
   const { response, res } = input;
   const utf8 = new StringDecoder("utf8");
   input.onText(utf8.write(input.held));
-  if (input.ended) {
+  if (response.readableEnded) {
     input.onText(utf8.end());
     return Promise.resolve({ kind: "ended" });
   }

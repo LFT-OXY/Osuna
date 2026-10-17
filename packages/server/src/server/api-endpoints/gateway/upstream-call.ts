@@ -87,15 +87,17 @@ export type AttemptOutcome =
   | FailedAttempt
   | { kind: "gone" };
 
-/** 上游开了口：2xx 响应头到了，第一段内容也到了（或者回复在那之前就收完了，且不是空回复）。 */
+/**
+ * 上游开了口：2xx 响应头到了，第一段内容也到了（或者回复在那之前就收完了，且不是空回复）。
+ * 回复收完没有，接着读之前看 `response.readableEnded`，不另记：整个流一段写完时，开口那一段交出之后
+ * end 不等人读就发出，开口之后才挂上的 end 再也等不到。
+ */
 export interface OpenedUpstream {
   kind: "opened";
   response: IncomingMessage;
   status: number;
   // 开口前扣下的字节，按收到的顺序；调用方先交出它们，再接着读 response。
   held: Buffer;
-  // 回复在开口时已经收完：response 不会再有数据。
-  ended: boolean;
   // 读过 held 的那个 ReplyTap，接着喂后面的字节；不按协议读（count_tokens）时为 null。
   tap: ReplyTap | null;
 }
@@ -109,7 +111,7 @@ type UpstreamOutcome =
   | { kind: "failed"; error: unknown };
 
 type Opening =
-  | { kind: "open"; held: Buffer; ended: boolean; tap: ReplyTap | null }
+  | { kind: "open"; held: Buffer; tap: ReplyTap | null }
   // 开口前出错：报错那个事件的原文。
   | { kind: "error"; raw: string }
   | { kind: "empty" }
@@ -160,7 +162,6 @@ export async function openUpstream(input: {
         response,
         status,
         held: opening.held,
-        ended: opening.ended,
         tap: opening.tap,
       };
     case "error":
@@ -243,12 +244,7 @@ function awaitOpening(input: {
       response.off("error", onClose);
       resolve(result);
     };
-    const open = (ended: boolean): Opening => ({
-      kind: "open",
-      held: Buffer.concat(chunks),
-      ended,
-      tap,
-    });
+    const open = (): Opening => ({ kind: "open", held: Buffer.concat(chunks), tap });
     const onData = (chunk: Buffer) => {
       input.onHeard?.();
       chunks.push(chunk);
@@ -268,11 +264,11 @@ function awaitOpening(input: {
         if (!saidSomething && !heldTooMuch) return;
       }
       response.pause();
-      settle(open(false));
+      settle(open());
     };
     const onEnd = () => {
       if (reads === null) {
-        settle(open(true));
+        settle(open());
         return;
       }
       // 一个字节都没有的回复照原样交出（不是本协议回复的 2xx 归工单 18）。
@@ -280,7 +276,7 @@ function awaitOpening(input: {
       const failed = reply ? failedBeforeContent(reply) : null;
       if (failed) settle(failed);
       else if (reply && isEmptyReply(reply, reads)) settle({ kind: "empty" });
-      else settle(open(true));
+      else settle(open());
     };
     const onClose = () => settle({ kind: "broken" });
     response.on("data", onData);
