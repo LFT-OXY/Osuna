@@ -2592,6 +2592,23 @@ export const ptBR: TranslationResources = {
         summaryCooling_hours_one: "{{name}} em resfriamento, volta em {{count}} hora",
         summaryCooling_hours_other: "{{name}} em resfriamento, volta em {{count}} horas",
         saveFailed: "Não foi possível mudar as configurações de endpoints de API do {{agent}}",
+        issues: {
+          updateHost:
+            "Atualize o Osuna neste host para ver aqui quando as configurações do {{agent}} forem mudadas fora do Osuna.",
+          notThroughGateway:
+            "O {{agent}} não passa mais pelo gateway: as configurações dele foram mudadas fora do Osuna",
+          notThroughGatewayDetail: "Mudado em {{file}}: {{keys}}",
+          configUnparsable:
+            "O Osuna não consegue ler o arquivo de configuração do {{agent}}, então não pode mudá-lo",
+          configUnparsableDetail: "{{file}}: {{detail}}",
+          codexProfileOverride: 'O perfil "{{profile}}" do Codex se sobrepõe aos endpoints de API',
+          codexProfileOverrideDetail:
+            "[profiles.{{profile}}] em {{file}} define {{keys}}, e o Codex usa isso no lugar do que o Osuna escreveu. Remova do perfil ou deixe de selecioná-lo.",
+          reapply: "Aplicar de novo",
+          switchToOfficial: "Voltar ao oficial",
+          keepCurrent: "Manter configurações atuais",
+          actionFailed: 'Não foi possível "{{action}}" para o {{agent}}',
+        },
       },
     },
     hostSections: {

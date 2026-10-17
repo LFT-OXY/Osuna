@@ -2588,6 +2588,23 @@ export const ru: TranslationResources = {
         summaryCooling_hours_one: "{{name}} остывает, вернётся через {{count}} час",
         summaryCooling_hours_other: "{{name}} остывает, вернётся через {{count}} часа",
         saveFailed: "Не удалось изменить настройки сторонних API для {{agent}}",
+        issues: {
+          updateHost:
+            "Обновите Osuna на этом хосте, чтобы здесь было видно, когда настройки {{agent}} меняют вне Osuna.",
+          notThroughGateway:
+            "{{agent}} больше не идёт через шлюз: его настройки изменили вне Osuna",
+          notThroughGatewayDetail: "Изменено в {{file}}: {{keys}}",
+          configUnparsable:
+            "Osuna не может прочитать файл настроек {{agent}}, поэтому не может его изменить",
+          configUnparsableDetail: "{{file}}: {{detail}}",
+          codexProfileOverride: "Профиль Codex «{{profile}}» перекрывает сторонние API",
+          codexProfileOverrideDetail:
+            "[profiles.{{profile}}] в {{file}} задаёт {{keys}}, и Codex использует их вместо того, что записал Osuna. Уберите их из профиля или не выбирайте его.",
+          reapply: "Применить снова",
+          switchToOfficial: "Вернуться к официальному",
+          keepCurrent: "Оставить текущие настройки",
+          actionFailed: "Не удалось «{{action}}» для {{agent}}",
+        },
       },
     },
     hostSections: {

@@ -408,6 +408,109 @@ experimental_bearer_token = "${token}"
     expect((await client.apiEndpointList("codex")).health).toEqual([]);
   });
 
+  describe("settings changed outside Osuna (agentIssues)", () => {
+    async function switchOn(): Promise<string> {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("codex", endpointId);
+      return readFile(configPath, "utf8");
+    }
+
+    function gatewayV1(): string {
+      return `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1`;
+    }
+
+    test("Osuna's Codex model provider table pointed elsewhere reads as no longer going through the gateway", async () => {
+      const switched = await switchOn();
+      await writeFile(configPath, switched.replace(gatewayV1(), "https://other-tool.example/v1"));
+
+      const listed = await client.apiEndpointList("claude");
+      expect(listed.agentIssues?.codex).toEqual([
+        {
+          code: "not_through_gateway",
+          params: { file: configPath, keys: `model_providers.${ID}` },
+          message: expect.stringContaining("Codex no longer goes through the gateway"),
+        },
+      ]);
+      expect(listed.agentIssues?.claude).toEqual([]);
+    });
+
+    test("a changed token or model_provider counts too; a changed model alone does not", async () => {
+      const switched = await switchOn();
+      await writeFile(configPath, switched.replace(`model = "relay/gpt"`, `model = "gpt-5"`));
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+      const token = await codexToken();
+      await writeFile(configPath, switched.replace(`"${token}"`, `"sk-other"`));
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toMatchObject([
+        { code: "not_through_gateway", params: { keys: `model_providers.${ID}` } },
+      ]);
+
+      await writeFile(
+        configPath,
+        switched.replace(`model_provider = "${ID}"`, `model_provider = "mine"`),
+      );
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toMatchObject([
+        { code: "not_through_gateway", params: { keys: "model_provider" } },
+      ]);
+    });
+
+    test("re-apply writes the table back; switching to official restores the owned keys", async () => {
+      const switched = await switchOn();
+      const repointed = switched.replace(gatewayV1(), "https://other-tool.example/v1");
+      await writeFile(configPath, repointed);
+
+      const reapplied = await client.apiEndpointSetAgentSettings({
+        provider: "codex",
+        enabled: true,
+        reapply: true,
+      });
+      expect(reapplied.error).toBeNull();
+      expect(await readFile(configPath, "utf8")).toBe(switched);
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+      await writeFile(configPath, repointed);
+      const off = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+      expect(off.agent?.enabled).toBe(false);
+      // 服务商表关掉开关时留着（ADR 0010），daemon 下次启动按新端口改写它。
+      expect(await readFile(configPath, "utf8")).toBe(
+        (await keptConfig()).replace(gatewayV1(), "https://other-tool.example/v1"),
+      );
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+    });
+
+    test("keeping the current settings leaves config.toml as changed and the model list it still names", async () => {
+      const switched = await switchOn();
+      const changed = switched.replace(`model_provider = "${ID}"`, `model_provider = "mine"`);
+      await writeFile(configPath, changed);
+
+      const kept = await client.apiEndpointKeepCurrentSettings("codex");
+
+      expect(kept).toMatchObject({ provider: "codex", agent: { enabled: false }, error: null });
+      expect(await readFile(configPath, "utf8")).toBe(changed);
+      // config.toml 仍写着 model_catalog_json：目录文件不能跟着关开关删掉，否则 Codex 读不到它。
+      expect(await catalog()).toEqual(
+        expect.arrayContaining(["relay/gpt list", "relay/mini list"]),
+      );
+      const listed = await client.apiEndpointList("codex");
+      expect(listed.agentIssues?.codex).toEqual([]);
+      expect(listed.health).toEqual([]);
+    });
+
+    test("a profile that overrides the owned keys comes with the profile and the keys", async () => {
+      await writeFile(
+        configPath,
+        `profile = "work"\n${USER_CONFIG}\n[profiles.work]\nmodel_provider = "azure"\n`,
+      );
+      expect((await client.apiEndpointList("claude")).agentIssues?.codex).toEqual([
+        {
+          code: "codex_profile_override",
+          params: { file: configPath, profile: "work", keys: "model_provider" },
+          message: expect.stringContaining("[profiles.work] sets model_provider"),
+        },
+      ]);
+    });
+  });
+
   test("Official shows where config.toml itself points", async () => {
     expect(await client.apiEndpointList("codex")).toMatchObject({
       activeEndpointId: null,

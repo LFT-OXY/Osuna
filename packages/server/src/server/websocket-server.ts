@@ -1866,6 +1866,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.apiEndpointService ? { apiEndpoints: true } : {}),
         // COMPAT(apiEndpointGateway): added in v0.16.0, remove gate after 2027-04-14.
         ...(this.apiEndpointService ? { apiEndpointGateway: true } : {}),
+        // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
+        ...(this.apiEndpointService ? { apiEndpointCliWiring: true } : {}),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         providerVersions: true,
         agentRequestReceipts: true,

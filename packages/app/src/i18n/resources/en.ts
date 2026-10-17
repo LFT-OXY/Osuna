@@ -2616,6 +2616,22 @@ export const en = {
         summaryCooling_hours_one: "{{name}} cooling down, back in {{count}} hour",
         summaryCooling_hours_other: "{{name}} cooling down, back in {{count}} hours",
         saveFailed: "Couldn't change the API endpoint settings for {{agent}}",
+        issues: {
+          updateHost:
+            "Update Osuna on this host to see here when {{agent}}'s settings are changed outside Osuna.",
+          notThroughGateway:
+            "{{agent}} no longer goes through the gateway: its settings were changed outside Osuna",
+          notThroughGatewayDetail: "Changed in {{file}}: {{keys}}",
+          configUnparsable: "Osuna can't read {{agent}}'s settings file, so it can't change it",
+          configUnparsableDetail: "{{file}}: {{detail}}",
+          codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
+          codexProfileOverrideDetail:
+            "[profiles.{{profile}}] in {{file}} sets {{keys}}, and Codex uses those instead of what Osuna wrote. Remove them from the profile, or stop selecting it.",
+          reapply: "Apply again",
+          switchToOfficial: "Switch to official",
+          keepCurrent: "Keep current settings",
+          actionFailed: 'Couldn\'t finish "{{action}}" for {{agent}}',
+        },
       },
     },
     hostSections: {

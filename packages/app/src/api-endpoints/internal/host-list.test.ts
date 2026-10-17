@@ -47,7 +47,25 @@ describe("selectHostEndpointsState", () => {
       endpoints: [endpoint({ id: "a" })],
       agents: { claude: { enabled: true, defaultModelId: "claude-sonnet-4-5" } },
       gatewayUnavailable: null,
+      // 老主机不发 agentIssues：提示区为空。
+      agentIssues: {},
     });
+  });
+
+  it("reads each agent's settings issues", () => {
+    const issue = { code: "config_unparsable", params: { file: "f", detail: "d" }, message: "m" };
+    const ready = selectHostEndpointsState({
+      data: {
+        requestId: "r",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        agentIssues: { claude: [], codex: [issue] },
+        error: null,
+      },
+      error: null,
+    });
+    expect(ready).toMatchObject({ agentIssues: { claude: [], codex: [issue] } });
   });
 
   it("reports the daemon's error, and a failed request", () => {

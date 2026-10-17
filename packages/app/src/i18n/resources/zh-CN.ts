@@ -2581,6 +2581,20 @@ export const zhCN: TranslationResources = {
         summaryCooling_hours_one: "{{name}} 冷却中，{{count}} 小时后恢复",
         summaryCooling_hours_other: "{{name}} 冷却中，{{count}} 小时后恢复",
         saveFailed: "没能修改 {{agent}} 的第三方接口设置",
+        issues: {
+          updateHost: "更新这台主机上的 Osuna 后，{{agent}} 的配置被别的程序改了会在这里提示。",
+          notThroughGateway: "{{agent}} 已不经过中转站：配置被别的程序改了",
+          notThroughGatewayDetail: "{{file}} 里改动的项：{{keys}}",
+          configUnparsable: "Osuna 读不懂 {{agent}} 的配置文件，所以改不了它",
+          configUnparsableDetail: "{{file}}：{{detail}}",
+          codexProfileOverride: "Codex 的 profile「{{profile}}」盖过了第三方接口",
+          codexProfileOverrideDetail:
+            "{{file}} 的 [profiles.{{profile}}] 设了 {{keys}}，Codex 会用它们，而不是 Osuna 写的值。从这个 profile 里删掉它们，或者不再选中它。",
+          reapply: "重新应用",
+          switchToOfficial: "切回官方",
+          keepCurrent: "保留当前设置",
+          actionFailed: "{{agent}} 没能{{action}}",
+        },
       },
     },
     hostSections: {

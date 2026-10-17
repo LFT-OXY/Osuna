@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -11,14 +11,14 @@ import type {
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { useHostFeatureAvailability } from "@/runtime/host-features";
+import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
 import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
 import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointsListSection, NoticeCard } from "./host-list-section";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
-import { selectAgentApiEndpointsView } from "./internal/agent-settings";
+import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
@@ -74,7 +74,9 @@ function AgentApiEndpoints({
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
-  const { state, setAgentSettings } = endpoints;
+  const { state, setAgentSettings, runIssueAction } = endpoints;
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
+  const hasIssues = useHostFeature(serverId, "apiEndpointCliWiring");
 
   const handleToggle = useCallback(
     (enabled: boolean) => setAgentSettings(provider, { enabled }),
@@ -84,6 +86,28 @@ function AgentApiEndpoints({
     (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
     [provider, setAgentSettings],
   );
+  const handleIssueAction = useCallback(
+    (action: AgentIssueAction) => runIssueAction(provider, action),
+    [provider, runIssueAction],
+  );
+  const issueActions = useMemo(() => {
+    if (!hasIssues) return null;
+    const pending = endpoints.pendingIssueAction;
+    const failed = endpoints.issueActionError;
+    return {
+      pendingAction: pending?.provider === provider ? pending.action : null,
+      actionError: failed?.provider === provider ? failed : null,
+      onAction: handleIssueAction,
+      onDismissError: endpoints.dismissIssueActionError,
+    };
+  }, [
+    endpoints.dismissIssueActionError,
+    endpoints.issueActionError,
+    endpoints.pendingIssueAction,
+    handleIssueAction,
+    hasIssues,
+    provider,
+  ]);
   const handleManage = useCallback(
     () => router.push(buildSettingsHostSectionRoute(serverId, "api-endpoints")),
     [router, serverId],
@@ -105,6 +129,7 @@ function AgentApiEndpoints({
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onManage={handleManage}
+      issueActions={issueActions}
     />
   );
 }

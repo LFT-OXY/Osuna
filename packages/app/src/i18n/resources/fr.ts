@@ -2608,6 +2608,24 @@ export const fr: TranslationResources = {
         summaryCooling_hours_one: "{{name}} en refroidissement, de retour dans {{count}} heure",
         summaryCooling_hours_other: "{{name}} en refroidissement, de retour dans {{count}} heures",
         saveFailed: "Impossible de modifier les réglages des points d'accès API de {{agent}}",
+        issues: {
+          updateHost:
+            "Mettez à jour Osuna sur cet hôte pour voir ici quand les réglages de {{agent}} sont modifiés en dehors d'Osuna.",
+          notThroughGateway:
+            "{{agent}} ne passe plus par la passerelle : ses réglages ont été modifiés en dehors d'Osuna",
+          notThroughGatewayDetail: "Modifié dans {{file}} : {{keys}}",
+          configUnparsable:
+            "Osuna ne peut pas lire le fichier de réglages de {{agent}}, il ne peut donc pas le modifier",
+          configUnparsableDetail: "{{file}} : {{detail}}",
+          codexProfileOverride:
+            "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",
+          codexProfileOverrideDetail:
+            "[profiles.{{profile}}] dans {{file}} définit {{keys}}, et Codex les utilise à la place de ce qu'Osuna a écrit. Retirez-les du profil ou ne le sélectionnez plus.",
+          reapply: "Réappliquer",
+          switchToOfficial: "Revenir à l'officiel",
+          keepCurrent: "Garder les réglages actuels",
+          actionFailed: "Impossible de « {{action}} » pour {{agent}}",
+        },
       },
     },
     hostSections: {

@@ -2566,6 +2566,22 @@ export const ko: TranslationResources = {
         summaryCooling_hours_one: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
         summaryCooling_hours_other: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
         saveFailed: "{{agent}}의 서드파티 API 설정을 바꾸지 못했습니다",
+        issues: {
+          updateHost:
+            "이 호스트의 Osuna를 업데이트하면 {{agent}} 설정이 Osuna 밖에서 바뀌었을 때 여기에 표시됩니다.",
+          notThroughGateway:
+            "{{agent}}이(가) 더 이상 게이트웨이를 거치지 않습니다: 설정이 Osuna 밖에서 바뀌었습니다",
+          notThroughGatewayDetail: "{{file}}에서 바뀐 항목: {{keys}}",
+          configUnparsable: "{{agent}}의 설정 파일을 읽을 수 없어 Osuna가 바꿀 수 없습니다",
+          configUnparsableDetail: "{{file}}: {{detail}}",
+          codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
+          codexProfileOverrideDetail:
+            "{{file}}의 [profiles.{{profile}}]이(가) {{keys}}을(를) 설정해서 Codex는 Osuna가 쓴 값 대신 그것을 씁니다. 프로필에서 지우거나 선택하지 마세요.",
+          reapply: "다시 적용",
+          switchToOfficial: "공식으로 전환",
+          keepCurrent: "현재 설정 유지",
+          actionFailed: '{{agent}}의 "{{action}}"을(를) 하지 못했습니다',
+        },
       },
     },
     hostSections: {

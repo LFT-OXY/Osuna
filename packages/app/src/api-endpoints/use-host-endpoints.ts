@@ -23,6 +23,7 @@ import {
   selectHostEndpointsState,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
+import type { AgentIssueAction } from "./internal/agent-settings";
 import { createUpstreamRequestId, linkAbortToCancel } from "./internal/upstream-request";
 
 // 接口是主机共用的，按哪个 provider 查列表都一样；和 Claude Code 页共用同一份缓存。
@@ -40,6 +41,12 @@ export type AgentSettingsChange = Pick<
   "enabled" | "defaultModelId"
 >;
 
+/** 提示区里正在做的处理，或做失败的那一次。 */
+export interface AgentIssueActionState {
+  provider: string;
+  action: AgentIssueAction;
+}
+
 export interface UseHostEndpointsResult {
   state: HostEndpointsLoadState;
   // 正在切换开关或「立刻恢复」的那一家。
@@ -53,6 +60,11 @@ export interface UseHostEndpointsResult {
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
   setAgentSettings: (provider: string, settings: AgentSettingsChange) => void;
+  // 提示区的处理：正在做的、失败的原因（留在提示区里，直到重试或关掉）。
+  pendingIssueAction: AgentIssueActionState | null;
+  issueActionError: (AgentIssueActionState & { message: string }) | null;
+  runIssueAction: (provider: string, action: AgentIssueAction) => void;
+  dismissIssueActionError: () => void;
   save: (request: ConnectionSaveRequest) => Promise<ConnectionSaveResult>;
   detect: (
     request: ConnectionDetectRequest,
@@ -70,6 +82,9 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const [pendingEndpointId, setPendingEndpointId] = useState<string | null>(null);
   const [pendingAgent, setPendingAgent] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingIssueAction, setPendingIssueAction] = useState<AgentIssueActionState | null>(null);
+  const [issueActionError, setIssueActionError] =
+    useState<UseHostEndpointsResult["issueActionError"]>(null);
   const queryKey = useMemo(() => hostEndpointsQueryKey(serverId), [serverId]);
 
   const query = useFetchQuery({
@@ -181,6 +196,28 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, refresh],
   );
 
+  const runIssueAction = useCallback(
+    (provider: string, action: AgentIssueAction) => {
+      if (!client) return;
+      void (async () => {
+        setPendingIssueAction({ provider, action });
+        setIssueActionError(null);
+        try {
+          const result = await sendIssueAction(client, provider, action);
+          if (result.error) {
+            setIssueActionError({ provider, action, message: result.error.message });
+          }
+        } catch (error) {
+          setIssueActionError({ provider, action, message: toErrorMessage(error) });
+        } finally {
+          await refresh();
+          setPendingIssueAction(null);
+        }
+      })();
+    },
+    [client, refresh],
+  );
+
   const save = useCallback(
     async (request: ConnectionSaveRequest): Promise<ConnectionSaveResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -222,6 +259,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   );
 
   const dismissActionError = useCallback(() => setActionError(null), []);
+  const dismissIssueActionError = useCallback(() => setIssueActionError(null), []);
 
   return {
     state,
@@ -232,7 +270,29 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     resume,
     pendingAgent,
     setAgentSettings,
+    pendingIssueAction,
+    issueActionError,
+    runIssueAction,
+    dismissIssueActionError,
     save,
     detect,
   };
+}
+
+type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
+
+/** 重新应用 = 开着、按当前设置重写；切回官方 = 关开关并按接管记录还原；保留当前设置是单独的 RPC。 */
+function sendIssueAction(
+  client: HostClient,
+  provider: string,
+  action: AgentIssueAction,
+): Promise<{ error: { message: string } | null }> {
+  switch (action) {
+    case "reapply":
+      return client.apiEndpointSetAgentSettings({ provider, enabled: true, reapply: true });
+    case "switchToOfficial":
+      return client.apiEndpointSetAgentSettings({ provider, enabled: false });
+    case "keepCurrent":
+      return client.apiEndpointKeepCurrentSettings(provider);
+  }
 }

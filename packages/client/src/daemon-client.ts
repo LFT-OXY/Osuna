@@ -664,6 +664,10 @@ type ApiEndpointSetAgentSettingsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_agent_settings.response" }
 >["payload"];
+type ApiEndpointKeepCurrentSettingsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.keep_current_settings.response" }
+>["payload"];
 type ApiEndpointSetEndpointStatePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_endpoint_state.response" }
@@ -6333,6 +6337,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_agent_settings.request", ...options },
+    });
+  }
+
+  /** 「保留当前设置」：关掉总开关，CLI 配置保持现在的样子，不再提示设置被改过。 */
+  async apiEndpointKeepCurrentSettings(
+    provider: string,
+    requestId?: string,
+  ): Promise<ApiEndpointKeepCurrentSettingsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.keep_current_settings.request", provider },
     });
   }
 

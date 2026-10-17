@@ -502,6 +502,120 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
+  describe("settings changed outside Osuna (agentIssues)", () => {
+    async function switchOnThenRepoint(): Promise<{ switched: string; modified: string }> {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      const switched = await readFile(settingsPath, "utf8");
+      const modified = switched.replace(`"${gatewayUrl()}"`, '"https://other-tool.example"');
+      await writeFile(settingsPath, modified);
+      return { switched, modified };
+    }
+
+    test("advertises the capability", () => {
+      expect(client.getLastServerInfoMessage()?.features?.apiEndpointCliWiring).toBe(true);
+    });
+
+    test("an address changed outside Osuna reads as no longer going through the gateway", async () => {
+      await switchOnThenRepoint();
+
+      const listed = await client.apiEndpointList("claude");
+      expect(listed.agentIssues).toEqual({
+        claude: [
+          {
+            code: "not_through_gateway",
+            params: { file: settingsPath, keys: "env.ANTHROPIC_BASE_URL" },
+            message: expect.stringContaining("env.ANTHROPIC_BASE_URL"),
+          },
+        ],
+        codex: [],
+      });
+      // 老客户端照旧看到 modified_externally。
+      expect(listed.health).toEqual([
+        { code: "modified_externally", message: expect.stringContaining("env.ANTHROPIC_BASE_URL") },
+      ]);
+    });
+
+    test("a changed token counts too; a changed model alone does not", async () => {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      const switched = JSON.parse(await readFile(settingsPath, "utf8")) as {
+        model: string;
+        env: Record<string, string>;
+      };
+      await writeFile(settingsPath, JSON.stringify({ ...switched, model: "other-model" }));
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+
+      await writeFile(
+        settingsPath,
+        JSON.stringify({ ...switched, env: { ...switched.env, ANTHROPIC_AUTH_TOKEN: "sk-other" } }),
+      );
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "not_through_gateway",
+          params: { file: settingsPath, keys: "env.ANTHROPIC_AUTH_TOKEN" },
+          message: expect.any(String),
+        },
+      ]);
+    });
+
+    test("re-apply writes the gateway back and the issue is gone", async () => {
+      const { switched } = await switchOnThenRepoint();
+
+      const reapplied = await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        reapply: true,
+      });
+
+      expect(reapplied.error).toBeNull();
+      expect(await readFile(settingsPath, "utf8")).toBe(switched);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
+
+    test("switching to official turns the switch off and restores the file", async () => {
+      await switchOnThenRepoint();
+
+      const off = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+
+      expect(off.agent?.enabled).toBe(false);
+      expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
+
+    test("keeping the current settings turns the switch off, leaves the file as changed and stops warning", async () => {
+      const { modified } = await switchOnThenRepoint();
+
+      const kept = await client.apiEndpointKeepCurrentSettings("claude");
+
+      expect(kept).toMatchObject({ provider: "claude", error: null });
+      expect(kept.agent?.enabled).toBe(false);
+      expect(await readFile(settingsPath, "utf8")).toBe(modified);
+      const listed = await client.apiEndpointList("claude");
+      expect(listed.agentIssues?.claude).toEqual([]);
+      expect(listed.health).toEqual([]);
+      expect(listed.agents?.claude?.enabled).toBe(false);
+    });
+
+    test("keeping the current settings while the switch is off changes nothing", async () => {
+      const kept = await client.apiEndpointKeepCurrentSettings("claude");
+      expect(kept).toMatchObject({ agent: { enabled: false }, error: null });
+      expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+    });
+
+    test("a settings.json that does not parse comes with the file and the reason", async () => {
+      await writeFile(settingsPath, `{ "env": { "A": "1", } }`);
+
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "config_unparsable",
+          params: { file: settingsPath, detail: expect.any(String) },
+          message: expect.stringContaining(settingsPath),
+        },
+      ]);
+    });
+  });
+
   test("Official shows where settings.json itself points", async () => {
     const endpointId = await createEndpoint();
     expect(await client.apiEndpointList("claude")).toMatchObject({

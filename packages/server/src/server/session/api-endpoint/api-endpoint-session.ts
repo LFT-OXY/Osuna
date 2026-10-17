@@ -19,6 +19,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.delete.request"
       | "provider.api_endpoint.set_active.request"
       | "provider.api_endpoint.set_agent_settings.request"
+      | "provider.api_endpoint.keep_current_settings.request"
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
@@ -68,6 +69,8 @@ export class ApiEndpointSession {
         return this.handleSetActive(request);
       case "provider.api_endpoint.set_agent_settings.request":
         return this.handleSetAgentSettings(request);
+      case "provider.api_endpoint.keep_current_settings.request":
+        return this.handleKeepCurrentSettings(request);
       case "provider.api_endpoint.set_endpoint_state.request":
         return this.handleSetEndpointState(request);
       case "provider.api_endpoint.fetch_models.request":
@@ -197,6 +200,7 @@ export class ApiEndpointSession {
       const agent = await this.service.setAgentSettings(request.provider, {
         enabled: request.enabled,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
+        ...(request.reapply !== undefined ? { reapply: request.reapply } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.set_agent_settings.response",
@@ -205,6 +209,31 @@ export class ApiEndpointSession {
     } catch (error) {
       this.host.emit({
         type: "provider.api_endpoint.set_agent_settings.response",
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          agent: this.currentAgentSettings(request.provider),
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handleKeepCurrentSettings(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.keep_current_settings.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const agent = await this.service.keepCurrentSettings(request.provider);
+      this.host.emit({
+        type: "provider.api_endpoint.keep_current_settings.response",
+        payload: { requestId: request.requestId, provider: request.provider, agent, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.keep_current_settings.response",
         payload: {
           requestId: request.requestId,
           provider: request.provider,

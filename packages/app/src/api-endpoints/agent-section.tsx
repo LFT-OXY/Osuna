@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { AgentIssuesArea, AgentIssuesUpdateHost, type AgentIssuesAreaProps } from "./agent-issues";
 import type {
   AgentApiEndpointsView,
   AgentEndpointsSummary,
@@ -40,6 +41,8 @@ export interface AgentApiEndpointsSectionProps {
   onToggle: (enabled: boolean) => void;
   onDefaultModelChange: (modelId: string) => void;
   onManage: () => void;
+  // 主机声明了 apiEndpointCliWiring 时为提示区的处理；否则为 null，请用户更新主机。
+  issueActions: Omit<AgentIssuesAreaProps, "providerLabel" | "issues"> | null;
 }
 
 export function AgentApiEndpointsSection({
@@ -51,6 +54,7 @@ export function AgentApiEndpointsSection({
   onToggle,
   onDefaultModelChange,
   onManage,
+  issueActions,
 }: AgentApiEndpointsSectionProps) {
   const { t } = useTranslation();
   const switchHint = useSwitchHint(providerLabel, view.enableBlockedBy);
@@ -70,6 +74,9 @@ export function AgentApiEndpointsSection({
             </Button>
           </Alert>
         </View>
+      ) : null}
+      {issueActions ? (
+        <AgentIssuesArea providerLabel={providerLabel} issues={view.issues} {...issueActions} />
       ) : null}
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
@@ -100,6 +107,11 @@ export function AgentApiEndpointsSection({
         ) : null}
         <ManageRow summary={view.summary} onPress={onManage} />
       </View>
+      {issueActions ? null : (
+        <View style={styles.updateHost}>
+          <AgentIssuesUpdateHost providerLabel={providerLabel} />
+        </View>
+      )}
     </AgentApiEndpointsFrame>
   );
 }
@@ -241,6 +253,9 @@ function ManageRow({ summary, onPress }: { summary: AgentEndpointsSummary; onPre
 const styles = StyleSheet.create((theme) => ({
   alert: {
     marginBottom: theme.spacing[3],
+  },
+  updateHost: {
+    marginTop: theme.spacing[2],
   },
   select: {
     width: 260,

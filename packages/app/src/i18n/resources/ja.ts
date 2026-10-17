@@ -2578,6 +2578,23 @@ export const ja: TranslationResources = {
         summaryCooling_hours_one: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
         summaryCooling_hours_other: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
         saveFailed: "{{agent}} のサードパーティ API 設定を変更できませんでした",
+        issues: {
+          updateHost:
+            "このホストの Osuna を更新すると、{{agent}} の設定が Osuna 以外で変更されたときにここに表示されます。",
+          notThroughGateway:
+            "{{agent}} はゲートウェイを経由しなくなりました：設定が Osuna 以外で変更されています",
+          notThroughGatewayDetail: "{{file}} で変更された項目：{{keys}}",
+          configUnparsable: "{{agent}} の設定ファイルを読めないため、Osuna は変更できません",
+          configUnparsableDetail: "{{file}}：{{detail}}",
+          codexProfileOverride:
+            "Codex のプロファイル「{{profile}}」がサードパーティ API を上書きしています",
+          codexProfileOverrideDetail:
+            "{{file}} の [profiles.{{profile}}] が {{keys}} を設定しているため、Codex は Osuna が書いた値ではなくそちらを使います。プロファイルから削除するか、選択をやめてください。",
+          reapply: "再適用",
+          switchToOfficial: "公式に戻す",
+          keepCurrent: "現在の設定を保持",
+          actionFailed: "{{agent}} の「{{action}}」に失敗しました",
+        },
       },
     },
     hostSections: {

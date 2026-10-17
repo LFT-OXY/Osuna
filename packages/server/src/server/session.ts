@@ -3109,6 +3109,7 @@ export class Session {
       case "provider.api_endpoint.delete.request":
       case "provider.api_endpoint.set_active.request":
       case "provider.api_endpoint.set_agent_settings.request":
+      case "provider.api_endpoint.keep_current_settings.request":
       case "provider.api_endpoint.set_endpoint_state.request":
       case "provider.api_endpoint.fetch_models.request":
       case "provider.api_endpoint.test_connection.request":

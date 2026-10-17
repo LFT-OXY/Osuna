@@ -7,6 +7,7 @@ import {
   API_ENDPOINT_REQUEST_FORMATS,
   apiEndpointHasModelMapping,
   type ApiEndpoint,
+  type ApiEndpointAgentIssue,
   type ApiEndpointAgentSettings,
   type ApiEndpointBaseUrl,
   type ApiEndpointCooldown,
@@ -34,7 +35,9 @@ import {
 } from "./claude-settings-patch.js";
 import {
   applyCodexApiEndpoint,
+  CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  readCodexCatalogPath,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -134,6 +137,8 @@ export interface ApiEndpointSaveInput {
 export interface ApiEndpointAgentSettingsInput {
   enabled: boolean;
   defaultModelId?: string;
+  // 「重新应用」：开着时设置没变也按当前设置重写 CLI 配置。
+  reapply?: boolean;
 }
 
 export interface ApiEndpointStateInput {
@@ -184,6 +189,31 @@ export interface ApiEndpointServiceOptions {
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
 type ApiEndpointHealthCode = "modified_externally" | "config_unparsable" | "codex_profile_override";
 
+/** 提示区的 code（ADR 0012「Changed outside Osuna」）；后面的工单往这里加。 */
+type ApiEndpointAgentIssueCode =
+  | "not_through_gateway"
+  | "config_unparsable"
+  | "codex_profile_override";
+
+interface AgentIssue extends ApiEndpointAgentIssue {
+  code: ApiEndpointAgentIssueCode;
+}
+
+/**
+ * 这些负责的键被外部改了，CLI 的请求就不再经过中转站（地址、口令；Codex 另有选哪个服务商、模型目录）。
+ * 其余负责的键被改仍只算 modified_externally，不进提示区。
+ */
+const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
+  claude: ["env.ANTHROPIC_BASE_URL", "env.ANTHROPIC_AUTH_TOKEN"],
+  codex: [
+    "model_provider",
+    "model_catalog_json",
+    `model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`,
+  ],
+};
+
+const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
+
 interface HealthIssue extends ApiEndpointHealthIssue {
   code: ApiEndpointHealthCode;
 }
@@ -206,6 +236,7 @@ export type ApiEndpointListResult = Required<
     | "runningSessionCount"
     | "agents"
     | "gatewayUnavailable"
+    | "agentIssues"
   >
 >;
 
@@ -226,6 +257,8 @@ type GatewayAddress = { kind: "pending" } | { kind: "bound"; url: string } | { k
 
 interface ApiEndpointFileStatus {
   health: HealthIssue[];
+  // 提示区：同一份检查换成带参数的 code。
+  issues: AgentIssue[];
   baseUrl: string | null;
 }
 
@@ -285,7 +318,11 @@ export class ApiEndpointService {
     const supported = requireProvider(provider);
     const state = this.readState();
     const enabled = state.agents[supported].enabled;
-    const status = supported === "codex" ? this.inspectCodex(enabled) : this.inspectClaude(enabled);
+    const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
+      claude: this.inspectClaude(state.agents.claude.enabled),
+      codex: this.inspectCodex(state.agents.codex.enabled),
+    };
+    const status = statuses[supported];
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
       activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
@@ -294,6 +331,7 @@ export class ApiEndpointService {
       cliBaseUrl: enabled ? null : status.baseUrl,
       runningSessionCount: this.countLiveSessions(supported),
       gatewayUnavailable: this.gatewayUnavailable(),
+      agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
     };
   }
 
@@ -516,12 +554,50 @@ export class ApiEndpointService {
         ? enabledAgentSettings(state, supported, input.defaultModelId?.trim())
         : // 关掉总开关从不被拒；默认模型留着，下次打开时还能用就沿用。
           { ...state.agents[supported], enabled: false };
-      const next = await this.commit(state, {
-        ...state,
-        agents: { ...state.agents, [supported]: agent },
-      });
+      const reapply = input.enabled && input.reapply === true;
+      const next = await this.commit(
+        state,
+        { ...state, agents: { ...state.agents, [supported]: agent } },
+        reapply ? { rewrite: supported } : {},
+      );
       return next.agents[supported];
     });
+  }
+
+  /**
+   * 「保留当前设置」（ADR 0012）：关掉总开关，但不按接管记录改回 CLI 配置；接管记录一并忘掉，此后不再提示。
+   * 先忘掉接管记录再落下关开关，commit 里的切回官方因此什么都不改；落不下时把接管记录放回去。
+   */
+  keepCurrentSettings(provider: string): Promise<ApiEndpointAgentSettings> {
+    return this.exclusive(async () => {
+      const supported = requireProvider(provider);
+      const state = this.readState();
+      const agent = state.agents[supported];
+      if (!agent.enabled) return agent;
+      const forget = this.forgetTakeover(supported);
+      try {
+        const next = await this.commit(state, {
+          ...state,
+          agents: { ...state.agents, [supported]: { ...agent, enabled: false } },
+        });
+        return next.agents[supported];
+      } catch (error) {
+        forget.undo();
+        throw error;
+      }
+    });
+  }
+
+  /** 忘掉接管记录（备份留着，只供手动找回）；返回放回去的办法。 */
+  private forgetTakeover(provider: ApiEndpointProvider): { undo: () => void } {
+    if (provider === "claude") {
+      const record = this.store.readClaudeTakeover();
+      this.store.writeClaudeTakeover({ ...record, takeover: null });
+      return { undo: () => this.store.writeClaudeTakeover(record) };
+    }
+    const record = this.store.readCodexTakeover();
+    this.store.writeCodexTakeover({ ...record, takeover: null });
+    return { undo: () => this.store.writeCodexTakeover(record) };
   }
 
   /** 接口开关与「立刻恢复」。关掉开关按默认模型失踪规则处理各 Agent。 */
@@ -597,7 +673,9 @@ export class ApiEndpointService {
       if (catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalogBefore);
       throw error;
     }
-    if (catalog === null && catalogBefore !== null) this.store.writeCodexModelCatalog(null);
+    if (catalog === null && catalogBefore !== null && !this.codexConfigNamesCatalog()) {
+      this.store.writeCodexModelCatalog(null);
+    }
 
     for (const [id, apiKey] of Object.entries(options.keys ?? {})) {
       this.store.setApiKey(id, apiKey);
@@ -641,7 +719,8 @@ export class ApiEndpointService {
     const wiring = this.cliWiring(state, provider, tokens);
     if (provider === "codex") {
       const catalog = wiring ? this.codexModelCatalog(state) : null;
-      if (catalog !== this.store.readCodexModelCatalog()) {
+      const isNamed = catalog === null && this.codexConfigNamesCatalog();
+      if (catalog !== this.store.readCodexModelCatalog() && !isNamed) {
         this.store.writeCodexModelCatalog(catalog);
       }
     }
@@ -1076,6 +1155,20 @@ export class ApiEndpointService {
     return path.join(path.dirname(hooksPath), "config.toml");
   }
 
+  /**
+   * config.toml 自己还写着 Osuna 的模型目录（「保留当前设置」后、或用户手抄的）：关着开关也不删目录文件，
+   * 否则 Codex 读不到它。读不出按没写。
+   */
+  private codexConfigNamesCatalog(): boolean {
+    try {
+      const text = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
+      return readCodexCatalogPath(text) === this.store.codexModelCatalogPath;
+    } catch (error) {
+      this.logger.warn({ err: error }, "Could not read the Codex model list path");
+      return false;
+    }
+  }
+
   /** 目录的默认档跟着用户 config.toml 的 model_reasoning_effort；只在重新生成目录时读，读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
     let effort: string | null = null;
@@ -1293,11 +1386,10 @@ export class ApiEndpointService {
       text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
       takeover: enabled ? this.store.readClaudeTakeover().takeover : null,
     });
-    if (result.kind === "unparsable") {
-      return { health: [unparsableIssue(settingsPath, result.message)], baseUrl: null };
-    }
+    if (result.kind === "unparsable") return unparsableStatus(settingsPath, result.message);
     return {
       health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
+      issues: notThroughGatewayIssues("claude", settingsPath, result.modifiedKeys),
       baseUrl: result.baseUrl,
     };
   }
@@ -1308,18 +1400,21 @@ export class ApiEndpointService {
       text: readOptionalFile(configPath)?.toString("utf8") ?? null,
       takeover: enabled ? this.store.readCodexTakeover().takeover : null,
     });
-    if (result.kind === "unparsable") {
-      return { health: [unparsableIssue(configPath, result.message)], baseUrl: null };
-    }
+    if (result.kind === "unparsable") return unparsableStatus(configPath, result.message);
     const health = modifiedExternallyIssues(configPath, result.modifiedKeys);
+    const issues = notThroughGatewayIssues("codex", configPath, result.modifiedKeys);
     if (result.profileOverride) {
       const { profile, keys } = result.profileOverride;
-      health.push({
+      const overridden = keys.join(", ");
+      const issue: AgentIssue = {
         code: "codex_profile_override",
-        message: `${configPath} selects profile "${profile}", and [profiles.${profile}] sets ${keys.join(", ")}, which overrides the API endpoint`,
-      });
+        params: { file: configPath, profile, keys: overridden },
+        message: `${configPath} selects profile "${profile}", and [profiles.${profile}] sets ${overridden}, which overrides the API endpoint`,
+      };
+      health.push({ code: "codex_profile_override", message: issue.message });
+      issues.push(issue);
     }
-    return { health, baseUrl: result.baseUrl };
+    return { health, issues, baseUrl: result.baseUrl };
   }
 
   /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
@@ -1684,8 +1779,30 @@ function unparsable(filePath: string, detail: string): ApiEndpointRequestError {
   );
 }
 
-function unparsableIssue(filePath: string, detail: string): HealthIssue {
-  return { code: "config_unparsable", message: `${filePath} could not be parsed: ${detail}` };
+function unparsableStatus(filePath: string, detail: string): ApiEndpointFileStatus {
+  const message = `${filePath} could not be parsed: ${detail}`;
+  return {
+    health: [{ code: "config_unparsable", message }],
+    issues: [{ code: "config_unparsable", params: { file: filePath, detail }, message }],
+    baseUrl: null,
+  };
+}
+
+function notThroughGatewayIssues(
+  provider: ApiEndpointProvider,
+  filePath: string,
+  modifiedKeys: string[],
+): AgentIssue[] {
+  const keys = modifiedKeys.filter((key) => ROUTING_KEYS[provider].includes(key));
+  if (keys.length === 0) return [];
+  const changed = keys.join(", ");
+  return [
+    {
+      code: "not_through_gateway",
+      params: { file: filePath, keys: changed },
+      message: `${AGENT_NAMES[provider]} no longer goes through the gateway: ${changed} in ${filePath} changed outside Osuna`,
+    },
+  ];
 }
 
 function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue[] {

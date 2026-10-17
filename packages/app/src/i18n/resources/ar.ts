@@ -2553,6 +2553,20 @@ export const ar: TranslationResources = {
         summaryCooling_hours_one: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
         summaryCooling_hours_other: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
         saveFailed: "تعذّر تغيير إعدادات واجهات API الخارجية لـ {{agent}}",
+        issues: {
+          updateHost: "حدّث Osuna على هذا المضيف لترى هنا متى تُغيَّر إعدادات {{agent}} خارج Osuna.",
+          notThroughGateway: "لم يعد {{agent}} يمر عبر البوابة: غُيّرت إعداداته خارج Osuna",
+          notThroughGatewayDetail: "تغيّر في {{file}}: {{keys}}",
+          configUnparsable: "لا يستطيع Osuna قراءة ملف إعدادات {{agent}}، لذا لا يمكنه تغييره",
+          configUnparsableDetail: "{{file}}: {{detail}}",
+          codexProfileOverride: 'ملف التعريف "{{profile}}" في Codex يتجاوز واجهات API الخارجية',
+          codexProfileOverrideDetail:
+            "‏[profiles.{{profile}}] في {{file}} يضبط {{keys}}، ويستخدمها Codex بدلًا مما كتبه Osuna. احذفها من ملف التعريف أو توقّف عن اختياره.",
+          reapply: "تطبيق مرة أخرى",
+          switchToOfficial: "العودة إلى الرسمي",
+          keepCurrent: "إبقاء الإعدادات الحالية",
+          actionFailed: 'تعذّر "{{action}}" لـ {{agent}}',
+        },
       },
     },
     hostSections: {

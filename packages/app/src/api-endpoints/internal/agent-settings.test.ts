@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointAgentIssue,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { selectAgentApiEndpointsView } from "./agent-settings";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
@@ -24,6 +27,7 @@ function view(input: {
   enabled?: boolean;
   defaultModelId?: string | null;
   gatewayUnavailable?: { code: string; message: string } | null;
+  agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
 }) {
   return selectAgentApiEndpointsView({
     state: {
@@ -33,6 +37,7 @@ function view(input: {
         claude: { enabled: input.enabled ?? false, defaultModelId: input.defaultModelId ?? null },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
+      agentIssues: input.agentIssues ?? {},
     },
     provider: "claude",
     now: NOW,
@@ -115,5 +120,66 @@ describe("the manage API endpoints summary", () => {
       enabledCount: 1,
       cooling: null,
     });
+  });
+});
+
+describe("the settings issues on an agent page", () => {
+  const notThroughGateway: ApiEndpointAgentIssue = {
+    code: "not_through_gateway",
+    params: { file: "/home/me/.claude/settings.json", keys: "env.ANTHROPIC_BASE_URL" },
+    message: "Claude Code no longer goes through the gateway",
+  };
+
+  it("shows only this agent's issues, each with what it can do", () => {
+    const result = view({
+      endpoints: [endpoint({ id: "a" })],
+      enabled: true,
+      agentIssues: {
+        claude: [notThroughGateway],
+        codex: [{ code: "config_unparsable", params: { file: "c", detail: "d" }, message: "x" }],
+      },
+    });
+    expect(result.issues).toEqual([
+      {
+        kind: "notThroughGateway",
+        params: notThroughGateway.params,
+        message: notThroughGateway.message,
+        actions: ["reapply", "switchToOfficial", "keepCurrent"],
+      },
+    ]);
+  });
+
+  it("explains a file it can't read and a Codex profile without offering actions", () => {
+    const result = view({
+      endpoints: [],
+      agentIssues: {
+        claude: [
+          { code: "config_unparsable", params: { file: "f", detail: "bad" }, message: "m1" },
+          {
+            code: "codex_profile_override",
+            params: { file: "f", profile: "work", keys: "model" },
+            message: "m2",
+          },
+        ],
+      },
+    });
+    expect(result.issues.map((issue) => [issue.kind, issue.actions])).toEqual([
+      ["configUnparsable", []],
+      ["codexProfileOverride", []],
+    ]);
+  });
+
+  it("shows the host's own words for a case it does not know", () => {
+    const result = view({
+      endpoints: [],
+      agentIssues: { claude: [{ code: "a_future_case", message: "Something new happened" }] },
+    });
+    expect(result.issues).toEqual([
+      { kind: "unknown", params: {}, message: "Something new happened", actions: [] },
+    ]);
+  });
+
+  it("has no issues when the host sends none", () => {
+    expect(view({ endpoints: [] }).issues).toEqual([]);
   });
 });

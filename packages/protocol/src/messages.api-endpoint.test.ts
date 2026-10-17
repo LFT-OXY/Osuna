@@ -665,3 +665,89 @@ describe("host-wide API endpoints", () => {
     expect(older.features?.apiEndpointGateway).toBeUndefined();
   });
 });
+
+// 提示区（apiEndpointCliWiring）：新字段与新 RPC 都可选，老客户端照旧解析。
+describe("API endpoint settings issues (apiEndpointCliWiring)", () => {
+  const listResponse = {
+    type: "provider.api_endpoint.list.response" as const,
+    payload: {
+      requestId: "req-1",
+      provider: "claude",
+      endpoints: [],
+      activeEndpointId: null,
+      health: [{ code: "modified_externally", message: "changed" }],
+      error: null,
+    },
+  };
+
+  it("parses a list with agentIssues, one without it, and an issue code it does not know", () => {
+    const withIssues = {
+      ...listResponse,
+      payload: {
+        ...listResponse.payload,
+        agentIssues: {
+          claude: [
+            {
+              code: "not_through_gateway",
+              params: { file: "/home/me/.claude/settings.json", keys: "env.ANTHROPIC_BASE_URL" },
+              message: "Claude Code no longer goes through the gateway",
+            },
+          ],
+          codex: [{ code: "a_future_case", message: "something new" }],
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(withIssues)).toEqual(withIssues);
+    expect(SessionOutboundMessageSchema.parse(listResponse)).toEqual(listResponse);
+  });
+
+  it("parses set_agent_settings with and without reapply", () => {
+    const base = {
+      type: "provider.api_endpoint.set_agent_settings.request" as const,
+      requestId: "req-2",
+      provider: "codex",
+      enabled: true,
+    };
+    expect(SessionInboundMessageSchema.parse(base)).toEqual(base);
+    const reapply = { ...base, reapply: true };
+    expect(SessionInboundMessageSchema.parse(reapply)).toEqual(reapply);
+  });
+
+  it("parses keep_current_settings and its response, success and failure", () => {
+    const request = {
+      type: "provider.api_endpoint.keep_current_settings.request" as const,
+      requestId: "req-3",
+      provider: "claude",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const kept = {
+      type: "provider.api_endpoint.keep_current_settings.response" as const,
+      payload: {
+        requestId: "req-3",
+        provider: "claude",
+        agent: { enabled: false, defaultModelId: "glm-4.6" },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(kept)).toEqual(kept);
+    const failed = {
+      ...kept,
+      payload: { ...kept.payload, agent: null, error: { code: "unknown", message: "EACCES" } },
+    };
+    expect(SessionOutboundMessageSchema.parse(failed)).toEqual(failed);
+  });
+
+  it("parses a host that advertises apiEndpointCliWiring, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointGateway: true, apiEndpointCliWiring: true },
+    });
+    expect(current.features?.apiEndpointCliWiring).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointGateway: true },
+    });
+    expect(older.features?.apiEndpointCliWiring).toBeUndefined();
+  });
+});

@@ -163,6 +163,18 @@ export const ApiEndpointHealthIssueSchema = z.object({
 export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema>;
 
 /**
+ * 提供方设置页提示区的一条「设置被改过」，读状态时检测。`code` 是字符串，app 按它翻译，认不出的照 `message`（英文）显示：
+ * not_through_gateway（params：file、keys）、config_unparsable（file、detail）、
+ * codex_profile_override（file、profile、keys）。后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
+ */
+export const ApiEndpointAgentIssueSchema = z.object({
+  code: z.string(),
+  params: z.record(z.string(), z.string()).optional(),
+  message: z.string(),
+});
+export type ApiEndpointAgentIssue = z.infer<typeof ApiEndpointAgentIssueSchema>;
+
+/**
  * `activeEndpointId: null` 表示「官方」；否则是持有该 Agent 默认模型、开着的接口里最早建的一家（投影）。
  * `agents` 是每个 Agent 的设置，按 provider 索引；老 daemon 不发。`health` 为空即正常；
  * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
@@ -183,6 +195,8 @@ export const ApiEndpointListResponseSchema = z.object({
     runningSessionCount: z.number().optional(),
     agents: z.record(z.string(), ApiEndpointAgentSettingsSchema).optional(),
     gatewayUnavailable: ApiEndpointHealthIssueSchema.nullable().optional(),
+    // 每个 Agent 的提示区，按 provider 索引，与请求的 provider 无关；老 daemon 不发。
+    agentIssues: z.record(z.string(), z.array(ApiEndpointAgentIssueSchema)).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -270,6 +284,7 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * 设置一个 Agent 的「使用第三方接口」总开关与默认模型。只在至少一家接口开着且已选模型时能打开；
  * 打开时省略 defaultModelId 就保留当前的（还能用的话），否则取最早建的开着接口的第一个已选模型；
  * 关掉时忽略 defaultModelId，从不被拒。失败时 `agent` 是该 Agent 未变的设置。
+ * `reapply`（「重新应用」，与 enabled: true 一起）：设置没变也按当前设置重写 CLI 配置，盖掉外部改动；老 daemon 忽略它。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -277,6 +292,7 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   provider: z.string(),
   enabled: z.boolean(),
   defaultModelId: z.string().optional(),
+  reapply: z.boolean().optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema
@@ -293,6 +309,32 @@ export const ApiEndpointSetAgentSettingsResponseSchema = z.object({
 });
 export type ApiEndpointSetAgentSettingsResponse = z.infer<
   typeof ApiEndpointSetAgentSettingsResponseSchema
+>;
+
+/**
+ * 「保留当前设置」：关掉该 Agent 的「使用第三方接口」总开关，但 CLI 配置文件保持现在的样子、不按接管记录改回，
+ * 此后不再提示设置被改过。总开关已经关着时什么都不做。失败时 `agent` 是该 Agent 未变的设置。
+ */
+export const ApiEndpointKeepCurrentSettingsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.keep_current_settings.request"),
+  requestId: z.string(),
+  provider: z.string(),
+});
+export type ApiEndpointKeepCurrentSettingsRequest = z.infer<
+  typeof ApiEndpointKeepCurrentSettingsRequestSchema
+>;
+
+export const ApiEndpointKeepCurrentSettingsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.keep_current_settings.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: z.string(),
+    agent: ApiEndpointAgentSettingsSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointKeepCurrentSettingsResponse = z.infer<
+  typeof ApiEndpointKeepCurrentSettingsResponseSchema
 >;
 
 /**

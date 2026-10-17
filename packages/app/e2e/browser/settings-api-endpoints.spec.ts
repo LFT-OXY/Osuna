@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
@@ -25,13 +26,14 @@ import { gotoWorkspace } from "../support/helpers/launcher";
 import { expectSavedSelection } from "../support/helpers/model-memory";
 import { openGlobalNewWorkspaceComposer } from "../support/helpers/new-workspace";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { getServerId } from "../support/helpers/server-id";
 import {
+  clickProviderRow,
   expectProviderDetail,
   expectProvidersList,
   openSettingsHost,
   openSettingsHostSection,
-  providerRow,
 } from "../support/helpers/settings";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { buildApiEndpointSettingsRoute } from "@/utils/host-routes";
@@ -746,6 +748,234 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
   });
 });
 
+test.describe("Settings changed outside Osuna on the provider pages", () => {
+  const OTHER_TOOL_URL = "https://other-tool.example";
+
+  /** Claude Code 的开关打开后，别的程序把 settings.json 的中转站地址改走。 */
+  async function repointClaudeElsewhere(): Promise<string> {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const on = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(on.error).toBeNull();
+    const settingsPath = path.join(cliHome, "claude", "settings.json");
+    const settings = await readClaudeSettings();
+    const changed = JSON.stringify(
+      { ...settings, env: { ...settings.env, ANTHROPIC_BASE_URL: OTHER_TOOL_URL } },
+      null,
+      2,
+    );
+    await writeFile(settingsPath, changed);
+    return changed;
+  }
+
+  function issue(page: Page, kind: string): Locator {
+    return agentSection(page).getByTestId(`agent-api-endpoints-issue-${kind}`);
+  }
+
+  function issueButton(page: Page, action: string): Locator {
+    return agentSection(page).getByTestId(`agent-api-endpoints-issue-${action}`);
+  }
+
+  function issueError(page: Page): Locator {
+    return agentSection(page).getByTestId("agent-api-endpoints-issue-error");
+  }
+
+  /** Claude 的配置目录只读时按下这个处理：daemon 原子替换文件失败，等失败信息出现后再放开目录。 */
+  async function pressWhileReadOnly(page: Page, action: string): Promise<void> {
+    await chmod(claudeDir(), 0o500);
+    try {
+      await issueButton(page, action).click();
+      await expect(issueError(page)).toBeVisible();
+    } finally {
+      await chmod(claudeDir(), 0o700);
+    }
+  }
+
+  function claudeDir(): string {
+    return path.join(cliHome, "claude");
+  }
+
+  test("no longer through the gateway: Apply again fails in place, then points Claude Code back", async ({
+    page,
+  }) => {
+    await repointClaudeElsewhere();
+    await openClaudeCodePage(page);
+
+    await expect(issue(page, "notThroughGateway")).toContainText(
+      "Claude no longer goes through the gateway: its settings were changed outside Osuna",
+    );
+    await expect(issue(page, "notThroughGateway")).toContainText("env.ANTHROPIC_BASE_URL");
+
+    await test.step("failure stays in place until dismissed", async () => {
+      await pressWhileReadOnly(page, "reapply");
+      await expect(issueError(page)).toContainText('Couldn\'t finish "Apply again" for Claude');
+      await expect(issue(page, "notThroughGateway")).toBeVisible();
+      await expect.poll(claudeSettingsBaseUrl).toBe(OTHER_TOOL_URL);
+      await issueError(page).getByRole("button", { name: "Dismiss" }).click();
+      await expect(issueError(page)).toHaveCount(0);
+    });
+
+    await test.step("retrying succeeds: the issue goes and the file points at the gateway", async () => {
+      await pressWhileReadOnly(page, "reapply");
+      await issueButton(page, "reapply").click();
+      await expect(issue(page, "notThroughGateway")).toHaveCount(0);
+      await expect(issueError(page)).toHaveCount(0);
+      await expect.poll(claudeSettingsBaseUrl).toContain("/api-endpoint-gateway");
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+    });
+  });
+
+  test("Switch to official fails in place, then turns the switch off and restores the file", async ({
+    page,
+  }) => {
+    await repointClaudeElsewhere();
+    await openClaudeCodePage(page);
+    await expect(issue(page, "notThroughGateway")).toBeVisible();
+
+    await pressWhileReadOnly(page, "switchToOfficial");
+    await expect(issueError(page)).toContainText(
+      'Couldn\'t finish "Switch to official" for Claude',
+    );
+    await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+
+    await issueButton(page, "switchToOfficial").click();
+    await expect(issue(page, "notThroughGateway")).toHaveCount(0);
+    await expect(issueError(page)).toHaveCount(0);
+    await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+    await expect.poll(claudeSettingsBaseUrl).toBeUndefined();
+  });
+
+  test("Keep current settings fails in place, then turns the switch off and leaves the file as changed", async ({
+    page,
+  }) => {
+    const changed = await repointClaudeElsewhere();
+    // daemon 自己的数据目录改不成只读（写入前会把权限改回来）：让主机对这一次请求回失败。
+    const host = await failKeepCurrentSettings(page);
+    await openClaudeCodePage(page);
+    await expect(issue(page, "notThroughGateway")).toBeVisible();
+
+    await issueButton(page, "keepCurrent").click();
+    await expect(issueError(page)).toContainText(
+      'Couldn\'t finish "Keep current settings" for Claude',
+    );
+    await expect(issueError(page)).toContainText("EACCES: permission denied");
+    await expect(issue(page, "notThroughGateway")).toBeVisible();
+    await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+
+    host.failing = false;
+    await issueButton(page, "keepCurrent").click();
+    await expect(issue(page, "notThroughGateway")).toHaveCount(0);
+    await expect(issueError(page)).toHaveCount(0);
+    await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+    expect(await readFile(path.join(claudeDir(), "settings.json"), "utf8")).toBe(changed);
+  });
+
+  test("a settings file Osuna can't read is explained, with no actions", async ({ page }) => {
+    await mkdir(claudeDir(), { recursive: true });
+    await writeFile(path.join(claudeDir(), "settings.json"), '{ "env": { "A": "1", } }');
+    try {
+      await openClaudeCodePage(page);
+      const unreadable = issue(page, "configUnparsable");
+      await expect(unreadable).toContainText(
+        "Osuna can't read Claude's settings file, so it can't change it",
+      );
+      await expect(unreadable).toContainText(path.join(claudeDir(), "settings.json"));
+      await expect(unreadable.getByRole("button")).toHaveCount(0);
+    } finally {
+      await writeFile(path.join(claudeDir(), "settings.json"), "{}\n");
+    }
+  });
+
+  test("a Codex profile that overrides the switch is explained, with no actions", async ({
+    page,
+  }) => {
+    const configPath = path.join(cliHome, "codex", "config.toml");
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(configPath, 'profile = "work"\n\n[profiles.work]\nmodel_provider = "azure"\n');
+    try {
+      await openAgentPage(page, "codex");
+      const override = issue(page, "codexProfileOverride");
+      await expect(override).toContainText('Codex\'s profile "work" overrides the API endpoints');
+      await expect(override).toContainText(`[profiles.work] in ${configPath} sets model_provider`);
+      await expect(override.getByRole("button")).toHaveCount(0);
+    } finally {
+      await writeFile(configPath, "");
+    }
+  });
+
+  test("a host without the capability shows no issues and asks for an update", async ({ page }) => {
+    await repointClaudeElsewhere();
+    await hideCliWiringCapability(page);
+    await openClaudeCodePage(page);
+
+    await expect(
+      agentSection(page).getByTestId("agent-api-endpoints-issues-update-host"),
+    ).toHaveText(
+      "Update Osuna on this host to see here when Claude's settings are changed outside Osuna.",
+    );
+    await expect(agentSection(page).getByTestId("agent-api-endpoints-issues")).toHaveCount(0);
+  });
+});
+
+/** `failing` 为 true 时，keep_current_settings 请求不送到 daemon，直接回一个失败响应。 */
+async function failKeepCurrentSettings(page: Page): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const request =
+        typeof message === "string" && message.includes("keep_current_settings.request")
+          ? (JSON.parse(message) as { message?: { requestId?: string; provider?: string } }).message
+          : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.keep_current_settings.response",
+            payload: {
+              requestId: request.requestId,
+              provider: request.provider,
+              agent: null,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+/** 从 server_info 去掉 apiEndpointCliWiring，模拟 v0.16 的主机。 */
+async function hideCliWiringCapability(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"server_info"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+      };
+      const payload = envelope.message?.payload;
+      if (payload?.status === "server_info" && payload.features) {
+        delete payload.features.apiEndpointCliWiring;
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
+}
+
 const CARRIED_PREFERENCES_KEY = "e2e-api-endpoints-carried-preferences";
 
 /**
@@ -789,7 +1019,7 @@ async function openAgentPage(page: Page, provider: "claude" | "codex"): Promise<
   await openSettingsHost(page, serverId);
   await openSettingsHostSection(page, serverId, "providers");
   await expectProvidersList(page, serverId);
-  await providerRow(page, provider).click();
+  await clickProviderRow(page, provider);
   await expectProviderDetail(page, serverId, provider);
   await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeVisible();
 }

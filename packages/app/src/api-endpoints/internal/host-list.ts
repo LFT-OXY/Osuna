@@ -1,6 +1,7 @@
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,
+  type ApiEndpointAgentIssue,
   type ApiEndpointAgentSettings,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
@@ -23,6 +24,8 @@ export type HostEndpointsLoadState =
       agents: Record<string, ApiEndpointAgentSettings>;
       // 非空时中转站用不了（如 daemon 以 socket 监听），总开关打不开。
       gatewayUnavailable: ApiEndpointHealthIssue | null;
+      // 每个 Agent 的「设置被改过」，按 provider 索引；主机没声明 apiEndpointCliWiring 时为空。
+      agentIssues: Record<string, ApiEndpointAgentIssue[]>;
     };
 
 export function selectHostEndpointsState(input: {
@@ -36,6 +39,7 @@ export function selectHostEndpointsState(input: {
       endpoints: input.data.endpoints,
       agents: input.data.agents ?? {},
       gatewayUnavailable: input.data.gatewayUnavailable ?? null,
+      agentIssues: input.data.agentIssues ?? {},
     };
   }
   if (input.error) return { status: "error", message: input.error.message };
