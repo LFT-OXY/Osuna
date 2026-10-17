@@ -9,7 +9,7 @@
 
 **Blocked by:** 13
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：上游回一整份 JSON，CLI 收到它要的事件流，内容一致。
 - [ ] 直通和翻译各一例：上游回 HTML 登录页，就换到下一家，这家冷却；日志和最后的错误里有页面标题。
