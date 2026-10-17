@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端，结构化输出被拒两次：第一次重问是 `json_object` 加 system 里的 schema；再被拒，第二次重问只有文字说明；下一次请求直接用记住的那一步。
 - [ ] 预填被拒：同一家收到补了 user 轮的请求；下一次以 assistant 结尾的请求直接补 user 轮。
