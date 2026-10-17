@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { ModelFacts } from "../../model-facts.js";
 import {
   AnthropicDecoder,
+  AnthropicEncoder,
   anthropicInId,
   anthropicOutId,
   buildAnthropicRequest,
@@ -23,7 +24,7 @@ import {
 /*
  * Anthropic Messages 这一侧的翻译。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
  * anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、
- * thinking_off_test.go、anthropic_max_tokens_test.go 与 internal/provider/grok_test.go。
+ * thinking_off_test.go、anthropic_max_tokens_test.go、refusal_details_test.go 与 internal/provider/grok_test.go。
  */
 
 const INTERRUPTED = "[The result of this tool call is unavailable: the turn was interrupted.]";
@@ -350,6 +351,78 @@ describe("decoding an Anthropic stream", () => {
       stop: "tool",
       usage: { input: 3, output: 7, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 0, reasoning: 0 },
     });
+  });
+});
+
+describe("a refusal's stop_details reach an Anthropic client (magpie refusal_details_test.go)", () => {
+  const details = {
+    type: "refusal",
+    category: "cyber",
+    explanation: "This request was declined because it could enable cyber harm.",
+  };
+  const refusal = [
+    '{"type":"message_start","message":{"id":"m1","role":"assistant","model":"m","content":[],"usage":{"input_tokens":3}}}',
+    JSON.stringify({
+      type: "message_delta",
+      delta: { stop_reason: "refusal", stop_sequence: null, stop_details: details },
+      usage: { output_tokens: 0 },
+    }),
+  ];
+
+  test("streamed: the encoder's message_delta carries them", () => {
+    const written: string[] = [];
+    const encoder = new AnthropicEncoder({
+      model: "relay-a/m",
+      write: (chunk) => written.push(chunk),
+    });
+    const decoder = new AnthropicDecoder();
+    for (const chunk of refusal) decoder.decode(chunk, (event) => encoder.event(event));
+    encoder.finish();
+    const events = written
+      .join("")
+      .split("\n")
+      .filter((line) => line.startsWith("data: "));
+    expect(events.map((line) => JSON.parse(line.slice(6)) as unknown).at(-2)).toEqual({
+      type: "message_delta",
+      delta: { stop_reason: "refusal", stop_sequence: null, stop_details: details },
+      usage: {
+        input_tokens: 3,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("whole: the rendered reply carries them, read from a whole reply too", () => {
+    const collector = new ReplyCollector();
+    new AnthropicDecoder().whole(
+      { id: "m1", type: "message", content: [], stop_reason: "refusal", stop_details: details },
+      (event) => collector.add(event),
+    );
+    expect(renderAnthropic(collector.finish(), "relay-a/m")).toEqual({
+      id: "msg_m1",
+      type: "message",
+      role: "assistant",
+      model: "relay-a/m",
+      content: [],
+      stop_reason: "refusal",
+      stop_sequence: null,
+      stop_details: details,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("a stop with no details says none", () => {
+    const reply = decodeAnthropic([
+      '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_sequence":null},"usage":{"output_tokens":0}}',
+    ]).finish();
+    expect(renderAnthropic(reply, "m")).not.toHaveProperty("stop_details");
   });
 });
 

@@ -337,6 +337,31 @@ quiet_whole_test.go, codex_access_programs_test.go and zhipu_envelope_test.go:
   packages/server/src/server/api-endpoints/gateway/translation/sse.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+How the gateway treats an endpoint's safety filter refusing a request: what
+counts as a refusal (filterReasons, policyCode, flaggedWords, policyRefusal,
+highRiskRefusal, refusedNote, refusedDetail, refusedCode and refusedReply in
+magpie's internal/gateway/fallback.go), asking every other endpoint before the
+reply opened with nobody resting, a refusal after it resting nobody either
+(holdWriter.settle, handBack and refusalAfter in fallback.go, the refusals
+loop in gateway.go), and what the agent gets when every endpoint refused
+(handBack, refusedStatus and failTo in gateway.go and fallback.go; stop_details
+carried as anthropic.go's stopDetails, anthropicEncoder.finish and
+renderAnthropic do). Their tests reuse the cases of refusal_error_test.go,
+refusal_accounts_test.go, refusal_details_test.go and refusal_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/safety-filter.ts
+  packages/server/src/server/api-endpoints/gateway/safety-filter.test.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/reply-tap.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

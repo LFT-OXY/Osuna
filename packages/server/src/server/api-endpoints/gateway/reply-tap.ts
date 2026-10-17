@@ -7,6 +7,7 @@ import { parseJson } from "../upstream-http.js";
 import {
   addUsage,
   emptyUsage,
+  type StopDetails,
   type StopReason,
   type StreamEvent,
   type Usage,
@@ -24,6 +25,8 @@ export interface TappedReply {
   content: ReplyContent[];
   // 上游说的结束原因；拒答是 filter。没说为 null。
   stop: StopReason | null;
+  // Anthropic 上游随结束原因给的 stop_details（拒答的类别与解释）。
+  stopDetails?: StopDetails;
   // 上游发了结束标记（StreamEvent 的 done）。
   ended: boolean;
   // raw 是报错那个事件的 data 原文（整份回复是整份原文），判错读它；vendorError 见 VendorError。
@@ -117,6 +120,7 @@ export class ReplyTap {
         return;
       case "stop":
         this.reply.stop = event.stop;
+        if (event.details) this.reply.stopDetails = event.details;
         return;
       case "done":
         this.reply.ended = true;

@@ -1,5 +1,5 @@
 // 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、repliesCounted、uncounted、answersNothing），
-// 复用的连接被掐时在新连接上重发照 upstream_transport.go 的 replayable
+// 复用的连接被掐时在新连接上重发照 upstream_transport.go 的 replayable，开口前的拒答照 fallback.go 的 holdWriter.settle、streamEvent 与 handBack
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, {
@@ -22,12 +22,13 @@ import { streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
 import { zhipuRefusal } from "./zhipu-envelope.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
+import { errorRefusal, replyRefusal } from "./safety-filter.js";
 import type { Usage } from "./translation/ir.js";
 
 /*
  * 向一家接口发出请求、等它开口：直通与翻译共用。开口是回复里出现第一段真内容（文字、思考或工具调用），
  * 按上游的协议认；在那之前的帧（message_start、response.created、ping……）扣在这里，开口时原样交出。
- * 开口之前的失败（出错、断开、空回复）不写给 Agent，交回中转站决定换不换家；开口之后怎么转给 Agent
+ * 开口之前的失败（出错、断开、空回复、拒答）不写给 Agent，交回中转站决定换不换家；开口之后怎么转给 Agent
  * 由调用方决定。
  * 用 node:http 而不是 fetch：fetch 会替我们解压、把等响应头的时间限死在 5 分钟。
  */
@@ -43,6 +44,9 @@ const MAX_HELD_BYTES = 1024 * 1024;
 const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "EPIPE"]);
 // 一次最多这么多回重发：连接池里每台主机最多留这么多条空闲连接（magpie 的 MaxIdleConnsPerHost）。
 const MAX_REPLAYS = 8;
+
+// 拒答记成的状态码（magpie 的 refusedStatus）：告诉 Agent 这个请求原样再发也一样，不是一份空回答。
+const REFUSED_STATUS = 400;
 
 // 空回复交给 Agent 的说法（magpie 的 emptyReply）。
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
@@ -76,13 +80,19 @@ export interface FailedAttempt {
   detail: string;
   upstreamError: UpstreamError;
   cause: FailureCause;
+  // 以结束形式拒答时，把扣下的那份回复照常交给 Agent（全都拒答时交还给 Claude Code，magpie 的 handBack）。
+  handBack?: HandBack;
 }
 
 /**
  * 失败从哪来：上游报错或连不上（error）；等响应头超时（timeout，不原地重试，真实的等待是 10 分钟）；
- * 空回复（empty，Anthropic 或 Responses 的回复说完了，却没有任何内容、一个 token 也没计）。
+ * 空回复（empty，Anthropic 或 Responses 的回复说完了，却没有任何内容、一个 token 也没计）；
+ * 拒答（refused，安全过滤不肯回答，safety-filter.ts）。
  */
-export type FailureCause = "error" | "timeout" | "empty";
+export type FailureCause = "error" | "timeout" | "empty" | "refused";
+
+/** 把一份开了口的回复照常交给 Agent：直通原样转、翻译后编码，与没被当作失败时一样。 */
+export type HandBack = () => Promise<AttemptOutcome>;
 
 /** 开口之后回复怎么结束的：完整（带这次的用量，粘性按它判断缓存）、上游断流、Agent 先走了。 */
 export type AnswerEnd =
@@ -162,7 +172,7 @@ export async function openUpstream(input: {
   const status = response.statusCode ?? 502;
   if (status >= 400) {
     const text = await readLimited({ stream: response, first: null });
-    return failedByUpstream({ status, response, text, apiKey });
+    return refusedOr(failedByUpstream({ status, response, text, apiKey }));
   }
 
   const opening = await awaitOpening({
@@ -183,7 +193,9 @@ export async function openUpstream(input: {
       };
     case "error": {
       const errorStatus = statusOfError(opening);
-      return failedByUpstream({ status: errorStatus, response, text: opening.raw, apiKey });
+      return refusedOr(
+        failedByUpstream({ status: errorStatus, response, text: opening.raw, apiKey }),
+      );
     }
     case "empty":
       return failedBySelf({ status: 502, detail: EMPTY_REPLY, cause: "empty" });
@@ -231,6 +243,34 @@ function failedByUpstream(input: {
     upstreamError: readUpstreamError(text),
     cause: "error",
   };
+}
+
+/**
+ * 上游的错误是安全过滤拒答（报错形式，用 403 说的也算）：记成 400 的拒答，说法是安全过滤的原因与厂商原话
+ * （magpie 的 refusedStatus）；判错仍读原文。不是拒答原样返回。
+ */
+function refusedOr(failed: FailedAttempt): FailedAttempt {
+  const note = errorRefusal(failed.text);
+  if (note === null) return failed;
+  return { ...failed, status: REFUSED_STATUS, detail: note, cause: "refused" };
+}
+
+/**
+ * 开了口的回复其实是没说一个字就以拒答结束的（结束形式）：当作拒答失败交回中转站换家，回复扣着，
+ * `handBack` 照常交给 Agent。只看已经收完的回复：没收完就开口的，是说了内容或扣得太多。不是拒答为 null。
+ */
+export function refusedAnswer(input: {
+  opened: OpenedUpstream;
+  format: ApiEndpointRequestFormat;
+  handBack: HandBack;
+}): FailedAttempt | null {
+  const { opened } = input;
+  const reply = opened.tap?.soFar();
+  if (!reply || !opened.response.readableEnded) return null;
+  const note = replyRefusal(reply, input.format);
+  if (note === null) return null;
+  const refused = failedBySelf({ status: REFUSED_STATUS, detail: note, cause: "refused" });
+  return { ...refused, headers: opened.response.headers, handBack: input.handBack };
 }
 
 /** 中转站自己判的失败（超时、连不上、开口前断开、空回复）：没有上游错误体，判错就读这段描述。 */

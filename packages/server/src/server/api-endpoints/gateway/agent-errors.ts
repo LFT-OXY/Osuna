@@ -1,5 +1,5 @@
 // 保活之后在流里报错移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 streamFailure、streamError），
-// 对话太长按 CLI 自己的说法交出照 writeErrorSaid
+// 对话太长按 CLI 自己的说法交出照 writeErrorSaid，全都拒答时的 400 照 fallback.go 的 refusedStatus
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { Response } from "express";
@@ -18,6 +18,19 @@ import { sseEvent } from "./translation/sse.js";
  */
 
 const TOO_LONG_CODE = "context_length_exceeded";
+
+/*
+ * 全都拒答时给 Codex 的错误码：invalid_prompt。Codex 把它读成 InvalidPrompt，不重问、把 message 原样显示
+ * （openai/codex@ce0323f2 codex-rs/codex-api/src/sse/responses_error.rs:82 读 response.failed，
+ * codex-api/src/api_bridge.rs:150-172 读 HTTP 400，protocol/src/error.rs:155 显示 message、:422 不给重试间隔）。
+ * server_error 会让它整轮重问最多 5 次、每次都被拒；bio_policy、cyber_policy 同样终止，但会被当成 OpenAI
+ * 自己的那两种政策显示，magpie 也把说违反用量政策的 invalid_prompt 认作拒答（fallback.go:2943 policyRefusal）。
+ * magpie 自己保活之后发的是 server_error（gateway.go:6366 streamError 经 responses.go:1773 的编码），这里不照搬。
+ */
+const REFUSED_CODE = "invalid_prompt";
+
+/** 流里错误事件的错误码：一般的失败、对话太长、拒答。 */
+type StreamErrorCode = "server_error" | typeof TOO_LONG_CODE | typeof REFUSED_CODE;
 
 export type AgentWire = "anthropic" | "openai";
 
@@ -61,7 +74,8 @@ export function sendAgentError(input: {
   const { res, wire } = input;
   const isTooLong = readsTooLong(input.error.status, input.error.message);
   if (res.headersSent) {
-    sendStreamError({ res, wire, message: input.error.message, isTooLong });
+    const code = isTooLong ? TOO_LONG_CODE : "server_error";
+    sendStreamError({ res, wire, message: input.error.message, code });
     return;
   }
   let { error } = input;
@@ -87,17 +101,35 @@ function tooLongError(input: { wire: AgentWire; message: string }): AgentError {
   return told;
 }
 
+/**
+ * 全都拒答：告诉 Agent 这个请求被拒了、原样再发也一样（magpie 的 refusedStatus），而不是一份它会再三重问的空回答。
+ * 400 invalid_request_error；Codex 一侧带 invalid_prompt，保活之后在流里发 response.failed 也用它。
+ */
+export function sendRefusal(input: {
+  res: Response;
+  wire: AgentWire;
+  message: string;
+  headers: Record<string, string>;
+}): void {
+  const { res, wire, message } = input;
+  if (res.headersSent) {
+    sendStreamError({ res, wire, message, code: REFUSED_CODE });
+    return;
+  }
+  const code = wire === "openai" ? REFUSED_CODE : null;
+  sendAgentError({ res, wire, error: { status: 400, message, code }, headers: input.headers });
+}
+
 function sendStreamError(input: {
   res: Response;
   wire: AgentWire;
   message: string;
-  isTooLong: boolean;
+  code: StreamErrorCode;
 }): void {
-  const { message, isTooLong } = input;
-  const code = isTooLong ? TOO_LONG_CODE : "server_error";
+  const { message, code } = input;
   const event =
     input.wire === "anthropic"
-      ? { type: "error", error: anthropicStreamError({ message, isTooLong }) }
+      ? { type: "error", error: anthropicStreamError({ message, code }) }
       : {
           type: "response.failed",
           response: {
@@ -112,10 +144,10 @@ function sendStreamError(input: {
 /** Anthropic 流里的错误：api_error；对话太长时带上 context_length_exceeded 代码（magpie 同样）。 */
 function anthropicStreamError(input: {
   message: string;
-  isTooLong: boolean;
+  code: StreamErrorCode;
 }): AnthropicStreamError {
   const failed: AnthropicStreamError = { type: "api_error", message: input.message };
-  if (input.isTooLong) failed.code = TOO_LONG_CODE;
+  if (input.code === TOO_LONG_CODE) failed.code = TOO_LONG_CODE;
   return failed;
 }
 

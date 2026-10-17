@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink；开口后的拒答不冷却照 fallback.go 的 refusedAfter）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -44,6 +44,7 @@ import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { saysRefusal } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
 import {
   ANSWERED_BY_HEADER,
@@ -51,9 +52,11 @@ import {
   notAStream,
   openUpstream,
   readLimited,
+  refusedAnswer,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
+  type OpenedUpstream,
 } from "./upstream-call.js";
 
 /*
@@ -151,7 +154,15 @@ export async function attemptTranslated(input: {
     ask: (without) => open(build(without)),
   });
   if (opened.kind !== "opened") return opened;
-  const { response, held } = opened;
+  const answered = opened;
+  const handBack = () => answerOpened({ ...input, url, opened: answered });
+  return refusedAnswer({ opened, format: to, handBack }) ?? handBack();
+}
+
+/** 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就渲染成整份回复。 */
+async function answerOpened(input: TranslatedAnswer): Promise<AttemptOutcome> {
+  const { response, held } = input.opened;
+  const { to, url, apiKey } = input;
   let reply: UpstreamReply = { kind: "stream", response, held };
   if (!isEventStream(response, held)) {
     // 上游没理会 stream: true：整份回复照它流出来时的事件读；不是这个协议的回复，当作开口前失败换家。
@@ -165,6 +176,22 @@ export async function attemptTranslated(input: {
     ? streamReply({ ...input, reply })
     : wholeReply({ ...input, reply });
   return { kind: "answered", finished };
+}
+
+/** 交出一份翻译后的回复要的：Agent 的协议与请求、这家、上游的格式与开了口的回复。 */
+interface TranslatedAnswer {
+  res: Response;
+  wire: AgentWire;
+  endpoint: StoredApiEndpoint;
+  apiKey: string;
+  from: ApiEndpointRequestFormat;
+  to: ApiEndpointRequestFormat;
+  request: GatewayRequest;
+  requestedModel: string;
+  upstreamModel: string;
+  keepAlive: AgentKeepAlive;
+  url: URL;
+  opened: OpenedUpstream;
 }
 
 /** 上游的回复怎么读：事件流从开口时扣下的字节读起；没理会 stream: true 的，是已经读完的整份回复。 */
@@ -341,6 +368,10 @@ async function wholeReply(input: {
       error: wholeFailureError({ failure, endpointName: endpoint.name }),
       headers,
     });
+    // 开口之后的拒答照常交给 Agent，不怪这家，不冷却（magpie 的 refusedAfter）。
+    const refusedAfter =
+      end.kind === "ended" && collector.error !== null && saysRefusal(collector.error);
+    if (refusedAfter) return { kind: "complete", usage: collector.usage() };
     return { kind: "broken", message: failure.message };
   }
   const reply = unfencedReply({ reply: collector.finish(), request: input.request });

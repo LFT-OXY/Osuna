@@ -59,6 +59,7 @@ import {
   notAStream,
   openUpstream,
   readLimited,
+  refusedAnswer,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -186,9 +187,28 @@ export async function attemptEndpoint(input: {
     });
   }
   if (opened.kind !== "opened") return opened;
-  const tidy = replyTidy({ ...input, opened });
+  const answered = opened;
+  const handBack = () => answerOpened({ ...input, url, opened: answered });
+  return refusedAnswer({ opened, format: input.format, handBack }) ?? handBack();
+}
+
+/** 开了口的回复交给 Agent：先交出扣下的帧，之后边收边发；保活之后收到的整份回复照流写出。 */
+async function answerOpened(input: {
+  res: Response;
+  format: ApiEndpointRequestFormat;
+  pathSuffix?: string;
+  endpoint: StoredApiEndpoint;
+  apiKey: string;
+  requestedModel: string;
+  upstreamModel: string;
+  url: URL;
+  opened: OpenedUpstream;
+  keepAlive?: AgentKeepAlive;
+}): Promise<AttemptOutcome> {
+  const { res, opened } = input;
+  const tidy = replyTidy(input);
   const keptAliveWhole = res.headersSent && !isEventStream(opened.response, opened.held);
-  if (keptAliveWhole) return wholeAsStream({ ...input, url, opened, tidy });
+  if (keptAliveWhole) return wholeAsStream({ ...input, tidy });
   input.keepAlive?.stop();
   // 保活已经回了 200 与响应头：接着在同一个流里交出回复。
   if (!res.headersSent) {

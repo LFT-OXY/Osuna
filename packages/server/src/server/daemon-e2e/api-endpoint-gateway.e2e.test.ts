@@ -32,6 +32,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 对话太长（工单 15）照 overflow_cap_test.go（TestRelayInputCapGoesToTheNextMember）与 fallback.go 的 tooLongUnsaid。
  * 按厂商的改写（工单 16）照 grok_integral_test.go 与 grok_schema_test.go。
  * 认清上游回的是什么（工单 18）照 notapi_test.go（cloudflarePage）、quiet_whole_test.go 与 codex_access_programs_test.go。
+ * 拒答换家（工单 19）照 refusal_error_test.go（highRiskMessage、TestHighRiskQuotationIsAnAnswer）、refusal_test.go 与 refusal_details_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -6480,3 +6481,331 @@ const CHAT_WHOLE = {
     prompt_tokens_details: { cached_tokens: 100 },
   },
 };
+
+describe("a refusal goes to the next endpoint, as magpie does (ticket 19)", () => {
+  test("a stop_reason refusal before the reply opened: the agent gets only the next endpoint's answer, and the first stays available", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => refusalStream(res);
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    const text = await response.text();
+    expect(text).toContain("from B");
+    expect(text).not.toContain("refusal");
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+    expect(switchedLog(logLines)).toMatchObject({
+      from: "Relay A",
+      to: "Relay B",
+      model: "kimi-k2",
+      failure: "refused",
+      status: 400,
+      until: null,
+    });
+  });
+
+  test("every endpoint refusing: Claude Code gets the first one's refusal as it was, with stop_details; Codex gets a 400 with the reason", async () => {
+    const { upstreamA, upstreamB, chatUpstream, gateway } = await threeRefusing();
+
+    for (const stream of [true, false]) {
+      const toClaude = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model: "kimi-k2",
+          stream,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+
+      expect(toClaude.status).toBe(200);
+      expect(toClaude.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+      const said = stream ? sseData(await toClaude.text()) : await toClaude.json();
+      expect(said).toEqual(stream ? REFUSAL_EVENTS : REFUSAL_WHOLE);
+      const asked = [upstreamA, upstreamB, chatUpstream].map((upstream) =>
+        upstream.requests.splice(0),
+      );
+      expect(asked.map((requests) => requests.length)).toEqual([1, 1, 1]);
+    }
+
+    const toCodex = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+
+    expect(toCodex.status).toBe(400);
+    expect(toCodex.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await toCodex.json()).toEqual({
+      error: {
+        message: "Relay A: kimi-k2 refused this request (safety filter: content_filter)",
+        type: "invalid_request_error",
+        code: "invalid_prompt",
+        param: null,
+      },
+    });
+    const urls = (upstream: FakeUpstream) => upstream.requests.map((request) => request.url);
+    expect([upstreamA, upstreamB, chatUpstream].map(urls)).toEqual([
+      ["/v1/responses"],
+      ["/v1/messages"],
+      ["/v1/chat/completions"],
+    ]);
+  });
+
+  test.each([
+    { said: "a 400", status: 400 },
+    { said: "a 403", status: 403 },
+  ])(
+    "the high risk refusal said as $said goes to the next endpoint, and the first is neither cooling nor marked for a check",
+    async ({ status }) => {
+      const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+      upstreamA.respond = (_request, res) => failWith(res, { status, message: HIGH_RISK });
+
+      const response = await ask();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+      expect(await response.text()).toContain("from B");
+      expect(upstreamB.requests).toHaveLength(1);
+      expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+    },
+  );
+
+  test("a content_filter error event before the reply opened goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        sseFrame({ type: "message_start", message: { id: "msg_a", usage: { input_tokens: 9 } } }),
+      );
+      res.end(
+        sseFrame({
+          type: "error",
+          error: { type: "content_filter", message: "Output blocked by content filtering policy" },
+        }),
+      );
+    };
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test("a Chat reply ending in content_filter with nothing said is a refusal: Codex gets a 400 with the reason, nobody cools", async () => {
+    const { chatUpstream, gateway, endpointsDir, daemon } = await threeRefusing();
+    await selectModels(endpointsDir, { ep_a: ["gpt-5.5"], ep_b: ["glm-4.6"] });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        message: "Relay C: kimi-k2 refused this request (safety filter: content_filter)",
+        type: "invalid_request_error",
+        code: "invalid_prompt",
+        param: null,
+      },
+    });
+    expect(chatUpstream.requests).toHaveLength(1);
+    const client = await connectTo(daemon);
+    expect(await client.apiEndpointList("codex")).toMatchObject({
+      endpoints: [{ cooldown: null }, { cooldown: null }, { cooldown: null }],
+    });
+  });
+
+  test("an answer quoting the high risk sentence is an answer: it reaches the agent and the next endpoint is not asked", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      streamReply(res, { text: `The vendor said: "${HIGH_RISK}".` });
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await response.text()).toContain("considered high risk");
+    expect(upstreamB.requests).toHaveLength(0);
+  });
+
+  test("a refusal after the reply opened reaches the agent as it came, and the endpoint does not cool", async () => {
+    const { chatUpstream, gateway, endpointsDir, daemon } = await threeRefusing();
+    await selectModels(endpointsDir, { ep_a: ["gpt-5.5"], ep_b: ["glm-4.6"] });
+    chatUpstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        `data: ${JSON.stringify({ id: "chatcmpl-think", choices: [{ index: 0, delta: { reasoning_content: "Let me think." } }] })}\n\n`,
+      );
+      res.end(`data: ${JSON.stringify({ error: { message: HIGH_RISK } })}\n\n`);
+    };
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        stream: false,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: `Relay C: ${HIGH_RISK}` },
+    });
+    expect(await cooldownOf(await connectTo(daemon), "ep_c")).toBeNull();
+  });
+
+  test("every endpoint refusing after the keepalive began: Claude Code's stream ends in the refusal, Codex's in response.failed it does not retry", async () => {
+    const claude = await threeRefusing({ keepAliveMs: 30 });
+    const codex = await threeRefusing({ keepAliveMs: 30 });
+    const releases: (() => void)[] = [];
+    for (const relays of [claude, codex]) {
+      // A 等测试读到保活之后才拒答。
+      const refusesNow = relays.upstreamA.respond;
+      const released = new Promise<void>((resolve) => releases.push(resolve));
+      relays.upstreamA.respond = (request, res) => {
+        void released.then(() => refusesNow(request, res));
+      };
+    }
+
+    const toClaude = await fetch(
+      `${claude.gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+    const claudeKept = await readUntil(toClaude, "event: ping");
+    releases[0]?.();
+    const toCodex = await fetch(
+      `${codex.gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+    const codexKept = await readUntil(toCodex, "event: response.in_progress");
+    releases[1]?.();
+    const claudeEvents = sseData(claudeKept.text + (await claudeKept.rest()));
+    const codexEvents = sseData(codexKept.text + (await codexKept.rest()));
+
+    expect(toClaude.status).toBe(200);
+    expect(claudeEvents.filter((event) => !isPing(event))).toEqual(REFUSAL_EVENTS);
+    expect(toCodex.status).toBe(200);
+    expect(codexEvents.at(-1)).toEqual({
+      type: "response.failed",
+      response: {
+        object: "response",
+        status: "failed",
+        error: {
+          code: "invalid_prompt",
+          message: "Relay A: kimi-k2 refused this request (safety filter: content_filter)",
+        },
+      },
+    });
+  });
+});
+
+const HIGH_RISK = "The request was rejected because it was considered high risk";
+
+function isPing(event: unknown): boolean {
+  return isRecordLike(event) && event.type === "ping";
+}
+
+/**
+ * 三家都选了 kimi-k2、都拒答：A 按问的格式回 Anthropic 或 Responses 的拒答，B 回 Anthropic 的，
+ * C（只有 Chat 地址）回 content_filter。
+ */
+async function threeRefusing(options: Pick<StartOptions, "keepAliveMs"> = {}) {
+  const upstreamA = await startUpstream();
+  const upstreamB = await startUpstream();
+  const chatUpstream = await startUpstream();
+  const harness = await start({ upstreamA, upstreamB, chatUpstream, ...options });
+  await selectModels(harness.endpointsDir, { ep_c: ["kimi-k2"] });
+  upstreamA.respond = (request, res) => {
+    if (request.url.endsWith("/responses")) responsesRefusal(res);
+    else anthropicRefusal(request, res);
+  };
+  upstreamB.respond = anthropicRefusal;
+  chatUpstream.respond = (_request, res) => chatRefusal(res);
+  return { ...harness, upstreamA, upstreamB, chatUpstream };
+}
+
+/** Anthropic 上游的拒答：要流式回 refusalStream，不要就回整份。 */
+function anthropicRefusal(request: RecordedRequest, res: ServerResponse): void {
+  if (receivedBody(request).stream) {
+    refusalStream(res);
+    return;
+  }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify(REFUSAL_WHOLE));
+}
+
+const REFUSAL_WHOLE = {
+  id: "msg_refused",
+  type: "message",
+  role: "assistant",
+  model: "kimi-k2",
+  content: [],
+  stop_reason: "refusal",
+  stop_sequence: null,
+  stop_details: { category: "cyber", explanation: "The request asks for malware." },
+  usage: { input_tokens: 9, output_tokens: 0 },
+};
+
+/** Responses 上游因 content_filter 没有完成：一个字也没说。 */
+function responsesRefusal(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.write(sseFrame({ type: "response.created", response: { id: "resp_refused" } }));
+  res.end(
+    sseFrame({
+      type: "response.incomplete",
+      response: {
+        id: "resp_refused",
+        status: "incomplete",
+        incomplete_details: { reason: "content_filter" },
+        output: [],
+        usage: { input_tokens: 9, output_tokens: 0 },
+      },
+    }),
+  );
+}
+
+/** Chat 上游以 content_filter 结束、一个字也没说。 */
+function chatRefusal(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.write(
+    `data: ${JSON.stringify({ id: "chatcmpl-refused", choices: [{ index: 0, delta: { role: "assistant" } }] })}\n\n`,
+  );
+  res.write(
+    `data: ${JSON.stringify({ id: "chatcmpl-refused", choices: [{ index: 0, delta: {}, finish_reason: "content_filter" }] })}\n\n`,
+  );
+  res.end("data: [DONE]\n\n");
+}
+
+/** Claude 的安全过滤开口前就拒答的流：没说一个字，stop_reason 是 refusal，带 stop_details（magpie fallback.go refusedDetail）。 */
+function refusalStream(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of REFUSAL_EVENTS) res.write(sseFrame(event));
+  res.end();
+}
+
+const REFUSAL_EVENTS = [
+  { type: "message_start", message: { id: "msg_refused", usage: { input_tokens: 9 } } },
+  {
+    type: "message_delta",
+    delta: {
+      stop_reason: "refusal",
+      stop_details: { category: "cyber", explanation: "The request asks for malware." },
+    },
+    usage: { output_tokens: 0 },
+  },
+  { type: "message_stop" },
+];

@@ -143,6 +143,9 @@ export interface GatewayRequest {
 
 export type StopReason = "stop" | "length" | "tool" | "filter";
 
+/** Anthropic 回复的 stop_details：拒答时分类器说的类别与解释，原样转给 Anthropic 客户端（magpie ir.go 的 StopDetails）。 */
+export type StopDetails = Record<string, unknown>;
+
 /** Anthropic 口径：input 不含缓存读写，OpenAI 的 prompt 含。 */
 export interface Usage {
   input: number;
@@ -166,7 +169,8 @@ export type StreamEvent =
   | { kind: "tool_args"; text: string }
   // 中间格式不带的工具项（服务端工具、Codex 自己的 apply_patch 之类）：只说明回复里有它，编码器不写出。
   | { kind: "other_tool" }
-  | { kind: "stop"; stop: StopReason }
+  // details 只有 Anthropic 上游给了 stop_details 时才有。
+  | { kind: "stop"; stop: StopReason; details?: StopDetails }
   | { kind: "usage"; usage: Usage }
   // 上游发了结束标记：Anthropic 的 message_stop、Chat 的 [DONE]、Responses 的 completed 或 incomplete。
   | { kind: "done" }
@@ -217,6 +221,7 @@ export interface Reply {
   id: string;
   parts: Part[];
   stop: StopReason;
+  stopDetails?: StopDetails;
   usage: Usage;
 }
 
@@ -640,6 +645,7 @@ export class ReplyCollector {
       case "stop":
         this.closeTool();
         this.reply.stop = event.stop;
+        if (event.details) this.reply.stopDetails = event.details;
         return;
       default:
     }

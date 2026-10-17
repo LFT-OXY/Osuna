@@ -135,9 +135,10 @@ export async function askRefitted(input: {
   return { outcome, sent };
 }
 
-/** 认得出的拒收之外，同一家的 400 / 422 不说原因：不是「这个格式的地址没有这个模型」。 */
+/** 认得出的拒收之外，同一家的 400 / 422 不说原因：不是「这个格式的地址没有这个模型」，也不是拒答。 */
 function refusesBare(failed: FailedAttempt): boolean {
-  return refusesContent(failed.status) && !refusesFormat(failed);
+  const refusedAnswer = failed.cause === "refused";
+  return refusesContent(failed.status) && !refusesFormat(failed) && !refusedAnswer;
 }
 
 /**

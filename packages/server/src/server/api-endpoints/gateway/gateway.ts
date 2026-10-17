@@ -1,5 +1,6 @@
 // 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
-// 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用
+// 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用，
+// 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { timingSafeEqual } from "node:crypto";
@@ -19,7 +20,7 @@ import {
 import type { ModelFacts } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
-import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
@@ -61,7 +62,12 @@ import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./t
 import { protocolOf } from "./translation/protocols.js";
 import { readAgentBody } from "./request-body.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
-import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./upstream-call.js";
+import {
+  ANSWERED_BY_HEADER,
+  type AttemptOutcome,
+  type FailedAttempt,
+  type HandBack,
+} from "./upstream-call.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
@@ -75,6 +81,7 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 自动切换：用户选的那家在开口（回复里出现第一段内容）前失败（额度、欠费、限流、服务器错误、超时）时，
  * 按创建顺序换到下一家有同名模型的接口，失败的那家冷却；开口之后不再换家。冷却与「上次谁答的」只记在内存里。
  * 空回复先在同一家再问一次，还空就换下一家；空回复怪不到这家，不冷却（magpie #1221）。
+ * 拒答（安全过滤不肯回答，safety-filter.ts）也怪不到这家：不冷却、不标「需要检查」，问遍剩下的同名候选。
  * 换家之前先看是不是拒收（不思考的写法、这个格式的地址没有这个模型、两个认证头不能同时带）：
  * 是就在同一家换写法重问（换格式时按格式顺序问下一个地址，要翻译就翻译），也只记在内存里。
  * 要流式的请求等开口时有保活（keepalive.ts）；保活发出响应头之后再失败，错误在流里交给 Agent。
@@ -650,6 +657,9 @@ async function askInTurn(input: {
   const restOf = (candidate: GatewayCandidate) =>
     cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
   let remaining = [...input.plan];
+  // 排第一那家的拒答，与第一份扣下的结束形式的拒答。
+  let refused: Refused | null = null;
+  let handBack: HandBack | null = null;
   for (let candidate = remaining.shift(); candidate; candidate = remaining.shift()) {
     const next = spentAfter(remaining.map(restOf)) ? undefined : remaining[0];
     const outcome = await askUntilSettled({ ...input, candidate, last: next === undefined });
@@ -678,6 +688,17 @@ async function askInTurn(input: {
       { endpoint: candidate.endpoint.slug, status: failed.status, detail: failed.detail },
       "API endpoint returned an error",
     );
+    // 拒答不怪这家：不冷却、不标「需要检查」，问遍剩下的；都拒答时交出排第一那家的（magpie #248）。
+    if (failed.cause === "refused") {
+      refused ??= { candidate, failed };
+      handBack ??= failed.handBack ?? null;
+      if (next) {
+        logSwitch({ logger, from: candidate, to: next, failure: "refused", failed, rest: null });
+        continue;
+      }
+      await sendAllRefused({ res, wire, refused, handBack });
+      return;
+    }
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
     if (modelRetired(failed.status, failed.text)) {
       retired.retire({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
@@ -734,17 +755,8 @@ async function askInTurn(input: {
     let rest: EndpointRest | null = null;
     if (failed.cause !== "empty") rest = markFailed({ cooldowns, candidate, failed });
     if (next) {
-      logger.info(
-        {
-          from: candidate.endpoint.name,
-          to: next.endpoint.name,
-          model: candidate.upstreamModel,
-          failure: switchedFailure(failed, rest),
-          status: failed.status,
-          until: rest?.until ? new Date(rest.until).toISOString() : null,
-        },
-        "API endpoint gateway switched endpoints",
-      );
+      const failure = switchedFailure(failed, rest);
+      logSwitch({ logger, from: candidate, to: next, failure, failed, rest });
       continue;
     }
     sendFailedAttempt({
@@ -757,6 +769,65 @@ async function askInTurn(input: {
     });
     return;
   }
+}
+
+/** 一次拒答：哪家、它的失败（说法是安全过滤的原因）。 */
+interface Refused {
+  candidate: AskableCandidate;
+  failed: FailedAttempt;
+}
+
+function logSwitch(input: {
+  logger: pino.Logger;
+  from: AskableCandidate;
+  to: AskableCandidate;
+  failure: string;
+  failed: FailedAttempt;
+  rest: EndpointRest | null;
+}): void {
+  const { from, rest } = input;
+  const until = rest?.until ? new Date(rest.until).toISOString() : null;
+  input.logger.info(
+    {
+      from: from.endpoint.name,
+      to: input.to.endpoint.name,
+      model: from.upstreamModel,
+      failure: input.failure,
+      status: input.failed.status,
+      until,
+    },
+    "API endpoint gateway switched endpoints",
+  );
+}
+
+/**
+ * 全都拒答（magpie gateway.go 的 handBack 与 failTo(refusedStatus)）：Claude Code 收到扣下的那份原样拒答
+ * （200、stop_reason refusal 与 stop_details），它会按自己的设置换备用模型；保活之后就以流里的拒答结尾。
+ * 没有扣下的（都以报错形式拒答）、或是 Codex，收到 400 与排第一那家的原因。
+ */
+async function sendAllRefused(input: {
+  res: Response;
+  wire: AgentWire;
+  refused: Refused;
+  handBack: HandBack | null;
+}): Promise<void> {
+  const { res, wire, handBack } = input;
+  if (wire === "anthropic" && handBack) {
+    const outcome = await handBack();
+    if (outcome.kind === "gone") return;
+    if (outcome.kind === "answered") {
+      await outcome.finished;
+      return;
+    }
+  }
+  const { candidate, failed } = input.refused;
+  const { endpoint } = candidate;
+  sendRefusal({
+    res,
+    wire,
+    message: `${endpoint.name}: ${candidate.upstreamModel} refused this request (${failed.detail})`,
+    headers: { [ANSWERED_BY_HEADER]: endpoint.slug },
+  });
 }
 
 type SettledAttempt =
@@ -786,6 +857,7 @@ async function askUntilSettled(input: {
   for (;;) {
     const outcome = await askEndpoint(input);
     if (outcome.kind !== "failed") return outcome;
+    if (outcome.cause === "refused") return { kind: "failed", failed: outcome };
     if (outcome.cause === "empty") {
       if (askedEmptyAgain) return { kind: "failed", failed: outcome };
       askedEmptyAgain = true;

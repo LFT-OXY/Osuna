@@ -29,6 +29,7 @@ import {
   type Message,
   type Part,
   type Reply,
+  type StopDetails,
   type StopReason,
   type StreamEvent,
   type Tool,
@@ -793,7 +794,7 @@ export class AnthropicDecoder {
     blocks.forEach((block, index) => {
       this.event({ type: "content_block_start", index, content_block: block }, emit);
     });
-    const delta = { stop_reason: body.stop_reason };
+    const delta = { stop_reason: body.stop_reason, stop_details: body.stop_details };
     this.event({ type: "message_delta", delta, usage: body.usage }, emit);
     this.event({ type: "message_stop" }, emit);
   }
@@ -891,7 +892,9 @@ function emitStart(event: Record<string, unknown>, emit: EmitEvent): void {
 function emitMessageDelta(event: Record<string, unknown>, emit: EmitEvent): void {
   const delta = isRecord(event.delta) ? event.delta : {};
   if (typeof delta.stop_reason === "string" && delta.stop_reason !== "") {
-    emit({ kind: "stop", stop: stopFromAnthropic(delta.stop_reason) });
+    const stop = stopFromAnthropic(delta.stop_reason);
+    if (isRecord(delta.stop_details)) emit({ kind: "stop", stop, details: delta.stop_details });
+    else emit({ kind: "stop", stop });
   }
   emit({ kind: "usage", usage: usageFromAnthropic(event.usage) });
 }
@@ -986,7 +989,11 @@ export class AnthropicEncoder {
     const reply = this.collector.finish();
     this.send("message_delta", {
       type: "message_delta",
-      delta: { stop_reason: stopToAnthropic(reply.stop), stop_sequence: null },
+      delta: {
+        stop_reason: stopToAnthropic(reply.stop),
+        stop_sequence: null,
+        ...stopDetailsOf(reply),
+      },
       usage: usageToAnthropic(reply.usage),
     });
     this.send("message_stop", { type: "message_stop" });
@@ -1093,6 +1100,12 @@ export function renderAnthropic(reply: Reply, model: string): Record<string, unk
     content,
     stop_reason: stopToAnthropic(reply.stop),
     stop_sequence: null,
+    ...stopDetailsOf(reply),
     usage: usageToAnthropic(reply.usage),
   };
+}
+
+/** 上游给了 stop_details 才写（magpie 的 anthropicEncoder.finish 与 renderAnthropic）。 */
+function stopDetailsOf(reply: Reply): { stop_details?: StopDetails } {
+  return reply.stopDetails ? { stop_details: reply.stopDetails } : {};
 }
