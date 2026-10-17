@@ -8,7 +8,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：接口清单给了上下文、档位、看图的模型，目录里按这些值写；接口没给、models.dev 有的按 models.dev 写；都没有的与现在一样。
 - [ ] 只开 Codex 开关时也会下载 models.dev（价格表自动更新开着时）；两个开关都关时不下载。
