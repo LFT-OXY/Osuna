@@ -7,7 +7,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 流式和整份各一例：CLI 收到的 JSON 外面没有 ```。
 - [ ] 没要求 JSON 的回复，里面的 ``` 原样保留。
