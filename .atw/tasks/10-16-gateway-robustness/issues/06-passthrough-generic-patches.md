@@ -14,7 +14,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 同一份 Claude Code 请求：发给非 Claude 模型时，没有计费行和审查字段；发给 Claude 模型时，除了模型名和认证，和原请求逐字节一致。
 - [ ] advisor 的两种情况各有一例。
