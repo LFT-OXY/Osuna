@@ -23,16 +23,23 @@ export function ensurePrivateFile(filePath: string): void {
   applyPrivateMode(filePath, PRIVATE_FILE_MODE);
 }
 
+export interface PrivateFileWriteOptions {
+  // 把临时文件改名成目标；调用方可换成遇到占用会重试的（api-endpoints/last-good.ts）。
+  rename?: (from: string, to: string) => void;
+}
+
 export function writePrivateFileAtomicSync(
   filePath: string,
   data: string | NodeJS.ArrayBufferView,
+  options: PrivateFileWriteOptions = {},
 ): void {
+  const rename = options.rename ?? renameSync;
   ensurePrivateDirectory(path.dirname(filePath));
   const parent = path.dirname(filePath);
   const temporary = path.join(parent, `.${path.basename(filePath)}.${process.pid}.${randomUUID()}`);
   try {
     writeFileSync(temporary, data, { mode: PRIVATE_FILE_MODE });
-    renameSync(temporary, filePath);
+    rename(temporary, filePath);
     ensurePrivateFile(filePath);
   } catch (error) {
     rmSync(temporary, { force: true });

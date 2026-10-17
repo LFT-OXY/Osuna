@@ -289,7 +289,8 @@ function createRetiredModels(input: {
 }): RetiredModels {
   const overrides = input.config.apiEndpoints ?? {};
   return new RetiredModels({
-    filePath: new ApiEndpointStore(input.config.paseoHome).retiredModelsPath,
+    filePath: new ApiEndpointStore({ paseoHome: input.config.paseoHome, logger: input.logger })
+      .retiredModelsPath,
     logger: input.logger,
     now: overrides.retiredModelsNow,
     timers: overrides.retiredModelsTimers,

@@ -257,6 +257,17 @@ internal/gateway/upstream_transport.go:
   packages/server/src/server/api-endpoints/gateway/request-body.ts
   packages/server/src/server/api-endpoints/gateway/upstream-call.ts
 
+Keeping the daemon's own state files' last good generation (a .bak written
+before each write, a file that doesn't parse read from its .bak and copied
+aside as .bad-<time>, an error when the .bak doesn't parse either) follows
+Read, Fallback, Keep and KeepBad in magpie's internal/lastgood/lastgood.go;
+trying a read or rename again for up to half a second while another program
+holds the file on Windows follows retry in internal/steady/steady.go, and its
+test the stand-in reads of internal/steady/steady_test.go:
+
+  packages/server/src/server/api-endpoints/last-good.ts
+  packages/server/src/server/api-endpoints/last-good.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

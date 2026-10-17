@@ -251,8 +251,8 @@ export class ApiEndpointService {
   private gateway: GatewayAddress = { kind: "pending" };
 
   constructor(options: ApiEndpointServiceOptions) {
-    this.store = new ApiEndpointStore(options.paseoHome);
     this.logger = options.logger.child({ module: "api-endpoints" });
+    this.store = new ApiEndpointStore({ paseoHome: options.paseoHome, logger: this.logger });
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.now = options.now ?? (() => new Date());

@@ -119,8 +119,8 @@ export function createApiEndpointGateway(options: {
   daemonVersion: string;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
-  const store = new ApiEndpointStore(options.paseoHome);
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
+  const store = new ApiEndpointStore({ paseoHome: options.paseoHome, logger });
   const failover: Failover = {
     cooldowns: options.cooldowns,
     retired: options.retired,

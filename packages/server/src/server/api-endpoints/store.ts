@@ -1,5 +1,6 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import type pino from "pino";
 import { z } from "zod";
 import {
   API_ENDPOINT_REQUEST_FORMATS,
@@ -16,6 +17,7 @@ import { writePrivateFileAtomicSync } from "../private-files.js";
 import { ClaudeSettingsTakeoverSchema } from "./claude-settings-patch.js";
 import { CodexConfigTakeoverSchema } from "./codex-config-patch.js";
 import { readOptionalFile } from "./config-file.js";
+import { type DataFileSystem, LastGoodFile, NODE_DATA_FILE_SYSTEM } from "./last-good.js";
 import { ModelFactsSchema } from "./model-facts.js";
 
 /*
@@ -29,6 +31,8 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即作废，都关着时文件删除；
  * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
+ * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
+ * 接管记录不这样做：拿旧记录去恢复 CLI 配置可能恢复错值，读不懂照旧报错。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
 
@@ -95,6 +99,19 @@ const LegacyEndpointsFileSchema = z.object({
 });
 type LegacyEndpointsFile = z.infer<typeof LegacyEndpointsFileSchema>;
 
+// endpoints.json 读得懂的两种样子；写回时 .bak 存的是写入前的原字节，所以旧格式的 .bak 也照样能用。
+type EndpointsFileContent =
+  | { kind: "current"; file: z.infer<typeof EndpointsFileSchema> }
+  | { kind: "legacy"; file: LegacyEndpointsFile };
+
+function parseEndpointsFile(filePath: string, raw: unknown): EndpointsFileContent {
+  const current = EndpointsFileSchema.safeParse(raw);
+  if (current.success) return { kind: "current", file: current.data };
+  const legacy = LegacyEndpointsFileSchema.safeParse(raw);
+  if (legacy.success) return { kind: "legacy", file: legacy.data };
+  throw new ApiEndpointsFileUnparsableError(filePath, current.error.message);
+}
+
 export interface ApiEndpointState {
   endpoints: StoredApiEndpoint[];
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
@@ -114,6 +131,7 @@ export class ApiEndpointsFileUnparsableError extends Error {
 }
 
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
+type KeysFile = z.infer<typeof KeysFileSchema>;
 
 const ClaudeTakeoverFileSchema = z.object({
   // null：当前没有接管（官方模式）。
@@ -134,20 +152,52 @@ export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 
 // 按 provider 存；没有条目即该 Agent 没有口令（总开关关着）。
 const GatewayTokensFileSchema = z.object({ tokens: z.record(z.string(), z.string()) });
-export type GatewayTokens = z.infer<typeof GatewayTokensFileSchema>["tokens"];
+type GatewayTokensFile = z.infer<typeof GatewayTokensFileSchema>;
+export type GatewayTokens = GatewayTokensFile["tokens"];
 
 const ENDPOINTS_FILE = "endpoints.json";
-const GATEWAY_TOKENS_FILE = "gateway-tokens.json";
 const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
 // v0.15 让 Codex 通过 auth.command 读 key 的文件；现在不再写，见到就删。
 // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
 const LEGACY_CODEX_KEY_FILE = "codex-api-key";
 
+export interface ApiEndpointStoreOptions {
+  paseoHome: string;
+  logger: pino.Logger;
+  // 只给测试换：.bad-<时间> 用的时钟、模拟占用的文件系统。
+  now?: () => Date;
+  fileSystem?: DataFileSystem;
+}
+
 export class ApiEndpointStore {
   private readonly root: string;
+  private readonly endpointsFile: LastGoodFile<EndpointsFileContent>;
+  private readonly keysFile: LastGoodFile<KeysFile>;
+  private readonly gatewayTokensFile: LastGoodFile<GatewayTokensFile>;
 
-  constructor(paseoHome: string) {
-    this.root = path.join(paseoHome, "api-endpoints");
+  constructor(options: ApiEndpointStoreOptions) {
+    this.root = path.join(options.paseoHome, "api-endpoints");
+    const shared = {
+      logger: options.logger,
+      now: options.now ?? (() => new Date()),
+      fileSystem: options.fileSystem ?? NODE_DATA_FILE_SYSTEM,
+    };
+    const endpointsPath = path.join(this.root, ENDPOINTS_FILE);
+    this.endpointsFile = new LastGoodFile({
+      ...shared,
+      filePath: endpointsPath,
+      parse: (raw) => parseEndpointsFile(endpointsPath, raw),
+    });
+    this.keysFile = new LastGoodFile({
+      ...shared,
+      filePath: path.join(this.root, "keys.json"),
+      parse: (raw) => KeysFileSchema.parse(raw),
+    });
+    this.gatewayTokensFile = new LastGoodFile({
+      ...shared,
+      filePath: path.join(this.root, "gateway-tokens.json"),
+      parse: (raw) => GatewayTokensFileSchema.parse(raw),
+    });
   }
 
   /** 把首次改写前的字节原样存一份，返回副本路径；文件不存在时返回 null。 */
@@ -165,38 +215,35 @@ export class ApiEndpointStore {
   }
 
   readState(): ApiEndpointState {
-    const filePath = path.join(this.root, ENDPOINTS_FILE);
-    let raw: unknown;
+    let content: EndpointsFileContent | null;
     try {
-      raw = this.readJson(ENDPOINTS_FILE);
+      content = this.endpointsFile.read();
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new ApiEndpointsFileUnparsableError(filePath, error.message);
+        throw new ApiEndpointsFileUnparsableError(
+          path.join(this.root, ENDPOINTS_FILE),
+          error.message,
+        );
       }
       throw error;
     }
-    if (raw === null) {
+    if (content === null) {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
-    const current = EndpointsFileSchema.safeParse(raw);
-    if (current.success) {
-      const { agents } = current.data;
-      return {
-        endpoints: current.data.endpoints,
-        agents: {
-          claude: agents.claude ?? OFFICIAL_AGENT,
-          codex: agents.codex ?? OFFICIAL_AGENT,
-        },
-      };
-    }
-    const legacy = LegacyEndpointsFileSchema.safeParse(raw);
-    if (legacy.success) return upgradeLegacyFile(legacy.data);
-    throw new ApiEndpointsFileUnparsableError(filePath, current.error.message);
+    if (content.kind === "legacy") return upgradeLegacyFile(content.file);
+    const { agents } = content.file;
+    return {
+      endpoints: content.file.endpoints,
+      agents: {
+        claude: agents.claude ?? OFFICIAL_AGENT,
+        codex: agents.codex ?? OFFICIAL_AGENT,
+      },
+    };
   }
 
   /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。 */
   writeState(state: ApiEndpointState): void {
-    this.writeJson(ENDPOINTS_FILE, EndpointsFileSchema.parse(state));
+    this.endpointsFile.write(EndpointsFileSchema.parse(state));
   }
 
   setApiKey(id: string, apiKey: string): void {
@@ -213,17 +260,16 @@ export class ApiEndpointStore {
   }
 
   readGatewayTokens(): GatewayTokens {
-    const raw = this.readJson(GATEWAY_TOKENS_FILE);
-    return raw === null ? {} : GatewayTokensFileSchema.parse(raw).tokens;
+    return this.gatewayTokensFile.read()?.tokens ?? {};
   }
 
-  /** 两个 Agent 都关着时没有口令，文件删掉。 */
+  /** 两个 Agent 都关着时没有口令，文件连同 .bak 删掉。 */
   writeGatewayTokens(tokens: GatewayTokens): void {
     if (Object.keys(tokens).length === 0) {
-      rmSync(path.join(this.root, GATEWAY_TOKENS_FILE), { force: true });
+      this.gatewayTokensFile.remove();
       return;
     }
-    this.writeJson(GATEWAY_TOKENS_FILE, GatewayTokensFileSchema.parse({ tokens }));
+    this.gatewayTokensFile.write(GatewayTokensFileSchema.parse({ tokens }));
   }
 
   readClaudeTakeover(): ClaudeTakeoverFile {
@@ -291,12 +337,11 @@ export class ApiEndpointStore {
   }
 
   private readKeys(): Record<string, string> {
-    const raw = this.readJson("keys.json");
-    return raw === null ? {} : KeysFileSchema.parse(raw).keys;
+    return this.keysFile.read()?.keys ?? {};
   }
 
   private writeKeys(keys: Record<string, string>): void {
-    this.writeJson("keys.json", KeysFileSchema.parse({ keys }));
+    this.keysFile.write(KeysFileSchema.parse({ keys }));
   }
 
   private readJson(name: string): unknown {

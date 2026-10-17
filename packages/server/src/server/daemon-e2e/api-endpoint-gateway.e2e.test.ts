@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import {
   createServer,
   request as httpRequest,
@@ -5244,5 +5244,156 @@ describe("connections, compressed bodies and the User-Agent", () => {
     expect([passed.status, translated.status]).toEqual([200, 200]);
     expect(upstream.requests[0]?.headers["user-agent"]).toBe("Osuna/0.11.2");
     expect(chat.requests[0]?.headers["user-agent"]).toBe("Osuna/0.11.2");
+  });
+});
+
+/** endpointsDir 里以 name 开头的文件名，按字母排。 */
+async function filesOf(endpointsDir: string, name: string): Promise<string[]> {
+  const names = await readdir(endpointsDir);
+  return names.filter((entry) => entry.startsWith(name)).sort();
+}
+
+const BAD_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
+
+function claudeAskKimi(gateway: string): Promise<Response> {
+  return fetch(
+    `${gateway}/v1/messages`,
+    claudeRequest({
+      model: "kimi-k2",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  );
+}
+
+describe("a data file written badly is served from its last good copy (magpie lastgood)", () => {
+  test("endpoints.json: the gateway routes by the .bak, the bad one is kept as .bad-<time> and a warning is logged", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    const { daemon, gateway, endpointsDir, logLines } = await start({ upstreamA, upstreamB });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const seeded = await readFile(endpointsPath, "utf8");
+    const client = await connectTo(daemon);
+
+    // 这次写入前的那份（A 开着）存成 .bak；写进去的这份把 A 关了。
+    await client.apiEndpointSetEndpointState({ endpointId: "ep_a", enabled: false });
+    const bakAfterWrite = await readFile(`${endpointsPath}.bak`, "utf8");
+    await writeFile(endpointsPath, "{ not json");
+    const response = await claudeAskKimi(gateway);
+
+    expect(bakAfterWrite).toBe(seeded);
+    expect(response.status).toBe(200);
+    // 按 .bak 路由：A 还开着，kimi-k2 先到 A。
+    expect([upstreamA.requests.length, upstreamB.requests.length]).toEqual([1, 0]);
+    expect(await readFile(endpointsPath, "utf8")).toBe(seeded);
+    const files = await filesOf(endpointsDir, "endpoints.json");
+    expect(files).toHaveLength(3);
+    // .bad-<时间> 按字母排在 .bak 前面。
+    expect([files[0], files[2]]).toEqual(["endpoints.json", "endpoints.json.bak"]);
+    const badName = files[1]!;
+    expect(badName.replace("endpoints.json.bad-", "")).toMatch(BAD_STAMP);
+    expect(await readFile(path.join(endpointsDir, badName), "utf8")).toBe("{ not json");
+    const warnings = gatewayLog(
+      logLines,
+      "API endpoint data file could not be parsed; its last good copy was put back",
+    ).map(({ level, filePath, badPath }) => ({ level, filePath, badPath }));
+    expect(warnings).toEqual([
+      { level: 40, filePath: endpointsPath, badPath: path.join(endpointsDir, badName) },
+    ]);
+  });
+
+  test("keys.json: the request goes out with the key from the .bak", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    const keysPath = path.join(endpointsDir, "keys.json");
+    const good = await readFile(keysPath, "utf8");
+    await writeFile(`${keysPath}.bak`, good);
+    await writeFile(keysPath, "");
+
+    const response = await claudeAskKimi(gateway);
+
+    expect(response.status).toBe(200);
+    expect(upstreamA.requests[0]?.headers["x-api-key"]).toBe(KEY_A);
+    expect(await readFile(keysPath, "utf8")).toBe(good);
+    const files = await filesOf(endpointsDir, "keys.json");
+    expect(files).toHaveLength(3);
+    expect([files[0], files[2]]).toEqual(["keys.json", "keys.json.bak"]);
+    expect(files[1]!.replace("keys.json.bad-", "")).toMatch(BAD_STAMP);
+    expect(await readFile(path.join(endpointsDir, files[1]!), "utf8")).toBe("");
+  });
+
+  test("gateway-tokens.json: the CLI's token is still accepted from the .bak", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    const tokensPath = path.join(endpointsDir, "gateway-tokens.json");
+    const good = await readFile(tokensPath, "utf8");
+    await writeFile(`${tokensPath}.bak`, good);
+    await writeFile(tokensPath, '{"tokens": {"claude": ');
+
+    const response = await claudeAskKimi(gateway);
+
+    expect(response.status).toBe(200);
+    expect(await readFile(tokensPath, "utf8")).toBe(good);
+    const files = await filesOf(endpointsDir, "gateway-tokens.json");
+    expect(files).toHaveLength(3);
+    expect([files[0], files[2]]).toEqual(["gateway-tokens.json", "gateway-tokens.json.bak"]);
+    expect(files[1]!.replace("gateway-tokens.json.bad-", "")).toMatch(BAD_STAMP);
+    expect(await readFile(path.join(endpointsDir, files[1]!), "utf8")).toBe(
+      '{"tokens": {"claude": ',
+    );
+  });
+
+  test("with the .bak bad too it is an error as before, and nothing is written or removed", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    await writeFile(endpointsPath, "{ not json");
+    await writeFile(`${endpointsPath}.bak`, "also not json");
+
+    const response = await claudeAskKimi(gateway);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: "The API endpoints file could not be parsed" },
+    });
+    expect(upstreamA.requests).toEqual([]);
+    expect(await filesOf(endpointsDir, "endpoints.json")).toEqual([
+      "endpoints.json",
+      "endpoints.json.bak",
+    ]);
+    expect(await readFile(endpointsPath, "utf8")).toBe("{ not json");
+    expect(await readFile(`${endpointsPath}.bak`, "utf8")).toBe("also not json");
+  });
+
+  test("a takeover record written badly is not read from a .bak: the change is refused as before", async () => {
+    const { daemon, endpointsDir } = await start();
+    const client = await connectTo(daemon);
+    // 开着总开关时 daemon 已写好接管记录；把它写坏，旁边放一份读得懂的 .bak。
+    const recordPath = path.join(endpointsDir, "takeover-claude.json");
+    const good = await readFile(recordPath, "utf8");
+    await writeFile(`${recordPath}.bak`, good);
+    await writeFile(recordPath, "{ not json");
+
+    const turnedOff = await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: false,
+    });
+
+    expect(turnedOff).toEqual({
+      requestId: expect.any(String),
+      provider: "claude",
+      agent: { enabled: true, defaultModelId: "kimi-k2" },
+      error: {
+        code: "unknown",
+        message: "Expected property name or '}' in JSON at position 2 (line 1 column 3)",
+      },
+    });
+    expect(await readFile(recordPath, "utf8")).toBe("{ not json");
+    expect(await readFile(`${recordPath}.bak`, "utf8")).toBe(good);
+    expect(await filesOf(endpointsDir, "takeover-claude.json")).toEqual([
+      "takeover-claude.json",
+      "takeover-claude.json.bak",
+    ]);
   });
 });
