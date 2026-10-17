@@ -12,6 +12,7 @@ const GATEWAY = {
   model: "kimi-k2",
   modelPicker: [],
   hintEnv: {},
+  allowWebSearch: false,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -210,6 +211,67 @@ describe("applyClaudeApiEndpoint", () => {
       denyCreated: false,
     });
     expect(JSON.parse(restore(text, takeover)).permissions).toEqual({ deny: ["WebSearch"] });
+  });
+
+  it("writes no WebSearch deny rule while some endpoint searches the web by itself", () => {
+    const result = applyClaudeApiEndpoint({
+      text: USER_SETTINGS,
+      wiring: { ...GATEWAY, allowWebSearch: true },
+      takeover: null,
+    });
+    if (result.kind !== "patched") throw new Error("Expected a patch");
+
+    expect(JSON.parse(result.text).permissions).toEqual({
+      allow: ["Bash(npm run *)"],
+      deny: ["Read(./.env)"],
+    });
+    expect(result.takeover.webSearchDeny.added).toBe(false);
+    expect(restore(result.text, result.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("takes its own WebSearch deny rule out when searching is allowed, and puts it back when not", () => {
+    const denied = apply("{}\n");
+    expect(JSON.parse(denied.text).permissions).toEqual({ deny: ["WebSearch"] });
+
+    const allowed = applyClaudeApiEndpoint({
+      text: denied.text,
+      wiring: { ...GATEWAY, allowWebSearch: true },
+      takeover: denied.takeover,
+    });
+    if (allowed.kind !== "patched") throw new Error("Expected a patch");
+    // permissions 与 deny 都是 Osuna 建的：规则拿掉后一并收走。
+    expect(JSON.parse(allowed.text).permissions).toBeUndefined();
+    expect(allowed.takeover.webSearchDeny.added).toBe(false);
+
+    const deniedAgain = apply(allowed.text, allowed.takeover);
+    expect(JSON.parse(deniedAgain.text).permissions).toEqual({ deny: ["WebSearch"] });
+    expect(deniedAgain.takeover.webSearchDeny).toEqual({
+      added: true,
+      permissionsCreated: true,
+      denyCreated: true,
+    });
+    expect(restore(deniedAgain.text, deniedAgain.takeover)).toBe("{}\n");
+  });
+
+  it("leaves a WebSearch deny rule the user wrote in place while searching is allowed", () => {
+    const denied = `{
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  }
+}
+`;
+    const result = applyClaudeApiEndpoint({
+      text: denied,
+      wiring: { ...GATEWAY, allowWebSearch: true },
+      takeover: null,
+    });
+    if (result.kind !== "patched") throw new Error("Expected a patch");
+
+    expect(JSON.parse(result.text).permissions).toEqual({ deny: ["WebSearch"] });
+    expect(result.takeover.webSearchDeny.added).toBe(false);
+    expect(restore(result.text, result.takeover)).toBe(denied);
   });
 
   it("is stable: the same input gives the same output, and re-applying changes nothing", () => {

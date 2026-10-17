@@ -2567,6 +2567,13 @@ export const ru: TranslationResources = {
         none: "Не сопоставлять",
         pickTitle: "Модель для {{tier}}",
       },
+      webSearch: {
+        title: "Веб-поиск",
+        switch: "Сам ищет в интернете",
+        hint: "Для сервиса перед собственным API Anthropic или OpenAI: веб-поиск Claude Code и Codex передаётся ему как есть. После включения или выключения запущенные сеансы Claude Code переключаются со следующего запроса, и этот запрос теряет кэш промпта.",
+        saving: "Сохранение…",
+        saveFailed: "Не удалось сохранить: {{message}}",
+      },
       agent: {
         title: "Сторонние API",
         useSwitch: "Использовать сторонние API",

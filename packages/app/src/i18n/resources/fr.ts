@@ -2585,6 +2585,13 @@ export const fr: TranslationResources = {
         none: "Aucune correspondance",
         pickTitle: "Modèle pour {{tier}}",
       },
+      webSearch: {
+        title: "Recherche web",
+        switch: "Fait ses propres recherches web",
+        hint: "Pour un service placé devant l'API d'Anthropic ou d'OpenAI : les recherches web de Claude Code et de Codex lui sont transmises telles quelles. L'activer ou le désactiver s'applique aux sessions Claude Code en cours dès leur prochaine requête, qui perd alors son cache de prompt.",
+        saving: "Enregistrement…",
+        saveFailed: "Impossible d'enregistrer : {{message}}",
+      },
       agent: {
         title: "Points d'accès API",
         useSwitch: "Utiliser les points d'accès API",

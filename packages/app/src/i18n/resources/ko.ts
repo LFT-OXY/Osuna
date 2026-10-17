@@ -2546,6 +2546,13 @@ export const ko: TranslationResources = {
         none: "매핑 안 함",
         pickTitle: "{{tier}} 모델",
       },
+      webSearch: {
+        title: "웹 검색",
+        switch: "자체적으로 웹 검색 가능",
+        hint: "Anthropic 또는 OpenAI 공식 API 앞단의 서비스용: Claude Code와 Codex의 웹 검색을 그대로 넘깁니다. 켜거나 끄면 실행 중인 Claude Code 세션은 다음 요청부터 바뀌며, 그 요청은 프롬프트 캐시를 쓰지 못합니다.",
+        saving: "저장 중…",
+        saveFailed: "저장하지 못했습니다: {{message}}",
+      },
       agent: {
         title: "서드파티 API",
         useSwitch: "서드파티 API 사용",

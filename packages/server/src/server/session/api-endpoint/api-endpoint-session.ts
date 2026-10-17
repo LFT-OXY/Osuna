@@ -131,6 +131,7 @@ export class ApiEndpointSession {
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
         ...(request.manualModels !== undefined ? { manualModels: request.manualModels } : {}),
+        ...(request.searchesWeb !== undefined ? { searchesWeb: request.searchesWeb } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",

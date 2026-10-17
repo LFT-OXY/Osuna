@@ -67,6 +67,7 @@ import {
   type FailedAttempt,
   type HandBack,
 } from "./upstream-call.js";
+import { asksAnthropicWebSearch, searchesWebItself } from "./web-search.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
@@ -274,7 +275,36 @@ async function routeAgentRequest(input: {
     reply(404, route.message);
     return null;
   }
+  if (input.wire === "anthropic" && asksAnthropicWebSearch(parsed)) {
+    const searchers = webSearchCandidates(route.candidates);
+    if (searchers.length === 0) {
+      // 不剔掉工具照发：上游凭记忆写的文字会被 Claude Code 当成搜索结果。400 不会让它重试或要求重新登录。
+      reply(400, noWebSearchMessage(model));
+      return null;
+    }
+    return { body, parsed, model, candidates: searchers };
+  }
   return { body, parsed, model, candidates: route.candidates };
+}
+
+/**
+ * Claude Code 的搜索子请求只交给同一模型下、打开了「自己能联网搜索」、有 Anthropic 地址的接口，
+ * 对话本身走哪家不影响（ADR 0009）。只留 Anthropic 地址：原样直通，换格式翻译会剔掉搜索工具。
+ */
+function webSearchCandidates(candidates: GatewayCandidate[]): GatewayCandidate[] {
+  return candidates.flatMap((candidate) => {
+    const { endpoint } = candidate;
+    if (!searchesWebItself(endpoint, "anthropic_messages")) return [];
+    const baseUrls = endpoint.baseUrls.filter((entry) => entry.format === "anthropic_messages");
+    return [{ ...candidate, endpoint: { ...endpoint, baseUrls } }];
+  });
+}
+
+function noWebSearchMessage(model: string): string {
+  return (
+    `Web search is not available for ${model}: no API endpoint that is on and serves this model ` +
+    `has "Searches the web by itself" turned on in Osuna.`
+  );
 }
 
 /**

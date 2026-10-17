@@ -47,6 +47,7 @@ import { buildCodexModelCatalog } from "./codex-model-catalog.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
+import { someEndpointSearchesWeb } from "./gateway/web-search.js";
 import {
   readOptionalFile,
   writeConfigFileGuarded,
@@ -132,6 +133,8 @@ export interface ApiEndpointSaveInput {
   modelMapping?: ApiEndpointModelMapping;
   // undefined：保留这家已有的手动添加模型。
   manualModels?: ApiEndpointModel[];
+  // undefined：保留这家原来的「自己能联网搜索」。
+  searchesWeb?: boolean;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -444,6 +447,7 @@ export class ApiEndpointService {
         state,
         existing,
         fields,
+        searchesWeb: keptSearchesWeb(input.searchesWeb, existing),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -784,7 +788,12 @@ export class ApiEndpointService {
     if (baseUrl === null) throw this.gatewayError();
     // nextGatewayTokens 给每个开着的 Agent 都发了口令。
     if (token === undefined) throw new Error(`No gateway token for ${provider}`);
-    return { baseUrl, token, ...this.cliModels(state, provider, agent.defaultModelId) };
+    return {
+      baseUrl,
+      token,
+      ...this.cliModels(state, provider, agent.defaultModelId),
+      allowWebSearch: someEndpointSearchesWeb(state),
+    };
   }
 
   /**
@@ -899,6 +908,7 @@ export class ApiEndpointService {
       this.gatewayUrlFor(provider),
       tokens[provider] ?? null,
       this.cliModels(state, provider, agent.defaultModelId),
+      provider === "claude" && someEndpointSearchesWeb(state),
     ]);
   }
 
@@ -1452,6 +1462,7 @@ export class ApiEndpointService {
           }
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
+      searchesWeb: endpoint.searchesWeb === true,
     };
   }
 
@@ -1564,11 +1575,21 @@ function withEndpoint(
   return index === -1 ? [...endpoints, endpoint] : endpoints.with(index, endpoint);
 }
 
+/** 保存请求省略「自己能联网搜索」时沿用这家原来的；新建为关。 */
+function keptSearchesWeb(
+  requested: boolean | undefined,
+  existing: StoredApiEndpoint | null,
+): boolean {
+  return requested ?? existing?.searchesWeb === true;
+}
+
 /** 标识、开关、创建时间与老表单的默认模型沿用已有的；新建时生成标识。 */
 function buildEndpoint(input: {
   state: ApiEndpointState;
   existing: StoredApiEndpoint | null;
   fields: EndpointFields;
+  // 「自己能联网搜索」：请求省略时调用方已换成这家原来的值。
+  searchesWeb: boolean;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -1586,6 +1607,7 @@ function buildEndpoint(input: {
     // 上游清单只由拉取模型改，保存时沿用。
     ...(existing?.catalog ? { catalog: existing.catalog } : {}),
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
+    ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };

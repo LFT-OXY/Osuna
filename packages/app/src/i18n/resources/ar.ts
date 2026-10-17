@@ -2533,6 +2533,13 @@ export const ar: TranslationResources = {
         none: "بدون ربط",
         pickTitle: "نموذج {{tier}}",
       },
+      webSearch: {
+        title: "البحث على الويب",
+        switch: "يبحث على الويب بنفسه",
+        hint: "لخدمة تقع أمام واجهة Anthropic أو OpenAI الرسمية: يُمرَّر بحث Claude Code وCodex على الويب إليها كما هو. عند التشغيل أو الإيقاف تتغير جلسات Claude Code الجارية من طلبها التالي، ويفقد ذلك الطلب ذاكرة التخزين المؤقت للموجّه.",
+        saving: "جارٍ الحفظ…",
+        saveFailed: "تعذّر الحفظ: {{message}}",
+      },
       agent: {
         title: "واجهات API الخارجية",
         useSwitch: "استخدام واجهات API الخارجية",

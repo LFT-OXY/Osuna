@@ -24,6 +24,7 @@ import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
+import { ApiEndpointWebSearchSection } from "./web-search-section";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
 /*
@@ -345,6 +346,12 @@ function ApiEndpointDetailSections({
   const { t } = useTranslation();
   const now = useClock();
   const detail = useEndpointDetail({ serverId, endpoint, endpoints: allEndpoints, agents });
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
+  const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
+  // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
+  const canSearchWeb = (endpoint.baseUrls ?? []).some(
+    (entry) => entry.format === "anthropic_messages" || entry.format === "openai_responses",
+  );
   // 头部操作、删除、模型与映射保存的失败共用头部下面一个提示（docs/design.md：每处一个 Alert）。
   let pageError: { title: string; message: string } | null = null;
   if (detail.deleteError !== null) {
@@ -387,6 +394,13 @@ function ApiEndpointDetailSections({
         testResults={detail.testResults}
         onEdit={onEdit}
       />
+      {hasCliWiring && canSearchWeb ? (
+        <ApiEndpointWebSearchSection
+          value={detail.searchesWeb}
+          save={detail.webSearchSave}
+          onChange={detail.setSearchesWeb}
+        />
+      ) : null}
       <ApiEndpointModelsSection
         source={detail.source}
         fetchState={detail.fetchState}

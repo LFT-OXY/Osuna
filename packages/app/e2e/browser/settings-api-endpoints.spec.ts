@@ -433,6 +433,52 @@ test.describe("Settings API endpoints", () => {
     ).toEqual(["claude-sonnet-4-5"]);
   });
 
+  test("Searches the web by itself saves from its switch, a failed save stays in place, and a Chat-only endpoint has no such row", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Searching relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const chatOnlyId = await seedApiEndpoint(client, {
+      name: "Chat relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+    const host = await failSearchesWebSave(page);
+    await openEndpointDetail(page, endpointId);
+    const section = page.getByTestId("api-endpoint-web-search-section").filter({ visible: true });
+    const toggle = section.getByRole("switch", { name: "Searches the web by itself" });
+    const searchesWeb = async () =>
+      (await client.apiEndpointList("claude")).endpoints.find((entry) => entry.id === endpointId)
+        ?.searchesWeb;
+
+    await expect(section).toContainText("Web search");
+    await expect(toggle).not.toBeChecked();
+
+    await test.step("a failed save stays under the switch", async () => {
+      await toggle.click();
+      await expect(section.getByTestId("api-endpoint-web-search-error")).toHaveText(
+        "Couldn't save: EACCES: permission denied",
+      );
+      await expect(toggle).not.toBeChecked();
+      expect(await searchesWeb()).toBe(false);
+    });
+
+    await test.step("trying again saves it and clears the failure", async () => {
+      host.failing = false;
+      await toggle.click();
+      await expect(toggle).toBeChecked();
+      await expect(section.getByTestId("api-endpoint-web-search-error")).toHaveCount(0);
+      await expect.poll(searchesWeb).toBe(true);
+    });
+
+    await openEndpointDetail(page, chatOnlyId);
+    await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-web-search-section")).toHaveCount(0);
+  });
+
   test("Test connection shows one result per address, and a rejected key reads Key rejected", async ({
     page,
   }) => {
@@ -944,6 +990,42 @@ async function failKeepCurrentSettings(page: Page): Promise<{ failing: boolean }
               requestId: request.requestId,
               provider: request.provider,
               agent: null,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+/** `failing` 为 true 时，带 searchesWeb 的保存请求不送到 daemon，直接回一个失败响应。 */
+async function failSearchesWebSave(page: Page): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isSearchSave =
+        typeof message === "string" &&
+        message.includes("provider.api_endpoint.save.request") &&
+        message.includes('"searchesWeb"');
+      const request = isSearchSave
+        ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+        : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.save.response",
+            payload: {
+              requestId: request.requestId,
+              endpoint: null,
               error: { code: "unknown", message: "EACCES: permission denied" },
             },
           },

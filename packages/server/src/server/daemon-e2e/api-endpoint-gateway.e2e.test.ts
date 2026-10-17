@@ -7725,3 +7725,138 @@ describe("a reply that breaks goes on where it was cut (magpie continuation)", (
     });
   });
 });
+
+/*
+ * 联网搜索按接口放行（工单 04，ADR 0009）：Claude Code 的 WebSearch 另发一次只带 web_search_20250305 的子请求，
+ * 样子照 Claude Code 2.1.302（research/web-search.md 第 1 题）。
+ */
+describe("Claude Code's web search goes only to endpoints that search the web by themselves", () => {
+  const SEARCH_SYSTEM = [
+    { type: "text", text: "x-anthropic-billing-header: cc_version=2.1.302;" },
+    { type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." },
+    {
+      type: "text",
+      text: "You run a web search for another Claude model, which is waiting on the result and can search again. Search once, then reply with a brief summary of the results.",
+    },
+  ];
+  const SEARCH_TOOLS = [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }];
+
+  function searchRequest(model: string) {
+    return {
+      model,
+      max_tokens: 32000,
+      stream: true,
+      system: SEARCH_SYSTEM,
+      messages: [{ role: "user", content: "Perform a web search for the query: osuna" }],
+      thinking: { type: "disabled" },
+      tool_choice: { type: "tool", name: "web_search" },
+      tools: SEARCH_TOOLS,
+    };
+  }
+
+  /** 三家都选了 claude-sonnet-4-5（Anthropic 官方接口前面的中转）：A、C 打开了「自己能联网搜索」，B 没有；`searchers` 改写哪几家打开。 */
+  async function threeRelays(searchers: Record<string, boolean> = { a: true, c: true }) {
+    const upstreams = {
+      a: await startUpstream(),
+      b: await startUpstream(),
+      c: await startUpstream(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-search-"));
+    tempRoots.push(root);
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    await mkdir(endpointsDir, { recursive: true });
+    const endpoints = (["a", "b", "c"] as const).map((key) => {
+      const endpoint = storedEndpoint({
+        id: `ep_${key}`,
+        slug: `relay-${key}`,
+        name: `Relay ${key.toUpperCase()}`,
+        baseUrls: [{ format: "anthropic_messages", url: upstreams[key].url }],
+        models: ["claude-sonnet-4-5"],
+      });
+      return searchers[key] ? Object.assign(endpoint, { searchesWeb: true }) : endpoint;
+    });
+    const files = {
+      "endpoints.json": {
+        endpoints,
+        agents: {
+          claude: { enabled: true, defaultModelId: "claude-sonnet-4-5" },
+          codex: { enabled: false, defaultModelId: null },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B, ep_c: KEY_C } },
+      "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN } },
+    };
+    for (const [name, value] of Object.entries(files)) {
+      await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
+    }
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      cleanup: false,
+      logger: pino({ level: "silent" }),
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        gatewayRetryPauseMs: 10,
+      },
+    });
+    daemons.push(daemon);
+    const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+    const ask = (body: unknown) => fetch(`${gateway}/v1/messages`, claudeRequest(body));
+    return { upstreams, ask };
+  }
+
+  test("a search in a conversation on B goes to A first, then to C when A fails, never to B, as it was sent", async () => {
+    const { upstreams, ask } = await threeRelays();
+    upstreams.a.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    upstreams.c.respond = (_request, res) => streamReply(res, { text: "found it" });
+
+    const response = await ask(searchRequest("relay-b/claude-sonnet-4-5"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
+    expect(await response.text()).toContain("found it");
+    expect(upstreams.b.requests).toHaveLength(0);
+    expect(upstreams.a.requests).toHaveLength(1);
+    expect(upstreams.c.requests).toHaveLength(1);
+    for (const request of [upstreams.a.requests[0], upstreams.c.requests[0]]) {
+      const body = JSON.parse(request?.body.toString() ?? "{}");
+      expect(body.tools).toEqual(SEARCH_TOOLS);
+      expect(body.system).toEqual(SEARCH_SYSTEM);
+      expect(body.tool_choice).toEqual({ type: "tool", name: "web_search" });
+      expect(body.model).toBe("claude-sonnet-4-5");
+    }
+  });
+
+  test("the conversation itself still goes to the endpoint it names", async () => {
+    const { upstreams, ask } = await threeRelays();
+    upstreams.b.respond = (_request, res) => streamReply(res, { text: "from B" });
+
+    const response = await ask({
+      model: "relay-b/claude-sonnet-4-5",
+      max_tokens: 32,
+      stream: true,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreams.b.requests).toHaveLength(1);
+    expect(upstreams.a.requests).toHaveLength(0);
+  });
+
+  test("with no endpoint for the model that searches, the CLI gets a 400 invalid_request_error and no upstream is asked", async () => {
+    const { upstreams, ask } = await threeRelays({});
+
+    const response = await ask(searchRequest("claude-sonnet-4-5"));
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      type: string;
+      error: { type: string; message: string };
+    };
+    expect(body.type).toBe("error");
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(body.error.message).toContain("claude-sonnet-4-5");
+    expect(body.error.message).toContain("Searches the web by itself");
+    for (const upstream of Object.values(upstreams)) expect(upstream.requests).toHaveLength(0);
+  });
+});

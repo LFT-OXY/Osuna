@@ -2555,6 +2555,13 @@ export const ja: TranslationResources = {
         none: "マッピングしない",
         pickTitle: "{{tier}} のモデル",
       },
+      webSearch: {
+        title: "ウェブ検索",
+        switch: "自前でウェブ検索できる",
+        hint: "Anthropic または OpenAI 公式 API の前段にあるサービス向け：Claude Code と Codex のウェブ検索をそのまま渡します。オン・オフすると、実行中の Claude Code セッションは次のリクエストから切り替わり、そのリクエストではプロンプトキャッシュが無効になります。",
+        saving: "保存中…",
+        saveFailed: "保存できませんでした：{{message}}",
+      },
       agent: {
         title: "サードパーティ API",
         useSwitch: "サードパーティ API を使う",

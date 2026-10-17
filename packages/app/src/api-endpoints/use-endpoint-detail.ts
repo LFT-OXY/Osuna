@@ -35,6 +35,12 @@ export type FormatTestOutcome =
   | { kind: "authFailed"; message: string }
   | { kind: "failed"; message: string };
 
+// 「自己能联网搜索」开关的保存：保存中显示要保存的值，失败的原因留到下次切换。
+export type WebSearchSaveState =
+  | { status: "idle" }
+  | { status: "saving"; value: boolean }
+  | { status: "failed"; message: string };
+
 export type FormatTestResults = Partial<Record<ApiEndpointRequestFormat, FormatTestOutcome>>;
 
 type ModelSelection = Pick<ModelSource, "models" | "manualModels">;
@@ -59,6 +65,10 @@ export interface UseEndpointDetailResult {
   testResults: FormatTestResults;
   isTesting: boolean;
   isDeleting: boolean;
+  // 开关显示的值：保存中为要保存的值，否则以 daemon 为准。
+  searchesWeb: boolean;
+  webSearchSave: WebSearchSaveState;
+  setSearchesWeb: (value: boolean) => void;
   fetchModels: () => void;
   changeModels: (next: ModelSelection) => void;
   // 失败原因交给调用方（手动添加那一行自己显示），不进 saveError。
@@ -93,6 +103,7 @@ export function useEndpointDetail(input: {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<FormatTestResults>({});
   const [isDeleting, setIsDeleting] = useState(false);
+  const [webSearchSave, setWebSearchSave] = useState<WebSearchSaveState>({ status: "idle" });
   // 还没回来的保存数；只决定何时放下草稿，不参与渲染。
   const pendingSaves = useRef(0);
   const autoFetchedFor = useRef<string | null>(null);
@@ -235,6 +246,39 @@ export function useEndpointDetail(input: {
     [confirmModelsOff, current.modelMapping, saveReportingError],
   );
 
+  const setSearchesWeb = useCallback(
+    (value: boolean) => {
+      if (!client) {
+        setWebSearchSave({ status: "failed", message: t("workspace.terminal.hostDisconnected") });
+        return;
+      }
+      setWebSearchSave({ status: "saving", value });
+      void (async () => {
+        let failure: string | null = null;
+        try {
+          const result = await client.apiEndpointSave({
+            provider: LIST_PROVIDER,
+            endpointId: endpoint.id,
+            name: endpoint.name,
+            baseUrls: endpoint.baseUrls ?? [],
+            models: current.models,
+            manualModels: current.manualModels,
+            ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
+            searchesWeb: value,
+          });
+          failure = result.error?.message ?? null;
+        } catch (error) {
+          failure = toErrorMessage(error);
+        }
+        await refresh();
+        setWebSearchSave(
+          failure === null ? { status: "idle" } : { status: "failed", message: failure },
+        );
+      })();
+    },
+    [client, current, endpoint, refresh, t],
+  );
+
   const addModel = useCallback(
     (modelId: string) => save({ ...current, ...addManualModel(current, modelId) }),
     [current, save],
@@ -323,6 +367,10 @@ export function useEndpointDetail(input: {
     testResults,
     isTesting,
     isDeleting,
+    searchesWeb:
+      webSearchSave.status === "saving" ? webSearchSave.value : endpoint.searchesWeb === true,
+    webSearchSave,
+    setSearchesWeb,
     fetchModels,
     changeModels,
     addModel,

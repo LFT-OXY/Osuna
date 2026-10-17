@@ -236,6 +236,13 @@ turn (internal/gateway/codex_memory.go, callKind in codex_backend.go):
   packages/server/src/server/api-endpoints/gateway/routing.test.ts
   packages/server/src/server/api-endpoints/gateway/codex-side-calls.ts
 
+When an endpoint's "Searches the web by itself" counts (only with an Anthropic
+or OpenAI Responses address) follows searchesItself in magpie's
+internal/gateway/search.go, and telling a web search tool in a request follows
+how internal/gateway/anthropic.go reads server-side tools (WebSearch):
+
+  packages/server/src/server/api-endpoints/gateway/web-search.ts
+
 How a model its vendor said is retired is remembered (a week, kept in a file,
 taken back when that endpoint answers for it, left out of every model list
 and of routing by bare name) follows Retire, Unretire, retiredNow and

@@ -88,10 +88,21 @@ afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-/** 起一个隔离 daemon；`files` 是启动前就放进 $PASEO_HOME/api-endpoints/ 的文件。 */
-async function start(files: Record<string, string> = {}): Promise<Harness> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-host-"));
-  tempRoots.push(root);
+/**
+ * 起一个隔离 daemon；`files` 是启动前就放进 $PASEO_HOME/api-endpoints/ 的文件。
+ * 给了 `reuse` 就沿用那次的 home（先关掉它的 daemon），模拟重启。
+ */
+async function start(files: Record<string, string> = {}, reuse?: Harness): Promise<Harness> {
+  let root: string;
+  if (reuse) {
+    await reuse.client.close();
+    await reuse.daemon.close();
+    harnesses.splice(harnesses.indexOf(reuse), 1);
+    root = path.dirname(path.dirname(path.dirname(reuse.endpointsPath)));
+  } else {
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-host-"));
+    tempRoots.push(root);
+  }
   const endpointsDir = path.join(root, ".paseo", "api-endpoints");
   await mkdir(endpointsDir, { recursive: true });
   for (const [name, text] of Object.entries(files)) {
@@ -99,13 +110,17 @@ async function start(files: Record<string, string> = {}): Promise<Harness> {
   }
   const claudeConfigDir = path.join(root, "claude");
   const settingsPath = path.join(claudeConfigDir, "settings.json");
-  await mkdir(claudeConfigDir, { recursive: true });
-  await writeFile(settingsPath, USER_SETTINGS);
+  if (!reuse) {
+    await mkdir(claudeConfigDir, { recursive: true });
+    await writeFile(settingsPath, USER_SETTINGS);
+  }
 
   const logLines: string[] = [];
   const logger = pino({ level: "info" }, { write: (line: string) => logLines.push(line) });
   const daemon = await createTestPaseoDaemon({
     paseoHomeRoot: root,
+    // home 在 tempRoots 里统一删；重启要沿用它。
+    cleanup: false,
     logger,
     apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
   });
@@ -642,5 +657,125 @@ describe("clients without apiEndpointGateway get a single-endpoint projection", 
       })
       .toBeUndefined();
     expect((await claudeEntry())?.apiEndpointModelGroups).toBeUndefined();
+  });
+});
+
+describe("Searches the web by itself", () => {
+  test("is off for old endpoints, saved with the endpoint, kept by a save that omits it, and survives a restart", async () => {
+    const harness = await startWithLegacyFile();
+    const legacy = await harness.client.apiEndpointList("claude");
+    expect(legacy.endpoints.map((endpoint) => endpoint.searchesWeb)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+
+    const id = await saveEndpoint(harness.client, "Relay", ["m1"]);
+    const turnedOn = await harness.client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [{ id: "m1" }],
+      searchesWeb: true,
+    });
+    expect(turnedOn.error).toBeNull();
+    expect(turnedOn.endpoint?.searchesWeb).toBe(true);
+
+    // 老客户端（含官方 Paseo 手机 App）的保存不带这个字段：保留。
+    const oldClientSave = await harness.client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay renamed",
+      baseUrl: "https://relay.example",
+      models: [{ id: "m1" }, { id: "m2" }],
+      defaultModelId: "m1",
+    });
+    expect(oldClientSave.error).toBeNull();
+    expect(oldClientSave.endpoint?.searchesWeb).toBe(true);
+
+    const restarted = await start({}, harness);
+    const listed = await restarted.client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === id)).toMatchObject({
+      name: "Relay renamed",
+      searchesWeb: true,
+    });
+
+    const turnedOff = await restarted.client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay renamed",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [{ id: "m1" }],
+      searchesWeb: false,
+    });
+    expect(turnedOff.endpoint?.searchesWeb).toBe(false);
+  });
+});
+
+describe("Claude Code's WebSearch follows the endpoints that search the web by themselves", () => {
+  const USER_DENY = `{
+  "permissions": {
+    "deny": [
+      "Read(./.env)"
+    ]
+  }
+}
+`;
+
+  async function setSearchesWeb(client: DaemonClient, id: string, searchesWeb: boolean) {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Searcher",
+      baseUrls: [{ format: "anthropic_messages", url: "https://searcher.example" }],
+      models: [{ id: "s1" }],
+      searchesWeb,
+    });
+    expect(saved.error).toBeNull();
+  }
+
+  test("the deny rule is there while none is on, goes when one is on, and comes back when it is off again", async () => {
+    const { client, settingsPath } = await start();
+    await writeFile(settingsPath, USER_DENY);
+    const id = await saveEndpoint(client, "Searcher", ["s1"]);
+    await saveEndpoint(client, "Plain", ["p1"]);
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const deny = async () => JSON.parse(await readFile(settingsPath, "utf8")).permissions?.deny;
+
+    expect(await deny()).toEqual(["Read(./.env)", "WebSearch"]);
+
+    await setSearchesWeb(client, id, true);
+    expect(await deny()).toEqual(["Read(./.env)"]);
+
+    // 开着开关的那家被关掉：没有开着的接口会搜了，规则回来。
+    await client.apiEndpointSetEndpointState({ endpointId: id, enabled: false });
+    expect(await deny()).toEqual(["Read(./.env)", "WebSearch"]);
+    await client.apiEndpointSetEndpointState({ endpointId: id, enabled: true });
+    expect(await deny()).toEqual(["Read(./.env)"]);
+
+    await setSearchesWeb(client, id, false);
+    expect(await deny()).toEqual(["Read(./.env)", "WebSearch"]);
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_DENY);
+  });
+
+  test("a switch on an endpoint with only a Chat address does not count", async () => {
+    const { client, settingsPath } = await start();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Chat only",
+      baseUrls: [{ format: "openai_chat", url: "https://chat.example/v1" }],
+      apiKey: "sk-chat",
+      models: [{ id: "c1" }],
+      searchesWeb: true,
+    });
+    expect(saved.error).toBeNull();
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+    expect(settings.permissions.deny).toEqual(["WebSearch"]);
   });
 });

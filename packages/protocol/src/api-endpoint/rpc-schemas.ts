@@ -111,6 +111,8 @@ export const ApiEndpointSchema = z.object({
   catalog: ApiEndpointModelCatalogSchema.optional(),
   // 用户手动添加的模型名，不管开没开都留在清单里。
   manualModels: z.array(ApiEndpointModelSchema).optional(),
+  // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
+  searchesWeb: z.boolean().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -209,6 +211,7 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * 新客户端带 baseUrls，不带 baseUrl / defaultModelId，models 可以为空；接口开关不在这里改。
  * 老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
  * manualModels 省略即保留这家已有的手动添加模型；拉回来的上游清单只由 fetch_models 改。
+ * searchesWeb 省略即保留这家原来的「自己能联网搜索」，老客户端保存时不会把它关掉。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -223,6 +226,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   defaultModelId: z.string().optional(),
   modelMapping: ApiEndpointModelMappingSchema.optional(),
   manualModels: z.array(ApiEndpointModelSchema).optional(),
+  searchesWeb: z.boolean().optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 

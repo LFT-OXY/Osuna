@@ -15,8 +15,9 @@ import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.j
  * - 顶层 model：新会话的起始模型。不写 env.ANTHROPIC_MODEL，它会盖过会话里 /model 的选择；
  * - env 下的 ANTHROPIC_MODEL、ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL、ANTHROPIC_SMALL_FAST_MODEL：
  *   接管时有就记下并删掉（档位由中转站按各家映射翻译），切回官方时放回；
- * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，第三方接口不支持，
- *   Claude Code 没有关它的环境变量，只能用权限规则。用户自己写的同名规则不归 Osuna 所有。
+ * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，多数第三方接口不支持，
+ *   Claude Code 没有关它的环境变量，只能用权限规则。只在没有一家开着的接口「自己能联网搜索」时写；
+ *   有了就拿掉自己写的那条（ADR 0009）。用户自己写的同名规则不归 Osuna 所有。
  * - 顶层 modelPicker：终端 /model 列出各家接口的已选模型（Claude Code v2.1.242 起，只读用户设置）。
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
  * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
@@ -90,13 +91,17 @@ export type ClaudeSettingsRestoreResult =
   | { kind: "missing" }
   | { kind: "unparsable"; message: string };
 
-/** CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示。 */
+/**
+ * CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示，
+ * 以及是否放开 WebSearch（至少一家开着的接口「自己能联网搜索」）。
+ */
 export interface ClaudeGatewayWiring {
   baseUrl: string;
   token: string;
   model: string;
   modelPicker: ClaudeModelPickerOption[];
   hintEnv: ClaudeHintEnv;
+  allowWebSearch: boolean;
 }
 
 /**
@@ -137,7 +142,13 @@ export function applyClaudeApiEndpoint(input: {
   };
   text = edit(text, ["model"], input.wiring.model, formatting);
 
-  const webSearchDeny = ensureWebSearchDenied(text, parsed.settings, input.takeover, formatting);
+  const webSearchDeny = writeWebSearchRule({
+    text,
+    before: parsed.settings,
+    allow: input.wiring.allowWebSearch,
+    takeover: input.takeover,
+    formatting,
+  });
   text = webSearchDeny.text;
 
   const hintEnv = writeHintEnv({
@@ -284,20 +295,7 @@ export function restoreClaudeOfficial(input: {
     text = edit(text, ["modelPicker"], undefined, formatting);
   }
 
-  const { webSearchDeny } = input.takeover;
-  if (webSearchDeny.added) {
-    const deny = readSettings(text).permissions?.deny ?? [];
-    const index = deny.indexOf(WEB_SEARCH_RULE);
-    if (index !== -1) {
-      text = edit(text, ["permissions", "deny", index], undefined, formatting);
-    }
-    if (webSearchDeny.denyCreated && readSettings(text).permissions?.deny?.length === 0) {
-      text = edit(text, ["permissions", "deny"], undefined, formatting);
-    }
-    if (webSearchDeny.permissionsCreated) {
-      text = removeIfEmptyObject(text, ["permissions"], formatting);
-    }
-  }
+  text = removeOwnWebSearchDeny(text, input.takeover.webSearchDeny, formatting);
 
   // 负责的东西都拿走后只剩空对象：jsonc 会留下 "{\n}"，按接管前的样子收回。
   const { originalFile } = input.takeover;
@@ -416,6 +414,55 @@ function parseSettings(text: string): ParseResult {
 /** 只在已校验过的文本上调用。 */
 function readSettings(text: string): ParsedSettings {
   return JSON.parse(text) as ParsedSettings;
+}
+
+/** 拿掉 Osuna 写的那条 "WebSearch"，以及因它而建、现在空了的 deny 与 permissions；不是 Osuna 的不动。 */
+function removeOwnWebSearchDeny(
+  text: string,
+  record: ClaudeSettingsTakeover["webSearchDeny"],
+  formatting: FormattingOptions,
+): string {
+  if (!record.added) return text;
+  let next = text;
+  const deny = readSettings(next).permissions?.deny ?? [];
+  const index = deny.indexOf(WEB_SEARCH_RULE);
+  if (index !== -1) {
+    next = edit(next, ["permissions", "deny", index], undefined, formatting);
+  }
+  if (record.denyCreated && readSettings(next).permissions?.deny?.length === 0) {
+    next = edit(next, ["permissions", "deny"], undefined, formatting);
+  }
+  if (record.permissionsCreated) {
+    next = removeIfEmptyObject(next, ["permissions"], formatting);
+  }
+  return next;
+}
+
+/** 至少一家开着的接口自己会搜时放开 WebSearch，否则写上禁止规则（ADR 0009）。 */
+function writeWebSearchRule(input: {
+  text: string;
+  before: ParsedSettings;
+  allow: boolean;
+  takeover: ClaudeSettingsTakeover | null;
+  formatting: FormattingOptions;
+}): { text: string; record: ClaudeSettingsTakeover["webSearchDeny"] } {
+  const { text, takeover, formatting } = input;
+  if (input.allow) return allowWebSearch(text, takeover, formatting);
+  return ensureWebSearchDenied(text, input.before, takeover, formatting);
+}
+
+/** 放开 WebSearch：只拿掉自己写的那条，之后文件里的 "WebSearch"（如果有）都归用户。 */
+function allowWebSearch(
+  text: string,
+  takeover: ClaudeSettingsTakeover | null,
+  formatting: FormattingOptions,
+): { text: string; record: ClaudeSettingsTakeover["webSearchDeny"] } {
+  const notOurs = { added: false, permissionsCreated: false, denyCreated: false };
+  if (!takeover) return { text, record: notOurs };
+  return {
+    text: removeOwnWebSearchDeny(text, takeover.webSearchDeny, formatting),
+    record: notOurs,
+  };
 }
 
 function ensureWebSearchDenied(
