@@ -736,7 +736,7 @@ Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tic
 
 ### 3. Contracts
 
-- Token file `$PASEO_HOME/api-endpoints/gateway-tokens.json` `{ tokens: { [provider]: token } }` (0600, `ApiEndpointStore.readGatewayTokens` / `writeGatewayTokens`). `ApiEndpointService.commit` syncs it after `writeState`: switch off → on issues `randomBytes(32).toString("base64url")`, on with no token issues one, on → on keeps it, off deletes it.
+- Token file `$PASEO_HOME/api-endpoints/gateway-tokens.json` `{ tokens: { [provider]: token } }` (0600, `ApiEndpointStore.readGatewayTokens` / `writeGatewayTokens`). `ApiEndpointService.commit` syncs it after `writeState`: an agent that is on and has no token gets `randomBytes(32).toString("base64url")` (`nextGatewayTokens`); a token is never revoked — switch off keeps it, switch on again reuses it (cli-wiring-web-search ticket 02, ADR 0010), so sessions still running and Codex conversations recorded under Osuna's table keep reaching the gateway.
 - The gateway reads `endpoints.json`, `keys.json` and the token file on every request, so endpoint edits take effect without a hook.
 - Request body (gateway-robustness ticket 11, `gateway/request-body.ts`, magpie): `Content-Encoding` `zstd`, `gzip` / `x-gzip` are decoded with Node's built-in zlib (zstd needs Node ≥ 22.15 — CI, Docker `node:22` and Electron 44 have it; an older Node answers zstd with 415); any other encoding → 415; corrupt compressed data → 400 plus one `warn` with the encoding. The 64 MB cap (`MAX_REQUEST_BODY_BYTES`; tests shrink it with `gatewayBodyLimitBytes`) counts decoded bytes while decoding → 413 saying it is the gateway's own limit, no endpoint was asked, and to `/compact` or start a new conversation. Passthrough sends the decoded body and drops `Content-Encoding`.
 - User-Agent: passthrough and translated attempts (count_tokens too) send the CLI's own `User-Agent`; without one, `Osuna/<daemonVersion>`.
@@ -865,12 +865,16 @@ Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tic
 
 ### 4. Validation & Error Matrix
 
+Caller recognition (cli-wiring-web-search ticket 02, `gateway/callers.ts` `judgeCaller`, magpie MIT): a loopback request without forwarding headers is accepted with any token or none. The agent is the one whose token matches (Bearer, then `x-api-key`); otherwise the User-Agent product name (claude: `claude`/`cc`/`claude-code`, prefixes `claude-cli`/`claude-code`; codex: `codex`, prefixes `codex`/`acp-extension-codex`); otherwise the path (`/v1/messages` Claude Code, `/v1/responses` Codex — not in magpie). The gateway is mounted before the host allowlist and CORS in `bootstrap.ts` so a rebinding rejection comes back in the agent's error shape, not the allowlist's `Invalid Host header`. There is no 401 any more.
+
 All errors are wrapped in the agent's protocol (`gateway/agent-errors.ts`): `/v1/messages` or an `anthropic-version` header → `{ type: "error", error: { type, message } }`; otherwise `{ error: { message, type, code, param: null } }`. `type` defaults by status (400 `invalid_request_error`, 401 `authentication_error`, 403 `permission_error`, 404 `not_found_error`, 413 `request_too_large`, 429 `rate_limit_error`, 529 `overloaded_error`, other 5xx `api_error`).
 
 | Condition | Status | Message |
 |---|---|---|
-| Socket not loopback, or `Forwarded` / `X-Forwarded-For` / `X-Real-IP` present | 403 | `The API endpoint gateway only accepts local requests` |
-| No token, or matches no agent (`timingSafeEqual`) | 401 | `Invalid API endpoint gateway token` |
+| Socket not loopback | 403 | `The API endpoint gateway only accepts requests from this computer` |
+| Any of `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `Cf-Connecting-IP`, `True-Client-IP`, `Tailscale-User-Login` (magpie `lan.go`) | 403 | `… this one came through a proxy or tunnel …` |
+| No matching token, browser markers, and a `Host` that is not this machine (DNS rebinding; localhost, loopback IPs, `os.hostname()` and container host names pass) | 403 | `… doesn't answer a browser that reached it as <host> …` |
+| `Origin` of another site; `Origin: null` or a localhost-subdomain page without a matching token (magpie `cors.go`) | 403 | names the page / says to open it at localhost |
 | Decoded body over 64 MB | 413 | `The request body is over the API endpoint gateway's limit of 64 MB (decompressed); no API endpoint was asked. …` with `/compact` |
 | `Content-Encoding` other than zstd / gzip, or zstd on a Node without it | 415 | names the encoding / says to send identity or gzip |
 | Compressed body that does not decode | 400 | `The request body is not valid <encoding> data` |

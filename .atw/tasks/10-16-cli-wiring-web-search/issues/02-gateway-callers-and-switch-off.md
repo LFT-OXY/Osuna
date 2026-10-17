@@ -9,7 +9,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：不带口令、带 ChatGPT 形式令牌、带 claude.ai 形式令牌的本机请求都被收下，并认对 Claude Code、Codex。
 - [ ] 带 `Origin` 头、DNS 重绑定形式、带任一转发头的请求被拒，回 Agent 认得的错误格式。
