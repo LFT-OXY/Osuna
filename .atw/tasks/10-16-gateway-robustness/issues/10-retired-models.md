@@ -21,7 +21,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：一家回 410「已下线」后，下面这些地方都不再有这家的这一项，另一家的同名模型仍在：
   - 中转站的模型清单；
