@@ -118,7 +118,7 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 
 ### 与 magpie 不同的地方
 
-- **点名搜索写成 `{"type":"web_search"}`**：magpie 把 Claude Code 子请求的 `{"type":"tool","name":"web_search"}` 读成 `name:web_search`，发 Responses 时写成 `{"type":"function","name":"web_search"}`，而 `tools` 里没有这个函数，只有原生 `web_search`。OpenAI 的托管工具点名是 `{"type": <工具类型>}`；openai-agents-js 的 `ToolChoice` 显式收 `{ type: 'web_search' }`、openai-agents-python 的 `convert_tool_choice` 把 `"web_search"` 转成同样的形状（两处都注明 SDK 的 `ToolChoiceTypes` 还没列它）。magpie 这条路径没有测试（research/web-search.md 第 5 题）。
+- **点名搜索照 magpie**：Claude Code 子请求的 `{"type":"tool","name":"web_search"}` 发 Responses 时照 magpie `buildResponses` 写成 `{"type":"function","name":"web_search"}`，虽然 `tools` 里只有原生 `web_search`。曾考虑写成托管工具的 `{"type":"web_search"}`（openai-agents 的 JS、Python 库用这种写法），但这种写法和 magpie 的写法都没有对真实接口验证过，没有核实过的坏处就不偏离 magpie。magpie 这条路径没有测试（research/web-search.md 第 5 题）。
 - **Anthropic 上游的搜索写回 Codex**：magpie 的 `anthropicDecoder` 跳过 `server_tool_use` 的内容、不读 `web_search_tool_result`，Codex 收不到 `web_search_call`；工单要求写回，所以 Osuna 按结果块的 `tool_use_id` 找到它的 `server_tool_use` 取查询词，结果项取 title、url、page_age；结果是错误对象时交出一次没有页面的搜索。属于比 magpie 多做。
 - **Responses 结果项的标题**：magpie 只读 sources 的 url、标题也用 url；Osuna 在 source 带 `title` 时用它，否则同 magpie。
 - 文字修补（`textCallFilter`）收到搜索时先交出扣着的文字，保住先后顺序；断流续写不把搜索当作调用（magpie `continuation.add` 同样只看 KToolStart、KToolArgs）。

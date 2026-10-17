@@ -13,7 +13,6 @@ import {
   argsOf,
   attachmentText,
   callsTool,
-  choosesWebSearch,
   dataUrl,
   effortOf,
   imagePart,
@@ -767,8 +766,9 @@ export const SEARCH_SOURCES = "web_search_call.action.sources";
 
 /**
  * strict 照 Codex 一律写明：不写时 ChatGPT 后端按严格模式校验 schema，拒收带环视的 pattern（magpie #383）。
- * 客户端要了联网搜索时末尾加上原生的 web_search。点名搜索（Claude Code 的搜索子请求）写成 {"type":"web_search"}：
- * magpie 写成同名的 function，而 tools 里没有这个函数（research/implementation-notes.md「06」）。
+ * 客户端要了联网搜索时末尾加上原生的 web_search。点名搜索（Claude Code 的搜索子请求的 name:web_search）照 magpie
+ * buildResponses 写成 {"type":"function","name":"web_search"}，虽然 tools 里只有原生 web_search、没有这个函数；
+ * 托管工具的写法 {"type":"web_search"} 与这种写法都没有对真实接口验证过，照 magpie。
  */
 function responsesTools(request: GatewayRequest): Record<string, unknown> {
   const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
@@ -783,8 +783,6 @@ function responsesTools(request: GatewayRequest): Record<string, unknown> {
   const { toolChoice } = request;
   if (toolChoice === "auto" || toolChoice === "none" || toolChoice === "required") {
     out.tool_choice = toolChoice;
-  } else if (choosesWebSearch(request)) {
-    out.tool_choice = { type: "web_search" };
   } else if (toolChoice.startsWith("name:")) {
     out.tool_choice = { type: "function", name: toolChoice.slice(5) };
   }

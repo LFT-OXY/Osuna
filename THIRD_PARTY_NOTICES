@@ -316,7 +316,9 @@ internal/gateway/kimi_schema.go, deepseekToolPatterns and unicodeNullEscape in
 deepseek_schema.go, grokToolPatterns and ecmaClassForRust in grok_schema.go,
 grokModel, wholeNums, wholeEncoder, wholeResult and intTidy in
 grok_integral.go, reasoningDetailsAsContent in chattidy.go, buildChat's
-inlineThink in chat.go and forwardOnce in gateway.go; their tests reuse the
+inlineThink in chat.go and forwardOnce in gateway.go, and not asking xAI's own
+address for web_search_call.action.sources follows buildResponses in
+responses.go; their tests reuse the
 cases of kimi_schema_test.go, deepseek_schema_test.go, grok_schema_test.go,
 grok_integral_test.go, kimi_reasoning_details_test.go and
 minimax_think_test.go:

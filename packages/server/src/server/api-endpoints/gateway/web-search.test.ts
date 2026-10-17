@@ -117,16 +117,16 @@ describe("a translated request and the endpoint's web search", () => {
   });
 
   test("keeps the search for an endpoint that searches on the format it goes out on", () => {
-    expect(withWebSearchFor(CODEX_TURN, true)).toBe(CODEX_TURN);
+    expect(withWebSearchFor({ request: CODEX_TURN, searches: true })).toBe(CODEX_TURN);
     expect(CODEX_TURN.webSearch).toBe(true);
   });
 
   test("drops it, with a choice naming it, for one that doesn't", () => {
-    expect(withWebSearchFor(CODEX_TURN, false)).toMatchObject({
+    expect(withWebSearchFor({ request: CODEX_TURN, searches: false })).toMatchObject({
       webSearch: false,
       toolChoice: "auto",
     });
-    expect(withWebSearchFor(CLAUDE_SEARCH, false)).toMatchObject({
+    expect(withWebSearchFor({ request: CLAUDE_SEARCH, searches: false })).toMatchObject({
       webSearch: false,
       toolChoice: "",
     });

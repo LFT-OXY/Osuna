@@ -1043,7 +1043,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     wire: input.wire,
     from: input.format,
     to: candidate.format,
-    request: withWebSearchFor(candidate.translated, searches),
+    request: withWebSearchFor({ request: candidate.translated, searches }),
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });

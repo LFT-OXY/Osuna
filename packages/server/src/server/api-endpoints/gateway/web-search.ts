@@ -78,8 +78,12 @@ export function formatsToSearchOn<Format extends ApiEndpointRequestFormat>(input
 /**
  * 翻译出去的请求只对在目标格式上自己会搜的接口带搜索；不会搜的拿掉它，连同点名它的 tool_choice（不然点的是一个不存在的工具）。
  */
-export function withWebSearchFor(request: GatewayRequest, searches: boolean): GatewayRequest {
-  if (!request.webSearch || searches) return request;
+export function withWebSearchFor(input: {
+  request: GatewayRequest;
+  searches: boolean;
+}): GatewayRequest {
+  const { request } = input;
+  if (!request.webSearch || input.searches) return request;
   const toolChoice = choosesWebSearch(request) ? "" : request.toolChoice;
   return { ...request, webSearch: false, toolChoice };
 }

@@ -7931,12 +7931,12 @@ describe("Claude Code's web search goes only to endpoints that search the web by
     res.end();
   }
 
-  /** 发给只有 Responses 地址那家的请求：原生 web_search、点名它、要了搜到的页面。 */
+  /** 发给只有 Responses 地址那家的请求：原生 web_search、照 magpie 点名同名函数、要了搜到的页面。 */
   function expectNativeSearch(request: RecordedRequest | undefined) {
     expect(request?.url).toBe("/v1/responses");
     const body = receivedBody(request);
     expect(body.tools).toEqual([{ type: "web_search" }]);
-    expect(body.tool_choice).toEqual({ type: "web_search" });
+    expect(body.tool_choice).toEqual({ type: "function", name: "web_search" });
     expect(body.include).toEqual(["web_search_call.action.sources"]);
   }
 
@@ -7998,6 +7998,18 @@ describe("Claude Code's web search goes only to endpoints that search the web by
       { type: "text", text: "Osuna is an app." },
     ]);
     expect(body.stop_reason).toBe("end_turn");
+  });
+
+  test("an endpoint with only a Responses URL and the switch off: the search still gets the 400 and nothing reaches it", async () => {
+    const { upstreams, ask } = await threeRelays({}, {}, ["a"]);
+
+    const response = await ask(searchRequest("relay-a/claude-sonnet-4-5"));
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { type: string; error: { type: string } };
+    expect(body.type).toBe("error");
+    expect(body.error.type).toBe("invalid_request_error");
+    expect(upstreams.a.requests).toHaveLength(0);
   });
 
   test("with no endpoint for the model that searches, the CLI gets a 400 invalid_request_error and no upstream is asked", async () => {

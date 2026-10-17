@@ -1586,11 +1586,11 @@ describe("Claude Code's web search asked of a Responses endpoint", () => {
     ],
   };
 
-  test("the search tool goes out as Responses' own web_search, the sources asked for, and the forced choice names it", () => {
+  test("the search tool goes out as Responses' own web_search, the sources asked for, and the forced choice names it as magpie does", () => {
     const built = buildResponsesRequest(parseAnthropicRequest(SEARCH_REQUEST), "gpt-5");
 
     expect(built.tools).toEqual([{ type: "web_search" }]);
-    expect(built.tool_choice).toEqual({ type: "web_search" });
+    expect(built.tool_choice).toEqual({ type: "function", name: "web_search" });
     expect(built.include).toEqual(["web_search_call.action.sources"]);
   });
 
