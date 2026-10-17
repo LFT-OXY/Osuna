@@ -21,6 +21,7 @@ const GATEWAY: CodexGatewayWiring = {
   token: "gw-token",
   model: "relay/gpt",
   catalogPath: CATALOG,
+  chatgptBaseUrl: null,
 };
 
 // 用户手写的 config.toml：注释、行尾注释、引号风格、带空格的项目路径、自己的中转站，全都不能动。
@@ -299,6 +300,104 @@ timeout_ms = 5000
   });
 });
 
+const CHATGPT_URL = "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex";
+
+/** 用 ChatGPT 登录的 Codex（ADR 0010）：内置 openai 服务商经 openai_base_url 指到中转站的 ChatGPT 后端地址。 */
+function applyChatGpt(text: string | null, takeover: CodexConfigTakeover | null = null) {
+  return applyWith({ text, takeover, wiring: { chatgptBaseUrl: CHATGPT_URL } });
+}
+
+describe("applyCodexApiEndpoint under a ChatGPT sign-in", () => {
+  it("writes openai_base_url, keeps Codex's own model, drops the provider and keeps the table", () => {
+    const { text } = applyChatGpt(USER_CONFIG);
+
+    expect(text).toBe(`# my codex config
+model = 'gpt-5.1-codex'   # the one I like
+approval_policy = "on-request"
+openai_base_url = "${CHATGPT_URL}"
+
+# projects
+[projects."/Users/me/My Code"]
+trust_level = "trusted"
+
+[model_providers.mine]
+name = "Mine"
+base_url = "https://mine.example/v1"
+
+${RELAY_BLOCK}`);
+  });
+
+  it("writes the endpoint's default model when Codex has none of its own", () => {
+    const { text } = applyChatGpt(`approval_policy = "never"\n`);
+
+    expect(text).toBe(`approval_policy = "never"
+model = "relay/gpt"
+openai_base_url = "${CHATGPT_URL}"
+
+${RELAY_BLOCK}`);
+  });
+
+  it("takes Osuna's own model_provider and model_catalog_json out and Official puts every key back", () => {
+    const provider = apply(USER_CONFIG);
+    const chatgpt = applyChatGpt(provider.text, provider.takeover);
+
+    expect(toValue(chatgpt.text)).toMatchObject({ model: "gpt-5.1-codex" });
+    expect(chatgpt.text).not.toContain("model_provider =");
+    expect(chatgpt.text).not.toContain("model_catalog_json");
+    // 拿掉又放回的键回到最后一个顶层键后面：值一样，位置不保证。
+    expect(toValue(restore(chatgpt.text, chatgpt.takeover))).toEqual(
+      toValue(withKeptTable(USER_CONFIG)),
+    );
+  });
+
+  it("gives the file back byte for byte when Codex was on its built-in provider", () => {
+    const config = USER_CONFIG.replace(`model_provider = "mine"\n`, "");
+    const provider = apply(config);
+    const chatgpt = applyChatGpt(provider.text, provider.takeover);
+
+    expect(restore(applyChatGpt(config).text, applyChatGpt(config).takeover)).toBe(
+      withKeptTable(config),
+    );
+    expect(restore(chatgpt.text, chatgpt.takeover)).toBe(withKeptTable(config));
+  });
+
+  it("replaces an openai_base_url the user wrote and puts it back on Official", () => {
+    const config = `openai_base_url = 'https://proxy.example/v1'  # mine\n${USER_CONFIG}`;
+    const { text, takeover } = applyChatGpt(config);
+
+    expect(text.split("\n")[0]).toBe(`openai_base_url = "${CHATGPT_URL}"  # mine`);
+    expect(takeover.keys.openai_base_url?.original).toEqual({
+      present: true,
+      raw: "'https://proxy.example/v1'",
+    });
+    expect(restore(text, takeover).split("\n")[0]).toBe(
+      "openai_base_url = 'https://proxy.example/v1'  # mine",
+    );
+  });
+
+  it("rewires by the new sign-in: the keys of the old wiring go back to what they were", () => {
+    const chatgpt = applyChatGpt(USER_CONFIG);
+    const provider = applyWith({ text: chatgpt.text, takeover: chatgpt.takeover });
+
+    expect(toValue(provider.text)).toEqual(toValue(apply(USER_CONFIG).text));
+    expect(provider.takeover.keys.openai_base_url).toBeUndefined();
+    expect(toValue(restore(provider.text, provider.takeover))).toEqual(
+      toValue(withKeptTable(USER_CONFIG)),
+    );
+
+    const again = applyChatGpt(provider.text, provider.takeover);
+    expect(toValue(again.text)).toEqual(toValue(chatgpt.text));
+    expect(toValue(restore(again.text, again.takeover))).toEqual(
+      toValue(withKeptTable(USER_CONFIG)),
+    );
+  });
+
+  it("is stable: applying again yields the same bytes", () => {
+    const first = applyChatGpt(USER_CONFIG);
+    expect(applyChatGpt(first.text, first.takeover)).toEqual(first);
+  });
+});
+
 describe("restoreCodexOfficial", () => {
   it("returns the owned top-level keys to their exact bytes and keeps Osuna's provider table", () => {
     const { text, takeover } = apply(USER_CONFIG);
@@ -505,6 +604,17 @@ describe("inspectCodexConfig", () => {
 
     const withoutCatalog = text.replace(`${CATALOG_LINE}\n`, "");
     expect(inspect(withoutCatalog, takeover).modifiedKeys).toEqual(["model_catalog_json"]);
+  });
+
+  it("under a ChatGPT sign-in names openai_base_url and a model_provider put back by someone else", () => {
+    const { text, takeover } = applyChatGpt(USER_CONFIG);
+    expect(inspect(text, takeover).modifiedKeys).toEqual([]);
+
+    const moved = text.replace(CHATGPT_URL, "https://proxy.example/v1");
+    expect(inspect(moved, takeover).modifiedKeys).toEqual(["openai_base_url"]);
+
+    const provider = text.replace(`approval_policy`, `model_provider = "mine"\napproval_policy`);
+    expect(inspect(provider, takeover).modifiedKeys).toEqual(["model_provider"]);
   });
 
   it("does not count edits to keys it doesn't own", () => {

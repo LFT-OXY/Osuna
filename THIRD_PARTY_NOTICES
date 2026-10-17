@@ -483,6 +483,13 @@ TestCodexNativeModelStaysNative in codex_backend_test.go:
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
 
+Wiring a Codex signed in with ChatGPT beside its sign-in (openai_base_url at
+the gateway's ChatGPT backend path, model_provider and model_catalog_json taken
+out, Codex's own last model kept, the gateway's provider table still written)
+follows Join, putProvider and dropProvider in magpie's internal/agent/codex.go:
+
+  packages/server/src/server/api-endpoints/codex-config-patch.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

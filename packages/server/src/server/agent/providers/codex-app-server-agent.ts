@@ -611,6 +611,40 @@ export async function probeCodexVersion(
   return resolveBinaryVersion(launchPrefix.command);
 }
 
+/**
+ * 起一个临时 app-server，初始化后发一次请求就关掉。configOverrides 是放在 `app-server` 前面的 `-c key=value`。
+ * 第三方接口用它问 Codex 自己是怎么登录的（account/read），不读 auth.json 与钥匙串（ADR 0010）。
+ */
+export async function requestTemporaryCodexAppServer(input: {
+  runtimeSettings?: ProviderRuntimeSettings;
+  logger: Logger;
+  configOverrides: string[];
+  method: string;
+  params?: unknown;
+  timeoutMs: number;
+}): Promise<unknown> {
+  const launchPrefix = await resolveCodexLaunchPrefix(input.runtimeSettings);
+  const overrides = input.configOverrides.flatMap((override) => ["-c", override]);
+  const child = spawnProcess(
+    launchPrefix.command,
+    [...launchPrefix.args, ...overrides, "app-server"],
+    {
+      detached: process.platform !== "win32",
+      stdio: ["pipe", "pipe", "pipe"],
+      baseEnv: buildCodexAppServerEnv(input.runtimeSettings),
+    },
+  );
+  assertChildWithPipes(child);
+  const client = new CodexAppServerClient(child, input.logger);
+  try {
+    await client.request("initialize", buildCodexAppServerInitializeParams(), input.timeoutMs);
+    client.notify("initialized", {});
+    return await client.request(input.method, input.params, input.timeoutMs);
+  } finally {
+    await client.dispose();
+  }
+}
+
 async function resolveCodexLaunch(
   runtimeSettings?: ProviderRuntimeSettings,
 ): Promise<ResolvedProviderLaunch> {

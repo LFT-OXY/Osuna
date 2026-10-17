@@ -1,3 +1,6 @@
+// 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import { z } from "zod";
 
@@ -6,8 +9,9 @@ import { z } from "zod";
  * 按位置拼接文本，其余字节不动；每次拼完再解析一遍，拼不出合法文件就整个拒绝。
  *
  * 负责的键：顶层 model_provider / model / model_catalog_json，以及整张专用表
- * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）。切回官方时三个顶层键还原、专用表留着：
- * 记在这个服务商名下的 Codex 对话关掉开关后还要能续（ADR 0010），daemon 每次启动按新端口改写它。
+ * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）；用 ChatGPT 登录时另有顶层 openai_base_url，
+ * model_provider 与 model_catalog_json 改为拿掉（ADR 0010）。切回官方时顶层键还原、专用表留着：
+ * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
  */
 
 /**
@@ -18,7 +22,14 @@ export const CODEX_API_ENDPOINT_PROVIDER_ID = "osuna_api_endpoint";
 
 const TOML_VERSION = "1.0";
 const BOM = "\uFEFF";
-const TOP_LEVEL_KEYS = ["model_provider", "model", "model_catalog_json"] as const;
+const TOP_LEVEL_KEYS = [
+  "model_provider",
+  "model",
+  "model_catalog_json",
+  "openai_base_url",
+] as const;
+// API key 登录或未登录时负责的顶层键（Osuna 的服务商接法）。
+const PROVIDER_KEYS = ["model_provider", "model", "model_catalog_json"] as const;
 // 专用表的 name：Codex 在状态与报错里显示它。
 const PROVIDER_TABLE_NAME = "Osuna";
 type TopLevelKey = (typeof TOP_LEVEL_KEYS)[number];
@@ -38,7 +49,11 @@ export type CodexProviderTableRecord = z.infer<typeof CodexProviderTableRecordSc
  * v0.15 的记录没有 table 与 fileCreated（那时专用表用 auth.command 读 key）。
  */
 export const CodexConfigTakeoverSchema = z.object({
-  keys: z.record(z.string(), z.object({ original: CodexOriginalValueSchema, written: z.string() })),
+  // written 为 null：Osuna 拿掉了这个键（ChatGPT 登录时的 model_provider 与 model_catalog_json）。
+  keys: z.record(
+    z.string(),
+    z.object({ original: CodexOriginalValueSchema, written: z.string().nullable() }),
+  ),
   // 专用表上次写入的地址与口令。
   table: CodexProviderTableRecordSchema.optional(),
   // 接管前文件不存在：切回官方后只剩 Osuna 写的东西时把文件删掉。
@@ -46,12 +61,17 @@ export const CodexConfigTakeoverSchema = z.object({
 });
 export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 
-/** CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。 */
+/**
+ * CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。
+ * chatgptBaseUrl 非 null 表示 Codex 用 ChatGPT 登录：写进 openai_base_url 的中转站 ChatGPT 后端地址，
+ * 起始模型这时只在 Codex 自己没选过模型时才写。
+ */
 export interface CodexGatewayWiring {
   baseUrl: string;
   token: string;
   model: string;
   catalogPath: string;
+  chatgptBaseUrl: string | null;
 }
 
 export type CodexConfigPatchResult =
@@ -92,24 +112,27 @@ export function applyCodexApiEndpoint(input: {
 
   const eol = detectEol(baseText);
   const { wiring } = input;
-  const values: Record<TopLevelKey, string> = {
-    model_provider: CODEX_API_ENDPOINT_PROVIDER_ID,
-    model: wiring.model,
-    model_catalog_json: wiring.catalogPath,
+  const originalOf = (key: TopLevelKey): CodexOriginalValue => {
+    const recorded = input.takeover?.keys[key]?.original;
+    if (recorded) return recorded;
+    const node = findTopLevelKeyValue(parsed.program, key);
+    return node ? { present: true, raw: sliceNode(baseText, node.value) } : { present: false };
   };
+  // 每个负责的键这次写的原文（含引号），null 为拿掉。
+  const raws = wiringRaws(wiring, originalOf("model"));
   const table: CodexProviderTableRecord = { baseUrl: wiring.baseUrl, bearerToken: wiring.token };
   const keys: CodexConfigTakeover["keys"] = {};
-  for (const key of TOP_LEVEL_KEYS) {
-    const node = findTopLevelKeyValue(parsed.program, key);
-    const original: CodexOriginalValue =
-      input.takeover?.keys[key]?.original ??
-      (node ? { present: true, raw: sliceNode(baseText, node.value) } : { present: false });
-    keys[key] = { original, written: values[key] };
-  }
-
   let text = baseText;
   for (const key of TOP_LEVEL_KEYS) {
-    text = setTopLevelValue({ text, key, raw: tomlString(values[key]), eol });
+    const raw = raws[key];
+    const original = originalOf(key);
+    if (raw === undefined) {
+      // 换了登录方式：上一种接法独有的键（openai_base_url）放回接管前的样子，不再记。
+      if (input.takeover?.keys[key]) text = putBack(text, key, original, eol);
+      continue;
+    }
+    keys[key] = { original, written: raw === null ? null : readRaw(raw) };
+    text = raw === null ? removeTopLevelKey(text, key) : setTopLevelValue({ text, key, raw, eol });
   }
   // 旧版本写的 auth.command 子表一并拿掉。
   text = appendProviderTable({ text: removeProviderTables(text), table, eol });
@@ -119,7 +142,8 @@ export function applyCodexApiEndpoint(input: {
   const failure = verify(
     text,
     (value) =>
-      TOP_LEVEL_KEYS.every((key) => value[key] === values[key]) && holdsProviderTable(value, table),
+      Object.entries(keys).every(([key, record]) => holdsWritten(value[key], record.written)) &&
+      holdsProviderTable(value, table),
   );
   return (
     failure ?? {
@@ -128,6 +152,54 @@ export function applyCodexApiEndpoint(input: {
       takeover: { keys, table, fileCreated },
     }
   );
+}
+
+/**
+ * 两种接法各自写的顶层键。ChatGPT 登录：Codex 回到内置 openai 服务商（拿掉 model_provider 与目录），
+ * 地址由 openai_base_url 指到中转站；模型保持 Codex 自己上次选的（magpie 的 joined），没有才写起始模型。
+ */
+function wiringRaws(
+  wiring: CodexGatewayWiring,
+  originalModel: CodexOriginalValue,
+): Partial<Record<TopLevelKey, string | null>> {
+  if (wiring.chatgptBaseUrl === null) {
+    return {
+      model_provider: tomlString(CODEX_API_ENDPOINT_PROVIDER_ID),
+      model: tomlString(wiring.model),
+      model_catalog_json: tomlString(wiring.catalogPath),
+    };
+  }
+  return {
+    model_provider: null,
+    model: originalModel.present ? originalModel.raw : tomlString(wiring.model),
+    model_catalog_json: null,
+    openai_base_url: tomlString(wiring.chatgptBaseUrl),
+  };
+}
+
+/** 接管记录里这个键的写入值是否还在：null 是拿掉了，文件里就不该有它。 */
+function holdsWritten(value: unknown, written: string | null): boolean {
+  return written === null ? value === undefined : value === written;
+}
+
+function putBack(
+  text: string,
+  key: TopLevelKey,
+  original: CodexOriginalValue,
+  eol: string,
+): string {
+  return original.present
+    ? setTopLevelValue({ text, key, raw: original.raw, eol })
+    : removeTopLevelKey(text, key);
+}
+
+/** 一个 TOML 值原文（含引号）代表的字符串；负责的键在解析时已保证是字符串。 */
+function readRaw(raw: string): string {
+  const value: unknown = getStaticTOMLValue(parse(`v = ${raw}`));
+  if (!isRecord(value) || typeof value.v !== "string") {
+    throw new Error("An owned config.toml key does not hold a string");
+  }
+  return value.v;
 }
 
 /** 切回官方：把顶层负责的键恢复成接管前的写法，专用表留着。 */
@@ -144,10 +216,7 @@ export function restoreCodexOfficial(input: {
   let text = original;
   for (const key of TOP_LEVEL_KEYS) {
     const record = input.takeover.keys[key];
-    if (!record) continue;
-    text = record.original.present
-      ? setTopLevelValue({ text, key, raw: record.original.raw, eol })
-      : removeTopLevelKey(text, key);
+    if (record) text = putBack(text, key, record.original, eol);
   }
   // 文件是 Osuna 建的：顶层键拿掉后专用表前面的空行也是当初补的。
   if (input.takeover.fileCreated) text = text.replace(/^(?:\r?\n)+/, "");
@@ -237,7 +306,7 @@ export function inspectCodexConfig(input: {
   const modifiedKeys: string[] = [];
   for (const key of TOP_LEVEL_KEYS) {
     const record = input.takeover?.keys[key];
-    if (record && value[key] !== record.written) modifiedKeys.push(key);
+    if (record && !holdsWritten(value[key], record.written)) modifiedKeys.push(key);
   }
   const table = input.takeover?.table;
   if (table && !holdsProviderTable(value, table)) {
@@ -248,7 +317,11 @@ export function inspectCodexConfig(input: {
   const profiles = isRecord(value.profiles) ? value.profiles : {};
   const selected = profile ? profiles[profile] : undefined;
   const profileTable = isRecord(selected) ? selected : {};
-  const overriddenKeys = TOP_LEVEL_KEYS.filter((key) => profileTable[key] !== undefined);
+  // 接管时查这次负责的键（ChatGPT 登录含 openai_base_url），官方模式下查服务商接法那三个。
+  const checkedKeys = input.takeover
+    ? TOP_LEVEL_KEYS.filter((key) => input.takeover?.keys[key] !== undefined)
+    : PROVIDER_KEYS;
+  const overriddenKeys = checkedKeys.filter((key) => profileTable[key] !== undefined);
   const profileOverride =
     profile && overriddenKeys.length > 0 ? { profile, keys: overriddenKeys } : null;
 

@@ -44,6 +44,8 @@ import {
   type CodexConfigTakeover,
 } from "./codex-config-patch.js";
 import { buildCodexModelCatalog } from "./codex-model-catalog.js";
+import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
+import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
@@ -188,6 +190,8 @@ export interface ApiEndpointServiceOptions {
   // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
   modelsDevFetch?: typeof globalThis.fetch;
   modelsDevTimers?: UsagePricingTimers;
+  // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
+  readCodexSignIn?: ReadCodexSignIn;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
@@ -215,6 +219,7 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
   codex: [
     "model_provider",
     "model_catalog_json",
+    "openai_base_url",
     `model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`,
   ],
 };
@@ -287,6 +292,10 @@ export class ApiEndpointService {
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
   private readonly modelsDev: ModelsDevCatalog;
+  private readonly readCodexSignIn: ReadCodexSignIn;
+  // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
+  private codexSignIn: CodexSignIn | null = null;
+  private codexSignInCheck: Promise<void> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private gateway: GatewayAddress = { kind: "pending" };
 
@@ -304,6 +313,9 @@ export class ApiEndpointService {
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
+    this.readCodexSignIn =
+      options.readCodexSignIn ??
+      (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.modelsDev = new ModelsDevCatalog({
       filePath: this.store.modelsDevPath,
@@ -324,6 +336,7 @@ export class ApiEndpointService {
    */
   async list(provider: string): Promise<ApiEndpointListResult> {
     const supported = requireProvider(provider);
+    await this.followCodexSignIn();
     const state = this.readState();
     const enabled = state.agents[supported].enabled;
     const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
@@ -349,8 +362,8 @@ export class ApiEndpointService {
    * CLI 配置里的中转站地址或口令不是现在的就重写，其它内容不动；Codex 的模型目录跟着补齐。
    * 关着的 Codex 留着的服务商表改指这次的端口（ADR 0010）。出错只记日志，不挡 daemon 启动。
    */
-  attachGateway(url: string | null): Promise<void> {
-    return this.exclusive(() => {
+  async attachGateway(url: string | null): Promise<void> {
+    await this.exclusive(() => {
       this.gateway = url === null ? { kind: "socket" } : { kind: "bound", url };
       const state = this.readStateForSnapshot();
       if (!state) return;
@@ -371,6 +384,8 @@ export class ApiEndpointService {
         }
       }
     });
+    // 先按上次的接法对账，不让启动等 Codex；登录方式变了再在后台改写。
+    void this.followCodexSignIn();
   }
 
   activeEndpointId(provider: string): string | null {
@@ -558,6 +573,7 @@ export class ApiEndpointService {
   ): Promise<ApiEndpointAgentSettings> {
     return this.exclusive(async () => {
       const supported = requireProvider(provider);
+      if (supported === "codex" && input.enabled) await this.checkCodexSignIn();
       const state = this.readState();
       const agent = input.enabled
         ? enabledAgentSettings(state, supported, input.defaultModelId?.trim())
@@ -754,7 +770,8 @@ export class ApiEndpointService {
     // 工单 18 以前的接管记录没有 hintEnv：补写一次模型提示。
     const isHintUnrecorded = provider === "claude" && claudeTakeover?.hintEnv === undefined;
     const isUpToDate = written?.url === url && written.token === wiring.token;
-    if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded) return;
+    const isRewired = provider === "codex" && this.codexWiringChanged();
+    if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded && !isRewired) return;
     this.syncCli(provider, wiring);
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
@@ -1295,8 +1312,12 @@ export class ApiEndpointService {
           text,
           wiring: {
             ...wiring,
+            model: this.codexUsesChatGpt() ? this.chatgptStartModel(wiring.model) : wiring.model,
             baseUrl: `${wiring.baseUrl}${CODEX_GATEWAY_SUFFIX}`,
             catalogPath: this.store.codexModelCatalogPath,
+            chatgptBaseUrl: this.codexUsesChatGpt()
+              ? `${wiring.baseUrl}${CHATGPT_BACKEND_PATH}`
+              : null,
           },
           takeover: record.takeover,
         });
@@ -1325,6 +1346,72 @@ export class ApiEndpointService {
     // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
     this.store.removeLegacyCodexKeyFile();
     this.logger.info({ configPath }, "Codex config pointed at the API endpoint gateway");
+  }
+
+  /**
+   * 问一次 Codex 是怎么登录的；同一时间只问一次。判断不出（没装 Codex、超时、回答认不出）就记日志、
+   * 保持上次的结果，从没判断出时按接管记录现在的接法。
+   */
+  private checkCodexSignIn(): Promise<void> {
+    this.codexSignInCheck ??= this.readSignInOnce().finally(() => {
+      this.codexSignInCheck = null;
+    });
+    return this.codexSignInCheck;
+  }
+
+  private async readSignInOnce(): Promise<void> {
+    try {
+      const signIn = await this.readCodexSignIn();
+      if (signIn !== this.codexSignIn) this.logger.info({ signIn }, "Codex sign-in read");
+      this.codexSignIn = signIn;
+    } catch (error) {
+      this.logger.warn({ err: error }, "Could not tell how Codex is signed in");
+    }
+  }
+
+  /** Codex 开着时问一次登录方式，与 config.toml 现在的接法不同就按新方式重写（daemon 启动、读状态时）。 */
+  private async followCodexSignIn(): Promise<void> {
+    if (!this.readStateForSnapshot()?.agents.codex.enabled) return;
+    await this.checkCodexSignIn();
+    await this.exclusive(() => {
+      const state = this.readStateForSnapshot();
+      if (!state?.agents.codex.enabled || !this.codexWiringChanged()) return;
+      if (this.gatewayUrlFor("codex") === null) return;
+      // 负责的路由键被别的程序改过：不替用户改回，留给提示区的「重新应用」（按新的登录方式写）。
+      if (this.inspectCodex(true).issues.some((issue) => issue.code === "not_through_gateway")) {
+        this.logger.info("Codex config changed outside Osuna; not rewired for its new sign-in");
+        return;
+      }
+      try {
+        this.syncCli("codex", this.cliWiring(state, "codex", this.store.readGatewayTokens()));
+        this.onActiveEndpointChanged("codex");
+      } catch (error) {
+        this.logger.warn({ err: error }, "Failed to rewire Codex for its sign-in");
+      }
+    });
+  }
+
+  private codexUsesChatGpt(): boolean {
+    if (this.codexSignIn !== null) return this.codexSignIn === "chatgpt";
+    return isChatGptWiring(this.store.readCodexTakeover().takeover);
+  }
+
+  /** 接管着、且 config.toml 现在的接法与 Codex 的登录方式不符。 */
+  private codexWiringChanged(): boolean {
+    const takeover = this.store.readCodexTakeover().takeover;
+    return takeover !== null && isChatGptWiring(takeover) !== this.codexUsesChatGpt();
+  }
+
+  /**
+   * ChatGPT 登录、Codex 自己没选过模型时写的起始模型：不带接口标识的名字都指 ChatGPT 自带模型（ADR 0010），
+   * 所以写成最早开着、选了它的那家的「接口标识/模型名」。
+   */
+  private chatgptStartModel(modelId: string): string {
+    const state = this.readStateForSnapshot();
+    const endpoint = state?.endpoints.find(
+      (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
+    );
+    return endpoint ? `${endpoint.slug}/${modelId}` : modelId;
   }
 
   private restoreCodexOfficial(): void {
@@ -1861,4 +1948,9 @@ function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue
 /** 有 Agent 用得上模型资料（Claude Code 或 Codex 的总开关开着）：models.dev 才允许下载。 */
 function usesModelFacts(state: ApiEndpointState | null): boolean {
   return state !== null && (state.agents.claude.enabled || state.agents.codex.enabled);
+}
+
+/** 接管记录是 ChatGPT 登录的接法：Osuna 写了 openai_base_url。 */
+function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
+  return typeof takeover?.keys.openai_base_url?.written === "string";
 }

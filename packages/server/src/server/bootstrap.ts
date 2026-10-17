@@ -162,6 +162,7 @@ import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
 import { ApiEndpointStore } from "./api-endpoints/store.js";
+import { createCodexSignInReader } from "./api-endpoints/codex-sign-in.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -507,6 +508,7 @@ export interface PaseoDaemonConfig {
     | "isModelsDevAutoUpdate"
     | "modelsDevFetch"
     | "modelsDevTimers"
+    | "readCodexSignIn"
   > &
     ApiEndpointGatewayOverrides &
     RetiredModelsOverrides;
@@ -1036,6 +1038,11 @@ export async function createPaseoDaemon(
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
+    // 问 Codex 自己是怎么登录的（临时 app-server 的 account/read），决定 config.toml 的接法（ADR 0010）。
+    readCodexSignIn: createCodexSignInReader({
+      runtimeSettings: config.agentProviderSettings?.codex,
+      logger,
+    }),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {

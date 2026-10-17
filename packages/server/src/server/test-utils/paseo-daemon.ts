@@ -234,12 +234,17 @@ async function prepareTestDaemonConfig(
       pricing: { autoUpdate: false, ...options.usage?.pricing },
     },
     // 第三方接口会改写 CLI 配置文件；测试 daemon 默认指向临时目录，绝不碰真实的 ~/.claude 和 ~/.codex。
-    apiEndpoints: options.apiEndpoints ?? {
-      env: {
-        CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),
-        CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
-      },
-      homeDir: paseoHomeRoot,
+    apiEndpoints: {
+      // 判断 Codex 登录方式的生产实现会起真的 Codex app-server：测试 daemon 一律换成固定答案（未登录），
+      // 关心登录方式的用例自己传 readCodexSignIn。
+      readCodexSignIn: async () => "signed_out",
+      ...(options.apiEndpoints ?? {
+        env: {
+          CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),
+          CODEX_HOME: path.join(paseoHomeRoot, "codex-home"),
+        },
+        homeDir: paseoHomeRoot,
+      }),
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {

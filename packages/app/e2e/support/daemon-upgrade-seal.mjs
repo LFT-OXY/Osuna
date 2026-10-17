@@ -6,6 +6,9 @@
  *    brew 的安装与升级、包管理器的全局安装、官方安装脚本，一律换成一个立刻以 1 退出的 node 进程，并记一行到
  *    PASEO_E2E_UPGRADE_RECORD_PATH（设了的话）。
  *
+ * 3. 不起真的 Codex 判断登录方式：第三方接口打开 Codex 开关、读状态时会起一个临时 app-server 问 account/read
+ *    （带 `-c model_provider="openai"`），同样换成立刻以 1 退出的进程，daemon 按「判断不出」保持现在的接法。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -65,9 +68,18 @@ export function isGlobalInstallCommand(command, args) {
   return list.some((arg) => /chatgpt\.com\/codex\/install\.(sh|ps1)/.test(arg));
 }
 
+/**
+ * 第三方接口判断 Codex 登录方式时起的临时 app-server（codex-sign-in.ts）。只看参数：
+ * Codex 也可能经 node 跑 npm 包里的脚本，可执行文件不一定叫 codex。
+ */
+export function isCodexSignInProbe(_command, args) {
+  const list = Array.isArray(args) ? args.map(String) : [];
+  return list.includes("app-server") && list.includes('model_provider="openai"');
+}
+
 const realSpawn = childProcess.spawn;
 childProcess.spawn = function sealedSpawn(command, args, options) {
-  if (!isGlobalInstallCommand(command, args)) {
+  if (!isGlobalInstallCommand(command, args) && !isCodexSignInProbe(command, args)) {
     return realSpawn.apply(this, arguments);
   }
   const record = process.env.PASEO_E2E_UPGRADE_RECORD_PATH;
