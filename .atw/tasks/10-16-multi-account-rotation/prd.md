@@ -23,7 +23,8 @@
 - 号的顺序、每号每个窗口的上限、固定用某个号。
 - 怎么读每个号的额度：Codex 的号向 OpenAI 查；Claude 的号，magpie 只靠 Claude Code 自己的 `/usage`，没读到过额度的号不换上去。
 - 登录过期后怎么续：尽量让 CLI 自己续；必须由 Osuna 代办时单独决定，写进 ADR。
-- 与「使用第三方接口」怎么同时存在。magpie 让第三方模型和 ChatGPT 自带模型同时出现在 Codex 的 `/model`（magpie `internal/agent/codex.go:30-36`）。上次任务把「Codex 与 ChatGPT 登录并存」定为不做，这里重新打开。
+- 与「使用第三方接口」怎么同时存在。子任务 2 已定 Codex 用 ChatGPT 登录时只写 `openai_base_url`，第三方模型和 ChatGPT 自带模型同时出现在 Codex 的 `/model`，接口的模型写成「接口标识/模型名」（`../10-16-cli-wiring-web-search/research/decisions.md` Q9、Q25）；第二层建在这个接法上。
+- 账号额度和余额都用完时怎么办（子任务 2 Q34 留到这里）。magpie 定时查额度，用完时临时把 Codex 改成独立服务商，好让 Codex 桌面应用还能用第三方模型（magpie `internal/agent/codex.go:964-1001,1145-1186`）。完全发不出的只有桌面应用，Osuna 用的 app-server 和终端 Codex 照常发出，事实见 `../10-16-cli-wiring-web-search/research/codex-account-held.md`。换到下一个还有余量的号可能就是这里的答案。
 - 从别的工具的文件导入账号（02·B15）要不要做。
 - 账号存在哪里、怎么保护。
 - 界面：账号列表、各号额度、Agent 现在登录的是哪个号、为什么换了号、换号失败的原因和处理办法。

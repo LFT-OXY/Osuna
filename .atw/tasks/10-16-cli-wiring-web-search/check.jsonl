@@ -1,0 +1,22 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：中转站、CLI 配置改写、Codex 对话文件都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "接口与 Agent 设置的新字段、接管记录里新负责的键、挪对话的备份与记录要守的持久化规则"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "新 RPC、可选字段与新能力位的写法"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "拒绝与失败时给用户的原因（读不懂的设置文件、挪对话被跳过、搜索不可用）"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试与假上游夹具的写法，新增的进程、登录方式适配器"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "提供方设置页、接口页、关开关确认框、会话历史多选与挪动的界面规范"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试：每个会失败的操作测成功与失败"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议、daemon、client、app 四层一起改时的检查点"}
+{"file": ".atw/tasks/10-16-cli-wiring-web-search/research/decisions.md", "reason": "5 轮访谈 36 题的决定与依据，判断实现是否越界、是否照 magpie"}
+{"file": ".atw/tasks/10-16-cli-wiring-web-search/research/codex-wiring.md", "reason": "Codex 接法、对话按服务商分组、openai_base_url、挪对话的源码事实"}
+{"file": ".atw/tasks/10-16-cli-wiring-web-search/research/claude-code-wiring.md", "reason": "Claude Code 登录、档位、云平台开关、设置文件解析、CLI 回写、magpie 提示文案的源码事实"}
+{"file": ".atw/tasks/10-16-cli-wiring-web-search/research/web-search.md", "reason": "WebSearch 子请求的样子、magpie 开关的作用、各条放行路线的后果"}
+{"file": ".atw/tasks/10-16-cli-wiring-web-search/research/codex-account-held.md", "reason": "ChatGPT 额度用完时各个 Codex 的表现（本任务不做的依据）"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "CLI 配置改写规则；本任务按新 ADR 部分取代"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "中转站、口令与 Codex 写什么；本任务按新 ADR 部分取代"}
+{"file": "docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md", "reason": "中转站改写请求与换家的边界，新的搜索改写、Subagent 档位后缀要与之一致"}
+{"file": "docs/protocol-compatibility.md", "reason": "旧客户端（官方 Paseo 手机 App）兼容规则与能力位"}
+{"file": "docs/rpc-namespacing.md", "reason": "新 RPC 的带点命名"}
+{"file": "docs/design.md", "reason": "界面设计规范：Switch、模型名字体、次要操作、状态"}
+{"file": "docs/forms.md", "reason": "设置页新选项的表单写法"}
+{"file": "docs/i18n.md", "reason": "9 种界面语言，中文真翻译"}
+{"file": "docs/testing.md", "reason": "测试标准：行为测试、确定性、可失败操作的三态"}
