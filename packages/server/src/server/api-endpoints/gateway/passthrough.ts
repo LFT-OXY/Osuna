@@ -226,18 +226,19 @@ export interface PassthroughBodyInput {
 }
 
 /**
- * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处，
- * 对话请求都去掉这家这个模型不收的字段（count_tokens 不改）。
+ * 发给上游的请求体：换模型名；Anthropic 的请求（count_tokens 也算，照 magpie）按上游模型改 Claude Code 的几处；
+ * Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处，并去掉这家这个模型不收的字段。
  */
 export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const conversation = input.pathSuffix === undefined;
-  const fits =
-    (input.format === "anthropic_messages" || input.format === "openai_responses") && conversation;
-  if (input.upstreamModel === input.requestedModel && !conversation) return input.body;
+  const anthropic = input.format === "anthropic_messages";
+  const fits = (anthropic || input.format === "openai_responses") && conversation;
   let text = input.body.toString("utf8");
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
-  if (fits && input.format === "anthropic_messages") {
+  if (anthropic) {
     text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
+  }
+  if (fits && anthropic) {
     text = fitAnthropicBody(text, input.upstreamModel);
     text = fitThinkingOff({
       text,
@@ -249,7 +250,7 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
     else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
   }
-  // count_tokens 不带 refusals，也不改。
+  // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
   return Buffer.from(text);

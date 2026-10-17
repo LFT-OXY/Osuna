@@ -116,20 +116,15 @@ export function joinToolRuns(body: string): string {
     if (isResult(item)) {
       if (open.delete(id)) answering = true;
     } else if (id !== "") {
-      if (answeredLater[index]) {
-        if (!inRun) first = out.length;
-        open.add(id);
-      }
+      const opensRun = answeredLater[index] && !inRun;
+      if (opensRun) first = out.length;
+      if (answeredLater[index]) open.add(id);
     } else if (interrupts) {
       held.push(item);
       moved = true;
       return;
     } else if (saidBetweenCalls) {
-      let from = out.length;
-      while (from > first && typeOf(out[from - 1]) === "reasoning") from--;
-      const step = [...out.splice(from), item];
-      out.splice(first, 0, ...step);
-      first += step.length;
+      first = moveSaidBeforeCalls({ out, first, said: item });
       moved = true;
       return;
     }
@@ -143,6 +138,19 @@ export function joinToolRuns(body: string): string {
   out.push(...held);
   if (!moved) return body;
   return JSON.stringify({ ...parsed.request, input: out });
+}
+
+/**
+ * 模型在一串调用中间说的话（said），连同 out 末尾紧挨在它前面的推理，挪到这串第一个调用（out[first]）之前。
+ * 原地改 out，交回这串第一个调用挪动后的位置。
+ */
+function moveSaidBeforeCalls(input: { out: unknown[]; first: number; said: unknown }): number {
+  const { out, first } = input;
+  let from = out.length;
+  while (from > first && typeOf(out[from - 1]) === "reasoning") from--;
+  const step = [...out.splice(from), input.said];
+  out.splice(first, 0, ...step);
+  return first + step.length;
 }
 
 /**

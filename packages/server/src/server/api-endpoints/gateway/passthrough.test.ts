@@ -269,6 +269,34 @@ describe("Claude Code's billing line and auto mode review passed through (magpie
     expect(passedThrough({ body, model: "claude-opus-4-8" })).toBe(body);
   });
 
+  test("count_tokens gets the same fixes as the conversation (magpie: before countsTokens), and nothing else", () => {
+    const count = (body: string, model: string) =>
+      upstreamBody({
+        format: "anthropic_messages",
+        pathSuffix: "/count_tokens",
+        body: Buffer.from(body),
+        requestedModel: model,
+        upstreamModel: model,
+        endpoint: { slug: "relay", models: [] },
+      }).toString("utf8");
+    const turn = claudeCodeTurn("glm-5.2").replace(`"thinking":{"type":"disabled"},`, "");
+    // 别家模型：没有计费行与审查字段；count_tokens 不补关思考。
+    expect(count(turn, "glm-5.2")).toBe(
+      turn
+        .replace(`{"type":"text","text":"${BILLING}"},`, "")
+        .replace(`,"safeguards":{"dangerous_tool_use":{"enabled":true}}`, ""),
+    );
+    const budgeted = `{"model":"claude-opus-5-5","temperature":0,"thinking":{"type":"enabled","budget_tokens":10000},"messages":[]}`;
+    expect(JSON.parse(count(budgeted, "claude-opus-5-5"))).toEqual({
+      model: "claude-opus-5-5",
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort: "medium" },
+      messages: [],
+    });
+    const claude = claudeCodeTurn("claude-opus-4-8");
+    expect(count(claude, "claude-opus-4-8")).toBe(claude);
+  });
+
   test("the line ahead of the prompt is cut; a system of the line alone goes; a mention of it stays", () => {
     const off = `"thinking":{"type":"disabled"}`;
     const cases = [

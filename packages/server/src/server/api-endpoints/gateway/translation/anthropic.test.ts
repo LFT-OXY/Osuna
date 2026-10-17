@@ -551,6 +551,27 @@ describe("thinking on a request built for Anthropic (magpie anthropic.go anthrop
     });
   });
 
+  test("a Claude that refuses sampling gets no temperature or top_p, an older one does (magpie samplingAsTaken)", () => {
+    for (const model of ["claude-opus-4-7", "claude-opus-5-5"]) {
+      expect(built(model, { thinking: false })).toEqual({
+        thinking: undefined,
+        output_config: undefined,
+        max_tokens: 16384,
+        temperature: undefined,
+      });
+      const topP = { ...request([{ role: "user", parts: [text("hi")] }]), topP: 0.9 };
+      expect(buildAnthropicRequest(topP, model).top_p).toBeUndefined();
+    }
+    const older = { ...request([{ role: "user", parts: [text("hi")] }]), topP: 0.9 };
+    expect(buildAnthropicRequest(older, "claude-opus-4-6").top_p).toBe(0.9);
+    expect(built("claude-opus-4-6", { thinking: false })).toEqual({
+      thinking: undefined,
+      output_config: undefined,
+      max_tokens: 16384,
+      temperature: 0.7,
+    });
+  });
+
   test("reasoning turned off is thinking disabled", () => {
     expect(built("claude-sonnet-4-5", { thinkOff: true }).thinking).toEqual({ type: "disabled" });
   });

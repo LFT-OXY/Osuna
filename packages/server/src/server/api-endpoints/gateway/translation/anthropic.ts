@@ -36,6 +36,7 @@ import {
   type ToolResultPart,
   type Usage,
 } from "./ir.js";
+import { withoutSampling } from "../refused-fields.js";
 import { sseEvent } from "./sse.js";
 
 /*
@@ -222,7 +223,10 @@ export function buildAnthropicRequest(
   }
   // 系统提示与工具每轮都一样，和对话分开缓存。
   if (system !== "") out.system = [{ type: "text", text: system, cache_control: EPHEMERAL }];
-  Object.assign(out, anthropicThinking(request, model));
+  // 不收采样参数的 Claude 不发 temperature、top_p（magpie samplingAsTaken，直通也一样）。
+  let thinking = anthropicThinking(request, model);
+  if (refusesSampling(model)) thinking = withoutSampling(thinking);
+  Object.assign(out, thinking);
   const config: Record<string, unknown> = {};
   const effort = adaptiveEffort(request, model);
   if (effort !== null) config.effort = effort;
@@ -398,8 +402,8 @@ export function adaptiveThinkingAsTaken(
   const asked = typeof config.effort === "string" ? config.effort : "";
   const budget = typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : 0;
   const effort = effortOfBudget(budget);
-  const noEffortToAdd = asked !== "" || effort === "";
-  if (noEffortToAdd) return out;
+  const addsEffort = asked === "" && effort !== "";
+  if (!addsEffort) return out;
   out.output_config = { ...config, effort: effort === "xhigh" ? "max" : effort };
   return out;
 }
