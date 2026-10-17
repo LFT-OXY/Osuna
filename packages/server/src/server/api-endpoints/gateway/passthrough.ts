@@ -310,7 +310,7 @@ function relay(input: {
     return { kind: "broken", message: reason };
   };
   // 上游的流收完了：没说完的在流尾补错误，说完的照常结束。
-  const finished = (): AnswerEnd => {
+  const completed = (): AnswerEnd => {
     if (tappedShort({ tap, format, streamed })) return tailed(ENDED_SHORT);
     sink.end();
     return endOf(tap);
@@ -322,9 +322,9 @@ function relay(input: {
     return { kind: "broken", message: reason };
   };
   sink.write(held);
-  if (response.readableEnded) return Promise.resolve(finished());
+  if (response.readableEnded) return Promise.resolve(completed());
   // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；照断流处理。
-  if (response.destroyed) return Promise.resolve(cut(connectionLost()));
+  if (response.destroyed) return Promise.resolve(cut(connectionLost({ error: undefined })));
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;
@@ -341,12 +341,12 @@ function relay(input: {
       tap?.feed(chunk);
       atLine = endsLine({ chunk, before: atLine });
     });
-    response.once("end", () => settle(finished));
+    response.once("end", () => settle(completed));
     const broke = (error?: Error) => {
       // 上游已经收完：Agent 这时离开也算答完了（end 可能因为没人读而不再发出）。
-      if (response.complete) settle(finished);
+      if (response.complete) settle(completed);
       else if (agentGone) settle(() => ({ kind: "gone" }));
-      else settle(() => cut(connectionLost(error)));
+      else settle(() => cut(connectionLost({ error })));
     };
     response.once("error", broke);
     response.once("close", () => broke());
@@ -376,10 +376,12 @@ function tappedShort(input: {
   streamed: boolean;
 }): boolean {
   const { tap } = input;
-  if (tap === null || !input.streamed) return false;
+  if (tap === null) return false;
+  if (!input.streamed) return false;
   const reply = tap.end();
-  const ending = { stopped: reply.stop !== null, ended: reply.ended, failed: reply.error !== null };
-  return endedShort({ format: input.format, ending });
+  const stopped = reply.stop !== null;
+  const failed = reply.error !== null;
+  return endedShort({ format: input.format, ending: { stopped, ended: reply.ended, failed } });
 }
 
 /** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */

@@ -13,6 +13,7 @@ import path from "node:path";
 import * as zlib from "node:zlib";
 import pino from "pino";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { ENDED_SHORT, brokenMessage } from "../api-endpoints/gateway/broken-reply.js";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
 import { HIGH_RISK_REFUSAL as HIGH_RISK } from "../api-endpoints/gateway/safety-filter.js";
 import { hashDaemonPassword } from "../auth.js";
@@ -3263,8 +3264,8 @@ describe("switching to another endpoint when one fails", () => {
         type: "error",
         error: {
           type: "api_error",
-          message: brokenSaid({
-            endpoint: "Relay A",
+          message: brokenMessage({
+            endpointName: "Relay A",
             reason: "connection lost mid-reply (aborted)",
           }),
         },
@@ -6868,13 +6869,6 @@ const REFUSAL_EVENTS = [
   { type: "message_stop" },
 ];
 
-/** 开口后断流时 Agent 在流尾收到的错误文字（magpie gateway.go 的 saysPassing）。 */
-function brokenSaid(input: { endpoint: string; reason: string }): string {
-  return `${input.endpoint}: ${input.reason} (502: you can retry your request)`;
-}
-
-const ENDED_SHORT = "the reply ended before it was complete";
-
 /** 开了口的 Anthropic 流：开头、一个文字块开始、半句话。 */
 const HALF_ANTHROPIC_REPLY = [
   sseFrame({ type: "message_start", message: { id: "msg_half", usage: { input_tokens: 9 } } }),
@@ -6945,7 +6939,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
         type: "error",
         error: {
           type: "api_error",
-          message: brokenSaid({ endpoint: "Relay A", reason: ENDED_SHORT }),
+          message: brokenMessage({ endpointName: "Relay A", reason: ENDED_SHORT }),
         },
       })}`,
     );
@@ -6966,6 +6960,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
       codexRequest(codexConversation("gpt-5.5", true)),
     );
 
+    expect(response.status).toBe(200);
     expect(await response.text()).toBe(
       `${HALF_RESPONSES_REPLY}\n${sseFrame({
         type: "response.failed",
@@ -6974,7 +6969,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
           status: "failed",
           error: {
             code: "server_error",
-            message: brokenSaid({ endpoint: "Relay A", reason: ENDED_SHORT }),
+            message: brokenMessage({ endpointName: "Relay A", reason: ENDED_SHORT }),
           },
         },
       })}`,
@@ -7005,7 +7000,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
       "response.failed",
     ]);
     expect(sseData(tail).at(-1)).toEqual(
-      halfCodexFailed(brokenSaid({ endpoint: "Relay B", reason: ENDED_SHORT })),
+      halfCodexFailed(brokenMessage({ endpointName: "Relay B", reason: ENDED_SHORT })),
     );
     const client = await connectTo(daemon);
     await expect.poll(() => cooldownOf(client, "ep_b")).toMatchObject({ state: "cooling_down" });
@@ -7034,7 +7029,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
         type: "error",
         error: {
           type: "api_error",
-          message: brokenSaid({ endpoint: "Relay D", reason: ENDED_SHORT }),
+          message: brokenMessage({ endpointName: "Relay D", reason: ENDED_SHORT }),
         },
       },
     ]);
@@ -7057,7 +7052,7 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
 
     expect(events.at(-1)).toEqual(
       halfCodexFailed(
-        brokenSaid({ endpoint: "Relay B", reason: "connection lost mid-reply (aborted)" }),
+        brokenMessage({ endpointName: "Relay B", reason: "connection lost mid-reply (aborted)" }),
       ),
     );
   });

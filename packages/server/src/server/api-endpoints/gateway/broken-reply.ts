@@ -20,8 +20,9 @@ export const ENDED_SHORT = "the reply ended before it was complete";
 const BROKEN_STATUS = 502;
 
 /** 连接在回复中途断开的原因（magpie 的 cutMidReply）。 */
-export function connectionLost(error?: Error): string {
-  const cause = error ? describeNetworkError(error) : "aborted";
+export function connectionLost(input: { error: Error | undefined }): string {
+  let cause = "aborted";
+  if (input.error !== undefined) cause = describeNetworkError(input.error);
   return `connection lost mid-reply (${cause})`;
 }
 
@@ -40,9 +41,10 @@ export function endedShort(input: {
   format: ApiEndpointRequestFormat;
   ending: ReplyEnding;
 }): boolean {
+  if (input.format === "openai_chat") return false;
   const { stopped, ended, failed } = input.ending;
   const closed = stopped || ended || failed;
-  return input.format !== "openai_chat" && !closed;
+  return !closed;
 }
 
 /** 边解码边记下回复怎么收的尾。 */
