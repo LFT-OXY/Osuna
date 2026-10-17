@@ -158,6 +158,7 @@ import {
   type ApiEndpointGatewayOverrides,
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
+import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
 import { ApiEndpointStore } from "./api-endpoints/store.js";
@@ -967,6 +968,11 @@ export async function createPaseoDaemon(
   // script-bound upgrades are forwarded first. The handler is a no-op for
   // requests that don't match a registered script route.
   httpServer.on("upgrade", serviceProxy.upgradeHandler({ passthroughUnknown: true }));
+  // Codex tries Responses over a WebSocket first; the gateway's ChatGPT backend path answers 426 so it
+  // moves to HTTP at once. Registered before the daemon's own WebSocket server, which would answer 400.
+  httpServer.on("upgrade", (req, socket) => {
+    answerChatGptWebSocket({ gatewayPath: API_ENDPOINT_GATEWAY_PATH, req, socket });
+  });
 
   if (config.serviceProxy?.standaloneListen) {
     serviceProxyListenTarget = parseListenString(config.serviceProxy.standaloneListen);

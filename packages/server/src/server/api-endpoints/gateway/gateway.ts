@@ -21,6 +21,13 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { judgeCaller } from "./callers.js";
+import {
+  DEFAULT_CHATGPT_BASE_URL,
+  DEFAULT_OPENAI_API_BASE_URL,
+  chatgptBackendRest,
+  relayToChatGpt,
+  type ChatGptBases,
+} from "./chatgpt-backend.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -117,6 +124,9 @@ export interface ApiEndpointGatewayOverrides {
   gatewayKeepAliveQuietMs?: number;
   // 只给测试缩小请求体上限（按解开后的大小），不必真造 64 MB。
   gatewayBodyLimitBytes?: number;
+  // 只给测试把 ChatGPT 后端与 OpenAI API 换成本机的假后端，从不连真的 chatgpt.com。
+  gatewayChatGptBaseUrl?: string;
+  gatewayOpenAiApiBaseUrl?: string;
 }
 
 /** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
@@ -155,6 +165,10 @@ export function createApiEndpointGateway(options: {
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
   };
+  const chatgptBases: ChatGptBases = {
+    chatgpt: options.overrides?.gatewayChatGptBaseUrl ?? DEFAULT_CHATGPT_BASE_URL,
+    openAiApi: options.overrides?.gatewayOpenAiApiBaseUrl ?? DEFAULT_OPENAI_API_BASE_URL,
+  };
 
   return (req, res) => {
     const wire = wireOf(req);
@@ -171,6 +185,12 @@ export function createApiEndpointGateway(options: {
       return;
     }
 
+    // ChatGPT 后端那组路径只有 Codex 走（ADR 0010），全部原样转给 ChatGPT。
+    if (chatgptBackendRest(req.path) !== null) {
+      logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
+      relayToChatGpt({ req, res, bases: chatgptBases, logger });
+      return;
+    }
     const isWarmUp = req.path === "/api/hello" && (req.method === "GET" || req.method === "HEAD");
     if (isWarmUp) {
       res.status(200).json({ ok: true });

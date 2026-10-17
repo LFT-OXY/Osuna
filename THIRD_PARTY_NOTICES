@@ -471,6 +471,18 @@ useragent_test.go in internal/agent:
   packages/server/src/server/api-endpoints/gateway/callers.ts
   packages/server/src/server/api-endpoints/gateway/callers.test.ts
 
+The gateway's ChatGPT backend path (relaying a Codex signed in with ChatGPT to
+the ChatGPT backend as it came, an API key's requests to the OpenAI API, and
+426 to a WebSocket handshake) follows CodexPath, codexBackend, codexUpstream,
+apiKey, copyHeaders and hopHeader in magpie's
+internal/gateway/codex_backend.go. Its tests take cases from
+TestCodexOwnModelPassesThrough, TestCodexWebSocketUpgradeRequired and
+TestCodexNativeModelStaysNative in codex_backend_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/chatgpt-backend.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone
