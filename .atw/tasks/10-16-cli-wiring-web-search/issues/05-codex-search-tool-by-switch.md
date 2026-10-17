@@ -8,7 +8,7 @@
 
 **Blocked by:** 04
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：同一模型 A（开了开关、Responses 地址）、B（没开、Responses 地址）：发给 A 的请求带 `web_search`，发给 B 的不带，点名它的 `tool_choice` 也不在；A 失败换到 B 时，B 收到的请求同样不带。
 - [ ] 用假上游模拟「带 `web_search` 就 400」：发给没开开关的这家时请求不再被拒。
