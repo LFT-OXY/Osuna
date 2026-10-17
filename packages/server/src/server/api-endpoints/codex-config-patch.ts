@@ -64,7 +64,7 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 /**
  * CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。
  * chatgptBaseUrl 非 null 表示 Codex 用 ChatGPT 登录：写进 openai_base_url 的中转站 ChatGPT 后端地址，
- * 起始模型这时只在 Codex 自己没选过模型时才写。
+ * 起始模型这时不写，model 归 Codex 自己。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -119,7 +119,7 @@ export function applyCodexApiEndpoint(input: {
     return node ? { present: true, raw: sliceNode(baseText, node.value) } : { present: false };
   };
   // 每个负责的键这次写的原文（含引号），null 为拿掉。
-  const raws = wiringRaws(wiring, originalOf("model"));
+  const raws = wiringRaws(wiring);
   const table: CodexProviderTableRecord = { baseUrl: wiring.baseUrl, bearerToken: wiring.token };
   const keys: CodexConfigTakeover["keys"] = {};
   let text = baseText;
@@ -127,7 +127,7 @@ export function applyCodexApiEndpoint(input: {
     const raw = raws[key];
     const original = originalOf(key);
     if (raw === undefined) {
-      // 换了登录方式：上一种接法独有的键（openai_base_url）放回接管前的样子，不再记。
+      // 换了登录方式：这种接法不负责的键（openai_base_url，或 ChatGPT 接法下的 model）放回接管前的样子，不再记。
       if (input.takeover?.keys[key]) text = putBack(text, key, original, eol);
       continue;
     }
@@ -156,12 +156,10 @@ export function applyCodexApiEndpoint(input: {
 
 /**
  * 两种接法各自写的顶层键。ChatGPT 登录：Codex 回到内置 openai 服务商（拿掉 model_provider 与目录），
- * 地址由 openai_base_url 指到中转站；模型保持 Codex 自己上次选的（magpie 的 joined），没有才写起始模型。
+ * 地址由 openai_base_url 指到中转站；model 不归 Osuna（magpie 的 Join 不碰它）：Codex 自己选过的留着，
+ * 没选过就照旧没有（用 Codex 自己的默认）；从服务商接法换过来时放回接管前的样子。
  */
-function wiringRaws(
-  wiring: CodexGatewayWiring,
-  originalModel: CodexOriginalValue,
-): Partial<Record<TopLevelKey, string | null>> {
+function wiringRaws(wiring: CodexGatewayWiring): Partial<Record<TopLevelKey, string | null>> {
   if (wiring.chatgptBaseUrl === null) {
     return {
       model_provider: tomlString(CODEX_API_ENDPOINT_PROVIDER_ID),
@@ -171,7 +169,6 @@ function wiringRaws(
   }
   return {
     model_provider: null,
-    model: originalModel.present ? originalModel.raw : tomlString(wiring.model),
     model_catalog_json: null,
     openai_base_url: tomlString(wiring.chatgptBaseUrl),
   };

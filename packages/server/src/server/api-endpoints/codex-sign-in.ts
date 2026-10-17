@@ -11,8 +11,11 @@ import { requestTemporaryCodexAppServer } from "../agent/providers/codex-app-ser
 
 export type CodexSignIn = "chatgpt" | "api_key" | "signed_out" | "other";
 
-/** 可替换的「登录方式」适配器：生产起临时 app-server，测试换成固定答案，绝不碰真的 Codex。 */
-export type ReadCodexSignIn = () => Promise<CodexSignIn>;
+/**
+ * 可替换的「登录方式」适配器：生产起临时 app-server，测试换成固定答案，绝不碰真的 Codex。
+ * codexHome 是正被改写的 config.toml 所在目录：Codex 提供方的环境变量可能另设了 CODEX_HOME，问的必须是同一处。
+ */
+export type ReadCodexSignIn = (input: { codexHome: string }) => Promise<CodexSignIn>;
 
 // ChatGPT 账号的 account/read 会先向 chatgpt.com 查工作区路由，Codex 自己最多等 15 秒。
 const ACCOUNT_READ_TIMEOUT_MS = 20_000;
@@ -34,10 +37,11 @@ export function createCodexSignInReader(input: {
   runtimeSettings?: ProviderRuntimeSettings;
   logger: pino.Logger;
 }): ReadCodexSignIn {
-  return async () =>
+  return async ({ codexHome }) =>
     codexSignInOf(
       await requestTemporaryCodexAppServer({
         runtimeSettings: input.runtimeSettings,
+        env: { CODEX_HOME: codexHome },
         logger: input.logger,
         configOverrides: ['model_provider="openai"'],
         method: "account/read",

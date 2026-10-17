@@ -617,6 +617,8 @@ export async function probeCodexVersion(
  */
 export async function requestTemporaryCodexAppServer(input: {
   runtimeSettings?: ProviderRuntimeSettings;
+  // 盖在提供方环境之上的变量（如 CODEX_HOME）。
+  env?: Record<string, string>;
   logger: Logger;
   configOverrides: string[];
   method: string;
@@ -631,7 +633,7 @@ export async function requestTemporaryCodexAppServer(input: {
     {
       detached: process.platform !== "win32",
       stdio: ["pipe", "pipe", "pipe"],
-      baseEnv: buildCodexAppServerEnv(input.runtimeSettings),
+      baseEnv: buildCodexAppServerEnv(input.runtimeSettings, input.env),
     },
   );
   assertChildWithPipes(child);

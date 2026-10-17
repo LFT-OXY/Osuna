@@ -1312,7 +1312,6 @@ export class ApiEndpointService {
           text,
           wiring: {
             ...wiring,
-            model: this.codexUsesChatGpt() ? this.chatgptStartModel(wiring.model) : wiring.model,
             baseUrl: `${wiring.baseUrl}${CODEX_GATEWAY_SUFFIX}`,
             catalogPath: this.store.codexModelCatalogPath,
             chatgptBaseUrl: this.codexUsesChatGpt()
@@ -1361,7 +1360,8 @@ export class ApiEndpointService {
 
   private async readSignInOnce(): Promise<void> {
     try {
-      const signIn = await this.readCodexSignIn();
+      const codexHome = path.dirname(this.resolveCodexConfigPath());
+      const signIn = await this.readCodexSignIn({ codexHome });
       if (signIn !== this.codexSignIn) this.logger.info({ signIn }, "Codex sign-in read");
       this.codexSignIn = signIn;
     } catch (error) {
@@ -1400,18 +1400,6 @@ export class ApiEndpointService {
   private codexWiringChanged(): boolean {
     const takeover = this.store.readCodexTakeover().takeover;
     return takeover !== null && isChatGptWiring(takeover) !== this.codexUsesChatGpt();
-  }
-
-  /**
-   * ChatGPT 登录、Codex 自己没选过模型时写的起始模型：不带接口标识的名字都指 ChatGPT 自带模型（ADR 0010），
-   * 所以写成最早开着、选了它的那家的「接口标识/模型名」。
-   */
-  private chatgptStartModel(modelId: string): string {
-    const state = this.readStateForSnapshot();
-    const endpoint = state?.endpoints.find(
-      (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
-    );
-    return endpoint ? `${endpoint.slug}/${modelId}` : modelId;
   }
 
   private restoreCodexOfficial(): void {

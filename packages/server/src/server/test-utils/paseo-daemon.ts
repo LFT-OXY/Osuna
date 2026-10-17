@@ -237,7 +237,7 @@ async function prepareTestDaemonConfig(
     apiEndpoints: {
       // 判断 Codex 登录方式的生产实现会起真的 Codex app-server：测试 daemon 一律换成固定答案（未登录），
       // 关心登录方式的用例自己传 readCodexSignIn。
-      readCodexSignIn: async () => "signed_out",
+      readCodexSignIn: async () => "signed_out" as const,
       ...(options.apiEndpoints ?? {
         env: {
           CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),

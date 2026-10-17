@@ -30,6 +30,7 @@ describe.skipIf(process.platform === "win32")("Codex wiring follows how Codex is
   let authPath: string;
   let signIn: CodexSignIn;
   let signInChecks: number;
+  let askedHomes: string[];
   let daemon: TestPaseoDaemon;
   let client: DaemonClient;
 
@@ -44,6 +45,7 @@ describe.skipIf(process.platform === "win32")("Codex wiring follows how Codex is
     await writeFile(authPath, AUTH_JSON);
     signIn = "chatgpt";
     signInChecks = 0;
+    askedHomes = [];
     await start();
   });
 
@@ -60,8 +62,9 @@ describe.skipIf(process.platform === "win32")("Codex wiring follows how Codex is
       apiEndpoints: {
         env: { CODEX_HOME: codexHome },
         homeDir: root,
-        readCodexSignIn: async () => {
+        readCodexSignIn: async ({ codexHome: home }) => {
           signInChecks += 1;
+          askedHomes.push(home);
           return signIn;
         },
       },
@@ -124,7 +127,6 @@ experimental_bearer_token = "${await token()}"
   async function chatgptConfig(): Promise<string> {
     return `# my codex config
 approval_policy = "never"
-model = "relay/gpt-x"
 openai_base_url = "${chatgptUrl()}"
 
 [projects."/Users/me/My Code"]
@@ -152,12 +154,14 @@ ${await table()}`;
 
   const config = () => readFile(configPath, "utf8");
 
-  test("signed in with ChatGPT: only openai_base_url, model and Osuna's table; Official puts it back", async () => {
+  test("signed in with ChatGPT: only openai_base_url and Osuna's table; Official puts it back", async () => {
     await createEndpoint();
     await setCodex(true);
 
     expect(await config()).toBe(await chatgptConfig());
     expect(signInChecks).toBeGreaterThan(0);
+    // 问的是正被改写的这份 config.toml 所在的 Codex home，不是 Codex 提供方自己的环境。
+    expect(new Set(askedHomes)).toEqual(new Set([codexHome]));
 
     await setCodex(false);
     expect(await config()).toBe(await keptConfig());
@@ -185,13 +189,7 @@ ${await table()}`;
 
     signIn = "api_key";
     await client.apiEndpointList("codex");
-    // ChatGPT 接法插进来的 model 留在原处，model_provider 放回到它后面。
-    expect(await config()).toBe(
-      (await providerConfig()).replace(
-        `model_provider = "osuna_api_endpoint"\nmodel = "gpt-x"`,
-        `model = "gpt-x"\nmodel_provider = "osuna_api_endpoint"`,
-      ),
-    );
+    expect(await config()).toBe(await providerConfig());
 
     signIn = "chatgpt";
     await client.apiEndpointList("codex");
@@ -221,7 +219,6 @@ ${await table()}`;
     expect(await config()).toBe(`openai_base_url = "${chatgptUrl()}"
 # my codex config
 approval_policy = "never"
-model = "relay/gpt-x"
 
 [projects."/Users/me/My Code"]
 trust_level = "trusted"

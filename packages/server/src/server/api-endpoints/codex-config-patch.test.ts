@@ -303,6 +303,12 @@ timeout_ms = 5000
 const CHATGPT_URL = "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex";
 
 /** 用 ChatGPT 登录的 Codex（ADR 0010）：内置 openai 服务商经 openai_base_url 指到中转站的 ChatGPT 后端地址。 */
+function inspect(text: string | null, takeover: CodexConfigTakeover | null) {
+  const result = inspectCodexConfig({ text, takeover });
+  if (result.kind !== "parsed") throw new Error(`Expected a parsed file, got ${result.kind}`);
+  return result;
+}
+
 function applyChatGpt(text: string | null, takeover: CodexConfigTakeover | null = null) {
   return applyWith({ text, takeover, wiring: { chatgptBaseUrl: CHATGPT_URL } });
 }
@@ -327,14 +333,23 @@ base_url = "https://mine.example/v1"
 ${RELAY_BLOCK}`);
   });
 
-  it("writes the endpoint's default model when Codex has none of its own", () => {
-    const { text } = applyChatGpt(`approval_policy = "never"\n`);
+  it("leaves model alone when Codex has none of its own, as magpie's Join does", () => {
+    const { text, takeover } = applyChatGpt(`approval_policy = "never"\n`);
 
     expect(text).toBe(`approval_policy = "never"
-model = "relay/gpt"
 openai_base_url = "${CHATGPT_URL}"
 
 ${RELAY_BLOCK}`);
+    expect(takeover.keys.model).toBeUndefined();
+    expect(restore(text, takeover)).toBe(withKeptTable(`approval_policy = "never"\n`));
+  });
+
+  it("keeps a model Codex picked itself while on, through Official", () => {
+    const { text, takeover } = applyChatGpt(`approval_policy = "never"\n`);
+    const picked = text.replace(`openai_base_url`, `model = "gpt-5.5"\nopenai_base_url`);
+
+    expect(inspect(picked, takeover).modifiedKeys).toEqual([]);
+    expect(toValue(restore(picked, takeover))).toMatchObject({ model: "gpt-5.5" });
   });
 
   it("takes Osuna's own model_provider and model_catalog_json out and Official puts every key back", () => {
@@ -571,12 +586,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe("inspectCodexConfig", () => {
-  function inspect(text: string | null, takeover: CodexConfigTakeover | null) {
-    const result = inspectCodexConfig({ text, takeover });
-    if (result.kind !== "parsed") throw new Error(`Expected a parsed file, got ${result.kind}`);
-    return result;
-  }
-
   it("finds nothing modified right after the switch", () => {
     const { text, takeover } = apply(USER_CONFIG);
     expect(inspect(text, takeover).modifiedKeys).toEqual([]);

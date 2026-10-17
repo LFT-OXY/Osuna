@@ -201,10 +201,10 @@ daemon 的 `ws` 服务（`path: "/ws"`）原先用 `server` 选项自己挂 upgr
 
 | 项 | magpie（`internal/agent/codex.go`） | Osuna |
 | --- | --- | --- |
-| 判断登录方式 | `codexChatGPT`：读 `auth.json`（或钥匙串）看有没有 access token | 起临时 app-server（`codex -c model_provider="openai" app-server`），`initialize` 后发 `account/read`（`codex-sign-in.ts` `createCodexSignInReader`，经 `codex-app-server-agent.ts` `requestTemporaryCodexAppServer`）。覆盖成内置 openai 是因为当前服务商是 Osuna 的表时它报不出账号。`account.type` 为 `chatgpt` 才算 ChatGPT；`apiKey`、`null`（未登录）、其余（如 `amazonBedrock`）都按服务商接法 |
+| 判断登录方式 | `codexChatGPT`：读 `auth.json`（或钥匙串）看有没有 access token | 起临时 app-server（`codex -c model_provider="openai" app-server`，`CODEX_HOME` 设成正被改写的 `config.toml` 所在目录：Codex 提供方设置里的环境变量可能另设 `CODEX_HOME`，那样问的和改的会是两处），`initialize` 后发 `account/read`（`codex-sign-in.ts` `createCodexSignInReader`，经 `codex-app-server-agent.ts` `requestTemporaryCodexAppServer`）。覆盖成内置 openai 是因为当前服务商是 Osuna 的表时它报不出账号。`account.type` 为 `chatgpt` 才算 ChatGPT；`apiKey`、`null`（未登录）、其余（如 `amazonBedrock`）都按服务商接法 |
 | 什么时候判断 | 每次 Sync | 打开开关（含「重新应用」）前、`list` 时（Codex 开着才问）、daemon 启动后（先按接管记录现在的接法对账，再在后台问，不让启动等 Codex）。同一时间只问一次 |
 | 判断不出 | 关了账号发现时按上次接的样子（`joined() \|\| beside()`） | 同：没装 Codex、超时（20 秒，ChatGPT 账号的 `account/read` 会先向 chatgpt.com 查工作区路由，Codex 自己最多等 15 秒）、回答认不出时记日志，保持上次的结果；从没判断出时按接管记录现在的接法，没有接管记录按服务商接法 |
-| ChatGPT 接法写什么 | `Join`：拿掉 `model_provider`、`model_catalog_json`，写 `openai_base_url = <网关>/backend-api/codex`，`model` 不动（Codex 上次选的），`putProvider` 照写服务商表 | 同（`codex-config-patch.ts` `wiringRaws`）。`openai_base_url` = 中转站地址 + `/backend-api/codex`（`CHATGPT_BACKEND_PATH`）。`model`：接管前文件里有就原样留着（含原来的引号写法）；没有才写起始模型，写成最早开着、选了它的那家的「接口标识/模型名」（`service.ts` `chatgptStartModel`），因为不带标识的名字都指 ChatGPT 自带模型（ADR 0010） |
+| ChatGPT 接法写什么 | `Join`：拿掉 `model_provider`、`model_catalog_json`，写 `openai_base_url = <网关>/backend-api/codex`，`model` 不动（Codex 上次选的），`putProvider` 照写服务商表 | 同（`codex-config-patch.ts` `wiringRaws`）。`openai_base_url` = 中转站地址 + `/backend-api/codex`（`CHATGPT_BACKEND_PATH`）。`model` 不归 Osuna、不进接管记录：Codex 自己选过的原样留着，没选过就照旧没有（用 Codex 自己的默认模型）；从服务商接法换过来时放回接管前的样子；开着时 Codex 在 `/model` 里换的模型切回官方后也留着（magpie `Unwire`「a model of Codex's own picked while joined stays」） |
 | 登录方式变了 | Sync 时重新 Join 或改成服务商模式 | 判断结果与接管记录的接法不同（记录里 `openai_base_url` 有写入值即 ChatGPT 接法，`isChatGptWiring`）就按新方式重写：上一种接法独有的 `openai_base_url` 按接管记录放回原样、不再记；两种都负责的键沿用第一次接管时记的原值 |
 
 ### 用户自己写的 `openai_base_url`
@@ -212,6 +212,10 @@ daemon 的 `ws` 服务（`path: "/ws"`）原先用 `server` 选项自己挂 upgr
 magpie 的 ChatGPT 接法（`Join`，以及选了 magpie 模型时的 beside 那段 `set`）不看原值，直接写成网关地址；断开时 `dropBase` 只在它是 magpie 的地址时删掉，原值不存，所以用户写的地址丢了。只有 magpie API 模式（`u == "" || viaBase()` 才写）和多号 failover（`codex.failover` 标记）不碰用户写的。
 
 Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 自带模型的请求就不经过中转站，开关等于没开），另照 ADR 0004 在接管记录里记原值（值的原文，含引号），切回官方、或换成服务商接法时放回原处（比 magpie 多做）。用例：`codex-config-patch.test.ts`「replaces an openai_base_url the user wrote and puts it back on Official」、`api-endpoint-codex-sign-in.e2e.test.ts`「an openai_base_url the user wrote …」。
+
+### 待定：用户自己写的顶层 `model_provider`（不是 `openai`、也不是 CC Switch 镜像）
+
+magpie 的 `Join` 对这种配置返回 false（`codex.go` `Join` 里 `p != "" && p != "openai" && !isCCSwitchMirror(p)`）。但 `connect`（`internal/agent/applied.go` `connect`，`Join` 之后）接着挑一个 magpie 模型调 `set`：ChatGPT 登录、账号没被扣住时走 beside 那段，照样 `DelTOMLTop("model_provider", "model_catalog_json")`、写 `openai_base_url` 和 `model = <magpie 模型>`，再由 `takeTables` 把 CC Switch 的 `custom` 表也指向网关（`codex_ccswitch_test.go` `TestCodexTakesCCSwitchTables` 用带 ChatGPT 令牌的 auth 验证了这条路）。所以 magpie 整体上**会**拿掉用户的服务商，只是不算 joined、会写模型。Osuna 现在拿掉用户的 `model_provider`（关掉时放回）、不写 `model`。是照 magpie 的 beside 写模型、保留用户的服务商并提示接不上，还是维持现状，等决定。
 
 ### 其余做法
 
