@@ -1,4 +1,6 @@
 import { writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -612,5 +614,244 @@ experimental_bearer_token = "${token}"
     } finally {
       await chmod(codexHome, 0o700);
     }
+  });
+});
+
+// 工单 07：Codex 的模型目录按接口清单与 models.dev 写真实的上下文、档位与能否看图。
+describe("Codex's model catalog carries what the endpoint models can do", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: Server | null;
+
+  // daemon 启动前放好的 models.dev 缓存；测试 daemon 默认关着自动更新，不会去下载。
+  const MODELS_DEV_CACHE = {
+    fetchedAt: "2026-10-15T00:00:00.000Z",
+    etag: null,
+    models: {
+      "kimi-k2": {
+        context: 262_144,
+        output: 98_304,
+        efforts: ["low", "high", "max"],
+        images: true,
+      },
+    },
+  };
+
+  async function start(input: {
+    modelsDevCache?: object;
+    modelsDevFetch?: typeof globalThis.fetch;
+    modelsDevTimers?: { schedule: (handler: () => void, ms: number) => () => void };
+  }): Promise<void> {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-facts-"));
+    tempRoots.push(root);
+    const codexHome = path.join(root, "codex-home");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(path.join(codexHome, "config.toml"), USER_CONFIG);
+    const cacheDir = path.join(root, "home", ".paseo", "api-endpoints");
+    await mkdir(cacheDir, { recursive: true });
+    if (input.modelsDevCache) {
+      await writeFile(path.join(cacheDir, "models-dev.json"), JSON.stringify(input.modelsDevCache));
+    }
+    daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: path.join(root, "home"),
+      apiEndpoints: {
+        env: { CODEX_HOME: codexHome },
+        homeDir: root,
+        ...(input.modelsDevFetch
+          ? {
+              isModelsDevAutoUpdate: () => true,
+              modelsDevFetch: input.modelsDevFetch,
+              modelsDevTimers: input.modelsDevTimers,
+            }
+          : {}),
+      },
+    });
+    client = await connect(daemon);
+  }
+
+  beforeEach(() => {
+    upstream = null;
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    if (upstream) {
+      upstream.closeAllConnections();
+      await new Promise((resolve) => upstream?.close(resolve));
+    }
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function switchOn(baseUrl: string, models: string[]): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Relay",
+      baseUrl,
+      apiKey: SECRET,
+      models: models.map((id) => ({ id })),
+      defaultModelId: models[0]!,
+    });
+    const endpointId = saved.endpoint?.id;
+    if (!endpointId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("codex", endpointId);
+    return endpointId;
+  }
+
+  interface Entry {
+    slug: string;
+    context_window: number;
+    max_context_window?: number;
+    default_reasoning_level: string | null;
+    supported_reasoning_levels: Array<{ effort: string }>;
+    input_modalities?: string[];
+  }
+
+  async function entries(): Promise<Record<string, Entry>> {
+    const file = path.join(daemon.paseoHome, "api-endpoints", "codex-models.json");
+    const parsed = JSON.parse(await readFile(file, "utf8")) as { models: Entry[] };
+    return Object.fromEntries(parsed.models.map((entry) => [entry.slug, entry]));
+  }
+
+  function facts(entry: Entry | undefined) {
+    if (!entry) throw new Error("Expected a catalog entry");
+    return {
+      context: entry.context_window,
+      max: entry.max_context_window,
+      levels: entry.supported_reasoning_levels.map((level) => level.effort),
+      start: entry.default_reasoning_level,
+      input: entry.input_modalities,
+    };
+  }
+
+  const UNKNOWN = {
+    context: 272_000,
+    max: 272_000,
+    levels: ["low", "medium", "high", "xhigh"],
+    start: "medium",
+    input: undefined,
+  };
+
+  test("the endpoint's own list first, models.dev next, and today's entry for a model neither knows", async () => {
+    await start({ modelsDevCache: MODELS_DEV_CACHE });
+    upstream = createServer((request, response) => {
+      if (request.url !== "/api/v1/models") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "glm-5",
+              context_length: 200_000,
+              supported_reasoning_levels: ["high", "max"],
+              modalities: { input: ["text"] },
+            },
+            // 清单说的看图在 models.dev 的前面，没说的上下文与档位由 models.dev 补上。
+            { id: "kimi-k2", modalities: { input: ["text"] } },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2", "mystery"]);
+
+    const before = await entries();
+    expect(facts(before["glm-5"])).toEqual(UNKNOWN);
+    expect(facts(before["kimi-k2"])).toEqual({
+      context: 262_144,
+      max: undefined,
+      levels: ["low", "high", "max"],
+      start: "high",
+      input: ["text", "image"],
+    });
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "codex",
+      endpointId,
+      baseUrl,
+      format: "openai_responses",
+    });
+    expect(fetched.error).toBeNull();
+
+    const after = await entries();
+    const glm = {
+      context: 200_000,
+      max: undefined,
+      levels: ["high", "max"],
+      start: "high",
+      input: ["text"],
+    };
+    expect(facts(after["glm-5"])).toEqual(glm);
+    expect(facts(after["relay/glm-5"])).toEqual(glm);
+    expect(facts(after["kimi-k2"])).toEqual({
+      context: 262_144,
+      max: undefined,
+      levels: ["low", "high", "max"],
+      start: "high",
+      input: ["text"],
+    });
+    expect(facts(after.mystery)).toEqual(UNKNOWN);
+  });
+
+  test("models.dev is not downloaded with both switches off; Codex alone allows it and the catalog follows", async () => {
+    const requests: string[] = [];
+    // 价格表自动更新开着；检查的定时器由测试手动到点。
+    let pending: (() => void) | null = null;
+    const modelsDevTimers = {
+      schedule(handler: () => void) {
+        pending = handler;
+        return () => {
+          if (pending === handler) pending = null;
+        };
+      },
+    };
+    function fireCheck(): void {
+      const handler = pending;
+      if (!handler) throw new Error("Expected a scheduled models.dev check");
+      pending = null;
+      handler();
+    }
+    const modelsDevFetch: typeof globalThis.fetch = async (input) => {
+      requests.push(String(input));
+      return new Response(
+        JSON.stringify({
+          relay: {
+            models: {
+              mystery: {
+                limit: { context: 400_000, output: 128_000 },
+                reasoning_options: [{ type: "effort", values: ["minimal", "low"] }],
+                modalities: { input: ["text", "image"] },
+              },
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    };
+    await start({ modelsDevFetch, modelsDevTimers });
+    // 两个开关都关着：到点的检查不下载，改约一小时后。
+    fireCheck();
+    await expect.poll(() => pending).not.toBeNull();
+    expect(requests).toEqual([]);
+
+    await switchOn("https://relay.example/api", ["mystery"]);
+    fireCheck();
+
+    await expect.poll(() => requests).toEqual(["https://models.dev/api.json"]);
+    await expect
+      .poll(async () => facts((await entries()).mystery))
+      .toEqual({
+        context: 400_000,
+        max: undefined,
+        levels: ["minimal", "low"],
+        start: "minimal",
+        input: ["text", "image"],
+      });
   });
 });

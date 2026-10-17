@@ -127,28 +127,28 @@ about you or your machine beyond the IP and user agent any HTTP request carries.
 Everything else the daemon fetches is either something you asked for, such as
 the CLI update check below, or a connection you turned on.
 
-| File                                           | Fetched when                             | Used for                                                                                 |
-| ---------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| The price table on `raw.githubusercontent.com` | Always                                   | Pricing usage                                                                            |
-| `models.dev/api.json`                          | Claude Code is switched to API endpoints | Telling Claude Code each endpoint model's context window, reply length and effort levels |
+| File                                           | Fetched when                                      | Used for                                                                                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The price table on `raw.githubusercontent.com` | Always                                            | Pricing usage                                                                                                                                             |
+| `models.dev/api.json`                          | Claude Code or Codex is switched to API endpoints | Telling Claude Code and Codex each endpoint model's context window and effort levels, plus Claude Code its reply length and Codex whether it takes images |
 
 Each runs 30 seconds after start and every 24 hours after that, and skips the
 request while the copy it already fetched is younger than a day. A daemon still
 running on the built-in price snapshot always asks, however recent that
-snapshot's own date is; models.dev has no snapshot, and turning Claude Code's
-API endpoint switch on checks it right away. Both requests are conditional
-(`If-None-Match`), so an unchanged file costs a 304 rather than 2.7 or 5.7 MB.
-They time out after 15 seconds; a failure is logged at `info`, retried an hour
-later, and never replaces the copy you already have. The daemon keeps the
-models.dev answer slimmed to three numbers per model in
+snapshot's own date is; models.dev has no snapshot, and turning Claude Code's or
+Codex's API endpoint switch on while both were off checks it right away. Both
+requests are conditional (`If-None-Match`), so an unchanged file costs a 304
+rather than 2.7 or 5.7 MB. They time out after 15 seconds; a failure is logged
+at `info`, retried an hour later, and never replaces the copy you already have.
+The daemon keeps the models.dev answer slimmed to each model's window, reply
+length, effort levels and image input in
 `$PASEO_HOME/api-endpoints/models-dev.json`.
 
 Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
 or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
-from the built-in snapshot and your own prices, tells Claude Code what an
-endpoint's own model list says and what a models.dev copy fetched earlier says,
-and fetches neither file — including on a host
-that has no network at all. The switch covers the automatic check only:
+from the built-in snapshot and your own prices, tells Claude Code and Codex what
+an endpoint's own model list says and what a models.dev copy fetched earlier
+says, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
 "Refresh now" in the price table still fetches the price table when you press
 it.
 

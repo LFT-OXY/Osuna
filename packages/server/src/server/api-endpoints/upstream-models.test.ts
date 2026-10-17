@@ -203,6 +203,37 @@ describe("fetchUpstreamModels", () => {
     });
   });
 
+  test("keeps whether a model sees images, in each list's shape; a list that does not say leaves it unknown", async () => {
+    const upstream = await startUpstream({
+      "/v1/models": {
+        status: 200,
+        body: {
+          data: [
+            // magpie 与 models.dev 的形状：modalities.input
+            { id: "modalities", modalities: { input: ["text", "image"], output: ["text"] } },
+            // OpenRouter：architecture.input_modalities
+            { id: "openrouter", architecture: { input_modalities: ["text"] } },
+            // Codex 自己的清单：input_modalities
+            { id: "codex-shaped", input_modalities: ["text", "image"] },
+            { id: "silent" },
+          ],
+        },
+      },
+    });
+
+    const result = await run({ provider: "codex", baseUrl: upstream.baseUrl });
+
+    expect(result).toEqual({
+      ok: true,
+      models: [
+        { id: "modalities", facts: { images: true } },
+        { id: "openrouter", facts: { images: false } },
+        { id: "codex-shaped", facts: { images: true } },
+        { id: "silent" },
+      ],
+    });
+  });
+
   test("follows has_more / last_id pages", async () => {
     const upstream = await startUpstream({
       "/v1/models": {

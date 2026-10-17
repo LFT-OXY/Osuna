@@ -80,6 +80,7 @@ import { testUpstreamConnection } from "./upstream-connection.js";
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
+import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import {
   fetchUpstreamModels,
   type ListedModel,
@@ -182,8 +183,11 @@ export interface ApiEndpointServiceOptions {
   countLiveSessions: (provider: ApiEndpointProvider) => number;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
-  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 总开关开着）；缺省不下载。
+  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着）；缺省不下载。
   isModelsDevAutoUpdate?: () => boolean;
+  // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
+  modelsDevFetch?: typeof globalThis.fetch;
+  modelsDevTimers?: UsagePricingTimers;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
@@ -304,11 +308,12 @@ export class ApiEndpointService {
     this.modelsDev = new ModelsDevCatalog({
       filePath: this.store.modelsDevPath,
       logger: this.logger,
-      isAllowed: () =>
-        isModelsDevAutoUpdate() && this.readStateForSnapshot()?.agents.claude.enabled === true,
+      isAllowed: () => isModelsDevAutoUpdate() && usesModelFacts(this.readStateForSnapshot()),
       onUpdated: () => {
-        void this.refreshClaudeHints();
+        void this.refreshModelFacts();
       },
+      fetch: options.modelsDevFetch,
+      timers: options.modelsDevTimers,
     });
     this.modelsDev.start();
   }
@@ -698,14 +703,14 @@ export class ApiEndpointService {
     return next;
   }
 
-  /** 通知设置有变的 Agent；刚打开 Claude Code 总开关时让 models.dev 马上检查一次。 */
+  /** 通知设置有变的 Agent；两个总开关从都关着到有一个打开时让 models.dev 马上检查一次。 */
   private announceCommitted(previous: ApiEndpointState, next: ApiEndpointState): void {
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (agentFingerprint(previous, provider) !== agentFingerprint(next, provider)) {
         this.onActiveEndpointChanged(provider);
       }
     }
-    if (!previous.agents.claude.enabled && next.agents.claude.enabled) this.modelsDev.wake();
+    if (!usesModelFacts(previous) && usesModelFacts(next)) this.modelsDev.wake();
   }
 
   private syncCli(provider: ApiEndpointProvider, wiring: CliWiring | null): void {
@@ -839,7 +844,7 @@ export class ApiEndpointService {
 
   /**
    * 这家这个模型的资料：这家上游清单给的在前，models.dev 补上没给的。
-   * Claude Code 的模型提示与中转站（翻译时的档位、回复上限、采样参数，选路时的窗口）都按它查。
+   * Codex 模型目录、Claude Code 的模型提示与中转站（翻译时的档位、回复上限、采样参数，选路时的窗口）都按它查。
    */
   modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
     const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
@@ -876,12 +881,7 @@ export class ApiEndpointService {
     return this.exclusive(() => {
       const state = this.readStateForSnapshot();
       if (!state) return;
-      if (state.agents.codex.enabled) {
-        const catalog = this.codexModelCatalog(state);
-        if (catalog !== this.store.readCodexModelCatalog()) {
-          this.store.writeCodexModelCatalog(catalog);
-        }
-      }
+      this.rewriteCodexCatalog(state);
       this.rewriteClaudeHints(state);
       for (const provider of API_ENDPOINT_PROVIDERS) {
         if (state.agents[provider].enabled) this.onActiveEndpointChanged(provider);
@@ -889,11 +889,21 @@ export class ApiEndpointService {
     });
   }
 
-  private refreshClaudeHints(): Promise<void> {
+  /** models.dev 更新了：开着的 Agent 按新资料重写 Codex 模型目录与 Claude Code 的模型提示。 */
+  private refreshModelFacts(): Promise<void> {
     return this.exclusive(() => {
       const state = this.readStateForSnapshot();
-      if (state) this.rewriteClaudeHints(state);
+      if (!state) return;
+      this.rewriteCodexCatalog(state);
+      this.rewriteClaudeHints(state);
     });
+  }
+
+  /** Codex 开着时按现在的接口与模型资料重写模型目录，内容不变不写。 */
+  private rewriteCodexCatalog(state: ApiEndpointState): void {
+    if (!state.agents.codex.enabled) return;
+    const catalog = this.codexModelCatalog(state);
+    if (catalog !== this.store.readCodexModelCatalog()) this.store.writeCodexModelCatalog(catalog);
   }
 
   /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
@@ -991,8 +1001,8 @@ export class ApiEndpointService {
   }
 
   /**
-   * 记下这家的上游清单，不影响路由与模型目录。拉取期间被删的接口不再写回。
-   * 清单带的模型资料改变了 Claude Code 的模型提示时，跟着重写 settings.json。
+   * 记下这家的上游清单，不影响路由。拉取期间被删的接口不再写回。
+   * 清单带的模型资料改变了 Codex 模型目录或 Claude Code 的模型提示时，跟着重写。
    */
   private keepCatalog(endpointId: string, models: ListedModel[]): Promise<void> {
     return this.exclusive(() => {
@@ -1005,6 +1015,7 @@ export class ApiEndpointService {
         endpoints: withEndpoint(state.endpoints, { ...endpoint, catalog }),
       };
       this.store.writeState(next);
+      this.rewriteCodexCatalog(next);
       const tokens = this.store.readGatewayTokens();
       if (
         this.cliFingerprint(state, "claude", tokens) !== this.cliFingerprint(next, "claude", tokens)
@@ -1197,7 +1208,9 @@ export class ApiEndpointService {
     } catch (error) {
       this.logger.warn({ err: error }, "Could not read Codex reasoning effort");
     }
-    return buildCodexModelCatalog(this.retiredModels.listed(state), effort);
+    return buildCodexModelCatalog(this.retiredModels.listed(state), effort, (endpoint, modelId) =>
+      this.modelFacts(endpoint, modelId),
+    );
   }
 
   private restoreOfficial(provider: ApiEndpointProvider): void {
@@ -1843,4 +1856,9 @@ function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue
       message: `${filePath} was changed outside Osuna: ${keys.join(", ")}`,
     },
   ];
+}
+
+/** 有 Agent 用得上模型资料（Claude Code 或 Codex 的总开关开着）：models.dev 才允许下载。 */
+function usesModelFacts(state: ApiEndpointState | null): boolean {
+  return state !== null && (state.agents.claude.enabled || state.agents.codex.enabled);
 }

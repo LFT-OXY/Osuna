@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildCodexModelCatalog } from "./codex-model-catalog.js";
+import {
+  buildCodexModelCatalog,
+  codexDefaultLevel,
+  codexModelEntry,
+  codexReasoningLevels,
+} from "./codex-model-catalog.js";
+import type { ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 function endpoint(input: {
@@ -40,9 +46,16 @@ interface CatalogEntry {
 
 function entries(
   state: ApiEndpointState,
-  options: { reasoningEffort?: string | null } = {},
+  options: {
+    reasoningEffort?: string | null;
+    facts?: (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
+  } = {},
 ): CatalogEntry[] {
-  const catalog = buildCodexModelCatalog(state, options.reasoningEffort ?? null);
+  const catalog = buildCodexModelCatalog(
+    state,
+    options.reasoningEffort ?? null,
+    options.facts ?? (() => ({})),
+  );
   return (JSON.parse(catalog) as { models: CatalogEntry[] }).models;
 }
 
@@ -124,4 +137,129 @@ describe("buildCodexModelCatalog", () => {
       expect(new Set(levels)).toEqual(new Set([level]));
     },
   );
+
+  it("writes what each endpoint knows of its model; a bare name takes the first endpoint that serves it", () => {
+    const known: Record<string, ModelFacts> = {
+      "relay-a/kimi-k2": { context: 262_144, efforts: ["low", "high"], images: false },
+      "relay-b/kimi-k2": { context: 131_072, images: true },
+    };
+    const byEntry = Object.fromEntries(
+      entries(STATE, { facts: (ep, modelId) => known[`${ep.slug}/${modelId}`] ?? {} }).map(
+        (entry) => [entry.slug, entry],
+      ),
+    );
+
+    expect(byEntry["kimi-k2"]).toMatchObject({
+      context_window: 262_144,
+      input_modalities: ["text"],
+      supported_reasoning_levels: [
+        { effort: "low", description: "Fast responses with lighter reasoning" },
+        { effort: "high", description: "Greater reasoning depth for complex problems" },
+      ],
+    });
+    expect(byEntry["relay-b/kimi-k2"]).toMatchObject({
+      context_window: 131_072,
+      input_modalities: ["text", "image"],
+    });
+    // 档位没查到的那家照旧四档。
+    expect(byEntry["relay-b/kimi-k2"]?.supported_reasoning_levels).toHaveLength(4);
+  });
+});
+
+describe("codexModelEntry", () => {
+  function entry(facts: ModelFacts, reasoningEffort: string | null = null) {
+    return codexModelEntry({
+      slug: "relay/m",
+      displayName: "M",
+      visibility: "hide",
+      priority: 3,
+      facts,
+      reasoningEffort,
+    });
+  }
+
+  it("writes the known window, levels, default and image input", () => {
+    expect(
+      entry(
+        { context: 1_000_000, output: 64_000, efforts: ["low", "high", "max"], images: true },
+        "xhigh",
+      ),
+    ).toMatchObject({
+      slug: "relay/m",
+      display_name: "M",
+      visibility: "hide",
+      priority: 3,
+      context_window: 1_000_000,
+      input_modalities: ["text", "image"],
+      supported_reasoning_levels: [
+        { effort: "low", description: "Fast responses with lighter reasoning" },
+        { effort: "high", description: "Greater reasoning depth for complex problems" },
+        { effort: "max", description: "" },
+      ],
+      default_reasoning_level: "max",
+      supports_reasoning_summaries: true,
+    });
+  });
+
+  it("a known window is the whole window: no larger maximum is claimed", () => {
+    expect(entry({ context: 1_000_000 })).not.toHaveProperty("max_context_window");
+  });
+
+  it("says text only for a model known not to see images", () => {
+    expect(entry({ images: false }).input_modalities).toEqual(["text"]);
+  });
+
+  it("keeps today's entry for a model nothing is known of", () => {
+    const unknown = entry({}, "high");
+    expect(unknown).toMatchObject({
+      context_window: 272_000,
+      max_context_window: 272_000,
+      default_reasoning_level: "high",
+      supports_reasoning_summaries: true,
+    });
+    expect(unknown.supported_reasoning_levels.map((level) => level.effort)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(unknown).not.toHaveProperty("input_modalities");
+  });
+
+  it("offers no levels for a model known to have none", () => {
+    expect(entry({ efforts: [] })).toMatchObject({
+      supported_reasoning_levels: [],
+      default_reasoning_level: null,
+      supports_reasoning_summaries: false,
+    });
+  });
+});
+
+describe("codexReasoningLevels", () => {
+  it("passes the listed names on in order, since Codex takes any non-empty level", () => {
+    expect(codexReasoningLevels(["none", "low", "xhigh", "max", "ultra", "thinking-hard"])).toEqual(
+      ["none", "low", "xhigh", "max", "ultra", "thinking-hard"],
+    );
+  });
+
+  it("drops an empty name, which would make Codex reject the whole file, and repeats", () => {
+    expect(codexReasoningLevels([" high ", "", "  ", "high", "low"])).toEqual(["high", "low"]);
+  });
+});
+
+describe("codexDefaultLevel", () => {
+  it.each([
+    { levels: ["low", "high", "max"], chosen: null, level: "high" },
+    { levels: ["low", "high", "max"], chosen: "high", level: "high" },
+    { levels: ["low", "high", "max"], chosen: "medium", level: "high" },
+    { levels: ["low", "high", "max"], chosen: "none", level: "low" },
+    { levels: ["low", "high", "max"], chosen: "ultra", level: "max" },
+    { levels: ["low", "high", "max"], chosen: "turbo", level: "high" },
+    { levels: ["none", "low"], chosen: "none", level: "none" },
+    { levels: ["minimal", "low"], chosen: null, level: "minimal" },
+    { levels: ["low", "medium", "high"], chosen: null, level: "medium" },
+    { levels: ["thinking-hard"], chosen: "high", level: "thinking-hard" },
+  ])("levels $levels started at $chosen default to $level", ({ levels, chosen, level }) => {
+    expect(codexDefaultLevel(levels, chosen)).toBe(level);
+  });
 });

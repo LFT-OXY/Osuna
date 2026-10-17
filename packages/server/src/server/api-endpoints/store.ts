@@ -27,7 +27,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - takeover-claude.json：接管记录，含用户原先写在 settings.json 里的值（可能是别的 token）；
  * - takeover-codex.json：config.toml 的接管记录；
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
- * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示用；
+ * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示与 Codex 的模型目录用；
  * - gateway-tokens.json：每个开过总开关的 Agent 一个中转站口令，只说明是哪个 Agent；关掉总开关不作废（ADR 0010）；
  * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。

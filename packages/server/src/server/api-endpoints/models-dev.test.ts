@@ -14,12 +14,13 @@ const API_JSON = {
       "gpt-6-sol": {
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
         reasoning_options: [{ type: "effort", values: ["low", "high"] }],
+        modalities: { input: ["text", "image"], output: ["text"] },
       },
     },
   },
 };
 
-const GPT_6_SOL = { context: 922_000, output: 128_000, efforts: ["low", "high"] };
+const GPT_6_SOL = { context: 922_000, output: 128_000, efforts: ["low", "high"], images: true };
 
 interface Request {
   url: string;

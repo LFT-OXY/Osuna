@@ -71,9 +71,11 @@ wire_effort.go, and the refusal words (alwaysThinks, refusesThinkingOff,
 thinkingOffRefused in anthropic.go; mandatoryReasoning, effortLevelsNamed,
 noneQuoted in gateway.go) with the retry at the lowest level in gateway.go.
 Their tests reuse cases from thinking_off_test.go, sub2api_think_off_test.go
-and gateway_test.go. The Codex catalog's default reasoning level follows
-ModelDefault in internal/codexcat/codexcat.go and NearestEffort in
-internal/catalog/catalog.go:
+and gateway_test.go. The Codex catalog's entries for a model's known window,
+effort levels and image input follow entriesAt in internal/codexcat/codexcat.go
+and levelsOf in internal/catalog/live.go, and its default reasoning level
+follows DefaultEffort and ModelDefault in internal/codexcat/codexcat.go and
+EffortRank and NearestEffort in internal/catalog/catalog.go:
 
   packages/server/src/server/api-endpoints/gateway/refusals.ts
   packages/server/src/server/api-endpoints/gateway/refusals.test.ts
@@ -433,11 +435,14 @@ CLAUDE_CODE_MODEL_CAPABILITIES, and leaving a value the user set alone)
 follows claude1M, claudeWindow, claudeOutput, claudeCaps and
 claudeCapabilities in magpie's internal/agent/claude.go; how a model is
 looked up in the models.dev catalog (the bare id, the value most providers
-give) follows bareID, found, mostGiven, mostListed and window in magpie's
-internal/catalog/catalog.go:
+give, whether most providers say it takes images) follows bareID, found,
+mostGiven, mostListed, window and the image votes in load in magpie's
+internal/catalog/catalog.go, and reading image input from a model list follows
+liveModel's modalities in internal/catalog/live.go:
 
   packages/server/src/server/api-endpoints/claude-model-hints.ts
   packages/server/src/server/api-endpoints/model-facts.ts
+  packages/server/src/server/api-endpoints/upstream-models.ts
 
 The settings page's model families (which model name prefix belongs to which
 vendor) follow magpie's internal/agent/icons.go, and the vendor logos are

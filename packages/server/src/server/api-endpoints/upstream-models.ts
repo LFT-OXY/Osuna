@@ -1,5 +1,8 @@
+// 从清单的 modalities.input 读能否看图移植自 magpie（https://github.com/yetone/magpie，internal/catalog/live.go 的 liveModel）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type { ApiEndpointModel } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { knownWindow, positiveInteger, type ModelFacts } from "./model-facts.js";
+import { knownWindow, positiveInteger, takesImages, type ModelFacts } from "./model-facts.js";
 import type { ApiEndpointProvider } from "./store.js";
 import {
   ANTHROPIC_VERSION,
@@ -167,6 +170,8 @@ function collect(entries: unknown[], idField: "id" | "slug"): ListedModel[] {
  * 各家列表给的上下文、回复上限与思考档位：Anthropic 的 max_input_tokens / max_tokens / capabilities.effort，
  * OpenRouter 的 context_length / top_provider.max_completion_tokens，Codex 的 context_window，
  * 网关类的 max_output_tokens / supported_reasoning_levels。max_tokens 只在 Anthropic 形状里才是回复上限。
+ * 能不能看图：modalities.input（magpie 读的形状）、OpenRouter 的 architecture.input_modalities、Codex 的 input_modalities；
+ * 都没给的不算知道。
  */
 function readFacts(entry: Record<string, unknown>): ModelFacts {
   const facts: ModelFacts = {};
@@ -183,7 +188,18 @@ function readFacts(entry: Record<string, unknown>): ModelFacts {
   if (output !== undefined) facts.output = output;
   const efforts = listedEfforts(entry);
   if (efforts.length > 0) facts.efforts = efforts;
+  const images = listedImages(entry);
+  if (images !== undefined) facts.images = images;
   return facts;
+}
+
+function listedImages(entry: Record<string, unknown>): boolean | undefined {
+  if (isRecord(entry.modalities) && Array.isArray(entry.modalities.input)) {
+    return takesImages(entry.modalities);
+  }
+  const architecture = isRecord(entry.architecture) ? entry.architecture : {};
+  const input = [architecture.input_modalities, entry.input_modalities].find(Array.isArray);
+  return input === undefined ? undefined : takesImages({ input });
 }
 
 const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;

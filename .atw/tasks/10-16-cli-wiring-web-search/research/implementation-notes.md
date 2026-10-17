@@ -122,3 +122,29 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 - **Anthropic 上游的搜索写回 Codex**：magpie 的 `anthropicDecoder` 跳过 `server_tool_use` 的内容、不读 `web_search_tool_result`，Codex 收不到 `web_search_call`；工单要求写回，所以 Osuna 按结果块的 `tool_use_id` 找到它的 `server_tool_use` 取查询词，结果项取 title、url、page_age；结果是错误对象时交出一次没有页面的搜索。属于比 magpie 多做。
 - **Responses 结果项的标题**：magpie 只读 sources 的 url、标题也用 url；Osuna 在 source 带 `title` 时用它，否则同 magpie。
 - 文字修补（`textCallFilter`）收到搜索时先交出扣着的文字，保住先后顺序；断流续写不把搜索当作调用（magpie `continuation.add` 同样只看 KToolStart、KToolArgs）。
+
+## 07 Codex 模型目录写真实能力
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie | Osuna |
+| --- | --- | --- |
+| 上下文 | `codexcat.go` `entriesAt`：知道窗口才写 `context_window`；用户设了压缩阈值时写阈值，`max_context_window` 写整个窗口 | 知道就写 `context_window`，不写 `max_context_window`（Osuna 没有压缩阈值设置，窗口就是整个窗口）；不知道照旧两项都写 272K |
+| 档位名 | `live.go` `levelsOf`：非空、去重、原样、顺序不变 | 同，另去掉首尾空白（`codexReasoningLevels`）。Codex 认得的九个名字之外的非空字符串它当作自定义档位收下（`codex-rs/protocol/src/openai_models.rs` `ReasoningEffort::Custom`），所以不改名、不丢认不得的；空串会让整个目录读不进来 |
+| 默认档 | `ModelDefault` + `NearestEffort`（含 ultra，一样近取强的，不取 none）+ `DefaultEffort`（medium、high、第一档） | 照搬（`codexDefaultLevel`）。四档固定时的结果与之前相同，只有 `model_reasoning_effort = "ultra"` 由 medium 变成 xhigh |
+| 知道没有档位 | `Efforts: []`、不写默认档、`supports_reasoning_summaries` 为假 | 同（models.dev 列着却没有一家给档位的模型） |
+| 看图 | 写 `input_modalities`：`["text"]`，`Images` 为真再加 `image`；models.dev 按家数投票（`catalog.go` `load` 的 `votes`），清单读 `modalities.input` | 知道才写；models.dev 同样投票，打平算不收。清单另读 OpenRouter 的 `architecture.input_modalities` 与 Codex 的 `input_modalities`（多读，同 `readFacts` 已读这两家的窗口） |
+| 档位说明 | 一律空串 | low / medium / high / xhigh 用 Codex 自带目录的说明，别的空串 |
+| 回复上限 | 不写 | 不写：Codex 的 `ModelInfo` 没有这一项。资料里的 `output` 照旧只给 Claude Code 与中转站 |
+
+### 与 magpie 不同、要判断的地方
+
+- **查不到的照旧，不照 magpie 写成「不知道」**：工单要求查不到的保持现在的写法，所以逐项回退：上下文 272K、四档固定、不写 `input_modalities`（Codex 缺省当能看图，`default_input_modalities`）。magpie 对不知道的模型写 `["text"]`、不给档位、不写窗口。
+- **没做的 magpie 字段**：`withUltra`（别家卖的 OpenAI 模型补 ultra 档、标 multi-agent V2）、`multi_agent_reasoning_effort`、`service_tiers`、`supports_search_tool`、`auto_review_model_override`、`apply_patch_tool_type: freeform`、截断按 tokens。都不在工单的四项里，归 23、24 号或以后的工单。
+
+### 怎么做的
+
+- `codex-model-catalog.ts`：`codexModelEntry`（一个条目）、`codexReasoningLevels`、`codexDefaultLevel` 都导出，10 号工单合并 ChatGPT 清单时直接用 `codexModelEntry`。`buildCodexModelCatalog` 多一个 `factsFor`，光秃秃的名字按最早开着、选了它的那家查（与 Claude Code 起始模型、中转站先发给哪家一致）。
+- `ModelFacts` 多一个 `images`；`models-dev.json` 与 `endpoints.json` 里存的清单资料旧文件没有这一项，下次下载、重拉清单补上（同 `sampling` 的先例）。
+- models.dev 下载的条件改为价格表自动更新开着且 Claude Code 或 Codex 的总开关开着；两个都关着到有一个打开时马上检查一次。下载更新后、重拉某家清单后，Codex 开着就重写模型目录（内容不变不写）。
+- 测试 daemon 可以换掉 models.dev 的下载函数和检查定时器（`modelsDevFetch`、`modelsDevTimers`，同 `retiredModelsTimers` 的先例），e2e 用它验证两个开关都关时到点不下载、只开 Codex 时下载并据此重写目录，不联网。

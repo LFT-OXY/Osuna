@@ -16,8 +16,8 @@ import {
 import { parseJson } from "./upstream-http.js";
 
 /*
- * models.dev 的公开模型资料（上下文、回复上限、思考档位），给 Claude Code 的模型提示用。
- * 只在 Claude Code 总开关开着、价格表自动更新也开着时才下载（isAllowed）；规则见 docs/usage.md 的对外请求一节。
+ * models.dev 的公开模型资料（上下文、回复上限、思考档位、能否看图），给 Claude Code 的模型提示与 Codex 的模型目录用。
+ * 只在 Claude Code 或 Codex 的总开关开着、价格表自动更新也开着时才下载（isAllowed）；规则见 docs/usage.md 的对外请求一节。
  * 下载后只留查询要用的几项，存到 api-endpoints/models-dev.json；不随安装包带快照。
  * 中转站另外按服务商的主机名查它自己说的收不收 temperature 与 top_p（sampling）。
  */
@@ -93,7 +93,7 @@ export class ModelsDevCatalog {
     this.scheduleCheck(FIRST_CHECK_DELAY_MS);
   }
 
-  /** 刚允许下载（打开了 Claude Code 总开关）：马上检查一次，缓存还新就不发请求。 */
+  /** 刚允许下载（打开了 Claude Code 或 Codex 的总开关）：马上检查一次，缓存还新就不发请求。 */
   wake(): void {
     if (this.checking) return;
     this.scheduleCheck(0);

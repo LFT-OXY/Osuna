@@ -3,6 +3,7 @@ import {
   indexModelsDev,
   indexSamplingByHost,
   lookupModelFacts,
+  mergeModelFacts,
   samplingFor,
 } from "./model-facts.js";
 
@@ -48,6 +49,7 @@ describe("models.dev facts", () => {
       context: 922_000,
       output: 128_000,
       efforts: ["low", "medium", "high", "xhigh", "max"],
+      images: false,
     });
   });
 
@@ -57,6 +59,7 @@ describe("models.dev facts", () => {
       context: 131_072,
       output: 32_768,
       efforts: [],
+      images: false,
     });
   });
 
@@ -70,7 +73,11 @@ describe("models.dev facts", () => {
   test("knows nothing of an unlisted model or a window too small to be real", () => {
     const index = indexModelsDev(MODELS_DEV);
     expect(lookupModelFacts(index, "my-own-model")).toEqual({});
-    expect(lookupModelFacts(index, "tiny-free")).toEqual({ output: 256, efforts: [] });
+    expect(lookupModelFacts(index, "tiny-free")).toEqual({
+      output: 256,
+      efforts: [],
+      images: false,
+    });
   });
 
   test("ignores entries that are not models without losing the rest", () => {
@@ -79,8 +86,38 @@ describe("models.dev facts", () => {
       fine: { models: { c: { limit: { context: 200_000, output: 64_000 } } } },
       noise: "not a provider",
     });
-    expect(lookupModelFacts(index, "c")).toEqual({ context: 200_000, output: 64_000, efforts: [] });
-    expect(lookupModelFacts(index, "b")).toEqual({ efforts: [] });
+    expect(lookupModelFacts(index, "c")).toEqual({
+      context: 200_000,
+      output: 64_000,
+      efforts: [],
+      images: false,
+    });
+    expect(lookupModelFacts(index, "b")).toEqual({ efforts: [], images: false });
+  });
+
+  test("a model sees images when most providers serving it take image input; a tie is known not to", () => {
+    const vision = (input: string[]) => ({ modalities: { input, output: ["text"] } });
+    const index = indexModelsDev({
+      a: { models: { "glm-5v": vision(["text", "image"]), "deepseek-v4": vision(["text"]) } },
+      b: {
+        models: { "glm-5v": vision(["text", "image"]), "deepseek-v4": vision(["text", "image"]) },
+      },
+      c: { models: { "glm-5v": vision(["text"]) } },
+    });
+    expect(lookupModelFacts(index, "glm-5v").images).toBe(true);
+    expect(lookupModelFacts(index, "deepseek-v4").images).toBe(false);
+    expect(lookupModelFacts(index, "unlisted").images).toBeUndefined();
+  });
+
+  test("the endpoint's own list says first whether a model sees images; models.dev fills it in", () => {
+    expect(mergeModelFacts({ images: false }, { images: true, context: 200_000 })).toEqual({
+      images: false,
+      context: 200_000,
+    });
+    expect(mergeModelFacts({ output: 8192 }, { images: true })).toEqual({
+      output: 8192,
+      images: true,
+    });
   });
 
   test("temperature is read per provider, by its API host, never voted across providers", () => {

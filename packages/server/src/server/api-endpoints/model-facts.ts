@@ -1,12 +1,12 @@
 // 按模型名查 models.dev 的规则移植自 magpie（https://github.com/yetone/magpie，internal/catalog/catalog.go 的
-// bareID / found / mostGiven / mostListed / window，internal/provider/models.go 的 RejectsTemperature 与 Levelless）。
+// bareID / found / mostGiven / mostListed / window 与 load 里按多数认看图，internal/provider/models.go 的 RejectsTemperature 与 Levelless）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { z } from "zod";
 import { isRecord } from "./upstream-http.js";
 
 /*
- * 接口模型的已知数据：一次请求能装多少（上下文）、一次回复最多多长、能调哪些思考档位、收不收 temperature 与 top_p。
+ * 接口模型的已知数据：一次请求能装多少（上下文）、一次回复最多多长、能调哪些思考档位、能不能看图、收不收 temperature 与 top_p。
  * 不知道的字段不出现；Claude Code 的模型提示与中转站只用知道的。
  */
 
@@ -14,6 +14,7 @@ export const ModelFactsSchema = z.object({
   context: z.number().optional(),
   output: z.number().optional(),
   efforts: z.array(z.string()).optional(),
+  images: z.boolean().optional(),
   // false 是这家的这个模型不收 temperature 与 top_p：只按这家自己在 models.dev 的条目（samplingFor）。
   takesSampling: z.boolean().optional(),
 });
@@ -32,11 +33,14 @@ interface Votes {
   context: Map<number, number>;
   output: Map<number, number>;
   efforts: Map<string, number>;
+  // 说收图的家数减去不收的家数（magpie 的 votes）。
+  images: number;
 }
 
 /**
  * 同一个模型各家给的数可能不同：取给得最多的那个，打平取小的；档位打平取少的。
  * 列着、却没有一家给档位的模型，档位是空列表：知道它没有可挑的档位（magpie Levelless），和查不到不一样。
+ * 看图按家数投票，多数说 modalities.input 有 image 才算。
  */
 export function indexModelsDev(raw: unknown): ModelsDevIndex {
   const votes = new Map<string, Votes>();
@@ -50,6 +54,7 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
         context: new Map(),
         output: new Map(),
         efforts: new Map(),
+        images: 0,
       };
       votes.set(key, entry);
       const limit = isRecord(model.limit) ? model.limit : {};
@@ -59,6 +64,7 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
       if (output !== undefined) count(entry.output, output);
       const efforts = effortsOf(model.reasoning_options);
       if (efforts.length > 0) count(entry.efforts, efforts.join(","));
+      entry.images += takesImages(model.modalities) ? 1 : -1;
     }
   }
   const index: ModelsDevIndex = {};
@@ -70,6 +76,8 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
     if (output !== undefined) facts.output = output;
     const efforts = mostListed(entry.efforts);
     facts.efforts = efforts === undefined ? [] : efforts.split(",");
+    // 列着的模型都算知道：多数说收图才收，打平算不收。
+    facts.images = entry.images > 0;
     index[id] = facts;
   }
   return index;
@@ -133,10 +141,12 @@ export function mergeModelFacts(listed: ModelFacts | undefined, known: ModelFact
   const context = listed?.context ?? known.context;
   const output = listed?.output ?? known.output;
   const efforts = listed?.efforts ?? known.efforts;
+  const images = listed?.images ?? known.images;
   return {
     ...(context === undefined ? {} : { context }),
     ...(output === undefined ? {} : { output }),
     ...(efforts === undefined ? {} : { efforts }),
+    ...(images === undefined ? {} : { images }),
   };
 }
 
@@ -158,6 +168,13 @@ function windowOf(limit: Record<string, unknown>): number | undefined {
   const context = knownWindow(limit.context);
   if (input === undefined) return context;
   return context !== undefined && context < input ? context : input;
+}
+
+/** `{ input: [...] }` 里有没有 image；models.dev 与各家清单的 modalities 都是这个形状。 */
+export function takesImages(modalities: unknown): boolean {
+  return (
+    isRecord(modalities) && Array.isArray(modalities.input) && modalities.input.includes("image")
+  );
 }
 
 function effortsOf(options: unknown): string[] {

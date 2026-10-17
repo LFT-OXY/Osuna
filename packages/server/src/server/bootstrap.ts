@@ -498,7 +498,15 @@ export interface PaseoDaemonConfig {
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
-  apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck"> &
+  apiEndpoints?: Pick<
+    ApiEndpointServiceOptions,
+    | "env"
+    | "homeDir"
+    | "beforeConfigRecheck"
+    | "isModelsDevAutoUpdate"
+    | "modelsDevFetch"
+    | "modelsDevTimers"
+  > &
     ApiEndpointGatewayOverrides &
     RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
