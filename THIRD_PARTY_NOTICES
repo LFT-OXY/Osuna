@@ -236,6 +236,15 @@ turn (internal/gateway/codex_memory.go, callKind in codex_backend.go):
   packages/server/src/server/api-endpoints/gateway/routing.test.ts
   packages/server/src/server/api-endpoints/gateway/codex-side-calls.ts
 
+How a model its vendor said is retired is remembered (a week, kept in a file,
+taken back when that endpoint answers for it, left out of every model list
+and of routing by bare name) follows Retire, Unretire, retiredNow and
+retiredFor in magpie's internal/provider/retired.go, with the gateway's calls
+from internal/gateway/gateway.go and routing.go (servedCandidate):
+
+  packages/server/src/server/api-endpoints/retired-models.ts
+  packages/server/src/server/api-endpoints/retired-models.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

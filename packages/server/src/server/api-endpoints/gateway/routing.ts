@@ -18,6 +18,7 @@ import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from ".
  * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型。
  * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
  * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
+ * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
  */
 
 export interface GatewayCandidate {
@@ -39,16 +40,22 @@ function claudeTierOf(model: string): ApiEndpointModelTier | null {
   );
 }
 
-export function resolveGatewayRoute(input: {
+export interface GatewayRouteInput {
   state: ApiEndpointState;
+  // 去掉一周内下线的模型之后的状态；缺省即 state（没有下线的模型）。
+  listed?: ApiEndpointState;
   agent: ApiEndpointProvider;
   model: string;
-}): GatewayRoute {
-  const chosen = chooseEndpoint({ ...input, model: input.model.replaceAll("~", "/") });
+}
+
+export function resolveGatewayRoute(input: GatewayRouteInput): GatewayRoute {
+  const listed = input.listed ?? input.state;
+  const model = input.model.replaceAll("~", "/");
+  const chosen = chooseEndpoint({ state: input.state, listed, agent: input.agent, model });
   if (!chosen) {
-    return { ok: false, message: unknownModel(input.state, input.model) };
+    return { ok: false, message: unknownModel(listed, input.model) };
   }
-  const others = input.state.endpoints.flatMap((endpoint) => {
+  const others = listed.endpoints.flatMap((endpoint) => {
     if (!endpoint.enabled || endpoint.id === chosen.endpoint.id) return [];
     const upstreamModel = listedAs(endpoint, chosen.upstreamModel);
     return upstreamModel === null ? [] : [{ endpoint, upstreamModel }];
@@ -103,19 +110,18 @@ export function listedAs(
   return endpoint.models.find((entry) => sameModel(entry.id) === key)?.id ?? null;
 }
 
-function chooseEndpoint(input: {
-  state: ApiEndpointState;
-  agent: ApiEndpointProvider;
-  model: string;
-}): GatewayCandidate | null {
+function chooseEndpoint(input: Required<GatewayRouteInput>): GatewayCandidate | null {
   const { model } = input;
-  const enabled = input.state.endpoints.filter((endpoint) => endpoint.enabled);
+  const enabled = input.listed.endpoints.filter((endpoint) => endpoint.enabled);
 
   const slash = model.indexOf("/");
   const bare = slash === -1 ? null : model.slice(slash + 1);
   if (bare !== null) {
     const slug = model.slice(0, slash);
-    const named = enabled.find((endpoint) => endpoint.slug === slug);
+    // 指定了这家：已下线的也照发，厂商怎么答交给 CLI。
+    const named = input.state.endpoints.find(
+      (endpoint) => endpoint.enabled && endpoint.slug === slug,
+    );
     if (named) {
       const upstreamModel = listedAs(named, bare);
       if (upstreamModel !== null) return { endpoint: named, upstreamModel };

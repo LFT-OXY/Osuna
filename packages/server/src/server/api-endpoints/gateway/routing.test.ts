@@ -180,6 +180,52 @@ describe("routing a requested model name to an endpoint", () => {
   });
 });
 
+describe("a model its vendor said is retired at one endpoint", () => {
+  // listed 是去掉已下线模型之后的状态（retired-models.ts）：alpha 的 kimi-k2 下线了。
+  const retiredAlpha = { ...alpha, models: [] };
+
+  test("a bare model name skips that endpoint and goes to another with the same model", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([alpha, beta]),
+        listed: state([retiredAlpha, beta]),
+        agent: "claude",
+        model: "kimi-k2",
+      }),
+    ).toEqual(route([beta, "kimi-k2"]));
+  });
+
+  test("slug/model still goes to that endpoint, and the others follow", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([alpha, beta]),
+        listed: state([retiredAlpha, beta]),
+        agent: "claude",
+        model: "alpha/kimi-k2",
+      }),
+    ).toEqual(route([alpha, "kimi-k2"], [beta, "kimi-k2"]));
+  });
+
+  test("with no other endpoint the model is not found, and the closest names left are offered", () => {
+    const both = endpoint({
+      id: "ep_a",
+      slug: "alpha",
+      models: [{ id: "kimi-k2" }, { id: "kimi-k2-thinking" }],
+    });
+    expect(
+      resolveGatewayRoute({
+        state: state([both]),
+        listed: state([{ ...both, models: [{ id: "kimi-k2-thinking" }] }]),
+        agent: "codex",
+        model: "kimi-k2",
+      }),
+    ).toEqual({
+      ok: false,
+      message: 'No enabled API endpoint offers the model "kimi-k2"; did you mean kimi-k2-thinking?',
+    });
+  });
+});
+
 describe("names that differ only in how a model is written are the same model", () => {
   test.each([
     { written: "claude-opus-4.6", same: "claude-opus-4-6" },

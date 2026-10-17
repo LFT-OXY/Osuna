@@ -27,6 +27,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - codex-models.json：Codex 的 model_catalog_json，Codex 总开关开着时才有；
  * - models-dev.json：models.dev 模型资料的精简缓存（models-dev.ts），给 Claude Code 的模型提示用；
  * - gateway-tokens.json：每个开着总开关的 Agent 一个中转站口令，口令兼身份；总开关关掉即作废，都关着时文件删除；
+ * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * 不进 config.json，因为 get_daemon_config 会把 agents.providers 原样发给客户端。
  */
@@ -245,6 +246,10 @@ export class ApiEndpointStore {
 
   get modelsDevPath(): string {
     return path.join(this.root, "models-dev.json");
+  }
+
+  get retiredModelsPath(): string {
+    return path.join(this.root, "retired-models.json");
   }
 
   get codexModelCatalogPath(): string {

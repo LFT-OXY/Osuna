@@ -1,4 +1,5 @@
-// 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable
+// 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
+// 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { timingSafeEqual } from "node:crypto";
@@ -16,6 +17,7 @@ import {
   type StoredApiEndpoint,
 } from "../store.js";
 import type { ModelFacts } from "../model-facts.js";
+import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
@@ -29,7 +31,7 @@ import {
   spentAfter,
   type EndpointRest,
 } from "./cooldown.js";
-import { endpointFailure, lateRests, retryable } from "./failure.js";
+import { endpointFailure, lateRests, modelRetired, retryable } from "./failure.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
 import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
 import {
@@ -68,6 +70,8 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 换家之前先看是不是拒收（不思考的写法、这个格式的地址没有这个模型、两个认证头不能同时带）：
  * 是就在同一家换写法重问（换格式时按格式顺序问下一个地址，要翻译就翻译），也只记在内存里。
  * 要流式的请求等开口时有保活（keepalive.ts）；保活发出响应头之后再失败，错误在流里交给 Agent。
+ * 厂商说模型已下线时记下这家的这一项（retired-models.ts，落盘），一周内列表与只写模型名的选路都没有它；
+ * 这家答成功一次就恢复。
  */
 
 export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
@@ -104,6 +108,7 @@ export function createApiEndpointGateway(options: {
   paseoHome: string;
   logger: pino.Logger;
   cooldowns: EndpointCooldowns;
+  retired: RetiredModels;
   modelFacts: ModelFactsLookup;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
@@ -111,6 +116,7 @@ export function createApiEndpointGateway(options: {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
   const failover: Failover = {
     cooldowns: options.cooldowns,
+    retired: options.retired,
     sticks: new ConversationSticks(),
     refusals: new RefusedShapes(),
     codexTurns: new CodexLastTurn(),
@@ -148,7 +154,7 @@ export function createApiEndpointGateway(options: {
     }
     if (req.path === "/v1/models" && req.method === "GET") {
       const state = readState({ res, wire, store, logger });
-      if (state) res.status(200).json(modelList(state));
+      if (state) res.status(200).json(modelList(failover.retired.listed(state)));
       return;
     }
     const target = req.method === "POST" ? agentPath(req.path) : null;
@@ -181,6 +187,7 @@ export function createApiEndpointGateway(options: {
 
 interface Failover {
   cooldowns: EndpointCooldowns;
+  retired: RetiredModels;
   sticks: ConversationSticks;
   refusals: RefusedShapes;
   codexTurns: CodexLastTurn;
@@ -233,6 +240,7 @@ async function routeAgentRequest(input: {
 /**
  * 按模型名找候选。Codex 的记忆整理与 auto-review 找不到模型时，改用 Codex 上一轮对话用的模型找；
  * 找得到的 Codex 对话轮记下它问的模型。请求里的模型名不变，发给每家时照常换成候选的写法。
+ * 厂商说已下线的模型只在指定了那家时才选。
  */
 function routeModel(input: {
   req: Request;
@@ -242,15 +250,16 @@ function routeModel(input: {
   failover: Failover;
 }): GatewayRoute {
   const { req, agent, state, model } = input;
-  const { codexTurns } = input.failover;
-  const route = resolveGatewayRoute({ state, agent, model });
+  const { codexTurns, retired } = input.failover;
+  const listed = retired.listed(state);
+  const route = resolveGatewayRoute({ state, listed, agent, model });
   if (route.ok) {
     if (agent === "codex") codexTurns.asked(req.headers, model);
     return route;
   }
   const standIn = agent === "codex" ? codexTurns.standIn(req.headers, model) : null;
   if (standIn === null) return route;
-  const instead = resolveGatewayRoute({ state, agent, model: standIn });
+  const instead = resolveGatewayRoute({ state, listed, agent, model: standIn });
   return instead.ok ? instead : route;
 }
 
@@ -565,7 +574,7 @@ async function askInTurn(input: {
   keepAlive: AgentKeepAlive;
 }): Promise<void> {
   const { res, wire, logger, plan } = input;
-  const { cooldowns, sticks } = input.failover;
+  const { cooldowns, sticks, retired } = input.failover;
   const restOf = (candidate: GatewayCandidate) =>
     cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
   for (const [index, candidate] of plan.entries()) {
@@ -577,6 +586,7 @@ async function askInTurn(input: {
       const end = await outcome.finished;
       if (end.kind === "complete") {
         cooldowns.served(candidate.endpoint.id, candidate.upstreamModel);
+        retired.restore({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
         sticks.answered(input.conversation, {
           endpointId: candidate.endpoint.id,
           model: candidate.upstreamModel,
@@ -596,6 +606,10 @@ async function askInTurn(input: {
       { endpoint: candidate.endpoint.slug, status: failed.status },
       "API endpoint returned an error",
     );
+    // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
+    if (modelRetired(failed.status, failed.text)) {
+      retired.retire({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
+    }
     if (!retryable(failed.status, failed.text)) {
       sendFailedAttempt({
         res,

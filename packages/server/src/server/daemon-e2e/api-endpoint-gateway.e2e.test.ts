@@ -156,6 +156,10 @@ async function start(
     modelsDevSampling?: Record<string, Record<string, boolean>>;
     // B 的上游清单（catalog）里给的模型资料（按模型名）。
     catalogB?: Record<string, Record<string, unknown>>;
+    // A 选了的模型；缺省 kimi-k2 与 gpt-5.5。
+    modelsA?: string[];
+    // 已下线模型记录用的时钟，测试拿它快进一周。
+    retiredModelsNow?: () => number;
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -175,7 +179,7 @@ async function start(
             { format: "anthropic_messages", url: urlA },
             { format: "openai_responses", url: `${urlA}/v1` },
           ],
-          models: ["kimi-k2", "gpt-5.5"],
+          models: options.modelsA ?? ["kimi-k2", "gpt-5.5"],
         }),
         {
           ...storedEndpoint({
@@ -253,6 +257,7 @@ async function start(
         ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
         ...(options.keepAliveMs ? { gatewayKeepAliveMs: options.keepAliveMs } : {}),
         ...(options.keepAliveQuietMs ? { gatewayKeepAliveQuietMs: options.keepAliveQuietMs } : {}),
+        ...(options.retiredModelsNow ? { retiredModelsNow: options.retiredModelsNow } : {}),
       },
     });
     daemons.push(daemon);
@@ -4701,5 +4706,219 @@ describe("the model's output changed in two places, as magpie does", () => {
         cache_creation_input_tokens: 0,
       },
     });
+  });
+});
+
+/** OpenCode Zen 说模型已下线时的 410（magpie retired_test.go 的 zenDeprecated，模型名换成这里的）。 */
+function retiredReply(res: ServerResponse, model: string) {
+  res.writeHead(410, { "content-type": "application/json" });
+  res.end(
+    JSON.stringify({
+      type: "error",
+      error: { type: "ModelDeprecated", message: `Model ${model} has been deprecated.` },
+      metadata: { model },
+    }),
+  );
+}
+
+describe("a model its vendor says is retired", () => {
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+  /** 给 Agent 选模型的四处列表：中转站清单、Codex 目录、Claude 的 modelPicker、快照里 Claude 的分组。 */
+  async function lists(harness: Harness) {
+    const models = await fetch(`${harness.gateway}/v1/models`, {
+      headers: { authorization: `Bearer ${CLAUDE_TOKEN}` },
+    });
+    const listed = (await models.json()) as { data: { id: string }[] };
+    const root = path.dirname(path.dirname(harness.endpointsDir));
+    const catalog = JSON.parse(
+      await readFile(path.join(harness.endpointsDir, "codex-models.json"), "utf8"),
+    ) as { models: { slug: string }[] };
+    const settings = JSON.parse(
+      await readFile(path.join(root, "claude", "settings.json"), "utf8"),
+    ) as { model?: string; modelPicker?: { options: { model: string }[] } };
+    const client = await connectTo(harness.daemon);
+    const snapshot = await client.getProvidersSnapshot();
+    const claude = snapshot.entries.find((entry) => entry.provider === "claude");
+    return {
+      gateway: listed.data.map((model) => model.id),
+      codex: catalog.models.map((model) => model.slug),
+      claudePicker: (settings.modelPicker?.options ?? []).map((option) => option.model),
+      claudeModel: settings.model,
+      snapshot: (claude?.apiEndpointModelGroups ?? []).map((group) =>
+        group.models.map((model) => model.id),
+      ),
+    };
+  }
+
+  const ALL_LISTED = {
+    gateway: ["kimi-k2", "gpt-5.5", "glm-4.6"],
+    codex: [
+      "kimi-k2",
+      "gpt-5.5",
+      "glm-4.6",
+      "relay-a/kimi-k2",
+      "relay-a/gpt-5.5",
+      "relay-b/kimi-k2",
+      "relay-b/glm-4.6",
+    ],
+    claudePicker: ["relay-a/kimi-k2", "relay-a/gpt-5.5", "relay-b/kimi-k2", "relay-b/glm-4.6"],
+    claudeModel: "kimi-k2",
+    snapshot: [
+      ["relay-a/kimi-k2", "relay-a/gpt-5.5"],
+      ["relay-b/kimi-k2", "relay-b/glm-4.6"],
+    ],
+  };
+
+  // 光秃秃的名字按创建顺序去重：A 的 kimi-k2 不在了，kimi-k2 由 B 带出，排到 gpt-5.5 后面。
+  const A_KIMI_RETIRED = {
+    ...ALL_LISTED,
+    gateway: ["gpt-5.5", "kimi-k2", "glm-4.6"],
+    codex: [
+      "gpt-5.5",
+      "kimi-k2",
+      "glm-4.6",
+      "relay-a/gpt-5.5",
+      "relay-b/kimi-k2",
+      "relay-b/glm-4.6",
+    ],
+    claudePicker: ["relay-a/gpt-5.5", "relay-b/kimi-k2", "relay-b/glm-4.6"],
+    snapshot: [["relay-a/gpt-5.5"], ["relay-b/kimi-k2", "relay-b/glm-4.6"]],
+  };
+
+  test("after a 410 that endpoint's entry leaves every list, and the other endpoint's stays", async () => {
+    const { upstreamA, upstreamB, ask, ...harness } = await twoRelays();
+    upstreamA.respond = (_request, res) => retiredReply(res, "kimi-k2");
+    const endpointsBefore = await readFile(
+      path.join(harness.endpointsDir, "endpoints.json"),
+      "utf8",
+    );
+    await expect.poll(() => lists(harness), { timeout: 10_000 }).toEqual(ALL_LISTED);
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from B");
+    await expect.poll(() => lists(harness), { timeout: 10_000 }).toEqual(A_KIMI_RETIRED);
+    // 接口自己的已选模型与各 Agent 的默认模型都不变。
+    expect(await readFile(path.join(harness.endpointsDir, "endpoints.json"), "utf8")).toBe(
+      endpointsBefore,
+    );
+    const retired = harness.logLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line.msg === "API endpoint model retired");
+    expect(retired).toMatchObject({ endpoint: "Relay A", model: "kimi-k2" });
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("a bare model name skips it; with no other endpoint the CLI is told the model is not found", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => retiredReply(res, "gpt-5.5");
+    const harness = await start({ upstreamA, modelsA: ["kimi-k2", "gpt-5.5", "gpt-5.5-mini"] });
+    const askFor = (model: string) =>
+      fetch(
+        `${harness.gateway}/v1/messages`,
+        claudeRequest({ model, max_tokens: 32, messages: [{ role: "user", content: "hi" }] }),
+      );
+
+    const first = await askFor("gpt-5.5");
+    expect(first.status).toBe(410);
+    expect(await first.json()).toMatchObject({
+      error: { message: "Relay A: Model gpt-5.5 has been deprecated." },
+    });
+
+    const second = await askFor("gpt-5.5");
+
+    expect(second.status).toBe(404);
+    expect(await second.json()).toMatchObject({
+      error: {
+        message: 'No enabled API endpoint offers the model "gpt-5.5"; did you mean gpt-5.5-mini?',
+      },
+    });
+    expect(upstreamA.requests).toHaveLength(1);
+  });
+
+  test("a request naming that endpoint is still sent, and an answer puts the entry back", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => retiredReply(res, "gpt-5.5");
+    const harness = await start({ upstreamA });
+    const askFor = (model: string) =>
+      fetch(
+        `${harness.gateway}/v1/messages`,
+        claudeRequest({ model, max_tokens: 32, messages: [{ role: "user", content: "hi" }] }),
+      );
+    await (await askFor("gpt-5.5")).text();
+    await expect
+      .poll(async () => (await lists(harness)).claudePicker, { timeout: 10_000 })
+      .toEqual(["relay-a/kimi-k2", "relay-b/kimi-k2", "relay-b/glm-4.6"]);
+
+    // 厂商还说已下线：它的回答交给 CLI。
+    const refused = await askFor("relay-a/gpt-5.5");
+    expect(refused.status).toBe(410);
+    await refused.text();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const answered = await askFor("relay-a/gpt-5.5");
+
+    expect(answered.status).toBe(200);
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["gpt-5.5", "gpt-5.5", "gpt-5.5"]);
+    await expect.poll(() => lists(harness), { timeout: 10_000 }).toEqual(ALL_LISTED);
+    const back = harness.logLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line.msg === "API endpoint model back in service");
+    expect(back).toMatchObject({ endpoint: "Relay A", model: "gpt-5.5", why: "answered" });
+  });
+
+  test("the record survives a restart and is gone a week later", async () => {
+    let now = Date.parse("2026-10-17T00:00:00.000Z");
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    upstreamA.respond = (_request, res) => retiredReply(res, "kimi-k2");
+    upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
+    const harness = await start({ upstreamA, upstreamB, retiredModelsNow: () => now });
+    const askKimi = (gateway: string) =>
+      fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model: "kimi-k2",
+          max_tokens: 32,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+    await (await askKimi(harness.gateway)).text();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+
+    // 冷却只在内存里，重启后没有了；还绕开 A 的只有已下线记录。
+    const next = await harness.restart();
+    const restarted = { ...harness, ...next };
+    const skipped = await askKimi(next.gateway);
+    expect(await skipped.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(1);
+    await expect.poll(() => lists(restarted), { timeout: 10_000 }).toEqual(A_KIMI_RETIRED);
+
+    now += WEEK;
+    const asked = await askKimi(next.gateway);
+
+    expect(await asked.text()).toContain("from A");
+    expect(upstreamA.requests).toHaveLength(2);
+    await expect.poll(() => lists(restarted), { timeout: 10_000 }).toEqual(ALL_LISTED);
+  });
+
+  test("an unreadable record file counts as empty and the gateway works as usual", async () => {
+    const { upstreamA, endpointsDir, restart } = await twoRelays();
+    await writeFile(path.join(endpointsDir, "retired-models.json"), "{ not json");
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const { gateway } = await restart();
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "kimi-k2",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from A");
   });
 });

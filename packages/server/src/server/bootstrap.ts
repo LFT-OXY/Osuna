@@ -159,6 +159,8 @@ import {
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
+import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
+import { ApiEndpointStore } from "./api-endpoints/store.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -480,7 +482,8 @@ export interface PaseoDaemonConfig {
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
   apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck"> &
-    ApiEndpointGatewayOverrides;
+    ApiEndpointGatewayOverrides &
+    RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
   log?: PersistedConfig["log"];
@@ -817,12 +820,24 @@ export async function createPaseoDaemon(
   // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
+  const apiEndpointRetiredModels = new RetiredModels({
+    filePath: new ApiEndpointStore(config.paseoHome).retiredModelsPath,
+    logger,
+    now: config.apiEndpoints?.retiredModelsNow,
+    onChanged: () => {
+      void apiEndpointService.retiredModelsChanged().catch((error: unknown) => {
+        logger.warn({ err: error }, "Failed to rewrite the model lists after a retired model");
+      });
+    },
+  });
   app.use(
     API_ENDPOINT_GATEWAY_PATH,
     createApiEndpointGateway({
       paseoHome: config.paseoHome,
       logger,
       cooldowns: apiEndpointCooldowns,
+      retired: apiEndpointRetiredModels,
       // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
       modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
       overrides: config.apiEndpoints,
@@ -974,6 +989,7 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     logger,
     cooldowns: apiEndpointCooldowns,
+    retiredModels: apiEndpointRetiredModels,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })

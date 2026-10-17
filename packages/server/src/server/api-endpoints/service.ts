@@ -42,6 +42,7 @@ import {
 } from "./codex-config-patch.js";
 import { buildCodexModelCatalog } from "./codex-model-catalog.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
+import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import {
   readOptionalFile,
@@ -161,6 +162,8 @@ export interface ApiEndpointServiceOptions {
   logger: pino.Logger;
   // 中转站记下的冷却；列表显示它，「立刻恢复」、编辑连接与删除清掉它。
   cooldowns: EndpointCooldowns;
+  // 中转站记下的已下线模型；给 Agent 选模型的列表都去掉它们，接口页与默认模型不受影响。
+  retiredModels: RetiredModels;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
@@ -242,6 +245,7 @@ export class ApiEndpointService {
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
+  private readonly retiredModels: RetiredModels;
   private readonly modelsDev: ModelsDevCatalog;
   private queue: Promise<unknown> = Promise.resolve();
   private gateway: GatewayAddress = { kind: "pending" };
@@ -259,6 +263,7 @@ export class ApiEndpointService {
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
+    this.retiredModels = options.retiredModels;
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.modelsDev = new ModelsDevCatalog({
       filePath: this.store.modelsDevPath,
@@ -341,7 +346,7 @@ export class ApiEndpointService {
   }
 
   /**
-   * 总开关开着时，所有开着的接口的已选模型（按 id 去重），默认模型即该 Agent 的默认模型。
+   * 总开关开着时，所有开着的接口的已选模型（按 id 去重，去掉已下线的），默认模型即该 Agent 的默认模型。
    * 官方模式、不支持的提供方或文件读不懂时返回 null，模型目录照旧。
    */
   activeModels(provider: string): AgentModelDefinition[] | null {
@@ -350,7 +355,7 @@ export class ApiEndpointService {
     if (!state || !supported) return null;
     const agent = state.agents[supported];
     if (!agent.enabled) return null;
-    return usableModels(state).map((model) => ({
+    return usableModels(this.retiredModels.listed(state)).map((model) => ({
       provider: supported,
       id: model.id,
       label: model.label ?? model.id,
@@ -359,7 +364,7 @@ export class ApiEndpointService {
   }
 
   /**
-   * 总开关开着时按接口分组的可选模型，给新客户端的聊天模型选择器；label 是光秃秃的模型名，
+   * 总开关开着时按接口分组的可选模型（去掉已下线的），给新客户端的聊天模型选择器；label 是光秃秃的模型名，
    * isDefault 标在含默认模型的第一家上。官方模式、不支持的提供方或文件读不懂时返回 null。
    */
   activeModelGroups(provider: string): ApiEndpointModelGroup[] | null {
@@ -376,7 +381,7 @@ export class ApiEndpointService {
       const label = model.label ?? model.id;
       return { provider: agentProvider, id, label, isDefault };
     }
-    return endpointModelGroups(state).map((group) => {
+    return endpointModelGroups(this.retiredModels.listed(state)).map((group) => {
       const models = group.models.map(toDefinition);
       return { name: group.endpoint.name, models };
     });
@@ -697,8 +702,8 @@ export class ApiEndpointService {
   }
 
   /**
-   * CLI 看到的起始模型；Claude Code 另有终端 /model 里的接口模型（与聊天模型选择器同样的分组和顺序，每行直达那一家）
-   * 和按已知模型资料算出的提示。Codex 的模型列表在单独的目录文件里，不进 config.toml。
+   * CLI 看到的起始模型；Claude Code 另有终端 /model 里的接口模型（与聊天模型选择器同样的分组和顺序，每行直达那一家，
+   * 去掉已下线的）和按已知模型资料算出的提示。Codex 的模型列表在单独的目录文件里，不进 config.toml。
    */
   private cliModels(
     state: ApiEndpointState,
@@ -706,11 +711,12 @@ export class ApiEndpointService {
     defaultModelId: string,
   ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv"> {
     if (provider !== "claude") return { model: defaultModelId, modelPicker: [], hintEnv: {} };
+    const listed = this.retiredModels.listed(state);
     const start: ClaudeHintModel = {
       id: defaultModelId,
-      facts: this.startModelFacts(state, defaultModelId),
+      facts: this.startModelFacts(listed, defaultModelId),
     };
-    const rows = endpointModelGroups(state).flatMap((group) =>
+    const rows = endpointModelGroups(listed).flatMap((group) =>
       group.models.map(({ id, model }) => ({
         hint: { id, facts: this.modelFacts(group.endpoint, model.id) },
         label: model.label ?? model.id,
@@ -751,7 +757,7 @@ export class ApiEndpointService {
   }
 
   /**
-   * 模型资料变了（models.dev 更新、上游清单重拉）：开着的 Claude Code 跟着重写。
+   * 模型资料变了（models.dev 更新、上游清单重拉）或有模型下线、恢复：开着的 Claude Code 跟着重写。
    * 负责的键被外部改过时不动，留给健康检查和用户；写不成只记日志，不挡调用方。
    */
   private rewriteClaudeHints(state: ApiEndpointState): void {
@@ -765,6 +771,27 @@ export class ApiEndpointService {
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to rewrite the Claude model hints");
     }
+  }
+
+  /**
+   * 中转站记下或恢复了已下线模型（含满一周到期）：走「接口变了」的流程，重写 Codex 模型目录与
+   * Claude Code 的模型选择列表，再通知客户端刷新开着总开关的 Agent。接口与默认模型都不动。
+   */
+  retiredModelsChanged(): Promise<void> {
+    return this.exclusive(() => {
+      const state = this.readStateForSnapshot();
+      if (!state) return;
+      if (state.agents.codex.enabled) {
+        const catalog = this.codexModelCatalog(state);
+        if (catalog !== this.store.readCodexModelCatalog()) {
+          this.store.writeCodexModelCatalog(catalog);
+        }
+      }
+      this.rewriteClaudeHints(state);
+      for (const provider of API_ENDPOINT_PROVIDERS) {
+        if (state.agents[provider].enabled) this.onActiveEndpointChanged(provider);
+      }
+    });
   }
 
   private refreshClaudeHints(): Promise<void> {
@@ -1060,7 +1087,7 @@ export class ApiEndpointService {
     } catch (error) {
       this.logger.warn({ err: error }, "Could not read Codex reasoning effort");
     }
-    return buildCodexModelCatalog(state, effort);
+    return buildCodexModelCatalog(this.retiredModels.listed(state), effort);
   }
 
   private restoreOfficial(provider: ApiEndpointProvider): void {
