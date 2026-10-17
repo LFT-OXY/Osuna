@@ -52,6 +52,7 @@ import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
 import { protocolOf } from "./translation/protocols.js";
+import { readAgentBody } from "./request-body.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./upstream-call.js";
 
@@ -72,13 +73,15 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 要流式的请求等开口时有保活（keepalive.ts）；保活发出响应头之后再失败，错误在流里交给 Agent。
  * 厂商说模型已下线时记下这家的这一项（retired-models.ts，落盘），一周内列表与只写模型名的选路都没有它；
  * 这家答成功一次就恢复。
+ * 压缩过的请求体（zstd、gzip）先解开再处理（request-body.ts）；发给上游的 User-Agent 是 CLI 自己的，
+ * CLI 没带时写 Osuna/<版本>。
  */
 
 export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
 
 // CLI 等上游响应头最长这么久；开口之后不限时，交给 CLI 自己的超时。
 const DEFAULT_HEADER_TIMEOUT_MS = 10 * 60 * 1000;
-// Claude Code 带图的长上下文也只有几 MB；再大多半是出了错。
+// Claude Code 带图的长上下文也只有几 MB；再大多半是出了错。按解开后的大小算。
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024;
 
 const COUNT_TOKENS_PATH = "/v1/messages/count_tokens";
@@ -92,6 +95,8 @@ export interface ApiEndpointGatewayOverrides {
   gatewayRetryPauseMs?: number;
   gatewayKeepAliveMs?: number;
   gatewayKeepAliveQuietMs?: number;
+  // 只给测试缩小请求体上限（按解开后的大小），不必真造 64 MB。
+  gatewayBodyLimitBytes?: number;
 }
 
 /** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
@@ -110,6 +115,8 @@ export function createApiEndpointGateway(options: {
   cooldowns: EndpointCooldowns;
   retired: RetiredModels;
   modelFacts: ModelFactsLookup;
+  // daemon 自己的版本：CLI 没带 User-Agent 时写 Osuna/<版本>。
+  daemonVersion: string;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const store = new ApiEndpointStore(options.paseoHome);
@@ -125,6 +132,8 @@ export function createApiEndpointGateway(options: {
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
     keepAliveMs: options.overrides?.gatewayKeepAliveMs ?? KEEPALIVE_EVERY_MS,
     keepAliveQuietMs: options.overrides?.gatewayKeepAliveQuietMs ?? KEEPALIVE_QUIET_MOST_MS,
+    bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
+    ownUserAgent: `Osuna/${options.daemonVersion}`,
   };
 
   return (req, res) => {
@@ -196,6 +205,9 @@ interface Failover {
   retryPauseMs: number;
   keepAliveMs: number;
   keepAliveQuietMs: number;
+  bodyLimitBytes: number;
+  // CLI 没带 User-Agent 时发给上游的。
+  ownUserAgent: string;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -216,11 +228,16 @@ async function routeAgentRequest(input: {
   const { res, wire } = input;
   const reply = (status: number, message: string) =>
     sendAgentError({ res, wire, error: { status, message } });
-  const body = await readBody(input.req, MAX_REQUEST_BODY_BYTES);
-  if (body === null) {
-    reply(413, "The request body is too large for the API endpoint gateway");
+  const read = await readAgentBody({ req: input.req, limit: input.failover.bodyLimitBytes });
+  if (read.kind === "tooLarge") {
+    reply(413, read.message);
     return null;
   }
+  if (read.kind === "unreadable") {
+    reply(read.status, read.message);
+    return null;
+  }
+  const { body } = read;
   const parsed = parseJson(body.toString("utf8"));
   const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
   if (model === null) {
@@ -325,6 +342,7 @@ async function countOnEndpoint(input: {
     requestedModel: input.model,
     upstreamModel: input.counter.upstreamModel,
     headerTimeoutMs: input.failover.headerTimeoutMs,
+    userAgent: userAgentFor({ req: input.req, failover: input.failover }),
   });
   if (outcome.kind === "answered") await outcome.finished;
   if (outcome.kind !== "failed") return true;
@@ -796,6 +814,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     requestedModel: input.model,
     upstreamModel: candidate.upstreamModel,
     headerTimeoutMs: input.failover.headerTimeoutMs,
+    userAgent: userAgentFor(input),
     refusals: refused,
     keepAlive: input.keepAlive,
   };
@@ -810,6 +829,11 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     request: candidate.translated,
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
   });
+}
+
+/** 发给上游的 User-Agent：直通与翻译都用 CLI 自己的，CLI 没带时用 Osuna/<版本>。 */
+function userAgentFor(input: { req: Request; failover: Failover }): string {
+  return input.req.headers["user-agent"] ?? input.failover.ownUserAgent;
 }
 
 /** 换家日志里的失败原因：空回复，或冷却的分类。 */
@@ -964,24 +988,4 @@ function modelList(state: ApiEndpointState) {
     first_id: data[0]?.id ?? null,
     last_id: data.at(-1)?.id ?? null,
   };
-}
-
-/** 读完整个请求体；超过上限返回 null。 */
-function readBody(req: Request, limit: number): Promise<Buffer | null> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > limit) {
-        resolve(null);
-        req.removeAllListeners("data");
-        req.resume();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
-  });
 }

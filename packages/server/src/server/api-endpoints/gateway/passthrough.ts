@@ -87,6 +87,8 @@ const DROPPED_REQUEST_HEADERS = new Set([
   "authorization",
   "x-api-key",
   "accept-encoding",
+  // 请求体已经解开（request-body.ts），发出去的是原文。
+  "content-encoding",
   "forwarded",
   "x-forwarded-for",
   "x-forwarded-host",
@@ -107,6 +109,8 @@ export async function attemptEndpoint(input: {
   requestedModel: string;
   upstreamModel: string;
   headerTimeoutMs: number;
+  // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
+  userAgent: string;
   // 这家的这个模型不收哪些不思考的写法；count_tokens 不用。
   refusals?: ShapeRefusals;
   // count_tokens 不保活。
@@ -127,7 +131,13 @@ export async function attemptEndpoint(input: {
     openUpstream({
       res,
       url,
-      headers: upstreamHeaders({ headers: input.req.headers, apiKey, keys, dropsReviewBeta }),
+      headers: upstreamHeaders({
+        headers: input.req.headers,
+        apiKey,
+        keys,
+        dropsReviewBeta,
+        userAgent: input.userAgent,
+      }),
       body,
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -416,6 +426,7 @@ function upstreamHeaders(input: {
   keys: KeyHeaders;
   // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
   dropsReviewBeta: boolean;
+  userAgent: string;
 }): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(input.headers)) {
@@ -430,6 +441,7 @@ function upstreamHeaders(input: {
   }
   // 要上游不压缩：错误体要读出原文，回复原样转给 Agent。
   out["accept-encoding"] = "identity";
+  out["user-agent"] = input.userAgent;
   return { ...out, ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }) };
 }
 

@@ -245,6 +245,18 @@ from internal/gateway/gateway.go and routing.go (servedCandidate):
   packages/server/src/server/api-endpoints/retired-models.ts
   packages/server/src/server/api-endpoints/retired-models.test.ts
 
+Reading a compressed request body (zstd and gzip by Content-Encoding, 415 for
+any other, the limit counted on the decompressed bytes, the 413 that says the
+limit is the gateway's and to /compact) follows decodedBody,
+readBoundedRequestBody, overLimit and sizeWord in magpie's
+internal/gateway/request_bounds.go and the 413 hint in writeError
+(gateway.go); asking again at once on a new connection when a kept-alive one
+was dropped before the reply began follows replayable in
+internal/gateway/upstream_transport.go:
+
+  packages/server/src/server/api-endpoints/gateway/request-body.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

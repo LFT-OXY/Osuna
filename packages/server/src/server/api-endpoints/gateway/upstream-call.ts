@@ -1,7 +1,12 @@
-// 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、repliesCounted、uncounted、answersNothing）
+// 开口前扣住帧与空回复的认法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go 的 holdWriter.scan、streamEvent、holdMost，gateway.go 的 emptyReply、repliesCounted、uncounted、answersNothing），
+// 复用的连接被掐时在新连接上重发照 upstream_transport.go 的 replayable
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
+import http, {
+  type ClientRequest,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+} from "node:http";
 import https from "node:https";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -24,6 +29,9 @@ export const ANSWERED_BY_HEADER = "x-osuna-api-endpoint";
 const MAX_ERROR_BODY_BYTES = 1024 * 1024;
 // 开口前最多扣这么多（magpie 的 holdMost），再多就当开口：只有帧不会这么长。
 const MAX_HELD_BYTES = 1024 * 1024;
+
+// 复用的连接在回复开始前被掐的报错码（EOF 记作 ECONNRESET「socket hang up」，写不进去是 EPIPE）。
+const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "EPIPE"]);
 
 // 空回复交给 Agent 的说法（magpie 的 emptyReply）。
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
@@ -299,32 +307,23 @@ function isEmptyReply(reply: TappedReply, format: ApiEndpointRequestFormat): boo
   return repliesCounted && uncounted && reply.content.length === 0 && answersNothing;
 }
 
-async function sendUpstream(input: {
+interface UpstreamSend {
   res: Response;
   url: URL;
   headers: Record<string, string | string[]>;
   body: Buffer;
   headerTimeoutMs: number;
-}): Promise<UpstreamOutcome> {
-  const transport = input.url.protocol === "https:" ? https : http;
-  const upstream = transport.request(input.url, {
-    method: "POST",
-    headers: { ...input.headers, "content-length": String(input.body.length) },
-  });
-  const answered = new Promise<IncomingMessage>((resolve, reject) => {
-    upstream.once("response", resolve);
-    upstream.once("error", reject);
-  });
-  // 开口之后的连接错误由 response 的 error / close 处理；这里只为不让无人接的 error 打崩进程。
-  upstream.on("error", () => {});
-  // Agent 先断开（用户中断）：不再等上游。
-  const abandon = () => {
-    if (!input.res.writableFinished) upstream.destroy();
-  };
-  input.res.once("close", abandon);
-  upstream.once("close", () => input.res.off("close", abandon));
-  upstream.end(input.body);
+}
 
+async function sendUpstream(input: UpstreamSend): Promise<UpstreamOutcome> {
+  // 最近发出的那个请求：超时时掐掉它。
+  const latest: { request: ClientRequest | null } = { request: null };
+  const answered = answeredOnLiveConnection({
+    input,
+    sent: (upstream) => {
+      latest.request = upstream;
+    },
+  });
   let timer: NodeJS.Timeout | undefined;
   const timedOut = new Promise<UpstreamOutcome>((resolve) => {
     timer = setTimeout(() => resolve({ kind: "timeout" }), input.headerTimeoutMs);
@@ -337,8 +336,55 @@ async function sendUpstream(input: {
     timedOut,
   ]);
   clearTimeout(timer);
-  if (outcome.kind === "timeout") upstream.destroy();
+  if (outcome.kind === "timeout") latest.request?.destroy();
   return outcome;
+}
+
+/**
+ * 发出请求等响应头。保活留下的连接可能已被上游或中间的代理关掉：请求写进去、回复一个字节都没来就断了
+ * （EOF、broken pipe）。这不怪这家，立刻再发；坏连接已从连接池里拿掉，再发会落到别的连接上（magpie 的 replayable）。
+ * 只认复用的连接：新连接上断开是真的连不上。
+ */
+async function answeredOnLiveConnection(input: {
+  input: UpstreamSend;
+  sent: (upstream: ClientRequest) => void;
+}): Promise<IncomingMessage> {
+  for (;;) {
+    const upstream = sendOnce(input.input);
+    input.sent(upstream);
+    try {
+      return await new Promise<IncomingMessage>((resolve, reject) => {
+        upstream.once("response", resolve);
+        upstream.once("error", reject);
+      });
+    } catch (error) {
+      const dropped = upstream.reusedSocket && droppedConnection(error);
+      if (!dropped || input.input.res.destroyed) throw error;
+    }
+  }
+}
+
+function sendOnce(input: UpstreamSend): ClientRequest {
+  const transport = input.url.protocol === "https:" ? https : http;
+  const upstream = transport.request(input.url, {
+    method: "POST",
+    headers: { ...input.headers, "content-length": String(input.body.length) },
+  });
+  // 开口之后的连接错误由 response 的 error / close 处理；这里只为不让无人接的 error 打崩进程。
+  upstream.on("error", () => {});
+  // Agent 先断开（用户中断）：不再等上游。
+  const abandon = () => {
+    if (!input.res.writableFinished) upstream.destroy();
+  };
+  input.res.once("close", abandon);
+  upstream.once("close", () => input.res.off("close", abandon));
+  upstream.end(input.body);
+  return upstream;
+}
+
+function droppedConnection(error: unknown): boolean {
+  const code = error instanceof Error && "code" in error ? error.code : null;
+  return typeof code === "string" && DROPPED_CONNECTION_CODES.has(code);
 }
 
 function readUpstreamError(text: string): Pick<AgentError, "type" | "code"> {

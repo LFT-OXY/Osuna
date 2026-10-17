@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import {
   createServer,
+  request as httpRequest,
   type IncomingHttpHeaders,
   type Server,
   type ServerResponse,
@@ -8,6 +9,7 @@ import {
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import * as zlib from "node:zlib";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
@@ -162,6 +164,10 @@ async function start(
     retiredModelsNow?: () => number;
     // 已下线记录的到期定时器，测试拿它在快进后手动到点。
     retiredModelsTimers?: { schedule: (handler: () => void, ms: number) => () => void };
+    // 中转站收的请求体上限，测试用小的，不必真造 64 MB。
+    bodyLimitBytes?: number;
+    // daemon 自报的版本：CLI 没带 User-Agent 时中转站写 Osuna/<版本>。
+    daemonVersion?: string;
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -247,6 +253,7 @@ async function start(
       // home 在 tempRoots 里统一删；重启要沿用它。
       cleanup: false,
       logger,
+      ...(options.daemonVersion ? { daemonVersion: options.daemonVersion } : {}),
       ...(options.password ? { auth: { password: hashDaemonPassword(options.password) } } : {}),
       apiEndpoints: {
         env: {
@@ -259,6 +266,7 @@ async function start(
         ...(options.headerTimeoutMs ? { gatewayHeaderTimeoutMs: options.headerTimeoutMs } : {}),
         ...(options.keepAliveMs ? { gatewayKeepAliveMs: options.keepAliveMs } : {}),
         ...(options.keepAliveQuietMs ? { gatewayKeepAliveQuietMs: options.keepAliveQuietMs } : {}),
+        ...(options.bodyLimitBytes ? { gatewayBodyLimitBytes: options.bodyLimitBytes } : {}),
         ...(options.retiredModelsNow ? { retiredModelsNow: options.retiredModelsNow } : {}),
         ...(options.retiredModelsTimers
           ? { retiredModelsTimers: options.retiredModelsTimers }
@@ -4958,5 +4966,239 @@ describe("a model its vendor says is retired", () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("from A");
+  });
+});
+
+// @types/node 还停在 20，没有 zstd 的类型；跑测试的 Node 自带 zlib.zstdCompressSync。
+interface ZlibWithZstd {
+  gzipSync: typeof zlib.gzipSync;
+  zstdCompressSync?: (data: Buffer) => Buffer;
+}
+const zlibWithZstd: ZlibWithZstd = zlib;
+
+type BodyEncoding = "zstd" | "gzip";
+
+function compressed(input: { body: string; encoding: BodyEncoding }): Buffer {
+  const data = Buffer.from(input.body);
+  if (input.encoding === "gzip") return zlibWithZstd.gzipSync(data);
+  const zstd = zlibWithZstd.zstdCompressSync;
+  if (!zstd) throw new Error("this Node.js has no zstd");
+  return zstd(data);
+}
+
+/** 不带 User-Agent 的 POST（fetch 总会写上自己的），回状态码与回复原文。 */
+function postWithoutUserAgent(input: {
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+}): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const sent = httpRequest(input.url, { method: "POST", headers: input.headers }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () =>
+        resolve({ status: response.statusCode ?? 0, text: Buffer.concat(chunks).toString() }),
+      );
+    });
+    sent.on("error", reject);
+    sent.end(input.body);
+  });
+}
+
+describe("connections, compressed bodies and the User-Agent", () => {
+  const KIMI_BODY = JSON.stringify({
+    model: "kimi-k2",
+    max_tokens: 10,
+    thinking: { type: "enabled", budget_tokens: 1024 },
+    messages: [{ role: "user", content: "hi" }],
+  });
+  const DEEPSEEK_BODY = JSON.stringify({
+    model: "deepseek-v3",
+    max_tokens: 10,
+    messages: [{ role: "user", content: "hi" }],
+  });
+  // 翻成 Chat 后上游收到的：与 Claude Code 发来的是同一段对话。
+  const DEEPSEEK_AS_CHAT = {
+    model: "deepseek-v3",
+    messages: [{ role: "user", content: "hi" }],
+    stream: true,
+    stream_options: { include_usage: true },
+    max_tokens: 10,
+  };
+
+  test("a kept-alive connection the endpoint dropped is asked again at once on a new one, with no cooldown", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    const { gateway, daemon } = await start({ upstreamA, upstreamB });
+    const answerOk = upstreamA.respond;
+    // 第二个请求落在第一个留下的连接上：上游一个字节不回就关掉它。
+    upstreamA.respond = (request, res) => {
+      if (upstreamA.requests.length === 2) res.socket?.destroy();
+      else answerOk(request, res);
+    };
+
+    const first = await fetch(`${gateway}/v1/messages`, claudeRequest(KIMI_BODY));
+    await first.text();
+    const second = await fetch(`${gateway}/v1/messages`, claudeRequest(KIMI_BODY));
+
+    expect(second.status).toBe(200);
+    expect(second.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await second.json()).toEqual({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    expect(upstreamA.requests).toHaveLength(3);
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test.each<BodyEncoding>(["zstd", "gzip"])(
+    "a %s body passed through reaches the endpoint decompressed, without Content-Encoding",
+    async (encoding) => {
+      const upstream = await startUpstream();
+      const { gateway } = await start({ upstreamA: upstream });
+      const init = claudeRequest("");
+
+      const response = await fetch(`${gateway}/v1/messages`, {
+        ...init,
+        headers: { ...init.headers, "content-encoding": encoding },
+        body: compressed({ body: KIMI_BODY, encoding }),
+      });
+
+      expect(response.status).toBe(200);
+      const received = upstream.requests[0]!;
+      expect(received.body.toString()).toBe(KIMI_BODY);
+      expect(received.headers["content-encoding"]).toBeUndefined();
+      expect(received.headers["content-length"]).toBe(String(Buffer.byteLength(KIMI_BODY)));
+    },
+  );
+
+  test.each<BodyEncoding>(["zstd", "gzip"])(
+    "a %s body translated reaches the endpoint as the same conversation, without Content-Encoding",
+    async (encoding) => {
+      const chat = await startUpstream();
+      chat.respond = (_request, res) => chatSays(res, ["ok"]);
+      const { gateway } = await start({ chatUpstream: chat });
+      const init = claudeRequest("");
+
+      const response = await fetch(`${gateway}/v1/messages`, {
+        ...init,
+        headers: { ...init.headers, "content-encoding": encoding },
+        body: compressed({ body: DEEPSEEK_BODY, encoding }),
+      });
+
+      expect(response.status).toBe(200);
+      const received = chat.requests[0]!;
+      expect(JSON.parse(received.body.toString())).toEqual(DEEPSEEK_AS_CHAT);
+      expect(received.headers["content-encoding"]).toBeUndefined();
+    },
+  );
+
+  test("a body in another encoding is refused with 415 and no endpoint is asked", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream });
+    const init = claudeRequest("");
+
+    const response = await fetch(`${gateway}/v1/messages`, {
+      ...init,
+      headers: { ...init.headers, "content-encoding": "br" },
+      body: zlib.brotliCompressSync(Buffer.from(KIMI_BODY)),
+    });
+
+    expect(response.status).toBe(415);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message:
+          'The API endpoint gateway cannot read a "br" request body; send it as identity, gzip or zstd',
+      },
+    });
+    expect(upstream.requests).toHaveLength(0);
+  });
+
+  test("a body over the limit once decompressed is refused with 413 that names the gateway and /compact", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream, bodyLimitBytes: 1024 * 1024 });
+    const huge = JSON.stringify({
+      model: "kimi-k2",
+      max_tokens: 10,
+      messages: [{ role: "user", content: "x".repeat(1024 * 1024) }],
+    });
+    const init = claudeRequest("");
+
+    const response = await fetch(`${gateway}/v1/messages`, {
+      ...init,
+      headers: { ...init.headers, "content-encoding": "gzip" },
+      body: compressed({ body: huge, encoding: "gzip" }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "request_too_large",
+        message:
+          "The request body is over the API endpoint gateway's limit of 1 MB (decompressed); no API endpoint was asked. " +
+          "This is the gateway's limit, not the model's context: run /compact to shorten the conversation, or start a new one.",
+      },
+    });
+    expect(upstream.requests).toHaveLength(0);
+  });
+
+  test("the CLI's own User-Agent reaches the endpoint, passed through and translated", async () => {
+    const upstream = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatSays(res, ["ok"]);
+    const { gateway } = await start({ upstreamA: upstream, chatUpstream: chat });
+    const userAgent = "claude-cli/2.1.30 (external, cli)";
+    const ask = (body: string) => {
+      const init = claudeRequest(body);
+      return fetch(`${gateway}/v1/messages`, {
+        ...init,
+        headers: { ...init.headers, "user-agent": userAgent },
+      });
+    };
+
+    const passed = await ask(KIMI_BODY);
+    const translated = await ask(DEEPSEEK_BODY);
+
+    expect([passed.status, translated.status]).toEqual([200, 200]);
+    expect(upstream.requests[0]?.headers["user-agent"]).toBe(userAgent);
+    expect(chat.requests[0]?.headers["user-agent"]).toBe(userAgent);
+  });
+
+  test("a CLI that sends no User-Agent goes out as Osuna/<version>, passed through and translated", async () => {
+    const upstream = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatSays(res, ["ok"]);
+    const { gateway } = await start({
+      upstreamA: upstream,
+      chatUpstream: chat,
+      daemonVersion: "0.11.2",
+    });
+    const headers = {
+      authorization: `Bearer ${CLAUDE_TOKEN}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+    };
+
+    const passed = await postWithoutUserAgent({
+      url: `${gateway}/v1/messages`,
+      headers,
+      body: KIMI_BODY,
+    });
+    const translated = await postWithoutUserAgent({
+      url: `${gateway}/v1/messages`,
+      headers,
+      body: DEEPSEEK_BODY,
+    });
+
+    expect([passed.status, translated.status]).toEqual([200, 200]);
+    expect(upstream.requests[0]?.headers["user-agent"]).toBe("Osuna/0.11.2");
+    expect(chat.requests[0]?.headers["user-agent"]).toBe("Osuna/0.11.2");
   });
 });

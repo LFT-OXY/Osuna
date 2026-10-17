@@ -78,6 +78,8 @@ export async function attemptTranslated(input: {
   // 这家这个模型的资料（ModelFactsLookup）。
   facts: ModelFacts;
   headerTimeoutMs: number;
+  // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
+  userAgent: string;
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
   keepAlive: AgentKeepAlive;
@@ -89,7 +91,7 @@ export async function attemptTranslated(input: {
     openUpstream({
       res,
       url,
-      headers: translatedHeaders({ apiKey, keys, to }),
+      headers: translatedHeaders({ apiKey, keys, to, userAgent: input.userAgent }),
       body: Buffer.from(body),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -162,9 +164,11 @@ function translatedHeaders(input: {
   apiKey: string;
   keys: KeyHeaders;
   to: ApiEndpointRequestFormat;
+  userAgent: string;
 }): Record<string, string> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
+    "user-agent": input.userAgent,
     accept: "text/event-stream",
     // 要上游不压缩：错误体要读出原文。
     "accept-encoding": "identity",
