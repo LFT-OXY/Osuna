@@ -713,7 +713,7 @@ const signal = AbortSignal.any([input.signal, timeout]); // input.signal = clien
 
 ## Scenario: a local HTTP route that relays CLI traffic with a host secret
 
-Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tickets 02 and 04–07), `server/api-endpoints/gateway/`. The why behind its rules: `docs/adr/0007-api-endpoints-route-through-daemon-gateway.md`, partly superseded by `docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md` (gateway-robustness); the gateway-robustness bullets below record what was built and every user decision. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
+Reference implementation: the API endpoint gateway (api-endpoint-auto-switch tickets 02 and 04–07), `server/api-endpoints/gateway/`. The why behind its rules: `docs/adr/0007-api-endpoints-route-through-daemon-gateway.md`, partly superseded by `docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md` (gateway-robustness), and by `0009` (web search per endpoint) and `0010` (Codex wiring, caller recognition instead of token auth) from cli-wiring-web-search, whose code lands ticket by ticket; the gateway-robustness bullets below record what was built and every user decision. Not a session RPC: the CLIs call it over plain HTTP, so it lives outside the WebSocket layer and outside daemon auth.
 
 ### 1. Scope / Trigger
 

@@ -15,7 +15,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 四篇新 ADR 写好，各自写明取代了 ADR 0004、0007 的哪几句；依据指向 `research/` 下对应的笔记与 decisions.md 的题号。
 - [ ] ADR 0004、0007 里被取代的每一句旁标出被哪篇取代（照 ADR 0008 标 0007 的写法），原文保留不删。

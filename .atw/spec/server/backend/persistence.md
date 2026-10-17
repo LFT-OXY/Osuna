@@ -182,7 +182,7 @@ three files corrupted → requests still served, one `.bad-` file, one warn;
 
 ## Scenario: rewriting a config file another program owns
 
-Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict guard and health in 06; api-endpoint-auto-switch ticket 03 changed *what* is written, ticket 17 added `modelPicker`, ticket 18 the model hints). `server/api-endpoints/` rewrites Claude Code's `settings.json` and Codex's `config.toml` so the CLI talks to the daemon's own gateway (`/api-endpoint-gateway`) with a per-agent token; the real key never leaves the daemon. The editing rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`, what the keys hold in ADR 0007 (draft: the task's `adr-draft.md`); this is how the code keeps them.
+Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict guard and health in 06; api-endpoint-auto-switch ticket 03 changed *what* is written, ticket 17 added `modelPicker`, ticket 18 the model hints). `server/api-endpoints/` rewrites Claude Code's `settings.json` and Codex's `config.toml` so the CLI talks to the daemon's own gateway (`/api-endpoint-gateway`) with a per-agent token; the real key never leaves the daemon. The editing rules are in `docs/adr/0004-api-endpoint-rewrites-cli-config.md`, what the keys hold in ADR 0007 (draft: the task's `adr-draft.md`); this is how the code keeps them. ADR 0012 (cli-wiring-web-search) replaces parts of both — JSONC `settings.json`, following the CLI's own saved model and thinking level, new owned keys, the kept claude.ai sign-in — and ADR 0010 changes what Codex gets under a ChatGPT sign-in; the code catches up ticket by ticket, so check those ADRs before following a rule below that they contradict.
 
 ### 1. Scope / Trigger
 
