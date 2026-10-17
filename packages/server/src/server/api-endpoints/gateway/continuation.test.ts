@@ -10,7 +10,7 @@ import {
   type PrefillMode,
 } from "./continuation.js";
 import type { ShapeRefusals } from "./refusals.js";
-import type { StreamEvent } from "./translation/ir.js";
+import type { Message, StreamEvent } from "./translation/ir.js";
 
 const NO_REFUSALS: ShapeRefusals = { has: () => false, add: () => {} };
 const PREFILL_REFUSED: ShapeRefusals = { has: (shape) => shape === "prefill", add: () => {} };
@@ -109,7 +109,12 @@ describe("the Chat prefill mark (magpie buildChat with Resume)", () => {
 });
 
 /** 一个 ReplySoFar 和它往下交的事件。 */
-function soFarPassing(): { soFar: ReplySoFar; passed: StreamEvent[] } {
+interface SoFarPassing {
+  soFar: ReplySoFar;
+  passed: StreamEvent[];
+}
+
+function soFarPassing(): SoFarPassing {
   const passed: StreamEvent[] = [];
   return { soFar: new ReplySoFar((event) => passed.push(event)), passed };
 }
@@ -118,7 +123,9 @@ function feed(soFar: ReplySoFar, events: StreamEvent[]): void {
   for (const event of events) soFar.event(event);
 }
 
-const texts = (chunks: string[]): StreamEvent[] => chunks.map((text) => ({ kind: "text", text }));
+function texts(chunks: string[]): StreamEvent[] {
+  return chunks.map((text) => ({ kind: "text", text }));
+}
 
 /** 已经交给 Agent 的是 `prefilled`，接着写的这一次说了 `chunks`。 */
 function continuedWith(input: { prefilled: string; chunks: string[] }): string {
@@ -133,17 +140,23 @@ function continuedWith(input: { prefilled: string; chunks: string[] }): string {
 describe("what the agent already has of a reply (magpie continuation)", () => {
   test("it can go on once something was said and no tool call began", () => {
     const { soFar } = soFarPassing();
-    expect(soFar.mayGoOn()).toBe(false);
+    expect(soFar.canGoOn()).toBe(false);
     feed(soFar, texts(["hel"]));
-    expect(soFar.mayGoOn()).toBe(true);
+    expect(soFar.canGoOn()).toBe(true);
     feed(soFar, [{ kind: "tool_start", id: "call_1", name: "Bash" }]);
-    expect(soFar.mayGoOn()).toBe(false);
+    expect(soFar.canGoOn()).toBe(false);
+  });
+
+  test("a reply that ended as a refusal does not go on", () => {
+    const { soFar } = soFarPassing();
+    feed(soFar, [...texts(["hel"]), { kind: "stop", stop: "filter" }]);
+    expect(soFar.canGoOn()).toBe(false);
   });
 
   test("thinking alone is something to go on from", () => {
     const { soFar } = soFarPassing();
     feed(soFar, [{ kind: "think", text: "hmm" }]);
-    expect(soFar.mayGoOn()).toBe(true);
+    expect(soFar.canGoOn()).toBe(true);
   });
 
   test("the continuation carries the thinking and the text, trailing whitespace trimmed", () => {
@@ -152,9 +165,8 @@ describe("what the agent already has of a reply (magpie continuation)", () => {
       { kind: "think", text: "think-1" },
       { kind: "text", text: "hel\n" },
     ]);
-    const asked = {
-      messages: [{ role: "user" as const, parts: [{ kind: "text" as const, text: "hi" }] }],
-    };
+    const messages: Message[] = [{ role: "user", parts: [{ kind: "text", text: "hi" }] }];
+    const asked = { messages };
     expect(soFar.resume(asked)).toEqual({
       messages: [
         { role: "user", parts: [{ kind: "text", text: "hi" }] },

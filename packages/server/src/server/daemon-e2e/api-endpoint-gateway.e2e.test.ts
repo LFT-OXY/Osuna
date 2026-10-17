@@ -20,6 +20,7 @@ import {
 } from "../api-endpoints/gateway/broken-reply.js";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
 import { HIGH_RISK_REFUSAL as HIGH_RISK } from "../api-endpoints/gateway/safety-filter.js";
+import { isRecord } from "../api-endpoints/upstream-http.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -7142,39 +7143,51 @@ const HALF_CALL_ANTHROPIC_REPLY = [
   }),
 ].join("");
 
-/** 第 n 次（从 0 起）请求怎么回：给了的照给的流写完或写一半掐断，没给的回 REST_ANTHROPIC_REPLY。 */
+/** 开了口、写了 `head` 之后上游掐断连接（回复说到一半连接中断）。 */
+function writeThenCut(res: ServerResponse, head: string): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.write(head);
+  setTimeout(() => res.destroy(), 50);
+}
+
+/** 第 n 次（从 0 起）请求怎么回：前 `cuts` 次说半句就断（掐断连接或流读完却没说完），之后回 REST_ANTHROPIC_REPLY。 */
 function cutThenRest(input: { cuts: number; cut: boolean }): FakeUpstream["respond"] {
   let asked = 0;
   return (_request, res) => {
-    res.writeHead(200, { "content-type": "text/event-stream" });
     const call = asked++;
-    if (call >= input.cuts) {
-      res.end(REST_ANTHROPIC_REPLY);
+    const isCut = call < input.cuts;
+    const losesConnection = isCut && input.cut;
+    if (losesConnection) {
+      writeThenCut(res, HALF_ANTHROPIC_REPLY);
       return;
     }
-    if (!input.cut) {
-      res.end(HALF_ANTHROPIC_REPLY);
-      return;
-    }
-    res.write(HALF_ANTHROPIC_REPLY);
-    setTimeout(() => res.destroy(), 50);
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.end(isCut ? HALF_ANTHROPIC_REPLY : REST_ANTHROPIC_REPLY);
   };
 }
 
 /** 一次请求最后一条消息。 */
 function lastMessageOf(request: RecordedRequest): unknown {
-  const body = JSON.parse(request.body.toString()) as { messages: unknown[] };
+  const body: unknown = JSON.parse(request.body.toString());
+  if (!isRecord(body) || !Array.isArray(body.messages)) return undefined;
   return body.messages.at(-1);
 }
 
-/** Codex 收到的事件里各类事件的个数与说的全部文字。 */
-function codexReadOf(text: string): { types: string[]; said: string } {
-  const events = sseData(text) as { type: string; delta?: string }[];
-  const said = events
-    .filter((event) => event.type === "response.output_text.delta")
-    .map((event) => event.delta)
-    .join("");
-  return { types: events.map((event) => event.type), said };
+/** Agent 收到的流：依次的事件类型与说的全部文字。 */
+interface AgentRead {
+  types: string[];
+  said: string;
+}
+
+/** Codex 收到的流读成 AgentRead：文字是 output_text.delta 的 delta 连起来。 */
+function codexReadOf(text: string): AgentRead {
+  const read: AgentRead = { types: [], said: "" };
+  for (const event of sseData(text)) {
+    if (!isRecord(event)) continue;
+    read.types.push(String(event.type));
+    if (event.type === "response.output_text.delta") read.said += String(event.delta);
+  }
+  return read;
 }
 
 /** 开了口的 Chat 流说了半句；接着写的那一次说完。 */
@@ -7187,28 +7200,38 @@ const REST_CHAT_CHUNKS = [
   { id: "chatcmpl-rest", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
 ];
 
+function chatData(chunks: unknown[]): string {
+  return chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("");
+}
+
 /** Chat 上游：第一次说半句就掐断，之后的说完。 */
 function chatCutThenRest(): FakeUpstream["respond"] {
   let asked = 0;
   return (_request, res) => {
-    res.writeHead(200, { "content-type": "text/event-stream" });
-    if (asked++ > 0) {
-      const rest = REST_CHAT_CHUNKS.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
-      res.end(`${rest.join("")}data: [DONE]\n\n`);
+    if (asked++ === 0) {
+      writeThenCut(res, chatData([HALF_CHAT_CHUNK]));
       return;
     }
-    res.write(`data: ${JSON.stringify(HALF_CHAT_CHUNK)}\n\n`);
-    setTimeout(() => res.destroy(), 50);
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.end(`${chatData(REST_CHAT_CHUNKS)}data: [DONE]\n\n`);
   };
 }
 
-/** Claude Code 收到的事件里各类事件的个数与说的全部文字。 */
-function claudeReadOf(text: string): { types: string[]; said: string } {
-  const events = sseData(text) as { type: string; delta?: { type: string; text?: string } }[];
-  const said = events
-    .map((event) => (event.delta?.type === "text_delta" ? event.delta.text : ""))
-    .join("");
-  return { types: events.map((event) => event.type), said };
+/** 认一种类型的事件。 */
+function isEventOf(type: string): (event: unknown) => boolean {
+  return (event) => isRecord(event) && event.type === type;
+}
+
+/** Claude Code 收到的流读成 AgentRead：文字是 text_delta 连起来。 */
+function claudeReadOf(text: string): AgentRead {
+  const read: AgentRead = { types: [], said: "" };
+  for (const event of sseData(text)) {
+    if (!isRecord(event)) continue;
+    read.types.push(String(event.type));
+    const { delta } = event;
+    if (isRecord(delta) && delta.type === "text_delta") read.said += String(delta.text);
+  }
+  return read;
 }
 
 const CUT_REASON = connectionLost({ error: undefined });
@@ -7261,11 +7284,7 @@ describe("a reply that breaks goes on where it was cut (magpie continuation)", (
 
   test("a reply cut after a tool call began is not asked to go on: the error ends the stream", async () => {
     const anthropic = await startUpstream();
-    anthropic.respond = (_request, res) => {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      res.write(HALF_CALL_ANTHROPIC_REPLY);
-      setTimeout(() => res.destroy(), 50);
-    };
+    anthropic.respond = (_request, res) => writeThenCut(res, HALF_CALL_ANTHROPIC_REPLY);
     const { gateway } = await start({ upstreamB: anthropic });
 
     const response = await fetch(
@@ -7352,9 +7371,7 @@ describe("a reply that breaks goes on where it was cut (magpie continuation)", (
         res.end(JSON.stringify(prefillRefused));
         return;
       }
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      res.write(HALF_ANTHROPIC_REPLY);
-      setTimeout(() => res.destroy(), 50);
+      writeThenCut(res, HALF_ANTHROPIC_REPLY);
     };
     const { gateway, logLines } = await start({ upstreamB: anthropic });
     const ask = async () => {
@@ -7395,5 +7412,90 @@ describe("a reply that breaks goes on where it was cut (magpie continuation)", (
     expect(sseData(text).at(-1)).toEqual(
       halfCodexFailed(brokenMessage({ endpointName: "Relay B", reason: CUT_REASON })),
     );
+  });
+
+  test("while the reply waits to go on, Codex is kept alive with response.in_progress", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      if (anthropic.requests.length === 1) {
+        writeThenCut(res, HALF_ANTHROPIC_REPLY);
+        return;
+      }
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(REST_ANTHROPIC_REPLY);
+      }, 300);
+    };
+    const { gateway } = await start({ upstreamB: anthropic, keepAliveMs: 40 });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const text = await response.text();
+    const events = sseData(text);
+    const saidAt = events.findIndex(isEventOf("response.output_text.delta"));
+    const waiting = events.slice(saidAt + 1).filter(isEventOf("response.in_progress"));
+
+    expect(waiting.length).toBeGreaterThan(0);
+    for (const event of waiting) {
+      expect(event).toEqual({
+        type: "response.in_progress",
+        response: { object: "response", status: "in_progress", output: [] },
+      });
+    }
+    expect(codexReadOf(text).said).toBe("Let me look.");
+  });
+
+  test("a continuation that fails on its own ends with what it said, after it was asked again", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      if (anthropic.requests.length === 1) {
+        writeThenCut(res, HALF_ANTHROPIC_REPLY);
+        return;
+      }
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "api_error", message: "upstream is busy" },
+        }),
+      );
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const events = sseData(await response.text());
+
+    expect(anthropic.requests).toHaveLength(3);
+    expect(events.at(-1)).toEqual(
+      halfCodexFailed("Relay B: upstream is busy (503: you can retry your request)"),
+    );
+  });
+
+  test("a Chat reply that ended as a refusal and then lost its connection is not asked to go on", async () => {
+    const chat = await startUpstream();
+    const refused = {
+      id: "chatcmpl-half",
+      choices: [{ index: 0, delta: {}, finish_reason: "content_filter" }],
+    };
+    chat.respond = (_request, res) => writeThenCut(res, chatData([HALF_CHAT_CHUNK, refused]));
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+    const text = await response.text();
+
+    expect(chat.requests).toHaveLength(1);
+    expect(claudeReadOf(text).said).toBe("Let me");
+    expect(sseData(text).at(-1)).toEqual({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: brokenMessage({ endpointName: "Relay C", reason: CUT_REASON }),
+      },
+    });
   });
 });

@@ -270,6 +270,11 @@ export function heldClock(at: number, now: number): string {
   return sameDay ? `${time} ${zone}` : `${date} ${time} ${zone}`;
 }
 
+/** 第 again 次（从 0 起）原地重问前等多久：每次加倍。 */
+export function doubledPause(input: { retryPauseMs: number; again: number }): number {
+  return input.retryPauseMs * 2 ** input.again;
+}
+
 /**
  * 最后一家失败后要不要等一会儿再问它一次：服务器忙最多两次，短时限流最多三次，
  * 每次等待翻倍（厂商给了 Retry-After 就等它），超过 8 秒就不等，把错误交给 Agent。
@@ -283,7 +288,7 @@ export function passing(input: {
   now: number;
 }): { again: boolean; waitMs: number } {
   const said = retryAfter(input.headers, input.now);
-  const waitMs = said > 0 ? said : input.retryPauseMs * 2 ** input.again;
+  const waitMs = said > 0 ? said : doubledPause(input);
   if (waitMs > COOLDOWN.longestPause) return { again: false, waitMs: 0 };
   if ([408, 500, 502, 503, 504, 529].includes(input.status)) {
     return { again: input.again < COOLDOWN.lastRetries, waitMs };

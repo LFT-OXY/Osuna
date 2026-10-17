@@ -13,6 +13,7 @@ import {
   ENDED_SHORT,
   ReplyEndingWatch,
   brokenMessage,
+  passingMessage,
   type ReplyEnding,
   connectionLost,
   endedShort,
@@ -26,6 +27,7 @@ import {
   withPrefillMark,
   type PrefillMode,
 } from "./continuation.js";
+import { doubledPause } from "./cooldown.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -34,6 +36,7 @@ import {
   keyHeaderValues,
   keyHeadersFor,
   noteRefusal,
+  refusesPrefill,
   type KeyHeaders,
   type RefusedShape,
   type ShapeRefusals,
@@ -120,10 +123,10 @@ export async function attemptTranslated(input: {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
   const sends = () => keyHeadersFor({ format: to, refusals });
-  const openAt = (ask: { at: URL; body: string; keys: KeyHeaders }) =>
+  const openAt = (ask: { url: URL; body: string; keys: KeyHeaders }) =>
     openUpstream({
       res,
-      url: ask.at,
+      url: ask.url,
       headers: translatedHeaders({ apiKey, keys: ask.keys, to, userAgent: input.userAgent }),
       body: Buffer.from(ask.body),
       apiKey,
@@ -131,7 +134,7 @@ export async function attemptTranslated(input: {
       reads: to,
       onHeard: () => input.keepAlive.heard(),
     });
-  const open = (body: string, keys: KeyHeaders = sends()) => openAt({ at: url, body, keys });
+  const open = (body: string, keys: KeyHeaders = sends()) => openAt({ url, body, keys });
   const bodyOf = (ask: {
     request: GatewayRequest;
     continuation: PrefillMode | null;
@@ -152,9 +155,9 @@ export async function attemptTranslated(input: {
     ask: async ({ soFar, mode }) => {
       const request = soFar.resume(input.request);
       const sent = bodyOf({ request, continuation: mode, refusals });
-      const at = continuationUrl({ baseUrl: input.baseUrl, to, mode });
-      const opening = await openAt({ at, body: sent, keys: sends() });
-      return resumedFrom({ opening, sent, at, apiKey, to, refusals });
+      const resumeUrl = continuationUrl({ baseUrl: input.baseUrl, to, mode });
+      const opening = await openAt({ url: resumeUrl, body: sent, keys: sends() });
+      return resumedFrom({ opening, sent, url: resumeUrl, apiKey, to, refusals });
     },
   });
   const body = build();
@@ -203,7 +206,7 @@ export async function attemptTranslated(input: {
 
 /** 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就渲染成整份回复。 */
 async function answerOpened(input: TranslatedAnswer): Promise<AttemptOutcome> {
-  const reply = await upstreamReplyOf({ ...input, at: input.url });
+  const reply = await upstreamReplyOf(input);
   if (reply.kind === "failed") return reply;
   input.keepAlive.stop();
   const finished = input.request.stream
@@ -236,7 +239,7 @@ interface TranslatedAnswer {
 async function upstreamReplyOf(input: {
   opened: OpenedUpstream;
   to: ApiEndpointRequestFormat;
-  at: URL;
+  url: URL;
   apiKey: string;
 }): Promise<UpstreamReply | FailedAttempt> {
   const { response, held } = input.opened;
@@ -244,22 +247,35 @@ async function upstreamReplyOf(input: {
   const text = await readLimited({ stream: response, first: held });
   const whole = parseJson(text);
   if (!isWholeReply(input.to, whole))
-    return notAStream({ url: input.at, text, apiKey: input.apiKey });
+    return notAStream({ url: input.url, text, apiKey: input.apiKey });
   return { kind: "whole", body: whole };
 }
 
-/** 接着写问到了什么：接着读的回复、接不上了、Agent 走了。 */
-type Resumed = { kind: "reply"; reply: UpstreamReply } | { kind: "stopped" } | { kind: "gone" };
+/**
+ * 接着写问到了什么：接着读的回复；接不上（以引起断流的原因收尾）；接着写的那一问失败（以它自己的话收尾）；Agent 走了。
+ */
+type Resumed =
+  | { kind: "reply"; reply: UpstreamReply }
+  | { kind: "stopped" }
+  | { kind: "failed"; failure: FailedAttempt }
+  | { kind: "gone" };
 
-/** 接着问一次的结果；failed 是还能再续一次的失败（5xx、连不上之类）。 */
-type AskedToGoOn = Resumed | { kind: "failed" };
+/** 接着问一次的结果；retryable 是还能再续一次的失败（5xx、连不上之类）。 */
+type AskedToGoOn = Resumed | { kind: "retryable"; failure: FailedAttempt };
 
 /** 按 Agent 已经收到的部分接着写：每份回复最多问 STREAM_RETRIES 次。 */
 type GoOn = (soFar: ReplySoFar) => Promise<Resumed>;
 
+/** 接着问一次要的：Agent 已经收到的部分与这家怎么接。 */
+interface GoOnAsk {
+  soFar: ReplySoFar;
+  mode: PrefillMode;
+}
+
 /**
  * 断了的回复怎么接着写（magpie 的 continuation.again）：这家这个模型能从一半接着写（prefillMode）、
- * Agent 已经收到了点什么且还没开始工具调用时，等一会儿在同一家接着问；问不开口的再问，同一个请求再问也会被拒的不再问。
+ * Agent 已经收到了点什么、没开始工具调用、也不是拒答时，等一会儿在同一家接着问；问不开口的再问，
+ * 同一个请求再问也会被拒的不再问。等着的时候照开口前那样给 Agent 保活（magpie 的 enc.keepalive）。
  */
 function continuer(input: {
   res: Response;
@@ -268,46 +284,60 @@ function continuer(input: {
   upstreamModel: string;
   refusals: ShapeRefusals;
   retryPauseMs: number;
-  ask: (input: { soFar: ReplySoFar; mode: PrefillMode }) => Promise<AskedToGoOn>;
+  keepAlive: AgentKeepAlive;
+  ask: (ask: GoOnAsk) => Promise<AskedToGoOn>;
 }): GoOn {
-  const { res } = input;
+  const { res, keepAlive } = input;
   let asked = 0;
-  return async (soFar) => {
+  const askUntilSettled = async (soFar: ReplySoFar): Promise<Resumed> => {
+    let settled: Resumed = { kind: "stopped" };
     while (asked < STREAM_RETRIES) {
       const mode = prefillMode({ ...input, model: input.upstreamModel });
-      if (mode === null || !soFar.mayGoOn()) return { kind: "stopped" };
-      const waitMs = input.retryPauseMs * 2 ** asked;
+      const canGoOn = mode !== null && soFar.canGoOn();
+      if (!canGoOn) return settled;
+      const waitMs = doubledPause({ retryPauseMs: input.retryPauseMs, again: asked });
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       if (res.destroyed) return { kind: "gone" };
       asked++;
       const resumed = await input.ask({ soFar, mode });
-      if (resumed.kind !== "failed") return resumed;
+      if (resumed.kind !== "retryable") return resumed;
+      settled = { kind: "failed", failure: resumed.failure };
     }
-    return { kind: "stopped" };
+    return settled;
+  };
+  return async (soFar) => {
+    keepAlive.restart();
+    try {
+      return await askUntilSettled(soFar);
+    } finally {
+      keepAlive.stop();
+    }
   };
 }
 
 /**
- * 接着写的那一问开了口没有：开了口就接着读；被拒时先记下认得出的拒收（拒了预填的，以后不再续），
- * 同一个请求再问也会被拒的（400、404、422、拒答）不再问，别的失败还能再续一次。
+ * 接着写的那一问开了口没有：开了口就接着读；被拒时先记下认得出的拒收。拒了预填的以引起断流的原因收尾、以后不再续
+ * （Agent 没要过预填）；同一个请求再问也会被拒的（400、404、422、拒答）以它自己的话收尾；别的失败还能再续一次。
  */
 async function resumedFrom(input: {
   opening: UpstreamOpening;
   sent: string;
-  at: URL;
+  url: URL;
   apiKey: string;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
 }): Promise<AskedToGoOn> {
-  const { opening, to } = input;
+  const { opening, to, refusals } = input;
   if (opening.kind === "gone") return opening;
   if (opening.kind === "failed") {
     const body = parseJson(input.sent);
-    noteRefusal({ refusals: input.refusals, format: to, body, failed: opening });
-    return turnsAwayAgain(opening) ? { kind: "stopped" } : { kind: "failed" };
+    noteRefusal({ refusals, format: to, body, failed: opening });
+    if (refusesPrefill(refusals)) return { kind: "stopped" };
+    if (turnsAwayAgain(opening)) return { kind: "failed", failure: opening };
+    return { kind: "retryable", failure: opening };
   }
   const reply = await upstreamReplyOf({ ...input, opened: opening });
-  if (reply.kind === "failed") return { kind: "failed" };
+  if (reply.kind === "failed") return { kind: "retryable", failure: reply };
   return { kind: "reply", reply };
 }
 
@@ -473,11 +503,28 @@ async function streamReply(input: {
     flush();
     // 编码器写的都是完整的事件：空一行，错误连同它前面收尾的块（编码器自己补的）都在这之后。
     res.write("\n");
-    const message = brokenMessage({ endpointName: input.endpoint.name, reason: tried.reason });
-    encoder.event({ kind: "error", message, code: null, vendorError: null });
+    const told = toldBroken({ endpointName: input.endpoint.name, reason: tried.reason, resumed });
+    encoder.event({ kind: "error", message: told.message, code: null, vendorError: null });
     res.end();
-    return { kind: "broken", message: tried.reason };
+    return { kind: "broken", message: told.reason };
   }
+}
+
+/** 流尾交给 Agent 的错误：话与原因。 */
+interface ToldBroken {
+  message: string;
+  reason: string;
+}
+
+/** 接不上时以引起断流的原因收尾；接着写的那一问失败时以它自己的话收尾（magpie 的 failed）。 */
+function toldBroken(input: { endpointName: string; reason: string; resumed: Resumed }): ToldBroken {
+  const { endpointName, resumed } = input;
+  if (resumed.kind !== "failed") {
+    const { reason } = input;
+    return { message: brokenMessage({ endpointName, reason }), reason };
+  }
+  const { detail, status } = resumed.failure;
+  return { message: passingMessage({ endpointName, reason: detail, status }), reason: detail };
 }
 
 /** 读一次上游的回复读到哪：说完了（这一次解码出的回复）、断了（原因，与交出还扣着的文字）、Agent 走了。 */

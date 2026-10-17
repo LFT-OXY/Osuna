@@ -1,4 +1,4 @@
-// 断流后接着写移植自 magpie（https://github.com/yetone/magpie，internal/gateway/continuation.go 的 streamRetries、prefillHow、chatPrefill、continuation（possible、prefillText、request、emit、add、unecho），
+// 断流后接着写移植自 magpie（https://github.com/yetone/magpie，internal/gateway/continuation.go 的 streamRetries、prefillHow、chatPrefill、continuation（possible、again 里的拒答、prefillText、request、emit、add、unecho），
 // chat.go buildChat 里 Resume 的 prefix / partial，gateway.go forwardTranslated 里 DeepSeek 前缀模式的 /beta）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
@@ -6,7 +6,8 @@ import { BlockList, isIP } from "node:net";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord } from "../upstream-http.js";
 import { refusesPrefill, type ShapeRefusals } from "./refusals.js";
-import type { EmitEvent, Message, Part, StreamEvent } from "./translation/ir.js";
+import { refusedAfterOpening } from "./safety-filter.js";
+import type { EmitEvent, Message, Part, StopReason, StreamEvent } from "./translation/ir.js";
 import { upstreamUrl } from "./upstream-call.js";
 
 /*
@@ -50,9 +51,10 @@ LOCAL_NETWORKS.addSubnet("fc00::", 7, "ipv6");
 /** Chat 上游的预填模式：DeepSeek、Kimi 自己的地址，或本机、局域网上转它们模型的中转服务。 */
 function chatPrefill(input: { baseUrl: string; model: string }): ChatPrefillMode | null {
   const host = new URL(input.baseUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const deepseekHost = host === "api.deepseek.com" || host.endsWith(".deepseek.com");
-  if (deepseekHost) return "prefix";
-  if (host.includes("moonshot") || host.includes("kimi")) return "partial";
+  const isDeepSeek = host === "api.deepseek.com" || host.endsWith(".deepseek.com");
+  if (isDeepSeek) return "prefix";
+  const isKimi = host.includes("moonshot") || host.includes("kimi");
+  if (isKimi) return "partial";
   if (!isLocalHost(host)) return null;
   const model = input.model.toLowerCase();
   if (model.includes("deepseek")) return "prefix";
@@ -60,7 +62,8 @@ function chatPrefill(input: { baseUrl: string; model: string }): ChatPrefillMode
 }
 
 function isLocalHost(host: string): boolean {
-  if (host === "localhost" || host.endsWith(".local")) return true;
+  const isLocalName = host === "localhost" || host.endsWith(".local");
+  if (isLocalName) return true;
   const family = isIP(host);
   if (family === 0) return false;
   return LOCAL_NETWORKS.check(host, family === 4 ? "ipv4" : "ipv6");
@@ -87,7 +90,8 @@ export function withPrefillMark(input: {
   const { body, mode } = input;
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const last: unknown = messages.at(-1);
-  if (mode === "anthropic" || !isRecord(last)) return body;
+  if (mode === "anthropic") return body;
+  if (!isRecord(last)) return body;
   const marked: Record<string, unknown> = { ...last, [mode]: true };
   if (input.thinking !== "") marked.reasoning_content = input.thinking;
   return { ...body, messages: [...messages.slice(0, -1), marked] };
@@ -100,14 +104,16 @@ export function lastThinking(messages: Message[]): string {
 }
 
 /**
- * Agent 已经收到的那部分回复：边往下交边记下文字、推理、有没有开始工具调用。
+ * Agent 已经收到的那部分回复：边往下交边记下文字、推理、有没有开始工具调用、以什么收尾（认拒答）。
  * 接着写之后，新的一次的推理不再显示，开头把已交出的文字原样重说一遍的也去掉（magpie 的 unecho）。
  */
 export class ReplySoFar {
   private thinking = "";
   private text = "";
-  private calling = false;
-  private resumed = false;
+  private hasCalled = false;
+  private isResumed = false;
+  private stop: StopReason | null = null;
+  private error: ReplyError | null = null;
   // 预填进去的文字：接着写的回复把它整段重说一遍时去掉。
   private echo = "";
   // 已经来了、还可能是重说的那段。
@@ -116,26 +122,23 @@ export class ReplySoFar {
   constructor(private readonly emit: EmitEvent) {}
 
   event(event: StreamEvent): void {
-    if (this.resumed && isThinking(event)) return;
-    let passed = event;
-    if (this.resumed && event.kind === "text") {
-      passed = { kind: "text", text: this.unecho(event.text) };
-      if (passed.text === "") return;
-    }
+    const passed = this.isResumed ? this.resumedEvent(event) : event;
+    if (passed === null) return;
     this.add(passed);
     this.emit(passed);
   }
 
-  /** 还能接着写：已经说了点什么（文字或推理），还没开始工具调用。 */
-  mayGoOn(): boolean {
-    const said = this.thinking !== "" || this.text !== "";
-    return said && !this.calling;
+  /** 还能接着写：已经说了点什么（文字或推理），还没开始工具调用，也不是拒答。 */
+  canGoOn(): boolean {
+    const hasSaid = this.thinking !== "" || this.text !== "";
+    const isRefusal = refusedAfterOpening({ stop: this.stop, error: this.error });
+    return hasSaid && !this.hasCalled && !isRefusal;
   }
 
   /** 接着写的请求：原来的对话后面加上 Agent 已经收到的这部分；之后来的事件按接着写的读。 */
   resume<T extends { messages: Message[] }>(request: T): T {
     const prefill = this.prefillText();
-    this.resumed = true;
+    this.isResumed = true;
     this.echo = prefill;
     this.seen = "";
     const parts: Part[] = [];
@@ -149,10 +152,34 @@ export class ReplySoFar {
     return this.text.trimEnd();
   }
 
+  /** 接着写的这一次的事件交给 Agent 的样子：推理不再显示，文字去掉重说；什么都不交时为 null。 */
+  private resumedEvent(event: StreamEvent): StreamEvent | null {
+    if (isThinking(event)) return null;
+    if (event.kind !== "text") return event;
+    const text = this.unecho(event.text);
+    return text === "" ? null : { kind: "text", text };
+  }
+
   private add(event: StreamEvent): void {
-    if (event.kind === "think") this.thinking += event.text;
-    else if (event.kind === "text") this.text += event.text;
-    else if (event.kind === "tool_start" || event.kind === "tool_args") this.calling = true;
+    switch (event.kind) {
+      case "think":
+        this.thinking += event.text;
+        return;
+      case "text":
+        this.text += event.text;
+        return;
+      case "tool_start":
+      case "tool_args":
+        this.hasCalled = true;
+        return;
+      case "stop":
+        this.stop = event.stop;
+        return;
+      case "error":
+        this.error = event;
+        return;
+      default:
+    }
   }
 
   /** 去掉接着写的回复开头对预填文字的整段重说；还可能是重说的先扣着，读得出来再交。 */
@@ -160,14 +187,18 @@ export class ReplySoFar {
     if (this.echo === "") return piece;
     this.seen += piece;
     const echo = this.echo;
-    const mayStillEcho = this.seen.length < echo.length && echo.startsWith(this.seen);
-    if (mayStillEcho) return "";
-    const said = this.seen.startsWith(echo) ? this.seen.slice(echo.length) : this.seen;
+    const canStillEcho = this.seen.length < echo.length && echo.startsWith(this.seen);
+    if (canStillEcho) return "";
+    let said = this.seen;
+    if (said.startsWith(echo)) said = said.slice(echo.length);
     this.seen = "";
     this.echo = "";
     return said;
   }
 }
+
+/** 回复里报的错：认拒答只看错误码与话。 */
+type ReplyError = Pick<Extract<StreamEvent, { kind: "error" }>, "code" | "message">;
 
 function isThinking(event: StreamEvent): boolean {
   return event.kind === "think" || event.kind === "think_start" || event.kind === "sig";

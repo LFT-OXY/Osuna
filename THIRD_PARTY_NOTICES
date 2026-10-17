@@ -381,12 +381,16 @@ assistant, message, up to twice (streamRetries, prefillHow, chatPrefill and
 the continuation type's possible, again, prefillText, request, emit, add and
 unecho in magpie's internal/gateway/continuation.go; the Resume prefix /
 partial marks of buildChat in chat.go and DeepSeek's /beta path in
-forwardTranslated in gateway.go); its tests reuse the cases of
-continuation_test.go:
+forwardTranslated in gateway.go), the agent kept alive while it waits
+(streamTranslated's enc.keepalive), and a continuation that fails ending with
+its own words (saysPassing and passingSaid in gateway.go); its tests reuse the
+cases of continuation_test.go:
 
   packages/server/src/server/api-endpoints/gateway/continuation.ts
   packages/server/src/server/api-endpoints/gateway/continuation.test.ts
   packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/broken-reply.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
 Request-format auto-detection (each format's base URL, the model asked, the

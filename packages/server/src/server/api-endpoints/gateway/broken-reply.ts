@@ -1,5 +1,5 @@
 // 开口后断流移植自 magpie（https://github.com/yetone/magpie，internal/gateway/upstream.go 的 replyEnds、continuation.go 的 errEndedShort，
-// gateway.go 的 cutMidReply、streamFailure、saysPassing 与直通回复里的 apart）
+// gateway.go 的 cutMidReply、streamFailure、saysPassing、passingSaid 与直通回复里的 apart）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -63,6 +63,30 @@ export class ReplyEndingWatch implements ReplyEnding {
 /** 断流时交给 Agent 的话：「<接口名>: <原因> (502: you can retry your request)」（magpie 的 saysPassing）。 */
 export function brokenMessage(input: { endpointName: string; reason: string }): string {
   return `${input.endpointName}: ${input.reason} (${BROKEN_STATUS}: you can retry your request)`;
+}
+
+// 话里已经说了是会过去的失败（magpie 的 passingSaid）。
+const PASSING_SAID =
+  /\b(?:429|500|502|503|504)\b|timed? ?out|rate.?limit|too many requests|overloaded|service.?unavailable|server.?error|internal.?error|connection.?(?:error|refused|reset)|retry your request|try your request again/i;
+
+/** 流里交给 Agent 的一次失败（状态码已经说不出去了）。 */
+export interface StreamedFailure {
+  endpointName: string;
+  reason: string;
+  status: number;
+}
+
+/**
+ * 流里交给 Agent 的失败的话：「<接口名>: <原因>」；会过去的失败（408、429、5xx）话里又没说的，
+ * 加上「(<状态码>: you can retry your request)」（magpie 的 saysPassing）。
+ */
+export function passingMessage(input: StreamedFailure): string {
+  const { status } = input;
+  const message = `${input.endpointName}: ${input.reason}`;
+  const passes = status === 408 || status === 429 || status >= 500;
+  const saysSo = PASSING_SAID.test(message);
+  if (!passes || saysSo) return message;
+  return `${message} (${status}: you can retry your request)`;
 }
 
 /**
