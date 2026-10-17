@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用与 JSON 外的代码块接在 forwardTranslated 的 written、encoder 与 render 处）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -30,15 +30,20 @@ import {
 import {
   ReplyCollector,
   openAIEffort,
+  passingFilter,
   requestForModel,
   thinkingBackOn,
+  type EmitEvent,
   type GatewayRequest,
+  type ReplyFilter,
   type StreamEvent,
 } from "./translation/ir.js";
+import { isGrokReply, wholeArgsFilter } from "./grok-integral.js";
 import { fenceFilter, unfencedReply } from "./translation/fence.js";
 import { protocolOf } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
+import { withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
 import {
   ANSWERED_BY_HEADER,
   failedBySelf,
@@ -99,8 +104,9 @@ export async function attemptTranslated(input: {
       onHeard: () => input.keepAlive.heard(),
     });
   const build = (asked: ShapeRefusals = refusals) =>
-    upstreamBody({
+    translatedBody({
       request: input.request,
+      baseUrl: input.baseUrl,
       from: input.from,
       to,
       model: input.upstreamModel,
@@ -188,16 +194,23 @@ function wholeText(input: {
   return readLimited({ stream: input.response, first: input.held });
 }
 
-/** 发给上游的请求体（JSON）：按这家这个模型不收的写法改过请求，翻好后再去掉它不收的字段。 */
-function upstreamBody(input: {
+/** 翻译后发给上游的请求体要的：Agent 的请求、这家的地址、两种格式、上游模型名与资料、这家这个模型不收的写法。 */
+export interface TranslatedBodyInput {
   request: GatewayRequest;
+  baseUrl: string;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
   facts: ModelFacts;
   refusals: ShapeRefusals;
-}): string {
-  const { to, refusals } = input;
+}
+
+/**
+ * 发给上游的请求体（JSON）：按这家这个模型不收的写法改过请求，翻好后再去掉它不收的字段，
+ * 最后按厂商改（vendor-rewrites.ts；MiniMax 的思考在翻成 Chat 之前写回 <think>）。
+ */
+export function translatedBody(input: TranslatedBodyInput): string {
+  const { to, refusals, baseUrl } = input;
   let request = allowedReasoning({ request: input.request, to, refusals });
   if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
   request = downgradedRequest({
@@ -208,13 +221,14 @@ function upstreamBody(input: {
     lastIsTurn: input.from !== "anthropic_messages",
   });
   request = requestForModel({ request, to, facts: input.facts });
+  if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
   const built = protocolOf(to).build({ ...request, stream: true }, input.model);
   const body = withoutRefusedFields({
     format: to,
     body: built,
     refused: (field) => refusals.has(field),
   });
-  return JSON.stringify(body);
+  return JSON.stringify(withVendorRewrites({ format: to, baseUrl, model: input.model, body }));
 }
 
 /** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */
@@ -248,6 +262,7 @@ async function streamReply(input: {
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
   requestedModel: string;
+  upstreamModel: string;
   response: IncomingMessage;
   held: Buffer;
   ended: boolean;
@@ -268,7 +283,15 @@ async function streamReply(input: {
   });
   const decoder = protocolOf(input.to).decoder();
   const fence = fenceFilter({ request: input.request, emit: (event) => encoder.event(event) });
-  const calls = textCallFilter({ tools: input.request.tools, emit: (event) => fence.event(event) });
+  const numbers = wholeNumbersFilter({
+    requestedModel: input.requestedModel,
+    upstreamModel: input.upstreamModel,
+    emit: (event) => fence.event(event),
+  });
+  const calls = textCallFilter({
+    tools: input.request.tools,
+    emit: (event) => numbers.event(event),
+  });
   const emit = (event: StreamEvent) => calls.event(event);
   const reader = new SseReader((data) => decoder.decode(data, emit));
   const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
@@ -280,6 +303,7 @@ async function streamReply(input: {
   reader.end();
   decoder.end?.(emit);
   calls.end();
+  numbers.end();
   fence.end();
   encoder.finish();
   res.end();
@@ -295,6 +319,7 @@ async function wholeReply(input: {
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
   requestedModel: string;
+  upstreamModel: string;
   response: IncomingMessage;
   held: Buffer;
   ended: boolean;
@@ -302,9 +327,14 @@ async function wholeReply(input: {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
   const decoder = protocolOf(input.to).decoder();
+  const numbers = wholeNumbersFilter({
+    requestedModel: input.requestedModel,
+    upstreamModel: input.upstreamModel,
+    emit: (event) => collector.add(event),
+  });
   const calls = textCallFilter({
     tools: input.request.tools,
-    emit: (event) => collector.add(event),
+    emit: (event) => numbers.event(event),
   });
   const emit = (event: StreamEvent) => calls.event(event);
   const reader = new SseReader((data) => decoder.decode(data, emit));
@@ -313,6 +343,7 @@ async function wholeReply(input: {
   reader.end();
   decoder.end?.(emit);
   calls.end();
+  numbers.end();
   let failure: string | null = null;
   if (end.kind === "broken") failure = end.message;
   else if (collector.error && !collector.saidAnything()) failure = collector.error.message;
@@ -334,6 +365,16 @@ async function wholeReply(input: {
       protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
     );
   return { kind: "complete", usage: reply.usage };
+}
+
+/** Grok 的回复：调用参数里的零小数去掉（grok-integral.ts）；别的模型的回复原样往下交。 */
+function wholeNumbersFilter(input: {
+  requestedModel: string;
+  upstreamModel: string;
+  emit: EmitEvent;
+}): ReplyFilter {
+  if (isGrokReply(input)) return wholeArgsFilter(input.emit);
+  return passingFilter(input.emit);
 }
 
 /** 读上游的流直到结束（从开口时扣下的字节读起）；字符可能被切在两段之间，按 UTF-8 接好再交出去。 */

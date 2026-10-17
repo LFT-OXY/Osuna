@@ -129,7 +129,7 @@ function parseChatMessage(message: Record<string, unknown>): Message | null {
  * Chat 客户端把上一轮的思考发回来的三种写法：reasoning_content（DeepSeek 的，多数客户端用）、reasoning（OpenRouter 的）、
  * reasoning_details（OpenRouter 的结构化写法，每条取 text，没有就取 summary）。几种都在时按这个顺序取第一个。
  */
-function reasoningText(message: Record<string, unknown>): string {
+export function reasoningText(message: Record<string, unknown>): string {
   const plain = [message.reasoning_content, message.reasoning].find(
     (value): value is string => typeof value === "string" && value !== "",
   );

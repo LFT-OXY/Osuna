@@ -227,14 +227,18 @@ describe("a Codex request passed through to a DeepSeek model's Responses endpoin
   });
 });
 
-/** 直通给 relay 这家（选了 Opus 5.5 与 Sonnet 5.5）的对话请求体。 */
+const RELAY_URL = "https://relay.example/v1";
+
+/** 直通给 relay 这家（选了 Opus 5.5 与 Sonnet 5.5）的对话请求体；地址不给就是中转服务的。 */
 function passedThrough(input: {
   body: string;
   model: string;
   format?: PassthroughBodyInput["format"];
+  baseUrl?: string;
 }) {
   return upstreamBody({
     format: input.format ?? "anthropic_messages",
+    baseUrl: input.baseUrl ?? RELAY_URL,
     body: Buffer.from(input.body),
     requestedModel: input.model,
     upstreamModel: input.model,
@@ -274,6 +278,7 @@ describe("Claude Code's billing line and auto mode review passed through (magpie
       upstreamBody({
         format: "anthropic_messages",
         pathSuffix: "/count_tokens",
+        baseUrl: RELAY_URL,
         body: Buffer.from(body),
         requestedModel: model,
         upstreamModel: model,
@@ -487,6 +492,111 @@ describe("reasoning with nothing sealed in it, passed through to a Responses end
   test("a request the endpoint stores goes byte for byte", () => {
     const body = codex(`"store":true,`);
     expect(passedThrough({ body, model: "gpt-5.5", format: "openai_responses" })).toBe(body);
+  });
+});
+
+/*
+ * 按厂商的改写只做四家（magpie kimi_schema.go、deepseek_schema.go、grok_schema.go，gateway.go forwardOnce 里的 withoutDeferredTools）：
+ * Kimi、DeepSeek 只认官方地址，Grok 按模型名认（或 xAI 自己的地址）。别的地址、别家的模型，请求体逐字节原样。
+ */
+
+// 一个工具 schema 里四家各自要改的写法都有：没写 type 的 enum、const，`\0`，字符类里的 `[`；
+// 消息里还有延后加载工具块。
+const VENDOR_TOOLS =
+  `"tools":[{"name":"parse_visual_regions","input_schema":{"type":"object","properties":{` +
+  `"kinds":{"type":"array","items":{"enum":["text","icon"]}},"level":{"enum":[1,2,3]},"on":{"const":true},` +
+  `"mixed":{"enum":["a",1]},"typed":{"type":"string","enum":["x"]},` +
+  `"content":{"type":"string","pattern":"^[^\\\\0]*$"},"selector":{"type":"string","pattern":"^[^\\\\s[\\\\]]+$"}}}}]`;
+const vendorTurn = (model: string) =>
+  `{"model":"${model}","max_tokens":32000,"thinking":{"type":"enabled","budget_tokens":2048},` +
+  `${VENDOR_TOOLS},"messages":[{"role":"user","content":"hi"},` +
+  `{"role":"user","content":[{"type":"tool_addition","tool":{"type":"tool_reference","name":"Read"}}]},` +
+  `{"role":"user","content":[{"type":"text","text":"go on"},{"type":"tool_removal","tool":{"type":"tool_reference","name":"Gone"}}]}]}`;
+const UNDEFERRED_MESSAGES = [
+  { role: "user", content: "hi" },
+  { role: "user", content: [{ type: "text", text: "go on" }] },
+];
+
+/** vendorTurn 里的工具，properties 换成 `changed` 里给的。 */
+function vendorTools(changed: Record<string, unknown>) {
+  const properties = {
+    kinds: { type: "array", items: { enum: ["text", "icon"] } },
+    level: { enum: [1, 2, 3] },
+    on: { const: true },
+    mixed: { enum: ["a", 1] },
+    typed: { type: "string", enum: ["x"] },
+    content: { type: "string", pattern: "^[^\\0]*$" },
+    selector: { type: "string", pattern: "^[^\\s[\\]]+$" },
+    ...changed,
+  };
+  return [{ name: "parse_visual_regions", input_schema: { type: "object", properties } }];
+}
+
+describe("vendor rewrites passed through to the four vendors only", () => {
+  test.each(["https://api.kimi.com/coding/v1", "https://api.moonshot.cn/anthropic"])(
+    "Kimi at %s: an untyped enum or const gets its values' type, deferred-tool blocks go",
+    (baseUrl) => {
+      const sent = passedThrough({ body: vendorTurn("kimi-k2.6"), model: "kimi-k2.6", baseUrl });
+      expect(JSON.parse(sent)).toEqual({
+        model: "kimi-k2.6",
+        max_tokens: 32000,
+        thinking: { type: "enabled", budget_tokens: 2048 },
+        tools: vendorTools({
+          kinds: { type: "array", items: { type: "string", enum: ["text", "icon"] } },
+          level: { type: "integer", enum: [1, 2, 3] },
+          on: { type: "boolean", const: true },
+        }),
+        messages: UNDEFERRED_MESSAGES,
+      });
+    },
+  );
+
+  test("DeepSeek's own address: `\\0` in a pattern becomes `\\u0000`, deferred-tool blocks go", () => {
+    const sent = passedThrough({
+      body: vendorTurn("deepseek-v4"),
+      model: "deepseek-v4",
+      baseUrl: "https://api.deepseek.com/anthropic",
+    });
+    expect(JSON.parse(sent)).toEqual({
+      model: "deepseek-v4",
+      max_tokens: 32000,
+      thinking: { type: "enabled", budget_tokens: 2048 },
+      tools: vendorTools({ content: { type: "string", pattern: "^[^\\u0000]*$" } }),
+      messages: UNDEFERRED_MESSAGES,
+    });
+  });
+
+  test.each([
+    ["grok-4.6", RELAY_URL],
+    ["x-ai/grok-4", RELAY_URL],
+    ["my-alias", "https://api.x.ai/v1"],
+  ])(
+    "Grok (%s at %s): a `[` in a character class is escaped, nothing else changes",
+    (model, baseUrl) => {
+      const body = vendorTurn(model);
+      expect(passedThrough({ body, model, baseUrl })).toBe(
+        body.replace(`"^[^\\\\s[\\\\]]+$"`, `"^[^\\\\s\\\\[\\\\]]+$"`),
+      );
+    },
+  );
+
+  test("a Codex request to Grok has its patterns rewritten too", () => {
+    const body = `{"model":"grok-4.7","tools":[{"type":"function","name":"find","parameters":{"type":"object","properties":{"q":{"type":"string","pattern":"[a&&b]"}}}}],"input":[]}`;
+    expect(passedThrough({ body, model: "grok-4.7", format: "openai_responses" })).toBe(
+      body.replace(`"[a&&b]"`, `"[a&\\\\&b]"`),
+    );
+  });
+
+  test.each([
+    ["kimi-k2.6", RELAY_URL],
+    ["deepseek-v4", "https://openrouter.ai/api/v1"],
+    ["MiniMax-M2.7", RELAY_URL],
+    ["mistral-large", "https://api.mistral.ai/v1"],
+    ["kimi-k2.6", "https://api.kimi.com.relay.example/v1"],
+  ])("%s at %s gets the request byte for byte", (model, baseUrl) => {
+    const body = vendorTurn(model);
+    // DeepSeek 的模型名本来就要每个工具轮带思考块；这份请求没有工具轮。
+    expect(passedThrough({ body, model, baseUrl })).toBe(body);
   });
 });
 

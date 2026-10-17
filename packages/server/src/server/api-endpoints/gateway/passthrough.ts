@@ -1,9 +1,11 @@
 // fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns、
 // adaptiveThinking、samplingAsTaken，responses.go 的 withReasoningText，codex_backend.go 的 withoutBareReasoning，gateway.go 的 passthrough 里按上游模型改的几处、
-// 直通重问与 attempt 里去掉拒收字段、画图工具的重问）
+// 直通重问与 attempt 里去掉拒收字段、画图工具的重问；按厂商的改写接在 forwardOnce 处，Grok 回复的整数接在直通回复的 intTidy 处）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
+import { StringDecoder } from "node:string_decoder";
+import { Transform, type Writable } from "node:stream";
 import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -45,9 +47,12 @@ import {
   withoutSafeguards,
   withoutSampling,
 } from "./refused-fields.js";
+import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import { ReplyTap } from "./reply-tap.js";
+import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import {
   ANSWERED_BY_HEADER,
+  isEventStream,
   openUpstream,
   upstreamUrl,
   type AnswerEnd,
@@ -177,26 +182,66 @@ export async function attemptEndpoint(input: {
   }
   if (opened.kind !== "opened") return opened;
   input.keepAlive?.stop();
+  const tidy = replyTidy({ ...input, opened });
   // 保活已经回了 200 与响应头：接着在同一个流里交出回复。
   if (!res.headersSent) {
-    res.writeHead(opened.status, {
-      ...responseHeaders(opened.response.headers),
-      [ANSWERED_BY_HEADER]: input.endpoint.slug,
-    });
+    const headers = responseHeaders(opened.response.headers);
+    // 改过的回复长度会变。
+    if (tidy !== null) delete headers["content-length"];
+    res.writeHead(opened.status, { ...headers, [ANSWERED_BY_HEADER]: input.endpoint.slug });
   }
-  return { kind: "answered", finished: relay({ opened, res }) };
+  return { kind: "answered", finished: relay({ opened, res, tidy }) };
+}
+
+/** Grok 的对话回复要去掉调用参数里的零小数（grok-integral.ts）；别的回复原样转，为 null。 */
+function replyTidy(input: {
+  format: ApiEndpointRequestFormat;
+  pathSuffix?: string;
+  requestedModel: string;
+  upstreamModel: string;
+  opened: OpenedUpstream;
+}): WholeArgsTidy | null {
+  const { format, opened } = input;
+  const conversation = input.pathSuffix === undefined;
+  // 直通只有 Agent 说的两种格式，Chat 不会来。
+  if (format === "openai_chat") return null;
+  const grokConversation = conversation && isGrokReply(input);
+  if (!grokConversation) return null;
+  return new WholeArgsTidy({ format, stream: isEventStream(opened.response, opened.held) });
+}
+
+/** 交给 Agent 的那一路：要改的回复先经 tidy，按 UTF-8 接好字符再改；别的直接写给 Agent。 */
+function agentSink(input: { res: Response; tidy: WholeArgsTidy | null }): Writable {
+  const { tidy } = input;
+  if (tidy === null) return input.res;
+  const utf8 = new StringDecoder("utf8");
+  const sink = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      done(null, tidy.write(utf8.write(chunk)));
+    },
+    flush(done) {
+      done(null, tidy.write(utf8.end()) + tidy.end());
+    },
+  });
+  sink.pipe(input.res);
+  return sink;
 }
 
 /** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存读写 token 数）。 */
-function relay(input: { opened: OpenedUpstream; res: Response }): Promise<AnswerEnd> {
+function relay(input: {
+  opened: OpenedUpstream;
+  res: Response;
+  tidy: WholeArgsTidy | null;
+}): Promise<AnswerEnd> {
   const { res } = input;
   const { response, held, tap } = input.opened;
   const usage = (reading: ReplyTap | null) => reading?.end().usage ?? emptyUsage();
+  const sink = agentSink(input);
   if (input.opened.ended) {
-    res.end(held);
+    sink.end(held);
     return Promise.resolve({ kind: "complete", usage: usage(tap) });
   }
-  res.write(held);
+  sink.write(held);
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;
@@ -221,14 +266,16 @@ function relay(input: { opened: OpenedUpstream; res: Response }): Promise<Answer
     };
     response.once("error", broke);
     response.once("close", () => broke());
-    response.pipe(res);
+    response.pipe(sink);
   });
 }
 
-/** 直通请求体要的：格式、路径后缀（count_tokens）、原请求体、两个模型名、这家接口与它不收的写法。 */
+/** 直通请求体要的：格式、路径后缀（count_tokens）、这家的地址、原请求体、两个模型名、这家接口与它不收的写法。 */
 export interface PassthroughBodyInput {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
+  // 按厂商的改写按它认官方地址。
+  baseUrl: string;
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
@@ -264,7 +311,23 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
+  text = withVendorText({ ...input, text });
   return Buffer.from(text);
+}
+
+/** 按厂商的改写（vendor-rewrites.ts，count_tokens 也算，照 magpie forwardOnce）：只改变了的顶层字段，其余字节原样。 */
+function withVendorText(input: {
+  text: string;
+  format: ApiEndpointRequestFormat;
+  baseUrl: string;
+  upstreamModel: string;
+}): string {
+  const target = { baseUrl: input.baseUrl, model: input.upstreamModel };
+  if (!hasVendorRewrites(target)) return input.text;
+  const body = parseJson(input.text);
+  if (!isRecord(body)) return input.text;
+  const fitted = withVendorRewrites({ ...target, format: input.format, body });
+  return withChangedKeys({ text: input.text, body, fitted });
 }
 
 /** 去掉这家这个模型不收的字段、降级它不收的写法：只改变了的顶层字段，其余字节原样。 */

@@ -286,6 +286,29 @@ vendor's words of overflow_cap_test.go and fallback.go:
   packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+The four vendors' rewrites (Kimi's typed enums, reasoning_details as
+reasoning_content and no deferred-tool blocks, MiniMax's thinking back in
+<think>, DeepSeek's \u0000 in tool patterns, Grok's tool patterns in Rust's
+regex spelling and its whole numbers in a call's arguments) follow
+kimiToolEnumTypes, isKimi and valuesType in magpie's
+internal/gateway/kimi_schema.go, deepseekToolPatterns and unicodeNullEscape in
+deepseek_schema.go, grokToolPatterns and ecmaClassForRust in grok_schema.go,
+grokModel, wholeNums, wholeEncoder, wholeResult and intTidy in
+grok_integral.go, reasoningDetailsAsContent in chattidy.go, buildChat's
+inlineThink in chat.go and forwardOnce in gateway.go; their tests reuse the
+cases of kimi_schema_test.go, deepseek_schema_test.go, grok_schema_test.go,
+grok_integral_test.go, kimi_reasoning_details_test.go and
+minimax_think_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/vendor-rewrites.ts
+  packages/server/src/server/api-endpoints/gateway/vendor-rewrites.test.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.test.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

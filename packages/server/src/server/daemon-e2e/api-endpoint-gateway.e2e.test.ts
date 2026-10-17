@@ -29,6 +29,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning；翻译时去掉 prompt_cache_key 重问照 prompt_cache_test.go（TestPromptCacheKeyRefused）；
  * 改模型输出（工单 08）照 format_fence_test.go（TestStructuredOutputFencedAnswerUnfenced）、textcalls_test.go 与 textcalls_glm_test.go；
  * 对话太长（工单 15）照 overflow_cap_test.go（TestRelayInputCapGoesToTheNextMember）与 fallback.go 的 tooLongUnsaid。
+ * 按厂商的改写（工单 16）照 grok_integral_test.go 与 grok_schema_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -5741,4 +5742,162 @@ describe("a data file written badly is served from its last good copy (magpie la
       "takeover-claude.json.bak",
     ]);
   });
+});
+
+/*
+ * 按厂商的改写（工单 16，照 magpie grok_integral_test.go、grok_schema_test.go）：本机假上游的地址不是任何一家的官方地址，
+ * 所以这里只有按模型名认的 Grok 会改；Kimi、MiniMax、DeepSeek 认官方地址的改写在 passthrough.test.ts 与 vendor-rewrites.test.ts。
+ */
+
+const GROK_ARGS_PIECES = ['{"cmd":"sleep 2.0","yield_time_ms":2500.', "0}"];
+const GROK_WHOLE_ARGS = '{"cmd":"sleep 2.0","yield_time_ms":2500}';
+
+/** Anthropic 流：Grok 调用一次工具，参数切在 `2500.` 之后。 */
+function grokToolUseStream(pieces: string[]): string {
+  const delta = (piece: string) =>
+    `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":${JSON.stringify(piece)}}}\n\n`;
+  return (
+    'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"grok-4.6","content":[],"usage":{"input_tokens":10,"output_tokens":1}}}\n\n' +
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"Bash","input":{}}}\n\n' +
+    pieces.map(delta).join("") +
+    'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n' +
+    'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}\n\n' +
+    'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+  );
+}
+
+/** 整份 Responses 回复：Grok 调用一次工具。 */
+function grokResponsesWhole(args: string) {
+  return {
+    id: "resp_1",
+    object: "response",
+    status: "completed",
+    model: "grok-4.6",
+    output: [
+      {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "exec_command",
+        arguments: args,
+        status: "completed",
+      },
+    ],
+    usage: { input_tokens: 5, output_tokens: 3 },
+  };
+}
+
+/** Responses 流：Grok 调用一次工具，参数切在 `2500.` 之后。 */
+function grokResponsesStream(res: ServerResponse): void {
+  const args = GROK_ARGS_PIECES.join("");
+  const call = { type: "function_call", id: "fc_1", call_id: "call_1", name: "exec_command" };
+  const events = [
+    { type: "response.created", response: { id: "resp_1", status: "in_progress", output: [] } },
+    { type: "response.output_item.added", output_index: 0, item: { ...call, arguments: "" } },
+    ...GROK_ARGS_PIECES.map((delta) => ({
+      type: "response.function_call_arguments.delta",
+      item_id: "fc_1",
+      output_index: 0,
+      delta,
+    })),
+    {
+      type: "response.function_call_arguments.done",
+      item_id: "fc_1",
+      output_index: 0,
+      arguments: args,
+    },
+    { type: "response.output_item.done", output_index: 0, item: { ...call, arguments: args } },
+    { type: "response.completed", response: grokResponsesWhole(args) },
+  ];
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const event of events) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  res.end();
+}
+
+// Claude Code 的一轮：工具 schema 里有 Kimi、DeepSeek、Grok 各自要改的写法，消息里有延后加载工具块。
+const VENDOR_TURN = (model: string) =>
+  `{"model":"${model}","max_tokens":32000,"stream":true,"thinking":{"type":"enabled","budget_tokens":2048},` +
+  `"tools":[{"name":"Bash","input_schema":{"type":"object","properties":{"kind":{"enum":["text","icon"]},` +
+  `"content":{"type":"string","pattern":"^[^\\\\0]*$"},"selector":{"type":"string","pattern":"^[^\\\\s[\\\\]]+$"}}}}],` +
+  `"messages":[{"role":"user","content":"hi"},` +
+  `{"role":"user","content":[{"type":"tool_addition","tool":{"type":"tool_reference","name":"Read"}}]}]}`;
+
+describe("vendor rewrites, only for the four vendors", () => {
+  test("Grok through a relay: Claude Code's tool pattern goes in Grok's spelling, and the call's 2500.0 comes back as 2500", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(grokToolUseStream(GROK_ARGS_PIECES));
+    };
+    const { gateway } = await start({ upstreamA: upstream, modelsA: ["grok-4.6"] });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(VENDOR_TURN("relay-a/grok-4.6")),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(
+      grokToolUseStream(['{"cmd":"sleep 2.0","yield_time_ms":2500', "}"]),
+    );
+    expect(upstream.requests[0]!.body.toString()).toBe(
+      VENDOR_TURN("grok-4.6").replace(`"^[^\\\\s[\\\\]]+$"`, `"^[^\\\\s\\\\[\\\\]]+$"`),
+    );
+  });
+
+  test("Grok through a relay: Codex's whole reply passed through has its call's numbers whole", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      const body = JSON.stringify(grokResponsesWhole(GROK_ARGS_PIECES.join("")));
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(Buffer.byteLength(body)),
+      });
+      res.end(body);
+    };
+    const { gateway } = await start({ upstreamA: upstream, modelsA: ["grok-4.6"] });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ ...codexConversation("grok-4.6", false), stream: false }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(grokResponsesWhole(GROK_WHOLE_ARGS));
+  });
+
+  test("Grok translated: Claude Code gets a Responses-only endpoint's call with whole numbers", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => grokResponsesStream(res);
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
+    );
+    const events = sseData(await response.text()) as Record<string, unknown>[];
+
+    const args = events
+      .map((event) => (event.delta as Record<string, unknown> | undefined)?.partial_json)
+      .filter((piece): piece is string => typeof piece === "string")
+      .join("");
+    expect(args).toBe(GROK_WHOLE_ARGS);
+  });
+
+  test.each(["relay-a/kimi-k2", "relay-b/glm-4.6"])(
+    "%s through a relay gets the request as Claude Code sent it, apart from the model",
+    async (model) => {
+      const upstream = await startUpstream();
+      const { gateway } = await start({ upstreamA: upstream, upstreamB: upstream });
+
+      const response = await fetch(
+        `${gateway}/v1/messages?beta=true`,
+        claudeRequest(VENDOR_TURN(model)),
+      );
+
+      expect(response.status).toBe(200);
+      const sent = model.slice(model.indexOf("/") + 1);
+      expect(upstream.requests[0]!.body.toString()).toBe(VENDOR_TURN(sent));
+    },
+  );
 });
