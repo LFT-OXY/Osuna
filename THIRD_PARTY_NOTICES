@@ -98,6 +98,24 @@ tools_need_responses_test.go and internal/provider/authheader_test.go:
   packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+Two changes to what a model says, in a translated reply: a JSON answer a model
+wrapped in a code fence, for a client that asked for structured output, reaches
+it unfenced (unfence, unfencedResult and fenceEncoder in
+internal/gateway/format_fence.go, wantsJSON in format.go), and a tool call a
+model wrote into its text as Hermes' <tool_call>, DeepSeek's DSML or GLM's
+arg_key pairs becomes a real call (textCallAt, parseTextCalls, cutMark,
+hermesCall, paramCall, glmCall, dsmlCall, callArgs, escapeRawControls and
+textCallSee in internal/gateway/textcalls.go). Their tests reuse cases from
+format_fence_test.go, textcalls_test.go, textcalls_glm_test.go,
+textcalls_param_test.go and textcalls_tail_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/translation/fence.ts
+  packages/server/src/server/api-endpoints/gateway/translation/text-calls.ts
+  packages/server/src/server/api-endpoints/gateway/translation/fence.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/text-calls.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 A field an endpoint refuses, left out when the same endpoint is asked again:
 auto mode's safeguards and the thinking display (refuseShapes,
 withoutRefusedShapes and withDisplay in internal/gateway/anthropic_shapes.go),

@@ -23,7 +23,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
- * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning；翻译时去掉 prompt_cache_key 重问照 prompt_cache_test.go（TestPromptCacheKeyRefused）。
+ * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning；翻译时去掉 prompt_cache_key 重问照 prompt_cache_test.go（TestPromptCacheKeyRefused）；
+ * 改模型输出（工单 08）照 format_fence_test.go（TestStructuredOutputFencedAnswerUnfenced）、textcalls_test.go 与 textcalls_glm_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -4394,4 +4395,250 @@ timeout_ms = 5000
       }
     },
   );
+});
+
+/** 假 Chat 上游的流式回复：按给的片说一段文字，以 stop 结束。 */
+function chatSays(res: ServerResponse, pieces: string[]): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  for (const content of pieces) {
+    const chunk = { id: "c1", choices: [{ index: 0, delta: { content }, finish_reason: null }] };
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  }
+  const stop = { id: "c1", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] };
+  res.write(`data: ${JSON.stringify(stop)}\n\n`);
+  res.end("data: [DONE]\n\n");
+}
+
+/** Codex 读到的回答文字：流里的 output_text.delta，或整份回复 output 里的文字。 */
+function codexText(input: { body: string; stream: boolean }): string {
+  if (input.stream) {
+    const events = sseData(input.body) as Record<string, unknown>[];
+    return events
+      .filter((event) => event.type === "response.output_text.delta")
+      .map((event) => String(event.delta))
+      .join("");
+  }
+  const output = (JSON.parse(input.body) as { output: { content?: { text: string }[] }[] }).output;
+  return output.flatMap((item) => (item.content ?? []).map((part) => part.text)).join("");
+}
+
+const CALENDAR_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { title: "Name", type: "string" },
+    date: { title: "Date", type: "string" },
+    participants: { items: { type: "string" }, title: "Participants", type: "array" },
+  },
+  required: ["name", "date", "participants"],
+  title: "CalendarEvent",
+  additionalProperties: false,
+};
+const CALENDAR_ANSWER = '{"name":"Science Fair","date":"Friday","participants":["Alice","Bob"]}';
+const FENCED_CALENDAR = `\`\`\`json\n${CALENDAR_ANSWER}\n\`\`\``;
+
+/** magpie 的 fencedChat：代码块被切在几片之间。 */
+const FENCED_PIECES = [
+  FENCED_CALENDAR.slice(0, 2),
+  FENCED_CALENDAR.slice(2, 9),
+  FENCED_CALENDAR.slice(9, -2),
+  FENCED_CALENDAR.slice(-2),
+];
+
+describe("the model's output changed in two places, as magpie does", () => {
+  test.each([
+    {
+      name: "json_schema",
+      format: { type: "json_schema", strict: true, name: "CalendarEvent", schema: CALENDAR_SCHEMA },
+      want: CALENDAR_ANSWER,
+    },
+    { name: "json_object", format: { type: "json_object" }, want: CALENDAR_ANSWER },
+    // 要的是普通文字：模型怎么说就怎么给。
+    { name: "no format", format: null, want: FENCED_CALENDAR },
+  ])(
+    "Codex asking for $name gets a fenced answer as $want, streamed and whole",
+    async ({ format, want }) => {
+      const chat = await startUpstream();
+      chat.respond = (_request, res) => chatSays(res, FENCED_PIECES);
+      const { gateway } = await start({ chatUpstream: chat });
+      const ask = async (stream: boolean) => {
+        const body = {
+          model: "qwen3-coder",
+          input: "Alice and Bob are going to a science fair on Friday.",
+          stream,
+          ...(format ? { text: { format } } : {}),
+        };
+        const response = await fetch(`${gateway}/v1/responses`, codexRequest(body));
+        expect(response.status).toBe(200);
+        return codexText({ body: await response.text(), stream });
+      };
+
+      expect(await ask(true)).toBe(want);
+      expect(await ask(false)).toBe(want);
+    },
+  );
+
+  test("Claude Code gets a Hermes call a Chat model wrote into its text as a tool_use, streamed", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) =>
+      chatSays(res, [
+        "我先看看目录。\n\n<tool",
+        '_call>{"name":"Bash","arguments":{"command":"ls -la"}}',
+        "</tool_call>",
+      ]);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+
+    expect(response.status).toBe(200);
+    expect(sseData(await response.text()).slice(1)).toEqual([
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "我先看看目录。\n\n" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: expect.stringMatching(/^call_text_/),
+          name: "Bash",
+          input: {},
+        },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":"ls -la"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("Claude Code gets a DeepSeek DSML call as a tool_use in a whole reply", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) =>
+      chatSays(res, [
+        'Running it.\n\n<｜DSML｜function_calls>\n<｜DSML｜invoke name="Bash">\n<｜DSML｜parameter name="command" string="true">ls -la</｜DSML｜parameter>\n',
+        '<｜DSML｜parameter name="timeout" string="false">30</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
+      ]);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest(claudeConversation(false)),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: "msg_c1",
+      type: "message",
+      role: "assistant",
+      model: "deepseek-v3",
+      content: [
+        { type: "text", text: "Running it.\n\n" },
+        {
+          type: "tool_use",
+          id: expect.stringMatching(/^call_text_/),
+          name: "Bash",
+          input: { command: "ls -la", timeout: 30 },
+        },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("Codex gets GLM's arg_key call of its custom exec tool as a custom_tool_call, streamed", async () => {
+    const glmExec =
+      '<tool_call>exec\n<arg_key>input</arg_key>\n<arg_value>const r = await tools.shell({cmd: "ls"});\nconsole.log(r);</arg_value>\n</tool_call>';
+    const said = `Let me look.\n\n${glmExec}`;
+    const chat = await startUpstream();
+    chat.respond = (_request, res) =>
+      chatSays(res, [said.slice(0, 20), said.slice(20, 31), said.slice(31, 52), said.slice(52)]);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({
+        model: "qwen3-coder",
+        stream: true,
+        input: "list the files",
+        tools: [
+          {
+            type: "custom",
+            name: "exec",
+            description: "Run JavaScript.",
+            format: { type: "grammar", syntax: "lark", definition: "start: /[\\s\\S]+/" },
+          },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(completedResponse(await response.text()).output).toEqual([
+      {
+        id: expect.stringMatching(/^msg_/),
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "Let me look.\n\n", annotations: [], logprobs: [] }],
+        phase: "commentary",
+      },
+      {
+        id: expect.stringMatching(/^ctc_/),
+        type: "custom_tool_call",
+        status: "completed",
+        call_id: expect.stringMatching(/^call_text_/),
+        name: "exec",
+        input: 'const r = await tools.shell({cmd: "ls"});\nconsole.log(r);',
+      },
+    ]);
+  });
+
+  test("with no tools in the request, the same text reaches Claude Code as it was written", async () => {
+    const block = '<tool_call>{"name":"Bash","arguments":{"command":"ls"}}</tool_call>';
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatSays(res, [block]);
+    const { gateway } = await start({ chatUpstream: chat });
+    const { tools: _tools, tool_choice: _choice, ...toolless } = claudeConversation(false);
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(toolless));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: "msg_c1",
+      type: "message",
+      role: "assistant",
+      model: "deepseek-v3",
+      content: [{ type: "text", text: block }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
 });

@@ -757,7 +757,7 @@ export class ChatDecoder {
 }
 
 /** text 结尾有几个字符是 tag 的开头。 */
-function partialTagAtEnd(input: { text: string; tag: string }): number {
+export function partialTagAtEnd(input: { text: string; tag: string }): number {
   const { text, tag } = input;
   for (let length = Math.min(tag.length - 1, text.length); length > 0; length--) {
     if (text.endsWith(tag.slice(0, length))) return length;

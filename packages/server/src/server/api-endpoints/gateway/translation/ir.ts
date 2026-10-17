@@ -173,6 +173,17 @@ export type StreamEvent =
 
 export type EmitEvent = (event: StreamEvent) => void;
 
+/** 解码出的事件流上的一道修补：按需扣着、改了再交给下一道；流结束时交出还扣着的。 */
+export interface ReplyFilter {
+  event(event: StreamEvent): void;
+  end(): void;
+}
+
+/** 什么都不改的一道：直接交给下一道。 */
+export function passingFilter(emit: EmitEvent): ReplyFilter {
+  return { event: emit, end: () => {} };
+}
+
 /** 非流式客户端拿到的整份回复。 */
 export interface Reply {
   id: string;

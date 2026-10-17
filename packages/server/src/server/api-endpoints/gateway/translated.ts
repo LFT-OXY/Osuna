@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用与 JSON 外的代码块接在 forwardTranslated 的 written、encoder 与 render 处）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -35,8 +35,10 @@ import {
   type GatewayRequest,
   type StreamEvent,
 } from "./translation/ir.js";
+import { fenceFilter, unfencedReply } from "./translation/fence.js";
 import { protocolOf } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
+import { textCallFilter } from "./translation/text-calls.js";
 import {
   ANSWERED_BY_HEADER,
   failedBySelf,
@@ -55,6 +57,8 @@ import {
  * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住；
  * 两个认证头不能同时带时只带一个重问，也记住；不收请求里的某个字段时去掉它重问，也记住；
  * 不收结构化输出或预填时降级重问，也记住。推理档位、回复上限与采样参数按这家这个模型的资料填（requestForModel）。
+ * 回复只改两处（照 magpie）：请求给了工具时，写在文字里的工具调用转成真调用（textCallFilter）；
+ * Agent 要 JSON 时，剥掉模型包在外面的代码块（fenceFilter、unfencedReply）。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -259,7 +263,9 @@ async function streamReply(input: {
     request: input.request,
   });
   const decoder = protocolOf(input.to).decoder();
-  const emit = (event: StreamEvent) => encoder.event(event);
+  const fence = fenceFilter({ request: input.request, emit: (event) => encoder.event(event) });
+  const calls = textCallFilter({ tools: input.request.tools, emit: (event) => fence.event(event) });
+  const emit = (event: StreamEvent) => calls.event(event);
   const reader = new SseReader((data) => decoder.decode(data, emit));
   const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
   if (end.kind === "gone") return end;
@@ -269,6 +275,8 @@ async function streamReply(input: {
   }
   reader.end();
   decoder.end?.(emit);
+  calls.end();
+  fence.end();
   encoder.finish();
   res.end();
   return { kind: "complete", cacheRead: encoder.usage().cacheRead };
@@ -290,12 +298,17 @@ async function wholeReply(input: {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
   const decoder = protocolOf(input.to).decoder();
-  const emit = (event: StreamEvent) => collector.add(event);
+  const calls = textCallFilter({
+    tools: input.request.tools,
+    emit: (event) => collector.add(event),
+  });
+  const emit = (event: StreamEvent) => calls.event(event);
   const reader = new SseReader((data) => decoder.decode(data, emit));
   const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
   if (end.kind === "gone") return end;
   reader.end();
   decoder.end?.(emit);
+  calls.end();
   let failure: string | null = null;
   if (end.kind === "broken") failure = end.message;
   else if (collector.error && !collector.saidAnything()) failure = collector.error.message;
@@ -309,7 +322,7 @@ async function wholeReply(input: {
     });
     return { kind: "broken", message: failure };
   }
-  const reply = collector.finish();
+  const reply = unfencedReply({ reply: collector.finish(), request: input.request });
   res
     .status(200)
     .set(headers)
