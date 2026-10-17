@@ -12,7 +12,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假 ChatGPT 后端收到的对话请求，路径、查询串、请求头（除逐跳头、`Host`）与请求体都与「Codex」发出的一致；回复（含流式）原样回到「Codex」。
 - [ ] 模型清单、`/responses/compact`、`/alpha/search` 与一条其他路径同样原样转。
