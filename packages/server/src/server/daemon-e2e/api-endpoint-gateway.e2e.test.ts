@@ -14,6 +14,7 @@ import * as zlib from "node:zlib";
 import pino from "pino";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
+import { HIGH_RISK_REFUSAL as HIGH_RISK } from "../api-endpoints/gateway/safety-filter.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -6655,12 +6656,57 @@ describe("a refusal goes to the next endpoint, as magpie does (ticket 19)", () =
       }),
     );
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-c");
     expect(await response.json()).toEqual({
       type: "error",
-      error: { type: "api_error", message: `Relay C: ${HIGH_RISK}` },
+      error: { type: "invalid_request_error", message: `Relay C: ${HIGH_RISK}` },
     });
     expect(await cooldownOf(await connectTo(daemon), "ep_c")).toBeNull();
+  });
+
+  test("a refusal after the reply opened is not an answer: the conversation does not stay with that endpoint", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    let askedA = 0;
+    upstreamA.respond = (_request, res) => {
+      askedA++;
+      if (askedA === 1) failWith(res, { status: 400, message: "Extra inputs are not permitted" });
+      else streamReply(res, { text: "from A" });
+    };
+    upstreamB.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const usage = { input_tokens: 10, cache_read_input_tokens: 4000 };
+      res.write(sseFrame({ type: "message_start", message: { id: "msg_b", usage } }));
+      res.write(
+        sseFrame({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "I started" },
+        }),
+      );
+      res.write(
+        sseFrame({
+          type: "message_delta",
+          delta: { stop_reason: "refusal" },
+          usage: { output_tokens: 2 },
+        }),
+      );
+      res.end(sseFrame({ type: "message_stop" }));
+    };
+
+    const first = await ask();
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(sseData(await first.text()).at(-2)).toEqual({
+      type: "message_delta",
+      delta: { stop_reason: "refusal" },
+      usage: { output_tokens: 2 },
+    });
+    const second = await ask();
+
+    expect(second.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await second.text()).toContain("from A");
+    expect(upstreamA.requests).toHaveLength(2);
+    expect(upstreamB.requests).toHaveLength(1);
   });
 
   test("every endpoint refusing after the keepalive began: Claude Code's stream ends in the refusal, Codex's in response.failed it does not retry", async () => {
@@ -6712,8 +6758,6 @@ describe("a refusal goes to the next endpoint, as magpie does (ticket 19)", () =
     });
   });
 });
-
-const HIGH_RISK = "The request was rejected because it was considered high risk";
 
 function isPing(event: unknown): boolean {
   return isRecordLike(event) && event.type === "ping";

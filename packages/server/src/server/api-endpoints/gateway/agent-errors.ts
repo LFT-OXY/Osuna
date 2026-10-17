@@ -4,6 +4,7 @@
 
 import type { Response } from "express";
 import { readsTooLong } from "./failure.js";
+import { REFUSED_STATUS } from "./safety-filter.js";
 import { sseEvent } from "./translation/sse.js";
 
 /*
@@ -117,7 +118,8 @@ export function sendRefusal(input: {
     return;
   }
   const code = wire === "openai" ? REFUSED_CODE : null;
-  sendAgentError({ res, wire, error: { status: 400, message, code }, headers: input.headers });
+  const error = { status: REFUSED_STATUS, message, code };
+  sendAgentError({ res, wire, error, headers: input.headers });
 }
 
 function sendStreamError(input: {

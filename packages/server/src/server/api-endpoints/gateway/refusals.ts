@@ -119,7 +119,8 @@ export async function askRefitted(input: {
   ask: (body: string) => Promise<UpstreamOpening>;
 }): Promise<RefittedAsk> {
   let { outcome, sent } = input;
-  while (outcome.kind === "failed") {
+  // 拒答不是写法的问题：用 403 说的也记成了 400，不能当作拒收去改写重问。
+  while (outcome.kind === "failed" && outcome.cause !== "refused") {
     const noted = noteRefusal({
       refusals: input.refusals,
       format: input.format,

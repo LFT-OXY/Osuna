@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   RefusedShapes,
+  askRefitted,
   askWithOneKeyHeader,
   keyHeadersFor,
   noteRefusal,
@@ -286,5 +287,57 @@ describe("asking again with the key in one header", () => {
     expect(keyHeadersFor({ format: "anthropic_messages", refusals: memory() })).toBe("both");
     expect(keyHeadersFor({ format: "openai_chat", refusals: memory() })).toBe("bearer");
     expect(keyHeadersFor({ format: "openai_responses", refusals: undefined })).toBe("bearer");
+  });
+});
+
+describe("a refusal is not a rejected shape", () => {
+  const sent = JSON.stringify({ reasoning: { effort: "none" } });
+  const asking = () => {
+    const bodies: string[] = [];
+    const ask = (body: string) => {
+      bodies.push(body);
+      return Promise.resolve(failed(500, "upstream busy"));
+    };
+    return { bodies, ask };
+  };
+
+  test("a refusal whose words also name a rejected shape is handed back as it came, nothing asked again or recorded", async () => {
+    const refusals = memory();
+    const upstream = asking();
+    const refused: FailedAttempt = {
+      ...failed(400, NONE_REFUSED),
+      cause: "refused",
+      handBack: null,
+    };
+
+    const asked = await askRefitted({
+      refusals,
+      format: "openai_responses",
+      sent,
+      outcome: refused,
+      refit: () => JSON.stringify({ reasoning: { effort: "low" } }),
+      ask: upstream.ask,
+    });
+
+    expect(asked).toEqual({ outcome: refused, sent });
+    expect(upstream.bodies).toEqual([]);
+    expect(refusals.added).toEqual([]);
+  });
+
+  test("the same words as an error are a rejected shape: recorded and asked again", async () => {
+    const refusals = memory();
+    const upstream = asking();
+
+    await askRefitted({
+      refusals,
+      format: "openai_responses",
+      sent,
+      outcome: failed(400, NONE_REFUSED),
+      refit: () => JSON.stringify({ reasoning: { effort: "low" } }),
+      ask: upstream.ask,
+    });
+
+    expect(upstream.bodies).toEqual(['{"reasoning":{"effort":"low"}}']);
+    expect(refusals.added).toEqual(["none"]);
   });
 });

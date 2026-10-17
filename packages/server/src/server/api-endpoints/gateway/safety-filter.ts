@@ -5,7 +5,7 @@
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
 import type { TappedReply } from "./reply-tap.js";
-import { stringOf } from "./translation/ir.js";
+import { stringOf, type StopReason } from "./translation/ir.js";
 
 /*
  * 拒答：厂商的安全过滤不肯回答。照 magpie 只认错误本身，不认回答文字里引用的句子：
@@ -33,6 +33,10 @@ const POLICY_CODE = /^[a-z]+_policy$/;
 const FLAGGED_WORDS = /flagged|usage polic/i;
 // 没有错误码、整句就是拒答的错误（magpie #2400）。只认错误自己的整句 message：回答里引用它的仍是回答。
 export const HIGH_RISK_REFUSAL = "The request was rejected because it was considered high risk";
+
+// 拒答记成、全都拒答时交给 Agent 的状态码（magpie 的 refusedStatus）：告诉 Agent 这个请求原样再发也一样，
+// 不是一份它会再三重问的空回答。
+export const REFUSED_STATUS = 400;
 
 const MAX_NOTE_MESSAGE = 300;
 const MAX_EXPLANATION = 200;
@@ -79,8 +83,26 @@ function refusalReason(code: string, message: string): string | null {
   return null;
 }
 
-/** 解码出的一个错误（错误码与话）是不是拒答：开口之后才拒答的，照常交给 Agent、不怪这家（magpie 的 refusedAfter）。 */
-export function saysRefusal(error: { code: string | null; message: string }): boolean {
+/**
+ * 开口之后读完的回复以拒答结束（结束原因是拒答，或最后报的错是拒答）：照常交给了 Agent，不算这家答成功，
+ * 也不怪它（magpie 的 refusedAfter）。
+ */
+export function refusedAfterOpening(reply: {
+  stop: StopReason | null;
+  error: DecodedError | null;
+}): boolean {
+  if (reply.stop === "filter") return true;
+  return reply.error !== null && saysRefusal(reply.error);
+}
+
+/** 解码出的一个错误（错误码与话）。 */
+interface DecodedError {
+  code: string | null;
+  message: string;
+}
+
+/** 解码出的一个错误是不是拒答：按错误码或整句话认。 */
+export function saysRefusal(error: DecodedError): boolean {
   return refusalReason(error.code ?? "", error.message.trim()) !== null;
 }
 

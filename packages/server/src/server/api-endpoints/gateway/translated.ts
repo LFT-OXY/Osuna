@@ -8,7 +8,7 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import type { ModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, describeNetworkError, parseJson } from "../upstream-http.js";
-import { sendAgentError, type AgentError, type AgentWire } from "./agent-errors.js";
+import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -44,7 +44,7 @@ import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
-import { saysRefusal } from "./safety-filter.js";
+import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
 import {
   ANSWERED_BY_HEADER,
@@ -52,7 +52,7 @@ import {
   notAStream,
   openUpstream,
   readLimited,
-  refusedAnswer,
+  answerUnlessRefused,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -154,9 +154,11 @@ export async function attemptTranslated(input: {
     ask: (without) => open(build(without)),
   });
   if (opened.kind !== "opened") return opened;
-  const answered = opened;
-  const handBack = () => answerOpened({ ...input, url, opened: answered });
-  return refusedAnswer({ opened, format: to, handBack }) ?? handBack();
+  return answerUnlessRefused({
+    opened,
+    format: to,
+    answer: (ready) => answerOpened({ ...input, url, opened: ready }),
+  });
 }
 
 /** 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就渲染成整份回复。 */
@@ -313,7 +315,12 @@ async function streamReply(input: {
     tools: input.request.tools,
     emit: (event) => numbers.event(event),
   });
-  const emit = (event: StreamEvent) => calls.event(event);
+  // 只为认出开口后的拒答：解码出的事件另攒一份。
+  const read = new ReplyCollector();
+  const emit = (event: StreamEvent) => {
+    read.add(event);
+    calls.event(event);
+  };
   const end = await decodeReply({ res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
   if (end.kind === "broken") {
@@ -325,6 +332,8 @@ async function streamReply(input: {
   fence.end();
   encoder.finish();
   res.end();
+  const refused = refusedAfterOpening({ stop: read.finish().stop, error: read.error });
+  if (refused) return { kind: "refused" };
   return { kind: "complete", usage: encoder.usage() };
 }
 
@@ -362,16 +371,20 @@ async function wholeReply(input: {
   else if (collector.error && !collector.saidAnything()) failure = collector.error;
   const headers = { [ANSWERED_BY_HEADER]: endpoint.slug };
   if (failure !== null) {
+    // 只想了一下就以报错形式拒答：照拒答交给 Agent（400，不是它会重问的 5xx），不怪这家（magpie 的 refusedAfter）。
+    const refusedAfterThinking =
+      end.kind === "ended" && refusedAfterOpening({ stop: null, error: collector.error });
+    if (refusedAfterThinking) {
+      const message = `${endpoint.name}: ${failure.message}`;
+      sendRefusal({ res, wire: input.wire, message, headers });
+      return { kind: "refused" };
+    }
     sendAgentError({
       res,
       wire: input.wire,
       error: wholeFailureError({ failure, endpointName: endpoint.name }),
       headers,
     });
-    // 开口之后的拒答照常交给 Agent，不怪这家，不冷却（magpie 的 refusedAfter）。
-    const refusedAfter =
-      end.kind === "ended" && collector.error !== null && saysRefusal(collector.error);
-    if (refusedAfter) return { kind: "complete", usage: collector.usage() };
     return { kind: "broken", message: failure.message };
   }
   const reply = unfencedReply({ reply: collector.finish(), request: input.request });
@@ -381,6 +394,8 @@ async function wholeReply(input: {
     .json(
       protocolOf(input.from).render(reply, { model: input.requestedModel, request: input.request }),
     );
+  const refused = refusedAfterOpening({ stop: reply.stop, error: collector.error });
+  if (refused) return { kind: "refused" };
   return { kind: "complete", usage: reply.usage };
 }
 

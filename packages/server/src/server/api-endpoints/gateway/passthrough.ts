@@ -49,7 +49,8 @@ import {
   withoutSampling,
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
-import { ReplyTap } from "./reply-tap.js";
+import type { ReplyTap } from "./reply-tap.js";
+import { refusedAfterOpening } from "./safety-filter.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import { wholeEvents } from "./whole-stream.js";
@@ -59,7 +60,7 @@ import {
   notAStream,
   openUpstream,
   readLimited,
-  refusedAnswer,
+  answerUnlessRefused,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -187,9 +188,11 @@ export async function attemptEndpoint(input: {
     });
   }
   if (opened.kind !== "opened") return opened;
-  const answered = opened;
-  const handBack = () => answerOpened({ ...input, url, opened: answered });
-  return refusedAnswer({ opened, format: input.format, handBack }) ?? handBack();
+  return answerUnlessRefused({
+    opened,
+    format: input.format,
+    answer: (ready) => answerOpened({ ...input, url, opened: ready }),
+  });
 }
 
 /** 开了口的回复交给 Agent：先交出扣下的帧，之后边收边发；保活之后收到的整份回复照流写出。 */
@@ -276,8 +279,7 @@ async function wholeAsStream(input: {
   input.keepAlive?.stop();
   for (const event of events) res.write(sseEvent(event.name, event.data));
   res.end();
-  const usage = input.opened.tap?.end().usage ?? emptyUsage();
-  return { kind: "answered", finished: Promise.resolve({ kind: "complete", usage }) };
+  return { kind: "answered", finished: Promise.resolve(endOf(input.opened.tap)) };
 }
 
 /** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存读写 token 数）。 */
@@ -288,11 +290,10 @@ function relay(input: {
 }): Promise<AnswerEnd> {
   const { res } = input;
   const { response, held, tap } = input.opened;
-  const usage = (reading: ReplyTap | null) => reading?.end().usage ?? emptyUsage();
   const sink = agentSink(input);
   if (response.readableEnded) {
     sink.end(held);
-    return Promise.resolve({ kind: "complete", usage: usage(tap) });
+    return Promise.resolve(endOf(tap));
   }
   sink.write(held);
   // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；照断流处理。
@@ -305,7 +306,7 @@ function relay(input: {
     if (!res.writableFinished) agentGone = true;
   });
   return new Promise((resolve) => {
-    const complete = () => resolve({ kind: "complete", usage: usage(tap) });
+    const complete = () => resolve(endOf(tap));
     response.on("data", (chunk: Buffer) => tap?.feed(chunk));
     response.once("end", complete);
     const broke = (error?: Error) => {
@@ -326,6 +327,13 @@ function relay(input: {
     response.once("close", () => broke());
     response.pipe(sink);
   });
+}
+
+/** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */
+function endOf(tap: ReplyTap | null): AnswerEnd {
+  const reply = tap?.end();
+  if (reply && refusedAfterOpening(reply)) return { kind: "refused" };
+  return { kind: "complete", usage: reply?.usage ?? emptyUsage() };
 }
 
 /** 直通请求体要的：格式、路径后缀（count_tokens）、这家的地址、原请求体、两个模型名、这家接口与它不收的写法。 */

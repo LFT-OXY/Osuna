@@ -691,7 +691,7 @@ async function askInTurn(input: {
     // 拒答不怪这家：不冷却、不标「需要检查」，问遍剩下的；都拒答时交出排第一那家的（magpie #248）。
     if (failed.cause === "refused") {
       refused ??= { candidate, failed };
-      handBack ??= failed.handBack ?? null;
+      handBack ??= failed.handBack;
       if (next) {
         logSwitch({ logger, from: candidate, to: next, failure: "refused", failed, rest: null });
         continue;
@@ -812,7 +812,8 @@ async function sendAllRefused(input: {
   handBack: HandBack | null;
 }): Promise<void> {
   const { res, wire, handBack } = input;
-  if (wire === "anthropic" && handBack) {
+  const handsBackToClaude = wire === "anthropic" && handBack !== null;
+  if (handsBackToClaude) {
     const outcome = await handBack();
     if (outcome.kind === "gone") return;
     if (outcome.kind === "answered") {

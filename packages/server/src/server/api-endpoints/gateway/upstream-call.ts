@@ -22,7 +22,7 @@ import { streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
 import { zhipuRefusal } from "./zhipu-envelope.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
-import { errorRefusal, replyRefusal } from "./safety-filter.js";
+import { REFUSED_STATUS, errorRefusal, replyRefusal } from "./safety-filter.js";
 import type { Usage } from "./translation/ir.js";
 
 /*
@@ -45,9 +45,6 @@ const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "EPIPE"]);
 // 一次最多这么多回重发：连接池里每台主机最多留这么多条空闲连接（magpie 的 MaxIdleConnsPerHost）。
 const MAX_REPLAYS = 8;
 
-// 拒答记成的状态码（magpie 的 refusedStatus）：告诉 Agent 这个请求原样再发也一样，不是一份空回答。
-const REFUSED_STATUS = 400;
-
 // 空回复交给 Agent 的说法（magpie 的 emptyReply）。
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
 
@@ -69,8 +66,16 @@ export function upstreamUrl(input: {
   return new URL(`${base}${UPSTREAM_PATHS[input.format]}${input.suffix ?? ""}${input.query ?? ""}`);
 }
 
-/** 开口之前的失败：上游的状态码与错误体，或中转站自己判的超时（504）与连不上（502）。 */
-export interface FailedAttempt {
+/**
+ * 开口之前的失败：上游的状态码与错误体，或中转站自己判的超时（504）与连不上（502）。
+ * 只有拒答带 handBack：以结束形式拒答时把扣下的那份回复照常交给 Agent（全都拒答时交还给 Claude Code，
+ * magpie 的 handBack）；以报错形式拒答的没有回复可交，为 null。
+ */
+export type FailedAttempt =
+  | (FailedBase & { cause: Exclude<FailureCause, "refused"> })
+  | (FailedBase & { cause: "refused"; handBack: HandBack | null });
+
+interface FailedBase {
   kind: "failed";
   status: number;
   headers: IncomingHttpHeaders;
@@ -79,9 +84,6 @@ export interface FailedAttempt {
   // 给 Agent 看的上游原文，key 已打码。
   detail: string;
   upstreamError: UpstreamError;
-  cause: FailureCause;
-  // 以结束形式拒答时，把扣下的那份回复照常交给 Agent（全都拒答时交还给 Claude Code，magpie 的 handBack）。
-  handBack?: HandBack;
 }
 
 /**
@@ -94,9 +96,13 @@ export type FailureCause = "error" | "timeout" | "empty" | "refused";
 /** 把一份开了口的回复照常交给 Agent：直通原样转、翻译后编码，与没被当作失败时一样。 */
 export type HandBack = () => Promise<AttemptOutcome>;
 
-/** 开口之后回复怎么结束的：完整（带这次的用量，粘性按它判断缓存）、上游断流、Agent 先走了。 */
+/**
+ * 开口之后回复怎么结束的：完整（带这次的用量，粘性按它判断缓存）、开口后才拒答（照常交给了 Agent，
+ * 不算这家答成功，也不怪它）、上游断流、Agent 先走了。
+ */
 export type AnswerEnd =
   | { kind: "complete"; usage: Usage }
+  | { kind: "refused" }
   | { kind: "broken"; message: string }
   | { kind: "gone" };
 
@@ -252,32 +258,39 @@ function failedByUpstream(input: {
 function refusedOr(failed: FailedAttempt): FailedAttempt {
   const note = errorRefusal(failed.text);
   if (note === null) return failed;
-  return { ...failed, status: REFUSED_STATUS, detail: note, cause: "refused" };
+  return { ...failed, status: REFUSED_STATUS, detail: note, cause: "refused", handBack: null };
 }
 
 /**
- * 开了口的回复其实是没说一个字就以拒答结束的（结束形式）：当作拒答失败交回中转站换家，回复扣着，
- * `handBack` 照常交给 Agent。只看已经收完的回复：没收完就开口的，是说了内容或扣得太多。不是拒答为 null。
+ * 开了口的回复交给 Agent（`answer`）；它其实是没说一个字就以拒答结束的（结束形式）时不交，当作拒答失败
+ * 交回中转站换家，回复扣着，`handBack` 到时照常交给 Agent。只看已经收完的回复：没收完就开口的，
+ * 是说了内容或扣得太多。
  */
-export function refusedAnswer(input: {
+export function answerUnlessRefused(input: {
   opened: OpenedUpstream;
   format: ApiEndpointRequestFormat;
-  handBack: HandBack;
-}): FailedAttempt | null {
+  answer: (opened: OpenedUpstream) => Promise<AttemptOutcome>;
+}): Promise<AttemptOutcome> {
   const { opened } = input;
+  const handBack = () => input.answer(opened);
   const reply = opened.tap?.soFar();
-  if (!reply || !opened.response.readableEnded) return null;
-  const note = replyRefusal(reply, input.format);
-  if (note === null) return null;
-  const refused = failedBySelf({ status: REFUSED_STATUS, detail: note, cause: "refused" });
-  return { ...refused, headers: opened.response.headers, handBack: input.handBack };
+  const endedReply = reply !== undefined && opened.response.readableEnded;
+  const note = endedReply ? replyRefusal(reply, input.format) : null;
+  if (note === null) return handBack();
+  const refused: FailedAttempt = {
+    ...failedBySelf({ status: REFUSED_STATUS, detail: note }),
+    headers: opened.response.headers,
+    cause: "refused",
+    handBack,
+  };
+  return Promise.resolve(refused);
 }
 
 /** 中转站自己判的失败（超时、连不上、开口前断开、空回复）：没有上游错误体，判错就读这段描述。 */
 export function failedBySelf(input: {
   status: number;
   detail: string;
-  cause?: Exclude<FailureCause, "error">;
+  cause?: Exclude<FailureCause, "error" | "refused">;
 }): FailedAttempt {
   return {
     kind: "failed",
