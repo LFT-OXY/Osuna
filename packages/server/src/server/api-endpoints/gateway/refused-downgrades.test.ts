@@ -1,3 +1,6 @@
+// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
 import {
   downgradedRequest,
