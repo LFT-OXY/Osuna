@@ -10,7 +10,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 五种写法各有用例：被拒后，同一家收到去掉该字段的请求；同一家同一模型的下一次请求直接不带它；别的家、别的模型不受影响。
 - [ ] 只剩 `tool_reference` 的工具结果去掉后补一句文字，对话结构仍然合法。
