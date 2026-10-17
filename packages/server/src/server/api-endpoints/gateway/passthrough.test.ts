@@ -1,3 +1,7 @@
+// 用例照 magpie（MIT，THIRD_PARTY_NOTICES）的 deepseek_anthropic_thinking_test.go、billing_line_test.go、advisor_test.go、adaptive_wire_test.go、
+// reasoning_passthrough_test.go、kimi_schema_test.go、deepseek_schema_test.go、grok_schema_test.go 等（各 describe 标了出处）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {

@@ -154,7 +154,8 @@ export class WholeArgsTidy {
   end(): string {
     const rest = this.held;
     this.held = "";
-    return this.reply.stream ? this.lines(rest) : this.event(rest);
+    if (this.reply.stream) return this.lines(rest);
+    return this.event(rest);
   }
 
   /** 这段文字可能带着调用参数。 */
@@ -190,7 +191,7 @@ export class WholeArgsTidy {
     return this.anthropicArgs(event);
   }
 
-  private stream(key: string): WholeNumbers {
+  private numbersFor(key: string): WholeNumbers {
     let numbers = this.calls.get(key);
     if (numbers === undefined) {
       numbers = new WholeNumbers();
@@ -204,7 +205,7 @@ export class WholeArgsTidy {
     if (isFunctionCall(event.item)) places.push({ path: ["item", "arguments"], fix: wholeArgs });
     const key = callKey(event);
     if (event.type === "response.function_call_arguments.delta") {
-      const numbers = this.stream(key);
+      const numbers = this.numbersFor(key);
       places.push({ path: ["delta"], fix: (text) => numbers.feed(text) });
     }
     if (event.type === "response.function_call_arguments.done") {
@@ -229,7 +230,7 @@ export class WholeArgsTidy {
     const delta = isRecord(event.delta) ? event.delta : null;
     const argsDelta = event.type === "content_block_delta" && delta?.type === "input_json_delta";
     if (argsDelta) {
-      const numbers = this.stream(String(event.index));
+      const numbers = this.numbersFor(String(event.index));
       places.push({ path: ["delta", "partial_json"], fix: (text) => numbers.feed(text) });
     }
     return places;
@@ -246,7 +247,8 @@ function isToolUse(block: unknown): boolean {
 
 /** Responses 参数事件的调用按什么认：项 id，没有就按它在输出里的位置。 */
 function callKey(event: Record<string, unknown>): string {
-  if (typeof event.item_id === "string" && event.item_id !== "") return event.item_id;
+  const itemId = typeof event.item_id === "string" ? event.item_id : "";
+  if (itemId !== "") return itemId;
   return `#${String(event.output_index)}`;
 }
 
@@ -265,7 +267,8 @@ function outputArgs(response: Record<string, unknown>, at: JSONPath): ArgsAt[] {
 function withArgsFixed(input: { text: string; place: ArgsAt }): string {
   const { text, place } = input;
   const root = parseTree(text);
-  const node = root ? findNodeAtLocation(root, place.path) : undefined;
+  if (root === undefined) return text;
+  const node = findNodeAtLocation(root, place.path);
   if (node === undefined) return text;
   if (node.type === "string") {
     const value = String(node.value);

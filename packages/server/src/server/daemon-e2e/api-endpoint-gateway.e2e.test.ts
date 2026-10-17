@@ -5875,13 +5875,47 @@ describe("vendor rewrites, only for the four vendors", () => {
       `${gateway}/v1/messages?beta=true`,
       claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
     );
-    const events = sseData(await response.text()) as Record<string, unknown>[];
+    const text = await response.text();
 
-    const args = events
-      .map((event) => (event.delta as Record<string, unknown> | undefined)?.partial_json)
-      .filter((piece): piece is string => typeof piece === "string")
-      .join("");
-    expect(args).toBe(GROK_WHOLE_ARGS);
+    const usage = (input: number, output: number) => ({
+      input_tokens: input,
+      output_tokens: output,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
+    expect(response.status).toBe(200);
+    expect(sseData(text)).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_resp_1",
+          type: "message",
+          role: "assistant",
+          model: "grok-4",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: usage(0, 0),
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "call_1", name: "exec_command", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: GROK_WHOLE_ARGS },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: usage(5, 3),
+      },
+      { type: "message_stop" },
+    ]);
   });
 
   test.each(["relay-a/kimi-k2", "relay-b/glm-4.6"])(

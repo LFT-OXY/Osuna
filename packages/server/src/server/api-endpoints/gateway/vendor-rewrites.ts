@@ -104,7 +104,8 @@ export function withVendorRewrites(input: VendorRewriteInput): Body {
   if (vendor === "deepseek") body = withToolSchemasFixed(body, withNullEscaped);
   // Kimi 的 Anthropic 地址见到延后加载工具块就整个 400、原话里不点名（magpie #2042）；DeepSeek 照工单一并不发。
   const dropsDeferred = vendor === "kimi" || vendor === "deepseek";
-  if (dropsDeferred && format === "anthropic_messages") {
+  const dropsAnthropicDeferred = dropsDeferred && format === "anthropic_messages";
+  if (dropsAnthropicDeferred) {
     body = withoutRefusedFields({ format, body, refused: (field) => field === "deferredTools" });
   }
   if (grok) body = withToolSchemasFixed(body, withRustClasses);
@@ -121,9 +122,9 @@ export function withThinkingInline(input: {
 }): GatewayRequest {
   const { request } = input;
   if (addressVendor(input.baseUrl) !== "minimax") return request;
-  const messages = request.messages.map(messageWithThinkingInline);
-  const changed = messages.some((message, index) => message !== request.messages[index]);
-  return changed ? { ...request, messages } : request;
+  const messages = listFixed(request.messages, messageWithThinkingInline);
+  if (messages === request.messages) return request;
+  return { ...request, messages };
 }
 
 function messageWithThinkingInline(message: Message): Message {
@@ -142,13 +143,14 @@ function messageWithThinkingInline(message: Message): Message {
 function withReasoningDetailsAsContent(body: Body): Body {
   const given = body.messages;
   if (!Array.isArray(given)) return body;
-  const messages = given.map(messageWithReasoningContent);
-  const changed = messages.some((message, index) => message !== given[index]);
-  return changed ? { ...body, messages } : body;
+  const messages = listFixed(given, messageWithReasoningContent);
+  if (messages === given) return body;
+  return { ...body, messages };
 }
 
 function messageWithReasoningContent(message: unknown): unknown {
-  if (!isRecord(message) || !("reasoning_details" in message)) return message;
+  const carriesDetails = isRecord(message) && "reasoning_details" in message;
+  if (!carriesDetails) return message;
   const { reasoning_details: _details, ...rest } = message;
   const own = typeof message.reasoning_content === "string" && message.reasoning_content !== "";
   const think = reasoningText(message);
@@ -160,9 +162,9 @@ function messageWithReasoningContent(message: unknown): unknown {
 function withToolSchemasFixed(body: Body, fix: SchemaFix): Body {
   const given = body.tools;
   if (!Array.isArray(given)) return body;
-  const tools = given.map((tool) => toolFixed(tool, fix));
-  const changed = tools.some((tool, index) => tool !== given[index]);
-  return changed ? { ...body, tools } : body;
+  const tools = listFixed(given, (tool) => toolFixed(tool, fix));
+  if (tools === given) return body;
+  return { ...body, tools };
 }
 
 /** 工具里 parameters、input_schema 是 schema；Chat 的 function 里再找一层。 */
@@ -177,11 +179,7 @@ function toolFixed(tool: unknown, fix: SchemaFix): unknown {
 
 /** 一个 schema（或一列 schema）连同它下面的子 schema 都改；schema 里的数据（default、const 的值）不碰。 */
 function schemaFixed(node: unknown, fix: SchemaFix): unknown {
-  if (Array.isArray(node)) {
-    const items = node.map((item) => schemaFixed(item, fix));
-    const changed = items.some((item, index) => item !== node[index]);
-    return changed ? items : node;
-  }
+  if (Array.isArray(node)) return listFixed(node, (item) => schemaFixed(item, fix));
   if (!isRecord(node)) return node;
   return valuesFixed(fix(node), (key, value) => {
     if (SCHEMA_MAPS.has(key)) return schemaMapFixed(value, fix);
@@ -193,6 +191,14 @@ function schemaFixed(node: unknown, fix: SchemaFix): unknown {
 function schemaMapFixed(node: unknown, fix: SchemaFix): unknown {
   if (!isRecord(node)) return node;
   return valuesFixed(node, (_name, schema) => schemaFixed(schema, fix));
+}
+
+/** 逐个改一列的元素；一个都没变就原样交回同一列。 */
+function listFixed<T>(list: T[], fix: (item: T) => T): T[] {
+  const fixed = list.map(fix);
+  const changed = fixed.some((item, index) => item !== list[index]);
+  if (!changed) return list;
+  return fixed;
 }
 
 /** 逐个键改对象的值，第一次有变化时才复制；一个都没变就原样交回同一个对象。 */
@@ -217,7 +223,8 @@ function withEnumType(schema: Body): Body {
   if (Array.isArray(schema.enum)) values = schema.enum;
   else if ("const" in schema) values = [schema.const];
   const type = valuesType(values);
-  return type === null ? schema : { type, ...schema };
+  if (type === null) return schema;
+  return { type, ...schema };
 }
 
 type ValueType = "string" | "boolean" | "integer" | "number";
@@ -252,7 +259,8 @@ function joinedType(sofar: ValueType | null, next: ValueType): ValueType | null 
 function withPatternFixed(schema: Body, fix: (pattern: string) => string): Body {
   if (typeof schema.pattern !== "string") return schema;
   const pattern = fix(schema.pattern);
-  return pattern === schema.pattern ? schema : { ...schema, pattern };
+  if (pattern === schema.pattern) return schema;
+  return { ...schema, pattern };
 }
 
 /** DeepSeek 的 schema 校验不认 ECMAScript 的 `\0`（「… is not a 'regex'」）：改成同义的 `\u0000`。 */
@@ -293,7 +301,8 @@ function ecmaClassForRust(pattern: string): string {
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
     const next = pattern[i + 1];
-    if (c === "\\" && next !== undefined) {
+    const escaped = c === "\\" && next !== undefined;
+    if (escaped) {
       out += c + next;
       i++;
       continue;
@@ -304,7 +313,8 @@ function ecmaClassForRust(pattern: string): string {
       i++;
       continue;
     }
-    if (inClass && c === "[") {
+    const nestedOpen = inClass && c === "[";
+    if (nestedOpen) {
       out += "\\[";
       continue;
     }

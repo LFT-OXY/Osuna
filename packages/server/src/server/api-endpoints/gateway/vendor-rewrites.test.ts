@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { isRecord } from "../upstream-http.js";
 import type { ShapeRefusals } from "./refusals.js";
 import { translatedBody } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
@@ -62,7 +63,9 @@ function translated(input: {
     facts: {},
     refusals: NO_REFUSALS,
   });
-  return JSON.parse(text) as Record<string, unknown>;
+  const body: unknown = JSON.parse(text);
+  if (!isRecord(body)) throw new Error(`not a JSON object: ${text}`);
+  return body;
 }
 
 /** 翻成 Chat 的工具，参数的 properties 换成 `changed` 里给的。 */
@@ -229,15 +232,17 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
     model: "m",
     body: { tools: [{ name: "x", input_schema: schema }] },
   });
-  const schemaFor = (input: {
+  /** 只带这一个工具的请求体，按厂商改过之后。 */
+  const sentBody = (input: {
     baseUrl: string;
     schema: Record<string, unknown>;
     model?: string;
   }) => {
     const target = { ...anthropicTool(input.schema), model: input.model ?? "m" };
-    const out = withVendorRewrites({ ...target, baseUrl: input.baseUrl });
-    return (out.tools as { input_schema: unknown }[])[0].input_schema;
+    return withVendorRewrites({ ...target, baseUrl: input.baseUrl });
   };
+  /** 只带一个工具、参数是 `schema` 的请求体。 */
+  const toolBody = (schema: Record<string, unknown>) => anthropicTool(schema).body;
 
   test("Kimi: each schema's type from its values; mixed, null, typed, and a property called enum left as they were", () => {
     const schema = {
@@ -259,25 +264,27 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
       },
       $defs: { mode: { enum: ["fast", "slow"] } },
     };
-    expect(schemaFor({ baseUrl: "https://api.kimi.com/coding/v1", schema })).toEqual({
-      type: "object",
-      properties: {
-        kinds: {
-          anyOf: [
-            { items: { type: "string", enum: ["text", "icon"] }, maxItems: 2, type: "array" },
-            { type: "null" },
-          ],
+    expect(sentBody({ baseUrl: "https://api.kimi.com/coding/v1", schema })).toEqual(
+      toolBody({
+        type: "object",
+        properties: {
+          kinds: {
+            anyOf: [
+              { items: { type: "string", enum: ["text", "icon"] }, maxItems: 2, type: "array" },
+              { type: "null" },
+            ],
+          },
+          level: { type: "integer", enum: [1, 2, 3] },
+          scale: { type: "number", enum: [1, 1.5] },
+          on: { type: "boolean", const: true },
+          mixed: { enum: ["a", 1] },
+          maybe: { enum: ["a", null] },
+          typed: { type: "string", enum: ["x"] },
+          enum: { type: "string" },
         },
-        level: { type: "integer", enum: [1, 2, 3] },
-        scale: { type: "number", enum: [1, 1.5] },
-        on: { type: "boolean", const: true },
-        mixed: { enum: ["a", 1] },
-        maybe: { enum: ["a", null] },
-        typed: { type: "string", enum: ["x"] },
-        enum: { type: "string" },
-      },
-      $defs: { mode: { type: "string", enum: ["fast", "slow"] } },
-    });
+        $defs: { mode: { type: "string", enum: ["fast", "slow"] } },
+      }),
+    );
   });
 
   test.each([
@@ -289,10 +296,12 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
     ["\\\\\\0", "\\\\\\u0000"],
   ])("DeepSeek: pattern %s is sent as %s", (pattern, sent) => {
     const schema = { type: "string", pattern };
-    expect(schemaFor({ baseUrl: "https://api.deepseek.com", schema })).toEqual({
-      type: "string",
-      pattern: sent,
-    });
+    expect(sentBody({ baseUrl: "https://api.deepseek.com", schema })).toEqual(
+      toolBody({
+        type: "string",
+        pattern: sent,
+      }),
+    );
   });
 
   test("DeepSeek: only the schemas' patterns, never a default or a const value", () => {
@@ -303,13 +312,15 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
       },
       const: { pattern: "\\0" },
     };
-    expect(schemaFor({ baseUrl: "https://api.deepseek.com", schema })).toEqual({
-      type: "object",
-      properties: {
-        content: { type: "string", pattern: "^[^\\u0000]*$", default: { pattern: "\\0" } },
-      },
-      const: { pattern: "\\0" },
-    });
+    expect(sentBody({ baseUrl: "https://api.deepseek.com", schema })).toEqual(
+      toolBody({
+        type: "object",
+        properties: {
+          content: { type: "string", pattern: "^[^\\u0000]*$", default: { pattern: "\\0" } },
+        },
+        const: { pattern: "\\0" },
+      }),
+    );
   });
 
   test.each([
@@ -324,10 +335,12 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
     ["\\\\[a[b]", "\\\\[a\\[b]"],
   ])("Grok: pattern %s is sent as %s", (pattern, sent) => {
     const schema = { type: "string", pattern };
-    expect(schemaFor({ baseUrl: RELAY_URL, model: "grok-4.6", schema })).toEqual({
-      type: "string",
-      pattern: sent,
-    });
+    expect(sentBody({ baseUrl: RELAY_URL, model: "grok-4.6", schema })).toEqual(
+      toolBody({
+        type: "string",
+        pattern: sent,
+      }),
+    );
   });
 
   test("another model through a relay gets the same object back", () => {
