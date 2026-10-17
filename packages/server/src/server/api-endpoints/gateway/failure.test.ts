@@ -1,3 +1,6 @@
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go、gateway.go 的源码注释，shape_fallback_test.go 与 overflow_cap_test.go）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
 import {
   FAILURE_WORDS,

@@ -3127,14 +3127,13 @@ function receivedModel(request: RecordedRequest | undefined): unknown {
 }
 
 /** 两家都选了 kimi-k2：A 是用户选的（最早建的），B 在它之后。 */
+type StartOptions = NonNullable<Parameters<typeof start>[0]>;
+
 async function twoRelays(
-  options: {
-    headerTimeoutMs?: number;
-    keepAliveMs?: number;
-    keepAliveQuietMs?: number;
-    modelsDev?: Record<string, Record<string, unknown>>;
-    catalogB?: Record<string, Record<string, unknown>>;
-  } = {},
+  options: Pick<
+    StartOptions,
+    "headerTimeoutMs" | "keepAliveMs" | "keepAliveQuietMs" | "modelsDev" | "catalogB"
+  > = {},
 ) {
   const upstreamA = await startUpstream();
   const upstreamB = await startUpstream();
@@ -3543,8 +3542,52 @@ describe("a conversation too long for a model", () => {
     expect(upstreamB.requests).toHaveLength(0);
     expect(await response.json()).toEqual({
       type: "error",
-      error: { type: "api_error", message: "Relay A: prompt is too long: 210000 tokens > 200000" },
+      error: {
+        type: "invalid_request_error",
+        message: "Relay A: prompt is too long: 210000 tokens > 200000",
+      },
     });
+  });
+
+  test("told too long after the keepalive began, each CLI gets the error in its stream with context_length_exceeded", async () => {
+    const claude = await twoRelays({ keepAliveMs: 30 });
+    const codex = await twoRelays({ keepAliveMs: 30 });
+    const tooLong = (res: ServerResponse) =>
+      failWith(res, { status: 400, message: "prompt is too long: 210000 tokens > 200000" });
+    const releases: (() => void)[] = [];
+    for (const relays of [claude, codex]) {
+      const held = heldUpstream(() => {}, tooLong);
+      relays.upstreamA.respond = held.respond;
+      releases.push(held.release);
+    }
+
+    const toClaude = await claude.ask();
+    const claudeKept = await readUntil(toClaude, "event: ping");
+    releases[0]?.();
+    const toCodex = await fetch(
+      `${codex.gateway}/v1/responses`,
+      codexRequest({ model: "kimi-k2", input: "hi", stream: true }),
+    );
+    const codexKept = await readUntil(toCodex, "event: response.in_progress");
+    releases[1]?.();
+    const claudeEvents = sseData(claudeKept.text + (await claudeKept.rest()));
+    const codexEvents = sseData(codexKept.text + (await codexKept.rest()));
+
+    const message = "Relay A: prompt is too long: 210000 tokens > 200000";
+    expect(claudeEvents.at(-1)).toEqual({
+      type: "error",
+      error: { type: "api_error", message, code: "context_length_exceeded" },
+    });
+    expect(codexEvents.at(-1)).toEqual({
+      type: "response.failed",
+      response: {
+        object: "response",
+        status: "failed",
+        error: { code: "context_length_exceeded", message },
+      },
+    });
+    expect(claude.upstreamB.requests).toHaveLength(0);
+    expect(codex.upstreamB.requests).toHaveLength(0);
   });
 
   test("a 400 that says no reason, for a request past 1.2 times the window, reaches Claude Code as too long", async () => {
@@ -3626,10 +3669,35 @@ describe("a conversation too long for a model", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       type: "error",
-      error: { type: "invalid_request_error", message: `Relay A: ${capped}` },
+      error: { type: "invalid_request_error", message: `prompt is too long: Relay A: ${capped}` },
     });
     expect(upstreamB.requests).toHaveLength(0);
     expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test("a relay's own cap reaches Codex as context_length_exceeded", async () => {
+    const upstream = await startUpstream();
+    const capped = "Input token exceed the limit (request id: 2026…)";
+    upstream.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: capped, type: "invalid_request_error" } }));
+    };
+    const { gateway } = await start({ upstreamA: upstream });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "gpt-5.5", input: "hi", stream: false }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        message: `Relay A: ${capped}`,
+        type: "invalid_request_error",
+        code: "context_length_exceeded",
+        param: null,
+      },
+    });
   });
 });
 

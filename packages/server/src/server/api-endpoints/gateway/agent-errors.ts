@@ -1,7 +1,9 @@
-// 保活之后在流里报错移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 streamFailure）
+// 保活之后在流里报错移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 streamFailure、streamError），
+// 对话太长按 CLI 自己的说法交出照 writeErrorSaid
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { Response } from "express";
+import { readsTooLong } from "./failure.js";
 import { sseEvent } from "./translation/sse.js";
 
 /*
@@ -10,7 +12,12 @@ import { sseEvent } from "./translation/sse.js";
  * 保活已经回了 200 与事件流的响应头时，状态码说不出了，改发流里的错误事件（magpie 的 streamFailure）：
  * Claude Code 收到 api_error（它会改发不流式的请求），Codex 收到 response.failed 加 server_error（它会重问整轮，
  * 原因带到最终报错里）。
+ * 认得出是对话太长的，照 CLI 自己的 API 的说法交出，CLI 才会压缩对话再问（magpie writeErrorSaid、streamError）：
+ * 400 invalid_request_error 带 context_length_exceeded，Anthropic 一侧文字里没有「prompt is too long」就补在前面；
+ * 流里的错误事件带 context_length_exceeded 代码。
  */
+
+const TOO_LONG_CODE = "context_length_exceeded";
 
 export type AgentWire = "anthropic" | "openai";
 
@@ -50,32 +57,68 @@ export function sendAgentError(input: {
   error: AgentError;
   headers?: Record<string, string | string[]>;
 }): void {
-  const { res, wire, error } = input;
+  const { res, wire } = input;
+  const isTooLong = readsTooLong(input.error.status, input.error.message);
   if (res.headersSent) {
-    sendStreamError({ res, wire, message: error.message });
+    sendStreamError({ res, wire, message: input.error.message, isTooLong });
     return;
   }
+  let { error } = input;
+  if (isTooLong) error = tooLongError({ wire, message: error.message });
   const type = error.type ?? errorTypeForStatus(error.status);
+  const code = error.code ?? null;
   const body =
     wire === "anthropic"
       ? { type: "error", error: { type, message: error.message } }
-      : { error: { message: error.message, type, code: error.code ?? null, param: null } };
+      : { error: { message: error.message, type, code, param: null } };
   if (input.headers) res.set(input.headers);
   res.status(error.status).json(body);
 }
 
-function sendStreamError(input: { res: Response; wire: AgentWire; message: string }): void {
+/** 对话太长照 CLI 自己的说法：400、invalid_request_error、context_length_exceeded。 */
+function tooLongError(input: { wire: AgentWire; message: string }): AgentError {
   const { message } = input;
+  const saysPromptTooLong = message.toLowerCase().includes("prompt is too long");
+  const needsPrefix = input.wire === "anthropic" && !saysPromptTooLong;
+  const told = { status: 400, message, type: "invalid_request_error", code: TOO_LONG_CODE };
+  if (needsPrefix) told.message = `prompt is too long: ${message}`;
+  return told;
+}
+
+function sendStreamError(input: {
+  res: Response;
+  wire: AgentWire;
+  message: string;
+  isTooLong: boolean;
+}): void {
+  const { message, isTooLong } = input;
+  const code = isTooLong ? TOO_LONG_CODE : "server_error";
   const event =
     input.wire === "anthropic"
-      ? { type: "error", error: { type: "api_error", message } }
+      ? { type: "error", error: anthropicStreamError({ message, isTooLong }) }
       : {
           type: "response.failed",
           response: {
             object: "response",
             status: "failed",
-            error: { code: "server_error", message },
+            error: { code, message },
           },
         };
   input.res.end(sseEvent(event.type, event));
+}
+
+/** Anthropic 流里的错误：api_error；对话太长时带上 context_length_exceeded 代码（magpie 同样）。 */
+function anthropicStreamError(input: {
+  message: string;
+  isTooLong: boolean;
+}): AnthropicStreamError {
+  const failed: AnthropicStreamError = { type: "api_error", message: input.message };
+  if (input.isTooLong) failed.code = TOO_LONG_CODE;
+  return failed;
+}
+
+interface AnthropicStreamError {
+  type: "api_error";
+  message: string;
+  code?: typeof TOO_LONG_CODE;
 }

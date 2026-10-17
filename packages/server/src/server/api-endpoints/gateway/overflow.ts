@@ -28,6 +28,12 @@ const SAID_MOST = 200;
 /** 候选的这个模型的已知窗口（token）；不知道为 undefined。 */
 export type WindowOf = (candidate: GatewayCandidate) => number | undefined;
 
+/** 发出前按窗口筛过的候选，与被跳过的。 */
+export interface RoomyPlan<T extends GatewayCandidate> {
+  plan: T[];
+  skipped: T[];
+}
+
 /**
  * 发出前去掉已知窗口装不下这次请求的候选（magpie 的 roomy）。估算不出、一家都没去掉、
  * 或一家都装不下时原样不动：都装不下就问第一家，再按超长告诉 CLI 去压缩。
@@ -36,7 +42,7 @@ export function roomyCandidates<T extends GatewayCandidate>(input: {
   plan: T[];
   tokens: number | null;
   windowOf: WindowOf;
-}): { plan: T[]; skipped: T[] } {
+}): RoomyPlan<T> {
   const { tokens, windowOf } = input;
   if (tokens === null) return { plan: input.plan, skipped: [] };
   const holding = input.plan.filter((candidate) => holds({ window: windowOf(candidate), tokens }));
@@ -68,7 +74,9 @@ export function largerWindows<T extends GatewayCandidate>(input: {
 /** 窗口不知道、或比估算大，就算装得下（magpie holds）。 */
 function holds(input: { window: number | undefined; tokens: number | null }): boolean {
   const { window, tokens } = input;
-  return window === undefined || tokens === null || tokens < window;
+  if (window === undefined) return true;
+  if (tokens === null) return true;
+  return tokens < window;
 }
 
 /** 一家失败是不是因为对话太长：怎么认出来的，以及要交给 CLI 的说法。 */
@@ -100,7 +108,8 @@ export function overflowOf(input: {
   const said = saidBriefly(input.detail);
   // 厂商原话读起来像别的上限（限流、max_tokens）时不附上，免得 CLI 认不出是超长。
   const withSaid = `${message} (${input.endpointName} answered ${status}: ${said})`;
-  if (said !== "" && readsTooLong(withSaid)) return { kind: "unsaid", message: withSaid };
+  const keepsSaid = said !== "" && readsTooLong(400, withSaid);
+  if (keepsSaid) return { kind: "unsaid", message: withSaid };
   return { kind: "unsaid", message: `${message} (${input.endpointName} answered ${status})` };
 }
 
@@ -120,5 +129,6 @@ function saysNoReason(status: number, rawBody: string): boolean {
 
 function saidBriefly(detail: string): string {
   const said = detail.trim();
-  return said.length > SAID_MOST ? `${said.slice(0, SAID_MOST)}…` : said;
+  if (said.length <= SAID_MOST) return said;
+  return `${said.slice(0, SAID_MOST)}…`;
 }

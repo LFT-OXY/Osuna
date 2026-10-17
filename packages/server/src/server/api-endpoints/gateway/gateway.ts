@@ -438,21 +438,18 @@ async function handleAgentRequest(input: {
   const { modelFacts } = input.failover;
   const windowOf: WindowOf = (candidate) =>
     modelFacts(candidate.endpoint, candidate.upstreamModel).context;
+  const windows = planned.plan.map(windowOf);
   const tokens = estimatedTokens({
     format: input.format,
     parsed: translatable,
     bytes: mended.length,
-    windows: planned.plan.map(windowOf),
+    windows,
   });
   const roomy = roomyCandidates({ plan: planned.plan, tokens, windowOf });
   for (const candidate of roomy.skipped) {
+    const window = windowOf(candidate);
     input.logger.info(
-      {
-        endpoint: candidate.endpoint.name,
-        model: candidate.upstreamModel,
-        tokens,
-        window: windowOf(candidate),
-      },
+      { endpoint: candidate.endpoint.name, model: candidate.upstreamModel, tokens, window },
       "API endpoint skipped: the request is past its context window",
     );
   }
@@ -711,11 +708,12 @@ async function askInTurn(input: {
         remaining = larger;
         continue;
       }
+      const told = toldTooLong(failed, overflow);
       sendFailedAttempt({
         res,
         wire,
         endpoint: candidate.endpoint,
-        failed: toldTooLong(failed, overflow),
+        failed: told,
         suffix: "",
         headers: {},
       });
@@ -930,7 +928,8 @@ function userAgentFor(input: { req: Request; failover: Failover }): string {
 }
 
 /**
- * 超长交给 Agent 的样子：上游说了的照原样；不说原因、认作超长的改成 400，带 Codex 认得的 context_length_exceeded。
+ * 超长交给 Agent 的样子：上游说了的照原样；不说原因、认作超长的改成 400、换成「prompt is too long」的说法。
+ * 两种都由 sendAgentError 按 CLI 自己的说法交出（invalid_request_error、context_length_exceeded）。
  */
 function toldTooLong(failed: FailedAttempt, overflow: Overflow): FailedAttempt {
   if (overflow.kind === "said") return failed;
@@ -939,7 +938,6 @@ function toldTooLong(failed: FailedAttempt, overflow: Overflow): FailedAttempt {
     status: 400,
     headers: {},
     detail: overflow.message,
-    upstreamError: { type: "invalid_request_error", code: "context_length_exceeded" },
   };
 }
 

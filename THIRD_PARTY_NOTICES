@@ -272,12 +272,15 @@ A conversation too long for a model (candidates known too small for the
 request skipped before any is asked, a failure that says no reason taken as
 too long once the estimate is 1.2 times past the window, the vendor's words
 kept only when the message still reads as too long, a relay's own cap on one
-request's input matched as an overflow) follows unsaidMargin, tooLongUnsaid,
+request's input matched as an overflow, and every overflow told the way each
+CLI's own API says it, in a stream too) follows unsaidMargin, tooLongUnsaid,
 roomy, holds and withRoom in magpie's internal/gateway/fallback.go and the
-tooLongRe of gateway.go; its tests reuse the vendor's words of
-overflow_cap_test.go:
+tooLongRe, writeErrorSaid and streamError of gateway.go; its tests reuse the
+vendor's words of overflow_cap_test.go and fallback.go:
 
   packages/server/src/server/api-endpoints/gateway/overflow.ts
+  packages/server/src/server/api-endpoints/gateway/overflow.test.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
   packages/server/src/server/api-endpoints/gateway/failure.ts
   packages/server/src/server/api-endpoints/gateway/failure.test.ts
   packages/server/src/server/api-endpoints/gateway/gateway.ts

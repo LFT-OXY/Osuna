@@ -119,9 +119,9 @@ function overflowed(status: number, body: string): boolean {
   return (status === 400 || status === 413 || status === 422) && tooLong(status, body);
 }
 
-/** 这段话读起来是对话太长（不是 max_tokens 或限流）。 */
-export function readsTooLong(message: string): boolean {
-  return tooLong(400, message);
+/** 带这个状态码的这段话读起来是对话太长（不是 max_tokens 或限流）。 */
+export function readsTooLong(status: number, message: string): boolean {
+  return tooLong(status, message);
 }
 
 /** 上游说这次请求超过了模型（或中转服务）能收的长度：400、413、422 且词表说是对话太长。 */
