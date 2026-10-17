@@ -3,7 +3,9 @@ import {
   RefusedShapes,
   askWithOneKeyHeader,
   keyHeadersFor,
+  noteRefusal,
   refusedShape,
+  refusesPrefill,
   refusesBothKeyHeaders,
   refusesFormat,
   type KeyHeaders,
@@ -15,7 +17,8 @@ import { failedBySelf, type FailedAttempt } from "./upstream-call.js";
 /*
  * 上游不收的写法：effort none、关掉思考、这个格式的地址、两个认证头一起带。错误原文照 magpie（MIT，THIRD_PARTY_NOTICES）的
  * sub2api_think_off_test.go（TestRefusesThinkingOff）、gateway_test.go（含 TestWrongEndpoint）、thinking_off_test.go、
- * tools_need_responses_test.go，与 internal/provider/authheader_test.go（TestBothAuthRefused、TestRetryOneAuth*）。
+ * tools_need_responses_test.go，与 internal/provider/authheader_test.go（TestBothAuthRefused、TestRetryOneAuth*）；
+ * 预填的拒绝照 prefill_test.go 的 openCodeGoPrefillRefusal。
  */
 
 const NONE_REFUSED = `{"type":"error","error":{"type":"invalid_request_error","message":"gpt-6.1-sol does not support reasoning effort \\"none\\"; use low, medium, high, xhigh or max"}}`;
@@ -98,7 +101,35 @@ describe("remembering a refusal", () => {
     expect(refused.has("ep_a", "gpt-5.5", "none")).toBe(false);
     expect(refused.has("ep_b", "gpt-6.1-sol", "none")).toBe(false);
   });
+
+  test("a refused prefill can be looked up for that endpoint's model only", () => {
+    const refused = new RefusedShapes();
+    const of = (endpointId: string, model: string): ShapeRefusals => ({
+      has: (shape) => refused.has(endpointId, model, shape),
+      add: (shape) => refused.add(endpointId, model, shape),
+    });
+    const body = {
+      messages: [
+        { role: "user", content: "a" },
+        { role: "assistant", content: "b" },
+      ],
+    };
+
+    const noted = noteRefusal({
+      refusals: of("ep_a", "claude-sonnet-4-6"),
+      format: "openai_chat",
+      body,
+      failed: { status: 400, text: PREFILL_REFUSED },
+    });
+
+    expect(noted).toBe(true);
+    expect(refusesPrefill(of("ep_a", "claude-sonnet-4-6"))).toBe(true);
+    expect(refusesPrefill(of("ep_a", "claude-opus-4-8"))).toBe(false);
+    expect(refusesPrefill(of("ep_b", "claude-sonnet-4-6"))).toBe(false);
+  });
 });
+
+const PREFILL_REFUSED = `{"type":"error","error":{"type":"api_error","message":"Upstream request failed: [invalid_request_error] This model does not support assistant message prefill. The conversation must end with a user message."}}`;
 
 // magpie 的 toolsOnChatRefused（#1308）与 bothRefusedZH（Aloha on Discord）。
 const TOOLS_ON_CHAT_REFUSED = `{"error":{"message":"status_code=400, gpt-6.1-sol requires Responses for tool calls; this account only supports Chat Completions","type":"invalid_request_error"}}`;

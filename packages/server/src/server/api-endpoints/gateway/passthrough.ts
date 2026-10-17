@@ -24,8 +24,10 @@ import {
   keyHeaderValues,
   keyHeadersFor,
   type KeyHeaders,
+  type RefusedShape,
   type ShapeRefusals,
 } from "./refusals.js";
+import { withDowngrades } from "./refused-downgrades.js";
 import { offersImageTool, takesImageTool, withoutRefusedFields } from "./refused-fields.js";
 import { ReplyTap } from "./reply-tap.js";
 import {
@@ -41,8 +43,8 @@ import {
 /*
  * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
  * 逐字节原样发给上游，认证头换成这家的真实 key。
- * 不思考的写法上游不收（effort none、关思考）、两个认证头不能同时带、或不收请求里的某个字段时，
- * 开口前在同一家换写法重问，并记住。
+ * 不思考的写法上游不收（effort none、关思考）、两个认证头不能同时带、不收请求里的某个字段、
+ * 或不收结构化输出与预填时，开口前在同一家换写法重问，并记住。
  * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，
  * 由 CLI 自己报错。
  */
@@ -227,7 +229,7 @@ function upstreamBody(input: {
   return Buffer.from(text);
 }
 
-/** 去掉这家这个模型不收的字段：只改变了的顶层字段，其余字节原样。 */
+/** 去掉这家这个模型不收的字段、降级它不收的写法：只改变了的顶层字段，其余字节原样。 */
 function withoutRefusedText(input: {
   text: string;
   format: ApiEndpointRequestFormat;
@@ -235,12 +237,10 @@ function withoutRefusedText(input: {
 }): string {
   const body = parseJson(input.text);
   if (!isRecord(body)) return input.text;
-  const { refusals } = input;
-  const fitted = withoutRefusedFields({
-    format: input.format,
-    body,
-    refused: (field) => refusals.has(field),
-  });
+  const { format, refusals } = input;
+  const refused = (shape: RefusedShape) => refusals.has(shape);
+  const dropped = withoutRefusedFields({ format, body, refused });
+  const fitted = withDowngrades({ format, body: dropped, refused });
   let out = input.text;
   for (const key of new Set([...Object.keys(body), ...Object.keys(fitted)])) {
     if (fitted[key] !== body[key]) out = applyEdits(out, modify(out, [key], fitted[key], {}));

@@ -19,6 +19,7 @@ import {
   type RefusedShape,
   type ShapeRefusals,
 } from "./refusals.js";
+import { downgradedRequest } from "./refused-downgrades.js";
 import {
   requestOffersImageTool,
   takesImageTool,
@@ -50,7 +51,8 @@ import {
  * 回复解码后按 Agent 的协议编码，Agent 要流式就边收边发，不要就攒齐渲染成整份回复。
  * 开口（第一段内容）前的失败与直通一样交回中转站换家；开口之后不再换家。
  * 关推理的请求上游不收（effort none、关思考）时，开口前在同一家打开推理、用最低档重问一次，并记住；
- * 两个认证头不能同时带时只带一个重问，也记住；不收请求里的某个字段时去掉它重问，也记住。
+ * 两个认证头不能同时带时只带一个重问，也记住；不收请求里的某个字段时去掉它重问，也记住；
+ * 不收结构化输出或预填时降级重问，也记住。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -87,7 +89,13 @@ export async function attemptTranslated(input: {
       onHeard: () => input.keepAlive.heard(),
     });
   const build = (asked: ShapeRefusals = refusals) =>
-    upstreamBody({ request: input.request, to, model: input.upstreamModel, refusals: asked });
+    upstreamBody({
+      request: input.request,
+      from: input.from,
+      to,
+      model: input.upstreamModel,
+      refusals: asked,
+    });
   const body = build();
   const keys = sends();
   let opened = await open(body, keys);
@@ -161,6 +169,7 @@ function wholeText(input: {
 /** 发给上游的请求体（JSON）：按这家这个模型不收的写法改过请求，翻好后再去掉它不收的字段。 */
 function upstreamBody(input: {
   request: GatewayRequest;
+  from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
   refusals: ShapeRefusals;
@@ -168,6 +177,13 @@ function upstreamBody(input: {
   const { to, refusals } = input;
   let request = allowedReasoning({ request: input.request, to, refusals });
   if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
+  request = downgradedRequest({
+    request,
+    to,
+    refused: (shape) => refusals.has(shape),
+    // Chat、Responses 的 Agent 把末尾的 assistant 消息当作说完的一轮；Anthropic 的是它自己要的预填。
+    lastIsTurn: input.from !== "anthropic_messages",
+  });
   const built = protocolOf(to).build({ ...request, stream: true }, input.model);
   const body = withoutRefusedFields({
     format: to,

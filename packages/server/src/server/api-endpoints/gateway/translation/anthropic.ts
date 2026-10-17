@@ -66,7 +66,7 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
         ? false
         : null,
     metadata: body.metadata ?? null,
-    format: parseFormat(body.output_config),
+    format: anthropicFormat(body.output_config),
     named: {},
     ...parseThinking(body),
   };
@@ -156,7 +156,7 @@ function parseToolChoice(choice: unknown): ToolChoice {
 }
 
 /** output_config.format 只有带 schema 的一种。 */
-function parseFormat(config: unknown): SchemaFormat | null {
+export function anthropicFormat(config: unknown): SchemaFormat | null {
   if (!isRecord(config) || !isRecord(config.format)) return null;
   const { format } = config;
   if (format.type !== "json_schema" || format.schema === undefined || format.schema === null) {

@@ -4,19 +4,20 @@
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { FAILURE_WORDS, wordsOf } from "./failure.js";
+import { refusedDowngrades, type DowngradedShape } from "./refused-downgrades.js";
 import { refusedFields, refusesContent, type DroppedField } from "./refused-fields.js";
 import type { FailedAttempt, UpstreamOpening } from "./upstream-call.js";
 
 /*
  * 上游不收的写法（拒收）：OpenAI 格式的 effort none、Anthropic 格式的关思考、这个格式的地址不提供这个模型、
- * 两个认证头不能同时带、请求里的某个字段（refused-fields.ts）。中转站在开口前、换家判断之前，换一种写法在同一家重问，并记住这家的这个模型不收，
+ * 两个认证头不能同时带、请求里的某个字段（refused-fields.ts）、结构化输出与预填（refused-downgrades.ts）。中转站在开口前、换家判断之前，换一种写法在同一家重问，并记住这家的这个模型不收，
  * 以后直接换写法发。记录只在内存里，daemon 重启清零（和冷却一样）。
  */
 
 /**
  * none：不收 effort none；thinkingOff：不让关思考；`format:<格式>`：这个格式的地址不提供这个模型；
  * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）；
- * 其余是不收、要去掉的字段（DroppedField）。
+ * 其余是不收、要去掉的字段（DroppedField）与要降级的写法（DowngradedShape）。
  */
 export type RefusedShape =
   | "none"
@@ -24,7 +25,8 @@ export type RefusedShape =
   | `format:${ApiEndpointRequestFormat}`
   | "bothKeyHeaders"
   | "xApiKeyAlone"
-  | DroppedField;
+  | DroppedField
+  | DowngradedShape;
 
 const REFUSAL_WORDS = {
   // 列出它收的档位，如 Command Code 的 `expected one of "low"|"medium"|…`。
@@ -79,7 +81,7 @@ function openAIEffortOf(format: ApiEndpointRequestFormat, body: Record<string, u
 }
 
 /**
- * 发出去的 `body` 被拒，是因为不思考的写法或它带着的字段：记进 `refusals`，返回 true，调用方在同一家换写法重问。
+ * 发出去的 `body` 被拒，是因为不思考的写法、它带着的字段或要降级的写法：记进 `refusals`，返回 true，调用方在同一家换写法重问。
  * 同一模型并发的请求可能都按旧写法发出，所以已经记过的也照样重问。
  */
 export function noteRefusal(input: {
@@ -90,7 +92,7 @@ export function noteRefusal(input: {
 }): boolean {
   const { failed } = input;
   const read = { ...input, status: failed.status, text: failed.text };
-  const shapes: RefusedShape[] = refusedFields(read);
+  const shapes: RefusedShape[] = [...refusedFields(read), ...refusedDowngrades(read)];
   const shape = refusedShape(read);
   if (shape !== null) shapes.push(shape);
   for (const refused of shapes) input.refusals.add(refused);
@@ -282,7 +284,21 @@ export function refusalNote(shape: RefusedShape): string {
   if (shape === "none" || shape === "thinkingOff") {
     return "API endpoint refused reasoning off; asking it again with reasoning on";
   }
+  if (shape === "jsonSchema") {
+    return "API endpoint refused a JSON schema; asking it again for a JSON object with the schema in the system prompt";
+  }
+  if (shape === "structuredOutput") {
+    return "API endpoint refused structured output; asking it again with the format told in the system prompt";
+  }
+  if (shape === "prefill") {
+    return "API endpoint refused a conversation ending with the assistant's message; it takes no prefill for this model";
+  }
   return "API endpoint refused a field of the request; asking it again without it";
+}
+
+/** 这家这个模型说过不收以 assistant 结尾的对话（预填）。 */
+export function refusesPrefill(refusals: ShapeRefusals): boolean {
+  return refusals.has("prefill");
 }
 
 /** 这次问的那家的那个模型：直通与翻译读它决定怎么发，被拒时记进去。 */

@@ -22,7 +22,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 拒收的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go、gateway_test.go
  * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
- * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）。
+ * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
+ * format_refused_test.go 与 prefill_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -2353,6 +2354,297 @@ describe("a refused field left out at the same endpoint", () => {
     expect(offered()).toEqual([true, false]);
     expect((await ask()).status).toBe(400);
     expect(offered()).toEqual([true, false]);
+  });
+});
+
+// 小米 MiMo 不收 json_schema、DeepSeek 不收 json_object（magpie format_refused_test.go）。
+const SCHEMA_REFUSED = `{"error":{"message":"text.format type 'json_schema' is not supported, only 'text' and 'json_object' are allowed.","type":"invalid_request_error","param":null,"code":"400"}}`;
+const OBJECT_REFUSED = `{"error":{"message":"This response_format type is unavailable now","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}`;
+// 火山方舟 Agent Plan 与 OpenCode Go 不收预填（magpie prefill_test.go）。
+const VOLCENGINE_PREFILL_REFUSED = `{"error":{"code":"InvalidParameter","message":"The parameter input[1].role specified in the request are not valid: The last message cannot be from the assistant for a model that does not support prefill","param":"input[1].role","type":"BadRequest"}}`;
+const OPENCODE_PREFILL_REFUSED = `{"type":"error","error":{"type":"api_error","message":"Upstream request failed: [invalid_request_error] This model does not support assistant message prefill. The conversation must end with a user message."}}`;
+
+const ANSWER_SCHEMA = {
+  type: "object",
+  properties: { ok: { type: "boolean" } },
+  required: ["ok"],
+  additionalProperties: false,
+};
+const SCHEMA_LINE = `Respond with a single JSON value and nothing else, matching this JSON schema:\n${JSON.stringify(ANSWER_SCHEMA)}.`;
+
+/** 要了结构化输出就拒收：json_schema 与 json_object 都不收。 */
+function refusingFormats(input: {
+  formatOf: (body: Record<string, unknown>) => unknown;
+  answer: (res: ServerResponse) => void;
+}) {
+  return (request: RecordedRequest, res: ServerResponse) => {
+    const format = input.formatOf(receivedBody(request));
+    if (!isRecordLike(format)) {
+      input.answer(res);
+      return;
+    }
+    refuse(res, format.type === "json_schema" ? SCHEMA_REFUSED : OBJECT_REFUSED);
+  };
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** 对话以 assistant 结尾就拒收。 */
+function refusingPrefill(input: {
+  lastOf: (body: Record<string, unknown>) => unknown;
+  refusal: string;
+  answer: (res: ServerResponse) => void;
+}) {
+  return (request: RecordedRequest, res: ServerResponse) => {
+    const last = input.lastOf(receivedBody(request));
+    if (isRecordLike(last) && last.role === "assistant") refuse(res, input.refusal);
+    else input.answer(res);
+  };
+}
+
+function roleAndContent(message: Record<string, unknown>): Record<string, unknown> {
+  return { role: message.role, content: message.content };
+}
+
+function lastItem(items: unknown): unknown {
+  return Array.isArray(items) ? items.at(-1) : undefined;
+}
+
+describe("a refused shape downgraded at the same endpoint", () => {
+  test("Codex's schema refused twice is asked as a JSON object, then in words, and from then on", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = refusingFormats({
+      formatOf: (body) => (isRecordLike(body.text) ? body.text.format : undefined),
+      answer: answerResponsesWhole,
+    });
+    const harness = await start({ upstreamA: upstream });
+    const format = { type: "json_schema", name: "probe", strict: true, schema: ANSWER_SCHEMA };
+    const ask = async (gateway: string) => {
+      const response = await askAgent({
+        gateway,
+        agent: "codex",
+        model: "gpt-5.5",
+        extra: { instructions: "You are Codex.", text: { format } },
+      });
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const sent = () =>
+      upstream.requests.splice(0).map((request) => {
+        const { instructions, text } = receivedBody(request);
+        return { instructions, text };
+      });
+    const told = `You are Codex.\n\n${SCHEMA_LINE}`;
+
+    await ask(harness.gateway);
+    expect(sent()).toEqual([
+      { instructions: "You are Codex.", text: { format } },
+      { instructions: told, text: { format: { type: "json_object" } } },
+      { instructions: told, text: undefined },
+    ]);
+    await ask(harness.gateway);
+    expect(sent()).toEqual([{ instructions: told, text: undefined }]);
+
+    const remembered = (msg: string) =>
+      gatewayLog(harness.logLines, msg).map(({ level, endpoint, model, refused }) => ({
+        level,
+        endpoint,
+        model,
+        refused,
+      }));
+    expect(
+      remembered(
+        "API endpoint refused a JSON schema; asking it again for a JSON object with the schema in the system prompt",
+      ),
+    ).toEqual([{ level: 30, endpoint: "Relay A", model: "gpt-5.5", refused: "jsonSchema" }]);
+    expect(
+      remembered(
+        "API endpoint refused structured output; asking it again with the format told in the system prompt",
+      ),
+    ).toEqual([{ level: 30, endpoint: "Relay A", model: "gpt-5.5", refused: "structuredOutput" }]);
+
+    // 记住的写法只在内存里：重启后又先要 schema。
+    const next = await harness.restart();
+    await ask(next.gateway);
+    expect(sent().map((body) => body.text)).toEqual([
+      { format },
+      { format: { type: "json_object" } },
+      undefined,
+    ]);
+  });
+
+  test("Claude Code's schema translated for a Chat endpoint steps down the same way", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = refusingFormats({
+      formatOf: (body) => body.response_format,
+      answer: chatStream,
+    });
+    const { gateway } = await start({ chatUpstream: upstream });
+    const ask = async () => {
+      const response = await askAgent({
+        gateway,
+        agent: "claude",
+        model: "deepseek-v3",
+        extra: {
+          system: "Be brief.",
+          output_config: { format: { type: "json_schema", schema: ANSWER_SCHEMA } },
+        },
+      });
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const sent = () =>
+      upstream.requests.splice(0).map((request) => {
+        const body = receivedBody(request);
+        const [system] = body.messages as unknown[];
+        return { system, format: body.response_format };
+      });
+    const told = { role: "system", content: `Be brief.\n\n${SCHEMA_LINE}` };
+
+    await ask();
+    expect(sent()).toEqual([
+      {
+        system: { role: "system", content: "Be brief." },
+        format: {
+          type: "json_schema",
+          json_schema: { name: "response", schema: ANSWER_SCHEMA },
+        },
+      },
+      { system: told, format: { type: "json_object" } },
+      { system: told, format: undefined },
+    ]);
+    await ask();
+    expect(sent()).toEqual([{ system: told, format: undefined }]);
+  });
+
+  test("Codex's prefill refused is asked with a user turn after it, and from then on for that model only", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = refusingPrefill({
+      lastOf: (body) => lastItem(body.input),
+      refusal: VOLCENGINE_PREFILL_REFUSED,
+      answer: answerResponsesWhole,
+    });
+    const harness = await start({ upstreamA: upstream });
+    const said = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "a" }] },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "b" }] },
+    ];
+    const turnAfter = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Continue." }],
+    };
+    const ask = async (model: string) => {
+      const response = await askAgent({
+        gateway: harness.gateway,
+        agent: "codex",
+        model,
+        extra: { input: said },
+      });
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const sent = () => upstream.requests.splice(0).map((request) => receivedBody(request).input);
+
+    await ask("gpt-5.5");
+    expect(sent()).toEqual([said, [...said, turnAfter]]);
+    await ask("gpt-5.5");
+    expect(sent()).toEqual([[...said, turnAfter]]);
+    // A 的另一个模型没拒过预填：照原样问。
+    await ask("kimi-k2");
+    expect(sent()).toEqual([said, [...said, turnAfter]]);
+
+    expect(
+      gatewayLog(
+        harness.logLines,
+        "API endpoint refused a conversation ending with the assistant's message; it takes no prefill for this model",
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        level: 30,
+        endpoint: "Relay A",
+        model: "gpt-5.5",
+        refused: "prefill",
+      }),
+    );
+
+    const next = await harness.restart();
+    const response = await askAgent({
+      gateway: next.gateway,
+      agent: "codex",
+      model: "gpt-5.5",
+      extra: { input: said },
+    });
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(sent()).toEqual([said, [...said, turnAfter]]);
+  });
+
+  test("Codex's prefill translated for a Chat endpoint gets a user turn after it", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = refusingPrefill({
+      lastOf: (body) => lastItem(body.messages),
+      refusal: OPENCODE_PREFILL_REFUSED,
+      answer: chatStream,
+    });
+    const { gateway } = await start({ chatUpstream: upstream });
+    const ask = async () => {
+      const response = await askAgent({
+        gateway,
+        agent: "codex",
+        model: "deepseek-v3",
+        extra: {
+          input: [
+            { type: "message", role: "user", content: [{ type: "input_text", text: "a" }] },
+            { type: "message", role: "assistant", content: [{ type: "output_text", text: "b" }] },
+          ],
+        },
+      });
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const sent = () =>
+      upstream.requests.splice(0).map((request) => {
+        const messages = receivedBody(request).messages as Record<string, unknown>[];
+        return messages.map(roleAndContent);
+      });
+    const said = [
+      { role: "user", content: "a" },
+      { role: "assistant", content: "b" },
+    ];
+    const turnAfter = { role: "user", content: "Continue." };
+
+    await ask();
+    expect(sent()).toEqual([said, [...said, turnAfter]]);
+    await ask();
+    expect(sent()).toEqual([[...said, turnAfter]]);
+  });
+
+  test("Claude Code's own prefill is its ask: the refusal comes back and it is not asked again", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = refusingPrefill({
+      lastOf: (body) => lastItem(body.messages),
+      refusal: OPENCODE_PREFILL_REFUSED,
+      answer: streamReply,
+    });
+    const { gateway } = await start({ upstreamB: upstream });
+    const messages = [
+      { role: "user", content: "a" },
+      { role: "assistant", content: "b" },
+    ];
+
+    const response = await askAgent({
+      gateway,
+      agent: "claude",
+      model: "glm-4.6",
+      extra: { messages },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("does not support assistant message prefill");
+    expect(upstream.requests.map((request) => receivedBody(request).messages)).toEqual([messages]);
   });
 });
 

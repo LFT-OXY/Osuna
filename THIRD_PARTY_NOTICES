@@ -119,6 +119,21 @@ image_tool_test.go and testdata/codex_image_gen_tool.json:
   packages/server/src/server/api-endpoints/gateway/translated.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+Structured output and a prefill an endpoint refuses, downgraded when the same
+endpoint is asked again: a schema asked as any JSON object with the schema in
+the system prompt, then the format told in words alone (formatRefusal,
+refusesFormat, asObject, inSystem, formatInBody, withSystemLine and withLine in
+internal/gateway/format.go), and a user turn after a conversation ending with
+the assistant's message (prefillRefusal, refusesPrefill, endsWithAssistant,
+userLast, userLastBody and continueText in prefill.go). Their tests reuse
+cases from format_refused_test.go and prefill_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.ts
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.test.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
 MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
 which names are the same model (sameModel in internal/provider/group.go) and
