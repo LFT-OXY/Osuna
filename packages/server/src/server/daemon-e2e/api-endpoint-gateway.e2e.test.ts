@@ -160,6 +160,8 @@ async function start(
     modelsA?: string[];
     // 已下线模型记录用的时钟，测试拿它快进一周。
     retiredModelsNow?: () => number;
+    // 已下线记录的到期定时器，测试拿它在快进后手动到点。
+    retiredModelsTimers?: { schedule: (handler: () => void, ms: number) => () => void };
   } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-gateway-"));
@@ -258,6 +260,9 @@ async function start(
         ...(options.keepAliveMs ? { gatewayKeepAliveMs: options.keepAliveMs } : {}),
         ...(options.keepAliveQuietMs ? { gatewayKeepAliveQuietMs: options.keepAliveQuietMs } : {}),
         ...(options.retiredModelsNow ? { retiredModelsNow: options.retiredModelsNow } : {}),
+        ...(options.retiredModelsTimers
+          ? { retiredModelsTimers: options.retiredModelsTimers }
+          : {}),
       },
     });
     daemons.push(daemon);
@@ -4868,13 +4873,28 @@ describe("a model its vendor says is retired", () => {
     expect(back).toMatchObject({ endpoint: "Relay A", model: "gpt-5.5", why: "answered" });
   });
 
-  test("the record survives a restart and is gone a week later", async () => {
+  test("the record survives a restart, and a week later the files get the entry back with no one asking", async () => {
     let now = Date.parse("2026-10-17T00:00:00.000Z");
+    // 最近排上的到期处理；属性而不是 let，免得 TS 把闭包里改过的变量收窄成 null。
+    const expiry: { due: (() => void) | null } = { due: null };
+    const timers = {
+      schedule: (handler: () => void) => {
+        expiry.due = handler;
+        return () => {
+          expiry.due = null;
+        };
+      },
+    };
     const upstreamA = await startUpstream();
     const upstreamB = await startUpstream();
     upstreamA.respond = (_request, res) => retiredReply(res, "kimi-k2");
     upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
-    const harness = await start({ upstreamA, upstreamB, retiredModelsNow: () => now });
+    const harness = await start({
+      upstreamA,
+      upstreamB,
+      retiredModelsNow: () => now,
+      retiredModelsTimers: timers,
+    });
     const askKimi = (gateway: string) =>
       fetch(
         `${gateway}/v1/messages`,
@@ -4895,12 +4915,30 @@ describe("a model its vendor says is retired", () => {
     expect(upstreamA.requests).toHaveLength(1);
     await expect.poll(() => lists(restarted), { timeout: 10_000 }).toEqual(A_KIMI_RETIRED);
 
+    // 一周到了，没有请求、也没人读列表：到期定时器自己重写 Codex 目录与 Claude 的 modelPicker。
     now += WEEK;
-    const asked = await askKimi(next.gateway);
+    expiry.due?.();
+    const root = path.dirname(path.dirname(harness.endpointsDir));
+    async function files() {
+      const catalog = JSON.parse(
+        await readFile(path.join(harness.endpointsDir, "codex-models.json"), "utf8"),
+      ) as { models: { slug: string }[] };
+      const settings = JSON.parse(
+        await readFile(path.join(root, "claude", "settings.json"), "utf8"),
+      ) as { modelPicker?: { options: { model: string }[] } };
+      return {
+        codex: catalog.models.map((model) => model.slug),
+        claudePicker: (settings.modelPicker?.options ?? []).map((option) => option.model),
+      };
+    }
+    await expect
+      .poll(files, { timeout: 10_000 })
+      .toEqual({ codex: ALL_LISTED.codex, claudePicker: ALL_LISTED.claudePicker });
 
+    const asked = await askKimi(next.gateway);
     expect(await asked.text()).toContain("from A");
     expect(upstreamA.requests).toHaveLength(2);
-    await expect.poll(() => lists(restarted), { timeout: 10_000 }).toEqual(ALL_LISTED);
+    expect(await lists(restarted)).toEqual(ALL_LISTED);
   });
 
   test("an unreadable record file counts as empty and the gateway works as usual", async () => {

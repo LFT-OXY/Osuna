@@ -44,23 +44,41 @@ let root: string;
 let filePath: string;
 let now: number;
 let changes: number;
+// 手动推进的到期定时器：只留最近一次排的。
+let pending: { handler: () => void; ms: number } | null;
 
 beforeEach(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "paseo-retired-models-"));
   filePath = path.join(root, "retired-models.json");
   now = START;
   changes = 0;
+  pending = null;
 });
 
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+/** 到点：定时器跑一次后就不再排着，除非处理时又排了新的。 */
+function fire(): void {
+  const due = pending;
+  pending = null;
+  due?.handler();
+}
+
 function create(): RetiredModels {
   return new RetiredModels({
     filePath,
     logger: createTestLogger(),
     now: () => now,
+    timers: {
+      schedule: (handler, ms) => {
+        pending = { handler, ms };
+        return () => {
+          pending = null;
+        };
+      },
+    },
     onChanged: () => {
       changes += 1;
     },
@@ -108,7 +126,22 @@ describe("a model its vendor said is retired", () => {
     });
   });
 
-  test("comes back a week later, and the file forgets it", async () => {
+  test("comes back a week later on its own, with no one reading the lists", async () => {
+    const retired = create();
+    retired.retire(ZEN_EXO);
+    expect(pending?.ms).toBe(7 * DAY);
+
+    now = START + 7 * DAY;
+    fire();
+
+    expect(changes).toBe(2);
+    expect(pending).toBeNull();
+    const file: unknown = JSON.parse(await readFile(filePath, "utf8"));
+    expect(file).toEqual({ models: [] });
+    expect(listedModels(retired.listed(STATE)).zen).toEqual(["exo-free", "space-bunny-free"]);
+  });
+
+  test("reading the lists past the week shows it again but leaves the file to the timer", async () => {
     const retired = create();
     retired.retire(ZEN_EXO);
     now = START + 7 * DAY - 1;
@@ -117,9 +150,29 @@ describe("a model its vendor said is retired", () => {
     now = START + 7 * DAY;
 
     expect(listedModels(retired.listed(STATE)).zen).toEqual(["exo-free", "space-bunny-free"]);
-    expect(changes).toBe(2);
+    expect(changes).toBe(1);
     const file: unknown = JSON.parse(await readFile(filePath, "utf8"));
-    expect(file).toEqual({ models: [] });
+    expect(file).toEqual({
+      models: [{ endpointId: "zen", model: "exo-free", retiredAt: "2026-10-17T00:00:00.000Z" }],
+    });
+  });
+
+  test("the timer aims at the earliest record, also after a restart, and stops on dispose", () => {
+    const retired = create();
+    retired.retire(ZEN_EXO);
+    now = START + 2 * DAY;
+    retired.retire({ endpoint: ZEN, model: "space-bunny-free" });
+    expect(pending?.ms).toBe(5 * DAY);
+    retired.dispose();
+    expect(pending).toBeNull();
+
+    now = START + 8 * DAY;
+    create();
+
+    expect(pending?.ms).toBe(0);
+    fire();
+    expect(changes).toBe(3);
+    expect(pending?.ms).toBe(DAY);
   });
 
   test("comes back as soon as the vendor answers a request for it", () => {
