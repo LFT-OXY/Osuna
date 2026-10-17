@@ -69,8 +69,8 @@ const StoredApiEndpointSchema = z.object({
     .optional(),
   // 用户手动添加的模型名，开没开都留着。
   manualModels: z.array(StoredModelSchema).optional(),
-  // 「自己能联网搜索」：只存 true；没有即为关（ADR 0009）。
-  searchesWeb: z.literal(true).optional(),
+  // 「自己能联网搜索」：只写 true；没有或手改成 false 都是关（ADR 0009）。
+  searchesWeb: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

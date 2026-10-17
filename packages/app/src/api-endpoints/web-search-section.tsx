@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
-import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { Text } from "react-native";
+import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
 import { Switch } from "@/components/ui/switch";
 import { settingsStyles } from "@/styles/settings";
 import type { WebSearchSaveState } from "./use-endpoint-detail";
@@ -21,27 +21,32 @@ export function ApiEndpointWebSearchSection({
 }) {
   const { t } = useTranslation();
   const label = t("settings.apiEndpoints.webSearch.switch");
+  const hint = (
+    <>
+      <Text style={settingsStyles.rowHint}>{t("settings.apiEndpoints.webSearch.hint")}</Text>
+      {save.status === "saving" ? (
+        <Text style={settingsStyles.rowHint} testID="api-endpoint-web-search-saving">
+          {t("settings.apiEndpoints.webSearch.saving")}
+        </Text>
+      ) : null}
+      {save.status === "failed" ? (
+        <Text
+          accessibilityRole="alert"
+          style={settingsStyles.rowError}
+          testID="api-endpoint-web-search-error"
+        >
+          {t("settings.apiEndpoints.webSearch.saveFailed", { message: save.message })}
+        </Text>
+      ) : null}
+    </>
+  );
   return (
     <SettingsSection
       title={t("settings.apiEndpoints.webSearch.title")}
       testID="api-endpoint-web-search-section"
     >
-      <View style={settingsStyles.card}>
-        <View style={settingsStyles.row}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>{label}</Text>
-            <Text style={settingsStyles.rowHint}>{t("settings.apiEndpoints.webSearch.hint")}</Text>
-            {save.status === "saving" ? (
-              <Text style={settingsStyles.rowHint} testID="api-endpoint-web-search-saving">
-                {t("settings.apiEndpoints.webSearch.saving")}
-              </Text>
-            ) : null}
-            {save.status === "failed" ? (
-              <Text style={settingsStyles.rowError} testID="api-endpoint-web-search-error">
-                {t("settings.apiEndpoints.webSearch.saveFailed", { message: save.message })}
-              </Text>
-            ) : null}
-          </View>
+      <SettingsCard>
+        <SettingsRow label={label} hint={hint}>
           <Switch
             value={value}
             onValueChange={onChange}
@@ -49,8 +54,8 @@ export function ApiEndpointWebSearchSection({
             accessibilityLabel={label}
             testID="api-endpoint-web-search-switch"
           />
-        </View>
-      </View>
+        </SettingsRow>
+      </SettingsCard>
     </SettingsSection>
   );
 }

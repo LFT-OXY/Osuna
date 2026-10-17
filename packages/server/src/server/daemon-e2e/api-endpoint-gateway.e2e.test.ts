@@ -7755,7 +7755,10 @@ describe("Claude Code's web search goes only to endpoints that search the web by
   }
 
   /** 三家都选了 claude-sonnet-4-5（Anthropic 官方接口前面的中转）：A、C 打开了「自己能联网搜索」，B 没有；`searchers` 改写哪几家打开。 */
-  async function threeRelays(searchers: Record<string, boolean> = { a: true, c: true }) {
+  async function threeRelays(
+    searchers: Record<string, boolean> = { a: true, c: true },
+    models: Record<string, string[]> = {},
+  ) {
     const upstreams = {
       a: await startUpstream(),
       b: await startUpstream(),
@@ -7771,7 +7774,7 @@ describe("Claude Code's web search goes only to endpoints that search the web by
         slug: `relay-${key}`,
         name: `Relay ${key.toUpperCase()}`,
         baseUrls: [{ format: "anthropic_messages", url: upstreams[key].url }],
-        models: ["claude-sonnet-4-5"],
+        models: models[key] ?? ["claude-sonnet-4-5"],
       });
       return searchers[key] ? Object.assign(endpoint, { searchesWeb: true }) : endpoint;
     });
@@ -7825,6 +7828,29 @@ describe("Claude Code's web search goes only to endpoints that search the web by
       expect(body.tool_choice).toEqual({ type: "tool", name: "web_search" });
       expect(body.model).toBe("claude-sonnet-4-5");
     }
+  });
+
+  test("a Subagent's search is matched by the Subagent's model, not the conversation's", async () => {
+    const { upstreams, ask } = await threeRelays(
+      { a: true, b: true, c: true },
+      { b: ["claude-sonnet-4-5", "claude-haiku-4-5"] },
+    );
+    for (const upstream of Object.values(upstreams)) {
+      upstream.respond = (_request, res) => streamReply(res, { text: "found it" });
+    }
+
+    // 同一个会话里：主对话的搜索按主模型，Subagent（haiku）的搜索按它自己的模型。
+    const main = await ask(searchRequest("claude-sonnet-4-5"));
+    expect(main.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await main.text();
+    const subagent = await ask(searchRequest("claude-haiku-4-5"));
+
+    expect(subagent.status).toBe(200);
+    expect(subagent.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await subagent.text()).toContain("found it");
+    expect(upstreams.b.requests.map(receivedModel)).toEqual(["claude-haiku-4-5"]);
+    expect(upstreams.a.requests.map(receivedModel)).toEqual(["claude-sonnet-4-5"]);
+    expect(upstreams.c.requests).toHaveLength(0);
   });
 
   test("the conversation itself still goes to the endpoint it names", async () => {

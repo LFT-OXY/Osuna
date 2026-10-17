@@ -702,6 +702,24 @@ describe("Searches the web by itself", () => {
       searchesWeb: true,
     });
 
+    // 手改成 false 的文件照常读，读作关。
+    const handEdited = JSON.parse(await readFile(restarted.endpointsPath, "utf8"));
+    for (const endpoint of handEdited.endpoints) {
+      if (endpoint.id === id) endpoint.searchesWeb = false;
+    }
+    await writeFile(restarted.endpointsPath, JSON.stringify(handEdited, null, 2));
+    const reread = await restarted.client.apiEndpointList("claude");
+    expect(reread.error).toBeNull();
+    expect(reread.endpoints.find((endpoint) => endpoint.id === id)?.searchesWeb).toBe(false);
+    await restarted.client.apiEndpointSave({
+      provider: "claude",
+      endpointId: id,
+      name: "Relay renamed",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [{ id: "m1" }],
+      searchesWeb: true,
+    });
+
     const turnedOff = await restarted.client.apiEndpointSave({
       provider: "claude",
       endpointId: id,
@@ -760,6 +778,30 @@ describe("Claude Code's WebSearch follows the endpoints that search the web by t
 
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(USER_DENY);
+  });
+
+  test("a WebSearch deny rule the user wrote stays byte for byte through all three steps", async () => {
+    const userRules = `  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "WebSearch"
+    ]
+  }`;
+    const { client, settingsPath } = await start();
+    await writeFile(settingsPath, `{\n${userRules}\n}\n`);
+    const id = await saveEndpoint(client, "Searcher", ["s1"]);
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    const text = () => readFile(settingsPath, "utf8");
+
+    // 一家都没开：规则是用户的，Osuna 不再加一条。
+    expect(await text()).toContain(userRules);
+    await setSearchesWeb(client, id, true);
+    expect(await text()).toContain(userRules);
+    await setSearchesWeb(client, id, false);
+    expect(await text()).toContain(userRules);
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await text()).toBe(`{\n${userRules}\n}\n`);
   });
 
   test("a switch on an endpoint with only a Chat address does not count", async () => {
