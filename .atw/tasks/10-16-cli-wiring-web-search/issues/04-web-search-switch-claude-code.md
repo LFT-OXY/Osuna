@@ -10,7 +10,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 协议：接口的新字段可选，列表与保存都带它；旧客户端保存接口时不丢这个字段（照 `manualModels` 的做法，省略即保留）。
 - [ ] 存储：旧 `endpoints.json` 照常读；保存后重启 daemon，字段还在。
