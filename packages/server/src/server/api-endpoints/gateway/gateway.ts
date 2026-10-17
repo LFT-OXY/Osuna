@@ -37,6 +37,7 @@ import {
   type GatewayCandidate,
   type GatewayRoute,
 } from "./routing.js";
+import { foldsRootsUpFront } from "./refused-fields.js";
 import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
@@ -737,8 +738,12 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   const { refusals } = input.failover;
   const endpointId = candidate.endpoint.id;
   const model = candidate.upstreamModel;
+  const foldsRoots = foldsRootsUpFront(candidate.baseUrl);
   return {
-    has: (shape) => refusals.has(endpointId, model, shape),
+    has: (shape) => {
+      const foldedUpFront = shape === "rootUnion" && foldsRoots;
+      return foldedUpFront || refusals.has(endpointId, model, shape);
+    },
     add: (shape) => {
       // 并发的请求可能都按旧写法发出、都被拒：日志只在第一次记住时写。
       if (refusals.has(endpointId, model, shape)) return;

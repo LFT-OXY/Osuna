@@ -13,7 +13,7 @@ import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
   askWithOneKeyHeader,
-  askWithoutImageTool,
+  askWithoutField,
   keyHeaderValues,
   keyHeadersFor,
   type KeyHeaders,
@@ -120,12 +120,21 @@ export async function attemptTranslated(input: {
     refit: build,
     ask: open,
   });
+  const sentCacheKey = sendsCacheKey({ request: input.request, to, refusals });
+  opened = await askWithoutField({
+    refusals,
+    field: "cacheKey",
+    offered: sentCacheKey,
+    outcome: refitted.outcome,
+    ask: (without) => open(build(without)),
+  });
   const sentImageTool = !refusals.has("imageTool") && requestOffersImageTool(input.request);
   const mayRefuseImageTool = sentImageTool && !takesImageTool(input.baseUrl);
-  opened = await askWithoutImageTool({
+  opened = await askWithoutField({
     refusals,
+    field: "imageTool",
     offered: mayRefuseImageTool,
-    outcome: refitted.outcome,
+    outcome: opened,
     ask: (without) => open(build(without)),
   });
   if (opened.kind !== "opened") return opened;
@@ -198,6 +207,16 @@ function upstreamBody(input: {
     refused: (field) => refusals.has(field),
   });
   return JSON.stringify(body);
+}
+
+/** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */
+function sendsCacheKey(input: {
+  request: GatewayRequest;
+  to: ApiEndpointRequestFormat;
+  refusals: ShapeRefusals;
+}): boolean {
+  const carried = input.request.cacheKey !== "" && input.to !== "anthropic_messages";
+  return carried && !input.refusals.has("cacheKey");
 }
 
 /** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */

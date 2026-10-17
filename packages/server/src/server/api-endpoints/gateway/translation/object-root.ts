@@ -19,8 +19,9 @@ const UNION_KEYS = ["anyOf", "oneOf", "allOf"];
 
 /** Messages 的 input_schema：里面有联合（`Of"`）时把根包成 object；不用改就交回同一个对象（magpie objectSchema）。 */
 export function objectSchema(schema: unknown): unknown {
-  if (!isRecord(schema) || !JSON.stringify(schema).includes('Of"')) return schema;
-  return objectRoot(schema);
+  if (!isRecord(schema)) return schema;
+  const mentionsUnion = JSON.stringify(schema).includes('Of"');
+  return mentionsUnion ? objectRoot(schema) : schema;
 }
 
 /** 根包成 object 的 schema；根已经是没有联合的 object 时交回同一个对象（magpie ObjectRoot）。 */
@@ -152,6 +153,8 @@ function sameSchema(a: unknown, b: unknown): boolean {
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, inner: unknown) => {
     if (!isRecord(inner)) return inner;
-    return Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : 1)));
+    const entries = Object.entries(inner);
+    const sorted = entries.sort(([a], [b]) => (a < b ? -1 : 1));
+    return Object.fromEntries(sorted);
   });
 }

@@ -3,6 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { hostOf } from "../model-facts.js";
 import { isRecord } from "../upstream-http.js";
 import { toolLoadedText, type GatewayRequest } from "./translation/ir.js";
 import { objectRoot } from "./translation/object-root.js";
@@ -331,7 +332,9 @@ function toolsWithoutStrict(input: { tools: unknown[]; chat: boolean }): unknown
  */
 function foldsTools(body: Body): Body {
   const { tools } = body;
-  if (!Array.isArray(tools) || !JSON.stringify(tools).includes('Of"')) return body;
+  if (!Array.isArray(tools)) return body;
+  const hasUnion = JSON.stringify(tools).includes('Of"');
+  if (!hasUnion) return body;
   const folded = toolsFolded(tools);
   if (folded === tools) return body;
   return { ...body, tools: folded };
@@ -408,6 +411,11 @@ export function withoutImageToolRequest(request: GatewayRequest): GatewayRequest
   const asksForGoneTool = tools.length === 0 && asksForTool;
   const toolChoice = asksForGoneTool ? "" : request.toolChoice;
   return { ...request, tools, toolChoice };
+}
+
+/** xAI 自己的 API 不收根是联合的工具参数，不等它拒：一开始就包成 object（magpie object_root.go 的 foldsRoots）。 */
+export function foldsRootsUpFront(baseUrl: string): boolean {
+  return hostOf(baseUrl) === "api.x.ai";
 }
 
 /** OpenAI 自己的地址收 Codex 的画图工具，不必去掉（magpie mayDropImageTool；Osuna 没有 ChatGPT 登录的接口）。 */

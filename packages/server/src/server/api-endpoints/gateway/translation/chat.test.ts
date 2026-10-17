@@ -872,7 +872,7 @@ describe("this turn's thinking and server tools between Claude Code and a Chat e
   });
 });
 
-describe("a Chat request built for the model as its facts say (magpie fitFor, catalog.NearestEffort, RejectsTemperature)", () => {
+describe("a Chat request built for the model as its facts say (magpie fitFor, catalog.NearestEffort, Levelless, RejectsTemperature)", () => {
   function built(input: { effort: Effort; facts: ModelFacts }) {
     const asked = {
       ...request([{ role: "user", parts: [{ kind: "text", text: "hi" }] }]),
@@ -910,14 +910,28 @@ describe("a Chat request built for the model as its facts say (magpie fitFor, ca
     expect(built({ effort: "low", facts })).toEqual(body({ reasoning_effort: "low" }));
   });
 
+  test("the whole ladder counts, minimal included (magpie EffortRank)", () => {
+    expect(built({ effort: "xhigh", facts: { efforts: ["minimal"] } })).toEqual(
+      body({ reasoning_effort: "minimal" }),
+    );
+    expect(built({ effort: "low", facts: { efforts: ["minimal", "high"] } })).toEqual(
+      body({ reasoning_effort: "minimal" }),
+    );
+  });
+
   test("never none, which only turning reasoning off asks", () => {
     const facts = { efforts: ["none", "high"] };
     expect(built({ effort: "low", facts })).toEqual(body({ reasoning_effort: "high" }));
   });
 
-  test("a model whose levels are not known is asked no more than high", () => {
-    expect(built({ effort: "max", facts: {} })).toEqual(body({ reasoning_effort: "high" }));
-    expect(built({ effort: "medium", facts: {} })).toEqual(body({ reasoning_effort: "medium" }));
+  test("a model known to have no levels is asked no more than high; one whose levels are not known, as asked", () => {
+    expect(built({ effort: "max", facts: { efforts: [] } })).toEqual(
+      body({ reasoning_effort: "high" }),
+    );
+    expect(built({ effort: "medium", facts: { efforts: [] } })).toEqual(
+      body({ reasoning_effort: "medium" }),
+    );
+    expect(built({ effort: "max", facts: {} })).toEqual(body({ reasoning_effort: "max" }));
   });
 
   test("a model known to refuse temperature and top_p is sent neither; one that takes them or is unknown keeps them", () => {

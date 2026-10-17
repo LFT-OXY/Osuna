@@ -88,6 +88,32 @@ async function harness(): Promise<Harness> {
 }
 
 describe("ModelsDevCatalog", () => {
+  test("keeps each provider's own word on temperature, by its API host, across restarts", async () => {
+    const h = await harness();
+    h.respond = async () =>
+      new Response(
+        JSON.stringify({
+          ...API_JSON,
+          deepseek: {
+            api: "https://api.deepseek.com",
+            models: { "deepseek-reasoner": { temperature: false } },
+          },
+        }),
+        { status: 200 },
+      );
+    const catalog = h.create();
+    const ask = { hosts: ["api.deepseek.com"], modelId: "deepseek-reasoner" };
+    expect(catalog.takesSampling(ask)).toBeUndefined();
+
+    catalog.start();
+    await h.fire();
+    catalog.dispose();
+
+    expect(catalog.takesSampling(ask)).toBe(false);
+    expect(h.create().takesSampling(ask)).toBe(false);
+    expect(h.create().takesSampling({ ...ask, hosts: ["relay.example"] })).toBeUndefined();
+  });
+
   test("knows nothing before the first download, then keeps what it fetched across restarts", async () => {
     const h = await harness();
     const catalog = h.create();

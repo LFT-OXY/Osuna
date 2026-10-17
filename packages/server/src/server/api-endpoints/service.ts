@@ -73,7 +73,7 @@ import {
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
-import { mergeModelFacts, type ModelFacts } from "./model-facts.js";
+import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
 import {
   fetchUpstreamModels,
@@ -742,7 +742,12 @@ export class ApiEndpointService {
    */
   modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
     const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
-    return mergeModelFacts(listed, this.modelsDev.facts(modelId));
+    const facts = mergeModelFacts(listed, this.modelsDev.facts(modelId));
+    // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，像 magpie 只看这家的目录。
+    const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
+    const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
+    if (takesSampling === undefined) return facts;
+    return { ...facts, takesSampling };
   }
 
   /**

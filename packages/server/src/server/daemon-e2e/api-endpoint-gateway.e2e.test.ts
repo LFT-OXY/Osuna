@@ -23,7 +23,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
- * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning。
+ * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning；翻译时去掉 prompt_cache_key 重问照 prompt_cache_test.go（TestPromptCacheKeyRefused）。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -150,6 +150,8 @@ async function start(
     keepAliveQuietMs?: number;
     // 写进 models-dev.json 的模型资料（按模型名），不联网。
     modelsDev?: Record<string, Record<string, unknown>>;
+    // 写进 models-dev.json 的各服务商收不收采样参数（按主机名，再按模型名）。
+    modelsDevSampling?: Record<string, Record<string, boolean>>;
     // B 的上游清单（catalog）里给的模型资料（按模型名）。
     catalogB?: Record<string, Record<string, unknown>>;
   } = {},
@@ -220,7 +222,12 @@ async function start(
     await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
   }
   if (options.modelsDev) {
-    const cache = { fetchedAt: "2026-10-15T00:00:00.000Z", etag: null, models: options.modelsDev };
+    const cache = {
+      fetchedAt: "2026-10-15T00:00:00.000Z",
+      etag: null,
+      models: options.modelsDev,
+      sampling: options.modelsDevSampling ?? {},
+    };
     await writeFile(path.join(endpointsDir, "models-dev.json"), JSON.stringify(cache));
   }
 
@@ -1520,9 +1527,11 @@ describe("translating for Codex, and to an endpoint that speaks only Responses",
       chatUpstream: chat,
       upstreamB: anthropic,
       modelsDev: {
-        "qwen3-coder": { efforts: ["low", "high", "max"], takesSampling: false },
+        "qwen3-coder": { efforts: ["low", "high", "max"] },
         "glm-4.6": { context: 200_000, output: 131_072, efforts: ["low", "medium", "high"] },
       },
+      // 假上游在 127.0.0.1：models.dev 里这个主机名的服务商说 qwen3-coder 不收采样参数。
+      modelsDevSampling: { "127.0.0.1": { "qwen3-coder": false } },
       // 这家自己的清单给的回复上限在 models.dev 的前面。
       catalogB: { "glm-4.6": { output: 98_304 } },
     });
@@ -1612,6 +1621,38 @@ describe("translating for Codex, and to an endpoint that speaks only Responses",
         },
       ],
     });
+  });
+
+  test("a Chat endpoint's unexplained 400 to the cache key is asked again without it, remembered once that answers (magpie TestPromptCacheKeyRefused)", async () => {
+    const keyed = (request: RecordedRequest) =>
+      "prompt_cache_key" in (JSON.parse(request.body.toString()) as Record<string, unknown>);
+    const ask = (gateway: string) =>
+      fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ ...codexConversation("qwen3-coder", true), prompt_cache_key: "thread-1" }),
+      );
+
+    const keyRefusing = await startUpstream();
+    keyRefusing.respond = (request, res) => {
+      if (!keyed(request)) return chatStream(res);
+      res.writeHead(422, { "content-type": "application/json" });
+      res.end(`{"error":{"message":"invalid request body"}}`);
+    };
+    const first = await start({ chatUpstream: keyRefusing });
+    const turns = [await ask(first.gateway), await ask(first.gateway)];
+    expect(turns.map((response) => response.status)).toEqual([200, 200]);
+    expect(keyRefusing.requests.map(keyed)).toEqual([true, false, false]);
+
+    // 拒的是别的（对话太长）：去掉也没用，不记，下一轮照样带。
+    const other = await startUpstream();
+    other.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(`{"error":{"message":"context too long"}}`);
+    };
+    const second = await start({ chatUpstream: other });
+    const failed = [await ask(second.gateway), await ask(second.gateway)];
+    expect(failed.map((response) => response.status)).toEqual([400, 400]);
+    expect(other.requests.map(keyed)).toEqual([true, false, true, false]);
   });
 
   test("a Claude Code request reaches a Responses-only endpoint translated and the stream comes back as Anthropic events", async () => {

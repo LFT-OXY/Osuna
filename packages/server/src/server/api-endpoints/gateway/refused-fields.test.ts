@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  foldsRootsUpFront,
   offersImageTool,
   refusedFields,
   withoutRefusedFields,
@@ -443,6 +444,11 @@ describe("a tool whose parameters are a union at the root refused (magpie object
         },
       ],
     });
+  });
+
+  test("xAI's own API gets them folded from the start; another host only once it refused (magpie foldsRoots)", () => {
+    expect(foldsRootsUpFront("https://api.x.ai/v1")).toBe(true);
+    expect(foldsRootsUpFront("https://relay.example/v1")).toBe(false);
   });
 
   test("an object root is left as it came", () => {

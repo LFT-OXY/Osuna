@@ -141,26 +141,28 @@ function refusesBare(failed: FailedAttempt): boolean {
 }
 
 /**
- * Codex 的画图工具：不认命名空间的厂商回一个不说原因的 400（magpie #949）。这次的请求带着它、这家又不是 OpenAI 自己的地址时，
- * 去掉它在同一家重问一次；重问开了口才记住，以后不发。重问仍失败就交出那次的失败，按原来的规则处理。
+ * 不说原因的 400 / 422 可能是因为某个字段：这次的请求带着它时，去掉它在同一家重问一次；重问开了口才记住，以后不发。
+ * 重问仍失败就交出那次的失败，按原来的规则处理，也不记。用在 Codex 的画图工具（不认命名空间的厂商，magpie #949）
+ * 与翻译时的 prompt_cache_key（不认识的字段一律不收的厂商，原话不一定点名，magpie gateway.go 的 forwardTranslated）。
  */
-export async function askWithoutImageTool(input: {
+export async function askWithoutField(input: {
   refusals: ShapeRefusals;
-  // 这次发出的请求带着画图工具，且这家可能不收（不是 OpenAI 自己的地址）。
+  field: DroppedField;
+  // 这次发出的请求带着这个字段，且这家可能不收。
   offered: boolean;
   outcome: UpstreamOpening;
   ask: (refusals: ShapeRefusals) => Promise<UpstreamOpening>;
 }): Promise<UpstreamOpening> {
-  const { outcome, refusals } = input;
+  const { outcome, refusals, field } = input;
   if (outcome.kind !== "failed") return outcome;
   const bareRefusal = input.offered && refusesBare(outcome);
   if (!bareRefusal) return outcome;
   const without: ShapeRefusals = {
-    has: (shape) => shape === "imageTool" || refusals.has(shape),
+    has: (shape) => shape === field || refusals.has(shape),
     add: (shape) => refusals.add(shape),
   };
   const retried = await input.ask(without);
-  if (retried.kind === "opened") refusals.add("imageTool");
+  if (retried.kind === "opened") refusals.add(field);
   return retried;
 }
 

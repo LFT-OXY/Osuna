@@ -622,7 +622,8 @@ export function buildResponsesRequest(
   };
   if (request.clientMetadata !== null) out.client_metadata = request.clientMetadata;
   const text = request.format ? { format: responsesFormat(request.format) } : {};
-  if (request.text !== null || request.format) out.text = { ...request.text, ...text };
+  const asksText = request.text !== null || request.format !== null;
+  if (asksText) out.text = { ...request.text, ...text };
   if (request.cacheKey !== "") out.prompt_cache_key = request.cacheKey;
   if (request.system !== "") out.instructions = request.system;
   if (request.maxTokens > 0) out.max_output_tokens = request.maxTokens;

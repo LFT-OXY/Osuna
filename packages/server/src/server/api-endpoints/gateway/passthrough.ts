@@ -30,7 +30,7 @@ import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
   askWithOneKeyHeader,
-  askWithoutImageTool,
+  askWithoutField,
   keyHeaderValues,
   keyHeadersFor,
   type KeyHeaders,
@@ -157,8 +157,9 @@ export async function attemptEndpoint(input: {
     const sentImageTool =
       input.format === "openai_responses" && offersImageTool(parseJson(refitted.sent));
     const mayRefuseImageTool = sentImageTool && !takesImageTool(input.baseUrl);
-    opened = await askWithoutImageTool({
+    opened = await askWithoutField({
       refusals,
+      field: "imageTool",
       offered: mayRefuseImageTool,
       outcome: refitted.outcome,
       ask: (without) => open(upstreamBody({ ...input, refusals: without })),

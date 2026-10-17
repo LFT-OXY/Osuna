@@ -164,19 +164,23 @@ gemini_pending_call_test.go:
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
 The generic fixes a translated request gets by the model it goes to: the
-effort fitted to the model's own levels (fitFor in internal/gateway/decide.go,
-fitEffort in ir.go, EffortRank and NearestEffort in internal/catalog/catalog.go),
+effort fitted to the model's own levels, no more than high for a model listed
+with none (fitFor in internal/gateway/decide.go, fitEffort in ir.go, EffortRank
+and NearestEffort in internal/catalog/catalog.go, Levelless in
+internal/provider/models.go),
 the model's published reply limit where Anthropic's Messages API needs one
 (askedOutput in maxoutput.go, OutputWithin in internal/provider/models.go),
 temperature and top_p left out for a model known to refuse them
-(RejectsTemperature in internal/provider/models.go, rejectTemp in chat.go and
-responses.go), Codex's prompt_cache_key, include, client_metadata and text
-carried on (Request.CacheKey, Include, ClientMetadata and Text in ir.go,
-textFormat in responses.go) and the key left out where refused (cacheKeyField,
-refusesField in gateway.go), a tool's union root folded to an object
-(ObjectRoot, objectRootIn, grokRef and appendDistinct in
-internal/provider/grok.go, objectSchema in anthropic.go, rootUnionRefusal,
-objectRootsBody and foldTools in object_root.go), an earlier turn's thinking
+by the provider's own models.dev entry (RejectsTemperature in
+internal/provider/models.go, rejectTemp in chat.go and responses.go), Codex's
+prompt_cache_key, include, client_metadata and text carried on
+(Request.CacheKey, Include, ClientMetadata and Text in ir.go, textFormat in
+responses.go) and the key left out where refused, named or not
+(cacheKeyField, refusesField and the retry in forwardTranslated in
+gateway.go), a tool's union root folded to an object (ObjectRoot,
+objectRootIn, grokRef and appendDistinct in internal/provider/grok.go,
+objectSchema in anthropic.go, rootUnionRefusal, foldsRoots, objectRootsBody
+and foldTools in object_root.go), an earlier turn's thinking
 in any of a Chat client's three spellings (messageReasoning and reasoningText
 in chattidy.go), Gemini's thoughts marked in extra_content (markedThought in
 chat.go), and the phase of each message told to Codex (phaseOutput and
@@ -186,6 +190,9 @@ object_root_test.go, internal/provider/grok_test.go,
 chat_inbound_reasoning_test.go, gemini_thought_tag_test.go and phase_test.go:
 
   packages/server/src/server/api-endpoints/model-facts.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
   packages/server/src/server/api-endpoints/gateway/refused-fields.ts
   packages/server/src/server/api-endpoints/gateway/refused-fields.test.ts
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts

@@ -87,7 +87,8 @@ export interface NamedTool {
 /** 空为没说；`name:<工具名>` 为点名某个工具。 */
 export type ToolChoice = "" | "auto" | "none" | "required" | `name:${string}`;
 
-export type Effort = "" | "low" | "medium" | "high" | "xhigh" | "max";
+/** minimal、ultra 只来自按模型资料适配（requestForModel），读请求时归到 low、max。 */
+export type Effort = "" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 /** 客户端要的回答形状（结构化输出）：按 schema 的 JSON，或任意 JSON 对象。 */
 export type Format = { type: "json_object" } | SchemaFormat;
@@ -428,27 +429,36 @@ export function openAIEffort(request: GatewayRequest): string | null {
 }
 
 /** 各家说的推理档位，从弱到强（magpie EffortRank）。 */
-const EFFORT_RANK = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
-
-// 中间格式能带的档位：模型资料里别的档位（minimal 之类）不挑。
-const EFFORTS: readonly Effort[] = ["low", "medium", "high", "xhigh", "max"];
+const EFFORT_RANK: readonly (Effort | "none")[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
 
 /**
  * 模型自己的档位里离要的最近的一档，一样近取高的，不挑 none（magpie NearestEffort）。
- * 档位不知道、本来就有要的这档时照要的。
+ * 档位不知道、本来就有要的这档、或要的不是认得的档位时照要的。
  */
 export function nearestEffort(want: Effort, levels: string[]): Effort {
-  const known = EFFORTS.filter((effort) => levels.includes(effort));
   const at = EFFORT_RANK.indexOf(want);
-  if (known.length === 0 || at < 0 || known.includes(want)) return want;
+  const keepsWant = levels.length === 0 || at < 0 || levels.includes(want);
+  if (keepsWant) return want;
   let best = want;
   let distance = EFFORT_RANK.length;
-  for (const level of known) {
-    const index = EFFORT_RANK.indexOf(level);
+  for (const level of levels) {
+    const index = EFFORT_RANK.findIndex((rung) => rung === level);
+    const rung = EFFORT_RANK[index];
+    if (rung === undefined || rung === "none") continue;
     const gap = Math.abs(index - at);
+    const isCloser = gap < distance;
     const isTieUp = gap === distance && index > at;
-    if (gap < distance || isTieUp) {
-      best = level;
+    if (isCloser || isTieUp) {
+      best = rung;
       distance = gap;
     }
   }
@@ -457,7 +467,8 @@ export function nearestEffort(want: Effort, levels: string[]): Effort {
 
 /**
  * 按模型资料改翻译出的请求（magpie forwardTranslated 的 fitFor、askedOutput 与 build 的 rejectTemp）：
- * - 推理档位挑模型自己有的最近一档；档位不知道时，发给 OpenAI 格式的 xhigh、max 降到各家都收的 high。
+ * - 推理档位挑模型自己有的最近一档；知道它没有可挑的档位（资料里档位是空列表，magpie Levelless）时不超过 high，
+ *   档位不知道的照要的发。
  * - Messages 必须给回复上限：请求没给时按模型公布的上限（不超过窗口）填，不知道才由构建用 16384。
  * - 已知不收 temperature、top_p 的模型发 Chat、Responses 时不带；Claude 走 Messages 另有 refusesSampling。
  */
@@ -468,26 +479,26 @@ export function requestForModel(input: {
 }): GatewayRequest {
   const { request, facts } = input;
   const messages = input.to === "anthropic_messages";
-  const levels = facts.efforts ?? [];
-  const effort = nearestEffort(request.effort, levels);
-  const unknownAboveHigh = levels.length === 0 && (effort === "xhigh" || effort === "max");
-  const capsEffort = !messages && unknownAboveHigh;
-  const fills = messages && request.maxTokens <= 0;
+  const levels = facts.efforts;
+  const nearest = nearestEffort(request.effort, levels ?? []);
+  const levelless = levels !== undefined && levels.length === 0;
+  const aboveHigh = EFFORT_RANK.indexOf(nearest) > EFFORT_RANK.indexOf("high");
+  const capsEffort = levelless && aboveHigh;
+  const effort = capsEffort ? "high" : nearest;
+  const fillsMaxTokens = messages && request.maxTokens <= 0;
+  const maxTokens = fillsMaxTokens ? publishedOutput(facts) : request.maxTokens;
   const dropsSampling = !messages && facts.takesSampling === false;
-  return {
-    ...request,
-    effort: capsEffort ? "high" : effort,
-    maxTokens: fills ? publishedOutput(facts) : request.maxTokens,
-    temperature: dropsSampling ? null : request.temperature,
-    topP: dropsSampling ? null : request.topP,
-  };
+  const temperature = dropsSampling ? null : request.temperature;
+  const topP = dropsSampling ? null : request.topP;
+  return { ...request, effort, maxTokens, temperature, topP };
 }
 
 /** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie OutputWithin）。 */
 function publishedOutput(facts: ModelFacts): number {
   const output = facts.output ?? 0;
   const context = facts.context ?? 0;
-  return context > 0 && output > context ? context : output;
+  const pastWindow = context > 0 && output > context;
+  return pastWindow ? context : output;
 }
 
 /** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */
@@ -499,11 +510,14 @@ export function thinkingBackOn(request: GatewayRequest): GatewayRequest {
 export function budgetOf(effort: Effort): number {
   const budgets: Record<Effort, number> = {
     "": 10_000,
+    // magpie budgetOf 不认的档位按 10000。
+    minimal: 10_000,
     low: 4096,
     medium: 10_000,
     high: 24_000,
     xhigh: 32_000,
     max: 32_000,
+    ultra: 10_000,
   };
   return budgets[effort];
 }

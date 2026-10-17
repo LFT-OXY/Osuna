@@ -561,16 +561,16 @@ function stopToChat(stop: StopReason): string {
 // 回复文首一段思考的起止标签：没装推理解析的开源模型、MiniMax 用 <think>，Gemini 用 <thought>。
 const THOUGHT_TAGS: Record<string, string> = { "<think>": "</think>", "<thought>": "</thought>" };
 
-/**
- * Chat 流 → 中间事件。工具调用按 index 分片拼接，同一 id 重复出现（有的中转站每片都带）仍是同一个调用；
- * 只认第一个读得出 index 的 choice，读不出 index 的片不选也不拒。文首的 <think> / <thought> 段算推理。
- */
 /** Vertex AI 的 OpenAI 兼容接口把 Gemini 的思考那段在 delta.extra_content.google.thought 里标出来。 */
 function marksThought(delta: Record<string, unknown>): boolean {
   const extra = isRecord(delta.extra_content) ? delta.extra_content : {};
   return isRecord(extra.google) && extra.google.thought === true;
 }
 
+/**
+ * Chat 流 → 中间事件。工具调用按 index 分片拼接，同一 id 重复出现（有的中转站每片都带）仍是同一个调用；
+ * 只认第一个读得出 index 的 choice，读不出 index 的片不选也不拒。文首的 <think> / <thought> 段算推理。
+ */
 export class ChatDecoder {
   private started = false;
   private tool = -1;
