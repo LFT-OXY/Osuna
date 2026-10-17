@@ -8,7 +8,7 @@
 
 **Blocked by:** 05
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：只有 Responses 地址、开了开关的假上游收到原生 `web_search`；Claude Code 收到的回复里有 `server_tool_use` 与带 title、url 的 `web_search_tool_result`，流式与整份各一例。
 - [ ] 端到端：只有 Anthropic 地址、开了开关的假上游收到 `web_search_20250305`；Codex 收到的回复里有 `web_search_call`，流式与整份各一例。
