@@ -162,3 +162,34 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 - `ModelFacts` 多一个 `images`；`models-dev.json` 与 `endpoints.json` 里存的清单资料旧文件没有这一项，下次下载、重拉清单补上（同 `sampling` 的先例）。
 - models.dev 下载的条件改为价格表自动更新开着且 Claude Code 或 Codex 的总开关开着；两个都关着到有一个打开时马上检查一次。下载更新后、重拉某家清单后，Codex 开着就重写模型目录（内容不变不写）。
 - 测试 daemon 可以换掉 models.dev 的下载函数和检查定时器（`modelsDevFetch`、`modelsDevTimers`，同 `retiredModelsTimers` 的先例），e2e 用它验证两个开关都关时到点不下载、只开 Codex 时下载并据此重写目录，不联网。
+
+## 08 ChatGPT 后端路径原样转发
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie（`internal/gateway/codex_backend.go`） | Osuna（`gateway/chatgpt-backend.ts`） |
+| --- | --- | --- |
+| 路径 | `CodexPath = "/backend-api/codex"`，挂在网关根上 | 同，挂在中转站入口下：`/api-endpoint-gateway/backend-api/codex/…` |
+| 转去哪 | `provider.CodexBase` + 原路径 + 原查询串（`codexUpstreamOn`） | 同；地址可由测试换成本机假后端（`gatewayChatGptBaseUrl`、`gatewayOpenAiApiBaseUrl`） |
+| 请求头 | `copyHeaders`：除 `hopHeader`（Connection、Keep-Alive、Proxy-Connection、Transfer-Encoding、Upgrade、Te、Trailer、Content-Length）、Host 与 magpie 的账号选择头外全带；另删 `Accept-Encoding` | 除同一组逐跳头与 Host 外全带，`Accept-Encoding` 与 `Content-Length` 也照带（见下） |
+| 请求体 | 读出来（解 zstd）、改条目 id、补搜索工具，发出前再压回 zstd | 一个字节不改，`req` 直接 pipe 给上游（工单要求原样） |
+| 回复 | 除逐跳头外的回复头照回，边收边回 | 同，`Content-Length` 也照回（字节没变） |
+| WebSocket | 处理函数里看 `Upgrade: websocket` 回 426 | daemon 的 `upgrade` 事件里回 426（`answerChatGptWebSocket`，`bootstrap.ts`）：Node 的握手不进 Express；挂在 daemon 自己的 WebSocket 服务之前，否则它先以 400 断开 |
+| `Bearer sk-` | `apiKey`：`Authorization` 去掉 `Bearer ` 后以 `sk-` 开头，除 `/models` 外转 `https://api.openai.com/v1` + 原路径 | 照做（`chatgptTarget`） |
+| 认调用方 | 路由本身专给 Codex | `judgeCaller` 照旧先拦网页与转发；这组路径按路径认作 Codex（日志记 `agent: "codex"`），口令与 User-Agent 不影响它：原样转发用不到 Agent |
+| 连不上 | `codexUnreached`，502 | 502，OpenAI 形状，说明 ChatGPT 连不上、Codex 自带模型经中转站走 Codex 自己的登录 |
+
+### `Bearer sk-` 的结论：照 magpie 转给 OpenAI API
+
+ADR 0010 下 API key 登录写的是 Osuna 的 Codex 服务商表，不写 `openai_base_url`，正常不会有 `sk-` 的请求到这组路径。只有开关开着、用户从 ChatGPT 登录换成 API key 登录、Osuna 还没按新登录方式重写 `config.toml` 的空档里，Codex 仍按 `openai_base_url` 把 API key 发到这里。不转的话 ChatGPT 会以 401 拒收这个 key，这一轮失败；照 magpie 转给 OpenAI API，和用户没开开关时 API key 登录的 Codex 去的地方一样（`codex-wiring.md` 第 3 题：没有 base_url 时 API key 登录默认 `https://api.openai.com/v1`）。key 只发给 OpenAI，不发给第三方接口，符合 PRD 第 14 条。模型清单照 magpie 仍问 ChatGPT。
+
+### 比 magpie 少做的（都超出「原样转」）
+
+- 不删 `Accept-Encoding`、不把请求体解开再压回：magpie 这么做是为了从回复里读用量、改请求体；Osuna 这里只转发，Node 的 `http` 客户端不自动解压，回复按 ChatGPT 的编码原样回给 Codex。
+- 不做 magpie 对自带模型的请求体修补（`plainItemIDs`、`boundCallIDs`、`DeclareSearch`、`withoutUnreadable` 重问）、ChatGPT 断连重问（`edgeMayDrop`）、额度重置（`autoResetSignedIn`）、网页当 502（`notAnAPIReply`）、空错误补说明（`codexFailedEmpty`）、API key 被拒的说明（`codexKeyRefused`）：工单要求请求体与回复原样，401、403 原样回给 Codex。搜索工具补声明归 10 号工单（05 节）。
+- magpie 的标题、描述、预测小请求另转、子 Agent 换模型、禁用的自带模型、多号轮换：Osuna 没有这些设置（多号轮换在子任务 9）。
+- 模型清单合并、`/responses/compact` 与 `/alpha/search` 按模型分流归 10 号工单；本张一律原样转。
+
+### WebSocket 426 的写法
+
+daemon 的 `ws` 服务（`path: "/ws"`）对路径不符的握手同步写 400 并断开。426 的监听挂在它前面、同步写完整个回复，`ws` 随后对已结束的 socket 再写会报错并销毁 socket，此时 426 已写进内核；e2e 用真实 daemon 验证 Codex 收到 426、假 ChatGPT 后端什么都没收到。
