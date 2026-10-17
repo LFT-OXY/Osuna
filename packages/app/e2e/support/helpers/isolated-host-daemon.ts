@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { withDisabledE2ESpeechEnv } from "./speech-env";
 import { killProcessTree, spawnTsx } from "./spawn-node";
 
@@ -25,6 +26,17 @@ export interface IsolatedHostDaemonOptions {
   paseoHome?: string;
   preserveHome?: boolean;
   publishedVersion?: string;
+}
+
+/**
+ * 测试 daemon 永远碰不到本机的 CLI 安装：预加载 daemon-upgrade-seal.mjs，不查最新版本、
+ * 把升级命令换成立刻失败的进程。
+ */
+export const UPGRADE_SEAL_PATH = path.resolve(__dirname, "../daemon-upgrade-seal.mjs");
+
+function withUpgradeSeal(nodeOptions: string | undefined): string {
+  const seal = `--import ${pathToFileURL(UPGRADE_SEAL_PATH).href}`;
+  return nodeOptions ? `${nodeOptions} ${seal}` : seal;
 }
 
 async function getAvailablePort(): Promise<number> {
@@ -191,6 +203,9 @@ export async function startIsolatedHostDaemon(
         PASEO_RELAY_ENABLED: options.mutableRelay ? undefined : "0",
         PASEO_NODE_ENV: "development",
         NODE_ENV: "development",
+        NODE_OPTIONS: withUpgradeSeal(
+          options.environment?.NODE_OPTIONS ?? process.env.NODE_OPTIONS,
+        ),
       }),
       stdio: ["ignore", "ignore", "pipe"],
       detached: false,

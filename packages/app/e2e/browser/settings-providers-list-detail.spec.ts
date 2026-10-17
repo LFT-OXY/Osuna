@@ -10,6 +10,7 @@ import {
   openCompactSettings,
   openSettingsHost,
   openSettingsHostSection,
+  clickProviderRow,
   providerRow,
   returnToProvidersList,
   readProviderRowIds,
@@ -72,7 +73,7 @@ test.describe("Settings providers list and detail", () => {
     const [first, second] = await readTwoProviderIds(page);
 
     await test.step("pressing a row pushes its detail", async () => {
-      await providerRow(page, second).click();
+      await clickProviderRow(page, second);
       await expectProviderDetail(page, serverId, second);
       await expect(page.getByTestId("settings-providers-breadcrumb")).toBeVisible();
     });
@@ -87,7 +88,7 @@ test.describe("Settings providers list and detail", () => {
     });
 
     await test.step("browser Back returns from the detail to the list", async () => {
-      await providerRow(page, first).click();
+      await clickProviderRow(page, first);
       await expectProviderDetail(page, serverId, first);
       await page.goBack();
       await expectProvidersList(page, serverId);
@@ -125,7 +126,7 @@ async function openProviderDetail(page: Page, provider: string): Promise<void> {
   await openSettingsHost(page, serverId);
   await openSettingsHostSection(page, serverId, "providers");
   await expectProvidersList(page, serverId);
-  await providerRow(page, provider).click();
+  await clickProviderRow(page, provider);
   await expectProviderDetail(page, serverId, provider);
 }
 
@@ -203,7 +204,7 @@ test.describe("Settings providers list and detail on a narrow desktop window", (
     const [, second] = await readTwoProviderIds(page);
 
     await test.step("pressing a row pushes its detail", async () => {
-      await providerRow(page, second).click();
+      await clickProviderRow(page, second);
       await expectProviderDetail(page, serverId, second);
       await expect(page.getByTestId("settings-providers-breadcrumb")).toBeVisible();
     });
@@ -214,7 +215,7 @@ test.describe("Settings providers list and detail on a narrow desktop window", (
     });
 
     await test.step("resizing keeps the detail", async () => {
-      await providerRow(page, second).click();
+      await clickProviderRow(page, second);
       await expectProviderDetail(page, serverId, second);
       await page.setViewportSize(WIDE_VIEWPORT);
       await expectProviderDetail(page, serverId, second);
@@ -242,7 +243,7 @@ test.describe("Settings providers list and detail on a phone", () => {
 
     await test.step("pressing a row pushes its full-screen detail", async () => {
       const [label] = (await providerRow(page, first).innerText()).split("\n");
-      await providerRow(page, first).click();
+      await clickProviderRow(page, first);
       await expectProviderDetail(page, serverId, first);
       await expect(page.getByTestId("provider-detail-refresh")).toBeVisible();
       // 顶栏标题与页内头部块各显示一次名称。

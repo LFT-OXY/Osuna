@@ -10,6 +10,7 @@ import {
   openProviderCatalog,
   openSettingsHost,
   openSettingsHostSection,
+  clickProviderRow,
   providerRow,
   returnToProvidersList,
   readProviderRowIds,
@@ -85,7 +86,7 @@ test.describe("provider removal", () => {
       await openSettingsHost(page, getServerId());
       await openSettingsHostSection(page, getServerId(), "providers");
       const [firstProvider] = await readProviderRowIds(page);
-      await providerRow(page, firstProvider).click();
+      await clickProviderRow(page, firstProvider);
       await expectProviderDetail(page, getServerId(), firstProvider);
 
       // 内置提供方的菜单只有「诊断」。

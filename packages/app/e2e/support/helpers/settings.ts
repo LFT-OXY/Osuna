@@ -369,6 +369,14 @@ export function providerRow(page: Page, provider: string) {
   return page.getByTestId(`provider-row-${provider}`).filter({ visible: true });
 }
 
+/**
+ * 打开提供方详情：点行的左上角（图标那一侧）。行中央下面一行可能是「Upgrade to …」按钮，
+ * 点中它会让测试 daemon 在本机执行真的升级命令（2026-10-18 就这样弄坏过开发者的 Claude Code）。
+ */
+export async function clickProviderRow(page: Page, provider: string): Promise<void> {
+  await providerRow(page, provider).click({ position: { x: 12, y: 8 } });
+}
+
 // "已启用"组的行；停用的提供方 daemon 不探测，详情页也没有诊断等区块。
 function enabledProviderRows(page: Page) {
   return page
