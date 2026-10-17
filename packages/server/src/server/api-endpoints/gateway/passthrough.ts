@@ -54,6 +54,7 @@ import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
+import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
 import { wholeEvents } from "./whole-stream.js";
 import {
   ANSWERED_BY_HEADER,
@@ -400,7 +401,7 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  endpoint: AdvisorEndpoint;
+  endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls">;
   refusals?: ShapeRefusals;
 }
 
@@ -428,12 +429,20 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
     if (replaysThinking(input.upstreamModel)) text = fitResponsesBody(text, input.upstreamModel);
     else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
+    if (!searchesWebItself(input.endpoint, "openai_responses")) text = withoutWebSearchText(text);
   }
   // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
   text = withVendorText({ ...input, text });
   return Buffer.from(text);
+}
+
+/** 不会搜的那家收不到 Codex 的 web_search（ADR 0009）：只改变了的顶层字段，其余字节原样。 */
+function withoutWebSearchText(text: string): string {
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  return withChangedKeys({ text, body, fitted: withoutResponsesWebSearch(body) });
 }
 
 /** 按厂商的改写（vendor-rewrites.ts，count_tokens 也算，照 magpie forwardOnce）：只改变了的顶层字段，其余字节原样。 */

@@ -7886,3 +7886,156 @@ describe("Claude Code's web search goes only to endpoints that search the web by
     for (const upstream of Object.values(upstreams)) expect(upstream.requests).toHaveLength(0);
   });
 });
+
+/*
+ * Codex 的搜索工具按开关保留或拿掉（工单 05，ADR 0009）：Codex 每轮都带 {"type":"web_search"}（research/web-search.md「Codex 自身」）。
+ * 照 magpie search_own_api_test.go（TestSearchOfferedStaysOnTheClientsAPI）：不会搜的那家收不到搜索工具；
+ * 历史里的 web_search_call 照 magpie responses.go 读 input 的那段：不会搜的那家不收（magpie 重建请求时不读这一项），会搜的原样收。
+ */
+describe("Codex's web_search tool goes only to endpoints that search the web by themselves", () => {
+  const WEB_SEARCH = { type: "web_search", external_web_access: false };
+  const EXEC = {
+    type: "function",
+    name: "exec_command",
+    description: "Run a command",
+    parameters: { type: "object", properties: { cmd: { type: "string" } } },
+  };
+  const ASKED = {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "what is the newest Go release?" }],
+  };
+  // 照 magpie search_history_test.go 的 searchedHistory：一次搜索与引用它的回答。
+  const SEARCHED = {
+    id: "ws_1",
+    type: "web_search_call",
+    status: "completed",
+    action: { type: "search", query: "newest Go release" },
+  };
+  const ANSWERED = {
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", annotations: [], text: "Go 1.27.2." }],
+  };
+  const AGAIN = {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "and the one before?" }],
+  };
+
+  function codexTurn(model: string, fields: Record<string, unknown> = {}) {
+    return {
+      model,
+      instructions: "You are Codex.",
+      stream: false,
+      store: false,
+      input: [ASKED],
+      tools: [EXEC, WEB_SEARCH],
+      tool_choice: "auto",
+      ...fields,
+    };
+  }
+
+  /** 两家都选了 kimi-k2、都只有 Responses 地址：A（先建的）打开了「自己能联网搜索」，B 没有。 */
+  async function twoResponsesRelays() {
+    const upstreams = { a: await startUpstream(), b: await startUpstream() };
+    for (const upstream of Object.values(upstreams)) {
+      upstream.respond = (_request, res) => answerResponsesWhole(res);
+    }
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-search-"));
+    tempRoots.push(root);
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    await mkdir(endpointsDir, { recursive: true });
+    const endpoints = (["a", "b"] as const).map((key) => {
+      const endpoint = storedEndpoint({
+        id: `ep_${key}`,
+        slug: `relay-${key}`,
+        name: `Relay ${key.toUpperCase()}`,
+        baseUrls: [{ format: "openai_responses", url: `${upstreams[key].url}/v1` }],
+        models: ["kimi-k2"],
+      });
+      return key === "a" ? Object.assign(endpoint, { searchesWeb: true }) : endpoint;
+    });
+    const files = {
+      "endpoints.json": {
+        endpoints,
+        agents: {
+          claude: { enabled: false, defaultModelId: null },
+          codex: { enabled: true, defaultModelId: "kimi-k2" },
+        },
+      },
+      "keys.json": { keys: { ep_a: KEY_A, ep_b: KEY_B } },
+      "gateway-tokens.json": { tokens: { codex: CODEX_TOKEN } },
+    };
+    for (const [name, value] of Object.entries(files)) {
+      await writeFile(path.join(endpointsDir, name), JSON.stringify(value, null, 2));
+    }
+    const daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      cleanup: false,
+      logger: pino({ level: "silent" }),
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+        homeDir: root,
+        gatewayRetryPauseMs: 10,
+      },
+    });
+    daemons.push(daemon);
+    const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
+    const ask = (body: unknown) => fetch(`${gateway}/v1/responses`, codexRequest(body));
+    return { upstreams, ask };
+  }
+
+  test("A gets the tool and the tool_choice naming it as sent; when A fails, B gets the turn without either", async () => {
+    const { upstreams, ask } = await twoResponsesRelays();
+    upstreams.a.respond = (_request, res) => failWith(res, { status: 503, message: "busy" });
+    const turn = codexTurn("kimi-k2", { tool_choice: { type: "web_search" } });
+
+    const response = await ask(turn);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreams.a.requests).toHaveLength(1);
+    expect(upstreams.b.requests).toHaveLength(1);
+    const toA = receivedBody(upstreams.a.requests[0]);
+    expect(toA.tools).toEqual([EXEC, WEB_SEARCH]);
+    expect(toA.tool_choice).toEqual({ type: "web_search" });
+    const toB = receivedBody(upstreams.b.requests[0]);
+    expect(toB.tools).toEqual([EXEC]);
+    expect(toB).not.toHaveProperty("tool_choice");
+    expect(toB.input).toEqual([ASKED]);
+  });
+
+  test("an endpoint that turns away any request offering web_search answers the turn once the tool is left out", async () => {
+    const { upstreams, ask } = await twoResponsesRelays();
+    upstreams.b.respond = (request, res) => {
+      if (request.body.toString().includes("web_search")) {
+        refuse(res, `{"error":{"type":"invalid_request_error","message":"unsupported tool type"}}`);
+        return;
+      }
+      answerResponsesWhole(res);
+    };
+
+    const response = await ask(codexTurn("relay-b/kimi-k2"));
+
+    expect(response.status).toBe(200);
+    expect(upstreams.b.requests).toHaveLength(1);
+    const toB = receivedBody(upstreams.b.requests[0]);
+    expect(toB.tools).toEqual([EXEC]);
+    expect(toB.tool_choice).toBe("auto");
+    expect(upstreams.a.requests).toHaveLength(0);
+  });
+
+  test("a web_search_call in the history is left out for the endpoint that doesn't search and kept for the one that does", async () => {
+    const { upstreams, ask } = await twoResponsesRelays();
+    const input = [ASKED, SEARCHED, ANSWERED, AGAIN];
+
+    await ask(codexTurn("relay-b/kimi-k2", { input }));
+    await ask(codexTurn("relay-a/kimi-k2", { input }));
+
+    expect(receivedBody(upstreams.b.requests[0]).input).toEqual([ASKED, ANSWERED, AGAIN]);
+    expect(receivedBody(upstreams.a.requests[0]).input).toEqual(input);
+  });
+});

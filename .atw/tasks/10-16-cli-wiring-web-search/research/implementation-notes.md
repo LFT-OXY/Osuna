@@ -88,3 +88,18 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 - 候选在 `resolveGatewayRoute` 选出的同一模型候选里筛：打开了开关、有 Anthropic 地址；筛出的候选只保留 Anthropic 地址，于是只会原样直通，不会因为某个格式被拒而换成翻译（翻译会剔掉搜索工具）。之后的排序、粘性、冷却、自动切换照旧。
 - 一家都没有：400 `invalid_request_error`，文字 `Web search is not available for <模型>: no API endpoint that is on and serves this model has "Searches the web by itself" turned on in Osuna.`，不问任何上游。
 - 直通对非 Claude 模型照旧去掉 system 里的计费行（magpie 同样）；e2e 用 Claude 模型名验证 tools 与 system 原样到达。
+
+## 05 Codex 的搜索工具按开关保留或拿掉
+
+### 对照 magpie（7597c132）的结论
+
+- **工具**：magpie 对不会搜的那家不直通，在客户端自己的协议上重建请求，重建时 `searchesFor` 为假就不写搜索工具（`gateway.go` 的 `ownAPI` 与 `searchesFor` 那段；测试 `search_own_api_test.go` `TestSearchOfferedStaysOnTheClientsAPI` 断言请求体里没有 `web_search`）。会搜的那家原样直通。
+- **历史里的 `web_search_call`**：magpie 解析 Responses 的 `input`（`responses.go` 读 items 的 switch）没有这一项的分支，重建时它被丢掉；同一个对话里搜索前的说明、引用搜索的回答照常保留。直通给会搜的那家时原样带着。Osuna 照做：不会搜的那家收到的 `input` 去掉 `web_search_call`，其余项原样；会搜的原样。
+- magpie 发给 ChatGPT 后端时「历史里有 `web_search_call` 却没声明工具就补上只读缓存的 `web_search`」（`search_history_test.go`）归 10 号工单，这里没做。
+
+### 怎么做的
+
+- 改在直通请求体上（`passthrough.ts` `upstreamBody` 的 Responses 分支，`gateway/web-search.ts` `withoutResponsesWebSearch`）：这家在 Responses 上不算会搜（`searchesWebItself(endpoint, "openai_responses")` 为假）就去掉 `type` 以 `web_search` 开头的工具、点名它的 `tool_choice`（`{"type":"web_search"}`；`allowed_tools` 里列了它的拿掉那一项，一项不剩整个去掉）和 `input` 里的 `web_search_call`；一个工具都不剩时 `tools` 与 `tool_choice` 一并去掉（同画图工具、advisor 的先例）。只改变了的顶层字段，其余字节原样。
+- 按每次发出去的候选判断，自动切换换家时下一家按它自己的开关重新判断；被拒重问（`refit`、去掉画图工具）也走 `upstreamBody`，同样生效。
+- 翻译出去的请求（Responses → Chat / Anthropic）本来就剔掉 `web_search` 与 `web_search_call`（`translation/responses.ts`），所以只有 Anthropic 地址、打开了开关的接口现在等同没打开；06 号工单再改成翻译成 `web_search_20250305`。
+- 不另加「上游以 400 拒收 `web_search` 就去掉重问」：不会搜的那家一开始就收不到这个工具。
