@@ -749,7 +749,7 @@ export class ApiEndpointService {
   modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
     const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
     const facts = mergeModelFacts(listed, this.modelsDev.facts(modelId));
-    // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，像 magpie 只看这家的目录。
+    // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
     const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
     const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
     if (takesSampling === undefined) return facts;

@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的拒收、改写与断流用例，逐项出处见下方注释）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -33,7 +33,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 /*
  * 中转站直通（工单 02）：真实 daemon + 本机假上游。CLI 这一侧用 fetch 扮演，
  * 带上 gateway-tokens.json 里的口令，就像 CLI 读自己的配置文件那样。
- * 拒收的厂商原话照 magpie（MIT，THIRD_PARTY_NOTICES）的 sub2api_think_off_test.go、gateway_test.go
+ * 拒收的厂商原话照 magpie 的 sub2api_think_off_test.go、gateway_test.go
  * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
@@ -3520,7 +3520,7 @@ function switchedLog(logLines: string[]): Record<string, unknown> | undefined {
     .find((line) => line.msg === "API endpoint gateway switched endpoints");
 }
 
-// 中转服务自己的单次输入上限照 magpie（MIT，THIRD_PARTY_NOTICES）overflow_cap_test.go 的原话（#2445）；
+// 中转服务自己的单次输入上限照 magpie overflow_cap_test.go 的原话（#2445）；
 // 不说原因的 400 照 fallback.go 的 tooLongUnsaid 注释里 WorkBuddy 的「Invalid request parameters」。
 describe("a conversation too long for a model", () => {
   test("a request past the first endpoint's known window is not sent to it and goes to one with room", async () => {

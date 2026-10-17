@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 textcalls_test.go、textcalls_glm_test.go、textcalls_param_test.go、textcalls_tail_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -7,7 +7,7 @@ import { ReplyCollector, emptyUsage, type Part, type Reply, type Tool } from "./
 import { textCallFilter } from "./text-calls.js";
 
 /*
- * 模型写在文字里的工具调用（Hermes、DeepSeek DSML、GLM arg_key）转成真调用。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
+ * 模型写在文字里的工具调用（Hermes、DeepSeek DSML、GLM arg_key）转成真调用。例子照 magpie 的
  * textcalls_test.go、textcalls_glm_test.go、textcalls_param_test.go 与 textcalls_tail_test.go。
  */
 

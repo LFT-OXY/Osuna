@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 sub2api_think_off_test.go、gateway_test.go、thinking_off_test.go、tools_need_responses_test.go、prefill_test.go，internal/provider/authheader_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -19,7 +19,7 @@ import {
 import { failedBySelf, type FailedAttempt } from "./upstream-call.js";
 
 /*
- * 上游不收的写法：effort none、关掉思考、这个格式的地址、两个认证头一起带。错误原文照 magpie（MIT，THIRD_PARTY_NOTICES）的
+ * 上游不收的写法：effort none、关掉思考、这个格式的地址、两个认证头一起带。错误原文照 magpie 的
  * sub2api_think_off_test.go（TestRefusesThinkingOff）、gateway_test.go（含 TestWrongEndpoint）、thinking_off_test.go、
  * tools_need_responses_test.go，与 internal/provider/authheader_test.go（TestBothAuthRefused、TestRetryOneAuth*）；
  * 预填的拒绝照 prefill_test.go 的 openCodeGoPrefillRefusal。

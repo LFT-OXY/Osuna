@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 chat_tool_pairing_test.go、translate_stream_test.go、chat_inbound_reasoning_test.go、gemini_thought_tag_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -16,7 +16,7 @@ import {
 
 /*
  * OpenAI Chat 这一侧的翻译：Claude Code 的请求翻成 Chat 请求、Chat 流解码。
- * 例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 chat_tool_pairing_test.go、translate_stream_test.go、
+ * 例子照 magpie 的 chat_tool_pairing_test.go、translate_stream_test.go、
  * chat_inbound_reasoning_test.go 与 gemini_thought_tag_test.go。
  */
 

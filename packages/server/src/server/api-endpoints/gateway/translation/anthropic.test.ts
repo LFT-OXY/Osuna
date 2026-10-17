@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、thinking_off_test.go、anthropic_max_tokens_test.go、refusal_details_test.go，internal/provider/grok_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -25,7 +25,7 @@ import {
 } from "./ir.js";
 
 /*
- * Anthropic Messages 这一侧的翻译。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
+ * Anthropic Messages 这一侧的翻译。例子照 magpie 的
  * anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、
  * thinking_off_test.go、anthropic_max_tokens_test.go、refusal_details_test.go 与 internal/provider/grok_test.go。
  */

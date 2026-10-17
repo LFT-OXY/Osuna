@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 format_fence_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -7,7 +7,7 @@ import { emptyUsage, type GatewayRequest, type Reply, type StreamEvent } from ".
 import { parseResponsesRequest } from "./responses.js";
 
 /*
- * 要 JSON 的回复剥掉模型包的 ``` 代码块。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 format_fence_test.go。
+ * 要 JSON 的回复剥掉模型包的 ``` 代码块。例子照 magpie 的 format_fence_test.go。
  */
 
 const MEMORY = '{"raw_memory":"Keep ``` examples","rollout_summary":"test"}';

@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go、phase_test.go、codex_access_programs_test.go 与 responses.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -32,7 +32,7 @@ import {
 } from "./responses.js";
 
 /*
- * Responses 请求的工具配对修补。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
+ * Responses 请求的工具配对修补。例子照 magpie 的
  * join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go 与 phase_test.go；
  * 流里 invalid_request_error 的字段照 codex_access_programs_test.go 与 responses.go 的 requestRefused。
  */

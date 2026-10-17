@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/affinity.go 的 auto 模式，affinity_cache_write_test.go、affinity_silent_cache_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -14,7 +14,7 @@ import {
 import type { Effort } from "./translation/ir.js";
 
 /*
- * 粘性照 magpie（MIT，THIRD_PARTY_NOTICES）的 auto 模式（research/magpie-port-inventory.md 第 3 节）：
+ * 粘性照 magpie 的 auto 模式（research/magpie-port-inventory.md 第 3 节）：
  * 12 步判定逐条一例，轮次计数与对话识别各几例，再看候选怎么重排。缓存写入、悄悄缓存、1 小时缓存与推理档
  * 照 affinity_cache_write_test.go（TestAffinityKeepsACacheJustWritten、TestAffinityKeepsAnHourCachePastFiveMinutes、
  * TestHourCacheAfter）与 affinity_silent_cache_test.go 的用例。

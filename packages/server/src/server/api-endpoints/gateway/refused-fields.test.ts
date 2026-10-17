@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 safeguards_refused_test.go、thinking_display_test.go、anthropic_shapes_test.go、thinking_off_test.go、deferred_tools_test.go、tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go、prompt_cache_test.go、object_root_test.go，internal/provider/grok_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -12,7 +12,7 @@ import {
 
 /*
  * 上游不收的字段：自动模式的审查字段、display、已弃用的采样参数、延后加载工具块、只剩 tool_reference 的工具结果、
- * 工具的 strict、Codex 的画图工具。厂商原话与改法照 magpie（MIT，THIRD_PARTY_NOTICES）的 safeguards_refused_test.go、
+ * 工具的 strict、Codex 的画图工具。厂商原话与改法照 magpie 的 safeguards_refused_test.go、
  * thinking_display_test.go、anthropic_shapes_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go（TestToolStrictRefusalWordings）、image_tool_test.go，
  * prompt_cache_test.go（TestPromptCacheKeyRefused）、object_root_test.go（rootUnionRefusals）与

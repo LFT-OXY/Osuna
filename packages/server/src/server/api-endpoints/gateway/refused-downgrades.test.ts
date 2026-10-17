@@ -1,4 +1,4 @@
-// 用例取自 magpie（https://github.com/yetone/magpie，出处见下方注释）
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 format_refused_test.go、prefill_test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -12,7 +12,7 @@ import type { GatewayRequest } from "./translation/ir.js";
 
 /*
  * 上游不收、要降级的写法：结构化输出（先降到 json_object 加 system 里的 schema，再降到只用文字说明）与预填（补一个 user 轮）。
- * 厂商原话与改法照 magpie（MIT，THIRD_PARTY_NOTICES）的 format_refused_test.go（mimoSchemaRefusal、formatRefuser）
+ * 厂商原话与改法照 magpie 的 format_refused_test.go（mimoSchemaRefusal、formatRefuser）
  * 与 prefill_test.go（openCodeGoPrefillRefusal、volcenginePrefillRefusal、TestUserLastBody）。
  */
 
