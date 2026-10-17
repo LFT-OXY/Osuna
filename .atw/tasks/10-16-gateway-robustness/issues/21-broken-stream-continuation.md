@@ -11,7 +11,7 @@
 
 **Blocked by:** 05, 20
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：Anthropic 上游第一次说到一半断开，中转站把已经发出的部分作为预填再问，第二次说完。Claude Code 收到一条完整的回复：一个 `message_start`，文字连贯，一个 `message_stop`。
 - [ ] 已经开始工具调用时断开：不续写，在流尾补错误。
