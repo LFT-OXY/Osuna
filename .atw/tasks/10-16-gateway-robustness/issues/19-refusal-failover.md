@@ -19,7 +19,7 @@
 
 **Blocked by:** 17
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：第一家在开口前回 `stop_reason: refusal`，第二家正常回答。CLI 只收到第二家的回答，第一家的状态仍是「可用」。
 - [ ] 三家都拒答：Claude Code 收到第一家的拒答，包含 `stop_details`；Codex 收到 400 和原因。
