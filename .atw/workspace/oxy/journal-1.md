@@ -1072,3 +1072,27 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 36: 中转站稳健性：核对工单 01–22、用户验收工单 23、归档
+<!-- atw-session: v=2 fp=2a342ab276415d2a -->
+
+**Date**: 2026-10-17
+**Task**: 中转站稳健性：核对工单 01–22、用户验收工单 23、归档
+**Package**: app
+**Branch**: `compare-magpie-third-party-api-gaps`
+
+### Summary
+
+5 个只读检查助手逐条核对工单 01–22 的验收项，改到的测试文件逐个单跑全过，typecheck/lint 通过，无不通过项；6 处与原文的偏离均有用户 10-17 决定或覆盖等价，写入各票核对记录后勾选。用户用真实 Claude Code/Codex 验收工单 23 通过。修正 ADR 0008 拒收重问一句与 askRefitted 行为一致。任务验收通过并归档；合入 main 后的 CI 待核。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a07342a89` | docs(api-endpoints): ADR 0008 拒收重问一句写准——再被拒且是另一种写法时接着记、接着问，认不出或改不出新请求体才按常规处理（中转站稳健性核对） |
+| `b93865267` | chore(task): 中转站稳健性核对收尾——工单 01–22 逐条核过并勾选、偏离处写核对记录；工单 23 用户真实 CLI 验收通过；任务进入 accept |
+
+### Status
+
+[OK] **Completed**
