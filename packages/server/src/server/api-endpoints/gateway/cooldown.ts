@@ -209,7 +209,7 @@ function resetsZhipu(body: string, now: number): number {
   return wait > 0 && wait <= COOLDOWN.longestWritten ? wait : 0;
 }
 
-/** resetsIn / tryAgainIn 读出的天、小时、分钟；一个都没写或超过一周返回 0。 */
+/** resetsSpan / tryAgainIn 读出的天、小时、分钟；一个都没写或超过一周返回 0。 */
 function spanWritten(match: RegExpExecArray | null): number {
   if (!match) return 0;
   const [days, hours, minutes] = match.slice(1, 4);
@@ -226,11 +226,21 @@ export function resetsAt(body: string, now: number): number {
   const match = FAILURE_WORDS.resets.exec(body);
   if (match && Number(match[1]) * 1000 > now) return Number(match[1]) * 1000 - now;
   return (
-    resetsIn(body, now) ||
-    resetsWritten(body, now) ||
-    resetsZhipu(body, now) ||
-    spanWritten(FAILURE_WORDS.resetsIn.exec(wordsOf(body)))
+    resetsIn(body, now) || resetsWritten(body, now) || resetsZhipu(body, now) || resetsAfter(body)
   );
+}
+
+/** 「resets in 0h 19min」这类写的还有多久恢复；没写返回 0。 */
+function resetsAfter(body: string): number {
+  const written = FAILURE_WORDS.resetsSpan.exec(wordsOf(body));
+  return spanWritten(written);
+}
+
+/** Cline 免费模型额度用完时说的「Try again in 23h 59m」；不是 Cline 的这种拒绝返回 0。 */
+function clineBackIn(attempt: FailureReport): number {
+  if (!clineModelLimited(attempt)) return 0;
+  const written = FAILURE_WORDS.tryAgainIn.exec(wordsOf(attempt.body));
+  return spanWritten(written);
 }
 
 /** 请求发到 Cline 的 API（cline.bot 及其子域名），被拒是因为某个免费模型当天的额度用完。 */
@@ -289,13 +299,17 @@ export function passing(input: {
   return { again: false, waitMs: 0 };
 }
 
+/** 全在额度冷却时交出的：排第一那家的冷却，和最早恢复的时刻。 */
+export interface QuotaHold {
+  first: EndpointRest;
+  backAt: number;
+}
+
 /**
  * 候选的每一家都因 429 / 402 的额度用完或欠费在冷却、且留着厂商原话时，这次不再请求：
  * 交出排第一那家的错误，`backAt` 是最早恢复的时刻。任何一家不是这样（或不在冷却）就返回 null。
  */
-export function quotaHeld(
-  rests: ReadonlyArray<EndpointRest | null>,
-): { first: EndpointRest; backAt: number } | null {
+export function quotaHeld(rests: ReadonlyArray<EndpointRest | null>): QuotaHold | null {
   let backAt = Number.POSITIVE_INFINITY;
   for (const rest of rests) {
     const held =
@@ -327,10 +341,7 @@ function modelOwnQuota(attempt: FailureReport): boolean {
 
 /** 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就一刻钟；最多八天。 */
 function quotaRest(attempt: FailureReport, now: number): { duration: number; by: RestBy } {
-  const clineBack = clineModelLimited(attempt)
-    ? spanWritten(FAILURE_WORDS.tryAgainIn.exec(wordsOf(attempt.body)))
-    : 0;
-  const resets = resetsAt(attempt.body, now) || clineBack;
+  const resets = resetsAt(attempt.body, now) || clineBackIn(attempt);
   const said = retryAfter(attempt.headers, now);
   if (resets > 0) return { duration: Math.min(resets, COOLDOWN.longestQuota), by: "resets" };
   if (said > 0) return { duration: said, by: "retry-after" };
@@ -340,6 +351,12 @@ function quotaRest(attempt: FailureReport, now: number): { duration: number; by:
 /** 一分钟起，每多失败一次翻倍，到 `longest` 为止。 */
 function doubled(failures: number, longest: number): number {
   return Math.min(COOLDOWN.fallbackCooldown * 2 ** Math.min(failures - 1, 10), longest);
+}
+
+/** 其他失败记过一次后：按几次翻倍，冷却记在哪个键上。 */
+interface Backoff {
+  failures: number;
+  key: string;
 }
 
 export class EndpointCooldowns {
@@ -455,13 +472,12 @@ export class EndpointCooldowns {
    * 其他失败记一次，整家（或不提供的这个模型）一份，模型自己一份。模型自己的次数只有它自己答上才清零；
    * 比整家的多，说明同一家别的模型其间答上过，失败是这个模型的：按它自己的次数翻倍，只冷却它（magpie #2241）。
    */
-  private backoff(input: { key: string; modelKey: string; unserved: boolean }): {
-    failures: number;
-    key: string;
-  } {
+  private backoff(input: { key: string; modelKey: string; unserved: boolean }): Backoff {
     const failures = this.countFailure(input.key);
-    const own = input.unserved ? 0 : this.countFailure(input.modelKey);
-    return own > failures ? { failures: own, key: input.modelKey } : { failures, key: input.key };
+    if (input.unserved) return { failures, key: input.key };
+    const own = this.countFailure(input.modelKey);
+    if (own > failures) return { failures: own, key: input.modelKey };
+    return { failures, key: input.key };
   }
 
   private countFailure(key: string): number {

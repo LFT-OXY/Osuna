@@ -74,11 +74,11 @@ export const FAILURE_WORDS = {
   zhipuResets:
     /(?:\bYour limit will reset at|您的限额将在)\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(\s*\S{0,3})/i,
   // 用天、小时、分钟写的还有多久恢复（Factory 402 的「resets in 0h 19min」）。
-  resetsIn:
+  resetsSpan:
     /\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?/i,
   // Cline 某个免费模型当天的额度用完：只是这个模型的。
   clineFreeLimit: /free limit reached on model/i,
-  // Cline 免费模型额度用完时说的还有多久（「Try again in 23h 59m」），单位同 resetsIn。
+  // Cline 免费模型额度用完时说的还有多久（「Try again in 23h 59m」），单位同 resetsSpan。
   tryAgainIn:
     /\btry again in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:(\d+)\s*h(?:ours?|rs?)?\b\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\b)?/i,
 } as const;

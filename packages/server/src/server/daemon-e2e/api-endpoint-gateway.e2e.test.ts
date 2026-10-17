@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
+import { heldClock } from "../api-endpoints/gateway/cooldown.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -3301,6 +3302,41 @@ describe("switching to another endpoint when one fails", () => {
     expect(((await held.json()) as { error: { message: string } }).error.message).toMatch(
       /^Relay A: You exceeded your current quota \(available again at (\d{4}-\d{2}-\d{2} )?\d{2}:\d{2} UTC[+-]\d{1,2}(:\d{2})?\)$/,
     );
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("with every endpoint out of quota the first one's words come back with the time the earliest is back", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) =>
+      failWith(res, {
+        status: 429,
+        message: "You exceeded your current quota",
+        headers: { "retry-after": "3000" },
+      });
+    upstreamB.respond = (_request, res) =>
+      failWith(res, {
+        status: 429,
+        message: "B: monthly quota used up",
+        headers: { "retry-after": "600" },
+      });
+    const before = Date.now();
+    await (await ask()).text();
+    const after = Date.now();
+
+    const held = await ask();
+
+    expect(held.status).toBe(429);
+    expect(held.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(Number(held.headers.get("retry-after"))).toBeLessThanOrEqual(600);
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(590);
+    // B 先恢复：时刻是 B 的，原话是排第一的 A 的；分钟可能恰好在两次取时之间进位。
+    const told = [before, after].map(
+      (at) =>
+        `Relay A: You exceeded your current quota (available again at ${heldClock(at + 600_000, at)})`,
+    );
+    const message = ((await held.json()) as { error: { message: string } }).error.message;
+    expect(told).toContain(message);
     expect(upstreamA.requests).toHaveLength(1);
     expect(upstreamB.requests).toHaveLength(1);
   });

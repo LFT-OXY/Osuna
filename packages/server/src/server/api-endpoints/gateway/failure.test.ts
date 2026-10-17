@@ -154,7 +154,7 @@ const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: s
     ],
     misses: ["this model is retired at 2026-10-15 20:12:13"],
   },
-  resetsIn: {
+  resetsSpan: {
     hits: ["weekly standard usage limit (resets in 0h 19min)", "resets in 3d 4h"],
     misses: ["resets at 20:00"],
   },

@@ -822,11 +822,16 @@ function markFailed(input: {
   });
 }
 
-/** 额度、欠费、限流判出了恢复时间：附在上游原文后面。 */
-function backAgainSuffix(rest: EndpointRest | null): string {
+/**
+ * 额度、欠费、限流判出了恢复时间：附在上游原文后面。全在额度冷却时给的是最早恢复那家的时刻
+ * （`backAt`，magpie 同样），不是被复述那家自己的。
+ */
+function backAgainSuffix(rest: EndpointRest | null, backAt?: number): string {
   const backed = rest?.why === "credit" || rest?.why === "quota" || rest?.why === "rate";
-  if (!backed || rest.until === null) return "";
-  return ` (available again at ${heldClock(rest.until, Date.now())})`;
+  if (!backed) return "";
+  const until = backAt ?? rest.until;
+  if (until === null) return "";
+  return ` (available again at ${heldClock(until, Date.now())})`;
 }
 
 /** 429 没带 Retry-After 时告诉 CLI 何时再问：这家冷却结束的时刻。 */
@@ -856,7 +861,7 @@ function sendRest(input: {
     wire: input.wire,
     error: {
       status: rest.status,
-      message: `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest)}`,
+      message: `${input.candidate.endpoint.name}: ${rest.said}${backAgainSuffix(rest, input.backAt)}`,
     },
     headers: {
       [ANSWERED_BY_HEADER]: input.candidate.endpoint.slug,
