@@ -9,7 +9,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 第一轮只有缓存写入、没有命中的对话，第二轮仍回到同一家。直通和翻译各一例。
 - [ ] 悄悄缓存的厂商：第二轮回到同一家。
