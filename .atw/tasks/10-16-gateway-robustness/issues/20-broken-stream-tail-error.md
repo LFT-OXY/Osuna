@@ -18,7 +18,7 @@
 
 **Blocked by:** 17
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（翻译）：Anthropic 上游发了一半文字后干净断开。Claude Code 收到的流里没有 `message_stop`，而是一个空行加 `api_error` 事件，消息里有接口名、原因和「可以重试」字样。
 - [ ] Codex 的同样场景，收到 `response.failed`。
