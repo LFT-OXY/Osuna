@@ -16,7 +16,7 @@
 
 **Blocked by:** 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：外部改掉 `settings.json` 的中转站地址后，列表返回「不再经过中转站」（代码与参数）；「重新应用」后提示消失、文件指回中转站；「切回官方」后开关关、文件还原；「保留当前设置」后开关关、文件保持被改后的样子、不再提示。
 - [ ] Codex 同上（`config.toml` 里 Osuna 服务商表的地址或口令被改）。
