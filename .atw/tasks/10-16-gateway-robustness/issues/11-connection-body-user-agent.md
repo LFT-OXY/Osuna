@@ -8,7 +8,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假上游第一次在复用的连接上直接关闭，中转站在新连接上重发并成功；这家不冷却。
 - [ ] zstd、gzip 压缩的请求体，直通和翻译各一例都成功；上游收到的是解开后的请求体，没有 Content-Encoding。
