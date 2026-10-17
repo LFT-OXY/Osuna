@@ -15,7 +15,7 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：把接口清单写坏后，中转站照常按上一份好的转发请求；目录里多出 `.bad-<时间>` 文件；日志里有一行警告。
 - [ ] key 文件、口令文件，同样各有一例。

@@ -139,6 +139,41 @@ Tests: `agent-manager.test.ts` "listCommands …" — a second `AgentManager` on
 same `commandCatalogPath` reads the entry back (daemon restart), and a
 `"{ not json"` file yields `partial: true`.
 
+### State files keep a last good copy (`.bak` / `.bad-<time>`)
+
+`LastGoodFile<T>` (`server/api-endpoints/last-good.ts`, magpie `lastgood` /
+`steady`, gateway-robustness ticket 12) guards the three files only the daemon
+writes and can't rebuild: `api-endpoints/endpoints.json`, `keys.json` and
+`gateway-tokens.json`. The takeover records and the CLIs' own config files keep
+"can't parse → don't write" (scenario below).
+
+- Write: a parseable current file is first copied to `<file>.bak`; a current
+  file that is already bad is moved aside as `<file>.bad-<time>` (magpie
+  `Keep`), then the new content goes through `writePrivateFileAtomicSync`.
+- Read a bad file with a good `.bak`: move the bad one aside, put the `.bak`
+  bytes back as the file, serve that, one `warn` `{ filePath, why, badPath }`.
+  `why` is `BadFileReason` (`empty`, `zero_bytes`, `not_json`,
+  `schema_mismatch`) — never the parse error text, which quotes file bytes and
+  `keys.json` holds keys. The aside and put-back are best-effort: if either
+  fails, warn and still serve the `.bak` value. Served data may be one write
+  behind, same as magpie.
+- Bad file and bad or missing `.bak`: throw as before
+  (`ApiEndpointsFileUnparsableError` for endpoints) and write, move or delete
+  nothing.
+- Deleting the token file deletes its `.bak` too, so a revoked token can't come
+  back through a later fallback.
+- Windows locks: reads and renames retry every 10 ms for up to 0.5 s on any
+  error except ENOENT, through the replaceable `DataFileSystem` adapter
+  (`NODE_DATA_FILE_SYSTEM` in production, a fake in `last-good.test.ts`). No
+  cross-process lock: only the daemon writes these files.
+- Not done: fsync before rename (magpie does it for its zero-byte-after-power-loss
+  bug #1505).
+
+Tests: `last-good.test.ts` (busy read/rename retried then succeeds, held past
+0.5 s throws, put-back failing still serves `.bak`); gateway e2e — each of the
+three files corrupted → requests still served, one `.bad-` file, one warn;
+`.bak` also bad → error, directory unchanged; takeover record unchanged.
+
 ## Files and secrets
 
 - Keypairs and other private files go through `server/private-files.ts` (mode `0600`).
