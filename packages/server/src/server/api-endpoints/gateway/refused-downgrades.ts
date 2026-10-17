@@ -8,6 +8,8 @@ import { anthropicFormat } from "./translation/anthropic.js";
 import {
   formatInstruction,
   openAIFormat,
+  stringOf,
+  withLine,
   type Format,
   type GatewayRequest,
 } from "./translation/ir.js";
@@ -151,14 +153,6 @@ interface ToldLine {
   body: Body;
   line: string;
   asObject: boolean;
-}
-
-function withLine(system: string, line: string): string {
-  return system === "" ? line : `${system}\n\n${line}`;
-}
-
-function stringOf(value: unknown): string {
-  return typeof value === "string" ? value : "";
 }
 
 function withoutKey(record: Body, key: string): Body {

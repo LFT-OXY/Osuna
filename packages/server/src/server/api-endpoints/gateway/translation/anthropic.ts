@@ -21,6 +21,7 @@ import {
   sourceImage,
   stringOrText,
   toolOutput,
+  withLine,
   type EmitEvent,
   type SchemaFormat,
   type GatewayRequest,
@@ -206,7 +207,7 @@ export function buildAnthropicRequest(
   // output_config.format 只收 schema：任意 JSON 对象用话写进系统提示。
   const system =
     format?.type === "json_object"
-      ? [request.system, formatInstruction(format)].filter((part) => part !== "").join("\n\n")
+      ? withLine(request.system, formatInstruction(format))
       : request.system;
   const replay = replaysThinking(model) && !isAnthropicModel(model);
   const messages = pairToolBlocks(anthropicMessages({ messages: request.messages, replay }));

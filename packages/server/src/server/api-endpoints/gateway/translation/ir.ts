@@ -386,6 +386,11 @@ export function formatInstruction(format: Format): string {
     : "Respond with a single JSON object and nothing else.";
 }
 
+/** 系统提示末尾另起一段说上这句；没有系统提示时就是这句。 */
+export function withLine(system: string, line: string): string {
+  return system === "" ? line : `${system}\n\n${line}`;
+}
+
 /** 各协议的推理力度名字统一成这几档。 */
 export function effortOf(value: unknown): Effort {
   const effort = typeof value === "string" ? value.trim().toLowerCase() : "";
