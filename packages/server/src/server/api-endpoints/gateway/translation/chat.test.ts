@@ -132,6 +132,7 @@ function request(messages: Message[]): GatewayRequest {
     text: null,
     format: null,
     named: {},
+    webSearch: false,
   };
 }
 

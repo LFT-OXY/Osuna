@@ -64,7 +64,7 @@ import { fenceFilter, unfencedReply } from "./translation/fence.js";
 import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
-import { withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
 import {
@@ -410,6 +410,9 @@ export function translatedBody(input: TranslatedBodyInput): string {
   });
   if (continuation !== null) {
     body = withPrefillMark({ body, mode: continuation, thinking: lastThinking(request.messages) });
+  }
+  if (to === "openai_responses") {
+    body = withSearchSourcesFor({ baseUrl, body, asked: request.include });
   }
   return JSON.stringify(withVendorRewrites({ format: to, baseUrl, model: input.model, body }));
 }

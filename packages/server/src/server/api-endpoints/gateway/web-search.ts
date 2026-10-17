@@ -1,12 +1,14 @@
 // 「自己能联网搜索」何时算数移植自 magpie（https://github.com/yetone/magpie，internal/gateway/search.go 的 searchesItself），
 // 认出请求里的联网搜索工具照 internal/gateway/anthropic.go 读 tools 的那段（r.WebSearch）；
-// 不会搜的那家收不到 Codex 的 web_search 与历史里的 web_search_call 照 gateway.go 的 ownAPI / searchesFor 与 responses.go 读 input 的那段
+// 不会搜的那家收不到 Codex 的 web_search 与历史里的 web_search_call 照 gateway.go 的 ownAPI / searchesFor 与 responses.go 读 input 的那段；
+// 翻译时先挑这家会搜的格式、只对会搜的格式带搜索照 gateway.go translated 里 request.WebSearch 那段与 searchesFor
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointState, StoredApiEndpoint } from "../store.js";
 import { isRecord } from "../upstream-http.js";
 import { withoutKeys } from "./refused-fields.js";
+import { choosesWebSearch, type GatewayRequest } from "./translation/ir.js";
 
 type Body = Record<string, unknown>;
 
@@ -52,6 +54,36 @@ export function asksAnthropicWebSearch(parsed: unknown): boolean {
   );
 }
 
+/** Agent 的请求要了联网搜索：Claude Code 的服务端搜索工具，或 Codex 没被 allowed_tools 排除的 web_search。 */
+export function asksWebSearch(format: ApiEndpointRequestFormat, parsed: unknown): boolean {
+  if (format === "anthropic_messages") return asksAnthropicWebSearch(parsed);
+  if (format === "openai_responses") return isRecord(parsed) && asksResponsesWebSearch(parsed);
+  return false;
+}
+
+/**
+ * 要了联网搜索时这家从哪些格式里挑：有它自己会搜的格式就只在这些里挑（只有 Anthropic 地址会搜的，Codex 的搜索翻成 Anthropic，
+ * 不按平常的顺序先翻成 Chat 丢掉搜索）；一个都没有、或没要搜索时照原样。
+ */
+export function formatsToSearchOn<Format extends ApiEndpointRequestFormat>(input: {
+  endpoint: Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls">;
+  formats: readonly Format[];
+  asked: boolean;
+}): readonly Format[] {
+  if (!input.asked) return input.formats;
+  const searching = input.formats.filter((format) => searchesWebItself(input.endpoint, format));
+  return searching.length > 0 ? searching : input.formats;
+}
+
+/**
+ * 翻译出去的请求只对在目标格式上自己会搜的接口带搜索；不会搜的拿掉它，连同点名它的 tool_choice（不然点的是一个不存在的工具）。
+ */
+export function withWebSearchFor(request: GatewayRequest, searches: boolean): GatewayRequest {
+  if (!request.webSearch || searches) return request;
+  const toolChoice = choosesWebSearch(request) ? "" : request.toolChoice;
+  return { ...request, webSearch: false, toolChoice };
+}
+
 function isWebSearchTool(tool: unknown): boolean {
   return isRecord(tool) && typeof tool.type === "string" && tool.type.startsWith("web_search");
 }
@@ -60,7 +92,7 @@ function isWebSearchTool(tool: unknown): boolean {
  * Responses 请求要了联网搜索：带着 web_search 工具，且 tool_choice 不是没列它的 allowed_tools
  * （照 magpie searchAsked 与 responses.go 读 allowed_tools 的那段）。
  */
-function asksResponsesWebSearch(body: Body): boolean {
+export function asksResponsesWebSearch(body: Body): boolean {
   const tools = Array.isArray(body.tools) ? body.tools : [];
   if (!tools.some(isWebSearchTool)) return false;
   const choice = body.tool_choice;

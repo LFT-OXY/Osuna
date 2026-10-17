@@ -1,6 +1,7 @@
 // 按厂商的改写移植自 magpie（https://github.com/yetone/magpie，internal/gateway/kimi_schema.go 的 kimiToolEnumTypes、isKimi、valuesType，
 // deepseek_schema.go 的 deepseekToolPatterns、unicodeNullEscape，grok_schema.go 的 grokToolPatterns、ecmaClassForRust，grok_integral.go 的 grokModel，
-// chattidy.go 的 reasoningDetailsAsContent，chat.go buildChat 里 MiniMax 的 inlineThink，gateway.go forwardOnce 里 Kimi 的 withoutDeferredTools）
+// chattidy.go 的 reasoningDetailsAsContent，chat.go buildChat 里 MiniMax 的 inlineThink，gateway.go forwardOnce 里 Kimi 的 withoutDeferredTools，
+// responses.go buildResponses 里 xAI 不要 web_search_call.action.sources）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -8,6 +9,7 @@ import { hostOf } from "../model-facts.js";
 import { isRecord } from "../upstream-http.js";
 import { withoutRefusedFields } from "./refused-fields.js";
 import { reasoningText } from "./translation/chat.js";
+import { SEARCH_SOURCES } from "./translation/responses.js";
 import type { GatewayRequest, Message } from "./translation/ir.js";
 
 /*
@@ -110,6 +112,27 @@ export function withVendorRewrites(input: VendorRewriteInput): Body {
   }
   if (grok) body = withToolSchemasFixed(body, withRustClasses);
   return body;
+}
+
+/**
+ * 翻成 Responses 的搜索请求为写回搜索结果加了 web_search_call.action.sources；xAI 自己的地址不知道收不收，不给它要
+ * （magpie buildResponses）。客户端自己要的照留。
+ */
+export function withSearchSourcesFor(input: {
+  baseUrl: string;
+  body: Body;
+  asked: readonly string[];
+}): Body {
+  const { body } = input;
+  const { include } = body;
+  const added = Array.isArray(include) && include.includes(SEARCH_SOURCES);
+  const dropped =
+    added && hostOf(input.baseUrl) === XAI_HOST && !input.asked.includes(SEARCH_SOURCES);
+  if (!dropped || !Array.isArray(include)) return body;
+  const kept = include.filter((item) => item !== SEARCH_SOURCES);
+  if (kept.length > 0) return { ...body, include: kept };
+  const { include: _include, ...rest } = body;
+  return rest;
 }
 
 /**

@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said，
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go（含联网搜索的 Search、Hit、KSearch）、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said，
 // decide.go 的 fitFor、internal/catalog/catalog.go 的 EffortRank 与 NearestEffort、maxoutput.go 的 askedOutput、internal/provider/models.go 的 OutputWithin，
 // 厂商说请求本身有问题时带上它的字段照 responses.go 的 requestRefused 与 saidError）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
@@ -10,7 +10,8 @@ import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
  * 三种协议共用的中间格式：请求先读成它，回复由它写出。只在中转站里用，不进 packages/protocol。
- * 思考只带本轮文字与 Anthropic 签名；联网搜索不代搜，服务端工具在解析时剔除。
+ * 思考只带本轮文字与 Anthropic 签名。联网搜索不代搜：请求只记客户端要了搜索（webSearch），
+ * 回复里上游自己做的搜索读成 web_search 一段，按客户端的协议写回；别的服务端工具在解析时剔除。
  */
 
 export interface TextPart {
@@ -59,7 +60,28 @@ export interface FilePart {
   url: string;
 }
 
-export type Part = TextPart | ThinkingPart | ToolCallPart | ToolResultPart | ImagePart | FilePart;
+/** 搜索找到的一页（magpie Hit）；page_age 上游没说时为空。 */
+export interface SearchHit {
+  title: string;
+  url: string;
+  pageAge: string;
+}
+
+/** 上游自己做的一次联网搜索：查询词与找到的页面。只出现在回复里；请求历史里的搜索在解析时丢掉（magpie 同样）。 */
+export interface SearchPart {
+  kind: "web_search";
+  query: string;
+  hits: SearchHit[];
+}
+
+export type Part =
+  | TextPart
+  | ThinkingPart
+  | ToolCallPart
+  | ToolResultPart
+  | ImagePart
+  | FilePart
+  | SearchPart;
 
 export interface Message {
   role: "user" | "assistant";
@@ -139,7 +161,18 @@ export interface GatewayRequest {
   format: Format | null;
   // 按扁平名索引的 Codex 命名空间工具与自由文本工具；别的协议的客户端没有。
   named: Record<string, NamedTool>;
+  // 客户端带了它那边的联网搜索工具（Anthropic 的 web_search_20250305、Responses 的 web_search）。
+  // 只发给在目标格式上自己会搜的接口（withWebSearchFor），构建时写成目标协议的原生搜索工具。
+  webSearch: boolean;
 }
+
+/** 点名的是联网搜索：Claude Code 搜索子请求的 {type:"tool",name:"web_search"}，且没有同名的函数工具。 */
+export function choosesWebSearch(request: GatewayRequest): boolean {
+  const named = request.toolChoice === `name:${WEB_SEARCH_NAME}`;
+  return request.webSearch && named && !request.tools.some((tool) => tool.name === WEB_SEARCH_NAME);
+}
+
+export const WEB_SEARCH_NAME = "web_search";
 
 export type StopReason = "stop" | "length" | "tool" | "filter";
 
@@ -169,6 +202,8 @@ export type StreamEvent =
   | { kind: "tool_args"; text: string }
   // 中间格式不带的工具项（服务端工具、Codex 自己的 apply_patch 之类）：只说明回复里有它，编码器不写出。
   | { kind: "other_tool" }
+  // 上游自己做完的一次联网搜索（magpie KSearch）：整个到达，不拆成调用与参数。
+  | { kind: "search"; query: string; hits: SearchHit[] }
   // details 只有 Anthropic 上游给了 stop_details 时才有。
   | { kind: "stop"; stop: StopReason; details?: StopDetails }
   | { kind: "usage"; usage: Usage }
@@ -582,6 +617,7 @@ export function estimateInputTokens(request: GatewayRequest): number {
   for (const message of request.messages) {
     for (const part of message.parts) {
       if (part.kind === "tool_call") total += bytes(part.args) + bytes(part.name);
+      else if (part.kind === "web_search") total += bytes(part.query);
       else if (part.kind !== "image" && part.kind !== "file") total += bytes(part.text);
     }
   }
@@ -641,6 +677,10 @@ export class ReplyCollector {
         return;
       case "tool_args":
         this.args += event.text;
+        return;
+      case "search":
+        this.closeTool();
+        this.reply.parts.push({ kind: "web_search", query: event.query, hits: event.hits });
         return;
       case "stop":
         this.closeTool();

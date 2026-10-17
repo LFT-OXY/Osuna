@@ -317,6 +317,7 @@ describe("a translated request downgraded", () => {
     text: null,
     format: { type: "json_schema", name: "probe", description: "", schema: SCHEMA, strict: null },
     named: {},
+    webSearch: false,
   };
   const refusedOnly =
     (...shapes: DowngradedShape[]) =>

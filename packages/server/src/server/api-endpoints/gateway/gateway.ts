@@ -67,7 +67,13 @@ import {
   type FailedAttempt,
   type HandBack,
 } from "./upstream-call.js";
-import { asksAnthropicWebSearch, searchesWebItself } from "./web-search.js";
+import {
+  asksAnthropicWebSearch,
+  asksWebSearch,
+  formatsToSearchOn,
+  searchesWebItself,
+  withWebSearchFor,
+} from "./web-search.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
@@ -288,15 +294,18 @@ async function routeAgentRequest(input: {
 }
 
 /**
- * Claude Code 的搜索子请求只交给同一模型下、打开了「自己能联网搜索」、有 Anthropic 地址的接口，
- * 对话本身走哪家不影响（ADR 0009）。只留 Anthropic 地址：原样直通，换格式翻译会剔掉搜索工具。
+ * Claude Code 的搜索子请求只交给同一模型下、打开了「自己能联网搜索」、有 Anthropic 或 Responses 地址的接口，
+ * 对话本身走哪家不影响（ADR 0009）。只留这家会搜的地址：有 Anthropic 地址就原样直通，只有 Responses 地址时翻成那边的
+ * 原生 web_search（照 magpie 先挑会搜的协议）；不会因为某个格式被拒换成 Chat 丢掉搜索。
  */
 function webSearchCandidates(candidates: GatewayCandidate[]): GatewayCandidate[] {
   return candidates.flatMap((candidate) => {
     const { endpoint } = candidate;
-    if (!searchesWebItself(endpoint, "anthropic_messages")) return [];
-    const baseUrls = endpoint.baseUrls.filter((entry) => entry.format === "anthropic_messages");
-    return [{ ...candidate, endpoint: { ...endpoint, baseUrls } }];
+    const baseUrls = endpoint.baseUrls.filter((entry) => searchesWebItself(endpoint, entry.format));
+    if (baseUrls.length === 0) return [];
+    const anthropic = baseUrls.filter((entry) => entry.format === "anthropic_messages");
+    const kept = anthropic.length > 0 ? anthropic : baseUrls;
+    return [{ ...candidate, endpoint: { ...endpoint, baseUrls: kept } }];
   });
 }
 
@@ -456,7 +465,8 @@ async function handleAgentRequest(input: {
   const chosen = candidates[0];
   if (passable.length === 0 && chosen) {
     const answeredBy = { [ANSWERED_BY_HEADER]: chosen.endpoint.slug };
-    if (askableFormat({ candidate: chosen, agentFormat: input.format, refusals })) {
+    const asksSearch = asksWebSearch(input.format, translatable);
+    if (askableFormat({ candidate: chosen, agentFormat: input.format, refusals, asksSearch })) {
       reply(500, `${chosen.endpoint.name}: the API key is missing`, answeredBy);
     } else {
       reply(502, `${chosen.endpoint.name}: no address for this agent's request format`, answeredBy);
@@ -526,6 +536,7 @@ function askableFormat(input: {
   candidate: GatewayCandidate;
   agentFormat: ApiEndpointRequestFormat;
   refusals: RefusedShapes;
+  asksSearch: boolean;
 }): ApiEndpointRequestFormat | null {
   const { candidate } = input;
   const formats = formatsOf(candidate);
@@ -535,7 +546,11 @@ function askableFormat(input: {
   return chooseRequestFormat({
     agentFormat: input.agentFormat,
     model: candidate.upstreamModel,
-    formats: offered,
+    formats: formatsToSearchOn({
+      endpoint: candidate.endpoint,
+      formats: offered,
+      asked: input.asksSearch,
+    }),
   });
 }
 
@@ -567,8 +582,9 @@ function askableCandidates(input: {
   refusals: RefusedShapes;
 }): AskableCandidate[] {
   const { refusals } = input;
+  const asksSearch = asksWebSearch(input.format, input.parsed);
   const reachable = input.candidates.flatMap((candidate) => {
-    const format = askableFormat({ candidate, agentFormat: input.format, refusals });
+    const format = askableFormat({ candidate, agentFormat: input.format, refusals, asksSearch });
     const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
     const apiKey = input.store.getApiKey(candidate.endpoint.id);
     if (format === null || baseUrl === undefined || apiKey === null) return [];
@@ -961,7 +977,9 @@ async function askEndpoint(input: EndpointAsk): Promise<AttemptOutcome> {
 /** 这家下一个还没说过没有这个模型的格式；要翻译却翻不过去时为 null。 */
 function nextFormat(input: EndpointAsk): AskableCandidate | null {
   const { candidate } = input;
-  const formats = formatsLeft({ candidate, refusals: input.failover.refusals });
+  const left = formatsLeft({ candidate, refusals: input.failover.refusals });
+  const asked = asksWebSearch(input.format, input.parsed);
+  const formats = formatsToSearchOn({ endpoint: candidate.endpoint, formats: left, asked });
   const format = chooseRequestFormat({
     agentFormat: input.format,
     model: candidate.upstreamModel,
@@ -1018,12 +1036,14 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
   if (candidate.translated === null) {
     return attemptEndpoint({ ...target, req: input.req, format: input.format, body: input.body });
   }
+  // 只有在这个格式上自己会搜的那家才带搜索（ADR 0009）；不会搜的连同点名它的 tool_choice 一起拿掉。
+  const searches = searchesWebItself(candidate.endpoint, candidate.format);
   return attemptTranslated({
     ...target,
     wire: input.wire,
     from: input.format,
     to: candidate.format,
-    request: candidate.translated,
+    request: withWebSearchFor(candidate.translated, searches),
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });

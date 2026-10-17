@@ -104,3 +104,21 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 - 按每次发出去的候选判断，自动切换换家时下一家按它自己的开关重新判断；被拒重问（`refit`、去掉画图工具）也走 `upstreamBody`，同样生效。
 - 翻译出去的请求（Responses → Chat / Anthropic）本来就剔掉 `web_search` 与 `web_search_call`（`translation/responses.ts`），所以只有 Anthropic 地址、打开了开关的接口现在等同没打开；06 号工单再改成翻译成 `web_search_20250305`。
 - 不另加「上游以 400 拒收 `web_search` 就去掉重问」：不会搜的那家一开始就收不到这个工具。
+
+## 06 搜索在 Anthropic 与 Responses 之间互译
+
+04 节「筛出的候选只保留 Anthropic 地址」「只有 Responses 地址的要等 06 号工单」与 05 节「只有 Anthropic 地址、打开了开关的接口等同没打开」到此作废，以本节为准。
+
+### 对照 magpie（7597c132）的结论
+
+- **先挑会搜的协议**：magpie `gateway.go` translated 里 `request.WebSearch` 那段，按这家可用的协议顺序找第一个 `searchesFor` 成立的作为目标。Osuna：Claude Code 的搜索子请求只留这家会搜的地址（有 Anthropic 就只留 Anthropic、原样直通，否则只留 Responses、翻译过去，`gateway.ts` `webSearchCandidates`）；Codex 要了搜索时在这家会搜的格式里挑（`web-search.ts` `formatsToSearchOn`，接在 `askableFormat` 与按格式被拒换格式的 `nextFormat` 上），没有会搜的格式照原顺序挑。所以填了 Chat 与 Anthropic、Anthropic 上打开开关的接口，Codex 的搜索翻成 Anthropic，不再按平常的顺序翻成 Chat 丢掉搜索；Anthropic 地址说没有这个模型时照常换到 Chat（不带搜索）。
+- **只对会搜的格式带搜索**：magpie 的 `searchesFor` 决定重建时写不写搜索工具。Osuna 在 `askOnce` 按这次的目标格式 `withWebSearchFor`：不会搜的去掉 `webSearch`，连同点名搜索的 `tool_choice`。
+- **请求**：中间格式多一个 `webSearch`（magpie `ir.go` `WebSearch`）。Anthropic 解析照 `anthropic.go` 读服务端工具（`asksAnthropicWebSearch`），Responses 解析照 `searchAsked` 与 `allowed_tools`（`asksResponsesWebSearch`）。构建：Anthropic 在函数工具后面加 `{"type":"web_search_20250305","name":"web_search","max_uses":5}`（`anthropicBody`，缓存标记仍在最后一个函数工具上）；Responses 加 `{"type":"web_search"}` 并在 `include` 里要 `web_search_call.action.sources`（`buildResponses`），xAI 自己的地址不要（`vendor-rewrites.ts` `withSearchSourcesFor`，只去掉中转站加的，Codex 自己要的照留）。客户端写在工具上的 `max_uses`、域名过滤不保留（magpie 同样）。历史里的 `server_tool_use`、`web_search_tool_result`、`web_search_call` 照旧不读。
+- **回复**：Responses 的 `web_search_call`（`output_item.done`）读成一次搜索（`responsesDecoder`），Anthropic 编码写成 `server_tool_use`（查询词走 `input_json_delta`）加带完整结果的 `web_search_tool_result`，整份回复写成同样两块（`anthropicEncoder` KSearch、`renderAnthropic`、`searchResultBlock`，不写搜索方的 `encrypted_content`）。Responses 编码写成 `output_item.added`、`response.web_search_call.completed`、`output_item.done`，前面说完的消息按 commentary（`responsesEncoder` KSearch、`responsesSearchItem`，`query` 与 `queries` 都写）。
+
+### 与 magpie 不同的地方
+
+- **点名搜索写成 `{"type":"web_search"}`**：magpie 把 Claude Code 子请求的 `{"type":"tool","name":"web_search"}` 读成 `name:web_search`，发 Responses 时写成 `{"type":"function","name":"web_search"}`，而 `tools` 里没有这个函数，只有原生 `web_search`。OpenAI 的托管工具点名是 `{"type": <工具类型>}`；openai-agents-js 的 `ToolChoice` 显式收 `{ type: 'web_search' }`、openai-agents-python 的 `convert_tool_choice` 把 `"web_search"` 转成同样的形状（两处都注明 SDK 的 `ToolChoiceTypes` 还没列它）。magpie 这条路径没有测试（research/web-search.md 第 5 题）。
+- **Anthropic 上游的搜索写回 Codex**：magpie 的 `anthropicDecoder` 跳过 `server_tool_use` 的内容、不读 `web_search_tool_result`，Codex 收不到 `web_search_call`；工单要求写回，所以 Osuna 按结果块的 `tool_use_id` 找到它的 `server_tool_use` 取查询词，结果项取 title、url、page_age；结果是错误对象时交出一次没有页面的搜索。属于比 magpie 多做。
+- **Responses 结果项的标题**：magpie 只读 sources 的 url、标题也用 url；Osuna 在 source 带 `title` 时用它，否则同 magpie。
+- 文字修补（`textCallFilter`）收到搜索时先交出扣着的文字，保住先后顺序；断流续写不把搜索当作调用（magpie `continuation.add` 同样只看 KToolStart、KToolArgs）。

@@ -16,6 +16,7 @@ import {
   usageToAnthropic,
 } from "./anthropic.js";
 import { ChatDecoder, buildChatRequest, parseChatRequest, renderChat } from "./chat.js";
+import { ResponsesEncoder, parseResponsesRequest, renderResponses } from "./responses.js";
 import {
   ReplyCollector,
   requestForModel,
@@ -55,6 +56,7 @@ function request(messages: Message[]): GatewayRequest {
     text: null,
     format: null,
     named: {},
+    webSearch: false,
   };
 }
 
@@ -1312,5 +1314,161 @@ describe("a tool whose parameters are a union at the root, asked of Anthropic (m
     // 请求本身不改：换家时还要从同一个请求再翻译。
     expect(asked.tools[0]!.schema).toEqual(UNION_ROOT);
     expect(UNION_ROOT.anyOf).toHaveLength(2);
+  });
+});
+
+/*
+ * Codex 的搜索交给只有 Anthropic 地址、自己会搜的接口（工单 06，ADR 0009）：web_search 照 magpie anthropic.go 的
+ * anthropicBody 写成 web_search_20250305；回复里 Anthropic 自己的搜索（server_tool_use 与 web_search_tool_result）
+ * 写回 Codex 的 web_search_call，样子照 magpie responses.go 的 responsesSearchItem 与 responsesEncoder（KSearch）。
+ */
+describe("Codex's web search asked of an Anthropic endpoint", () => {
+  const EXEC = {
+    type: "function",
+    name: "exec_command",
+    description: "Run a command",
+    parameters: { type: "object", properties: {} },
+  };
+  const WEB_SEARCH = { type: "web_search", external_web_access: false };
+  const codexTurn = (fields: Record<string, unknown> = {}) =>
+    parseResponsesRequest({
+      model: "kimi-k2",
+      input: "what is the newest Go release?",
+      tools: [EXEC, WEB_SEARCH],
+      tool_choice: "auto",
+      ...fields,
+    });
+  const SEARCH_USE = {
+    type: "server_tool_use",
+    id: "srvtoolu_1",
+    name: "web_search",
+    input: { query: "newest Go release" },
+  };
+  const SEARCH_RESULT = {
+    type: "web_search_tool_result",
+    tool_use_id: "srvtoolu_1",
+    content: [
+      {
+        type: "web_search_result",
+        title: "Go 1.27 is released",
+        url: "https://go.dev/blog/go1.27",
+        encrypted_content: "EqgfCioIARgB",
+        page_age: "2 days ago",
+      },
+    ],
+  };
+  const SEARCH_ITEM = {
+    id: expect.stringMatching(/^ws_/),
+    type: "web_search_call",
+    status: "completed",
+    action: {
+      type: "search",
+      query: "newest Go release",
+      queries: ["newest Go release"],
+      sources: [{ type: "url", url: "https://go.dev/blog/go1.27" }],
+    },
+  };
+
+  test("web_search goes out as web_search_20250305 after the functions", () => {
+    const built = buildAnthropicRequest(codexTurn(), "kimi-k2");
+
+    expect(built.tools).toEqual([
+      expect.objectContaining({ name: "exec_command" }),
+      { type: "web_search_20250305", name: "web_search", max_uses: 5 },
+    ]);
+  });
+
+  test("a search alone still goes out; allowed_tools leaving web_search out sends none", () => {
+    const alone = buildAnthropicRequest(codexTurn({ tools: [WEB_SEARCH] }), "kimi-k2");
+    const excluded = buildAnthropicRequest(
+      codexTurn({
+        tool_choice: {
+          type: "allowed_tools",
+          mode: "auto",
+          tools: [{ type: "function", name: "exec_command" }],
+        },
+      }),
+      "kimi-k2",
+    );
+
+    expect(alone.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 5 }]);
+    expect(JSON.stringify(excluded.tools)).not.toContain("web_search");
+  });
+
+  test("a streamed search reaches Codex as a web_search_call item, then the answer", () => {
+    let written = "";
+    const encoder = new ResponsesEncoder({
+      model: "kimi-k2",
+      request: codexTurn({ stream: true }),
+      write: (piece) => (written += piece),
+    });
+    const decoder = new AnthropicDecoder();
+    const stream = [
+      { type: "message_start", message: { id: "msg_1", usage: { input_tokens: 10 } } },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { ...SEARCH_USE, input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"query": "newest' },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: ' Go release"}' },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: SEARCH_RESULT },
+      { type: "content_block_stop", index: 1 },
+      { type: "content_block_start", index: 2, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Go 1.27." } },
+      { type: "content_block_stop", index: 2 },
+      { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5 } },
+      { type: "message_stop" },
+    ];
+    for (const event of stream) {
+      decoder.decode(JSON.stringify(event), (decoded) => encoder.event(decoded));
+    }
+    encoder.finish();
+
+    const sent = written
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)) as Record<string, unknown>);
+    const done = sent.filter((event) => event.type === "response.output_item.done");
+    expect(done.map((event) => event.item)).toEqual([
+      SEARCH_ITEM,
+      expect.objectContaining({ type: "message" }),
+    ]);
+    expect(sent.map((event) => event.type)).toContain("response.web_search_call.completed");
+    expect(sent.at(-1)).toMatchObject({
+      type: "response.completed",
+      response: { output: [SEARCH_ITEM, expect.objectContaining({ type: "message" })] },
+    });
+  });
+
+  test("a whole reply with a search renders the web_search_call item for Codex", () => {
+    const collector = new ReplyCollector();
+    new AnthropicDecoder().whole(
+      {
+        id: "msg_1",
+        type: "message",
+        content: [SEARCH_USE, SEARCH_RESULT, { type: "text", text: "Go 1.27." }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      (event) => collector.add(event),
+    );
+
+    const rendered = renderResponses(collector.finish(), {
+      model: "kimi-k2",
+      request: codexTurn(),
+    });
+
+    expect(rendered.output).toEqual([SEARCH_ITEM, expect.objectContaining({ type: "message" })]);
+    expect(rendered.status).toBe("completed");
   });
 });

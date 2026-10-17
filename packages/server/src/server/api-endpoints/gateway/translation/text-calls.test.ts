@@ -386,3 +386,21 @@ describe("text that stays as it came", () => {
     );
   });
 });
+
+describe("a search the upstream ran while text was held", () => {
+  test("the held text goes first, then the search (ticket 06)", () => {
+    const collector = new ReplyCollector();
+    const filter = textCallFilter({ tools: TOOLS, emit: (event) => collector.add(event) });
+    filter.event({ kind: "text", text: "Looking it up <tool" });
+    filter.event({ kind: "search", query: "osuna", hits: [] });
+    filter.event({ kind: "text", text: "Found it." });
+    filter.event({ kind: "stop", stop: "stop" });
+    filter.end();
+
+    expect(collector.finish().parts).toEqual([
+      { kind: "text", text: "Looking it up <tool" },
+      { kind: "web_search", query: "osuna", hits: [] },
+      { kind: "text", text: "Found it." },
+    ]);
+  });
+});

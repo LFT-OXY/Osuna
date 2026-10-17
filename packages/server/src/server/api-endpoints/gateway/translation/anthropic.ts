@@ -1,4 +1,5 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go；
+// 联网搜索写成 web_search_20250305 照 anthropicBody，搜索写回 Claude Code 照 anthropicEncoder 的 KSearch、renderAnthropic 与 searchResultBlock）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { isRecord, parseJson } from "../../upstream-http.js";
@@ -29,6 +30,7 @@ import {
   type Message,
   type Part,
   type Reply,
+  type SearchHit,
   type StopDetails,
   type StopReason,
   type StreamEvent,
@@ -37,8 +39,10 @@ import {
   type ToolResultPart,
   type Usage,
   vendorErrorFields,
+  WEB_SEARCH_NAME,
 } from "./ir.js";
 import { withoutSampling } from "../refused-fields.js";
+import { asksAnthropicWebSearch } from "../web-search.js";
 import { objectSchema } from "./object-root.js";
 import { sseEvent } from "./sse.js";
 
@@ -77,6 +81,7 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
     text: null,
     format: anthropicFormat(body.output_config),
     named: {},
+    webSearch: asksAnthropicWebSearch(body),
     ...parseThinking(body),
   };
 }
@@ -242,7 +247,7 @@ export function buildAnthropicRequest(
   if (Object.keys(config).length > 0) out.output_config = config;
   if (request.stop.length > 0) out.stop_sequences = request.stop;
   if (request.metadata !== null) out.metadata = request.metadata;
-  if (request.tools.length > 0) {
+  if (request.tools.length > 0 || request.webSearch) {
     const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -250,7 +255,9 @@ export function buildAnthropicRequest(
       input_schema: objectSchema(tool.schema) ?? { type: "object", properties: {} },
     }));
     // 有系统提示时工具不标：连同 Claude 登录自带的一个，不超过 Anthropic 的四个。
-    if (system === "") tools.at(-1)!.cache_control = EPHEMERAL;
+    const last = tools.at(-1);
+    if (system === "" && last) last.cache_control = EPHEMERAL;
+    if (request.webSearch) tools.push(WEB_SEARCH_TOOL);
     out.tools = tools;
     const choice = anthropicToolChoice(request);
     if (choice) out.tool_choice = choice;
@@ -259,6 +266,9 @@ export function buildAnthropicRequest(
 }
 
 const EPHEMERAL = { type: "ephemeral" };
+
+/** Anthropic 自己的联网搜索工具，次数上限照 magpie anthropicBody。 */
+const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 5 };
 
 /**
  * Anthropic 只缓存到标了记号的块，别的协议的请求从来不带：标在对话的最后一块上，下一轮只是往后加，
@@ -319,6 +329,8 @@ function anthropicBlock(part: Part): AnthropicBlock | null {
       return part.signature === ""
         ? null
         : { type: "thinking", thinking: part.text, signature: part.signature };
+    case "web_search":
+      return null;
   }
 }
 
@@ -770,12 +782,15 @@ function stopToAnthropic(stop: StopReason): string {
 }
 
 /**
- * Anthropic 事件流 → 中间事件。Anthropic 服务端工具（联网搜索）的块只报一个 other_tool，内容跳过；
+ * Anthropic 事件流 → 中间事件。Anthropic 服务端工具的块只报一个 other_tool；其中联网搜索的查询词
+ * （server_tool_use 的 input 或它的 input_json_delta）记下，等 web_search_tool_result 到了连同结果交出一次搜索。
  * tool_use 的 start 已带完整 input 时（中转站常见）就用它，不再等 input_json_delta。
  */
 export class AnthropicDecoder {
   private readonly serverBlocks = new Set<number>();
   private readonly wholeInput = new Set<number>();
+  // 服务端工具块的 id 与收到的 input 原文，按块的下标。
+  private readonly serverInputs = new Map<number, { id: string; input: string }>();
 
   decode(data: string, emit: EmitEvent): void {
     const event = parseJson(data);
@@ -809,7 +824,8 @@ export class AnthropicDecoder {
         this.startBlock(index, event.content_block, emit);
         return;
       case "content_block_delta":
-        if (!this.serverBlocks.has(index)) this.delta(index, event.delta, emit);
+        if (this.serverBlocks.has(index)) this.serverDelta(index, event.delta);
+        else this.delta(index, event.delta, emit);
         return;
       case "message_delta":
         emitMessageDelta(event, emit);
@@ -829,6 +845,7 @@ export class AnthropicDecoder {
     if (block.type === "server_tool_use") this.serverBlocks.add(index);
     else this.serverBlocks.delete(index);
     this.wholeInput.delete(index);
+    if (this.serverBlock(index, block, emit)) return;
     switch (block.type) {
       case "tool_use":
         emit({ kind: "tool_start", id: String(block.id ?? ""), name: String(block.name ?? "") });
@@ -857,6 +874,38 @@ export class AnthropicDecoder {
     }
   }
 
+  /** 服务端工具的块与联网搜索的结果块；是这两种时为真。 */
+  private serverBlock(index: number, block: Record<string, unknown>, emit: EmitEvent): boolean {
+    if (block.type === "server_tool_use") {
+      const given = isRecord(block.input) && Object.keys(block.input).length > 0;
+      const input = given ? JSON.stringify(block.input) : "";
+      this.serverInputs.set(index, { id: String(block.id ?? ""), input });
+      emit({ kind: "other_tool" });
+      return true;
+    }
+    if (block.type !== "web_search_tool_result") return false;
+    emit({ kind: "other_tool" });
+    emit({ kind: "search", query: this.queryOf(block.tool_use_id), hits: hitsOf(block.content) });
+    return true;
+  }
+
+  /** 服务端工具的 input_json_delta 接在它的 input 后面；start 已带完整 input 的不再接。 */
+  private serverDelta(index: number, delta: unknown): void {
+    const entry = this.serverInputs.get(index);
+    if (!entry || !isRecord(delta) || delta.type !== "input_json_delta") return;
+    if (typeof delta.partial_json === "string") entry.input += delta.partial_json;
+  }
+
+  /** 这次搜索的查询词：按结果块的 tool_use_id 找到它的 server_tool_use。 */
+  private queryOf(id: unknown): string {
+    for (const entry of this.serverInputs.values()) {
+      if (entry.id !== id) continue;
+      const input = parseJson(entry.input);
+      return isRecord(input) && typeof input.query === "string" ? input.query : "";
+    }
+    return "";
+  }
+
   private delta(index: number, delta: unknown, emit: EmitEvent): void {
     if (!isRecord(delta)) return;
     const text = (field: unknown) => (typeof field === "string" ? field : "");
@@ -878,6 +927,17 @@ export class AnthropicDecoder {
       default:
     }
   }
+}
+
+/** 搜索结果块里的页面；结果是错误对象（web_search_tool_result_error）时没有页面。 */
+function hitsOf(content: unknown): SearchHit[] {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((result): SearchHit[] => {
+    if (!isRecord(result) || typeof result.url !== "string" || result.url === "") return [];
+    const title = typeof result.title === "string" ? result.title : "";
+    const pageAge = typeof result.page_age === "string" ? result.page_age : "";
+    return [{ title, url: result.url, pageAge }];
+  });
 }
 
 function emitStart(event: Record<string, unknown>, emit: EmitEvent): void {
@@ -979,8 +1039,34 @@ export class AnthropicEncoder {
         this.gotArgs = true;
         this.delta({ type: "input_json_delta", partial_json: event.text });
         return;
+      case "search":
+        this.search(event.query, event.hits);
+        return;
       default:
     }
+  }
+
+  /** 照 Anthropic 自己的搜索写出：server_tool_use（查询词走 input_json_delta）与带完整结果的 web_search_tool_result。 */
+  private search(query: string, hits: SearchHit[]): void {
+    this.close();
+    const id = `srvtoolu_${newId()}`;
+    const block = { type: "server_tool_use", id, name: WEB_SEARCH_NAME, input: {} };
+    this.send("content_block_start", {
+      type: "content_block_start",
+      index: this.index,
+      content_block: block,
+    });
+    this.delta({ type: "input_json_delta", partial_json: JSON.stringify({ query }) });
+    this.send("content_block_stop", { type: "content_block_stop", index: this.index });
+    this.index++;
+    const result = searchResultBlock(id, hits);
+    this.send("content_block_start", {
+      type: "content_block_start",
+      index: this.index,
+      content_block: result,
+    });
+    this.send("content_block_stop", { type: "content_block_stop", index: this.index });
+    this.index++;
   }
 
   finish(): void {
@@ -1086,6 +1172,16 @@ export function renderAnthropic(reply: Reply, model: string): Record<string, unk
             input: parseJson(argsOf(part)) ?? {},
           },
         ];
+      case "web_search": {
+        const id = `srvtoolu_${newId()}`;
+        const use = {
+          type: "server_tool_use",
+          id,
+          name: WEB_SEARCH_NAME,
+          input: { query: part.query },
+        };
+        return [use, searchResultBlock(id, part.hits)];
+      }
       case "tool_result":
       case "image":
       case "file":
@@ -1103,6 +1199,21 @@ export function renderAnthropic(reply: Reply, model: string): Record<string, unk
     ...stopDetailsOf(reply),
     usage: usageToAnthropic(reply.usage),
   };
+}
+
+/**
+ * Claude Code 读的 web_search_tool_result：结果项只取 title 与 url（research/web-search.md 第 1 题）。
+ * 不写搜索方的 encrypted_content：它只对做搜索的那家有效，Claude Code 会把它发给别家（magpie searchResultBlock）。
+ */
+function searchResultBlock(id: string, hits: SearchHit[]): Record<string, unknown> {
+  const content = hits.map((hit) => ({
+    type: "web_search_result",
+    title: hit.title,
+    url: hit.url,
+    encrypted_content: "",
+    page_age: hit.pageAge === "" ? null : hit.pageAge,
+  }));
+  return { type: "web_search_tool_result", tool_use_id: id, content };
 }
 
 /** 上游给了 stop_details 才写（magpie 的 anthropicEncoder.finish 与 renderAnthropic）。 */

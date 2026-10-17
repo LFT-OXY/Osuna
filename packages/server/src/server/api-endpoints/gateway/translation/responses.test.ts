@@ -7,6 +7,7 @@ import {
   AnthropicEncoder,
   buildAnthropicRequest,
   parseAnthropicRequest,
+  renderAnthropic,
 } from "./anthropic.js";
 import { buildChatRequest, parseChatRequest } from "./chat.js";
 import {
@@ -1525,5 +1526,133 @@ describe("the phase of each message a translated model says to Codex (magpie pha
     };
     expect(render(answer)).toEqual(["final_answer"]);
     expect(render({ ...answer, stop: "length" })).toEqual([undefined]);
+  });
+});
+
+/*
+ * Claude Code 的搜索子请求交给只有 Responses 地址、自己会搜的接口（工单 06，ADR 0009）：
+ * 请求照 magpie anthropic.go 读 tools 与 responses.go buildResponses 写成原生 web_search，
+ * 回复照 responses.go 读 web_search_call、anthropic.go 的 anthropicEncoder（KSearch）与 searchResultBlock 写回。
+ */
+describe("Claude Code's web search asked of a Responses endpoint", () => {
+  const SEARCH_REQUEST = {
+    model: "gpt-5",
+    max_tokens: 32000,
+    stream: true,
+    system: "You run a web search for another Claude model.",
+    messages: [{ role: "user", content: "Perform a web search for the query: osuna" }],
+    thinking: { type: "disabled" },
+    tool_choice: { type: "tool", name: "web_search" },
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+  };
+  const SEARCHED = {
+    id: "ws_1",
+    type: "web_search_call",
+    status: "completed",
+    action: {
+      type: "search",
+      query: "osuna",
+      sources: [
+        { type: "url", url: "https://osuna.dev/" },
+        { type: "url", url: "https://example.com/osuna" },
+      ],
+    },
+  };
+  const ANSWER = {
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Osuna is an app.", annotations: [] }],
+  };
+  const RESULTS = {
+    type: "web_search_tool_result",
+    tool_use_id: expect.stringMatching(/^srvtoolu_/),
+    content: [
+      {
+        type: "web_search_result",
+        title: "https://osuna.dev/",
+        url: "https://osuna.dev/",
+        encrypted_content: "",
+        page_age: null,
+      },
+      {
+        type: "web_search_result",
+        title: "https://example.com/osuna",
+        url: "https://example.com/osuna",
+        encrypted_content: "",
+        page_age: null,
+      },
+    ],
+  };
+
+  test("the search tool goes out as Responses' own web_search, the sources asked for, and the forced choice names it", () => {
+    const built = buildResponsesRequest(parseAnthropicRequest(SEARCH_REQUEST), "gpt-5");
+
+    expect(built.tools).toEqual([{ type: "web_search" }]);
+    expect(built.tool_choice).toEqual({ type: "web_search" });
+    expect(built.include).toEqual(["web_search_call.action.sources"]);
+  });
+
+  test("a streamed search reaches Claude Code as server_tool_use and web_search_tool_result with title and url", () => {
+    let written = "";
+    const encoder = new AnthropicEncoder({ model: "gpt-5", write: (piece) => (written += piece) });
+    const decoder = new ResponsesDecoder();
+    const stream = [
+      { type: "response.created", response: { id: "resp_1" } },
+      { type: "response.output_item.added", item: { ...SEARCHED, status: "in_progress" } },
+      { type: "response.output_item.done", item: SEARCHED },
+      { type: "response.output_item.added", item: { ...ANSWER, content: [] } },
+      { type: "response.output_text.delta", delta: "Osuna is an app." },
+      { type: "response.output_item.done", item: ANSWER },
+      { type: "response.completed", response: { id: "resp_1", status: "completed" } },
+    ];
+    for (const event of stream) {
+      decoder.decode(JSON.stringify(event), (decoded) => encoder.event(decoded));
+    }
+    encoder.finish();
+
+    const sent = events(written);
+    const starts = sent.filter((event) => event.type === "content_block_start");
+    expect(starts.map((event) => event.content_block)).toEqual([
+      {
+        type: "server_tool_use",
+        id: expect.stringMatching(/^srvtoolu_/),
+        name: "web_search",
+        input: {},
+      },
+      RESULTS,
+      { type: "text", text: "" },
+    ]);
+    const [use, results] = starts.map((event) => event.content_block as Record<string, unknown>);
+    expect(results?.tool_use_id).toBe(use?.id);
+    expect(sent).toContainEqual({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "input_json_delta", partial_json: '{"query":"osuna"}' },
+    });
+    expect(sent.at(-2)).toMatchObject({ delta: { stop_reason: "end_turn" } });
+  });
+
+  test("a whole reply with a search renders the same blocks for Claude Code", () => {
+    const collector = new ReplyCollector();
+    new ResponsesDecoder().whole(
+      { id: "resp_1", status: "completed", output: [SEARCHED, ANSWER] },
+      (event) => collector.add(event),
+    );
+
+    const rendered = renderAnthropic(collector.finish(), "gpt-5");
+
+    expect(rendered.content).toEqual([
+      {
+        type: "server_tool_use",
+        id: expect.stringMatching(/^srvtoolu_/),
+        name: "web_search",
+        input: { query: "osuna" },
+      },
+      RESULTS,
+      { type: "text", text: "Osuna is an app." },
+    ]);
+    expect(rendered.stop_reason).toBe("end_turn");
   });
 });

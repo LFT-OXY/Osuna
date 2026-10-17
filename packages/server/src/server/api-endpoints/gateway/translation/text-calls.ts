@@ -407,6 +407,10 @@ class TextCallFilter implements ReplyFilter {
         this.release();
         this.native = true;
         break;
+      // 上游做完的搜索接在已经说的文字后面：扣着的先交出。
+      case "search":
+        this.release();
+        break;
       case "stop":
         this.input.emit(this.stop(event));
         return;

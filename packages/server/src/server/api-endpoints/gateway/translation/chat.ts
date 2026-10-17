@@ -90,6 +90,8 @@ export function parseChatRequest(body: unknown): GatewayRequest {
     text: null,
     format: openAIFormat(body.response_format),
     named: {},
+    // 中转站只收 Claude Code 与 Codex 的请求，没有 Chat 客户端的搜索要交出去。
+    webSearch: false,
   };
 }
 

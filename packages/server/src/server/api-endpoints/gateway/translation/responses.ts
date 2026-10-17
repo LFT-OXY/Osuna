@@ -1,4 +1,5 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go，phase.go 的 phaseOutput、heldMost）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go，phase.go 的 phaseOutput、heldMost；
+// 联网搜索写成原生 web_search 照 buildResponses，web_search_call 读成搜索照 responsesDecoder，写回 Codex 照 responsesEncoder 的 KSearch、responsesSearchItem 与 renderResponses）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { createHash } from "node:crypto";
@@ -12,6 +13,7 @@ import {
   argsOf,
   attachmentText,
   callsTool,
+  choosesWebSearch,
   dataUrl,
   effortOf,
   imagePart,
@@ -32,6 +34,7 @@ import {
   type NamedTool,
   type Part,
   type Reply,
+  type SearchHit,
   type StopReason,
   type StreamEvent,
   type Tool,
@@ -40,6 +43,7 @@ import {
   vendorErrorFields,
   vendorErrorOf,
 } from "./ir.js";
+import { asksResponsesWebSearch } from "../web-search.js";
 import { sseEvent } from "./sse.js";
 
 /*
@@ -298,6 +302,7 @@ export function parseResponsesRequest(body: unknown): GatewayRequest {
     text: textOptions(body.text),
     format: openAIFormat(isRecord(body.text) ? body.text.format : null),
     named: chosen.named,
+    webSearch: isRecord(body) && asksResponsesWebSearch(body),
   };
 }
 
@@ -634,8 +639,10 @@ export function buildResponsesRequest(
   const effort = openAIEffort(request);
   if (effort) out.reasoning = { effort, summary: "auto" };
   else if (request.thinking) out.reasoning = { summary: "auto" };
-  if (request.tools.length > 0) Object.assign(out, responsesTools(request));
-  const include = includedFor({ include: request.include, reasons: out.reasoning !== undefined });
+  if (request.tools.length > 0 || request.webSearch) Object.assign(out, responsesTools(request));
+  // 搜到的页面：别的协议的客户端要靠它写出结果（magpie buildResponses；xAI 不收由 vendor-rewrites 去掉）。
+  const asked = request.webSearch ? [...request.include, SEARCH_SOURCES] : request.include;
+  const include = includedFor({ include: asked, reasons: out.reasoning !== undefined });
   if (include.length > 0) out.include = include;
   return out;
 }
@@ -719,6 +726,8 @@ function responsesInput(messages: Message[], replay: boolean): unknown[] {
             arguments: argsOf(part),
           });
           break;
+        case "web_search":
+          break;
         case "tool_result": {
           flush();
           const images = part.images.map((image) => ({
@@ -754,20 +763,28 @@ function responsesFormat(format: Format): Record<string, unknown> {
   return out;
 }
 
-/** strict 照 Codex 一律写明：不写时 ChatGPT 后端按严格模式校验 schema，拒收带环视的 pattern（magpie #383）。 */
+export const SEARCH_SOURCES = "web_search_call.action.sources";
+
+/**
+ * strict 照 Codex 一律写明：不写时 ChatGPT 后端按严格模式校验 schema，拒收带环视的 pattern（magpie #383）。
+ * 客户端要了联网搜索时末尾加上原生的 web_search。点名搜索（Claude Code 的搜索子请求）写成 {"type":"web_search"}：
+ * magpie 写成同名的 function，而 tools 里没有这个函数（research/implementation-notes.md「06」）。
+ */
 function responsesTools(request: GatewayRequest): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    tools: request.tools.map((tool) => ({
-      type: "function",
-      name: tool.name,
-      description: tool.description,
-      strict: tool.strict,
-      ...(tool.schema === null ? {} : { parameters: tool.schema }),
-    })),
-  };
+  const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    strict: tool.strict,
+    ...(tool.schema === null ? {} : { parameters: tool.schema }),
+  }));
+  if (request.webSearch) tools.push({ type: "web_search" });
+  const out: Record<string, unknown> = { tools };
   const { toolChoice } = request;
   if (toolChoice === "auto" || toolChoice === "none" || toolChoice === "required") {
     out.tool_choice = toolChoice;
+  } else if (choosesWebSearch(request)) {
+    out.tool_choice = { type: "web_search" };
   } else if (toolChoice.startsWith("name:")) {
     out.tool_choice = { type: "function", name: toolChoice.slice(5) };
   }
@@ -1037,9 +1054,27 @@ export class ResponsesDecoder {
   }
 
   private itemDone(item: Record<string, unknown>, emit: EmitEvent): void {
+    if (item.type === "web_search_call") {
+      this.searched(item, emit);
+      return;
+    }
     if (item.type !== "function_call") return;
     if (stringOf(item.arguments) !== "") this.full = stringOf(item.arguments);
     this.endCall(emit);
+  }
+
+  /** 做完的搜索：查询词与 sources 里的页面（magpie 只读 action.query，Responses 只给地址，标题也用地址）。 */
+  private searched(item: Record<string, unknown>, emit: EmitEvent): void {
+    const action = isRecord(item.action) ? item.action : {};
+    const queries = Array.isArray(action.queries) ? action.queries : [];
+    const query = stringOf(action.query) || stringOf(queries[0]);
+    if (query === "") return;
+    const sources = Array.isArray(action.sources) ? action.sources.filter(isRecord) : [];
+    const hits = sources.flatMap((source) => {
+      const url = stringOf(source.url);
+      return url === "" ? [] : [{ title: stringOf(source.title) || url, url, pageAge: "" }];
+    });
+    emit({ kind: "search", query, hits });
   }
 
   private finished(input: {
@@ -1295,6 +1330,9 @@ export class ResponsesEncoder {
           this.send("response.function_call_arguments.delta", { ...this.at(), delta: event.text });
         }
         break;
+      case "search":
+        this.search(event.query, event.hits);
+        break;
       case "error":
         this.closeItem();
         this.release(null);
@@ -1400,6 +1438,24 @@ export class ResponsesEncoder {
     this.output.push(item);
     this.open = null;
     this.text = "";
+  }
+
+  /**
+   * 搜索做完才整个到达：照 magpie 只说它的查询词与页面，不补进行中的事件，也不在回答里补引用位置。
+   * 前面说完的消息按 commentary 写出。
+   */
+  private search(query: string, hits: SearchHit[]): void {
+    this.closeItem();
+    this.release("commentary");
+    this.outputIndex++;
+    const item = searchItem(query, hits);
+    this.send("response.output_item.added", { output_index: this.outputIndex, item });
+    this.send("response.web_search_call.completed", {
+      output_index: this.outputIndex,
+      item_id: item.id,
+    });
+    this.send("response.output_item.done", { output_index: this.outputIndex, item });
+    this.output.push(item);
   }
 
   private closeCall(): Record<string, unknown> {
@@ -1511,6 +1567,8 @@ export function renderResponses(
         });
         return [{ id: itemPrefix(item) + newId(), ...item }];
       }
+      case "web_search":
+        return [searchItem(part.query, part.hits)];
       default:
         return [];
     }
@@ -1529,6 +1587,17 @@ export function renderResponses(
     usage: usageToResponses(reply.usage),
     incomplete_details: incomplete,
     error: null,
+  };
+}
+
+/** 做完的一次搜索写给 Codex：query 给旧的客户端，queries 给照现行接口读的（magpie responsesSearchItem）。 */
+function searchItem(query: string, hits: SearchHit[]): Record<string, unknown> {
+  const sources = hits.map((hit) => ({ type: "url", url: hit.url }));
+  return {
+    id: `ws_${newId()}`,
+    type: "web_search_call",
+    status: "completed",
+    action: { type: "search", query, queries: [query], sources },
   };
 }
 

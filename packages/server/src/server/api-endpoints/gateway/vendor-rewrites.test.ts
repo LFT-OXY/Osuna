@@ -349,3 +349,31 @@ describe("tool schemas rewritten for Kimi, DeepSeek and Grok", () => {
     expect(withVendorRewrites(input)).toBe(input.body);
   });
 });
+
+/* 搜到的页面只对 xAI 以外的 Responses 地址要（magpie responses.go buildResponses：xAI 的接口不知道收不收）。 */
+describe("the search sources asked of a Responses address", () => {
+  const search = parseAnthropicRequest({
+    model: "m",
+    max_tokens: 1000,
+    messages: [{ role: "user", content: "Perform a web search for the query: osuna" }],
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 }],
+  });
+  const includeFor = (baseUrl: string) => {
+    const text = translatedBody({
+      request: search,
+      baseUrl,
+      from: "anthropic_messages",
+      to: "openai_responses",
+      model: "grok-4",
+      facts: {},
+      refusals: NO_REFUSALS,
+      continuation: null,
+    });
+    return (JSON.parse(text) as { include?: unknown }).include;
+  };
+
+  test("a relay is asked for them; xAI's own address is not", () => {
+    expect(includeFor(RELAY_URL)).toEqual(["web_search_call.action.sources"]);
+    expect(includeFor("https://api.x.ai/v1")).toBeUndefined();
+  });
+});

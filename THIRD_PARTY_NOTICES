@@ -243,9 +243,19 @@ how internal/gateway/anthropic.go reads server-side tools (WebSearch), and
 leaving Codex's web_search tool, and the web_search_call items of its history,
 out of a request to an endpoint that doesn't search follows ownAPI and
 searchesFor in internal/gateway/gateway.go and how internal/gateway/responses.go
-reads a request's input:
+reads a request's input. Asking a translated search of the format an endpoint
+searches on, and offering the search only there, follows how translated in
+internal/gateway/gateway.go handles request.WebSearch with searchesFor; writing
+the search as the target API's own tool and writing the upstream's search back
+in the client's shape follow anthropicBody, anthropicEncoder, renderAnthropic
+and searchResultBlock in internal/gateway/anthropic.go, and buildResponses,
+responsesDecoder, responsesEncoder, responsesSearchItem and renderResponses in
+internal/gateway/responses.go:
 
   packages/server/src/server/api-endpoints/gateway/web-search.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
 
 How a model its vendor said is retired is remembered (a week, kept in a file,
 taken back when that endpoint answers for it, left out of every model list

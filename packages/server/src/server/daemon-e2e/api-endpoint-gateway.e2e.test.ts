@@ -7754,10 +7754,14 @@ describe("Claude Code's web search goes only to endpoints that search the web by
     };
   }
 
-  /** 三家都选了 claude-sonnet-4-5（Anthropic 官方接口前面的中转）：A、C 打开了「自己能联网搜索」，B 没有；`searchers` 改写哪几家打开。 */
+  /**
+   * 三家都选了 claude-sonnet-4-5（Anthropic 官方接口前面的中转）：A、C 打开了「自己能联网搜索」，B 没有；`searchers` 改写哪几家打开。
+   * 都只有 Anthropic 地址；`responsesOnly` 里的那几家改成只有 Responses 地址。
+   */
   async function threeRelays(
     searchers: Record<string, boolean> = { a: true, c: true },
     models: Record<string, string[]> = {},
+    responsesOnly: string[] = [],
   ) {
     const upstreams = {
       a: await startUpstream(),
@@ -7773,7 +7777,11 @@ describe("Claude Code's web search goes only to endpoints that search the web by
         id: `ep_${key}`,
         slug: `relay-${key}`,
         name: `Relay ${key.toUpperCase()}`,
-        baseUrls: [{ format: "anthropic_messages", url: upstreams[key].url }],
+        baseUrls: [
+          responsesOnly.includes(key)
+            ? { format: "openai_responses", url: `${upstreams[key].url}/v1` }
+            : { format: "anthropic_messages", url: upstreams[key].url },
+        ],
         models: models[key] ?? ["claude-sonnet-4-5"],
       });
       return searchers[key] ? Object.assign(endpoint, { searchesWeb: true }) : endpoint;
@@ -7869,6 +7877,129 @@ describe("Claude Code's web search goes only to endpoints that search the web by
     expect(upstreams.a.requests).toHaveLength(0);
   });
 
+  /*
+   * 只有 Responses 地址的那家（工单 06）：照 magpie 写成原生 web_search；回复里的 web_search_call 写回 server_tool_use 与
+   * web_search_tool_result，结果项的 title 是地址（Responses 的 sources 只给地址，magpie 同样）。
+   */
+  const SEARCHED = {
+    id: "ws_1",
+    type: "web_search_call",
+    status: "completed",
+    action: {
+      type: "search",
+      query: "osuna",
+      sources: [{ type: "url", url: "https://osuna.dev/" }],
+    },
+  };
+  const ANSWER = {
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text: "Osuna is an app.", annotations: [] }],
+  };
+  const RESULTS = {
+    type: "web_search_tool_result",
+    tool_use_id: expect.stringMatching(/^srvtoolu_/),
+    content: [
+      {
+        type: "web_search_result",
+        title: "https://osuna.dev/",
+        url: "https://osuna.dev/",
+        encrypted_content: "",
+        page_age: null,
+      },
+    ],
+  };
+
+  function searchedStream(res: ServerResponse) {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    for (const event of [
+      { type: "response.created", response: { id: "resp_1", status: "in_progress" } },
+      { type: "response.output_item.added", item: { ...SEARCHED, status: "in_progress" } },
+      { type: "response.output_item.done", item: SEARCHED },
+      { type: "response.output_item.added", item: { ...ANSWER, content: [] } },
+      { type: "response.output_text.delta", delta: "Osuna is an app." },
+      { type: "response.output_item.done", item: ANSWER },
+      {
+        type: "response.completed",
+        response: { id: "resp_1", status: "completed", usage: { input_tokens: 9 } },
+      },
+    ]) {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    res.end();
+  }
+
+  /** 发给只有 Responses 地址那家的请求：原生 web_search、点名它、要了搜到的页面。 */
+  function expectNativeSearch(request: RecordedRequest | undefined) {
+    expect(request?.url).toBe("/v1/responses");
+    const body = receivedBody(request);
+    expect(body.tools).toEqual([{ type: "web_search" }]);
+    expect(body.tool_choice).toEqual({ type: "web_search" });
+    expect(body.include).toEqual(["web_search_call.action.sources"]);
+  }
+
+  test("an endpoint with only a Responses URL gets Responses' own web_search; Claude Code's stream gets the search blocks", async () => {
+    const { upstreams, ask } = await threeRelays({ a: true }, {}, ["a"]);
+    upstreams.a.respond = (_request, res) => searchedStream(res);
+
+    const response = await ask(searchRequest("claude-sonnet-4-5"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expectNativeSearch(upstreams.a.requests[0]);
+    const sent = sseData(await response.text()) as Record<string, unknown>[];
+    const blocks = sent
+      .filter((event) => event.type === "content_block_start")
+      .map((event) => event.content_block);
+    expect(blocks).toEqual([
+      {
+        type: "server_tool_use",
+        id: expect.stringMatching(/^srvtoolu_/),
+        name: "web_search",
+        input: {},
+      },
+      RESULTS,
+      { type: "text", text: "" },
+    ]);
+    expect(sent).toContainEqual(
+      expect.objectContaining({
+        delta: { type: "input_json_delta", partial_json: '{"query":"osuna"}' },
+      }),
+    );
+  });
+
+  test("an endpoint with only a Responses URL answering whole: Claude Code's whole reply has the search blocks", async () => {
+    const { upstreams, ask } = await threeRelays({ a: true }, {}, ["a"]);
+    upstreams.a.respond = (_request, res) => {
+      const whole = {
+        id: "resp_1",
+        object: "response",
+        status: "completed",
+        output: [SEARCHED, ANSWER],
+      };
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(whole));
+    };
+
+    const response = await ask({ ...searchRequest("claude-sonnet-4-5"), stream: false });
+
+    expect(response.status).toBe(200);
+    expectNativeSearch(upstreams.a.requests[0]);
+    const body = (await response.json()) as { content: unknown[]; stop_reason: string };
+    expect(body.content).toEqual([
+      {
+        type: "server_tool_use",
+        id: expect.stringMatching(/^srvtoolu_/),
+        name: "web_search",
+        input: { query: "osuna" },
+      },
+      RESULTS,
+      { type: "text", text: "Osuna is an app." },
+    ]);
+    expect(body.stop_reason).toBe("end_turn");
+  });
+
   test("with no endpoint for the model that searches, the CLI gets a 400 invalid_request_error and no upstream is asked", async () => {
     const { upstreams, ask } = await threeRelays({});
 
@@ -7938,8 +8069,8 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
     };
   }
 
-  /** 两家都选了 kimi-k2、都只有 Responses 地址（`aFormat` 改 A 的）：A（先建的）打开了「自己能联网搜索」，B 没有。 */
-  async function twoResponsesRelays(aFormat = "openai_responses") {
+  /** 两家都选了 kimi-k2、都只有 Responses 地址（`aFormat`、`bFormat` 改各自的）：A（先建的）打开了「自己能联网搜索」，B 没有。 */
+  async function twoResponsesRelays(aFormat = "openai_responses", bFormat = "openai_responses") {
     const upstreams = { a: await startUpstream(), b: await startUpstream() };
     for (const upstream of Object.values(upstreams)) {
       upstream.respond = (_request, res) => answerResponsesWhole(res);
@@ -7954,8 +8085,8 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
         slug: `relay-${key}`,
         name: `Relay ${key.toUpperCase()}`,
         baseUrls: [
-          key === "a" && aFormat === "anthropic_messages"
-            ? { format: aFormat, url: upstreams[key].url }
+          (key === "a" ? aFormat : bFormat) === "anthropic_messages"
+            ? { format: "anthropic_messages", url: upstreams[key].url }
             : { format: "openai_responses", url: `${upstreams[key].url}/v1` },
         ],
         models: ["kimi-k2"],
@@ -8043,20 +8174,129 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
     expect(receivedBody(upstreams.a.requests[0]).input).toEqual(input);
   });
 
-  test("an endpoint with the switch on but only an Anthropic URL gets the turn translated without the tool or the web_search_call", async () => {
+  /*
+   * 只有 Anthropic 地址的那家（工单 06）：照 magpie 写成 web_search_20250305；Anthropic 自己的搜索（server_tool_use 与
+   * web_search_tool_result）写回 Codex 的 web_search_call。历史里的 web_search_call 照 magpie 不读（重建请求时没有这一项）。
+   */
+  const SEARCH_USE = {
+    type: "server_tool_use",
+    id: "srvtoolu_1",
+    name: "web_search",
+    input: { query: "newest Go release" },
+  };
+  const SEARCH_RESULT = {
+    type: "web_search_tool_result",
+    tool_use_id: "srvtoolu_1",
+    content: [
+      {
+        type: "web_search_result",
+        title: "Go 1.27 is released",
+        url: "https://go.dev/blog/go1.27",
+        encrypted_content: "EqgfCioIARgB",
+        page_age: "2 days ago",
+      },
+    ],
+  };
+  const SEARCH_ITEM = {
+    id: expect.stringMatching(/^ws_/),
+    type: "web_search_call",
+    status: "completed",
+    action: {
+      type: "search",
+      query: "newest Go release",
+      queries: ["newest Go release"],
+      sources: [{ type: "url", url: "https://go.dev/blog/go1.27" }],
+    },
+  };
+
+  function searchedAnthropicStream(res: ServerResponse) {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    for (const event of [
+      { type: "message_start", message: { id: "msg_1", usage: { input_tokens: 10 } } },
+      { type: "content_block_start", index: 0, content_block: { ...SEARCH_USE, input: {} } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"query":"newest Go release"}' },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: SEARCH_RESULT },
+      { type: "content_block_stop", index: 1 },
+      { type: "content_block_start", index: 2, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Go 1.27." } },
+      { type: "content_block_stop", index: 2 },
+      { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5 } },
+      { type: "message_stop" },
+    ]) {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    res.end();
+  }
+
+  /** 发给只有 Anthropic 地址那家的请求：web_search_20250305 跟在函数后面，历史里的搜索不发。 */
+  function expectAnthropicSearch(request: RecordedRequest | undefined) {
+    expect(request?.url).toBe("/v1/messages");
+    expect(request?.body.toString()).not.toContain("ws_1");
+    expect(receivedBody(request).tools).toEqual([
+      expect.objectContaining({ name: "exec_command" }),
+      { type: "web_search_20250305", name: "web_search", max_uses: 5 },
+    ]);
+  }
+
+  test("an endpoint with the switch on but only an Anthropic URL gets web_search_20250305; Codex's stream gets the web_search_call", async () => {
     const { upstreams, ask } = await twoResponsesRelays("anthropic_messages");
+    upstreams.a.respond = (_request, res) => searchedAnthropicStream(res);
     const input = [ASKED, SEARCHED, ANSWERED, AGAIN];
 
-    const response = await ask(codexTurn("relay-a/kimi-k2", { input }));
+    const response = await ask(codexTurn("relay-a/kimi-k2", { input, stream: true }));
 
     expect(response.status).toBe(200);
-    expect(upstreams.a.requests).toHaveLength(1);
-    expect(upstreams.a.requests[0]?.url).toBe("/v1/messages");
-    const toA = upstreams.a.requests[0]?.body.toString() ?? "";
-    expect(toA).not.toContain("web_search");
-    expect(toA).not.toContain("ws_1");
-    expect(receivedBody(upstreams.a.requests[0]).tools).toEqual([
+    expectAnthropicSearch(upstreams.a.requests[0]);
+    const sent = sseData(await response.text()) as Record<string, unknown>[];
+    const done = sent.filter((event) => event.type === "response.output_item.done");
+    expect(done.map((event) => event.item)).toEqual([
+      SEARCH_ITEM,
+      expect.objectContaining({ type: "message" }),
+    ]);
+    expect(sent.map((event) => event.type)).toContain("response.web_search_call.completed");
+  });
+
+  test("an endpoint with only an Anthropic URL and the switch off gets the turn translated without the tool or the web_search_call", async () => {
+    const { upstreams, ask } = await twoResponsesRelays("openai_responses", "anthropic_messages");
+    const input = [ASKED, SEARCHED, ANSWERED, AGAIN];
+
+    const response = await ask(codexTurn("relay-b/kimi-k2", { input }));
+
+    expect(response.status).toBe(200);
+    expect(upstreams.b.requests[0]?.url).toBe("/v1/messages");
+    const toB = upstreams.b.requests[0]?.body.toString() ?? "";
+    expect(toB).not.toContain("web_search");
+    expect(toB).not.toContain("ws_1");
+    expect(receivedBody(upstreams.b.requests[0]).tools).toEqual([
       expect.objectContaining({ name: "exec_command" }),
     ]);
+  });
+
+  test("an endpoint with only an Anthropic URL answering whole: Codex's whole reply has the web_search_call", async () => {
+    const { upstreams, ask } = await twoResponsesRelays("anthropic_messages");
+    upstreams.a.respond = (_request, res) => {
+      const whole = {
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        content: [SEARCH_USE, SEARCH_RESULT, { type: "text", text: "Go 1.27." }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(whole));
+    };
+
+    const response = await ask(codexTurn("relay-a/kimi-k2"));
+
+    expect(response.status).toBe(200);
+    expectAnthropicSearch(upstreams.a.requests[0]);
+    const body = (await response.json()) as { output: unknown[]; status: string };
+    expect(body.output).toEqual([SEARCH_ITEM, expect.objectContaining({ type: "message" })]);
+    expect(body.status).toBe("completed");
   });
 });
