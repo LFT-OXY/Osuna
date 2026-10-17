@@ -5,6 +5,7 @@
 import type { Readable, Transform } from "node:stream";
 import * as zlib from "node:zlib";
 import type { Request } from "express";
+import type pino from "pino";
 
 /*
  * 读 Agent 发来的整个请求体：Codex 发给 OpenAI 自带服务商时用 zstd 压缩，别的客户端可能用 gzip。
@@ -19,6 +20,7 @@ interface ZlibWithZstd {
 }
 const zlibWithZstd: ZlibWithZstd = zlib;
 
+const MB = 1024 * 1024;
 const READABLE_ENCODINGS = "identity, gzip or zstd";
 
 export type AgentBody =
@@ -26,7 +28,11 @@ export type AgentBody =
   | { kind: "tooLarge"; message: string }
   | { kind: "unreadable"; status: 400 | 415; message: string };
 
-export async function readAgentBody(input: { req: Request; limit: number }): Promise<AgentBody> {
+export async function readAgentBody(input: {
+  req: Request;
+  limit: number;
+  logger: pino.Logger;
+}): Promise<AgentBody> {
   const { req, limit } = input;
   const encoding = String(req.headers["content-encoding"] ?? "")
     .trim()
@@ -48,10 +54,18 @@ export async function readAgentBody(input: { req: Request; limit: number }): Pro
   req.resume();
   if (read.kind === "tooLarge") return { kind: "tooLarge", message: overLimit(limit) };
   // 没压缩时读断了只会是 CLI 自己走了，回什么它都收不到。
-  const message = stream
-    ? `The request body is not valid ${encoding} data`
-    : "The request body could not be read";
-  return { kind: "unreadable", status: 400, message };
+  if (stream === null) {
+    return { kind: "unreadable", status: 400, message: "The request body could not be read" };
+  }
+  input.logger.warn(
+    { encoding, err: read.error },
+    "API endpoint gateway could not decompress a request body",
+  );
+  return {
+    kind: "unreadable",
+    status: 400,
+    message: `The request body is not valid ${encoding} data`,
+  };
 }
 
 type Decoder =
@@ -83,7 +97,10 @@ function decoderFor(encoding: string): Decoder {
   }
 }
 
-type LimitedRead = { kind: "read"; body: Buffer } | { kind: "tooLarge" } | { kind: "broken" };
+type LimitedRead =
+  | { kind: "read"; body: Buffer }
+  | { kind: "tooLarge" }
+  | { kind: "broken"; error: unknown };
 
 function readLimited(input: { source: Readable; limit: number }): Promise<LimitedRead> {
   const { source, limit } = input;
@@ -105,7 +122,7 @@ function readLimited(input: { source: Readable; limit: number }): Promise<Limite
       chunks.push(chunk);
     };
     const onEnd = () => settle({ kind: "read", body: Buffer.concat(chunks) });
-    const onError = () => settle({ kind: "broken" });
+    const onError = (error: unknown) => settle({ kind: "broken", error });
     source.on("data", onData);
     source.once("end", onEnd);
     source.once("error", onError);
@@ -118,15 +135,7 @@ function readLimited(input: { source: Readable; limit: number }): Promise<Limite
  */
 function overLimit(limit: number): string {
   return (
-    `The request body is over the API endpoint gateway's limit of ${sizeWord(limit)} (decompressed); no API endpoint was asked. ` +
+    `The request body is over the API endpoint gateway's limit of ${limit / MB} MB (decompressed); no API endpoint was asked. ` +
     "This is the gateway's limit, not the model's context: run /compact to shorten the conversation, or start a new one."
   );
-}
-
-/** 字节数写成 MB；不是整 MB 时写 KB 或字节（测试设的小上限）。 */
-function sizeWord(bytes: number): string {
-  const MB = 1024 * 1024;
-  if (bytes >= MB && bytes % MB === 0) return `${bytes / MB} MB`;
-  if (bytes >= 1024 && bytes % 1024 === 0) return `${bytes / 1024} KB`;
-  return `${bytes} bytes`;
 }

@@ -32,6 +32,8 @@ const MAX_HELD_BYTES = 1024 * 1024;
 
 // 复用的连接在回复开始前被掐的报错码（EOF 记作 ECONNRESET「socket hang up」，写不进去是 EPIPE）。
 const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "EPIPE"]);
+// 一次最多这么多回重发：连接池里每台主机最多留这么多条空闲连接（magpie 的 MaxIdleConnsPerHost）。
+const MAX_REPLAYS = 8;
 
 // 空回复交给 Agent 的说法（magpie 的 emptyReply）。
 export const EMPTY_REPLY = "an empty reply (the model answered nothing; try again)";
@@ -319,7 +321,7 @@ async function sendUpstream(input: UpstreamSend): Promise<UpstreamOutcome> {
   // 最近发出的那个请求：超时时掐掉它。
   const latest: { request: ClientRequest | null } = { request: null };
   const answered = answeredOnLiveConnection({
-    input,
+    send: input,
     sent: (upstream) => {
       latest.request = upstream;
     },
@@ -343,14 +345,15 @@ async function sendUpstream(input: UpstreamSend): Promise<UpstreamOutcome> {
 /**
  * 发出请求等响应头。保活留下的连接可能已被上游或中间的代理关掉：请求写进去、回复一个字节都没来就断了
  * （EOF、broken pipe）。这不怪这家，立刻再发；坏连接已从连接池里拿掉，再发会落到别的连接上（magpie 的 replayable）。
- * 只认复用的连接：新连接上断开是真的连不上。
+ * 只认复用的连接：新连接上断开是真的连不上。最多重发 MAX_REPLAYS 回。
  */
 async function answeredOnLiveConnection(input: {
-  input: UpstreamSend;
+  send: UpstreamSend;
   sent: (upstream: ClientRequest) => void;
 }): Promise<IncomingMessage> {
-  for (;;) {
-    const upstream = sendOnce(input.input);
+  const { send } = input;
+  for (let replays = 0; ; replays++) {
+    const upstream = sendOnce(send);
     input.sent(upstream);
     try {
       return await new Promise<IncomingMessage>((resolve, reject) => {
@@ -358,8 +361,10 @@ async function answeredOnLiveConnection(input: {
         upstream.once("error", reject);
       });
     } catch (error) {
-      const dropped = upstream.reusedSocket && droppedConnection(error);
-      if (!dropped || input.input.res.destroyed) throw error;
+      const droppedWhileIdle = upstream.reusedSocket && droppedConnection(error);
+      const mayReplay = droppedWhileIdle && replays < MAX_REPLAYS;
+      const agentLeft = send.res.destroyed;
+      if (!mayReplay || agentLeft) throw error;
     }
   }
 }

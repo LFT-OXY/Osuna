@@ -228,7 +228,11 @@ async function routeAgentRequest(input: {
   const { res, wire } = input;
   const reply = (status: number, message: string) =>
     sendAgentError({ res, wire, error: { status, message } });
-  const read = await readAgentBody({ req: input.req, limit: input.failover.bodyLimitBytes });
+  const read = await readAgentBody({
+    req: input.req,
+    limit: input.failover.bodyLimitBytes,
+    logger: input.logger,
+  });
   if (read.kind === "tooLarge") {
     reply(413, read.message);
     return null;

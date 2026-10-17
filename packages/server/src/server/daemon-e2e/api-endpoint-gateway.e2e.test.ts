@@ -5055,6 +5055,50 @@ describe("connections, compressed bodies and the User-Agent", () => {
     expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
   });
 
+  test("a new connection the endpoint dropped is not asked again there: it fails and the next endpoint answers", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    const { gateway, daemon } = await start({ upstreamA, upstreamB });
+    upstreamA.respond = (_request, res) => res.socket?.destroy();
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(KIMI_BODY));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({
+      state: "cooling_down",
+    });
+  });
+
+  test("a corrupt gzip body is refused with 400, logged, and no endpoint is asked", async () => {
+    const upstream = await startUpstream();
+    const { gateway, logLines } = await start({ upstreamA: upstream });
+    const init = claudeRequest("");
+
+    const response = await fetch(`${gateway}/v1/messages`, {
+      ...init,
+      headers: { ...init.headers, "content-encoding": "gzip" },
+      body: Buffer.from("not gzip at all"),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "The request body is not valid gzip data",
+      },
+    });
+    expect(upstream.requests).toHaveLength(0);
+    const warned = logLines
+      .map((line) => JSON.parse(line) as { msg: string; encoding?: string; level: number })
+      .filter((line) => line.msg === "API endpoint gateway could not decompress a request body")
+      .map((line) => ({ level: line.level, encoding: line.encoding }));
+    expect(warned).toEqual([{ level: 40, encoding: "gzip" }]);
+  });
+
   test.each<BodyEncoding>(["zstd", "gzip"])(
     "a %s body passed through reaches the endpoint decompressed, without Content-Encoding",
     async (encoding) => {
