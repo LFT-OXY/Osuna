@@ -94,7 +94,10 @@ function isSnapshotDate(text: string): boolean {
 }
 
 /** 这家怎么写这个模型：写法完全相同的优先，否则第一个只差写法的；没选为 null。 */
-function listedAs(endpoint: StoredApiEndpoint, model: string): string | null {
+export function listedAs(
+  endpoint: Pick<StoredApiEndpoint, "models">,
+  model: string,
+): string | null {
   if (endpoint.models.some((entry) => entry.id === model)) return model;
   const key = sameModel(model);
   return endpoint.models.find((entry) => sameModel(entry.id) === key)?.id ?? null;

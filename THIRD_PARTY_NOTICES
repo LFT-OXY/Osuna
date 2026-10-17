@@ -134,6 +134,35 @@ cases from format_refused_test.go and prefill_test.go:
   packages/server/src/server/api-endpoints/gateway/refusals.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+The generic fixes a pass-through request gets by the model it goes to: Claude
+Code's billing line left out for another vendor's model (withoutBillingLine,
+keepsBillingLine in internal/gateway/billing_line.go, billingHeader in
+claude_subscription.go), auto mode's review beta and safeguards likewise
+(serverReview in automode.go), the advisor server tool named as the endpoint
+names its model or left out with its instructions (advisorTools,
+advisorModel, advisorGoneIn, withoutAdvisor, advisorRefName in advisor.go),
+a budget sent to a Claude that thinks only adaptively asked adaptively
+(adaptiveThinking in anthropic.go), sampling left out for a Claude that
+refuses it (samplingRefused, samplingAsTaken in anthropic.go), and reasoning
+with nothing sealed in it left out before a Responses upstream
+(withoutBareReasoning in codex_backend.go). The Responses tool-pairing repair
+also moves the model's text between a batch's calls ahead of its first call
+(joinToolRuns in responses.go), and a request translated into Responses has
+a second answer to one call left out and a lone call answered
+(dropSecondAnswers in codeassist.go, pairToolItems in buildResponses). Their
+tests reuse cases from billing_line_test.go, advisor_test.go (with
+testdata/claude-code-advisor-turn.json), adaptive_wire_test.go,
+join_tool_runs_test.go, pair_tool_items_test.go and
+gemini_pending_call_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/claude-code-fields.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
 MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
 which names are the same model (sameModel in internal/provider/group.go) and

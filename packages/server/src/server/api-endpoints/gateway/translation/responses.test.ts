@@ -191,6 +191,40 @@ describe("an item inside a run of calls and results (magpie join_tool_runs_test.
     expect(joinToolRuns(fixed)).toBe(fixed);
   });
 
+  // magpie TestRelayedTextBetweenABatchsCallsIsAnswered（#2100）：模型在一批调用的每个调用前各说了一句。
+  const SAY_1 =
+    '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I\'ll run two commands."}]}';
+  const SAY_2 =
+    '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Also this."}]}';
+  const CALL_A =
+    '{"type":"function_call","call_id":"call_aaaa1111","name":"exec_command","arguments":"{\\"cmd\\":\\"ls\\"}"}';
+  const CALL_B =
+    '{"type":"function_call","call_id":"call_bbbb2222","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}';
+  const OUT_A = '{"type":"function_call_output","call_id":"call_aaaa1111","output":"a.txt"}';
+  const OUT_B = '{"type":"function_call_output","call_id":"call_bbbb2222","output":"/w"}';
+  const REASONING = '{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}';
+  const USER =
+    '{"type":"message","role":"user","content":[{"type":"input_text","text":"run them"}]}';
+  const batch = (items: string[]) => `{"model":"m","input":[${[USER, ...items].join(",")}]}`;
+
+  test("the model's text between a batch's calls goes ahead of the first call, with the reasoning before it", () => {
+    expect(JSON.parse(joinToolRuns(batch([SAY_1, CALL_A, SAY_2, CALL_B, OUT_A, OUT_B])))).toEqual(
+      JSON.parse(batch([SAY_1, SAY_2, CALL_A, CALL_B, OUT_A, OUT_B])),
+    );
+    expect(
+      JSON.parse(joinToolRuns(batch([SAY_1, CALL_A, REASONING, SAY_2, CALL_B, OUT_A, OUT_B]))),
+    ).toEqual(JSON.parse(batch([SAY_1, REASONING, SAY_2, CALL_A, CALL_B, OUT_A, OUT_B])));
+  });
+
+  test("text between whole exchanges, or before a batch's calls, stays byte for byte", () => {
+    for (const body of [
+      batch([SAY_1, CALL_A, OUT_A, SAY_2, CALL_B, OUT_B]),
+      batch([SAY_1, CALL_A, CALL_B, OUT_A, OUT_B]),
+    ]) {
+      expect(joinToolRuns(body)).toBe(body);
+    }
+  });
+
   test("whole exchanges, a call nobody answers and results out of order are left byte for byte", () => {
     for (const body of [
       '{"model":"m","input":[{"type":"function_call","call_id":"call_a","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_a","output":"a"},{"type":"message","role":"developer","content":[{"type":"input_text","text":"a note"}]},{"type":"function_call","call_id":"call_b","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_b","output":"b"}]}',
@@ -257,6 +291,128 @@ describe("magpie's Responses upstream bodies (testdata/upstream_bodies)", () => 
         `{"input":[{"content":[{"text":"what is this","type":"input_text"},{"detail":"auto","image_url":"data:image/png;base64,${PNG}","type":"input_image"}],"role":"user","type":"message"}],"max_output_tokens":64,"model":"m1","store":false,"stream":true}`,
       ),
     );
+  });
+});
+
+describe("a tool exchange translated into Responses (magpie pair_tool_items_test.go, gemini_pending_call_test.go)", () => {
+  const RUN_IT = {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "run it" }],
+  };
+  const GO_ON = { type: "message", role: "user", content: [{ type: "input_text", text: "go on" }] };
+  const CALL_A = { type: "function_call", call_id: "call_a", name: "echo", arguments: "{}" };
+
+  test("a Chat or Messages client's lone call gets its synthetic result (TestTranslatedToResponsesAnswersALoneCall)", () => {
+    const chat = parseChatRequest({
+      model: "fake/m1",
+      stream: true,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          tool_calls: [
+            { id: "call_a", type: "function", function: { name: "echo", arguments: "{}" } },
+          ],
+        },
+        { role: "user", content: "go on" },
+      ],
+    });
+    const messages = parseAnthropicRequest({
+      model: "fake/m1",
+      stream: true,
+      max_tokens: 16,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_a", name: "echo", input: {} }],
+        },
+        { role: "user", content: "go on" },
+      ],
+    });
+    const answered = [
+      RUN_IT,
+      CALL_A,
+      { type: "function_call_output", call_id: "call_a", output: INTERRUPTED },
+      GO_ON,
+    ];
+    expect(buildResponsesRequest(chat, "m1").input).toEqual(answered);
+    expect(buildResponsesRequest(messages, "m1").input).toEqual(answered);
+  });
+
+  test("a paired exchange goes as it was built (TestTranslatedToResponsesKeepsAPairedExchange)", () => {
+    const chat = parseChatRequest({
+      model: "fake/m1",
+      stream: true,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          tool_calls: [
+            { id: "call_a", type: "function", function: { name: "echo", arguments: "{}" } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_a", content: "ok" },
+        { role: "user", content: "go on" },
+      ],
+    });
+    expect(buildResponsesRequest(chat, "m1").input).toEqual([
+      RUN_IT,
+      CALL_A,
+      { type: "function_call_output", call_id: "call_a", output: "ok" },
+      GO_ON,
+    ]);
+  });
+
+  test("a second answer to one call is left out with its image; a call made again gets its own (TestSecondAnswerDroppedWithItsImages)", () => {
+    const request = parseAnthropicRequest({
+      model: "fake/m1",
+      max_tokens: 16,
+      messages: [
+        { role: "user", content: "look" },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "Read", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call_1", content: "alpha-result" }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: [
+                { type: "text", text: "beta-result" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data: "c2Vjb25k" },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "Read", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call_1", content: "gamma-result" }],
+        },
+      ],
+    });
+    const call = { type: "function_call", call_id: "call_1", name: "Read", arguments: "{}" };
+    expect(buildResponsesRequest(request, "gpt-5.4").input).toEqual([
+      { type: "message", role: "user", content: [{ type: "input_text", text: "look" }] },
+      call,
+      { type: "function_call_output", call_id: "call_1", output: "alpha-result" },
+      call,
+      { type: "function_call_output", call_id: "call_1", output: "gamma-result" },
+    ]);
   });
 });
 

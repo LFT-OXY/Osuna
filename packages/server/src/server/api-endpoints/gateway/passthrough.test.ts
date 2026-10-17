@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { fitAnthropicBody, fitResponsesBody, fitThinkingOff } from "./passthrough.js";
+import {
+  fitAnthropicBody,
+  fitResponsesBody,
+  fitThinkingOff,
+  upstreamBody,
+  type PassthroughBodyInput,
+} from "./passthrough.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import { sseEvent } from "./translation/sse.js";
 
@@ -218,6 +224,241 @@ describe("a Codex request passed through to a DeepSeek model's Responses endpoin
   test("another vendor's model is sent the request as it came", () => {
     const body = codex(`{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}`);
     expect(fitResponsesBody(body, "gpt-5.4")).toBe(body);
+  });
+});
+
+/** 直通给 relay 这家（选了 Opus 5.5 与 Sonnet 5.5）的对话请求体。 */
+function passedThrough(input: {
+  body: string;
+  model: string;
+  format?: PassthroughBodyInput["format"];
+}) {
+  return upstreamBody({
+    format: input.format ?? "anthropic_messages",
+    body: Buffer.from(input.body),
+    requestedModel: input.model,
+    upstreamModel: input.model,
+    endpoint: { slug: "relay", models: [{ id: "claude-opus-5-5" }, { id: "claude-sonnet-5-5" }] },
+  }).toString("utf8");
+}
+
+// Claude Code 2.1.114 的请求（magpie #1600）：计费行单独一块、每轮的 cch 不同，后面是要缓存的提示词。
+const BILLING =
+  "x-anthropic-billing-header: cc_version=2.1.114.aff; cc_entrypoint=sdk-cli; cch=9ebf3;";
+const claudeCodeTurn = (model: string) =>
+  `{"model":"${model}","max_tokens":32000,"stream":true,"thinking":{"type":"disabled"},` +
+  `"system":[{"type":"text","text":"${BILLING}"},` +
+  `{"type":"text","text":"You are a Claude agent, built on Anthropic's Claude Agent SDK.","cache_control":{"type":"ephemeral"}},` +
+  `{"type":"text","text":"\\nYou are an interactive agent <rules> & more","cache_control":{"type":"ephemeral"}}],` +
+  `"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}],"metadata":{"user_id":"u"},` +
+  `"safeguards":{"dangerous_tool_use":{"enabled":true}}}`;
+
+describe("Claude Code's billing line and auto mode review passed through (magpie billing_line_test.go, automode.go)", () => {
+  test("another vendor's model gets neither, every other byte as sent", () => {
+    expect(
+      passedThrough({ body: claudeCodeTurn("deepseek-v4.1-flash"), model: "deepseek-v4.1-flash" }),
+    ).toBe(
+      claudeCodeTurn("deepseek-v4.1-flash")
+        .replace(`{"type":"text","text":"${BILLING}"},`, "")
+        .replace(`,"safeguards":{"dangerous_tool_use":{"enabled":true}}`, ""),
+    );
+  });
+
+  test("a Claude model gets the request byte for byte", () => {
+    const body = claudeCodeTurn("claude-opus-4-8");
+    expect(passedThrough({ body, model: "claude-opus-4-8" })).toBe(body);
+  });
+
+  test("the line ahead of the prompt is cut; a system of the line alone goes; a mention of it stays", () => {
+    const off = `"thinking":{"type":"disabled"}`;
+    const cases = [
+      [
+        `{${off},"system":"x-anthropic-billing-header: cc_version=2.1.114.aff; cch=0218c;You are <it>.","x":1}`,
+        `{${off},"system":"You are <it>.","x":1}`,
+      ],
+      [
+        `{${off},"system":[{"type":"text","text":"x-anthropic-billing-header: cch=0218c;\\nYou are it.","cache_control":{"type":"ephemeral"}}]}`,
+        `{${off},"system":[{"type":"text","text":"You are it.","cache_control":{"type":"ephemeral"}}]}`,
+      ],
+      [
+        `{${off},"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.114.aff; cch=0218c;"}]}`,
+        `{${off}}`,
+      ],
+    ];
+    for (const [body, sent] of cases) expect(passedThrough({ body, model: "glm-5.2" })).toBe(sent);
+    for (const body of [
+      `{${off},"system":[{"type":"text","text":"Rules mention x-anthropic-billing-header: here"}]}`,
+      `{${off},"messages":[{"role":"user","content":"x-anthropic-billing-header: cch=1;"}]}`,
+      `{${off},"system":[{"type":"text","text":"a"},{"type":"text","text":"b x-anthropic-billing-header: cch=1;"}]}`,
+    ]) {
+      expect(passedThrough({ body, model: "glm-5.2" })).toBe(body);
+    }
+  });
+});
+
+// magpie testdata/claude-code-advisor-turn.json：Claude Code 2.1.300 开着 advisor 的一轮（advisor 说明截短）。
+const ADVISOR_NOTE =
+  "# Advisor Tool\\n\\nYou have access to an `advisor` tool backed by a stronger reviewer model. It takes NO parameters -- when you call advisor(), your entire conversation history is automatically forwarded.";
+const advisorTurn = (model: string, advisor: string) =>
+  `{"model":"${model}","max_tokens":64,"stream":true,"thinking":{"type":"disabled"},"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]},` +
+  `{"role":"system","content":[{"type":"text","text":"# Environment\\n - Platform: darwin\\n\\nToday's date is 2026-10-15.\\n\\n${ADVISOR_NOTE}"},` +
+  `{"type":"tool_addition","tool":{"type":"tool_reference","name":"advisor"},"cache_control":{"type":"ephemeral"}}],"output_config":{"effort":"medium"}}],` +
+  `"tools":[{"name":"Read","description":"read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}},` +
+  `{"type":"advisor_20260301","name":"advisor","model":"${advisor}","defer_loading":true}]}`;
+const READ_TOOL = {
+  name: "Read",
+  description: "read a file",
+  input_schema: { type: "object", properties: { path: { type: "string" } } },
+};
+
+describe("Claude Code's advisor passed through (magpie advisor_test.go)", () => {
+  test.each([
+    { case: "this endpoint's Claude", advisor: "relay/claude-opus-5-5" },
+    { case: "the 1M mark", advisor: "relay/claude-opus-5-5[1m]" },
+    { case: "Claude's own id", advisor: "claude-opus-5-5" },
+  ])("$case: the advisor goes as this endpoint names it, the rest as sent", ({ advisor }) => {
+    const body = advisorTurn("claude-opus-4-8", advisor);
+    expect(passedThrough({ body, model: "claude-opus-4-8" })).toBe(
+      advisorTurn("claude-opus-4-8", "claude-opus-5-5"),
+    );
+  });
+
+  test.each([
+    {
+      case: "another endpoint's model",
+      model: "claude-opus-4-8",
+      advisor: "other/claude-opus-5-5",
+    },
+    { case: "a vendor's model asked", model: "glm-5.2", advisor: "relay/claude-opus-5-5" },
+  ])(
+    "$case: the advisor is left out with its instructions and tool_addition",
+    ({ model, advisor }) => {
+      expect(JSON.parse(passedThrough({ body: advisorTurn(model, advisor), model }))).toEqual({
+        model,
+        max_tokens: 64,
+        stream: true,
+        thinking: { type: "disabled" },
+        messages: [
+          { role: "user", content: [{ type: "text", text: "hi" }] },
+          {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                text: "# Environment\n - Platform: darwin\n\nToday's date is 2026-10-15.\n\nThe advisor tool is no longer available; disregard the earlier advisor instructions.",
+              },
+            ],
+            output_config: { effort: "medium" },
+          },
+        ],
+        tools: [READ_TOOL],
+      });
+    },
+  );
+});
+
+describe("thinking with a budget passed through to a Claude that thinks only adaptively (magpie adaptive_wire_test.go)", () => {
+  const ask = (model: string, rest: string) =>
+    `{"model":"${model}","max_tokens":32000,${rest},"messages":[{"role":"user","content":"hi"}]}`;
+
+  test.each([
+    {
+      case: "a budget",
+      model: "claude-opus-5.5",
+      rest: `"thinking":{"type":"enabled","budget_tokens":10000}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "medium" },
+    },
+    {
+      case: "Bedrock's spelling, a budget past high",
+      model: "anthropic.claude-opus-5-5-20260901-v1:0",
+      rest: `"thinking":{"type":"enabled","budget_tokens":31999}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "max" },
+    },
+    {
+      case: "an effort beside the budget",
+      model: "claude-opus-5.5",
+      rest: `"thinking":{"type":"enabled","budget_tokens":4000,"display":"summarized"},"output_config":{"effort":"high"}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "high" },
+    },
+    {
+      case: "the client's own display",
+      model: "claude-sonnet-4-6",
+      rest: `"thinking":{"type":"enabled","budget_tokens":10000,"display":"omitted"}`,
+      thinking: { type: "adaptive", display: "omitted" },
+      config: { effort: "medium" },
+    },
+  ])("$case goes as adaptive thinking with an effort", ({ model, rest, thinking, config }) => {
+    expect(JSON.parse(passedThrough({ body: ask(model, rest), model }))).toEqual({
+      model,
+      max_tokens: 32000,
+      thinking,
+      output_config: config,
+      messages: [{ role: "user", content: "hi" }],
+    });
+  });
+
+  test("an older Claude keeps its budget, byte for byte", () => {
+    const body = ask("claude-sonnet-4-5", `"thinking":{"type":"enabled","budget_tokens":10000}`);
+    expect(passedThrough({ body, model: "claude-sonnet-4-5" })).toBe(body);
+  });
+});
+
+describe("sampling parameters passed through to a Claude (magpie samplingRefused)", () => {
+  const sampled = (model: string) =>
+    `{"model":"${model}","max_tokens":64,"temperature":0,"top_p":0.9,"top_k":5,"messages":[]}`;
+
+  test.each([
+    "claude-opus-4-7",
+    "claude-opus-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+    "claude-fable-5",
+  ])("%s gets none of them", (model) => {
+    expect(JSON.parse(passedThrough({ body: sampled(model), model }))).toEqual({
+      model,
+      max_tokens: 64,
+      messages: [],
+    });
+  });
+
+  test.each(["claude-opus-4-6", "claude-haiku-4-5", "claude-sonnet-6"])(
+    "%s gets them byte for byte",
+    (model) => {
+      expect(passedThrough({ body: sampled(model), model })).toBe(sampled(model));
+    },
+  );
+});
+
+describe("reasoning with nothing sealed in it, passed through to a Responses endpoint (magpie withoutBareReasoning)", () => {
+  // 第二项是中转站翻译回复时给 Codex 造的推理项：只有 id 与摘要。
+  const codex = (rest: string) =>
+    `{"model":"gpt-5.5", "stream":true,${rest}"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]},` +
+    `{"id":"rs_0123456789abcdef","type":"reasoning","summary":[{"type":"summary_text","text":"Thinking it over."}]},` +
+    `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ZW5j"},` +
+    `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello."}]},` +
+    `{"type":"message","role":"user","content":[{"type":"input_text","text":"again"}]}]}`;
+
+  test("is left out, the sealed reasoning and every other byte as sent", () => {
+    expect(
+      passedThrough({
+        body: codex(`"store":false,`),
+        model: "gpt-5.5",
+        format: "openai_responses",
+      }),
+    ).toBe(
+      `{"model":"gpt-5.5", "stream":true,"store":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]},` +
+        `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ZW5j"},` +
+        `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello."}]},` +
+        `{"type":"message","role":"user","content":[{"type":"input_text","text":"again"}]}]}`,
+    );
+  });
+
+  test("a request the endpoint stores goes byte for byte", () => {
+    const body = codex(`"store":true,`);
+    expect(passedThrough({ body, model: "gpt-5.5", format: "openai_responses" })).toBe(body);
   });
 });
 

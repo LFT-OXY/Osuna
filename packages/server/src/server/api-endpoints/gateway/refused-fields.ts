@@ -115,14 +115,25 @@ export function withoutRefusedFields(input: {
   }
   if (refused("deferredTools")) body = withoutDeferredTools(body);
   if (refused("toolResultRefs")) body = withRefsSaid(body);
-  if (refused("safeguards")) body = withoutKeys(body, ["safeguards"]);
-  if (refused("sampling")) body = withoutKeys(body, SAMPLING_KEYS);
+  if (refused("safeguards")) body = withoutSafeguards(body);
+  if (refused("sampling")) body = withoutSampling(body);
   const displayRefused = refused("display") || refused("displayValue");
   if (displayRefused) body = withDisplay({ body, all: refused("display") });
   return body;
 }
 
-function withoutKeys(body: Body, keys: string[]): Body {
+/** 去掉 Claude Code 自动模式的审查字段（safeguards）；没有就原样交回同一个对象。 */
+export function withoutSafeguards(body: Body): Body {
+  return withoutKeys(body, ["safeguards"]);
+}
+
+/** 去掉 temperature、top_p、top_k；都没有就原样交回同一个对象。 */
+export function withoutSampling(body: Body): Body {
+  return withoutKeys(body, SAMPLING_KEYS);
+}
+
+/** 去掉这几个顶层字段；一个都没有就原样交回同一个对象。 */
+export function withoutKeys(body: Body, keys: string[]): Body {
   if (!keys.some((key) => key in body)) return body;
   const out = { ...body };
   for (const key of keys) delete out[key];
@@ -178,7 +189,8 @@ function blockType(block: unknown): unknown {
   return isRecord(block) ? block.type : undefined;
 }
 
-function isDeferredBlock(block: unknown): boolean {
+/** 消息里的延后加载工具块：tool_addition、tool_removal、tool_reference。 */
+export function isDeferredBlock(block: unknown): boolean {
   return DEFERRED_BLOCKS.has(String(blockType(block)));
 }
 

@@ -76,7 +76,9 @@ function callIdOf(item: unknown): string {
 /**
  * 一串调用与结果之间夹着的项（Codex 每个缩过图的结果后面写的 <image_resize_notice>）挪到这串的末尾：
  * 检查配对的上游会认为这串在那里断了而拒收（火山方舟、OpenCode Zen）。带 call_id 的项永远不动；
- * 第一个结果之前，模型自己写的项（推理、它的文字、*_call）是它这一步的，留在原处。
+ * 第一个结果之前，模型自己写的推理与 *_call 是它这一步的，留在原处；它在两个调用之间说的话（assistant 消息）
+ * 连同紧挨在前面的推理挪到这串第一个调用之前：把请求转成 Chat 的上游会让调用后的文字另起一条 assistant 消息，
+ * 前一条的调用就成了没人回答的（OpenCode Go「No tool output found」，magpie #2100）。
  * 只有后面有结果回答它的调用才算开了一串。
  */
 export function joinToolRuns(body: string): string {
@@ -85,10 +87,11 @@ export function joinToolRuns(body: string): string {
   if (!parsed) return body;
   const { input } = parsed;
   const isResult = (item: unknown) => callIdOf(item) !== "" && typeOf(item).endsWith("_output");
+  const isAssistantText = (item: unknown) =>
+    typeOf(item) === "message" && isRecord(item) && item.role === "assistant";
   const modelsOwn = (item: unknown) => {
     const type = typeOf(item);
-    const assistant = type === "message" && isRecord(item) && item.role === "assistant";
-    return type === "reasoning" || assistant || type.endsWith("_call");
+    return type === "reasoning" || isAssistantText(item) || type.endsWith("_call");
   };
   // answeredLater[i]：位置 i 的调用后面有回答它的结果。
   const ahead = new Set<string>();
@@ -101,17 +104,32 @@ export function joinToolRuns(body: string): string {
   const out: unknown[] = [];
   let held: unknown[] = [];
   let moved = false;
-  // open：这串里结果还在后面的调用；answering：这串的结果已经开始了。
+  // open：这串里结果还在后面的调用；answering：这串的结果已经开始了；first：这串第一个调用在 out 里的位置。
   const open = new Set<string>();
   let answering = false;
+  let first = 0;
   input.forEach((item, index) => {
     const id = callIdOf(item);
+    const inRun = open.size > 0;
+    const interrupts = inRun && (answering || !modelsOwn(item));
+    const saidBetweenCalls = inRun && isAssistantText(item);
     if (isResult(item)) {
       if (open.delete(id)) answering = true;
     } else if (id !== "") {
-      if (answeredLater[index]) open.add(id);
-    } else if (open.size > 0 && (answering || !modelsOwn(item))) {
+      if (answeredLater[index]) {
+        if (!inRun) first = out.length;
+        open.add(id);
+      }
+    } else if (interrupts) {
       held.push(item);
+      moved = true;
+      return;
+    } else if (saidBetweenCalls) {
+      let from = out.length;
+      while (from > first && typeOf(out[from - 1]) === "reasoning") from--;
+      const step = [...out.splice(from), item];
+      out.splice(first, 0, ...step);
+      first += step.length;
       moved = true;
       return;
     }
@@ -136,7 +154,13 @@ export function pairToolItems(body: string): string {
   if (!body.includes('_call"')) return body;
   const parsed = inputOf(body);
   if (!parsed) return body;
-  const { input } = parsed;
+  const paired = pairedToolInput(parsed.input);
+  if (paired === parsed.input) return body;
+  return JSON.stringify({ ...parsed.request, input: paired });
+}
+
+/** pairToolItems 对 input 数组的那一步；没什么可补时原样交回同一个数组。 */
+function pairedToolInput(input: unknown[]): unknown[] {
   const answered = new Set(
     input.flatMap((item) => {
       const type = typeOf(item);
@@ -167,8 +191,7 @@ export function pairToolItems(body: string): string {
       owed = [];
     }
   });
-  if (out.length === input.length) return body;
-  return JSON.stringify({ ...parsed.request, input: out });
+  return out.length === input.length ? input : out;
 }
 
 /**
@@ -560,16 +583,18 @@ function parseResponsesToolChoice(choice: unknown, offered: OfferedTools): Chose
 /**
  * 历史思考只回原厂：Anthropic 的签名思考、Chat 的推理文字都不发给 Responses 上游；
  * 例外是要回放推理的 DeepSeek 模型，每轮推理写成 reasoning 项，每一步都以推理开头（reasonFirst）。
+ * 工具往来照直通前那样修补：同一个调用的第二个答复不发，没有答复的调用补上中断的结果（magpie #2262、#2222）。
  */
 export function buildResponsesRequest(
   request: GatewayRequest,
   model: string,
 ): Record<string, unknown> {
   const replay = replaysThinking(model);
-  const input = responsesInput(request.messages, replay);
+  const input = responsesInput(withoutSecondAnswers(request.messages), replay);
+  const ordered = replay ? (reasonFirst(input) ?? input) : input;
   const out: Record<string, unknown> = {
     model,
-    input: replay ? (reasonFirst(input) ?? input) : input,
+    input: pairedToolInput(ordered),
     stream: request.stream,
     store: false,
   };
@@ -583,6 +608,33 @@ export function buildResponsesRequest(
   else if (request.thinking) out.reasoning = { summary: "auto" };
   if (request.tools.length > 0) Object.assign(out, responsesTools(request));
   return out;
+}
+
+/**
+ * 去掉前面已经有答复的调用的又一个答复（连同它带的图片），第一个答复为准；同一个 id 又调用了一次的，
+ * 它自己的答复照发。没有 id 的结果不动。不改 messages 本身：换家时还要从同一个请求再翻译。
+ */
+function withoutSecondAnswers(messages: Message[]): Message[] {
+  const answered = new Set<string>();
+  let changed = false;
+  const out: Message[] = [];
+  for (const message of messages) {
+    const parts = message.parts.filter((part) => {
+      if (part.kind === "tool_call" && part.id !== "") answered.delete(part.id);
+      if (part.kind !== "tool_result") return true;
+      if (part.callId === "") return true;
+      if (answered.has(part.callId)) return false;
+      answered.add(part.callId);
+      return true;
+    });
+    if (parts.length === message.parts.length) {
+      out.push(message);
+      continue;
+    }
+    changed = true;
+    if (parts.length > 0) out.push({ ...message, parts });
+  }
+  return changed ? out : messages;
 }
 
 function responsesInput(messages: Message[], replay: boolean): unknown[] {

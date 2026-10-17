@@ -23,7 +23,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * （含 TestAnthropicClientFallsBackPastCopilotNoEndpoints）、internal/provider/authheader_test.go，
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
- * format_refused_test.go 与 prefill_test.go。
+ * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -553,6 +553,130 @@ describe("passing requests through to an endpoint that speaks the agent's format
         code: null,
         param: null,
       },
+    });
+  });
+});
+
+// Claude Code 的一轮（magpie billing_line_test.go 的 claudeCodeTurn 加上自动模式的审查）：计费行单独一块，
+// 后面是要缓存的提示词；自适应思考与力度；空格与键序都要原样到达。
+const CLAUDE_CODE_TURN = (model: string) => `{"model":  "${model}","max_tokens":32000,"stream":true,
+  "thinking":{"type":"adaptive"},"output_config":{"effort":"high"},
+  "system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.114.aff; cc_entrypoint=sdk-cli; cch=9ebf3;"},{"type":"text","text":"You are a Claude agent, built on Anthropic's Claude Agent SDK.","cache_control":{"type":"ephemeral"}}],
+  "tools":[{"name":"Read","description":"read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}}],
+  "messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral"}}]}],
+  "metadata":{"user_id":"u"},"safeguards":{"dangerous_tool_use":{"enabled":true}}}`;
+const CLAUDE_CODE_BETAS = "claude-code-20250219,dangerous-tool-use-2026-09-03";
+
+describe("the generic fits a pass-through request gets, by the model it goes to", () => {
+  test("Claude Code's billing line and auto mode review reach a Claude model byte for byte and no other", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["kimi-k2", "claude-opus-4-8"] });
+    const ask = async (model: string) => {
+      const init = claudeRequest(CLAUDE_CODE_TURN(model));
+      const headers = { ...(init.headers as Record<string, string>) };
+      headers["anthropic-beta"] = CLAUDE_CODE_BETAS;
+      const response = await fetch(`${gateway}/v1/messages?beta=true`, { ...init, headers });
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+
+    await ask("relay-a/claude-opus-4-8");
+    await ask("relay-a/kimi-k2");
+
+    const [claude, vendor] = upstream.requests;
+    expect(claude!.body.toString()).toBe(CLAUDE_CODE_TURN("claude-opus-4-8"));
+    expect(claude!.headers["anthropic-beta"]).toBe(CLAUDE_CODE_BETAS);
+    expect(claude!.headers["x-api-key"]).toBe(KEY_A);
+    expect(vendor!.headers["anthropic-beta"]).toBe("claude-code-20250219");
+    // 别家模型：没有计费行与审查字段；自适应思考与力度照原来的修补去掉。
+    expect(JSON.parse(vendor!.body.toString())).toEqual({
+      model: "kimi-k2",
+      max_tokens: 32000,
+      stream: true,
+      system: [
+        {
+          type: "text",
+          text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: [
+        {
+          name: "Read",
+          description: "read a file",
+          input_schema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }],
+        },
+      ],
+      metadata: { user_id: "u" },
+    });
+  });
+
+  test("a Codex conversation translated once, then passed through to a Responses address, goes without the reasoning the gateway made", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      for (const event of [
+        { type: "message_start", message: { id: "msg_1", usage: { input_tokens: 5 } } },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "Hm." },
+        },
+        { type: "content_block_stop", index: 0 },
+        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Hello." } },
+        { type: "content_block_stop", index: 1 },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+        { type: "message_stop" },
+      ]) {
+        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+      res.end();
+    };
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => answerResponsesWhole(res);
+    const { gateway } = await start({ upstreamA: responses, upstreamB: anthropic });
+    const said = { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] };
+
+    // 第一轮：B 只有 Anthropic 地址，翻译过去；回给 Codex 的推理项是中转站造的。
+    const first = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "relay-b/kimi-k2", input: [said], stream: false, store: false }),
+    );
+    const { output } = (await first.json()) as { output: Record<string, unknown>[] };
+    expect(output.map((item) => item.type)).toEqual(["reasoning", "message"]);
+    // 第二轮换到 A 的 Responses 地址直通，Codex 把上一轮的输出原样带回来。
+    const again = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "again" }],
+    };
+    const second = {
+      model: "relay-a/kimi-k2",
+      input: [said, ...output, again],
+      stream: false,
+      store: false,
+    };
+    const response = await fetch(`${gateway}/v1/responses`, codexRequest(second));
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(responses.requests[0]!.body.toString())).toEqual({
+      ...second,
+      model: "kimi-k2",
+      input: [said, output[1], again],
     });
   });
 });
@@ -2000,6 +2124,8 @@ interface FieldRefusal {
   refusal: string;
   // 上游收到的请求体还带着这一项。
   has: (body: Record<string, unknown>) => boolean;
+  // 换掉 A、B 的已选模型（直通时）：[学会的、同一家另一个、另一家的]，前一个两家都有。
+  models?: { ep_a: string[]; ep_b: string[]; asked: [string, string, string] };
 }
 
 function mentions(word: string): (body: Record<string, unknown>) => boolean {
@@ -2014,6 +2140,12 @@ const PASSED_THROUGH_REFUSALS: FieldRefusal[] = [
     status: 400,
     refusal: SAFEGUARDS_REFUSED,
     has: (body) => body.safeguards !== undefined,
+    // 审查字段只发给 Claude 模型（直通的通用修补）。
+    models: {
+      ep_a: ["claude-sonnet-4-5", "claude-opus-4-1"],
+      ep_b: ["claude-sonnet-4-5", "claude-haiku-4-5"],
+      asked: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"],
+    },
   },
   {
     field: "display",
@@ -2157,7 +2289,8 @@ describe("a refused field left out at the same endpoint", () => {
       upstreamA.respond = refusing(refused, setup.answer);
       other.respond = refusing(refused, setup.answer);
       const harness = await setup.start(upstreamA, other);
-      const [model, sameEndpoint, otherEndpoint] = setup.models;
+      if (refused.models) await selectModels(harness.endpointsDir, refused.models);
+      const [model, sameEndpoint, otherEndpoint] = refused.models?.asked ?? setup.models;
       const ask = async (input: { gateway: string; model: string }) => {
         const response = await askAgent({ ...input, agent: refused.agent, extra: refused.extra });
         expect(response.status).toBe(200);
@@ -2319,13 +2452,16 @@ describe("a refused field left out at the same endpoint", () => {
   });
 
   test("asked again without it and refused still, the request goes on to the next endpoint", async () => {
-    const { upstreamA, upstreamB, ask, logLines } = await twoRelays();
+    const { upstreamA, upstreamB, ask, endpointsDir, logLines } = await twoRelays();
+    // 审查字段只发给 Claude 模型。
+    const model = "claude-sonnet-4-5";
+    await selectModels(endpointsDir, { ep_a: [model], ep_b: [model] });
     upstreamA.respond = (request, res) => {
       if (receivedBody(request).safeguards !== undefined) refuse(res, SAFEGUARDS_REFUSED);
       else failWith(res, { status: 503, message: "upstream busy" });
     };
 
-    const response = await ask({ safeguards: { dangerous_tool_use: { enabled: true } } });
+    const response = await ask({ model, safeguards: { dangerous_tool_use: { enabled: true } } });
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("from B");
@@ -2337,7 +2473,7 @@ describe("a refused field left out at the same endpoint", () => {
       dangerous_tool_use: { enabled: true },
     });
     expect(gatewayLog(logLines, "API endpoint gateway switched endpoints")).toEqual([
-      expect.objectContaining({ from: "Relay A", to: "Relay B", model: "kimi-k2" }),
+      expect.objectContaining({ from: "Relay A", to: "Relay B", model }),
     ]);
   });
 

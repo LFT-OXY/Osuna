@@ -380,6 +380,50 @@ function noXhigh(model: string): boolean {
   return version?.major === 4 && version.minor === 6;
 }
 
+/**
+ * 发给 4.6 起只认自适应思考的 Claude 的 enabled 加预算（不认得这个模型的客户端发的），改成 adaptive（magpie adaptiveThinking）：
+ * display 照请求的，没给就 summarized（Opus 4.7 起不要就不显示思考，magpie #1485）；没给 output_config.effort 时按预算换成力度，
+ * 预算分不出 xhigh 与 max、4.6 又没有 xhigh，这一档问 max。别的请求（含更早的 Claude、disabled）原样返回同一个对象。
+ */
+export function adaptiveThinkingAsTaken(
+  body: Record<string, unknown>,
+  model: string,
+): Record<string, unknown> {
+  const thinking = isRecord(body.thinking) ? body.thinking : null;
+  const budgeted = thinking?.type === "enabled";
+  if (!budgeted || !adaptiveOnly(model)) return body;
+  const display = thinking.display ?? "summarized";
+  const out: Record<string, unknown> = { ...body, thinking: { type: "adaptive", display } };
+  const config = isRecord(body.output_config) ? body.output_config : {};
+  const asked = typeof config.effort === "string" ? config.effort : "";
+  const budget = typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : 0;
+  const effort = effortOfBudget(budget);
+  const noEffortToAdd = asked !== "" || effort === "";
+  if (noEffortToAdd) return out;
+  out.output_config = { ...config, effort: effort === "xhigh" ? "max" : effort };
+  return out;
+}
+
+/**
+ * 不收 temperature、top_p、top_k 的 Claude（magpie samplingRefused，照 Anthropic 的规则）：Opus 4.7、4.8、5、5.5，
+ * Fable 5、Mythos 5 任何值都不收；Sonnet 5、5.5 只收默认值；Haiku 5.5 只收个别值、不收 top_k。
+ * 去掉后按模型的默认采样。更早的 Claude 都收；比这些新的系列原样发。
+ */
+export function refusesSampling(model: string): boolean {
+  const match = CLAUDE_LINE.exec(model.toLowerCase());
+  if (!match) return false;
+  const family = match[1];
+  const major = Number(match[2]);
+  const minor = Number(match[3] ?? 0);
+  const fiveOrFiveFive = major === 5 && [0, 5].includes(minor);
+  const fourSevenOn = major === 4 && minor >= 7;
+  const fiveFive = major === 5 && minor === 5;
+  if (family === "fable" || family === "mythos") return major === 5;
+  if (family === "opus") return fourSevenOn || fiveOrFiveFive;
+  if (family === "sonnet") return fiveOrFiveFive;
+  return family === "haiku" && fiveFive;
+}
+
 // 中转站怎么拼都能读出 Claude 的系列与版本：claude-sonnet-5-5、sonnet-5.5、anthropic.claude-sonnet-5-5-v1:0、claude-fable-5-1。
 const CLAUDE_LINE =
   /(?:^|[^a-z0-9])(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[-.](\d{1,2}))?(?:[^0-9]|$)/;

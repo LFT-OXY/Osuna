@@ -1,4 +1,6 @@
-// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns，responses.go 的 withReasoningText，gateway.go 的直通重问与 attempt 里去掉拒收字段、画图工具的重问）
+// fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns、
+// adaptiveThinking、samplingAsTaken，responses.go 的 withReasoningText，codex_backend.go 的 withoutBareReasoning，gateway.go 的 passthrough 里按上游模型改的几处、
+// 直通重问与 attempt 里去掉拒收字段、画图工具的重问）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -8,7 +10,9 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import type { StoredApiEndpoint } from "../store.js";
 import { describeNetworkError, isRecord, parseJson } from "../upstream-http.js";
 import {
+  adaptiveThinkingAsTaken,
   isAnthropicModel,
+  refusesSampling,
   thinkingLeftOn,
   thinkingOffAsTaken,
   thinkingOnToolTurns,
@@ -16,6 +20,12 @@ import {
 import { replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import {
+  withAdvisorFitted,
+  withoutBillingLine,
+  withoutReviewBeta,
+  type AdvisorEndpoint,
+} from "./claude-code-fields.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -28,7 +38,13 @@ import {
   type ShapeRefusals,
 } from "./refusals.js";
 import { withDowngrades } from "./refused-downgrades.js";
-import { offersImageTool, takesImageTool, withoutRefusedFields } from "./refused-fields.js";
+import {
+  offersImageTool,
+  takesImageTool,
+  withoutRefusedFields,
+  withoutSafeguards,
+  withoutSampling,
+} from "./refused-fields.js";
 import { ReplyTap } from "./reply-tap.js";
 import {
   ANSWERED_BY_HEADER,
@@ -41,8 +57,10 @@ import {
 } from "./upstream-call.js";
 
 /*
- * 同协议直通的一次尝试：请求体除模型名（与思考字段、发给 DeepSeek 的 Responses 请求的推理项）外
- * 逐字节原样发给上游，认证头换成这家的真实 key。
+ * 同协议直通的一次尝试：请求体除模型名与下面这些只看上游模型的修补外逐字节原样发给上游，认证头换成这家的真实 key。
+ * Anthropic：思考字段按模型收的写法改；非 Claude 模型去掉 Claude Code 的计费行与自动模式审查（字段与 beta）；
+ * advisor 工具只在这家的 Claude 上留着；不收采样参数的 Claude 去掉它们。Responses：DeepSeek 回放推理，
+ * 别的模型去掉没有封存内容的推理项（中转站翻译时自己造的）。
  * 不思考的写法上游不收（effort none、关思考）、两个认证头不能同时带、不收请求里的某个字段、
  * 或不收结构化输出与预填时，开口前在同一家换写法重问，并记住。
  * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，
@@ -103,11 +121,13 @@ export async function attemptEndpoint(input: {
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
   const sends = () => keyHeadersFor({ format: input.format, refusals });
+  const anthropic = input.format === "anthropic_messages";
+  const dropsReviewBeta = anthropic && !isAnthropicModel(input.upstreamModel);
   const open = (body: Buffer, keys: KeyHeaders = sends()) =>
     openUpstream({
       res,
       url,
-      headers: upstreamHeaders({ headers: input.req.headers, apiKey, keys }),
+      headers: upstreamHeaders({ headers: input.req.headers, apiKey, keys, dropsReviewBeta }),
       body,
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -194,18 +214,22 @@ function relay(input: { opened: OpenedUpstream; res: Response }): Promise<Answer
   });
 }
 
-/**
- * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处，
- * 对话请求都去掉这家这个模型不收的字段（count_tokens 不改）。
- */
-function upstreamBody(input: {
+/** 直通请求体要的：格式、路径后缀（count_tokens）、原请求体、两个模型名、这家接口与它不收的写法。 */
+export interface PassthroughBodyInput {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
+  endpoint: AdvisorEndpoint;
   refusals?: ShapeRefusals;
-}): Buffer {
+}
+
+/**
+ * 发给上游的请求体：换模型名；Anthropic 与 Responses 的对话请求再按上游模型与它不收的写法改几处，
+ * 对话请求都去掉这家这个模型不收的字段（count_tokens 不改）。
+ */
+export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const conversation = input.pathSuffix === undefined;
   const fits =
     (input.format === "anthropic_messages" || input.format === "openai_responses") && conversation;
@@ -213,6 +237,7 @@ function upstreamBody(input: {
   let text = input.body.toString("utf8");
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
   if (fits && input.format === "anthropic_messages") {
+    text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
     text = fitAnthropicBody(text, input.upstreamModel);
     text = fitThinkingOff({
       text,
@@ -220,7 +245,8 @@ function upstreamBody(input: {
       leftOn: input.refusals?.has("thinkingOff") ?? false,
     });
   } else if (fits) {
-    text = fitResponsesBody(text, input.upstreamModel);
+    if (replaysThinking(input.upstreamModel)) text = fitResponsesBody(text, input.upstreamModel);
+    else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
   }
   // count_tokens 不带 refusals，也不改。
@@ -241,11 +267,64 @@ function withoutRefusedText(input: {
   const refused = (shape: RefusedShape) => refusals.has(shape);
   const dropped = withoutRefusedFields({ format, body, refused });
   const fitted = withDowngrades({ format, body: dropped, refused });
+  return withChangedKeys({ text: input.text, body, fitted });
+}
+
+/** 请求体原文只改 fitted 里与 body 不同的顶层字段（去掉的也算），其余字节原样。 */
+function withChangedKeys(input: {
+  text: string;
+  body: Record<string, unknown>;
+  fitted: Record<string, unknown>;
+}): string {
+  const { body, fitted } = input;
   let out = input.text;
   for (const key of new Set([...Object.keys(body), ...Object.keys(fitted)])) {
     if (fitted[key] !== body[key]) out = applyEdits(out, modify(out, [key], fitted[key], {}));
   }
   return out;
+}
+
+/**
+ * Claude Code 的请求按上游模型改：advisor 工具（withAdvisorFitted）；非 Claude 模型去掉计费行与自动模式的审查字段；
+ * 4.6 起的 Claude 把 enabled 加预算改成 adaptive；不收采样参数的 Claude 去掉 temperature、top_p、top_k。
+ * 发给 Claude 模型、没什么要改的请求逐字节原样。
+ */
+function fitClaudeCodeBody(input: {
+  text: string;
+  model: string;
+  endpoint: AdvisorEndpoint;
+}): string {
+  const { text, model } = input;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  let fitted = withAdvisorFitted({ body, model, endpoint: input.endpoint });
+  if (!isAnthropicModel(model)) fitted = withoutSafeguards(withoutBillingLine(fitted));
+  fitted = adaptiveThinkingAsTaken(fitted, model);
+  if (refusesSampling(model)) fitted = withoutSampling(fitted);
+  return withChangedKeys({ text, body, fitted });
+}
+
+/**
+ * 直通给 Responses 上游（要回放推理的 DeepSeek 除外）前，去掉没有封存内容的推理项：只有 id 与摘要，
+ * 是中转站翻译回复时给 Codex 造的（rs_ 加随机 id）。请求不存储（store 不是 true）时上游按 id 找不到它，
+ * 整个请求回 400「Item with id 'rs_…' not found」（magpie #1008）；它的摘要是模型写给自己的，不会被读回。
+ */
+function withoutBareReasoning(text: string): string {
+  if (!text.includes('"reasoning"')) return text;
+  const body = parseJson(text);
+  // 存储的请求上游找得到这些项，原样发。
+  const stored = !isRecord(body) || body.store === true;
+  const input = stored ? undefined : body.input;
+  if (!Array.isArray(input)) return text;
+  const kept = input.filter((item) => !isBareReasoning(item));
+  if (kept.length === input.length) return text;
+  return applyEdits(text, modify(text, ["input"], kept, {}));
+}
+
+function isBareReasoning(item: unknown): boolean {
+  if (!isRecord(item) || item.type !== "reasoning") return false;
+  const sealed = typeof item.encrypted_content === "string" && item.encrypted_content !== "";
+  return !sealed;
 }
 
 /**
@@ -333,10 +412,19 @@ function upstreamHeaders(input: {
   headers: IncomingHttpHeaders;
   apiKey: string;
   keys: KeyHeaders;
+  // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
+  dropsReviewBeta: boolean;
 }): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(input.headers)) {
     if (value !== undefined && !DROPPED_REQUEST_HEADERS.has(name)) out[name] = value;
+  }
+  const betas = out["anthropic-beta"];
+  const fitsBetas = input.dropsReviewBeta && betas !== undefined;
+  if (fitsBetas) {
+    const kept = withoutReviewBeta(betas);
+    if (kept === null) delete out["anthropic-beta"];
+    else out["anthropic-beta"] = kept;
   }
   // 要上游不压缩：错误体要读出原文，回复原样转给 Agent。
   out["accept-encoding"] = "identity";
