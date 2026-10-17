@@ -5,17 +5,21 @@ import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/s
 import { readOptionalFile } from "./config-file.js";
 import {
   indexModelsDev,
+  indexSamplingByHost,
   lookupModelFacts,
   ModelFactsSchema,
+  samplingFor,
   type ModelFacts,
   type ModelsDevIndex,
+  type SamplingByHost,
 } from "./model-facts.js";
 import { parseJson } from "./upstream-http.js";
 
 /*
  * models.dev 的公开模型资料（上下文、回复上限、思考档位），给 Claude Code 的模型提示用。
  * 只在 Claude Code 总开关开着、价格表自动更新也开着时才下载（isAllowed）；规则见 docs/usage.md 的对外请求一节。
- * 下载后只留查询要用的三项，存到 api-endpoints/models-dev.json；不随安装包带快照。
+ * 下载后只留查询要用的几项，存到 api-endpoints/models-dev.json；不随安装包带快照。
+ * 中转站另外按服务商的主机名查它自己说的收不收 temperature 与 top_p（sampling）。
  */
 
 export const MODELS_DEV_URL = "https://models.dev/api.json";
@@ -29,6 +33,8 @@ const CacheFileSchema = z.object({
   fetchedAt: z.string(),
   etag: z.string().nullable(),
   models: z.record(z.string(), ModelFactsSchema),
+  // 旧缓存没有；下次下载补上。
+  sampling: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
 });
 type CacheFile = z.infer<typeof CacheFileSchema>;
 
@@ -55,6 +61,7 @@ export class ModelsDevCatalog {
   private readonly timers: UsagePricingTimers;
   private cache: CacheFile | null;
   private index: ModelsDevIndex;
+  private sampling: SamplingByHost;
   private cancelPendingCheck: (() => void) | null = null;
   private checking = false;
   private disposed = false;
@@ -69,11 +76,17 @@ export class ModelsDevCatalog {
     this.timers = options.timers ?? REAL_PRICING_TIMERS;
     this.cache = this.readCache();
     this.index = this.cache?.models ?? {};
+    this.sampling = this.cache?.sampling ?? {};
   }
 
   /** 按模型名查；不知道的是空对象。 */
   facts(modelId: string): ModelFacts {
     return lookupModelFacts(this.index, modelId);
+  }
+
+  /** 这个模型在这几个主机名的服务商那里收不收 temperature 与 top_p；models.dev 没说为 undefined。 */
+  takesSampling(input: { hosts: string[]; modelId: string }): boolean | undefined {
+    return samplingFor({ byHost: this.sampling, ...input });
   }
 
   start(): void {
@@ -135,10 +148,13 @@ export class ModelsDevCatalog {
         return true;
       }
       if (!response.ok) throw new Error(`models.dev request failed with ${response.status}`);
-      const models = indexModelsDev(await response.json());
+      const raw: unknown = await response.json();
+      const models = indexModelsDev(raw);
       if (Object.keys(models).length === 0) throw new Error("models.dev listed no models");
-      this.writeCache({ fetchedAt, etag: response.headers.get("etag"), models });
+      const sampling = indexSamplingByHost(raw);
+      this.writeCache({ fetchedAt, etag: response.headers.get("etag"), models, sampling });
       this.index = models;
+      this.sampling = sampling;
       this.onUpdated();
       return true;
     } catch (error) {

@@ -159,6 +159,8 @@ import {
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
+import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
+import { ApiEndpointStore } from "./api-endpoints/store.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -279,6 +281,23 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
 }
 
 /** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
+/** 已下线模型的记录；测试可注入时钟与到期定时器。 */
+function createRetiredModels(input: {
+  config: PaseoDaemonConfig;
+  logger: Logger;
+  onChanged: () => void;
+}): RetiredModels {
+  const overrides = input.config.apiEndpoints ?? {};
+  return new RetiredModels({
+    filePath: new ApiEndpointStore({ paseoHome: input.config.paseoHome, logger: input.logger })
+      .retiredModelsPath,
+    logger: input.logger,
+    now: overrides.retiredModelsNow,
+    timers: overrides.retiredModelsTimers,
+    onChanged: input.onChanged,
+  });
+}
+
 function createApiEndpointGatewayUrl(listenTarget: ListenTarget | null): string | null {
   if (!listenTarget || listenTarget.type !== "tcp") {
     return null;
@@ -480,7 +499,8 @@ export interface PaseoDaemonConfig {
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
   apiEndpoints?: Pick<ApiEndpointServiceOptions, "env" | "homeDir" | "beforeConfigRecheck"> &
-    ApiEndpointGatewayOverrides;
+    ApiEndpointGatewayOverrides &
+    RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
   log?: PersistedConfig["log"];
@@ -817,12 +837,26 @@ export async function createPaseoDaemon(
   // so it skips daemon auth, and it reads request bodies itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
+  const apiEndpointRetiredModels = createRetiredModels({
+    config,
+    logger,
+    onChanged: () => {
+      void apiEndpointService.retiredModelsChanged().catch((error: unknown) => {
+        logger.warn({ err: error }, "Failed to rewrite the model lists after a retired model");
+      });
+    },
+  });
   app.use(
     API_ENDPOINT_GATEWAY_PATH,
     createApiEndpointGateway({
       paseoHome: config.paseoHome,
       logger,
       cooldowns: apiEndpointCooldowns,
+      retired: apiEndpointRetiredModels,
+      // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
+      modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
+      daemonVersion,
       overrides: config.apiEndpoints,
     }),
   );
@@ -972,6 +1006,7 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     logger,
     cooldowns: apiEndpointCooldowns,
+    retiredModels: apiEndpointRetiredModels,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })
@@ -1951,6 +1986,7 @@ export async function createPaseoDaemon(
     await speechService.stop();
     await scheduleService.stop().catch(() => undefined);
     await usageService.dispose().catch(() => undefined);
+    apiEndpointRetiredModels.dispose();
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();

@@ -1,6 +1,11 @@
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、thinking_off_test.go、anthropic_max_tokens_test.go、refusal_details_test.go，internal/provider/grok_test.go）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
+import type { ModelFacts } from "../../model-facts.js";
 import {
   AnthropicDecoder,
+  AnthropicEncoder,
   anthropicInId,
   anthropicOutId,
   buildAnthropicRequest,
@@ -11,12 +16,18 @@ import {
   usageToAnthropic,
 } from "./anthropic.js";
 import { ChatDecoder, buildChatRequest, parseChatRequest, renderChat } from "./chat.js";
-import { ReplyCollector, type GatewayRequest, type Message, type Part } from "./ir.js";
+import {
+  ReplyCollector,
+  requestForModel,
+  type GatewayRequest,
+  type Message,
+  type Part,
+} from "./ir.js";
 
 /*
- * Anthropic Messages 这一侧的翻译。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
+ * Anthropic Messages 这一侧的翻译。例子照 magpie 的
  * anthropic_tool_pairing_test.go、devin_tool_ids_test.go、anthropic_cache_ttl_test.go、stop_context_test.go、
- * thinking_off_test.go。
+ * thinking_off_test.go、anthropic_max_tokens_test.go、refusal_details_test.go 与 internal/provider/grok_test.go。
  */
 
 const INTERRUPTED = "[The result of this tool call is unavailable: the turn was interrupted.]";
@@ -38,6 +49,10 @@ function request(messages: Message[]): GatewayRequest {
     thinkOff: false,
     parallel: null,
     metadata: null,
+    cacheKey: "",
+    include: [],
+    clientMetadata: null,
+    text: null,
     format: null,
     named: {},
   };
@@ -342,6 +357,78 @@ describe("decoding an Anthropic stream", () => {
   });
 });
 
+describe("a refusal's stop_details reach an Anthropic client (magpie refusal_details_test.go)", () => {
+  const details = {
+    type: "refusal",
+    category: "cyber",
+    explanation: "This request was declined because it could enable cyber harm.",
+  };
+  const refusal = [
+    '{"type":"message_start","message":{"id":"m1","role":"assistant","model":"m","content":[],"usage":{"input_tokens":3}}}',
+    JSON.stringify({
+      type: "message_delta",
+      delta: { stop_reason: "refusal", stop_sequence: null, stop_details: details },
+      usage: { output_tokens: 0 },
+    }),
+  ];
+
+  test("streamed: the encoder's message_delta carries them", () => {
+    const written: string[] = [];
+    const encoder = new AnthropicEncoder({
+      model: "relay-a/m",
+      write: (chunk) => written.push(chunk),
+    });
+    const decoder = new AnthropicDecoder();
+    for (const chunk of refusal) decoder.decode(chunk, (event) => encoder.event(event));
+    encoder.finish();
+    const events = written
+      .join("")
+      .split("\n")
+      .filter((line) => line.startsWith("data: "));
+    expect(events.map((line) => JSON.parse(line.slice(6)) as unknown).at(-2)).toEqual({
+      type: "message_delta",
+      delta: { stop_reason: "refusal", stop_sequence: null, stop_details: details },
+      usage: {
+        input_tokens: 3,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("whole: the rendered reply carries them, read from a whole reply too", () => {
+    const collector = new ReplyCollector();
+    new AnthropicDecoder().whole(
+      { id: "m1", type: "message", content: [], stop_reason: "refusal", stop_details: details },
+      (event) => collector.add(event),
+    );
+    expect(renderAnthropic(collector.finish(), "relay-a/m")).toEqual({
+      id: "msg_m1",
+      type: "message",
+      role: "assistant",
+      model: "relay-a/m",
+      content: [],
+      stop_reason: "refusal",
+      stop_sequence: null,
+      stop_details: details,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+  });
+
+  test("a stop with no details says none", () => {
+    const reply = decodeAnthropic([
+      '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_sequence":null},"usage":{"output_tokens":0}}',
+    ]).finish();
+    expect(renderAnthropic(reply, "m")).not.toHaveProperty("stop_details");
+  });
+});
+
 describe("Anthropic usage (magpie anthropic_cache_ttl_test.go)", () => {
   test("cache writes keep their split by how long they are kept", () => {
     const usage = usageFromAnthropic({
@@ -547,6 +634,27 @@ describe("thinking on a request built for Anthropic (magpie anthropic.go anthrop
       thinking: undefined,
       output_config: undefined,
       max_tokens: 1024,
+      temperature: 0.7,
+    });
+  });
+
+  test("a Claude that refuses sampling gets no temperature or top_p, an older one does (magpie samplingAsTaken)", () => {
+    for (const model of ["claude-opus-4-7", "claude-opus-5-5"]) {
+      expect(built(model, { thinking: false })).toEqual({
+        thinking: undefined,
+        output_config: undefined,
+        max_tokens: 16384,
+        temperature: undefined,
+      });
+      const topP = { ...request([{ role: "user", parts: [text("hi")] }]), topP: 0.9 };
+      expect(buildAnthropicRequest(topP, model).top_p).toBeUndefined();
+    }
+    const older = { ...request([{ role: "user", parts: [text("hi")] }]), topP: 0.9 };
+    expect(buildAnthropicRequest(older, "claude-opus-4-6").top_p).toBe(0.9);
+    expect(built("claude-opus-4-6", { thinking: false })).toEqual({
+      thinking: undefined,
+      output_config: undefined,
+      max_tokens: 16384,
       temperature: 0.7,
     });
   });
@@ -1084,5 +1192,125 @@ describe("magpie's chat-to-anthropic upstream body (testdata/upstream_bodies)", 
         `{"max_tokens":28096,"messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"${png}"}}]},{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"Read","input":{"path":"/x"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"file \\"body\\"\\n"},{"type":"text","text":"go on é","cache_control":{"type":"ephemeral"}}]}],"model":"m1","stop_sequences":["\\n\\n"],"stream":true,"system":[{"type":"text","text":"be brief","cache_control":{"type":"ephemeral"}}],"thinking":{"budget_tokens":24000,"type":"enabled"},"tools":[{"description":"Reads","input_schema":{"type":"object","properties":{"path":{"type":"string"}}},"name":"Read"}]}`,
       ),
     );
+  });
+});
+
+describe("the reply limit a Messages request is built with (magpie anthropic_max_tokens_test.go)", () => {
+  function maxTokens(input: { asked: number; facts: ModelFacts }) {
+    const asked = { ...request([{ role: "user", parts: [text("hi")] }]), maxTokens: input.asked };
+    const fitted = requestForModel({
+      request: asked,
+      to: "anthropic_messages",
+      facts: input.facts,
+    });
+    return buildAnthropicRequest(fitted, "claude-sonnet-4-5").max_tokens;
+  }
+
+  test("a request naming none gets the model's published limit", () => {
+    expect(maxTokens({ asked: 0, facts: { context: 200_000, output: 64_000 } })).toBe(64_000);
+  });
+
+  test("a published limit past the window is held to the window", () => {
+    expect(maxTokens({ asked: 0, facts: { context: 100_000, output: 500_000 } })).toBe(100_000);
+  });
+
+  test("a model whose limit is not known gets 16384", () => {
+    expect(maxTokens({ asked: 0, facts: {} })).toBe(16_384);
+    expect(maxTokens({ asked: 0, facts: { context: 200_000 } })).toBe(16_384);
+  });
+
+  test("the client's own limit goes as it is", () => {
+    expect(maxTokens({ asked: 1000, facts: { context: 200_000, output: 64_000 } })).toBe(1000);
+  });
+
+  test("the thinking budget fits under a filled limit as under one the client named", () => {
+    const asked = {
+      ...request([{ role: "user", parts: [text("hi")] }]),
+      thinking: true,
+      effort: "high" as const,
+    };
+    const fitted = requestForModel({
+      request: asked,
+      to: "anthropic_messages",
+      facts: { output: 8192 },
+    });
+    const built = buildAnthropicRequest(fitted, "deepseek-chat");
+    expect({ thinking: built.thinking, max_tokens: built.max_tokens }).toEqual({
+      thinking: { type: "enabled", budget_tokens: 7168 },
+      max_tokens: 8192,
+    });
+  });
+
+  test("a Claude's effort is kept when its levels are not known, and fitted when they are", () => {
+    const asked = {
+      ...request([{ role: "user", parts: [text("hi")] }]),
+      thinking: true,
+      effort: "xhigh" as const,
+    };
+    const fitted = (efforts?: string[]) =>
+      buildAnthropicRequest(
+        requestForModel({
+          request: asked,
+          to: "anthropic_messages",
+          facts: efforts ? { efforts } : {},
+        }),
+        "claude-opus-4-7",
+      ).output_config;
+    expect(fitted()).toEqual({ effort: "xhigh" });
+    expect(fitted(["low", "medium", "high", "max"])).toEqual({ effort: "max" });
+  });
+});
+
+describe("a tool whose parameters are a union at the root, asked of Anthropic (magpie grok_test.go TestObjectRootKeepsOwnRequired, anthropic.go objectSchema)", () => {
+  const UNION_ROOT = {
+    type: "object",
+    properties: { id: { type: "string" } },
+    required: ["id"],
+    allOf: [{ properties: { kind: { type: "string" } }, required: ["kind"] }],
+    anyOf: [
+      {
+        type: "object",
+        properties: { a: { type: "string" }, n: { type: "integer" } },
+        required: ["a", "n"],
+      },
+      { type: "object", properties: { b: { type: "string" } }, required: ["b", "n", "id"] },
+    ],
+  };
+
+  test("goes as an object root: every branch's fields, the root's, allOf's and every branch's required", () => {
+    const asked = {
+      ...request([{ role: "user", parts: [text("hi")] }]),
+      tools: [
+        { name: "pick", description: "", schema: UNION_ROOT, strict: false },
+        { name: "plain", description: "", schema: { type: "object" }, strict: false },
+      ],
+    };
+    const built = buildAnthropicRequest(asked, "glm-4.6");
+    expect(built.tools).toEqual([
+      {
+        name: "pick",
+        description: "",
+        input_schema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            kind: { type: "string" },
+            a: { type: "string" },
+            n: { type: "integer" },
+            b: { type: "string" },
+          },
+          required: ["id", "kind", "n"],
+        },
+      },
+      {
+        name: "plain",
+        description: "",
+        input_schema: { type: "object" },
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+    // 请求本身不改：换家时还要从同一个请求再翻译。
+    expect(asked.tools[0]!.schema).toEqual(UNION_ROOT);
+    expect(UNION_ROOT.anyOf).toHaveLength(2);
   });
 });

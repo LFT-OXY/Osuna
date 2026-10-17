@@ -1,5 +1,18 @@
+// 用例照 magpie（MIT，THIRD_PARTY_NOTICES）的 deepseek_anthropic_thinking_test.go、billing_line_test.go、advisor_test.go、adaptive_wire_test.go、
+// reasoning_passthrough_test.go、kimi_schema_test.go、deepseek_schema_test.go、grok_schema_test.go 等（各 describe 标了出处）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
-import { fitAnthropicBody, fitResponsesBody, fitThinkingOff } from "./passthrough.js";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import {
+  fitAnthropicBody,
+  fitResponsesBody,
+  fitThinkingOff,
+  upstreamBody,
+  type PassthroughBodyInput,
+} from "./passthrough.js";
+import { ReplyTap, type TappedReply } from "./reply-tap.js";
+import { sseEvent } from "./translation/sse.js";
 
 /*
  * 直通给 Anthropic 地址的请求体，按这家的模型改的几处；其余字节原样。
@@ -215,5 +228,1021 @@ describe("a Codex request passed through to a DeepSeek model's Responses endpoin
   test("another vendor's model is sent the request as it came", () => {
     const body = codex(`{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}`);
     expect(fitResponsesBody(body, "gpt-5.4")).toBe(body);
+  });
+});
+
+const RELAY_URL = "https://relay.example/v1";
+
+/** 直通给 relay 这家（选了 Opus 5.5 与 Sonnet 5.5）的对话请求体；地址不给就是中转服务的。 */
+function passedThrough(input: {
+  body: string;
+  model: string;
+  format?: PassthroughBodyInput["format"];
+  baseUrl?: string;
+}) {
+  return upstreamBody({
+    format: input.format ?? "anthropic_messages",
+    baseUrl: input.baseUrl ?? RELAY_URL,
+    body: Buffer.from(input.body),
+    requestedModel: input.model,
+    upstreamModel: input.model,
+    endpoint: { slug: "relay", models: [{ id: "claude-opus-5-5" }, { id: "claude-sonnet-5-5" }] },
+  }).toString("utf8");
+}
+
+// Claude Code 2.1.114 的请求（magpie #1600）：计费行单独一块、每轮的 cch 不同，后面是要缓存的提示词。
+const BILLING =
+  "x-anthropic-billing-header: cc_version=2.1.114.aff; cc_entrypoint=sdk-cli; cch=9ebf3;";
+const claudeCodeTurn = (model: string) =>
+  `{"model":"${model}","max_tokens":32000,"stream":true,"thinking":{"type":"disabled"},` +
+  `"system":[{"type":"text","text":"${BILLING}"},` +
+  `{"type":"text","text":"You are a Claude agent, built on Anthropic's Claude Agent SDK.","cache_control":{"type":"ephemeral"}},` +
+  `{"type":"text","text":"\\nYou are an interactive agent <rules> & more","cache_control":{"type":"ephemeral"}}],` +
+  `"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}],"metadata":{"user_id":"u"},` +
+  `"safeguards":{"dangerous_tool_use":{"enabled":true}}}`;
+
+describe("Claude Code's billing line and auto mode review passed through (magpie billing_line_test.go, automode.go)", () => {
+  test("another vendor's model gets neither, every other byte as sent", () => {
+    expect(
+      passedThrough({ body: claudeCodeTurn("deepseek-v4.1-flash"), model: "deepseek-v4.1-flash" }),
+    ).toBe(
+      claudeCodeTurn("deepseek-v4.1-flash")
+        .replace(`{"type":"text","text":"${BILLING}"},`, "")
+        .replace(`,"safeguards":{"dangerous_tool_use":{"enabled":true}}`, ""),
+    );
+  });
+
+  test("a Claude model gets the request byte for byte", () => {
+    const body = claudeCodeTurn("claude-opus-4-8");
+    expect(passedThrough({ body, model: "claude-opus-4-8" })).toBe(body);
+  });
+
+  test("count_tokens gets the same fixes as the conversation (magpie: before countsTokens), and nothing else", () => {
+    const count = (body: string, model: string) =>
+      upstreamBody({
+        format: "anthropic_messages",
+        pathSuffix: "/count_tokens",
+        baseUrl: RELAY_URL,
+        body: Buffer.from(body),
+        requestedModel: model,
+        upstreamModel: model,
+        endpoint: { slug: "relay", models: [] },
+      }).toString("utf8");
+    const turn = claudeCodeTurn("glm-5.2").replace(`"thinking":{"type":"disabled"},`, "");
+    // 别家模型：没有计费行与审查字段；count_tokens 不补关思考。
+    expect(count(turn, "glm-5.2")).toBe(
+      turn
+        .replace(`{"type":"text","text":"${BILLING}"},`, "")
+        .replace(`,"safeguards":{"dangerous_tool_use":{"enabled":true}}`, ""),
+    );
+    const budgeted = `{"model":"claude-opus-5-5","temperature":0,"thinking":{"type":"enabled","budget_tokens":10000},"messages":[]}`;
+    expect(JSON.parse(count(budgeted, "claude-opus-5-5"))).toEqual({
+      model: "claude-opus-5-5",
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort: "medium" },
+      messages: [],
+    });
+    const claude = claudeCodeTurn("claude-opus-4-8");
+    expect(count(claude, "claude-opus-4-8")).toBe(claude);
+  });
+
+  test("the line ahead of the prompt is cut; a system of the line alone goes; a mention of it stays", () => {
+    const off = `"thinking":{"type":"disabled"}`;
+    const cases = [
+      [
+        `{${off},"system":"x-anthropic-billing-header: cc_version=2.1.114.aff; cch=0218c;You are <it>.","x":1}`,
+        `{${off},"system":"You are <it>.","x":1}`,
+      ],
+      [
+        `{${off},"system":[{"type":"text","text":"x-anthropic-billing-header: cch=0218c;\\nYou are it.","cache_control":{"type":"ephemeral"}}]}`,
+        `{${off},"system":[{"type":"text","text":"You are it.","cache_control":{"type":"ephemeral"}}]}`,
+      ],
+      [
+        `{${off},"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.114.aff; cch=0218c;"}]}`,
+        `{${off}}`,
+      ],
+    ];
+    for (const [body, sent] of cases) expect(passedThrough({ body, model: "glm-5.2" })).toBe(sent);
+    for (const body of [
+      `{${off},"system":[{"type":"text","text":"Rules mention x-anthropic-billing-header: here"}]}`,
+      `{${off},"messages":[{"role":"user","content":"x-anthropic-billing-header: cch=1;"}]}`,
+      `{${off},"system":[{"type":"text","text":"a"},{"type":"text","text":"b x-anthropic-billing-header: cch=1;"}]}`,
+    ]) {
+      expect(passedThrough({ body, model: "glm-5.2" })).toBe(body);
+    }
+  });
+});
+
+// magpie testdata/claude-code-advisor-turn.json：Claude Code 2.1.300 开着 advisor 的一轮（advisor 说明截短）。
+const ADVISOR_NOTE =
+  "# Advisor Tool\\n\\nYou have access to an `advisor` tool backed by a stronger reviewer model. It takes NO parameters -- when you call advisor(), your entire conversation history is automatically forwarded.";
+const advisorTurn = (model: string, advisor: string) =>
+  `{"model":"${model}","max_tokens":64,"stream":true,"thinking":{"type":"disabled"},"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]},` +
+  `{"role":"system","content":[{"type":"text","text":"# Environment\\n - Platform: darwin\\n\\nToday's date is 2026-10-15.\\n\\n${ADVISOR_NOTE}"},` +
+  `{"type":"tool_addition","tool":{"type":"tool_reference","name":"advisor"},"cache_control":{"type":"ephemeral"}}],"output_config":{"effort":"medium"}}],` +
+  `"tools":[{"name":"Read","description":"read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}},` +
+  `{"type":"advisor_20260301","name":"advisor","model":"${advisor}","defer_loading":true}]}`;
+const READ_TOOL = {
+  name: "Read",
+  description: "read a file",
+  input_schema: { type: "object", properties: { path: { type: "string" } } },
+};
+
+describe("Claude Code's advisor passed through (magpie advisor_test.go)", () => {
+  test.each([
+    { case: "this endpoint's Claude", advisor: "relay/claude-opus-5-5" },
+    { case: "the 1M mark", advisor: "relay/claude-opus-5-5[1m]" },
+    { case: "Claude's own id", advisor: "claude-opus-5-5" },
+  ])("$case: the advisor goes as this endpoint names it, the rest as sent", ({ advisor }) => {
+    const body = advisorTurn("claude-opus-4-8", advisor);
+    expect(passedThrough({ body, model: "claude-opus-4-8" })).toBe(
+      advisorTurn("claude-opus-4-8", "claude-opus-5-5"),
+    );
+  });
+
+  test.each([
+    {
+      case: "another endpoint's model",
+      model: "claude-opus-4-8",
+      advisor: "other/claude-opus-5-5",
+    },
+    { case: "a vendor's model asked", model: "glm-5.2", advisor: "relay/claude-opus-5-5" },
+  ])(
+    "$case: the advisor is left out with its instructions and tool_addition",
+    ({ model, advisor }) => {
+      expect(JSON.parse(passedThrough({ body: advisorTurn(model, advisor), model }))).toEqual({
+        model,
+        max_tokens: 64,
+        stream: true,
+        thinking: { type: "disabled" },
+        messages: [
+          { role: "user", content: [{ type: "text", text: "hi" }] },
+          {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                text: "# Environment\n - Platform: darwin\n\nToday's date is 2026-10-15.\n\nThe advisor tool is no longer available; disregard the earlier advisor instructions.",
+              },
+            ],
+            output_config: { effort: "medium" },
+          },
+        ],
+        tools: [READ_TOOL],
+      });
+    },
+  );
+});
+
+describe("thinking with a budget passed through to a Claude that thinks only adaptively (magpie adaptive_wire_test.go)", () => {
+  const ask = (model: string, rest: string) =>
+    `{"model":"${model}","max_tokens":32000,${rest},"messages":[{"role":"user","content":"hi"}]}`;
+
+  test.each([
+    {
+      case: "a budget",
+      model: "claude-opus-5.5",
+      rest: `"thinking":{"type":"enabled","budget_tokens":10000}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "medium" },
+    },
+    {
+      case: "Bedrock's spelling, a budget past high",
+      model: "anthropic.claude-opus-5-5-20260901-v1:0",
+      rest: `"thinking":{"type":"enabled","budget_tokens":31999}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "max" },
+    },
+    {
+      case: "an effort beside the budget",
+      model: "claude-opus-5.5",
+      rest: `"thinking":{"type":"enabled","budget_tokens":4000,"display":"summarized"},"output_config":{"effort":"high"}`,
+      thinking: { type: "adaptive", display: "summarized" },
+      config: { effort: "high" },
+    },
+    {
+      case: "the client's own display",
+      model: "claude-sonnet-4-6",
+      rest: `"thinking":{"type":"enabled","budget_tokens":10000,"display":"omitted"}`,
+      thinking: { type: "adaptive", display: "omitted" },
+      config: { effort: "medium" },
+    },
+  ])("$case goes as adaptive thinking with an effort", ({ model, rest, thinking, config }) => {
+    expect(JSON.parse(passedThrough({ body: ask(model, rest), model }))).toEqual({
+      model,
+      max_tokens: 32000,
+      thinking,
+      output_config: config,
+      messages: [{ role: "user", content: "hi" }],
+    });
+  });
+
+  test("an older Claude keeps its budget, byte for byte", () => {
+    const body = ask("claude-sonnet-4-5", `"thinking":{"type":"enabled","budget_tokens":10000}`);
+    expect(passedThrough({ body, model: "claude-sonnet-4-5" })).toBe(body);
+  });
+});
+
+describe("sampling parameters passed through to a Claude (magpie samplingRefused)", () => {
+  const sampled = (model: string) =>
+    `{"model":"${model}","max_tokens":64,"temperature":0,"top_p":0.9,"top_k":5,"messages":[]}`;
+
+  test.each([
+    "claude-opus-4-7",
+    "claude-opus-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+    "claude-fable-5",
+  ])("%s gets none of them", (model) => {
+    expect(JSON.parse(passedThrough({ body: sampled(model), model }))).toEqual({
+      model,
+      max_tokens: 64,
+      messages: [],
+    });
+  });
+
+  test.each(["claude-opus-4-6", "claude-haiku-4-5", "claude-sonnet-6"])(
+    "%s gets them byte for byte",
+    (model) => {
+      expect(passedThrough({ body: sampled(model), model })).toBe(sampled(model));
+    },
+  );
+});
+
+describe("reasoning with nothing sealed in it, passed through to a Responses endpoint (magpie withoutBareReasoning)", () => {
+  // 第二项是中转站翻译回复时给 Codex 造的推理项：只有 id 与摘要。
+  const codex = (rest: string) =>
+    `{"model":"gpt-5.5", "stream":true,${rest}"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]},` +
+    `{"id":"rs_0123456789abcdef","type":"reasoning","summary":[{"type":"summary_text","text":"Thinking it over."}]},` +
+    `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ZW5j"},` +
+    `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello."}]},` +
+    `{"type":"message","role":"user","content":[{"type":"input_text","text":"again"}]}]}`;
+
+  test("is left out, the sealed reasoning and every other byte as sent", () => {
+    expect(
+      passedThrough({
+        body: codex(`"store":false,`),
+        model: "gpt-5.5",
+        format: "openai_responses",
+      }),
+    ).toBe(
+      `{"model":"gpt-5.5", "stream":true,"store":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]},` +
+        `{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ZW5j"},` +
+        `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello."}]},` +
+        `{"type":"message","role":"user","content":[{"type":"input_text","text":"again"}]}]}`,
+    );
+  });
+
+  test("a request the endpoint stores goes byte for byte", () => {
+    const body = codex(`"store":true,`);
+    expect(passedThrough({ body, model: "gpt-5.5", format: "openai_responses" })).toBe(body);
+  });
+});
+
+/*
+ * 按厂商的改写只做四家（magpie kimi_schema.go、deepseek_schema.go、grok_schema.go，gateway.go forwardOnce 里的 withoutDeferredTools）：
+ * Kimi、DeepSeek 只认官方地址，Grok 按模型名认（或 xAI 自己的地址）。别的地址、别家的模型，请求体逐字节原样。
+ */
+
+// 一个工具 schema 里四家各自要改的写法都有：没写 type 的 enum、const，`\0`，字符类里的 `[`；
+// 消息里还有延后加载工具块。
+const VENDOR_TOOLS =
+  `"tools":[{"name":"parse_visual_regions","input_schema":{"type":"object","properties":{` +
+  `"kinds":{"type":"array","items":{"enum":["text","icon"]}},"level":{"enum":[1,2,3]},"on":{"const":true},` +
+  `"mixed":{"enum":["a",1]},"typed":{"type":"string","enum":["x"]},` +
+  `"content":{"type":"string","pattern":"^[^\\\\0]*$"},"selector":{"type":"string","pattern":"^[^\\\\s[\\\\]]+$"}}}}]`;
+const vendorTurn = (model: string) =>
+  `{"model":"${model}","max_tokens":32000,"thinking":{"type":"enabled","budget_tokens":2048},` +
+  `${VENDOR_TOOLS},"messages":[{"role":"user","content":"hi"},` +
+  `{"role":"user","content":[{"type":"tool_addition","tool":{"type":"tool_reference","name":"Read"}}]},` +
+  `{"role":"user","content":[{"type":"text","text":"go on"},{"type":"tool_removal","tool":{"type":"tool_reference","name":"Gone"}}]}]}`;
+const UNDEFERRED_MESSAGES = [
+  { role: "user", content: "hi" },
+  { role: "user", content: [{ type: "text", text: "go on" }] },
+];
+
+/** vendorTurn 里的工具，properties 换成 `changed` 里给的。 */
+function vendorTools(changed: Record<string, unknown>) {
+  const properties = {
+    kinds: { type: "array", items: { enum: ["text", "icon"] } },
+    level: { enum: [1, 2, 3] },
+    on: { const: true },
+    mixed: { enum: ["a", 1] },
+    typed: { type: "string", enum: ["x"] },
+    content: { type: "string", pattern: "^[^\\0]*$" },
+    selector: { type: "string", pattern: "^[^\\s[\\]]+$" },
+    ...changed,
+  };
+  return [{ name: "parse_visual_regions", input_schema: { type: "object", properties } }];
+}
+
+describe("vendor rewrites passed through to the four vendors only", () => {
+  test.each(["https://api.kimi.com/coding/v1", "https://api.moonshot.cn/anthropic"])(
+    "Kimi at %s: an untyped enum or const gets its values' type, deferred-tool blocks go",
+    (baseUrl) => {
+      const sent = passedThrough({ body: vendorTurn("kimi-k2.6"), model: "kimi-k2.6", baseUrl });
+      expect(JSON.parse(sent)).toEqual({
+        model: "kimi-k2.6",
+        max_tokens: 32000,
+        thinking: { type: "enabled", budget_tokens: 2048 },
+        tools: vendorTools({
+          kinds: { type: "array", items: { type: "string", enum: ["text", "icon"] } },
+          level: { type: "integer", enum: [1, 2, 3] },
+          on: { type: "boolean", const: true },
+        }),
+        messages: UNDEFERRED_MESSAGES,
+      });
+    },
+  );
+
+  test("DeepSeek's own address: `\\0` in a pattern becomes `\\u0000`, deferred-tool blocks go", () => {
+    const sent = passedThrough({
+      body: vendorTurn("deepseek-v4"),
+      model: "deepseek-v4",
+      baseUrl: "https://api.deepseek.com/anthropic",
+    });
+    expect(JSON.parse(sent)).toEqual({
+      model: "deepseek-v4",
+      max_tokens: 32000,
+      thinking: { type: "enabled", budget_tokens: 2048 },
+      tools: vendorTools({ content: { type: "string", pattern: "^[^\\u0000]*$" } }),
+      messages: UNDEFERRED_MESSAGES,
+    });
+  });
+
+  test.each([
+    ["grok-4.6", RELAY_URL],
+    ["x-ai/grok-4", RELAY_URL],
+    ["my-alias", "https://api.x.ai/v1"],
+  ])(
+    "Grok (%s at %s): a `[` in a character class is escaped, nothing else changes",
+    (model, baseUrl) => {
+      const body = vendorTurn(model);
+      expect(passedThrough({ body, model, baseUrl })).toBe(
+        body.replace(`"^[^\\\\s[\\\\]]+$"`, `"^[^\\\\s\\\\[\\\\]]+$"`),
+      );
+    },
+  );
+
+  test("a Codex request to Grok has its patterns rewritten too", () => {
+    const body = `{"model":"grok-4.7","tools":[{"type":"function","name":"find","parameters":{"type":"object","properties":{"q":{"type":"string","pattern":"[a&&b]"}}}}],"input":[]}`;
+    expect(passedThrough({ body, model: "grok-4.7", format: "openai_responses" })).toBe(
+      body.replace(`"[a&&b]"`, `"[a&\\\\&b]"`),
+    );
+  });
+
+  test.each([
+    ["kimi-k2.6", RELAY_URL],
+    ["deepseek-v4", "https://openrouter.ai/api/v1"],
+    ["MiniMax-M2.7", RELAY_URL],
+    ["mistral-large", "https://api.mistral.ai/v1"],
+    ["kimi-k2.6", "https://api.kimi.com.relay.example/v1"],
+  ])("%s at %s gets the request byte for byte", (model, baseUrl) => {
+    const body = vendorTurn(model);
+    // DeepSeek 的模型名本来就要每个工具轮带思考块；这份请求没有工具轮。
+    expect(passedThrough({ body, model, baseUrl })).toBe(body);
+  });
+});
+
+/*
+ * 直通回复边转边读：喂给读取器的是上游原样的字节，按段到达；段的边界可以落在事件、数字或一个汉字中间。
+ */
+
+/** 按字节位置切成几段。 */
+function cutAt(text: string, offsets: number[]): Buffer[] {
+  const bytes = Buffer.from(text);
+  return [0, ...offsets].map((start, index) => bytes.subarray(start, offsets[index]));
+}
+
+/** `piece` 在 `text` 里第一次出现处再往后 `into` 个字节：切在数字或汉字中间用。 */
+function inside(text: string, piece: string, into: number): number {
+  return Buffer.from(text).indexOf(piece) + into;
+}
+
+function tapped(input: {
+  format: ApiEndpointRequestFormat;
+  stream: boolean;
+  chunks: Buffer[];
+}): TappedReply {
+  const tap = new ReplyTap({ format: input.format, stream: input.stream });
+  for (const chunk of input.chunks) tap.feed(chunk);
+  return tap.end();
+}
+
+const NO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  cacheWrite1h: 0,
+  reasoning: 0,
+};
+
+describe("reading an Anthropic stream passed through", () => {
+  test("thinking, text and a tool call, the stop reason, the end and the cache, read across cut chunks", () => {
+    const stream = [
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_1",
+          usage: {
+            input_tokens: 12,
+            cache_read_input_tokens: 2048,
+            cache_creation_input_tokens: 300,
+            cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 },
+          },
+        },
+      }),
+      sseEvent("ping", { type: "ping" }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "thinking", thinking: "" },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "先读文件" },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "text", text: "" },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "text_delta", text: "你好" },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 1 }),
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "tool_use", id: "toolu_1", name: "Read", input: {} },
+      }),
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "input_json_delta", partial_json: '{"path":"a.ts"}' },
+      }),
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 2 }),
+      sseEvent("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use" },
+        usage: { output_tokens: 42 },
+      }),
+      sseEvent("message_stop", { type: "message_stop" }),
+    ].join("");
+
+    const reply = tapped({
+      format: "anthropic_messages",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "2048", 2),
+        inside(stream, "你好", 1),
+        inside(stream, '"tool_use"},', 4),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 12,
+        output: 42,
+        cacheRead: 2048,
+        cacheWrite: 300,
+        cacheWrite1h: 200,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a refusal before any content, an error event, and a stream that stops short; a ping is no content", () => {
+    const opening =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: { id: "msg_2", usage: { input_tokens: 5 } },
+      }) + sseEvent("ping", { type: "ping" });
+    const read = (rest: string) =>
+      tapped({ format: "anthropic_messages", stream: true, chunks: [Buffer.from(opening + rest)] });
+    const usage = {
+      input: 5,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cacheWrite1h: 0,
+      reasoning: 0,
+    };
+
+    expect(
+      read(
+        sseEvent("message_delta", {
+          type: "message_delta",
+          delta: { stop_reason: "refusal" },
+          usage: { output_tokens: 0 },
+        }) + sseEvent("message_stop", { type: "message_stop" }),
+      ),
+    ).toEqual({ content: [], stop: "filter", ended: true, error: null, usage });
+    expect(
+      read(
+        sseEvent("error", {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        }),
+      ),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: {
+        message: "Overloaded",
+        code: "overloaded_error",
+        vendorError: null,
+        raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      },
+      usage,
+    });
+    expect(
+      read(
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "Half an ans" },
+        }),
+      ),
+    ).toEqual({ content: ["text"], stop: null, ended: false, error: null, usage });
+    expect(read("")).toEqual({ content: [], stop: null, ended: false, error: null, usage });
+  });
+});
+
+describe("what counts as said in an Anthropic stream (magpie fallback.go streamPart.said)", () => {
+  const read = (...events: string[]) =>
+    tapped({ format: "anthropic_messages", stream: true, chunks: [Buffer.from(events.join(""))] });
+
+  test("a thinking block with only its signature says nothing", () => {
+    expect(
+      read(
+        sseEvent("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "" },
+        }),
+        sseEvent("content_block_delta", {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "signature_delta", signature: "EqQBCkgIBxAB" },
+        }),
+        sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+      ),
+    ).toEqual({ content: [], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+
+  test("a server tool's call is a tool call", () => {
+    expect(
+      read(
+        sseEvent("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "server_tool_use",
+            id: "srvtoolu_1",
+            name: "web_search",
+            input: {},
+          },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+});
+
+describe("reading a Chat stream passed through", () => {
+  const chunk = (data: Record<string, unknown>) => sseEvent(null, data);
+
+  test("reasoning, text and a tool call, the stop reason, [DONE] and the cache, read across cut chunks", () => {
+    const stream = [
+      chunk({
+        id: "chatcmpl-1",
+        choices: [{ index: 0, delta: { role: "assistant", reasoning_content: "先看看" } }],
+      }),
+      chunk({ id: "chatcmpl-1", choices: [{ index: 0, delta: { content: "好的" } }] }),
+      chunk({
+        id: "chatcmpl-1",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_1",
+                  type: "function",
+                  function: { name: "read", arguments: '{"path":"a.ts"}' },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      chunk({ id: "chatcmpl-1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] }),
+      chunk({
+        id: "chatcmpl-1",
+        choices: [],
+        usage: {
+          prompt_tokens: 3000,
+          completion_tokens: 40,
+          prompt_tokens_details: { cached_tokens: 2048, cache_write_tokens: 500 },
+        },
+      }),
+      sseEvent(null, "[DONE]"),
+    ].join("");
+
+    const reply = tapped({
+      format: "openai_chat",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "好的", 2),
+        inside(stream, "2048", 1),
+        inside(stream, "[DONE]", 3),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 452,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 500,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a content filter stop, an error chunk, and a stream without [DONE]", () => {
+    const read = (...chunks: Record<string, unknown>[]) =>
+      tapped({
+        format: "openai_chat",
+        stream: true,
+        chunks: [Buffer.from(chunks.map(chunk).join(""))],
+      });
+
+    expect(
+      read({
+        id: "chatcmpl-2",
+        choices: [{ index: 0, delta: {}, finish_reason: "content_filter" }],
+      }),
+    ).toEqual({ content: [], stop: "filter", ended: false, error: null, usage: NO_USAGE });
+    expect(read({ error: { message: "upstream overloaded" } })).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: {
+        message: "upstream overloaded",
+        code: null,
+        vendorError: null,
+        raw: '{"error":{"message":"upstream overloaded"}}',
+      },
+      usage: NO_USAGE,
+    });
+    expect(read({ id: "chatcmpl-3", choices: [{ index: 0, delta: { content: "Half" } }] })).toEqual(
+      { content: ["text"], stop: null, ended: false, error: null, usage: NO_USAGE },
+    );
+  });
+});
+
+describe("reading a Responses stream passed through", () => {
+  const event = (type: string, data: Record<string, unknown>) => sseEvent(type, { type, ...data });
+  const created = event("response.created", {
+    response: { id: "resp_1", status: "in_progress", output: [] },
+  });
+  const read = (...events: string[]) =>
+    tapped({
+      format: "openai_responses",
+      stream: true,
+      chunks: [Buffer.from(created + events.join(""))],
+    });
+
+  test("reasoning, text and a call, the stop reason, the completed response and the cache, read across cut chunks", () => {
+    const call = { id: "fc_1", type: "function_call", call_id: "call_1", name: "shell" };
+    const stream = [
+      created,
+      event("response.in_progress", { response: { id: "resp_1", status: "in_progress" } }),
+      event("response.output_item.added", {
+        output_index: 0,
+        item: { id: "rs_1", type: "reasoning", summary: [] },
+      }),
+      event("response.reasoning_summary_text.delta", { item_id: "rs_1", delta: "**看一下文件**" }),
+      event("response.output_item.added", {
+        output_index: 1,
+        item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+      }),
+      event("response.output_text.delta", { item_id: "msg_1", delta: "好的" }),
+      event("response.output_item.added", { output_index: 2, item: { ...call, arguments: "" } }),
+      event("response.function_call_arguments.delta", { item_id: "fc_1", delta: '{"cmd":"ls"}' }),
+      event("response.output_item.done", {
+        output_index: 2,
+        item: { ...call, arguments: '{"cmd":"ls"}' },
+      }),
+      event("response.completed", {
+        response: {
+          id: "resp_1",
+          status: "completed",
+          output: [],
+          usage: {
+            input_tokens: 3000,
+            output_tokens: 40,
+            input_tokens_details: { cached_tokens: 2048, cache_write_tokens: 500 },
+            output_tokens_details: { reasoning_tokens: 12 },
+          },
+        },
+      }),
+    ].join("");
+
+    const reply = tapped({
+      format: "openai_responses",
+      stream: true,
+      chunks: cutAt(stream, [
+        inside(stream, "response.created", 5),
+        inside(stream, "好的", 4),
+        inside(stream, "2048", 3),
+      ]),
+    });
+
+    expect(reply).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 452,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 500,
+        cacheWrite1h: 0,
+        reasoning: 12,
+      },
+    });
+  });
+
+  test("a reply cut short by the content filter, a failed response, and one that only began", () => {
+    expect(
+      read(
+        event("response.incomplete", {
+          response: { status: "incomplete", incomplete_details: { reason: "content_filter" } },
+        }),
+      ),
+    ).toEqual({ content: [], stop: "filter", ended: true, error: null, usage: NO_USAGE });
+    expect(
+      read(
+        event("response.failed", {
+          response: { status: "failed", error: { code: "server_error", message: "overloaded" } },
+        }),
+      ),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: {
+        message: "overloaded",
+        code: "server_error",
+        vendorError: null,
+        raw: '{"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"overloaded"}}}',
+      },
+      usage: NO_USAGE,
+    });
+    expect(read()).toEqual({ content: [], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+
+  test("Codex's own call (apply_patch) is a tool call it stops for; a server tool's call is a tool call", () => {
+    const patch = {
+      id: "ctc_1",
+      type: "custom_tool_call",
+      call_id: "call_2",
+      name: "apply_patch",
+      input: "*** Begin Patch",
+    };
+    expect(
+      read(
+        event("response.output_item.added", { output_index: 0, item: { ...patch, input: "" } }),
+        event("response.custom_tool_call_input.delta", {
+          item_id: "ctc_1",
+          delta: "*** Begin Patch",
+        }),
+        event("response.output_item.done", { output_index: 0, item: patch }),
+        event("response.completed", {
+          response: { id: "resp_1", status: "completed", output: [] },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: "tool", ended: true, error: null, usage: NO_USAGE });
+    expect(
+      read(
+        event("response.output_item.added", {
+          output_index: 0,
+          item: { id: "ws_1", type: "web_search_call", status: "in_progress" },
+        }),
+      ),
+    ).toEqual({ content: ["tool_call"], stop: null, ended: false, error: null, usage: NO_USAGE });
+  });
+});
+
+describe("reading a reply passed through whole", () => {
+  // 切在正中间：整份回复要攒齐了才读。
+  const whole = (format: ApiEndpointRequestFormat, body: unknown) => {
+    const text = JSON.stringify(body);
+    return tapped({ format, stream: false, chunks: cutAt(text, [Buffer.byteLength(text) >> 1]) });
+  };
+
+  test("it is read as its stream would be, in each format", () => {
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_9",
+        type: "message",
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "先读文件", signature: "EqQB" },
+          { type: "text", text: "好的" },
+          { type: "tool_use", id: "toolu_9", name: "Read", input: { path: "a.ts" } },
+        ],
+        stop_reason: "tool_use",
+        usage: {
+          input_tokens: 12,
+          output_tokens: 3,
+          cache_read_input_tokens: 2048,
+          cache_creation_input_tokens: 300,
+        },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 12,
+        output: 3,
+        cacheRead: 2048,
+        cacheWrite: 300,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+    expect(
+      whole("openai_responses", {
+        id: "resp_9",
+        object: "response",
+        status: "completed",
+        output: [
+          {
+            id: "rs_9",
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "**看一下**" }],
+          },
+          {
+            id: "msg_9",
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "好的" }],
+          },
+          {
+            id: "ctc_9",
+            type: "custom_tool_call",
+            call_id: "call_9",
+            name: "apply_patch",
+            input: "*** Begin Patch",
+          },
+        ],
+        usage: {
+          input_tokens: 3000,
+          output_tokens: 40,
+          input_tokens_details: { cached_tokens: 2048 },
+        },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 952,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+    // DeepSeek 的缓存命中字段。
+    expect(
+      whole("openai_chat", {
+        id: "chatcmpl-9",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              reasoning_content: "先看看",
+              content: "好的",
+              tool_calls: [
+                { id: "call_9", type: "function", function: { name: "read", arguments: "{}" } },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 3000, completion_tokens: 40, prompt_cache_hit_tokens: 2048 },
+      }),
+    ).toEqual({
+      content: ["thinking", "text", "tool_call"],
+      stop: "tool",
+      ended: true,
+      error: null,
+      usage: {
+        input: 952,
+        output: 40,
+        cacheRead: 2048,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        reasoning: 0,
+      },
+    });
+  });
+
+  test("a refusal and an error that came whole", () => {
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_10",
+        type: "message",
+        role: "assistant",
+        content: [],
+        stop_reason: "refusal",
+        usage: { input_tokens: 5, output_tokens: 0 },
+      }),
+    ).toEqual({
+      content: [],
+      stop: "filter",
+      ended: true,
+      error: null,
+      usage: { ...NO_USAGE, input: 5 },
+    });
+    expect(
+      whole("anthropic_messages", {
+        type: "error",
+        error: { type: "overloaded_error", message: "Overloaded" },
+      }),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: {
+        message: "Overloaded",
+        code: "overloaded_error",
+        vendorError: null,
+        raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      },
+      usage: NO_USAGE,
+    });
+    expect(
+      whole("openai_responses", {
+        error: { message: "quota exhausted", code: "insufficient_quota" },
+      }),
+    ).toEqual({
+      content: [],
+      stop: null,
+      ended: false,
+      error: {
+        message: "quota exhausted",
+        code: "insufficient_quota",
+        vendorError: null,
+        raw: '{"error":{"message":"quota exhausted","code":"insufficient_quota"}}',
+      },
+      usage: NO_USAGE,
+    });
+  });
+
+  test("a body that is not JSON, or bigger than 8 MB (magpie sniff.go), is not read", () => {
+    const unread = { content: [], stop: null, ended: false, error: null, usage: NO_USAGE };
+    expect(
+      tapped({
+        format: "anthropic_messages",
+        stream: false,
+        chunks: [Buffer.from("<html><title>Just a moment...</title></html>")],
+      }),
+    ).toEqual(unread);
+    expect(
+      whole("anthropic_messages", {
+        id: "msg_11",
+        type: "message",
+        content: [{ type: "text", text: "x".repeat(8 * 1024 * 1024) }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, cache_read_input_tokens: 2048 },
+      }),
+    ).toEqual(unread);
   });
 });

@@ -1,3 +1,6 @@
+// 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway 的 join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go、phase_test.go、codex_access_programs_test.go 与 responses.go）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, test } from "vitest";
 import {
   AnthropicDecoder,
@@ -29,8 +32,9 @@ import {
 } from "./responses.js";
 
 /*
- * Responses 请求的工具配对修补。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
- * join_tool_runs_test.go、pair_tool_items_test.go 与 orphan_tool_output_test.go。
+ * Responses 请求的工具配对修补。例子照 magpie 的
+ * join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go 与 phase_test.go；
+ * 流里 invalid_request_error 的字段照 codex_access_programs_test.go 与 responses.go 的 requestRefused。
  */
 
 const INTERRUPTED = "[The result of this tool call is unavailable: the turn was interrupted.]";
@@ -191,6 +195,40 @@ describe("an item inside a run of calls and results (magpie join_tool_runs_test.
     expect(joinToolRuns(fixed)).toBe(fixed);
   });
 
+  // magpie TestRelayedTextBetweenABatchsCallsIsAnswered（#2100）：模型在一批调用的每个调用前各说了一句。
+  const SAY_1 =
+    '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I\'ll run two commands."}]}';
+  const SAY_2 =
+    '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Also this."}]}';
+  const CALL_A =
+    '{"type":"function_call","call_id":"call_aaaa1111","name":"exec_command","arguments":"{\\"cmd\\":\\"ls\\"}"}';
+  const CALL_B =
+    '{"type":"function_call","call_id":"call_bbbb2222","name":"exec_command","arguments":"{\\"cmd\\":\\"pwd\\"}"}';
+  const OUT_A = '{"type":"function_call_output","call_id":"call_aaaa1111","output":"a.txt"}';
+  const OUT_B = '{"type":"function_call_output","call_id":"call_bbbb2222","output":"/w"}';
+  const REASONING = '{"type":"reasoning","id":"rs_2","summary":[],"encrypted_content":"ZW5j"}';
+  const USER =
+    '{"type":"message","role":"user","content":[{"type":"input_text","text":"run them"}]}';
+  const batch = (items: string[]) => `{"model":"m","input":[${[USER, ...items].join(",")}]}`;
+
+  test("the model's text between a batch's calls goes ahead of the first call, with the reasoning before it", () => {
+    expect(JSON.parse(joinToolRuns(batch([SAY_1, CALL_A, SAY_2, CALL_B, OUT_A, OUT_B])))).toEqual(
+      JSON.parse(batch([SAY_1, SAY_2, CALL_A, CALL_B, OUT_A, OUT_B])),
+    );
+    expect(
+      JSON.parse(joinToolRuns(batch([SAY_1, CALL_A, REASONING, SAY_2, CALL_B, OUT_A, OUT_B]))),
+    ).toEqual(JSON.parse(batch([SAY_1, REASONING, SAY_2, CALL_A, CALL_B, OUT_A, OUT_B])));
+  });
+
+  test("text between whole exchanges, or before a batch's calls, stays byte for byte", () => {
+    for (const body of [
+      batch([SAY_1, CALL_A, OUT_A, SAY_2, CALL_B, OUT_B]),
+      batch([SAY_1, CALL_A, CALL_B, OUT_A, OUT_B]),
+    ]) {
+      expect(joinToolRuns(body)).toBe(body);
+    }
+  });
+
   test("whole exchanges, a call nobody answers and results out of order are left byte for byte", () => {
     for (const body of [
       '{"model":"m","input":[{"type":"function_call","call_id":"call_a","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_a","output":"a"},{"type":"message","role":"developer","content":[{"type":"input_text","text":"a note"}]},{"type":"function_call","call_id":"call_b","name":"echo","arguments":"{}"},{"type":"function_call_output","call_id":"call_b","output":"b"}]}',
@@ -257,6 +295,128 @@ describe("magpie's Responses upstream bodies (testdata/upstream_bodies)", () => 
         `{"input":[{"content":[{"text":"what is this","type":"input_text"},{"detail":"auto","image_url":"data:image/png;base64,${PNG}","type":"input_image"}],"role":"user","type":"message"}],"max_output_tokens":64,"model":"m1","store":false,"stream":true}`,
       ),
     );
+  });
+});
+
+describe("a tool exchange translated into Responses (magpie pair_tool_items_test.go, gemini_pending_call_test.go)", () => {
+  const RUN_IT = {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "run it" }],
+  };
+  const GO_ON = { type: "message", role: "user", content: [{ type: "input_text", text: "go on" }] };
+  const CALL_A = { type: "function_call", call_id: "call_a", name: "echo", arguments: "{}" };
+
+  test("a Chat or Messages client's lone call gets its synthetic result (TestTranslatedToResponsesAnswersALoneCall)", () => {
+    const chat = parseChatRequest({
+      model: "fake/m1",
+      stream: true,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          tool_calls: [
+            { id: "call_a", type: "function", function: { name: "echo", arguments: "{}" } },
+          ],
+        },
+        { role: "user", content: "go on" },
+      ],
+    });
+    const messages = parseAnthropicRequest({
+      model: "fake/m1",
+      stream: true,
+      max_tokens: 16,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_a", name: "echo", input: {} }],
+        },
+        { role: "user", content: "go on" },
+      ],
+    });
+    const answered = [
+      RUN_IT,
+      CALL_A,
+      { type: "function_call_output", call_id: "call_a", output: INTERRUPTED },
+      GO_ON,
+    ];
+    expect(buildResponsesRequest(chat, "m1").input).toEqual(answered);
+    expect(buildResponsesRequest(messages, "m1").input).toEqual(answered);
+  });
+
+  test("a paired exchange goes as it was built (TestTranslatedToResponsesKeepsAPairedExchange)", () => {
+    const chat = parseChatRequest({
+      model: "fake/m1",
+      stream: true,
+      messages: [
+        { role: "user", content: "run it" },
+        {
+          role: "assistant",
+          tool_calls: [
+            { id: "call_a", type: "function", function: { name: "echo", arguments: "{}" } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_a", content: "ok" },
+        { role: "user", content: "go on" },
+      ],
+    });
+    expect(buildResponsesRequest(chat, "m1").input).toEqual([
+      RUN_IT,
+      CALL_A,
+      { type: "function_call_output", call_id: "call_a", output: "ok" },
+      GO_ON,
+    ]);
+  });
+
+  test("a second answer to one call is left out with its image; a call made again gets its own (TestSecondAnswerDroppedWithItsImages)", () => {
+    const request = parseAnthropicRequest({
+      model: "fake/m1",
+      max_tokens: 16,
+      messages: [
+        { role: "user", content: "look" },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "Read", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call_1", content: "alpha-result" }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: [
+                { type: "text", text: "beta-result" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data: "c2Vjb25k" },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call_1", name: "Read", input: {} }],
+        },
+        {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call_1", content: "gamma-result" }],
+        },
+      ],
+    });
+    const call = { type: "function_call", call_id: "call_1", name: "Read", arguments: "{}" };
+    expect(buildResponsesRequest(request, "gpt-5.4").input).toEqual([
+      { type: "message", role: "user", content: [{ type: "input_text", text: "look" }] },
+      call,
+      { type: "function_call_output", call_id: "call_1", output: "alpha-result" },
+      call,
+      { type: "function_call_output", call_id: "call_1", output: "gamma-result" },
+    ]);
   });
 });
 
@@ -646,11 +806,38 @@ describe("decoding a Responses stream", () => {
     const failed = decodeResponses([
       '{"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"overloaded"}}}',
     ]);
-    expect(failed.error).toEqual({ message: "overloaded", code: "server_error" });
+    expect(failed.error).toEqual({
+      message: "overloaded",
+      code: "server_error",
+      vendorError: null,
+    });
     const bare = decodeResponses(['{"type":"error","message":"rate limited"}']);
-    expect(bare.error).toEqual({ message: "rate limited", code: null });
+    expect(bare.error).toEqual({ message: "rate limited", code: null, vendorError: null });
     const shapeless = decodeResponses(['{"error":"quota exhausted"}']);
-    expect(shapeless.error).toEqual({ message: "quota exhausted", code: null });
+    expect(shapeless.error).toEqual({ message: "quota exhausted", code: null, vendorError: null });
+  });
+
+  test("an error the vendor types invalid_request_error keeps its type, code and param (magpie requestRefused)", () => {
+    const refused = decodeResponses([
+      '{"type":"error","error":{"message":"not authorized","type":"invalid_request_error","param":"access_programs.cyber","code":"access_program_not_enabled"}}',
+    ]);
+    const failed = decodeResponses([
+      '{"type":"response.failed","response":{"status":"failed","error":{"message":"bad input","type":"invalid_request_error"}}}',
+    ]);
+    expect(refused.error).toEqual({
+      message: "not authorized",
+      code: "access_program_not_enabled",
+      vendorError: {
+        type: "invalid_request_error",
+        code: "access_program_not_enabled",
+        param: "access_programs.cyber",
+      },
+    });
+    expect(failed.error).toEqual({
+      message: "bad input",
+      code: null,
+      vendorError: { type: "invalid_request_error", code: null, param: null },
+    });
   });
 });
 
@@ -734,6 +921,7 @@ describe("a stream told to Codex", () => {
         role: "assistant",
         status: "completed",
         content: [{ type: "output_text", text: "Let me look.", annotations: [], logprobs: [] }],
+        phase: "commentary",
       },
       {
         id: expect.stringMatching(/^fc_/),
@@ -794,7 +982,7 @@ describe("a stream told to Codex", () => {
   test("an upstream error ends the stream as response.failed", () => {
     const sent = toCodex(codexRequest({}), (emit) => {
       emit({ kind: "text", text: "Hm" });
-      emit({ kind: "error", message: "overloaded", code: null });
+      emit({ kind: "error", message: "overloaded", code: null, vendorError: null });
     });
     expect(sent.find((event) => event.type === "response.failed")).toMatchObject({
       response: { status: "failed", error: { code: "server_error", message: "overloaded" } },
@@ -850,6 +1038,7 @@ describe("a whole reply for a Codex request that did not stream", () => {
         role: "assistant",
         status: "completed",
         content: [{ type: "output_text", text: "On it.", annotations: [] }],
+        phase: "commentary",
       },
       {
         id: expect.stringMatching(/^fc_/),
@@ -1105,5 +1294,236 @@ describe("Codex turning reasoning off, asked of another API", () => {
       thinking: { type: "adaptive", display: "summarized" },
       output_config: { effort: "low" },
     });
+  });
+});
+
+describe("Codex's cache key, include, client metadata and text options asked of another API (magpie ir.go Request.CacheKey, Include, ClientMetadata, Text)", () => {
+  const CODEX_FIELDS = {
+    model: "kimi-k2",
+    input: "hi",
+    prompt_cache_key: "thread-1",
+    include: ["reasoning.encrypted_content"],
+    client_metadata: { "x-codex-installation-id": "inst-1" },
+    text: { verbosity: "low" },
+    reasoning: { effort: "high", summary: "auto" },
+  };
+
+  test("a Chat upstream gets the cache key alone", () => {
+    expect(buildChatRequest(parseResponsesRequest(CODEX_FIELDS), "kimi-k2")).toEqual({
+      model: "kimi-k2",
+      messages: [{ role: "user", content: "hi" }],
+      stream: false,
+      prompt_cache_key: "thread-1",
+      reasoning_effort: "high",
+    });
+  });
+
+  test("an Anthropic upstream gets none of them", () => {
+    expect(buildAnthropicRequest(parseResponsesRequest(CODEX_FIELDS), "glm-4.6")).toEqual({
+      model: "glm-4.6",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }],
+        },
+      ],
+      stream: false,
+      thinking: { type: "enabled", budget_tokens: 24_000 },
+      max_tokens: 28_096,
+    });
+  });
+
+  test("a Responses upstream gets all four as Codex sent them, the format beside the text options", () => {
+    const request = parseResponsesRequest({
+      ...CODEX_FIELDS,
+      text: {
+        verbosity: "low",
+        format: { type: "json_schema", name: "plan", schema: { type: "object" }, strict: true },
+      },
+    });
+    expect(buildResponsesRequest(request, "kimi-k2")).toEqual({
+      model: "kimi-k2",
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }],
+      stream: false,
+      store: false,
+      client_metadata: { "x-codex-installation-id": "inst-1" },
+      text: {
+        verbosity: "low",
+        format: {
+          type: "json_schema",
+          name: "plan",
+          schema: { type: "object" },
+          strict: true,
+        },
+      },
+      prompt_cache_key: "thread-1",
+      reasoning: { effort: "high", summary: "auto" },
+      include: ["reasoning.encrypted_content"],
+    });
+  });
+
+  test("sealed reasoning is asked for only with reasoning, and an include asked twice goes once", () => {
+    const request = parseResponsesRequest({
+      model: "kimi-k2",
+      input: "hi",
+      include: [
+        "reasoning.encrypted_content",
+        "message.output_text.logprobs",
+        "message.output_text.logprobs",
+      ],
+    });
+    expect(buildResponsesRequest(request, "kimi-k2")).toEqual({
+      model: "kimi-k2",
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }],
+      stream: false,
+      store: false,
+      include: ["message.output_text.logprobs"],
+    });
+  });
+});
+
+describe("the phase of each message a translated model says to Codex (magpie phase_test.go)", () => {
+  /** 每条 assistant 消息的 phase：先按流里 output_item.done 的，再按最后一个事件 output 里的。 */
+  function phases(sent: Record<string, unknown>[]): { streamed: unknown[]; ended: unknown[] } {
+    const isMessage = (item: unknown) => (item as Record<string, unknown>).type === "message";
+    const phaseOf = (item: unknown) => (item as Record<string, unknown>).phase;
+    const streamed = sent
+      .filter((event) => event.type === "response.output_item.done" && isMessage(event.item))
+      .map((event) => phaseOf(event.item));
+    const last = sent.at(-1)!.response as { output: unknown[] };
+    return { streamed, ended: last.output.filter(isMessage).map(phaseOf) };
+  }
+
+  const call: StreamEvent[] = [
+    { kind: "tool_start", id: "c1", name: "shell" },
+    { kind: "tool_args", text: "{}" },
+  ];
+
+  test.each<[string, StreamEvent[], string | undefined]>([
+    [
+      "said before a call",
+      [{ kind: "text", text: "Let me look." }, ...call, { kind: "stop", stop: "tool" }],
+      "commentary",
+    ],
+    [
+      "said before reasoning and a call",
+      [
+        { kind: "text", text: "Let me look." },
+        { kind: "think", text: "hm" },
+        ...call,
+        { kind: "stop", stop: "tool" },
+      ],
+      "commentary",
+    ],
+    [
+      "said last",
+      [
+        { kind: "text", text: "Done." },
+        { kind: "stop", stop: "stop" },
+      ],
+      "final_answer",
+    ],
+    [
+      "said last, reasoning after",
+      [
+        { kind: "text", text: "Done." },
+        { kind: "think", text: "hm" },
+        { kind: "stop", stop: "stop" },
+      ],
+      "final_answer",
+    ],
+    [
+      "cut at the length",
+      [
+        { kind: "text", text: "Done" },
+        { kind: "stop", stop: "length" },
+      ],
+      undefined,
+    ],
+  ])("%s", (_name, feed, phase) => {
+    const sent = toCodex(codexRequest({}), (emit) => {
+      for (const event of feed) emit(event);
+    });
+    expect(phases(sent)).toEqual({ streamed: [phase], ended: [phase] });
+  });
+
+  test("two messages around a call: the first is commentary, the last the answer", () => {
+    const sent = toCodex(codexRequest({}), (emit) => {
+      emit({ kind: "text", text: "Checking." });
+      for (const event of call) emit(event);
+      emit({ kind: "text", text: "Found it." });
+      emit({ kind: "stop", stop: "stop" });
+    });
+    expect(phases(sent)).toEqual({
+      streamed: ["commentary", "final_answer"],
+      ended: ["commentary", "final_answer"],
+    });
+  });
+
+  test("a held message keeps the events after it in order, numbered as they are written", () => {
+    const sent = toCodex(codexRequest({}), (emit) => {
+      emit({ kind: "text", text: "Checking." });
+      emit({ kind: "think", text: "hm" });
+      for (const event of call) emit(event);
+    });
+    expect(sent.map((event) => event.type)).toEqual([
+      "response.created",
+      "response.in_progress",
+      "response.output_item.added",
+      "response.content_part.added",
+      "response.output_text.delta",
+      "response.output_text.done",
+      "response.content_part.done",
+      // 消息的 done 等到下一个不是推理的项，推理的事件跟在它后面。
+      "response.output_item.done",
+      "response.output_item.added",
+      "response.reasoning_summary_part.added",
+      "response.reasoning_summary_text.delta",
+      "response.reasoning_summary_text.done",
+      "response.reasoning_summary_part.done",
+      "response.output_item.done",
+      "response.output_item.added",
+      "response.function_call_arguments.delta",
+      "response.function_call_arguments.done",
+      "response.output_item.done",
+      "response.completed",
+    ]);
+    expect(sent.map((event) => event.sequence_number)).toEqual(sent.map((_, index) => index));
+    expect(phases(sent).streamed).toEqual(["commentary"]);
+  });
+
+  test("an error after a message leaves it without a phase", () => {
+    const sent = toCodex(codexRequest({}), (emit) => {
+      emit({ kind: "text", text: "Hm" });
+      emit({ kind: "error", message: "overloaded", code: null, vendorError: null });
+    });
+    const done = sent.find((event) => event.type === "response.output_item.done")!;
+    expect(done.item).not.toHaveProperty("phase");
+  });
+
+  test("a whole reply's messages say their phase too", () => {
+    const usage = emptyUsage();
+    const render = (reply: Parameters<typeof renderResponses>[0]) =>
+      (renderResponses(reply, { model: "m", request: codexRequest({}) }).output as unknown[])
+        .filter((item) => (item as Record<string, unknown>).type === "message")
+        .map((item) => (item as Record<string, unknown>).phase);
+    const withCall = {
+      id: "r",
+      stop: "tool" as const,
+      usage,
+      parts: [
+        { kind: "text" as const, text: "Checking." },
+        { kind: "tool_call" as const, id: "c1", name: "shell", args: "{}" },
+      ],
+    };
+    expect(render(withCall)).toEqual(["commentary"]);
+    const answer = {
+      id: "r",
+      stop: "stop" as const,
+      usage,
+      parts: [{ kind: "text" as const, text: "Done." }],
+    };
+    expect(render(answer)).toEqual(["final_answer"]);
+    expect(render({ ...answer, stop: "length" })).toEqual([undefined]);
   });
 });

@@ -10,6 +10,7 @@ import {
   isRecord,
   parseJson,
   structuredErrorMessage,
+  redactKey,
 } from "./upstream-http.js";
 
 /*
@@ -90,7 +91,7 @@ export async function testUpstreamConnection(input: {
       ok: false,
       status,
       durationMs: elapsed(),
-      error: { code, message: message.replaceAll(input.apiKey, "***") },
+      error: { code, message: redactKey(message, input.apiKey) },
     },
   });
 

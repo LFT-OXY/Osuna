@@ -1,4 +1,4 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/responses.go，phase.go 的 phaseOutput、heldMost）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { createHash } from "node:crypto";
@@ -11,6 +11,7 @@ import {
   TOOL_RESULT_RECEIVED,
   argsOf,
   attachmentText,
+  callsTool,
   dataUrl,
   effortOf,
   imagePart,
@@ -36,6 +37,8 @@ import {
   type Tool,
   type ToolChoice,
   type Usage,
+  vendorErrorFields,
+  vendorErrorOf,
 } from "./ir.js";
 import { sseEvent } from "./sse.js";
 
@@ -75,7 +78,9 @@ function callIdOf(item: unknown): string {
 /**
  * 一串调用与结果之间夹着的项（Codex 每个缩过图的结果后面写的 <image_resize_notice>）挪到这串的末尾：
  * 检查配对的上游会认为这串在那里断了而拒收（火山方舟、OpenCode Zen）。带 call_id 的项永远不动；
- * 第一个结果之前，模型自己写的项（推理、它的文字、*_call）是它这一步的，留在原处。
+ * 第一个结果之前，模型自己写的推理与 *_call 是它这一步的，留在原处；它在两个调用之间说的话（assistant 消息）
+ * 连同紧挨在前面的推理挪到这串第一个调用之前：把请求转成 Chat 的上游会让调用后的文字另起一条 assistant 消息，
+ * 前一条的调用就成了没人回答的（OpenCode Go「No tool output found」，magpie #2100）。
  * 只有后面有结果回答它的调用才算开了一串。
  */
 export function joinToolRuns(body: string): string {
@@ -84,10 +89,11 @@ export function joinToolRuns(body: string): string {
   if (!parsed) return body;
   const { input } = parsed;
   const isResult = (item: unknown) => callIdOf(item) !== "" && typeOf(item).endsWith("_output");
+  const isAssistantText = (item: unknown) =>
+    typeOf(item) === "message" && isRecord(item) && item.role === "assistant";
   const modelsOwn = (item: unknown) => {
     const type = typeOf(item);
-    const assistant = type === "message" && isRecord(item) && item.role === "assistant";
-    return type === "reasoning" || assistant || type.endsWith("_call");
+    return type === "reasoning" || isAssistantText(item) || type.endsWith("_call");
   };
   // answeredLater[i]：位置 i 的调用后面有回答它的结果。
   const ahead = new Set<string>();
@@ -100,17 +106,27 @@ export function joinToolRuns(body: string): string {
   const out: unknown[] = [];
   let held: unknown[] = [];
   let moved = false;
-  // open：这串里结果还在后面的调用；answering：这串的结果已经开始了。
+  // open：这串里结果还在后面的调用；answering：这串的结果已经开始了；first：这串第一个调用在 out 里的位置。
   const open = new Set<string>();
   let answering = false;
+  let first = 0;
   input.forEach((item, index) => {
     const id = callIdOf(item);
+    const inRun = open.size > 0;
+    const interrupts = inRun && (answering || !modelsOwn(item));
+    const saidBetweenCalls = inRun && isAssistantText(item);
     if (isResult(item)) {
       if (open.delete(id)) answering = true;
     } else if (id !== "") {
+      const opensRun = answeredLater[index] && !inRun;
+      if (opensRun) first = out.length;
       if (answeredLater[index]) open.add(id);
-    } else if (open.size > 0 && (answering || !modelsOwn(item))) {
+    } else if (interrupts) {
       held.push(item);
+      moved = true;
+      return;
+    } else if (saidBetweenCalls) {
+      first = moveSaidBeforeCalls({ out, first, said: item });
       moved = true;
       return;
     }
@@ -127,6 +143,19 @@ export function joinToolRuns(body: string): string {
 }
 
 /**
+ * 模型在一串调用中间说的话（said），连同 out 末尾紧挨在它前面的推理，挪到这串第一个调用（out[first]）之前。
+ * 原地改 out，交回这串第一个调用挪动后的位置。
+ */
+function moveSaidBeforeCalls(input: { out: unknown[]; first: number; said: unknown }): number {
+  const { out, first } = input;
+  let from = out.length;
+  while (from > first && typeOf(out[from - 1]) === "reasoning") from--;
+  const step = [...out.splice(from), input.said];
+  out.splice(first, 0, ...step);
+  return first + step.length;
+}
+
+/**
  * 没有对应结果的调用（function_call / custom_tool_call）补一个「轮次被中断」的结果，
  * 放在它所在那串调用与结果的末尾。没有调用的结果交给 orphanedToolOutputs；
  * 回答上一个请求里调用的结果（previous_response_id）原样不动。
@@ -135,7 +164,13 @@ export function pairToolItems(body: string): string {
   if (!body.includes('_call"')) return body;
   const parsed = inputOf(body);
   if (!parsed) return body;
-  const { input } = parsed;
+  const paired = pairedToolInput(parsed.input);
+  if (paired === parsed.input) return body;
+  return JSON.stringify({ ...parsed.request, input: paired });
+}
+
+/** pairToolItems 对 input 数组的那一步；没什么可补时原样交回同一个数组。 */
+function pairedToolInput(input: unknown[]): unknown[] {
   const answered = new Set(
     input.flatMap((item) => {
       const type = typeOf(item);
@@ -166,8 +201,7 @@ export function pairToolItems(body: string): string {
       owed = [];
     }
   });
-  if (out.length === input.length) return body;
-  return JSON.stringify({ ...parsed.request, input: out });
+  return out.length === input.length ? input : out;
 }
 
 /**
@@ -237,6 +271,8 @@ export function parseResponsesRequest(body: unknown): GatewayRequest {
   const conversation = parseInput(body.input, stringOf(body.instructions));
   const offered = parseResponsesTools(body.tools);
   const chosen = parseResponsesToolChoice(body.tool_choice, offered);
+  const asked = Array.isArray(body.include) ? body.include : [];
+  const include = asked.filter((item): item is string => typeof item === "string");
   return {
     model: stringOf(body.model),
     system: conversation.system,
@@ -256,9 +292,21 @@ export function parseResponsesRequest(body: unknown): GatewayRequest {
     thinkOff: effort.trim().toLowerCase() === "none",
     parallel: typeof body.parallel_tool_calls === "boolean" ? body.parallel_tool_calls : null,
     metadata: null,
+    cacheKey: stringOf(body.prompt_cache_key),
+    include,
+    clientMetadata: body.client_metadata ?? null,
+    text: textOptions(body.text),
     format: openAIFormat(isRecord(body.text) ? body.text.format : null),
     named: chosen.named,
   };
+}
+
+/** text 里 format 以外的（verbosity）：format 另读成 Format，在各家自己的字段里问；普通文字的 format 留在原处（magpie textFormat）。 */
+function textOptions(text: unknown): Record<string, unknown> | null {
+  if (!isRecord(text)) return null;
+  if (openAIFormat(text.format) === null) return text;
+  const { format: _format, ...rest } = text;
+  return Object.keys(rest).length === 0 ? null : rest;
 }
 
 interface Conversation {
@@ -559,20 +607,26 @@ function parseResponsesToolChoice(choice: unknown, offered: OfferedTools): Chose
 /**
  * 历史思考只回原厂：Anthropic 的签名思考、Chat 的推理文字都不发给 Responses 上游；
  * 例外是要回放推理的 DeepSeek 模型，每轮推理写成 reasoning 项，每一步都以推理开头（reasonFirst）。
+ * 工具往来照直通前那样修补：同一个调用的第二个答复不发，没有答复的调用补上中断的结果（magpie #2262、#2222）。
  */
 export function buildResponsesRequest(
   request: GatewayRequest,
   model: string,
 ): Record<string, unknown> {
   const replay = replaysThinking(model);
-  const input = responsesInput(request.messages, replay);
+  const input = responsesInput(withoutSecondAnswers(request.messages), replay);
+  const ordered = replay ? (reasonFirst(input) ?? input) : input;
   const out: Record<string, unknown> = {
     model,
-    input: replay ? (reasonFirst(input) ?? input) : input,
+    input: pairedToolInput(ordered),
     stream: request.stream,
     store: false,
   };
-  if (request.format) out.text = { format: responsesFormat(request.format) };
+  if (request.clientMetadata !== null) out.client_metadata = request.clientMetadata;
+  const text = request.format ? { format: responsesFormat(request.format) } : {};
+  const asksText = request.text !== null || request.format !== null;
+  if (asksText) out.text = { ...request.text, ...text };
+  if (request.cacheKey !== "") out.prompt_cache_key = request.cacheKey;
   if (request.system !== "") out.instructions = request.system;
   if (request.maxTokens > 0) out.max_output_tokens = request.maxTokens;
   if (request.temperature !== null) out.temperature = request.temperature;
@@ -581,7 +635,50 @@ export function buildResponsesRequest(
   if (effort) out.reasoning = { effort, summary: "auto" };
   else if (request.thinking) out.reasoning = { summary: "auto" };
   if (request.tools.length > 0) Object.assign(out, responsesTools(request));
+  const include = includedFor({ include: request.include, reasons: out.reasoning !== undefined });
+  if (include.length > 0) out.include = include;
   return out;
+}
+
+/**
+ * 客户端的 include 照没有中转站时那样发，去掉重复；封存的推理只在要推理时要，像 Codex 那样：
+ * OpenAI 不让不推理的模型给它（magpie buildResponses）。
+ */
+function includedFor(input: { include: string[]; reasons: boolean }): string[] {
+  const out: string[] = [];
+  for (const item of input.include) {
+    const sealedWithoutReasoning = item === "reasoning.encrypted_content" && !input.reasons;
+    if (item === "" || out.includes(item) || sealedWithoutReasoning) continue;
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * 去掉前面已经有答复的调用的又一个答复（连同它带的图片），第一个答复为准；同一个 id 又调用了一次的，
+ * 它自己的答复照发。没有 id 的结果不动。不改 messages 本身：换家时还要从同一个请求再翻译。
+ */
+function withoutSecondAnswers(messages: Message[]): Message[] {
+  const answered = new Set<string>();
+  let changed = false;
+  const out: Message[] = [];
+  for (const message of messages) {
+    const parts = message.parts.filter((part) => {
+      if (part.kind === "tool_call" && part.id !== "") answered.delete(part.id);
+      if (part.kind !== "tool_result") return true;
+      if (part.callId === "") return true;
+      if (answered.has(part.callId)) return false;
+      answered.add(part.callId);
+      return true;
+    });
+    if (parts.length === message.parts.length) {
+      out.push(message);
+      continue;
+    }
+    changed = true;
+    if (parts.length > 0) out.push({ ...message, parts });
+  }
+  return changed ? out : messages;
 }
 
 function responsesInput(messages: Message[], replay: boolean): unknown[] {
@@ -844,7 +941,27 @@ export class ResponsesDecoder {
 
   decode(data: string, emit: EmitEvent): void {
     const event = parseJson(data);
-    if (!isRecord(event)) return;
+    if (isRecord(event)) this.event(event, emit);
+  }
+
+  /** 整份回复（不流式）：照它流出来时的事件读一遍。错误体照一个事件读。 */
+  whole(body: unknown, emit: EmitEvent): void {
+    if (!isRecord(body)) return;
+    if (!Array.isArray(body.output)) {
+      this.event(body, emit);
+      return;
+    }
+    this.event({ type: "response.created", response: body }, emit);
+    for (const item of body.output.filter(isRecord)) {
+      this.event({ type: "response.output_item.added", item }, emit);
+      for (const delta of itemDeltas(item)) this.event(delta, emit);
+      this.event({ type: "response.output_item.done", item }, emit);
+    }
+    // 完成、截断还是失败，finished 按 status 认。
+    this.event({ type: "response.completed", response: body }, emit);
+  }
+
+  private event(event: Record<string, unknown>, emit: EmitEvent): void {
     const item = isRecord(event.item) ? event.item : {};
     const response = isRecord(event.response) ? event.response : {};
     switch (event.type) {
@@ -887,19 +1004,25 @@ export class ResponsesDecoder {
         // error 事件，或别的形状里带着的错误：照样是回复的结束（magpie #1933）。
         if (event.type === "error" || carries(event.error)) {
           this.endCall(emit);
-          emit({ kind: "error", ...errorOf(event.error, event.message) });
+          const vendorError = vendorErrorOf(event.error);
+          emit({ kind: "error", ...errorOf(event.error, event.message), vendorError });
         }
     }
   }
 
   private itemAdded(item: Record<string, unknown>, emit: EmitEvent): void {
     this.endCall(emit);
-    if (item.type === "function_call") {
+    const type = stringOf(item.type);
+    if (type === "function_call") {
       this.called = true;
       this.calling = true;
       emit({ kind: "tool_start", id: stringOf(item.call_id), name: stringOf(item.name) });
-    } else if (item.type === "reasoning") {
+    } else if (type === "reasoning") {
       emit({ kind: "think_start" });
+    } else if (callsTool(type)) {
+      // Codex 自己的调用（apply_patch 之类）也等客户端去调；服务端工具不用。
+      if (CALL_TYPES.has(type)) this.called = true;
+      emit({ kind: "other_tool" });
     }
   }
 
@@ -928,7 +1051,8 @@ export class ResponsesDecoder {
     const failed =
       carries(response.error) || input.type === "response.failed" || response.status === "failed";
     if (failed) {
-      emit({ kind: "error", ...errorOf(response.error, undefined) });
+      const vendorError = vendorErrorOf(response.error);
+      emit({ kind: "error", ...errorOf(response.error, undefined), vendorError });
       return;
     }
     let stop: StopReason = "stop";
@@ -940,6 +1064,7 @@ export class ResponsesDecoder {
     }
     emit({ kind: "stop", stop });
     emit({ kind: "usage", usage: usageFromResponses(response.usage) });
+    emit({ kind: "done" });
   }
 
   private endCall(emit: EmitEvent): void {
@@ -953,9 +1078,30 @@ export class ResponsesDecoder {
 }
 
 function listsCall(output: unknown): boolean {
-  return (
-    Array.isArray(output) && output.some((item) => isRecord(item) && item.type === "function_call")
-  );
+  return Array.isArray(output) && output.some((item) => CALL_TYPES.has(typeOf(item)));
+}
+
+/** 整份回复里一项说的话，写成流里的 delta 事件：消息的文字，推理的摘要与文字。 */
+function itemDeltas(item: Record<string, unknown>): Record<string, unknown>[] {
+  const parts = (key: string) => {
+    const value = item[key];
+    return Array.isArray(value) ? value.filter(isRecord) : [];
+  };
+  if (item.type === "message") {
+    return parts("content")
+      .filter((part) => part.type === "output_text")
+      .map((part) => ({ type: "response.output_text.delta", delta: part.text }));
+  }
+  if (item.type !== "reasoning") return [];
+  const summaries = parts("summary").map((part) => ({
+    type: "response.reasoning_summary_text.delta",
+    delta: part.text,
+  }));
+  const texts = parts("content").map((part) => ({
+    type: "response.reasoning_text.delta",
+    delta: part.text,
+  }));
+  return [...summaries, ...texts];
 }
 
 /** 流出来的参数与完成事件给的参数里更全的一个，JSON 优先。 */
@@ -1023,6 +1169,34 @@ function callTo(input: {
 
 type OpenItem = "text" | "thinking" | "tool_call" | null;
 
+/**
+ * assistant 消息的 phase，像 OpenAI 自己的模型那样：调用之前说的过程话是 commentary，结束这一轮的答复是 final_answer。
+ * Codex 把做完的一轮里的过程话和调用折进「Worked for …」，没有 phase 的消息当答复（magpie #2437）。
+ */
+type Phase = "commentary" | "final_answer";
+
+// 等着定 phase 的消息后面最多扣这么多事件；再多就不等了，消息不带 phase。
+const HELD_MOST = 512;
+
+interface HeldEvent {
+  type: string;
+  fields: Record<string, unknown>;
+}
+
+/**
+ * 给整份回复里的 assistant 消息标 phase：最后一个不是推理的项之前的是 commentary；
+ * 它本身是消息、且回复正常结束（completed）时是 final_answer。
+ */
+function phaseOutput(input: { output: Record<string, unknown>[]; completed: boolean }): void {
+  const { output } = input;
+  const last = output.findLastIndex((item) => item.type !== "reasoning");
+  output.forEach((item, index) => {
+    if (item.type !== "message") return;
+    if (index < last) item.phase = "commentary";
+    else if (index === last && input.completed) item.phase = "final_answer";
+  });
+}
+
 /** 中间事件 → Responses 流。Codex 从 output_item.done 读整项，从 response.completed 读用量。 */
 export class ResponsesEncoder {
   private readonly collector = new ReplyCollector();
@@ -1039,6 +1213,9 @@ export class ResponsesEncoder {
   // 上游开始了新的一段推理：下一段推理自成一项。
   private thinkNew = false;
   private call = { id: "", name: "" };
+  // 说完了、还不知道 phase 的消息，与扣在它后面的事件：等下一个不是推理的项或回复结束才定。
+  private heldMessage: Record<string, unknown> | null = null;
+  private held: HeldEvent[] = [];
 
   constructor(
     private readonly input: {
@@ -1120,9 +1297,14 @@ export class ResponsesEncoder {
         break;
       case "error":
         this.closeItem();
+        this.release(null);
         this.send("response.failed", {
           response: this.response("failed", {
-            error: { code: event.code ?? "server_error", message: event.message },
+            error: {
+              code: event.code ?? "server_error",
+              message: event.message,
+              ...vendorErrorFields(event.vendorError),
+            },
           }),
         });
         break;
@@ -1136,6 +1318,8 @@ export class ResponsesEncoder {
     this.closeItem();
     const reply = this.collector.finish();
     const { status, incomplete } = endingOf(reply.stop);
+    // 截断的回复不猜答复。
+    this.release(status === "completed" ? "final_answer" : null);
     this.send(status === "completed" ? "response.completed" : "response.incomplete", {
       response: this.response(status, {
         usage: usageToResponses(reply.usage),
@@ -1166,6 +1350,8 @@ export class ResponsesEncoder {
     item: Record<string, unknown>;
   }): void {
     this.closeItem();
+    // 推理之后才知道消息后面跟着什么。
+    if (input.kind !== "thinking") this.release("commentary");
     this.outputIndex++;
     this.open = input.kind;
     this.itemId = input.prefix + newId();
@@ -1195,6 +1381,9 @@ export class ResponsesEncoder {
         status: "completed",
         content: [part],
       };
+      // 它的 done 等后面的事件说出 phase 再发。
+      this.release("commentary");
+      this.heldMessage = item;
     } else if (this.open === "thinking") {
       const part = { type: "summary_text", text: this.text };
       this.send("response.reasoning_summary_text.done", {
@@ -1248,7 +1437,29 @@ export class ResponsesEncoder {
     return { ...responseShell({ ...shell, output: this.output }), ...extra };
   }
 
+  /** 有消息在等 phase 时扣着，否则马上写。 */
   private send(type: string, fields: Record<string, unknown>): void {
+    if (this.heldMessage === null) {
+      this.write(type, fields);
+      return;
+    }
+    this.held.push({ type, fields });
+    if (this.held.length > HELD_MOST) this.release(null);
+  }
+
+  /** 写出等着的消息与扣在它后面的事件；phase 为 null 时消息照原样不带 phase。 */
+  private release(phase: Phase | null): void {
+    const message = this.heldMessage;
+    if (message === null) return;
+    if (phase !== null) message.phase = phase;
+    const held = this.held;
+    this.heldMessage = null;
+    this.held = [];
+    for (const event of held) this.write(event.type, event.fields);
+  }
+
+  /** 序号按写出的顺序编。 */
+  private write(type: string, fields: Record<string, unknown>): void {
     const data = { type, sequence_number: this.sequence++, ...fields };
     this.input.write(sseEvent(type, data));
   }
@@ -1305,6 +1516,7 @@ export function renderResponses(
     }
   });
   const { status, incomplete } = endingOf(reply.stop);
+  phaseOutput({ output: items, completed: status === "completed" });
   const shell = responseShell({
     id: responseId(reply.id),
     createdAt: Math.floor(Date.now() / 1000),

@@ -3,6 +3,7 @@
 
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
+import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import {
   FAILURE_WORDS,
@@ -16,7 +17,8 @@ import {
 
 /*
  * 冷却：一家接口失败后多久不被自动选中。只记在内存里，daemon 重启清零。
- * 冷却按整家接口记；只因模型被拒（这把 key 不提供它）时只冷却这家的这个模型。
+ * 冷却按整家接口记；只因模型被拒（这把 key 不提供它）、厂商说只是这个模型的额度、或这个模型自己接连失败时，
+ * 只冷却这家的这个模型。
  * 冷却结束的时刻也会记一行日志，所以每条冷却挂一个定时器。
  */
 
@@ -71,10 +73,11 @@ export interface EndpointRest {
   said: string;
 }
 
-/** 一次失败交给冷却记录的样子：哪家、哪个模型、上游怎么答的。 */
+/** 一次失败交给冷却记录的样子：哪家、哪个模型、问的哪个地址、上游怎么答的。 */
 export interface FailureReport {
   endpoint: { id: string; name: string };
   model: string;
+  baseUrl: string;
   status: number;
   headers: IncomingHttpHeaders;
   body: string;
@@ -158,8 +161,24 @@ function resetsWritten(body: string, now: number): number {
   const offsetMinutes = Number(match[9] ?? 0);
   if (offsetHours > 14 || offsetMinutes > 59) return 0;
   const offset = (match[7] === "-" ? -1 : 1) * (offsetHours * 60 + offsetMinutes) * MINUTE;
-  const local = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
-  // 2026-13-45、24:61 这类会被进位的不是真实日期。
+  const local = wallClock({ y, mo, d, h, mi, s });
+  if (local === null) return 0;
+  const wait = local - offset - now;
+  return wait > 0 && wait <= COOLDOWN.longestWritten ? wait : 0;
+}
+
+/** 按 UTC 读的年月日时分秒；2026-13-45、24:61 这类会被进位的不是真实日期，返回 null。 */
+function wallClock(parts: {
+  y: number;
+  mo: number;
+  d: number;
+  h: number;
+  mi: number;
+  s: number;
+}): number | null {
+  const { y, mo, d, h, mi, s } = parts;
+  const at = Date.UTC(y, mo - 1, d, h, mi, s);
+  const local = new Date(at);
   const carried =
     local.getUTCFullYear() !== y ||
     local.getUTCMonth() !== mo - 1 ||
@@ -167,16 +186,93 @@ function resetsWritten(body: string, now: number): number {
     local.getUTCHours() !== h ||
     local.getUTCMinutes() !== mi ||
     local.getUTCSeconds() !== s;
-  if (carried) return 0;
-  const wait = local.getTime() - offset - now;
+  return carried ? null : at;
+}
+
+// 智谱写恢复时间用的时区：北京时间。
+const ZHIPU_OFFSET = 8 * 60 * MINUTE;
+
+/**
+ * 智谱 1308、1310 写的恢复时间按北京时间读（magpie 的 resetsZhipu）。秒数被截断、后面自带时区
+ * （那归 resetsWritten 读）、不是真实日期、已过去或超过一周返回 0。
+ */
+function resetsZhipu(body: string, now: number): number {
+  const match = FAILURE_WORDS.zhipuResets.exec(wordsOf(body));
+  if (!match) return 0;
+  const after = (match[7] ?? "").trimStart();
+  const ownZone = /^(?:[\d:+\-Z]|UTC|GMT)/i.test(after);
+  if (ownZone) return 0;
+  const [y, mo, d, h, mi, s] = match.slice(1, 7).map((group) => Number(group ?? 0));
+  const at = wallClock({ y, mo, d, h, mi, s });
+  if (at === null) return 0;
+  const wait = at - ZHIPU_OFFSET - now;
   return wait > 0 && wait <= COOLDOWN.longestWritten ? wait : 0;
 }
 
-/** 错误里说的恢复时间：Claude Code 的 resets 行、ChatGPT 的 resets_at、文字写的日期；没说返回 0。 */
+/** resetsSpan / tryAgainIn 读出的天、小时、分钟；一个都没写或超过一周返回 0。 */
+function spanWritten(match: RegExpExecArray | null): number {
+  if (!match) return 0;
+  const [days, hours, minutes] = match.slice(1, 4);
+  if (days === undefined && hours === undefined && minutes === undefined) return 0;
+  const span =
+    Number(days ?? 0) * 24 * 60 * MINUTE +
+    Number(hours ?? 0) * 60 * MINUTE +
+    Number(minutes ?? 0) * MINUTE;
+  return span > COOLDOWN.longestWritten ? 0 : span;
+}
+
+/** 错误里说的恢复时间：Claude Code 的 resets 行、ChatGPT 的 resets_at、文字写的日期、智谱的北京时间、「resets in」；没说返回 0。 */
 export function resetsAt(body: string, now: number): number {
   const match = FAILURE_WORDS.resets.exec(body);
   if (match && Number(match[1]) * 1000 > now) return Number(match[1]) * 1000 - now;
-  return resetsIn(body, now) || resetsWritten(body, now);
+  return (
+    resetsIn(body, now) || resetsWritten(body, now) || resetsZhipu(body, now) || resetsAfter(body)
+  );
+}
+
+/** 「resets in 0h 19min」这类写的还有多久恢复；没写返回 0。 */
+function resetsAfter(body: string): number {
+  const written = FAILURE_WORDS.resetsSpan.exec(wordsOf(body));
+  return spanWritten(written);
+}
+
+/** Cline 免费模型额度用完时说的「Try again in 23h 59m」；不是 Cline 的这种拒绝返回 0。 */
+function clineBackIn(attempt: FailureReport): number {
+  if (!clineModelLimited(attempt)) return 0;
+  const written = FAILURE_WORDS.tryAgainIn.exec(wordsOf(attempt.body));
+  return spanWritten(written);
+}
+
+/** 请求发到 Cline 的 API（cline.bot 及其子域名），被拒是因为某个免费模型当天的额度用完。 */
+function clineModelLimited(attempt: FailureReport): boolean {
+  const host = hostOf(attempt.baseUrl);
+  const atCline = host === "cline.bot" || host.endsWith(".cline.bot");
+  return atCline && FAILURE_WORDS.clineFreeLimit.test(wordsOf(attempt.body));
+}
+
+/**
+ * 什么时候能再问，写给 Agent 看：当天只写时分，否则带日期；后面跟 daemon 所在机器的时区，
+ * 读的人可能不在同一个时区（magpie 的 heldClock）。
+ */
+export function heldClock(at: number, now: number): string {
+  const back = new Date(at);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const time = `${pad(back.getHours())}:${pad(back.getMinutes())}`;
+  const sameDay = back.toDateString() === new Date(now).toDateString();
+  const date = `${back.getFullYear()}-${pad(back.getMonth() + 1)}-${pad(back.getDate())}`;
+  const offset = -back.getTimezoneOffset();
+  const sign = offset < 0 ? "-" : "+";
+  const away = Math.abs(offset);
+  const offsetHours = Math.floor(away / 60);
+  const offsetMinutes = away % 60;
+  const minutesPart = offsetMinutes > 0 ? `:${pad(offsetMinutes)}` : "";
+  const zone = `UTC${sign}${offsetHours}${minutesPart}`;
+  return sameDay ? `${time} ${zone}` : `${date} ${time} ${zone}`;
+}
+
+/** 第 again 次（从 0 起）原地重问前等多久：每次加倍。 */
+export function doubledPause(input: { retryPauseMs: number; again: number }): number {
+  return input.retryPauseMs * 2 ** input.again;
 }
 
 /**
@@ -192,7 +288,7 @@ export function passing(input: {
   now: number;
 }): { again: boolean; waitMs: number } {
   const said = retryAfter(input.headers, input.now);
-  const waitMs = said > 0 ? said : input.retryPauseMs * 2 ** input.again;
+  const waitMs = said > 0 ? said : doubledPause(input);
   if (waitMs > COOLDOWN.longestPause) return { again: false, waitMs: 0 };
   if ([408, 500, 502, 503, 504, 529].includes(input.status)) {
     return { again: input.again < COOLDOWN.lastRetries, waitMs };
@@ -208,13 +304,17 @@ export function passing(input: {
   return { again: false, waitMs: 0 };
 }
 
+/** 全在额度冷却时交出的：排第一那家的冷却，和最早恢复的时刻。 */
+export interface QuotaHold {
+  first: EndpointRest;
+  backAt: number;
+}
+
 /**
  * 候选的每一家都因 429 / 402 的额度用完或欠费在冷却、且留着厂商原话时，这次不再请求：
- * 交出最后一家的错误，`backAt` 是最早恢复的时刻。任何一家不是这样（或不在冷却）就返回 null。
+ * 交出排第一那家的错误，`backAt` 是最早恢复的时刻。任何一家不是这样（或不在冷却）就返回 null。
  */
-export function quotaHeld(
-  rests: ReadonlyArray<EndpointRest | null>,
-): { last: EndpointRest; backAt: number } | null {
+export function quotaHeld(rests: ReadonlyArray<EndpointRest | null>): QuotaHold | null {
   let backAt = Number.POSITIVE_INFINITY;
   for (const rest of rests) {
     const held =
@@ -226,13 +326,27 @@ export function quotaHeld(
     if (!held) return null;
     backAt = Math.min(backAt, rest.until ?? backAt);
   }
-  const last = rests.at(-1);
-  return last ? { last, backAt } : null;
+  const first = rests[0];
+  return first ? { first, backAt } : null;
 }
 
-/** 额度用完：错误里写的重置时间，其次 Retry-After，都没有就一刻钟；最多八天。 */
+/** 这些冷却都是额度用完或欠费：这几家多半都不会答（magpie 的 spentAfter）。 */
+export function spentAfter(rests: ReadonlyArray<EndpointRest | null>): boolean {
+  const spent = (rest: EndpointRest | null) => rest?.why === "quota" || rest?.why === "credit";
+  return rests.length > 0 && rests.every(spent);
+}
+
+/** 额度用完只是这个模型的：写明了恢复时间又说其他模型还能用，或 Cline 某个免费模型当天用完。 */
+function modelOwnQuota(attempt: FailureReport): boolean {
+  const words = wordsOf(attempt.body);
+  const otherModelsServe =
+    FAILURE_WORDS.resetsWhen.test(words) && FAILURE_WORDS.otherModels.test(words);
+  return otherModelsServe || clineModelLimited(attempt);
+}
+
+/** 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就一刻钟；最多八天。 */
 function quotaRest(attempt: FailureReport, now: number): { duration: number; by: RestBy } {
-  const resets = resetsAt(attempt.body, now);
+  const resets = resetsAt(attempt.body, now) || clineBackIn(attempt);
   const said = retryAfter(attempt.headers, now);
   if (resets > 0) return { duration: Math.min(resets, COOLDOWN.longestQuota), by: "resets" };
   if (said > 0) return { duration: said, by: "retry-after" };
@@ -244,12 +358,18 @@ function doubled(failures: number, longest: number): number {
   return Math.min(COOLDOWN.fallbackCooldown * 2 ** Math.min(failures - 1, 10), longest);
 }
 
+/** 其他失败记过一次后：按几次翻倍，冷却记在哪个键上。 */
+interface Backoff {
+  failures: number;
+  key: string;
+}
+
 export class EndpointCooldowns {
   private readonly logger: pino.Logger;
   private readonly now: () => number;
   // 冷却结束后记录仍留着：限流「刚结束又被限流」要看上一次。
   private readonly rests = new Map<string, EndpointRest>();
-  // 连续的其他失败次数，按冷却键记；答复成功清零。
+  // 连续的其他失败次数，按冷却键记，模型自己的另记一份（「<endpointId>/<model>」）；答复成功清零。
   private readonly failures = new Map<string, number>();
   private readonly endTimers = new Map<string, NodeJS.Timeout>();
 
@@ -276,11 +396,8 @@ export class EndpointCooldowns {
     const { id } = attempt.endpoint;
     const modelKey = `${id}/${attempt.model}`;
     const unserved = why === "other" && modelRefused(attempt.status, attempt.body);
-    const otherModelsServe =
-      why === "quota" &&
-      FAILURE_WORDS.resetsWhen.test(wordsOf(attempt.body)) &&
-      FAILURE_WORDS.otherModels.test(wordsOf(attempt.body));
-    const key = unserved || otherModelsServe ? modelKey : id;
+    const modelQuota = why === "quota" && modelOwnQuota(attempt);
+    let key = unserved || modelQuota ? modelKey : id;
 
     let duration: number | null;
     let by: RestBy;
@@ -300,13 +417,11 @@ export class EndpointCooldowns {
         duration = null;
         by = "auth";
         break;
-      case "other": {
-        failures = (this.failures.get(key) ?? 0) + 1;
-        this.failures.set(key, failures);
+      case "other":
+        ({ failures, key } = this.backoff({ key, modelKey, unserved }));
         duration = doubled(failures, COOLDOWN.longestRetry);
         by = "backoff";
         break;
-      }
     }
 
     const rest: EndpointRest = {
@@ -356,6 +471,24 @@ export class EndpointCooldowns {
         this.end(key);
       }
     }
+  }
+
+  /**
+   * 其他失败记一次，整家（或不提供的这个模型）一份，模型自己一份。模型自己的次数只有它自己答上才清零；
+   * 比整家的多，说明同一家别的模型其间答上过，失败是这个模型的：按它自己的次数翻倍，只冷却它（magpie #2241）。
+   */
+  private backoff(input: { key: string; modelKey: string; unserved: boolean }): Backoff {
+    const failures = this.countFailure(input.key);
+    if (input.unserved) return { failures, key: input.key };
+    const own = this.countFailure(input.modelKey);
+    if (own > failures) return { failures: own, key: input.modelKey };
+    return { failures, key: input.key };
+  }
+
+  private countFailure(key: string): number {
+    const failures = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, failures);
+    return failures;
   }
 
   private active(key: string): EndpointRest | null {

@@ -1,7 +1,11 @@
-// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn）
+// 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said，
+// decide.go 的 fitFor、internal/catalog/catalog.go 的 EffortRank 与 NearestEffort、maxoutput.go 的 askedOutput、internal/provider/models.go 的 OutputWithin，
+// 厂商说请求本身有问题时带上它的字段照 responses.go 的 requestRefused 与 saidError）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes } from "node:crypto";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ModelFacts } from "../../model-facts.js";
 import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
@@ -84,7 +88,8 @@ export interface NamedTool {
 /** 空为没说；`name:<工具名>` 为点名某个工具。 */
 export type ToolChoice = "" | "auto" | "none" | "required" | `name:${string}`;
 
-export type Effort = "" | "low" | "medium" | "high" | "xhigh" | "max";
+/** minimal、ultra 只来自按模型资料适配（requestForModel），读请求时归到 low、max。 */
+export type Effort = "" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 /** 客户端要的回答形状（结构化输出）：按 schema 的 JSON，或任意 JSON 对象。 */
 export type Format = { type: "json_object" } | SchemaFormat;
@@ -121,6 +126,15 @@ export interface GatewayRequest {
   parallel: boolean | null;
   // Anthropic 客户端的 metadata（Claude Code 的 user_id），只转给 Anthropic 上游。
   metadata: unknown;
+  // 客户端的 prompt_cache_key（Codex 发它这段对话的 id）：OpenAI 与前面的中转服务按它把对话送到缓存所在处。
+  // 转给 Chat 与 Responses 上游；空为没给。
+  cacheKey: string;
+  // Responses 客户端的 include（要上游另外给的输出，如 Codex 的 reasoning.encrypted_content），只转给 Responses 上游。
+  include: string[];
+  // Responses 客户端的 client_metadata（Codex 的安装与会话 id，中转服务可能查），只转给 Responses 上游；null 为没给。
+  clientMetadata: unknown;
+  // Responses 客户端的 text 去掉 format（Codex 的 verbosity），只转给 Responses 上游；null 为没给。
+  text: Record<string, unknown> | null;
   // 结构化输出；null 为普通文字。
   format: Format | null;
   // 按扁平名索引的 Codex 命名空间工具与自由文本工具；别的协议的客户端没有。
@@ -128,6 +142,9 @@ export interface GatewayRequest {
 }
 
 export type StopReason = "stop" | "length" | "tool" | "filter";
+
+/** Anthropic 回复的 stop_details：拒答时分类器说的类别与解释，原样转给 Anthropic 客户端（magpie ir.go 的 StopDetails）。 */
+export type StopDetails = Record<string, unknown>;
 
 /** Anthropic 口径：input 不含缓存读写，OpenAI 的 prompt 含。 */
 export interface Usage {
@@ -150,17 +167,61 @@ export type StreamEvent =
   | { kind: "tool_start"; id: string; name: string }
   // 参数 JSON 的一段。
   | { kind: "tool_args"; text: string }
-  | { kind: "stop"; stop: StopReason }
+  // 中间格式不带的工具项（服务端工具、Codex 自己的 apply_patch 之类）：只说明回复里有它，编码器不写出。
+  | { kind: "other_tool" }
+  // details 只有 Anthropic 上游给了 stop_details 时才有。
+  | { kind: "stop"; stop: StopReason; details?: StopDetails }
   | { kind: "usage"; usage: Usage }
-  | { kind: "error"; message: string; code: string | null };
+  // 上游发了结束标记：Anthropic 的 message_stop、Chat 的 [DONE]、Responses 的 completed 或 incomplete。
+  | { kind: "done" }
+  | { kind: "error"; message: string; code: string | null; vendorError: VendorError | null };
+
+/**
+ * 厂商说是请求本身有问题（错误对象的 type 是 invalid_request_error）时它自己的错误：转给 Agent 时带上它的
+ * type、code、param，状态读成 400，重问也一样被拒（magpie 的 requestRefused、saidError）。只按 type 认，不看措辞。
+ */
+export interface VendorError {
+  type: string;
+  code: string | null;
+  param: string | null;
+}
+
+/** 错误对象是不是厂商说请求本身有问题。 */
+export function vendorErrorOf(error: unknown): VendorError | null {
+  if (!isRecord(error) || error.type !== "invalid_request_error") return null;
+  const code = stringOf(error.code) || null;
+  const param = stringOf(error.param) || null;
+  return { type: error.type, code, param };
+}
+
+/** 写给 Agent 的错误对象上要带的厂商字段：有值的 type、code、param。 */
+export function vendorErrorFields(vendorError: VendorError | null): Record<string, string> {
+  if (vendorError === null) return {};
+  const fields: Record<string, string> = { type: vendorError.type };
+  if (vendorError.code !== null) fields.code = vendorError.code;
+  if (vendorError.param !== null) fields.param = vendorError.param;
+  return fields;
+}
 
 export type EmitEvent = (event: StreamEvent) => void;
+
+/** 解码出的事件流上的一道修补：按需扣着、改了再交给下一道；流结束时交出还扣着的。 */
+export interface ReplyFilter {
+  event(event: StreamEvent): void;
+  end(): void;
+}
+
+/** 什么都不改的一道：直接交给下一道。 */
+export function passingFilter(emit: EmitEvent): ReplyFilter {
+  return { event: emit, end: () => {} };
+}
 
 /** 非流式客户端拿到的整份回复。 */
 export interface Reply {
   id: string;
   parts: Part[];
   stop: StopReason;
+  stopDetails?: StopDetails;
   usage: Usage;
 }
 
@@ -286,6 +347,11 @@ export function textOf(parts: Part[]): string {
   return parts.map((part) => (part.kind === "text" ? part.text : "")).join("");
 }
 
+/** 告诉模型 ToolSearch 加载的这个工具已经能用了（tool_reference 不能原样发时）。 */
+export function toolLoadedText(name: string): string {
+  return `Tool ${name} is loaded and can be called now.`;
+}
+
 /**
  * 字符串，或 {type:"text"} 块的数组（Anthropic 的 system、工具结果……），读成一段文字。
  * Claude Code 的 tool_reference（ToolSearch 加载延后的工具）告诉模型工具已经能用了。
@@ -304,7 +370,7 @@ export function stringOrText(value: unknown): string {
       out += block.text;
     } else if (type === "tool_reference") {
       if (out !== "") out += "\n";
-      out += `Tool ${String(block.tool_name)} is loaded and can be called now.`;
+      out += toolLoadedText(String(block.tool_name));
     }
   }
   return out;
@@ -330,6 +396,11 @@ export function joinSplitCalls(messages: Message[]): Message[] {
     out.push({ role: message.role, parts: [...message.parts] });
   }
   return out;
+}
+
+/** 回复里这一类块或项是工具：调用、工具结果、服务端工具（magpie 的 streamPart.said）。 */
+export function callsTool(type: string): boolean {
+  return type.includes("call") || type.includes("tool") || type.startsWith("mcp_");
 }
 
 /** 给要求回放推理、这一轮却没有推理的上游的推理：一个空格。 */
@@ -372,6 +443,11 @@ export function formatInstruction(format: Format): string {
     : "Respond with a single JSON object and nothing else.";
 }
 
+/** 系统提示末尾另起一段说上这句；没有系统提示时就是这句。 */
+export function withLine(system: string, line: string): string {
+  return system === "" ? line : `${system}\n\n${line}`;
+}
+
 /** 各协议的推理力度名字统一成这几档。 */
 export function effortOf(value: unknown): Effort {
   const effort = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -387,14 +463,86 @@ export function effortOf(value: unknown): Effort {
 }
 
 /**
- * 不知道上游模型认哪几档：xhigh / max 降到 OpenAI 通用的 high。
+ * OpenAI 格式的推理力度；档位已由 requestForModel 按模型适配。
  * 客户端用 OpenAI 的 effort none 关推理（effortOf 读成 low，Anthropic 的 disabled 不带力度）时照原样发 none；
  * 上游不收再由中转站用 thinkingBackOn 重发。
  */
 export function openAIEffort(request: GatewayRequest): string | null {
   if (request.thinkOff && request.effort !== "") return "none";
-  if (request.effort === "") return null;
-  return request.effort === "xhigh" || request.effort === "max" ? "high" : request.effort;
+  return request.effort === "" ? null : request.effort;
+}
+
+/** 各家说的推理档位，从弱到强（magpie EffortRank）。 */
+const EFFORT_RANK: readonly (Effort | "none")[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+];
+
+/**
+ * 模型自己的档位里离要的最近的一档，一样近取高的，不挑 none（magpie NearestEffort）。
+ * 档位不知道、本来就有要的这档、或要的不是认得的档位时照要的。
+ */
+export function nearestEffort(want: Effort, levels: string[]): Effort {
+  const at = EFFORT_RANK.indexOf(want);
+  const keepsWant = levels.length === 0 || at < 0 || levels.includes(want);
+  if (keepsWant) return want;
+  let best = want;
+  let distance = EFFORT_RANK.length;
+  for (const level of levels) {
+    const index = EFFORT_RANK.findIndex((rung) => rung === level);
+    const rung = EFFORT_RANK[index];
+    if (rung === undefined || rung === "none") continue;
+    const gap = Math.abs(index - at);
+    const isCloser = gap < distance;
+    const isTieUp = gap === distance && index > at;
+    if (isCloser || isTieUp) {
+      best = rung;
+      distance = gap;
+    }
+  }
+  return best;
+}
+
+/**
+ * 按模型资料改翻译出的请求（magpie forwardTranslated 的 fitFor、askedOutput 与 build 的 rejectTemp）：
+ * - 推理档位挑模型自己有的最近一档；知道它没有可挑的档位（资料里档位是空列表，magpie Levelless）时不超过 high，
+ *   档位不知道的照要的发。
+ * - Messages 必须给回复上限：请求没给时按模型公布的上限（不超过窗口）填，不知道才由构建用 16384。
+ * - 已知不收 temperature、top_p 的模型发 Chat、Responses 时不带；Claude 走 Messages 另有 refusesSampling。
+ */
+export function requestForModel(input: {
+  request: GatewayRequest;
+  to: ApiEndpointRequestFormat;
+  facts: ModelFacts;
+}): GatewayRequest {
+  const { request, facts } = input;
+  const messages = input.to === "anthropic_messages";
+  const levels = facts.efforts;
+  const nearest = nearestEffort(request.effort, levels ?? []);
+  const levelless = levels !== undefined && levels.length === 0;
+  const aboveHigh = EFFORT_RANK.indexOf(nearest) > EFFORT_RANK.indexOf("high");
+  const capsEffort = levelless && aboveHigh;
+  const effort = capsEffort ? "high" : nearest;
+  const fillsMaxTokens = messages && request.maxTokens <= 0;
+  const maxTokens = fillsMaxTokens ? publishedOutput(facts) : request.maxTokens;
+  const dropsSampling = !messages && facts.takesSampling === false;
+  const temperature = dropsSampling ? null : request.temperature;
+  const topP = dropsSampling ? null : request.topP;
+  return { ...request, effort, maxTokens, temperature, topP };
+}
+
+/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie OutputWithin）。 */
+function publishedOutput(facts: ModelFacts): number {
+  const output = facts.output ?? 0;
+  const context = facts.context ?? 0;
+  const pastWindow = context > 0 && output > context;
+  return pastWindow ? context : output;
 }
 
 /** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */
@@ -406,11 +554,14 @@ export function thinkingBackOn(request: GatewayRequest): GatewayRequest {
 export function budgetOf(effort: Effort): number {
   const budgets: Record<Effort, number> = {
     "": 10_000,
+    // magpie budgetOf 不认的档位按 10000。
+    minimal: 10_000,
     low: 4096,
     medium: 10_000,
     high: 24_000,
     xhigh: 32_000,
     max: 32_000,
+    ultra: 10_000,
   };
   return budgets[effort];
 }
@@ -447,7 +598,7 @@ export class ReplyCollector {
   private args = "";
   // 收到 think_start：下一段推理自成一块。
   private fresh = false;
-  error: { message: string; code: string | null } | null = null;
+  error: Omit<Extract<StreamEvent, { kind: "error" }>, "kind"> | null = null;
 
   add(event: StreamEvent): void {
     switch (event.kind) {
@@ -458,8 +609,11 @@ export class ReplyCollector {
       case "usage":
         addUsage(this.reply.usage, event.usage);
         return;
+      case "done":
+      case "other_tool":
+        return;
       case "error":
-        this.error = { message: event.message, code: event.code };
+        this.error = { message: event.message, code: event.code, vendorError: event.vendorError };
         return;
       case "think_start":
         this.fresh = true;
@@ -491,6 +645,7 @@ export class ReplyCollector {
       case "stop":
         this.closeTool();
         this.reply.stop = event.stop;
+        if (event.details) this.reply.stopDetails = event.details;
         return;
       default:
     }

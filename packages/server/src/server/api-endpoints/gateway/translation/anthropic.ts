@@ -10,6 +10,7 @@ import {
   argsOf,
   attachmentText,
   budgetOf,
+  callsTool,
   effortOf,
   effortOfBudget,
   FORMAT_NAME,
@@ -20,6 +21,7 @@ import {
   sourceImage,
   stringOrText,
   toolOutput,
+  withLine,
   type EmitEvent,
   type SchemaFormat,
   type GatewayRequest,
@@ -27,13 +29,17 @@ import {
   type Message,
   type Part,
   type Reply,
+  type StopDetails,
   type StopReason,
   type StreamEvent,
   type Tool,
   type ToolChoice,
   type ToolResultPart,
   type Usage,
+  vendorErrorFields,
 } from "./ir.js";
+import { withoutSampling } from "../refused-fields.js";
+import { objectSchema } from "./object-root.js";
 import { sseEvent } from "./sse.js";
 
 /*
@@ -65,7 +71,11 @@ export function parseAnthropicRequest(body: unknown): GatewayRequest {
         ? false
         : null,
     metadata: body.metadata ?? null,
-    format: parseFormat(body.output_config),
+    cacheKey: "",
+    include: [],
+    clientMetadata: null,
+    text: null,
+    format: anthropicFormat(body.output_config),
     named: {},
     ...parseThinking(body),
   };
@@ -155,7 +165,7 @@ function parseToolChoice(choice: unknown): ToolChoice {
 }
 
 /** output_config.format 只有带 schema 的一种。 */
-function parseFormat(config: unknown): SchemaFormat | null {
+export function anthropicFormat(config: unknown): SchemaFormat | null {
   if (!isRecord(config) || !isRecord(config.format)) return null;
   const { format } = config;
   if (format.type !== "json_schema" || format.schema === undefined || format.schema === null) {
@@ -205,7 +215,7 @@ export function buildAnthropicRequest(
   // output_config.format 只收 schema：任意 JSON 对象用话写进系统提示。
   const system =
     format?.type === "json_object"
-      ? [request.system, formatInstruction(format)].filter((part) => part !== "").join("\n\n")
+      ? withLine(request.system, formatInstruction(format))
       : request.system;
   const replay = replaysThinking(model) && !isAnthropicModel(model);
   const messages = pairToolBlocks(anthropicMessages({ messages: request.messages, replay }));
@@ -220,7 +230,10 @@ export function buildAnthropicRequest(
   }
   // 系统提示与工具每轮都一样，和对话分开缓存。
   if (system !== "") out.system = [{ type: "text", text: system, cache_control: EPHEMERAL }];
-  Object.assign(out, anthropicThinking(request, model));
+  // 不收采样参数的 Claude 不发 temperature、top_p（magpie samplingAsTaken，直通也一样）。
+  let thinking = anthropicThinking(request, model);
+  if (refusesSampling(model)) thinking = withoutSampling(thinking);
+  Object.assign(out, thinking);
   const config: Record<string, unknown> = {};
   const effort = adaptiveEffort(request, model);
   if (effort !== null) config.effort = effort;
@@ -233,7 +246,8 @@ export function buildAnthropicRequest(
     const tools: Record<string, unknown>[] = request.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
-      input_schema: tool.schema ?? { type: "object", properties: {} },
+      // 根是联合的 schema Anthropic 不收（"does not support oneOf, allOf, or anyOf at the top level"）。
+      input_schema: objectSchema(tool.schema) ?? { type: "object", properties: {} },
     }));
     // 有系统提示时工具不标：连同 Claude 登录自带的一个，不超过 Anthropic 的四个。
     if (system === "") tools.at(-1)!.cache_control = EPHEMERAL;
@@ -376,6 +390,50 @@ function adaptiveOnly(model: string): boolean {
 function noXhigh(model: string): boolean {
   const version = claudeVersionOf(model);
   return version?.major === 4 && version.minor === 6;
+}
+
+/**
+ * 发给 4.6 起只认自适应思考的 Claude 的 enabled 加预算（不认得这个模型的客户端发的），改成 adaptive（magpie adaptiveThinking）：
+ * display 照请求的，没给就 summarized（Opus 4.7 起不要就不显示思考，magpie #1485）；没给 output_config.effort 时按预算换成力度，
+ * 预算分不出 xhigh 与 max、4.6 又没有 xhigh，这一档问 max。别的请求（含更早的 Claude、disabled）原样返回同一个对象。
+ */
+export function adaptiveThinkingAsTaken(
+  body: Record<string, unknown>,
+  model: string,
+): Record<string, unknown> {
+  const thinking = isRecord(body.thinking) ? body.thinking : null;
+  const budgeted = thinking?.type === "enabled";
+  if (!budgeted || !adaptiveOnly(model)) return body;
+  const display = thinking.display ?? "summarized";
+  const out: Record<string, unknown> = { ...body, thinking: { type: "adaptive", display } };
+  const config = isRecord(body.output_config) ? body.output_config : {};
+  const asked = typeof config.effort === "string" ? config.effort : "";
+  const budget = typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : 0;
+  const effort = effortOfBudget(budget);
+  const addsEffort = asked === "" && effort !== "";
+  if (!addsEffort) return out;
+  out.output_config = { ...config, effort: effort === "xhigh" ? "max" : effort };
+  return out;
+}
+
+/**
+ * 不收 temperature、top_p、top_k 的 Claude（magpie samplingRefused，照 Anthropic 的规则）：Opus 4.7、4.8、5、5.5，
+ * Fable 5、Mythos 5 任何值都不收；Sonnet 5、5.5 只收默认值；Haiku 5.5 只收个别值、不收 top_k。
+ * 去掉后按模型的默认采样。更早的 Claude 都收；比这些新的系列原样发。
+ */
+export function refusesSampling(model: string): boolean {
+  const match = CLAUDE_LINE.exec(model.toLowerCase());
+  if (!match) return false;
+  const family = match[1];
+  const major = Number(match[2]);
+  const minor = Number(match[3] ?? 0);
+  const fiveOrFiveFive = major === 5 && [0, 5].includes(minor);
+  const fourSevenOn = major === 4 && minor >= 7;
+  const fiveFive = major === 5 && minor === 5;
+  if (family === "fable" || family === "mythos") return major === 5;
+  if (family === "opus") return fourSevenOn || fiveOrFiveFive;
+  if (family === "sonnet") return fiveOrFiveFive;
+  return family === "haiku" && fiveFive;
 }
 
 // 中转站怎么拼都能读出 Claude 的系列与版本：claude-sonnet-5-5、sonnet-5.5、anthropic.claude-sonnet-5-5-v1:0、claude-fable-5-1。
@@ -712,7 +770,7 @@ function stopToAnthropic(stop: StopReason): string {
 }
 
 /**
- * Anthropic 事件流 → 中间事件。跳过 Anthropic 服务端工具（联网搜索）的块；
+ * Anthropic 事件流 → 中间事件。Anthropic 服务端工具（联网搜索）的块只报一个 other_tool，内容跳过；
  * tool_use 的 start 已带完整 input 时（中转站常见）就用它，不再等 input_json_delta。
  */
 export class AnthropicDecoder {
@@ -721,7 +779,27 @@ export class AnthropicDecoder {
 
   decode(data: string, emit: EmitEvent): void {
     const event = parseJson(data);
-    if (!isRecord(event)) return;
+    if (isRecord(event)) this.event(event, emit);
+  }
+
+  /** 整份回复（不流式）：照它流出来时的事件读一遍。错误体本身就是 error 事件的样子。 */
+  whole(body: unknown, emit: EmitEvent): void {
+    if (!isRecord(body)) return;
+    if (body.type === "error") {
+      this.event(body, emit);
+      return;
+    }
+    this.event({ type: "message_start", message: body }, emit);
+    const blocks = Array.isArray(body.content) ? body.content : [];
+    blocks.forEach((block, index) => {
+      this.event({ type: "content_block_start", index, content_block: block }, emit);
+    });
+    const delta = { stop_reason: body.stop_reason, stop_details: body.stop_details };
+    this.event({ type: "message_delta", delta, usage: body.usage }, emit);
+    this.event({ type: "message_stop" }, emit);
+  }
+
+  private event(event: Record<string, unknown>, emit: EmitEvent): void {
     const index = typeof event.index === "number" ? event.index : -1;
     switch (event.type) {
       case "message_start":
@@ -736,8 +814,11 @@ export class AnthropicDecoder {
       case "message_delta":
         emitMessageDelta(event, emit);
         return;
+      case "message_stop":
+        emit({ kind: "done" });
+        return;
       case "error":
-        emit({ kind: "error", ...errorOf(event.error) });
+        emit({ kind: "error", ...errorOf(event.error), vendorError: null });
         return;
       default:
     }
@@ -772,6 +853,7 @@ export class AnthropicDecoder {
         }
         return;
       default:
+        if (callsTool(String(block.type))) emit({ kind: "other_tool" });
     }
   }
 
@@ -810,7 +892,9 @@ function emitStart(event: Record<string, unknown>, emit: EmitEvent): void {
 function emitMessageDelta(event: Record<string, unknown>, emit: EmitEvent): void {
   const delta = isRecord(event.delta) ? event.delta : {};
   if (typeof delta.stop_reason === "string" && delta.stop_reason !== "") {
-    emit({ kind: "stop", stop: stopFromAnthropic(delta.stop_reason) });
+    const stop = stopFromAnthropic(delta.stop_reason);
+    if (isRecord(delta.stop_details)) emit({ kind: "stop", stop, details: delta.stop_details });
+    else emit({ kind: "stop", stop });
   }
   emit({ kind: "usage", usage: usageFromAnthropic(event.usage) });
 }
@@ -856,6 +940,7 @@ export class AnthropicEncoder {
             type: "api_error",
             message: event.message,
             ...(event.code ? { code: event.code } : {}),
+            ...vendorErrorFields(event.vendorError),
           },
         });
         break;
@@ -904,7 +989,11 @@ export class AnthropicEncoder {
     const reply = this.collector.finish();
     this.send("message_delta", {
       type: "message_delta",
-      delta: { stop_reason: stopToAnthropic(reply.stop), stop_sequence: null },
+      delta: {
+        stop_reason: stopToAnthropic(reply.stop),
+        stop_sequence: null,
+        ...stopDetailsOf(reply),
+      },
       usage: usageToAnthropic(reply.usage),
     });
     this.send("message_stop", { type: "message_stop" });
@@ -1011,6 +1100,12 @@ export function renderAnthropic(reply: Reply, model: string): Record<string, unk
     content,
     stop_reason: stopToAnthropic(reply.stop),
     stop_sequence: null,
+    ...stopDetailsOf(reply),
     usage: usageToAnthropic(reply.usage),
   };
+}
+
+/** 上游给了 stop_details 才写（magpie 的 anthropicEncoder.finish 与 renderAnthropic）。 */
+function stopDetailsOf(reply: Reply): { stop_details?: StopDetails } {
+  return reply.stopDetails ? { stop_details: reply.stopDetails } : {};
 }

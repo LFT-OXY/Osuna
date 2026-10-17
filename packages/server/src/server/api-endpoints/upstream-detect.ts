@@ -13,6 +13,7 @@ import {
   extractErrorDetail,
   isRecord,
   parseJson,
+  redactKey,
 } from "./upstream-http.js";
 
 /*
@@ -163,7 +164,7 @@ export async function probeUpstreamFormat(input: {
     url: baseUrl,
     status,
     httpStatus,
-    message: message === null ? null : message.replaceAll(input.apiKey, "***"),
+    message: message === null ? null : redactKey(message, input.apiKey),
   });
   if (input.modelId === null) {
     return result("not_detected", null, "The upstream listed no models to try");

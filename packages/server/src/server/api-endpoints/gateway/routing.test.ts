@@ -1,6 +1,9 @@
+// 同一个模型的写法与相近名字的例子照 magpie（MIT，THIRD_PARTY_NOTICES）的 internal/provider/group.go
+// 的 sameModel 注释与 closest.go 的 Closest。
+
 import { describe, expect, test } from "vitest";
 import type { ApiEndpointState, StoredApiEndpoint } from "../store.js";
-import { chooseRequestFormat, resolveGatewayRoute } from "./routing.js";
+import { chooseRequestFormat, resolveGatewayRoute, sameModel } from "./routing.js";
 
 function endpoint(
   input: Pick<StoredApiEndpoint, "id" | "slug"> & Partial<StoredApiEndpoint>,
@@ -58,14 +61,14 @@ describe("routing a requested model name to an endpoint", () => {
     ).toEqual(route([beta, "kimi-k2"]));
   });
 
-  test("a bare model name that itself contains a slash is matched whole", () => {
+  test("a bare model name that itself contains a slash is matched whole first", () => {
     expect(
       resolveGatewayRoute({
         state: state([alpha, beta]),
         agent: "codex",
         model: "moonshotai/kimi-k2",
       }),
-    ).toEqual(route([beta, "moonshotai/kimi-k2"]));
+    ).toEqual(route([beta, "moonshotai/kimi-k2"], [alpha, "kimi-k2"]));
   });
 
   test("a Claude tier name is translated by the first endpoint that maps that tier", () => {
@@ -105,7 +108,7 @@ describe("routing a requested model name to an endpoint", () => {
       }),
     ).toEqual({
       ok: false,
-      message: 'No enabled API endpoint offers the model "claude-haiku-4-5"',
+      message: 'No enabled API endpoint offers the model "claude-haiku-4-5"; did you mean glm-4.6?',
     });
   });
 
@@ -147,6 +150,168 @@ describe("routing a requested model name to an endpoint", () => {
         model: "beta/glm-4.6",
       }),
     ).toEqual({ ok: false, message: 'No enabled API endpoint offers the model "beta/glm-4.6"' });
+  });
+
+  test("a model not offered names the three closest ids, nearest first", () => {
+    const listed = endpoint({
+      id: "ep_c",
+      slug: "gamma",
+      models: [
+        { id: "glm-4.6" },
+        { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+        { id: "claude-opus-4-6" },
+        { id: "claude-opus-4-1" },
+        { id: "gpt-5.5" },
+      ],
+    });
+    expect(
+      resolveGatewayRoute({ state: state([listed]), agent: "claude", model: "claude-opus-4-7" }),
+    ).toEqual({
+      ok: false,
+      message:
+        'No enabled API endpoint offers the model "claude-opus-4-7"; did you mean claude-opus-4-6, claude-opus-4-1, claude-sonnet-4-5?',
+    });
+  });
+
+  test("a model sharing no word with any listed one names none", () => {
+    expect(
+      resolveGatewayRoute({ state: state([alpha]), agent: "codex", model: "gemini-3-pro" }),
+    ).toEqual({ ok: false, message: 'No enabled API endpoint offers the model "gemini-3-pro"' });
+  });
+});
+
+describe("a model its vendor said is retired at one endpoint", () => {
+  // listed 是去掉已下线模型之后的状态（retired-models.ts）：alpha 的 kimi-k2 下线了。
+  const retiredAlpha = { ...alpha, models: [] };
+
+  test("a bare model name skips that endpoint and goes to another with the same model", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([alpha, beta]),
+        listed: state([retiredAlpha, beta]),
+        agent: "claude",
+        model: "kimi-k2",
+      }),
+    ).toEqual(route([beta, "kimi-k2"]));
+  });
+
+  test("slug/model still goes to that endpoint, and the others follow", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([alpha, beta]),
+        listed: state([retiredAlpha, beta]),
+        agent: "claude",
+        model: "alpha/kimi-k2",
+      }),
+    ).toEqual(route([alpha, "kimi-k2"], [beta, "kimi-k2"]));
+  });
+
+  test("with no other endpoint the model is not found, and the closest names left are offered", () => {
+    const both = endpoint({
+      id: "ep_a",
+      slug: "alpha",
+      models: [{ id: "kimi-k2" }, { id: "kimi-k2-thinking" }],
+    });
+    expect(
+      resolveGatewayRoute({
+        state: state([both]),
+        listed: state([{ ...both, models: [{ id: "kimi-k2-thinking" }] }]),
+        agent: "codex",
+        model: "kimi-k2",
+      }),
+    ).toEqual({
+      ok: false,
+      message: 'No enabled API endpoint offers the model "kimi-k2"; did you mean kimi-k2-thinking?',
+    });
+  });
+});
+
+describe("names that differ only in how a model is written are the same model", () => {
+  test.each([
+    { written: "claude-opus-4.6", same: "claude-opus-4-6" },
+    { written: "claude_opus_4_6", same: "claude-opus-4-6" },
+    { written: "Claude-Opus-4-6", same: "claude-opus-4-6" },
+    { written: "anthropic/claude-opus-4-6", same: "claude-opus-4-6" },
+    { written: "accounts/fireworks/models/deepseek-v4p1", same: "deepseek-v4-1" },
+    { written: "claude-opus-4-6-20260115", same: "claude-opus-4-6" },
+    { written: "claude-opus-4-6@20260115", same: "claude-opus-4-6" },
+    { written: "deepseek-v4-1-flash-260910", same: "deepseek-v4-1-flash" },
+    // 四位数的发布号是另一个模型；冒号后的变体、-flash、-thinking 都留着。
+    { written: "kimi-k2-0905", same: "kimi-k2-0905" },
+    { written: "qwen3-coder-2507", same: "qwen3-coder-2507" },
+    { written: "gpt-5.5:batch", same: "gpt-5-5:batch" },
+    { written: "gemini-2.5-flash-thinking", same: "gemini-2-5-flash-thinking" },
+  ])("$written is $same", ({ written, same }) => {
+    expect(sameModel(written)).toBe(same);
+  });
+
+  const first = endpoint({ id: "ep_c", slug: "gamma", models: [{ id: "claude-opus-4.6" }] });
+  const second = endpoint({
+    id: "ep_d",
+    slug: "delta",
+    models: [{ id: "anthropic/claude-opus-4-6-20260115" }],
+  });
+
+  test("the name a CLI asks for reaches each endpoint as that endpoint lists it", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([first, second]),
+        agent: "claude",
+        model: "claude-opus-4-6",
+      }),
+    ).toEqual(route([first, "claude-opus-4.6"], [second, "anthropic/claude-opus-4-6-20260115"]));
+  });
+
+  test("an endpoint listing the very name asked comes first, and is sent that spelling", () => {
+    const both = endpoint({
+      id: "ep_e",
+      slug: "eps",
+      models: [{ id: "claude-opus-4.6" }, { id: "claude-opus-4-6" }],
+    });
+    expect(
+      resolveGatewayRoute({
+        state: state([first, both]),
+        agent: "claude",
+        model: "claude-opus-4-6",
+      }),
+    ).toEqual(route([both, "claude-opus-4-6"], [first, "claude-opus-4.6"]));
+  });
+
+  test("slug/model asks that endpoint first, in its own spelling", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([first, second]),
+        agent: "claude",
+        model: "delta/claude-opus-4.6",
+      }),
+    ).toEqual(route([second, "anthropic/claude-opus-4-6-20260115"], [first, "claude-opus-4.6"]));
+  });
+
+  test("a prefix that is no endpoint's slug is the vendor's and is ignored", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([first, second]),
+        agent: "codex",
+        model: "anthropic/claude-opus-4-6",
+      }),
+    ).toEqual(route([first, "claude-opus-4.6"], [second, "anthropic/claude-opus-4-6-20260115"]));
+  });
+
+  test("~ in a requested name is read as /", () => {
+    expect(
+      resolveGatewayRoute({
+        state: state([first, second]),
+        agent: "claude",
+        model: "delta~claude-opus-4-6",
+      }),
+    ).toEqual(route([second, "anthropic/claude-opus-4-6-20260115"], [first, "claude-opus-4.6"]));
+  });
+
+  test("a model mapped to a tier is followed by the same model however others write it", () => {
+    const mapped = { ...alpha, modelMapping: { opus: "claude-opus-4.6" } };
+    expect(
+      resolveGatewayRoute({ state: state([mapped, second]), agent: "claude", model: "opus" }),
+    ).toEqual(route([mapped, "claude-opus-4.6"], [second, "anthropic/claude-opus-4-6-20260115"]));
   });
 });
 

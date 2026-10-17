@@ -9,9 +9,10 @@ magpie — https://github.com/yetone/magpie
 
 The API endpoint gateway's failure classification, cooldowns, and conversation
 stickiness are ported to TypeScript from magpie's internal/gateway
-(routing.go, fallback.go, affinity.go, gateway.go, prompt.go), and so are
+(routing.go, fallback.go, affinity.go, gateway.go, prompt.go; the firewall
+block page from internal/provider/test.go), and so are
 the order the gateway asks endpoints in and the retry of the last one
-(restLast, probeOne, passing in fallback.go). Their tests take magpie's
+(restLast, probeOne, passing, spentAfter in fallback.go). Their tests take magpie's
 constants and the vendor error texts quoted in its source comments:
 
   packages/server/src/server/api-endpoints/gateway/failure.ts
@@ -38,7 +39,18 @@ tool_strict_test.go, responses_file_id_test.go, responses_cache_write_test.go,
 reasoning_state_responses_test.go, reasoning_passthrough_test.go and
 deepseek_step_lead_test.go. The pass-through request's thinking fixes for other
 vendors' models (thinkingOffUnlessAsked, withThinkingOnToolTurns in
-anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
+anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts.
+The reading of a reply (reply-tap.ts): what counts as said (streamPart.said and
+anthropicDeltaSays in fallback.go) and the 8 MB of a reply that came whole it
+reads (usageSniffer in sniff.go). Holding a reply's frames until its first
+content (holdWriter.scan, streamEvent and holdMost in fallback.go), the status
+an error in a stream stands for (streamStatus in fallback.go), and what an empty
+reply is and is told as (emptyReply, answersNothing in gateway.go) are ported
+into upstream-call.ts and failure.ts. Keeping a streaming agent alive while its
+reply has not opened (keepAlive, keepQuiet in fallback.go; keepaliveEvery,
+keepaliveLongest in gateway.go) is ported into keepalive.ts, and the error told
+in a stream whose headers already went out (streamFailure in gateway.go) into
+agent-errors.ts:
 
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
@@ -47,6 +59,10 @@ anthropic.go, withReasoningText in responses.go) are ported into passthrough.ts:
   packages/server/src/server/api-endpoints/gateway/translation/sse.ts
   packages/server/src/server/api-endpoints/gateway/passthrough.ts
   packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/reply-tap.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
   packages/server/src/server/api-endpoints/gateway/translation/*.test.ts
 
 Reasoning turned off, sent the way each model takes it: thinkingOffOf,
@@ -65,10 +81,317 @@ internal/catalog/catalog.go:
   packages/server/src/server/api-endpoints/codex-model-catalog.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+A model an address does not serve in its format, asked at the endpoint's next
+format (wrongEndpoint and markUnfit in internal/gateway/gateway.go), and an
+endpoint refusing both key headers, asked with x-api-key alone and then Bearer
+alone (BothAuthRefused and OneAuthOrder in internal/catalog/authheader.go,
+RetryOneAuth in internal/provider/authheader.go). Their tests reuse cases from
+gateway_test.go (TestWrongEndpoint,
+TestAnthropicClientFallsBackPastCopilotNoEndpoints),
+tools_need_responses_test.go and internal/provider/authheader_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/api-endpoints/gateway/failure.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+Two changes to what a model says, in a translated reply: a JSON answer a model
+wrapped in a code fence, for a client that asked for structured output, reaches
+it unfenced (unfence, unfencedResult and fenceEncoder in
+internal/gateway/format_fence.go, wantsJSON in format.go), and a tool call a
+model wrote into its text as Hermes' <tool_call>, DeepSeek's DSML or GLM's
+arg_key pairs becomes a real call (textCallAt, parseTextCalls, cutMark,
+hermesCall, paramCall, glmCall, dsmlCall, callArgs, escapeRawControls and
+textCallSee in internal/gateway/textcalls.go). Their tests reuse cases from
+format_fence_test.go, textcalls_test.go, textcalls_glm_test.go,
+textcalls_param_test.go and textcalls_tail_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/translation/fence.ts
+  packages/server/src/server/api-endpoints/gateway/translation/text-calls.ts
+  packages/server/src/server/api-endpoints/gateway/translation/fence.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/text-calls.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+A field an endpoint refuses, left out when the same endpoint is asked again:
+auto mode's safeguards and the thinking display (refuseShapes,
+withoutRefusedShapes and withDisplay in internal/gateway/anthropic_shapes.go),
+deprecated sampling (samplingDeprecated, withoutSampling in anthropic.go),
+Claude Code's deferred-tool blocks and a tool result holding only
+tool_reference blocks (withoutDeferredTools, withRefsSaid in
+anthropic_shapes.go), a tool's strict (toolStrictRefusal, withoutToolStrict in
+strict_refused.go), and Codex's image tool after a bare 400 (withoutImageTool,
+withoutImageToolReq, mayDropImageTool in image_tool.go, the retries in
+gateway.go). Their tests reuse cases from safeguards_refused_test.go,
+thinking_display_test.go, anthropic_shapes_test.go, thinking_off_test.go,
+deferred_tools_test.go, tool_reference_result_test.go, strict_refused_test.go,
+image_tool_test.go and testdata/codex_image_gen_tool.json:
+
+  packages/server/src/server/api-endpoints/gateway/refused-fields.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.test.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+Structured output and a prefill an endpoint refuses, downgraded when the same
+endpoint is asked again: a schema asked as any JSON object with the schema in
+the system prompt, then the format told in words alone (formatRefusal,
+refusesFormat, asObject, inSystem, formatInBody, withSystemLine and withLine in
+internal/gateway/format.go), and a user turn after a conversation ending with
+the assistant's message (prefillRefusal, refusesPrefill, endsWithAssistant,
+userLast, userLastBody and continueText in prefill.go). Their tests reuse
+cases from format_refused_test.go and prefill_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.ts
+  packages/server/src/server/api-endpoints/gateway/refused-downgrades.test.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+The generic fixes a pass-through request gets by the model it goes to: Claude
+Code's billing line left out for another vendor's model (withoutBillingLine,
+keepsBillingLine in internal/gateway/billing_line.go, billingHeader in
+claude_subscription.go), auto mode's review beta and safeguards likewise
+(serverReview in automode.go), the advisor server tool named as the endpoint
+names its model or left out with its instructions (advisorTools,
+advisorModel, advisorGoneIn, withoutAdvisor, advisorRefName in advisor.go),
+a budget sent to a Claude that thinks only adaptively asked adaptively
+(adaptiveThinking in anthropic.go), sampling left out for a Claude that
+refuses it (samplingRefused, samplingAsTaken in anthropic.go), and reasoning
+with nothing sealed in it left out before a Responses upstream
+(withoutBareReasoning in codex_backend.go). The Responses tool-pairing repair
+also moves the model's text between a batch's calls ahead of its first call
+(joinToolRuns in responses.go), and a request translated into Responses has
+a second answer to one call left out and a lone call answered
+(dropSecondAnswers in codeassist.go, pairToolItems in buildResponses). Their
+tests reuse cases from billing_line_test.go, advisor_test.go (with
+testdata/claude-code-advisor-turn.json), adaptive_wire_test.go,
+join_tool_runs_test.go, pair_tool_items_test.go and
+gemini_pending_call_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/claude-code-fields.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+The generic fixes a translated request gets by the model it goes to: the
+effort fitted to the model's own levels, no more than high for a model listed
+with none (fitFor in internal/gateway/decide.go, fitEffort in ir.go, EffortRank
+and NearestEffort in internal/catalog/catalog.go, Levelless in
+internal/provider/models.go),
+the model's published reply limit where Anthropic's Messages API needs one
+(askedOutput in maxoutput.go, OutputWithin in internal/provider/models.go),
+temperature and top_p left out for a model known to refuse them
+by the provider's own models.dev entry (RejectsTemperature in
+internal/provider/models.go, rejectTemp in chat.go and responses.go), Codex's
+prompt_cache_key, include, client_metadata and text carried on
+(Request.CacheKey, Include, ClientMetadata and Text in ir.go, textFormat in
+responses.go) and the key left out where refused, named or not
+(cacheKeyField, refusesField and the retry in forwardTranslated in
+gateway.go), a tool's union root folded to an object (ObjectRoot,
+objectRootIn, grokRef and appendDistinct in internal/provider/grok.go,
+objectSchema in anthropic.go, rootUnionRefusal, foldsRoots, objectRootsBody
+and foldTools in object_root.go), an earlier turn's thinking
+in any of a Chat client's three spellings (messageReasoning and reasoningText
+in chattidy.go), Gemini's thoughts marked in extra_content (markedThought in
+chat.go), and the phase of each message told to Codex (phaseOutput and
+heldMost in phase.go, the encoder's release in responses.go). Their tests
+reuse cases from anthropic_max_tokens_test.go, prompt_cache_test.go,
+object_root_test.go, internal/provider/grok_test.go,
+chat_inbound_reasoning_test.go, gemini_thought_tag_test.go and phase_test.go:
+
+  packages/server/src/server/api-endpoints/model-facts.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/refusals.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.ts
+  packages/server/src/server/api-endpoints/gateway/refused-fields.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/object-root.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.ts
+  packages/server/src/server/api-endpoints/gateway/translation/chat.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 The request-format choice (chooseRequestFormat) follows magpie's usable and
-MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go):
+MessagesFirst (internal/gateway/gateway.go, internal/provider/provider.go);
+which names are the same model (sameModel in internal/provider/group.go) and
+the closest ids a model not found names (Closest in internal/provider/closest.go,
+unknownModel in internal/gateway/unknown_model.go) are ported from magpie too,
+and so is sending Codex's memory and auto-review calls to the model of its last
+turn (internal/gateway/codex_memory.go, callKind in codex_backend.go):
 
   packages/server/src/server/api-endpoints/gateway/routing.ts
+  packages/server/src/server/api-endpoints/gateway/routing.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-side-calls.ts
+
+How a model its vendor said is retired is remembered (a week, kept in a file,
+taken back when that endpoint answers for it, left out of every model list
+and of routing by bare name) follows Retire, Unretire, retiredNow and
+retiredFor in magpie's internal/provider/retired.go, with the gateway's calls
+from internal/gateway/gateway.go and routing.go (servedCandidate):
+
+  packages/server/src/server/api-endpoints/retired-models.ts
+  packages/server/src/server/api-endpoints/retired-models.test.ts
+
+Reading a compressed request body (zstd and gzip by Content-Encoding, 415 for
+any other, the limit counted on the decompressed bytes, the 413 that says the
+limit is the gateway's and to /compact) follows decodedBody,
+readBoundedRequestBody, overLimit and sizeWord in magpie's
+internal/gateway/request_bounds.go and the 413 hint in writeError
+(gateway.go); asking again at once on a new connection when a kept-alive one
+was dropped before the reply began follows replayable in
+internal/gateway/upstream_transport.go:
+
+  packages/server/src/server/api-endpoints/gateway/request-body.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+
+Keeping the daemon's own state files' last good generation (a .bak written
+before each write, a file that doesn't parse read from its .bak and copied
+aside as .bad-<time>, an error when the .bak doesn't parse either) follows
+Read, Fallback, Keep and KeepBad in magpie's internal/lastgood/lastgood.go;
+trying a read or rename again for up to half a second while another program
+holds the file on Windows follows retry in internal/steady/steady.go, and its
+test the stand-in reads of internal/steady/steady_test.go:
+
+  packages/server/src/server/api-endpoints/last-good.ts
+  packages/server/src/server/api-endpoints/last-good.test.ts
+
+A conversation too long for a model (candidates known too small for the
+request skipped before any is asked, a failure that says no reason taken as
+too long once the estimate is 1.2 times past the window, the vendor's words
+kept only when the message still reads as too long, a relay's own cap on one
+request's input matched as an overflow, and every overflow told the way each
+CLI's own API says it, in a stream too) follows unsaidMargin, tooLongUnsaid,
+roomy, holds and withRoom in magpie's internal/gateway/fallback.go and the
+tooLongRe, writeErrorSaid and streamError of gateway.go; its tests reuse the
+vendor's words of overflow_cap_test.go and fallback.go:
+
+  packages/server/src/server/api-endpoints/gateway/overflow.ts
+  packages/server/src/server/api-endpoints/gateway/overflow.test.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/failure.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+The four vendors' rewrites (Kimi's typed enums, reasoning_details as
+reasoning_content and no deferred-tool blocks, MiniMax's thinking back in
+<think>, DeepSeek's \u0000 in tool patterns, Grok's tool patterns in Rust's
+regex spelling and its whole numbers in a call's arguments) follow
+kimiToolEnumTypes, isKimi and valuesType in magpie's
+internal/gateway/kimi_schema.go, deepseekToolPatterns and unicodeNullEscape in
+deepseek_schema.go, grokToolPatterns and ecmaClassForRust in grok_schema.go,
+grokModel, wholeNums, wholeEncoder, wholeResult and intTidy in
+grok_integral.go, reasoningDetailsAsContent in chattidy.go, buildChat's
+inlineThink in chat.go and forwardOnce in gateway.go; their tests reuse the
+cases of kimi_schema_test.go, deepseek_schema_test.go, grok_schema_test.go,
+grok_integral_test.go, kimi_reasoning_details_test.go and
+minimax_think_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/vendor-rewrites.ts
+  packages/server/src/server/api-endpoints/gateway/vendor-rewrites.test.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.ts
+  packages/server/src/server/api-endpoints/gateway/grok-integral.test.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+How the gateway reads what an endpoint answered: a whole reply given to a
+streaming request, and the stream it is said as once the keepalive went out
+(wholeEvents, anthropicWholeEvents, responsesWholeEvents and chatWholeEvents in
+magpie's internal/gateway/whole_stream.go, holdWriter.settle and release in
+fallback.go); a 2xx that is no API reply (notAnAPIReply, webPage, htmlStart and
+pageTitle in notapi.go, BlockedHint in internal/provider/test.go); a vendor's
+own error in a stream (requestRefused and saidError in responses.go, an error
+named only by its event: line as streamEvent in fallback.go reads it); and
+Zhipu's refusal wrapped in a 200 (zhipuCodeStatus, zhipuEnvelope and
+ZhipuEnveloped in internal/provider/zhipu_envelope.go, zhipuHost in
+zhipu_coding.go). Their tests reuse the cases of notapi_test.go,
+quiet_whole_test.go, codex_access_programs_test.go and zhipu_envelope_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/whole-stream.ts
+  packages/server/src/server/api-endpoints/gateway/whole-stream.test.ts
+  packages/server/src/server/api-endpoints/gateway/not-api-reply.ts
+  packages/server/src/server/api-endpoints/gateway/not-api-reply.test.ts
+  packages/server/src/server/api-endpoints/gateway/zhipu-envelope.ts
+  packages/server/src/server/api-endpoints/gateway/zhipu-envelope.test.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/sse.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+How the gateway treats an endpoint's safety filter refusing a request: what
+counts as a refusal (filterReasons, policyCode, flaggedWords, policyRefusal,
+highRiskRefusal, refusedNote, refusedDetail, refusedCode and refusedReply in
+magpie's internal/gateway/fallback.go), asking every other endpoint before the
+reply opened with nobody resting, a refusal after it resting nobody either
+(holdWriter.settle, handBack and refusalAfter in fallback.go, the refusals
+loop in gateway.go), and what the agent gets when every endpoint refused
+(handBack, refusedStatus and failTo in gateway.go and fallback.go; stop_details
+carried as anthropic.go's stopDetails, anthropicEncoder.finish and
+renderAnthropic do). Their tests reuse the cases of refusal_error_test.go,
+refusal_accounts_test.go, refusal_details_test.go and refusal_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/safety-filter.ts
+  packages/server/src/server/api-endpoints/gateway/safety-filter.test.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/reply-tap.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
+  packages/server/src/server/api-endpoints/gateway/translation/anthropic.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+A reply that breaks after it opened, its connection lost or its stream ended
+short of its last event (replyEnds in magpie's internal/gateway/upstream.go,
+errEndedShort in continuation.go), is no longer finished as if whole: the
+stream ends with an error event of the agent's own protocol after a blank line
+(cutMidReply, streamFailure, saysPassing and the pass-through reply's apart in
+gateway.go); its tests follow TestPassthroughStreamEndsOnLineEnd:
+
+  packages/server/src/server/api-endpoints/gateway/broken-reply.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
+A translated reply that breaks after it opened is first asked of the same
+endpoint again with what the agent already has of it sent back as the last,
+assistant, message, up to twice (streamRetries, prefillHow, chatPrefill and
+the continuation type's possible, again, prefillText, request, emit, add and
+unecho in magpie's internal/gateway/continuation.go; the Resume prefix /
+partial marks of buildChat in chat.go and DeepSeek's /beta path in
+forwardTranslated in gateway.go), the agent kept alive while it waits
+(streamTranslated's enc.keepalive), and a continuation that fails ending with
+its own words (saysPassing and passingSaid in gateway.go); its tests reuse the
+cases of continuation_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/continuation.ts
+  packages/server/src/server/api-endpoints/gateway/continuation.test.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/broken-reply.ts
+  packages/server/src/server/api-endpoints/gateway/keepalive.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:

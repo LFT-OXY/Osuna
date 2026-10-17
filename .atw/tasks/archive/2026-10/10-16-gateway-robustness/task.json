@@ -1,0 +1,28 @@
+{
+  "id": "gateway-robustness",
+  "name": "gateway-robustness",
+  "title": "中转站稳健性补齐",
+  "description": "只改内置中转站内部，补齐 magpie 有而 Osuna 缺的稳健性处理（差距总表块 1），不加界面",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": "server",
+  "priority": "P2",
+  "creator": "oxy",
+  "assignee": "oxy",
+  "createdAt": "2026-10-16",
+  "completedAt": "2026-10-17",
+  "branch": "compare-magpie-third-party-api-gaps",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "10-16-magpie-osuna-gaps",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "implementation_base_sha": "5e52876099f89af7b740e973680a72fe6e0b18fd"
+  }
+}
