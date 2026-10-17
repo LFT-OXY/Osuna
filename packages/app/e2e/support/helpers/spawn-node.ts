@@ -1,5 +1,22 @@
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { once } from "node:events";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+/**
+ * 测试 daemon 永远碰不到本机的 CLI 安装：经 NODE_OPTIONS 预加载 daemon-upgrade-seal.mjs，
+ * 不查最新版本、把 CLI 与包管理器的升级命令换成立刻失败的进程。每个起测试 daemon 的地方都要套上它。
+ */
+const UPGRADE_SEAL_PATH = path.resolve(__dirname, "../daemon-upgrade-seal.mjs");
+
+export function withUpgradeSeal(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
+  const base = env ?? process.env;
+  const seal = `--import ${pathToFileURL(UPGRADE_SEAL_PATH).href}`;
+  const nodeOptions = base.NODE_OPTIONS?.includes(seal)
+    ? base.NODE_OPTIONS
+    : [base.NODE_OPTIONS, seal].filter(Boolean).join(" ");
+  return { ...base, NODE_OPTIONS: nodeOptions };
+}
 
 /**
  * Runs a repo-local TypeScript entrypoint through Node's own tsx loader instead
@@ -17,7 +34,10 @@ export function spawnTsx(entrypoint: string, args: string[], options: SpawnOptio
   if (entrypoint.startsWith("-")) {
     throw new Error(`TypeScript entrypoint must be a path, received ${entrypoint}`);
   }
-  return spawn(process.execPath, ["--import", "tsx", "--", entrypoint, ...args], options);
+  return spawn(process.execPath, ["--import", "tsx", "--", entrypoint, ...args], {
+    ...options,
+    env: withUpgradeSeal(options.env),
+  });
 }
 
 /**

@@ -496,6 +496,48 @@ experimental_bearer_token = "${token}"
       expect(listed.health).toEqual([]);
     });
 
+    test("keeping a table changed outside Osuna keeps it across a restart until the switch is on again", async () => {
+      // 先换成一个保留数据目录的 daemon，后面才能用同一个数据目录重启。
+      await client.close();
+      await daemon.close();
+      const homeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-home-"));
+      tempRoots.push(homeRoot);
+      const start = async () => {
+        daemon = await createTestPaseoDaemon({
+          paseoHomeRoot: homeRoot,
+          cleanup: false,
+          apiEndpoints: { env: { CODEX_HOME: codexHome }, homeDir: path.dirname(codexHome) },
+        });
+        client = await connect(daemon);
+      };
+      await start();
+      const switched = await switchOn();
+      const firstGateway = gatewayV1();
+      const changed = switched
+        .replace(firstGateway, "https://my-own-relay.example/v1")
+        .replace(`"${await codexToken()}"`, '"sk-mine"');
+      await writeFile(configPath, changed);
+
+      const kept = await client.apiEndpointKeepCurrentSettings("codex");
+      expect(kept).toMatchObject({ agent: { enabled: false }, error: null });
+      expect(await readFile(configPath, "utf8")).toBe(changed);
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+      await client.close();
+      await daemon.close();
+      await start();
+      expect(gatewayV1()).not.toBe(firstGateway);
+      expect(await readFile(configPath, "utf8")).toBe(changed);
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+      const on = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+      expect(on.error).toBeNull();
+      const back = await readFile(configPath, "utf8");
+      expect(back).toContain(`base_url = "${gatewayV1()}"`);
+      expect(back).toContain(`experimental_bearer_token = "${await codexToken()}"`);
+      expect(back).toContain(`model_provider = "${ID}"`);
+    });
+
     test("a profile that overrides the owned keys comes with the profile and the keys", async () => {
       await writeFile(
         configPath,

@@ -596,7 +596,15 @@ export class ApiEndpointService {
       return { undo: () => this.store.writeClaudeTakeover(record) };
     }
     const record = this.store.readCodexTakeover();
-    this.store.writeCodexTakeover({ ...record, takeover: null });
+    // 服务商表被外部改过：保留就是保留，启动时也不改回指向中转站。
+    const tableKept = this.inspectCodex(true).issues.some((issue) =>
+      issue.params?.keys?.split(", ").includes(`model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`),
+    );
+    this.store.writeCodexTakeover({
+      ...record,
+      takeover: null,
+      ...(tableKept ? { tableKept: true } : {}),
+    });
     return { undo: () => this.store.writeCodexTakeover(record) };
   }
 
@@ -1320,12 +1328,12 @@ export class ApiEndpointService {
 
   /**
    * 官方模式下留着的 Osuna 服务商表（ADR 0010）：记在它名下的 Codex 对话还要经中转站续，启动时改指这次的端口与 Codex 的口令。
-   * 文件里没有这张表就不写；旧版本（v0.15）留下的 auth.command 表同样换成指向中转站的。
+   * 文件里没有这张表、或「保留当前设置」时它已被外部改过（tableKept，ADR 0012）就不写；旧版本（v0.15）留下的 auth.command 表同样换成指向中转站的。
    * 从没发过 Codex 口令（旧版本关开关时作废了）就补一个，先落口令文件再替换 config.toml。
    */
   private refreshKeptCodexTable(url: string): void {
     const record = this.store.readCodexTakeover();
-    if (record.takeover) return;
+    if (record.takeover || record.tableKept) return;
     const configPath = this.resolveCodexConfigPath();
     const tokensBefore = this.store.readGatewayTokens();
     const token = tokensBefore.codex ?? newGatewayToken();

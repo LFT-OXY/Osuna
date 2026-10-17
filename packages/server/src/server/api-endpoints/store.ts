@@ -147,6 +147,8 @@ const CodexTakeoverFileSchema = z.object({
   // null：当前没有接管（官方模式）。
   takeover: CodexConfigTakeoverSchema.nullable(),
   backup: z.object({ path: z.string().nullable() }).nullable(),
+  // 「保留当前设置」时 Osuna 的服务商表已被外部改过：这张表归用户，启动时不再改写，直到再打开开关（ADR 0012）。
+  tableKept: z.boolean().optional(),
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 

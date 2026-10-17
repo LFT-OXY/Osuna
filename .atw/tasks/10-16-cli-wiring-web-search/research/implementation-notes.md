@@ -62,7 +62,7 @@ magpie 另认的 Claude Desktop（`Mozilla/… Claude/…`）、Claude Science�
 
 `config.toml` 被外部改了 `model_provider` 但仍写着 Osuna 的 `model_catalog_json` 时，「保留当前设置」后 Codex 还会读这个目录文件。关开关原本会删掉它，Codex 就读不到了；现在 config.toml 还写着它时，关开关与 daemon 启动对账都不删（`service.ts` `codexConfigNamesCatalog`）。正常切回官方会把 `model_catalog_json` 改回原值，目录照旧删除。
 
-已知取舍：被外部改走的 Osuna 服务商表，「切回官方」与「保留当前设置」都不改它；daemon 下次启动按 ADR 0010 把它改指中转站。
+被外部改走的 Osuna 服务商表：「保留当前设置」时在 `takeover-codex.json` 记下 `tableKept`，daemon 启动不再按 ADR 0010 改写它，直到再打开开关（写接管记录时这个标记随之去掉）；代价是记在这张表名下的 Codex 对话续到用户自己的地址（ADR 0012）。「切回官方」照旧不动表、下次启动改回指向中转站。
 
 ### 测试 daemon 的升级封条
 

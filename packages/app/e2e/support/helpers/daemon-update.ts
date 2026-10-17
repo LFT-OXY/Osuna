@@ -1,6 +1,6 @@
 import { fork, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { killProcessTree } from "./spawn-node";
+import { killProcessTree, withUpgradeSeal } from "./spawn-node";
 
 export interface OutdatedDaemon {
   endpoint: string;
@@ -35,13 +35,13 @@ export async function startOutdatedDaemon(options?: {
   const child = fork(
     path.resolve(__dirname, "../../../../server/src/server/test-utils/outdated-daemon-process.ts"),
     {
-      env: {
+      env: withUpgradeSeal({
         ...process.env,
         E2E_METRO_PORT: metroPort,
         E2E_DESKTOP_MANAGED: options?.desktopManaged === true ? "1" : "0",
         E2E_DAEMON_STATUS_RPC_CAPABILITY: options?.daemonStatusRpcCapability === false ? "0" : "1",
         E2E_RELAY_CONFIG_CAPABILITY: options?.relayConfigCapability === false ? "0" : "1",
-      },
+      }),
       execArgv: ["--import", "tsx"],
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     },

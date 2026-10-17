@@ -2,8 +2,8 @@
  * e2e 测试 daemon 的封条：经 NODE_OPTIONS=--import 预加载进 daemon 及它派生的 Node 进程。
  *
  * 1. 不查 npm registry 的最新版本：设置页就不会出现「Upgrade to …」按钮（版本检查按查不到处理）。
- * 2. 即使有人直接发 provider.upgrade，也不会碰本机的全局安装：brew、各 CLI 的 update / upgrade 子命令、
- *    Codex 的安装脚本与 npm 全局安装，一律换成一个立刻以 1 退出的 node 进程，并记一行到
+ * 2. 即使有人直接发 provider.upgrade，也不会碰本机的 CLI 安装：Agent CLI 的 update / upgrade 子命令、
+ *    brew 的安装与升级、包管理器的全局安装、官方安装脚本，一律换成一个立刻以 1 退出的 node 进程，并记一行到
  *    PASEO_E2E_UPGRADE_RECORD_PATH（设了的话）。
  *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
@@ -15,7 +15,10 @@ import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 
 const NPM_REGISTRY = "https://registry.npmjs.org/";
-const UPGRADE_SUBCOMMANDS = new Set(["update", "upgrade"]);
+// 带自升级子命令的 Agent CLI（provider-upgrade-command.ts 的表，外加 Codex）。
+const AGENT_CLIS = new Set(["claude", "codex", "copilot", "opencode", "pi", "omp"]);
+const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
+const INSTALL_VERBS = new Set(["install", "i", "add", "update", "upgrade", "reinstall"]);
 
 const realFetch = globalThis.fetch;
 if (typeof realFetch === "function") {
@@ -28,15 +31,38 @@ if (typeof realFetch === "function") {
   };
 }
 
-/** 会改本机全局安装的命令：升级命令表（provider-upgrade-command.ts）里会出现的全部形状。 */
+function commandName(command) {
+  return path
+    .basename(String(command))
+    .toLowerCase()
+    .replace(/\.(exe|cmd|bat|ps1)$/, "");
+}
+
+/**
+ * Agent CLI 的可执行文件：升级时用它实际启动的那个，可能是解析过符号链接的真实路径
+ * （~/.local/share/claude/versions/2.1.x、Caskroom/claude-code@latest/…），所以看路径里的每一段。
+ */
+function isAgentCli(command) {
+  const segments = String(command).toLowerCase().split(/[\\/]/);
+  return segments.some((segment) => {
+    const name = segment.replace(/\.(exe|cmd|bat|ps1)$/, "");
+    return [...AGENT_CLIS].some(
+      (cli) => name === cli || name.startsWith(`${cli}-`) || name.startsWith(`${cli}@`),
+    );
+  });
+}
+
+/** 会改本机 CLI 安装的命令：Agent CLI 的 update / upgrade、brew 装与升级、包管理器的全局安装、官方安装脚本。 */
 export function isGlobalInstallCommand(command, args) {
-  const name = path.basename(String(command)).toLowerCase();
+  const name = commandName(command);
   const list = Array.isArray(args) ? args.map(String) : [];
-  if (name === "brew") return true;
-  if (UPGRADE_SUBCOMMANDS.has(list[0])) return true;
-  if (list.some((arg) => /install\.(sh|ps1)/.test(arg))) return true;
-  if ((name === "npm" || name === "npm.cmd") && list.includes("-g")) return true;
-  return false;
+  if (isAgentCli(command)) return list[0] === "update" || list[0] === "upgrade";
+  if (name === "brew") return list.some((arg) => INSTALL_VERBS.has(arg));
+  if (PACKAGE_MANAGERS.has(name)) {
+    const isGlobal = list.includes("-g") || list.includes("--global") || list[0] === "global";
+    return isGlobal && list.some((arg) => INSTALL_VERBS.has(arg));
+  }
+  return list.some((arg) => /chatgpt\.com\/codex\/install\.(sh|ps1)/.test(arg));
 }
 
 const realSpawn = childProcess.spawn;
