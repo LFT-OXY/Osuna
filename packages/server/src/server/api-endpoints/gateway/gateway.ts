@@ -1,5 +1,5 @@
 // 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
-// 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate
+// 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { timingSafeEqual } from "node:crypto";
@@ -32,6 +32,13 @@ import {
   type EndpointRest,
 } from "./cooldown.js";
 import { endpointFailure, lateRests, modelRetired, retryable } from "./failure.js";
+import {
+  largerWindows,
+  overflowOf,
+  roomyCandidates,
+  type Overflow,
+  type WindowOf,
+} from "./overflow.js";
 import { attemptEndpoint, sendFailedAttempt } from "./passthrough.js";
 import { AgentKeepAlive, KEEPALIVE_EVERY_MS, KEEPALIVE_QUIET_MOST_MS } from "./keepalive.js";
 import {
@@ -75,6 +82,8 @@ import { ANSWERED_BY_HEADER, type AttemptOutcome, type FailedAttempt } from "./u
  * 这家答成功一次就恢复。
  * 压缩过的请求体（zstd、gzip）先解开再处理（request-body.ts）；发给上游的 User-Agent 是 CLI 自己的，
  * CLI 没带时写 Osuna/<版本>。
+ * 对话太长（overflow.ts）：已知窗口装不下的候选发出前就跳过；一家说太长（或不说原因、估算已超窗口 1.2 倍）时
+ * 不冷却，后面有已知窗口更大的同名候选就换过去，没有就按超长告诉 CLI 去压缩。
  */
 
 export const API_ENDPOINT_GATEWAY_PATH = "/api-endpoint-gateway";
@@ -426,6 +435,27 @@ async function handleAgentRequest(input: {
     sendRest({ res, wire, ...planned });
     return;
   }
+  const { modelFacts } = input.failover;
+  const windowOf: WindowOf = (candidate) =>
+    modelFacts(candidate.endpoint, candidate.upstreamModel).context;
+  const tokens = estimatedTokens({
+    format: input.format,
+    parsed: translatable,
+    bytes: mended.length,
+    windows: planned.plan.map(windowOf),
+  });
+  const roomy = roomyCandidates({ plan: planned.plan, tokens, windowOf });
+  for (const candidate of roomy.skipped) {
+    input.logger.info(
+      {
+        endpoint: candidate.endpoint.name,
+        model: candidate.upstreamModel,
+        tokens,
+        window: windowOf(candidate),
+      },
+      "API endpoint skipped: the request is past its context window",
+    );
+  }
   const keepAlive = new AgentKeepAlive({
     res,
     wire,
@@ -441,7 +471,9 @@ async function handleAgentRequest(input: {
       parsed: translatable,
       model,
       conversation,
-      plan: planned.plan,
+      plan: roomy.plan,
+      tokens,
+      windowOf,
       keepAlive,
     });
   } finally {
@@ -526,6 +558,23 @@ function readTranslated(input: { format: ApiEndpointRequestFormat; parsed: unkno
   }
 }
 
+/**
+ * 这次请求的本地估算（estimateInputTokens）。请求体字节 ÷ 4 都不到最小的已知窗口时估算不可能超过任何窗口，
+ * 不必读（magpie roomy 同样）；读不懂、或没有已知窗口时为 null。
+ */
+function estimatedTokens(input: {
+  format: ApiEndpointRequestFormat;
+  parsed: unknown;
+  bytes: number;
+  windows: (number | undefined)[];
+}): number | null {
+  const known = input.windows.filter((window): window is number => window !== undefined);
+  const mayOverflow = known.some((window) => input.bytes / 4 >= window);
+  if (!mayOverflow) return null;
+  const read = readTranslated(input);
+  return read.ok ? estimateInputTokens(read.request) : null;
+}
+
 /** Responses 请求直通前先修补工具往来（夹在一串里的项、没有调用的结果、没有结果的调用）；没什么可改时原样不动。 */
 function mendedBody(format: ApiEndpointRequestFormat, body: Buffer): Buffer {
   if (format !== "openai_responses") return body;
@@ -579,6 +628,7 @@ function planAttempts(input: {
 /**
  * 按顺序问：开口前失败且值得换就冷却这家、换下一家；最后一家的错误交给 Agent。
  * 后面剩下的都因额度用完或欠费在冷却时，这家就当最后一家（原地重试、错误交给 Agent），不去问明知没额度的。
+ * 对话太长不冷却：只换到后面已知窗口更大的候选，没有就交给 Agent。
  */
 async function askInTurn(input: {
   req: Request;
@@ -593,14 +643,17 @@ async function askInTurn(input: {
   model: string;
   conversation: string;
   plan: AskableCandidate[];
+  // 这次请求的本地估算；没估为 null。
+  tokens: number | null;
+  windowOf: WindowOf;
   keepAlive: AgentKeepAlive;
 }): Promise<void> {
-  const { res, wire, logger, plan } = input;
+  const { res, wire, logger, tokens, windowOf } = input;
   const { cooldowns, sticks, retired } = input.failover;
   const restOf = (candidate: GatewayCandidate) =>
     cooldowns.restOf(candidate.endpoint.id, candidate.upstreamModel);
-  for (const [index, candidate] of plan.entries()) {
-    const remaining = plan.slice(index + 1);
+  let remaining = [...input.plan];
+  for (let candidate = remaining.shift(); candidate; candidate = remaining.shift()) {
     const next = spentAfter(remaining.map(restOf)) ? undefined : remaining[0];
     const outcome = await askUntilSettled({ ...input, candidate, last: next === undefined });
     if (outcome.kind === "gone") return;
@@ -631,6 +684,42 @@ async function askInTurn(input: {
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。
     if (modelRetired(failed.status, failed.text)) {
       retired.retire({ endpoint: candidate.endpoint, model: candidate.upstreamModel });
+    }
+    const window = windowOf(candidate);
+    const overflow = overflowOf({
+      ...failed,
+      tokens,
+      window,
+      model: candidate.upstreamModel,
+      endpointName: candidate.endpoint.name,
+    });
+    if (overflow) {
+      const larger = largerWindows({ left: remaining, window, tokens, windowOf });
+      const to = larger[0];
+      if (to) {
+        logger.info(
+          {
+            from: candidate.endpoint.name,
+            to: to.endpoint.name,
+            model: candidate.upstreamModel,
+            failure: "too_long",
+            status: failed.status,
+            until: null,
+          },
+          "API endpoint gateway switched endpoints",
+        );
+        remaining = larger;
+        continue;
+      }
+      sendFailedAttempt({
+        res,
+        wire,
+        endpoint: candidate.endpoint,
+        failed: toldTooLong(failed, overflow),
+        suffix: "",
+        headers: {},
+      });
+      return;
     }
     if (!retryable(failed.status, failed.text)) {
       sendFailedAttempt({
@@ -838,6 +927,20 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
 /** 发给上游的 User-Agent：直通与翻译都用 CLI 自己的，CLI 没带时用 Osuna/<版本>。 */
 function userAgentFor(input: { req: Request; failover: Failover }): string {
   return input.req.headers["user-agent"] ?? input.failover.ownUserAgent;
+}
+
+/**
+ * 超长交给 Agent 的样子：上游说了的照原样；不说原因、认作超长的改成 400，带 Codex 认得的 context_length_exceeded。
+ */
+function toldTooLong(failed: FailedAttempt, overflow: Overflow): FailedAttempt {
+  if (overflow.kind === "said") return failed;
+  return {
+    ...failed,
+    status: 400,
+    headers: {},
+    detail: overflow.message,
+    upstreamError: { type: "invalid_request_error", code: "context_length_exceeded" },
+  };
 }
 
 /** 换家日志里的失败原因：空回复，或冷却的分类。 */

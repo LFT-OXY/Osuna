@@ -8,6 +8,7 @@ import {
   modelRetired,
   requestRefused,
   retryable,
+  saysTooLong,
   streamStatus,
   wordsOf,
 } from "./failure.js";
@@ -80,6 +81,8 @@ const WORD_CASES: Record<keyof typeof FAILURE_WORDS, { hits: string[]; misses: s
       "This model's maximum context length is 128000 tokens",
       "exceeded model token limit",
       "上下文长度超过限制",
+      // magpie overflow_cap_test.go：中转服务自己的单次输入上限（#2445，B.ai）。
+      "Input token exceed the limit (request id: 2026…)",
     ],
     misses: ["max_tokens is too large"],
   },
@@ -238,6 +241,20 @@ describe("whether another endpoint is worth asking", () => {
   test("a conversation too long for the model is not: every endpoint would refuse it", () => {
     expect(retryable(400, "prompt is too long: 210000 tokens")).toBe(false);
     expect(retryable(413, "context_length_exceeded")).toBe(false);
+  });
+
+  test("a relay's own cap on one request's input reads as too long; rate limits worded with input tokens do not (magpie #2445)", () => {
+    const capped = "Input token exceed the limit (request id: 2026…)";
+    expect(
+      saysTooLong(400, `{"error":{"message":"${capped}","type":"invalid_request_error"}}`),
+    ).toBe(true);
+    expect(retryable(400, `{"error":{"message":"${capped}"}}`)).toBe(false);
+    const rates = [
+      "Input token exceed the limit per minute",
+      "Input tokens exceeded the limit, please wait",
+      "input tokens exceed the TPM limit",
+    ];
+    expect(rates.map((message) => saysTooLong(400, message))).toEqual([false, false, false]);
   });
 
   test("a 400 or 422 is only when its words say quota, unserved, refused, shape or region", () => {

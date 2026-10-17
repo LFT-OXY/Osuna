@@ -37,7 +37,9 @@ export const FAILURE_WORDS = {
   // 对话超过模型的上下文。
   tooLong: new RegExp(
     String.raw`context_length_exceeded|prompt is too long|input is too long|(exceeds?|exceeded|over|beyond)( the)?( model'?s?)?( maximum)? context|context (length|limit|window) (exceeded|is exceeded)|maximum context length|too many (input |prompt )?tokens|上下文(长度)?(超|过长)|超(过|出)(了)?(模型)?(的)?(最大)?上下文` +
-      String.raw`|input token count.*exceeds the maximum|maximum prompt length is \d|reduce the length of the messages|maximum allowed input length|longer than the model'?s context length|available context size|greater than the context length|prompt token count of [\d,]+ exceeds the limit|context window exceeds limit|exceeded model token limit|configured context size|prompt too long|prompt exceeds max length|context_window_exceeded|exceeded (max |maximum )?context length|range of input length should be|token limit exceeded`,
+      String.raw`|input token count.*exceeds the maximum|maximum prompt length is \d|reduce the length of the messages|maximum allowed input length|longer than the model'?s context length|available context size|greater than the context length|prompt token count of [\d,]+ exceeds the limit|context window exceeds limit|exceeded model token limit|configured context size|prompt too long|prompt exceeds max length|context_window_exceeded|exceeded (max |maximum )?context length|range of input length should be|token limit exceeded` +
+      // 中转服务自己的单次输入上限（magpie #2445，B.ai 的「Input token exceed the limit」）。
+      String.raw`|input tokens? (count )?(exceeds?|exceeded) (the )?(max(imum)? )?limit`,
     "i",
   ),
   // 速率类措辞，有它就不算对话超长。
@@ -115,6 +117,16 @@ function tooLong(status: number, body: string): boolean {
 
 function overflowed(status: number, body: string): boolean {
   return (status === 400 || status === 413 || status === 422) && tooLong(status, body);
+}
+
+/** 这段话读起来是对话太长（不是 max_tokens 或限流）。 */
+export function readsTooLong(message: string): boolean {
+  return tooLong(400, message);
+}
+
+/** 上游说这次请求超过了模型（或中转服务）能收的长度：400、413、422 且词表说是对话太长。 */
+export function saysTooLong(status: number, rawBody: string): boolean {
+  return overflowed(status, wordsOf(rawBody));
 }
 
 /**

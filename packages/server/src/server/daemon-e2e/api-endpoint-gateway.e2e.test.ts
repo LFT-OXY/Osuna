@@ -27,7 +27,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 以及 safeguards_refused_test.go、thinking_display_test.go、thinking_off_test.go、deferred_tools_test.go、
  * tool_reference_result_test.go、strict_refused_test.go、image_tool_test.go（含 testdata/codex_image_gen_tool.json）、
  * format_refused_test.go 与 prefill_test.go；直通的通用修补照 billing_line_test.go（Claude Code 的一轮）与 codex_backend.go 的 withoutBareReasoning；翻译时去掉 prompt_cache_key 重问照 prompt_cache_test.go（TestPromptCacheKeyRefused）；
- * 改模型输出（工单 08）照 format_fence_test.go（TestStructuredOutputFencedAnswerUnfenced）、textcalls_test.go 与 textcalls_glm_test.go。
+ * 改模型输出（工单 08）照 format_fence_test.go（TestStructuredOutputFencedAnswerUnfenced）、textcalls_test.go 与 textcalls_glm_test.go；
+ * 对话太长（工单 15）照 overflow_cap_test.go（TestRelayInputCapGoesToTheNextMember）与 fallback.go 的 tooLongUnsaid。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -3127,7 +3128,13 @@ function receivedModel(request: RecordedRequest | undefined): unknown {
 
 /** 两家都选了 kimi-k2：A 是用户选的（最早建的），B 在它之后。 */
 async function twoRelays(
-  options: { headerTimeoutMs?: number; keepAliveMs?: number; keepAliveQuietMs?: number } = {},
+  options: {
+    headerTimeoutMs?: number;
+    keepAliveMs?: number;
+    keepAliveQuietMs?: number;
+    modelsDev?: Record<string, Record<string, unknown>>;
+    catalogB?: Record<string, Record<string, unknown>>;
+  } = {},
 ) {
   const upstreamA = await startUpstream();
   const upstreamB = await startUpstream();
@@ -3454,6 +3461,175 @@ describe("switching to another endpoint when one fails", () => {
     ]);
     expect(logLines.join("\n")).not.toContain(KEY_A);
     expect(logLines.join("\n")).not.toContain(KEY_B);
+  });
+});
+
+/** 按本地估算（UTF-8 字节 ÷ 4）约有这么多 token 的一句话。 */
+function textOfTokens(tokens: number): string {
+  return "x".repeat(tokens * 4);
+}
+
+function switchedLog(logLines: string[]): Record<string, unknown> | undefined {
+  return logLines
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .find((line) => line.msg === "API endpoint gateway switched endpoints");
+}
+
+// 中转服务自己的单次输入上限照 magpie（MIT，THIRD_PARTY_NOTICES）overflow_cap_test.go 的原话（#2445）；
+// 不说原因的 400 照 fallback.go 的 tooLongUnsaid 注释里 WorkBuddy 的「Invalid request parameters」。
+describe("a conversation too long for a model", () => {
+  test("a request past the first endpoint's known window is not sent to it and goes to one with room", async () => {
+    const { upstreamA, upstreamB, ask, logLines } = await twoRelays({
+      modelsDev: { "kimi-k2": { context: 4096 } },
+      catalogB: { "kimi-k2": { context: 1_000_000 } },
+    });
+
+    const response = await ask({ messages: [{ role: "user", content: textOfTokens(5000) }] });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(0);
+    expect(upstreamB.requests).toHaveLength(1);
+    const skipped = logLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line.msg === "API endpoint skipped: the request is past its context window");
+    expect(skipped).toMatchObject({
+      endpoint: "Relay A",
+      model: "kimi-k2",
+      tokens: 5000,
+      window: 4096,
+    });
+  });
+
+  test("an endpoint saying it is too long hands it to the next endpoint whose known window is larger, nobody cooling", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays({
+      modelsDev: { "kimi-k2": { context: 200_000 } },
+      catalogB: { "kimi-k2": { context: 1_000_000 } },
+    });
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "prompt is too long: 210000 tokens > 200000" });
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await response.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(switchedLog(logLines)).toMatchObject({
+      from: "Relay A",
+      to: "Relay B",
+      model: "kimi-k2",
+      failure: "too_long",
+      status: 400,
+      until: null,
+    });
+    const client = await connectTo(daemon);
+    expect(await cooldownOf(client, "ep_a")).toBeNull();
+    expect(await cooldownOf(client, "ep_b")).toBeNull();
+  });
+
+  test("with no larger known window after it, the agent is told it is too long and the next endpoint is not asked", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({
+      modelsDev: { "kimi-k2": { context: 200_000 } },
+    });
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "prompt is too long: 210000 tokens > 200000" });
+
+    const response = await ask();
+
+    expect(response.status).toBe(400);
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: "Relay A: prompt is too long: 210000 tokens > 200000" },
+    });
+  });
+
+  test("a 400 that says no reason, for a request past 1.2 times the window, reaches Claude Code as too long", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays({
+      modelsDev: { "kimi-k2": { context: 4096 } },
+    });
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "Invalid request parameters" });
+
+    const response = await ask({ messages: [{ role: "user", content: textOfTokens(5000) }] });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message:
+          "Relay A: prompt is too long: about 5000 tokens, more than kimi-k2's context window of 4096 (Relay A answered 400: Invalid request parameters)",
+      },
+    });
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
+  });
+
+  test("the same 400 under 1.2 times the window is the endpoint's own error", async () => {
+    const { upstreamA, ask } = await twoRelays({ modelsDev: { "kimi-k2": { context: 4096 } } });
+    upstreamA.respond = (_request, res) =>
+      failWith(res, { status: 400, message: "Invalid request parameters" });
+
+    const response = await ask({ messages: [{ role: "user", content: textOfTokens(4500) }] });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: "Relay A: Invalid request parameters" },
+    });
+  });
+
+  test("a 400 that says no reason, for a request past 1.2 times the window, reaches Codex as context_length_exceeded", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "Invalid request parameters" } }));
+    };
+    const { gateway } = await start({
+      upstreamA: upstream,
+      modelsDev: { "gpt-5.5": { context: 4096 } },
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "gpt-5.5", input: textOfTokens(5000), stream: false }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        message:
+          "Relay A: prompt is too long: about 5000 tokens, more than gpt-5.5's context window of 4096 (Relay A answered 400: Invalid request parameters)",
+        type: "invalid_request_error",
+        code: "context_length_exceeded",
+        param: null,
+      },
+    });
+  });
+
+  test("a relay's own cap on one request's input is taken as too long (magpie #2445)", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const capped = "Input token exceed the limit (request id: 2026…)";
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: capped, type: "invalid_request_error" } }));
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "invalid_request_error", message: `Relay A: ${capped}` },
+    });
+    expect(upstreamB.requests).toHaveLength(0);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toBeNull();
   });
 });
 

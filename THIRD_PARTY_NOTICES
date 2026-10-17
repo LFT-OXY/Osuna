@@ -268,6 +268,21 @@ test the stand-in reads of internal/steady/steady_test.go:
   packages/server/src/server/api-endpoints/last-good.ts
   packages/server/src/server/api-endpoints/last-good.test.ts
 
+A conversation too long for a model (candidates known too small for the
+request skipped before any is asked, a failure that says no reason taken as
+too long once the estimate is 1.2 times past the window, the vendor's words
+kept only when the message still reads as too long, a relay's own cap on one
+request's input matched as an overflow) follows unsaidMargin, tooLongUnsaid,
+roomy, holds and withRoom in magpie's internal/gateway/fallback.go and the
+tooLongRe of gateway.go; its tests reuse the vendor's words of
+overflow_cap_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/overflow.ts
+  packages/server/src/server/api-endpoints/gateway/failure.ts
+  packages/server/src/server/api-endpoints/gateway/failure.test.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 
