@@ -171,6 +171,8 @@ export function refreshCodexProviderTable(input: {
   if (parsed.kind === "unparsable") return parsed;
   if (!hasProviderTable(parsed.program)) return { kind: "absent" };
   if (holdsProviderTable(parsed.value, input.table)) return { kind: "patched", text: input.text };
+  // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
+  // 连同 v0.15 留下的 [model_providers.osuna_api_endpoint.auth] 子表一起拿掉，换成指向中转站的表。
   const text = appendProviderTable({
     text: removeProviderTables(original),
     table: input.table,

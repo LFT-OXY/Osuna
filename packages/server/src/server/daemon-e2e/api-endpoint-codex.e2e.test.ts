@@ -180,6 +180,27 @@ experimental_bearer_token = "${token}"
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
+  test("turning the switch off and on again writes the same token into config.toml", async () => {
+    await createEndpointWithBaseUrls("Relay", ["relay/gpt"]);
+    const writtenToken = async () =>
+      /experimental_bearer_token = "([^"]+)"/.exec(await readFile(configPath, "utf8"))?.[1];
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true })).error,
+    ).toBeNull();
+    const token = await writtenToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+    expect(await writtenToken()).toBe(token);
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true })).error,
+    ).toBeNull();
+
+    expect(await readFile(configPath, "utf8")).toContain(`model_provider = "${ID}"`);
+    expect(await writtenToken()).toBe(token);
+    expect(await codexToken()).toBe(token);
+  });
+
   test("every catalog entry offers four reasoning levels and defaults to the one nearest the user's effort", async () => {
     await writeFile(configPath, `model_reasoning_effort = "none"\n${USER_CONFIG}`);
     await createEndpointWithBaseUrls("Relay", ["relay/gpt"]);

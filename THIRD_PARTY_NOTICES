@@ -428,6 +428,21 @@ minimax-color, mimocode, stepfun-color), with width, height, style and
   packages/app/src/assets/model-family-icons.ts
   packages/app/src/assets/model-family-icons/*.svg
 
+How the gateway recognises its callers (loopback only, the forwarding headers
+that mark a proxied request, DNS rebinding, refusing web pages by Origin,
+Origin: null and localhost subdomains, reading the token from Authorization
+and x-api-key, and telling the agent by its User-Agent) follows local,
+proxied, forwardHeaders, rebound, fromBrowser, ownHost and callerKeys in
+magpie's internal/gateway/lan.go, corsGuard, foreignPage and
+localhostSubdomain in internal/gateway/cors.go, agentOf in
+internal/gateway/gateway.go, AgentOf in internal/usage/usage.go and the UA
+fields in internal/agent/claude.go and codex.go. Its tests take cases from
+lan_rebind_test.go, cors_test.go and lan_test.go in internal/gateway and
+useragent_test.go in internal/agent:
+
+  packages/server/src/server/api-endpoints/gateway/callers.ts
+  packages/server/src/server/api-endpoints/gateway/callers.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone
