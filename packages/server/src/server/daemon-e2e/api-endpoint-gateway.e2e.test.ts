@@ -13,7 +13,11 @@ import path from "node:path";
 import * as zlib from "node:zlib";
 import pino from "pino";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ENDED_SHORT, brokenMessage } from "../api-endpoints/gateway/broken-reply.js";
+import {
+  ENDED_SHORT,
+  brokenMessage,
+  connectionLost,
+} from "../api-endpoints/gateway/broken-reply.js";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
 import { HIGH_RISK_REFUSAL as HIGH_RISK } from "../api-endpoints/gateway/safety-filter.js";
 import { hashDaemonPassword } from "../auth.js";
@@ -35,7 +39,10 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 按厂商的改写（工单 16）照 grok_integral_test.go 与 grok_schema_test.go。
  * 认清上游回的是什么（工单 18）照 notapi_test.go（cloudflarePage）、quiet_whole_test.go 与 codex_access_programs_test.go。
  * 拒答换家（工单 19）照 refusal_error_test.go（highRiskMessage、TestHighRiskQuotationIsAnAnswer）、refusal_test.go 与 refusal_details_test.go。
- * 开口后断流（工单 20）照 gateway.go 的 cutMidReply、saysPassing 与 TestPassthroughStreamEndsOnLineEnd 的流尾空行。
+ * 开口后断流（工单 20）照 gateway.go 的 cutMidReply、saysPassing 与 TestPassthroughStreamEndsOnLineEnd 的流尾空行；
+ * 断流后接着写（工单 21）照 continuation_test.go（TestStreamCutContinuesOnAnthropic、TestStreamCutContinuesWithDeepSeekPrefix、
+ * TestStreamCutAfterToolCallEndsAsBefore、TestStreamCutOnPlainChatEndsAsBefore、TestStreamCutContinuesOnlySoLong、
+ * TestStreamCutPrefillRefusedEndsAsBefore）。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -7099,4 +7106,294 @@ describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply
       });
     },
   );
+});
+
+/** 接着写的那一次说完的 Anthropic 流：开头、接上的半句、正常收尾。 */
+const REST_ANTHROPIC_REPLY = [
+  sseFrame({ type: "message_start", message: { id: "msg_rest", usage: { input_tokens: 11 } } }),
+  sseFrame({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+  sseFrame({
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "text_delta", text: " look." },
+  }),
+  sseFrame({ type: "content_block_stop", index: 0 }),
+  sseFrame({
+    type: "message_delta",
+    delta: { stop_reason: "end_turn" },
+    usage: { output_tokens: 4 },
+  }),
+  sseFrame({ type: "message_stop" }),
+].join("");
+
+/** 说了半句、接着开始工具调用、参数写了一半的 Anthropic 流。 */
+const HALF_CALL_ANTHROPIC_REPLY = [
+  HALF_ANTHROPIC_REPLY,
+  sseFrame({ type: "content_block_stop", index: 0 }),
+  sseFrame({
+    type: "content_block_start",
+    index: 1,
+    content_block: { type: "tool_use", id: "toolu_9", name: "exec_command", input: {} },
+  }),
+  sseFrame({
+    type: "content_block_delta",
+    index: 1,
+    delta: { type: "input_json_delta", partial_json: '{"cmd":' },
+  }),
+].join("");
+
+/** 第 n 次（从 0 起）请求怎么回：给了的照给的流写完或写一半掐断，没给的回 REST_ANTHROPIC_REPLY。 */
+function cutThenRest(input: { cuts: number; cut: boolean }): FakeUpstream["respond"] {
+  let asked = 0;
+  return (_request, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const call = asked++;
+    if (call >= input.cuts) {
+      res.end(REST_ANTHROPIC_REPLY);
+      return;
+    }
+    if (!input.cut) {
+      res.end(HALF_ANTHROPIC_REPLY);
+      return;
+    }
+    res.write(HALF_ANTHROPIC_REPLY);
+    setTimeout(() => res.destroy(), 50);
+  };
+}
+
+/** 一次请求最后一条消息。 */
+function lastMessageOf(request: RecordedRequest): unknown {
+  const body = JSON.parse(request.body.toString()) as { messages: unknown[] };
+  return body.messages.at(-1);
+}
+
+/** Codex 收到的事件里各类事件的个数与说的全部文字。 */
+function codexReadOf(text: string): { types: string[]; said: string } {
+  const events = sseData(text) as { type: string; delta?: string }[];
+  const said = events
+    .filter((event) => event.type === "response.output_text.delta")
+    .map((event) => event.delta)
+    .join("");
+  return { types: events.map((event) => event.type), said };
+}
+
+/** 开了口的 Chat 流说了半句；接着写的那一次说完。 */
+const HALF_CHAT_CHUNK = {
+  id: "chatcmpl-half",
+  choices: [{ index: 0, delta: { content: "Let me" } }],
+};
+const REST_CHAT_CHUNKS = [
+  { id: "chatcmpl-rest", choices: [{ index: 0, delta: { content: " look." } }] },
+  { id: "chatcmpl-rest", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+];
+
+/** Chat 上游：第一次说半句就掐断，之后的说完。 */
+function chatCutThenRest(): FakeUpstream["respond"] {
+  let asked = 0;
+  return (_request, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    if (asked++ > 0) {
+      const rest = REST_CHAT_CHUNKS.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
+      res.end(`${rest.join("")}data: [DONE]\n\n`);
+      return;
+    }
+    res.write(`data: ${JSON.stringify(HALF_CHAT_CHUNK)}\n\n`);
+    setTimeout(() => res.destroy(), 50);
+  };
+}
+
+/** Claude Code 收到的事件里各类事件的个数与说的全部文字。 */
+function claudeReadOf(text: string): { types: string[]; said: string } {
+  const events = sseData(text) as { type: string; delta?: { type: string; text?: string } }[];
+  const said = events
+    .map((event) => (event.delta?.type === "text_delta" ? event.delta.text : ""))
+    .join("");
+  return { types: events.map((event) => event.type), said };
+}
+
+const CUT_REASON = connectionLost({ error: undefined });
+
+describe("a reply that breaks goes on where it was cut (magpie continuation)", () => {
+  test("translated for Codex, an Anthropic reply cut mid-way is asked to go on from what Codex has, and Codex reads one whole reply", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = cutThenRest({ cuts: 1, cut: true });
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const read = codexReadOf(await response.text());
+
+    expect(anthropic.requests).toHaveLength(2);
+    expect(lastMessageOf(anthropic.requests[1])).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "Let me", cache_control: { type: "ephemeral" } }],
+    });
+    expect(read.said).toBe("Let me look.");
+    expect(read.types.filter((type) => type === "response.created")).toHaveLength(1);
+    expect(read.types.filter((type) => type === "response.completed")).toHaveLength(1);
+    expect(read.types).not.toContain("response.failed");
+  });
+
+  test("translated for Claude Code, a DeepSeek Chat reply cut mid-way goes on in its prefix mode, and Claude Code reads one whole reply", async () => {
+    const chat = await startUpstream();
+    chat.respond = chatCutThenRest();
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+    const read = claudeReadOf(await response.text());
+
+    expect(chat.requests.map((request) => request.url)).toEqual([
+      "/v1/chat/completions",
+      "/beta/chat/completions",
+    ]);
+    expect(lastMessageOf(chat.requests[1])).toEqual({
+      role: "assistant",
+      content: "Let me",
+      prefix: true,
+    });
+    expect(read.said).toBe("Let me look.");
+    expect(read.types.filter((type) => type === "message_start")).toHaveLength(1);
+    expect(read.types.filter((type) => type === "message_stop")).toHaveLength(1);
+    expect(read.types).not.toContain("error");
+  });
+
+  test("a reply cut after a tool call began is not asked to go on: the error ends the stream", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(HALF_CALL_ANTHROPIC_REPLY);
+      setTimeout(() => res.destroy(), 50);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const events = sseData(await response.text()) as Record<string, unknown>[];
+
+    expect(anthropic.requests).toHaveLength(1);
+    expect(events.at(-1)).toEqual({
+      type: "response.failed",
+      sequence_number: 12,
+      response: {
+        id: "resp_msg_half",
+        object: "response",
+        created_at: expect.any(Number),
+        status: "failed",
+        model: "glm-4.6",
+        output: [
+          {
+            id: expect.stringMatching(/^msg_/),
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Let me", annotations: [], logprobs: [] }],
+            phase: "commentary",
+          },
+          {
+            id: expect.stringMatching(/^fc_/),
+            type: "function_call",
+            status: "completed",
+            call_id: "toolu_9",
+            arguments: '{"cmd":',
+            name: "exec_command",
+          },
+        ],
+        parallel_tool_calls: true,
+        tool_choice: "auto",
+        tools: [],
+        error: {
+          code: "server_error",
+          message: brokenMessage({ endpointName: "Relay B", reason: CUT_REASON }),
+        },
+      },
+    });
+  });
+
+  test("a Chat upstream with no prefill mode of its own is not asked to go on: the error ends the stream", async () => {
+    const chat = await startUpstream();
+    chat.respond = chatCutThenRest();
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(true), model: "qwen3-coder" }),
+    );
+    const events = sseData(await response.text());
+
+    expect(chat.requests).toHaveLength(1);
+    expect(events.slice(-2)).toEqual([
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "error",
+        error: {
+          type: "api_error",
+          message: brokenMessage({ endpointName: "Relay C", reason: CUT_REASON }),
+        },
+      },
+    ]);
+  });
+
+  test("a model that turned the continuation's prefill away ends with what cut the reply, and is not asked to go on again", async () => {
+    const anthropic = await startUpstream();
+    const prefillRefused = {
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "This model does not support assistant message prefill.",
+      },
+    };
+    anthropic.respond = (_request, res) => {
+      if (anthropic.requests.length === 2) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify(prefillRefused));
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(HALF_ANTHROPIC_REPLY);
+      setTimeout(() => res.destroy(), 50);
+    };
+    const { gateway, logLines } = await start({ upstreamB: anthropic });
+    const ask = async () => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest(codexConversation("glm-4.6", true)),
+      );
+      return sseData(await response.text()).at(-1);
+    };
+    const cutFailed = halfCodexFailed(
+      brokenMessage({ endpointName: "Relay B", reason: CUT_REASON }),
+    );
+
+    expect(await ask()).toEqual(cutFailed);
+    expect(anthropic.requests).toHaveLength(2);
+    expect(logLines.join("")).toContain(
+      "API endpoint refused a conversation ending with the assistant's message; it takes no prefill for this model",
+    );
+
+    expect(await ask()).toEqual(cutFailed);
+    expect(anthropic.requests).toHaveLength(3);
+  });
+
+  test("a reply cut three times running goes on twice, then the error ends the stream", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = cutThenRest({ cuts: 3, cut: true });
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const text = await response.text();
+
+    expect(anthropic.requests).toHaveLength(3);
+    expect(codexReadOf(text).said).toBe("Let me");
+    expect(codexReadOf(text).types).not.toContain("response.completed");
+    expect(sseData(text).at(-1)).toEqual(
+      halfCodexFailed(brokenMessage({ endpointName: "Relay B", reason: CUT_REASON })),
+    );
+  });
 });

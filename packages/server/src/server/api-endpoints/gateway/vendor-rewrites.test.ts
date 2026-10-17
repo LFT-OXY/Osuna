@@ -62,6 +62,7 @@ function translated(input: {
     from: "anthropic_messages",
     facts: {},
     refusals: NO_REFUSALS,
+    continuation: null,
   });
   const body: unknown = JSON.parse(text);
   if (!isRecord(body)) throw new Error(`not a JSON object: ${text}`);

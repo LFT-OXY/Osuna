@@ -992,6 +992,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     to: candidate.format,
     request: candidate.translated,
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
+    retryPauseMs: input.failover.retryPauseMs,
   });
 }
 

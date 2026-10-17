@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink；开口后的拒答不冷却照 fallback.go 的 refusedAfter；开口后断流不补结尾、在流尾补错误照 continuation.go 的 errEndedShort 与 cutMidReply）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink；开口后的拒答不冷却照 fallback.go 的 refusedAfter；开口后断流不补结尾、在流尾补错误照 continuation.go 的 errEndedShort 与 cutMidReply；断流后接着写照 continuation.go 的 streamTranslated 与 continuation.again）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -17,6 +17,15 @@ import {
   connectionLost,
   endedShort,
 } from "./broken-reply.js";
+import {
+  ReplySoFar,
+  STREAM_RETRIES,
+  continuationUrl,
+  lastThinking,
+  prefillMode,
+  withPrefillMark,
+  type PrefillMode,
+} from "./continuation.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -24,6 +33,7 @@ import {
   askWithoutField,
   keyHeaderValues,
   keyHeadersFor,
+  noteRefusal,
   type KeyHeaders,
   type RefusedShape,
   type ShapeRefusals,
@@ -64,7 +74,9 @@ import {
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
+  type FailedAttempt,
   type OpenedUpstream,
+  type UpstreamOpening,
 } from "./upstream-call.js";
 
 /*
@@ -76,8 +88,8 @@ import {
  * 不收结构化输出或预填时降级重问，也记住。推理档位、回复上限与采样参数按这家这个模型的资料填（requestForModel）。
  * 回复只改两处（照 magpie）：请求给了工具时，写在文字里的工具调用转成真调用（textCallFilter）；
  * Agent 要 JSON 时，剥掉模型包在外面的代码块（fenceFilter、unfencedReply）。
- * 开口后上游断了（连接中断，或流读完了却没说完）不替上游补结尾（broken-reply.ts）：要流式的在流尾补错误事件，
- * 不要的回 502。
+ * 开口后上游断了（连接中断，或流读完了却没说完）不替上游补结尾（broken-reply.ts）：要流式的先在同一家接着写
+ * （continuation.ts），接不上或续满了再在流尾补错误事件；不要的回 502。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -102,31 +114,49 @@ export async function attemptTranslated(input: {
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
   keepAlive: AgentKeepAlive;
+  // 断了的回复接着写之前等多久（第二次加倍）。
+  retryPauseMs: number;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
   const sends = () => keyHeadersFor({ format: to, refusals });
-  const open = (body: string, keys: KeyHeaders = sends()) =>
+  const openAt = (ask: { at: URL; body: string; keys: KeyHeaders }) =>
     openUpstream({
       res,
-      url,
-      headers: translatedHeaders({ apiKey, keys, to, userAgent: input.userAgent }),
-      body: Buffer.from(body),
+      url: ask.at,
+      headers: translatedHeaders({ apiKey, keys: ask.keys, to, userAgent: input.userAgent }),
+      body: Buffer.from(ask.body),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
       onHeard: () => input.keepAlive.heard(),
     });
-  const build = (asked: ShapeRefusals = refusals) =>
+  const open = (body: string, keys: KeyHeaders = sends()) => openAt({ at: url, body, keys });
+  const bodyOf = (ask: {
+    request: GatewayRequest;
+    continuation: PrefillMode | null;
+    refusals: ShapeRefusals;
+  }) =>
     translatedBody({
-      request: input.request,
+      ...ask,
       baseUrl: input.baseUrl,
       from: input.from,
       to,
       model: input.upstreamModel,
       facts: input.facts,
-      refusals: asked,
     });
+  const build = (asked: ShapeRefusals = refusals) =>
+    bodyOf({ request: input.request, continuation: null, refusals: asked });
+  const goOn = continuer({
+    ...input,
+    ask: async ({ soFar, mode }) => {
+      const request = soFar.resume(input.request);
+      const sent = bodyOf({ request, continuation: mode, refusals });
+      const at = continuationUrl({ baseUrl: input.baseUrl, to, mode });
+      const opening = await openAt({ at, body: sent, keys: sends() });
+      return resumedFrom({ opening, sent, at, apiKey, to, refusals });
+    },
+  });
   const body = build();
   const keys = sends();
   let opened = await open(body, keys);
@@ -167,22 +197,14 @@ export async function attemptTranslated(input: {
   return answerUnlessRefused({
     opened,
     format: to,
-    answer: (ready) => answerOpened({ ...input, url, opened: ready }),
+    answer: (ready) => answerOpened({ ...input, url, opened: ready, goOn }),
   });
 }
 
 /** 开了口的回复解码后按 Agent 的协议交给它：要流式就边收边发，不要就渲染成整份回复。 */
 async function answerOpened(input: TranslatedAnswer): Promise<AttemptOutcome> {
-  const { response, held } = input.opened;
-  const { to, url, apiKey } = input;
-  let reply: UpstreamReply = { kind: "stream", response, held };
-  if (!isEventStream(response, held)) {
-    // 上游没理会 stream: true：整份回复照它流出来时的事件读；不是这个协议的回复，当作开口前失败换家。
-    const text = await readLimited({ stream: response, first: held });
-    const whole = parseJson(text);
-    if (!isWholeReply(to, whole)) return notAStream({ url, text, apiKey });
-    reply = { kind: "whole", body: whole };
-  }
+  const reply = await upstreamReplyOf({ ...input, at: input.url });
+  if (reply.kind === "failed") return reply;
   input.keepAlive.stop();
   const finished = input.request.stream
     ? streamReply({ ...input, reply })
@@ -204,6 +226,96 @@ interface TranslatedAnswer {
   keepAlive: AgentKeepAlive;
   url: URL;
   opened: OpenedUpstream;
+  goOn: GoOn;
+}
+
+/**
+ * 开了口的回复怎么读：事件流照常；上游没理会 stream: true 的，整份回复照它流出来时的事件读；
+ * 不是这个协议的回复，当作开口前失败。
+ */
+async function upstreamReplyOf(input: {
+  opened: OpenedUpstream;
+  to: ApiEndpointRequestFormat;
+  at: URL;
+  apiKey: string;
+}): Promise<UpstreamReply | FailedAttempt> {
+  const { response, held } = input.opened;
+  if (isEventStream(response, held)) return { kind: "stream", response, held };
+  const text = await readLimited({ stream: response, first: held });
+  const whole = parseJson(text);
+  if (!isWholeReply(input.to, whole))
+    return notAStream({ url: input.at, text, apiKey: input.apiKey });
+  return { kind: "whole", body: whole };
+}
+
+/** 接着写问到了什么：接着读的回复、接不上了、Agent 走了。 */
+type Resumed = { kind: "reply"; reply: UpstreamReply } | { kind: "stopped" } | { kind: "gone" };
+
+/** 接着问一次的结果；failed 是还能再续一次的失败（5xx、连不上之类）。 */
+type AskedToGoOn = Resumed | { kind: "failed" };
+
+/** 按 Agent 已经收到的部分接着写：每份回复最多问 STREAM_RETRIES 次。 */
+type GoOn = (soFar: ReplySoFar) => Promise<Resumed>;
+
+/**
+ * 断了的回复怎么接着写（magpie 的 continuation.again）：这家这个模型能从一半接着写（prefillMode）、
+ * Agent 已经收到了点什么且还没开始工具调用时，等一会儿在同一家接着问；问不开口的再问，同一个请求再问也会被拒的不再问。
+ */
+function continuer(input: {
+  res: Response;
+  to: ApiEndpointRequestFormat;
+  baseUrl: string;
+  upstreamModel: string;
+  refusals: ShapeRefusals;
+  retryPauseMs: number;
+  ask: (input: { soFar: ReplySoFar; mode: PrefillMode }) => Promise<AskedToGoOn>;
+}): GoOn {
+  const { res } = input;
+  let asked = 0;
+  return async (soFar) => {
+    while (asked < STREAM_RETRIES) {
+      const mode = prefillMode({ ...input, model: input.upstreamModel });
+      if (mode === null || !soFar.mayGoOn()) return { kind: "stopped" };
+      const waitMs = input.retryPauseMs * 2 ** asked;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      if (res.destroyed) return { kind: "gone" };
+      asked++;
+      const resumed = await input.ask({ soFar, mode });
+      if (resumed.kind !== "failed") return resumed;
+    }
+    return { kind: "stopped" };
+  };
+}
+
+/**
+ * 接着写的那一问开了口没有：开了口就接着读；被拒时先记下认得出的拒收（拒了预填的，以后不再续），
+ * 同一个请求再问也会被拒的（400、404、422、拒答）不再问，别的失败还能再续一次。
+ */
+async function resumedFrom(input: {
+  opening: UpstreamOpening;
+  sent: string;
+  at: URL;
+  apiKey: string;
+  to: ApiEndpointRequestFormat;
+  refusals: ShapeRefusals;
+}): Promise<AskedToGoOn> {
+  const { opening, to } = input;
+  if (opening.kind === "gone") return opening;
+  if (opening.kind === "failed") {
+    const body = parseJson(input.sent);
+    noteRefusal({ refusals: input.refusals, format: to, body, failed: opening });
+    return turnsAwayAgain(opening) ? { kind: "stopped" } : { kind: "failed" };
+  }
+  const reply = await upstreamReplyOf({ ...input, opened: opening });
+  if (reply.kind === "failed") return { kind: "failed" };
+  return { kind: "reply", reply };
+}
+
+// 同一个请求再问也一样被拒的状态码（magpie 的 continuation.again）。
+const TURNED_AWAY_STATUSES = new Set([400, 404, 422]);
+
+function turnsAwayAgain(failed: FailedAttempt): boolean {
+  return failed.cause === "refused" || TURNED_AWAY_STATUSES.has(failed.status);
 }
 
 /** 上游的回复怎么读：事件流从开口时扣下的字节读起；没理会 stream: true 的，是已经读完的整份回复。 */
@@ -238,6 +350,8 @@ export interface TranslatedBodyInput {
   model: string;
   facts: ModelFacts;
   refusals: ShapeRefusals;
+  // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
+  continuation: PrefillMode | null;
 }
 
 /**
@@ -245,7 +359,7 @@ export interface TranslatedBodyInput {
  * 最后按厂商改（vendor-rewrites.ts；MiniMax 的思考在翻成 Chat 之前写回 <think>）。
  */
 export function translatedBody(input: TranslatedBodyInput): string {
-  const { to, refusals, baseUrl } = input;
+  const { to, refusals, baseUrl, continuation } = input;
   let request = allowedReasoning({ request: input.request, to, refusals });
   if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
   request = downgradedRequest({
@@ -253,16 +367,20 @@ export function translatedBody(input: TranslatedBodyInput): string {
     to,
     refused: (shape) => refusals.has(shape),
     // Chat、Responses 的 Agent 把末尾的 assistant 消息当作说完的一轮；Anthropic 的是它自己要的预填。
-    lastIsTurn: input.from !== "anthropic_messages",
+    // 接着写的请求末尾是中转站自己的预填，不补 user 轮。
+    lastIsTurn: input.from !== "anthropic_messages" && continuation === null,
   });
   request = requestForModel({ request, to, facts: input.facts });
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
   const built = protocolOf(to).build({ ...request, stream: true }, input.model);
-  const body = withoutRefusedFields({
+  let body = withoutRefusedFields({
     format: to,
     body: built,
     refused: (field) => refusals.has(field),
   });
+  if (continuation !== null) {
+    body = withPrefillMark({ body, mode: continuation, thinking: lastThinking(request.messages) });
+  }
   return JSON.stringify(withVendorRewrites({ format: to, baseUrl, model: input.model, body }));
 }
 
@@ -289,7 +407,10 @@ function allowedReasoning(input: {
   return off && refusals.has(shape) ? thinkingBackOn(request) : request;
 }
 
-/** Agent 要流式：解码一个事件就编码一个事件写给它。上游断流就在流尾补错误事件，不补结尾。 */
+/**
+ * Agent 要流式：解码一个事件就编码一个事件写给它。上游断流时先接着写（goOn），接上的回复接着往下写；
+ * 接不上就在流尾补错误事件，不补结尾。
+ */
 async function streamReply(input: {
   res: Response;
   wire: AgentWire;
@@ -300,6 +421,7 @@ async function streamReply(input: {
   requestedModel: string;
   upstreamModel: string;
   reply: UpstreamReply;
+  goOn: GoOn;
 }): Promise<AnswerEnd> {
   const { res } = input;
   // 保活已经回了 200 与响应头：接着在同一个流里写。
@@ -315,16 +437,68 @@ async function streamReply(input: {
     write: (text) => res.write(text),
     request: input.request,
   });
-  const decoder = protocolOf(input.to).decoder();
   const fence = fenceFilter({ request: input.request, emit: (event) => encoder.event(event) });
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
     emit: (event) => fence.event(event),
   });
+  // 接着写时 Agent 收到的要连成一份回复：这之后的几道修补与编码器各次共用。
+  const soFar = new ReplySoFar((event) => numbers.event(event));
+  const flush = () => {
+    numbers.end();
+    fence.end();
+  };
+  let reply = input.reply;
+  while (true) {
+    const tried = await readTry({ ...input, reply, soFar });
+    if (tried.kind === "gone") return tried;
+    if (tried.kind === "ended") {
+      flush();
+      encoder.finish();
+      res.end();
+      const { stop } = tried.read.finish();
+      const refused = refusedAfterOpening({ stop, error: tried.read.error });
+      if (refused) return { kind: "refused" };
+      return { kind: "complete", usage: encoder.usage() };
+    }
+    const resumed = await input.goOn(soFar);
+    if (resumed.kind === "gone") return resumed;
+    if (resumed.kind === "reply") {
+      reply = resumed.reply;
+      continue;
+    }
+    // 写成文字的调用还扣着的，照原文交出（接着写时它们不算 Agent 已经收到的，由新的一次重说）。
+    tried.release();
+    flush();
+    // 编码器写的都是完整的事件：空一行，错误连同它前面收尾的块（编码器自己补的）都在这之后。
+    res.write("\n");
+    const message = brokenMessage({ endpointName: input.endpoint.name, reason: tried.reason });
+    encoder.event({ kind: "error", message, code: null, vendorError: null });
+    res.end();
+    return { kind: "broken", message: tried.reason };
+  }
+}
+
+/** 读一次上游的回复读到哪：说完了（这一次解码出的回复）、断了（原因，与交出还扣着的文字）、Agent 走了。 */
+type TryEnd =
+  | { kind: "ended"; read: ReplyCollector }
+  | { kind: "broken"; reason: string; release: () => void }
+  | { kind: "gone" };
+
+/** 读一次上游的回复交给 soFar：写成文字的调用每次重新认，断了时还扣着的不交出（由调用方决定）。 */
+async function readTry(input: {
+  res: Response;
+  to: ApiEndpointRequestFormat;
+  request: GatewayRequest;
+  reply: UpstreamReply;
+  soFar: ReplySoFar;
+}): Promise<TryEnd> {
+  const { soFar } = input;
+  const decoder = protocolOf(input.to).decoder();
   const calls = textCallFilter({
     tools: input.request.tools,
-    emit: (event) => numbers.event(event),
+    emit: (event) => soFar.event(event),
   });
   // 只为认出开口后的拒答：解码出的事件另攒一份。
   const read = new ReplyCollector();
@@ -334,25 +508,12 @@ async function streamReply(input: {
     ending.add(event);
     calls.event(event);
   };
-  const end = await decodeReply({ res, reply: input.reply, decoder, emit });
+  const end = await decodeReply({ res: input.res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
-  calls.end();
-  numbers.end();
-  fence.end();
   const broken = brokenReason({ end, format: input.to, ending });
-  if (broken !== null) {
-    // 编码器写的都是完整的事件：空一行，错误连同它前面收尾的块（编码器自己补的）都在这之后。
-    res.write("\n");
-    const message = brokenMessage({ endpointName: input.endpoint.name, reason: broken });
-    encoder.event({ kind: "error", message, code: null, vendorError: null });
-    res.end();
-    return { kind: "broken", message: broken };
-  }
-  encoder.finish();
-  res.end();
-  const refused = refusedAfterOpening({ stop: read.finish().stop, error: read.error });
-  if (refused) return { kind: "refused" };
-  return { kind: "complete", usage: encoder.usage() };
+  if (broken !== null) return { kind: "broken", reason: broken, release: () => calls.end() };
+  calls.end();
+  return { kind: "ended", read };
 }
 
 /** Agent 不要流式：攒齐整份回复再一次给它；只想了一下就出错的回复按出错交给它。 */
