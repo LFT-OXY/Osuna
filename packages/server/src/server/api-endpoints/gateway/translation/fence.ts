@@ -69,7 +69,9 @@ class FenceFilter implements ReplyFilter {
 
   event(event: StreamEvent): void {
     if (event.kind !== "text") {
-      if (event.kind !== "start" && event.kind !== "usage") this.flush();
+      // 开头与用量不说明文字说完了。
+      const endsText = event.kind !== "start" && event.kind !== "usage";
+      if (endsText) this.flush();
       this.emit(event);
       return;
     }

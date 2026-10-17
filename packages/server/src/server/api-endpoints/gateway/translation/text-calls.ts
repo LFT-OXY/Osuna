@@ -90,7 +90,8 @@ interface CallStart {
 function textCallAt(text: string): CallStart {
   const found = TEXT_CALL_MARKS.map((mark) => text.indexOf(mark)).filter((at) => at >= 0);
   if (found.length > 0) return { at: Math.min(...found), tail: 0 };
-  const tail = Math.max(...TEXT_CALL_MARKS.map((tag) => partialTagAtEnd({ text, tag })));
+  const tails = TEXT_CALL_MARKS.map((tag) => partialTagAtEnd({ text, tag }));
+  const tail = Math.max(...tails);
   return { at: -1, tail };
 }
 
@@ -102,10 +103,8 @@ function withoutCutMark(text: string): string {
 /** 截在结尾的半个标签，没有为 ""。 */
 function cutMark(text: string): string {
   for (const mark of CUT_MARKS) {
-    for (let length = mark.length - 1; length >= 2; length--) {
-      const piece = mark.slice(0, length);
-      if (text.endsWith(piece)) return piece;
-    }
+    const length = partialTagAtEnd({ text, tag: mark });
+    if (length >= 2) return mark.slice(0, length);
   }
   return "";
 }
@@ -246,7 +245,8 @@ function hermesCall(input: CallText): ReadCall | null {
   const end = objectEnd(body);
   if (end === -1) return null;
   const value = parseJson(escapeRawControls(body.slice(0, end)));
-  if (!isRecord(value) || typeof value.name !== "string") return null;
+  if (!isRecord(value)) return null;
+  if (typeof value.name !== "string") return null;
   if (!names.has(value.name)) return null;
   const args = callArgs(givenArgs(value));
   if (args === null) return null;
@@ -286,8 +286,9 @@ function closedCall(input: {
 function paramCall(input: CallText): ReadCall | null {
   const { text, names } = input;
   const head = PARAM_HEAD.exec(text);
-  const name = head?.[1] ?? "";
-  if (head === null || !names.has(name)) return null;
+  if (head === null) return null;
+  const name = head[1] ?? "";
+  if (!names.has(name)) return null;
   let at = head[0].length;
   const args: Record<string, unknown> = {};
   for (let open = PARAM_OPEN.exec(text.slice(at)); open; open = PARAM_OPEN.exec(text.slice(at))) {
@@ -314,7 +315,8 @@ function paramValue(input: { text: string; from: number }): ValueSpan {
   let next = text.length;
   for (const stop of PARAM_STOPS) {
     const found = text.indexOf(stop, from);
-    if (found < 0 || found >= end) continue;
+    const stopsEarlier = found >= 0 && found < end;
+    if (!stopsEarlier) continue;
     end = found;
     next = stop === "</parameter>" ? found + stop.length : found;
   }
@@ -336,8 +338,9 @@ function afterClose(input: { text: string; at: number }): number {
 function glmCall(input: CallText): ReadCall | null {
   const { text, names } = input;
   const head = GLM_NAME.exec(text);
-  const name = head?.[1] ?? "";
-  if (head === null || !names.has(name)) return null;
+  if (head === null) return null;
+  const name = head[1] ?? "";
+  if (!names.has(name)) return null;
   let at = head[0].length;
   const args: Record<string, unknown> = {};
   for (let pair = GLM_PAIR.exec(text.slice(at)); pair; pair = GLM_PAIR.exec(text.slice(at))) {
@@ -373,7 +376,8 @@ function dsmlCall(input: CallText & { name: string; open: number }): ReadCall | 
 
 /** 请求给了工具时，翻译出的回复先过这一道（TextCallFilter）；没给工具时原样交出。 */
 export function textCallFilter(input: { tools: Tool[]; emit: EmitEvent }): ReplyFilter {
-  const names = new Set(input.tools.map((tool) => tool.name).filter((name) => name !== ""));
+  const offered = input.tools.map((tool) => tool.name).filter((name) => name !== "");
+  const names = new Set(offered);
   return names.size > 0
     ? new TextCallFilter({ names, emit: input.emit })
     : passingFilter(input.emit);

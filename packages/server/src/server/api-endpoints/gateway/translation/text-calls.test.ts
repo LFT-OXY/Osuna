@@ -40,10 +40,18 @@ function replyOf(input: { tools: Tool[]; chunks: string[] }): Reply {
   return collector.finish();
 }
 
-function called(name: string, args: unknown): Part {
+/** 转成的真调用：id 是中转站起的，只看前缀。 */
+interface ExpectedCall {
+  kind: "tool_call";
+  id: unknown;
+  name: string;
+  args: string;
+}
+
+function called(name: string, args: unknown): ExpectedCall {
   return {
     kind: "tool_call",
-    id: expect.stringMatching(/^call_text_/) as unknown as string,
+    id: expect.stringMatching(/^call_text_/),
     name,
     args: JSON.stringify(args),
   };
@@ -53,7 +61,12 @@ function textReply(text: string): Reply {
   return { id: "c1", parts: [{ kind: "text", text }], stop: "stop", usage: emptyUsage() };
 }
 
-function callReply(parts: Part[]): Reply {
+/** 期望的整份回复：调用的 id 只看前缀。 */
+interface ExpectedReply extends Omit<Reply, "parts"> {
+  parts: (Part | ExpectedCall)[];
+}
+
+function callReply(parts: (Part | ExpectedCall)[]): ExpectedReply {
   return { id: "c1", parts, stop: "tool", usage: emptyUsage() };
 }
 
