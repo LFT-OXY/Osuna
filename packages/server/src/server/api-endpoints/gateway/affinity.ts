@@ -78,7 +78,8 @@ export function affinityWhy(input: AffinityInput): AffinityWhy {
   if (input.within) return "turn";
   if (input.mode === "turn" || input.rotate) return "new-turn";
   if (input.cacheRead + input.cacheWrite < AFFINITY.cacheWorth) return "no-cache";
-  if (input.sinceAnsweredMs > AFFINITY.cacheCold && !input.hourWarm) return "cold";
+  const cooled = input.sinceAnsweredMs > AFFINITY.cacheCold && !input.hourWarm;
+  if (cooled) return "cold";
   return "cache";
 }
 
@@ -297,10 +298,10 @@ function hourCacheWarm(hour: HourCache, now: number): boolean {
   return hour.tokens >= AFFINITY.cacheWorth && now - hour.at <= AFFINITY.cacheHour;
 }
 
-/** 候选的推理档：magpie 路由组的成员固定在某一档；Osuna 的候选没有固定档，不带。 */
 interface StickyCandidate {
   endpoint: { id: string };
   upstreamModel: string;
+  // 预留的一级（magpie 的 w.Fixed == c.effort：路由组成员固定在某一档）；Osuna 的候选还没有固定档，不带。
   effort?: Effort;
 }
 
@@ -314,6 +315,7 @@ interface Answerer {
 interface Stick extends Answerer {
   at: number;
   cacheRead: number;
+  // 写进缓存的；厂商读写都不报时是那次发出的 prompt（usage.input）。
   cacheWrite: number;
   hour: HourCache;
 }
@@ -352,6 +354,8 @@ export class ConversationSticks {
     const had = stick !== undefined && sinceAnsweredMs <= AFFINITY.stickKeep;
     const at = stick ? answererAt(candidates, stick) : -1;
     const answerer = candidates[at];
+    const cacheWrite = stick?.cacheWrite ?? 0;
+    const hourWarm = stick !== undefined && hourCacheWarm(stick.hour, this.now());
     const why = affinityWhy({
       mode: "auto",
       rotate: false,
@@ -361,8 +365,8 @@ export class ConversationSticks {
       spent: false,
       within: input.within,
       cacheRead: stick?.cacheRead ?? 0,
-      cacheWrite: stick?.cacheWrite ?? 0,
-      hourWarm: stick !== undefined && hourCacheWarm(stick.hour, this.now()),
+      cacheWrite,
+      hourWarm,
       sinceAnsweredMs,
     });
     const kept = why === "session" || why === "turn" || why === "cache";
@@ -373,6 +377,7 @@ export class ConversationSticks {
   /**
    * 记下这段对话这次由谁答、缓存读写了多少。悄悄缓存的厂商（OpenAI 的自动前缀缓存、Gemini）读写都不报，
    * 它缓存里存着的就是这次发出的 prompt，算作写入，下一轮留下来读；一个 token 都没报的仍算没有缓存。
+   * 照 magpie 的 answered() 有意不按厂商区分：只看读写是不是都为 0。
    */
   answered(key: string, answer: Answerer & { usage: StickUsage }): void {
     const { usage, ...answerer } = answer;
@@ -381,17 +386,15 @@ export class ConversationSticks {
     const last = this.sticks.get(key);
     // 缓存是那家那个模型的：换了回答者，1 小时缓存从头算。
     const sameAnswerer = last?.endpointId === answer.endpointId && last.model === answer.model;
-    const hour = hourCacheAfter({
-      hour: sameAnswerer ? last.hour : NO_HOUR_CACHE,
-      usage,
-      now,
-    });
+    const keptHour = sameAnswerer ? last.hour : NO_HOUR_CACHE;
+    const hour = hourCacheAfter({ hour: keptHour, usage, now });
+    const cacheWrite = silent ? usage.input : usage.cacheWrite;
     this.sticks.delete(key);
     this.sticks.set(key, {
       ...answerer,
       at: now,
       cacheRead: usage.cacheRead,
-      cacheWrite: silent ? usage.input : usage.cacheWrite,
+      cacheWrite,
       hour,
     });
     if (this.sticks.size > AFFINITY.sticksKept) {

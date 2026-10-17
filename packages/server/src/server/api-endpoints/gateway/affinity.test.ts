@@ -283,17 +283,18 @@ describe("putting the answerer back first", () => {
     expect(newTurn(store)).toEqual([a, b]);
   });
 
-  test("a five-minute write, or too little for an hour, goes cold at five minutes", () => {
-    for (const cacheWrite1h of [0, 500]) {
-      const { store, clock } = sticks();
-      store.answered("claude|kimi-k2|s1", {
-        endpointId: "ep_b",
-        model: "kimi-k2",
-        usage: replied({ cacheWrite: 3000, cacheWrite1h }),
-      });
-      clock.now += 6 * MINUTE;
-      expect(newTurn(store)).toEqual([a, b]);
-    }
+  test.each([
+    ["a five-minute write", 0],
+    ["too little for an hour", 500],
+  ])("%s goes cold at five minutes", (_name, cacheWrite1h) => {
+    const { store, clock } = sticks();
+    store.answered("claude|kimi-k2|s1", {
+      endpointId: "ep_b",
+      model: "kimi-k2",
+      usage: replied({ cacheWrite: 3000, cacheWrite1h }),
+    });
+    clock.now += 6 * MINUTE;
+    expect(newTurn(store)).toEqual([a, b]);
   });
 
   test("reading all of an hour's cache keeps it another hour; reading less of it ends it", () => {
