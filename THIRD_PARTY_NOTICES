@@ -362,6 +362,19 @@ refusal_accounts_test.go, refusal_details_test.go and refusal_test.go:
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+A reply that breaks after it opened, its connection lost or its stream ended
+short of its last event (replyEnds in magpie's internal/gateway/upstream.go,
+errEndedShort in continuation.go), is no longer finished as if whole: the
+stream ends with an error event of the agent's own protocol after a blank line
+(cutMidReply, streamFailure, saysPassing and the pass-through reply's apart in
+gateway.go); its tests follow TestPassthroughStreamEndsOnLineEnd:
+
+  packages/server/src/server/api-endpoints/gateway/broken-reply.ts
+  packages/server/src/server/api-endpoints/gateway/agent-errors.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

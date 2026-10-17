@@ -1,4 +1,4 @@
-// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink；开口后的拒答不冷却照 fallback.go 的 refusedAfter）
+// 被拒后打开推理重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 forwardTranslated、forward 里的 RetryOneAuth，以及 forwardTranslated 里去掉拒收字段与画图工具的重问；回复里写成文字的调用、JSON 外的代码块与 Grok 参数里的整数接在 forwardTranslated 的 written、encoder 与 render 处；MiniMax 的思考照 chat.go buildChat 的 inlineThink；开口后的拒答不冷却照 fallback.go 的 refusedAfter；开口后断流不补结尾、在流尾补错误照 continuation.go 的 errEndedShort 与 cutMidReply）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingMessage } from "node:http";
@@ -7,8 +7,16 @@ import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
-import { ANTHROPIC_VERSION, describeNetworkError, parseJson } from "../upstream-http.js";
+import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
+import {
+  ENDED_SHORT,
+  ReplyEndingWatch,
+  brokenMessage,
+  type ReplyEnding,
+  connectionLost,
+  endedShort,
+} from "./broken-reply.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -68,6 +76,8 @@ import {
  * 不收结构化输出或预填时降级重问，也记住。推理档位、回复上限与采样参数按这家这个模型的资料填（requestForModel）。
  * 回复只改两处（照 magpie）：请求给了工具时，写在文字里的工具调用转成真调用（textCallFilter）；
  * Agent 要 JSON 时，剥掉模型包在外面的代码块（fenceFilter、unfencedReply）。
+ * 开口后上游断了（连接中断，或流读完了却没说完）不替上游补结尾（broken-reply.ts）：要流式的在流尾补错误事件，
+ * 不要的回 502。
  */
 
 type StreamEnd = { kind: "ended" } | { kind: "broken"; message: string } | { kind: "gone" };
@@ -279,9 +289,10 @@ function allowedReasoning(input: {
   return off && refusals.has(shape) ? thinkingBackOn(request) : request;
 }
 
-/** Agent 要流式：解码一个事件就编码一个事件写给它。上游断流就断开 Agent 的连接，由 CLI 自己报错。 */
+/** Agent 要流式：解码一个事件就编码一个事件写给它。上游断流就在流尾补错误事件，不补结尾。 */
 async function streamReply(input: {
   res: Response;
+  wire: AgentWire;
   endpoint: StoredApiEndpoint;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
@@ -317,19 +328,26 @@ async function streamReply(input: {
   });
   // 只为认出开口后的拒答：解码出的事件另攒一份。
   const read = new ReplyCollector();
+  const ending = new ReplyEndingWatch();
   const emit = (event: StreamEvent) => {
     read.add(event);
+    ending.add(event);
     calls.event(event);
   };
   const end = await decodeReply({ res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
-  if (end.kind === "broken") {
-    res.destroy();
-    return end;
-  }
   calls.end();
   numbers.end();
   fence.end();
+  const broken = brokenReason({ end, format: input.to, ending });
+  if (broken !== null) {
+    // 编码器写的都是完整的事件：空一行，错误连同它前面收尾的块（编码器自己补的）都在这之后。
+    res.write("\n");
+    const message = brokenMessage({ endpointName: input.endpoint.name, reason: broken });
+    encoder.event({ kind: "error", message, code: null, vendorError: null });
+    res.end();
+    return { kind: "broken", message: broken };
+  }
   encoder.finish();
   res.end();
   const refused = refusedAfterOpening({ stop: read.finish().stop, error: read.error });
@@ -361,13 +379,18 @@ async function wholeReply(input: {
     tools: input.request.tools,
     emit: (event) => numbers.event(event),
   });
-  const emit = (event: StreamEvent) => calls.event(event);
+  const ending = new ReplyEndingWatch();
+  const emit = (event: StreamEvent) => {
+    ending.add(event);
+    calls.event(event);
+  };
   const end = await decodeReply({ res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
   calls.end();
   numbers.end();
+  const broken = brokenReason({ end, format: input.to, ending });
   let failure: WholeFailure | null = null;
-  if (end.kind === "broken") failure = { message: end.message, vendorError: null };
+  if (broken !== null) failure = { message: broken, vendorError: null };
   else if (collector.error && !collector.saidAnything()) failure = collector.error;
   const headers = { [ANSWERED_BY_HEADER]: endpoint.slug };
   if (failure !== null) {
@@ -397,6 +420,17 @@ async function wholeReply(input: {
   const refused = refusedAfterOpening({ stop: reply.stop, error: collector.error });
   if (refused) return { kind: "refused" };
   return { kind: "complete", usage: reply.usage };
+}
+
+/** 开口后上游断了的原因：连接中断，或流读完了却没说完；说完了为 null。 */
+function brokenReason(input: {
+  end: Exclude<StreamEnd, { kind: "gone" }>;
+  format: ApiEndpointRequestFormat;
+  ending: ReplyEnding;
+}): string | null {
+  const { end } = input;
+  if (end.kind === "broken") return end.message;
+  return endedShort(input) ? ENDED_SHORT : null;
 }
 
 /** 整份回复交不出的原因：上游断流，或只想了一下就出错。 */
@@ -455,7 +489,7 @@ function readStream(input: {
     return Promise.resolve({ kind: "ended" });
   }
   // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；没读到的也读不到了。
-  if (response.destroyed) return Promise.resolve({ kind: "broken", message: "aborted" });
+  if (response.destroyed) return Promise.resolve({ kind: "broken", message: connectionLost() });
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;
@@ -469,7 +503,7 @@ function readStream(input: {
     const broke = (error?: Error) => {
       if (response.complete) return;
       if (agentGone) resolve({ kind: "gone" });
-      else resolve({ kind: "broken", message: error ? describeNetworkError(error) : "aborted" });
+      else resolve({ kind: "broken", message: connectionLost(error) });
     };
     response.once("error", broke);
     response.once("close", () => broke());

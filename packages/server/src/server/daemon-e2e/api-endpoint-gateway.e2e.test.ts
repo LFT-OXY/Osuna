@@ -34,6 +34,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 按厂商的改写（工单 16）照 grok_integral_test.go 与 grok_schema_test.go。
  * 认清上游回的是什么（工单 18）照 notapi_test.go（cloudflarePage）、quiet_whole_test.go 与 codex_access_programs_test.go。
  * 拒答换家（工单 19）照 refusal_error_test.go（highRiskMessage、TestHighRiskQuotationIsAnAnswer）、refusal_test.go 与 refusal_details_test.go。
+ * 开口后断流（工单 20）照 gateway.go 的 cutMidReply、saysPassing 与 TestPassthroughStreamEndsOnLineEnd 的流尾空行。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -3242,11 +3243,12 @@ describe("switching to another endpoint when one fails", () => {
     });
   });
 
-  test("once the reply opened it stays: the broken stream reaches the agent and the endpoint cools down", async () => {
+  test("once the reply opened it stays: the broken stream ends with an error event for the agent and the endpoint cools down", async () => {
     const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    const opening = `event: message_start\ndata: {"type":"message_start","message":{}}\n\n`;
     upstreamA.respond = (_request, res) => {
       res.writeHead(200, { "content-type": "text/event-stream" });
-      res.write(`event: message_start\ndata: {"type":"message_start","message":{}}\n\n`);
+      res.write(opening);
       res.write(OPENING_DELTA);
       setTimeout(() => res.destroy(), 50);
     };
@@ -3255,7 +3257,19 @@ describe("switching to another endpoint when one fails", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
-    await expect(response.text()).rejects.toThrow();
+    // 开口后断流照 magpie：流尾先空一行，再补 api_error，然后正常结束响应。
+    expect(await response.text()).toBe(
+      `${opening}${OPENING_DELTA}\n${sseFrame({
+        type: "error",
+        error: {
+          type: "api_error",
+          message: brokenSaid({
+            endpoint: "Relay A",
+            reason: "connection lost mid-reply (aborted)",
+          }),
+        },
+      })}`,
+    );
     expect(upstreamB.requests).toHaveLength(0);
     const client = await connectTo(daemon);
     await expect.poll(() => cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
@@ -6853,3 +6867,241 @@ const REFUSAL_EVENTS = [
   },
   { type: "message_stop" },
 ];
+
+/** 开口后断流时 Agent 在流尾收到的错误文字（magpie gateway.go 的 saysPassing）。 */
+function brokenSaid(input: { endpoint: string; reason: string }): string {
+  return `${input.endpoint}: ${input.reason} (502: you can retry your request)`;
+}
+
+const ENDED_SHORT = "the reply ended before it was complete";
+
+/** 开了口的 Anthropic 流：开头、一个文字块开始、半句话。 */
+const HALF_ANTHROPIC_REPLY = [
+  sseFrame({ type: "message_start", message: { id: "msg_half", usage: { input_tokens: 9 } } }),
+  sseFrame({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+  sseFrame({
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "text_delta", text: "Let me" },
+  }),
+].join("");
+
+/** HALF_ANTHROPIC_REPLY 翻给 Codex 后流尾的 response.failed：说了的半句收成一条消息。 */
+function halfCodexFailed(message: string): Record<string, unknown> {
+  return {
+    type: "response.failed",
+    sequence_number: 8,
+    response: {
+      id: "resp_msg_half",
+      object: "response",
+      created_at: expect.any(Number),
+      status: "failed",
+      model: "glm-4.6",
+      output: [
+        {
+          id: expect.stringMatching(/^msg_/),
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "Let me", annotations: [], logprobs: [] }],
+        },
+      ],
+      parallel_tool_calls: true,
+      tool_choice: "auto",
+      tools: [],
+      error: { code: "server_error", message },
+    },
+  };
+}
+
+/** 开了口的 Responses 流：开头、一条消息开始、半句话。 */
+const HALF_RESPONSES_REPLY = [
+  sseFrame({
+    type: "response.created",
+    response: { id: "resp_half", model: "grok-4", status: "in_progress" },
+  }),
+  sseFrame({
+    type: "response.output_item.added",
+    output_index: 0,
+    item: { id: "msg_1", type: "message", role: "assistant", content: [] },
+  }),
+  sseFrame({ type: "response.output_text.delta", item_id: "msg_1", delta: "Let me" }),
+].join("");
+
+describe("a reply that breaks after it opened (magpie errEndedShort, cutMidReply)", () => {
+  test("passed through, a stream that ended short of message_stop gets an error event after a blank line, even cut inside a line", async () => {
+    const { upstreamA, ask, daemon } = await twoRelays();
+    const cutLine = 'event: content_block_delta\ndata: {"type":"conte';
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(HALF_ANTHROPIC_REPLY + cutLine);
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(
+      `${HALF_ANTHROPIC_REPLY}${cutLine}\n\n${sseFrame({
+        type: "error",
+        error: {
+          type: "api_error",
+          message: brokenSaid({ endpoint: "Relay A", reason: ENDED_SHORT }),
+        },
+      })}`,
+    );
+    const client = await connectTo(daemon);
+    await expect.poll(() => cooldownOf(client, "ep_a")).toMatchObject({ state: "cooling_down" });
+  });
+
+  test("passed through, a Codex stream that ended short of response.completed gets response.failed", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(HALF_RESPONSES_REPLY);
+    };
+    const { gateway } = await start({ upstreamA: upstream });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("gpt-5.5", true)),
+    );
+
+    expect(await response.text()).toBe(
+      `${HALF_RESPONSES_REPLY}\n${sseFrame({
+        type: "response.failed",
+        response: {
+          object: "response",
+          status: "failed",
+          error: {
+            code: "server_error",
+            message: brokenSaid({ endpoint: "Relay A", reason: ENDED_SHORT }),
+          },
+        },
+      })}`,
+    );
+  });
+
+  test("translated for Codex, an Anthropic stream that ended short is not finished for it: response.failed after a blank line", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(HALF_ANTHROPIC_REPLY);
+    };
+    const { gateway, daemon } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).not.toContain("response.completed");
+    const tail = text.slice(text.lastIndexOf("\n\n\n") + 3);
+    expect((sseData(tail) as Record<string, unknown>[]).map((event) => event.type)).toEqual([
+      "response.output_text.done",
+      "response.content_part.done",
+      "response.output_item.done",
+      "response.failed",
+    ]);
+    expect(sseData(tail).at(-1)).toEqual(
+      halfCodexFailed(brokenSaid({ endpoint: "Relay B", reason: ENDED_SHORT })),
+    );
+    const client = await connectTo(daemon);
+    await expect.poll(() => cooldownOf(client, "ep_b")).toMatchObject({ state: "cooling_down" });
+  });
+
+  test("translated for Claude Code, a Responses stream that ended short gets api_error after a blank line and no message_stop", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(HALF_RESPONSES_REPLY);
+    };
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
+    );
+    const text = await response.text();
+
+    expect(text).not.toContain("message_stop");
+    expect(text).not.toContain("message_delta");
+    const tail = text.slice(text.lastIndexOf("\n\n\n") + 3);
+    expect(sseData(tail)).toEqual([
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "error",
+        error: {
+          type: "api_error",
+          message: brokenSaid({ endpoint: "Relay D", reason: ENDED_SHORT }),
+        },
+      },
+    ]);
+  });
+
+  test("translated, a connection lost mid-reply gets the error in the stream instead of a cut connection", async () => {
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(HALF_ANTHROPIC_REPLY);
+      setTimeout(() => res.destroy(), 50);
+    };
+    const { gateway } = await start({ upstreamB: anthropic });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest(codexConversation("glm-4.6", true)),
+    );
+    const events = sseData(await response.text());
+
+    expect(events.at(-1)).toEqual(
+      halfCodexFailed(
+        brokenSaid({ endpoint: "Relay B", reason: "connection lost mid-reply (aborted)" }),
+      ),
+    );
+  });
+
+  test("a Chat stream that ends without [DONE] after its finish_reason is whole", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(CHAT_CHUNKS.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(""));
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(claudeConversation(true)));
+
+    expect(sseData(await response.text())).toEqual(CHAT_AS_ANTHROPIC_EVENTS);
+  });
+
+  test.each([
+    { broken: "a connection lost", reason: "connection lost mid-reply (aborted)", cut: true },
+    { broken: "a stream that ended short", reason: ENDED_SHORT, cut: false },
+  ])(
+    "an agent that did not ask to stream gets a 502 with the reason for $broken",
+    async ({ reason, cut }) => {
+      const anthropic = await startUpstream();
+      anthropic.respond = (_request, res) => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        if (!cut) {
+          res.end(HALF_ANTHROPIC_REPLY);
+          return;
+        }
+        res.write(HALF_ANTHROPIC_REPLY);
+        setTimeout(() => res.destroy(), 50);
+      };
+      const { gateway } = await start({ upstreamB: anthropic });
+
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest(codexConversation("glm-4.6", false)),
+      );
+
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({
+        error: { message: `Relay B: ${reason}`, type: "api_error", code: null, param: null },
+      });
+    },
+  );
+});

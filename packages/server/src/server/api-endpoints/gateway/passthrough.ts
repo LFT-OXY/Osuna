@@ -1,7 +1,7 @@
 // fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns、
 // adaptiveThinking、samplingAsTaken，responses.go 的 withReasoningText，codex_backend.go 的 withoutBareReasoning，gateway.go 的 passthrough 里按上游模型改的几处、
 // 直通重问与 attempt 里去掉拒收字段、画图工具的重问；按厂商的改写接在 forwardOnce 处，Grok 回复的整数接在直通回复的 intTidy 处；
-// 保活之后整份回复照流写出照 fallback.go 的 holdWriter.release 与 whole_stream.go 的 wholeAsStream）
+// 保活之后整份回复照流写出照 fallback.go 的 holdWriter.release 与 whole_stream.go 的 wholeAsStream；开口后断流在流尾补错误照 gateway.go 直通回复里的 apart 与 streamFailure）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -11,7 +11,7 @@ import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { StoredApiEndpoint } from "../store.js";
-import { describeNetworkError, isRecord, parseJson } from "../upstream-http.js";
+import { isRecord, parseJson } from "../upstream-http.js";
 import {
   adaptiveThinkingAsTaken,
   isAnthropicModel,
@@ -23,6 +23,7 @@ import {
 import { emptyUsage, replaysThinking } from "./translation/ir.js";
 import { replayedReasoningInput } from "./translation/responses.js";
 import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import { ENDED_SHORT, brokenTail, connectionLost, endedShort } from "./broken-reply.js";
 import {
   withAdvisorFitted,
   withoutBillingLine,
@@ -75,8 +76,8 @@ import {
  * 别的模型去掉没有封存内容的推理项（中转站翻译时自己造的）。
  * 不思考的写法上游不收（effort none、关思考）、两个认证头不能同时带、不收请求里的某个字段、
  * 或不收结构化输出与预填时，开口前在同一家换写法重问，并记住。
- * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；上游断流就断开 Agent 的连接，
- * 由 CLI 自己报错。
+ * 开口时先交出扣下的帧，之后边收边发，同时按协议读一遍（ReplyTap）；开口后上游断了（连接中断，或流读完了却没说完），
+ * 事件流在流尾补错误事件（broken-reply.ts），整份回复补不了，断开 Agent 的连接。
  */
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -220,7 +221,14 @@ async function answerOpened(input: {
     if (tidy !== null) delete headers["content-length"];
     res.writeHead(opened.status, { ...headers, [ANSWERED_BY_HEADER]: input.endpoint.slug });
   }
-  return { kind: "answered", finished: relay({ opened, res, tidy }) };
+  const finished = relay({
+    opened,
+    res,
+    tidy,
+    format: input.format,
+    endpointName: input.endpoint.name,
+  });
+  return { kind: "answered", finished };
 }
 
 /** Grok 的对话回复要去掉调用参数里的零小数（grok-integral.ts）；别的回复原样转，为 null。 */
@@ -287,46 +295,91 @@ function relay(input: {
   opened: OpenedUpstream;
   res: Response;
   tidy: WholeArgsTidy | null;
+  format: ApiEndpointRequestFormat;
+  endpointName: string;
 }): Promise<AnswerEnd> {
-  const { res } = input;
+  const { res, format } = input;
   const { response, held, tap } = input.opened;
   const sink = agentSink(input);
-  if (response.readableEnded) {
-    sink.end(held);
-    return Promise.resolve(endOf(tap));
-  }
-  sink.write(held);
-  // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；照断流处理。
-  if (response.destroyed) {
+  const streamed = isEventStream(response, held);
+  const wire = wireOf(format);
+  let atLine = endsLine({ chunk: held, before: true });
+  const tailed = (reason: string): AnswerEnd => {
+    const { endpointName } = input;
+    sink.end(brokenTail({ wire, endpointName, reason, atLine }));
+    return { kind: "broken", message: reason };
+  };
+  // 上游的流收完了：没说完的在流尾补错误，说完的照常结束。
+  const finished = (): AnswerEnd => {
+    if (tappedShort({ tap, format, streamed })) return tailed(ENDED_SHORT);
+    sink.end();
+    return endOf(tap);
+  };
+  // 开口后连接断了：事件流在流尾补错误；整份回复补不了，断开 Agent 的连接，由 CLI 自己报错。
+  const cut = (reason: string): AnswerEnd => {
+    if (streamed) return tailed(reason);
     res.destroy();
-    return Promise.resolve({ kind: "broken", message: "aborted" });
-  }
+    return { kind: "broken", message: reason };
+  };
+  sink.write(held);
+  if (response.readableEnded) return Promise.resolve(finished());
+  // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；照断流处理。
+  if (response.destroyed) return Promise.resolve(cut(connectionLost()));
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;
   });
   return new Promise((resolve) => {
-    const complete = () => resolve(endOf(tap));
-    response.on("data", (chunk: Buffer) => tap?.feed(chunk));
-    response.once("end", complete);
+    // end、error、close 可能接连发出：Agent 的响应只结束一次。
+    let settled = false;
+    const settle = (end: () => AnswerEnd) => {
+      if (settled) return;
+      settled = true;
+      resolve(end());
+    };
+    response.on("data", (chunk: Buffer) => {
+      tap?.feed(chunk);
+      atLine = endsLine({ chunk, before: atLine });
+    });
+    response.once("end", () => settle(finished));
     const broke = (error?: Error) => {
       // 上游已经收完：Agent 这时离开也算答完了（end 可能因为没人读而不再发出）。
-      if (response.complete) {
-        complete();
-        return;
-      }
-      if (agentGone) {
-        resolve({ kind: "gone" });
-        return;
-      }
-      // 首字之后上游断流：照样断开 Agent 的连接，由 CLI 自己报错。
-      res.destroy();
-      resolve({ kind: "broken", message: error ? describeNetworkError(error) : "aborted" });
+      if (response.complete) settle(finished);
+      else if (agentGone) settle(() => ({ kind: "gone" }));
+      else settle(() => cut(connectionLost(error)));
     };
     response.once("error", broke);
     response.once("close", () => broke());
-    response.pipe(sink);
+    // 流尾可能要补错误：Agent 的响应由这里结束。
+    response.pipe(sink, { end: false });
   });
+}
+
+const NEWLINE = 0x0a;
+
+/** 写给 Agent 的最后一个字节是不是换行；这一段是空的，照之前的。 */
+function endsLine(input: { chunk: Buffer; before: boolean }): boolean {
+  const last = input.chunk.at(-1);
+  if (last === undefined) return input.before;
+  return last === NEWLINE;
+}
+
+/** 直通只有 Agent 说的两种格式。 */
+function wireOf(format: ApiEndpointRequestFormat): AgentWire {
+  return format === "anthropic_messages" ? "anthropic" : "openai";
+}
+
+/** 读完了的事件流没说完（broken-reply.ts 的 endedShort）；整份回复与不读的回复（count_tokens）不算。 */
+function tappedShort(input: {
+  tap: ReplyTap | null;
+  format: ApiEndpointRequestFormat;
+  streamed: boolean;
+}): boolean {
+  const { tap } = input;
+  if (tap === null || !input.streamed) return false;
+  const reply = tap.end();
+  const ending = { stopped: reply.stop !== null, ended: reply.ended, failed: reply.error !== null };
+  return endedShort({ format: input.format, ending });
 }
 
 /** 回复收完了：开口后才拒答的照常转给了 Agent，不算答成功；别的带上这次的用量。 */

@@ -31,7 +31,7 @@ const TOO_LONG_CODE = "context_length_exceeded";
 const REFUSED_CODE = "invalid_prompt";
 
 /** 流里错误事件的错误码：一般的失败、对话太长、拒答。 */
-type StreamErrorCode = "server_error" | typeof TOO_LONG_CODE | typeof REFUSED_CODE;
+export type StreamErrorCode = "server_error" | typeof TOO_LONG_CODE | typeof REFUSED_CODE;
 
 export type AgentWire = "anthropic" | "openai";
 
@@ -128,6 +128,15 @@ function sendStreamError(input: {
   message: string;
   code: StreamErrorCode;
 }): void {
+  input.res.end(streamErrorEvent(input));
+}
+
+/** 流里错误事件的原文：Anthropic 是 error 事件，OpenAI 是 response.failed（magpie 的 streamFailure）。 */
+export function streamErrorEvent(input: {
+  wire: AgentWire;
+  message: string;
+  code: StreamErrorCode;
+}): string {
   const { message, code } = input;
   const event =
     input.wire === "anthropic"
@@ -140,7 +149,7 @@ function sendStreamError(input: {
             error: { code, message },
           },
         };
-  input.res.end(sseEvent(event.type, event));
+  return sseEvent(event.type, event);
 }
 
 /** Anthropic 流里的错误：api_error；对话太长时带上 context_length_exceeded 代码（magpie 同样）。 */
