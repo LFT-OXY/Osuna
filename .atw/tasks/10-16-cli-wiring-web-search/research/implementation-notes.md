@@ -194,3 +194,45 @@ ADR 0010 下 API key 登录写的是 Osuna 的 Codex 服务商表，不写 `open
 ### WebSocket 426 的写法
 
 daemon 的 `ws` 服务（`path: "/ws"`）原先用 `server` 选项自己挂 upgrade 监听，对路径不符的握手同步写 400 并销毁 socket，会和 426 抢同一个 socket。现在它改成 `noServer`，由 `websocket-server.ts` 自己挂 upgrade 监听：socket 已经结束或销毁（426 已经答完）就不碰，其余照旧交给 `wss.handleUpgrade`（路径不符照旧 400）；关闭时自己摘掉这个监听。e2e 直接读 socket 上的全部字节，断言只有一个 `HTTP/1.1 426`，后面没有 400。
+
+## 09 用 ChatGPT 登录的 Codex 只改 ChatGPT 地址
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie（`internal/agent/codex.go`） | Osuna |
+| --- | --- | --- |
+| 判断登录方式 | `codexChatGPT`：读 `auth.json`（或钥匙串）看有没有 access token | 起临时 app-server（`codex -c model_provider="openai" app-server`），`initialize` 后发 `account/read`（`codex-sign-in.ts` `createCodexSignInReader`，经 `codex-app-server-agent.ts` `requestTemporaryCodexAppServer`）。覆盖成内置 openai 是因为当前服务商是 Osuna 的表时它报不出账号。`account.type` 为 `chatgpt` 才算 ChatGPT；`apiKey`、`null`（未登录）、其余（如 `amazonBedrock`）都按服务商接法 |
+| 什么时候判断 | 每次 Sync | 打开开关（含「重新应用」）前、`list` 时（Codex 开着才问）、daemon 启动后（先按接管记录现在的接法对账，再在后台问，不让启动等 Codex）。同一时间只问一次 |
+| 判断不出 | 关了账号发现时按上次接的样子（`joined() \|\| beside()`） | 同：没装 Codex、超时（20 秒，ChatGPT 账号的 `account/read` 会先向 chatgpt.com 查工作区路由，Codex 自己最多等 15 秒）、回答认不出时记日志，保持上次的结果；从没判断出时按接管记录现在的接法，没有接管记录按服务商接法 |
+| ChatGPT 接法写什么 | `Join`：拿掉 `model_provider`、`model_catalog_json`，写 `openai_base_url = <网关>/backend-api/codex`，`model` 不动（Codex 上次选的），`putProvider` 照写服务商表 | 同（`codex-config-patch.ts` `wiringRaws`）。`openai_base_url` = 中转站地址 + `/backend-api/codex`（`CHATGPT_BACKEND_PATH`）。`model`：接管前文件里有就原样留着（含原来的引号写法）；没有才写起始模型，写成最早开着、选了它的那家的「接口标识/模型名」（`service.ts` `chatgptStartModel`），因为不带标识的名字都指 ChatGPT 自带模型（ADR 0010） |
+| 登录方式变了 | Sync 时重新 Join 或改成服务商模式 | 判断结果与接管记录的接法不同（记录里 `openai_base_url` 有写入值即 ChatGPT 接法，`isChatGptWiring`）就按新方式重写：上一种接法独有的 `openai_base_url` 按接管记录放回原样、不再记；两种都负责的键沿用第一次接管时记的原值 |
+
+### 用户自己写的 `openai_base_url`
+
+magpie 的 ChatGPT 接法（`Join`，以及选了 magpie 模型时的 beside 那段 `set`）不看原值，直接写成网关地址；断开时 `dropBase` 只在它是 magpie 的地址时删掉，原值不存，所以用户写的地址丢了。只有 magpie API 模式（`u == "" || viaBase()` 才写）和多号 failover（`codex.failover` 标记）不碰用户写的。
+
+Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 自带模型的请求就不经过中转站，开关等于没开），另照 ADR 0004 在接管记录里记原值（值的原文，含引号），切回官方、或换成服务商接法时放回原处（比 magpie 多做）。用例：`codex-config-patch.test.ts`「replaces an openai_base_url the user wrote and puts it back on Official」、`api-endpoint-codex-sign-in.e2e.test.ts`「an openai_base_url the user wrote …」。
+
+### 其余做法
+
+- 接管记录的 `keys.<键>.written` 可为 `null`：表示 Osuna 拿掉了这个键（ChatGPT 接法的 `model_provider`、`model_catalog_json`）。健康检查按「文件里不该有它」比对，所以别的程序加回 `model_provider` 也算「不再经过中转站」。
+- 提示区的路由键加了 `openai_base_url`：被别的程序改了报 `not_through_gateway`（03 号工单的提示）。被改过时，登录方式变了也不自动重写，等用户点「重新应用」（与 `rewriteClaudeHints` 被改过就不动的先例一致），「重新应用」按新的登录方式写。
+- 拿掉又放回的键（用户自己的 `model_provider`）回到最后一个顶层键后面：值一样，位置不保证（Claude 那边 `ANTHROPIC_MODEL` 等变量的先例）。接管前没有 `model_provider` 的文件切回官方逐字节还原。
+- 生产以外不起真的 Codex：`createTestPaseoDaemon` 总是带一个回答「未登录」的 `readCodexSignIn`（用例自己传的优先）；app e2e 的 daemon 封条（`daemon-upgrade-seal.mjs` `isCodexSignInProbe`）把带 `app-server` 与 `model_provider="openai"` 的启动换成立刻以 1 退出的进程，daemon 按判断不出处理。
+
+### ChatGPT 工作区路由会不会绕过中转站：不会
+
+【源码核实】openai/codex @ `8d9f6466ff0294785d56f55b1fe363d132fe4133`（2026-10-17，`git clone --depth 1` 到新的临时目录，只读，没有运行）：
+
+- 路由只在服务商是内置 openai、走第一方登录、地址为空或以 `/backend-api/codex` 结尾（`supports_codex_backend_routes`，`codex-rs/model-provider-info/src/lib.rs:620-627`）且是 ChatGPT 登录时才去问（`codex-rs/model-provider/src/provider.rs:216-247`）。Osuna 的地址满足这几条，所以确实会问。
+- 问的是 app-server 的 `read_account(Some(request))`（`codex-rs/app-server/src/request_processors/account_processor/workspace_routing.rs`）：先向 `chatgpt_base_url`（缺省 `https://chatgpt.com/backend-api/`，不受 `openai_base_url` 影响）查账号的工作区，再判断这次请求是否「绑在工作区上」（同文件 `workspace_bound`，第 491-499 行），四个条件任一成立才改写：
+  1. `previously_routed`（这个会话之前被改写过）；
+  2. 服务商地址正好是 `https://chatgpt.com/backend-api/codex`；
+  3. 服务商地址的 origin 等于这个会话的 `chatgpt_base_url` 的 origin；
+  4. 两个 `chatgpt_base_url` 相同，且工作区后端的 origin 等于服务商地址的 origin。
+- Osuna 的地址是 `http://127.0.0.1:<端口>/api-endpoint-gateway/backend-api/codex`：不是 2；origin `http://127.0.0.1:<端口>` 不等于 `https://chatgpt.com`，3 不成立；工作区后端必须是 https origin（`parse_backend_url` 要求 `https`），4 不成立；新会话的 `previously_routed` 从 false 起（`WorkspaceRoutingContext::new`，`codex-rs/model-provider/src/workspace_routing.rs:28`），只有被改写过才变 true，1 不成立。于是 `workspace_routing = None`，`apply_workspace_routing` 不会把请求的 origin 改到 ChatGPT 的工作区后端，请求照旧发到中转站。
+
+由此带出的两点（都不需要改 Osuna）：
+
+- 用 ChatGPT 登录时 app-server 每个会话仍会直接向 chatgpt.com 查一次工作区（账号接口走 `chatgpt_base_url`，不经过中转站），查失败（401、超时等）这一轮会报错。这与没开开关时一样。
+- 推断，未核实：开关打开前在同一个长期运行的 app-server 里已被路由改写过的会话（`previously_routed` 为 true），若不重开就换成新地址继续，可能仍被改写到工作区后端。这属于「改完设置正在运行的会话要重开」（27 号工单）的范围。
