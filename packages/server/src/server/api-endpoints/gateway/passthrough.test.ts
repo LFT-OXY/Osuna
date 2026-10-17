@@ -761,6 +761,7 @@ describe("reading an Anthropic stream passed through", () => {
       error: {
         message: "Overloaded",
         code: "overloaded_error",
+        vendorError: null,
         raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
       },
       usage,
@@ -906,6 +907,7 @@ describe("reading a Chat stream passed through", () => {
       error: {
         message: "upstream overloaded",
         code: null,
+        vendorError: null,
         raw: '{"error":{"message":"upstream overloaded"}}',
       },
       usage: NO_USAGE,
@@ -1011,6 +1013,7 @@ describe("reading a Responses stream passed through", () => {
       error: {
         message: "overloaded",
         code: "server_error",
+        vendorError: null,
         raw: '{"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"overloaded"}}}',
       },
       usage: NO_USAGE,
@@ -1200,6 +1203,7 @@ describe("reading a reply passed through whole", () => {
       error: {
         message: "Overloaded",
         code: "overloaded_error",
+        vendorError: null,
         raw: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
       },
       usage: NO_USAGE,
@@ -1215,6 +1219,7 @@ describe("reading a reply passed through whole", () => {
       error: {
         message: "quota exhausted",
         code: "insufficient_quota",
+        vendorError: null,
         raw: '{"error":{"message":"quota exhausted","code":"insufficient_quota"}}',
       },
       usage: NO_USAGE,

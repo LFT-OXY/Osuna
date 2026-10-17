@@ -37,6 +37,8 @@ import {
   type Tool,
   type ToolChoice,
   type Usage,
+  vendorErrorFields,
+  vendorErrorOf,
 } from "./ir.js";
 import { sseEvent } from "./sse.js";
 
@@ -1002,7 +1004,8 @@ export class ResponsesDecoder {
         // error 事件，或别的形状里带着的错误：照样是回复的结束（magpie #1933）。
         if (event.type === "error" || carries(event.error)) {
           this.endCall(emit);
-          emit({ kind: "error", ...errorOf(event.error, event.message) });
+          const vendorError = vendorErrorOf(event.error);
+          emit({ kind: "error", ...errorOf(event.error, event.message), vendorError });
         }
     }
   }
@@ -1048,7 +1051,8 @@ export class ResponsesDecoder {
     const failed =
       carries(response.error) || input.type === "response.failed" || response.status === "failed";
     if (failed) {
-      emit({ kind: "error", ...errorOf(response.error, undefined) });
+      const vendorError = vendorErrorOf(response.error);
+      emit({ kind: "error", ...errorOf(response.error, undefined), vendorError });
       return;
     }
     let stop: StopReason = "stop";
@@ -1296,7 +1300,11 @@ export class ResponsesEncoder {
         this.release(null);
         this.send("response.failed", {
           response: this.response("failed", {
-            error: { code: event.code ?? "server_error", message: event.message },
+            error: {
+              code: event.code ?? "server_error",
+              message: event.message,
+              ...vendorErrorFields(event.vendorError),
+            },
           }),
         });
         break;

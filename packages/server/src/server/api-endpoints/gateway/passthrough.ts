@@ -49,11 +49,15 @@ import {
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import { ReplyTap } from "./reply-tap.js";
+import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
+import { wholeEvents } from "./whole-stream.js";
 import {
   ANSWERED_BY_HEADER,
   isEventStream,
+  notAStream,
   openUpstream,
+  readLimited,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -181,8 +185,10 @@ export async function attemptEndpoint(input: {
     });
   }
   if (opened.kind !== "opened") return opened;
-  input.keepAlive?.stop();
   const tidy = replyTidy({ ...input, opened });
+  const keptAliveWhole = res.headersSent && !isEventStream(opened.response, opened.held);
+  if (keptAliveWhole) return wholeAsStream({ ...input, url, opened, tidy });
+  input.keepAlive?.stop();
   // 保活已经回了 200 与响应头：接着在同一个流里交出回复。
   if (!res.headersSent) {
     const headers = responseHeaders(opened.response.headers);
@@ -225,6 +231,32 @@ function agentSink(input: { res: Response; tidy: WholeArgsTidy | null }): Writab
   });
   sink.pipe(input.res);
   return sink;
+}
+
+/**
+ * 保活已经回了事件流的响应头，上游却没理会 stream: true、回了整份 JSON：照这个协议的流写出（magpie 的 wholeAsStream），
+ * 不能当作整份回复交给 Agent。不是这个协议的整份回复，当作开口前失败换家，保活接着。
+ */
+async function wholeAsStream(input: {
+  res: Response;
+  format: ApiEndpointRequestFormat;
+  url: URL;
+  apiKey: string;
+  opened: OpenedUpstream;
+  tidy: WholeArgsTidy | null;
+  keepAlive?: AgentKeepAlive;
+}): Promise<AttemptOutcome> {
+  const { res, tidy } = input;
+  const raw = await readLimited({ stream: input.opened.response, first: input.opened.held });
+  let text = raw;
+  if (tidy !== null) text = tidy.write(raw) + tidy.end();
+  const events = wholeEvents(input.format, parseJson(text));
+  if (events === null) return notAStream({ url: input.url, text: raw, apiKey: input.apiKey });
+  input.keepAlive?.stop();
+  for (const event of events) res.write(sseEvent(event.name, event.data));
+  res.end();
+  const usage = input.opened.tap?.end().usage ?? emptyUsage();
+  return { kind: "answered", finished: Promise.resolve({ kind: "complete", usage }) };
 }
 
 /** 开口之后边收边发，同时按协议读一遍回复（粘性要用其中的缓存读写 token 数）。 */

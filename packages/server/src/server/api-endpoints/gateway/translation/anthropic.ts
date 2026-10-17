@@ -35,6 +35,7 @@ import {
   type ToolChoice,
   type ToolResultPart,
   type Usage,
+  vendorErrorFields,
 } from "./ir.js";
 import { withoutSampling } from "../refused-fields.js";
 import { objectSchema } from "./object-root.js";
@@ -816,7 +817,7 @@ export class AnthropicDecoder {
         emit({ kind: "done" });
         return;
       case "error":
-        emit({ kind: "error", ...errorOf(event.error) });
+        emit({ kind: "error", ...errorOf(event.error), vendorError: null });
         return;
       default:
     }
@@ -936,6 +937,7 @@ export class AnthropicEncoder {
             type: "api_error",
             message: event.message,
             ...(event.code ? { code: event.code } : {}),
+            ...vendorErrorFields(event.vendorError),
           },
         });
         break;

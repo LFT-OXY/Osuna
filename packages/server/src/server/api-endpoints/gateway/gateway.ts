@@ -675,7 +675,7 @@ async function askInTurn(input: {
     }
     const { failed } = outcome;
     logger.warn(
-      { endpoint: candidate.endpoint.slug, status: failed.status },
+      { endpoint: candidate.endpoint.slug, status: failed.status, detail: failed.detail },
       "API endpoint returned an error",
     );
     // 厂商自己的清单可能还列着它（OpenCode Zen 的 exo-free）：这家的这一项一周内不进列表。

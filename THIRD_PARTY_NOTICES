@@ -309,6 +309,34 @@ minimax_think_test.go:
   packages/server/src/server/api-endpoints/gateway/translated.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+How the gateway reads what an endpoint answered: a whole reply given to a
+streaming request, and the stream it is said as once the keepalive went out
+(wholeEvents, anthropicWholeEvents, responsesWholeEvents and chatWholeEvents in
+magpie's internal/gateway/whole_stream.go, holdWriter.settle and release in
+fallback.go); a 2xx that is no API reply (notAnAPIReply, webPage, htmlStart and
+pageTitle in notapi.go, BlockedHint in internal/provider/test.go); a vendor's
+own error in a stream (requestRefused and saidError in responses.go, an error
+named only by its event: line as streamEvent in fallback.go reads it); and
+Zhipu's refusal wrapped in a 200 (zhipuCodeStatus, zhipuEnvelope and
+ZhipuEnveloped in internal/provider/zhipu_envelope.go, zhipuHost in
+zhipu_coding.go). Their tests reuse the cases of notapi_test.go,
+quiet_whole_test.go, codex_access_programs_test.go and zhipu_envelope_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/whole-stream.ts
+  packages/server/src/server/api-endpoints/gateway/whole-stream.test.ts
+  packages/server/src/server/api-endpoints/gateway/not-api-reply.ts
+  packages/server/src/server/api-endpoints/gateway/not-api-reply.test.ts
+  packages/server/src/server/api-endpoints/gateway/zhipu-envelope.ts
+  packages/server/src/server/api-endpoints/gateway/zhipu-envelope.test.ts
+  packages/server/src/server/api-endpoints/gateway/upstream-call.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
+  packages/server/src/server/api-endpoints/gateway/translated.ts
+  packages/server/src/server/api-endpoints/gateway/translation/ir.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.ts
+  packages/server/src/server/api-endpoints/gateway/translation/responses.test.ts
+  packages/server/src/server/api-endpoints/gateway/translation/sse.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

@@ -13,6 +13,8 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import { describeNetworkError, extractErrorDetail, isRecord, parseJson } from "../upstream-http.js";
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
+import { notApiDetail, notApiReply, type NotApiReply } from "./not-api-reply.js";
+import { zhipuRefusal } from "./zhipu-envelope.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import type { Usage } from "./translation/ir.js";
 
@@ -66,7 +68,7 @@ export interface FailedAttempt {
   text: string;
   // 给 Agent 看的上游原文，key 已打码。
   detail: string;
-  upstreamError: Pick<AgentError, "type" | "code">;
+  upstreamError: UpstreamError;
   cause: FailureCause;
 }
 
@@ -112,10 +114,14 @@ type UpstreamOutcome =
 
 type Opening =
   | { kind: "open"; held: Buffer; tap: ReplyTap | null }
-  // 开口前出错：报错那个事件的原文。
-  | { kind: "error"; raw: string }
+  // 开口前出错：报错那个事件的原文；厂商说请求本身有问题的读成 400。
+  | { kind: "error"; raw: string; refusesRequest: boolean }
   | { kind: "empty" }
-  | { kind: "broken" };
+  | { kind: "broken" }
+  // 2xx 却不是接口的回复（网页、空的、不是 JSON）：认出它的开头，其余的由调用方接着读。
+  | { kind: "not_api"; reply: NotApiReply; head: Buffer }
+  // 2xx 里包着的拒绝（智谱的信封）：读成它代表的状态码与错误体。
+  | { kind: "enveloped"; status: number; text: string };
 
 export async function openUpstream(input: {
   res: Response;
@@ -153,7 +159,12 @@ export async function openUpstream(input: {
     return failedByUpstream({ status, response, text, apiKey });
   }
 
-  const opening = await awaitOpening({ response, reads: input.reads, onHeard: input.onHeard });
+  const opening = await awaitOpening({
+    response,
+    host: url.hostname,
+    reads: input.reads,
+    onHeard: input.onHeard,
+  });
   if (res.destroyed) return { kind: "gone" };
   switch (opening.kind) {
     case "open":
@@ -164,13 +175,10 @@ export async function openUpstream(input: {
         held: opening.held,
         tap: opening.tap,
       };
-    case "error":
-      return failedByUpstream({
-        status: streamStatus(opening.raw),
-        response,
-        text: opening.raw,
-        apiKey,
-      });
+    case "error": {
+      const errorStatus = statusOfError(opening);
+      return failedByUpstream({ status: errorStatus, response, text: opening.raw, apiKey });
+    }
     case "empty":
       return failedBySelf({ status: 502, detail: EMPTY_REPLY, cause: "empty" });
     case "broken":
@@ -178,6 +186,19 @@ export async function openUpstream(input: {
         status: 502,
         detail: `${url.origin}: the connection closed before the reply began`,
       });
+    case "enveloped":
+      return failedByUpstream({ status: opening.status, response, text: opening.text, apiKey });
+    case "not_api": {
+      const text = await readLimited({ stream: response, first: opening.head });
+      const statusLine = `${status} ${response.statusMessage ?? ""}`.trim();
+      const detail = notApiDetail({
+        kind: opening.reply,
+        statusLine,
+        headers: response.headers,
+        text,
+      });
+      return failedBySelf({ status: 502, detail: detail.replaceAll(apiKey, "***") });
+    }
   }
 }
 
@@ -229,6 +250,8 @@ export function failedBySelf(input: {
  */
 function awaitOpening(input: {
   response: IncomingMessage;
+  // 这家的主机名：智谱的信封只认它自己的地址。
+  host: string;
   reads: ApiEndpointRequestFormat | null;
   onHeard?: () => void;
 }): Promise<Opening> {
@@ -245,8 +268,23 @@ function awaitOpening(input: {
       resolve(result);
     };
     const open = (): Opening => ({ kind: "open", held: Buffer.concat(chunks), tap });
+    // 204 本来就没有内容。
+    const inspects = response.statusCode !== 204;
+    // 回复的开头（收完时一个字节都没有就是空的）说它不是接口的回复。
+    const notApi = (head: Buffer): Opening | null => {
+      if (bytes > 0 || !inspects) return null;
+      const reply = notApiReply({ headers: response.headers, head });
+      if (reply === null) return null;
+      return { kind: "not_api", reply, head };
+    };
     const onData = (chunk: Buffer) => {
       input.onHeard?.();
+      const notReply = notApi(chunk);
+      if (notReply) {
+        response.pause();
+        settle(notReply);
+        return;
+      }
       chunks.push(chunk);
       bytes += chunk.length;
       if (reads !== null) {
@@ -267,11 +305,21 @@ function awaitOpening(input: {
       settle(open());
     };
     const onEnd = () => {
+      const notReply = notApi(Buffer.alloc(0));
+      if (notReply) {
+        settle(notReply);
+        return;
+      }
+      const body = Buffer.concat(chunks);
+      const refusal = zhipuRefusal({ host: input.host, headers: response.headers, body });
+      if (refusal) {
+        settle({ kind: "enveloped", ...refusal });
+        return;
+      }
       if (reads === null) {
         settle(open());
         return;
       }
-      // 一个字节都没有的回复照原样交出（不是本协议回复的 2xx 归工单 18）。
       const reply = tap?.end() ?? null;
       const failed = reply ? failedBeforeContent(reply) : null;
       if (failed) settle(failed);
@@ -286,17 +334,24 @@ function awaitOpening(input: {
   });
 }
 
+/** 开口前出错代表的状态码：厂商说请求本身有问题的是 400，别的按流里的话判（streamStatus）。 */
+function statusOfError(opening: Extract<Opening, { kind: "error" }>): number {
+  if (opening.refusesRequest) return 400;
+  return streamStatus(opening.raw);
+}
+
 /** 还没有内容就报了错。 */
 function failedBeforeContent(reply: TappedReply): Opening | null {
   if (reply.error === null || reply.content.length > 0) return null;
-  return { kind: "error", raw: reply.error.raw };
+  const refusesRequest = reply.error.vendorError !== null;
+  return { kind: "error", raw: reply.error.raw, refusesRequest };
 }
 
 /**
  * 空回复（magpie 的 repliesCounted、uncounted、answersNothing）：Anthropic 与 Responses 的回复一定计 token，
  * 什么都没说、一个 token 也没计的才是空回复；Claude 自己以空回复结束一轮时计了提示词，仍是回答。
  * Chat 的回复不一定计 token，从不算空。被截断（length）与拒答（filter）的不算。
- * 没说结束原因的（HTML 页、`{}`）读不出是不是本协议的回复，也不算，归工单 18。
+ * 没说结束原因的（`{}`）读不出是不是本协议的回复，也不算；网页与空的回复开口前就认出（not-api-reply.ts）。
  */
 function isEmptyReply(reply: TappedReply, format: ApiEndpointRequestFormat): boolean {
   const { usage } = reply;
@@ -389,16 +444,34 @@ function droppedConnection(error: unknown): boolean {
   return typeof code === "string" && DROPPED_CONNECTION_CODES.has(code);
 }
 
-function readUpstreamError(text: string): Pick<AgentError, "type" | "code"> {
+/** 上游自己写的错误类型、代码与参数，转给 Agent 时照带。 */
+export type UpstreamError = Pick<AgentError, "type" | "code" | "param">;
+
+/** 错误体或流里的错误事件里的 `error`（Responses 的 response.failed 在 `response.error`）。 */
+function readUpstreamError(text: string): UpstreamError {
   const body = parseJson(text);
-  const error = isRecord(body) && isRecord(body.error) ? body.error : null;
-  if (!error) return {};
-  return {
-    ...(typeof error.type === "string" ? { type: error.type } : {}),
-    ...(typeof error.code === "string" || typeof error.code === "number"
-      ? { code: error.code }
-      : {}),
-  };
+  const read: UpstreamError = {};
+  if (!isRecord(body)) return read;
+  const response = isRecord(body.response) ? body.response : {};
+  const error = [body.error, response.error].find(isRecord);
+  if (!error) return read;
+  if (typeof error.type === "string") read.type = error.type;
+  if (isErrorCode(error.code)) read.code = error.code;
+  if (typeof error.param === "string") read.param = error.param;
+  return read;
+}
+
+function isErrorCode(value: unknown): value is string | number {
+  return typeof value === "string" || typeof value === "number";
+}
+
+/** 上游没理会 stream: true，回的又不是这个协议的整份回复：读不出回复，当作开口前失败换家。 */
+export function notAStream(input: { url: URL; text: string; apiKey: string }): FailedAttempt {
+  const detail = extractErrorDetail(input.text, input.apiKey);
+  return failedBySelf({
+    status: 502,
+    detail: `${input.url.origin}: the reply was not a stream: ${detail}`,
+  });
 }
 
 /** 读完（最多 1 MB）上游的回复原文：错误体，或没按要求流式回复的整份回复。 */
@@ -408,6 +481,8 @@ export function readLimited(input: {
   first: Buffer | null;
 }): Promise<string> {
   const { stream, first } = input;
+  // 开口时那一段之后就收完了的，end 已经发过。
+  if (stream.readableEnded) return Promise.resolve(first?.toString("utf8") ?? "");
   return new Promise((resolve) => {
     const chunks: Buffer[] = first ? [first] : [];
     let size = first?.length ?? 0;

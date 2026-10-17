@@ -88,7 +88,10 @@ describe("a structured-output reply streamed", () => {
 
   test.each([
     { name: "cut at its limit", last: { kind: "stop", stop: "length" } },
-    { name: "broken by an error", last: { kind: "error", message: "interrupted", code: null } },
+    {
+      name: "broken by an error",
+      last: { kind: "error", message: "interrupted", code: null, vendorError: null },
+    },
   ] satisfies { name: string; last: StreamEvent }[])(
     "a fenced answer $name is handed on as it came",
     ({ last }) => {

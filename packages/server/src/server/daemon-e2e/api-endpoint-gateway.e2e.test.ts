@@ -30,6 +30,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 改模型输出（工单 08）照 format_fence_test.go（TestStructuredOutputFencedAnswerUnfenced）、textcalls_test.go 与 textcalls_glm_test.go；
  * 对话太长（工单 15）照 overflow_cap_test.go（TestRelayInputCapGoesToTheNextMember）与 fallback.go 的 tooLongUnsaid。
  * 按厂商的改写（工单 16）照 grok_integral_test.go 与 grok_schema_test.go。
+ * 认清上游回的是什么（工单 18）照 notapi_test.go（cloudflarePage）、quiet_whole_test.go 与 codex_access_programs_test.go。
  */
 
 const CLAUDE_TOKEN = "gateway-token-claude-0123456789";
@@ -5971,4 +5972,428 @@ describe("what an endpoint answers is read for what it is (ticket 18)", () => {
     expect(whole.status).toBe(200);
     expect(await whole.json()).toEqual(CHAT_AS_ANTHROPIC_WHOLE);
   });
+
+  test("a translated endpoint that answers whole JSON instead of a stream: the agent gets the stream it asked for, saying the same", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(CHAT_WHOLE));
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(claudeConversation(true)),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(sseData(await response.text())).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_42",
+          type: "message",
+          role: "assistant",
+          model: "deepseek-v3",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          // 整份回复一开头就知道提示词用了多少。
+          usage: {
+            input_tokens: 20,
+            output_tokens: 0,
+            cache_read_input_tokens: 100,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Let me look." },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_ls", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      ...CHAT_AS_ANTHROPIC_EVENTS.slice(-2),
+    ]);
+  });
+
+  test("the same whole JSON reaches an agent that did not ask to stream as its whole reply", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(CHAT_WHOLE));
+    };
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(false), model: "relay-c/deepseek-v3" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(CHAT_AS_ANTHROPIC_WHOLE);
+  });
+  test("passed through after the keepalive began, a whole JSON reply goes out as the stream the agent asked for (magpie wholeAsStream)", async () => {
+    const { upstreamA, ask } = await twoRelays({ keepAliveMs: 30 });
+    const held = heldUpstream(
+      () => {},
+      (res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(ANTHROPIC_WHOLE));
+      },
+    );
+    upstreamA.respond = held.respond;
+
+    const response = await ask();
+    const { text, rest } = await readUntil(response, "event: ping", 2);
+    held.release();
+    const reply = (text + (await rest())).split('event: ping\ndata: {"type":"ping"}\n\n');
+
+    expect(response.status).toBe(200);
+    const expected = [
+      {
+        type: "message_start",
+        message: {
+          ...ANTHROPIC_WHOLE,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "thinking", thinking: "", signature: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "Look first." },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "signature_delta", signature: "sig-1" },
+      },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "text_delta", text: "from A, whole" },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "tool_use", id: "toolu_1", name: "Bash", input: {} },
+      },
+      {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' },
+      },
+      { type: "content_block_stop", index: 2 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null, stop_details: null },
+        usage: { input_tokens: 12, output_tokens: 5 },
+      },
+      { type: "message_stop" },
+    ];
+    const last = reply.at(-1) ?? "";
+    expect(sseData(last)).toEqual(expected);
+    expect(last.match(/^event: .*$/gm)).toEqual(expected.map((event) => `event: ${event.type}`));
+  });
+
+  test("passed through after the keepalive began, a 200 that is no reply of the protocol's goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays({ keepAliveMs: 30 });
+    const held = heldUpstream(
+      () => {},
+      (res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      },
+    );
+    upstreamA.respond = held.respond;
+
+    const response = await ask();
+    const { text, rest } = await readUntil(response, "event: ping", 2);
+    held.release();
+    const all = text + (await rest());
+
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(all).toContain("from B");
+  });
+  test("passed through, a sign-in page served 200 goes to the next endpoint, cools the first, and the log names its title", async () => {
+    const { upstreamA, upstreamB, ask, daemon, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => servePage(res);
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from B");
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject({
+      state: "cooling_down",
+      reason: "other",
+    });
+    expect(gatewayLog(logLines, "API endpoint returned an error")[0]).toMatchObject({
+      endpoint: "relay-a",
+      status: 502,
+      detail: PAGE_DETAIL,
+    });
+    expect(gatewayLog(logLines, "API endpoint gateway switched endpoints")[0]).toMatchObject({
+      from: "Relay A",
+      to: "Relay B",
+      failure: "other",
+      status: 502,
+    });
+  });
+
+  test("translated, a sign-in page served 200 goes to the next endpoint, cools the first, and the log names its title", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => servePage(res);
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const { gateway, daemon, logLines } = await start({
+      chatUpstream: chat,
+      upstreamA,
+      modelsA: ["deepseek-v3"],
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ ...claudeConversation(true), model: "relay-c/deepseek-v3" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from A");
+    expect(await cooldownOf(await connectTo(daemon), "ep_c")).toMatchObject({
+      state: "cooling_down",
+      reason: "other",
+    });
+    expect(gatewayLog(logLines, "API endpoint returned an error")[0]).toMatchObject({
+      endpoint: "relay-c",
+      status: 502,
+      detail: PAGE_DETAIL,
+    });
+  });
+
+  test("with no endpoint left, the agent is told what the page was, under the endpoint's name", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) => servePage(res);
+    upstreamB.respond = (_request, res) => servePage(res);
+
+    const response = await ask({ stream: false });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "api_error", message: `Relay B: ${PAGE_DETAIL}` },
+    });
+  });
+
+  test.each([
+    {
+      shape: "nothing at all",
+      body: "",
+      detail: "answered 200 OK with nothing in it, not an API reply",
+    },
+    {
+      shape: "JSON that is not",
+      body: "upstream connect error or disconnect/reset before headers",
+      detail:
+        "answered 200 OK with a reply that isn't JSON, not an API reply: upstream connect error or disconnect/reset before headers",
+    },
+  ])("a 200 with $shape is a 502 that goes to the next endpoint", async ({ body, detail }) => {
+    const { upstreamA, ask, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(body);
+    };
+
+    const response = await ask();
+
+    expect(await response.text()).toContain("from B");
+    expect(gatewayLog(logLines, "API endpoint returned an error")[0]).toMatchObject({
+      endpoint: "relay-a",
+      status: 502,
+      detail,
+    });
+  });
+  test("Codex: a Responses stream refusing the request as invalid_request_error is a 400 with the vendor's type, code and param", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(ACCESS_PROGRAM_REFUSED);
+    };
+    const { gateway } = await start({ upstreamA });
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ ...codexConversation("gpt-5.5", true), stream: true }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        message:
+          "Relay A: The requested Cyber access program is not authorized for this workspace.",
+        type: "invalid_request_error",
+        code: "access_program_not_enabled",
+        param: "access_programs.cyber",
+      },
+    });
+  });
+
+  test("translated: the same refusal after the reply opened reaches Claude Code with the vendor's type, code and param", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(
+        sseFrame({ type: "response.created", response: { id: "resp_9", status: "in_progress" } }),
+      );
+      res.write(
+        sseFrame({ type: "response.output_text.delta", item_id: "msg_1", delta: "Let me" }),
+      );
+      res.end(ACCESS_PROGRAM_REFUSED);
+    };
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest({ ...claudeConversation(true), model: "grok-4" }),
+    );
+
+    const usage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    };
+    expect(response.status).toBe(200);
+    // 照 magpie：错误事件之后编码器照样以 message_delta、message_stop 收尾。
+    expect(sseData(await response.text())).toEqual([
+      {
+        type: "message_start",
+        message: {
+          id: "msg_resp_9",
+          type: "message",
+          role: "assistant",
+          model: "grok-4",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage,
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Let me" } },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "The requested Cyber access program is not authorized for this workspace.",
+          code: "access_program_not_enabled",
+          param: "access_programs.cyber",
+        },
+      },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage,
+      },
+      { type: "message_stop" },
+    ]);
+  });
+
+  test("an error named only by its event: line, before the reply opened, goes to the next endpoint", async () => {
+    const { upstreamA, upstreamB, ask } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end('event: error\ndata: {"message":"upstream overloaded, try later"}\n\n');
+    };
+
+    const response = await ask();
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("from B");
+    expect(upstreamB.requests).toHaveLength(1);
+  });
 });
+
+/** ChatGPT 后端在 200 流里拒绝工作区没开的访问计划（照 magpie codex_access_programs_test.go）。 */
+const ACCESS_PROGRAM_REFUSED =
+  'event: error\ndata: {"type":"error","error":{"message":"The requested Cyber access program is not authorized for this workspace.","type":"invalid_request_error","param":"access_programs.cyber","code":"access_program_not_enabled"}}\n\n';
+
+/** Cloudflare 的挑战页，中转服务用 200 text/html 回在回复的位置（照 magpie notapi_test.go 的 cloudflarePage）。 */
+const CLOUDFLARE_PAGE = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body><div class="main-wrapper" role="main"><div class="main-content"><noscript>Enable JavaScript and cookies to continue</noscript></div></div></body></html>`;
+
+const PAGE_DETAIL =
+  "answered 200 OK with a web page (text/html), not an API reply: “Just a moment...”";
+
+function servePage(res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(CLOUDFLARE_PAGE);
+}
+
+/** Anthropic 上游不流式时给的整份回复：一段带签名的思考、一段文字、一个调用。 */
+const ANTHROPIC_WHOLE = {
+  id: "msg_whole",
+  type: "message",
+  role: "assistant",
+  model: "kimi-k2",
+  content: [
+    { type: "thinking", thinking: "Look first.", signature: "sig-1" },
+    { type: "text", text: "from A, whole" },
+    { type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "ls" } },
+  ],
+  stop_reason: "tool_use",
+  stop_sequence: null,
+  usage: { input_tokens: 12, output_tokens: 5 },
+};
+
+/** chatStream 说的同一份回复，Chat 上游不流式时整份给出的样子。 */
+const CHAT_WHOLE = {
+  id: "chatcmpl-42",
+  object: "chat.completion",
+  model: "deepseek-v3-0324",
+  choices: [
+    {
+      index: 0,
+      message: {
+        role: "assistant",
+        content: "Let me look.",
+        tool_calls: [
+          {
+            id: "call_ls",
+            type: "function",
+            function: { name: "Bash", arguments: '{"command":"ls"}' },
+          },
+        ],
+      },
+      finish_reason: "tool_calls",
+    },
+  ],
+  usage: {
+    prompt_tokens: 120,
+    completion_tokens: 30,
+    prompt_tokens_details: { cached_tokens: 100 },
+  },
+};

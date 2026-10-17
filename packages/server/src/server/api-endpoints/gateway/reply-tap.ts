@@ -10,6 +10,7 @@ import {
   type StopReason,
   type StreamEvent,
   type Usage,
+  type VendorError,
 } from "./translation/ir.js";
 import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
@@ -25,8 +26,13 @@ export interface TappedReply {
   stop: StopReason | null;
   // 上游发了结束标记（StreamEvent 的 done）。
   ended: boolean;
-  // raw 是报错那个事件的 data 原文（整份回复是整份原文），判错读它。
-  error: { message: string; code: string | null; raw: string } | null;
+  // raw 是报错那个事件的 data 原文（整份回复是整份原文），判错读它；vendorError 见 VendorError。
+  error: {
+    message: string;
+    code: string | null;
+    vendorError: VendorError | null;
+    raw: string;
+  } | null;
   usage: Usage;
 }
 
@@ -116,7 +122,12 @@ export class ReplyTap {
         this.reply.ended = true;
         return;
       case "error":
-        this.reply.error = { message: event.message, code: event.code, raw: this.raw };
+        this.reply.error = {
+          message: event.message,
+          code: event.code,
+          vendorError: event.vendorError,
+          raw: this.raw,
+        };
         return;
       case "text":
         if (event.text !== "") this.addContent("text");

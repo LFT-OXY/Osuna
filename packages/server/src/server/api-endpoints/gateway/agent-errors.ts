@@ -24,9 +24,10 @@ export type AgentWire = "anthropic" | "openai";
 export interface AgentError {
   status: number;
   message: string;
-  // 上游自己写的错误类型与代码；没有时按状态码取。
+  // 上游自己写的错误类型、代码与参数；没有时按状态码取类型，代码与参数为 null。
   type?: string;
   code?: string | number | null;
+  param?: string | null;
 }
 
 /** Anthropic 文档里的错误类型；OpenAI 侧沿用同一套名字。 */
@@ -67,10 +68,11 @@ export function sendAgentError(input: {
   if (isTooLong) error = tooLongError({ wire, message: error.message });
   const type = error.type ?? errorTypeForStatus(error.status);
   const code = error.code ?? null;
+  const param = error.param ?? null;
   const body =
     wire === "anthropic"
       ? { type: "error", error: { type, message: error.message } }
-      : { error: { message: error.message, type, code, param: null } };
+      : { error: { message: error.message, type, code, param } };
   if (input.headers) res.set(input.headers);
   res.status(error.status).json(body);
 }

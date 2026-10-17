@@ -404,7 +404,7 @@ describe("decoding a Chat stream (magpie translate_stream_test.go)", () => {
 
   test("an error chunk ends the reply as an error", () => {
     expect(decodeChat(['{"error":{"message":"upstream overloaded"}}'])).toEqual([
-      { kind: "error", message: "upstream overloaded", code: null },
+      { kind: "error", message: "upstream overloaded", code: null, vendorError: null },
     ]);
   });
 });

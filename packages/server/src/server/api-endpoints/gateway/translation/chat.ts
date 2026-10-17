@@ -36,6 +36,7 @@ import {
   type ToolChoice,
   type ToolResultPart,
   type Usage,
+  vendorErrorFields,
 } from "./ir.js";
 import { sseEvent } from "./sse.js";
 
@@ -611,7 +612,12 @@ export class ChatDecoder {
 
   private read(chunk: Record<string, unknown>, emit: EmitEvent): void {
     if (chunk.error !== undefined && chunk.error !== null) {
-      emit({ kind: "error", message: chatErrorMessage(chunk.error), code: null });
+      emit({
+        kind: "error",
+        message: chatErrorMessage(chunk.error),
+        code: null,
+        vendorError: null,
+      });
       return;
     }
     if (!this.started) this.start(chunk, emit);
@@ -826,6 +832,7 @@ export class ChatEncoder {
               message: event.message,
               type: "api_error",
               ...(event.code ? { code: event.code } : {}),
+              ...vendorErrorFields(event.vendorError),
             },
           }),
         );

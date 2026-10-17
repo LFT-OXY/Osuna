@@ -169,7 +169,34 @@ export type StreamEvent =
   | { kind: "usage"; usage: Usage }
   // 上游发了结束标记：Anthropic 的 message_stop、Chat 的 [DONE]、Responses 的 completed 或 incomplete。
   | { kind: "done" }
-  | { kind: "error"; message: string; code: string | null };
+  | { kind: "error"; message: string; code: string | null; vendorError: VendorError | null };
+
+/**
+ * 厂商说是请求本身有问题（错误对象的 type 是 invalid_request_error）时它自己的错误：转给 Agent 时带上它的
+ * type、code、param，状态读成 400，重问也一样被拒（magpie 的 requestRefused、saidError）。只按 type 认，不看措辞。
+ */
+export interface VendorError {
+  type: string;
+  code: string | null;
+  param: string | null;
+}
+
+/** 错误对象是不是厂商说请求本身有问题。 */
+export function vendorErrorOf(error: unknown): VendorError | null {
+  if (!isRecord(error) || error.type !== "invalid_request_error") return null;
+  const code = stringOf(error.code) || null;
+  const param = stringOf(error.param) || null;
+  return { type: error.type, code, param };
+}
+
+/** 写给 Agent 的错误对象上要带的厂商字段：有值的 type、code、param。 */
+export function vendorErrorFields(vendorError: VendorError | null): Record<string, string> {
+  if (vendorError === null) return {};
+  const fields: Record<string, string> = { type: vendorError.type };
+  if (vendorError.code !== null) fields.code = vendorError.code;
+  if (vendorError.param !== null) fields.param = vendorError.param;
+  return fields;
+}
 
 export type EmitEvent = (event: StreamEvent) => void;
 
@@ -565,7 +592,7 @@ export class ReplyCollector {
   private args = "";
   // 收到 think_start：下一段推理自成一块。
   private fresh = false;
-  error: { message: string; code: string | null } | null = null;
+  error: Omit<Extract<StreamEvent, { kind: "error" }>, "kind"> | null = null;
 
   add(event: StreamEvent): void {
     switch (event.kind) {
@@ -580,7 +607,7 @@ export class ReplyCollector {
       case "other_tool":
         return;
       case "error":
-        this.error = { message: event.message, code: event.code };
+        this.error = { message: event.message, code: event.code, vendorError: event.vendorError };
         return;
       case "think_start":
         this.fresh = true;

@@ -30,7 +30,8 @@ import {
 
 /*
  * Responses 请求的工具配对修补。例子照 magpie（MIT，THIRD_PARTY_NOTICES）的
- * join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go 与 phase_test.go。
+ * join_tool_runs_test.go、pair_tool_items_test.go、orphan_tool_output_test.go 与 phase_test.go；
+ * 流里 invalid_request_error 的字段照 codex_access_programs_test.go 与 responses.go 的 requestRefused。
  */
 
 const INTERRUPTED = "[The result of this tool call is unavailable: the turn was interrupted.]";
@@ -802,11 +803,38 @@ describe("decoding a Responses stream", () => {
     const failed = decodeResponses([
       '{"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"overloaded"}}}',
     ]);
-    expect(failed.error).toEqual({ message: "overloaded", code: "server_error" });
+    expect(failed.error).toEqual({
+      message: "overloaded",
+      code: "server_error",
+      vendorError: null,
+    });
     const bare = decodeResponses(['{"type":"error","message":"rate limited"}']);
-    expect(bare.error).toEqual({ message: "rate limited", code: null });
+    expect(bare.error).toEqual({ message: "rate limited", code: null, vendorError: null });
     const shapeless = decodeResponses(['{"error":"quota exhausted"}']);
-    expect(shapeless.error).toEqual({ message: "quota exhausted", code: null });
+    expect(shapeless.error).toEqual({ message: "quota exhausted", code: null, vendorError: null });
+  });
+
+  test("an error the vendor types invalid_request_error keeps its type, code and param (magpie requestRefused)", () => {
+    const refused = decodeResponses([
+      '{"type":"error","error":{"message":"not authorized","type":"invalid_request_error","param":"access_programs.cyber","code":"access_program_not_enabled"}}',
+    ]);
+    const failed = decodeResponses([
+      '{"type":"response.failed","response":{"status":"failed","error":{"message":"bad input","type":"invalid_request_error"}}}',
+    ]);
+    expect(refused.error).toEqual({
+      message: "not authorized",
+      code: "access_program_not_enabled",
+      vendorError: {
+        type: "invalid_request_error",
+        code: "access_program_not_enabled",
+        param: "access_programs.cyber",
+      },
+    });
+    expect(failed.error).toEqual({
+      message: "bad input",
+      code: null,
+      vendorError: { type: "invalid_request_error", code: null, param: null },
+    });
   });
 });
 
@@ -951,7 +979,7 @@ describe("a stream told to Codex", () => {
   test("an upstream error ends the stream as response.failed", () => {
     const sent = toCodex(codexRequest({}), (emit) => {
       emit({ kind: "text", text: "Hm" });
-      emit({ kind: "error", message: "overloaded", code: null });
+      emit({ kind: "error", message: "overloaded", code: null, vendorError: null });
     });
     expect(sent.find((event) => event.type === "response.failed")).toMatchObject({
       response: { status: "failed", error: { code: "server_error", message: "overloaded" } },
@@ -1464,7 +1492,7 @@ describe("the phase of each message a translated model says to Codex (magpie pha
   test("an error after a message leaves it without a phase", () => {
     const sent = toCodex(codexRequest({}), (emit) => {
       emit({ kind: "text", text: "Hm" });
-      emit({ kind: "error", message: "overloaded", code: null });
+      emit({ kind: "error", message: "overloaded", code: null, vendorError: null });
     });
     const done = sent.find((event) => event.type === "response.output_item.done")!;
     expect(done.item).not.toHaveProperty("phase");

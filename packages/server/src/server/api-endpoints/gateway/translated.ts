@@ -7,8 +7,8 @@ import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
-import { ANTHROPIC_VERSION, describeNetworkError, extractErrorDetail } from "../upstream-http.js";
-import { sendAgentError, type AgentWire } from "./agent-errors.js";
+import { ANTHROPIC_VERSION, describeNetworkError, parseJson } from "../upstream-http.js";
+import { sendAgentError, type AgentError, type AgentWire } from "./agent-errors.js";
 import type { AgentKeepAlive } from "./keepalive.js";
 import {
   askRefitted,
@@ -40,14 +40,15 @@ import {
 } from "./translation/ir.js";
 import { isGrokReply, wholeArgsFilter } from "./grok-integral.js";
 import { fenceFilter, unfencedReply } from "./translation/fence.js";
-import { protocolOf } from "./translation/protocols.js";
+import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { isWholeReply } from "./whole-stream.js";
 import {
   ANSWERED_BY_HEADER,
-  failedBySelf,
   isEventStream,
+  notAStream,
   openUpstream,
   readLimited,
   upstreamUrl,
@@ -151,20 +152,25 @@ export async function attemptTranslated(input: {
   });
   if (opened.kind !== "opened") return opened;
   const { response, held } = opened;
+  let reply: UpstreamReply = { kind: "stream", response, held };
   if (!isEventStream(response, held)) {
-    // 上游没理会 stream: true：读不出事件，当作开口前失败换家。
-    const text = await wholeText({ response, held });
-    return failedBySelf({
-      status: 502,
-      detail: `${url.origin}: the reply was not a stream: ${extractErrorDetail(text, apiKey)}`,
-    });
+    // 上游没理会 stream: true：整份回复照它流出来时的事件读；不是这个协议的回复，当作开口前失败换家。
+    const text = await readLimited({ stream: response, first: held });
+    const whole = parseJson(text);
+    if (!isWholeReply(to, whole)) return notAStream({ url, text, apiKey });
+    reply = { kind: "whole", body: whole };
   }
   input.keepAlive.stop();
   const finished = input.request.stream
-    ? streamReply({ ...input, response, held })
-    : wholeReply({ ...input, response, held });
+    ? streamReply({ ...input, reply })
+    : wholeReply({ ...input, reply });
   return { kind: "answered", finished };
 }
+
+/** 上游的回复怎么读：事件流从开口时扣下的字节读起；没理会 stream: true 的，是已经读完的整份回复。 */
+type UpstreamReply =
+  | { kind: "stream"; response: IncomingMessage; held: Buffer }
+  | { kind: "whole"; body: unknown };
 
 function translatedHeaders(input: {
   apiKey: string;
@@ -182,12 +188,6 @@ function translatedHeaders(input: {
   };
   if (input.to === "anthropic_messages") headers["anthropic-version"] = ANTHROPIC_VERSION;
   return headers;
-}
-
-/** 上游整份回复的原文：开口时已经收完的就是扣下的那些。 */
-function wholeText(input: { response: IncomingMessage; held: Buffer }): Promise<string> {
-  if (input.response.readableEnded) return Promise.resolve(input.held.toString("utf8"));
-  return readLimited({ stream: input.response, first: input.held });
 }
 
 /** 翻译后发给上游的请求体要的：Agent 的请求、这家的地址、两种格式、上游模型名与资料、这家这个模型不收的写法。 */
@@ -259,8 +259,7 @@ async function streamReply(input: {
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
-  response: IncomingMessage;
-  held: Buffer;
+  reply: UpstreamReply;
 }): Promise<AnswerEnd> {
   const { res } = input;
   // 保活已经回了 200 与响应头：接着在同一个流里写。
@@ -288,15 +287,12 @@ async function streamReply(input: {
     emit: (event) => numbers.event(event),
   });
   const emit = (event: StreamEvent) => calls.event(event);
-  const reader = new SseReader((data) => decoder.decode(data, emit));
-  const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
+  const end = await decodeReply({ res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
   if (end.kind === "broken") {
     res.destroy();
     return end;
   }
-  reader.end();
-  decoder.end?.(emit);
   calls.end();
   numbers.end();
   fence.end();
@@ -315,8 +311,7 @@ async function wholeReply(input: {
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
-  response: IncomingMessage;
-  held: Buffer;
+  reply: UpstreamReply;
 }): Promise<AnswerEnd> {
   const { res, endpoint } = input;
   const collector = new ReplyCollector();
@@ -331,25 +326,22 @@ async function wholeReply(input: {
     emit: (event) => numbers.event(event),
   });
   const emit = (event: StreamEvent) => calls.event(event);
-  const reader = new SseReader((data) => decoder.decode(data, emit));
-  const end = await readStream({ ...input, onText: (text) => reader.feed(text) });
+  const end = await decodeReply({ res, reply: input.reply, decoder, emit });
   if (end.kind === "gone") return end;
-  reader.end();
-  decoder.end?.(emit);
   calls.end();
   numbers.end();
-  let failure: string | null = null;
-  if (end.kind === "broken") failure = end.message;
-  else if (collector.error && !collector.saidAnything()) failure = collector.error.message;
+  let failure: WholeFailure | null = null;
+  if (end.kind === "broken") failure = { message: end.message, vendorError: null };
+  else if (collector.error && !collector.saidAnything()) failure = collector.error;
   const headers = { [ANSWERED_BY_HEADER]: endpoint.slug };
   if (failure !== null) {
     sendAgentError({
       res,
       wire: input.wire,
-      error: { status: 502, message: `${endpoint.name}: ${failure}` },
+      error: wholeFailureError({ failure, endpointName: endpoint.name }),
       headers,
     });
-    return { kind: "broken", message: failure };
+    return { kind: "broken", message: failure.message };
   }
   const reply = unfencedReply({ reply: collector.finish(), request: input.request });
   res
@@ -361,6 +353,17 @@ async function wholeReply(input: {
   return { kind: "complete", usage: reply.usage };
 }
 
+/** 整份回复交不出的原因：上游断流，或只想了一下就出错。 */
+type WholeFailure = Pick<Extract<StreamEvent, { kind: "error" }>, "message" | "vendorError">;
+
+/** 交给 Agent 的错误：502；厂商说请求本身有问题的是 400，带上它的 type、code、param（magpie 的 writeVendorError）。 */
+function wholeFailureError(input: { failure: WholeFailure; endpointName: string }): AgentError {
+  const { vendorError } = input.failure;
+  const message = `${input.endpointName}: ${input.failure.message}`;
+  if (vendorError === null) return { status: 502, message };
+  return { status: 400, message, ...vendorError };
+}
+
 /** Grok 的回复：调用参数里的零小数去掉（grok-integral.ts）；别的模型的回复原样往下交。 */
 function wholeNumbersFilter(input: {
   requestedModel: string;
@@ -369,6 +372,26 @@ function wholeNumbersFilter(input: {
 }): ReplyFilter {
   if (isGrokReply(input)) return wholeArgsFilter(input.emit);
   return passingFilter(input.emit);
+}
+
+/** 把上游的回复解码成中间事件，读到结束；流断了或 Agent 先走了，还扣着的不再交出。 */
+async function decodeReply(input: {
+  res: Response;
+  reply: UpstreamReply;
+  decoder: StreamDecoder;
+  emit: EmitEvent;
+}): Promise<StreamEnd> {
+  const { reply, decoder, emit } = input;
+  if (reply.kind === "whole") {
+    decoder.whole(reply.body, emit);
+    return { kind: "ended" };
+  }
+  const reader = new SseReader((data) => decoder.decode(data, emit));
+  const end = await readStream({ ...reply, res: input.res, onText: (text) => reader.feed(text) });
+  if (end.kind !== "ended") return end;
+  reader.end();
+  decoder.end?.(emit);
+  return end;
 }
 
 /** 读上游的流直到结束（从开口时扣下的字节读起）；字符可能被切在两段之间，按 UTF-8 接好再交出去。 */
