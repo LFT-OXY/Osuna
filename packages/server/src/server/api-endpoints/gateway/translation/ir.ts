@@ -1,5 +1,6 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/ir.go、wire_effort.go 的 thinkingBackOn、fallback.go 的 streamPart.said，
-// decide.go 的 fitFor、internal/catalog/catalog.go 的 EffortRank 与 NearestEffort、maxoutput.go 的 askedOutput、internal/provider/models.go 的 OutputWithin）
+// decide.go 的 fitFor、internal/catalog/catalog.go 的 EffortRank 与 NearestEffort、maxoutput.go 的 askedOutput、internal/provider/models.go 的 OutputWithin，
+// 厂商说请求本身有问题时带上它的字段照 responses.go 的 requestRefused 与 saidError）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes } from "node:crypto";

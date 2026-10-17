@@ -408,6 +408,8 @@ function readStream(input: {
     input.onText(utf8.end());
     return Promise.resolve({ kind: "ended" });
   }
+  // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；没读到的也读不到了。
+  if (response.destroyed) return Promise.resolve({ kind: "broken", message: "aborted" });
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;

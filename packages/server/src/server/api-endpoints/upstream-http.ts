@@ -1,3 +1,5 @@
+import type { IncomingHttpHeaders } from "node:http";
+
 /*
  * 拉取模型与测试连接共用的上游 HTTP 小工具：解析错误体、描述网络错误。
  * 上游信息只截断到 MAX_DETAIL_LENGTH，回显的 key 要在截断前替换掉，否则跨截断点的半截 key 会漏出去。
@@ -11,7 +13,7 @@ export const ANTHROPIC_VERSION = "2023-06-01";
  * 其中出现的 apiKey 换成 ***。
  */
 export function extractErrorDetail(text: string, apiKey: string): string {
-  const detail = (structuredErrorMessage(text) ?? text).replaceAll(apiKey, "***");
+  const detail = redactKey(structuredErrorMessage(text) ?? text, apiKey);
   return truncate(detail.replace(/\s+/g, " ").trim());
 }
 
@@ -35,6 +37,23 @@ export function describeNetworkError(error: unknown): string {
 
 function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
+}
+
+/** 文字里出现的 key 换成 ***；key 为空时原样（空串会在每两个字之间插入 ***）。 */
+export function redactKey(text: string, apiKey: string): string {
+  if (apiKey === "") return text;
+  return text.replaceAll(apiKey, "***");
+}
+
+/** 响应头里的 Content-Type，小写；没有为空。 */
+export function contentTypeOf(headers: IncomingHttpHeaders): string {
+  return String(headers["content-type"] ?? "").toLowerCase();
+}
+
+/** 回复压缩过（Content-Encoding 不是空的也不是 identity）：开头的字节看不出它是什么。 */
+export function isCompressed(headers: IncomingHttpHeaders): boolean {
+  const encoding = headers["content-encoding"] ?? "";
+  return encoding !== "" && encoding !== "identity";
 }
 
 export function parseJson(text: string): unknown {

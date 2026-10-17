@@ -2,7 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
-import { notApiDetail, notApiReply } from "./not-api-reply.js";
+import { notApiDetail, notApiReply, saysNothingYet } from "./not-api-reply.js";
 
 const CLOUDFLARE_PAGE = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body><div class="main-wrapper" role="main"><div class="main-content"><noscript>Enable JavaScript and cookies to continue</noscript></div></div></body></html>`;
 
@@ -33,6 +33,11 @@ describe("a 2xx that is no API reply", () => {
   ])("what an API does answer is left alone: $type $body", ({ type, encoding, body }) => {
     const headers = { "content-type": type, "content-encoding": encoding };
     expect(notApiReply({ headers, head: Buffer.from(body) })).toBeNull();
+  });
+
+  test("blank lines and a BOM say nothing yet; the first other byte does", () => {
+    expect(saysNothingYet(Buffer.from(" \r\n\t\uFEFF"))).toBe(true);
+    expect(saysNothingYet(Buffer.from("\n<"))).toBe(false);
   });
 
   test("a page is told by its title, its entities read and its spaces joined", () => {

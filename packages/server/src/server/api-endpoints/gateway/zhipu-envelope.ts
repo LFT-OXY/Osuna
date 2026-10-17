@@ -3,7 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
-import { isRecord, parseJson } from "../upstream-http.js";
+import { contentTypeOf, isCompressed, isRecord, parseJson } from "../upstream-http.js";
 
 /*
  * 智谱与 Z.ai 的 /api/v1（GLM Coding Plan 的 Responses 接口）拒绝时回 200，包在平台自己的信封里：
@@ -29,10 +29,11 @@ export function zhipuRefusal(input: {
   body: Buffer;
 }): ZhipuRefusal | null {
   if (!ZHIPU_HOSTS.has(input.host.toLowerCase())) return null;
-  const contentType = String(input.headers["content-type"] ?? "").toLowerCase();
+  const contentType = contentTypeOf(input.headers);
   const plainJson = contentType.includes("json") && !contentType.includes("event-stream");
-  const compressed = (input.headers["content-encoding"] ?? "") !== "";
-  if (!plainJson || compressed || input.body.length > MAX_ENVELOPE_BYTES) return null;
+  const tooLong = input.body.length > MAX_ENVELOPE_BYTES;
+  const readable = plainJson && !isCompressed(input.headers) && !tooLong;
+  if (!readable) return null;
   const envelope = zhipuEnvelope(parseJson(input.body.toString("utf8")));
   if (envelope === null) return null;
   const message = envelope.message || "request failed";

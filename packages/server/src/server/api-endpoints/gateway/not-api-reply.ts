@@ -3,6 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
+import { contentTypeOf, isCompressed } from "../upstream-http.js";
 import { FAILURE_WORDS } from "./failure.js";
 
 /*
@@ -15,9 +16,7 @@ import { FAILURE_WORDS } from "./failure.js";
 /** 不是接口回复的哪一种：网页、什么都没有、不是 JSON 的「JSON」。 */
 export type NotApiReply = "page" | "empty" | "not_json";
 
-// 网页的开头。
 const HTML_START = /^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>])/i;
-// 网页的标题。
 const PAGE_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/i;
 // 网页标题与「不是 JSON」的原文最多留这么多字（magpie 的 clipRunes）。
 const TITLE_MOST = 120;
@@ -34,16 +33,24 @@ export function notApiReply(input: {
   const contentType = contentTypeOf(input.headers);
   if (contentType.startsWith("text/html")) return "page";
   if (input.head.length === 0) return "empty";
-  const encoding = input.headers["content-encoding"];
-  const compressed = encoding !== undefined && encoding !== "" && encoding !== "identity";
-  if (compressed) return null;
-  const start = input.head.toString("utf8").replace(/^[ \t\r\n\uFEFF]+/, "");
+  if (isCompressed(input.headers)) return null;
+  const start = startOf(input.head);
   const isPage = HTML_START.test(start) && !contentType.includes("xml");
   if (isPage) return "page";
   const saysJson = contentType.includes("json");
   const startsAsJson = start === "" || start.startsWith("{") || start.startsWith("[");
   if (saysJson && !startsAsJson) return "not_json";
   return null;
+}
+
+/** 回复到目前为止只有空白（或什么都没有）：还看不出它是什么，要等后面的字节。 */
+export function saysNothingYet(head: Buffer): boolean {
+  return startOf(head) === "";
+}
+
+/** 去掉开头空白与 BOM 的回复原文。 */
+function startOf(head: Buffer): string {
+  return head.toString("utf8").replace(/^[ \t\r\n\uFEFF]+/, "");
 }
 
 /** 给 Agent 与日志看的说法：上游回了什么（状态行如 `200 OK`），网页带标题，防火墙的拦截页说怎么办。 */
@@ -101,10 +108,6 @@ function unescapeHtml(text: string): string {
     if (name.startsWith("#")) return String.fromCodePoint(Number.parseInt(name.slice(1), 10));
     return HTML_ENTITIES[name.toLowerCase()] ?? entity;
   });
-}
-
-function contentTypeOf(headers: IncomingHttpHeaders): string {
-  return String(headers["content-type"] ?? "").toLowerCase();
 }
 
 /** 最多留 `most` 个字，多的换成省略号。 */

@@ -3,6 +3,8 @@
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord } from "../upstream-http.js";
+import { stringOf } from "./translation/ir.js";
+import { listOf } from "./translation/object-root.js";
 
 /*
  * 上游没理会 stream: true、回了整份 JSON：先认它是不是这个协议的整份回复（`{}`、错误体、别的 JSON 都不是）。
@@ -255,7 +257,6 @@ function sendMessagePart(input: {
   send("response.content_part.done", { ...ids, part });
 }
 
-/** 一段推理摘要。 */
 function sendSummaryPart(input: {
   part: Record<string, unknown>;
   ids: Record<string, unknown>;
@@ -275,12 +276,4 @@ function responseEnd(status: unknown): string {
   if (status === "incomplete") return "response.incomplete";
   if (status === "failed") return "response.failed";
   return "response.completed";
-}
-
-function listOf(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function stringOf(value: unknown): string {
-  return typeof value === "string" ? value : "";
 }

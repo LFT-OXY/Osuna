@@ -7,6 +7,7 @@ import {
   extractErrorDetail,
   isRecord,
   parseJson,
+  redactKey,
 } from "./upstream-http.js";
 
 /*
@@ -59,7 +60,7 @@ export async function fetchUpstreamModels(input: {
   const signal = AbortSignal.any([input.signal, timeout]);
   const base = input.baseUrl.trim().replace(/\/+$/, "");
   const headers = buildHeaders(input.provider, input.apiKey);
-  const redact = (text: string) => text.replaceAll(input.apiKey, "***");
+  const redact = (text: string) => redactKey(text, input.apiKey);
 
   const attempts: FailedAttempt[] = [];
   for (const url of [`${base}/v1/models`, `${base}/models`]) {

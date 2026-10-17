@@ -7,11 +7,12 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
+import dns from "node:dns";
 import os from "node:os";
 import path from "node:path";
 import * as zlib from "node:zlib";
 import pino from "pino";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { heldClock } from "../api-endpoints/gateway/cooldown.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon } from "../bootstrap.js";
@@ -6194,6 +6195,77 @@ describe("what an endpoint answers is read for what it is (ticket 18)", () => {
     });
   });
 
+  test("a page that begins after a chunk of blank lines is read as the page it is", async () => {
+    const { upstreamA, ask, logLines } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write("\n\n");
+      setTimeout(() => res.end(CLOUDFLARE_PAGE), 20);
+    };
+
+    const response = await ask();
+
+    expect(await response.text()).toContain("from B");
+    expect(gatewayLog(logLines, "API endpoint returned an error")[0]).toMatchObject({
+      endpoint: "relay-a",
+      status: 502,
+      detail:
+        "answered 200 OK with a web page (application/json), not an API reply: “Just a moment...”",
+    });
+  });
+
+  test.each([
+    {
+      envelope: '{"code":1000,"msg":"身份验证失败。","success":false}',
+      cooldown: { state: "needs_check", reason: "auth", until: null },
+    },
+    {
+      envelope: '{"code":"1302","msg":"您的账户已达到速率限制，请您控制请求频率","success":false}',
+      cooldown: { state: "cooling_down", reason: "rate" },
+    },
+  ])(
+    "Zhipu's refusal in a 200 is read by its code and the next endpoint answers: $envelope",
+    async ({ envelope, cooldown }) => {
+      const zhipu = await startUpstream();
+      zhipu.respond = (_request, res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(envelope);
+      };
+      const upstreamB = await startUpstream();
+      upstreamB.respond = (_request, res) => streamReply(res, { text: "from B" });
+      // 智谱的信封只认它自己的主机名：让它解析到本机的假上游。
+      const lookup = dns.lookup;
+      const toLocal = vi
+        .spyOn(dns, "lookup")
+        .mockImplementation((hostname, ...rest) =>
+          Reflect.apply(lookup, dns, [localZhipu(hostname), ...rest]),
+        );
+      try {
+        const port = new URL(zhipu.url).port;
+        const { gateway, daemon } = await start({
+          upstreamA: { ...zhipu, url: `http://open.bigmodel.cn:${port}` },
+          upstreamB,
+        });
+
+        const response = await fetch(
+          `${gateway}/v1/messages`,
+          claudeRequest({
+            model: "kimi-k2",
+            stream: true,
+            max_tokens: 32,
+            messages: [{ role: "user", content: "hi" }],
+          }),
+        );
+
+        expect(await response.text()).toContain("from B");
+        expect(zhipu.requests).toHaveLength(1);
+        expect(await cooldownOf(await connectTo(daemon), "ep_a")).toMatchObject(cooldown);
+      } finally {
+        toLocal.mockRestore();
+      }
+    },
+  );
+
   test("with no endpoint left, the agent is told what the page was, under the endpoint's name", async () => {
     const { upstreamA, upstreamB, ask } = await twoRelays();
     upstreamA.respond = (_request, res) => servePage(res);
@@ -6323,24 +6395,35 @@ describe("what an endpoint answers is read for what it is (ticket 18)", () => {
     ]);
   });
 
-  test("an error named only by its event: line, before the reply opened, goes to the next endpoint", async () => {
-    const { upstreamA, upstreamB, ask } = await twoRelays();
-    upstreamA.respond = (_request, res) => {
-      res.writeHead(200, { "content-type": "text/event-stream" });
-      res.end('event: error\ndata: {"message":"upstream overloaded, try later"}\n\n');
-    };
+  test.each([
+    '{"message":"upstream overloaded, try later"}',
+    // type 只在里面那层：顶层仍没写 type。
+    '{"error":{"type":"overloaded_error","message":"Overloaded"}}',
+  ])(
+    "an error named only by its event: line, before the reply opened, goes to the next endpoint: %s",
+    async (data) => {
+      const { upstreamA, upstreamB, ask } = await twoRelays();
+      upstreamA.respond = (_request, res) => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(`event: error\ndata: ${data}\n\n`);
+      };
 
-    const response = await ask();
+      const response = await ask();
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("from B");
-    expect(upstreamB.requests).toHaveLength(1);
-  });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("from B");
+      expect(upstreamB.requests).toHaveLength(1);
+    },
+  );
 });
 
 /** ChatGPT 后端在 200 流里拒绝工作区没开的访问计划（照 magpie codex_access_programs_test.go）。 */
 const ACCESS_PROGRAM_REFUSED =
   'event: error\ndata: {"type":"error","error":{"message":"The requested Cyber access program is not authorized for this workspace.","type":"invalid_request_error","param":"access_programs.cyber","code":"access_program_not_enabled"}}\n\n';
+
+function localZhipu(hostname: string): string {
+  return hostname === "open.bigmodel.cn" ? "127.0.0.1" : hostname;
+}
 
 /** Cloudflare 的挑战页，中转服务用 200 text/html 回在回复的位置（照 magpie notapi_test.go 的 cloudflarePage）。 */
 const CLOUDFLARE_PAGE = `<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body><div class="main-wrapper" role="main"><div class="main-content"><noscript>Enable JavaScript and cookies to continue</noscript></div></div></body></html>`;

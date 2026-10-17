@@ -1,6 +1,7 @@
 // fitAnthropicBody、fitResponsesBody 与被拒重问移植自 magpie（https://github.com/yetone/magpie，internal/gateway/anthropic.go 的 thinkingOffUnlessAsked、withThinkingOnToolTurns、
 // adaptiveThinking、samplingAsTaken，responses.go 的 withReasoningText，codex_backend.go 的 withoutBareReasoning，gateway.go 的 passthrough 里按上游模型改的几处、
-// 直通重问与 attempt 里去掉拒收字段、画图工具的重问；按厂商的改写接在 forwardOnce 处，Grok 回复的整数接在直通回复的 intTidy 处）
+// 直通重问与 attempt 里去掉拒收字段、画图工具的重问；按厂商的改写接在 forwardOnce 处，Grok 回复的整数接在直通回复的 intTidy 处；
+// 保活之后整份回复照流写出照 fallback.go 的 holdWriter.release 与 whole_stream.go 的 wholeAsStream）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -274,6 +275,11 @@ function relay(input: {
     return Promise.resolve({ kind: "complete", usage: usage(tap) });
   }
   sink.write(held);
+  // 开口之后、接着读之前上游就断了：close 已经发过，不会再来；照断流处理。
+  if (response.destroyed) {
+    res.destroy();
+    return Promise.resolve({ kind: "broken", message: "aborted" });
+  }
   let agentGone = false;
   res.once("close", () => {
     if (!res.writableFinished) agentGone = true;

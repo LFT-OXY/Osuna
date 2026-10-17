@@ -54,14 +54,16 @@ export class SseReader {
   }
 }
 
-/** 有事件名、data 是没写 type 的对象时补上事件名；别的原样。只在 data 里根本没有 "type" 字样时才解析。 */
+/** 有事件名、data 是顶层没写 type 的对象时补上事件名；别的原样。 */
 function typedByName(input: { data: string; name: string | null }): string {
   const { data, name } = input;
-  const typed = name === null || name === "" || data.includes('"type"');
-  if (typed) return data;
+  // 各协议自己的事件都以 type 开头：不必解析。
+  const leadsWithType = data.startsWith('{"type":');
+  const named = name !== null && name !== "";
+  if (!named || leadsWithType) return data;
   const event = parseJson(data);
-  if (!isRecord(event)) return data;
-  return JSON.stringify({ type: name, ...event });
+  if (!isRecord(event) || typeof event.type === "string") return data;
+  return JSON.stringify({ ...event, type: name });
 }
 
 /** 一个事件的原文：有名字的写 `event:` 行（Anthropic），没名字的只有 data（OpenAI）。 */

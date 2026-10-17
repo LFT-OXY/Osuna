@@ -10,10 +10,16 @@ import http, {
 import https from "node:https";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { describeNetworkError, extractErrorDetail, isRecord, parseJson } from "../upstream-http.js";
+import {
+  describeNetworkError,
+  extractErrorDetail,
+  isRecord,
+  parseJson,
+  redactKey,
+} from "../upstream-http.js";
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
-import { notApiDetail, notApiReply, type NotApiReply } from "./not-api-reply.js";
+import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
 import { zhipuRefusal } from "./zhipu-envelope.js";
 import { ReplyTap, type TappedReply } from "./reply-tap.js";
 import type { Usage } from "./translation/ir.js";
@@ -149,7 +155,7 @@ export async function openUpstream(input: {
   }
   if (outcome.kind === "failed") {
     const detail = `${url.origin}: ${describeNetworkError(outcome.error)}`;
-    return failedBySelf({ status: 502, detail: detail.replaceAll(apiKey, "***") });
+    return failedBySelf({ status: 502, detail: redactKey(detail, apiKey) });
   }
 
   const { response } = outcome;
@@ -197,7 +203,7 @@ export async function openUpstream(input: {
         headers: response.headers,
         text,
       });
-      return failedBySelf({ status: 502, detail: detail.replaceAll(apiKey, "***") });
+      return failedBySelf({ status: 502, detail: redactKey(detail, apiKey) });
     }
   }
 }
@@ -268,28 +274,36 @@ function awaitOpening(input: {
       resolve(result);
     };
     const open = (): Opening => ({ kind: "open", held: Buffer.concat(chunks), tap });
-    // 204 本来就没有内容。
-    const inspects = response.statusCode !== 204;
+    // 看过回复的开头了（第一个不是空白的字节到了）；204 本来就没有内容，不看。
+    let looked = response.statusCode === 204;
     // 回复的开头（收完时一个字节都没有就是空的）说它不是接口的回复。
     const notApi = (head: Buffer): Opening | null => {
-      if (bytes > 0 || !inspects) return null;
       const reply = notApiReply({ headers: response.headers, head });
       if (reply === null) return null;
       return { kind: "not_api", reply, head };
     };
     const onData = (chunk: Buffer) => {
       input.onHeard?.();
-      const notReply = notApi(chunk);
-      if (notReply) {
-        response.pause();
-        settle(notReply);
-        return;
-      }
       chunks.push(chunk);
       bytes += chunk.length;
+      let fresh = chunk;
+      if (!looked) {
+        const head = Buffer.concat(chunks);
+        // 只有空白还看不出是什么，等后面的字节（太多就不等了）。
+        const waits = saysNothingYet(head) && bytes <= MAX_HELD_BYTES;
+        if (waits) return;
+        looked = true;
+        const notReply = notApi(head);
+        if (notReply) {
+          response.pause();
+          settle(notReply);
+          return;
+        }
+        fresh = head;
+      }
       if (reads !== null) {
-        tap ??= new ReplyTap({ format: reads, stream: isEventStream(response, chunk) });
-        tap.feed(chunk);
+        tap ??= new ReplyTap({ format: reads, stream: isEventStream(response, fresh) });
+        tap.feed(fresh);
         const reply = tap.soFar();
         const failed = failedBeforeContent(reply);
         if (failed) {
@@ -305,12 +319,12 @@ function awaitOpening(input: {
       settle(open());
     };
     const onEnd = () => {
-      const notReply = notApi(Buffer.alloc(0));
-      if (notReply) {
+      const body = Buffer.concat(chunks);
+      const notReply = notApi(body);
+      if (!looked && notReply) {
         settle(notReply);
         return;
       }
-      const body = Buffer.concat(chunks);
       const refusal = zhipuRefusal({ host: input.host, headers: response.headers, body });
       if (refusal) {
         settle({ kind: "enveloped", ...refusal });
@@ -481,8 +495,9 @@ export function readLimited(input: {
   first: Buffer | null;
 }): Promise<string> {
   const { stream, first } = input;
-  // 开口时那一段之后就收完了的，end 已经发过。
-  if (stream.readableEnded) return Promise.resolve(first?.toString("utf8") ?? "");
+  // 开口时那一段之后就收完或断了的，end、close 已经发过，不会再来。
+  const over = stream.readableEnded || stream.destroyed;
+  if (over) return Promise.resolve(first?.toString("utf8") ?? "");
   return new Promise((resolve) => {
     const chunks: Buffer[] = first ? [first] : [];
     let size = first?.length ?? 0;

@@ -141,7 +141,7 @@ function refTarget(input: { root: Schema; branch: unknown }): Schema | null {
   return null;
 }
 
-function listOf(value: unknown): unknown[] {
+export function listOf(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
