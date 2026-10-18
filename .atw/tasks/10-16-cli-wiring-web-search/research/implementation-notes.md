@@ -792,6 +792,7 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - Codex 那句说明照 magpie 按 Agent 是不是 Codex 显示，读取中、算不出时也在；线上不另带标志。
 - 主机没声明 `apiEndpointCliWiring` 时不弹框，直接关（浏览器测试覆盖）。
 - 放回的一行（接入前有、现在没有的键）写「现在：文件里没有这一项」。
+- 每个提供方关掉只改一个文件（Claude Code 的 settings.json、Codex 的 config.toml），「按文件分组」实际只有一组。
 - e2e 的 `resetApiEndpoints` 另清后台小任务、Subagent、记忆模型，并在开关都关着时删掉接管记录（含 reconnect），免得上一个用例关掉前的默认模型被下一个用例按 again 挑回来（24 号用例之后 Codex 用例必挂的原因）。
 
 ### 测试
@@ -799,4 +800,4 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 纯逻辑 `switch-off-preview.test.ts`（server）：magpie 的大文件、配对、相同内容、括号、大块拿掉；遮密钥；新建、删除、不变、家目录外的路径。
 - daemon 端到端：Claude（改回、放回、拿掉逐行与关掉后的文件一致；Osuna 建的文件列为删除；开关关着时没有；读不懂时回 `config_unparsable`）与 Codex（两行改回、目录行拿掉，关掉后与 `keptConfig` 一致；读不懂）；都比对预览前后内容与 mtime。
 - app：`internal/switch-off-preview.test.ts`（折叠、认不出的种类改文字、算不出）；浏览器测试「Turning Use API endpoints off previews what it puts back」：扣住预览请求看「正在读取」、放开后整份逐行与「现在」行、取消不改文件、确认后关掉并改回；折叠「还有 4 行」展开；读不懂时文字说明加原因，确认被拒在框里、「保留当前设置」关掉且文件不动；Codex 读取中与列表时说明都在、窄窗口确认按钮在视口内；老主机直接关。提示区「切回官方」开同一个框，失败留在框里、重试后关掉。原来三处关开关的步骤补上确认。
-- 截图（无头 Chromium、临时 HOME、假数据；长列表图里第二个文件是截图时注入的假数据，用来看按文件分组）：`screenshots/26-switch-off-sheet_long-list_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_codex_compact-390_{en,zh}.png`、`26-switch-off-sheet_unreadable_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_unreadable-refused_desktop-1280_{en,zh}.png`。
+- 截图（无头 Chromium、临时 HOME、假数据）：`screenshots/26-switch-off-sheet_long-list_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_codex_compact-390_{en,zh}.png`、`26-switch-off-sheet_unreadable_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_unreadable-refused_desktop-1280_{en,zh}.png`。
