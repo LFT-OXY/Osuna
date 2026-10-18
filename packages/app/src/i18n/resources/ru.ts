@@ -2284,7 +2284,7 @@ export const ru: TranslationResources = {
         copyResumeCommand: "Копировать команду возобновления",
         importAsAgent: "Импортировать как агента Osuna",
         importing: "Импорт...",
-        codexModelProvider: "Провайдер моделей Codex: {{name}}",
+        codexModelProvider: "Провайдер моделей Codex",
       },
       errors: {
         loadFailed: "Не удалось загрузить сессии",

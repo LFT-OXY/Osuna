@@ -69,14 +69,14 @@ test.describe("Session history", () => {
       const gatewayRow = page.getByTestId("session-history-row-codex-thread-gateway");
       await expect(gatewayRow).toBeVisible({ timeout: 30_000 });
       await expect(gatewayRow).toContainText("Started through the gateway");
-      await expect(
-        gatewayRow.getByLabel("Codex model provider: osuna_api_endpoint", { exact: true }),
-      ).toHaveText("osuna_api_endpoint");
+      const gatewayProvider = gatewayRow.getByTestId("session-history-row-codex-model-provider");
+      await expect(gatewayProvider).toContainText("Codex model provider");
+      await expect(gatewayProvider).toContainText("osuna_api_endpoint");
       await expect(
         page
           .getByTestId("session-history-row-codex-thread-official")
-          .getByLabel("Codex model provider: openai", { exact: true }),
-      ).toHaveText("openai");
+          .getByTestId("session-history-row-codex-model-provider"),
+      ).toContainText("openai");
     } finally {
       await workspace.cleanup();
     }

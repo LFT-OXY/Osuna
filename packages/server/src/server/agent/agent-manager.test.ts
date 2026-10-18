@@ -11034,6 +11034,41 @@ test("listImportableSessions lists a session a derived provider also lists only 
   ]);
 });
 
+// A custom Claude provider without its own CLAUDE_CONFIG_DIR reads the same
+// session files as stock Claude; both rows stay, as they did before Codex
+// started listing every Codex model provider.
+test("listImportableSessions keeps a Claude session a custom Claude provider also lists", async () => {
+  const sharedSession = {
+    providerHandleId: "claude-session",
+    cwd: "/tmp/recent",
+    title: null,
+    lastActivityAt: new Date("2026-01-02T00:00:00Z"),
+    firstPromptPreview: null,
+    lastPromptPreview: null,
+  };
+  const claudeClient = new RecordingPersistedAgentsClient("claude");
+  claudeClient.listImportableSessions = async () => [{ ...sharedSession }];
+  const customClient = new RecordingPersistedAgentsClient("zai");
+  customClient.listImportableSessions = async () => [{ ...sharedSession }];
+  const manager = new AgentManager({
+    clients: { claude: claudeClient, zai: customClient },
+    providerDefinitions: {
+      claude: { enabled: true, derivedFromProviderId: null },
+      zai: { enabled: true, derivedFromProviderId: "claude" },
+    },
+    logger,
+  });
+
+  const result = await manager.listImportableSessions();
+
+  expect(
+    result.sessions.map((session) => [session.provider, session.providerHandleId]).sort(),
+  ).toEqual([
+    ["claude", "claude-session"],
+    ["zai", "claude-session"],
+  ]);
+});
+
 test("listImportableSessions narrows to the providerFilter when supplied", async () => {
   const claudeClient = new RecordingPersistedAgentsClient("claude");
   const codexClient = new RecordingPersistedAgentsClient("codex");

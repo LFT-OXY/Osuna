@@ -2276,7 +2276,7 @@ export const en = {
         copyResumeCommand: "Copy resume command",
         importAsAgent: "Import as Osuna agent",
         importing: "Importing...",
-        codexModelProvider: "Codex model provider: {{name}}",
+        codexModelProvider: "Codex model provider",
       },
       errors: {
         loadFailed: "Could not load sessions",

@@ -2251,7 +2251,7 @@ export const ar: TranslationResources = {
         copyResumeCommand: "نسخ أمر الاستئناف",
         importAsAgent: "استيراد كوكيل Osuna",
         importing: "جارٍ الاستيراد...",
-        codexModelProvider: "مزوّد نماذج Codex: {{name}}",
+        codexModelProvider: "مزوّد نماذج Codex",
       },
       errors: {
         loadFailed: "تعذّر تحميل الجلسات",

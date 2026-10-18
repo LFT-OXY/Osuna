@@ -2272,7 +2272,7 @@ export const ja: TranslationResources = {
         copyResumeCommand: "再開コマンドをコピー",
         importAsAgent: "Osuna エージェントとしてインポート",
         importing: "インポート中...",
-        codexModelProvider: "Codex モデルプロバイダー：{{name}}",
+        codexModelProvider: "Codex モデルプロバイダー",
       },
       errors: {
         loadFailed: "セッションを読み込めませんでした",

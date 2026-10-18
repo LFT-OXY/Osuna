@@ -295,6 +295,11 @@ function stripNullableRoutingBlock(text: string | null): string | null {
   return text === null ? null : stripTrailingRoutingBlock(text);
 }
 
+/** One provider session's identity across providers: the same handle under two providers is two keys. */
+export function toProviderSessionHandleKey(provider: string, providerHandleId: string): string {
+  return `${provider}\0${providerHandleId}`;
+}
+
 export function toRecentProviderSessionDescriptorPayload(
   session: ImportableProviderSession & { provider: string },
   options: RecentProviderSessionProjectionOptions,

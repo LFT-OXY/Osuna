@@ -291,8 +291,8 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 ### 做法
 
 - 内置 Codex 列提供方会话时 `thread/list` 带 `modelProviders: []`（全部服务商）；`extends: "codex"` 的自定义提供方照旧只要自己那一个。每条带 Codex 回的 `modelProvider`，经 `ImportableProviderSession.codexModelProvider` 进协议的可选字段 `RecentProviderSessionDescriptorPayload.codexModelProvider`。旧客户端忽略这个键；旧 daemon 不发，界面就不显示，不用能力位。
-- 自定义 Codex 提供方开的对话现在内置 Codex 也列得出（同一 thread id）。daemon 合并时，基础提供方与派生自它的提供方列出同一条，只留派生那条（`AgentManager.withoutSessionsDerivedProvidersOwn`）：它带着自己的设置续；用内置 Codex 的 `codex resume` 续会因为 config.toml 里没有这个服务商的表而失败。
-- 会话历史的行在第二行显示服务商 id（`openai`、`osuna_api_endpoint`……），排在目录前，目录先被截；完整说法「Codex 服务商：{name}」给读屏。没把这句说法直接显示出来：Explorer 默认宽度下行正文只有约 195px，英文「Codex model provider: osuna_api_endpoint」放不下，会把 id 本身截掉。
+- 自定义 Codex 提供方开的对话现在内置 Codex 也列得出（同一 thread id）。daemon 合并时只对 Codex 去重：派生自 Codex 的提供方列出的、带 Codex 服务商的对话，内置 Codex 那条去掉（`AgentManager.dropStockCodexRowsCustomCodexOwns`）：自定义提供方带着自己的设置续；用内置 Codex 的 `codex resume` 续会因为 config.toml 里没有这个服务商的表而失败。自定义 Claude 提供方（如没设自己 `CLAUDE_CONFIG_DIR` 的 Z.AI）与内置 Claude 列出同一条时两条照旧都留。
+- 会话历史的行在第二行显示「Codex 服务商」字样加服务商 id（id 用正文色，字样用次要色），排在目录前。第二行伸到时间下面，Explorer 默认宽度下英文「Codex model provider osuna_api_endpoint」也放得下；窄了先截目录，再截字样，id 最后。原生端同样显示，不靠悬停。
 
 ### 一次性核实（2026-10-18，codex-cli 0.163.0）
 

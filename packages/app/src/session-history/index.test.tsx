@@ -489,16 +489,19 @@ describe("SessionHistorySurface", () => {
 
     const gatewayRow = await screen.findByTestId("session-history-row-codex-thread-gateway");
     expect(gatewayRow.textContent).toContain("Started through the gateway");
-    const gatewayProvider = within(gatewayRow).getByLabelText(
-      "Codex model provider: osuna_api_endpoint",
+    const gatewayProvider = within(gatewayRow).getByTestId(
+      "session-history-row-codex-model-provider",
     );
-    expect(gatewayProvider.textContent).toBe("osuna_api_endpoint");
+    expect(within(gatewayProvider).getByText("Codex model provider")).toBeTruthy();
+    expect(within(gatewayProvider).getByText("osuna_api_endpoint")).toBeTruthy();
     const officialRow = screen.getByTestId("session-history-row-codex-thread-official");
-    expect(within(officialRow).getByLabelText("Codex model provider: openai").textContent).toBe(
-      "openai",
+    const officialProvider = within(officialRow).getByTestId(
+      "session-history-row-codex-model-provider",
     );
+    expect(within(officialProvider).getByText("Codex model provider")).toBeTruthy();
+    expect(within(officialProvider).getByText("openai")).toBeTruthy();
     const claudeRow = screen.getByTestId("session-history-row-claude-claude-session");
-    expect(within(claudeRow).queryByTestId("session-history-row-codex-model-provider")).toBeNull();
+    expect(claudeRow.textContent).not.toContain("Codex model provider");
   });
 
   it("reports the chosen scope to the shell", async () => {

@@ -2287,7 +2287,7 @@ export const ptBR: TranslationResources = {
         copyResumeCommand: "Copiar comando de retomada",
         importAsAgent: "Importar como agente do Osuna",
         importing: "Importando...",
-        codexModelProvider: "Provedor de modelos do Codex: {{name}}",
+        codexModelProvider: "Provedor de modelos do Codex",
       },
       errors: {
         loadFailed: "Não foi possível carregar as sessões",

@@ -10,7 +10,10 @@ import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 import type { AgentPersistenceHandle, AgentProvider } from "./agent-sdk-types.js";
 import { ensureAgentLoaded, type AgentLoaderManager } from "./agent-loading.js";
 import { unarchiveAgentState } from "./agent-prompt.js";
-import { toRecentProviderSessionDescriptorPayload } from "./agent-projections.js";
+import {
+  toProviderSessionHandleKey,
+  toRecentProviderSessionDescriptorPayload,
+} from "./agent-projections.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type {
@@ -454,10 +457,6 @@ function toImportedOwnerFields(
     importedAgentId: owner.agentId,
     ...(owner.workspaceId ? { importedAgentWorkspaceId: owner.workspaceId } : {}),
   };
-}
-
-function toProviderSessionHandleKey(provider: string, providerHandleId: string): string {
-  return `${provider}\0${providerHandleId}`;
 }
 
 function isMetadataGenerationSession(input: { firstPromptPreview: string | null }): boolean {

@@ -2301,7 +2301,7 @@ export const es: TranslationResources = {
         copyResumeCommand: "Copiar comando de reanudación",
         importAsAgent: "Importar como agente de Osuna",
         importing: "Importando...",
-        codexModelProvider: "Proveedor de modelos de Codex: {{name}}",
+        codexModelProvider: "Proveedor de modelos de Codex",
       },
       errors: {
         loadFailed: "No se pudieron cargar las sesiones",

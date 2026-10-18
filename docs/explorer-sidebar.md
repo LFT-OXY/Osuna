@@ -83,12 +83,10 @@ rows on the client and never reaches the daemon. Outside `workspace` scope each 
 directory relative to the project root; Paseo worktrees live under `$PASEO_HOME/worktrees`,
 outside the root, so they show in full.
 
-Codex files each conversation under the **Codex model provider** it started on and, unless asked
-otherwise, lists only the one its config currently selects. Stock Codex therefore asks for every
-model provider, and each Codex row names its own next to the directory; the id stays visible
-when the directory is cut. A thread a custom provider extending Codex started is listed by both,
-so the daemon keeps only the custom provider's row, which resumes it with that provider's
-settings.
+Stock Codex asks Codex for the conversations of every
+[Codex model provider](glossary.md), and each Codex row names its own. A thread a custom
+provider extending Codex started is listed by both, so the daemon keeps only the custom
+provider's row, which resumes it with that provider's settings.
 
 The view asks with `includeImported: true`, so sessions Paseo already owns stay in the list with
 their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Paseo badge and

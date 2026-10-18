@@ -63,6 +63,7 @@ import {
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { CommandCatalog, type CommandCatalogResult } from "./command-catalog.js";
 import { restoreProviderSessionIds } from "./agent-storage.js";
+import { toProviderSessionHandleKey } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
@@ -112,6 +113,7 @@ import { extractAttention } from "../persistence-hooks.js";
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const IMPORTABLE_SESSION_LIST_TIMEOUT_MS = 90_000;
+const STOCK_CODEX_PROVIDER = "codex";
 // Paseo 自带的 Provider 集合。dev 的 mock 也算自带 —— 判定问的是「这个 Provider 是不是用户
 // 自己在 config 里要来的」，而不是「它有没有上生产」。
 const BUILTIN_PROVIDER_ID_SET: ReadonlySet<string> = new Set([
@@ -1181,7 +1183,7 @@ export class AgentManager {
         }
       }),
     );
-    const sessions = this.withoutSessionsDerivedProvidersOwn(
+    const sessions = this.dropStockCodexRowsCustomCodexOwns(
       providerResults.flatMap((result) => result.sessions),
     );
 
@@ -1198,19 +1200,28 @@ export class AgentManager {
   }
 
   /**
-   * 内置 Codex 列出所有 Codex 服务商名下的对话，于是派生自它的自定义提供方开的对话会被两边都列出；
-   * 这种对话归派生提供方（它带着自己的设置续），基础提供方那一条去掉。
+   * 内置 Codex 列出所有 Codex 服务商名下的对话，于是派生自 Codex 的自定义提供方开的对话会被两边都列出；
+   * 这种对话归自定义提供方（它带着自己的设置续），内置 Codex 那一条去掉。别的提供方不受影响。
    */
-  private withoutSessionsDerivedProvidersOwn(
+  private dropStockCodexRowsCustomCodexOwns(
     sessions: ManagedImportableProviderSession[],
   ): ManagedImportableProviderSession[] {
-    const derivedHandleKeys = new Set<string>();
+    const customCodexHandleKeys = new Set<string>();
     for (const session of sessions) {
       const baseProvider = this.providerDefinitions.get(session.provider)?.derivedFromProviderId;
-      if (baseProvider) derivedHandleKeys.add(`${baseProvider}\u0000${session.providerHandleId}`);
+      const isCustomCodexThread =
+        baseProvider === STOCK_CODEX_PROVIDER && !!session.codexModelProvider;
+      if (isCustomCodexThread) {
+        customCodexHandleKeys.add(
+          toProviderSessionHandleKey(STOCK_CODEX_PROVIDER, session.providerHandleId),
+        );
+      }
     }
     return sessions.filter(
-      (session) => !derivedHandleKeys.has(`${session.provider}\u0000${session.providerHandleId}`),
+      (session) =>
+        !customCodexHandleKeys.has(
+          toProviderSessionHandleKey(session.provider, session.providerHandleId),
+        ),
     );
   }
 

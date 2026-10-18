@@ -234,23 +234,32 @@ function SessionHistoryRowItem({
           />
         </View>
         <View style={styles.rowBody}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {row.title}
-          </Text>
+          <View style={styles.rowTitleLine}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {row.title}
+            </Text>
+            {row.importedAgentId ? (
+              <StatusBadge label={t("panels.sessionHistory.row.paseo")} />
+            ) : null}
+            <Text style={styles.rowMeta} numberOfLines={1}>
+              {meta}
+            </Text>
+          </View>
           {row.codexModelProvider || directory ? (
+            // 第二行伸到时间下面，默认侧栏宽度也放得下「Codex 服务商 + id」；窄了先截目录，再截说法，id 最后。
             <View style={styles.rowSubline}>
-              {/* 侧栏窄，行里只显示服务商 id，完整说法给读屏；服务商排在目录前，目录太长时先截目录。 */}
               {row.codexModelProvider ? (
-                <Text
+                <View
                   style={styles.rowCodexModelProvider}
-                  numberOfLines={1}
-                  accessibilityLabel={t("panels.sessionHistory.row.codexModelProvider", {
-                    name: row.codexModelProvider,
-                  })}
                   testID="session-history-row-codex-model-provider"
                 >
-                  {row.codexModelProvider}
-                </Text>
+                  <Text style={styles.rowCodexModelProviderLabel} numberOfLines={1}>
+                    {t("panels.sessionHistory.row.codexModelProvider")}
+                  </Text>
+                  <Text style={styles.rowCodexModelProviderId} numberOfLines={1}>
+                    {row.codexModelProvider}
+                  </Text>
+                </View>
               ) : null}
               {directory ? (
                 <Text style={styles.rowDirectory} numberOfLines={1}>
@@ -260,10 +269,6 @@ function SessionHistoryRowItem({
             </View>
           ) : null}
         </View>
-        {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {meta}
-        </Text>
         {/* A fixed slot: hidden by opacity, never unmounted, so revealing it moves nothing. */}
         <View
           style={[styles.kebabSlot, !kebab.showKebab && styles.kebabSlotHidden]}
@@ -736,7 +741,14 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
   },
+  rowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
   rowTitle: {
+    flex: 1,
+    minWidth: 0,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
@@ -746,12 +758,25 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   rowCodexModelProvider: {
+    flexDirection: "row",
     flexShrink: 1,
+    gap: theme.spacing[1],
+    minWidth: 0,
+  },
+  rowCodexModelProviderLabel: {
+    flexShrink: 1,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
+  rowCodexModelProviderId: {
+    flexShrink: 0,
+    maxWidth: "100%",
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
   rowDirectory: {
-    flexShrink: 10,
+    flex: 1,
     minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,

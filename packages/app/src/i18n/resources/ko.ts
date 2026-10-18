@@ -2263,7 +2263,7 @@ export const ko: TranslationResources = {
         copyResumeCommand: "재개 명령 복사",
         importAsAgent: "Osuna 에이전트로 가져오기",
         importing: "가져오는 중...",
-        codexModelProvider: "Codex 모델 공급자: {{name}}",
+        codexModelProvider: "Codex 모델 공급자",
       },
       errors: {
         loadFailed: "세션을 불러올 수 없습니다",
