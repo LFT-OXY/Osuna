@@ -349,6 +349,16 @@ this.syncCli("claude", cliTarget(next, "claude"), keyOf);
 const next = await this.commit(state, proposed, { keys }); // settle → CLI files → keys → state → notify
 ```
 
+## Scenario: moving a Codex conversation to another Codex model provider
+
+Reference implementation: cli-wiring-web-search ticket 13 (`server/codex-conversations/move-to-model-provider.ts`, `model-providers.ts`, magpie `internal/sessions/codex_provider.go` MIT; ADR 0011). Ticket 14 adds batch moves and the resume-error button on the same RPC (`threadIds`).
+
+- RPCs: `provider.codex.session.list_model_providers.request/.response` (targets: the config's tables, built-in `openai`, Osuna's own — listed but unselectable with a reason when `config.toml` has no Osuna table) and `provider.codex.session.move_model_provider.request/.response` (`providerId` required: the Codex provider whose Session history row it is; its own `CODEX_HOME` from that provider's env is where files, `config.toml` and `state_*.sqlite` are read — as magpie's `codexHomeOf(path)`). Permissions `daemon.read` / `daemon.manage`. UI gated on `apiEndpointCliWiring`.
+- Skip a conversation whose file was written in the last minute (`reason: "active"`); `not_found` when no file. Before changing anything, check Node has `sqlite` and zstd, else change nothing.
+- Backup first: copy every rollout file (plain and zstd twin) to `$PASEO_HOME/codex-model-provider-moves/<id>/` with `move.json` (thread id, from, to, at, file pairs), written with `writePrivateFileAtomicSync`, never read back. No guarded re-read before rename: the one-minute rule is the concurrency guard (ADR 0011).
+- Rewrite each `session_meta` carrying a provider — provider only, other bytes unchanged; zstd recompressed; temp file beside, fsync, mtime restored (Node keeps microseconds), rename. A file-step failure restores the changed files from the backup → `failed` with `backupPath`. Then each `state_*.sqlite`'s row for the thread; a missing table or a failing `pragma_table_info` is skipped (magpie); a DB failure leaves files moved → `state_database_failed` with `backupPath`. An unparsable `config.toml` doesn't abort the move. Settings-snapshot events keep the old provider (magpie). Moving back to the original provider restores plain files byte for byte.
+- Known limit (verified with real Codex 0.163.0, temp `CODEX_HOME`): if Codex rebuilds its state DB before the moved conversation is resumed once, the move reverts; the dialog says to resume once.
+
 ## Anti-patterns
 
 - `JSON.parse(raw) as StoredAgentRecord`. Parse with the schema.
