@@ -654,6 +654,23 @@ and Drift (replaced), Reapply and Keep in internal/agent/applied.go:
   packages/server/src/server/api-endpoints/service.ts
   packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
 
+Claude Code's background task model and Subagent model (the env keys written
+and taken out while routed, a Subagent fixed at a level written as
+"<model>:<level>" and followed from the file, the levels a Subagent may be
+fixed at, and the gateway asking a model named that way for that level in the
+agent's own format) follows claudeEnv, claudeOwnEnv, writeTiers, tierAt,
+tierWith and the subagent and subagent_effort fields in magpie's
+internal/agent/claude.go, MemberEffort and MemberEfforts in
+internal/provider/groupeffort.go, askedAt in internal/gateway/gateway.go, and
+withFixedEffort and withEffort in internal/gateway/decide.go:
+
+  packages/server/src/server/api-endpoints/gateway/fixed-effort.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+  packages/server/src/server/api-endpoints/service.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -74,6 +74,8 @@ export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
  * defaultThinkingOptionId 是「默认思考档位」：终端新会话与 Osuna 新对话从这一档起步，取值是思考档位 id；
  * null 或没有为没设，用 CLI 自己的。usesUltraCode 只对 Claude Code 有意义：Ultra Code 开（true）、关（false），
  * 没有为没设、不碰 settings.json 里的 ultracode。老 daemon 都不发。
+ * backgroundModelId（后台小任务模型）、subagentModelId（Subagent 模型）与 subagentThinkingOptionId（它的思考档位）
+ * 只对 Claude Code 有意义，模型取值同 defaultModelId；null 或没有为没设，跟主模型。老 daemon 都不发。
  */
 export const ApiEndpointAgentSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -81,6 +83,9 @@ export const ApiEndpointAgentSettingsSchema = z.object({
   keepsClaudeAiLogin: z.boolean().optional(),
   defaultThinkingOptionId: z.string().nullable().optional(),
   usesUltraCode: z.boolean().optional(),
+  backgroundModelId: z.string().nullable().optional(),
+  subagentModelId: z.string().nullable().optional(),
+  subagentThinkingOptionId: z.string().nullable().optional(),
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
@@ -313,6 +318,9 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * `defaultThinkingOptionId`：设「默认思考档位」；null 为不设，省略即不变。Claude Code 要是默认模型收的档位，
  * Codex 收它认的任何档位（换了默认模型时 daemon 把新模型不收的改到最近一档）。老 daemon 忽略它。
  * `usesUltraCode`：只给 Claude Code，开关 Ultra Code，打开要求默认模型支持 xhigh；省略即不变。老 daemon 忽略它。
+ * `backgroundModelId`、`subagentModelId`、`subagentThinkingOptionId`：只给 Claude Code，设后台小任务模型、Subagent 模型
+ * 与它的思考档位；模型要是开着的接口的已选模型，档位是 none、minimal、low、medium、high、xhigh、max 之一；
+ * null 为不设，省略即不变。老 daemon 忽略它们。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -324,6 +332,9 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   keepsClaudeAiLogin: z.boolean().optional(),
   defaultThinkingOptionId: z.string().nullable().optional(),
   usesUltraCode: z.boolean().optional(),
+  backgroundModelId: z.string().nullable().optional(),
+  subagentModelId: z.string().nullable().optional(),
+  subagentThinkingOptionId: z.string().nullable().optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema

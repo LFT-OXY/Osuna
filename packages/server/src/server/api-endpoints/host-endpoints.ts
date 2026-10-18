@@ -143,7 +143,8 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
   const models = usableModels(state);
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = agents[provider];
+    const agent = withoutUnservedSideModels(state, agents[provider]);
+    agents[provider] = agent;
     if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
     const first = models[0];
@@ -157,6 +158,26 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
     agents[provider] = { ...agent, enabled: true, defaultModelId: isBareOffered ? bare : first.id };
   }
   return { ...state, agents };
+}
+
+/**
+ * 后台小任务模型与 Subagent 模型已没有开着的接口提供时不再设，Claude Code 跟主模型（magpie 只写它在售的模型）。
+ * 没变时原样返回同一个对象。
+ */
+function withoutUnservedSideModels(
+  state: ApiEndpointState,
+  agent: ApiEndpointAgentSettings,
+): ApiEndpointAgentSettings {
+  const isBackgroundGone = isUnserved(state, agent.backgroundModelId);
+  const isSubagentGone = isUnserved(state, agent.subagentModelId);
+  if (!isBackgroundGone && !isSubagentGone) return agent;
+  const background = isBackgroundGone ? { backgroundModelId: null } : {};
+  const subagent = isSubagentGone ? { subagentModelId: null } : {};
+  return { ...agent, ...background, ...subagent };
+}
+
+function isUnserved(state: ApiEndpointState, id: string | null | undefined): boolean {
+  return typeof id === "string" && !isDefaultModelChoice(state, id);
 }
 
 /**

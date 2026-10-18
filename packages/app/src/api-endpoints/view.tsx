@@ -110,6 +110,21 @@ function AgentApiEndpoints({
     (usesUltraCode: boolean) => setAgentSettings(provider, { enabled: true, usesUltraCode }),
     [provider, setAgentSettings],
   );
+  const handleBackgroundModelChange = useCallback(
+    (backgroundModelId: string | null) =>
+      setAgentSettings(provider, { enabled: true, backgroundModelId }),
+    [provider, setAgentSettings],
+  );
+  const handleSubagentModelChange = useCallback(
+    (subagentModelId: string | null) =>
+      setAgentSettings(provider, { enabled: true, subagentModelId }),
+    [provider, setAgentSettings],
+  );
+  const handleSubagentThinkingChange = useCallback(
+    (subagentThinkingOptionId: string | null) =>
+      setAgentSettings(provider, { enabled: true, subagentThinkingOptionId }),
+    [provider, setAgentSettings],
+  );
   // 总开关开着、关着都能设，开关保持原样。
   const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
   const handleKeepClaudeAiLoginChange = useCallback(
@@ -169,6 +184,9 @@ function AgentApiEndpoints({
       onDefaultModelChange={handleDefaultModelChange}
       onDefaultThinkingChange={handleDefaultThinkingChange}
       onUltraCodeChange={handleUltraCodeChange}
+      onBackgroundModelChange={handleBackgroundModelChange}
+      onSubagentModelChange={handleSubagentModelChange}
+      onSubagentThinkingChange={handleSubagentThinkingChange}
       onManage={handleManage}
       // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

@@ -2636,6 +2636,19 @@ export const ja: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} は思考レベルに関係なく、実質的なタスクごとにワークフローを計画します。Extra High に対応したモデルでのみ使えます。",
+        backgroundModel: "バックグラウンドタスクのモデル",
+        backgroundModelHint:
+          "{{agent}} がセッション名の生成や Web ページの読み込みなど、自分で行う小さな作業に使うモデルです。",
+        backgroundModelPick: "{{agent}} のバックグラウンドタスクのモデル",
+        followsDefaultModel: "既定のモデルと同じ",
+        subagentModel: "サブエージェントのモデル",
+        subagentModelHint: "モデルを指定しないサブエージェントはこのモデルで動きます。",
+        subagentModelPick: "{{agent}} のサブエージェントのモデル",
+        subagentThinking: "サブエージェントの思考レベル",
+        subagentThinkingHint:
+          "{{agent}} がどのレベルを求めても、サブエージェントはこのレベルで考えます。",
+        subagentThinkingPick: "{{agent}} のサブエージェントの思考レベル",
+        subagentThinkingUnset: "設定しない（{{agent}} が決める）",
         connection: {
           kept: "{{agent}} はすでにサードパーティ API を使っています。{{model}} のままです。",
           again:

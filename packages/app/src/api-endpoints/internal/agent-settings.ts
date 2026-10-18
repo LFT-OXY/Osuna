@@ -1,6 +1,7 @@
 import type {
   ApiEndpoint,
   ApiEndpointAgentIssue,
+  ApiEndpointAgentSettings,
   ApiEndpointHealthIssue,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
@@ -140,6 +141,22 @@ export interface DefaultThinkingView {
   lockedAt: string | null;
 }
 
+/**
+ * Claude Code 的后台小任务模型、Subagent 模型与它的思考档位（PRD 第 32 条）：模型为 null 是跟主模型；
+ * Subagent 思考档位的选项来自 Subagent 模型（跟主模型时是默认模型）在聊天模型选择器里的档位。
+ */
+export interface ClaudeSideModelsView {
+  backgroundModel: DefaultModelOption | null;
+  subagentModel: DefaultModelOption | null;
+  subagentThinking: SubagentThinkingView;
+}
+
+export interface SubagentThinkingView {
+  // null 为没设，按 Claude Code 给 Subagent 的那一档。
+  value: string | null;
+  options: DefaultThinkingOption[];
+}
+
 // 与 Osuna 对话里 Claude 的 Ultra Code 档位同一个 id。
 const ULTRA_CODE_OPTION_ID = "ultracode";
 
@@ -159,6 +176,8 @@ export interface AgentApiEndpointsView {
   keepsClaudeAiLogin: boolean | null;
   // 总开关关着、默认模型没有档位或主机太旧（快照里没有分组）时为 null，不显示这一行。
   defaultThinking: DefaultThinkingView | null;
+  // 只有 Claude Code 有；总开关关着或主机太旧（设置里没有这几项）时为 null，不显示这几行。
+  sideModels: ClaudeSideModelsView | null;
 }
 
 export function selectAgentApiEndpointsView(input: {
@@ -214,6 +233,13 @@ export function selectAgentApiEndpointsView(input: {
     });
   }
 
+  const sideModels = claudeSideModelsView({
+    provider,
+    agent,
+    modelOptions,
+    groups: input.endpointModelGroups ?? [],
+  });
+
   return {
     enabled: agent.enabled,
     enableBlockedBy,
@@ -224,6 +250,7 @@ export function selectAgentApiEndpointsView(input: {
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
     keepsClaudeAiLogin,
     defaultThinking,
+    sideModels,
   };
 }
 
@@ -240,13 +267,8 @@ function defaultThinkingView(input: {
 }): DefaultThinkingView | null {
   const { defaultModelId } = input;
   if (defaultModelId === null) return null;
-  const models = input.groups.flatMap((group) => group.models);
-  const named = models.find((model) => model.id === defaultModelId);
-  const bare = models.find((model) => model.id.slice(model.id.indexOf("/") + 1) === defaultModelId);
-  const thinkingOptions = (named ?? bare)?.thinkingOptions ?? [];
-  const options = thinkingOptions
-    .filter((option) => option.id !== ULTRA_CODE_OPTION_ID)
-    .map((option) => ({ id: option.id, label: option.label }));
+  const thinkingOptions = modelThinkingOptions(input.groups, defaultModelId);
+  const options = levelsWithoutUltraCode(thinkingOptions);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove after 2027-04-18. 老 daemon 的分组模型不带思考档位，这一行不显示（没有档位的模型同样不显示）。
   if (options.length === 0) return null;
   const hasUltraCode = thinkingOptions.some((option) => option.id === ULTRA_CODE_OPTION_ID);
@@ -256,6 +278,55 @@ function defaultThinkingView(input: {
     usesUltraCode: hasUltraCode ? input.usesUltraCode : null,
     lockedAt: input.lockedAt,
   };
+}
+
+/** 后台小任务模型与 Subagent 的显示；只有 Claude Code、总开关开着、主机报了这几项时才有。 */
+function claudeSideModelsView(input: {
+  provider: string;
+  agent: ApiEndpointAgentSettings;
+  modelOptions: DefaultModelOption[];
+  groups: ApiEndpointModelGroup[];
+}): ClaudeSideModelsView | null {
+  const { agent, modelOptions } = input;
+  // COMPAT(apiEndpointClaudeSideModels): added in v0.17.0, remove after 2027-04-18. 老 daemon 不报这几项，也不收。
+  const reportsSideModels = agent.backgroundModelId !== undefined;
+  const showsSideModels = input.provider === "claude" && agent.enabled && reportsSideModels;
+  if (!showsSideModels) return null;
+  const subagentModelId = agent.subagentModelId ?? null;
+  return {
+    backgroundModel: displayedDefaultModel(modelOptions, agent.backgroundModelId ?? null),
+    subagentModel: displayedDefaultModel(modelOptions, subagentModelId),
+    subagentThinking: {
+      value: agent.subagentThinkingOptionId ?? null,
+      options: modelLevels(input.groups, subagentModelId ?? agent.defaultModelId),
+    },
+  };
+}
+
+/** 模型在聊天模型选择器里的档位：指定某一家的找那一家，光秃秃的名字找第一家提供它的。 */
+function modelThinkingOptions(
+  groups: ApiEndpointModelGroup[],
+  modelId: string,
+): DefaultThinkingOption[] {
+  const models = groups.flatMap((group) => group.models);
+  const named = models.find((model) => model.id === modelId);
+  const bare = models.find((model) => model.id.slice(model.id.indexOf("/") + 1) === modelId);
+  return (named ?? bare)?.thinkingOptions ?? [];
+}
+
+/** 档位选项去掉 Ultra Code（它是单独的开关）。 */
+function levelsWithoutUltraCode(options: DefaultThinkingOption[]): DefaultThinkingOption[] {
+  return options
+    .filter((option) => option.id !== ULTRA_CODE_OPTION_ID)
+    .map((option) => ({ id: option.id, label: option.label }));
+}
+
+function modelLevels(
+  groups: ApiEndpointModelGroup[],
+  modelId: string | null,
+): DefaultThinkingOption[] {
+  if (modelId === null) return [];
+  return levelsWithoutUltraCode(modelThinkingOptions(groups, modelId));
 }
 
 /** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */

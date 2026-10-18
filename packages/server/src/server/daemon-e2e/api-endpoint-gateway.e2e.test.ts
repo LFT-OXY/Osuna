@@ -179,6 +179,8 @@ async function start(
     catalogB?: Record<string, Record<string, unknown>>;
     // A 选了的模型；缺省 kimi-k2 与 gpt-5.5。
     modelsA?: string[];
+    // Claude Code 的默认模型；缺省 kimi-k2。
+    claudeDefaultModel?: string;
     // 已下线模型记录用的时钟，测试拿它快进一周。
     retiredModelsNow?: () => number;
     // 已下线记录的到期定时器，测试拿它在快进后手动到点。
@@ -244,7 +246,7 @@ async function start(
           : []),
       ],
       agents: {
-        claude: { enabled: true, defaultModelId: "kimi-k2" },
+        claude: { enabled: true, defaultModelId: options.claudeDefaultModel ?? "kimi-k2" },
         codex: { enabled: true, defaultModelId: "gpt-5.5" },
       },
     },
@@ -8546,5 +8548,83 @@ describe("Codex's web_search tool goes only to endpoints that search the web by 
     const body = (await response.json()) as { output: unknown[]; status: string };
     expect(body.output).toEqual([SEARCH_ITEM, expect.objectContaining({ type: "message" })]);
     expect(body.status).toBe("completed");
+  });
+});
+
+describe("a model asked for at an effort of its own, as the Subagent model is written (magpie askedAt)", () => {
+  // Claude Code 自己问的是 low：「模型名:high」要的 high 盖过它。
+  function askedAt(model: string) {
+    return {
+      model,
+      max_tokens: 4096,
+      stream: false,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+      messages: [{ role: "user", content: "hi" }],
+    };
+  }
+
+  test("an Anthropic endpoint is sent the model without the suffix, at that effort", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway } = await start({
+      upstreamA,
+      modelsA: ["claude-sonnet-5-5"],
+      claudeDefaultModel: "claude-sonnet-5-5",
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(askedAt("claude-sonnet-5-5:high")),
+    );
+
+    expect(response.status).toBe(200);
+    const body = receivedBody(upstreamA.requests[0]);
+    expect(body.model).toBe("claude-sonnet-5-5");
+    expect(body.thinking).toEqual({ type: "adaptive" });
+    expect(body.output_config).toEqual({ effort: "high" });
+  });
+
+  test("a Chat endpoint is sent the model without the suffix, at that reasoning_effort", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway } = await start({ chatUpstream: chat });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(askedAt("deepseek-v3:high")),
+    );
+    await response.text();
+
+    expect(response.status).toBe(200);
+    const body = receivedBody(chat.requests[0]);
+    expect(body.model).toBe("deepseek-v3");
+    expect(body.reasoning_effort).toBe("high");
+  });
+
+  test("a Responses endpoint is sent the model without the suffix, at that reasoning.effort", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => responsesStream(res);
+    const { gateway } = await start({ responsesUpstream: responses });
+
+    const response = await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(askedAt("grok-4:high")),
+    );
+    await response.text();
+
+    expect(response.status).toBe(200);
+    const body = receivedBody(responses.requests[0]);
+    expect(body.model).toBe("grok-4");
+    expect(body.reasoning).toMatchObject({ effort: "high" });
+  });
+
+  test("a model an endpoint lists with the colon in its own id is sent whole", async () => {
+    const upstreamA = await startUpstream();
+    // B 也选了光秃秃的 kimi-k2：拆开后会去 B，整个名字是 A 的才去 A。
+    const { gateway } = await start({ upstreamA, modelsA: ["kimi-k2:high"] });
+
+    await fetch(`${gateway}/v1/messages?beta=true`, claudeRequest(askedAt("kimi-k2:high")));
+
+    expect(receivedBody(upstreamA.requests[0]).model).toBe("kimi-k2:high");
   });
 });

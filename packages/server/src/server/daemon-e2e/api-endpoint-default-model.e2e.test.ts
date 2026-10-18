@@ -58,6 +58,10 @@ async function modifiedAt(file: string): Promise<bigint> {
   return (await stat(file, { bigint: true })).mtimeNs;
 }
 
+function isRelayB(endpoint: { name: string }): boolean {
+  return endpoint.name === "Relay B";
+}
+
 function issueCodes(issues: ListedIssue[]): string[] {
   return issues.map((issue) => issue.code);
 }
@@ -833,6 +837,131 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
 
       await setUltraCode(true);
       await expect.poll(glmThinking, { timeout: 10_000 }).toMatchObject({ start: "ultracode" });
+    });
+  });
+
+  describe("background task and Subagent models", () => {
+    // 照 magpie 的 claudeEnv 与 subagent、subagent_effort 字段（PRD 第 32 条）。
+
+    function setModels(values: {
+      backgroundModelId?: string | null;
+      subagentModelId?: string | null;
+      subagentThinkingOptionId?: string | null;
+      provider?: string;
+    }) {
+      const { provider = "claude", ...rest } = values;
+      return client.apiEndpointSetAgentSettings({ provider, enabled: true, ...rest });
+    }
+
+    async function claudeEnv(): Promise<Record<string, unknown>> {
+      const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
+        env?: Record<string, unknown>;
+      };
+      return settings.env ?? {};
+    }
+
+    test("both go into env, a Subagent thinking as model:level, a dotted Claude version with hyphens; switching off restores the file", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first", "glm-4.6"] });
+      await saveEndpoint({ name: "Relay B", models: ["claude-opus-4.6"] });
+      const before = `{
+  "env": {
+    "ANTHROPIC_SMALL_FAST_MODEL": "my-fast"
+  }
+}
+`;
+      await writeFile(settingsPath, before);
+      await turnOn("claude", "first");
+      // 都不设时跟主模型：用户自己的拿掉。
+      expect(await claudeEnv()).not.toHaveProperty("ANTHROPIC_SMALL_FAST_MODEL");
+      expect(await claudeEnv()).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
+
+      expect(
+        await setModels({
+          backgroundModelId: "glm-4.6",
+          subagentModelId: "claude-opus-4.6",
+          subagentThinkingOptionId: "high",
+        }),
+      ).toMatchObject({
+        error: null,
+        agent: {
+          backgroundModelId: "glm-4.6",
+          subagentModelId: "claude-opus-4.6",
+          subagentThinkingOptionId: "high",
+        },
+      });
+      expect(await claudeEnv()).toMatchObject({
+        ANTHROPIC_SMALL_FAST_MODEL: "glm-4.6",
+        CLAUDE_CODE_SUBAGENT_MODEL: "claude-opus-4-6:high",
+      });
+
+      // 只设思考档位：Subagent 跟主模型，按这一档。
+      await setModels({ subagentModelId: null });
+      expect((await claudeEnv()).CLAUDE_CODE_SUBAGENT_MODEL).toBe("first:high");
+
+      await setModels({ backgroundModelId: null, subagentThinkingOptionId: null });
+      expect(await claudeEnv()).not.toHaveProperty("ANTHROPIC_SMALL_FAST_MODEL");
+      expect(await claudeEnv()).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
+
+      await setModels({ backgroundModelId: "glm-4.6", subagentModelId: "glm-4.6" });
+      await turnOff("claude");
+      expect(await readFile(settingsPath, "utf8")).toBe(before);
+    });
+
+    test("only Claude Code has them, a model must be one an endpoint that is on selected, and a level one of magpie's", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+
+      expect((await setModels({ backgroundModelId: "gpt-9" })).error?.code).toBe("invalid_input");
+      expect((await setModels({ subagentModelId: "gpt-9" })).error?.code).toBe("invalid_input");
+      expect((await setModels({ subagentThinkingOptionId: "ultra" })).error?.code).toBe(
+        "invalid_input",
+      );
+      expect(
+        (await setModels({ provider: "codex", backgroundModelId: "glm-4.6" })).error?.code,
+      ).toBe("invalid_input");
+      // magpie 收它认的任何一档，不按模型的档位卡。
+      expect(await setModels({ subagentThinkingOptionId: "minimal" })).toMatchObject({
+        error: null,
+        agent: { subagentThinkingOptionId: "minimal" },
+      });
+    });
+
+    test("a Subagent model edited in settings.json to one an endpoint serves is followed, as magpie reads the file", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+      await setModels({ subagentModelId: "glm-4.6" });
+
+      const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
+        env: Record<string, unknown>;
+      };
+      settings.env.CLAUDE_CODE_SUBAGENT_MODEL = "claude-opus-4-6:low";
+      await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+
+      const list = await client.apiEndpointList("claude");
+      expect(list.agents?.claude).toMatchObject({
+        subagentModelId: "claude-opus-4-6",
+        subagentThinkingOptionId: "low",
+      });
+      expect(list.health).toEqual([]);
+    });
+
+    test("a model whose endpoint is turned off is dropped, and the Subagents follow the main model again", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first"] });
+      await saveEndpoint({ name: "Relay B", models: ["glm-4.6"] });
+      await turnOn("claude", "first");
+      await setModels({ backgroundModelId: "glm-4.6", subagentModelId: "glm-4.6" });
+
+      const endpoints = (await client.apiEndpointList("claude")).endpoints ?? [];
+      const relayB = endpoints.find(isRelayB);
+      if (!relayB) throw new Error("Expected Relay B");
+      await client.apiEndpointSetEndpointState({ endpointId: relayB.id, enabled: false });
+
+      expect((await client.apiEndpointList("claude")).agents?.claude).toMatchObject({
+        backgroundModelId: null,
+        subagentModelId: null,
+      });
+      expect(await claudeEnv()).not.toHaveProperty("ANTHROPIC_SMALL_FAST_MODEL");
+      expect(await claudeEnv()).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
     });
   });
 });

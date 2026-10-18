@@ -2665,6 +2665,18 @@ export const es: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} planifica un flujo de trabajo para cada tarea sustancial, con cualquier nivel de razonamiento. Solo en modelos que admiten Extra High.",
+        backgroundModel: "Modelo de tareas en segundo plano",
+        backgroundModelHint:
+          "Lo que {{agent}} usa para sus propias tareas pequeñas, como poner nombre a una sesión o leer una página web.",
+        backgroundModelPick: "Modelo de tareas en segundo plano de {{agent}}",
+        followsDefaultModel: "Igual que el modelo predeterminado",
+        subagentModel: "Modelo de subagentes",
+        subagentModelHint: "Los subagentes que no indican un modelo usan este.",
+        subagentModelPick: "Modelo de subagentes de {{agent}}",
+        subagentThinking: "Razonamiento de subagentes",
+        subagentThinkingHint: "Los subagentes razonan a este nivel, pida lo que pida {{agent}}.",
+        subagentThinkingPick: "Razonamiento de subagentes de {{agent}}",
+        subagentThinkingUnset: "Sin definir (decide {{agent}})",
         connection: {
           kept: "{{agent}} ya usa endpoints de API. Sigue con {{model}}.",
           again:

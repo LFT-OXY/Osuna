@@ -208,11 +208,23 @@ export class ApiEndpointSession {
         : { defaultThinkingOptionId: request.defaultThinkingOptionId };
     const ultraCode =
       request.usesUltraCode === undefined ? {} : { usesUltraCode: request.usesUltraCode };
+    const sideModels = {
+      ...(request.backgroundModelId === undefined
+        ? {}
+        : { backgroundModelId: request.backgroundModelId }),
+      ...(request.subagentModelId === undefined
+        ? {}
+        : { subagentModelId: request.subagentModelId }),
+      ...(request.subagentThinkingOptionId === undefined
+        ? {}
+        : { subagentThinkingOptionId: request.subagentThinkingOptionId }),
+    };
     try {
       const { agent, connection } = await this.service.setAgentSettings(request.provider, {
         enabled: request.enabled,
         ...thinking,
         ...ultraCode,
+        ...sideModels,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.reapply !== undefined ? { reapply: request.reapply } : {}),
         ...(request.keepsClaudeAiLogin !== undefined

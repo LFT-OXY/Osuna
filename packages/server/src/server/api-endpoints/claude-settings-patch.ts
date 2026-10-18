@@ -28,8 +28,10 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  * 负责的键（ADR 0007 改了写什么）：
  * - env 下的 ANTHROPIC_BASE_URL（daemon 中转站）/ ANTHROPIC_AUTH_TOKEN（中转站口令）/ ANTHROPIC_API_KEY（置空）；
  * - 顶层 model：新会话的起始模型。不写 env.ANTHROPIC_MODEL，它会盖过会话里 /model 的选择；
- * - env 下的 ANTHROPIC_MODEL、ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL、ANTHROPIC_SMALL_FAST_MODEL：
- *   接管时有就记下并删掉（档位由中转站按各家映射翻译），切回官方时放回；
+ * - env 下的 ANTHROPIC_MODEL、ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL、ANTHROPIC_SMALL_FAST_MODEL、
+ *   CLAUDE_CODE_SUBAGENT_MODEL：接管时有就记下并删掉（档位由中转站按各家映射翻译），切回官方时放回；
+ * - 后台小任务模型写 env.ANTHROPIC_SMALL_FAST_MODEL，Subagent 模型写 env.CLAUDE_CODE_SUBAGENT_MODEL（带档位时是
+ *   「模型名:档位」，中转站认这个后缀）；没设时照上一条删掉，Claude Code 就跟主模型（照 magpie 的 claudeEnv）。
  * - permissions.deny 里的一条 "WebSearch"：WebSearch 是 Anthropic 服务端工具，多数第三方接口不支持，
  *   Claude Code 没有关它的环境变量，只能用权限规则。只在没有一家开着的接口「自己能联网搜索」时写；
  *   有了就拿掉自己写的那条（ADR 0009）。用户自己写的同名规则不归 Osuna 所有。
@@ -51,11 +53,15 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  *   直到「重新应用」或在 Osuna 里换默认模型（shouldRewriteModel）。
  */
 
-/** 接管期间不能留在 env 里的变量。 */
+const BACKGROUND_MODEL_KEY = "ANTHROPIC_SMALL_FAST_MODEL";
+const SUBAGENT_MODEL_KEY = "CLAUDE_CODE_SUBAGENT_MODEL";
+
+/** 接管期间不能留在 env 里的变量；后台小任务与 Subagent 模型设了时写 Osuna 的值。 */
 const REMOVED_ENV_KEYS = [
   "ANTHROPIC_MODEL",
   ...API_ENDPOINT_MODEL_TIERS.map((tier) => `ANTHROPIC_DEFAULT_${tier.toUpperCase()}_MODEL`),
-  "ANTHROPIC_SMALL_FAST_MODEL",
+  BACKGROUND_MODEL_KEY,
+  SUBAGENT_MODEL_KEY,
 ];
 
 const WEB_SEARCH_RULE = "WebSearch";
@@ -179,6 +185,9 @@ export interface ClaudeGatewayWiring {
   defaultThinking: string | null;
   // Ultra Code：true 开、false 关，null 为没设、不碰。
   ultraCode: boolean | null;
+  // 后台小任务模型与 Subagent 模型（已是写给 Claude Code 的写法，Subagent 可带「:档位」）；null 为没设，跟主模型。
+  backgroundModel: string | null;
+  subagentModel: string | null;
 }
 
 /**
@@ -587,6 +596,8 @@ function gatewayEnv(
   for (const key of REMOVED_ENV_KEYS) {
     if (originalValue(envObject, key).present || takeover?.env[key]) env[key] = null;
   }
+  if (wiring.backgroundModel !== null) env[BACKGROUND_MODEL_KEY] = wiring.backgroundModel;
+  if (wiring.subagentModel !== null) env[SUBAGENT_MODEL_KEY] = wiring.subagentModel;
   return env;
 }
 
@@ -772,7 +783,19 @@ export function readClaudeCliPicks(input: {
   const isChangedByCli = recorded !== undefined && now !== recorded.written;
   if (recorded && isChangedByCli) model = { now, isKept: recorded.held === "kept" };
   const level = claudeLevelIn(settings, now ?? recorded?.written ?? "");
-  return { model, level, isUltraCodeOn: settings.ultracode === true };
+  const subagent = changedSubagent(settings, takeover);
+  return { model, level, isUltraCodeOn: settings.ultracode === true, subagent };
+}
+
+/** 文件里的 Subagent 模型不再是 Osuna 写的值时，它现在的值（没了为 null）；没变为 null（照 magpie subagent 字段的 Get 读文件）。 */
+function changedSubagent(
+  settings: ParsedSettings,
+  takeover: ClaudeSettingsTakeover,
+): CliPicks["subagent"] {
+  const raw = settings.env?.[SUBAGENT_MODEL_KEY];
+  const now = typeof raw === "string" && raw !== "" ? raw : null;
+  const written = takeover.env[SUBAGENT_MODEL_KEY]?.written ?? null;
+  return now === written ? null : { now };
 }
 
 /** magpie claudeTopEffort：读顶层 effortLevel 的 Claude 模型；Opus 5.5 起只读 modelSettings，别家的模型读顶层。 */

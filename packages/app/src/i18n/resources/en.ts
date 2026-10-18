@@ -2674,6 +2674,18 @@ export const en = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} plans a workflow for each substantive task, at whatever thinking level. Only for models that support Extra High.",
+        backgroundModel: "Background task model",
+        backgroundModelHint:
+          "What {{agent}} uses for small jobs of its own, like naming a session or reading a web page.",
+        backgroundModelPick: "Background task model for {{agent}}",
+        followsDefaultModel: "Same as the default model",
+        subagentModel: "Subagent model",
+        subagentModelHint: "Subagents that don't name a model run on it.",
+        subagentModelPick: "Subagent model for {{agent}}",
+        subagentThinking: "Subagent thinking",
+        subagentThinkingHint: "Subagents think at this level, whatever {{agent}} asks for.",
+        subagentThinkingPick: "Subagent thinking for {{agent}}",
+        subagentThinkingUnset: "Not set ({{agent}} decides)",
         connection: {
           kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:

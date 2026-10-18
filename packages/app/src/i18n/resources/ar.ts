@@ -2611,6 +2611,18 @@ export const ar: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "يخطط {{agent}} لسير عمل لكل مهمة جوهرية، أيًّا كان مستوى التفكير. متاح فقط للنماذج التي تدعم Extra High.",
+        backgroundModel: "نموذج المهام في الخلفية",
+        backgroundModelHint:
+          "ما يستخدمه {{agent}} لمهامه الصغيرة، مثل تسمية جلسة أو قراءة صفحة ويب.",
+        backgroundModelPick: "نموذج المهام في الخلفية لـ {{agent}}",
+        followsDefaultModel: "مثل النموذج الافتراضي",
+        subagentModel: "نموذج الوكلاء الفرعيين",
+        subagentModelHint: "يعمل عليه الوكلاء الفرعيون الذين لا يحددون نموذجًا.",
+        subagentModelPick: "نموذج الوكلاء الفرعيين لـ {{agent}}",
+        subagentThinking: "تفكير الوكلاء الفرعيين",
+        subagentThinkingHint: "يفكر الوكلاء الفرعيون بهذا المستوى، أيًّا كان ما يطلبه {{agent}}.",
+        subagentThinkingPick: "تفكير الوكلاء الفرعيين لـ {{agent}}",
+        subagentThinkingUnset: "غير محدد (يقرر {{agent}})",
         connection: {
           kept: "يستخدم {{agent}} واجهات API الخارجية بالفعل. يبقى على {{model}}.",
           again:

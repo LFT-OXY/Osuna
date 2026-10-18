@@ -443,7 +443,7 @@ export function readCodexCliPicks(input: {
     modelRecord !== undefined && !holdsWritten(value.model, modelRecord.written);
   if (modelRecord && isChangedByCodex) model = { now, isKept: modelRecord.held === "kept" };
   const level = stringOrNull(value.model_reasoning_effort);
-  return { model, level, isUltraCodeOn: null };
+  return { model, level, isUltraCodeOn: null, subagent: null };
 }
 
 /**

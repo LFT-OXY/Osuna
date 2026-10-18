@@ -18,6 +18,8 @@ const GATEWAY = {
   isAutoModeReviewed: true,
   defaultThinking: null,
   ultraCode: null,
+  backgroundModel: null,
+  subagentModel: null,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -1229,5 +1231,77 @@ describe("the CLI's own picks in settings.json", () => {
       settings.effortLevel = "medium";
     });
     expect(readClaudeCliPicks({ text: topOnly, takeover: other.takeover })?.level).toBe("medium");
+  });
+});
+
+describe("background task and Subagent models in settings.json", () => {
+  function wired(input: {
+    text: string | null;
+    backgroundModel?: string | null;
+    subagentModel?: string | null;
+    takeover?: ClaudeSettingsTakeover | null;
+  }) {
+    const result = applyClaudeApiEndpoint({
+      text: input.text,
+      wiring: {
+        ...GATEWAY,
+        backgroundModel: input.backgroundModel ?? null,
+        subagentModel: input.subagentModel ?? null,
+      },
+      takeover: input.takeover ?? null,
+    });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result;
+  }
+
+  it("writes both into env and takes them out on Official, back to the exact bytes", () => {
+    const { text, takeover } = wired({
+      text: USER_SETTINGS,
+      backgroundModel: "glm-4.6",
+      subagentModel: "claude-opus-4-6:high",
+    });
+    const env = JSON.parse(text).env;
+    expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBe("glm-4.6");
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("claude-opus-4-6:high");
+    expect(restore(text, takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("takes the user's own out while unset, so both follow the main model, and puts them back on Official", () => {
+    const own = setEnv(
+      setEnv(USER_SETTINGS, "ANTHROPIC_SMALL_FAST_MODEL", "my-fast"),
+      "CLAUDE_CODE_SUBAGENT_MODEL",
+      "my-subagent",
+    );
+    const { text, takeover } = wired({ text: own });
+    const env = JSON.parse(text).env;
+    expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBeUndefined();
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+    expect(JSON.parse(restore(text, takeover))).toEqual(JSON.parse(own));
+  });
+
+  it("drops what it wrote once unset again, keeping the first originals", () => {
+    const own = setEnv(USER_SETTINGS, "CLAUDE_CODE_SUBAGENT_MODEL", "my-subagent");
+    const first = wired({ text: own, backgroundModel: "glm-4.6", subagentModel: "kimi-k2:low" });
+    const second = wired({ text: first.text, takeover: first.takeover });
+    const env = JSON.parse(second.text).env;
+    expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBeUndefined();
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+    expect(JSON.parse(restore(second.text, second.takeover))).toEqual(JSON.parse(own));
+  });
+
+  it("reads the Subagent model the file holds once it is no longer what Osuna wrote", () => {
+    const first = wired({ text: USER_SETTINGS, subagentModel: "kimi-k2:low" });
+    expect(readClaudeCliPicks({ text: first.text, takeover: first.takeover })?.subagent).toBeNull();
+
+    const edited = setEnv(first.text, "CLAUDE_CODE_SUBAGENT_MODEL", "glm-4.6:high");
+    expect(readClaudeCliPicks({ text: edited, takeover: first.takeover })?.subagent).toEqual({
+      now: "glm-4.6:high",
+    });
+    const settings = JSON.parse(first.text) as { env: Record<string, string> };
+    delete settings.env.CLAUDE_CODE_SUBAGENT_MODEL;
+    const removed = `${JSON.stringify(settings, null, 2)}\n`;
+    expect(readClaudeCliPicks({ text: removed, takeover: first.takeover })?.subagent).toEqual({
+      now: null,
+    });
   });
 });

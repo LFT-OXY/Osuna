@@ -2624,6 +2624,19 @@ export const ko: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}}이(가) 사고 수준과 관계없이 실질적인 작업마다 워크플로를 계획합니다. Extra High를 지원하는 모델에서만 쓸 수 있습니다.",
+        backgroundModel: "백그라운드 작업 모델",
+        backgroundModelHint:
+          "{{agent}}이(가) 세션 이름 짓기, 웹 페이지 읽기 같은 작은 작업에 쓰는 모델입니다.",
+        backgroundModelPick: "{{agent}}의 백그라운드 작업 모델",
+        followsDefaultModel: "기본 모델과 같음",
+        subagentModel: "하위 에이전트 모델",
+        subagentModelHint: "모델을 지정하지 않은 하위 에이전트는 이 모델로 실행됩니다.",
+        subagentModelPick: "{{agent}}의 하위 에이전트 모델",
+        subagentThinking: "하위 에이전트 사고 수준",
+        subagentThinkingHint:
+          "{{agent}}이(가) 어떤 수준을 요청하든 하위 에이전트는 이 수준으로 생각합니다.",
+        subagentThinkingPick: "{{agent}}의 하위 에이전트 사고 수준",
+        subagentThinkingUnset: "설정 안 함({{agent}}이(가) 결정)",
         connection: {
           kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:

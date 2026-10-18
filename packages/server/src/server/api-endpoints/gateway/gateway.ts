@@ -1,15 +1,16 @@
 // 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
 // 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用，
 // 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)，
-// ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend
+// ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend，「模型名:档位」照 gateway.go 的 askedAt
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, { type IncomingHttpHeaders } from "node:http";
 import os from "node:os";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
+import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { usableModels } from "../host-endpoints.js";
+import { isDefaultModelChoice, usableModels } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
@@ -54,6 +55,7 @@ import {
   type EndpointRest,
 } from "./cooldown.js";
 import { endpointFailure, lateRests, modelRetired, retryable } from "./failure.js";
+import { askedAt, withFixedEffort } from "./fixed-effort.js";
 import {
   largerWindows,
   overflowOf,
@@ -544,15 +546,21 @@ async function routeAgentRequest(input: {
     reply(read.status, read.message);
     return null;
   }
-  const { body } = read;
-  const parsed = parseJson(body.toString("utf8"));
-  const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
-  if (model === null) {
+  const asked = parseJson(read.body.toString("utf8"));
+  const askedModel = isRecord(asked) && typeof asked.model === "string" ? asked.model : null;
+  if (askedModel === null) {
     reply(400, "The request has no model");
     return null;
   }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
+  const { body, parsed, model } = withoutAskedEffort({
+    body: read.body,
+    parsed: asked,
+    model: askedModel,
+    wire,
+    state,
+  });
   const route = routeModel({ ...input, state, model });
   if (!route.ok) {
     reply(404, route.message);
@@ -568,6 +576,31 @@ async function routeAgentRequest(input: {
     return { body, parsed, model, candidates: searchers };
   }
   return { body, parsed, model, candidates: route.candidates };
+}
+
+/** 拆掉「模型名:档位」后的请求：模型名去掉后缀，请求按 Agent 自己的格式改成这一档。 */
+interface AskedRequest {
+  body: Buffer;
+  parsed: unknown;
+  model: string;
+}
+
+/** 照 magpie 的 askedAt：每家都按这个模型问、按这一档问；整个名字是哪家选了的模型时原样。 */
+function withoutAskedEffort(input: {
+  body: Buffer;
+  parsed: unknown;
+  model: string;
+  wire: AgentWire;
+  state: ApiEndpointState;
+}): AskedRequest {
+  const { state } = input;
+  const split = askedAt({ id: input.model, isListed: (id) => isDefaultModelChoice(state, id) });
+  if (split.effort === null) return { body: input.body, parsed: input.parsed, model: input.model };
+  const format = input.wire === "anthropic" ? "anthropic_messages" : "openai_responses";
+  const original = input.body.toString("utf8");
+  const renamed = applyEdits(original, modify(original, ["model"], split.model, {}));
+  const text = withFixedEffort({ format, text: renamed, effort: split.effort });
+  return { body: Buffer.from(text, "utf8"), parsed: parseJson(text), model: split.model };
 }
 
 /**

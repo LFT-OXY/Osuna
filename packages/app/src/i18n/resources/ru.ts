@@ -2646,6 +2646,19 @@ export const ru: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} планирует рабочий процесс для каждой существенной задачи при любом уровне размышлений. Только для моделей с поддержкой Extra High.",
+        backgroundModel: "Модель фоновых задач",
+        backgroundModelHint:
+          "Модель для небольших задач, которые {{agent}} выполняет сам: название сессии, чтение веб-страницы.",
+        backgroundModelPick: "Модель фоновых задач для {{agent}}",
+        followsDefaultModel: "Как модель по умолчанию",
+        subagentModel: "Модель субагентов",
+        subagentModelHint: "Субагенты, для которых модель не указана, работают на ней.",
+        subagentModelPick: "Модель субагентов для {{agent}}",
+        subagentThinking: "Размышления субагентов",
+        subagentThinkingHint:
+          "Субагенты размышляют на этом уровне, какой бы уровень ни запросил {{agent}}.",
+        subagentThinkingPick: "Размышления субагентов для {{agent}}",
+        subagentThinkingUnset: "Не задано (решает {{agent}})",
         connection: {
           kept: "{{agent}} уже использует сторонние API. Модель остаётся {{model}}.",
           again:

@@ -1,5 +1,6 @@
 // 保留 claude.ai 登录时口令的两种不一致移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 Check）；
-// 跟着 CLI 自己存下的选择走与「模型被换掉」照 internal/agent/claude.go 的 Follow、internal/agent/applied.go 的 Drift（replaced）与 Keep
+// 跟着 CLI 自己存下的选择走与「模型被换掉」照 internal/agent/claude.go 的 Follow、internal/agent/applied.go 的 Drift（replaced）与 Keep；
+// 后台小任务与 Subagent 模型照 internal/agent/claude.go 的 writeTiers、tierWith 与 subagent、subagent_effort 字段
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -47,7 +48,12 @@ import {
   type ProbeGatewayAt,
 } from "./gateway-reach.js";
 import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
-import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
+import {
+  ONE_MILLION_MARK,
+  claudeHintEnv,
+  markOneMillion,
+  type ClaudeHintModel,
+} from "./claude-model-hints.js";
 import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
@@ -100,6 +106,7 @@ import {
 } from "./codex-models-cache.js";
 import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
+import { FIXED_EFFORTS, askedAt } from "./gateway/fixed-effort.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import type { RetiredModels } from "./retired-models.js";
@@ -115,6 +122,7 @@ import {
   AGENT_REQUEST_FORMAT,
   agentTargetEndpoint,
   bareDefaultModel,
+  defaultModelChoices,
   findEndpoint,
   isDefaultModelChoice,
   namedDefaultModel,
@@ -251,6 +259,10 @@ export interface ApiEndpointAgentSettingsInput {
   defaultThinkingOptionId?: string | null;
   // Ultra Code，只给 Claude Code；省略即不变。
   usesUltraCode?: boolean;
+  // 后台小任务模型、Subagent 模型与它的思考档位，只给 Claude Code：null 为不设，省略即不变。
+  backgroundModelId?: string | null;
+  subagentModelId?: string | null;
+  subagentThinkingOptionId?: string | null;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -585,8 +597,15 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
   ): ApiEndpointAgentSettings {
-    const agent = state.agents[provider];
-    if (provider !== "claude") return agent;
+    const stored = state.agents[provider];
+    if (provider !== "claude") return stored;
+    // 没设也报 null：客户端凭有没有这几项认出主机会写它们。
+    const agent = {
+      ...stored,
+      backgroundModelId: stored.backgroundModelId ?? null,
+      subagentModelId: stored.subagentModelId ?? null,
+      subagentThinkingOptionId: stored.subagentThinkingOptionId ?? null,
+    };
     const levels = this.claudeLevels(state, agent);
     const chosen = agent.defaultThinkingOptionId ?? null;
     const shown = chosen === null ? null : claudeClamp(chosen, levels);
@@ -864,11 +883,17 @@ export class ApiEndpointService {
         agent: withLogin,
         requested: input.defaultThinkingOptionId,
       });
-      const agent = this.withUltraCode({
+      const withUltraCode = this.withUltraCode({
         state,
         provider: supported,
         agent: withThinking,
         requested: input.usesUltraCode,
+      });
+      const agent = withClaudeSideModels({
+        state,
+        provider: supported,
+        agent: withUltraCode,
+        requested: input,
       });
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
@@ -1210,6 +1235,7 @@ export class ApiEndpointService {
       const isUltraCodeChanged = isUltraCodeOn !== (agent.usesUltraCode === true);
       if (isUltraCodeChanged) agent = { ...agent, usesUltraCode: isUltraCodeOn };
     }
+    if (picks.subagent) agent = followedSubagent({ state, agent, now: picks.subagent.now });
     const isEffortOriginalForgotten =
       provider === "codex" && isLevelChanged && picks.level === null;
     return { agent, held, isEffortOriginalForgotten };
@@ -1472,7 +1498,53 @@ export class ApiEndpointService {
       isAutoModeReviewed: isAutoModeReviewed(state),
       defaultThinking: agent.defaultThinkingOptionId ?? null,
       ultraCode: provider === "claude" ? (agent.usesUltraCode ?? null) : null,
+      ...this.claudeSideModels(state, provider),
     };
+  }
+
+  /**
+   * 后台小任务模型与 Subagent 模型写给 Claude Code 的样子（照 magpie 的 writeTiers）：1M 的模型标 [1m]，
+   * Subagent 带思考档位时写成「模型名:档位」（没设模型就跟主模型），带点的 Claude 版本写成连字符。没设为 null。
+   */
+  private claudeSideModels(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+  ): Pick<CliWiring, "backgroundModel" | "subagentModel"> {
+    const agent = state.agents[provider];
+    const none = { backgroundModel: null, subagentModel: null };
+    if (provider !== "claude" || agent.defaultModelId === null) return none;
+    const level = agent.subagentThinkingOptionId ?? null;
+    const subagentModelId = agent.subagentModelId ?? null;
+    const subagentModel =
+      level === null ? subagentModelId : (subagentModelId ?? agent.defaultModelId);
+    const write = (modelId: string | null, effort: string | null) =>
+      modelId === null ? null : this.claudeEnvModel({ state, modelId, effort });
+    return {
+      backgroundModel: write(agent.backgroundModelId ?? null, null),
+      subagentModel: write(subagentModel, level),
+    };
+  }
+
+  /** 一个模型写进 Claude Code env 的写法；effort 非空时接在模型名后面、[1m] 之前。 */
+  private claudeEnvModel(input: {
+    state: ApiEndpointState;
+    modelId: string;
+    effort: string | null;
+  }): string {
+    const listed = this.retiredModels.listed(input.state);
+    const marked = markOneMillion({
+      id: input.modelId,
+      facts: this.startModelFacts(listed, input.modelId),
+    });
+    const isMarked = marked.endsWith(ONE_MILLION_MARK);
+    const bare = isMarked ? marked.slice(0, -ONE_MILLION_MARK.length) : marked;
+    const effort = input.effort === null ? "" : `:${input.effort}`;
+    const mark = isMarked ? ONE_MILLION_MARK : "";
+    const served = [
+      ...usableModels(listed).map((model) => model.id),
+      ...defaultModelChoices(listed),
+    ];
+    return claudeSpelled({ model: `${bare}${effort}${mark}`, served });
   }
 
   /**
@@ -1655,6 +1727,7 @@ export class ApiEndpointService {
       provider === "claude" && isAutoModeReviewed(state),
       agent.defaultThinkingOptionId ?? null,
       agent.usesUltraCode ?? null,
+      this.claudeSideModels(state, provider),
     ]);
   }
 
@@ -2459,6 +2532,9 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.defaultModelId,
     agent.defaultThinkingOptionId ?? null,
     agent.usesUltraCode ?? null,
+    agent.backgroundModelId ?? null,
+    agent.subagentModelId ?? null,
+    agent.subagentThinkingOptionId ?? null,
     usableModels(state),
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [
@@ -2498,6 +2574,90 @@ function enabledAgentSettings(input: {
   // 有可用模型时总挑得出来。
   if (!defaultModelId) throw new Error("No default model was picked");
   return { ...agent, enabled: true, defaultModelId };
+}
+
+// Subagent 能固定的思考档位（magpie MemberEfforts）。
+const SUBAGENT_EFFORTS: ReadonlySet<string> = new Set(FIXED_EFFORTS);
+
+/**
+ * 设后台小任务模型、Subagent 模型与它的思考档位（照 magpie 的 subagent 与 subagent_effort 字段）：只有 Claude Code；
+ * 模型要是开着的接口的已选模型，档位收 magpie 认的任何一档（不按模型的档位卡）。省略的不变，null 为不设。
+ */
+function withClaudeSideModels(input: {
+  state: ApiEndpointState;
+  provider: ApiEndpointProvider;
+  agent: ApiEndpointAgentSettings;
+  requested: ApiEndpointAgentSettingsInput;
+}): ApiEndpointAgentSettings {
+  const { state, requested } = input;
+  const { backgroundModelId, subagentModelId, subagentThinkingOptionId } = requested;
+  const isAnyRequested =
+    backgroundModelId !== undefined ||
+    subagentModelId !== undefined ||
+    subagentThinkingOptionId !== undefined;
+  if (!isAnyRequested) return input.agent;
+  if (input.provider !== "claude") {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "Only Claude Code has a background task model and a Subagent model",
+    });
+  }
+  let agent = input.agent;
+  if (backgroundModelId !== undefined) {
+    agent = { ...agent, backgroundModelId: sideModel({ state, requested: backgroundModelId }) };
+  }
+  if (subagentModelId !== undefined) {
+    agent = { ...agent, subagentModelId: sideModel({ state, requested: subagentModelId }) };
+  }
+  if (subagentThinkingOptionId !== undefined) {
+    agent = { ...agent, subagentThinkingOptionId: subagentLevel(subagentThinkingOptionId) };
+  }
+  return agent;
+}
+
+function sideModel(input: { state: ApiEndpointState; requested: string | null }): string | null {
+  if (input.requested === null) return null;
+  const requested = input.requested.trim();
+  if (!isDefaultModelChoice(input.state, requested)) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `${requested} is not one of the models selected on an endpoint that is on`,
+    });
+  }
+  return requested;
+}
+
+function subagentLevel(requested: string | null): string | null {
+  if (requested === null) return null;
+  const level = requested.trim().toLowerCase();
+  if (!SUBAGENT_EFFORTS.has(level)) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `The Subagent thinking is one of ${FIXED_EFFORTS.join(", ")}, not ${requested}`,
+    });
+  }
+  return level;
+}
+
+/**
+ * CLI 配置里的 Subagent 模型被改了之后的设置（照 magpie subagent 字段的 Get 读文件）：删掉了就跟主模型；
+ * 改成某家接口提供的模型就是新的 Subagent 模型（就是默认模型时算跟主模型），「:档位」是它的思考档位；
+ * 哪家都没有的不跟，下次改写时照 Osuna 的设置写回（magpie 同样不留）。
+ */
+function followedSubagent(input: {
+  state: ApiEndpointState;
+  agent: ApiEndpointAgentSettings;
+  now: string | null;
+}): ApiEndpointAgentSettings {
+  const { state, agent } = input;
+  if (input.now === null) {
+    return { ...agent, subagentModelId: null, subagentThinkingOptionId: null };
+  }
+  const split = askedAt({ id: input.now, isListed: (id) => isDefaultModelChoice(state, id) });
+  const served = servedModel(state, split.model);
+  if (served === null) return agent;
+  const subagentModelId = served === agent.defaultModelId ? null : served;
+  return { ...agent, subagentModelId, subagentThinkingOptionId: split.effort };
 }
 
 /**

@@ -987,6 +987,7 @@ describe("Codex's own picks in config.toml", () => {
       model: null,
       level: "high",
       isUltraCodeOn: null,
+      subagent: null,
     });
 
     const saved = first.text
@@ -996,6 +997,7 @@ describe("Codex's own picks in config.toml", () => {
       model: { now: "gpt-9", isKept: false },
       level: "low",
       isUltraCodeOn: null,
+      subagent: null,
     });
 
     const kept = patch({ text: saved, takeover: first.takeover, defaultThinking: "low" });

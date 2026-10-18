@@ -26,4 +26,11 @@ export interface CliPicks {
   model: CliModelPick | null;
   level: string | null;
   isUltraCodeOn: boolean | null;
+  // Claude Code 的 Subagent 模型不再是 Osuna 写的值时有（照 magpie subagent 字段读文件）；Codex 没有，为 null。
+  subagent: CliSubagentPick | null;
+}
+
+/** 文件里现在的 Subagent 模型，可带「:档位」；删掉了为 null。 */
+export interface CliSubagentPick {
+  now: string | null;
 }

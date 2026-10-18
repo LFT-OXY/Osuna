@@ -22,8 +22,10 @@ import type {
   AgentApiEndpointsView,
   AgentEndpointsSummary,
   AgentSwitchBlock,
+  ClaudeSideModelsView,
   DefaultModelOption,
   DefaultThinkingView,
+  SubagentThinkingView,
 } from "./internal/agent-settings";
 
 /*
@@ -51,6 +53,10 @@ export interface AgentApiEndpointsSectionProps {
   // 默认思考档位；null 为不设。
   onDefaultThinkingChange: (thinkingOptionId: string | null) => void;
   onUltraCodeChange: (usesUltraCode: boolean) => void;
+  // 后台小任务模型、Subagent 模型与它的思考档位（只有 Claude Code）；null 为不设。
+  onBackgroundModelChange: (modelId: string | null) => void;
+  onSubagentModelChange: (modelId: string | null) => void;
+  onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -70,6 +76,9 @@ export function AgentApiEndpointsSection({
   onDefaultModelChange,
   onDefaultThinkingChange,
   onUltraCodeChange,
+  onBackgroundModelChange,
+  onSubagentModelChange,
+  onSubagentThinkingChange,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -155,6 +164,17 @@ export function AgentApiEndpointsSection({
             value={view.defaultThinking.usesUltraCode}
             busy={busy}
             onChange={onUltraCodeChange}
+          />
+        ) : null}
+        {view.sideModels ? (
+          <SideModelRows
+            providerLabel={providerLabel}
+            sideModels={view.sideModels}
+            options={view.modelOptions}
+            busy={busy}
+            onBackgroundModelChange={onBackgroundModelChange}
+            onSubagentModelChange={onSubagentModelChange}
+            onSubagentThinkingChange={onSubagentThinkingChange}
           />
         ) : null}
         {showsKeepClaudeAiLogin ? (
@@ -430,6 +450,212 @@ function DefaultThinkingRow({
           desktopPlacement="top-start"
           testID="agent-api-endpoints-default-thinking"
           triggerTestID="agent-api-endpoints-default-thinking-trigger"
+        />
+      </View>
+    </View>
+  );
+}
+
+// 「与默认模型相同」在下拉里的 id：模型 id 不会是空串。
+const FOLLOWS_DEFAULT_MODEL = "";
+
+/** 后台小任务模型、Subagent 模型与它的思考档位（照 magpie 的 subagent 与 subagent_effort）。 */
+function SideModelRows({
+  providerLabel,
+  sideModels,
+  options,
+  busy,
+  onBackgroundModelChange,
+  onSubagentModelChange,
+  onSubagentThinkingChange,
+}: {
+  providerLabel: string;
+  sideModels: ClaudeSideModelsView;
+  options: DefaultModelOption[];
+  busy: boolean;
+  onBackgroundModelChange: (modelId: string | null) => void;
+  onSubagentModelChange: (modelId: string | null) => void;
+  onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <SideModelRow
+        title={t("settings.apiEndpoints.agent.backgroundModel")}
+        hint={t("settings.apiEndpoints.agent.backgroundModelHint", { agent: providerLabel })}
+        pickTitle={t("settings.apiEndpoints.agent.backgroundModelPick", { agent: providerLabel })}
+        value={sideModels.backgroundModel}
+        options={options}
+        busy={busy}
+        onChange={onBackgroundModelChange}
+        testID="agent-api-endpoints-background-model"
+      />
+      <SideModelRow
+        title={t("settings.apiEndpoints.agent.subagentModel")}
+        hint={t("settings.apiEndpoints.agent.subagentModelHint")}
+        pickTitle={t("settings.apiEndpoints.agent.subagentModelPick", { agent: providerLabel })}
+        value={sideModels.subagentModel}
+        options={options}
+        busy={busy}
+        onChange={onSubagentModelChange}
+        testID="agent-api-endpoints-subagent-model"
+      />
+      <SubagentThinkingRow
+        providerLabel={providerLabel}
+        thinking={sideModels.subagentThinking}
+        busy={busy}
+        onChange={onSubagentThinkingChange}
+      />
+    </>
+  );
+}
+
+/** 一个可以不设（与默认模型相同）的模型。 */
+function SideModelRow({
+  title,
+  hint,
+  pickTitle,
+  value,
+  options,
+  busy,
+  onChange,
+  testID,
+}: {
+  title: string;
+  hint: string;
+  pickTitle: string;
+  value: DefaultModelOption | null;
+  options: DefaultModelOption[];
+  busy: boolean;
+  onChange: (modelId: string | null) => void;
+  testID: string;
+}) {
+  const { t } = useTranslation();
+  const labelOf = useDefaultModelLabel();
+  const followsLabel = t("settings.apiEndpoints.agent.followsDefaultModel");
+  const selectOptions = useMemo<SelectFieldOption<string>[]>(
+    () => [
+      {
+        id: FOLLOWS_DEFAULT_MODEL,
+        value: FOLLOWS_DEFAULT_MODEL,
+        label: followsLabel,
+        testID: `${testID}-option-default`,
+      },
+      ...options.map((option) => ({
+        id: option.id,
+        value: option.id,
+        label: labelOf(option),
+        testID: `${testID}-option-${option.id}`,
+      })),
+    ],
+    [followsLabel, labelOf, options, testID],
+  );
+  const selectedDisplay = useMemo<SelectFieldDisplay>(
+    () => (value === null ? { label: followsLabel } : { label: labelOf(value) }),
+    [followsLabel, labelOf, value],
+  );
+  const handleChange = useCallback(
+    (id: string) => onChange(id === FOLLOWS_DEFAULT_MODEL ? null : id),
+    [onChange],
+  );
+  const isCompact = useIsCompactFormFactor();
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
+      </View>
+      <View style={isCompact ? styles.selectStacked : styles.select}>
+        <SelectField
+          field={false}
+          label={pickTitle}
+          value={value?.id ?? FOLLOWS_DEFAULT_MODEL}
+          selectedDisplay={selectedDisplay}
+          options={selectOptions}
+          onChange={handleChange}
+          placeholder={title}
+          emptyText={t("settings.apiEndpoints.agent.noUsableEndpoint")}
+          searchable={selectOptions.length > 6}
+          title={pickTitle}
+          size="sm"
+          disabled={busy}
+          // 与默认模型同在最下面一张卡片里：列表朝上开。
+          desktopPlacement="top-start"
+          testID={testID}
+          triggerTestID={`${testID}-trigger`}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** Subagent 的思考档位：选项来自 Subagent 模型的档位；设了却不在选项里的照 id 显示。 */
+function SubagentThinkingRow({
+  providerLabel,
+  thinking,
+  busy,
+  onChange,
+}: {
+  providerLabel: string;
+  thinking: SubagentThinkingView;
+  busy: boolean;
+  onChange: (thinkingOptionId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const selectOptions = useMemo<SelectFieldOption<string>[]>(
+    () => [
+      {
+        id: UNSET_THINKING,
+        value: UNSET_THINKING,
+        label: t("settings.apiEndpoints.agent.subagentThinkingUnset", { agent: providerLabel }),
+        testID: "agent-api-endpoints-subagent-thinking-option-unset",
+      },
+      ...thinking.options.map((option) => ({
+        id: option.id,
+        value: option.id,
+        label: option.label,
+        testID: `agent-api-endpoints-subagent-thinking-option-${option.id}`,
+      })),
+    ],
+    [providerLabel, t, thinking.options],
+  );
+  const handleChange = useCallback(
+    (id: string) => onChange(id === UNSET_THINKING ? null : id),
+    [onChange],
+  );
+  const selectedId = thinking.value ?? UNSET_THINKING;
+  const selectedDisplay = useMemo<SelectFieldDisplay>(() => {
+    const selected = selectOptions.find((option) => option.id === selectedId);
+    return { label: selected?.label ?? selectedId };
+  }, [selectOptions, selectedId]);
+  const title = t("settings.apiEndpoints.agent.subagentThinkingPick", { agent: providerLabel });
+  const isCompact = useIsCompactFormFactor();
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.apiEndpoints.agent.subagentThinking")}
+        </Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.apiEndpoints.agent.subagentThinkingHint", { agent: providerLabel })}
+        </Text>
+      </View>
+      <View style={isCompact ? styles.selectStacked : styles.select}>
+        <SelectField
+          field={false}
+          label={title}
+          value={selectedId}
+          selectedDisplay={selectedDisplay}
+          options={selectOptions}
+          onChange={handleChange}
+          placeholder={t("settings.apiEndpoints.agent.subagentThinking")}
+          emptyText={t("settings.apiEndpoints.agent.subagentThinking")}
+          title={title}
+          size="sm"
+          disabled={busy}
+          desktopPlacement="top-start"
+          testID="agent-api-endpoints-subagent-thinking"
+          triggerTestID="agent-api-endpoints-subagent-thinking-trigger"
         />
       </View>
     </View>

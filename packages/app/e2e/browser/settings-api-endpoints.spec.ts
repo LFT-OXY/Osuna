@@ -895,6 +895,87 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
+  test("the background task and Subagent models: a failed save stays in place, a saved one goes into env and Official takes it out", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["glm-5.3", "claude-haiku-4.5"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "glm-5.3",
+    });
+    const settingsPath = path.join(cliHome, "claude", "settings.json");
+    try {
+      await openClaudeCodePage(page);
+      const section = agentSection(page);
+      const background = section.getByTestId("agent-api-endpoints-background-model-trigger");
+      const subagent = section.getByTestId("agent-api-endpoints-subagent-model-trigger");
+      const thinking = section.getByTestId("agent-api-endpoints-subagent-thinking-trigger");
+
+      await test.step("both follow the default model at first", async () => {
+        await expect(background).toHaveText("Same as the default model");
+        await expect(subagent).toHaveText("Same as the default model");
+        await expect(thinking).toHaveText("Not set (Claude decides)");
+      });
+
+      await test.step("a failed save stays in place and leaves the file", async () => {
+        const claudeDir = path.join(cliHome, "claude");
+        await background.click();
+        await chmod(claudeDir, 0o500);
+        try {
+          await page
+            .getByTestId("agent-api-endpoints-background-model-option-claude-haiku-4.5")
+            .click();
+          await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+            "Couldn't change the API endpoint settings for Claude",
+          );
+        } finally {
+          await chmod(claudeDir, 0o700);
+        }
+        await expect(background).toHaveText("Same as the default model");
+        expect(await claudeSettingsEnv("ANTHROPIC_SMALL_FAST_MODEL")).toBeUndefined();
+        await section.getByRole("button", { name: "Dismiss" }).click();
+      });
+
+      await test.step("saved: the dotted Claude version goes in with hyphens, the Subagent as model:level", async () => {
+        await background.click();
+        await page
+          .getByTestId("agent-api-endpoints-background-model-option-claude-haiku-4.5")
+          .click();
+        await expect(background).toHaveText("claude-haiku-4.5");
+        await expect.poll(claudeSettingsBackgroundModel).toBe("claude-haiku-4-5");
+
+        await subagent.click();
+        await page.getByTestId("agent-api-endpoints-subagent-model-option-glm-5.3").click();
+        await expect(subagent).toHaveText("glm-5.3");
+        await thinking.click();
+        await page.getByTestId("agent-api-endpoints-subagent-thinking-option-high").click();
+        await expect(thinking).toHaveText("High");
+        await expect.poll(claudeSettingsSubagentModel).toBe("glm-5.3:high");
+      });
+
+      await test.step("back to the default model takes the variable out", async () => {
+        await background.click();
+        await page.getByTestId("agent-api-endpoints-background-model-option-default").click();
+        await expect(background).toHaveText("Same as the default model");
+        await expect.poll(claudeSettingsBackgroundModel).toBeUndefined();
+      });
+
+      await test.step("switching off takes the Subagent model out of the file", async () => {
+        await section.getByTestId("agent-api-endpoints-switch").click();
+        await expect(section.getByTestId("agent-api-endpoints-subagent-model")).toHaveCount(0);
+        await expect.poll(claudeSettingsSubagentModel).toBeUndefined();
+      });
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await rm(settingsPath, { force: true });
+    }
+  });
+
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
     page,
   }) => {
@@ -1574,6 +1655,18 @@ async function claudeSettingsUltraCode(): Promise<boolean | undefined> {
 
 async function claudeSettingsEffortVariable(): Promise<string | undefined> {
   return (await readClaudeSettings()).env?.CLAUDE_CODE_EFFORT_LEVEL;
+}
+
+async function claudeSettingsEnv(key: string): Promise<string | undefined> {
+  return (await readClaudeSettings()).env?.[key];
+}
+
+function claudeSettingsBackgroundModel(): Promise<string | undefined> {
+  return claudeSettingsEnv("ANTHROPIC_SMALL_FAST_MODEL");
+}
+
+function claudeSettingsSubagentModel(): Promise<string | undefined> {
+  return claudeSettingsEnv("CLAUDE_CODE_SUBAGENT_MODEL");
 }
 
 async function claudeSettingsEffort(): Promise<string | undefined> {

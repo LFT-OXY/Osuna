@@ -2635,6 +2635,17 @@ export const zhCN: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} 为每个实质任务先规划一套工作流程，与思考档位无关；只在模型支持 Extra High 时可用",
+        backgroundModel: "后台小任务模型",
+        backgroundModelHint: "{{agent}} 自己起标题、读网页这类小任务用的模型",
+        backgroundModelPick: "{{agent}} 的后台小任务模型",
+        followsDefaultModel: "与默认模型相同",
+        subagentModel: "Subagent 模型",
+        subagentModelHint: "没指定模型的 Subagent 用它",
+        subagentModelPick: "{{agent}} 的 Subagent 模型",
+        subagentThinking: "Subagent 思考档位",
+        subagentThinkingHint: "不论 {{agent}} 要哪一档，Subagent 都按这一档思考",
+        subagentThinkingPick: "{{agent}} 的 Subagent 思考档位",
+        subagentThinkingUnset: "不设（由 {{agent}} 决定）",
         connection: {
           kept: "{{agent}} 已在用第三方接口，默认模型仍是 {{model}}。",
           again: "{{agent}} 已改用第三方接口，回到上次关掉开关前用的 {{model}}。",

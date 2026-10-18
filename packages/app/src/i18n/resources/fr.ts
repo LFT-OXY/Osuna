@@ -2665,6 +2665,19 @@ export const fr: TranslationResources = {
         ultraCode: "Ultra Code",
         ultraCodeHint:
           "{{agent}} planifie un flux de travail pour chaque tâche de fond, quel que soit le niveau de réflexion. Uniquement pour les modèles qui prennent en charge Extra High.",
+        backgroundModel: "Modèle des tâches en arrière-plan",
+        backgroundModelHint:
+          "Ce que {{agent}} utilise pour ses propres petites tâches, comme nommer une session ou lire une page web.",
+        backgroundModelPick: "Modèle des tâches en arrière-plan de {{agent}}",
+        followsDefaultModel: "Identique au modèle par défaut",
+        subagentModel: "Modèle des sous-agents",
+        subagentModelHint: "Les sous-agents qui n'indiquent pas de modèle utilisent celui-ci.",
+        subagentModelPick: "Modèle des sous-agents de {{agent}}",
+        subagentThinking: "Réflexion des sous-agents",
+        subagentThinkingHint:
+          "Les sous-agents réfléchissent à ce niveau, quel que soit celui que demande {{agent}}.",
+        subagentThinkingPick: "Réflexion des sous-agents de {{agent}}",
+        subagentThinkingUnset: "Non défini ({{agent}} décide)",
         connection: {
           kept: "{{agent}} utilise déjà les points d'accès API. Il reste sur {{model}}.",
           again:
