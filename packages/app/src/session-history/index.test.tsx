@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   DaemonClient,
@@ -461,6 +461,44 @@ describe("SessionHistorySurface", () => {
     renderSurface(createClient({ fetchRecentProviderSessions }), { scope: "workspace" });
     await screen.findAllByText("Fix login");
     expect(screen.queryByText("packages/web")).toBeNull();
+  });
+
+  it("names the Codex model provider each Codex row is filed under", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent",
+      entries: [
+        entry({
+          providerId: "codex",
+          providerLabel: "Codex",
+          providerHandleId: "thread-official",
+          title: "Started on the official setup",
+          codexModelProvider: "openai",
+        }),
+        entry({
+          providerId: "codex",
+          providerLabel: "Codex",
+          providerHandleId: "thread-gateway",
+          title: "Started through the gateway",
+          codexModelProvider: "osuna_api_endpoint",
+        }),
+        entry({ providerHandleId: "claude-session", title: "A Claude session" }),
+      ],
+    })) as unknown as FetchRecentProviderSessions;
+
+    renderSurface(createClient({ fetchRecentProviderSessions }));
+
+    const gatewayRow = await screen.findByTestId("session-history-row-codex-thread-gateway");
+    expect(gatewayRow.textContent).toContain("Started through the gateway");
+    const gatewayProvider = within(gatewayRow).getByLabelText(
+      "Codex model provider: osuna_api_endpoint",
+    );
+    expect(gatewayProvider.textContent).toBe("osuna_api_endpoint");
+    const officialRow = screen.getByTestId("session-history-row-codex-thread-official");
+    expect(within(officialRow).getByLabelText("Codex model provider: openai").textContent).toBe(
+      "openai",
+    );
+    const claudeRow = screen.getByTestId("session-history-row-claude-claude-session");
+    expect(within(claudeRow).queryByTestId("session-history-row-codex-model-provider")).toBeNull();
   });
 
   it("reports the chosen scope to the shell", async () => {

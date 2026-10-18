@@ -237,10 +237,27 @@ function SessionHistoryRowItem({
           <Text style={styles.rowTitle} numberOfLines={1}>
             {row.title}
           </Text>
-          {directory ? (
-            <Text style={styles.rowDirectory} numberOfLines={1}>
-              {directory}
-            </Text>
+          {row.codexModelProvider || directory ? (
+            <View style={styles.rowSubline}>
+              {/* 侧栏窄，行里只显示服务商 id，完整说法给读屏；服务商排在目录前，目录太长时先截目录。 */}
+              {row.codexModelProvider ? (
+                <Text
+                  style={styles.rowCodexModelProvider}
+                  numberOfLines={1}
+                  accessibilityLabel={t("panels.sessionHistory.row.codexModelProvider", {
+                    name: row.codexModelProvider,
+                  })}
+                  testID="session-history-row-codex-model-provider"
+                >
+                  {row.codexModelProvider}
+                </Text>
+              ) : null}
+              {directory ? (
+                <Text style={styles.rowDirectory} numberOfLines={1}>
+                  {directory}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
         {row.importedAgentId ? <StatusBadge label={t("panels.sessionHistory.row.paseo")} /> : null}
@@ -723,7 +740,19 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
+  rowSubline: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    minWidth: 0,
+  },
+  rowCodexModelProvider: {
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   rowDirectory: {
+    flexShrink: 10,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },

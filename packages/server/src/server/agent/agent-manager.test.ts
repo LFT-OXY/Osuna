@@ -10990,6 +10990,50 @@ test("listImportableSessions includes derived providers that list persisted agen
   expect(result.sessions.map((d) => d.provider).sort()).toEqual(["claude", "omp"]);
 });
 
+// Stock Codex lists every Codex model provider's threads, so a thread a custom
+// Codex provider started is listed by both; it belongs to the custom one, which
+// resumes it with its own settings.
+test("listImportableSessions lists a session a derived provider also lists only under the derived provider", async () => {
+  const sharedThread = {
+    providerHandleId: "thread-of-my-codex",
+    cwd: "/tmp/recent",
+    title: null,
+    lastActivityAt: new Date("2026-01-02T00:00:00Z"),
+    firstPromptPreview: null,
+    lastPromptPreview: null,
+  };
+  const codexClient = new RecordingPersistedAgentsClient("codex");
+  codexClient.listImportableSessions = async () => [
+    { ...sharedThread, codexModelProvider: "my-codex" },
+    {
+      ...sharedThread,
+      providerHandleId: "thread-of-openai",
+      codexModelProvider: "openai",
+    },
+  ];
+  const customClient = new RecordingPersistedAgentsClient("my-codex");
+  customClient.listImportableSessions = async () => [
+    { ...sharedThread, codexModelProvider: "my-codex" },
+  ];
+  const manager = new AgentManager({
+    clients: { codex: codexClient, "my-codex": customClient },
+    providerDefinitions: {
+      codex: { enabled: true, derivedFromProviderId: null },
+      "my-codex": { enabled: true, derivedFromProviderId: "codex" },
+    },
+    logger,
+  });
+
+  const result = await manager.listImportableSessions();
+
+  expect(
+    result.sessions.map((session) => [session.provider, session.providerHandleId]).sort(),
+  ).toEqual([
+    ["codex", "thread-of-openai"],
+    ["my-codex", "thread-of-my-codex"],
+  ]);
+});
+
 test("listImportableSessions narrows to the providerFilter when supplied", async () => {
   const claudeClient = new RecordingPersistedAgentsClient("claude");
   const codexClient = new RecordingPersistedAgentsClient("codex");

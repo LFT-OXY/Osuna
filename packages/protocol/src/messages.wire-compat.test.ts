@@ -32,6 +32,32 @@ test("terminal listings accept older rows and retain new per-terminal directorie
   expect(SessionOutboundMessageSchema.parse(withDirectory)).toEqual(withDirectory);
 });
 
+test("provider session listings accept older rows and retain each Codex row's model provider", () => {
+  const legacyRow = {
+    providerId: "codex",
+    providerLabel: "Codex",
+    providerHandleId: "thread-1",
+    cwd: "/workspace",
+    title: "Older daemon",
+    firstPromptPreview: null,
+    lastPromptPreview: null,
+    lastActivityAt: "2026-10-18T00:00:00.000Z",
+  };
+  const response = {
+    type: "fetch_recent_provider_sessions_response",
+    payload: { requestId: "recent-sessions", entries: [legacyRow] },
+  };
+  expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  const withModelProvider = {
+    ...response,
+    payload: {
+      ...response.payload,
+      entries: [{ ...legacyRow, codexModelProvider: "osuna_api_endpoint" }],
+    },
+  };
+  expect(SessionOutboundMessageSchema.parse(withModelProvider)).toEqual(withModelProvider);
+});
+
 const LegacySubAgentToolCallSchema = z.object({
   type: z.literal("tool_call"),
   callId: z.string(),

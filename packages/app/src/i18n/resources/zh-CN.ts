@@ -2242,6 +2242,7 @@ export const zhCN: TranslationResources = {
         copyResumeCommand: "复制恢复命令",
         importAsAgent: "导入为 Osuna Agent",
         importing: "正在导入...",
+        codexModelProvider: "Codex 服务商：{{name}}",
       },
       errors: {
         loadFailed: "无法加载会话",

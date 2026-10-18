@@ -578,6 +578,8 @@ export interface ImportableProviderSession {
   firstPromptPreview: string | null;
   lastPromptPreview: string | null;
   lastActivityAt: Date;
+  /** Codex 对话记在哪个 Codex 服务商名下（`model_provider` 的 id）；只有 Codex 系提供方填写。 */
+  codexModelProvider?: string;
 }
 
 export interface ImportProviderSessionInput {

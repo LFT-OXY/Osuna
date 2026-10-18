@@ -505,6 +505,23 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     expect(payload).not.toHaveProperty("nativeHandle");
   });
 
+  it("names the Codex model provider a Codex session is filed under", () => {
+    const session: ImportableProviderSession & { provider: string } = {
+      provider: "codex",
+      providerHandleId: "thread-through-gateway",
+      cwd: "/tmp/project",
+      title: "Through the gateway",
+      firstPromptPreview: null,
+      lastPromptPreview: null,
+      lastActivityAt: new Date("2026-04-30T12:34:56.000Z"),
+      codexModelProvider: "osuna_api_endpoint",
+    };
+
+    const payload = toRecentProviderSessionDescriptorPayload(session, { providerLabel: "Codex" });
+
+    expect(payload.codexModelProvider).toBe("osuna_api_endpoint");
+  });
+
   it("hides a trailing Routing block in provider-supplied titles and previews", () => {
     const original = "[@Claude](paseo://agent/provider/claude) write tests";
     const routed = `${original}\n\n<paseo-system>\n1. @Claude -> provider "claude", settings {}\n</paseo-system>`;

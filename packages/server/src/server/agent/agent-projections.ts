@@ -308,6 +308,7 @@ export function toRecentProviderSessionDescriptorPayload(
     firstPromptPreview: stripNullableRoutingBlock(session.firstPromptPreview),
     lastPromptPreview: stripNullableRoutingBlock(session.lastPromptPreview),
     lastActivityAt: session.lastActivityAt.toISOString(),
+    ...(session.codexModelProvider ? { codexModelProvider: session.codexModelProvider } : {}),
     ...(options.importedAgentId ? { importedAgentId: options.importedAgentId } : {}),
     ...(options.importedAgentWorkspaceId
       ? { importedAgentWorkspaceId: options.importedAgentWorkspaceId }

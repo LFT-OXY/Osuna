@@ -7124,19 +7124,36 @@ describe("Codex importable sessions", () => {
 
     const sessions = await provider.listImportableSessions({ cwd: "/workspace/project-a" });
 
-    expect(sessions.map((session) => session.providerHandleId)).toEqual(["custom-thread"]);
+    expect(
+      sessions.map((session) => [session.providerHandleId, session.codexModelProvider]),
+    ).toEqual([["custom-thread", "my-codex"]]);
     appServer.assertNoErrors();
   });
 
-  test("stock Codex keeps listing only its own threads", async () => {
+  test("stock Codex lists the threads of every Codex model provider, each naming its own", async () => {
     const appServer = createFakeCodexAppServer({
-      "thread/list": providerFilteringThreadListHandler(threadsByModelProvider),
+      "thread/list": providerFilteringThreadListHandler([
+        { id: "stock-thread", cwd: "/workspace/project-a", modelProvider: "openai", updatedAt: 3 },
+        {
+          id: "gateway-thread",
+          cwd: "/workspace/project-a",
+          modelProvider: "osuna_api_endpoint",
+          updatedAt: 2,
+        },
+        { id: "legacy-thread", cwd: "/workspace/project-a", updatedAt: 1 },
+      ]),
     });
     const provider = createProviderWithFakeAppServer(appServer);
 
     const sessions = await provider.listImportableSessions({ cwd: "/workspace/project-a" });
 
-    expect(sessions.map((session) => session.providerHandleId)).toEqual(["stock-thread"]);
+    expect(
+      sessions.map((session) => [session.providerHandleId, session.codexModelProvider]),
+    ).toEqual([
+      ["stock-thread", "openai"],
+      ["gateway-thread", "osuna_api_endpoint"],
+      ["legacy-thread", undefined],
+    ]);
     appServer.assertNoErrors();
   });
 
@@ -7222,7 +7239,12 @@ describe("Codex importable sessions", () => {
       },
       {
         method: "thread/list",
-        params: { limit: 50, sortKey: "updated_at", cwd: "/workspace/project-a" },
+        params: {
+          limit: 50,
+          sortKey: "updated_at",
+          cwd: "/workspace/project-a",
+          modelProviders: [],
+        },
       },
     ]);
   });

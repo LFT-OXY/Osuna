@@ -985,6 +985,8 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   importedAgentId: z.string().optional(),
   // 该 agent 所属 workspace；打开它时要带上，否则已归档 agent 会退到 host 级详情路由。
   importedAgentWorkspaceId: z.string().optional(),
+  // Codex 对话记在哪个 Codex 服务商名下（Codex 配置里 model_provider 的 id）；只有 Codex 系提供方的行带。
+  codexModelProvider: z.string().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<

@@ -285,3 +285,30 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 - magpie 同一处的 `takeTables`（CC Switch 的普通中转表也指向 magpie）、`putThreadTables`（给对话点名但已不存在的服务商补表）、多号 failover 写镜像（`codex.mirror_failover`）：工单只要镜像表。
 - 「保留当前设置」会忘掉接管记录，镜像表照被指着中转站的样子留下（ADR 0012 的「保留」）；之后再打开开关，这张表的地址不在记录里、不像镜像，不再接（magpie 同样只认记录里的）。
+
+## 12 会话历史列出所有 Codex 服务商的对话
+
+### 做法
+
+- 内置 Codex 列提供方会话时 `thread/list` 带 `modelProviders: []`（全部服务商）；`extends: "codex"` 的自定义提供方照旧只要自己那一个。每条带 Codex 回的 `modelProvider`，经 `ImportableProviderSession.codexModelProvider` 进协议的可选字段 `RecentProviderSessionDescriptorPayload.codexModelProvider`。旧客户端忽略这个键；旧 daemon 不发，界面就不显示，不用能力位。
+- 自定义 Codex 提供方开的对话现在内置 Codex 也列得出（同一 thread id）。daemon 合并时，基础提供方与派生自它的提供方列出同一条，只留派生那条（`AgentManager.withoutSessionsDerivedProvidersOwn`）：它带着自己的设置续；用内置 Codex 的 `codex resume` 续会因为 config.toml 里没有这个服务商的表而失败。
+- 会话历史的行在第二行显示服务商 id（`openai`、`osuna_api_endpoint`……），排在目录前，目录先被截；完整说法「Codex 服务商：{name}」给读屏。没把这句说法直接显示出来：Explorer 默认宽度下行正文只有约 195px，英文「Codex model provider: osuna_api_endpoint」放不下，会把 id 本身截掉。
+
+### 一次性核实（2026-10-18，codex-cli 0.163.0）
+
+在 `/tmp` 下的临时目录里，`env -i HOME=<临时> CODEX_HOME=<临时>/codex-home`，未登录、没有 API key，不碰 `~/.codex`。在 `sessions/2026/10/18/` 放两份手写的 rollout（`session_meta.model_provider` 分别是 `openai`、`osuna_api_endpoint`，各带一条用户消息），起真的 `codex app-server`，按 Osuna 的参数发 `thread/list`：
+
+| 参数 | 列出 |
+| --- | --- |
+| 不传 `modelProviders` | 只有 `openai` 那条 |
+| `modelProviders: []` | 两条，各带自己的 `modelProvider` |
+| `modelProviders: ["osuna_api_endpoint"]` | 只有中转站那条 |
+| `modelProviders: []` 加 `cwd` | 两条 |
+
+与 `codex-wiring.md` 第 1 题的源码结论一致；不需要登录。用完删掉了临时目录。挪对话相关的两项核实（挪过的能续、状态库重建后会不会改回）归工单 13。
+
+### 测试
+
+- daemon 端到端：`codex-history-all-model-providers.e2e.test.ts`，假 Codex 照上表的规则过滤夹具里两个服务商的对话；Osuna 不传空数组时这条用例失败（已验证）。
+- app 浏览器：`session-history-codex-model-provider.spec.ts`，夹具 `e2e/fixtures/session-history-codex.mjs`。
+- 截图：`screenshots/12-session-history_two-codex-model-providers_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex、临时 daemon 目录。

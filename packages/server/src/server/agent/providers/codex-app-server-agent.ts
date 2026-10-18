@@ -7442,12 +7442,14 @@ export class CodexAppServerAgentClient implements AgentClient {
       const listLimit = options?.cwd ? Math.max(scanLimit, 50) : scanLimit;
       // Codex records each thread under the model provider that ran it and,
       // unless told otherwise, lists only the provider its own config selects.
-      // A custom provider runs under its own id, so ask for exactly that one.
+      // A custom provider runs under its own id, so ask for exactly that one;
+      // stock Codex asks for every provider (an empty list) so threads started
+      // through the gateway, CC Switch or the user's own tables all show.
       const customProviderConfig = this.customProviderConfig();
       const allThreads = await readCodexThreadWindow(client, this.logger, {
         limit: listLimit,
         cwd: options?.cwd,
-        ...(customProviderConfig ? { modelProviders: [customProviderConfig.model_provider] } : {}),
+        modelProviders: customProviderConfig ? [customProviderConfig.model_provider] : [],
       });
       const threads = filterCodexThreadsByCwd(allThreads, options?.cwd);
       return threads.slice(0, limit).map((thread) => {
@@ -7455,9 +7457,14 @@ export class CodexAppServerAgentClient implements AgentClient {
         const cwd = typeof thread.cwd === "string" ? thread.cwd : process.cwd();
         const preview = typeof thread.preview === "string" ? thread.preview : null;
         const title = typeof thread.name === "string" && thread.name.trim() ? thread.name : preview;
+        const codexModelProvider =
+          typeof thread.modelProvider === "string" && thread.modelProvider
+            ? thread.modelProvider
+            : undefined;
 
         return {
           providerHandleId: threadId,
+          codexModelProvider,
           cwd,
           title,
           firstPromptPreview: preview,

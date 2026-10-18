@@ -317,6 +317,22 @@ describe("workspace message schemas", () => {
     });
   });
 
+  test("parses a Codex provider session that names its Codex model provider", () => {
+    const parsed = RecentProviderSessionDescriptorPayloadSchema.parse({
+      providerId: "codex",
+      providerLabel: "Codex",
+      providerHandleId: "thread-1",
+      cwd: "/tmp/repo",
+      title: "Resume this",
+      firstPromptPreview: null,
+      lastPromptPreview: null,
+      lastActivityAt: "2026-04-30T12:34:56.000Z",
+      codexModelProvider: "osuna_api_endpoint",
+    });
+
+    expect(parsed.codexModelProvider).toBe("osuna_api_endpoint");
+  });
+
   test("parses fetch_recent_provider_sessions request and response", () => {
     const request = SessionInboundMessageSchema.parse({
       type: "fetch_recent_provider_sessions_request",

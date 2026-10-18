@@ -1181,7 +1181,9 @@ export class AgentManager {
         }
       }),
     );
-    const sessions = providerResults.flatMap((result) => result.sessions);
+    const sessions = this.withoutSessionsDerivedProvidersOwn(
+      providerResults.flatMap((result) => result.sessions),
+    );
 
     const limit = options?.limit ?? 20;
     return {
@@ -1193,6 +1195,23 @@ export class AgentManager {
         ...providerResults.flatMap((result) => (result.error ? [result.error] : [])),
       ],
     };
+  }
+
+  /**
+   * 内置 Codex 列出所有 Codex 服务商名下的对话，于是派生自它的自定义提供方开的对话会被两边都列出；
+   * 这种对话归派生提供方（它带着自己的设置续），基础提供方那一条去掉。
+   */
+  private withoutSessionsDerivedProvidersOwn(
+    sessions: ManagedImportableProviderSession[],
+  ): ManagedImportableProviderSession[] {
+    const derivedHandleKeys = new Set<string>();
+    for (const session of sessions) {
+      const baseProvider = this.providerDefinitions.get(session.provider)?.derivedFromProviderId;
+      if (baseProvider) derivedHandleKeys.add(`${baseProvider}\u0000${session.providerHandleId}`);
+    }
+    return sessions.filter(
+      (session) => !derivedHandleKeys.has(`${session.provider}\u0000${session.providerHandleId}`),
+    );
   }
 
   private isProviderImportable(
