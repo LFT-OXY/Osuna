@@ -256,7 +256,10 @@ export type ApiEndpointListResult = Required<
  * 总开关开着时 CLI 配置里写的一切：daemon 中转站地址、该 Agent 的口令、新会话的起始模型。
  * Claude 原样写；Codex 地址补 /v1，另写模型目录路径。
  */
-type CliWiring = ClaudeGatewayWiring;
+type CliWiring = ClaudeGatewayWiring & {
+  // Codex：开着的接口的「接口标识/模型名」，聊天模型选择器的顺序（ChatGPT 登录、用着用户自己的服务商时从中挑模型）。
+  endpointModels: string[];
+};
 
 /** CLI 配置里上次写进去的中转站地址与口令。 */
 interface WrittenGateway {
@@ -826,8 +829,13 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
     defaultModelId: string,
-  ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv"> {
-    if (provider !== "claude") return { model: defaultModelId, modelPicker: [], hintEnv: {} };
+  ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv" | "endpointModels"> {
+    if (provider !== "claude") {
+      const endpointModels = endpointModelGroups(this.retiredModels.listed(state)).flatMap(
+        (group) => group.models.map(({ id }) => id),
+      );
+      return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
+    }
     const listed = this.retiredModels.listed(state);
     const start: ClaudeHintModel = {
       id: defaultModelId,
@@ -848,6 +856,7 @@ export class ApiEndpointService {
         description: row.description,
       })),
       hintEnv: claudeHintEnv({ start, listed: rows.map((row) => row.hint) }),
+      endpointModels: [],
     };
   }
 

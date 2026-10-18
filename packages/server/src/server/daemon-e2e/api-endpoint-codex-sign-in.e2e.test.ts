@@ -229,6 +229,31 @@ ${await table()}`);
     expect(await config()).toBe(await keptConfig(own));
   });
 
+  test("on a provider of the user's own: it is taken out and the model magpie's connect picks is written", async () => {
+    const own = `model = "gpt-x"
+model_provider = "mine"
+
+[model_providers.mine]
+name = "Mine"
+base_url = "https://mine.example/v1"
+`;
+    await writeFile(configPath, own);
+    await createEndpoint();
+    await setCodex(true);
+
+    expect(await config()).toBe(`model = "relay/gpt-x"
+openai_base_url = "${chatgptUrl()}"
+
+[model_providers.mine]
+name = "Mine"
+base_url = "https://mine.example/v1"
+
+${await table()}`);
+
+    await setCodex(false);
+    expect(await config()).toBe(await keptConfig(own));
+  });
+
   test("openai_base_url changed by another program is told as no longer through the gateway", async () => {
     await createEndpoint();
     await setCodex(true);

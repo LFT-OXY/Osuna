@@ -5,6 +5,7 @@ import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  magpieConnectPick,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -22,6 +23,7 @@ const GATEWAY: CodexGatewayWiring = {
   model: "relay/gpt",
   catalogPath: CATALOG,
   chatgptBaseUrl: null,
+  endpointModels: [],
 };
 
 // 用户手写的 config.toml：注释、行尾注释、引号风格、带空格的项目路径、自己的中转站，全都不能动。
@@ -407,9 +409,69 @@ ${RELAY_BLOCK}`);
     );
   });
 
+  it("on a provider of the user's own: takes it out and writes the model magpie's connect picks", () => {
+    const endpointModels = ["relay/other", "relay/gpt-5.1-codex", "backup/gpt-5.1-codex"];
+    const { text, takeover } = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { chatgptBaseUrl: CHATGPT_URL, endpointModels },
+    });
+
+    expect(text).toBe(`# my codex config
+model = "relay/gpt-5.1-codex"   # the one I like
+approval_policy = "on-request"
+openai_base_url = "${CHATGPT_URL}"
+
+# projects
+[projects."/Users/me/My Code"]
+trust_level = "trusted"
+
+[model_providers.mine]
+name = "Mine"
+base_url = "https://mine.example/v1"
+
+${RELAY_BLOCK}`);
+    expect(toValue(restore(text, takeover))).toEqual(toValue(withKeptTable(USER_CONFIG)));
+  });
+
+  it("on CC Switch's OpenAI mirror or on openai: joins beside the sign-in and leaves model alone", () => {
+    const mirror = `model_provider = "cc"
+model = "gpt-5.5"
+
+[model_providers.cc]
+name = "OpenAI"
+requires_openai_auth = true
+`;
+    for (const config of [mirror, `model_provider = "openai"\nmodel = "gpt-5.5"\n`]) {
+      const { text } = applyWith({
+        text: config,
+        takeover: null,
+        wiring: { chatgptBaseUrl: CHATGPT_URL, endpointModels: ["relay/gpt-x"] },
+      });
+      expect(toValue(text)).toMatchObject({ model: "gpt-5.5", openai_base_url: CHATGPT_URL });
+    }
+  });
+
   it("is stable: applying again yields the same bytes", () => {
     const first = applyChatGpt(USER_CONFIG);
     expect(applyChatGpt(first.text, first.takeover)).toEqual(first);
+  });
+});
+
+describe("magpieConnectPick", () => {
+  const options = ["relay/gpt-5", "relay/glm-4.6", "backup/claude-opus-4-1", "backup/glm-4.6"];
+
+  it("takes the first endpoint serving the model Codex was on, its prefix and [1m] read off", () => {
+    expect(magpieConnectPick("glm-4.6", options)).toBe("relay/glm-4.6");
+    expect(magpieConnectPick("mine/glm-4.6", options)).toBe("relay/glm-4.6");
+    expect(magpieConnectPick("glm-4.6", ["x/glm-4.6[1m]"])).toBe("x/glm-4.6[1m]");
+  });
+
+  it("then a model of the family a bare alias names, then the first", () => {
+    expect(magpieConnectPick("opus", options)).toBe("backup/claude-opus-4-1");
+    expect(magpieConnectPick("gpt-9", options)).toBe("relay/gpt-5");
+    expect(magpieConnectPick(null, options)).toBe("relay/gpt-5");
+    expect(magpieConnectPick("gpt-9", [])).toBeNull();
   });
 });
 

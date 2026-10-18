@@ -64,7 +64,8 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 /**
  * CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。
  * chatgptBaseUrl 非 null 表示 Codex 用 ChatGPT 登录：写进 openai_base_url 的中转站 ChatGPT 后端地址，
- * 起始模型这时不写，model 归 Codex 自己。
+ * 起始模型这时不写，model 归 Codex 自己；只有原本用着用户自己的服务商时，照 magpie 的 connect 从
+ * endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里挑一个写上。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -72,6 +73,7 @@ export interface CodexGatewayWiring {
   model: string;
   catalogPath: string;
   chatgptBaseUrl: string | null;
+  endpointModels: string[];
 }
 
 export type CodexConfigPatchResult =
@@ -119,7 +121,7 @@ export function applyCodexApiEndpoint(input: {
     return node ? { present: true, raw: sliceNode(baseText, node.value) } : { present: false };
   };
   // 每个负责的键这次写的原文（含引号），null 为拿掉。
-  const raws = wiringRaws(wiring);
+  const raws = wiringRaws(wiring, chatgptModel(parsed.value, originalOf, wiring));
   const table: CodexProviderTableRecord = { baseUrl: wiring.baseUrl, bearerToken: wiring.token };
   const keys: CodexConfigTakeover["keys"] = {};
   let text = baseText;
@@ -159,7 +161,10 @@ export function applyCodexApiEndpoint(input: {
  * 地址由 openai_base_url 指到中转站；model 不归 Osuna（magpie 的 Join 不碰它）：Codex 自己选过的留着，
  * 没选过就照旧没有（用 Codex 自己的默认）；从服务商接法换过来时放回接管前的样子。
  */
-function wiringRaws(wiring: CodexGatewayWiring): Partial<Record<TopLevelKey, string | null>> {
+function wiringRaws(
+  wiring: CodexGatewayWiring,
+  model: string | null,
+): Partial<Record<TopLevelKey, string | null>> {
   if (wiring.chatgptBaseUrl === null) {
     return {
       model_provider: tomlString(CODEX_API_ENDPOINT_PROVIDER_ID),
@@ -169,9 +174,58 @@ function wiringRaws(wiring: CodexGatewayWiring): Partial<Record<TopLevelKey, str
   }
   return {
     model_provider: null,
+    ...(model === null ? {} : { model: tomlString(model) }),
     model_catalog_json: null,
     openai_base_url: tomlString(wiring.chatgptBaseUrl),
   };
+}
+
+/**
+ * ChatGPT 登录时要写的 model，不写为 null。接管前用的是用户自己的服务商（不是 openai、也不是 CC Switch 的
+ * OpenAI 镜像）时，magpie 的 Join 不接（codex.go `Join`），`connect` 接着挑一个 magpie 模型 `set` 上：
+ * 服务商照样拿掉、模型写成挑中的那个（applied.go `connect`）。用户 2026-10-18 决定完全照 magpie。
+ */
+function chatgptModel(
+  value: Record<string, unknown>,
+  originalOf: (key: TopLevelKey) => CodexOriginalValue,
+  wiring: CodexGatewayWiring,
+): string | null {
+  const provider = originalOf("model_provider");
+  if (!provider.present) return null;
+  const providerId = readRaw(provider.raw);
+  if (providerId === "openai" || isCCSwitchMirror(value, providerId)) return null;
+  const model = originalOf("model");
+  return magpieConnectPick(model.present ? readRaw(model.raw) : null, wiring.endpointModels);
+}
+
+/** magpie `isCCSwitchMirror`：名叫 OpenAI、要求 OpenAI 登录、没有自己的地址的服务商表。 */
+function isCCSwitchMirror(value: Record<string, unknown>, providerId: string): boolean {
+  const providers = value.model_providers;
+  const table = isRecord(providers) ? providers[providerId] : undefined;
+  return (
+    isRecord(table) &&
+    table.name === "OpenAI" &&
+    table.requires_openai_auth === true &&
+    (table.base_url === undefined || table.base_url === "")
+  );
+}
+
+/**
+ * magpie `connect` 挑模型的办法（applied.go，Osuna 没有 Codex 自带模型与订阅那几档）：Codex 原来的模型去掉
+ * 前缀（`connectWas`）后，先找同名的（含带 [1m] 的），再找光秃秃的档位名所指那一族的，都没有取第一个。
+ */
+export function magpieConnectPick(current: string | null, options: string[]): string | null {
+  const cur = current === null ? "" : current.slice(current.lastIndexOf("/") + 1).trim();
+  const idOf = (option: string) => option.slice(option.lastIndexOf("/") + 1);
+  const same = options.find((option) => {
+    const id = idOf(option);
+    return cur !== "" && (id === cur || id.replace(/\[1m\]$/, "") === cur);
+  });
+  if (same) return same;
+  const alike = options.find(
+    (option) => cur !== "" && !cur.includes("-") && `${idOf(option)}-`.includes(`-${cur}-`),
+  );
+  return alike ?? options[0] ?? null;
 }
 
 /** 接管记录里这个键的写入值是否还在：null 是拿掉了，文件里就不该有它。 */
