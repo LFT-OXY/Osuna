@@ -1334,4 +1334,137 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(await codexTables()).toEqual({ agents: undefined, memories: undefined });
     });
   });
+
+  describe("Codex's forced Subagent model and Subagents on any model", () => {
+    // 照 magpie 的 CodexSubagentModel 与 CodexAgentsV1（PRD 第 33 条）：都不写 Codex 配置。
+    function setCodex(values: {
+      forcedSubagentModelId?: string | null;
+      allowsAnySubagentModel?: boolean;
+    }) {
+      return client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true, ...values });
+    }
+
+    const CatalogSchema = z.object({ models: z.array(z.record(z.string(), z.unknown())) });
+
+    async function catalogVersions(): Promise<Array<[unknown, unknown]>> {
+      const text = await readFile(path.join(root, ".paseo", "api-endpoints", "codex-models.json"));
+      const catalog = CatalogSchema.parse(JSON.parse(text.toString("utf8")));
+      return catalog.models.map((entry) => [entry.slug, entry.multi_agent_version]);
+    }
+
+    async function codexIssues(): Promise<ListedIssue[]> {
+      return (await client.apiEndpointList("codex")).agentIssues?.codex ?? [];
+    }
+
+    test("the forced Subagent model is Codex's alone, one an endpoint that is on selected, and leaves config.toml as it was", async () => {
+      await twoEndpoints();
+      await turnOn("codex", "first");
+      await turnOn("claude", "first");
+      const before = await readFile(configPath, "utf8");
+
+      const forced = await setCodex({ forcedSubagentModelId: "relay-b/glm-4.6" });
+      expect(forced.error).toBeNull();
+      expect(forced.agent?.forcedSubagentModelId).toBe("relay-b/glm-4.6");
+      expect((await client.apiEndpointList("codex")).agents?.codex?.forcedSubagentModelId).toBe(
+        "relay-b/glm-4.6",
+      );
+      expect(await readFile(configPath, "utf8")).toBe(before);
+
+      expect((await setCodex({ forcedSubagentModelId: "gpt-9" })).error?.code).toBe(
+        "invalid_input",
+      );
+      const claudeForced = await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        forcedSubagentModelId: "glm-4.6",
+      });
+      expect(claudeForced.error?.code).toBe("invalid_input");
+      const claudeAny = await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        allowsAnySubagentModel: true,
+      });
+      expect(claudeAny.error?.code).toBe("invalid_input");
+
+      const unset = await setCodex({ forcedSubagentModelId: null });
+      expect(unset.agent?.forcedSubagentModelId).toBeNull();
+    });
+
+    test("Subagents on any model mark every model in Codex's model list multi-agent V1, and switching it off takes the mark out", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first", "glm-4.6"] });
+      await turnOn("codex", "first");
+      const before = await readFile(configPath, "utf8");
+      expect(await catalogVersions()).toEqual([
+        ["first", undefined],
+        ["glm-4.6", undefined],
+        ["relay-a/first", undefined],
+        ["relay-a/glm-4.6", undefined],
+      ]);
+
+      const on = await setCodex({ allowsAnySubagentModel: true });
+      expect(on.error).toBeNull();
+      expect(on.agent?.allowsAnySubagentModel).toBe(true);
+      expect(await catalogVersions()).toEqual([
+        ["first", "v1"],
+        ["glm-4.6", "v1"],
+        ["relay-a/first", "v1"],
+        ["relay-a/glm-4.6", "v1"],
+      ]);
+      expect(await readFile(configPath, "utf8")).toBe(before);
+
+      await setCodex({ allowsAnySubagentModel: false });
+      expect(await catalogVersions()).toEqual([
+        ["first", undefined],
+        ["glm-4.6", undefined],
+        ["relay-a/first", undefined],
+        ["relay-a/glm-4.6", undefined],
+      ]);
+    });
+
+    test("Codex's own multi_agent_v2 on in config.toml, written any of three ways, is told with how to fix it", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first"] });
+      await turnOn("codex", "first");
+      await setCodex({ allowsAnySubagentModel: true });
+      const wired = await readFile(configPath, "utf8");
+      const holding = {
+        code: "codex_multi_agent_v2_on",
+        params: { file: configPath },
+        message: `${configPath} turns Codex's own multi_agent_v2 on, which takes over the multi-agent V1 the API endpoint models ask for; turn it off in Codex's config to run Subagents on them`,
+      };
+
+      for (const spelled of [
+        "\n[features]\nmulti_agent_v2 = true\n",
+        "\n[features]\nmulti_agent_v2 = { enabled = true }\n",
+        "\n[features]\nmulti_agent_v2.enabled = true\n",
+        "\n[features.multi_agent_v2]\nenabled = true\n",
+      ]) {
+        await writeFile(configPath, wired + spelled);
+        expect(await codexIssues()).toEqual([holding]);
+      }
+
+      await writeFile(configPath, `${wired}\n[features]\nmulti_agent_v2 = false\n`);
+      expect(await codexIssues()).toEqual([]);
+
+      // 开关关着不查。
+      await writeFile(configPath, `${wired}\n[features]\nmulti_agent_v2 = true\n`);
+      await setCodex({ allowsAnySubagentModel: false });
+      expect(await codexIssues()).toEqual([]);
+    });
+
+    test("a config.toml Osuna can't read is told apart: multi_agent_v2 can't be checked", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first"] });
+      await turnOn("codex", "first");
+      await setCodex({ allowsAnySubagentModel: true });
+      await writeFile(configPath, "model = \n");
+
+      const issues = await codexIssues();
+      expect(issueCodes(issues)).toEqual(["config_unparsable", "codex_multi_agent_v2_unreadable"]);
+      const unreadable = issues[1];
+      expect(unreadable).toEqual({
+        code: "codex_multi_agent_v2_unreadable",
+        params: { file: configPath, detail: expect.any(String) },
+        message: `Subagents on any model is on, but Osuna couldn't read ${configPath} to check Codex's own multi_agent_v2`,
+      });
+    });
+  });
 });

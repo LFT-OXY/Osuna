@@ -50,13 +50,15 @@ function entries(
   options: {
     reasoningEffort?: string | null;
     facts?: (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
+    marksAgentsV1?: boolean;
   } = {},
 ): CatalogEntry[] {
-  const catalog = buildCodexModelCatalog(
+  const catalog = buildCodexModelCatalog({
     state,
-    options.reasoningEffort ?? null,
-    options.facts ?? (() => ({})),
-  );
+    reasoningEffort: options.reasoningEffort ?? null,
+    factsFor: options.facts ?? (() => ({})),
+    marksAgentsV1: options.marksAgentsV1 ?? false,
+  });
   return (JSON.parse(catalog) as { models: CatalogEntry[] }).models;
 }
 
@@ -176,6 +178,7 @@ describe("codexModelEntry", () => {
       priority: 3,
       facts,
       reasoningEffort,
+      marksAgentsV1: false,
     });
   }
 
@@ -270,6 +273,7 @@ describe("codexEndpointEntries", () => {
     const listed = codexEndpointEntries({
       state: STATE,
       reasoningEffort: "high",
+      marksAgentsV1: false,
       factsFor: (owner, modelId) =>
         owner.slug === "relay-b" && modelId === "glm-4.6"
           ? { context: 200_000, efforts: ["low", "high"], images: false }

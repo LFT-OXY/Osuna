@@ -2651,6 +2651,14 @@ export const ko: TranslationResources = {
           "지난 대화를 백그라운드에서 {{agent}}의 메모리로 정리합니다. {{agent}}의 메모리 기능이 켜져 있을 때만 쓰이며, Osuna는 이 기능을 켜지 않습니다.",
         memoryModelUnset: "{{agent}} 기본값",
         memoryModelPick: "{{agent}}의 메모리 모델",
+        forcedSubagentModel: "강제 Subagent 모델",
+        forcedSubagentModelHint:
+          "메인 대화가 어떤 모델을 지정하든 모든 Subagent가 이 모델로 실행됩니다. Codex 설정은 그대로 둡니다.",
+        forcedSubagentModelUnset: "강제하지 않음",
+        forcedSubagentModelPick: "{{agent}}의 강제 Subagent 모델",
+        anySubagentModel: "{{agent}} Subagent가 모든 모델 사용",
+        anySubagentModelHint:
+          "{{agent}}가 보여 주는 모델을 멀티 에이전트 V1로 표시해, GPT 모델의 메인 대화가 API 엔드포인트 모델에서 Subagent를 시작할 수 있게 합니다. {{agent}} 자체의 multi_agent_v2가 켜져 있으면 그쪽이 우선합니다.",
         connection: {
           kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:
@@ -2720,6 +2728,17 @@ export const ko: TranslationResources = {
             "{{agent}}의 관리 설정({{file}})에서 ANTHROPIC_BASE_URL을 {{url}}(으)로 설정했습니다. 관리 설정은 Osuna가 쓰는 게이트웨이 주소보다 우선합니다.",
           managedBaseUrlFix:
             "이 컴퓨터의 관리자에게 {{agent}}의 관리 설정에서 ANTHROPIC_BASE_URL을 지워 달라고 요청하세요. 이 파일을 바꾸려면 관리자 권한이 필요합니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          codexMultiAgentV2On:
+            "Codex 자체의 multi_agent_v2가 「Subagent 모든 모델 사용」보다 우선합니다",
+          codexMultiAgentV2OnDetail:
+            "{{file}}에서 multi_agent_v2가 켜져 있어, API 엔드포인트 모델에 필요한 멀티 에이전트 V1보다 우선합니다. 그래서 GPT 메인 대화의 Subagent가 그 모델에서 실행되지 못합니다. Osuna는 이 설정을 바꾸지 않습니다.",
+          codexMultiAgentV2OnFix:
+            "{{file}}을 열고 [features] 아래의 multi_agent_v2를 false로 바꾸거나 지우세요. [features.multi_agent_v2] 표라면 enabled = false로 바꾸세요. 저장한 뒤 Codex를 다시 시작하세요. 이미 시작된 대화는 시작할 때의 버전을 유지합니다.",
+          codexMultiAgentV2Unreadable: "Osuna가 Codex 자체의 multi_agent_v2를 확인할 수 없습니다",
+          codexMultiAgentV2UnreadableDetail:
+            "「Subagent 모든 모델 사용」이 켜져 있지만 Osuna가 {{file}}을 읽지 못했습니다: {{detail}}",
+          codexMultiAgentV2UnreadableFix:
+            "{{file}}의 오류를 고쳐 올바른 TOML로 만든 뒤 이 페이지를 다시 여세요. 거기서 multi_agent_v2가 켜져 있으면 함께 끄세요.",
           howToFix: "해결 방법",
           codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
           codexProfileOverrideDetail:

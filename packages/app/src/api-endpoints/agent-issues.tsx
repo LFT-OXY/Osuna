@@ -322,6 +322,27 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           keys: params.keys,
         }),
       };
+    case "codexMultiAgentV2On":
+      return {
+        title: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2On"),
+        description: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2OnDetail", {
+          file: shortenPath(params.file),
+        }),
+        fixSteps: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2OnFix", {
+          file: shortenPath(params.file),
+        }),
+      };
+    case "codexMultiAgentV2Unreadable":
+      return {
+        title: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2Unreadable"),
+        description: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2UnreadableDetail", {
+          file: shortenPath(params.file),
+          detail: params.detail,
+        }),
+        fixSteps: t("settings.apiEndpoints.agent.issues.codexMultiAgentV2UnreadableFix", {
+          file: shortenPath(params.file),
+        }),
+      };
     case "unknown":
       return { title: issue.message };
   }

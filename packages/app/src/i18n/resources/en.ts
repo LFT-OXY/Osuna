@@ -2700,6 +2700,14 @@ export const en = {
           "Sums up past conversations into {{agent}}'s memories in the background. Only used while {{agent}}'s memories feature is on; Osuna doesn't turn it on.",
         memoryModelUnset: "{{agent}}'s own",
         memoryModelPick: "Memory model for {{agent}}",
+        forcedSubagentModel: "Forced Subagent model",
+        forcedSubagentModelHint:
+          "Every Subagent runs on it, whichever model the main conversation names. Codex's config is left as it is.",
+        forcedSubagentModelUnset: "Not forced",
+        forcedSubagentModelPick: "Forced Subagent model for {{agent}}",
+        anySubagentModel: "{{agent}} Subagents can use any model",
+        anySubagentModelHint:
+          "Marks the models {{agent}} lists as multi-agent V1, so a main conversation on a GPT model can start Subagents on API endpoint models. {{agent}}'s own multi_agent_v2 overrides this.",
         connection: {
           kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:
@@ -2767,6 +2775,16 @@ export const en = {
             "{{agent}}'s managed settings ({{file}}) set ANTHROPIC_BASE_URL to {{url}}. Managed settings win over the gateway address Osuna writes.",
           managedBaseUrlFix:
             "Ask whoever manages this computer to remove ANTHROPIC_BASE_URL from {{agent}}'s managed settings. Changing that file needs administrator rights. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
+          codexMultiAgentV2On: "Codex's own multi_agent_v2 overrides Subagents on any model",
+          codexMultiAgentV2OnDetail:
+            "{{file}} turns on multi_agent_v2, which takes over the multi-agent V1 the API endpoint models need, so Subagents of a GPT main conversation can't run on them. Osuna doesn't change this setting.",
+          codexMultiAgentV2OnFix:
+            "Open {{file}}. Under [features], set multi_agent_v2 = false or delete it; in a [features.multi_agent_v2] table, set enabled = false. Save, then start Codex again. Conversations already started keep the version they started with.",
+          codexMultiAgentV2Unreadable: "Osuna can't check Codex's own multi_agent_v2",
+          codexMultiAgentV2UnreadableDetail:
+            "Subagents on any model is on, but Osuna couldn't read {{file}}: {{detail}}",
+          codexMultiAgentV2UnreadableFix:
+            "Fix the error in {{file}} so it's valid TOML, then open this page again. If multi_agent_v2 is on there, turn it off too.",
           howToFix: "How to fix",
           codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
           codexProfileOverrideDetail:

@@ -167,6 +167,7 @@ export type GatewayTokens = GatewayTokensFile["tokens"];
 
 const ENDPOINTS_FILE = "endpoints.json";
 const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
+const CODEX_AGENT_VERSIONS_FILE = "codex-agent-versions.json";
 // v0.15 让 Codex 通过 auth.command 读 key 的文件；现在不再写，见到就删。
 // COMPAT(codexLegacyProviderTable): added after v0.15.0, remove after 2027-04-14.
 const LEGACY_CODEX_KEY_FILE = "codex-api-key";
@@ -306,6 +307,11 @@ export class ApiEndpointStore {
 
   get retiredModelsPath(): string {
     return path.join(this.root, "retired-models.json");
+  }
+
+  /** ChatGPT 给 Codex 的自带模型原来的多 Agent 版本（codex-agent-versions.ts）。 */
+  get codexAgentVersionsPath(): string {
+    return path.join(this.root, CODEX_AGENT_VERSIONS_FILE);
   }
 
   get codexModelCatalogPath(): string {

@@ -688,6 +688,35 @@ internal/edit/toml.go:
   packages/server/src/server/api-endpoints/host-endpoints.ts
   packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
 
+Codex's forced Subagent model (a Subagent's request moved to the model set,
+kept on the one asked for when that isn't served or can't open a task the
+ChatGPT backend sealed), spawn_agent naming every model a Subagent may be put
+on, and "Codex Subagents can use any model" (the models handed to Codex
+marked multi-agent V1, ChatGPT's own versions remembered and put back, and
+Codex's own multi_agent_v2 read to warn) follow codexSubagentPick and
+sealedTaskIn in magpie's internal/gateway/codex_subagent.go,
+hasSealedAgentMessage and withoutSealedMessages in codex_backend.go,
+spawnAgentModels, moreSpawnTools, moreSpawnModels and spawnChoices in
+codex_spawn_models.go, the Subagent kinds in internal/usage/purpose.go,
+Stamp, unstamp, Remember, originals, PolicyTag, MarkedV1 and CacheEntries in
+internal/codexcat/codexcat.go, and multiAgentV2OnIn and codexMultiAgentV2On in
+internal/agent/codex.go, with tests after codex_spawn_models_test.go and
+codex_subagent_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/codex-subagents.ts
+  packages/server/src/server/api-endpoints/gateway/codex-subagents.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-spawn-models.ts
+  packages/server/src/server/api-endpoints/gateway/codex-spawn-models.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-requests.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-models.ts
+  packages/server/src/server/api-endpoints/codex-agent-versions.ts
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+  packages/server/src/server/api-endpoints/codex-config-patch.ts
+  packages/server/src/server/api-endpoints/codex-config-patch.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

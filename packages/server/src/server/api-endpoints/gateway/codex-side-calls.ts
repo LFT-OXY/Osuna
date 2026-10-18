@@ -21,7 +21,7 @@ function header(headers: IncomingHttpHeaders, name: string): string {
 }
 
 /** 这个请求为什么发：x-openai-subagent 写的，或 x-codex-turn-metadata 里的 thread_source；对话本身的一轮为空。 */
-function callKind(headers: IncomingHttpHeaders): string {
+export function callKind(headers: IncomingHttpHeaders): string {
   const subagent = header(headers, "x-openai-subagent");
   if (subagent) return subagent;
   if (header(headers, "x-openai-memgen-request")) return "memgen";

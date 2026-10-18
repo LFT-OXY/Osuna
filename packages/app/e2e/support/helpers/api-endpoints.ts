@@ -182,7 +182,13 @@ interface ApiEndpointSeedClient {
     keepsClaudeAiLogin?: boolean;
     defaultThinkingOptionId?: string | null;
     usesUltraCode?: boolean;
+    forcedSubagentModelId?: string | null;
+    allowsAnySubagentModel?: boolean;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
+  apiEndpointSetEndpointState(options: {
+    endpointId: string;
+    enabled: boolean;
+  }): Promise<{ error: { code: string; message: string } | null }>;
   apiEndpointFetchModels(options: {
     provider: string;
     endpointId?: string;
@@ -232,6 +238,8 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
     provider: "codex",
     enabled: false,
     defaultThinkingOptionId: null,
+    forcedSubagentModelId: null,
+    allowsAnySubagentModel: false,
   });
   const list = await client.apiEndpointList("claude");
   for (const endpoint of list.endpoints) {

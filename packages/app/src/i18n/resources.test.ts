@@ -139,6 +139,8 @@ const zhCNRetiredTermExemptKeys = [
   "settings.project.metadata.commitMessagePlaceholder",
   // Claude Code 的功能名 Remote Control 照它自己的叫法。
   "settings.apiEndpoints.agent.keepClaudeAiLoginHint",
+  // Codex config.toml 里的表名 [features] 照原样写。
+  "settings.apiEndpoints.agent.issues.codexMultiAgentV2OnFix",
 ];
 
 function findRetiredZhCNTerms(): string[] {

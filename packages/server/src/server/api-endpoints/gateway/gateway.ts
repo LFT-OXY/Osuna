@@ -1,7 +1,8 @@
 // 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
 // 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用，
 // 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)，
-// ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend，「模型名:档位」照 gateway.go 的 askedAt
+// ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend，「模型名:档位」照 gateway.go 的 askedAt，
+// Codex 的 Subagent 改到强制模型、spawn_agent 补上清单照 codexBackend 与 handle 对 codexSubagentPick、spawnAgentModels 的调用
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, { type IncomingHttpHeaders } from "node:http";
@@ -44,6 +45,7 @@ import {
 import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
 import { CompactionFailures } from "./codex-compaction-fallback.js";
 import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
+import { shapeCodexApiRequest, shapeCodexChatGptRequest } from "./codex-requests.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -344,14 +346,68 @@ async function serveChatGptBackend(input: {
     relayChatGpt({ ...input, sent: { kind: "raw", body: raw.body } });
     return;
   }
-  const text = decoded.body.toString("utf8");
-  const model = modelOf(text);
-  const isForChatGpt = model === null || !isEndpointModel(model);
-  if (isForChatGpt) {
-    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text }) });
+  const sentText = decoded.body.toString("utf8");
+  const sentModel = modelOf(sentText);
+  if (sentModel === null) {
+    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text: sentText }) });
+    return;
+  }
+  const shaped = shapeChatGptTurn({ ...input, text: sentText, model: sentModel });
+  const { text, model } = shaped;
+  if (shaped.goesTo === "chatgpt") {
+    const isShaped = text !== sentText;
+    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
     return;
   }
   await serveEndpointModel({ ...input, model, text });
+}
+
+/**
+ * 对话（/responses）里 Codex 的 Subagent 改到强制 Subagent 模型、spawn_agent 补上能选的模型；压缩与搜索不改。
+ * 去向原样按模型名：带接口标识的走接口，光秃秃的给 ChatGPT（改到强制模型时按它归谁）。
+ */
+function shapeChatGptTurn(input: {
+  req: Request;
+  rest: string;
+  chatgpt: ChatGptBackend;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+  text: string;
+  model: string;
+}): { text: string; model: string; goesTo: "chatgpt" | "endpoint" } {
+  const { text, model } = input;
+  if (input.rest !== "/responses") {
+    let goesTo: "chatgpt" | "endpoint" = "chatgpt";
+    if (isEndpointModel(model)) goesTo = "endpoint";
+    return { text, model, goesTo };
+  }
+  const state = stateForShaping(input);
+  let listed: ApiEndpointState | null = null;
+  if (state !== null) listed = input.failover.retired.listed(state);
+  return shapeCodexChatGptRequest({
+    headers: input.req.headers,
+    text,
+    model,
+    state,
+    listed,
+    listing: input.chatgpt.listing(),
+    logger: input.logger,
+  });
+}
+
+/** endpoints.json 读不懂时为 null：Codex 自己的模型照常转给 ChatGPT，只是不改请求。 */
+function stateForShaping(input: {
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+}): ApiEndpointState | null {
+  try {
+    return input.store.readState();
+  } catch (error) {
+    if (!(error instanceof ApiEndpointsFileUnparsableError)) throw error;
+    input.logger.warn({ filePath: error.filePath }, "API endpoints file could not be parsed");
+    return null;
+  }
 }
 
 /** 请求体里的模型名；没有为 null。 */
@@ -364,12 +420,21 @@ function modelOf(text: string): string | null {
 /** 转给 ChatGPT 的请求体：原样的字节；或读回了 Osuna 的压缩摘要、解开后改过的 JSON。 */
 type ChatGptBody = { kind: "raw"; body: Buffer } | { kind: "rewritten"; body: Buffer } | null;
 
-/** ChatGPT 自带模型的对话里带着 Osuna 做的压缩条目时换成摘要消息（ChatGPT 读不懂它）；别的原样。 */
-function chatgptBodyFor(input: { rest: string; raw: Buffer; text: string }): ChatGptBody {
+/**
+ * ChatGPT 自带模型的对话里带着 Osuna 做的压缩条目时换成摘要消息（ChatGPT 读不懂它）；改过请求（isShaped：
+ * Subagent 改到强制模型、spawn_agent 补了模型）时发改过的；别的原样。
+ */
+function chatgptBodyFor(input: {
+  rest: string;
+  raw: Buffer;
+  text: string;
+  isShaped?: boolean;
+}): ChatGptBody {
   if (input.rest !== "/responses") return { kind: "raw", body: input.raw };
   const restored = codexCompactionInput({ text: input.text, isEndpointModel: false });
-  if (restored.kind === "unchanged") return { kind: "raw", body: input.raw };
-  return { kind: "rewritten", body: Buffer.from(restored.body) };
+  if (restored.kind === "changed") return { kind: "rewritten", body: Buffer.from(restored.body) };
+  if (input.isShaped === true) return { kind: "rewritten", body: Buffer.from(input.text) };
+  return { kind: "raw", body: input.raw };
 }
 
 function relayChatGpt(input: {
@@ -549,12 +614,14 @@ async function routeAgentRequest(input: {
   }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
-  const { body, parsed, model, fixedEffort } = withoutAskedEffort({
+  const codexed = codexApiRequest({
+    ...input,
     body: read.body,
     parsed: asked,
     model: askedModel,
     state,
   });
+  const { body, parsed, model, fixedEffort } = withoutAskedEffort({ ...codexed, state });
   const route = routeModel({ ...input, state, model });
   if (!route.ok) {
     reply(404, route.message);
@@ -570,6 +637,37 @@ async function routeAgentRequest(input: {
     return { body, parsed, model, fixedEffort, candidates: searchers };
   }
   return { body, parsed, model, fixedEffort, candidates: route.candidates };
+}
+
+/**
+ * Codex 经 /v1/responses 的请求（API key 接法）：Subagent 改到强制 Subagent 模型，spawn_agent 补上目录里的其余模型。
+ * ChatGPT 后端那组路径先读出了请求体（read），在那边已经按它自己的清单改过。
+ */
+function codexApiRequest(input: {
+  req: Request;
+  agent: ApiEndpointProvider;
+  read?: Buffer;
+  logger: pino.Logger;
+  failover: Failover;
+  body: Buffer;
+  parsed: unknown;
+  model: string;
+  state: ApiEndpointState;
+}): { body: Buffer; parsed: unknown; model: string } {
+  const { body, parsed, model, state } = input;
+  const isCodexApiTurn = input.agent === "codex" && input.read === undefined;
+  if (!isCodexApiTurn) return { body, parsed, model };
+  const sentText = body.toString("utf8");
+  const shaped = shapeCodexApiRequest({
+    headers: input.req.headers,
+    text: sentText,
+    model,
+    state,
+    listed: input.failover.retired.listed(state),
+    logger: input.logger,
+  });
+  if (shaped.text === sentText) return { body, parsed, model };
+  return { body: Buffer.from(shaped.text), parsed: parseJson(shaped.text), model: shaped.model };
 }
 
 /** 读出的请求与找到的候选；fixedEffort 是「模型名:档位」固定的档位，没有为 null。 */

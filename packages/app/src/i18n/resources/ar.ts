@@ -2637,6 +2637,14 @@ export const ar: TranslationResources = {
           "يلخص المحادثات السابقة في ذاكرة {{agent}} في الخلفية. لا يُستخدم إلا عندما تكون ميزة الذاكرة في {{agent}} مفعّلة؛ ولا يفعّلها Osuna.",
         memoryModelUnset: "الخاص بـ {{agent}}",
         memoryModelPick: "نموذج الذاكرة لـ {{agent}}",
+        forcedSubagentModel: "نموذج Subagent المفروض",
+        forcedSubagentModelHint:
+          "يعمل كل Subagent عليه، أيًّا كان النموذج الذي تحدده المحادثة الرئيسية. تبقى إعدادات Codex كما هي.",
+        forcedSubagentModelUnset: "غير مفروض",
+        forcedSubagentModelPick: "نموذج Subagent المفروض لـ {{agent}}",
+        anySubagentModel: "يمكن لـ Subagents في {{agent}} استخدام أي نموذج",
+        anySubagentModelHint:
+          "يضع على النماذج التي يعرضها {{agent}} إصدار الوكلاء المتعددين V1، فتستطيع المحادثة الرئيسية على نموذج GPT تشغيل Subagents على نماذج واجهات API. إعداد multi_agent_v2 الخاص بـ {{agent}} يتغلب على هذا.",
         connection: {
           kept: "يستخدم {{agent}} واجهات API الخارجية بالفعل. يبقى على {{model}}.",
           again:
@@ -2701,6 +2709,17 @@ export const ar: TranslationResources = {
             "تضبط الإعدادات المُدارة لـ {{agent}} ({{file}}) قيمة ANTHROPIC_BASE_URL على {{url}}. الإعدادات المُدارة تتقدّم على عنوان البوابة الذي يكتبه Osuna.",
           managedBaseUrlFix:
             "اطلب ممن يدير هذا الحاسوب حذف ANTHROPIC_BASE_URL من الإعدادات المُدارة لـ {{agent}}. تعديل هذا الملف يحتاج صلاحيات المسؤول. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.",
+          codexMultiAgentV2On:
+            "إعداد multi_agent_v2 الخاص بـ Codex يتغلب على «Subagents بأي نموذج»",
+          codexMultiAgentV2OnDetail:
+            "يفعّل {{file}} الإعداد multi_agent_v2، وهو يتغلب على إصدار الوكلاء المتعددين V1 الذي تحتاجه نماذج واجهات API، فلا تستطيع Subagents في محادثة GPT الرئيسية العمل عليها. لا يغيّر Osuna هذا الإعداد.",
+          codexMultiAgentV2OnFix:
+            "افتح {{file}}. تحت [features] اجعل multi_agent_v2 = false أو احذفه؛ وفي جدول [features.multi_agent_v2] اجعل enabled = false. احفظ ثم شغّل Codex من جديد. المحادثات التي بدأت تحتفظ بالإصدار الذي بدأت به.",
+          codexMultiAgentV2Unreadable: "لا يستطيع Osuna التحقق من multi_agent_v2 الخاص بـ Codex",
+          codexMultiAgentV2UnreadableDetail:
+            "«Subagents بأي نموذج» مفعّل، لكن Osuna لم يستطع قراءة {{file}}: {{detail}}",
+          codexMultiAgentV2UnreadableFix:
+            "أصلح الخطأ في {{file}} ليصبح TOML صالحًا، ثم افتح هذه الصفحة مرة أخرى. إن كان multi_agent_v2 مفعّلًا هناك فأوقفه أيضًا.",
           howToFix: "طريقة الإصلاح",
           codexProfileOverride: 'ملف التعريف "{{profile}}" في Codex يتجاوز واجهات API الخارجية',
           codexProfileOverrideDetail:

@@ -1,5 +1,5 @@
 // 条目按模型资料的写法与默认推理档的取法移植自 magpie（https://github.com/yetone/magpie，internal/codexcat/codexcat.go 的
-// entriesAt、DefaultEffort、ModelDefault，internal/catalog/catalog.go 的 EffortRank、NearestEffort，internal/catalog/live.go 的 levelsOf）
+// entriesAt、DefaultEffort、ModelDefault、Stamp，internal/catalog/catalog.go 的 EffortRank、NearestEffort，internal/catalog/live.go 的 levelsOf）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。档位说明文字取自 openai/codex（Apache-2.0），同见该文件。
 
 import { CODEX_BASE_INSTRUCTIONS } from "./codex-base-instructions.js";
@@ -44,13 +44,18 @@ export type CodexModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: strin
 /**
  * `reasoningEffort` 是 config.toml 顶层的 model_reasoning_effort，没设或读不出为 null。
  * `factsFor` 查这家这个模型的已知资料；光秃秃的名字按最早开着、选了它的那家查（中转站也先发给那家）。
+ * `marksAgentsV1` 是「Codex Subagent 可用任意模型」：每个条目写 multi_agent_version = "v1"。
  */
-export function buildCodexModelCatalog(
-  state: ApiEndpointState,
-  reasoningEffort: string | null,
-  factsFor: CodexModelFactsLookup,
-): string {
-  const models: Array<Omit<CodexModelEntryInput, "priority" | "reasoningEffort">> = [];
+export function buildCodexModelCatalog(input: {
+  state: ApiEndpointState;
+  reasoningEffort: string | null;
+  factsFor: CodexModelFactsLookup;
+  marksAgentsV1: boolean;
+}): string {
+  const { state, reasoningEffort, factsFor, marksAgentsV1 } = input;
+  const models: Array<
+    Omit<CodexModelEntryInput, "priority" | "reasoningEffort" | "marksAgentsV1">
+  > = [];
   for (const model of usableModels(state)) {
     const endpoint = state.endpoints.find(
       (entry) => entry.enabled && entry.models.some((own) => own.id === model.id),
@@ -77,7 +82,7 @@ export function buildCodexModelCatalog(
     }
   }
   const entries = models.map((model, index) =>
-    codexModelEntry({ ...model, priority: index + 1, reasoningEffort }),
+    codexModelEntry({ ...model, priority: index + 1, reasoningEffort, marksAgentsV1 }),
   );
   return `${JSON.stringify({ models: entries }, null, 2)}\n`;
 }
@@ -92,6 +97,8 @@ export function codexEndpointEntries(input: {
   // config.toml 顶层的 model_reasoning_effort，没设为 null。
   reasoningEffort: string | null;
   factsFor: CodexModelFactsLookup;
+  // 「Codex Subagent 可用任意模型」开着。
+  marksAgentsV1: boolean;
 }): CodexModelEntry[] {
   const listed = endpointModelGroups(input.state).flatMap((group) =>
     group.models.map(({ id, model }) => ({ id, model, endpoint: group.endpoint })),
@@ -104,6 +111,7 @@ export function codexEndpointEntries(input: {
       priority: index + 1,
       facts: input.factsFor(endpoint, model.id),
       reasoningEffort: input.reasoningEffort,
+      marksAgentsV1: input.marksAgentsV1,
     }),
   );
 }
@@ -118,11 +126,22 @@ export interface CodexModelEntryInput {
   facts: ModelFacts;
   // config.toml 顶层的 model_reasoning_effort，没设为 null。
   reasoningEffort: string | null;
+  // 「Codex Subagent 可用任意模型」：写 multi_agent_version = "v1"，Codex 给这个模型的 Subagent 发明文任务（magpie Stamp）。
+  marksAgentsV1: boolean;
 }
+
+/**
+ * 多 Agent 版本（magpie CodexAgentsV1）：Codex 自己的 multi_agent_v2 没开时，按条目的 multi_agent_version 选 V1 或 V2
+ * （codex-rs core/src/config/mod.rs multi_agent_version_for_model）。V1 的任务以明文交给 Subagent，接口模型读得懂；
+ * V2 的任务由 OpenAI 服务端封存，只有 ChatGPT 账号的模型打得开。
+ */
+export const AGENTS_V1 = { multi_agent_version: "v1" };
+const UNMARKED = {};
 
 /** Codex 模型目录（models.json 格式）的一个条目。 */
 export function codexModelEntry(input: CodexModelEntryInput) {
   const { facts } = input;
+  const agentsVersion = input.marksAgentsV1 ? AGENTS_V1 : UNMARKED;
   const levels = codexModelLevels(facts);
   const context = facts.context ?? FALLBACK_CONTEXT;
   return {
@@ -158,6 +177,7 @@ export function codexModelEntry(input: CodexModelEntryInput) {
     supports_parallel_tool_calls: true,
     // 0.145 以前的 Codex 只对写了 true 的模型发档位（magpie Summaries）：有档位才写 true。
     supports_reasoning_summaries: levels.length > 0,
+    ...agentsVersion,
   };
 }
 

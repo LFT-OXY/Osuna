@@ -1049,6 +1049,110 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
+  test("Codex's forced Subagent model and Subagents on any model: a failed save stays in place, saved ones reach the gateway's settings and Codex's model list", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["glm-5.3", "kimi-k2"],
+    });
+    const relayB = await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["qwen-3"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      defaultModelId: "kimi-k2",
+    });
+    const codexDir = path.join(cliHome, "codex");
+    // 两项都存在 Osuna 自己的目录里（endpoints.json 与给 Codex 的模型目录），不写 config.toml。
+    const catalogPath = /model_catalog_json = "([^"]+)"/.exec(await readCodexConfig())?.[1];
+    if (catalogPath === undefined) throw new Error("Expected Codex's model list in config.toml");
+    const forcedModel = async () =>
+      (await client.apiEndpointList("codex")).agents?.codex?.forcedSubagentModelId ?? null;
+    const catalogText = () => readFile(catalogPath, "utf8");
+    try {
+      await openAgentPage(page, "codex");
+      const section = agentSection(page);
+      const forced = section.getByTestId("agent-api-endpoints-forced-subagent-model-trigger");
+      const anyModel = section.getByTestId("agent-api-endpoints-any-subagent-model");
+      const saveError = section.getByTestId("agent-api-endpoints-error");
+
+      await test.step("nothing is forced and the switch is off at first", async () => {
+        await expect(forced).toHaveText("Not forced");
+        await expect(anyModel).not.toBeChecked();
+        await expect(section).toContainText("Codex Subagents can use any model");
+      });
+
+      await test.step("a model whose endpoint was turned off meanwhile is refused, and the row stays", async () => {
+        await forced.click();
+        await client.apiEndpointSetEndpointState({ endpointId: relayB, enabled: false });
+        await page.getByTestId("agent-api-endpoints-forced-subagent-model-option-qwen-3").click();
+        await expect(saveError).toContainText(
+          "Couldn't change the API endpoint settings for Codex",
+        );
+        await expect(saveError).toContainText("qwen-3 is not one of the models selected");
+        await expect(forced).toHaveText("Not forced");
+        expect(await forcedModel()).toBeNull();
+        await section.getByRole("button", { name: "Dismiss" }).click();
+      });
+
+      await test.step("Codex's model list that can't be written leaves the switch off", async () => {
+        const saved = await catalogText();
+        // 目录文件的位置被一个文件夹占着：改写不成。
+        await rm(catalogPath);
+        await mkdir(path.join(catalogPath, "held"), { recursive: true });
+        try {
+          await anyModel.click();
+          await expect(saveError).toContainText(
+            "Couldn't change the API endpoint settings for Codex",
+          );
+          await expect(anyModel).not.toBeChecked();
+        } finally {
+          await rm(catalogPath, { recursive: true, force: true });
+          await writeFile(catalogPath, saved);
+        }
+        await section.getByRole("button", { name: "Dismiss" }).click();
+      });
+
+      await test.step("saved: the gateway forces the model, and Codex's model list says V1", async () => {
+        const configBefore = await readCodexConfig();
+        await forced.click();
+        await page.getByTestId("agent-api-endpoints-forced-subagent-model-option-glm-5.3").click();
+        await expect(forced).toHaveText("glm-5.3");
+        await expect.poll(forcedModel).toBe("glm-5.3");
+        await anyModel.click();
+        await expect(anyModel).toBeChecked();
+        await expect.poll(catalogText).toContain('"multi_agent_version": "v1"');
+        expect(await readCodexConfig()).toBe(configBefore);
+      });
+
+      await test.step("Codex's own multi_agent_v2 on is told, with how to fix it", async () => {
+        const configPath = path.join(codexDir, "config.toml");
+        await writeFile(
+          configPath,
+          `${await readCodexConfig()}\n[features]\nmulti_agent_v2 = true\n`,
+        );
+        await openAgentPage(page, "codex");
+        const notice = agentSection(page).getByTestId(
+          "agent-api-endpoints-issue-codexMultiAgentV2On",
+        );
+        await expect(notice).toContainText(
+          "Codex's own multi_agent_v2 overrides Subagents on any model",
+        );
+        await notice.getByRole("button", { name: "How to fix" }).click();
+        await expect(notice.getByTestId("agent-api-endpoints-issue-fix-steps")).toContainText(
+          "set multi_agent_v2 = false or delete it",
+        );
+      });
+    } finally {
+      await rm(path.join(codexDir, "config.toml"), { force: true });
+    }
+  });
+
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
     page,
   }) => {

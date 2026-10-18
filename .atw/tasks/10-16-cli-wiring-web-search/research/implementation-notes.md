@@ -704,3 +704,33 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「Codex's default Subagent model and memory model」：ChatGPT 登录时 Codex 自己的模型在快照里、档位按它自己的、换模型拿掉不收的档位、手改成它的被跟且不写回；四个键与关掉还原；档位按模型校验、快照选项、换 Subagent 模型或主模型后拿掉不收的档位；ChatGPT 接法写成「接口标识/模型名」；只有 Codex 有记忆模型、模型要在售；手改成在售模型被跟、不在售的报被改过；接口关掉后两项回到没设、表拿掉。
 - app：`agent-settings.test.ts`；浏览器 `settings-api-endpoints.spec.ts`：记忆模型在只读目录下保存失败留在原处、四个键写进 config.toml、关掉开关拿掉。
 - 截图（无头 Chromium、临时 CODEX_HOME、假数据）：`screenshots/23-codex-page_subagent-and-memory-models-set_{desktop-1280,compact-390}_{en,zh}.png`。
+
+## 24 Codex 的强制 Subagent 模型、派 Subagent 时的完整清单、「Codex Subagent 可用任意模型」
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 认出 Subagent 的请求 | `callKind` 读 `x-openai-subagent`，`usage.PurposeOf` 把 `collab_spawn`、`thread_spawn`、`agent_job` 归成 Subagent | 同（`gateway/codex-subagents.ts`，`callKind` 从 `codex-side-calls.ts` 导出）。Codex @8c076942 发的是 `thread_spawn`（`protocol/src/protocol.rs:3183`） |
+| 强制模型改不改 | `codexSubagentPick`：没设、与主对话相同不改；没人提供、或任务被 ChatGPT 封存而它不是 ChatGPT 账号的模型时照主对话的发并说明原因；网关 key 不许用的也不改 | 同，原因写进日志；Osuna 没有网关 key 的限制。API key 接法「有人提供」按 `resolveGatewayRoute`；ChatGPT 接法另认 Codex 自己的模型（`models_cache.json` 可见的），光秃秃的名字同名时归它自己（与工单 23 一致），只有它打得开封存的任务 |
+| 封存的任务 | `sealedTaskIn`：去掉标题是「Message Type: MESSAGE」的封存消息后仍有封存的 agent_message | 同（`hasSealedAgentTask`，同一个 `gAAAAA…` 正则） |
+| 强制模型不再有人提供 | `SetCodexSubagentModel` 照存，网关照主对话的发直到又有人提供 | 同：`settleAgentSettings` 不清它；设的时候仍要是在售的（同工单 23 的下拉） |
+| 改到哪 | ChatGPT 后端路径上光秃秃的模型在 `codexBackend` 里改，带斜杠的在 `serveAgent` 里改 | 都在入口改：`/v1/responses`（API key 接法）在 `routeAgentRequest` 读出请求体后改；ChatGPT 后端路径在 `serveChatGptBackend` 读出模型名后改，改到 Codex 自己的模型转 ChatGPT，改到接口模型走接口 |
+| spawn_agent 补清单 | `spawnAgentModels`：含 `"spawn_agent"` 与「Available model overrides」才改；`tools`（含 namespace 内层）与 `tool_search_output.tools`；补在 Codex 那段后面，最多 200 个，已列的跳过 | 同（`gateway/codex-spawn-models.ts`），文字照搬（「More models that may be set as `model`:」） |
+| 补哪些模型 | `/v1`：Codex 拿到的目录；CodexPath：Codex 自己的（缓存里可见的，按 priority）再接 magpie 的；V1 关着、主对话在 ChatGPT 自己的模型上时只补 Codex 自己的 | 同：API key 接法补目录里 /model 列着的光秃秃名字；ChatGPT 接法补 `models_cache.json` 里可见的再接 `codexEndpointEntries` 的「接口标识/模型名」，开关关着且主对话光秃秃时只补 Codex 自己的 |
+| 「可用任意模型」标哪些 | `CodexAgentsV1`：ChatGPT 账号自己的条目（`own`）与 `codex/`、含 OpenAI 的分组条目标 v1，别家的不标 | 工单写明接口模型也标：API key 接法目录里每个条目、ChatGPT 接法合并清单里 ChatGPT 自带的与接口的都标。比 magpie 多标别家的条目；Codex 对没写 `multi_agent_version` 的条目按 feature 取版本（`codex-rs core/src/config/mod.rs:1660-1667`），标 v1 只是写明，不改变 multi_agent_v2 关着时的结果 |
+| 开关一换 Codex 重拉 | `PolicyTag`：清单标记前加 `v1.` | 同：`agentsV1Tag`，`+osuna-v1.<hash>`；API key 接法目录内容变了照常重写文件 |
+| 缓存里的 v1 | `Remember` 记下后端给的版本（`codex-agent-versions.json`），`CacheEntries` 读到标过 V1 的缓存时放回 | 同（`codex-agent-versions.ts`，文件在 `$PASEO_HOME/api-endpoints/`）：ChatGPT 的清单到了就记，拿不到 ChatGPT 的清单改用缓存时、缓存标记带 `v1.` 就放回 |
+| multi_agent_v2 盖过 | `codexSubAgentsV1Warning`：开关开着且经 magpie 时读整份 config.toml；`[features]` 的布尔值或 `[features.multi_agent_v2]` 的 `enabled`，三种写法；旧式 `profile` 的 features 盖过顶层；读不了另一条，不当作没开；不写 | 同（`readCodexMultiAgentV2`，提示区 `codex_multi_agent_v2_on` / `codex_multi_agent_v2_unreadable`），只在 Codex 总开关开着时查；两条都只给「如何修复」 |
+
+### 要判断的地方
+
+- **提示文案**：magpie 的英文照意思改成 Osuna 的说法（「API endpoint models」），另加修复步骤（magpie 只有一句话，「如何修复」是工单要的）。读不了配置时 `config_unparsable` 那条也在，两条并列（magpie 同样 Check 与 V1 提示各报各的）。
+- **界面**：两行放在默认 Subagent 档位之后、记忆模型之前；强制模型的下拉选项与默认 Subagent 模型相同（daemon 合好的 `sideModelOptions`）。
+
+### 测试
+
+- 纯逻辑：`codex-spawn-models.test.ts`（namespace、tool_search_output、200 个上限、不改的四种）；`codex-subagents.test.ts`（三种写法、不改的情况、没人提供、封存的任务与消息）；`codex-config-patch.test.ts`「Codex's own multi_agent_v2」（三种写法、false、不认的值、profile 盖过与不盖、没文件、读不懂）；`codex-model-catalog.test.ts` 跟着改签名。
+- daemon 端到端：`api-endpoint-default-model.e2e.test.ts`「Codex's forced Subagent model and Subagents on any model」（只给 Codex、要在售、不碰 config.toml；目录每个条目标 v1、关掉拿掉；三种写法与 `[features.multi_agent_v2]` 表报提示、false 与开关关着不报；读不懂另报）。`api-endpoint-gateway.e2e.test.ts`（Subagent 请求到达假上游时是强制模型、主对话与 review 不变；没人提供、封存的任务照主对话的发；spawn_agent 补上其余模型、不带的请求不变）。`api-endpoint-chatgpt-backend.e2e.test.ts`「Subagents of a Codex signed in with ChatGPT」（合并清单标 v1 与标记、关着照 ChatGPT 给的；拿不到 ChatGPT 时缓存里的 v1 放回；ChatGPT 自带模型上的 Subagent 改到接口模型、不带 ChatGPT 登录；改到 Codex 自己的模型转 ChatGPT；封存的任务留在 ChatGPT；spawn_agent 补的清单按开关与主对话所在）。
+- app：`agent-settings.test.ts`；浏览器 `settings-api-endpoints.spec.ts`「Codex's forced Subagent model and Subagents on any model」：接口在选的同时被关掉时保存被拒、原处不变；模型目录写不进时开关留在关；保存后中转站读到强制模型、目录标 v1、config.toml 不变；multi_agent_v2 开着时提示与「如何修复」。
+- 截图（无头 Chromium、临时 CODEX_HOME、假数据）：`screenshots/24-codex-page_any-model-on-overridden-by-multi-agent-v2_desktop-1280_{en,zh}.png`。

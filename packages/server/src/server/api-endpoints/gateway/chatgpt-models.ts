@@ -7,7 +7,18 @@ import https from "node:https";
 import type { Request, Response } from "express";
 import type pino from "pino";
 import type { CodexModelEntry } from "../codex-model-catalog.js";
-import { codexCachedModels, readCodexModelsCache, withListTag } from "../codex-models-cache.js";
+import {
+  isAgentsV1Marked,
+  markedAgentsV1,
+  rememberAgentVersions,
+  restoredAgentVersions,
+} from "../codex-agent-versions.js";
+import {
+  codexCachedModels,
+  codexModelsCacheEtag,
+  readCodexModelsCache,
+  withListTag,
+} from "../codex-models-cache.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { relayedHeaders, type ChatGptBases } from "./chatgpt-backend.js";
 
@@ -25,11 +36,16 @@ const MAX_LIST_BYTES = 16 * 1024 * 1024;
 // 接口模型排在 ChatGPT 自带模型之后（magpie：len(own)+100 起）。
 const ENDPOINT_PRIORITY_GAP = 100;
 
-/** 接口模型那部分清单：条目（priority 从 1 起）、它的标记、读 Codex 上次清单用的 CODEX_HOME。 */
+/**
+ * 接口模型那部分清单：条目（priority 从 1 起）、它的标记、读 Codex 上次清单用的 CODEX_HOME，
+ * 「Codex Subagent 可用任意模型」开着没有（ChatGPT 自带模型也标成 V1），以及记 ChatGPT 原来给的多 Agent 版本的文件。
+ */
 export interface ChatGptModelsListing {
   entries: CodexModelEntry[];
   tag: string;
   codexHome: string;
+  marksAgentsV1: boolean;
+  agentVersionsPath: string;
 }
 
 /** ChatGPT 自带模型原样在前，接口模型排在它们后面。 */
@@ -73,12 +89,41 @@ export async function answerChatGptModels(input: {
     etag = asked.etag;
   } else {
     input.logger.info({ why: asked.why }, "ChatGPT's model list missing; using Codex's last one");
-    own = codexCachedModels(readCodexModelsCache(listing.codexHome));
+    own = codexLastOwnModels(listing);
   }
+  if (asked.kind === "list") rememberVersions({ listing, models: own, logger: input.logger });
+  if (listing.marksAgentsV1) own = markedAgentsV1(own);
   res
     .status(200)
     .set("etag", withListTag(etag, listing.tag))
     .json({ models: mergeChatGptModels({ own, endpoints: listing.entries }) });
+}
+
+/**
+ * Codex 上次存下的清单里 ChatGPT 自带的那些：那份清单是开关开着时给的，版本换回 ChatGPT 原来给的；
+ * 不是的，就是 ChatGPT 给的原样，记下来（magpie CacheEntries）。
+ */
+function codexLastOwnModels(listing: ChatGptModelsListing): unknown[] {
+  const text = readCodexModelsCache(listing.codexHome);
+  const own = codexCachedModels(text);
+  const filePath = listing.agentVersionsPath;
+  if (isAgentsV1Marked(codexModelsCacheEtag(text))) {
+    return restoredAgentVersions({ filePath, models: own });
+  }
+  return own;
+}
+
+/** 记下 ChatGPT 给的多 Agent 版本；写不成只记日志，清单照给。 */
+function rememberVersions(input: {
+  listing: ChatGptModelsListing;
+  models: unknown[];
+  logger: pino.Logger;
+}): void {
+  try {
+    rememberAgentVersions({ filePath: input.listing.agentVersionsPath, models: input.models });
+  } catch (error) {
+    input.logger.warn({ err: error }, "Could not keep ChatGPT's multi-agent versions");
+  }
 }
 
 function askChatGptModels(input: {

@@ -35,6 +35,8 @@ function view(input: {
   subagentModelId?: string | null;
   subagentThinkingOptionId?: string | null;
   memoryModelId?: string | null;
+  forcedSubagentModelId?: string | null;
+  allowsAnySubagentModel?: boolean;
   lockedThinkingOptionId?: string | null;
   subagentThinkingOptions?: { id: string; label: string }[] | null;
   sideModelOptions?: { id: string; model: string; endpointName: string | null }[];
@@ -55,6 +57,8 @@ function view(input: {
           subagentModelId: input.subagentModelId,
           subagentThinkingOptionId: input.subagentThinkingOptionId,
           memoryModelId: input.memoryModelId,
+          forcedSubagentModelId: input.forcedSubagentModelId,
+          allowsAnySubagentModel: input.allowsAnySubagentModel,
         },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
@@ -274,6 +278,39 @@ describe("the settings issues on an agent page", () => {
         kind: "settingsHasComments",
         params: { file: "/home/me/.claude/settings.json" },
         message: "has comments",
+        actions: [],
+        hasFixSteps: true,
+      },
+    ]);
+  });
+
+  it("offers fix steps, not actions, when Codex's own multi_agent_v2 overrides Subagents on any model or can't be checked", () => {
+    const result = view({
+      provider: "codex",
+      endpoints: [],
+      agentIssues: {
+        codex: [
+          { code: "codex_multi_agent_v2_on", params: { file: "c.toml" }, message: "on" },
+          {
+            code: "codex_multi_agent_v2_unreadable",
+            params: { file: "c.toml", detail: "bad" },
+            message: "unreadable",
+          },
+        ],
+      },
+    });
+    expect(result.issues).toEqual([
+      {
+        kind: "codexMultiAgentV2On",
+        params: { file: "c.toml" },
+        message: "on",
+        actions: [],
+        hasFixSteps: true,
+      },
+      {
+        kind: "codexMultiAgentV2Unreadable",
+        params: { file: "c.toml", detail: "bad" },
+        message: "unreadable",
         actions: [],
         hasFixSteps: true,
       },
@@ -566,6 +603,8 @@ describe("Codex's default Subagent model and memory model", () => {
       subagentModelId: "relay-a/kimi-k2",
       subagentThinkingOptionId: "high",
       memoryModelId: "gpt-5.5",
+      forcedSubagentModelId: "glm-5.3",
+      allowsAnySubagentModel: true,
       subagentThinkingOptions: levels,
       sideModelOptions,
     });
@@ -574,6 +613,8 @@ describe("Codex's default Subagent model and memory model", () => {
       subagentModel: named,
       subagentThinking: { value: "high", options: levels },
       memoryModel: own,
+      forcedSubagentModel: bare,
+      allowsAnySubagentModel: true,
     });
     expect(shown.sideModels).toBeNull();
   });
@@ -593,6 +634,8 @@ describe("Codex's default Subagent model and memory model", () => {
       subagentModel: null,
       subagentThinking: { value: null, options: levels },
       memoryModel: null,
+      forcedSubagentModel: null,
+      allowsAnySubagentModel: false,
     });
   });
 

@@ -53,6 +53,10 @@ export type AgentIssueKind =
   | "claudeAiLoginTokenEmpty"
   // CLI 自己把模型换成了哪家接口都没有的（params.model 为空串是删掉了模型，params.defaultModel 是 Osuna 的默认模型）。
   | "modelReplaced"
+  // 「Codex Subagent 可用任意模型」开着，Codex 自己的 multi_agent_v2 也开着、盖过它（params.file）。
+  | "codexMultiAgentV2On"
+  // 「Codex Subagent 可用任意模型」开着，却读不了 config.toml（params.file、detail）。
+  | "codexMultiAgentV2Unreadable"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -76,6 +80,8 @@ const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   claude_ai_login_token_set: "claudeAiLoginTokenSet",
   claude_ai_login_token_empty: "claudeAiLoginTokenEmpty",
   model_replaced: "modelReplaced",
+  codex_multi_agent_v2_on: "codexMultiAgentV2On",
+  codex_multi_agent_v2_unreadable: "codexMultiAgentV2Unreadable",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
@@ -91,6 +97,9 @@ const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   claudeAiLoginTokenEmpty: ["keepClaudeAiLogin", "reapply"],
   // 照 magpie 的 replaced：写回默认模型，或留下 CLI 的模型不再提示。
   modelReplaced: ["reapply", "keepReplacedModel"],
+  // Osuna 不改 Codex 自己的 multi_agent_v2：只给「如何修复」。
+  codexMultiAgentV2On: [],
+  codexMultiAgentV2Unreadable: [],
   unknown: [],
 };
 
@@ -98,6 +107,8 @@ const KINDS_WITH_FIX_STEPS: ReadonlySet<AgentIssueKind> = new Set([
   "settingsHasComments",
   "cloudSwitchOn",
   "managedBaseUrl",
+  "codexMultiAgentV2On",
+  "codexMultiAgentV2Unreadable",
 ]);
 
 function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
@@ -152,7 +163,8 @@ export interface ClaudeSideModelsView {
 }
 
 /**
- * Codex 的默认 Subagent 模型与它的思考档位、记忆模型（PRD 第 33 条）：模型为 null 是没设（Subagent 跟主对话，记忆用 Codex 自己的）；
+ * Codex 的默认 Subagent 模型与它的思考档位、记忆模型、强制 Subagent 模型与「Codex Subagent 可用任意模型」（PRD 第 33 条）：
+ * 模型为 null 是没设（Subagent 跟主对话，记忆用 Codex 自己的）；
  * Subagent 思考档位的选项由主机按 Subagent 跑的模型给。
  */
 export interface CodexSideModelsView {
@@ -161,6 +173,10 @@ export interface CodexSideModelsView {
   subagentModel: DefaultModelOption | null;
   subagentThinking: SubagentThinkingView;
   memoryModel: DefaultModelOption | null;
+  // 强制 Subagent 模型：null 为没设，Subagent 照主对话挑的模型跑。
+  forcedSubagentModel: DefaultModelOption | null;
+  // 「Codex Subagent 可用任意模型」开着没有。
+  allowsAnySubagentModel: boolean;
 }
 
 export interface SubagentThinkingView {
@@ -344,6 +360,8 @@ function codexSideModelsView(input: {
       options: subagentThinkingOptions,
     },
     memoryModel: displayedDefaultModel(modelOptions, agent.memoryModelId ?? null),
+    forcedSubagentModel: displayedDefaultModel(modelOptions, agent.forcedSubagentModelId ?? null),
+    allowsAnySubagentModel: agent.allowsAnySubagentModel === true,
   };
 }
 

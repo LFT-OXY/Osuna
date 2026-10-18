@@ -1,4 +1,5 @@
-// CC Switch 镜像表的用例取自 magpie（https://github.com/yetone/magpie，internal/agent/codex_ccswitch_test.go 的 TestCodexTakesCCSwitchMirrorForItsThreads）
+// CC Switch 镜像表的用例取自 magpie（https://github.com/yetone/magpie，internal/agent/codex_ccswitch_test.go 的 TestCodexTakesCCSwitchMirrorForItsThreads；
+// multi_agent_v2 的写法照 internal/agent/codex.go 的 multiAgentV2OnIn、codexMultiAgentV2On）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, it } from "vitest";
@@ -11,6 +12,7 @@ import {
   isCodexMirrorKey,
   keepCodexCliModel,
   readCodexCliPicks,
+  readCodexMultiAgentV2,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -1147,6 +1149,45 @@ generate_memories = true
       subagent: { now: "gpt-mine" },
       subagentLevel: null,
       memory: null,
+    });
+  });
+});
+
+describe("Codex's own multi_agent_v2", () => {
+  it.each([
+    { text: "[features]\nmulti_agent_v2 = true\n", kind: "on" },
+    { text: "[features]\nmulti_agent_v2 = { enabled = true }\n", kind: "on" },
+    { text: "[features]\nmulti_agent_v2.enabled = true\n", kind: "on" },
+    { text: "[features.multi_agent_v2]\nenabled = true\n", kind: "on" },
+    { text: "[features]\nmulti_agent_v2 = false\n", kind: "off" },
+    // 表里没写 enabled、不是布尔值的都不认（Codex 自己会拒绝这样的文件）。
+    { text: "[features.multi_agent_v2]\nmax_threads = 4\n", kind: "off" },
+    { text: '[features]\nmulti_agent_v2 = "true"\n', kind: "off" },
+    { text: 'model = "gpt-5.5"\n', kind: "off" },
+    // 旧式 profile 选中的那张表写了就盖过顶层，没写就照顶层。
+    {
+      text: 'profile = "work"\n[features]\nmulti_agent_v2 = true\n[profiles.work.features]\nmulti_agent_v2 = false\n',
+      kind: "off",
+    },
+    {
+      text: 'profile = "work"\n[profiles.work.features]\nmulti_agent_v2 = true\n',
+      kind: "on",
+    },
+    {
+      text: 'profile = "work"\n[features]\nmulti_agent_v2 = true\n[profiles.work]\nmodel = "x"\n',
+      kind: "on",
+    },
+    // 没被选中的 profile 不算。
+    { text: "[profiles.work.features]\nmulti_agent_v2 = true\n", kind: "off" },
+  ])("$text is $kind", ({ text, kind }) => {
+    expect(readCodexMultiAgentV2(text)).toEqual({ kind });
+  });
+
+  it("no config.toml is off, and one that can't be read is said so, never taken for off", () => {
+    expect(readCodexMultiAgentV2(null)).toEqual({ kind: "off" });
+    expect(readCodexMultiAgentV2("model = \n")).toEqual({
+      kind: "unparsable",
+      message: expect.any(String),
     });
   });
 });

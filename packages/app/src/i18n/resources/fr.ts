@@ -2692,6 +2692,14 @@ export const fr: TranslationResources = {
           "Résume en arrière-plan les conversations passées dans les mémoires de {{agent}}. Utilisé seulement quand la fonction mémoires de {{agent}} est activée ; Osuna ne l'active pas.",
         memoryModelUnset: "Celui de {{agent}}",
         memoryModelPick: "Modèle de mémoire pour {{agent}}",
+        forcedSubagentModel: "Modèle de Subagent imposé",
+        forcedSubagentModelHint:
+          "Chaque Subagent l'utilise, quel que soit le modèle indiqué par la conversation principale. La configuration de Codex reste telle quelle.",
+        forcedSubagentModelUnset: "Non imposé",
+        forcedSubagentModelPick: "Modèle de Subagent imposé pour {{agent}}",
+        anySubagentModel: "Les Subagents de {{agent}} peuvent utiliser n'importe quel modèle",
+        anySubagentModelHint:
+          "Marque les modèles listés par {{agent}} en multi-agent V1, pour qu'une conversation principale sur un modèle GPT puisse lancer des Subagents sur les modèles des API endpoints. Le multi_agent_v2 de {{agent}} lui-même prend le dessus.",
         connection: {
           kept: "{{agent}} utilise déjà les points d'accès API. Il reste sur {{model}}.",
           again:
@@ -2765,6 +2773,17 @@ export const fr: TranslationResources = {
             "Les réglages gérés de {{agent}} ({{file}}) fixent ANTHROPIC_BASE_URL à {{url}}. Les réglages gérés l'emportent sur l'adresse de la passerelle qu'écrit Osuna.",
           managedBaseUrlFix:
             "Demandez à l'administrateur de cet ordinateur de retirer ANTHROPIC_BASE_URL des réglages gérés de {{agent}}. Modifier ce fichier demande des droits d'administrateur. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
+          codexMultiAgentV2On:
+            "Le multi_agent_v2 de Codex prend le dessus sur « Subagents sur n'importe quel modèle »",
+          codexMultiAgentV2OnDetail:
+            "{{file}} active multi_agent_v2, qui remplace le multi-agent V1 dont les modèles des API endpoints ont besoin : les Subagents d'une conversation principale GPT ne peuvent pas tourner dessus. Osuna ne modifie pas ce réglage.",
+          codexMultiAgentV2OnFix:
+            "Ouvrez {{file}}. Sous [features], mettez multi_agent_v2 = false ou supprimez-le ; dans une table [features.multi_agent_v2], mettez enabled = false. Enregistrez, puis relancez Codex. Les conversations déjà commencées gardent leur version de départ.",
+          codexMultiAgentV2Unreadable: "Osuna ne peut pas vérifier le multi_agent_v2 de Codex",
+          codexMultiAgentV2UnreadableDetail:
+            "« Subagents sur n'importe quel modèle » est activé, mais Osuna n'a pas pu lire {{file}} : {{detail}}",
+          codexMultiAgentV2UnreadableFix:
+            "Corrigez l'erreur dans {{file}} pour qu'il soit en TOML valide, puis rouvrez cette page. Si multi_agent_v2 y est activé, désactivez-le aussi.",
           howToFix: "Comment corriger",
           codexProfileOverride:
             "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",

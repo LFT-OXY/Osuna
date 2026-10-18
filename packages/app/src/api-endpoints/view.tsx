@@ -142,6 +142,16 @@ function AgentApiEndpoints({
     (memoryModelId: string | null) => setAgentSettings(provider, { enabled: true, memoryModelId }),
     [provider, setAgentSettings],
   );
+  const handleForcedSubagentModelChange = useCallback(
+    (forcedSubagentModelId: string | null) =>
+      setAgentSettings(provider, { enabled: true, forcedSubagentModelId }),
+    [provider, setAgentSettings],
+  );
+  const handleAnySubagentModelChange = useCallback(
+    (allowsAnySubagentModel: boolean) =>
+      setAgentSettings(provider, { enabled: true, allowsAnySubagentModel }),
+    [provider, setAgentSettings],
+  );
   // 总开关开着、关着都能设，开关保持原样。
   const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
   const handleKeepClaudeAiLoginChange = useCallback(
@@ -207,6 +217,8 @@ function AgentApiEndpoints({
       onSubagentModelChange={handleSubagentModelChange}
       onSubagentThinkingChange={handleSubagentThinkingChange}
       onMemoryModelChange={handleMemoryModelChange}
+      onForcedSubagentModelChange={handleForcedSubagentModelChange}
+      onAnySubagentModelChange={handleAnySubagentModelChange}
       onManage={handleManage}
       // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

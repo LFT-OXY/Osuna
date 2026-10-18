@@ -80,6 +80,7 @@ import {
   codexKeepsOwnModel,
   readCodexCatalogPath,
   readCodexModel,
+  readCodexMultiAgentV2,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -113,6 +114,7 @@ import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
 import { FIXED_EFFORTS, askedAt } from "./gateway/fixed-effort.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
+import { agentsV1Tag } from "./codex-agent-versions.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
@@ -269,6 +271,9 @@ export interface ApiEndpointAgentSettingsInput {
   subagentModelId?: string | null;
   subagentThinkingOptionId?: string | null;
   memoryModelId?: string | null;
+  // 强制 Subagent 模型与「Codex Subagent 可用任意模型」，只给 Codex；省略即不变，模型 null 为不设。
+  forcedSubagentModelId?: string | null;
+  allowsAnySubagentModel?: boolean;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -354,7 +359,11 @@ type ApiEndpointAgentIssueCode =
   // 保留 claude.ai 登录关着，口令却是空的或没了（params.how：empty / missing）。
   | "claude_ai_login_token_empty"
   // CLI 自己把模型换成了哪家接口都没有的（params.model：换成的模型，没设为空串；params.defaultModel：Osuna 的默认模型）。
-  | "model_replaced";
+  | "model_replaced"
+  // 「Codex Subagent 可用任意模型」开着，config.toml 里 Codex 自己的 multi_agent_v2 也开着、盖过它（params.file）。
+  | "codex_multi_agent_v2_on"
+  // 「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2（params.file、detail）。
+  | "codex_multi_agent_v2_unreadable";
 
 /** 「保留当前设置」回应的提示：model_replaced 只留下 CLI 的模型；省略为关掉总开关、不改回文件。 */
 export type KeepCurrentSettingsCode = "model_replaced";
@@ -529,6 +538,8 @@ export class ApiEndpointService {
       const replaced = this.modelReplacedIssue(state, agentProvider);
       if (replaced) statuses[agentProvider].issues.push(replaced);
     }
+    const multiAgentV2 = this.codexMultiAgentV2Issue(state);
+    if (multiAgentV2) statuses.codex.issues.push(multiAgentV2);
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
     if (state.agents.claude.enabled) {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));
@@ -1142,7 +1153,7 @@ export class ApiEndpointService {
         message: "Only Codex has a memory model",
       });
     }
-    let agent = input.agent;
+    let agent = this.withCodexSubagentRouting(input);
     if (backgroundModelId !== undefined) {
       agent = { ...agent, backgroundModelId: sideModel({ state, requested: backgroundModelId }) };
     }
@@ -1161,6 +1172,34 @@ export class ApiEndpointService {
     }
     const level = this.codexSubagentLevel({ state, agent, requested: subagentThinkingOptionId });
     return { ...agent, subagentThinkingOptionId: level };
+  }
+
+  /**
+   * 强制 Subagent 模型（magpie CodexSubagentModel）与「Codex Subagent 可用任意模型」（magpie CodexAgentsV1）：只有 Codex，
+   * 都不写 Codex 配置。模型取值同默认 Subagent 模型；省略的不变，null 为不设。
+   */
+  private withCodexSubagentRouting(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    agent: ApiEndpointAgentSettings;
+    requested: ApiEndpointAgentSettingsInput;
+  }): ApiEndpointAgentSettings {
+    const { state, provider, requested } = input;
+    const { forcedSubagentModelId, allowsAnySubagentModel } = requested;
+    const setsRouting = forcedSubagentModelId !== undefined || allowsAnySubagentModel !== undefined;
+    if (setsRouting && provider !== "codex") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "Only Codex has a forced Subagent model and Subagents on any model",
+      });
+    }
+    let agent = input.agent;
+    if (forcedSubagentModelId !== undefined) {
+      const forced = this.codexSideModel(state, forcedSubagentModelId);
+      agent = { ...agent, forcedSubagentModelId: forced };
+    }
+    if (allowsAnySubagentModel !== undefined) agent = { ...agent, allowsAnySubagentModel };
+    return agent;
   }
 
   /** Codex 的默认 Subagent 档位（magpie subagent_effort 的 Set）：Subagent 跑的模型收的才行，档位不清楚时都收。 */
@@ -1953,16 +1992,26 @@ export class ApiEndpointService {
   codexChatGptListing(): ChatGptModelsListing {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();
+    const marksAgentsV1 = state?.agents.codex.allowsAnySubagentModel === true;
     let entries: CodexModelEntry[] = [];
     if (state) {
       entries = codexEndpointEntries({
         state: this.retiredModels.listed(state),
         reasoningEffort: this.codexStartEffort(state),
         factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
+        marksAgentsV1,
       });
     }
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
-    return { entries, tag: codexListTag({ entries, defaultModelId }), codexHome };
+    let tag = codexListTag({ entries, defaultModelId });
+    if (marksAgentsV1) tag = agentsV1Tag(tag);
+    return {
+      entries,
+      tag,
+      codexHome,
+      marksAgentsV1,
+      agentVersionsPath: this.store.codexAgentVersionsPath,
+    };
   }
 
   /**
@@ -2285,11 +2334,12 @@ export class ApiEndpointService {
 
   /** 目录的默认档跟着默认思考档位，没设时跟着用户 config.toml 的 model_reasoning_effort；读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
-    return buildCodexModelCatalog(
-      this.retiredModels.listed(state),
-      this.codexStartEffort(state),
-      (endpoint, modelId) => this.modelFacts(endpoint, modelId),
-    );
+    return buildCodexModelCatalog({
+      state: this.retiredModels.listed(state),
+      reasoningEffort: this.codexStartEffort(state),
+      factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
+      marksAgentsV1: state.agents.codex.allowsAnySubagentModel === true,
+    });
   }
 
   /** Codex 新会话从哪一档起：默认思考档位（开关开着时），没设就是 config.toml 里用户自己的。 */
@@ -2679,6 +2729,34 @@ export class ApiEndpointService {
     if (trimTrailingSlashes(url) === trimTrailingSlashes(gatewayUrl)) return true;
     const base = proxyBase({ value: url, gateway: gatewayUrl });
     return base !== null && (await this.reachesGateway(base));
+  }
+
+  /**
+   * 「Codex Subagent 可用任意模型」开着、Codex 经过中转站时，Codex 自己的 multi_agent_v2 开着就盖过它（magpie codexSubAgentsV1Warning）：
+   * 只提示，Osuna 不改这个键。读不了文件时另一条，不当作没开。
+   */
+  private codexMultiAgentV2Issue(state: ApiEndpointState): AgentIssue | null {
+    const agent = state.agents.codex;
+    const isChecked = agent.enabled && agent.allowsAnySubagentModel === true;
+    if (!isChecked) return null;
+    const file = this.resolveCodexConfigPath();
+    const found = readCodexMultiAgentV2(readOptionalFile(file)?.toString("utf8") ?? null);
+    switch (found.kind) {
+      case "off":
+        return null;
+      case "on":
+        return {
+          code: "codex_multi_agent_v2_on",
+          params: { file },
+          message: `${file} turns Codex's own multi_agent_v2 on, which takes over the multi-agent V1 the API endpoint models ask for; turn it off in Codex's config to run Subagents on them`,
+        };
+      case "unparsable":
+        return {
+          code: "codex_multi_agent_v2_unreadable",
+          params: { file, detail: found.message },
+          message: `Subagents on any model is on, but Osuna couldn't read ${file} to check Codex's own multi_agent_v2`,
+        };
+    }
   }
 
   private inspectCodex(enabled: boolean): ApiEndpointFileStatus {

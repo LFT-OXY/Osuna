@@ -77,6 +77,9 @@ export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
  * backgroundModelId（后台小任务模型）只对 Claude Code 有意义；subagentModelId（Subagent 模型，Codex 是默认 Subagent 模型）
  * 与 subagentThinkingOptionId（它的思考档位）对两者都有意义；memoryModelId（记忆模型）只对 Codex 有意义。
  * 模型取值同 defaultModelId；null 或没有为没设，跟主模型（记忆模型没设用 Codex 自己的）。老 daemon 都不发。
+ * forcedSubagentModelId（强制 Subagent 模型）与 allowsAnySubagentModel（「Codex Subagent 可用任意模型」）只对 Codex 有意义：
+ * 前者不写 Codex 配置，中转站把 Subagent 的请求改到这个模型，null 或没有为没设；后者把给 Codex 的模型清单里的多 Agent 版本标成 v1，
+ * 没有即为关。老 daemon 都不发。
  */
 export const ApiEndpointAgentSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -88,6 +91,8 @@ export const ApiEndpointAgentSettingsSchema = z.object({
   subagentModelId: z.string().nullable().optional(),
   subagentThinkingOptionId: z.string().nullable().optional(),
   memoryModelId: z.string().nullable().optional(),
+  forcedSubagentModelId: z.string().nullable().optional(),
+  allowsAnySubagentModel: z.boolean().optional(),
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
@@ -193,7 +198,9 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
  * 同 ApiEndpointErrorSchema）、codex_profile_override（file、profile、keys）、
  * settings_has_comments（file：settings.json 带注释或尾随逗号，Claude Code 读不了）、
  * claude_ai_login_token_set（file：保留 claude.ai 登录开着，口令却被填回去）、
- * claude_ai_login_token_empty（file、how：empty / missing；保留 claude.ai 登录关着，口令却是空的或没了）。
+ * claude_ai_login_token_empty（file、how：empty / missing；保留 claude.ai 登录关着，口令却是空的或没了）、
+ * codex_multi_agent_v2_on（file：「Codex Subagent 可用任意模型」开着，config.toml 里 Codex 自己的 multi_agent_v2 也开着、盖过它）、
+ * codex_multi_agent_v2_unreadable（file、detail：「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2）。
  * 后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
  */
 export const ApiEndpointAgentIssueSchema = z.object({
@@ -324,6 +331,8 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * 与它的思考档位；模型要是开着的接口的已选模型，Claude Code 的档位是 none、minimal、low、medium、high、xhigh、max 之一，
  * Codex 的档位要是 Subagent 模型（没设时是主模型）收的；null 为不设，省略即不变。老 daemon 忽略它们。
  * `memoryModelId`：只给 Codex，设记忆模型，取值同 subagentModelId。老 daemon 忽略它。
+ * `forcedSubagentModelId`、`allowsAnySubagentModel`：只给 Codex，设强制 Subagent 模型（取值同 subagentModelId，null 为不设）
+ * 与「Codex Subagent 可用任意模型」；省略即不变，老 daemon 忽略它们。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -339,6 +348,8 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   subagentModelId: z.string().nullable().optional(),
   subagentThinkingOptionId: z.string().nullable().optional(),
   memoryModelId: z.string().nullable().optional(),
+  forcedSubagentModelId: z.string().nullable().optional(),
+  allowsAnySubagentModel: z.boolean().optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema

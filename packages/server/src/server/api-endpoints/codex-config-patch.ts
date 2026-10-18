@@ -1,6 +1,7 @@
 // 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider、
 // isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段；Codex 自己换过的模型照 internal/agent/applied.go 的 Drift 与 Keep；
-// 默认 Subagent 模型与档位、记忆模型照 subagents、subagent_effort、memories 字段与 internal/edit/toml.go 的 SetTOMLKey、DelTOMLKey）
+// 默认 Subagent 模型与档位、记忆模型照 subagents、subagent_effort、memories 字段与 internal/edit/toml.go 的 SetTOMLKey、DelTOMLKey；
+// Codex 自己的 multi_agent_v2 照 internal/agent/codex.go 的 multiAgentV2OnIn、codexMultiAgentV2On）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
@@ -813,6 +814,45 @@ export function readCodexCatalogPath(text: string | null): string | null {
   if (parsed.kind === "unparsable") return null;
   const catalogPath = parsed.value.model_catalog_json;
   return typeof catalogPath === "string" ? catalogPath : null;
+}
+
+/** Codex 自己的 multi_agent_v2：开着、没开，或文件读不懂（不当作没开）。 */
+export type CodexMultiAgentV2 = { kind: "on" } | { kind: "off" } | Unparsable;
+
+/**
+ * config.toml 有没有明确打开 Codex 自己的 multi_agent_v2（它盖过模型条目的 multi_agent_version，
+ * codex-rs core/src/config/mod.rs multi_agent_version_override）：`[features]` 下的 `multi_agent_v2 = true`，
+ * 或 `[features.multi_agent_v2]` 里的 `enabled = true`，表、内联、点号三种写法都认；旧式顶层 `profile` 选中的
+ * `[profiles.<name>.features]` 写了的盖过顶层（Codex 0.133 的做法，同 magpie）。只读不写，没有文件算没开。
+ */
+export function readCodexMultiAgentV2(text: string | null): CodexMultiAgentV2 {
+  if (text === null) return { kind: "off" };
+  let value: unknown;
+  try {
+    value = getStaticTOMLValue(parse(splitBom(text)[1]));
+  } catch (error) {
+    return { kind: "unparsable", message: errorMessage(error) };
+  }
+  if (!isRecord(value)) return { kind: "unparsable", message: "config.toml is not a table" };
+  let isOn = multiAgentV2In(value.features) === "on";
+  const profileName = value.profile;
+  if (typeof profileName === "string" && profileName !== "") {
+    const profiles = isRecord(value.profiles) ? value.profiles : {};
+    const profile = profiles[profileName];
+    const inProfile = multiAgentV2In(isRecord(profile) ? profile.features : undefined);
+    if (inProfile !== "unset") isOn = inProfile === "on";
+  }
+  return isOn ? { kind: "on" } : { kind: "off" };
+}
+
+/** 一张 [features] 表里的 multi_agent_v2；不是布尔值、表里没写 enabled 的都算没写（Codex 自己会拒绝这样的文件）。 */
+function multiAgentV2In(features: unknown): "on" | "off" | "unset" {
+  if (!isRecord(features)) return "unset";
+  const flag = features.multi_agent_v2;
+  let enabled: unknown = flag;
+  if (isRecord(flag)) enabled = flag.enabled;
+  if (typeof enabled !== "boolean") return "unset";
+  return enabled ? "on" : "off";
 }
 
 /**

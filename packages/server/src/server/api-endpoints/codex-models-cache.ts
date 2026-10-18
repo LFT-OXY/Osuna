@@ -109,6 +109,13 @@ function levelsOf(model: unknown): string[] {
   return levels;
 }
 
+/** 缓存的 ETag；没有缓存、读不懂或没写为空串。 */
+export function codexModelsCacheEtag(text: string | null): string {
+  if (text === null) return "";
+  const cache = parseJson(text);
+  return isRecord(cache) ? etagOf(cache) : "";
+}
+
 function etagOf(cache: Record<string, unknown>): string {
   return typeof cache.etag === "string" ? cache.etag : "";
 }

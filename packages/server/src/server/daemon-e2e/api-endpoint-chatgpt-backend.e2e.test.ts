@@ -1,6 +1,8 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend_test.go 的
 // TestCodexOwnModelPassesThrough、TestCodexWebSocketUpgradeRequired、TestCodexNativeModelStaysNative；
-// codexModels、codexModelsWait、codexClientHeader、alphaSearchHere、codexCompact、plainCompact、localSummary 与 compactFails 的做法）
+// codexModels、codexModelsWait、codexClientHeader、alphaSearchHere、codexCompact、plainCompact、localSummary 与 compactFails 的做法；
+// 工单 24 照 codex_spawn_models_test.go 的 TestSpawnAgentNamesEveryModel、codex_subagent_test.go 的 TestCodexSubagentPutOnTheModelSet
+// 与 codexcat.go 的 CacheEntries）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -16,11 +18,13 @@ import os from "node:os";
 import path from "node:path";
 import * as zlib from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
+import { z } from "zod";
 import {
   CODEX_COMPACT_PROMPT,
   CODEX_SUMMARY_PREFIX,
 } from "../api-endpoints/gateway/codex-compaction.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
 
 /*
  * 中转站的 ChatGPT 后端那组路径（工单 08，ADR 0010）：真实 daemon + 本机假 ChatGPT 后端与假 OpenAI API，
@@ -126,6 +130,9 @@ async function start(input: {
   modelsWaitMs?: number;
   // Codex 的默认模型；缺省第一家的第一个模型。
   defaultModelId?: string;
+  // 强制 Subagent 模型与「Codex Subagent 可用任意模型」；缺省没设、关着。
+  forcedSubagentModelId?: string;
+  allowsAnySubagentModel?: boolean;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-chatgpt-backend-"));
   tempRoots.push(root);
@@ -153,6 +160,8 @@ async function start(input: {
       codex: {
         enabled: true,
         defaultModelId: input.defaultModelId ?? fixtures[0]!.models[0]!.id,
+        forcedSubagentModelId: input.forcedSubagentModelId ?? null,
+        allowsAnySubagentModel: input.allowsAnySubagentModel === true,
       },
     },
   };
@@ -1030,4 +1039,273 @@ describe("compaction fallbacks for an endpoint model", () => {
     );
     expect(relay.requests).toHaveLength(3);
   });
+});
+
+const VersionedListSchema = z.object({
+  models: z.array(z.object({ slug: z.string(), multi_agent_version: z.string().optional() })),
+});
+
+function versionsOf(reply: Reply): Array<[string, string | undefined]> {
+  const list = VersionedListSchema.parse(JSON.parse(reply.body.toString("utf8")));
+  return list.models.map((model) => [model.slug, model.multi_agent_version]);
+}
+
+const SpawnToolsSchema = z.object({
+  model: z.string(),
+  tools: z.array(z.object({ description: z.string() })).optional(),
+});
+
+const SPAWN_DESCRIPTION =
+  "Available model overrides (optional; inherited parent model is preferred):\n- `gpt-5.5`: GPT-5.5\nSpawn a sub-agent for a well-scoped task.";
+
+/** SPAWN_DESCRIPTION 在 Codex 那段清单后补上 lines。 */
+function spawnAdded(lines: string[]): string {
+  const more = `More models that may be set as \`model\`:\n${lines.join("\n")}`;
+  return SPAWN_DESCRIPTION.replace("\nSpawn", `\n${more}\nSpawn`);
+}
+
+function spawnTurn(model: string): Buffer {
+  const tool = {
+    type: "function",
+    name: "spawn_agent",
+    description: SPAWN_DESCRIPTION,
+    parameters: { type: "object", properties: { model: { type: "string" } } },
+  };
+  return Buffer.from(JSON.stringify({ model, input: "hi", stream: true, tools: [tool] }));
+}
+
+function sentOf(request: RecordedRequest | undefined) {
+  return SpawnToolsSchema.parse(JSON.parse(request?.body.toString("utf8") ?? "{}"));
+}
+
+const COMPLETED_STREAM = sse(
+  '{"type":"response.created","response":{"id":"r1"}}',
+  '{"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":1,"output_tokens":1}}}',
+);
+
+function answerStream(_request: RecordedRequest, res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.end(COMPLETED_STREAM);
+}
+
+const OWN_CACHE = {
+  fetched_at: "2026-10-18T00:00:00Z",
+  etag: '"list-1"',
+  models: [
+    { slug: "gpt-5.5", display_name: "GPT-5.5", priority: 1, visibility: "list" },
+    { slug: "gpt-5.4-mini", display_name: "GPT-5.4 Mini", priority: 2, visibility: "list" },
+  ],
+};
+
+describe("Subagents of a Codex signed in with ChatGPT", () => {
+  test("Subagents on any model mark ChatGPT's own and the endpoint models multi-agent V1, the list's mark saying so; off, they are as ChatGPT gave them", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: [{ ...CHATGPT_MODELS[0], multi_agent_version: "v2" }] }));
+    };
+    const on = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      allowsAnySubagentModel: true,
+    });
+
+    const marked = await send({
+      url: `${on.codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(versionsOf(marked)).toEqual([
+      ["gpt-5.5", "v1"],
+      ["relay-a/gpt-5.5", "v1"],
+    ]);
+    expect(marked.headers.etag).toMatch(/^W\/"list-1\+osuna-v1\.[0-9a-f]+"$/);
+
+    const off = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
+    const plain = await send({
+      url: `${off.codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    expect(versionsOf(plain)).toEqual([
+      ["gpt-5.5", "v2"],
+      ["relay-a/gpt-5.5", undefined],
+    ]);
+    expect(plain.headers.etag).toMatch(/^W\/"list-1\+osuna-[0-9a-f]+"$/);
+  });
+
+  test("ChatGPT out of reach after the switch went off: the V1 Codex kept from the list goes back to what ChatGPT gave", async () => {
+    const chatgpt = await startBackend();
+    let isAnswering = true;
+    chatgpt.respond = (_request, res) => {
+      if (!isAnswering) return;
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: [{ ...CHATGPT_MODELS[0], multi_agent_version: "v2" }] }));
+    };
+    const { codexBase, codexHome, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      allowsAnySubagentModel: true,
+      modelsWaitMs: 300,
+    });
+    const marked = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    // Codex 把拿到的清单原样存下。
+    await writeFile(
+      path.join(codexHome, "models_cache.json"),
+      JSON.stringify({
+        fetched_at: "2026-10-18T00:00:00Z",
+        etag: marked.headers.etag,
+        models: [{ ...CHATGPT_MODELS[0], multi_agent_version: "v1" }],
+      }),
+    );
+    isAnswering = false;
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    expect(
+      (
+        await client.apiEndpointSetAgentSettings({
+          provider: "codex",
+          enabled: true,
+          allowsAnySubagentModel: false,
+        })
+      ).error,
+    ).toBeNull();
+    await client.close();
+
+    const fallback = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(versionsOf(fallback)).toEqual([
+      ["gpt-5.5", "v2"],
+      ["relay-a/gpt-5.5", undefined],
+    ]);
+  });
+
+  test("a Subagent on ChatGPT's own model reaches the forced endpoint model without the ChatGPT sign-in; the lead stays on ChatGPT", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = answerStream;
+    const relay = await startBackend();
+    relay.respond = answerStream;
+    const { codexBase, codexHome } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[0]!, url: `${relay.url}/v1` }],
+      forcedSubagentModelId: "relay-a/kimi-k2",
+    });
+    await writeFile(path.join(codexHome, "models_cache.json"), JSON.stringify(OWN_CACHE));
+    const body = Buffer.from('{"model":"gpt-5.5","input":"hi","stream":true}');
+    const length = { "content-length": String(body.length) };
+
+    const subagent = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ ...length, "x-openai-subagent": "thread_spawn" }),
+      body,
+    });
+    const lead = await send({ url: `${codexBase}/responses`, headers: codexHeaders(length), body });
+
+    expect([subagent.status, lead.status]).toEqual([200, 200]);
+    expect(relay.requests.map((request) => sentOf(request).model)).toEqual(["kimi-k2"]);
+    expect(relay.requests[0]?.headers["chatgpt-account-id"]).toBeUndefined();
+    expect(chatgpt.requests.map((request) => sentOf(request).model)).toEqual(["gpt-5.5"]);
+  });
+
+  test("forced onto one of ChatGPT's own models, a Subagent on an endpoint model goes to ChatGPT; a sealed task stays on ChatGPT whatever is forced", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = answerStream;
+    const relay = await startBackend();
+    relay.respond = answerStream;
+    const own = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[0]!, url: `${relay.url}/v1` }],
+      forcedSubagentModelId: "gpt-5.4-mini",
+    });
+    await writeFile(path.join(own.codexHome, "models_cache.json"), JSON.stringify(OWN_CACHE));
+    const onEndpoint = Buffer.from('{"model":"relay-a/kimi-k2","input":"hi","stream":true}');
+    const toChatGpt = await send({
+      url: `${own.codexBase}/responses`,
+      headers: codexHeaders({
+        "content-length": String(onEndpoint.length),
+        "x-openai-subagent": "thread_spawn",
+      }),
+      body: onEndpoint,
+    });
+    expect(toChatGpt.status).toBe(200);
+    expect(chatgpt.requests.map((request) => sentOf(request).model)).toEqual(["gpt-5.4-mini"]);
+    expect(relay.requests).toEqual([]);
+
+    const forcedAway = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[0]!, url: `${relay.url}/v1` }],
+      forcedSubagentModelId: "relay-a/kimi-k2",
+    });
+    await writeFile(
+      path.join(forcedAway.codexHome, "models_cache.json"),
+      JSON.stringify(OWN_CACHE),
+    );
+    const task = {
+      type: "agent_message",
+      content: [
+        { type: "input_text", text: "Message Type: NEW_TASK\n" },
+        { type: "encrypted_content", encrypted_content: "gAAAAABsealedtask_-0123" },
+      ],
+    };
+    const sealed = Buffer.from(JSON.stringify({ model: "gpt-5.5", input: [task], stream: true }));
+    const kept = await send({
+      url: `${forcedAway.codexBase}/responses`,
+      headers: codexHeaders({
+        "content-length": String(sealed.length),
+        "x-openai-subagent": "thread_spawn",
+      }),
+      body: sealed,
+    });
+    expect(kept.status).toBe(200);
+    expect(chatgpt.requests.map((request) => sentOf(request).model)).toEqual([
+      "gpt-5.4-mini",
+      "gpt-5.5",
+    ]);
+    expect(relay.requests).toEqual([]);
+  });
+
+  const ownAdded = "- `gpt-5.4-mini`: GPT-5.4 Mini";
+  const endpointAdded = "- `relay-a/kimi-k2`: kimi-k2";
+  test.each([
+    { allowsAnySubagentModel: false, leadOnOwn: [ownAdded] },
+    { allowsAnySubagentModel: true, leadOnOwn: [ownAdded, endpointAdded] },
+  ])(
+    "spawn_agent names Codex's own models, and the endpoint models too unless a lead on ChatGPT's own model seals its Subagents' tasks (any model: $allowsAnySubagentModel)",
+    async ({ allowsAnySubagentModel, leadOnOwn }) => {
+      const chatgpt = await startBackend();
+      chatgpt.respond = answerStream;
+      const relay = await startBackend();
+      relay.respond = answerStream;
+      const { codexBase, codexHome } = await start({
+        chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+        endpoints: [{ ...KIMI_ON_TWO[0]!, url: `${relay.url}/v1` }],
+        allowsAnySubagentModel,
+      });
+      await writeFile(path.join(codexHome, "models_cache.json"), JSON.stringify(OWN_CACHE));
+      for (const model of ["gpt-5.5", "relay-a/kimi-k2"]) {
+        const body = spawnTurn(model);
+        const reply = await send({
+          url: `${codexBase}/responses`,
+          headers: codexHeaders({ "content-length": String(body.length) }),
+          body,
+        });
+        expect(reply.status).toBe(200);
+      }
+
+      expect(sentOf(chatgpt.requests[0]).tools?.[0]?.description).toBe(spawnAdded(leadOnOwn));
+      expect(sentOf(relay.requests[0]).tools?.[0]?.description).toBe(
+        spawnAdded([ownAdded, endpointAdded]),
+      );
+    },
+  );
 });

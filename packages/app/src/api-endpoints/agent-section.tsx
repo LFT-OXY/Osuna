@@ -58,8 +58,10 @@ export interface AgentApiEndpointsSectionProps {
   onBackgroundModelChange: (modelId: string | null) => void;
   onSubagentModelChange: (modelId: string | null) => void;
   onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
-  // 记忆模型（只有 Codex）；null 为不设。
+  // 记忆模型、强制 Subagent 模型与「Codex Subagent 可用任意模型」（只有 Codex）；模型 null 为不设。
   onMemoryModelChange: (modelId: string | null) => void;
+  onForcedSubagentModelChange: (modelId: string | null) => void;
+  onAnySubagentModelChange: (allowsAnySubagentModel: boolean) => void;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -83,6 +85,8 @@ export function AgentApiEndpointsSection({
   onSubagentModelChange,
   onSubagentThinkingChange,
   onMemoryModelChange,
+  onForcedSubagentModelChange,
+  onAnySubagentModelChange,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -189,6 +193,8 @@ export function AgentApiEndpointsSection({
             onSubagentModelChange={onSubagentModelChange}
             onSubagentThinkingChange={onSubagentThinkingChange}
             onMemoryModelChange={onMemoryModelChange}
+            onForcedSubagentModelChange={onForcedSubagentModelChange}
+            onAnySubagentModelChange={onAnySubagentModelChange}
           />
         ) : null}
         {showsKeepClaudeAiLogin ? (
@@ -529,7 +535,10 @@ function SideModelRows({
   );
 }
 
-/** Codex 的默认 Subagent 模型、它的思考档位与记忆模型（照 magpie 的 subagents、subagent_effort 与 memories）。 */
+/**
+ * Codex 的默认 Subagent 模型、它的思考档位、强制 Subagent 模型、「Codex Subagent 可用任意模型」与记忆模型
+ * （照 magpie 的 subagents、subagent_effort、subagent model、multi-agent V1 与 memories）。
+ */
 function CodexSideModelRows({
   providerLabel,
   sideModels,
@@ -537,6 +546,8 @@ function CodexSideModelRows({
   onSubagentModelChange,
   onSubagentThinkingChange,
   onMemoryModelChange,
+  onForcedSubagentModelChange,
+  onAnySubagentModelChange,
 }: {
   providerLabel: string;
   sideModels: CodexSideModelsView;
@@ -544,6 +555,8 @@ function CodexSideModelRows({
   onSubagentModelChange: (modelId: string | null) => void;
   onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
   onMemoryModelChange: (modelId: string | null) => void;
+  onForcedSubagentModelChange: (modelId: string | null) => void;
+  onAnySubagentModelChange: (allowsAnySubagentModel: boolean) => void;
 }) {
   const { t } = useTranslation();
   const agent = { agent: providerLabel };
@@ -568,6 +581,23 @@ function CodexSideModelRows({
         thinking={sideModels.subagentThinking}
         busy={busy}
         onChange={onSubagentThinkingChange}
+      />
+      <SideModelRow
+        title={t("settings.apiEndpoints.agent.forcedSubagentModel")}
+        hint={t("settings.apiEndpoints.agent.forcedSubagentModelHint")}
+        pickTitle={t("settings.apiEndpoints.agent.forcedSubagentModelPick", agent)}
+        unsetLabel={t("settings.apiEndpoints.agent.forcedSubagentModelUnset")}
+        value={sideModels.forcedSubagentModel}
+        options={sideModels.modelOptions}
+        busy={busy}
+        onChange={onForcedSubagentModelChange}
+        testID="agent-api-endpoints-forced-subagent-model"
+      />
+      <AnySubagentModelRow
+        providerLabel={providerLabel}
+        value={sideModels.allowsAnySubagentModel}
+        busy={busy}
+        onChange={onAnySubagentModelChange}
       />
       <SideModelRow
         title={t("settings.apiEndpoints.agent.memoryModel")}
@@ -765,6 +795,39 @@ function UltraCodeRow({
         disabled={busy}
         accessibilityLabel={t("settings.apiEndpoints.agent.ultraCode")}
         testID="agent-api-endpoints-ultra-code"
+      />
+    </View>
+  );
+}
+
+/** 「Codex Subagent 可用任意模型」（照 magpie 的 multi-agent V1）：Codex 自己的 multi_agent_v2 开着时提示区另有说明。 */
+function AnySubagentModelRow({
+  providerLabel,
+  value,
+  busy,
+  onChange,
+}: {
+  providerLabel: string;
+  value: boolean;
+  busy: boolean;
+  onChange: (allowsAnySubagentModel: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const title = t("settings.apiEndpoints.agent.anySubagentModel", { agent: providerLabel });
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.apiEndpoints.agent.anySubagentModelHint", { agent: providerLabel })}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={busy}
+        accessibilityLabel={title}
+        testID="agent-api-endpoints-any-subagent-model"
       />
     </View>
   );

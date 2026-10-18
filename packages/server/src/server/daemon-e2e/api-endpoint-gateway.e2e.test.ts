@@ -16,6 +16,7 @@ import path from "node:path";
 import * as zlib from "node:zlib";
 import pino from "pino";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { z } from "zod";
 import {
   ENDED_SHORT,
   brokenMessage,
@@ -1197,6 +1198,134 @@ describe("Codex's auto-review and memory calls on a model no endpoint offers", (
     expect((await ask("gpt-5.6-terra")).status).toBe(404);
     expect((await ask("gpt-5.6-terra", { "x-openai-subagent": "review" })).status).toBe(404);
     expect(upstream.requests.map(receivedModel)).toEqual(["gpt-5.5"]);
+  });
+});
+
+/*
+ * Codex 的强制 Subagent 模型与 spawn_agent 的模型清单（工单 24），照 magpie 的 codex_subagent_test.go
+ * （TestCodexSubagentPutOnTheModelSet、TestCodexSubagentModelLeavesOtherRequests、TestCodexSubagentModelNotServedKeepsTheAsked）
+ * 与 codex_spawn_models_test.go（TestSpawnAgentNamesEveryModel；spawn_agent 的说明取自其中 Codex 0.162.0 的真实请求）。
+ */
+const SPAWN_LISTED =
+  "\n        \n        Available model overrides (optional; inherited parent model is preferred):\n- `gpt-5.5`: Latest workhorse model for coding and everyday work.\n";
+const SPAWN_TEXT =
+  "        Spawn a sub-agent for a well-scoped task. Returns the spawned agent id plus the user-facing nickname when available.";
+
+function spawnTools(description: string) {
+  return [
+    {
+      type: "namespace",
+      name: "multi_agent_v1",
+      tools: [
+        {
+          type: "function",
+          name: "spawn_agent",
+          description,
+          parameters: {
+            type: "object",
+            properties: { message: { type: "string" }, model: { type: "string" } },
+          },
+        },
+      ],
+    },
+  ];
+}
+
+const SpawnBodySchema = z.object({
+  tools: z.array(
+    z.object({ tools: z.array(z.object({ name: z.string(), description: z.string() })) }),
+  ),
+});
+
+// endpoints.json 里测试要改的部分，其余照原样带着。
+const EndpointsJsonSchema = z
+  .object({
+    agents: z.object({ codex: z.record(z.string(), z.unknown()) }).catchall(z.unknown()),
+  })
+  .catchall(z.unknown());
+
+function spawnDescriptionOf(request: RecordedRequest | undefined): string | undefined {
+  const parsed = SpawnBodySchema.safeParse(JSON.parse(request?.body.toString() ?? "{}"));
+  return parsed.success ? parsed.data.tools[0]?.tools[0]?.description : undefined;
+}
+
+describe("Codex's Subagents on the forced Subagent model, and spawn_agent naming every model", () => {
+  async function codexRelays(forced: string | null) {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (_request, res) => answerResponsesWhole(res);
+    const responsesUpstream = await startUpstream();
+    responsesUpstream.respond = (_request, res) => answerResponsesWhole(res);
+    const harness = await start({ upstreamA, responsesUpstream });
+    const endpointsPath = path.join(harness.endpointsDir, "endpoints.json");
+    const stored = EndpointsJsonSchema.parse(JSON.parse(await readFile(endpointsPath, "utf8")));
+    stored.agents.codex = { ...stored.agents.codex, forcedSubagentModelId: forced };
+    await writeFile(endpointsPath, JSON.stringify(stored, null, 2));
+    const ask = (body: Record<string, unknown>, headers: Record<string, string> = {}) =>
+      fetch(`${harness.gateway}/v1/responses`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CODEX_TOKEN}`,
+          "content-type": "application/json",
+          "thread-id": "thread-1",
+          ...headers,
+        },
+        body: JSON.stringify({ input: "hi", stream: false, ...body }),
+      });
+    return { ...harness, upstreamA, responsesUpstream, ask };
+  }
+
+  test("a Subagent's request reaches the forced model, whatever its lead asked; the lead's and other calls stay as asked", async () => {
+    const { upstreamA, responsesUpstream, ask } = await codexRelays("grok-4");
+
+    const lead = await ask({ model: "gpt-5.5" });
+    const subagent = await ask({ model: "gpt-5.5" }, { "x-openai-subagent": "thread_spawn" });
+    const older = await ask({ model: "kimi-k2" }, { "x-openai-subagent": "collab_spawn" });
+    const review = await ask({ model: "gpt-5.5" }, { "x-openai-subagent": "review" });
+
+    expect([lead.status, subagent.status, older.status, review.status]).toEqual([
+      200, 200, 200, 200,
+    ]);
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["gpt-5.5", "gpt-5.5"]);
+    expect(responsesUpstream.requests.map(receivedModel)).toEqual(["grok-4", "grok-4"]);
+  });
+
+  test("a forced model no endpoint serves now, or one that can't open a sealed task, leaves the Subagent where its lead put it", async () => {
+    const { upstreamA, responsesUpstream, ask } = await codexRelays("gone-9");
+    expect((await ask({ model: "gpt-5.5" }, { "x-openai-subagent": "thread_spawn" })).status).toBe(
+      200,
+    );
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["gpt-5.5"]);
+
+    const sealed = await codexRelays("grok-4");
+    const task = {
+      type: "agent_message",
+      author: "/root",
+      content: [
+        { type: "input_text", text: "Message Type: NEW_TASK\n" },
+        { type: "encrypted_content", encrypted_content: "gAAAAABsealedtask_-0123" },
+      ],
+    };
+    const reply = await sealed.ask(
+      { model: "gpt-5.5", input: [task] },
+      { "x-openai-subagent": "thread_spawn" },
+    );
+    expect(reply.status).toBe(200);
+    expect(sealed.upstreamA.requests.map(receivedModel)).toEqual(["gpt-5.5"]);
+    expect(sealed.responsesUpstream.requests).toEqual([]);
+    expect(responsesUpstream.requests).toEqual([]);
+  });
+
+  test("spawn_agent names the rest of the models in Codex's list after Codex's own, and a request without it is left alone", async () => {
+    const { upstreamA, ask } = await codexRelays(null);
+
+    const spawning = await ask({ model: "gpt-5.5", tools: spawnTools(SPAWN_LISTED + SPAWN_TEXT) });
+    const plain = await ask({ model: "gpt-5.5" });
+
+    expect([spawning.status, plain.status]).toEqual([200, 200]);
+    expect(spawnDescriptionOf(upstreamA.requests[0])).toBe(
+      `${SPAWN_LISTED.slice(0, -1)}\nMore models that may be set as \`model\`:\n- \`kimi-k2\`\n- \`glm-4.6\`\n- \`grok-4\`\n${SPAWN_TEXT}`,
+    );
+    expect(JSON.parse(upstreamA.requests[1]?.body.toString() ?? "{}")).not.toHaveProperty("tools");
   });
 });
 

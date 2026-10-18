@@ -2673,6 +2673,14 @@ export const ru: TranslationResources = {
           "В фоне сводит прошлые разговоры в память {{agent}}. Используется, только пока функция памяти {{agent}} включена; Osuna её не включает.",
         memoryModelUnset: "Своя у {{agent}}",
         memoryModelPick: "Модель памяти для {{agent}}",
+        forcedSubagentModel: "Принудительная модель Subagent",
+        forcedSubagentModelHint:
+          "Все Subagents работают на ней, какую бы модель ни указал основной диалог. Настройки Codex не меняются.",
+        forcedSubagentModelUnset: "Не задана",
+        forcedSubagentModelPick: "Принудительная модель Subagent для {{agent}}",
+        anySubagentModel: "Subagents в {{agent}} могут использовать любую модель",
+        anySubagentModelHint:
+          "Помечает модели из списка {{agent}} как мультиагентные V1, чтобы основной диалог на модели GPT мог запускать Subagents на моделях API endpoints. Собственный multi_agent_v2 в {{agent}} важнее этой настройки.",
         connection: {
           kept: "{{agent}} уже использует сторонние API. Модель остаётся {{model}}.",
           again:
@@ -2744,6 +2752,18 @@ export const ru: TranslationResources = {
             "Управляемые настройки {{agent}} ({{file}}) задают ANTHROPIC_BASE_URL = {{url}}. Управляемые настройки важнее адреса шлюза, который пишет Osuna.",
           managedBaseUrlFix:
             "Попросите администратора этого компьютера убрать ANTHROPIC_BASE_URL из управляемых настроек {{agent}}. Для изменения этого файла нужны права администратора. После этого перезапустите {{agent}} в терминале и начните новые чаты Claude в Osuna.",
+          codexMultiAgentV2On:
+            "Собственный multi_agent_v2 в Codex перекрывает «Subagents на любой модели»",
+          codexMultiAgentV2OnDetail:
+            "В {{file}} включён multi_agent_v2. Он заменяет мультиагентный режим V1, нужный моделям API endpoints, поэтому Subagents основного диалога на GPT не могут на них работать. Osuna эту настройку не меняет.",
+          codexMultiAgentV2OnFix:
+            "Откройте {{file}}. В [features] задайте multi_agent_v2 = false или удалите его; в таблице [features.multi_agent_v2] задайте enabled = false. Сохраните и перезапустите Codex. Уже начатые диалоги сохраняют версию, с которой начались.",
+          codexMultiAgentV2Unreadable:
+            "Osuna не может проверить собственный multi_agent_v2 в Codex",
+          codexMultiAgentV2UnreadableDetail:
+            "«Subagents на любой модели» включено, но Osuna не смогла прочитать {{file}}: {{detail}}",
+          codexMultiAgentV2UnreadableFix:
+            "Исправьте ошибку в {{file}}, чтобы это был корректный TOML, и снова откройте эту страницу. Если там включён multi_agent_v2, выключите его тоже.",
           howToFix: "Как исправить",
           codexProfileOverride: "Профиль Codex «{{profile}}» перекрывает сторонние API",
           codexProfileOverrideDetail:
