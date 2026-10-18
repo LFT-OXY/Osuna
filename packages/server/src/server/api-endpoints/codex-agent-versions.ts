@@ -33,7 +33,10 @@ export function isAgentsV1Marked(etag: string): boolean {
 
 /** 每个条目都写 multi_agent_version = "v1"，别的不变。 */
 export function markedAgentsV1(models: unknown[]): unknown[] {
-  return models.map((model) => (isRecord(model) ? { ...model, ...AGENTS_V1 } : model));
+  return models.map((model) => {
+    if (!isRecord(model)) return model;
+    return { ...model, ...AGENTS_V1 };
+  });
 }
 
 /** 记下 ChatGPT 给的版本：这次有的 slug 换成这次的，其余留着；内容没变不写。 */
@@ -41,19 +44,22 @@ export function rememberAgentVersions(input: { filePath: string; models: unknown
   const was = readAgentVersions(input.filePath);
   const next = { ...was };
   for (const model of input.models) {
-    if (!isRecord(model) || typeof model.slug !== "string" || model.slug === "") continue;
-    next[model.slug] = versionOf(model);
+    const slug = slugOf(model);
+    if (slug === null || !isRecord(model)) continue;
+    next[slug] = versionOf(model);
   }
   if (JSON.stringify(next) === JSON.stringify(was)) return;
-  writePrivateFileAtomicSync(input.filePath, `${JSON.stringify(next, null, 2)}\n`);
+  const written = AgentVersionsSchema.parse(next);
+  writePrivateFileAtomicSync(input.filePath, `${JSON.stringify(written, null, 2)}\n`);
 }
 
 /** 缓存里被 Osuna 标过的版本换回 ChatGPT 给的（没写过的拿掉）；没记过的 slug 不动。 */
 export function restoredAgentVersions(input: { filePath: string; models: unknown[] }): unknown[] {
   const was = readAgentVersions(input.filePath);
   return input.models.map((model) => {
-    if (!isRecord(model) || typeof model.slug !== "string") return model;
-    const original = was[model.slug];
+    const slug = slugOf(model);
+    if (slug === null || !isRecord(model)) return model;
+    const original = was[slug];
     if (original === undefined) return model;
     const { multi_agent_version: _stamped, ...rest } = model;
     if (original === "") return rest;
@@ -61,9 +67,19 @@ export function restoredAgentVersions(input: { filePath: string; models: unknown
   });
 }
 
+/** 条目的 slug；不是条目或没写为 null。 */
+function slugOf(model: unknown): string | null {
+  if (!isRecord(model)) return null;
+  const slug = model.slug;
+  const isNamed = typeof slug === "string" && slug !== "";
+  if (!isNamed) return null;
+  return slug;
+}
+
 function versionOf(model: Record<string, unknown>): string {
   const version = model.multi_agent_version;
-  return typeof version === "string" ? version : "";
+  if (typeof version !== "string") return "";
+  return version;
 }
 
 /** 读不到或读不懂当作什么都没记。 */
@@ -71,5 +87,6 @@ function readAgentVersions(filePath: string): Record<string, string> {
   const text = readOptionalFile(filePath)?.toString("utf8") ?? null;
   if (text === null) return {};
   const parsed = AgentVersionsSchema.safeParse(parseJson(text));
-  return parsed.success ? parsed.data : {};
+  if (!parsed.success) return {};
+  return parsed.data;
 }

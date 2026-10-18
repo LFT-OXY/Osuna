@@ -48,7 +48,8 @@ export function withSpawnAgentModels(input: { text: string; choices: SpawnChoice
       isChanged = true;
     }
   }
-  return isChanged ? JSON.stringify(body) : text;
+  if (!isChanged) return text;
+  return JSON.stringify(body);
 }
 
 /** 一组工具里的 spawn_agent（单独或在 namespace 里）补上模型；没有要补的为 null。 */
@@ -68,7 +69,8 @@ function moreSpawnTools(raw: unknown, choices: SpawnChoice[]): unknown[] | null 
     tool.tools = inner;
     isChanged = true;
   }
-  return isChanged ? raw : null;
+  if (!isChanged) return null;
+  return raw;
 }
 
 /** 是带 model 参数、说明里有 Codex 那段清单的 spawn_agent 时，补上清单里没有的；补了为 true。 */

@@ -834,15 +834,21 @@ export function readCodexMultiAgentV2(text: string | null): CodexMultiAgentV2 {
     return { kind: "unparsable", message: errorMessage(error) };
   }
   if (!isRecord(value)) return { kind: "unparsable", message: "config.toml is not a table" };
-  let isOn = multiAgentV2In(value.features) === "on";
+  let found = multiAgentV2In(value.features);
+  const inProfile = multiAgentV2In(selectedProfileFeatures(value));
+  if (inProfile !== "unset") found = inProfile;
+  if (found === "on") return { kind: "on" };
+  return { kind: "off" };
+}
+
+/** 旧式顶层 `profile` 选中的 `[profiles.<name>.features]`；没选或没有为 undefined。 */
+function selectedProfileFeatures(value: Record<string, unknown>): unknown {
   const profileName = value.profile;
-  if (typeof profileName === "string" && profileName !== "") {
-    const profiles = isRecord(value.profiles) ? value.profiles : {};
-    const profile = profiles[profileName];
-    const inProfile = multiAgentV2In(isRecord(profile) ? profile.features : undefined);
-    if (inProfile !== "unset") isOn = inProfile === "on";
-  }
-  return isOn ? { kind: "on" } : { kind: "off" };
+  const isSelected = typeof profileName === "string" && profileName !== "";
+  if (!isSelected || !isRecord(value.profiles)) return undefined;
+  const profile = value.profiles[profileName];
+  if (!isRecord(profile)) return undefined;
+  return profile.features;
 }
 
 /** 一张 [features] 表里的 multi_agent_v2；不是布尔值、表里没写 enabled 的都算没写（Codex 自己会拒绝这样的文件）。 */
@@ -852,7 +858,8 @@ function multiAgentV2In(features: unknown): "on" | "off" | "unset" {
   let enabled: unknown = flag;
   if (isRecord(flag)) enabled = flag.enabled;
   if (typeof enabled !== "boolean") return "unset";
-  return enabled ? "on" : "off";
+  if (enabled) return "on";
+  return "off";
 }
 
 /**

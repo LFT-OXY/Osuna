@@ -2725,14 +2725,14 @@ export const zhCN: TranslationResources = {
             "{{agent}} 的托管设置（{{file}}）把 ANTHROPIC_BASE_URL 设成了 {{url}}。托管设置会盖过 Osuna 写的中转站地址。",
           managedBaseUrlFix:
             "请这台电脑的管理员从 {{agent}} 的托管设置里删掉 ANTHROPIC_BASE_URL。改这份文件需要管理员权限。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
-          codexMultiAgentV2On: "Codex 自己的 multi_agent_v2 盖过了「Subagent 可用任意模型」",
+          codexMultiAgentV2On: "Codex 自己的 multi_agent_v2 盖过了「Codex Subagent 可用任意模型」",
           codexMultiAgentV2OnDetail:
             "{{file}} 打开了 multi_agent_v2，它会盖过第三方接口的模型所需的多 Agent V1，GPT 主对话的 Subagent 跑不到这些模型上。Osuna 不改这个设置。",
           codexMultiAgentV2OnFix:
             "打开 {{file}}，在 [features] 下把 multi_agent_v2 改成 false 或删掉；写成 [features.multi_agent_v2] 表的，把 enabled 改成 false。保存后重新启动 Codex。已经开始的对话仍按开始时的版本。",
           codexMultiAgentV2Unreadable: "Osuna 查不了 Codex 自己的 multi_agent_v2",
           codexMultiAgentV2UnreadableDetail:
-            "「Subagent 可用任意模型」开着，但 Osuna 读不了 {{file}}：{{detail}}",
+            "「Codex Subagent 可用任意模型」开着，但 Osuna 读不了 {{file}}：{{detail}}",
           codexMultiAgentV2UnreadableFix:
             "改好 {{file}} 里的错误，让它是合法的 TOML，再打开这个页面。那里的 multi_agent_v2 若开着，也一并关掉。",
           howToFix: "如何修复",

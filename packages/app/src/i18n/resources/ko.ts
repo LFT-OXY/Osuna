@@ -2729,14 +2729,14 @@ export const ko: TranslationResources = {
           managedBaseUrlFix:
             "이 컴퓨터의 관리자에게 {{agent}}의 관리 설정에서 ANTHROPIC_BASE_URL을 지워 달라고 요청하세요. 이 파일을 바꾸려면 관리자 권한이 필요합니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
           codexMultiAgentV2On:
-            "Codex 자체의 multi_agent_v2가 「Subagent 모든 모델 사용」보다 우선합니다",
+            "Codex 자체의 multi_agent_v2가 「Codex Subagent가 모든 모델 사용」보다 우선합니다",
           codexMultiAgentV2OnDetail:
             "{{file}}에서 multi_agent_v2가 켜져 있어, API 엔드포인트 모델에 필요한 멀티 에이전트 V1보다 우선합니다. 그래서 GPT 메인 대화의 Subagent가 그 모델에서 실행되지 못합니다. Osuna는 이 설정을 바꾸지 않습니다.",
           codexMultiAgentV2OnFix:
             "{{file}}을 열고 [features] 아래의 multi_agent_v2를 false로 바꾸거나 지우세요. [features.multi_agent_v2] 표라면 enabled = false로 바꾸세요. 저장한 뒤 Codex를 다시 시작하세요. 이미 시작된 대화는 시작할 때의 버전을 유지합니다.",
           codexMultiAgentV2Unreadable: "Osuna가 Codex 자체의 multi_agent_v2를 확인할 수 없습니다",
           codexMultiAgentV2UnreadableDetail:
-            "「Subagent 모든 모델 사용」이 켜져 있지만 Osuna가 {{file}}을 읽지 못했습니다: {{detail}}",
+            "「Codex Subagent가 모든 모델 사용」이 켜져 있지만 Osuna가 {{file}}을 읽지 못했습니다: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "{{file}}의 오류를 고쳐 올바른 TOML로 만든 뒤 이 페이지를 다시 여세요. 거기서 multi_agent_v2가 켜져 있으면 함께 끄세요.",
           howToFix: "해결 방법",

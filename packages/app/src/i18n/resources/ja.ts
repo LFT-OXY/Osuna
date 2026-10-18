@@ -2743,14 +2743,14 @@ export const ja: TranslationResources = {
           managedBaseUrlFix:
             "このコンピューターの管理者に、{{agent}} の管理設定から ANTHROPIC_BASE_URL を削除するよう依頼してください。このファイルの変更には管理者権限が必要です。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
           codexMultiAgentV2On:
-            "Codex 自身の multi_agent_v2 が「Subagent はどのモデルでも」より優先されています",
+            "Codex 自身の multi_agent_v2 が「Codex の Subagent はどのモデルでも使える」より優先されています",
           codexMultiAgentV2OnDetail:
             "{{file}} で multi_agent_v2 がオンになっています。API エンドポイントのモデルに必要なマルチエージェント V1 より優先されるため、GPT のメインの会話の Subagent はそれらのモデルで動けません。Osuna はこの設定を変えません。",
           codexMultiAgentV2OnFix:
             "{{file}} を開き、[features] の multi_agent_v2 を false にするか削除します。[features.multi_agent_v2] の表なら enabled = false にします。保存して Codex を起動し直してください。すでに始まった会話は、始まったときのバージョンのままです。",
           codexMultiAgentV2Unreadable: "Osuna は Codex 自身の multi_agent_v2 を確認できません",
           codexMultiAgentV2UnreadableDetail:
-            "「Subagent はどのモデルでも」はオンですが、Osuna は {{file}} を読めませんでした: {{detail}}",
+            "「Codex の Subagent はどのモデルでも使える」はオンですが、Osuna は {{file}} を読めませんでした: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "{{file}} のエラーを直して正しい TOML にしてから、このページを開き直してください。そこで multi_agent_v2 がオンならオフにもしてください。",
           howToFix: "直し方",

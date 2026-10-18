@@ -1,5 +1,5 @@
 // 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_subagent.go 的 codexSubagentPick、sealedTaskIn，
-// codex_backend.go 的 hasSealedAgentMessage、withoutSealedMessages，internal/usage/purpose.go 的 Subagent 一组）
+// codex_backend.go 的 hasSealedAgentMessage、withoutSealedMessages、sealedTaskError、sealedWayOut 与 sealedTaskItself，internal/usage/purpose.go 的 Subagent 一组）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
@@ -83,4 +83,30 @@ function isMessageHeader(part: Record<string, unknown>): boolean {
   const text = part.text;
   const isText = part.type === "input_text" && typeof text === "string";
   return isText && text.startsWith(MESSAGE_HEADER);
+}
+
+// magpie sealedTaskItself：封存的是任务本身。
+const SEALED_TASK_ITSELF =
+  "What is sealed is the task itself: the message the agent that spawned this subagent wrote in spawn_agent, which Codex hands on as the backend sealed it. fork_turns=\"none\" keeps the lead's earlier turns out of the subagent, but not the seal on its task, so it doesn't help here.";
+
+/**
+ * 封存的任务交到接口模型上时回给 Codex 的话（magpie sealedTaskError 的第三种，加 sealedWayOut）：
+ * 开关关着时让用户打开「Codex Subagent 可用任意模型」；开着时说这个对话仍在多 Agent V2 上。
+ */
+export function sealedTaskMessage(input: {
+  model: string;
+  allowsAnySubagentModel: boolean;
+}): string {
+  return (
+    `This subagent's task was sealed by the ChatGPT backend that answered its lead, and only one of Codex's own models can open it; ${input.model} is served by an API endpoint, which can't. ` +
+    `${SEALED_TASK_ITSELF} Give the subagent the lead's model, or a lead model that isn't served by the ChatGPT backend, so its subagents get a task they can read. ` +
+    `To go on with this task, use the lead's model, or have the lead spawn the subagent again.${sealedWayOut(input.allowsAnySubagentModel)}`
+  );
+}
+
+function sealedWayOut(allowsAnySubagentModel: boolean): string {
+  if (allowsAnySubagentModel) {
+    return " \"Codex Subagents can use any model\" is on in Osuna's settings, but this thread runs Codex's multi-agent V2, whose tasks are sealed: it began before the setting was turned on, or Codex's own features.multi_agent_v2 is on in its config. Start a new thread, with features.multi_agent_v2 off.";
+  }
+  return " For subagents on any model while the lead is on a ChatGPT model, turn on \"Codex Subagents can use any model\" on Codex's page in Osuna's settings and start a new thread: the lead then hands its subagents their tasks as text.";
 }

@@ -15,8 +15,8 @@ import { withSpawnAgentModels, type SpawnChoice } from "./codex-spawn-models.js"
 import { pickCodexSubagentModel, type CodexSubagentPick } from "./codex-subagents.js";
 import { resolveGatewayRoute } from "./routing.js";
 
-const CHATGPT = "chatgpt";
-const ENDPOINT = "endpoint";
+const CHATGPT: ChatGptTurnDestination = "chatgpt";
+const ENDPOINT: ChatGptTurnDestination = "endpoint";
 
 /** 改过的请求体与模型名。 */
 export interface ShapedCodexRequest {
@@ -54,16 +54,25 @@ export function shapeCodexApiRequest(input: {
   return { text: withSpawnAgentModels({ text: picked.text, choices }), model: picked.model };
 }
 
-/** ChatGPT 后端那组路径上的一轮改完之后发给谁：ChatGPT（Codex 自己的模型）或接口。 */
+/** ChatGPT 后端那组路径上的一轮发给谁：ChatGPT（Codex 自己的模型）或接口。 */
+export type ChatGptTurnDestination = "chatgpt" | "endpoint";
+
+/** ChatGPT 后端那组路径上的一轮改完之后的请求与去向。 */
 export interface ShapedChatGptRequest extends ShapedCodexRequest {
-  goesTo: "chatgpt" | "endpoint";
+  goesTo: ChatGptTurnDestination;
+}
+
+/** 按模型名的去向：带接口标识的走接口，光秃秃的给 ChatGPT（ADR 0010）。 */
+export function chatgptTurnDestination(model: string): ChatGptTurnDestination {
+  if (isEndpointModel(model)) return ENDPOINT;
+  return CHATGPT;
 }
 
 /**
  * 用 ChatGPT 登录的 Codex 的一轮（ADR 0010）：Subagent 的请求改到强制 Subagent 模型（光秃秃的名字是 Codex 自己的模型时归它，
  * 只有它打得开 ChatGPT 封存的任务），spawn_agent 补上 Codex 自己的模型与接口模型。主对话在 Codex 自己的模型上、
  * 「Codex Subagent 可用任意模型」又关着时，它的 Subagent 拿到的是封存的任务，只补 Codex 自己的模型。
- * `state` 为 null（endpoints.json 读不懂）时不改。
+ * `state` 为 null（endpoints.json 读不懂）时不改模型，spawn_agent 照样补（magpie 同样不看接口的文件）。
  */
 export function shapeCodexChatGptRequest(input: {
   headers: IncomingHttpHeaders;
@@ -77,22 +86,22 @@ export function shapeCodexChatGptRequest(input: {
   const { state, listed, listing } = input;
   const own = codexOwnModels(readCodexModelsCache(listing.codexHome));
   const ownSlugs = new Set(own.map((model) => model.slug));
-  let leadGoesTo: ShapedChatGptRequest["goesTo"] = "chatgpt";
-  if (isEndpointModel(input.model)) leadGoesTo = "endpoint";
-  if (state === null || listed === null) {
-    return { text: input.text, model: input.model, goesTo: leadGoesTo };
+  let picked: ShapedCodexRequest = { text: input.text, model: input.model };
+  let destination = chatgptTurnDestination(input.model);
+  if (state !== null && listed !== null) {
+    const isServedByEndpoint = (model: string) =>
+      resolveGatewayRoute({ state, listed, agent: "codex", model }).ok;
+    const pick = pickCodexSubagentModel({
+      headers: input.headers,
+      asked: input.model,
+      forced: state.agents.codex.forcedSubagentModelId ?? null,
+      parsed: parseJson(input.text),
+      isServed: (model) => ownSlugs.has(model) || isServedByEndpoint(model),
+      opensSealed: (model) => ownSlugs.has(model),
+    });
+    picked = applyPick({ ...input, pick });
+    if (pick.kind === "moved") destination = ownSlugs.has(pick.to) ? CHATGPT : ENDPOINT;
   }
-  const isServedByEndpoint = (model: string) =>
-    resolveGatewayRoute({ state, listed, agent: "codex", model }).ok;
-  const pick = pickCodexSubagentModel({
-    headers: input.headers,
-    asked: input.model,
-    forced: state.agents.codex.forcedSubagentModelId ?? null,
-    parsed: parseJson(input.text),
-    isServed: (model) => ownSlugs.has(model) || isServedByEndpoint(model),
-    opensSealed: (model) => ownSlugs.has(model),
-  });
-  const picked = applyPick({ ...input, pick });
   const isLeadSealing = !listing.marksAgentsV1 && !isEndpointModel(picked.model);
   const choices: SpawnChoice[] = own.map((model) => ({ slug: model.slug, name: model.label }));
   if (!isLeadSealing) {
@@ -100,8 +109,6 @@ export function shapeCodexChatGptRequest(input: {
       choices.push({ slug: entry.slug, name: entry.display_name });
   }
   const text = withSpawnAgentModels({ text: picked.text, choices });
-  let destination = leadGoesTo;
-  if (pick.kind === "moved") destination = ownSlugs.has(pick.to) ? CHATGPT : ENDPOINT;
   return { text, model: picked.model, goesTo: destination };
 }
 

@@ -191,6 +191,7 @@ async function start(input: {
   return {
     daemon,
     codexHome,
+    endpointsDir,
     codexBase: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/backend-api/codex`,
   };
 }
@@ -1050,6 +1051,11 @@ function versionsOf(reply: Reply): Array<[string, string | undefined]> {
   return list.models.map((model) => [model.slug, model.multi_agent_version]);
 }
 
+const ownAdded = "- `gpt-5.4-mini`: GPT-5.4 Mini";
+const endpointAdded = "- `relay-a/kimi-k2`: kimi-k2";
+
+const SealedErrorSchema = z.object({ error: z.object({ message: z.string() }) });
+
 const SpawnToolsSchema = z.object({
   model: z.string(),
   tools: z.array(z.object({ description: z.string() })).optional(),
@@ -1190,6 +1196,140 @@ describe("Subagents of a Codex signed in with ChatGPT", () => {
     ]);
   });
 
+  test("ChatGPT out of reach from the start: the versions in Codex's own last list are kept, so switching off still takes the V1 marks out", async () => {
+    const chatgpt = await startBackend();
+    // 从不应答。
+    chatgpt.respond = () => {};
+    const { codexBase, codexHome, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      allowsAnySubagentModel: true,
+      modelsWaitMs: 300,
+    });
+    const cachePath = path.join(codexHome, "models_cache.json");
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        fetched_at: "2026-10-18T00:00:00Z",
+        etag: '"list-1"',
+        models: [{ ...CHATGPT_MODELS[0], multi_agent_version: "v2" }],
+      }),
+    );
+    const marked = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    expect(versionsOf(marked)).toEqual([
+      ["gpt-5.5", "v1"],
+      ["relay-a/gpt-5.5", "v1"],
+    ]);
+    // Codex 把拿到的清单原样存下。
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        fetched_at: "2026-10-18T00:00:00Z",
+        etag: marked.headers.etag,
+        models: [{ ...CHATGPT_MODELS[0], multi_agent_version: "v1" }],
+      }),
+    );
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    const off = await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      allowsAnySubagentModel: false,
+    });
+    await client.close();
+    expect(off.error).toBeNull();
+
+    const fallback = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(versionsOf(fallback)).toEqual([
+      ["gpt-5.5", "v2"],
+      ["relay-a/gpt-5.5", undefined],
+    ]);
+  });
+
+  test.each([
+    {
+      allowsAnySubagentModel: false,
+      wayOut:
+        "For subagents on any model while the lead is on a ChatGPT model, turn on \"Codex Subagents can use any model\" on Codex's page in Osuna's settings and start a new thread",
+    },
+    {
+      allowsAnySubagentModel: true,
+      wayOut:
+        "\"Codex Subagents can use any model\" is on in Osuna's settings, but this thread runs Codex's multi-agent V2",
+    },
+  ])(
+    "a task ChatGPT sealed, sent to an endpoint model, is refused with the way out (any model: $allowsAnySubagentModel)",
+    async ({ allowsAnySubagentModel, wayOut }) => {
+      const chatgpt = await startBackend();
+      const relay = await startBackend();
+      relay.respond = answerStream;
+      const { codexBase } = await start({
+        chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+        endpoints: [{ ...KIMI_ON_TWO[0]!, url: `${relay.url}/v1` }],
+        allowsAnySubagentModel,
+      });
+      const task = {
+        type: "agent_message",
+        content: [
+          { type: "input_text", text: "Message Type: NEW_TASK\n" },
+          { type: "encrypted_content", encrypted_content: "gAAAAABsealedtask_-0123" },
+        ],
+      };
+      const body = Buffer.from(
+        JSON.stringify({ model: "relay-a/kimi-k2", input: [task], stream: true }),
+      );
+
+      const refused = await send({
+        url: `${codexBase}/responses`,
+        headers: codexHeaders({
+          "content-length": String(body.length),
+          "x-openai-subagent": "thread_spawn",
+        }),
+        body,
+      });
+
+      expect(refused.status).toBe(400);
+      const error = SealedErrorSchema.parse(JSON.parse(refused.body.toString("utf8")));
+      expect(error.error.message).toContain(
+        "This subagent's task was sealed by the ChatGPT backend that answered its lead",
+      );
+      expect(error.error.message).toContain(wayOut);
+      expect(relay.requests).toEqual([]);
+      expect(chatgpt.requests).toEqual([]);
+    },
+  );
+
+  test("with endpoints.json unreadable, spawn_agent still names Codex's own models and the turn reaches ChatGPT", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = answerStream;
+    const { codexBase, codexHome, endpointsDir } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+    });
+    await writeFile(path.join(codexHome, "models_cache.json"), JSON.stringify(OWN_CACHE));
+    await writeFile(path.join(endpointsDir, "endpoints.json"), "{ not json");
+    const body = spawnTurn("gpt-5.5");
+
+    const reply = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-length": String(body.length) }),
+      body,
+    });
+
+    expect(reply.status).toBe(200);
+    expect(sentOf(chatgpt.requests[0]).tools?.[0]?.description).toBe(spawnAdded([ownAdded]));
+  });
+
   test("a Subagent on ChatGPT's own model reaches the forced endpoint model without the ChatGPT sign-in; the lead stays on ChatGPT", async () => {
     const chatgpt = await startBackend();
     chatgpt.respond = answerStream;
@@ -1274,8 +1414,6 @@ describe("Subagents of a Codex signed in with ChatGPT", () => {
     expect(relay.requests).toEqual([]);
   });
 
-  const ownAdded = "- `gpt-5.4-mini`: GPT-5.4 Mini";
-  const endpointAdded = "- `relay-a/kimi-k2`: kimi-k2";
   test.each([
     { allowsAnySubagentModel: false, leadOnOwn: [ownAdded] },
     { allowsAnySubagentModel: true, leadOnOwn: [ownAdded, endpointAdded] },

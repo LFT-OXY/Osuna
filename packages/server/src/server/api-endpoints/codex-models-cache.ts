@@ -113,7 +113,8 @@ function levelsOf(model: unknown): string[] {
 export function codexModelsCacheEtag(text: string | null): string {
   if (text === null) return "";
   const cache = parseJson(text);
-  return isRecord(cache) ? etagOf(cache) : "";
+  if (!isRecord(cache)) return "";
+  return etagOf(cache);
 }
 
 function etagOf(cache: Record<string, unknown>): string {

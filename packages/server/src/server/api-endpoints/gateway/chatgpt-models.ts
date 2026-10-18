@@ -6,6 +6,7 @@ import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import type { Request, Response } from "express";
 import type pino from "pino";
+import { isErrnoException } from "../../pid-lock.js";
 import type { CodexModelEntry } from "../codex-model-catalog.js";
 import {
   isAgentsV1Marked,
@@ -89,7 +90,7 @@ export async function answerChatGptModels(input: {
     etag = asked.etag;
   } else {
     input.logger.info({ why: asked.why }, "ChatGPT's model list missing; using Codex's last one");
-    own = codexLastOwnModels(listing);
+    own = codexLastOwnModels({ listing, logger: input.logger });
   }
   if (asked.kind === "list") rememberVersions({ listing, models: own, logger: input.logger });
   if (listing.marksAgentsV1) own = markedAgentsV1(own);
@@ -103,13 +104,18 @@ export async function answerChatGptModels(input: {
  * Codex 上次存下的清单里 ChatGPT 自带的那些：那份清单是开关开着时给的，版本换回 ChatGPT 原来给的；
  * 不是的，就是 ChatGPT 给的原样，记下来（magpie CacheEntries）。
  */
-function codexLastOwnModels(listing: ChatGptModelsListing): unknown[] {
+function codexLastOwnModels(input: {
+  listing: ChatGptModelsListing;
+  logger: pino.Logger;
+}): unknown[] {
+  const { listing } = input;
   const text = readCodexModelsCache(listing.codexHome);
   const own = codexCachedModels(text);
   const filePath = listing.agentVersionsPath;
   if (isAgentsV1Marked(codexModelsCacheEtag(text))) {
     return restoredAgentVersions({ filePath, models: own });
   }
+  rememberVersions({ ...input, models: own });
   return own;
 }
 
@@ -122,6 +128,8 @@ function rememberVersions(input: {
   try {
     rememberAgentVersions({ filePath: input.listing.agentVersionsPath, models: input.models });
   } catch (error) {
+    // 写不进 $PASEO_HOME 只少了这份记录：关掉开关后缓存顶替时 v1 留着，清单照给。
+    if (!isErrnoException(error)) throw error;
     input.logger.warn({ err: error }, "Could not keep ChatGPT's multi-agent versions");
   }
 }

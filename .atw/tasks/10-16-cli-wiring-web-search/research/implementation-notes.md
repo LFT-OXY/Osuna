@@ -734,3 +734,11 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端：`api-endpoint-default-model.e2e.test.ts`「Codex's forced Subagent model and Subagents on any model」（只给 Codex、要在售、不碰 config.toml；目录每个条目标 v1、关掉拿掉；三种写法与 `[features.multi_agent_v2]` 表报提示、false 与开关关着不报；读不懂另报）。`api-endpoint-gateway.e2e.test.ts`（Subagent 请求到达假上游时是强制模型、主对话与 review 不变；没人提供、封存的任务照主对话的发；spawn_agent 补上其余模型、不带的请求不变）。`api-endpoint-chatgpt-backend.e2e.test.ts`「Subagents of a Codex signed in with ChatGPT」（合并清单标 v1 与标记、关着照 ChatGPT 给的；拿不到 ChatGPT 时缓存里的 v1 放回；ChatGPT 自带模型上的 Subagent 改到接口模型、不带 ChatGPT 登录；改到 Codex 自己的模型转 ChatGPT；封存的任务留在 ChatGPT；spawn_agent 补的清单按开关与主对话所在）。
 - app：`agent-settings.test.ts`；浏览器 `settings-api-endpoints.spec.ts`「Codex's forced Subagent model and Subagents on any model」：接口在选的同时被关掉时保存被拒、原处不变；模型目录写不进时开关留在关；保存后中转站读到强制模型、目录标 v1、config.toml 不变；multi_agent_v2 开着时提示与「如何修复」。
 - 截图（无头 Chromium、临时 CODEX_HOME、假数据）：`screenshots/24-codex-page_any-model-on-overridden-by-multi-agent-v2_desktop-1280_{en,zh}.png`。
+
+### 审查修正（24 号第一轮）
+
+- 封存的任务交到接口模型上：照 magpie `sealedTaskError`（没有 lead 记录的那种）回 400，末尾接 `sealedWayOut`：开关关着让用户打开「Codex Subagents can use any model」，开着说这个对话仍在多 Agent V2 上。这段话发给 Codex，照 magpie 用英文（`codex-subagents.ts` 的 `sealedTaskMessage`）。只在 ChatGPT 后端那组路径上拒：那里封存任务的是 ChatGPT；API key 接法下没有 ChatGPT 自带模型。
+- 拿不到 ChatGPT 清单、缓存没标过 V1 时也记下缓存里的版本（magpie `CacheEntries` 的 `Remember`），所以 ChatGPT 一直连不上时关掉开关也能放回。
+- endpoints.json 读不懂时不改模型，spawn_agent 照样补 Codex 自己的模型。
+- config.toml 读不懂时只报 `config_unparsable`，不再另报 `codex_multi_agent_v2_unreadable`。
+- 提示标题照开关的原名加引号（「Codex Subagent 可用任意模型」/ "Codex Subagents can use any model"），截图重拍。

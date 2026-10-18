@@ -2755,7 +2755,7 @@ export const ptBR: TranslationResources = {
           managedBaseUrlFix:
             "Peça a quem administra este computador para remover ANTHROPIC_BASE_URL das configurações gerenciadas do {{agent}}. Mudar esse arquivo exige permissão de administrador. Depois abra o {{agent}} de novo no terminal e inicie novos chats do Claude no Osuna.",
           codexMultiAgentV2On:
-            "O multi_agent_v2 do próprio Codex se sobrepõe a «Subagents em qualquer modelo»",
+            "O multi_agent_v2 do próprio Codex se sobrepõe a «Subagents do Codex podem usar qualquer modelo»",
           codexMultiAgentV2OnDetail:
             "{{file}} liga o multi_agent_v2, que substitui o multiagente V1 de que os modelos de API endpoints precisam; assim os Subagents de uma conversa principal em GPT não rodam neles. O Osuna não altera essa configuração.",
           codexMultiAgentV2OnFix:
@@ -2763,7 +2763,7 @@ export const ptBR: TranslationResources = {
           codexMultiAgentV2Unreadable:
             "O Osuna não consegue verificar o multi_agent_v2 do próprio Codex",
           codexMultiAgentV2UnreadableDetail:
-            "«Subagents em qualquer modelo» está ligado, mas o Osuna não conseguiu ler {{file}}: {{detail}}",
+            "«Subagents do Codex podem usar qualquer modelo» está ligado, mas o Osuna não conseguiu ler {{file}}: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "Corrija o erro em {{file}} para que seja TOML válido e abra esta página de novo. Se multi_agent_v2 estiver ligado lá, desligue-o também.",
           howToFix: "Como corrigir",

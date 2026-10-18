@@ -2775,14 +2775,15 @@ export const en = {
             "{{agent}}'s managed settings ({{file}}) set ANTHROPIC_BASE_URL to {{url}}. Managed settings win over the gateway address Osuna writes.",
           managedBaseUrlFix:
             "Ask whoever manages this computer to remove ANTHROPIC_BASE_URL from {{agent}}'s managed settings. Changing that file needs administrator rights. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
-          codexMultiAgentV2On: "Codex's own multi_agent_v2 overrides Subagents on any model",
+          codexMultiAgentV2On:
+            'Codex\'s own multi_agent_v2 overrides "Codex Subagents can use any model"',
           codexMultiAgentV2OnDetail:
             "{{file}} turns on multi_agent_v2, which takes over the multi-agent V1 the API endpoint models need, so Subagents of a GPT main conversation can't run on them. Osuna doesn't change this setting.",
           codexMultiAgentV2OnFix:
             "Open {{file}}. Under [features], set multi_agent_v2 = false or delete it; in a [features.multi_agent_v2] table, set enabled = false. Save, then start Codex again. Conversations already started keep the version they started with.",
           codexMultiAgentV2Unreadable: "Osuna can't check Codex's own multi_agent_v2",
           codexMultiAgentV2UnreadableDetail:
-            "Subagents on any model is on, but Osuna couldn't read {{file}}: {{detail}}",
+            '"Codex Subagents can use any model" is on, but Osuna couldn\'t read {{file}}: {{detail}}',
           codexMultiAgentV2UnreadableFix:
             "Fix the error in {{file}} so it's valid TOML, then open this page again. If multi_agent_v2 is on there, turn it off too.",
           howToFix: "How to fix",

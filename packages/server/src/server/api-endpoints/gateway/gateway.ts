@@ -31,7 +31,6 @@ import {
   DEFAULT_OPENAI_API_BASE_URL,
   chatgptBackendRest,
   codexIdentityHeaders,
-  isEndpointModel,
   noWebSearchReply,
   relayToChatGpt,
   relayedHeaders,
@@ -45,7 +44,13 @@ import {
 import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
 import { CompactionFailures } from "./codex-compaction-fallback.js";
 import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
-import { shapeCodexApiRequest, shapeCodexChatGptRequest } from "./codex-requests.js";
+import {
+  chatgptTurnDestination,
+  shapeCodexApiRequest,
+  shapeCodexChatGptRequest,
+  type ShapedChatGptRequest,
+} from "./codex-requests.js";
+import { hasSealedAgentTask, sealedTaskMessage } from "./codex-subagents.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -279,6 +284,7 @@ export function createApiEndpointGateway(options: {
           store,
           logger,
           failover,
+          source: { kind: "agent_path" },
         })
       : countTokens({ req, res, agent, store, logger, failover });
     void handled.catch((error: unknown) => {
@@ -359,6 +365,13 @@ async function serveChatGptBackend(input: {
     relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
     return;
   }
+  if (rest === "/responses" && hasSealedAgentTask(parseJson(text))) {
+    // ChatGPT 后端封存的任务只有 ChatGPT 自带模型打得开（magpie sealedReader）：交给接口它读不了，照 magpie 回 400 说明怎么办。
+    const allowsAnySubagentModel = input.chatgpt.listing().marksAgentsV1;
+    const message = sealedTaskMessage({ model, allowsAnySubagentModel });
+    sendAgentError({ res: input.res, wire: "openai", error: { status: 400, message } });
+    return;
+  }
   await serveEndpointModel({ ...input, model, text });
 }
 
@@ -375,13 +388,9 @@ function shapeChatGptTurn(input: {
   failover: Failover;
   text: string;
   model: string;
-}): { text: string; model: string; goesTo: "chatgpt" | "endpoint" } {
+}): ShapedChatGptRequest {
   const { text, model } = input;
-  if (input.rest !== "/responses") {
-    let goesTo: "chatgpt" | "endpoint" = "chatgpt";
-    if (isEndpointModel(model)) goesTo = "endpoint";
-    return { text, model, goesTo };
-  }
+  if (input.rest !== "/responses") return { text, model, goesTo: chatgptTurnDestination(model) };
   const state = stateForShaping(input);
   let listed: ApiEndpointState | null = null;
   if (state !== null) listed = input.failover.retired.listed(state);
@@ -513,7 +522,7 @@ async function serveEndpointModel(input: {
     store: input.store,
     logger: input.logger,
     failover: input.failover,
-    read: body,
+    source: { kind: "chatgpt_backend", body },
     forwardedHeaders,
   });
 }
@@ -584,20 +593,12 @@ async function routeAgentRequest(input: {
   store: ApiEndpointStore;
   logger: pino.Logger;
   failover: Failover;
-  // 已经读出并解开的请求体（ChatGPT 后端那组路径先读出来看过模型名）；没有就从请求里读。
-  read?: Buffer;
+  source: RequestSource;
 }): Promise<RoutedRequest | null> {
-  const { res, wire } = input;
+  const { res, wire, source } = input;
   const reply = (status: number, message: string) =>
     sendAgentError({ res, wire, error: { status, message } });
-  const read =
-    input.read === undefined
-      ? await readAgentBody({
-          req: input.req,
-          limit: input.failover.bodyLimitBytes,
-          logger: input.logger,
-        })
-      : { kind: "read" as const, body: input.read };
+  const read = await bodyFrom({ ...input, source });
   if (read.kind === "tooLarge") {
     reply(413, read.message);
     return null;
@@ -640,22 +641,52 @@ async function routeAgentRequest(input: {
 }
 
 /**
- * Codex 经 /v1/responses 的请求（API key 接法）：Subagent 改到强制 Subagent 模型，spawn_agent 补上目录里的其余模型。
- * ChatGPT 后端那组路径先读出了请求体（read），在那边已经按它自己的清单改过。
+ * 请求体从哪来：Agent 自己的路径上从请求里读；ChatGPT 后端那组路径先读出、解开、看过模型名，
+ * 并已按它自己的清单改过（Subagent 的强制模型、spawn_agent 的清单）。
  */
-function codexApiRequest(input: {
+type RequestSource = { kind: "agent_path" } | { kind: "chatgpt_backend"; body: Buffer };
+
+/** 从请求里读，或用 ChatGPT 后端那组路径已经读出的。 */
+function bodyFrom(input: {
   req: Request;
-  agent: ApiEndpointProvider;
-  read?: Buffer;
   logger: pino.Logger;
   failover: Failover;
+  source: RequestSource;
+}): ReturnType<typeof readAgentBody> {
+  const { source } = input;
+  if (source.kind === "chatgpt_backend") {
+    return Promise.resolve({ kind: "read", body: source.body });
+  }
+  return readAgentBody({
+    req: input.req,
+    limit: input.failover.bodyLimitBytes,
+    logger: input.logger,
+  });
+}
+
+/** 读出的请求体、解析后的内容与模型名。 */
+interface ReadRequest {
   body: Buffer;
   parsed: unknown;
   model: string;
-  state: ApiEndpointState;
-}): { body: Buffer; parsed: unknown; model: string } {
+}
+
+/**
+ * Codex 经 /v1/responses 的请求（API key 接法）：Subagent 改到强制 Subagent 模型，spawn_agent 补上目录里的其余模型。
+ * ChatGPT 后端那组路径来的已经在那边改过。
+ */
+function codexApiRequest(
+  input: ReadRequest & {
+    req: Request;
+    agent: ApiEndpointProvider;
+    source: RequestSource;
+    logger: pino.Logger;
+    failover: Failover;
+    state: ApiEndpointState;
+  },
+): ReadRequest {
   const { body, parsed, model, state } = input;
-  const isCodexApiTurn = input.agent === "codex" && input.read === undefined;
+  const isCodexApiTurn = input.agent === "codex" && input.source.kind === "agent_path";
   if (!isCodexApiTurn) return { body, parsed, model };
   const sentText = body.toString("utf8");
   const shaped = shapeCodexApiRequest({
@@ -784,7 +815,7 @@ async function countTokens(input: {
   const { res } = input;
   const wire = "anthropic";
   keepClaudeSignInOf(input);
-  const routed = await routeAgentRequest({ ...input, wire });
+  const routed = await routeAgentRequest({ ...input, wire, source: { kind: "agent_path" } });
   if (!routed) return;
   const { body, parsed, model, candidates } = routed;
   const { cooldowns } = input.failover;
@@ -868,7 +899,7 @@ async function handleAgentRequest(input: {
   store: ApiEndpointStore;
   logger: pino.Logger;
   failover: Failover;
-  read?: Buffer;
+  source: RequestSource;
   forwardedHeaders?: IncomingHttpHeaders;
 }): Promise<void> {
   const { req, res, wire, store } = input;

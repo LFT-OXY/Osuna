@@ -2753,7 +2753,7 @@ export const ru: TranslationResources = {
           managedBaseUrlFix:
             "Попросите администратора этого компьютера убрать ANTHROPIC_BASE_URL из управляемых настроек {{agent}}. Для изменения этого файла нужны права администратора. После этого перезапустите {{agent}} в терминале и начните новые чаты Claude в Osuna.",
           codexMultiAgentV2On:
-            "Собственный multi_agent_v2 в Codex перекрывает «Subagents на любой модели»",
+            "Собственный multi_agent_v2 в Codex перекрывает «Subagents в Codex могут использовать любую модель»",
           codexMultiAgentV2OnDetail:
             "В {{file}} включён multi_agent_v2. Он заменяет мультиагентный режим V1, нужный моделям API endpoints, поэтому Subagents основного диалога на GPT не могут на них работать. Osuna эту настройку не меняет.",
           codexMultiAgentV2OnFix:
@@ -2761,7 +2761,7 @@ export const ru: TranslationResources = {
           codexMultiAgentV2Unreadable:
             "Osuna не может проверить собственный multi_agent_v2 в Codex",
           codexMultiAgentV2UnreadableDetail:
-            "«Subagents на любой модели» включено, но Osuna не смогла прочитать {{file}}: {{detail}}",
+            "«Subagents в Codex могут использовать любую модель» включено, но Osuna не смогла прочитать {{file}}: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "Исправьте ошибку в {{file}}, чтобы это был корректный TOML, и снова откройте эту страницу. Если там включён multi_agent_v2, выключите его тоже.",
           howToFix: "Как исправить",

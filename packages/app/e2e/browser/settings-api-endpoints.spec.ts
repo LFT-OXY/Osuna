@@ -14,6 +14,7 @@ import {
   type FakeRelay,
 } from "../support/helpers/api-endpoints";
 import { readFile } from "node:fs/promises";
+import { z } from "zod";
 import {
   closeModelPicker,
   expectComposerModel,
@@ -1074,6 +1075,11 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     const forcedModel = async () =>
       (await client.apiEndpointList("codex")).agents?.codex?.forcedSubagentModelId ?? null;
     const catalogText = () => readFile(catalogPath, "utf8");
+    // 目录里每个条目的多 Agent 版本（Relay B 关掉后：两个光秃秃的名字与两个「接口标识/模型名」）。
+    const catalogVersions = async () =>
+      CodexCatalogSchema.parse(JSON.parse(await catalogText())).models.map(
+        (entry) => entry.multi_agent_version,
+      );
     try {
       await openAgentPage(page, "codex");
       const section = agentSection(page);
@@ -1126,7 +1132,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
         await expect.poll(forcedModel).toBe("glm-5.3");
         await anyModel.click();
         await expect(anyModel).toBeChecked();
-        await expect.poll(catalogText).toContain('"multi_agent_version": "v1"');
+        await expect.poll(catalogVersions).toEqual(["v1", "v1", "v1", "v1"]);
         expect(await readCodexConfig()).toBe(configBefore);
       });
 
@@ -1141,7 +1147,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
           "agent-api-endpoints-issue-codexMultiAgentV2On",
         );
         await expect(notice).toContainText(
-          "Codex's own multi_agent_v2 overrides Subagents on any model",
+          'Codex\'s own multi_agent_v2 overrides "Codex Subagents can use any model"',
         );
         await notice.getByRole("button", { name: "How to fix" }).click();
         await expect(notice.getByTestId("agent-api-endpoints-issue-fix-steps")).toContainText(
@@ -1785,6 +1791,10 @@ async function openAgentPage(page: Page, provider: "claude" | "codex"): Promise<
   await expectProviderDetail(page, serverId, provider);
   await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeVisible();
 }
+
+const CodexCatalogSchema = z.object({
+  models: z.array(z.object({ multi_agent_version: z.string().optional() })),
+});
 
 async function readCodexConfig(): Promise<string> {
   try {
