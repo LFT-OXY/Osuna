@@ -39,12 +39,9 @@ import {
   answerChatGptModels,
   type ChatGptModelsListing,
 } from "./chatgpt-models.js";
-import {
-  answerCodexCompaction,
-  codexCompactionInput,
-  localCompactionTurn,
-  type CompactionAnswer,
-} from "./codex-compaction.js";
+import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
+import { CompactionFailures } from "./codex-compaction-fallback.js";
+import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -180,6 +177,7 @@ export function createApiEndpointGateway(options: {
     sticks: new ConversationSticks(),
     refusals: new RefusedShapes(),
     codexTurns: new CodexLastTurn(),
+    compactionFailures: new CompactionFailures(),
     modelFacts: options.modelFacts,
     headerTimeoutMs: options.overrides?.gatewayHeaderTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
     retryPauseMs: options.overrides?.gatewayRetryPauseMs ?? COOLDOWN.retryPause,
@@ -418,13 +416,15 @@ async function serveEndpointModel(input: {
   const forwardedHeaders = codexIdentityHeaders(req.headers);
   const read = codexCompactionInput({ text: input.text, isEndpointModel: true });
   if (read.kind === "changed" && read.compacts) {
-    const body = Buffer.from(read.body);
     const turn = localCompactionTurn(String(forwardedHeaders[TURN_METADATA_HEADER] ?? ""));
     if (turn !== null) forwardedHeaders[TURN_METADATA_HEADER] = turn;
     await answerCodexCompaction({
       res,
       model,
-      ask: () => askOwnGateway({ req, body, headers: forwardedHeaders }),
+      body: read.body,
+      ask: (asked) => askOwnGateway({ req, body: Buffer.from(asked), headers: forwardedHeaders }),
+      failures: input.failover.compactionFailures,
+      logger: input.logger,
     });
     return;
   }
@@ -489,6 +489,8 @@ interface Failover {
   sticks: ConversationSticks;
   refusals: RefusedShapes;
   codexTurns: CodexLastTurn;
+  // 接口模型压缩连续失败的对话（只记在内存里）。
+  compactionFailures: CompactionFailures;
   modelFacts: ModelFactsLookup;
   headerTimeoutMs: number;
   retryPauseMs: number;

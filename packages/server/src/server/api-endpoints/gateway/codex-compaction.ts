@@ -4,9 +4,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 // 摘要提示与摘要前缀取自 openai/codex（Apache-2.0，prompts/templates/compact），同见该文件。
 
-import type { Response } from "express";
 import { isRecord, parseJson } from "../upstream-http.js";
-import { sendAgentError } from "./agent-errors.js";
 import { SseReader, sseEvent } from "./translation/sse.js";
 
 /*
@@ -97,7 +95,8 @@ function osunaSummaryOf(item: unknown): string | null {
   return Buffer.from(sealed.slice(OSUNA_COMPACTION.length), "base64").toString("utf8");
 }
 
-function userMessage(text: string) {
+/** 一条用户消息的 Responses 条目（magpie userMessage）。 */
+export function userMessage(text: string) {
   return { type: "message", role: "user", content: [{ type: "input_text", text }] };
 }
 
@@ -128,7 +127,9 @@ function localCompactionMetadata(metadata: unknown): Record<string, unknown> | n
 
 export type CompactionReply =
   | { kind: "summary"; id: string; summary: string; usage: unknown }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  // 被截断（输出上限）：不算摘要，也不以纯文字重问（magpie 的 incomplete 单独处理）。
+  | { kind: "incomplete"; message: string };
 
 interface ReadReply {
   id: string;
@@ -147,7 +148,7 @@ export function compactionReplyOf(text: string): CompactionReply {
   if (read.status === null) return { kind: "failed", message: ENDED_SHORT };
   if (read.status === "incomplete") {
     const reason = read.incompleteReason ?? "unknown";
-    return { kind: "failed", message: `the reply ended incomplete (${reason})` };
+    return { kind: "incomplete", message: `the reply ended incomplete (${reason})` };
   }
   const output = read.doneItems.length > 0 ? read.doneItems : read.output;
   return { kind: "summary", id: read.id, summary: messageText(output), usage: read.usage };
@@ -272,50 +273,4 @@ export function compactionEvents(input: { id: string; summary: string; usage: un
     { type: "response.completed", response: done },
   ];
   return events.map((event) => sseEvent(event.type, event)).join("");
-}
-
-/** 摘要请求问到的回复：状态码、Content-Type、回答的那家（中转站的 answered-by 头）与整份回复。 */
-export interface CompactionAnswer {
-  status: number;
-  contentType: string | undefined;
-  answeredBy: string | undefined;
-  body: Buffer;
-}
-
-/**
- * 压缩一段接口模型的对话（magpie codexCompact）：摘要请求交给中转站按常规选路换家问，整份读回；
- * 失败的回复照原样交给 Codex；读不出摘要、没写摘要的回 502 说明；有摘要就以压缩条目的流交回。
- */
-export async function answerCodexCompaction(input: {
-  res: Response;
-  model: string;
-  ask: () => Promise<CompactionAnswer>;
-}): Promise<void> {
-  const { res } = input;
-  const answer = await input.ask();
-  if (res.destroyed) return;
-  if (answer.status >= 400) {
-    if (answer.contentType !== undefined) res.setHeader("content-type", answer.contentType);
-    res.status(answer.status).end(answer.body);
-    return;
-  }
-  const reply = compactionReplyOf(answer.body.toString("utf8"));
-  const endpoint = answer.answeredBy ?? input.model.split("/")[0];
-  const who = `${endpoint} (${input.model})`;
-  const fail = (message: string) =>
-    sendAgentError({ res, wire: "openai", error: { status: 502, message } });
-  if (reply.kind === "failed") {
-    fail(`compaction: ${who}: ${reply.message}, so there is no summary`);
-    return;
-  }
-  if (reply.summary.trim() === "") {
-    fail("compaction: the model wrote no summary");
-    return;
-  }
-  let id = reply.id;
-  if (id === "") id = `resp_osuna_${Date.now()}`;
-  res
-    .status(200)
-    .set({ "content-type": "text/event-stream", "cache-control": "no-cache" })
-    .end(compactionEvents({ id, summary: reply.summary, usage: reply.usage }));
 }

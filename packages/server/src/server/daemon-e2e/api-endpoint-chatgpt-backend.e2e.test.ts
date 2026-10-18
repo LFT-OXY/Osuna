@@ -1,6 +1,6 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend_test.go 的
 // TestCodexOwnModelPassesThrough、TestCodexWebSocketUpgradeRequired、TestCodexNativeModelStaysNative；
-// codexModels、codexModelsWait、codexClientHeader、alphaSearchHere 与 codexCompact 的做法）
+// codexModels、codexModelsWait、codexClientHeader、alphaSearchHere、codexCompact、plainCompact、localSummary 与 compactFails 的做法）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -877,5 +877,129 @@ describe("compaction of an endpoint model's conversation for a Codex signed in w
       model: "gpt-5.5",
       input: [userText(`${CODEX_SUMMARY_PREFIX}\nWe fixed the parser.`), userText("go on")],
     });
+  });
+});
+
+describe("compaction fallbacks for an endpoint model", () => {
+  async function startRelay(respond: FakeBackend["respond"]) {
+    const chatgpt = await startBackend();
+    const relay = await startBackend();
+    relay.respond = respond;
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[1]!, slug: "relay-a", url: `${relay.url}/v1` }],
+    });
+    return { chatgpt, relay, codexBase };
+  }
+
+  function compactBody(): Buffer {
+    return Buffer.from(
+      JSON.stringify({
+        model: "relay-a/kimi-k2",
+        prompt_cache_key: "thread-7",
+        input: [
+          userText("fix the parser"),
+          { type: "reasoning", id: "rs_9", encrypted_content: "gAAAAAsealed" },
+          { type: "message", role: "assistant", content: [{ type: "output_text", text: "Done." }] },
+          { type: "compaction_trigger" },
+        ],
+        stream: true,
+      }),
+    );
+  }
+
+  function compact(codexBase: string): Promise<Reply> {
+    const body = compactBody();
+    return send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-length": String(body.length) }),
+      body,
+    });
+  }
+
+  function summaryStream(text: string): string {
+    return sse(
+      '{"type":"response.created","response":{"id":"resp_7"}}',
+      JSON.stringify({ type: "response.output_text.delta", delta: text }),
+      JSON.stringify({
+        type: "response.output_item.done",
+        item: { type: "message", role: "assistant", content: [{ type: "output_text", text }] },
+      }),
+      '{"type":"response.completed","response":{"id":"resp_7","status":"completed","output":[]}}',
+    );
+  }
+
+  function summaryOf(reply: Reply): string {
+    const sealed = compactionItemOf(reply).encrypted_content;
+    return Buffer.from(sealed.slice("osuna1:".length), "base64").toString("utf8");
+  }
+
+  test("an item the endpoint can't find: the summary is asked again with the conversation as text", async () => {
+    const { relay, codexBase } = await startRelay((request, res) => {
+      const isPlain = request.body.toString("utf8").includes("This is the conversation so far");
+      if (!isPlain) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end('{"error":{"message":"Item with id \'rs_9\' not found."}}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(summaryStream("Parser fixed; tests next."));
+    });
+
+    const reply = await compact(codexBase);
+
+    expect(reply.status).toBe(200);
+    expect(summaryOf(reply)).toBe("Parser fixed; tests next.");
+    expect(relay.requests).toHaveLength(2);
+    const plain = JSON.parse(relay.requests[1]!.body.toString("utf8")) as { input: unknown[] };
+    expect(plain.input).toEqual([
+      userText(
+        "This is the conversation so far:\n\n[user]\nfix the parser\n\n[assistant]\nDone.\n\n",
+      ),
+      userText(CODEX_COMPACT_PROMPT),
+    ]);
+  });
+
+  test("refused again as text: the summary is assembled locally and the compaction still completes", async () => {
+    const { relay, codexBase } = await startRelay((_request, res) => {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end('{"error":{"message":"Upstream request failed"}}');
+    });
+
+    const reply = await compact(codexBase);
+
+    expect(reply.status).toBe(200);
+    expect(relay.requests).toHaveLength(2);
+    expect(summaryOf(reply)).toBe(
+      "Osuna compacted this conversation without a model (relay-a (relay-a/kimi-k2) answered 404 to the summary request: RELAY-A: Upstream request failed), so this is no summary: " +
+        "it is what the user asked and the last reply. Look at the workspace for where the work stands before going on.\n\n" +
+        "## The user's messages\n\nfix the parser\n\n## The last reply\n\nDone.\n",
+    );
+  });
+
+  test("a conversation whose compaction keeps failing is not asked again for a while", async () => {
+    const { relay, codexBase } = await startRelay((_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(
+        sse(
+          '{"type":"response.created","response":{"id":"resp_8"}}',
+          '{"type":"response.output_text.delta","delta":"Half a sum"}',
+          '{"type":"response.incomplete","response":{"id":"resp_8","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}',
+        ),
+      );
+    });
+
+    for (let i = 0; i < 3; i++) {
+      const failed = await compact(codexBase);
+      expect(failed.status).toBe(502);
+    }
+    const held = await compact(codexBase);
+
+    expect(held.status).toBe(400);
+    const error = JSON.parse(held.body.toString("utf8")) as { error: { message: string } };
+    expect(error.error.message).toMatch(
+      /^compaction: relay-a\/kimi-k2 failed to summarise this conversation 3 times in a row \(last: the reply ended incomplete \(max_output_tokens\)\); Osuna doesn't ask it again for /,
+    );
+    expect(relay.requests).toHaveLength(3);
   });
 });

@@ -502,8 +502,13 @@ into Codex's summary request, the turn metadata saying local compaction, the
 summary handed back as a compaction item and read back in later turns)
 follow codexBackend, codexModels, codexModelsWait, modelsEtag, codexHeader,
 the /responses/compact refusal, codexInputAs, localCompactionTurn,
-localCompactionMeta, userMessage, codexCompact and compactReply in magpie's
-internal/gateway/codex_backend.go,
+localCompactionMeta, userMessage, codexCompact, compactReply and
+compactFailure, and asking the summary again as text, assembling one locally
+and pausing a conversation's compaction that keeps failing (plainCompact,
+localSummary, itemText, upstreamFailed, itemNotFound and unreadableItem) in
+magpie's internal/gateway/codex_backend.go, protectionWords and
+protectionRefused in internal/gateway/fallback.go, compactFails and
+compactKey in internal/gateway/codex_compact_guard.go,
 codexClientHeader in internal/gateway/gateway.go, alphaSearchReply in
 internal/gateway/codex_search.go, Tag, WithTag, Tagged and CacheEntries in
 internal/codexcat/codexcat.go, MagpieAdded in internal/catalog/catalog.go and
@@ -515,6 +520,9 @@ codexStaleCache in internal/agent/codex.go:
   packages/server/src/server/api-endpoints/gateway/chatgpt-models.test.ts
   packages/server/src/server/api-endpoints/gateway/codex-compaction.ts
   packages/server/src/server/api-endpoints/gateway/codex-compaction.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction-answer.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction-fallback.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction-fallback.test.ts
   packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
@@ -562,6 +570,7 @@ endpoint model's conversation are Codex's own (prompts/templates/compact),
 copied verbatim by way of magpie's internal/gateway/codex_backend.go:
 
   packages/server/src/server/api-endpoints/gateway/codex-compaction.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction-fallback.ts
 
 Copyright 2025 OpenAI. Licensed under the Apache License, Version 2.0, whose
 full text is in this repository's LICENSE.

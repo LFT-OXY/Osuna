@@ -149,7 +149,7 @@ describe("compactionReplyOf", () => {
       compactionReplyOf(
         'data: {"type":"response.incomplete","response":{"id":"r","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
       ),
-    ).toEqual({ kind: "failed", message: "the reply ended incomplete (max_output_tokens)" });
+    ).toEqual({ kind: "incomplete", message: "the reply ended incomplete (max_output_tokens)" });
   });
 });
 

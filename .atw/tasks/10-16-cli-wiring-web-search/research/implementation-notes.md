@@ -263,4 +263,5 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 标记里多算了 Codex 的默认模型：工单要求默认模型变了也标过期，清单本身不随它变，多一次重拉。
 - 等 ChatGPT 清单的 3 秒在 e2e 里用 `gatewayChatGptModelsWaitMs` 缩成 300 毫秒，常量 `CHATGPT_MODELS_WAIT_MS` 是 3000。
 - 走这几条要先看模型名的路径（`/responses`、`/responses/compact`、`/alpha/search`）时，ChatGPT 自带模型的请求体也先整个读出来再转（上限同中转站 64 MB，超了回 413）；magpie 同样先读。
-- 压缩比 magpie 少做的：摘要请求被 404、条目找不到、「Upstream request failed」、「response protection」拒绝时改用纯文字对话再问一次、再失败就本地拼摘要（`plainCompact`、`localSummary`，magpie #866、#1008、#1270）；同一段对话压缩一直失败时暂停一阵（`compactFails`，#2274）；服务商设成原生压缩时保留 trigger（`NativeCompaction`，#1099，Osuna 没有这个设置）；ChatGPT 自带模型请求里去掉推理条目（与压缩无关）。这些都是针对个别中转站的补救，没有它们时失败照原样交给 Codex，不会把错的东西当摘要。
+- 压缩的补救照 magpie 做了（用户 2026-10-18 决定，`gateway/codex-compaction-fallback.ts`、`codex-compaction-answer.ts`）：摘要请求被 404、条目找不到的 400、中转站的「Upstream request failed」（4xx，不含 401、403、429）、「response protection is unavailable」（含开口后以它断掉的流）拒绝时，以纯文字的对话再问一次（`plainCompact`：去掉 `previous_response_id`，对话最多 40 万字、去掉最早的）；再失败就本地拼「摘要」（`localSummary`：用户的话最多 8 万字、最近的，加最后一次回复），压缩照样完成（magpie #866、#1008、#1270）。同一段对话（`prompt_cache_key`）在同一个模型上连续失败 3 次、每次间隔不到 5 分钟，之后直接回 400 说明、不问模型，到最后一次失败满 5 分钟为止；401、403 不算，有摘要就清零（`CompactionFailures`，magpie `compactFails` #2274），只记在内存里。
+- 压缩仍比 magpie 少做的：服务商设成原生压缩时保留 trigger（`NativeCompaction`，#1099，Osuna 没有这个设置）；ChatGPT 自带模型请求里去掉推理条目（与压缩无关）。
