@@ -2649,6 +2649,20 @@ export const ja: TranslationResources = {
           "{{agent}} がどのレベルを求めても、サブエージェントはこのレベルで考えます。",
         subagentThinkingPick: "{{agent}} のサブエージェントの思考レベル",
         subagentThinkingUnset: "設定しない（{{agent}} が決める）",
+        codexSubagentModel: "Subagent の既定モデル",
+        codexSubagentModelHint:
+          "メインの会話がモデルを指定しないとき、Subagent はこのモデルで始まります。メインの会話は別のモデルを指定することもできます。",
+        codexSubagentModelUnset: "メインの会話と同じ",
+        codexSubagentModelPick: "{{agent}} の Subagent の既定モデル",
+        codexSubagentThinking: "Subagent の既定の思考レベル",
+        codexSubagentThinkingHint:
+          "メインの会話がレベルを指定しないとき、Subagent はこのレベルで始まります。モデルが受け付けるレベルだけを表示します。",
+        codexSubagentThinkingPick: "{{agent}} の Subagent の既定の思考レベル",
+        memoryModel: "メモリのモデル",
+        memoryModelHint:
+          "過去の会話をバックグラウンドで {{agent}} のメモリにまとめます。{{agent}} のメモリ機能がオンのときだけ使われます。Osuna はこの機能をオンにしません。",
+        memoryModelUnset: "{{agent}} 自身のもの",
+        memoryModelPick: "{{agent}} のメモリのモデル",
         connection: {
           kept: "{{agent}} はすでにサードパーティ API を使っています。{{model}} のままです。",
           again:

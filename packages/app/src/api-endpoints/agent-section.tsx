@@ -23,6 +23,7 @@ import type {
   AgentEndpointsSummary,
   AgentSwitchBlock,
   ClaudeSideModelsView,
+  CodexSideModelsView,
   DefaultModelOption,
   DefaultThinkingView,
   SubagentThinkingView,
@@ -30,7 +31,7 @@ import type {
 
 /*
  * Claude Code / Codex 提供方页的「第三方接口」区：一张卡片——总开关、默认模型、默认思考档位、
- * 「保留 claude.ai 登录」、「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
+ * 后台小任务 / Subagent / 记忆模型、「保留 claude.ai 登录」、「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
  */
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
@@ -57,6 +58,8 @@ export interface AgentApiEndpointsSectionProps {
   onBackgroundModelChange: (modelId: string | null) => void;
   onSubagentModelChange: (modelId: string | null) => void;
   onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
+  // 记忆模型（只有 Codex）；null 为不设。
+  onMemoryModelChange: (modelId: string | null) => void;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -79,6 +82,7 @@ export function AgentApiEndpointsSection({
   onBackgroundModelChange,
   onSubagentModelChange,
   onSubagentThinkingChange,
+  onMemoryModelChange,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -175,6 +179,17 @@ export function AgentApiEndpointsSection({
             onBackgroundModelChange={onBackgroundModelChange}
             onSubagentModelChange={onSubagentModelChange}
             onSubagentThinkingChange={onSubagentThinkingChange}
+          />
+        ) : null}
+        {view.codexSideModels ? (
+          <CodexSideModelRows
+            providerLabel={providerLabel}
+            sideModels={view.codexSideModels}
+            options={view.modelOptions}
+            busy={busy}
+            onSubagentModelChange={onSubagentModelChange}
+            onSubagentThinkingChange={onSubagentThinkingChange}
+            onMemoryModelChange={onMemoryModelChange}
           />
         ) : null}
         {showsKeepClaudeAiLogin ? (
@@ -484,6 +499,7 @@ function SideModelRows({
         title={t("settings.apiEndpoints.agent.backgroundModel")}
         hint={t("settings.apiEndpoints.agent.backgroundModelHint", { agent: providerLabel })}
         pickTitle={t("settings.apiEndpoints.agent.backgroundModelPick", { agent: providerLabel })}
+        unsetLabel={t("settings.apiEndpoints.agent.followsDefaultModel")}
         value={sideModels.backgroundModel}
         options={options}
         busy={busy}
@@ -494,6 +510,7 @@ function SideModelRows({
         title={t("settings.apiEndpoints.agent.subagentModel")}
         hint={t("settings.apiEndpoints.agent.subagentModelHint")}
         pickTitle={t("settings.apiEndpoints.agent.subagentModelPick", { agent: providerLabel })}
+        unsetLabel={t("settings.apiEndpoints.agent.followsDefaultModel")}
         value={sideModels.subagentModel}
         options={options}
         busy={busy}
@@ -502,6 +519,9 @@ function SideModelRows({
       />
       <SubagentThinkingRow
         providerLabel={providerLabel}
+        title={t("settings.apiEndpoints.agent.subagentThinking")}
+        hint={t("settings.apiEndpoints.agent.subagentThinkingHint", { agent: providerLabel })}
+        pickTitle={t("settings.apiEndpoints.agent.subagentThinkingPick", { agent: providerLabel })}
         thinking={sideModels.subagentThinking}
         busy={busy}
         onChange={onSubagentThinkingChange}
@@ -510,11 +530,69 @@ function SideModelRows({
   );
 }
 
-/** 一个可以不设（与默认模型相同）的模型。 */
+/** Codex 的默认 Subagent 模型、它的思考档位与记忆模型（照 magpie 的 subagents、subagent_effort 与 memories）。 */
+function CodexSideModelRows({
+  providerLabel,
+  sideModels,
+  options,
+  busy,
+  onSubagentModelChange,
+  onSubagentThinkingChange,
+  onMemoryModelChange,
+}: {
+  providerLabel: string;
+  sideModels: CodexSideModelsView;
+  options: DefaultModelOption[];
+  busy: boolean;
+  onSubagentModelChange: (modelId: string | null) => void;
+  onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
+  onMemoryModelChange: (modelId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const agent = { agent: providerLabel };
+  return (
+    <>
+      <SideModelRow
+        title={t("settings.apiEndpoints.agent.codexSubagentModel")}
+        hint={t("settings.apiEndpoints.agent.codexSubagentModelHint")}
+        pickTitle={t("settings.apiEndpoints.agent.codexSubagentModelPick", agent)}
+        unsetLabel={t("settings.apiEndpoints.agent.codexSubagentModelUnset")}
+        value={sideModels.subagentModel}
+        options={options}
+        busy={busy}
+        onChange={onSubagentModelChange}
+        testID="agent-api-endpoints-subagent-model"
+      />
+      <SubagentThinkingRow
+        providerLabel={providerLabel}
+        title={t("settings.apiEndpoints.agent.codexSubagentThinking")}
+        hint={t("settings.apiEndpoints.agent.codexSubagentThinkingHint")}
+        pickTitle={t("settings.apiEndpoints.agent.codexSubagentThinkingPick", agent)}
+        thinking={sideModels.subagentThinking}
+        busy={busy}
+        onChange={onSubagentThinkingChange}
+      />
+      <SideModelRow
+        title={t("settings.apiEndpoints.agent.memoryModel")}
+        hint={t("settings.apiEndpoints.agent.memoryModelHint", agent)}
+        pickTitle={t("settings.apiEndpoints.agent.memoryModelPick", agent)}
+        unsetLabel={t("settings.apiEndpoints.agent.memoryModelUnset", agent)}
+        value={sideModels.memoryModel}
+        options={options}
+        busy={busy}
+        onChange={onMemoryModelChange}
+        testID="agent-api-endpoints-memory-model"
+      />
+    </>
+  );
+}
+
+/** 一个可以不设的模型；不设时显示 unsetLabel（如「与默认模型相同」）。 */
 function SideModelRow({
   title,
   hint,
   pickTitle,
+  unsetLabel,
   value,
   options,
   busy,
@@ -524,6 +602,7 @@ function SideModelRow({
   title: string;
   hint: string;
   pickTitle: string;
+  unsetLabel: string;
   value: DefaultModelOption | null;
   options: DefaultModelOption[];
   busy: boolean;
@@ -532,7 +611,7 @@ function SideModelRow({
 }) {
   const { t } = useTranslation();
   const labelOf = useDefaultModelLabel();
-  const followsLabel = t("settings.apiEndpoints.agent.followsDefaultModel");
+  const followsLabel = unsetLabel;
   const selectOptions = useMemo<SelectFieldOption<string>[]>(
     () => [
       {
@@ -589,14 +668,20 @@ function SideModelRow({
   );
 }
 
-/** Subagent 的思考档位：选项来自 Subagent 模型的档位；设了却不在选项里的照 id 显示。 */
+/** Subagent 的思考档位：选项来自主机按 Subagent 模型给的档位；设了却不在选项里的照 id 显示。 */
 function SubagentThinkingRow({
   providerLabel,
+  title,
+  hint,
+  pickTitle,
   thinking,
   busy,
   onChange,
 }: {
   providerLabel: string;
+  title: string;
+  hint: string;
+  pickTitle: string;
   thinking: SubagentThinkingView;
   busy: boolean;
   onChange: (thinkingOptionId: string | null) => void;
@@ -628,29 +713,24 @@ function SubagentThinkingRow({
     const selected = selectOptions.find((option) => option.id === selectedId);
     return { label: selected?.label ?? selectedId };
   }, [selectOptions, selectedId]);
-  const title = t("settings.apiEndpoints.agent.subagentThinkingPick", { agent: providerLabel });
   const isCompact = useIsCompactFormFactor();
   return (
     <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
       <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>
-          {t("settings.apiEndpoints.agent.subagentThinking")}
-        </Text>
-        <Text style={settingsStyles.rowHint}>
-          {t("settings.apiEndpoints.agent.subagentThinkingHint", { agent: providerLabel })}
-        </Text>
+        <Text style={settingsStyles.rowTitle}>{title}</Text>
+        <Text style={settingsStyles.rowHint}>{hint}</Text>
       </View>
       <View style={isCompact ? styles.selectStacked : styles.select}>
         <SelectField
           field={false}
-          label={title}
+          label={pickTitle}
           value={selectedId}
           selectedDisplay={selectedDisplay}
           options={selectOptions}
           onChange={handleChange}
-          placeholder={t("settings.apiEndpoints.agent.subagentThinking")}
-          emptyText={t("settings.apiEndpoints.agent.subagentThinking")}
-          title={title}
+          placeholder={title}
+          emptyText={title}
+          title={pickTitle}
           size="sm"
           disabled={busy}
           desktopPlacement="top-start"

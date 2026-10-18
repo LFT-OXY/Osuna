@@ -2663,6 +2663,20 @@ export const ptBR: TranslationResources = {
           "Os subagentes raciocinam neste nível, seja qual for o pedido do {{agent}}.",
         subagentThinkingPick: "Raciocínio dos subagentes do {{agent}}",
         subagentThinkingUnset: "Não definido (o {{agent}} decide)",
+        codexSubagentModel: "Modelo padrão de Subagent",
+        codexSubagentModelHint:
+          "Os Subagents começam nele quando a conversa principal não indica um modelo. A conversa principal ainda pode indicar outro.",
+        codexSubagentModelUnset: "Igual à conversa principal",
+        codexSubagentModelPick: "Modelo padrão de Subagent para o {{agent}}",
+        codexSubagentThinking: "Raciocínio padrão de Subagent",
+        codexSubagentThinkingHint:
+          "Os Subagents começam neste nível quando a conversa principal não escolhe um. Só aparecem os níveis que o modelo aceita.",
+        codexSubagentThinkingPick: "Raciocínio padrão de Subagent para o {{agent}}",
+        memoryModel: "Modelo de memória",
+        memoryModelHint:
+          "Resume em segundo plano as conversas anteriores nas memórias do {{agent}}. Só é usado enquanto o recurso de memórias do {{agent}} está ligado; o Osuna não o liga.",
+        memoryModelUnset: "O do próprio {{agent}}",
+        memoryModelPick: "Modelo de memória para o {{agent}}",
         connection: {
           kept: "{{agent}} já usa endpoints de API. Continua em {{model}}.",
           again:

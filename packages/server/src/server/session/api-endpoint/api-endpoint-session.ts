@@ -472,10 +472,10 @@ function keepCurrentSettingsCode(code: string | undefined): KeepCurrentSettingsC
 
 type SideModelsRequest = Pick<
   ApiEndpointAgentSettingsInput,
-  "backgroundModelId" | "subagentModelId" | "subagentThinkingOptionId"
+  "backgroundModelId" | "subagentModelId" | "subagentThinkingOptionId" | "memoryModelId"
 >;
 
-/** 后台小任务模型、Subagent 模型与它的思考档位：只带客户端给了的（省略即不变，null 为不设）。 */
+/** 后台小任务模型、Subagent 模型与它的思考档位、记忆模型：只带客户端给了的（省略即不变，null 为不设）。 */
 function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
   const requested: SideModelsRequest = {};
   if (request.backgroundModelId !== undefined) {
@@ -485,5 +485,6 @@ function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
   if (request.subagentThinkingOptionId !== undefined) {
     requested.subagentThinkingOptionId = request.subagentThinkingOptionId;
   }
+  if (request.memoryModelId !== undefined) requested.memoryModelId = request.memoryModelId;
   return requested;
 }

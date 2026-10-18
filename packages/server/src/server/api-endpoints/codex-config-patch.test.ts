@@ -30,6 +30,8 @@ const GATEWAY: CodexGatewayWiring = {
   chatgptBaseUrl: null,
   endpointModels: [],
   defaultThinking: null,
+  subagent: null,
+  memoryModel: null,
 };
 
 // 用户手写的 config.toml：注释、行尾注释、引号风格、带空格的项目路径、自己的中转站，全都不能动。
@@ -988,6 +990,8 @@ describe("Codex's own picks in config.toml", () => {
       level: "high",
       isUltraCodeOn: null,
       subagent: null,
+      subagentLevel: null,
+      memory: null,
     });
 
     const saved = first.text
@@ -998,6 +1002,8 @@ describe("Codex's own picks in config.toml", () => {
       level: "low",
       isUltraCodeOn: null,
       subagent: null,
+      subagentLevel: null,
+      memory: null,
     });
 
     const kept = patch({ text: saved, takeover: first.takeover, defaultThinking: "low" });
@@ -1023,5 +1029,141 @@ describe("Codex's own picks in config.toml", () => {
     const restored = restoreCodexOfficial({ text: again.text, takeover: again.takeover });
     if (restored.kind !== "patched") throw new Error("Expected a patch");
     expect(topLevel(restored.text).model).toBe("gpt-5.1-codex");
+  });
+});
+
+describe("the default Subagent model and level and the memory model in config.toml", () => {
+  const SIDE_CONFIG = `${USER_CONFIG}
+[agents]
+max_threads = 4 # mine
+default_subagent_model = "gpt-mine"
+
+[memories]
+generate_memories = true
+`;
+
+  function sideTables(text: string) {
+    const value = toValue(text);
+    return { agents: value.agents, memories: value.memories };
+  }
+
+  it("writes the four keys, leaves the user's other [agents] and [memories] keys, and returns the file byte for byte on Official", () => {
+    const patched = applyWith({
+      text: SIDE_CONFIG,
+      takeover: null,
+      wiring: { subagent: { model: "relay/glm", effort: "high" }, memoryModel: "glm-4.6" },
+    });
+    expect(sideTables(patched.text)).toEqual({
+      agents: {
+        max_threads: 4,
+        default_subagent_model: "relay/glm",
+        default_subagent_reasoning_effort: "high",
+      },
+      memories: {
+        generate_memories: true,
+        extract_model: "glm-4.6",
+        consolidation_model: "glm-4.6",
+      },
+    });
+    expect(patched.text).toContain("max_threads = 4 # mine");
+    expect(restore(patched.text, patched.takeover)).toBe(withKeptTable(SIDE_CONFIG));
+  });
+
+  it("adds the tables when the file has none and takes them away again on Official", () => {
+    const patched = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { subagent: { model: "glm-4.6", effort: null }, memoryModel: "glm-4.6" },
+    });
+    expect(sideTables(patched.text)).toEqual({
+      agents: { default_subagent_model: "glm-4.6" },
+      memories: { extract_model: "glm-4.6", consolidation_model: "glm-4.6" },
+    });
+    const again = applyWith({
+      text: patched.text,
+      takeover: patched.takeover,
+      wiring: { subagent: { model: "glm-4.6", effort: null }, memoryModel: "glm-4.6" },
+    });
+    expect(again.text).toBe(patched.text);
+    expect(restore(again.text, again.takeover)).toBe(withKeptTable(USER_CONFIG));
+  });
+
+  it("writes only the level when no Subagent model is set", () => {
+    const patched = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { subagent: { model: null, effort: "low" } },
+    });
+    expect(sideTables(patched.text)).toEqual({
+      agents: { default_subagent_reasoning_effort: "low" },
+      memories: undefined,
+    });
+  });
+
+  it("puts the user's own back once unset, and leaves the keys alone when nothing was ever set", () => {
+    const first = applyWith({
+      text: SIDE_CONFIG,
+      takeover: null,
+      wiring: { subagent: { model: "glm-4.6", effort: null }, memoryModel: "glm-4.6" },
+    });
+    const second = applyWith({ text: first.text, takeover: first.takeover });
+    expect(sideTables(second.text)).toEqual(sideTables(SIDE_CONFIG));
+    expect(Object.keys(second.takeover.keys).filter((key) => key.includes("."))).toEqual([]);
+    const untouched = applyWith({ text: SIDE_CONFIG, takeover: null });
+    expect(sideTables(untouched.text)).toEqual(sideTables(SIDE_CONFIG));
+  });
+
+  it("names a bare model the way /model lists it under the ChatGPT wiring", () => {
+    const patched = applyWith({
+      text: null,
+      takeover: null,
+      wiring: {
+        chatgptBaseUrl: "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex",
+        endpointModels: ["relay/gpt", "zhipu/glm-4.6"],
+        subagent: { model: "glm-4.6", effort: null },
+        memoryModel: "relay/gpt",
+      },
+    });
+    expect(sideTables(patched.text)).toEqual({
+      agents: { default_subagent_model: "zhipu/glm-4.6" },
+      memories: { extract_model: "relay/gpt", consolidation_model: "relay/gpt" },
+    });
+  });
+
+  it("reads what changed in the file since, and counts a changed model as modified but not a changed level", () => {
+    const patched = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { subagent: { model: "glm-4.6", effort: "high" }, memoryModel: "glm-4.6" },
+    });
+    expect(readCodexCliPicks({ text: patched.text, takeover: patched.takeover })).toMatchObject({
+      subagent: null,
+      subagentLevel: null,
+      memory: null,
+    });
+    const edited = patched.text
+      .replace('default_subagent_model = "glm-4.6"', 'default_subagent_model = "kimi-k2"')
+      .replace('default_subagent_reasoning_effort = "high"', "")
+      .replace('consolidation_model = "glm-4.6"', 'consolidation_model = "kimi-k2"');
+    expect(readCodexCliPicks({ text: edited, takeover: patched.takeover })).toMatchObject({
+      subagent: { now: "kimi-k2" },
+      subagentLevel: { now: null },
+      memory: { now: "kimi-k2" },
+    });
+    const inspection = inspectCodexConfig({ text: edited, takeover: patched.takeover });
+    if (inspection.kind !== "parsed") throw new Error("Expected parsed");
+    expect(inspection.modifiedKeys).toEqual([
+      "agents.default_subagent_model",
+      "memories.consolidation_model",
+    ]);
+  });
+
+  it("reads the user's own values as picks before Osuna wrote any", () => {
+    const patched = applyWith({ text: SIDE_CONFIG, takeover: null });
+    expect(readCodexCliPicks({ text: patched.text, takeover: patched.takeover })).toMatchObject({
+      subagent: { now: "gpt-mine" },
+      subagentLevel: null,
+      memory: null,
+    });
   });
 });

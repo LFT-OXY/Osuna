@@ -24,6 +24,7 @@ function endpoint(overrides: Partial<ApiEndpoint> & { id: string }): ApiEndpoint
 }
 
 function view(input: {
+  provider?: string;
   endpoints: ApiEndpoint[];
   endpointModelGroups?: ApiEndpointModelGroup[] | null;
   enabled?: boolean;
@@ -33,6 +34,7 @@ function view(input: {
   backgroundModelId?: string | null;
   subagentModelId?: string | null;
   subagentThinkingOptionId?: string | null;
+  memoryModelId?: string | null;
   lockedThinkingOptionId?: string | null;
   subagentThinkingOptions?: { id: string; label: string }[] | null;
   gatewayUnavailable?: { code: string; message: string } | null;
@@ -43,7 +45,7 @@ function view(input: {
       status: "ready",
       endpoints: input.endpoints,
       agents: {
-        claude: {
+        [input.provider ?? "claude"]: {
           enabled: input.enabled ?? false,
           defaultModelId: input.defaultModelId ?? null,
           defaultThinkingOptionId: input.defaultThinkingOptionId,
@@ -51,12 +53,13 @@ function view(input: {
           backgroundModelId: input.backgroundModelId,
           subagentModelId: input.subagentModelId,
           subagentThinkingOptionId: input.subagentThinkingOptionId,
+          memoryModelId: input.memoryModelId,
         },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
       agentIssues: input.agentIssues ?? {},
     },
-    provider: "claude",
+    provider: input.provider ?? "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
     lockedThinkingOptionId: input.lockedThinkingOptionId ?? null,
     subagentThinkingOptions: input.subagentThinkingOptions ?? null,
@@ -525,5 +528,78 @@ describe("the background task and Subagent models on the Claude Code page", () =
       subagentThinkingOptions: null,
     });
     expect(old.sideModels).toBeNull();
+  });
+});
+
+describe("Codex's default Subagent model and memory model", () => {
+  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "kimi-k2" }] })];
+  const groups: ApiEndpointModelGroup[] = [
+    {
+      name: "Relay A",
+      models: [
+        { provider: "codex", id: "relay-a/glm-5.3", label: "glm-5.3" },
+        { provider: "codex", id: "relay-a/kimi-k2", label: "kimi-k2" },
+      ],
+    },
+  ];
+  const levels = [
+    { id: "low", label: "Low" },
+    { id: "high", label: "High" },
+  ];
+
+  it("shows the models and the Subagent levels the host reports", () => {
+    const shown = view({
+      provider: "codex",
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      subagentModelId: "relay-a/kimi-k2",
+      subagentThinkingOptionId: "high",
+      memoryModelId: "glm-5.3",
+      subagentThinkingOptions: levels,
+    });
+    expect(shown.codexSideModels).toEqual({
+      subagentModel: { id: "relay-a/kimi-k2", model: "kimi-k2", endpointName: "Relay A" },
+      subagentThinking: { value: "high", options: levels },
+      memoryModel: { id: "glm-5.3", model: "glm-5.3", endpointName: null },
+    });
+    expect(shown.sideModels).toBeNull();
+  });
+
+  it("leaves both to Codex while nothing is set", () => {
+    const shown = view({
+      provider: "codex",
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      subagentThinkingOptions: levels,
+    });
+    expect(shown.codexSideModels).toEqual({
+      subagentModel: null,
+      subagentThinking: { value: null, options: levels },
+      memoryModel: null,
+    });
+  });
+
+  it("is not offered while the switch is off, by a host without it, or on Claude Code", () => {
+    const off = view({ provider: "codex", endpoints, subagentThinkingOptions: levels });
+    expect(off.codexSideModels).toBeNull();
+    const old = view({
+      provider: "codex",
+      endpoints,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      subagentThinkingOptions: null,
+    });
+    expect(old.codexSideModels).toBeNull();
+    const claude = view({
+      endpoints,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      subagentThinkingOptions: levels,
+    });
+    expect(claude.codexSideModels).toBeNull();
   });
 });

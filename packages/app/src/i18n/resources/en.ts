@@ -2686,6 +2686,20 @@ export const en = {
         subagentThinkingHint: "Subagents think at this level, whatever {{agent}} asks for.",
         subagentThinkingPick: "Subagent thinking for {{agent}}",
         subagentThinkingUnset: "Not set ({{agent}} decides)",
+        codexSubagentModel: "Default Subagent model",
+        codexSubagentModelHint:
+          "Subagents start on it when the main conversation names no model. The main conversation can still name another.",
+        codexSubagentModelUnset: "Same as the main conversation",
+        codexSubagentModelPick: "Default Subagent model for {{agent}}",
+        codexSubagentThinking: "Default Subagent thinking",
+        codexSubagentThinkingHint:
+          "Subagents start at this level when the main conversation picks none. Only levels the model takes are listed.",
+        codexSubagentThinkingPick: "Default Subagent thinking for {{agent}}",
+        memoryModel: "Memory model",
+        memoryModelHint:
+          "Sums up past conversations into {{agent}}'s memories in the background. Only used while {{agent}}'s memories feature is on; Osuna doesn't turn it on.",
+        memoryModelUnset: "{{agent}}'s own",
+        memoryModelPick: "Memory model for {{agent}}",
         connection: {
           kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:

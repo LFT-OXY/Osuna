@@ -2646,6 +2646,18 @@ export const zhCN: TranslationResources = {
         subagentThinkingHint: "不论 {{agent}} 要哪一档，Subagent 都按这一档思考",
         subagentThinkingPick: "{{agent}} 的 Subagent 思考档位",
         subagentThinkingUnset: "不设（由 {{agent}} 决定）",
+        codexSubagentModel: "默认 Subagent 模型",
+        codexSubagentModelHint: "主对话没指定模型时 Subagent 用它；主对话仍可另指定",
+        codexSubagentModelUnset: "与主对话相同",
+        codexSubagentModelPick: "{{agent}} 的默认 Subagent 模型",
+        codexSubagentThinking: "默认 Subagent 思考档位",
+        codexSubagentThinkingHint: "主对话没指定档位时 Subagent 从这一档起步；只列模型能收的档位",
+        codexSubagentThinkingPick: "{{agent}} 的默认 Subagent 思考档位",
+        memoryModel: "记忆模型",
+        memoryModelHint:
+          "在后台把过去的对话整理成 {{agent}} 的记忆。只在 {{agent}} 的记忆功能打开时有用，Osuna 不会替你打开",
+        memoryModelUnset: "{{agent}} 自己的",
+        memoryModelPick: "{{agent}} 的记忆模型",
         connection: {
           kept: "{{agent}} 已在用第三方接口，默认模型仍是 {{model}}。",
           again: "{{agent}} 已改用第三方接口，回到上次关掉开关前用的 {{model}}。",

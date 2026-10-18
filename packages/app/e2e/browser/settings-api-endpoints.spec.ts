@@ -976,6 +976,79 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
+  test("Codex's default Subagent model and memory model: a failed save stays in place, saved ones go into config.toml and Official takes them out", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["glm-5.3", "kimi-k2"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      defaultModelId: "kimi-k2",
+    });
+    const codexDir = path.join(cliHome, "codex");
+    try {
+      await openAgentPage(page, "codex");
+      const section = agentSection(page);
+      const subagent = section.getByTestId("agent-api-endpoints-subagent-model-trigger");
+      const thinking = section.getByTestId("agent-api-endpoints-subagent-thinking-trigger");
+      const memory = section.getByTestId("agent-api-endpoints-memory-model-trigger");
+
+      await test.step("nothing is set at first", async () => {
+        await expect(subagent).toHaveText("Same as the main conversation");
+        await expect(thinking).toHaveText("Not set (Codex decides)");
+        await expect(memory).toHaveText("Codex's own");
+        await expect(section).toContainText("Only used while Codex's memories feature is on");
+      });
+
+      await test.step("a failed save stays in place and leaves the file", async () => {
+        await memory.click();
+        await chmod(codexDir, 0o500);
+        try {
+          await page.getByTestId("agent-api-endpoints-memory-model-option-glm-5.3").click();
+          await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+            "Couldn't change the API endpoint settings for Codex",
+          );
+        } finally {
+          await chmod(codexDir, 0o700);
+        }
+        await expect(memory).toHaveText("Codex's own");
+        expect(await readCodexConfig()).not.toContain("extract_model");
+        await section.getByRole("button", { name: "Dismiss" }).click();
+      });
+
+      await test.step("saved: the four keys go into config.toml", async () => {
+        await subagent.click();
+        await page.getByTestId("agent-api-endpoints-subagent-model-option-glm-5.3").click();
+        await expect(subagent).toHaveText("glm-5.3");
+        await thinking.click();
+        await page.getByTestId("agent-api-endpoints-subagent-thinking-option-high").click();
+        await expect(thinking).toHaveText("High");
+        await memory.click();
+        await page.getByTestId("agent-api-endpoints-memory-model-option-glm-5.3").click();
+        await expect(memory).toHaveText("glm-5.3");
+        await expect.poll(readCodexConfig).toContain('default_subagent_model = "glm-5.3"');
+        const config = await readCodexConfig();
+        expect(config).toContain('default_subagent_reasoning_effort = "high"');
+        expect(config).toContain('extract_model = "glm-5.3"');
+        expect(config).toContain('consolidation_model = "glm-5.3"');
+      });
+
+      await test.step("switching off takes them out of the file", async () => {
+        await section.getByTestId("agent-api-endpoints-switch").click();
+        await expect(section.getByTestId("agent-api-endpoints-memory-model")).toHaveCount(0);
+        await expect.poll(readCodexConfig).not.toContain("default_subagent_model");
+        expect(await readCodexConfig()).not.toContain("extract_model");
+      });
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+      await rm(path.join(codexDir, "config.toml"), { force: true });
+    }
+  });
+
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
     page,
   }) => {

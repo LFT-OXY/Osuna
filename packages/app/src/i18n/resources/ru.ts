@@ -2659,6 +2659,20 @@ export const ru: TranslationResources = {
           "Субагенты размышляют на этом уровне, какой бы уровень ни запросил {{agent}}.",
         subagentThinkingPick: "Размышления субагентов для {{agent}}",
         subagentThinkingUnset: "Не задано (решает {{agent}})",
+        codexSubagentModel: "Модель Subagent по умолчанию",
+        codexSubagentModelHint:
+          "Subagent запускаются на ней, когда основной разговор не указывает модель. Основной разговор может указать другую.",
+        codexSubagentModelUnset: "Как в основном разговоре",
+        codexSubagentModelPick: "Модель Subagent по умолчанию для {{agent}}",
+        codexSubagentThinking: "Уровень размышлений Subagent по умолчанию",
+        codexSubagentThinkingHint:
+          "Subagent начинают с этого уровня, когда основной разговор его не выбирает. Показаны только уровни, которые принимает модель.",
+        codexSubagentThinkingPick: "Уровень размышлений Subagent по умолчанию для {{agent}}",
+        memoryModel: "Модель памяти",
+        memoryModelHint:
+          "В фоне сводит прошлые разговоры в память {{agent}}. Используется, только пока функция памяти {{agent}} включена; Osuna её не включает.",
+        memoryModelUnset: "Своя у {{agent}}",
+        memoryModelPick: "Модель памяти для {{agent}}",
         connection: {
           kept: "{{agent}} уже использует сторонние API. Модель остаётся {{model}}.",
           again:

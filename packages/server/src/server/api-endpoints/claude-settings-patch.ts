@@ -833,7 +833,14 @@ export function readClaudeCliPicks(input: {
   if (recorded && isChangedByCli) model = { now, isKept: recorded.held === "kept" };
   const level = claudeLevelIn(settings, now ?? recorded?.written ?? "");
   const subagent = changedSubagent(settings, takeover);
-  return { model, level, isUltraCodeOn: settings.ultracode === true, subagent };
+  return {
+    model,
+    level,
+    isUltraCodeOn: settings.ultracode === true,
+    subagent,
+    subagentLevel: null,
+    memory: null,
+  };
 }
 
 /** 文件里的 Subagent 模型不再是 Osuna 写的值时，它现在的值（没了为 null）；没变为 null（照 magpie subagent 字段的 Get 读文件）。 */

@@ -12,7 +12,7 @@ import {
 } from "./host-list";
 
 /*
- * Claude Code / Codex 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、
+ * Claude Code / Codex 提供方页「第三方接口」区的纯计算：总开关能不能打开、默认模型的候选、后台小任务 / Subagent / 记忆模型、
  * 「管理第三方接口」入口行的汇总、提示区的「设置被改过」。规则与 daemon 一致（R-A2、R-B6、ADR 0012）。
  */
 
@@ -151,6 +151,16 @@ export interface ClaudeSideModelsView {
   subagentThinking: SubagentThinkingView;
 }
 
+/**
+ * Codex 的默认 Subagent 模型与它的思考档位、记忆模型（PRD 第 33 条）：模型为 null 是没设（Subagent 跟主对话，记忆用 Codex 自己的）；
+ * Subagent 思考档位的选项由主机按 Subagent 跑的模型给。
+ */
+export interface CodexSideModelsView {
+  subagentModel: DefaultModelOption | null;
+  subagentThinking: SubagentThinkingView;
+  memoryModel: DefaultModelOption | null;
+}
+
 export interface SubagentThinkingView {
   // null 为没设，按 Claude Code 给 Subagent 的那一档。
   value: string | null;
@@ -178,6 +188,8 @@ export interface AgentApiEndpointsView {
   defaultThinking: DefaultThinkingView | null;
   // 只有 Claude Code 有；总开关关着或主机太旧（设置里没有这几项）时为 null，不显示这几行。
   sideModels: ClaudeSideModelsView | null;
+  // 只有 Codex 有；总开关关着或主机太旧时为 null，不显示这几行。
+  codexSideModels: CodexSideModelsView | null;
 }
 
 export function selectAgentApiEndpointsView(input: {
@@ -241,6 +253,12 @@ export function selectAgentApiEndpointsView(input: {
     modelOptions,
     subagentThinkingOptions: input.subagentThinkingOptions,
   });
+  const codexSideModels = codexSideModelsView({
+    provider,
+    agent,
+    modelOptions,
+    subagentThinkingOptions: input.subagentThinkingOptions,
+  });
 
   return {
     enabled: agent.enabled,
@@ -253,6 +271,7 @@ export function selectAgentApiEndpointsView(input: {
     keepsClaudeAiLogin,
     defaultThinking,
     sideModels,
+    codexSideModels,
   };
 }
 
@@ -299,6 +318,26 @@ function claudeSideModelsView(input: {
       value: agent.subagentThinkingOptionId ?? null,
       options: subagentThinkingOptions,
     },
+  };
+}
+
+/** 默认 Subagent 模型、档位与记忆模型的显示；只有 Codex、总开关开着、主机支持时才有。 */
+function codexSideModelsView(input: {
+  provider: string;
+  agent: ApiEndpointAgentSettings;
+  modelOptions: DefaultModelOption[];
+  subagentThinkingOptions: DefaultThinkingOption[] | null;
+}): CodexSideModelsView | null {
+  const { agent, modelOptions, subagentThinkingOptions } = input;
+  const isShown = input.provider === "codex" && agent.enabled && subagentThinkingOptions !== null;
+  if (!isShown) return null;
+  return {
+    subagentModel: displayedDefaultModel(modelOptions, agent.subagentModelId ?? null),
+    subagentThinking: {
+      value: agent.subagentThinkingOptionId ?? null,
+      options: subagentThinkingOptions,
+    },
+    memoryModel: displayedDefaultModel(modelOptions, agent.memoryModelId ?? null),
   };
 }
 

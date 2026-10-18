@@ -2623,6 +2623,20 @@ export const ar: TranslationResources = {
         subagentThinkingHint: "يفكر الوكلاء الفرعيون بهذا المستوى، أيًّا كان ما يطلبه {{agent}}.",
         subagentThinkingPick: "تفكير الوكلاء الفرعيين لـ {{agent}}",
         subagentThinkingUnset: "غير محدد (يقرر {{agent}})",
+        codexSubagentModel: "نموذج Subagent الافتراضي",
+        codexSubagentModelHint:
+          "يبدأ Subagent عليه عندما لا تحدد المحادثة الرئيسية نموذجًا. يمكن للمحادثة الرئيسية أن تحدد نموذجًا آخر.",
+        codexSubagentModelUnset: "مثل المحادثة الرئيسية",
+        codexSubagentModelPick: "نموذج Subagent الافتراضي لـ {{agent}}",
+        codexSubagentThinking: "مستوى تفكير Subagent الافتراضي",
+        codexSubagentThinkingHint:
+          "يبدأ Subagent بهذا المستوى عندما لا تختار المحادثة الرئيسية مستوى. تظهر فقط المستويات التي يقبلها النموذج.",
+        codexSubagentThinkingPick: "مستوى تفكير Subagent الافتراضي لـ {{agent}}",
+        memoryModel: "نموذج الذاكرة",
+        memoryModelHint:
+          "يلخص المحادثات السابقة في ذاكرة {{agent}} في الخلفية. لا يُستخدم إلا عندما تكون ميزة الذاكرة في {{agent}} مفعّلة؛ ولا يفعّلها Osuna.",
+        memoryModelUnset: "الخاص بـ {{agent}}",
+        memoryModelPick: "نموذج الذاكرة لـ {{agent}}",
         connection: {
           kept: "يستخدم {{agent}} واجهات API الخارجية بالفعل. يبقى على {{model}}.",
           again:

@@ -2678,6 +2678,20 @@ export const fr: TranslationResources = {
           "Les sous-agents réfléchissent à ce niveau, quel que soit celui que demande {{agent}}.",
         subagentThinkingPick: "Réflexion des sous-agents de {{agent}}",
         subagentThinkingUnset: "Non défini ({{agent}} décide)",
+        codexSubagentModel: "Modèle Subagent par défaut",
+        codexSubagentModelHint:
+          "Les Subagents démarrent sur ce modèle quand la conversation principale n'en indique aucun. La conversation principale peut toujours en indiquer un autre.",
+        codexSubagentModelUnset: "Comme la conversation principale",
+        codexSubagentModelPick: "Modèle Subagent par défaut pour {{agent}}",
+        codexSubagentThinking: "Réflexion Subagent par défaut",
+        codexSubagentThinkingHint:
+          "Les Subagents démarrent à ce niveau quand la conversation principale n'en choisit aucun. Seuls les niveaux acceptés par le modèle sont proposés.",
+        codexSubagentThinkingPick: "Réflexion Subagent par défaut pour {{agent}}",
+        memoryModel: "Modèle de mémoire",
+        memoryModelHint:
+          "Résume en arrière-plan les conversations passées dans les mémoires de {{agent}}. Utilisé seulement quand la fonction mémoires de {{agent}} est activée ; Osuna ne l'active pas.",
+        memoryModelUnset: "Celui de {{agent}}",
+        memoryModelPick: "Modèle de mémoire pour {{agent}}",
         connection: {
           kept: "{{agent}} utilise déjà les points d'accès API. Il reste sur {{model}}.",
           again:

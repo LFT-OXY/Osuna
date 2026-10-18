@@ -2637,6 +2637,20 @@ export const ko: TranslationResources = {
           "{{agent}}이(가) 어떤 수준을 요청하든 하위 에이전트는 이 수준으로 생각합니다.",
         subagentThinkingPick: "{{agent}}의 하위 에이전트 사고 수준",
         subagentThinkingUnset: "설정 안 함({{agent}}이(가) 결정)",
+        codexSubagentModel: "기본 Subagent 모델",
+        codexSubagentModelHint:
+          "메인 대화가 모델을 지정하지 않으면 Subagent가 이 모델로 시작합니다. 메인 대화는 다른 모델을 지정할 수도 있습니다.",
+        codexSubagentModelUnset: "메인 대화와 같음",
+        codexSubagentModelPick: "{{agent}}의 기본 Subagent 모델",
+        codexSubagentThinking: "기본 Subagent 사고 수준",
+        codexSubagentThinkingHint:
+          "메인 대화가 수준을 지정하지 않으면 Subagent가 이 수준으로 시작합니다. 모델이 받는 수준만 표시합니다.",
+        codexSubagentThinkingPick: "{{agent}}의 기본 Subagent 사고 수준",
+        memoryModel: "메모리 모델",
+        memoryModelHint:
+          "지난 대화를 백그라운드에서 {{agent}}의 메모리로 정리합니다. {{agent}}의 메모리 기능이 켜져 있을 때만 쓰이며, Osuna는 이 기능을 켜지 않습니다.",
+        memoryModelUnset: "{{agent}} 기본값",
+        memoryModelPick: "{{agent}}의 메모리 모델",
         connection: {
           kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:

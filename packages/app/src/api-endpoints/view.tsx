@@ -90,7 +90,7 @@ function AgentApiEndpoints({
   // 每个会话都锁在哪一档由主机说（只有 Claude Code 的 max 会）。
   const lockedThinkingOptionId = providerEntry?.lockedThinkingOptionId ?? null;
   // Subagent 思考档位的选项由主机按 Subagent 模型或 settings.json 里的主模型给（照 magpie 的 subagent_effort）。
-  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有后台小任务与 Subagent 这几项。
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有后台小任务、Subagent 与记忆模型这几项。
   const subagentThinkingOptions = useMemo(() => {
     if (!hasIssues) return null;
     const options = providerEntry?.subagentThinkingOptions ?? [];
@@ -130,6 +130,10 @@ function AgentApiEndpoints({
   const handleSubagentThinkingChange = useCallback(
     (subagentThinkingOptionId: string | null) =>
       setAgentSettings(provider, { enabled: true, subagentThinkingOptionId }),
+    [provider, setAgentSettings],
+  );
+  const handleMemoryModelChange = useCallback(
+    (memoryModelId: string | null) => setAgentSettings(provider, { enabled: true, memoryModelId }),
     [provider, setAgentSettings],
   );
   // 总开关开着、关着都能设，开关保持原样。
@@ -195,6 +199,7 @@ function AgentApiEndpoints({
       onBackgroundModelChange={handleBackgroundModelChange}
       onSubagentModelChange={handleSubagentModelChange}
       onSubagentThinkingChange={handleSubagentThinkingChange}
+      onMemoryModelChange={handleMemoryModelChange}
       onManage={handleManage}
       // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

@@ -1,3 +1,6 @@
+// 没人提供的后台小任务、Subagent 与记忆模型不再设，照 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 subagentOwn、internal/agent/codex.go 的 dropSubagent）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type {
   ApiEndpointAgentSettings,
   ApiEndpointModel,
@@ -143,7 +146,7 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
   const models = usableModels(state);
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = withoutUnservedSideModels(state, agents[provider]);
+    const agent = withoutUnservedSideModels({ state, provider, agent: agents[provider] });
     agents[provider] = agent;
     if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
@@ -161,19 +164,23 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
 }
 
 /**
- * 后台小任务模型与 Subagent 模型已没有开着的接口提供时不再设，Claude Code 跟主模型（magpie 只写它在售的模型）。
- * 没变时原样返回同一个对象。
+ * 后台小任务模型、Subagent 模型与记忆模型已没有开着的接口提供时不再设，跟主模型（magpie 只写它在售的模型，
+ * Codex 的 dropSubagent 同样拿掉找不到的模型）。没变时原样返回同一个对象。
  */
-function withoutUnservedSideModels(
-  state: ApiEndpointState,
-  agent: ApiEndpointAgentSettings,
-): ApiEndpointAgentSettings {
+function withoutUnservedSideModels(input: {
+  state: ApiEndpointState;
+  provider: ApiEndpointProvider;
+  agent: ApiEndpointAgentSettings;
+}): ApiEndpointAgentSettings {
+  const { state, agent } = input;
   let settled = agent;
   if (isUnserved(state, agent.backgroundModelId)) settled = { ...settled, backgroundModelId: null };
-  // 照 magpie 的 subagentOwn：整个变量都不写，档位一起忘掉。
-  if (isUnserved(state, agent.subagentModelId)) {
-    settled = { ...settled, subagentModelId: null, subagentThinkingOptionId: null };
-  }
+  if (isUnserved(state, agent.memoryModelId)) settled = { ...settled, memoryModelId: null };
+  if (isUnserved(state, agent.subagentModelId)) settled = { ...settled, subagentModelId: null };
+  // 照 magpie 的 subagentOwn：Claude Code 整个变量都不写，档位一起忘掉；Codex 的档位是单独的键，留给 settle 按主模型看。
+  const isClaudeSubagentGone =
+    input.provider === "claude" && settled.subagentModelId !== agent.subagentModelId;
+  if (isClaudeSubagentGone) settled = { ...settled, subagentThinkingOptionId: null };
   return settled;
 }
 

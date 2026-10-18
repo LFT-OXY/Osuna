@@ -1029,4 +1029,180 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(await claudeEnv()).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");
     });
   });
+
+  describe("Codex's default Subagent model and memory model", () => {
+    // 照 magpie 的 subagents、subagent_effort 与 memories 字段（PRD 第 33 条）。
+    // Relay C：glm-5.3（Codex 里 low、high、max）与查不到资料的 kimi-k2（Codex 里四档）。
+    async function relayC(): Promise<void> {
+      await saveEndpoint({ name: "Relay C", models: ["glm-5.3", "kimi-k2"] });
+    }
+
+    function setCodex(values: {
+      subagentModelId?: string | null;
+      subagentThinkingOptionId?: string | null;
+      memoryModelId?: string | null;
+    }) {
+      return client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true, ...values });
+    }
+
+    async function codexTables(): Promise<{ agents: unknown; memories: unknown }> {
+      const value = parseToml(await readFile(configPath, "utf8"));
+      return { agents: value.agents, memories: value.memories };
+    }
+
+    async function codexSubagentLevels(): Promise<string[] | undefined> {
+      const snapshot = await client.getProvidersSnapshot();
+      const entry = snapshot.entries.find((candidate) => candidate.provider === "codex");
+      return entry?.subagentThinkingOptions?.map((option) => option.id);
+    }
+
+    test("the four keys go into config.toml beside the user's own, and switching off puts them back", async () => {
+      await relayC();
+      await saveEndpoint({ name: "Relay A", models: ["glm-4.6"] });
+      const before = `[agents]\nmax_threads = 4\ndefault_subagent_model = "gpt-mine"\n\n[memories]\ngenerate_memories = true\n`;
+      await writeFile(configPath, before);
+      await turnOn("codex", "kimi-k2");
+
+      expect(
+        await setCodex({
+          subagentModelId: "glm-5.3",
+          subagentThinkingOptionId: "high",
+          memoryModelId: "glm-4.6",
+        }),
+      ).toMatchObject({
+        error: null,
+        agent: {
+          subagentModelId: "glm-5.3",
+          subagentThinkingOptionId: "high",
+          memoryModelId: "glm-4.6",
+        },
+      });
+      expect(await codexTables()).toEqual({
+        agents: {
+          max_threads: 4,
+          default_subagent_model: "glm-5.3",
+          default_subagent_reasoning_effort: "high",
+        },
+        memories: {
+          generate_memories: true,
+          extract_model: "glm-4.6",
+          consolidation_model: "glm-4.6",
+        },
+      });
+
+      await turnOff("codex");
+      expect(await codexTables()).toEqual({
+        agents: { max_threads: 4, default_subagent_model: "gpt-mine" },
+        memories: { generate_memories: true },
+      });
+      // Osuna 的服务商表留着，其余逐字节还原。
+      expect((await readFile(configPath, "utf8")).startsWith(before)).toBe(true);
+    });
+
+    test("the level is one the Subagent model takes: the options list only those, and a new model drops one it doesn't take", async () => {
+      await relayC();
+      await turnOn("codex", "kimi-k2");
+      // 没设 Subagent 模型：主模型的档位。
+      await expect
+        .poll(codexSubagentLevels, { timeout: 10_000 })
+        .toEqual(["low", "medium", "high", "xhigh"]);
+
+      await setCodex({ subagentModelId: "glm-5.3" });
+      await expect.poll(codexSubagentLevels, { timeout: 10_000 }).toEqual(["low", "high", "max"]);
+      expect((await setCodex({ subagentThinkingOptionId: "medium" })).error?.code).toBe(
+        "invalid_input",
+      );
+      expect(await setCodex({ subagentThinkingOptionId: "max" })).toMatchObject({ error: null });
+
+      const moved = await setCodex({ subagentModelId: "kimi-k2" });
+      expect(moved.agent).toMatchObject({
+        subagentModelId: "kimi-k2",
+        subagentThinkingOptionId: null,
+      });
+      expect(await codexTables()).toMatchObject({
+        agents: { default_subagent_model: "kimi-k2" },
+      });
+      expect((await codexTables()).agents).not.toHaveProperty("default_subagent_reasoning_effort");
+
+      // 跟主对话时，换主模型同样拿掉新模型不收的档位。
+      await setCodex({ subagentModelId: null, subagentThinkingOptionId: "medium" });
+      const mainMoved = await turnOn("codex", "glm-5.3");
+      expect(mainMoved.agent?.subagentThinkingOptionId).toBeNull();
+    });
+
+    test("signed in with ChatGPT, the names are written the way /model lists them", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      await turnOn("codex");
+
+      expect(
+        await setCodex({ subagentModelId: "glm-4.6", memoryModelId: "relay-b/claude-opus-4-6" }),
+      ).toMatchObject({ error: null });
+      expect(await codexTables()).toEqual({
+        agents: { default_subagent_model: "relay-a/glm-4.6" },
+        memories: {
+          extract_model: "relay-b/claude-opus-4-6",
+          consolidation_model: "relay-b/claude-opus-4-6",
+        },
+      });
+    });
+
+    test("only Codex has a memory model, and both models must be ones an endpoint that is on selected", async () => {
+      await twoEndpoints();
+      await turnOn("codex", "first");
+      await turnOn("claude", "first");
+
+      expect((await setCodex({ subagentModelId: "gpt-9" })).error?.code).toBe("invalid_input");
+      expect((await setCodex({ memoryModelId: "gpt-9" })).error?.code).toBe("invalid_input");
+      const claudeMemory = await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        memoryModelId: "glm-4.6",
+      });
+      expect(claudeMemory.error?.code).toBe("invalid_input");
+    });
+
+    test("a hand edit to a served model is followed; one to a model no endpoint serves is a change outside Osuna", async () => {
+      await twoEndpoints();
+      await turnOn("codex", "first");
+      await setCodex({ subagentModelId: "glm-4.6", memoryModelId: "glm-4.6" });
+
+      async function editConfig(from: string, to: string): Promise<void> {
+        await writeFile(configPath, (await readFile(configPath, "utf8")).replace(from, to));
+      }
+
+      await editConfig('default_subagent_model = "glm-4.6"', 'default_subagent_model = "first"');
+      const followed = await client.apiEndpointList("codex");
+      expect(followed.agents?.codex).toMatchObject({ subagentModelId: "first" });
+      expect(followed.health).toEqual([]);
+
+      await editConfig('consolidation_model = "glm-4.6"', 'consolidation_model = "gpt-9"');
+      const list = await client.apiEndpointList("codex");
+      expect(list.agents?.codex).toMatchObject({ memoryModelId: "glm-4.6" });
+      expect(list.health).toEqual([
+        expect.objectContaining({
+          code: "modified_externally",
+          message: expect.stringContaining("memories.consolidation_model"),
+        }),
+      ]);
+    });
+
+    test("a model whose endpoint is turned off is dropped, and its keys go back", async () => {
+      await saveEndpoint({ name: "Relay A", models: ["first"] });
+      await saveEndpoint({ name: "Relay B", models: ["glm-4.6"] });
+      await turnOn("codex", "first");
+      await setCodex({ subagentModelId: "glm-4.6", memoryModelId: "glm-4.6" });
+
+      const endpoints = (await client.apiEndpointList("codex")).endpoints ?? [];
+      const relayB = endpoints.find(isRelayB);
+      if (!relayB) throw new Error("Expected Relay B");
+      await client.apiEndpointSetEndpointState({ endpointId: relayB.id, enabled: false });
+
+      expect((await client.apiEndpointList("codex")).agents?.codex).toMatchObject({
+        subagentModelId: null,
+        memoryModelId: null,
+      });
+      expect(await codexTables()).toEqual({ agents: undefined, memories: undefined });
+    });
+  });
 });

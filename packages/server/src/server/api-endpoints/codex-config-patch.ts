@@ -1,16 +1,23 @@
 // 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider、
-// isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段；Codex 自己换过的模型照 internal/agent/applied.go 的 Drift 与 Keep）
+// isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段；Codex 自己换过的模型照 internal/agent/applied.go 的 Drift 与 Keep；
+// 默认 Subagent 模型与档位、记忆模型照 subagents、subagent_effort、memories 字段与 internal/edit/toml.go 的 SetTOMLKey、DelTOMLKey）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import { z } from "zod";
-import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
+import {
+  CliModelHoldSchema,
+  type CliModelHold,
+  type CliPicks,
+  type CliSidePick,
+} from "./cli-model-hold.js";
 
 /*
  * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007 与 0010）：用 toml-eslint-parser 拿到节点的精确位置，
  * 按位置拼接文本，其余字节不动；每次拼完再解析一遍，拼不出合法文件就整个拒绝。
  *
- * 负责的键：顶层 model_provider / model / model_catalog_json，设了默认思考档位时的 model_reasoning_effort（照 magpie 的 effort 字段），以及整张专用表
+ * 负责的键：顶层 model_provider / model / model_catalog_json，设了默认思考档位时的 model_reasoning_effort（照 magpie 的 effort 字段），
+ * 设了才写的 [agents] default_subagent_model / default_subagent_reasoning_effort 与 [memories] extract_model / consolidation_model，以及整张专用表
  * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）；用 ChatGPT 登录时另有顶层 openai_base_url，
  * model_provider 与 model_catalog_json 改为拿掉（ADR 0010），CC Switch 的 OpenAI 镜像表的 base_url 也指到中转站。切回官方时顶层键还原、专用表留着：
  * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
@@ -40,6 +47,29 @@ const PROVIDER_KEYS = ["model_provider", "model", "model_catalog_json"] as const
 // 专用表的 name：Codex 在状态与报错里显示它。
 const PROVIDER_TABLE_NAME = "Osuna";
 type TopLevelKey = (typeof TOP_LEVEL_KEYS)[number];
+
+/** [agents] 与 [memories] 里负责的一个键；接管记录与提示里叫「表名.键名」。 */
+interface TableKey {
+  table: "agents" | "memories";
+  key: string;
+}
+
+const SUBAGENT_MODEL_KEY: TableKey = { table: "agents", key: "default_subagent_model" };
+const SUBAGENT_EFFORT_KEY: TableKey = { table: "agents", key: "default_subagent_reasoning_effort" };
+const MEMORY_EXTRACT_KEY: TableKey = { table: "memories", key: "extract_model" };
+const MEMORY_CONSOLIDATION_KEY: TableKey = { table: "memories", key: "consolidation_model" };
+const TABLE_KEYS: readonly TableKey[] = [
+  SUBAGENT_MODEL_KEY,
+  SUBAGENT_EFFORT_KEY,
+  MEMORY_EXTRACT_KEY,
+  MEMORY_CONSOLIDATION_KEY,
+];
+// 手改的档位照样跟过去（Codex 收任何档位名），不算被改过。
+const FOLLOWED_TABLE_KEYS: ReadonlySet<string> = new Set([tableKeyName(SUBAGENT_EFFORT_KEY)]);
+
+function tableKeyName(tableKey: TableKey): string {
+  return `${tableKey.table}.${tableKey.key}`;
+}
 
 // raw 是原值在文件里的写法（含引号），恢复时原样放回。
 const CodexOriginalValueSchema = z.discriminatedUnion("present", [
@@ -79,6 +109,8 @@ export const CodexConfigTakeoverSchema = z.object({
   mirrors: z.record(z.string(), CodexMirrorRecordSchema).optional(),
   // 接管前文件不存在：切回官方后只剩 Osuna 写的东西时把文件删掉。
   fileCreated: z.boolean().optional(),
+  // Osuna 加的 [agents]、[memories] 表：里面的键都放回后表空了就整张拿掉（magpie DelTOMLKey）。
+  createdTables: z.array(z.string()).optional(),
 });
 export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 
@@ -88,6 +120,8 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
  * 起始模型这时不写，model 归 Codex 自己；只有原本用着用户自己的服务商时，照 magpie 的 connect 写上默认模型，
  * 光秃秃的换成 endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里第一家的写法。
  * defaultThinking 是默认思考档位，两种接法都写进 model_reasoning_effort；null 为没设，不碰用户自己的。
+ * subagent 是默认 Subagent 模型与档位，memoryModel 是记忆模型（写进 extract_model 与 consolidation_model）；
+ * null 为没设，不碰用户自己的。模型是 Osuna 的模型 id，ChatGPT 接法下光秃秃的写成第一家提供它的「接口标识/模型名」。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -97,6 +131,14 @@ export interface CodexGatewayWiring {
   chatgptBaseUrl: string | null;
   endpointModels: string[];
   defaultThinking: string | null;
+  subagent: CodexSubagentWiring | null;
+  memoryModel: string | null;
+}
+
+/** 默认 Subagent 模型（null 为不设，跟主对话）与档位（null 为不设）。 */
+export interface CodexSubagentWiring {
+  model: string | null;
+  effort: string | null;
 }
 
 export type CodexConfigPatchResult =
@@ -189,17 +231,45 @@ export function applyCodexApiEndpoint(input: {
       eol,
     }));
   }
-  // 旧版本写的 auth.command 子表一并拿掉。
-  text = appendProviderTable({ text: removeProviderTables(text), table, eol });
+  // 旧版本写的 auth.command 子表一并拿掉。新加的 [agents]、[memories] 放在专用表前面，重写时位置不变。
+  const sides = applyTableKeys({
+    text: removeProviderTables(text),
+    raws: tableRaws(wiring),
+    originalIn: { program: parsed.program, text: baseText },
+    takeover: input.takeover,
+    keys,
+    eol,
+  });
+  text = appendProviderTable({ text: sides.text, table, eol });
   // COMPAT(codexLegacyProviderTable): v0.15 的记录没有 fileCreated，按文件原本存在处理；remove after 2027-04-14.
   const fileCreated = input.takeover ? (input.takeover.fileCreated ?? false) : input.text === null;
 
   const failure = verify(text, (value) =>
     holdsEverything({ value, keys, isModelHeld, table, mirrors }),
   );
+  const takeover = takeoverOf({
+    keys,
+    table,
+    fileCreated,
+    mirrors,
+    createdTables: sides.createdTables,
+  });
+  return failure ?? { kind: "patched", text: bom + text, takeover };
+}
+
+/** 接管记录；没有镜像表、没有新加的表时不记这两项。 */
+function takeoverOf(input: {
+  keys: CodexConfigTakeover["keys"];
+  table: CodexProviderTableRecord;
+  fileCreated: boolean;
+  mirrors: Record<string, CodexMirrorRecord>;
+  createdTables: string[];
+}): CodexConfigTakeover {
+  const { keys, table, fileCreated, mirrors, createdTables } = input;
   const takeover: CodexConfigTakeover = { keys, table, fileCreated };
   if (Object.keys(mirrors).length > 0) takeover.mirrors = mirrors;
-  return failure ?? { kind: "patched", text: bom + text, takeover };
+  if (createdTables.length > 0) takeover.createdTables = createdTables;
+  return takeover;
 }
 
 /**
@@ -296,6 +366,96 @@ function wiringRaws(
     openai_base_url: tomlString(wiring.chatgptBaseUrl),
     ...thinking,
   };
+}
+
+/** 这次写进 [agents]、[memories] 的原文（含引号），按「表名.键名」；没设的不在里面。 */
+function tableRaws(wiring: CodexGatewayWiring): Record<string, string> {
+  const listedName = (model: string) =>
+    wiring.chatgptBaseUrl === null ? model : chatgptListedName(model, wiring.endpointModels);
+  const raws: Record<string, string> = {};
+  const subagentModel = wiring.subagent?.model ?? null;
+  const subagentEffort = wiring.subagent?.effort ?? null;
+  if (subagentModel !== null) {
+    raws[tableKeyName(SUBAGENT_MODEL_KEY)] = tomlString(listedName(subagentModel));
+  }
+  if (subagentEffort !== null) raws[tableKeyName(SUBAGENT_EFFORT_KEY)] = tomlString(subagentEffort);
+  if (wiring.memoryModel !== null) {
+    const memory = tomlString(listedName(wiring.memoryModel));
+    raws[tableKeyName(MEMORY_EXTRACT_KEY)] = memory;
+    raws[tableKeyName(MEMORY_CONSOLIDATION_KEY)] = memory;
+  }
+  return raws;
+}
+
+/** ChatGPT 接法下 /model 里的写法：本身就是「接口标识/模型名」照用，光秃秃的取第一家提供它的。 */
+function chatgptListedName(model: string, endpointModels: string[]): string {
+  if (endpointModels.includes(model)) return model;
+  const named = endpointModels.find((option) => option.slice(option.indexOf("/") + 1) === model);
+  return named ?? model;
+}
+
+interface TableKeysApplied {
+  text: string;
+  createdTables: string[];
+}
+
+/**
+ * 写 [agents]、[memories] 里设了的键（照 magpie SetTOMLKey：只换值，没有就接在表的最后一个键后面，没有表就加一张），
+ * 记下接管前的写法；这次没设、上次写过的放回接管前的样子。Osuna 加的表空了就拿掉。
+ */
+function applyTableKeys(input: {
+  text: string;
+  raws: Record<string, string>;
+  // 接管前的文件：原值从这里读。
+  originalIn: { program: AST.TOMLProgram; text: string };
+  takeover: CodexConfigTakeover | null;
+  keys: CodexConfigTakeover["keys"];
+  eol: string;
+}): TableKeysApplied {
+  const { raws, takeover, keys, eol } = input;
+  const created = new Set(takeover?.createdTables ?? []);
+  let text = input.text;
+  for (const tableKey of TABLE_KEYS) {
+    const name = tableKeyName(tableKey);
+    const raw = raws[name];
+    const recorded = takeover?.keys[name];
+    if (raw === undefined) {
+      if (recorded) text = putBackInTable({ text, tableKey, original: recorded.original, eol });
+      continue;
+    }
+    const original = recorded?.original ?? originalInTable(input.originalIn, tableKey);
+    keys[name] = { original, written: readRaw(raw) };
+    if (!findNamedTable(parse(text), tableKey.table)) created.add(tableKey.table);
+    text = setTableKeyValue({ text, tableKey, raw, eol });
+  }
+  const isWritingIn = (table: string) =>
+    TABLE_KEYS.some((tableKey) => tableKey.table === table && keys[tableKeyName(tableKey)]);
+  const createdTables: string[] = [];
+  for (const table of created) {
+    if (isWritingIn(table)) createdTables.push(table);
+    else text = removeEmptyTable(text, table);
+  }
+  return { text, createdTables };
+}
+
+function originalInTable(
+  file: { program: AST.TOMLProgram; text: string },
+  tableKey: TableKey,
+): CodexOriginalValue {
+  const node = findKeyInTable(findNamedTable(file.program, tableKey.table), tableKey.key);
+  return node ? { present: true, raw: sliceNode(file.text, node.value) } : { present: false };
+}
+
+function putBackInTable(input: {
+  text: string;
+  tableKey: TableKey;
+  original: CodexOriginalValue;
+  eol: string;
+}): string {
+  const { text, tableKey, original, eol } = input;
+  if (original.present) return setTableKeyValue({ text, tableKey, raw: original.raw, eol });
+  const node = findKeyInTable(findNamedTable(parse(text), tableKey.table), tableKey.key);
+  return node ? removeLine(text, node) : text;
 }
 
 /**
@@ -396,7 +556,7 @@ function holdsEverything(input: {
   const { value, isModelHeld } = input;
   const holdsKeys = Object.entries(input.keys).every(([key, record]) => {
     const isLeftToCodex = key === "model" && isModelHeld;
-    return isLeftToCodex || holdsWritten(value[key], record.written);
+    return isLeftToCodex || holdsWritten(valueAt(value, key), record.written);
   });
   const holdsMirrors = Object.entries(input.mirrors).every(
     ([id, record]) => mirrorBaseUrl(value, id) === record.written,
@@ -443,7 +603,51 @@ export function readCodexCliPicks(input: {
     modelRecord !== undefined && !holdsWritten(value.model, modelRecord.written);
   if (modelRecord && isChangedByCodex) model = { now, isKept: modelRecord.held === "kept" };
   const level = stringOrNull(value.model_reasoning_effort);
-  return { model, level, isUltraCodeOn: null, subagent: null };
+  return {
+    model,
+    level,
+    isUltraCodeOn: null,
+    subagent: changedTableValue({ value, takeover, tableKey: SUBAGENT_MODEL_KEY }),
+    subagentLevel: changedTableValue({ value, takeover, tableKey: SUBAGENT_EFFORT_KEY }),
+    memory: changedMemoryModel(value, takeover),
+  };
+}
+
+/**
+ * [agents]、[memories] 里的一个键不再是 Osuna 写的值（没写过时就是文件里有值）时，它现在的值（没了为 null）；
+ * 没变为 null（照 magpie 这几个字段的 Get 读文件）。
+ */
+function changedTableValue(input: {
+  value: Record<string, unknown>;
+  takeover: CodexConfigTakeover;
+  tableKey: TableKey;
+}): CliSidePick | null {
+  const name = tableKeyName(input.tableKey);
+  const now = stringOrNull(valueAt(input.value, name));
+  const written = input.takeover.keys[name]?.written ?? null;
+  return now === written ? null : { now };
+}
+
+/** 记忆模型（照 magpie memories 字段的 Get：consolidation_model，没有再看 extract_model）：两个键有一个变了就算变了。 */
+function changedMemoryModel(
+  value: Record<string, unknown>,
+  takeover: CodexConfigTakeover,
+): CliSidePick | null {
+  const consolidation = changedTableValue({ value, takeover, tableKey: MEMORY_CONSOLIDATION_KEY });
+  const extract = changedTableValue({ value, takeover, tableKey: MEMORY_EXTRACT_KEY });
+  if (consolidation === null && extract === null) return null;
+  const now =
+    stringOrNull(valueAt(value, tableKeyName(MEMORY_CONSOLIDATION_KEY))) ??
+    stringOrNull(valueAt(value, tableKeyName(MEMORY_EXTRACT_KEY)));
+  return { now };
+}
+
+/** 顶层键的值；「表名.键名」是那张表里的键。 */
+function valueAt(value: Record<string, unknown>, name: string): unknown {
+  const tableKey = TABLE_KEYS.find((candidate) => tableKeyName(candidate) === name);
+  if (!tableKey) return value[name];
+  const table = value[tableKey.table];
+  return isRecord(table) ? table[tableKey.key] : undefined;
 }
 
 /**
@@ -527,6 +731,11 @@ export function restoreCodexOfficial(input: {
     const record = input.takeover.keys[key];
     if (record) text = putBack(text, key, record.original, eol);
   }
+  for (const tableKey of TABLE_KEYS) {
+    const record = input.takeover.keys[tableKeyName(tableKey)];
+    if (record) text = putBackInTable({ text, tableKey, original: record.original, eol });
+  }
+  for (const table of input.takeover.createdTables ?? []) text = removeEmptyTable(text, table);
   text = giveMirrors({ text, mirrors: input.takeover.mirrors ?? {}, eol });
   // 文件是 Osuna 建的：顶层键拿掉后专用表前面的空行也是当初补的。
   if (input.takeover.fileCreated) text = text.replace(/^(?:\r?\n)+/, "");
@@ -662,6 +871,12 @@ function modifiedOwnedKeys(
     const record = takeover?.keys[key];
     if (FOLLOWED_KEYS.has(key)) continue;
     if (record && !holdsWritten(value[key], record.written)) modifiedKeys.push(key);
+  }
+  for (const tableKey of TABLE_KEYS) {
+    const name = tableKeyName(tableKey);
+    const record = takeover?.keys[name];
+    if (FOLLOWED_TABLE_KEYS.has(name)) continue;
+    if (record && !holdsWritten(valueAt(value, name), record.written)) modifiedKeys.push(name);
   }
   const table = takeover?.table;
   if (table && !holdsProviderTable(value, table)) {
@@ -853,6 +1068,65 @@ function setTableValue(input: { text: string; id: string; raw: string; eol: stri
 function removeTableKey(text: string, id: string): string {
   const node = findTableKeyValue({ program: parse(text), providerId: id, key: "base_url" });
   return node ? removeLine(text, node) : text;
+}
+
+/** 用自己的 [name] 表头写的一层表；没有（内联表、点号键或干脆没有）为 null。 */
+function findNamedTable(program: AST.TOMLProgram, name: string): AST.TOMLTable | null {
+  const table = program.body[0].body.find(
+    (node): node is AST.TOMLTable =>
+      node.type === "TOMLTable" &&
+      node.kind === "standard" &&
+      node.resolvedKey.length === 1 &&
+      node.resolvedKey[0] === name,
+  );
+  return table ?? null;
+}
+
+function findKeyInTable(table: AST.TOMLTable | null, key: string): AST.TOMLKeyValue | null {
+  for (const node of table?.body ?? []) {
+    const [only, ...rest] = node.key.keys;
+    if (only && rest.length === 0 && keyName(only) === key) return node;
+  }
+  return null;
+}
+
+/**
+ * 表里有这个键就只换值那一段；没有就新起一行，接在表的最后一个键后面（空表放在表头下面）；没有这张表就在末尾加一张。
+ * 表写成内联表或点号键时加出来的表会重复定义，verify 整个拒绝。
+ */
+function setTableKeyValue(input: {
+  text: string;
+  tableKey: TableKey;
+  raw: string;
+  eol: string;
+}): string {
+  const { text, tableKey, raw, eol } = input;
+  const line = `${tableKey.key} = ${raw}`;
+  const table = findNamedTable(parse(text), tableKey.table);
+  if (!table) {
+    const block = `[${tableKey.table}]${eol}${line}${eol}`;
+    if (text === "") return block;
+    const separator = text.endsWith("\n") ? eol : eol + eol;
+    return text + separator + block;
+  }
+  const existing = findKeyInTable(table, tableKey.key);
+  if (existing) {
+    const [start, end] = existing.value.range;
+    return text.slice(0, start) + raw + text.slice(end);
+  }
+  const after = table.body.at(-1)?.range[1] ?? table.range[0];
+  const lineEnd = findLineEnd(text, after);
+  return `${text.slice(0, lineEnd)}${eol}${line}${text.slice(lineEnd)}`;
+}
+
+/** 表里什么都不剩时连表头与后面的空行一起拿掉；还有键就不动。 */
+function removeEmptyTable(text: string, name: string): string {
+  const table = findNamedTable(parse(text), name);
+  if (!table || table.body.length > 0) return text;
+  const start = findLineStart(text, table.range[0]);
+  let end = skipEol(text, findLineEnd(text, table.range[1]));
+  while (end < text.length && isBlankLine(text, end)) end = skipEol(text, findLineEnd(text, end));
+  return text.slice(0, start) + text.slice(end);
 }
 
 function providerTables(program: AST.TOMLProgram): AST.TOMLTable[] {
