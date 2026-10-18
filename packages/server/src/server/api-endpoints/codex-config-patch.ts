@@ -1,5 +1,5 @@
 // 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider、
-// isCCSwitchMirror、takeMirrors、giveMirrors）
+// isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
@@ -9,7 +9,7 @@ import { z } from "zod";
  * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007 与 0010）：用 toml-eslint-parser 拿到节点的精确位置，
  * 按位置拼接文本，其余字节不动；每次拼完再解析一遍，拼不出合法文件就整个拒绝。
  *
- * 负责的键：顶层 model_provider / model / model_catalog_json，以及整张专用表
+ * 负责的键：顶层 model_provider / model / model_catalog_json，设了默认思考档位时的 model_reasoning_effort（照 magpie 的 effort 字段），以及整张专用表
  * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）；用 ChatGPT 登录时另有顶层 openai_base_url，
  * model_provider 与 model_catalog_json 改为拿掉（ADR 0010），CC Switch 的 OpenAI 镜像表的 base_url 也指到中转站。切回官方时顶层键还原、专用表留着：
  * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
@@ -28,7 +28,10 @@ const TOP_LEVEL_KEYS = [
   "model",
   "model_catalog_json",
   "openai_base_url",
+  "model_reasoning_effort",
 ] as const;
+// CLI 自己会存下的选择（TUI 的 /model 连档位一起写回）：跟着走（第 30 条），不算被改过。
+const FOLLOWED_KEYS: ReadonlySet<TopLevelKey> = new Set(["model_reasoning_effort"]);
 // API key 登录或未登录时负责的顶层键（Osuna 的服务商接法）。
 const PROVIDER_KEYS = ["model_provider", "model", "model_catalog_json"] as const;
 // 专用表的 name：Codex 在状态与报错里显示它。
@@ -76,6 +79,7 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
  * chatgptBaseUrl 非 null 表示 Codex 用 ChatGPT 登录：写进 openai_base_url 的中转站 ChatGPT 后端地址，
  * 起始模型这时不写，model 归 Codex 自己；只有原本用着用户自己的服务商时，照 magpie 的 connect 写上默认模型，
  * 光秃秃的换成 endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里第一家的写法。
+ * defaultThinking 是默认思考档位，两种接法都写进 model_reasoning_effort；null 为没设，不碰用户自己的。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -84,6 +88,7 @@ export interface CodexGatewayWiring {
   catalogPath: string;
   chatgptBaseUrl: string | null;
   endpointModels: string[];
+  defaultThinking: string | null;
 }
 
 export type CodexConfigPatchResult =
@@ -251,18 +256,25 @@ function wiringRaws(
   wiring: CodexGatewayWiring,
   model: string | null,
 ): Partial<Record<TopLevelKey, string | null>> {
+  const thinking =
+    wiring.defaultThinking === null
+      ? {}
+      : { model_reasoning_effort: tomlString(wiring.defaultThinking) };
   if (wiring.chatgptBaseUrl === null) {
     return {
       model_provider: tomlString(CODEX_API_ENDPOINT_PROVIDER_ID),
       model: tomlString(wiring.model),
       model_catalog_json: tomlString(wiring.catalogPath),
+      ...thinking,
     };
   }
+  const ownModel = model === null ? {} : { model: tomlString(model) };
   return {
     model_provider: null,
-    ...(model === null ? {} : { model: tomlString(model) }),
+    ...ownModel,
     model_catalog_json: null,
     openai_base_url: tomlString(wiring.chatgptBaseUrl),
+    ...thinking,
   };
 }
 
@@ -525,6 +537,7 @@ function modifiedOwnedKeys(
   const modifiedKeys: string[] = [];
   for (const key of TOP_LEVEL_KEYS) {
     const record = takeover?.keys[key];
+    if (FOLLOWED_KEYS.has(key)) continue;
     if (record && !holdsWritten(value[key], record.written)) modifiedKeys.push(key);
   }
   const table = takeover?.table;

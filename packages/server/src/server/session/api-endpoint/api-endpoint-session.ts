@@ -197,9 +197,15 @@ export class ApiEndpointSession {
       { type: "provider.api_endpoint.set_agent_settings.request" }
     >,
   ): Promise<void> {
+    // 省略即不变，null 为不设。
+    const thinking =
+      request.defaultThinkingOptionId === undefined
+        ? {}
+        : { defaultThinkingOptionId: request.defaultThinkingOptionId };
     try {
       const { agent, connection } = await this.service.setAgentSettings(request.provider, {
         enabled: request.enabled,
+        ...thinking,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.reapply !== undefined ? { reapply: request.reapply } : {}),
         ...(request.keepsClaudeAiLogin !== undefined

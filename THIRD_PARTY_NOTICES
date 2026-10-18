@@ -624,6 +624,20 @@ internal/agent/connect_pick_test.go:
   packages/server/src/server/api-endpoints/models-dev.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
 
+Default thinking (the levels each model offers, the Claude model a model id
+names, the keys written into Claude Code's settings.json and Codex's
+config.toml, and a level a new default model doesn't take moved to its
+nearest) follows claudeNameRe, claudeName, claudeEfforts, claudeEffortsFor and
+the effort and ultracode fields in magpie's internal/agent/claude.go, the
+effort field and settle in internal/agent/codex.go, and nearestEffort in
+internal/provider/modelprefs.go:
+
+  packages/server/src/server/api-endpoints/claude-model-name.ts
+  packages/server/src/server/api-endpoints/default-thinking.ts
+  packages/server/src/server/api-endpoints/default-thinking.test.ts
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+  packages/server/src/server/api-endpoints/codex-config-patch.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

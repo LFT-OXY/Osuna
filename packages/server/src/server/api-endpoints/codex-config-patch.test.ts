@@ -27,6 +27,7 @@ const GATEWAY: CodexGatewayWiring = {
   catalogPath: CATALOG,
   chatgptBaseUrl: null,
   endpointModels: [],
+  defaultThinking: null,
 };
 
 // 用户手写的 config.toml：注释、行尾注释、引号风格、带空格的项目路径、自己的中转站，全都不能动。
@@ -892,5 +893,65 @@ describe("readCodexReasoningEffort", () => {
     expect(readCodexReasoningEffort('model = "gpt-5.5"\n')).toBeNull();
     expect(readCodexReasoningEffort("model_reasoning_effort = 3\n")).toBeNull();
     expect(readCodexReasoningEffort("model_reasoning_effort = \n")).toBeNull();
+  });
+});
+
+describe("default thinking in config.toml", () => {
+  it("writes model_reasoning_effort at the top and puts the user's own back on Official", () => {
+    const before = `model_reasoning_effort = "low"\n${USER_CONFIG}`;
+    const patched = applyWith({
+      text: before,
+      takeover: null,
+      wiring: { defaultThinking: "xhigh" },
+    });
+    expect(toValue(patched.text).model_reasoning_effort).toBe("xhigh");
+    expect(restore(patched.text, patched.takeover)).toBe(withKeptTable(before));
+  });
+
+  it("adds it when the user had none and takes it away again on Official", () => {
+    const patched = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { defaultThinking: "minimal" },
+    });
+    expect(toValue(patched.text).model_reasoning_effort).toBe("minimal");
+    expect(restore(patched.text, patched.takeover)).toBe(withKeptTable(USER_CONFIG));
+  });
+
+  it("writes it in the ChatGPT wiring too", () => {
+    const patched = applyWith({
+      text: null,
+      takeover: null,
+      wiring: {
+        chatgptBaseUrl: "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex",
+        defaultThinking: "high",
+      },
+    });
+    expect(toValue(patched.text).model_reasoning_effort).toBe("high");
+  });
+
+  it("puts the user's level back once no default thinking is set, and leaves it alone when none was ever set", () => {
+    const before = `model_reasoning_effort = "low"\n${USER_CONFIG}`;
+    const first = applyWith({ text: before, takeover: null, wiring: { defaultThinking: "high" } });
+    const second = applyWith({ text: first.text, takeover: first.takeover });
+    expect(toValue(second.text).model_reasoning_effort).toBe("low");
+    expect(second.takeover.keys.model_reasoning_effort).toBeUndefined();
+  });
+
+  it("does not count a level Codex saved since as modified: it follows the CLI's own picks", () => {
+    const patched = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { defaultThinking: "high" },
+    });
+    const inspection = inspectCodexConfig({
+      text: patched.text.replace(
+        'model_reasoning_effort = "high"',
+        'model_reasoning_effort = "low"',
+      ),
+      takeover: patched.takeover,
+    });
+    if (inspection.kind !== "parsed") throw new Error("Expected parsed");
+    expect(inspection.modifiedKeys).toEqual([]);
   });
 });

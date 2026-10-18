@@ -21,6 +21,7 @@ import {
   type FetchCatalogOptions,
   type ActiveApiEndpointLookup,
   type ApiEndpointModelGroupsLookup,
+  type LockedThinkingLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -139,6 +140,7 @@ export interface ProviderSnapshotManagerOptions {
   modelOverride?: ProviderModelOverride;
   activeApiEndpoint?: ActiveApiEndpointLookup;
   apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
+  lockedThinking?: LockedThinkingLookup;
 }
 
 interface ProviderSnapshotRefreshOptions {
@@ -269,6 +271,7 @@ export class ProviderSnapshotManager {
   private readonly modelOverride?: ProviderModelOverride;
   private readonly activeApiEndpoint?: ActiveApiEndpointLookup;
   private readonly apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
+  private readonly lockedThinking?: LockedThinkingLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -296,6 +299,7 @@ export class ProviderSnapshotManager {
     this.modelOverride = options.modelOverride;
     this.activeApiEndpoint = options.activeApiEndpoint;
     this.apiEndpointModelGroups = options.apiEndpointModelGroups;
+    this.lockedThinking = options.lockedThinking;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -1105,6 +1109,7 @@ export class ProviderSnapshotManager {
       const isModelListAuthoritative = overriddenModels ? true : undefined;
       const activeApiEndpoint = this.activeApiEndpoint?.(provider) ?? undefined;
       const apiEndpointModelGroups = this.apiEndpointModelGroups?.(provider) ?? undefined;
+      const lockedThinkingOptionId = this.lockedThinking?.(provider) ?? undefined;
       const models = normalizeAgentModelCatalog(catalogModels);
       if (models.length !== catalogModels.length) {
         this.logger.warn(
@@ -1122,6 +1127,7 @@ export class ProviderSnapshotManager {
         isModelListAuthoritative,
         activeApiEndpoint,
         apiEndpointModelGroups,
+        lockedThinkingOptionId,
         modes: catalog.modes,
         version,
         fetchedAt: new Date().toISOString(),

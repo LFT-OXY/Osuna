@@ -780,6 +780,111 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     await rm(settingsPath, { force: true });
   });
 
+  test("Default thinking sits beside the default model: a failed save stays in place, Max says it holds every session, and a new chat starts at it", async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["glm-5.3"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "glm-5.3",
+    });
+    const settingsPath = path.join(cliHome, "claude", "settings.json");
+    const workspace = await seedWorkspace({ repoPrefix: "api-endpoint-thinking-" });
+    try {
+      await openClaudeCodePage(page);
+      const section = agentSection(page);
+      const trigger = section.getByTestId("agent-api-endpoints-default-thinking-trigger");
+
+      await test.step("not set at first, with the model's levels and Ultra Code to pick from", async () => {
+        await expect(trigger).toHaveText("Not set (Claude decides)");
+        await trigger.click();
+        for (const [id, label] of [
+          ["high", "High"],
+          ["max", "Max"],
+          ["ultracode", "Ultra Code"],
+        ]) {
+          await expect(
+            page.getByTestId(`agent-api-endpoints-default-thinking-option-${id}`),
+          ).toHaveText(label);
+        }
+      });
+
+      await test.step("a failed save stays in place and leaves the file", async () => {
+        const claudeDir = path.join(cliHome, "claude");
+        await chmod(claudeDir, 0o500);
+        try {
+          await page.getByTestId("agent-api-endpoints-default-thinking-option-high").click();
+          await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+            "Couldn't change the API endpoint settings for Claude",
+          );
+        } finally {
+          await chmod(claudeDir, 0o700);
+        }
+        await expect(trigger).toHaveText("Not set (Claude decides)");
+        expect(await claudeSettingsEffort()).toBeUndefined();
+        await section.getByRole("button", { name: "Dismiss" }).click();
+      });
+
+      await test.step("Max is written for every session and the page says it holds them there", async () => {
+        await trigger.click();
+        await page.getByTestId("agent-api-endpoints-default-thinking-option-max").click();
+        await expect(trigger).toHaveText("Max");
+        await expect(
+          section.getByTestId("agent-api-endpoints-default-thinking-max-lock"),
+        ).toHaveText(
+          "At Max, every Claude session is held at Max, chats in Osuna included, and /effort can't lower it.",
+        );
+        await expect.poll(claudeSettingsEffortVariable).toBe("max");
+      });
+
+      await test.step("High is saved where Claude Code starts its sessions", async () => {
+        await trigger.click();
+        await page.getByTestId("agent-api-endpoints-default-thinking-option-high").click();
+        await expect(trigger).toHaveText("High");
+        await expect(
+          section.getByTestId("agent-api-endpoints-default-thinking-max-lock"),
+        ).toHaveCount(0);
+        await expect.poll(claudeSettingsEffort).toBe("high");
+      });
+
+      await test.step("a new chat with nothing remembered starts at the default thinking", async () => {
+        await carryPreferencesAcrossReloads(page);
+        await gotoWorkspace(page, workspace.workspaceId);
+        await waitForSidebarHydration(page);
+        await keepPreferencesForNextLoad(page, { provider: "claude" });
+        await gotoWorkspace(page, workspace.workspaceId);
+        await waitForSidebarHydration(page);
+        await openGlobalNewWorkspaceComposer(page);
+        await expectComposerModel(page, "glm-5.3");
+        await expect(
+          page.getByTestId("agent-thinking-selector").filter({ visible: true }),
+        ).toHaveAccessibleName("Select thinking option (High)");
+      });
+
+      await test.step("at Max the chat's thinking says why every session runs there", async () => {
+        await client.apiEndpointSetAgentSettings({
+          provider: "claude",
+          enabled: true,
+          defaultThinkingOptionId: "max",
+        });
+        await page.getByTestId("agent-thinking-selector").filter({ visible: true }).click();
+        await expect(page.getByTestId("thinking-note").filter({ visible: true })).toHaveText(
+          "Every session runs at Max: Default thinking for Claude is Max in Settings, so the level picked here has no effect.",
+        );
+      });
+    } finally {
+      await workspace.cleanup();
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await rm(settingsPath, { force: true });
+    }
+  });
+
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
     page,
   }) => {
@@ -1377,6 +1482,7 @@ function defaultModelTrigger(page: Page): Locator {
 
 interface ClaudeSettingsFile {
   model?: string;
+  effortLevel?: string;
   env?: Record<string, string>;
 }
 
@@ -1394,6 +1500,14 @@ async function readClaudeSettings(): Promise<ClaudeSettingsFile> {
 
 async function claudeSettingsModel(): Promise<string | undefined> {
   return (await readClaudeSettings()).model;
+}
+
+async function claudeSettingsEffortVariable(): Promise<string | undefined> {
+  return (await readClaudeSettings()).env?.CLAUDE_CODE_EFFORT_LEVEL;
+}
+
+async function claudeSettingsEffort(): Promise<string | undefined> {
+  return (await readClaudeSettings()).effortLevel;
 }
 
 async function claudeSettingsBaseUrl(): Promise<string | undefined> {

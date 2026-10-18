@@ -99,6 +99,11 @@ function AgentApiEndpoints({
     (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
     [provider, setAgentSettings],
   );
+  const handleDefaultThinkingChange = useCallback(
+    (defaultThinkingOptionId: string | null) =>
+      setAgentSettings(provider, { enabled: true, defaultThinkingOptionId }),
+    [provider, setAgentSettings],
+  );
   // 总开关开着、关着都能设，开关保持原样。
   const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
   const handleKeepClaudeAiLoginChange = useCallback(
@@ -150,6 +155,8 @@ function AgentApiEndpoints({
       connection={connection}
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
+      onDefaultThinkingChange={handleDefaultThinkingChange}
+      maxLocksSessions={provider === "claude"}
       onManage={handleManage}
       // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

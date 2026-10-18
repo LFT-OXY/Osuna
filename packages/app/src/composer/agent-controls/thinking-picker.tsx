@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Text } from "@/components/ui/text";
 import { ThinkingSlider } from "@/composer/agent-controls/thinking-slider";
 
 const SLIDER_POPOVER_WIDTH = 220;
@@ -20,6 +21,8 @@ export interface ThinkingPickerProps {
   anchorRef: RefObject<View | null>;
   /** 滑条选档，浮层保持打开。 */
   onSelect: (id: string) => void;
+  /** 滑条下的一句说明，例如每个会话都锁在某一档的原因。 */
+  note?: string;
 }
 
 /** 思考等级的浮层内容：档位名加滑条。 */
@@ -33,6 +36,7 @@ export function ThinkingPicker({
   onOpenChange,
   anchorRef,
   onSelect,
+  note,
 }: ThinkingPickerProps) {
   const { t } = useTranslation();
   const isSheet = surface === "sheet";
@@ -61,6 +65,16 @@ export function ThinkingPicker({
           disabled={disabled}
           onSelect={onSelect}
         />
+        {note ? (
+          <Text
+            variant="caption"
+            color="foregroundMuted"
+            style={styles.note}
+            testID="thinking-note"
+          >
+            {note}
+          </Text>
+        ) : null}
       </View>
     </Combobox>
   );
@@ -73,5 +87,8 @@ const styles = StyleSheet.create((theme) => ({
   sheetBody: {
     paddingHorizontal: theme.spacing[6],
     paddingVertical: theme.spacing[4],
+  },
+  note: {
+    marginTop: theme.spacing[3],
   },
 }));

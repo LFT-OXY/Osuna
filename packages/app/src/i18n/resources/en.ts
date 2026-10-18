@@ -217,6 +217,8 @@ export const en = {
       extraHigh: "Extra high",
       select: "Select thinking option",
       selectWithValue: "Select thinking option ({{value}})",
+      lockedAtMax:
+        "Every session runs at Max: Default thinking for {{agent}} is Max in Settings, so the level picked here has no effect.",
     },
     model: {
       unknown: "Unknown model",
@@ -2662,6 +2664,13 @@ export const en = {
         defaultModelHint: "New terminal sessions and the first new chat start with it.",
         defaultModelPick: "Default model for {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "Default thinking",
+        defaultThinkingHint:
+          "New terminal sessions start at this level, and so does a new chat with no remembered choice.",
+        defaultThinkingPick: "Default thinking for {{agent}}",
+        defaultThinkingUnset: "Not set ({{agent}} decides)",
+        defaultThinkingMaxLock:
+          "At Max, every {{agent}} session is held at Max, chats in Osuna included, and /effort can't lower it.",
         connection: {
           kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:

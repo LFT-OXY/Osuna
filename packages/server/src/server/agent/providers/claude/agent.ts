@@ -3475,19 +3475,19 @@ class ClaudeAgentSession implements AgentSession {
   private buildSettingsOptions(
     providerOptions: ClaudeProviderOptions,
     input: { ultracode: boolean },
-  ): Pick<ClaudeOptions, "settings"> | Record<string, never> {
+  ): Pick<ClaudeOptions, "settings"> {
     const fastMode = this.resolveFastModeSetting();
     // Internal agents do daemon work such as naming a branch, so the user's and
     // project's hooks must not run for them.
     const disableAllHooks = this.config.internal === true;
-    if (fastMode === null && !input.ultracode && !disableAllHooks) {
-      return {};
-    }
+    const fastModeSetting = fastMode === null ? {} : { fastMode };
+    const hooksSetting = disableAllHooks ? { disableAllHooks: true } : {};
     return {
       settings: mergeClaudeSettings(providerOptions.settings, {
-        ...(fastMode === null ? {} : { fastMode }),
-        ...(input.ultracode ? { ultracode: true } : {}),
-        ...(disableAllHooks ? { disableAllHooks: true } : {}),
+        ...fastModeSetting,
+        // 没选 Ultra Code 时也明确传关：否则 settings.json 里的 ultracode: true（第三方接口的默认思考档位）会盖到这个对话上。
+        ultracode: input.ultracode,
+        ...hooksSetting,
       }),
     };
   }

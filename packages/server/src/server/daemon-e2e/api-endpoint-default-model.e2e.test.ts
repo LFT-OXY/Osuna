@@ -15,6 +15,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 /*
  * 打开「使用第三方接口」时默认模型怎么挑（ADR 0012、PRD 第 28、29 条）：返回的挑法与写进 CLI 配置的模型一致；
  * 默认模型可以指定某一家（接口标识/模型名），中转站先发给那家、那家冷却时换同名的别家。
+ * 默认思考档位（PRD 第 31 条）写进 CLI 配置、关掉时还原，换默认模型后不收的档位改到最近一档，Osuna 新对话也从它起步。
  * 登录方式只经可替换的适配器得到，不起真的 Codex；CLI 配置目录都在临时目录里。
  */
 
@@ -32,6 +33,19 @@ function parseToml(text: string): Record<string, unknown> {
   const value: unknown = getStaticTOMLValue(parseTOML(text));
   if (typeof value !== "object" || value === null) throw new Error("Expected a TOML table");
   return Object.fromEntries(Object.entries(value));
+}
+
+/** 快照里 Claude Code 一个接口模型的思考档位、新对话的起步档位，以及每个会话锁在的档位。 */
+async function modelThinking(client: DaemonClient, modelId: string) {
+  const snapshot = await client.getProvidersSnapshot();
+  const entry = snapshot.entries.find((candidate) => candidate.provider === "claude");
+  const models = entry?.apiEndpointModelGroups?.flatMap((group) => group.models) ?? [];
+  const model = models.find((candidate) => candidate.id === modelId);
+  return {
+    options: model?.thinkingOptions?.map((option) => option.id),
+    start: model?.defaultThinkingOptionId,
+    locked: entry?.lockedThinkingOptionId,
+  };
 }
 
 async function startUpstream(text: string): Promise<FakeUpstream> {
@@ -92,7 +106,8 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       JSON.stringify({
         fetchedAt: new Date().toISOString(),
         etag: null,
-        models: {},
+        // glm-5.3 到 max 却没有 xhigh（magpie d1c485f7 说的那种），默认思考档位的用例用它。
+        models: { "glm-5.3": { efforts: ["low", "high", "max"] } },
         claude: ["claude-opus-4-6", "claude-sonnet-4-5"],
       }),
     );
@@ -380,5 +395,117 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     await whileCooling.text();
     expect(upstreamB.models).toEqual(["kimi-k2", "kimi-k2"]);
     expect(upstreamA.models).toEqual(["kimi-k2", "kimi-k2"]);
+  });
+  describe("default thinking", () => {
+    // Relay C：glm-5.3（low、high、max）与查不到资料的 kimi-k2（五档都给）。
+    async function relayC(): Promise<void> {
+      await saveEndpoint({ name: "Relay C", models: ["glm-5.3", "kimi-k2"] });
+    }
+
+    const glmThinking = () => modelThinking(client, "relay-c/glm-5.3");
+
+    function setThinking(provider: string, defaultThinkingOptionId: string | null) {
+      return client.apiEndpointSetAgentSettings({
+        provider,
+        enabled: true,
+        defaultThinkingOptionId,
+      });
+    }
+
+    async function claudeSettings(): Promise<Record<string, unknown>> {
+      return JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
+    }
+
+    test("Claude Code: high at the top, max in CLAUDE_CODE_EFFORT_LEVEL, Ultra Code as ultracode; switching off restores the file", async () => {
+      await relayC();
+      await twoEndpoints();
+      const before = `{
+  "theme": "dark"
+}
+`;
+      await writeFile(settingsPath, before);
+      await turnOn("claude", "glm-5.3");
+
+      expect(await setThinking("claude", "high")).toMatchObject({
+        error: null,
+        agent: { defaultThinkingOptionId: "high" },
+      });
+      expect(await claudeSettings()).toMatchObject({ effortLevel: "high" });
+      expect((await claudeSettings()).modelSettings).toBeUndefined();
+
+      // Claude 模型另写 modelSettings：Opus 5.5 起只读这里。
+      await turnOn("claude", "claude-opus-4-6");
+      expect(await claudeSettings()).toMatchObject({
+        effortLevel: "high",
+        modelSettings: { "claude-opus-4-6": { effortLevel: "high" } },
+      });
+
+      await setThinking("claude", "max");
+      const atMax = await claudeSettings();
+      expect(atMax.env).toMatchObject({ CLAUDE_CODE_EFFORT_LEVEL: "max" });
+      expect(atMax.effortLevel).toBeUndefined();
+      expect(atMax.modelSettings).toBeUndefined();
+
+      await turnOn("claude", "kimi-k2");
+      await setThinking("claude", "ultracode");
+      const ultra = await claudeSettings();
+      expect(ultra).toMatchObject({ ultracode: true, effortLevel: "xhigh" });
+      expect((ultra.env as Record<string, unknown>).CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+
+      await turnOff("claude");
+      expect(await readFile(settingsPath, "utf8")).toBe(before);
+    });
+
+    test("Ultra Code only where the model takes xhigh; a new default model moves the level to its nearest", async () => {
+      await relayC();
+      await twoEndpoints();
+      await turnOn("claude", "claude-opus-4-6");
+
+      const refused = await setThinking("claude", "ultracode");
+      expect(refused.error?.code).toBe("invalid_input");
+
+      // glm-5.3 到 max：中转站把 xhigh 按 max 发出，所以有 Ultra Code。
+      await turnOn("claude", "glm-5.3");
+      expect(await setThinking("claude", "ultracode")).toMatchObject({ error: null });
+
+      const moved = await turnOn("claude", "claude-opus-4-6");
+      expect(moved.agent?.defaultThinkingOptionId).toBe("max");
+      expect((await claudeSettings()).env).toMatchObject({ CLAUDE_CODE_EFFORT_LEVEL: "max" });
+      expect((await claudeSettings()).ultracode).toBeUndefined();
+    });
+
+    test("Codex: model_reasoning_effort at the top; switching off puts the user's own back", async () => {
+      await relayC();
+      const before = `model_reasoning_effort = "low"\n`;
+      await writeFile(configPath, before);
+      await turnOn("codex", "glm-5.3");
+
+      expect(await setThinking("codex", "max")).toMatchObject({
+        error: null,
+        agent: { defaultThinkingOptionId: "max" },
+      });
+      expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("max");
+      expect((await setThinking("codex", "xhigh")).error?.code).toBe("invalid_input");
+
+      await turnOff("codex");
+      expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("low");
+    });
+
+    test("Osuna's new chats start at the default thinking, and every Claude session is said to be locked at max", async () => {
+      await relayC();
+      await turnOn("claude", "glm-5.3");
+      await setThinking("claude", "high");
+
+      await expect.poll(glmThinking, { timeout: 10_000 }).toEqual({
+        options: ["low", "high", "xhigh", "max", "ultracode"],
+        start: "high",
+        locked: undefined,
+      });
+
+      await setThinking("claude", "max");
+      await expect
+        .poll(glmThinking, { timeout: 10_000 })
+        .toMatchObject({ start: "max", locked: "max" });
+    });
   });
 });

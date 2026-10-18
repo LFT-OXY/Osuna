@@ -1066,6 +1066,7 @@ export async function createPaseoDaemon(
       modelOverride: apiEndpointModelOverride,
       activeApiEndpoint: (provider) => apiEndpointService.activeEndpoint(provider),
       apiEndpointModelGroups: (provider) => apiEndpointService.activeModelGroups(provider),
+      lockedThinking: (provider) => apiEndpointService.lockedThinkingOptionId(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;

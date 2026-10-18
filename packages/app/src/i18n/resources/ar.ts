@@ -221,6 +221,8 @@ export const ar: TranslationResources = {
       extraHigh: "ارتفاع إضافي",
       select: "حدد خيار التفكير",
       selectWithValue: "حدد خيار التفكير ({{value}})",
+      lockedAtMax:
+        "تعمل كل الجلسات على Max: مستوى التفكير الافتراضي لـ {{agent}} هو Max في الإعدادات، لذا لا أثر للمستوى المختار هنا.",
     },
     model: {
       unknown: "نموذج غير معروف",
@@ -2599,6 +2601,13 @@ export const ar: TranslationResources = {
         defaultModelHint: "تبدأ به جلسات الطرفية الجديدة وأول محادثة جديدة.",
         defaultModelPick: "النموذج الافتراضي لـ {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "مستوى التفكير الافتراضي",
+        defaultThinkingHint:
+          "تبدأ جلسات الطرفية الجديدة بهذا المستوى، وكذلك الدردشة الجديدة التي لا اختيار محفوظًا لها.",
+        defaultThinkingPick: "مستوى التفكير الافتراضي لـ {{agent}}",
+        defaultThinkingUnset: "غير محدد (يقرر {{agent}})",
+        defaultThinkingMaxLock:
+          "عند Max تُثبَّت كل جلسات {{agent}} على Max، بما فيها الدردشات في Osuna، ولا يمكن لـ /effort خفضه.",
         connection: {
           kept: "يستخدم {{agent}} واجهات API الخارجية بالفعل. يبقى على {{model}}.",
           again:

@@ -225,6 +225,8 @@ export const fr: TranslationResources = {
       extraHigh: "Très élevé",
       select: "Choisir le niveau de réflexion",
       selectWithValue: "Choisir le niveau de réflexion ({{value}})",
+      lockedAtMax:
+        "Toutes les sessions tournent à Max : la réflexion par défaut de {{agent}} est Max dans les Réglages, le niveau choisi ici n'a donc aucun effet.",
     },
     model: {
       unknown: "Modèle inconnu",
@@ -2653,6 +2655,13 @@ export const fr: TranslationResources = {
           "Les nouvelles sessions du terminal et la première nouvelle discussion démarrent avec lui.",
         defaultModelPick: "Modèle par défaut de {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "Réflexion par défaut",
+        defaultThinkingHint:
+          "Les nouvelles sessions du terminal démarrent à ce niveau, tout comme une nouvelle discussion sans choix mémorisé.",
+        defaultThinkingPick: "Réflexion par défaut de {{agent}}",
+        defaultThinkingUnset: "Non défini ({{agent}} décide)",
+        defaultThinkingMaxLock:
+          "Sur Max, toutes les sessions de {{agent}} restent à Max, discussions dans Osuna comprises, et /effort ne peut pas l'abaisser.",
         connection: {
           kept: "{{agent}} utilise déjà les points d'accès API. Il reste sur {{model}}.",
           again:

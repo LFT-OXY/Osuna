@@ -221,6 +221,8 @@ export const ko: TranslationResources = {
       extraHigh: "매우 높음",
       select: "사고 옵션 선택",
       selectWithValue: "사고 옵션 선택 ({{value}})",
+      lockedAtMax:
+        "모든 세션이 Max로 실행됩니다. 설정에서 {{agent}}의 기본 사고 수준이 Max라서 여기서 고른 수준은 적용되지 않습니다.",
     },
     model: {
       unknown: "알 수 없는 모델",
@@ -2612,6 +2614,13 @@ export const ko: TranslationResources = {
         defaultModelHint: "터미널의 새 세션과 첫 새 채팅이 이 모델로 시작합니다.",
         defaultModelPick: "{{agent}} 기본 모델",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "기본 사고 수준",
+        defaultThinkingHint:
+          "터미널의 새 세션은 이 수준에서 시작합니다. 기억된 선택이 없는 새 채팅도 마찬가지입니다.",
+        defaultThinkingPick: "{{agent}} 기본 사고 수준",
+        defaultThinkingUnset: "설정 안 함({{agent}}이(가) 결정)",
+        defaultThinkingMaxLock:
+          "Max로 두면 Osuna 채팅을 포함한 {{agent}}의 모든 세션이 Max로 고정되며 /effort로도 낮출 수 없습니다.",
         connection: {
           kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:

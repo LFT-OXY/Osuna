@@ -221,6 +221,8 @@ export const zhCN: TranslationResources = {
       extraHigh: "超高",
       select: "选择思考档位",
       selectWithValue: "选择思考档位（{{value}}）",
+      lockedAtMax:
+        "所有会话都跑在 Max：设置里 {{agent}} 的默认思考档位是 Max，这里选的档位不起作用",
     },
     model: {
       unknown: "未知模型",
@@ -2624,6 +2626,12 @@ export const zhCN: TranslationResources = {
         defaultModelHint: "终端新会话、第一次新建对话从它开始",
         defaultModelPick: "{{agent}} 的默认模型",
         defaultModelOnEndpoint: "{{model}}（{{endpoint}}）",
+        defaultThinking: "默认思考档位",
+        defaultThinkingHint: "终端新会话从这一档起步；新建对话没有记住的选择时也用它",
+        defaultThinkingPick: "{{agent}} 的默认思考档位",
+        defaultThinkingUnset: "不设（由 {{agent}} 决定）",
+        defaultThinkingMaxLock:
+          "选 Max 后，{{agent}} 的所有会话都锁在 Max，包括 Osuna 里的对话，会话里用 /effort 也调不低",
         connection: {
           kept: "{{agent}} 已在用第三方接口，默认模型仍是 {{model}}。",
           again: "{{agent}} 已改用第三方接口，回到上次关掉开关前用的 {{model}}。",

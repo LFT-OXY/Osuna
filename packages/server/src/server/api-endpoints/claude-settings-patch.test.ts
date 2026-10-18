@@ -14,6 +14,7 @@ const GATEWAY = {
   hintEnv: {},
   allowWebSearch: false,
   isAutoModeReviewed: true,
+  defaultThinking: null,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -943,5 +944,146 @@ describe("cloud-platform switches in settings.json", () => {
       kind: "patched",
       text: USER_SETTINGS,
     });
+  });
+});
+
+describe("default thinking in settings.json", () => {
+  function applyThinking(input: {
+    text: string | null;
+    defaultThinking: string | null;
+    model?: string;
+    takeover?: ClaudeSettingsTakeover | null;
+  }) {
+    const wiring = {
+      ...GATEWAY,
+      model: input.model ?? GATEWAY.model,
+      defaultThinking: input.defaultThinking,
+    };
+    const result = applyClaudeApiEndpoint({
+      text: input.text,
+      wiring,
+      takeover: input.takeover ?? null,
+    });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result;
+  }
+
+  function restoreText(text: string, takeover: ClaudeSettingsTakeover): string {
+    const result = restoreClaudeOfficial({ text, takeover });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result.text;
+  }
+
+  it("writes high at the top for another vendor's model", () => {
+    const { text } = applyThinking({ text: USER_SETTINGS, defaultThinking: "high" });
+    const settings = JSON.parse(text);
+    expect(settings.effortLevel).toBe("high");
+    expect(settings.modelSettings).toBeUndefined();
+    expect(settings.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+  });
+
+  it("writes it under modelSettings too for a Claude model, which reads only that", () => {
+    const { text } = applyThinking({
+      text: USER_SETTINGS,
+      defaultThinking: "xhigh",
+      model: "claude-opus-5-5[1m]",
+    });
+    const settings = JSON.parse(text);
+    expect(settings.effortLevel).toBe("xhigh");
+    expect(settings.modelSettings).toEqual({ "claude-opus-5-5": { effortLevel: "xhigh" } });
+  });
+
+  it("writes max into CLAUDE_CODE_EFFORT_LEVEL, which settings.json can't keep", () => {
+    const { text } = applyThinking({ text: USER_SETTINGS, defaultThinking: "max" });
+    const settings = JSON.parse(text);
+    expect(settings.env.CLAUDE_CODE_EFFORT_LEVEL).toBe("max");
+    expect(settings.effortLevel).toBeUndefined();
+  });
+
+  it("writes Ultra Code as ultracode on at xhigh", () => {
+    const { text } = applyThinking({ text: USER_SETTINGS, defaultThinking: "ultracode" });
+    const settings = JSON.parse(text);
+    expect(settings.ultracode).toBe(true);
+    expect(settings.effortLevel).toBe("xhigh");
+  });
+
+  it("takes out the user's max variable and ultracode beside a lower level, and puts them back on Official", () => {
+    const before = `{
+  "env": {
+    "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  },
+  "ultracode": true,
+  "effortLevel": "low"
+}
+`;
+    const patched = applyThinking({ text: before, defaultThinking: "medium" });
+    const settings = JSON.parse(patched.text);
+    expect(settings.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+    expect(settings.ultracode).toBeUndefined();
+    expect(settings.effortLevel).toBe("medium");
+    // 拿掉又放回的键排到最后，值与接管前相同。
+    expect(JSON.parse(restoreText(patched.text, patched.takeover))).toEqual(JSON.parse(before));
+  });
+
+  it("puts every key it wrote back as it was on Official, containers it made included", () => {
+    const patched = applyThinking({
+      text: USER_SETTINGS,
+      defaultThinking: "ultracode",
+      model: "claude-opus-5-5",
+    });
+    expect(restoreText(patched.text, patched.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("gives back what it no longer writes when the level changes, keeping the first originals", () => {
+    const first = applyThinking({ text: USER_SETTINGS, defaultThinking: "max" });
+    const second = applyThinking({
+      text: first.text,
+      defaultThinking: "high",
+      model: "claude-sonnet-5",
+      takeover: first.takeover,
+    });
+    const settings = JSON.parse(second.text);
+    expect(settings.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+    expect(settings.effortLevel).toBe("high");
+    expect(settings.modelSettings).toEqual({ "claude-sonnet-5": { effortLevel: "high" } });
+    const third = applyThinking({
+      text: second.text,
+      defaultThinking: null,
+      takeover: second.takeover,
+    });
+    expect(third.text).toBe(apply(USER_SETTINGS).text);
+    expect(restoreText(second.text, second.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("leaves the user's own levels alone when no default thinking is set", () => {
+    const before = `{
+  "effortLevel": "low",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "xhigh"
+    }
+  }
+}
+`;
+    const { text } = applyThinking({ text: before, defaultThinking: null });
+    const settings = JSON.parse(text);
+    expect(settings.effortLevel).toBe("low");
+    expect(settings.modelSettings["claude-opus-5-5"].effortLevel).toBe("xhigh");
+  });
+
+  it("does not count a level the CLI saved since as modified: it follows the CLI's own picks", () => {
+    const patched = applyThinking({
+      text: USER_SETTINGS,
+      defaultThinking: "high",
+      model: "claude-opus-5-5",
+    });
+    const edited = JSON.parse(patched.text);
+    edited.modelSettings["claude-opus-5-5"].effortLevel = "low";
+    const inspection = inspectClaudeSettings({
+      text: `${JSON.stringify(edited, null, 2)}\n`,
+      takeover: patched.takeover,
+    });
+    if (inspection.kind !== "parsed") throw new Error("Expected parsed");
+    expect(inspection.modifiedKeys).toEqual([]);
   });
 });

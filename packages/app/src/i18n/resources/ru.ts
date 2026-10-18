@@ -223,6 +223,8 @@ export const ru: TranslationResources = {
       extraHigh: "Очень высокий",
       select: "Выбрать уровень рассуждений",
       selectWithValue: "Выбрать уровень рассуждений ({{value}})",
+      lockedAtMax:
+        "Все сеансы работают на Max: в настройках уровень размышлений по умолчанию для {{agent}} — Max, поэтому выбранный здесь уровень не действует.",
     },
     model: {
       unknown: "Неизвестная модель",
@@ -2634,6 +2636,13 @@ export const ru: TranslationResources = {
         defaultModelHint: "С неё начинаются новые сессии терминала и первый новый чат.",
         defaultModelPick: "Модель по умолчанию для {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "Уровень размышлений по умолчанию",
+        defaultThinkingHint:
+          "Новые сеансы в терминале начинаются с этого уровня, как и новый чат без запомненного выбора.",
+        defaultThinkingPick: "Уровень размышлений по умолчанию для {{agent}}",
+        defaultThinkingUnset: "Не задан (решает {{agent}})",
+        defaultThinkingMaxLock:
+          "При Max все сеансы {{agent}} закреплены на Max, включая чаты в Osuna, и /effort не может его понизить.",
         connection: {
           kept: "{{agent}} уже использует сторонние API. Модель остаётся {{model}}.",
           again:

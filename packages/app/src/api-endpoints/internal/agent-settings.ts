@@ -114,6 +114,18 @@ export interface DefaultModelOption {
   endpointName: string | null;
 }
 
+/** 默认思考档位的一个选项：档位 id 与聊天里的显示名。 */
+export interface DefaultThinkingOption {
+  id: string;
+  label: string;
+}
+
+/** 默认思考档位（glossary「默认思考档位」）：现在的档位（null 为没设）与默认模型能选的档位。 */
+export interface DefaultThinkingView {
+  value: string | null;
+  options: DefaultThinkingOption[];
+}
+
 export interface AgentApiEndpointsView {
   enabled: boolean;
   // 总开关关着时打不开的原因；开着时总能关，恒为 null。
@@ -128,6 +140,8 @@ export interface AgentApiEndpointsView {
   issues: AgentIssueView[];
   // 「保留 claude.ai 登录」开着没有（ADR 0012）；只有 Claude Code 有这个选项，别的 Agent 为 null。
   keepsClaudeAiLogin: boolean | null;
+  // 总开关关着、默认模型没有档位或主机太旧（快照里没有分组）时为 null，不显示这一行。
+  defaultThinking: DefaultThinkingView | null;
 }
 
 export function selectAgentApiEndpointsView(input: {
@@ -169,6 +183,16 @@ export function selectAgentApiEndpointsView(input: {
   let keepsClaudeAiLogin: boolean | null = null;
   if (provider === "claude") keepsClaudeAiLogin = agent.keepsClaudeAiLogin === true;
 
+  // 和默认模型一样只在总开关开着时设。
+  let defaultThinking: DefaultThinkingView | null = null;
+  if (agent.enabled) {
+    defaultThinking = defaultThinkingView({
+      groups: input.endpointModelGroups ?? [],
+      defaultModelId: agent.defaultModelId,
+      value: agent.defaultThinkingOptionId ?? null,
+    });
+  }
+
   return {
     enabled: agent.enabled,
     enableBlockedBy,
@@ -178,6 +202,29 @@ export function selectAgentApiEndpointsView(input: {
     summary: { enabledCount: enabledEndpoints.length, cooling },
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
     keepsClaudeAiLogin,
+    defaultThinking,
+  };
+}
+
+/**
+ * 选项来自默认模型在聊天模型选择器里的那一条（主机按这个模型的档位给出，Claude Code 的 Ultra Code 也在里面）：
+ * 指定某一家的找那一家，光秃秃的名字找第一家提供它的。
+ */
+function defaultThinkingView(input: {
+  groups: ApiEndpointModelGroup[];
+  defaultModelId: string | null;
+  value: string | null;
+}): DefaultThinkingView | null {
+  const { defaultModelId } = input;
+  if (defaultModelId === null) return null;
+  const models = input.groups.flatMap((group) => group.models);
+  const named = models.find((model) => model.id === defaultModelId);
+  const bare = models.find((model) => model.id.slice(model.id.indexOf("/") + 1) === defaultModelId);
+  const options = (named ?? bare)?.thinkingOptions ?? [];
+  if (options.length === 0) return null;
+  return {
+    value: input.value,
+    options: options.map((option) => ({ id: option.id, label: option.label })),
   };
 }
 

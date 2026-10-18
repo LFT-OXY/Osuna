@@ -224,6 +224,8 @@ export const ptBR: TranslationResources = {
       extraHigh: "Extra alto",
       select: "Selecionar opção de raciocínio",
       selectWithValue: "Selecionar opção de raciocínio ({{value}})",
+      lockedAtMax:
+        "Todas as sessões rodam em Max: o raciocínio padrão do {{agent}} é Max nas Configurações, então o nível escolhido aqui não tem efeito.",
     },
     model: {
       unknown: "Modelo desconhecido",
@@ -2638,6 +2640,13 @@ export const ptBR: TranslationResources = {
         defaultModelHint: "Novas sessões de terminal e o primeiro chat novo começam com ele.",
         defaultModelPick: "Modelo padrão do {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        defaultThinking: "Raciocínio padrão",
+        defaultThinkingHint:
+          "Novas sessões do terminal começam neste nível, e também um novo chat sem uma escolha lembrada.",
+        defaultThinkingPick: "Raciocínio padrão do {{agent}}",
+        defaultThinkingUnset: "Não definido ({{agent}} decide)",
+        defaultThinkingMaxLock:
+          "Em Max, todas as sessões do {{agent}} ficam presas em Max, incluindo os chats no Osuna, e /effort não consegue baixar.",
         connection: {
           kept: "{{agent}} já usa endpoints de API. Continua em {{model}}.",
           again:

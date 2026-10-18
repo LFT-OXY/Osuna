@@ -443,6 +443,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   activeApiEndpoint: ApiEndpointRefSchema.optional(),
   // 总开关开着时按接口分组的可选模型，id 为不透明的 `接口标识/模型名`；老客户端不读，只看 models。
   apiEndpointModelGroups: z.array(ApiEndpointModelGroupSchema).optional(),
+  // 这个提供方的每个会话都跑在这一档、选别的档位不起作用时才有（第三方接口的默认思考档位是 max）；老 daemon 不发。
+  lockedThinkingOptionId: z.string().optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version: z.string().optional(),
 });

@@ -223,6 +223,8 @@ export const ja: TranslationResources = {
       extraHigh: "非常に高い",
       select: "思考オプションを選択",
       selectWithValue: "思考オプションを選択（{{value}}）",
+      lockedAtMax:
+        "すべてのセッションが Max で動きます。設定で {{agent}} の既定の思考レベルが Max のため、ここで選んだレベルは効きません。",
     },
     model: {
       unknown: "不明なモデル",
@@ -2624,6 +2626,13 @@ export const ja: TranslationResources = {
           "ターミナルの新しいセッションと最初の新規チャットはこのモデルで始まります。",
         defaultModelPick: "{{agent}} の既定のモデル",
         defaultModelOnEndpoint: "{{model}}（{{endpoint}}）",
+        defaultThinking: "既定の思考レベル",
+        defaultThinkingHint:
+          "ターミナルの新しいセッションはこのレベルで始まります。前回の選択が残っていない新しいチャットも同じです。",
+        defaultThinkingPick: "{{agent}} の既定の思考レベル",
+        defaultThinkingUnset: "設定しない（{{agent}} に任せる）",
+        defaultThinkingMaxLock:
+          "Max にすると、Osuna のチャットを含む {{agent}} のすべてのセッションが Max に固定され、/effort でも下げられません。",
         connection: {
           kept: "{{agent}} はすでにサードパーティ API を使っています。{{model}} のままです。",
           again:

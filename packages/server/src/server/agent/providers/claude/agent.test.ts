@@ -1028,6 +1028,27 @@ describe("ClaudeAgentSession features", () => {
     await session.close();
   });
 
+  test("tells Claude Code Ultra Code is off when it isn't picked, so a default in settings.json can't turn it on", async () => {
+    const { queryFactory } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+      model: "claude-opus-4-8",
+      thinkingOptionId: "high",
+    });
+
+    await session.startTurn("hello");
+
+    expect(queryFactory.mock.calls[0]?.[0].options.settings).toMatchObject({ ultracode: false });
+
+    await session.close();
+  });
+
   test("disables Claude hooks for internal agents only", async () => {
     const { queryFactory } = createQueryMock();
     const client = new ClaudeAgentClient({
@@ -1051,7 +1072,7 @@ describe("ClaudeAgentSession features", () => {
     expect(queryFactory.mock.calls[0]?.[0].options.settings).toMatchObject({
       disableAllHooks: true,
     });
-    expect(queryFactory.mock.calls[1]?.[0].options.settings).toBeUndefined();
+    expect(queryFactory.mock.calls[1]?.[0].options.settings).not.toHaveProperty("disableAllHooks");
 
     await internalSession.close();
     await userSession.close();

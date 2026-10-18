@@ -72,9 +72,15 @@ import {
 } from "./codex-config-patch.js";
 import {
   buildCodexModelCatalog,
+  codexDefaultLevel,
   codexEndpointEntries,
   type CodexModelEntry,
 } from "./codex-model-catalog.js";
+import {
+  defaultThinkingLevels,
+  settleDefaultThinking,
+  thinkingOptionsOf,
+} from "./default-thinking.js";
 import {
   codexListTag,
   codexOwnFirstModel,
@@ -134,6 +140,12 @@ interface CliSync {
   wiring: CliWiring | null;
   agent: ApiEndpointAgentSettings;
 }
+
+/** Osuna 对话里一个接口模型的思考档位选项与新对话的起步档位；模型没有档位时为空。 */
+type ChatThinking = Pick<AgentModelDefinition, "thinkingOptions" | "defaultThinkingOptionId">;
+
+// 没设默认思考档位时 Osuna 的 Claude 新对话起步的档位，同 Claude 自定义模型（agent/providers/claude/model-manifest.ts）。
+const CLAUDE_START_THINKING = "high";
 
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
@@ -214,6 +226,8 @@ export interface ApiEndpointAgentSettingsInput {
   reapply?: boolean;
   // 「保留 claude.ai 登录」，只给 Claude Code；省略即不变。
   keepsClaudeAiLogin?: boolean;
+  // 默认思考档位：null 为不设，省略即不变。
+  defaultThinkingOptionId?: string | null;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -529,12 +543,52 @@ export class ApiEndpointService {
     if (!agent.enabled) return null;
     // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
     const defaultModel = bareDefaultModel(state, agent.defaultModelId);
-    return usableModels(this.retiredModels.listed(state)).map((model) => ({
-      provider: supported,
-      id: model.id,
-      label: model.label ?? model.id,
-      isDefault: model.id === defaultModel,
-    }));
+    const thinkingOf = this.chatThinking(state, supported);
+    return usableModels(this.retiredModels.listed(state)).map((model) =>
+      Object.assign(
+        {
+          provider: supported,
+          id: model.id,
+          label: model.label ?? model.id,
+          isDefault: model.id === defaultModel,
+        },
+        thinkingOf(model.id),
+      ),
+    );
+  }
+
+  /**
+   * Osuna 对话里接口模型的思考档位：选项同默认思考档位（Claude Code 的 Ultra Code 也在里面）；新对话没有记住的选择时
+   * 从默认思考档位起步（这个模型不收就取最近的一档），没设时 Claude Code 从 high 起、Codex 从 config.toml 里的那档起。
+   */
+  private chatThinking(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+  ): (modelId: string) => ChatThinking {
+    const chosen = state.agents[provider].defaultThinkingOptionId ?? null;
+    const codexOwn = provider === "codex" ? this.codexReasoningEffort() : null;
+    return (modelId) => {
+      const levels = this.thinkingLevelsFor({ state, provider, modelId });
+      if (levels.length === 0) return {};
+      const fallback =
+        provider === "claude"
+          ? settleDefaultThinking({ levels, chosen: CLAUDE_START_THINKING })
+          : codexDefaultLevel(levels, codexOwn);
+      const settled = settleDefaultThinking({ levels, chosen });
+      return {
+        thinkingOptions: thinkingOptionsOf({ provider, levels }),
+        defaultThinkingOptionId: settled ?? fallback ?? levels[0],
+      };
+    };
+  }
+
+  /** 第三方接口的默认思考档位是 max 时，Claude Code 的每个会话都锁在 max（CLAUDE_CODE_EFFORT_LEVEL 盖过每次选的档位）。 */
+  lockedThinkingOptionId(provider: string): string | null {
+    const state = this.readStateForSnapshot();
+    if (!state || findProvider(provider) !== "claude") return null;
+    const agent = state.agents.claude;
+    const isLockedAtMax = agent.enabled && agent.defaultThinkingOptionId === "max";
+    return isLockedAtMax ? "max" : null;
   }
 
   /**
@@ -555,12 +609,13 @@ export class ApiEndpointService {
       if (isNamed) return id === agent.defaultModelId;
       return model.id === agent.defaultModelId;
     }
+    const thinkingOf = this.chatThinking(state, supported);
     function toDefinition(entry: EndpointGroupModel): AgentModelDefinition {
       const { id, model } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
       const label = model.label ?? model.id;
-      return { provider: agentProvider, id, label, isDefault };
+      return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
     }
     return endpointModelGroups(this.retiredModels.listed(state)).map((group) => {
       const models = group.models.map(toDefinition);
@@ -719,9 +774,15 @@ export class ApiEndpointService {
         ? enabledAgentSettings({ state, provider: supported, requested, pick })
         : // 关掉总开关从不被拒；默认模型留着，下次打开时还能用就沿用。
           { ...state.agents[supported], enabled: false };
-      const agent = setsClaudeAiLogin
+      const withLogin = setsClaudeAiLogin
         ? { ...enabledOrOff, keepsClaudeAiLogin: input.keepsClaudeAiLogin }
         : enabledOrOff;
+      const agent = this.withDefaultThinking({
+        state,
+        provider: supported,
+        agent: withLogin,
+        requested: input.defaultThinkingOptionId,
+      });
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
         state,
@@ -738,6 +799,62 @@ export class ApiEndpointService {
       }
       return { agent: next.agents[supported], connection };
     });
+  }
+
+  /** 设默认思考档位：要是默认模型能选的档位；省略时不变（换默认模型后的取法在 commit 里）。 */
+  private withDefaultThinking(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    agent: ApiEndpointAgentSettings;
+    requested: string | null | undefined;
+  }): ApiEndpointAgentSettings {
+    const { state, provider, agent, requested } = input;
+    if (requested === undefined) return agent;
+    if (requested === null) return { ...agent, defaultThinkingOptionId: null };
+    const model = agent.defaultModelId;
+    if (model === null) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "Pick a default model before its default thinking",
+      });
+    }
+    const levels = this.thinkingLevelsFor({ state, provider, modelId: model });
+    if (!levels.includes(requested)) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `The default thinking must be one of the levels ${model} takes: ${levels.join(", ")}`,
+      });
+    }
+    return { ...agent, defaultThinkingOptionId: requested };
+  }
+
+  /** 默认模型是这个模型时默认思考档位能选的档位；资料按中转站先发给的那家查。 */
+  private thinkingLevelsFor(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    modelId: string;
+  }): string[] {
+    const { state, provider, modelId } = input;
+    return defaultThinkingLevels({
+      provider,
+      modelId,
+      facts: this.startModelFacts(state, modelId),
+    });
+  }
+
+  /** 换了默认模型（或模型资料变了）后，新模型不收的默认思考档位改到最近一档（照 magpie）。 */
+  private settleThinking(state: ApiEndpointState): ApiEndpointState {
+    const agents = { ...state.agents };
+    for (const provider of API_ENDPOINT_PROVIDERS) {
+      const agent = agents[provider];
+      const chosen = agent.defaultThinkingOptionId ?? null;
+      const modelId = agent.defaultModelId;
+      if (!agent.enabled || modelId === null || chosen === null) continue;
+      const levels = this.thinkingLevelsFor({ state, provider, modelId });
+      const settled = settleDefaultThinking({ levels, chosen });
+      if (settled !== chosen) agents[provider] = { ...agent, defaultThinkingOptionId: settled };
+    }
+    return { ...state, agents };
   }
 
   /**
@@ -879,7 +996,7 @@ export class ApiEndpointService {
       rewrite?: ApiEndpointProvider;
     } = {},
   ): Promise<ApiEndpointState> {
-    const next = settleAgentSettings(proposed);
+    const next = this.settleThinking(settleAgentSettings(proposed));
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
         this.requireGateway();
@@ -1045,6 +1162,7 @@ export class ApiEndpointService {
       ...this.cliModels(state, provider, agent.defaultModelId),
       allowWebSearch: someEndpointSearchesWeb(state),
       isAutoModeReviewed: isAutoModeReviewed(state),
+      defaultThinking: agent.defaultThinkingOptionId ?? null,
     };
   }
 
@@ -1184,7 +1302,7 @@ export class ApiEndpointService {
     if (state) {
       entries = codexEndpointEntries({
         state: this.retiredModels.listed(state),
-        reasoningEffort: this.codexReasoningEffort(),
+        reasoningEffort: this.codexStartEffort(state),
         factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
       });
     }
@@ -1226,6 +1344,7 @@ export class ApiEndpointService {
       this.cliModels(state, provider, agent.defaultModelId),
       provider === "claude" && someEndpointSearchesWeb(state),
       provider === "claude" && isAutoModeReviewed(state),
+      agent.defaultThinkingOptionId ?? null,
     ]);
   }
 
@@ -1507,13 +1626,20 @@ export class ApiEndpointService {
     }
   }
 
-  /** 目录的默认档跟着用户 config.toml 的 model_reasoning_effort；只在重新生成目录时读，读不出按没设。 */
+  /** 目录的默认档跟着默认思考档位，没设时跟着用户 config.toml 的 model_reasoning_effort；读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
     return buildCodexModelCatalog(
       this.retiredModels.listed(state),
-      this.codexReasoningEffort(),
+      this.codexStartEffort(state),
       (endpoint, modelId) => this.modelFacts(endpoint, modelId),
     );
+  }
+
+  /** Codex 新会话从哪一档起：默认思考档位（开关开着时），没设就是 config.toml 里用户自己的。 */
+  private codexStartEffort(state: ApiEndpointState): string | null {
+    const agent = state.agents.codex;
+    const chosen = agent.enabled ? (agent.defaultThinkingOptionId ?? null) : null;
+    return chosen ?? this.codexReasoningEffort();
   }
 
   /** config.toml 顶层的 model_reasoning_effort；读不出按没设。 */
@@ -2009,6 +2135,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
   const target = agentTargetEndpoint(state, provider);
   return JSON.stringify([
     agent.defaultModelId,
+    agent.defaultThinkingOptionId ?? null,
     usableModels(state),
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [

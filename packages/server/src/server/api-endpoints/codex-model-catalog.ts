@@ -123,8 +123,7 @@ export interface CodexModelEntryInput {
 /** Codex 模型目录（models.json 格式）的一个条目。 */
 export function codexModelEntry(input: CodexModelEntryInput) {
   const { facts } = input;
-  const levels =
-    facts.efforts === undefined ? FALLBACK_LEVELS : codexReasoningLevels(facts.efforts);
+  const levels = codexModelLevels(facts);
   const context = facts.context ?? FALLBACK_CONTEXT;
   return {
     slug: input.slug,
@@ -162,6 +161,11 @@ export function codexModelEntry(input: CodexModelEntryInput) {
   };
 }
 
+/** 这个模型在 Codex 里能选的档位：查不到资料时四档固定。 */
+export function codexModelLevels(facts: ModelFacts): string[] {
+  return facts.efforts === undefined ? FALLBACK_LEVELS : codexReasoningLevels(facts.efforts);
+}
+
 /**
  * 接口清单或 models.dev 的档位名对到 Codex 收的档位名（magpie levelsOf）。
  * Codex 认得的名字之外，任何非空字符串它都当作这个模型自己的档位收下（codex-rs openai_models.rs ReasoningEffort::Custom），
@@ -192,7 +196,8 @@ export function codexDefaultLevel(levels: readonly string[], chosen: string | nu
   return levels[0] ?? "medium";
 }
 
-function nearestLevel(want: string, levels: readonly string[]): string | null {
+/** levels 里离 want 最近的一档（magpie NearestEffort）：一样近取强的，不取 none；want 不是认得的档位时为 null。 */
+export function nearestLevel(want: string, levels: readonly string[]): string | null {
   if (levels.includes(want)) return want;
   const at = EFFORT_RANK.indexOf(want);
   if (at < 0) return null;

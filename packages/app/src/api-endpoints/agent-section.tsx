@@ -22,11 +22,12 @@ import type {
   AgentEndpointsSummary,
   AgentSwitchBlock,
   DefaultModelOption,
+  DefaultThinkingView,
 } from "./internal/agent-settings";
 
 /*
- * Claude Code / Codex 提供方页的「第三方接口」区：一张三行卡片——总开关、默认模型、
- * 「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
+ * Claude Code / Codex 提供方页的「第三方接口」区：一张卡片——总开关、默认模型、默认思考档位、
+ * 「保留 claude.ai 登录」、「管理第三方接口」入口。纯 props，运行时接线在 view.tsx。
  */
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
@@ -46,6 +47,10 @@ export interface AgentApiEndpointsSectionProps {
   connection: ApiEndpointConnection | null;
   onToggle: (enabled: boolean) => void;
   onDefaultModelChange: (modelId: string) => void;
+  // 默认思考档位；null 为不设。
+  onDefaultThinkingChange: (thinkingOptionId: string | null) => void;
+  // 默认思考档位选 Max 会锁住所有会话：只有 Claude Code（CLAUDE_CODE_EFFORT_LEVEL）；Codex 的 max 只是一档。
+  maxLocksSessions: boolean;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -63,6 +68,8 @@ export function AgentApiEndpointsSection({
   connection,
   onToggle,
   onDefaultModelChange,
+  onDefaultThinkingChange,
+  maxLocksSessions,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -132,6 +139,15 @@ export function AgentApiEndpointsSection({
             options={view.modelOptions}
             busy={busy}
             onChange={onDefaultModelChange}
+          />
+        ) : null}
+        {view.defaultThinking ? (
+          <DefaultThinkingRow
+            providerLabel={providerLabel}
+            locksAtMax={maxLocksSessions}
+            thinking={view.defaultThinking}
+            busy={busy}
+            onChange={onDefaultThinkingChange}
           />
         ) : null}
         {showsKeepClaudeAiLogin ? (
@@ -319,6 +335,94 @@ function DefaultModelRow({
           desktopPlacement="top-start"
           testID="agent-api-endpoints-default-model"
           triggerTestID="agent-api-endpoints-default-model-trigger"
+        />
+      </View>
+    </View>
+  );
+}
+
+// 「不设」在下拉里的 id：档位 id 不会是空串。
+const UNSET_THINKING = "";
+
+/** 默认思考档位：终端新会话从这一档起步；Claude Code 选 Max 时写明会锁住所有会话。 */
+function DefaultThinkingRow({
+  providerLabel,
+  locksAtMax,
+  thinking,
+  busy,
+  onChange,
+}: {
+  providerLabel: string;
+  locksAtMax: boolean;
+  thinking: DefaultThinkingView;
+  busy: boolean;
+  onChange: (thinkingOptionId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const selectOptions = useMemo<SelectFieldOption<string>[]>(
+    () => [
+      {
+        id: UNSET_THINKING,
+        value: UNSET_THINKING,
+        label: t("settings.apiEndpoints.agent.defaultThinkingUnset", { agent: providerLabel }),
+        testID: "agent-api-endpoints-default-thinking-option-unset",
+      },
+      ...thinking.options.map((option) => ({
+        id: option.id,
+        value: option.id,
+        label: option.label,
+        testID: `agent-api-endpoints-default-thinking-option-${option.id}`,
+      })),
+    ],
+    [providerLabel, t, thinking.options],
+  );
+  const handleChange = useCallback(
+    (id: string) => onChange(id === UNSET_THINKING ? null : id),
+    [onChange],
+  );
+  const selectedId = thinking.value ?? UNSET_THINKING;
+  const selectedDisplay = useMemo<SelectFieldDisplay | null>(() => {
+    const selected = selectOptions.find((option) => option.id === selectedId);
+    return selected ? { label: selected.label } : null;
+  }, [selectOptions, selectedId]);
+  const title = t("settings.apiEndpoints.agent.defaultThinkingPick", { agent: providerLabel });
+  const isLockedAtMax = locksAtMax && thinking.value === "max";
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.apiEndpoints.agent.defaultThinking")}
+        </Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.apiEndpoints.agent.defaultThinkingHint")}
+        </Text>
+        {isLockedAtMax ? (
+          <UiText
+            variant="caption"
+            color="statusWarning"
+            testID="agent-api-endpoints-default-thinking-max-lock"
+          >
+            {t("settings.apiEndpoints.agent.defaultThinkingMaxLock", { agent: providerLabel })}
+          </UiText>
+        ) : null}
+      </View>
+      <View style={styles.select}>
+        <SelectField
+          field={false}
+          label={title}
+          value={selectedId}
+          selectedDisplay={selectedDisplay}
+          options={selectOptions}
+          onChange={handleChange}
+          placeholder={t("settings.apiEndpoints.agent.defaultThinking")}
+          emptyText={t("settings.apiEndpoints.agent.defaultThinking")}
+          title={title}
+          size="sm"
+          disabled={busy}
+          // 与默认模型同在最下面一张卡片里：列表朝上开。
+          desktopPlacement="top-start"
+          testID="agent-api-endpoints-default-thinking"
+          triggerTestID="agent-api-endpoints-default-thinking-trigger"
         />
       </View>
     </View>

@@ -1,4 +1,4 @@
-// modelPicker 的归属规则、云平台开关的拿掉与放回、自动模式审查的开关移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker、dropClouds / putClouds、writeReview / dropReview）
+// modelPicker 的归属规则、云平台开关的拿掉与放回、自动模式审查的开关移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker、dropClouds / putClouds、writeReview / dropReview，默认思考档位照 effort 与 ultracode 字段）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -16,6 +16,7 @@ import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switches.js";
 import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
+import { CLAUDE_ULTRA_CODE, claudeModelName } from "./claude-model-name.js";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -39,6 +40,11 @@ import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.j
  *   先请服务器审查、拿不到再弹「这个会话不符合条件」的提示（ADR 0012）。归属规则同模型提示，记在同一份记录里。
  * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
  *   用户之后又自己设了的除外；关着的开关和云平台的其他变量不动（ADR 0012，照 magpie 的 dropClouds / putClouds）。
+ * - 默认思考档位（照 magpie 的 effort / ultracode 字段）：low–xhigh 写顶层 effortLevel，默认模型是 Claude 时另写
+ *   modelSettings.<模型>.effortLevel（Opus 5.5 起只读这里）；max 写 env.CLAUDE_CODE_EFFORT_LEVEL（settings.json 存不下 max，
+ *   这个变量盖过 /effort，所有会话锁在 max）；Ultra Code 写 ultracode: true 并按 xhigh 写档位。用户自己写的、会盖过这一档的
+ *   CLAUDE_CODE_EFFORT_LEVEL 与 ultracode 拿掉。都记下原值，切回官方时放回；没设默认思考档位时一个都不碰。
+ *   CLI 自己存下的档位跟着走（第 30 条），不算被改过。
  */
 
 /** 接管期间不能留在 env 里的变量。 */
@@ -61,6 +67,21 @@ const OriginalValueSchema = z.discriminatedUnion("present", [
 export type OriginalValue = z.infer<typeof OriginalValueSchema>;
 
 // 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
+// 默认思考档位写过的一个键：JSON 路径、接管前的值、写进去的值（null 为拿掉）。
+const ThinkingKeyRecordSchema = z.object({
+  path: z.array(z.string()),
+  original: OriginalValueSchema,
+  written: z.union([z.string(), z.boolean()]).nullable(),
+});
+type ThinkingKeyRecord = z.infer<typeof ThinkingKeyRecordSchema>;
+
+const ThinkingRecordSchema = z.object({
+  keys: z.array(ThinkingKeyRecordSchema),
+  // 为写 modelSettings.<模型>.effortLevel 新建的容器；放回原值后空了就删掉。
+  created: z.array(z.array(z.string())),
+});
+type ThinkingRecord = z.infer<typeof ThinkingRecordSchema>;
+
 const OriginalFileSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("absent") }),
   z.object({ kind: z.literal("empty"), text: z.string() }),
@@ -101,6 +122,9 @@ export const ClaudeSettingsTakeoverSchema = z.object({
   // 拿掉的云平台开关与它们原来的值（字符串或 JSON 的 true，照用户写的）。
   // COMPAT(claudeCloudSwitchRecord): 工单 16 以前的记录没有它，按没拿掉过处理；remove after 2027-04-18.
   clouds: z.record(z.string(), z.unknown()).optional(),
+  // 默认思考档位写过的键。
+  // COMPAT(claudeThinkingRecord): added in v0.17.0, remove after 2027-04-18. 工单 20 以前的记录没有它，按没写过处理。
+  thinking: ThinkingRecordSchema.optional(),
 });
 export type ClaudeSettingsTakeover = z.infer<typeof ClaudeSettingsTakeoverSchema>;
 
@@ -130,8 +154,8 @@ export type ClaudeSettingsRestoreResult =
 
 /**
  * CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示，
- * 是否放开 WebSearch（至少一家开着的接口「自己能联网搜索」），以及经中转站能到的模型里有没有会被 Anthropic
- * 审查自动模式动作的（没有就写 CLAUDE_CODE_AUTO_MODE_SERVER=0）。
+ * 是否放开 WebSearch（至少一家开着的接口「自己能联网搜索」），经中转站能到的模型里有没有会被 Anthropic
+ * 审查自动模式动作的（没有就写 CLAUDE_CODE_AUTO_MODE_SERVER=0），以及默认思考档位（null 为没设，用 CLI 自己的）。
  */
 export interface ClaudeGatewayWiring {
   baseUrl: string;
@@ -141,6 +165,7 @@ export interface ClaudeGatewayWiring {
   hintEnv: ClaudeHintEnv;
   allowWebSearch: boolean;
   isAutoModeReviewed: boolean;
+  defaultThinking: string | null;
 }
 
 /**
@@ -215,20 +240,184 @@ export function applyClaudeApiEndpoint(input: {
   const clouds = dropClouds({ text, envObject, takeover: input.takeover, formatting });
   text = clouds.text;
 
+  const thinking = writeThinking({
+    text,
+    before: parsed.settings,
+    level: input.wiring.defaultThinking,
+    model: input.wiring.model,
+    takeover: input.takeover,
+    formatting,
+  });
+  text = thinking.text;
+
+  const takeover: ClaudeSettingsTakeover = {
+    originalFile: input.takeover?.originalFile ?? classifyOriginalFile(input.text),
+    env: envRecords,
+    model,
+    envCreated: input.takeover?.envCreated ?? envObject === undefined,
+    webSearchDeny: webSearchDeny.record,
+    modelPicker: modelPicker.record,
+    hintEnv: hintEnv.record,
+    clouds: clouds.record,
+  };
   return {
     kind: "patched",
     text: `${bom}${text}`,
-    takeover: {
-      originalFile: input.takeover?.originalFile ?? classifyOriginalFile(input.text),
-      env: envRecords,
-      model,
-      envCreated: input.takeover?.envCreated ?? envObject === undefined,
-      webSearchDeny: webSearchDeny.record,
-      modelPicker: modelPicker.record,
-      hintEnv: hintEnv.record,
-      clouds: clouds.record,
-    },
+    takeover: withThinkingRecord(takeover, thinking.record),
   };
+}
+
+/** 没写过思考档位的记录不带这一项。 */
+function withThinkingRecord(
+  takeover: ClaudeSettingsTakeover,
+  record: ThinkingRecord,
+): ClaudeSettingsTakeover {
+  return record.keys.length > 0 ? { ...takeover, thinking: record } : takeover;
+}
+
+const EFFORT_ENV_PATH = ["env", "CLAUDE_CODE_EFFORT_LEVEL"];
+const ULTRACODE_PATH = ["ultracode"];
+
+/** 这次要写的一个思考档位键；value 为 null 是要拿掉。 */
+interface ThinkingKey {
+  path: string[];
+  value: string | boolean | null;
+}
+
+interface ThinkingKeysInput {
+  level: string;
+  model: string;
+  settings: ParsedSettings;
+  // 文件里有、或 Osuna 记着的键：会盖过这一档，要拿掉。
+  isHeld: (path: string[]) => boolean;
+}
+
+/** 默认思考档位要写的键（照 magpie 的 effort 与 ultracode 字段）。 */
+function thinkingKeys(input: ThinkingKeysInput): ThinkingKey[] {
+  const { level } = input;
+  const keys: ThinkingKey[] = [];
+  const dropIfHeld = (path: string[]) => {
+    if (input.isHeld(path)) keys.push({ path, value: null });
+  };
+  if (level === "max") {
+    keys.push({ path: EFFORT_ENV_PATH, value: "max" });
+    dropIfHeld(ULTRACODE_PATH);
+    return keys;
+  }
+  const isUltraCode = level === CLAUDE_ULTRA_CODE;
+  const effort = isUltraCode ? "xhigh" : level;
+  // 别家的模型和 Opus 5.5 以前的 Claude 读顶层；之后在 Claude Code 里换到别家模型时也从这一档起步（magpie 同样两处都写）。
+  keys.push({ path: ["effortLevel"], value: effort });
+  const modelPath = modelEffortPath(input.settings, claudeModelName(input.model));
+  if (modelPath) keys.push({ path: modelPath, value: effort });
+  dropIfHeld(EFFORT_ENV_PATH);
+  if (isUltraCode) {
+    keys.push({ path: ULTRACODE_PATH, value: true });
+  } else {
+    dropIfHeld(ULTRACODE_PATH);
+  }
+  return keys;
+}
+
+/** modelSettings.<模型>.effortLevel；不是 Claude 模型、或用户写的 modelSettings 不是对象时不写。 */
+function modelEffortPath(settings: ParsedSettings, name: string): string[] | null {
+  if (name === "") return null;
+  const { modelSettings } = settings;
+  if (modelSettings === undefined) return ["modelSettings", name, "effortLevel"];
+  if (!isRecord(modelSettings)) return null;
+  const entry = modelSettings[name];
+  const isEntryWritable = entry === undefined || isRecord(entry);
+  return isEntryWritable ? ["modelSettings", name, "effortLevel"] : null;
+}
+
+interface ThinkingPatch {
+  text: string;
+  record: ThinkingRecord;
+}
+
+/** 写默认思考档位；上次写过、这次不写的键放回原值，Osuna 建的、现在空了的容器删掉。level 为 null 时只做后两件。 */
+function writeThinking(input: {
+  text: string;
+  before: ParsedSettings;
+  level: string | null;
+  model: string;
+  takeover: ClaudeSettingsTakeover | null;
+  formatting: FormattingOptions;
+}): ThinkingPatch {
+  const { before, formatting } = input;
+  const recorded = input.takeover?.thinking ?? { keys: [], created: [] };
+  const recordAt = (path: string[]) => recorded.keys.find((key) => samePath(key.path, path));
+  const wasCreated = (path: string[]) => recorded.created.some((made) => samePath(made, path));
+  const isHeld = (path: string[]) => valueAt(before, path).present || recordAt(path) !== undefined;
+  const wanted =
+    input.level === null
+      ? []
+      : thinkingKeys({ level: input.level, model: input.model, settings: before, isHeld });
+  let { text } = input;
+  const keys: ThinkingKeyRecord[] = [];
+  const created: string[][] = [];
+  for (const key of wanted) {
+    for (let depth = 1; depth < key.path.length; depth++) {
+      const container = key.path.slice(0, depth);
+      const isNew = !valueAt(before, container).present || wasCreated(container);
+      if (isNew && !created.some((made) => samePath(made, container))) created.push(container);
+    }
+    const original = recordAt(key.path)?.original ?? valueAt(before, key.path);
+    keys.push({ path: key.path, original, written: key.value });
+    text = edit(text, key.path, key.value ?? undefined, formatting);
+  }
+  for (const record of recorded.keys) {
+    if (wanted.some((key) => samePath(key.path, record.path))) continue;
+    text = restoreValue(text, record.path, record.original, formatting);
+  }
+  const stale = recorded.created.filter((made) => !created.some((now) => samePath(now, made)));
+  text = removeEmptyContainers({ text, containers: stale, formatting });
+  return { text, record: { keys, created } };
+}
+
+/** 放回默认思考档位写过的键，再删掉 Osuna 建的、现在空了的容器。 */
+function restoreThinking(input: {
+  text: string;
+  record: ThinkingRecord;
+  formatting: FormattingOptions;
+}): string {
+  let { text } = input;
+  for (const key of input.record.keys) {
+    text = restoreValue(text, key.path, key.original, input.formatting);
+  }
+  return removeEmptyContainers({
+    text,
+    containers: input.record.created,
+    formatting: input.formatting,
+  });
+}
+
+/** 由深到浅删掉空了的容器。 */
+function removeEmptyContainers(input: {
+  text: string;
+  containers: string[][];
+  formatting: FormattingOptions;
+}): string {
+  let { text } = input;
+  const deepestFirst = [...input.containers].sort((a, b) => b.length - a.length);
+  for (const container of deepestFirst) {
+    text = removeIfEmptyObject(text, container, input.formatting);
+  }
+  return text;
+}
+
+function samePath(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((segment, index) => segment === b[index]);
+}
+
+/** 沿路径取值；路径上有一层不是对象或没有这个键时不在。 */
+function valueAt(settings: ParsedSettings, path: readonly string[]): OriginalValue {
+  let node: unknown = settings;
+  for (const segment of path) {
+    if (!isRecord(node) || !Object.hasOwn(node, segment)) return { present: false };
+    node = node[segment];
+  }
+  return { present: true, value: node };
 }
 
 interface CloudsPatch {
@@ -366,6 +555,9 @@ export function restoreClaudeOfficial(input: {
   }
   text = removeOwnHints(text, input.takeover, formatting);
   text = putCloudsBack({ text, takeover: input.takeover, formatting });
+  if (input.takeover.thinking) {
+    text = restoreThinking({ text, record: input.takeover.thinking, formatting });
+  }
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
   }
@@ -508,6 +700,7 @@ interface ParsedSettings {
   env?: Record<string, unknown>;
   model?: unknown;
   modelPicker?: unknown;
+  modelSettings?: unknown;
   permissions?: { deny?: unknown[] };
 }
 

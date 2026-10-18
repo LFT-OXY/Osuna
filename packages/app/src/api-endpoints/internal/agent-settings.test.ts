@@ -28,6 +28,7 @@ function view(input: {
   endpointModelGroups?: ApiEndpointModelGroup[] | null;
   enabled?: boolean;
   defaultModelId?: string | null;
+  defaultThinkingOptionId?: string | null;
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
 }) {
@@ -36,7 +37,11 @@ function view(input: {
       status: "ready",
       endpoints: input.endpoints,
       agents: {
-        claude: { enabled: input.enabled ?? false, defaultModelId: input.defaultModelId ?? null },
+        claude: {
+          enabled: input.enabled ?? false,
+          defaultModelId: input.defaultModelId ?? null,
+          defaultThinkingOptionId: input.defaultThinkingOptionId,
+        },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
       agentIssues: input.agentIssues ?? {},
@@ -331,5 +336,72 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       now: NOW,
     });
     expect(codex.keepsClaudeAiLogin).toBeNull();
+  });
+});
+
+describe("the default thinking on an agent page", () => {
+  const thinkingOptions = [
+    { id: "low", label: "Low" },
+    { id: "high", label: "High" },
+    { id: "max", label: "Max" },
+  ];
+  const groups: ApiEndpointModelGroup[] = [
+    {
+      name: "Relay A",
+      models: [
+        { provider: "claude", id: "relay-a/glm-5.3", label: "glm-5.3", thinkingOptions },
+        {
+          provider: "claude",
+          id: "relay-a/kimi-k2",
+          label: "kimi-k2",
+          thinkingOptions: [{ id: "high", label: "High" }],
+        },
+      ],
+    },
+  ];
+  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "kimi-k2" }] })];
+
+  it("offers the default model's levels, as the chat model selector has them", () => {
+    const shown = view({
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      defaultThinkingOptionId: "high",
+    });
+    expect(shown.defaultThinking).toEqual({ value: "high", options: thinkingOptions });
+  });
+
+  it("reads the levels of the endpoint a default model names", () => {
+    const shown = view({
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "relay-a/kimi-k2",
+    });
+    expect(shown.defaultThinking).toEqual({
+      value: null,
+      options: [{ id: "high", label: "High" }],
+    });
+  });
+
+  it("is not offered while the switch is off, the model has no levels, or the host is too old", () => {
+    expect(
+      view({ endpoints, endpointModelGroups: groups, defaultModelId: "glm-5.3" }).defaultThinking,
+    ).toBeNull();
+    expect(
+      view({ endpoints, endpointModelGroups: null, enabled: true, defaultModelId: "glm-5.3" })
+        .defaultThinking,
+    ).toBeNull();
+    const levelless: ApiEndpointModelGroup[] = [
+      {
+        name: "Relay A",
+        models: [{ provider: "claude", id: "relay-a/glm-5.3", label: "glm-5.3" }],
+      },
+    ];
+    expect(
+      view({ endpoints, endpointModelGroups: levelless, enabled: true, defaultModelId: "glm-5.3" })
+        .defaultThinking,
+    ).toBeNull();
   });
 });

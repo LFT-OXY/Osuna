@@ -104,6 +104,16 @@ type AgentControlSelector = "mode" | "model" | "thinking" | `feature-${string}`;
 
 const EMPTY_AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [];
 
+/** 每个会话都锁在 max 时（第三方接口的默认思考档位是 max，Claude Code 的 CLAUDE_CODE_EFFORT_LEVEL 盖过每次选的档位）写明原因。 */
+function useThinkingLockNote(
+  entry: ProviderSnapshotEntry | null | undefined,
+  providerLabel: string,
+): string | undefined {
+  const { t } = useTranslation();
+  if (entry?.lockedThinkingOptionId !== "max") return undefined;
+  return t("agentControls.thinking.lockedAtMax", { agent: providerLabel });
+}
+
 interface ControlledAgentControlsProps {
   provider: string;
   providerLabel: string;
@@ -117,6 +127,8 @@ interface ControlledAgentControlsProps {
   thinkingOptions?: AgentControlOption[];
   selectedThinkingOptionId?: string;
   onSelectThinkingOption?: (thinkingOptionId: string) => void;
+  /** 思考档位浮层里滑条下的一句说明：每个会话都锁在某一档时写明原因。 */
+  thinkingNote?: string;
   disabled?: boolean;
   isModelLoading?: boolean;
   modelSelectorProviders?: ProviderSelectorProvider[];
@@ -503,6 +515,7 @@ function ControlledAgentControls({
   thinkingOptions,
   selectedThinkingOptionId,
   onSelectThinkingOption,
+  thinkingNote,
   disabled = false,
   isModelLoading = false,
   modelSelectorProviders,
@@ -736,6 +749,7 @@ function ControlledAgentControls({
             modelSelectorProviders={effectiveModelSelectorProviders}
             modelDisabled={modelDisabled}
             comboboxThinkingOptions={comboboxThinkingOptions}
+            thinkingNote={thinkingNote}
             displayThinking={displayThinking}
             openSelector={openSelector}
             thinkingAnchorRef={thinkingAnchorRef}
@@ -779,6 +793,7 @@ function ControlledAgentControls({
             modelSelectorProviders={effectiveModelSelectorProviders}
             modelDisabled={modelDisabled}
             comboboxThinkingOptions={comboboxThinkingOptions}
+            thinkingNote={thinkingNote}
             openSelector={openSelector}
             displayThinking={displayThinking}
             activeSheet={activeSheet}
@@ -825,6 +840,7 @@ interface DesktopAgentControlsContentProps {
   modelSelectorProviders: ProviderSelectorProvider[];
   modelDisabled: boolean;
   comboboxThinkingOptions: ComboboxOption[];
+  thinkingNote?: string;
   displayThinking: string;
   openSelector: AgentControlSelector | null;
   thinkingAnchorRef: RefObject<View | null>;
@@ -872,6 +888,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     modelSelectorProviders,
     modelDisabled,
     comboboxThinkingOptions,
+    thinkingNote,
     displayThinking,
     openSelector,
     thinkingAnchorRef,
@@ -993,6 +1010,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             onOpenChange={handleThinkingOpenChange}
             anchorRef={thinkingAnchorRef}
             onSelect={handleThinkingSelect}
+            note={thinkingNote}
           />
         </>
       ) : null}
@@ -1080,6 +1098,7 @@ interface SheetAgentControlsContentProps {
   modelSelectorProviders: ProviderSelectorProvider[];
   modelDisabled: boolean;
   comboboxThinkingOptions: ComboboxOption[];
+  thinkingNote?: string;
   openSelector: AgentControlSelector | null;
   displayThinking: string;
   activeSheet: ActiveSheet;
@@ -1120,6 +1139,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     modelSelectorProviders,
     modelDisabled,
     comboboxThinkingOptions,
+    thinkingNote,
     openSelector,
     displayThinking,
     activeSheet,
@@ -1177,6 +1197,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
             onOpenChange={handleThinkingSheetOpenChange}
             anchorRef={thinkingAnchorRef}
             onSelect={handleThinkingSelect}
+            note={thinkingNote}
           />
         </>
       ) : null}
@@ -1511,6 +1532,10 @@ export const AgentControls = memo(function AgentControls({
   );
 
   const models = selectableEntryModels(snapshotSelectedEntry);
+  const thinkingNote = useThinkingLockNote(
+    snapshotSelectedEntry,
+    resolveProviderLabel(agent?.provider ?? "", snapshotEntries),
+  );
   const selectedProviderIsLoading = snapshotSelectedEntry?.status === "loading";
 
   const agentProviderDefinitions = useMemo(
@@ -1740,6 +1765,7 @@ export const AgentControls = memo(function AgentControls({
         thinkingOptions={thinkingOptions.length > 0 ? thinkingOptions : undefined}
         selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
         onSelectThinkingOption={handleSelectThinkingOption}
+        thinkingNote={thinkingNote}
         features={agent.features}
         onSetFeature={handleSetFeature}
         isModelLoading={snapshotIsLoading || selectedProviderIsLoading}
@@ -1792,6 +1818,10 @@ export function DraftAgentControls({
   const providerLabel = selectedProvider
     ? resolveProviderLabel(selectedProvider, providerEntries)
     : "";
+  const thinkingNote = useThinkingLockNote(
+    providerEntries.find((entry) => entry.provider === selectedProvider),
+    providerLabel,
+  );
 
   const effectiveSelectedThinkingOption =
     selectedThinkingOptionId || mappedThinkingOptions[0]?.id || undefined;
@@ -1867,6 +1897,7 @@ export function DraftAgentControls({
         onCreateAgentProfile={profileActions.create}
         onEditAgentProfile={profileActions.edit}
         thinkingOptions={mappedThinkingOptions.length > 0 ? mappedThinkingOptions : undefined}
+        thinkingNote={thinkingNote}
         selectedThinkingOptionId={effectiveSelectedThinkingOption}
         onSelectThinkingOption={onSelectThinkingOption}
         features={features}

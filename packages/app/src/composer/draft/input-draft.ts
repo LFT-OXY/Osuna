@@ -20,6 +20,7 @@ import {
   resolveEffectiveComposerThinkingOptionId,
   type ProviderSelectionState,
 } from "@/provider-selection/provider-selection";
+import { findModelByReference } from "@/provider-selection/model-catalog";
 import { hasDraftContent, useDraftStore, type DraftInput } from "@/stores/draft-store";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { useShallow } from "zustand/shallow";
@@ -271,6 +272,18 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [effectiveModelId, providerSelection],
   );
 
+  // 没有记住的选择时模型是空的：思考档位按实际会用的默认模型和它的起步档位显示，和提交时一致
+  // （第三方接口的默认思考档位就是这样落到新对话上的）。
+  const shownFormState = useMemo<UseAgentFormStateResult>(() => {
+    const effectiveModel = findModelByReference(formState.availableModels, effectiveModelId);
+    return {
+      ...formState,
+      availableThinkingOptions:
+        effectiveModel?.thinkingOptions ?? formState.availableThinkingOptions,
+      selectedThinkingOptionId: effectiveThinkingOptionId,
+    };
+  }, [effectiveModelId, effectiveThinkingOptionId, formState]);
+
   const {
     features: draftFeatures,
     featureValues: draftFeatureValues,
@@ -318,13 +331,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     }
 
     return {
-      ...formState,
+      ...shownFormState,
       workingDir,
       effectiveModelId,
       effectiveThinkingOptionId,
       featureValues: draftFeatureValues,
       agentControls: buildDraftAgentControls({
-        formState,
+        formState: shownFormState,
         features: draftFeatures,
         onSetFeature: setDraftFeatureValue,
         onApplyAgentProfile: applyDraftAgentProfile,
@@ -339,7 +352,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     draftFeatures,
     draftFeatureValues,
     applyDraftAgentProfile,
-    formState,
+    shownFormState,
     setDraftFeatureValue,
     workingDir,
   ]);

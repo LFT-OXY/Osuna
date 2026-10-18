@@ -31,7 +31,7 @@ export function claudeSpelled(input: ClaudeSpelledInput): string {
 }
 
 /** Claude 模型版本号里的点都换成连字符；别的 id 原样。 */
-function claudeDashed(id: string): string {
+export function claudeDashed(id: string): string {
   if (!id.includes(".")) return id;
   return id.replace(CLAUDE_DOTTED, (match) => match.replaceAll(".", "-"));
 }

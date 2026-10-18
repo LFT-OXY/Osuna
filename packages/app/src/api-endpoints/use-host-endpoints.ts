@@ -44,10 +44,10 @@ interface ActionFailure {
   message: string;
 }
 
-/** 「使用第三方接口」总开关、默认模型与「保留 claude.ai 登录」的一次修改。 */
+/** 「使用第三方接口」总开关、默认模型、默认思考档位与「保留 claude.ai 登录」的一次修改。 */
 export type AgentSettingsChange = Pick<
   ApiEndpointSetAgentSettingsRequest,
-  "enabled" | "defaultModelId" | "keepsClaudeAiLogin"
+  "enabled" | "defaultModelId" | "keepsClaudeAiLogin" | "defaultThinkingOptionId"
 >;
 
 /** 打开总开关时主机挑默认模型的办法，给那个 Agent 的设置页说一句（ADR 0012）。 */
