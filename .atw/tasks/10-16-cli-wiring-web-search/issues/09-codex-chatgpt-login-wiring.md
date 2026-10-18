@@ -16,7 +16,7 @@
 
 **Blocked by:** 03, 08
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（假适配器返回 ChatGPT）：打开开关后 `config.toml` 只多 `openai_base_url`（指向中转站的 ChatGPT 后端地址）、`model` 与 Osuna 的 Codex 服务商表，没有 Osuna 写的 `model_provider`、`model_catalog_json`；关掉后按原样还原，服务商表保留。
 - [ ] 端到端（API key、未登录）：与现在写的一样。
