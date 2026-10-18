@@ -87,6 +87,21 @@ describe("createLoginShellEnvReader", () => {
     expect(calls()).toEqual(["-ilc 1", "-ilc 1"]);
   });
 
+  it("keeps each set of variables' answer apart (the cloud switches and Codex's proxy)", async () => {
+    const { shell, calls } = fakeShell("export CLAUDE_CODE_USE_VERTEX=1 HTTP_PROXY=http://p:1");
+    const read = createLoginShellEnvReader({
+      env: { SHELL: shell },
+      now: () => 0,
+      findShell: () => null,
+    });
+
+    expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
+    expect(await read(["HTTP_PROXY", "NO_PROXY"])).toEqual({ HTTP_PROXY: "http://p:1" });
+    expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
+    expect(await read(["HTTP_PROXY", "NO_PROXY"])).toEqual({ HTTP_PROXY: "http://p:1" });
+    expect(calls()).toEqual(["-ilc 1", "-ilc 1"]);
+  });
+
   it("does not ask on Windows", async () => {
     const read = createLoginShellEnvReader({
       env: { SHELL: "/nonexistent" },

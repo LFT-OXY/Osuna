@@ -13,6 +13,7 @@ import {
   keepCodexCliModel,
   readCodexCliPicks,
   readCodexMultiAgentV2,
+  readCodexRespectsSystemProxy,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -1150,6 +1151,23 @@ generate_memories = true
       subagentLevel: null,
       memory: null,
     });
+  });
+});
+
+describe("Codex's own respect_system_proxy", () => {
+  it.each([
+    { text: "[features]\nrespect_system_proxy = true\n", isOn: true },
+    { text: "features.respect_system_proxy = true\n", isOn: true },
+    { text: "[features]\nrespect_system_proxy = false\n", isOn: false },
+    { text: '[features]\nrespect_system_proxy = "true"\n', isOn: false },
+    { text: "[profiles.work.features]\nrespect_system_proxy = true\n", isOn: false },
+    { text: "[features\n", isOn: false },
+  ])("$text is $isOn", ({ text, isOn }) => {
+    expect(readCodexRespectsSystemProxy(text)).toBe(isOn);
+  });
+
+  it("no config.toml is off", () => {
+    expect(readCodexRespectsSystemProxy(null)).toBe(false);
   });
 });
 

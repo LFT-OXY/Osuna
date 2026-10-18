@@ -443,6 +443,8 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           file: shortenPath(params.file),
         }),
       };
+    case "codexProxied":
+      return codexProxiedCopy({ t, providerLabel, issue });
     case "bypassed":
       return describeBypassed({
         t,
@@ -505,6 +507,64 @@ function cloudSwitchCopy(input: {
     default:
       return { title, description: issue.message };
   }
+}
+
+/** 代理写在哪：环境变量照原名，系统的代理设置翻译；认不出为 null。 */
+function proxyFromLabel(input: { t: Translate; from: string | undefined }): string | null {
+  switch (input.from) {
+    case "HTTP_PROXY":
+    case "HTTPS_PROXY":
+    case "ALL_PROXY":
+      return input.from;
+    case "windows_settings":
+      return input.t("settings.apiEndpoints.agent.issues.codexProxiedFromWindowsSettings");
+    case "system_settings":
+      return input.t("settings.apiEndpoints.agent.issues.codexProxiedFromSystemSettings");
+    default:
+      return null;
+  }
+}
+
+interface ProxyFixInput {
+  t: Translate;
+  fix: string | undefined;
+  values: Record<string, string | undefined>;
+}
+
+/** 「如何修复」按 daemon 判断的代理来源（magpie 的三种说法）；认不出为 null。 */
+function proxyFixSteps(input: ProxyFixInput): string | null {
+  const { t, values } = input;
+  switch (input.fix) {
+    case "environment":
+      return t("settings.apiEndpoints.agent.issues.codexProxiedFixEnvironment", values);
+    case "windows":
+      return t("settings.apiEndpoints.agent.issues.codexProxiedFixWindows", values);
+    case "other":
+      return t("settings.apiEndpoints.agent.issues.codexProxiedFixOther", values);
+    default:
+      return null;
+  }
+}
+
+/** 代理不转发：写明中转站、代理地址与来源；认不出的来源或修法照主机原文。 */
+function codexProxiedCopy(input: {
+  t: Translate;
+  providerLabel: string;
+  issue: AgentIssueView;
+}): IssueCopy {
+  const { t, providerLabel, issue } = input;
+  const { params } = issue;
+  const title = t("settings.apiEndpoints.agent.issues.codexProxied", { agent: providerLabel });
+  const from = proxyFromLabel({ t, from: params.from });
+  if (from === null) return { title, description: issue.message };
+  const values = { agent: providerLabel, host: params.host, proxy: params.proxy, from };
+  const fixSteps = proxyFixSteps({ t, fix: params.fix, values });
+  if (fixSteps === null) return { title, description: issue.message };
+  return {
+    title,
+    description: t("settings.apiEndpoints.agent.issues.codexProxiedDetail", values),
+    fixSteps,
+  };
 }
 
 const styles = StyleSheet.create((theme) => ({

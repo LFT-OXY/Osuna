@@ -860,6 +860,18 @@ export function readCodexMultiAgentV2(text: string | null): CodexMultiAgentV2 {
   return { kind: "off" };
 }
 
+/**
+ * config.toml 的 `[features] respect_system_proxy` 是不是 true（magpie codexProxyFor 读的同一项）：
+ * 开着时 Codex 只问系统要代理。没文件、读不懂（另有 config_unparsable 提示）都按没开。
+ */
+export function readCodexRespectsSystemProxy(text: string | null): boolean {
+  if (text === null) return false;
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return false;
+  const { features } = parsed.value;
+  return isRecord(features) && features.respect_system_proxy === true;
+}
+
 /** 旧式顶层 `profile` 选中的 `[profiles.<name>.features]`；没选或没有为 undefined。 */
 function selectedProfileFeatures(value: Record<string, unknown>): unknown {
   const profileName = value.profile;

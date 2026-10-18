@@ -14,7 +14,9 @@
  *
  * 5. 不读本机真实的进程表、进程的环境，不找、不跑真的 codex：第三方接口「改完提示要重开谁」的「进程与命令」适配器
  *    （host-processes.ts）换成这里装上的假的：进程表读 PASEO_E2E_PROCESS_TABLE_PATH 文件（ps 的格式，没设就是空的），
- *    CODEX_HOME 一律读不到，codex 就叫 codex，执行的命令只记一行到 PASEO_E2E_UPGRADE_RECORD_PATH、以 0 结束。
+ *    CODEX_HOME 一律读不到，codex 就叫 codex，执行的命令只记一行到 PASEO_E2E_UPGRADE_RECORD_PATH、以 0 结束；
+ *    系统代理读 PASEO_E2E_SYSTEM_PROXY_PATH 文件（SystemProxy 的 JSON，没设或没有这个文件就是没设代理），
+ *    不跑 scutil、不读注册表。
  *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
@@ -119,6 +121,15 @@ function readFakeProcessTable() {
   return processes;
 }
 
+const NO_SYSTEM_PROXY = { url: null, http: null, socks: null, bypass: [] };
+
+/** PASEO_E2E_SYSTEM_PROXY_PATH 里的假系统代理。 */
+function readFakeSystemProxy() {
+  const file = process.env.PASEO_E2E_SYSTEM_PROXY_PATH;
+  if (!file || !existsSync(file)) return NO_SYSTEM_PROXY;
+  return { ...NO_SYSTEM_PROXY, ...JSON.parse(readFileSync(file, "utf8")) };
+}
+
 globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
   reportsStartTimes: true,
   list: async () => readFakeProcessTable(),
@@ -132,6 +143,7 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
     }
     return { exitCode: 0, output: "" };
   },
+  readSystemProxy: async () => readFakeSystemProxy(),
 };
 
 const realSpawn = childProcess.spawn;

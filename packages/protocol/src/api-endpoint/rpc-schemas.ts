@@ -202,7 +202,9 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
  * codex_multi_agent_v2_on（file：「Codex Subagent 可用任意模型」开着，config.toml 里 Codex 自己的 multi_agent_v2 也开着、盖过它）、
  * codex_multi_agent_v2_unreadable（file、detail：「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2）、
  * bypassed（how：used / elsewhere / refused，at：ISO 时间，elsewhere 另有 host：设置没问题，但 CLI 自己的记录显示最近一次改写之后
- * 用过，中转站却没收到它的请求）。
+ * 用过，中转站却没收到它的请求）、
+ * codex_proxied（host、proxy、from：HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / windows_settings / system_settings，
+ * fix：environment / windows / other：Codex 经代理发给中转站的请求被代理吞掉，直连能通、经代理不通）。
  * 后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
  */
 export const ApiEndpointAgentIssueSchema = z.object({

@@ -1,15 +1,22 @@
 // 列进程的读法（ps 的 etime 与 PowerShell 的 Win32_Process）移植自 magpie（https://github.com/yetone/magpie，
 // internal/proc/list.go、list_other.go、list_windows.go 的 List 与 parseList，internal/agent/connectinfo.go 的 running 与 elapsed），
-// 读进程的 CODEX_HOME 移植自 internal/provider/codex_daemon.go 的 processCodexHome
+// 读进程的 CODEX_HOME 移植自 internal/provider/codex_daemon.go 的 processCodexHome，
+// 读系统代理移植自 internal/netproxy/system_darwin.go、system_windows.go、system_other.go 的 system
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { readFile } from "node:fs/promises";
 import { isErrnoException } from "../../utils/errno.js";
 import { spawnProcess } from "../../utils/spawn.js";
+import {
+  NO_SYSTEM_PROXY,
+  parseInternetSettings,
+  parseScutil,
+  type SystemProxy,
+} from "./system-proxy.js";
 
 /*
  * 可替换的「进程与命令」适配器：第三方接口要看本机在跑哪些 CLI（改完提示要重开谁）、执行 CLI 自己的命令
- * （重启 Codex 的后台 app-server），以后的代理探测也经它读系统代理。生产用 createSystemHostProcesses，
+ * （重启 Codex 的后台 app-server），查 Codex 经哪个代理时读系统代理（codex-proxy.ts）。生产用 createSystemHostProcesses，
  * 测试一律换成假的：真的实现在测试里一造就抛错，免得哪条用例读到真实的进程表、跑真的 codex。
  */
 
@@ -55,6 +62,8 @@ export interface HostProcesses {
   findCodex: FindCodexCommand;
   /** 执行一条命令直到它退出；起不来或超时抛 HostProcessesError，退出码不是 0 照常返回。 */
   run(command: HostCommand): Promise<HostCommandResult>;
+  /** 系统设置里的代理（macOS 的 scutil、Windows 的 Internet Options）；别的系统没有。问不到抛 HostProcessesError。 */
+  readSystemProxy(): Promise<SystemProxy>;
 }
 
 /** 适配器没办成：起不来、超时、问不到系统。调用方当作这次查不到，不挡别的事。 */
@@ -170,7 +179,36 @@ export function createSystemHostProcesses(input: { findCodex: FindCodexCommand }
       return parseProcessList({ output: result.output, now: new Date() });
     },
     run: runCommand,
+    readSystemProxy,
   };
+}
+
+const INTERNET_SETTINGS_KEY =
+  "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+
+async function readSystemProxy(): Promise<SystemProxy> {
+  if (process.platform === "darwin") {
+    const result = await runCommand({
+      command: "scutil",
+      args: ["--proxy"],
+      env: process.env,
+      timeoutMs: LIST_TIMEOUT_MS,
+    });
+    requireSuccess({ name: "Reading the system proxy", result });
+    return parseScutil(result.output);
+  }
+  if (process.platform === "win32") {
+    const result = await runCommand({
+      command: "reg",
+      args: ["query", INTERNET_SETTINGS_KEY],
+      env: process.env,
+      timeoutMs: LIST_TIMEOUT_MS,
+    });
+    requireSuccess({ name: "Reading Windows' proxy settings", result });
+    return parseInternetSettings(result.output);
+  }
+  // 别的系统的桌面代理以 *_PROXY 变量交给应用。
+  return NO_SYSTEM_PROXY;
 }
 
 // 浏览器测试的 daemon 由 e2e 封条（packages/app/e2e/support/daemon-upgrade-seal.mjs）在这里装上假的适配器，
@@ -185,7 +223,7 @@ function sealedHostProcesses(): HostProcesses | null {
 
 function isHostProcesses(value: unknown): value is HostProcesses {
   if (typeof value !== "object" || value === null) return false;
-  const methods = ["list", "readCodexHome", "findCodex", "run"];
+  const methods = ["list", "readCodexHome", "findCodex", "run", "readSystemProxy"];
   const hasMethods = methods.every((name) => typeof Reflect.get(value, name) === "function");
   return hasMethods && typeof Reflect.get(value, "reportsStartTimes") === "boolean";
 }

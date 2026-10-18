@@ -3233,6 +3233,18 @@ describe("Codex app-server provider", () => {
     }
   });
 
+  test("Codex started by Osuna goes around a proxy to 127.0.0.1, keeping NO_PROXY's own entries", () => {
+    const noProxyOf = (env: Record<string, string>) =>
+      buildCodexAppServerEnv({ env: { NO_PROXY: "", no_proxy: "", ...env } }).NO_PROXY;
+    expect(noProxyOf({})).toBe("127.0.0.1");
+    expect(noProxyOf({ NO_PROXY: "corp.example, 10.0.0.0/8" })).toBe(
+      "corp.example, 10.0.0.0/8,127.0.0.1",
+    );
+    // Codex 先读大写的，没有才读小写的：写成大写时带上小写的值。
+    expect(noProxyOf({ no_proxy: "localhost" })).toBe("localhost,127.0.0.1");
+    expect(noProxyOf({ NO_PROXY: "localhost, 127.0.0.1" })).toBe("localhost, 127.0.0.1");
+  });
+
   test("builds app-server env from launch-context env overrides", () => {
     const launchContext: AgentLaunchContext = {
       env: {

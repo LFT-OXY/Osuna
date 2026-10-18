@@ -6,6 +6,7 @@ import type {
   HostProcessesError,
   HostProgram,
 } from "../api-endpoints/host-processes.js";
+import { NO_SYSTEM_PROXY, type SystemProxy } from "../api-endpoints/system-proxy.js";
 
 /** 假的 codex：执行命令时记下的程序路径，从不真的去找、去跑。 */
 export const FAKE_CODEX_PATH = "/fake/bin/codex";
@@ -28,6 +29,10 @@ export class FakeHostProcesses implements HostProcesses {
   hasCodex = true;
   // 执行命令时顺带做的事（如重启后 Codex 改写进程记录文件）。
   onRun: ((command: HostCommand) => void) | null = null;
+  // 系统设置里的代理；缺省没设。
+  systemProxy: SystemProxy = NO_SYSTEM_PROXY;
+  // 设了就让 readSystemProxy 抛它（问不到系统）。
+  systemProxyError: HostProcessesError | null = null;
 
   async list(): Promise<HostProcess[]> {
     this.lists += 1;
@@ -48,5 +53,10 @@ export class FakeHostProcesses implements HostProcesses {
     this.runs.push(command);
     this.onRun?.(command);
     return this.runResult;
+  }
+
+  async readSystemProxy(): Promise<SystemProxy> {
+    if (this.systemProxyError !== null) throw this.systemProxyError;
+    return this.systemProxy;
   }
 }

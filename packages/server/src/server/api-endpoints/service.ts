@@ -89,6 +89,7 @@ import {
   readCodexModel,
   readCodexStartupReads,
   readCodexMultiAgentV2,
+  readCodexRespectsSystemProxy,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -135,9 +136,18 @@ import type { RetiredModels } from "./retired-models.js";
 import { switchOffFileChange } from "./switch-off-preview.js";
 import {
   createSystemHostProcesses,
+  HostProcessesError,
   type FindCodexCommand,
   type HostProcesses,
 } from "./host-processes.js";
+import {
+  CODEX_PROXY_ENV_KEYS,
+  codexProxiedMessage,
+  CodexProxyCheck,
+  probeThroughProxy,
+  type ProxyEnv,
+} from "./codex-proxy.js";
+import { createSystemProxyReader, NO_SYSTEM_PROXY, type SystemProxy } from "./system-proxy.js";
 import {
   CliReopenHints,
   cliChangedAt,
@@ -360,8 +370,11 @@ export interface ApiEndpointServiceOptions {
   countLiveSessions: (provider: ApiEndpointProvider) => number;
   // 该提供方下 before 之前启动、还活着的 Agent session 数：提示区说它们要重开才用上新设置。
   countSessionsStartedBefore: (input: { provider: ApiEndpointProvider; before: Date }) => number;
-  // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）；缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
+  // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）、读系统代理（codex-proxy.ts）；
+  // 缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
   hostProcesses?: HostProcesses;
+  // daemon 的版本：Osuna 自己发出的请求（经代理问中转站）带 Osuna/<版本>。
+  daemonVersion: string;
   // 真的适配器找哪个 codex 执行它自己的命令；缺省按默认找，daemon 传用户配的 codex 命令（假的适配器自己答）。
   findCodexCommand?: FindCodexCommand;
   upstreamTimeoutMs?: number;
@@ -406,7 +419,9 @@ type ApiEndpointAgentIssueCode =
   // 「Codex Subagent 可用任意模型」开着，config.toml 里 Codex 自己的 multi_agent_v2 也开着、盖过它（params.file）。
   | "codex_multi_agent_v2_on"
   // 「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2（params.file、detail）。
-  | "codex_multi_agent_v2_unreadable";
+  | "codex_multi_agent_v2_unreadable"
+  // Codex 经代理发给中转站的请求被代理吞掉：直连能通、经代理不通（params.host、proxy、from、fix，codex-proxy.ts）。
+  | "codex_proxied";
 
 /** 「保留当前设置」回应的提示：model_replaced 只留下 CLI 的模型；省略为关掉总开关、不改回文件。 */
 export type KeepCurrentSettingsCode = "model_replaced";
@@ -521,6 +536,7 @@ export class ApiEndpointService {
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
   private readonly countSessionsStartedBefore: ApiEndpointServiceOptions["countSessionsStartedBefore"];
   private readonly reopenHints: CliReopenHints;
+  private readonly codexProxy: CodexProxyCheck;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
@@ -554,13 +570,16 @@ export class ApiEndpointService {
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
     this.countSessionsStartedBefore = options.countSessionsStartedBefore;
-    const { hostProcesses } = options;
+    let adapter = options.hostProcesses ?? null;
+    // 真的适配器用到时才造：测试里一造就抛错。
+    const hostProcesses = (): HostProcesses => {
+      adapter ??= createSystemHostProcesses({
+        findCodex: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+      });
+      return adapter;
+    };
     this.reopenHints = new CliReopenHints({
-      hostProcesses: () =>
-        hostProcesses ??
-        createSystemHostProcesses({
-          findCodex: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
-        }),
+      hostProcesses,
       subjects: () => ({
         claude: this.reopenSubject("claude"),
         codex: this.reopenSubject("codex"),
@@ -571,6 +590,17 @@ export class ApiEndpointService {
       ownPid: process.pid,
     });
     this.reopenHints.start();
+    this.codexProxy = new CodexProxyCheck({
+      readEnv: () => this.readCodexProxyEnv(),
+      readSystemProxy: createSystemProxyReader({
+        read: () => this.readSystemProxy(hostProcesses),
+      }),
+      probeThroughProxy,
+      reachesGateway: this.reachesGateway,
+      userAgent: `Osuna/${options.daemonVersion}`,
+      platform: process.platform,
+      logger: this.logger,
+    });
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
@@ -622,12 +652,19 @@ export class ApiEndpointService {
     if (state.agents.claude.enabled) {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));
     }
-    // 照 magpie：设置本身有问题时先说那个，没有问题才看是不是被绕过。
+    // 照 magpie：设置本身有问题时先说那个，没有问题再看 Codex 是不是被代理挡住，都没有才看是不是被绕过。
     for (const agentProvider of API_ENDPOINT_PROVIDERS) {
       const issues = statuses[agentProvider].issues;
       const isSettingsRight = issues.every((issue) => NOTICE_CODES.has(issue.code));
       const isChecked = state.agents[agentProvider].enabled && isSettingsRight;
       if (!isChecked) continue;
+      if (agentProvider === "codex") {
+        const proxied = await this.codexProxiedIssue();
+        if (proxied !== null) {
+          issues.push(proxied);
+          continue;
+        }
+      }
       const bypassed = this.bypassedIssue(agentProvider);
       if (bypassed !== null) issues.push(bypassed);
     }
@@ -2894,6 +2931,42 @@ export class ApiEndpointService {
     if (trimTrailingSlashes(url) === trimTrailingSlashes(gatewayUrl)) return true;
     const base = proxyBase({ value: url, gateway: gatewayUrl });
     return base !== null && (await this.reachesGateway(base));
+  }
+
+  /** Codex 经代理到不了中转站（codex-proxy.ts）；直连、代理转得过去、还没查完都为 null。 */
+  private async codexProxiedIssue(): Promise<AgentIssue | null> {
+    const base = this.gatewayUrlFor("codex");
+    if (base === null) return null;
+    const configText = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
+    const finding = await this.codexProxy.read({
+      base,
+      respectsSystemProxy: readCodexRespectsSystemProxy(configText),
+    });
+    if (finding === null) return null;
+    return {
+      code: "codex_proxied",
+      params: { ...finding },
+      message: codexProxiedMessage(finding),
+    };
+  }
+
+  /** Codex 读到的代理变量：登录 shell 的，没有再用 daemon 自己的（magpie 的 codexEnv）。 */
+  private async readCodexProxyEnv(): Promise<ProxyEnv> {
+    const shell = await this.readLoginShellEnv(CODEX_PROXY_ENV_KEYS);
+    const env: Record<string, string | undefined> = {};
+    for (const key of CODEX_PROXY_ENV_KEYS) env[key] = shell[key] ?? this.env[key];
+    return env;
+  }
+
+  /** 问不到系统时按没设代理，记日志，不挡列表。 */
+  private async readSystemProxy(hostProcesses: () => HostProcesses): Promise<SystemProxy> {
+    try {
+      return await hostProcesses().readSystemProxy();
+    } catch (error) {
+      if (!(error instanceof HostProcessesError)) throw error;
+      this.logger.warn({ err: error }, "Could not read the system proxy");
+      return NO_SYSTEM_PROXY;
+    }
   }
 
   /** CLI 自己的记录显示最近一次改写之后用过，中转站却没收到（cli-bypass.ts）；没有为 null。 */

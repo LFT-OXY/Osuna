@@ -2781,6 +2781,18 @@ export const ko: TranslationResources = {
             "「Codex Subagent가 모든 모델 사용」이 켜져 있지만 Osuna가 {{file}}을 읽지 못했습니다: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "{{file}}의 오류를 고쳐 올바른 TOML로 만든 뒤 이 페이지를 다시 여세요. 거기서 multi_agent_v2가 켜져 있으면 함께 끄세요.",
+          codexProxied:
+            "{{agent}}가 프록시를 거쳐 Osuna에 연결하지만, 이 프록시가 요청을 Osuna로 전달하지 않습니다",
+          codexProxiedDetail:
+            "{{agent}}는 Osuna({{host}})로 가는 요청을 프록시 {{proxy}}를 거쳐 보냅니다. 이 프록시는 {{from}}에 설정되어 있습니다. 프록시가 요청을 Osuna로 전달하지 않아, 어떤 모델이든 매 턴 502 Bad Gateway로 실패합니다. Osuna 안의 {{agent}} 채팅은 이미 이 프록시를 우회합니다.",
+          codexProxiedFromWindowsSettings: "Windows 프록시 설정",
+          codexProxiedFromSystemSettings: "시스템 프록시 설정",
+          codexProxiedFixEnvironment:
+            "프록시가 127.0.0.1을 직접 연결하게 하세요. 127.0.0.0/8에 DIRECT 규칙을 추가하거나, 전역 모드 대신 규칙 모드를 사용하세요. 또는 {{from}}을 설정한 곳에서 NO_PROXY에 127.0.0.1을 추가하세요(셸 프로필, 예: ~/.zshrc에 있다면). 그런 다음 {{agent}}를 종료했다가 다시 여세요. 그때까지는 「공식으로 전환」으로 {{agent}} 설정을 원래대로 되돌릴 수 있습니다.",
+          codexProxiedFixWindows:
+            "프록시가 127.0.0.1을 직접 연결하게 하세요. 127.0.0.0/8에 DIRECT 규칙을 추가하거나, 전역 모드 대신 규칙 모드를 사용하세요. 또는 Windows 프록시 설정의 「다음으로 시작하는 주소에는 프록시 서버를 사용하지 않음」에 127.0.0.1을 추가하세요(거기에 127.*만 쓰면 {{agent}}에는 소용없습니다). 그런 다음 {{agent}}를 종료했다가 다시 여세요. 그때까지는 「공식으로 전환」으로 {{agent}} 설정을 원래대로 되돌릴 수 있습니다.",
+          codexProxiedFixOther:
+            "프록시가 127.0.0.1을 직접 연결하게 하세요. 127.0.0.0/8에 DIRECT 규칙을 추가하거나, 전역 모드 대신 규칙 모드를 사용하세요. 또는 셸 프로필(~/.zshrc)에 export NO_PROXY=127.0.0.1을 추가하세요. 터미널의 {{agent}}와 ChatGPT 앱의 {{agent}} 모두 이것을 읽습니다. 그런 다음 {{agent}}를 종료했다가 다시 여세요. 그때까지는 「공식으로 전환」으로 {{agent}} 설정을 원래대로 되돌릴 수 있습니다.",
           howToFix: "해결 방법",
           codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
           codexProfileOverrideDetail:

@@ -2797,6 +2797,18 @@ export const ja: TranslationResources = {
             "「Codex の Subagent はどのモデルでも使える」はオンですが、Osuna は {{file}} を読めませんでした: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "{{file}} のエラーを直して正しい TOML にしてから、このページを開き直してください。そこで multi_agent_v2 がオンならオフにもしてください。",
+          codexProxied:
+            "{{agent}} はプロキシ経由で Osuna につながっていますが、そのプロキシがリクエストを Osuna に渡していません",
+          codexProxiedDetail:
+            "{{agent}} は Osuna（{{host}}）へのリクエストをプロキシ {{proxy}} 経由で送っています。このプロキシは{{from}}で設定されています。プロキシがリクエストを Osuna に渡さないため、どのモデルでも毎回 502 Bad Gateway で失敗します。Osuna 内の {{agent}} チャットはすでにこのプロキシを迂回しています。",
+          codexProxiedFromWindowsSettings: "Windows のプロキシ設定",
+          codexProxiedFromSystemSettings: "システムのプロキシ設定",
+          codexProxiedFixEnvironment:
+            "プロキシで 127.0.0.1 を直接接続にしてください。127.0.0.0/8 に DIRECT ルールを追加するか、グローバルモードではなくルールモードを使います。または{{from}}を設定している場所で NO_PROXY に 127.0.0.1 を追加します（シェルのプロファイル、たとえば ~/.zshrc にある場合）。その後 {{agent}} を終了して開き直してください。それまでは「公式に戻す」で {{agent}} の設定を元に戻せます。",
+          codexProxiedFixWindows:
+            "プロキシで 127.0.0.1 を直接接続にしてください。127.0.0.0/8 に DIRECT ルールを追加するか、グローバルモードではなくルールモードを使います。または Windows のプロキシ設定の「次で始まるアドレス以外にプロキシ サーバーを使います」に 127.0.0.1 を追加します（そこに 127.* と書いても {{agent}} には効きません）。その後 {{agent}} を終了して開き直してください。それまでは「公式に戻す」で {{agent}} の設定を元に戻せます。",
+          codexProxiedFixOther:
+            "プロキシで 127.0.0.1 を直接接続にしてください。127.0.0.0/8 に DIRECT ルールを追加するか、グローバルモードではなくルールモードを使います。またはシェルのプロファイル（~/.zshrc）に export NO_PROXY=127.0.0.1 を追加します。ターミナルの {{agent}} も ChatGPT アプリの {{agent}} もこれを読みます。その後 {{agent}} を終了して開き直してください。それまでは「公式に戻す」で {{agent}} の設定を元に戻せます。",
           howToFix: "直し方",
           codexProfileOverride:
             "Codex のプロファイル「{{profile}}」がサードパーティ API を上書きしています",

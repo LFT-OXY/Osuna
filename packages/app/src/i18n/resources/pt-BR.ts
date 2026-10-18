@@ -2809,6 +2809,18 @@ export const ptBR: TranslationResources = {
             "«Subagents do Codex podem usar qualquer modelo» está ligado, mas o Osuna não conseguiu ler {{file}}: {{detail}}",
           codexMultiAgentV2UnreadableFix:
             "Corrija o erro em {{file}} para que seja TOML válido e abra esta página de novo. Se multi_agent_v2 estiver ligado lá, desligue-o também.",
+          codexProxied:
+            "{{agent}} chega ao Osuna por um proxy que não repassa as solicitações dele",
+          codexProxiedDetail:
+            "{{agent}} envia as solicitações para o Osuna ({{host}}) pelo proxy {{proxy}}, definido em {{from}}. Esse proxy não as repassa ao Osuna, então todo turno falha com 502 Bad Gateway, seja qual for o modelo. Os chats do {{agent}} no Osuna já contornam o proxy.",
+          codexProxiedFromWindowsSettings: "as configurações de proxy do Windows",
+          codexProxiedFromSystemSettings: "as configurações de proxy do sistema",
+          codexProxiedFixEnvironment:
+            "Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione 127.0.0.1 ao NO_PROXY onde {{from}} está definido (seu perfil de shell, como ~/.zshrc, se estiver lá). Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.",
+          codexProxiedFixWindows:
+            'Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione 127.0.0.1 a "Não usar o servidor proxy para endereços que comecem com" nas configurações de proxy do Windows (127.* ali não basta para o {{agent}}). Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.',
+          codexProxiedFixOther:
+            "Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione export NO_PROXY=127.0.0.1 ao seu perfil de shell (~/.zshrc): o {{agent}} no terminal e o {{agent}} do app do ChatGPT leem isso. Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.",
           howToFix: "Como corrigir",
           codexProfileOverride: 'O perfil "{{profile}}" do Codex se sobrepõe aos endpoints de API',
           codexProfileOverrideDetail:

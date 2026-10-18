@@ -455,6 +455,19 @@ in internal/proc/list.go, list_other.go and list_windows.go:
   packages/server/src/server/api-endpoints/host-processes.ts
   packages/app/src/api-endpoints/reopen-hints-copy.ts
 
+Which proxy Codex sends its gateway requests through (HTTP_PROXY, the system's
+HTTP proxy, ALL_PROXY, NO_PROXY as reqwest matches it, Windows' bypass list,
+and the respect_system_proxy path), the probe through it and the three fix
+wordings follow codexEnv, codexProxyFor, systemProxyName, reqwestNoProxy,
+systemBypassed, realProxyProbe, codexThroughProxy and codexProxiedDetail in
+magpie's internal/agent/codex_proxy.go and probed and proxied in reach.go;
+reading the system proxy follows parseScutil, parseWindows, system, System and
+Redact in internal/netproxy:
+
+  packages/server/src/server/api-endpoints/codex-proxy.ts
+  packages/server/src/server/api-endpoints/system-proxy.ts
+  packages/server/src/server/api-endpoints/host-processes.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

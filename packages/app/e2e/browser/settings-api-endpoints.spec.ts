@@ -1,5 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
@@ -49,6 +50,8 @@ test.use({
     PASEO_CLAUDE_MANAGED_SETTINGS_DIR: path.join(cliHome, "managed"),
     // 列进程时 daemon 读到的是这份假进程表（封条换掉 ps），绝不是本机真实的。
     PASEO_E2E_PROCESS_TABLE_PATH: path.join(cliHome, "process-table.txt"),
+    // 系统代理同样读这份假的（封条换掉 scutil 与注册表）。
+    PASEO_E2E_SYSTEM_PROXY_PATH: path.join(cliHome, "system-proxy.json"),
   },
 });
 
@@ -1886,6 +1889,55 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
     }
   });
 
+  test("Codex behind a system proxy that doesn't pass its requests on says where the proxy is set and how to fix it", async ({
+    page,
+  }) => {
+    // 不转发的假代理：全局模式的代理把 127.0.0.1 也送去别处，回 502。
+    const proxy = createServer((_request, response) => {
+      response.writeHead(502).end("Bad Gateway");
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const address = proxy.address();
+    if (address === null || typeof address === "string") throw new Error("No proxy port");
+    const proxyUrl = `http://127.0.0.1:${address.port}`;
+    const systemProxyPath = path.join(cliHome, "system-proxy.json");
+    await writeFile(
+      systemProxyPath,
+      JSON.stringify({ url: proxyUrl, http: proxyUrl, socks: null, bypass: [] }),
+    );
+    try {
+      await seedApiEndpoint(client, {
+        name: "Relay A",
+        baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+        models: ["kimi-k2"],
+      });
+      const on = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+      expect(on.error).toBeNull();
+
+      await openAgentPage(page, "codex");
+      const notice = issue(page, "codexProxied");
+      await expect(notice).toContainText(
+        "Codex reaches Osuna through a proxy that doesn't pass its requests on",
+      );
+      await expect(notice).toContainText(
+        `through the proxy at ${proxyUrl}, set in the system proxy settings.`,
+      );
+      await expect(notice).toContainText("Codex chats in Osuna already go around the proxy.");
+      await expect(issueButton(page, "reapply")).toHaveCount(0);
+      await expect(issueButton(page, "switchToOfficial")).toBeVisible();
+      await notice.getByRole("button", { name: "How to fix" }).click();
+      const steps = notice.getByTestId("agent-api-endpoints-issue-fix-steps");
+      await expect(steps).toContainText("add a DIRECT rule for 127.0.0.0/8");
+      await expect(steps).toContainText("add export NO_PROXY=127.0.0.1 to your shell profile");
+      await expect(steps).toBeInViewport({ ratio: 1 });
+    } finally {
+      await rm(systemProxyPath, { force: true });
+      // daemon 把设了的系统代理记 15 秒：等提示消失再交给下一个用例。
+      await expect.poll(codexIssueCodes, { timeout: 20_000 }).not.toContain("codex_proxied");
+      await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    }
+  });
+
   test("after a rewrite, the copies still on the old settings are listed with how to reopen each", async ({
     page,
   }) => {
@@ -2137,6 +2189,12 @@ async function readCodexConfig(): Promise<string> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
     throw error;
   }
+}
+
+/** 主机报给 Codex 页提示区的 code。 */
+async function codexIssueCodes(): Promise<string[]> {
+  const issues = (await client.apiEndpointList("codex")).agentIssues?.codex ?? [];
+  return issues.map((item) => item.code);
 }
 
 function agentSection(page: Page): Locator {

@@ -395,6 +395,29 @@ describe("the settings issues on an agent page", () => {
       },
     ]);
   });
+
+  it("Codex behind a proxy that doesn't pass its requests on: How to fix and Switch to official", () => {
+    const params = {
+      host: "127.0.0.1:6769",
+      proxy: "http://127.0.0.1:7890",
+      from: "HTTP_PROXY",
+      fix: "environment",
+    };
+    const result = view({
+      endpoints: [],
+      agentIssues: { codex: [{ code: "codex_proxied", params, message: "proxied" }] },
+      provider: "codex",
+    });
+    expect(result.issues).toEqual([
+      {
+        kind: "codexProxied",
+        params,
+        message: "proxied",
+        actions: ["switchToOfficial"],
+        hasFixSteps: true,
+      },
+    ]);
+  });
 });
 
 describe("who to reopen on an agent page", () => {

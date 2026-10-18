@@ -1051,6 +1051,7 @@ export async function createPaseoDaemon(
     cooldowns: apiEndpointCooldowns,
     retiredModels: apiEndpointRetiredModels,
     sightings: apiEndpointSightings,
+    daemonVersion,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })

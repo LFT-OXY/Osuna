@@ -1,5 +1,11 @@
 import { writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
@@ -10,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { CODEX_API_ENDPOINT_PROVIDER_ID } from "../api-endpoints/codex-config-patch.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 
 const ID = CODEX_API_ENDPOINT_PROVIDER_ID;
 
@@ -1174,3 +1181,158 @@ experimental_bearer_token = "${tokens.tokens.codex}"
     expect(await codexIssues()).toEqual([]);
   });
 });
+
+describe("Codex reaching the gateway through a proxy that doesn't pass its requests on", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let codexHome: string;
+  let hostProcesses: FakeHostProcesses;
+  // 登录 shell 答出的变量；每个用例自己设。
+  let shellVars: Record<string, string>;
+  let proxy: Server;
+  let proxyUrl: string;
+  // 假代理收到的请求：地址与 User-Agent。
+  let proxied: Array<{ url: string | undefined; userAgent: string | undefined }>;
+
+  beforeEach(async () => {
+    shellVars = {};
+    proxied = [];
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-proxy-"));
+    tempRoots.push(root);
+    codexHome = path.join(root, "codex-home");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(path.join(codexHome, "config.toml"), USER_CONFIG);
+    // 不转发的假代理：全局模式的代理把 127.0.0.1 也送去别处，回 502。
+    proxy = createServer((request, response) => {
+      proxied.push({ url: request.url, userAgent: request.headers["user-agent"] });
+      response.writeHead(502).end("Bad Gateway");
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const address = proxy.address();
+    if (address === null || typeof address === "string") throw new Error("No proxy port");
+    proxyUrl = `http://127.0.0.1:${address.port}`;
+    hostProcesses = new FakeHostProcesses();
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: { CODEX_HOME: codexHome },
+        homeDir: root,
+        readLoginShellEnv: async () => shellVars,
+        hostProcesses,
+      },
+    });
+    client = await connect(daemon);
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Relay",
+      baseUrl: "https://relay.example/v1",
+      apiKey: SECRET,
+      models: [{ id: "gpt-relay" }],
+      defaultModelId: "gpt-relay",
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("codex", saved.endpoint.id);
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function codexIssues(): Promise<unknown> {
+    return (await client.apiEndpointList("codex")).agentIssues?.codex;
+  }
+
+  function gatewayHost(): string {
+    return `127.0.0.1:${daemon.port}`;
+  }
+
+  test("HTTP_PROXY set in the login shell to a proxy that answers 502: proxied, fixed in the environment", async () => {
+    shellVars = { http_proxy: proxyUrl };
+    expect(await codexIssues()).toEqual([
+      {
+        code: "codex_proxied",
+        params: { host: gatewayHost(), proxy: proxyUrl, from: "HTTP_PROXY", fix: "environment" },
+        message:
+          `Codex sends its requests for Osuna (${gatewayHost()}) through the proxy at ${proxyUrl}, set in HTTP_PROXY, ` +
+          "and that proxy doesn't pass them on to Osuna: every turn fails, with 502 Bad Gateway, whichever model it is on. " +
+          "Have the proxy send 127.0.0.1 direct (a DIRECT rule for 127.0.0.0/8, or rule mode rather than global), " +
+          "or add 127.0.0.1 to NO_PROXY where HTTP_PROXY is set (your shell profile, such as ~/.zshrc, if it's there), " +
+          "then quit and reopen Codex. Until then, Switch to official puts Codex's config back as it was.",
+      },
+    ]);
+    // 这是 Osuna 自己发出的请求：问的是中转站的根路径，带 Osuna 的身份。
+    expect(proxied).toEqual([
+      {
+        url: `http://${gatewayHost()}/api-endpoint-gateway/`,
+        userAgent: expect.stringMatching(/^Osuna\/\d/),
+      },
+    ]);
+  });
+
+  test("NO_PROXY=127.0.0.1 goes around the proxy: nothing to say, nothing asked", async () => {
+    shellVars = { HTTP_PROXY: proxyUrl, NO_PROXY: "localhost,127.0.0.1" };
+    expect(await codexIssues()).toEqual([]);
+    expect(proxied).toEqual([]);
+  });
+
+  test("NO_PROXY=localhost doesn't keep 127.0.0.1 off it for Codex: proxied", async () => {
+    shellVars = { HTTP_PROXY: proxyUrl, NO_PROXY: "localhost" };
+    expect(await codexIssues()).toEqual([
+      {
+        code: "codex_proxied",
+        params: { host: gatewayHost(), proxy: proxyUrl, from: "HTTP_PROXY", fix: "environment" },
+        message: expect.stringContaining("set in HTTP_PROXY"),
+      },
+    ]);
+  });
+
+  test("the system's proxy, its account left out: proxied, fixed elsewhere", async () => {
+    const withAccount = proxyUrl.replace("http://", "http://me:secret@");
+    hostProcesses.systemProxy = { url: withAccount, http: withAccount, socks: null, bypass: [] };
+    expect(await codexIssues()).toEqual([
+      {
+        code: "codex_proxied",
+        params: {
+          host: gatewayHost(),
+          proxy: proxyUrl,
+          from: "system_settings",
+          fix: "other",
+        },
+        message: expect.stringContaining("or add export NO_PROXY=127.0.0.1 to your shell profile"),
+      },
+    ]);
+  });
+
+  test("a proxy that passes the request on to the gateway: nothing to say", async () => {
+    const forwarding = createServer(passOn);
+    await new Promise<void>((resolve) => forwarding.listen(0, "127.0.0.1", resolve));
+    const address = forwarding.address();
+    if (address === null || typeof address === "string") throw new Error("No proxy port");
+    shellVars = { HTTP_PROXY: `http://127.0.0.1:${address.port}` };
+    try {
+      expect(await codexIssues()).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve) => forwarding.close(() => resolve()));
+    }
+  });
+
+  test("Codex switched off: no proxy check", async () => {
+    shellVars = { HTTP_PROXY: proxyUrl };
+    await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+    expect(await codexIssues()).toEqual([]);
+    expect(proxied).toEqual([]);
+  });
+});
+
+/** 转发的假代理：把 absolute-form 的请求原样发给目标，再把回答交回去。 */
+function passOn(request: IncomingMessage, response: ServerResponse): void {
+  const forwarded = httpRequest(request.url ?? "", { method: request.method }, (reply) => {
+    response.writeHead(reply.statusCode ?? 502, reply.headers);
+    reply.pipe(response);
+  });
+  forwarded.end();
+}

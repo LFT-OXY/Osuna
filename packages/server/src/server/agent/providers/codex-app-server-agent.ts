@@ -82,6 +82,7 @@ import {
 } from "../../../executable-resolution/executable-resolution.js";
 import { createPathEquivalenceMatcher } from "../../../utils/path.js";
 import { spawnProcess } from "../../../utils/spawn.js";
+import type { ExternalProcessEnv } from "../../paseo-env.js";
 import { extractCodexTerminalSessionId, nonEmptyString } from "./tool-call-mapper-utils.js";
 import {
   buildCodexFeatures,
@@ -625,7 +626,8 @@ export async function findCodexCommand(input: {
   return {
     command,
     args: launch.args,
-    env: buildCodexAppServerEnv(input.runtimeSettings, input.env),
+    // 不加 NO_PROXY：重启的是终端 Codex 也连着的共用 app-server，终端里的 Codex 只提示、不替用户改。
+    env: createProviderEnv({ runtimeSettings: input.runtimeSettings, overlays: [input.env] }),
   };
 }
 
@@ -3408,11 +3410,28 @@ export function buildCodexAppServerEnv(
   runtimeSettings?: ProviderRuntimeSettings,
   launchEnv?: Record<string, string>,
 ) {
-  return createProviderEnv({
-    runtimeSettings,
-    overlays: [launchEnv],
-  });
+  return withLoopbackNoProxy(
+    createProviderEnv({
+      runtimeSettings,
+      overlays: [launchEnv],
+    }),
+  );
 }
+
+/**
+ * Osuna 起的 Codex 直连本机中转站：NO_PROXY 加上 127.0.0.1（已有值时追加）。Codex 的 reqwest 先读 NO_PROXY、
+ * 没有再读 no_proxy，对 IP 只认精确 IP 或网段（codex-rs http-client/src/outbound_proxy.rs:901-906，
+ * hyper-util matcher.rs），所以写大写的、带上原来小写的值。终端里的 Codex 不归 Osuna 管，只在提示区说（codex-proxy.ts）。
+ */
+function withLoopbackNoProxy(env: ExternalProcessEnv): ExternalProcessEnv {
+  const existing = (env.NO_PROXY || env.no_proxy || "").trim();
+  const entries = existing.split(",").map((entry) => entry.trim());
+  if (entries.includes(LOOPBACK_NO_PROXY)) return { ...env, NO_PROXY: existing };
+  if (existing === "") return { ...env, NO_PROXY: LOOPBACK_NO_PROXY };
+  return { ...env, NO_PROXY: `${existing},${LOOPBACK_NO_PROXY}` };
+}
+
+const LOOPBACK_NO_PROXY = "127.0.0.1";
 
 function buildCodexAppServerInitializeParams(): {
   clientInfo: { name: string; title: string; version: string };

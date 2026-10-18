@@ -828,3 +828,30 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端 `api-endpoint-reopen-hints.e2e.test.ts`（假适配器，整份比对）：改动前后启动的终端 Claude Code / Codex、没改写不列进程、Osuna 会话按提供方计数、没客户端时重启、有客户端给命令、重启失败给命令、「重新应用」不改内容时改动时刻不动、列不了进程不挡别的。
 - app：`reopen-hints-copy.test.ts`（含中文的「多久之前」）、`internal/agent-settings.test.ts`、`internal/host-list.test.ts`；浏览器测试「after a rewrite, the copies still on the old settings are listed…」（含「知道了」）。
 - 截图（无头 Chromium、临时 HOME、假进程表）：`screenshots/27-codex-page_reopen-hints_{desktop-1280,compact-390}_{en,zh}.png`。
+
+## 28 Codex 经代理连不上中转站
+
+### 对照 magpie（7597c132）与 Codex（openai/codex @8c076942）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 环境变量从哪来 | `codexEnv`：登录 shell 的，没有再用 magpie 自己进程的 | 同（`readCodexProxyEnv`，登录 shell 经 16 号的 `readLoginShellEnv`）。读取器原来只缓存一组变量，Claude 云平台开关与 Codex 代理交替问会每次都起 shell，改成每组各缓存一分钟 |
+| 系统代理 | `netproxy.System`：macOS `scutil --proxy`、Windows 注册表 Internet Settings，设了的管 15 秒、没设的管 2 秒 | 同，经 27 号「进程与命令」适配器新加的 `readSystemProxy`（macOS `scutil --proxy`，Windows `reg query`）；解析照 `parseScutil` / `parseWindows`（`system-proxy.ts`），缓存同 15 / 2 秒。问不到系统（`HostProcessesError`）按没设、记日志 |
+| 算走哪个代理 | `codexProxyFor`：HTTP_PROXY（大写优先）→ 系统的 HTTP 那一项 → ALL_PROXY；NO_PROXY 照 hyper-util，Windows 上没有 NO_PROXY 时用 ProxyOverride（去掉 `*.`）；`respect_system_proxy` 时只看系统、系统绕过列表按通配与 `<local>`，macOS 只有 SOCKS 一项时改用环境变量 | 照搬（`codex-proxy.ts` `codexProxyFor` / `reqwestNoProxy` / `systemBypassed`）。Codex 源码对照：`codex-rs/http-client/src/outbound_proxy.rs:341-399`（系统优先、拿不到才环境变量）、`:901-906`（大写优先）、`:704-785`（Windows 绕过列表的通配）。`respect_system_proxy` 只认 `[features]` 里的布尔 true，同 magpie |
+| 探测 | `realProxyProbe`：经代理 `GET <网关>/`，3 秒，回 200 且 `name == "magpie"`；socks 当 http；`probed` 后台问、20 秒缓存 | 同（`probeThroughProxy`，Node 的 http 发 absolute-form 请求，代理带账号时加 `Proxy-Authorization`）；带 `User-Agent: Osuna/<daemon 版本>`（PRD 第 5 条）。`CodexProxyCheck` 在后台查，列表最多等 3 秒，没查完先用同一中转站地址上次的答案 |
+| 什么时候报 | `proxied`：设置没问题（unwired、replaced 之后）、直连网关能通、经代理不通；它在 bypassed 之前 | 同：总开关开着、除 multi_agent_v2 两条提醒外没有别的问题时查，报了就不再看 bypassed。直连用现有 `reachesGateway`（20 秒缓存） |
+| 文案 | `codexProxiedDetail` 一句话 + 三种修法；界面只有标题，「How to fix」弹窗 + 「Disconnect」 | 英文 `message` 照 magpie（magpie 换成 Osuna，Disconnect 换成 Switch to official）。界面拆成标题、说明（地址、代理、来源）和「如何修复」三种步骤，动作只有「切回官方」。来源与修法由 daemon 定（`params.from`、`params.fix`），app 只翻译 |
+| 绕开 | 没有（magpie 不起 Codex） | 决定 Q18：`buildCodexAppServerEnv` 给 Osuna 起的每个 Codex 进程的 `NO_PROXY` 追加 `127.0.0.1`（原有 `NO_PROXY`，没有则 `no_proxy` 的值保留）。`findCodexCommand`（重启共用 app-server）不加：终端里的 Codex 也连着它，终端的只提示 |
+
+### 要判断的地方
+
+- 只加 `127.0.0.1`（工单原话）；daemon 监听 `::` 时 Codex 拿到的是 `::1`，那时 Osuna 起的 Codex 不绕开，提示照常查得出。
+- 「直连能通」用现有 `reachesGateway` 问中转站根路径（magpie 用 `reachable` 问 `/v1/models`、任何状态都算）：中转站在 daemon 里，问自我介绍更直接。
+- 截图里的代理来自假的系统代理（Playwright 封条读 `PASEO_E2E_SYSTEM_PROXY_PATH`），所以修法是「其他」那种；环境变量那种在 daemon 端到端测试里整份比对。
+
+### 测试
+
+- 纯逻辑：`codex-proxy.test.ts`（环境变量大小写、HTTPS_PROXY 只给 https、系统代理、ALL_PROXY、NO_PROXY 的精确 IP / 网段 / localhost / `127.*` / `*`、Windows 绕过列表、`respect_system_proxy` 各分支、三种修法的英文原文；经本机假代理探测：502 不通、转发的通且带账号、连不上与别人的自我介绍不通）；`system-proxy.test.ts`（scutil、Windows ProxyServer 两种写法、reg query、15 / 2 秒缓存、去账号）；`codex-config-patch.test.ts`「Codex's own respect_system_proxy」；`login-shell-env.test.ts`（两组变量各自缓存）；`codex-app-server-agent.test.ts`（NO_PROXY 追加、保留原值、小写的值带上、已有不重复）。
+- daemon 端到端 `api-endpoint-codex.e2e.test.ts`「Codex reaching the gateway through a proxy that doesn't pass its requests on」：登录 shell 的 `http_proxy` 指向不转发的假代理 → 整份比对 `codex_proxied`（环境变量那种修法）且假代理收到的是中转站根路径、`Osuna/` 身份；`NO_PROXY=localhost,127.0.0.1` 不提示也不探测；`NO_PROXY=localhost` 照样提示；系统代理（带账号，提示里去掉）→ `system_settings` / `other`；转发的代理不提示；总开关关着不查。
+- app：`agent-settings.test.ts`（「如何修复」与「切回官方」）；浏览器测试「Codex behind a system proxy that doesn't pass its requests on…」。
+- 截图（无头 Chromium、临时 CODEX_HOME、假系统代理与本机不转发的假代理）：`screenshots/28-codex-page_proxied_desktop-1280_{en,zh}.png`。
