@@ -9,7 +9,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：`settings.json` 里开着 `CLAUDE_CODE_USE_BEDROCK=1`、关着 `CLAUDE_CODE_USE_VERTEX=0`：打开开关后前者被拿掉、后者不动；关掉后前者放回；中间用户自己又写了前者的，关掉时不覆盖。
 - [ ] 管理员设置、`~/.claude.json`、登录 shell 里有云平台开关时，各有一条提示，写明来源。
