@@ -749,6 +749,28 @@ describe("passing requests through to an endpoint that speaks the agent's format
     expect(upstreamB.requests.map(receivedModel)).toEqual(["glm-4.6", "glm-4.6"]);
   });
 
+  test("a Claude Code tier id an endpoint selected still goes to the model its tier is mapped to", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB });
+    await selectModels(endpointsDir, { ep_a: ["kimi-k2", "claude-haiku-4-5-20251001"] });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { modelMapping?: Record<string, string> }[];
+    };
+    file.endpoints[1]!.modelMapping = { haiku: "glm-4.6" };
+    await writeFile(endpointsPath, JSON.stringify(file));
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [] }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["glm-4.6"]);
+    expect(upstreamA.requests).toEqual([]);
+  });
+
   test("a model no enabled endpoint offers is an error in the agent's format", async () => {
     const { gateway } = await start();
 
@@ -2111,11 +2133,12 @@ describe("reasoning turned off, sent the way each model takes it", () => {
       { thinking: { type: "disabled" }, effort: undefined },
     ];
 
+    // Claude Code 这边带上接口标识：光秃秃的 Claude id 会按档位映射换模型（magpie 的 claudeTierStandIn）。
     for (const model of models) {
       const response = await fetch(
         `${gateway}/v1/messages`,
         claudeRequest({
-          model,
+          model: `relay-b/${model}`,
           max_tokens: 64,
           thinking: { type: "disabled" },
           messages: [{ role: "user", content: "Is this action safe?" }],
@@ -7877,7 +7900,8 @@ describe("Claude Code's web search goes only to endpoints that search the web by
     const main = await ask(searchRequest("claude-sonnet-4-5"));
     expect(main.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
     await main.text();
-    const subagent = await ask(searchRequest("claude-haiku-4-5"));
+    // Subagent 的模型带接口标识（光秃秃的 claude-haiku-… 会按档位换成默认模型）。
+    const subagent = await ask(searchRequest("relay-b/claude-haiku-4-5"));
 
     expect(subagent.status).toBe(200);
     expect(subagent.headers.get("x-osuna-api-endpoint")).toBe("relay-b");

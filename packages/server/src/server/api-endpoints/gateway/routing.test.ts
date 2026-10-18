@@ -82,20 +82,38 @@ describe("routing a requested model name to an endpoint", () => {
     ).toEqual(route([mapped, "glm-4.6"]));
   });
 
-  test("a selected Claude model is sent as is even when a tier mapping exists elsewhere", () => {
+  test("a Claude Code tier id goes through its tier even when an endpoint selected it (magpie claudeTierStandIn)", () => {
     const selectsSonnet = endpoint({
       id: "ep_c",
       slug: "gamma",
       models: [{ id: "claude-sonnet-4-5" }],
     });
     const mapped = { ...beta, modelMapping: { sonnet: "glm-4.6" } };
-    expect(
-      resolveGatewayRoute({
-        state: state([mapped, selectsSonnet]),
-        agent: "claude",
-        model: "claude-sonnet-4-5",
-      }),
-    ).toEqual(route([selectsSonnet, "claude-sonnet-4-5"]));
+    const on = (defaultModelId: string | null) => ({
+      ...state([mapped, selectsSonnet]),
+      agents: {
+        claude: { enabled: true, defaultModelId },
+        codex: { enabled: true, defaultModelId: null },
+      },
+    });
+    const ask = (input: { state: ApiEndpointState; model: string }) =>
+      resolveGatewayRoute({ ...input, agent: "claude" });
+
+    expect(ask({ state: on("kimi-k2"), model: "claude-sonnet-4-5" })).toEqual(
+      route([mapped, "glm-4.6"]),
+    );
+    // 档位没有映射：换成默认模型。
+    expect(ask({ state: on("kimi-k2"), model: "claude-haiku-4-5" })).toEqual(
+      route([mapped, "kimi-k2"]),
+    );
+    // 默认模型就是这个 id：是用户自己选的，照常发给选了它的那家。
+    expect(ask({ state: on("claude-sonnet-4-5"), model: "claude-sonnet-4-5" })).toEqual(
+      route([selectsSonnet, "claude-sonnet-4-5"]),
+    );
+    // 开关关着（没有默认模型）时照常按名字找。
+    expect(ask({ state: on(null), model: "claude-sonnet-4-5" })).toEqual(
+      route([selectsSonnet, "claude-sonnet-4-5"]),
+    );
   });
 
   test("a Claude tier name no endpoint maps goes to Claude Code's default model", () => {

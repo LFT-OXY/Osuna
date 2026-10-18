@@ -23,7 +23,7 @@ export interface ClaudeHintModel {
 }
 
 const ONE_MILLION = 1_000_000;
-const ONE_MILLION_MARK = "[1m]";
+export const ONE_MILLION_MARK = "[1m]";
 // 不认识的模型不设 CLAUDE_CODE_MAX_OUTPUT_TOKENS 时 Claude Code 要的回复长度（2.1.299）。
 const UNKNOWN_MODEL_OUTPUT = 32_000;
 const CLAUDE_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
@@ -98,7 +98,8 @@ function capabilityNames(efforts: string[]): string[] {
   if (!efforts.some((effort) => CLAUDE_EFFORTS.has(effort))) return [];
   const caps = ["effort"];
   // 能到 max 却没有 xhigh 的也报 xhigh：Claude Code 的 Ultra Code 要 xhigh_effort，中转站会把 xhigh 按 max 发出。
-  if (efforts.includes("xhigh") || efforts.includes("max")) caps.push("xhigh_effort");
+  const isXhighReached = efforts.includes("xhigh") || efforts.includes("max");
+  if (isXhighReached) caps.push("xhigh_effort");
   if (efforts.includes("max")) caps.push("max_effort");
   return caps;
 }

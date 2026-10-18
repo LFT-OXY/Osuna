@@ -7,8 +7,9 @@
  * 唯一对回一个在售 id 才改写；中转站再按 sameModel 把它认回这家自己的写法。别家的 id 一律不动。
  */
 
+import { ONE_MILLION_MARK } from "./claude-model-hints.js";
+
 const CLAUDE_DOTTED = /claude-(?:opus|sonnet|haiku|fable|mythos)-\d+(?:\.\d+)+/gi;
-const ONE_MILLION_MARK = "[1m]";
 // 模型名后可以带的档位（Subagent 模型写成 `<模型>:<档位>`）。
 const FIXED_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
@@ -24,7 +25,9 @@ export function claudeSpelled(input: ClaudeSpelledInput): string {
   const { id, rest } = splitClaudeRef(input.model);
   const dashed = claudeDashed(id);
   if (dashed === id) return input.model;
-  return undashIn(input.served, dashed) === id ? `${dashed}${rest}` : input.model;
+  const isUniquelyBack = undashIn(input.served, dashed) === id;
+  if (!isUniquelyBack) return input.model;
+  return `${dashed}${rest}`;
 }
 
 /** Claude 模型版本号里的点都换成连字符；别的 id 原样。 */
@@ -35,15 +38,18 @@ function claudeDashed(id: string): string {
 
 /** 拆出 id 和后面跟着的 `:档位`、[1m]。 */
 function splitClaudeRef(ref: string): { id: string; rest: string } {
-  const isMarked = ref.endsWith(ONE_MILLION_MARK);
-  let id = isMarked ? ref.slice(0, -ONE_MILLION_MARK.length) : ref;
-  let rest = "";
-  const colon = id.lastIndexOf(":");
-  if (colon > 0 && FIXED_EFFORTS.has(id.slice(colon + 1).toLowerCase())) {
-    rest = id.slice(colon);
-    id = id.slice(0, colon);
+  let unmarked = ref;
+  if (ref.endsWith(ONE_MILLION_MARK)) unmarked = ref.slice(0, -ONE_MILLION_MARK.length);
+  const mark = ref.slice(unmarked.length);
+  const colon = unmarked.lastIndexOf(":");
+  const hasFixedEffort = colon > 0 && FIXED_EFFORTS.has(unmarked.slice(colon + 1).toLowerCase());
+  let id = unmarked;
+  let effort = "";
+  if (hasFixedEffort) {
+    id = unmarked.slice(0, colon);
+    effort = unmarked.slice(colon);
   }
-  return { id, rest: isMarked ? `${rest}${ONE_MILLION_MARK}` : rest };
+  return { id, rest: `${effort}${mark}` };
 }
 
 /** 连字符化后是 dashed 的唯一在售 id；dashed 本身在售、或有两个对得上时为 null。 */

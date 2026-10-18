@@ -194,7 +194,10 @@ export function applyClaudeApiEndpoint(input: {
   const hintEnv = writeHintEnv({
     text,
     envObject,
-    hints: { ...input.wiring.hintEnv, ...autoModeServerEnv(input.wiring.isAutoModeReviewed) },
+    hints: {
+      ...input.wiring.hintEnv,
+      ...autoModeServerEnv({ isReviewed: input.wiring.isAutoModeReviewed }),
+    },
     takeover: input.takeover,
     formatting,
   });
@@ -252,8 +255,9 @@ function dropClouds(input: {
 }
 
 /** 能到的模型都不会被审查时让 Claude Code 只在本地分类；有一个会被审查就不写。 */
-function autoModeServerEnv(isAutoModeReviewed: boolean): Partial<Record<string, string>> {
-  return isAutoModeReviewed ? {} : { [AUTO_MODE_SERVER_KEY]: "0" };
+function autoModeServerEnv(input: { isReviewed: boolean }): Partial<Record<string, string>> {
+  if (input.isReviewed) return {};
+  return { [AUTO_MODE_SERVER_KEY]: "0" };
 }
 
 interface HintEnvPatch {

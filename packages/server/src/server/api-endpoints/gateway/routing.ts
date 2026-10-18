@@ -1,6 +1,6 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/provider.go 的 MessagesFirst、internal/gateway/gateway.go 的 usable、
 // internal/provider/group.go 的 sameModel、internal/provider/closest.go 的 Closest、internal/gateway/unknown_model.go，
-// internal/gateway/gateway.go 的 claudeFamily 与 internal/agent/claude.go 的 claudeStandInAt）
+// internal/gateway/gateway.go 的 claudeFamily 与 claudeTierStandIn、internal/agent/claude.go 的 claudeStandInAt）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -8,17 +8,21 @@ import {
   type ApiEndpointModelTier,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { ONE_MILLION_MARK } from "../claude-model-hints.js";
 import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from "../store.js";
 
 /*
- * 中转站按请求里的模型名挑出用户选的那家，按顺序试（名字里的 `~` 先当 `/`）：
+ * Claude Code 的开关开着时，Claude Code 内置的档位 id（claude-haiku-4-5-20251001 这类，照 magpie 的 claudeFamily）
+ * 不论哪家选了它，都先换成这个档位的映射：第一家映射了该档位的接口；没有一家映射时换成 Claude Code 的默认模型。
+ * 默认模型本身就是这个 id 时照下面的顺序找（照 magpie 的 claudeTierStandIn / claudeStandInAt）。
+ *
+ * 其余的名字按顺序试（名字里的 `~` 先当 `/`）：
  * 1. `slug/模型名`：该家开着且选了这个模型就直达；
  * 2. 整个名字是某家已选的模型（模型名本身可能带斜杠，如 `moonshotai/kimi-k2`）；
  * 3. 标识那家已删除 / 已关闭 / 没选这个模型：视同不可用，斜杠后的光秃秃模型名换同名的家；
  * 4. 只差写法的同一个模型（sameModel）：斜杠前不是任何一家的标识时就是厂商前缀，一并忽略；
  * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型；
- * 6. 没有一家映射这个档位、Claude Code 的开关开着时，档位名（opus 等）或 Claude Code 内置的档位 id
- *    （claude-haiku-4-5-20251001 这类）改按 Claude Code 的默认模型找，不回 404（照 magpie 的 claudeStandInAt）。
+ * 6. 没有一家映射这个档位、Claude Code 的开关开着时，档位名（opus 等）改按 Claude Code 的默认模型找，不回 404。
  * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
  * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
  * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
@@ -47,10 +51,11 @@ function claudeTierOf(model: string): ApiEndpointModelTier | null {
 const CLAUDE_FAMILY_ID = /^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|fable)(?:[-.@:]|$)/;
 const CLAUDE_TIER_NAMES: ReadonlySet<string> = new Set(API_ENDPOINT_MODEL_TIERS);
 
-/** 名字是 Claude 档位名或 Claude Code 内置的档位 id。 */
-function isClaudeTierRequest(model: string): boolean {
-  const name = model.toLowerCase().replace(/\[1m\]$/, "");
-  return CLAUDE_TIER_NAMES.has(name) || CLAUDE_FAMILY_ID.test(name);
+/** 比较用的名字：小写，去掉 Claude Code 的 [1m]。 */
+function comparableName(model: string): string {
+  const lower = model.toLowerCase();
+  if (!lower.endsWith(ONE_MILLION_MARK)) return lower;
+  return lower.slice(0, -ONE_MILLION_MARK.length);
 }
 
 export interface GatewayRouteInput {
@@ -64,9 +69,9 @@ export interface GatewayRouteInput {
 export function resolveGatewayRoute(input: GatewayRouteInput): GatewayRoute {
   const listed = input.listed ?? input.state;
   const model = input.model.replaceAll("~", "/");
+  const routeInput = { state: input.state, listed, agent: input.agent, model };
   const chosen =
-    chooseEndpoint({ state: input.state, listed, agent: input.agent, model }) ??
-    tierFallback({ state: input.state, listed, agent: input.agent, model });
+    claudeTierStandIn(routeInput) ?? chooseEndpoint(routeInput) ?? tierFallback(routeInput);
   if (!chosen) {
     return { ok: false, message: unknownModel(listed, input.model) };
   }
@@ -151,22 +156,49 @@ function chooseEndpoint(input: Required<GatewayRouteInput>): GatewayCandidate | 
     if (upstreamModel !== null) return { endpoint, upstreamModel };
   }
   const tier = input.agent === "claude" ? claudeTierOf(bare ?? model) : null;
-  if (tier) {
-    for (const endpoint of enabled) {
-      const mapped = endpoint.modelMapping?.[tier];
-      if (mapped) return { endpoint, upstreamModel: mapped };
-    }
+  return tier ? tierMapping({ listed: input.listed, tier }) : null;
+}
+
+/** 第一家开着、映射了这个档位的接口和映射到的模型。 */
+function tierMapping(input: {
+  listed: ApiEndpointState;
+  tier: ApiEndpointModelTier;
+}): GatewayCandidate | null {
+  for (const endpoint of input.listed.endpoints) {
+    if (!endpoint.enabled) continue;
+    const mapped = endpoint.modelMapping?.[input.tier];
+    if (mapped) return { endpoint, upstreamModel: mapped };
   }
   return null;
 }
 
-/** 第 6 步：没配映射的 Claude 档位改按 Claude Code 的默认模型找。 */
-function tierFallback(input: Required<GatewayRouteInput>): GatewayCandidate | null {
+/** Claude Code 的开关开着、调用方是 Claude Code 时它的默认模型；否则为 null。 */
+function claudeDefaultModel(input: Required<GatewayRouteInput>): string | null {
   const claude = input.state.agents.claude;
+  const isClaudeCodeOn = input.agent === "claude" && claude.enabled;
+  return isClaudeCodeOn ? claude.defaultModelId : null;
+}
+
+/** 内置的档位 id 换成档位的映射，没有映射换成默认模型；默认模型就是它、或不适用时为 null。 */
+function claudeTierStandIn(input: Required<GatewayRouteInput>): GatewayCandidate | null {
+  const defaultModel = claudeDefaultModel(input);
+  const name = comparableName(input.model);
+  const isStandInAsked = defaultModel !== null && CLAUDE_FAMILY_ID.test(name);
+  if (!isStandInAsked) return null;
+  const isOwnPick = comparableName(defaultModel) === name;
+  if (isOwnPick) return null;
+  const tier = API_ENDPOINT_MODEL_TIERS.find((entry) => name.includes(entry));
+  const mapped = tier ? tierMapping({ listed: input.listed, tier }) : null;
+  return mapped ?? chooseEndpoint({ ...input, model: defaultModel });
+}
+
+/** 第 6 步：没配映射的档位名（opus 等）改按 Claude Code 的默认模型找。 */
+function tierFallback(input: Required<GatewayRouteInput>): GatewayCandidate | null {
+  const defaultModel = claudeDefaultModel(input);
   const isFallbackAsked =
-    input.agent === "claude" && claude.enabled && isClaudeTierRequest(input.model);
-  if (!isFallbackAsked || claude.defaultModelId === null) return null;
-  return chooseEndpoint({ ...input, model: claude.defaultModelId });
+    defaultModel !== null && CLAUDE_TIER_NAMES.has(comparableName(input.model));
+  if (!isFallbackAsked) return null;
+  return chooseEndpoint({ ...input, model: defaultModel });
 }
 
 /** 找不到模型时的说法：附上最接近的三个 id（magpie 的 unknownModel）。 */
