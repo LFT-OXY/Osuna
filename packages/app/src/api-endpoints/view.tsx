@@ -11,6 +11,7 @@ import type {
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
 import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
@@ -78,6 +79,17 @@ function AgentApiEndpoints({
   const { state, setAgentSettings, runIssueAction } = endpoints;
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasIssues = useHostFeature(serverId, "apiEndpointCliWiring");
+  const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 指定某一家的默认模型取聊天模型选择器同一份分组（「接口标识/模型名」）。
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不收「接口标识/模型名」的默认模型。
+  const endpointModelGroups = useMemo(() => {
+    if (!hasIssues) return null;
+    const entry = providerEntries?.find((candidate) => candidate.provider === provider);
+    return entry?.apiEndpointModelGroups ?? null;
+  }, [hasIssues, provider, providerEntries]);
+  const lastConnection = endpoints.lastConnection;
+  const isOwnConnection = lastConnection?.provider === provider;
+  const connection = isOwnConnection ? lastConnection.connection : null;
 
   const handleToggle = useCallback(
     (enabled: boolean) => setAgentSettings(provider, { enabled }),
@@ -130,14 +142,12 @@ function AgentApiEndpoints({
   return (
     <AgentApiEndpointsSection
       providerLabel={providerLabel}
-      view={selectAgentApiEndpointsView({ state, provider, now })}
+      view={selectAgentApiEndpointsView({ state, provider, endpointModelGroups, now })}
       busy={endpoints.pendingAgent === provider}
       actionError={endpoints.actionError}
       actionErrorCode={endpoints.actionErrorCode}
       onDismissError={endpoints.dismissActionError}
-      connection={
-        endpoints.lastConnection?.provider === provider ? endpoints.lastConnection.connection : null
-      }
+      connection={connection}
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onManage={handleManage}

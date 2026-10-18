@@ -45,8 +45,10 @@ function pickInput(overrides: Partial<DefaultModelPickInput>): DefaultModelPickI
     provider: "claude",
     cliModel: null,
     isWired: false,
+    ownDefaultModel: null,
     reconnect: null,
     joinsOwnModel: false,
+    writesEndpointName: false,
     ...overrides,
   };
 }
@@ -88,12 +90,39 @@ describe("pickDefaultModel", () => {
     );
   });
 
-  test("a Codex signed in with ChatGPT keeps its own model", () => {
+  test("a Codex signed in with ChatGPT keeps its own model, even after an earlier switch-off", () => {
     expect(pick({ provider: "codex", cliModel: "gpt-5.5", joinsOwnModel: true })).toEqual({
       how: "joined",
       defaultModelId: "first",
       previousModel: "gpt-5.5",
     });
+    const reconnect = { model: "backup/glm-4.6", left: "gpt-5.5" };
+    expect(
+      pick({ provider: "codex", cliModel: "gpt-5.5", joinsOwnModel: true, reconnect }).how,
+    ).toBe("joined");
+  });
+
+  test("names the endpoint when the CLI only takes <endpoint>/<model>", () => {
+    expect(
+      pick({ provider: "codex", cliModel: "glm-4.6", writesEndpointName: true }),
+    ).toMatchObject({ how: "same", defaultModelId: "relay/glm-4.6" });
+    expect(
+      pick({ provider: "codex", cliModel: "backup/glm-4.6", writesEndpointName: true }),
+    ).toMatchObject({ how: "same", defaultModelId: "backup/glm-4.6" });
+    expect(pick({ provider: "codex", cliModel: "gpt-9", writesEndpointName: true })).toMatchObject({
+      how: "first",
+      defaultModelId: "relay/first",
+    });
+  });
+
+  test("default: with no model set, the first of the CLI's own list when an endpoint offers it", () => {
+    expect(pick({ cliModel: null, ownDefaultModel: "claude-opus-4-6" })).toMatchObject({
+      how: "default",
+      defaultModelId: "claude-opus-4-6",
+    });
+    expect(pick({ cliModel: null, ownDefaultModel: "claude-opus-9" }).how).toBe("first");
+    // 设了模型时不看它自己的列表。
+    expect(pick({ cliModel: "gpt-9", ownDefaultModel: "claude-opus-4-6" }).how).toBe("first");
   });
 
   test("goes on with the model the CLI is on: its own spelling, an endpoint prefix or [1m] read off", () => {

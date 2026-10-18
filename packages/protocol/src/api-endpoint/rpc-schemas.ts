@@ -119,8 +119,6 @@ export const ApiEndpointSchema = z.object({
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
   searchesWeb: z.boolean().optional(),
-  // 接口标识：默认模型可以写成「接口标识/模型名」指定这一家（ADR 0012），app 据此显示成「模型名（接口名）」；老 daemon 不发。
-  slug: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 

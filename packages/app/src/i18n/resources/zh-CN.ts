@@ -2625,15 +2625,17 @@ export const zhCN: TranslationResources = {
         defaultModelPick: "{{agent}} 的默认模型",
         defaultModelOnEndpoint: "{{model}}（{{endpoint}}）",
         connection: {
-          kept: "{{agent}} 已在用第三方接口 · 默认模型 {{model}} 保持不变",
-          again: "{{agent}} 已改用第三方接口 · 回到上次关掉前用的 {{model}}",
+          kept: "{{agent}} 已在用第三方接口，默认模型仍是 {{model}}。",
+          again: "{{agent}} 已改用第三方接口，回到上次关掉开关前用的 {{model}}。",
           joined:
-            "{{agent}} 已改用第三方接口 · 仍用它上次选的模型，第三方接口的模型已加入 {{command}}",
-          same: "{{agent}} 已改用第三方接口 · 经中转站继续用它原来的模型 {{model}}",
-          alike: "{{agent}} 已改用第三方接口 · 经中转站改用它原来的 {{previous}} 所指的 {{model}}",
+            "{{agent}} 已改用第三方接口，仍用它自己上次选的模型，第三方接口的模型已加入 {{command}}。",
+          same: "{{agent}} 已改用第三方接口，经中转站继续用它原来的模型 {{model}}。",
+          default:
+            "{{agent}} 已改用第三方接口。它原先没设模型，改用它自己列表里的第一个：{{model}}。",
+          alike: "{{agent}} 已改用第三方接口。它原先设的是 {{previous}}，改用它所指的 {{model}}。",
           first:
-            "{{agent}} 已改用第三方接口 · 没有接口提供它原来的模型 {{previous}}，改用 {{model}}",
-          firstUnset: "{{agent}} 已改用第三方接口 · 原先未设模型，改用第一个：{{model}}",
+            "{{agent}} 已改用第三方接口。没有接口提供它原来的模型 {{previous}}，改用 {{model}}。",
+          firstUnset: "{{agent}} 已改用第三方接口。它原先没设模型，改用第一个可用的：{{model}}。",
         },
         keepClaudeAiLogin: "保留 claude.ai 登录",
         keepClaudeAiLoginHint:

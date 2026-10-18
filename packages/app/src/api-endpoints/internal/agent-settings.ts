@@ -3,6 +3,7 @@ import type {
   ApiEndpointAgentIssue,
   ApiEndpointHealthIssue,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import {
   endpointRowStatus,
   type CooldownRemaining,
@@ -120,7 +121,7 @@ export interface AgentApiEndpointsView {
   defaultModelId: string | null;
   // 当前默认模型的显示；对不上任何选项时照原样（endpointName 为 null）。
   defaultModel: DefaultModelOption | null;
-  // 先是开着的接口的已选模型，按创建顺序合并去重的光秃秃名字；主机给了接口标识时再接上每家的「接口标识/模型名」。
+  // 先是开着的接口的已选模型，按创建顺序合并去重的光秃秃名字；再是聊天模型选择器里每家的「接口标识/模型名」。
   modelOptions: DefaultModelOption[];
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
@@ -132,12 +133,17 @@ export interface AgentApiEndpointsView {
 export function selectAgentApiEndpointsView(input: {
   state: Extract<HostEndpointsLoadState, { status: "ready" }>;
   provider: string;
+  // 提供方快照里按接口分组的模型（id 是「接口标识/模型名」）；主机认不出指定某一家的默认模型时为 null。
+  endpointModelGroups: ApiEndpointModelGroup[] | null;
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
-  const modelOptions = defaultModelOptions(enabledEndpoints);
+  const modelOptions = defaultModelOptions({
+    enabledEndpoints,
+    groups: input.endpointModelGroups ?? [],
+  });
 
   let enableBlockedBy: AgentSwitchBlock | null = null;
   if (!agent.enabled) {
@@ -175,8 +181,11 @@ export function selectAgentApiEndpointsView(input: {
   };
 }
 
-/** 光秃秃的名字在前（按创建顺序去重），再是每家的「接口标识/模型名」；老主机不给接口标识就只有前一种。 */
-function defaultModelOptions(enabledEndpoints: ApiEndpoint[]): DefaultModelOption[] {
+/** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
+function defaultModelOptions(input: {
+  enabledEndpoints: ApiEndpoint[];
+  groups: ApiEndpointModelGroup[];
+}): DefaultModelOption[] {
   const options: DefaultModelOption[] = [];
   const ids = new Set<string>();
   const add = (option: DefaultModelOption) => {
@@ -184,13 +193,14 @@ function defaultModelOptions(enabledEndpoints: ApiEndpoint[]): DefaultModelOptio
     ids.add(option.id);
     options.push(option);
   };
-  for (const endpoint of enabledEndpoints) {
+  for (const endpoint of input.enabledEndpoints) {
     for (const model of endpoint.models) add({ id: model.id, model: model.id, endpointName: null });
   }
-  for (const endpoint of enabledEndpoints) {
-    if (!endpoint.slug) continue;
-    for (const model of endpoint.models) {
-      add({ id: `${endpoint.slug}/${model.id}`, model: model.id, endpointName: endpoint.name });
+  for (const group of input.groups) {
+    for (const model of group.models) {
+      // 接口标识里没有斜杠：第一个斜杠后面就是模型名。
+      const bare = model.id.slice(model.id.indexOf("/") + 1);
+      add({ id: model.id, model: bare, endpointName: group.name });
     }
   }
   return options;

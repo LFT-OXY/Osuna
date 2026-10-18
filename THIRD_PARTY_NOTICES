@@ -607,9 +607,11 @@ claude_signin_test.go:
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
 How the default model is picked when Use API endpoints is turned on (kept,
-again, joined, same, alike and first, the model the CLI is on read with its
-prefix taken off, the model of the last switch-off put back while the CLI is
-as it was left, the way it was picked handed to the settings page, and a Codex
+again, joined, same, default, alike and first, Claude Code's own models newest
+first from models.dev as catalog.Provider, textModel and claudeOwn in
+internal/catalog/catalog.go and internal/agent/claude.go list them, the
+model the CLI is on read with its prefix taken off, the model of the last
+switch-off put back while the CLI is as it was left, the way it was picked handed to the settings page, and a Codex
 on a provider of the user's own written the picked model) follows ConnectHow,
 connect, connectWas, reconnect, Disconnect's reconnection and Connection in
 magpie's internal/agent/applied.go and connectedSaid in
@@ -618,6 +620,8 @@ internal/agent/connect_pick_test.go:
 
   packages/server/src/server/api-endpoints/default-model-pick.ts
   packages/server/src/server/api-endpoints/default-model-pick.test.ts
+  packages/server/src/server/api-endpoints/models-dev.ts
+  packages/server/src/server/api-endpoints/models-dev.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
 
 MIT License

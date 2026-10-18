@@ -2654,18 +2654,20 @@ export const es: TranslationResources = {
         defaultModelPick: "Modelo predeterminado de {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
         connection: {
-          kept: "{{agent}} usa endpoints de API · sigue con {{model}}, como estaba",
+          kept: "{{agent}} ya usa endpoints de API. Sigue con {{model}}.",
           again:
-            "{{agent}} usa endpoints de API · de vuelta en {{model}}, el modelo predeterminado al apagarlo la última vez",
+            "{{agent}} ahora usa endpoints de API. Vuelve a {{model}}, el modelo que usaba la última vez que se apagó el interruptor.",
           joined:
-            "{{agent}} usa endpoints de API · sigue con su última elección; los modelos de los endpoints se suman a su {{command}}",
-          same: "{{agent}} usa endpoints de API · con {{model}} a través de la pasarela, el modelo que usaba",
+            "{{agent}} ahora usa endpoints de API. Sigue con el último modelo que eligió, y los modelos de los endpoints se añaden a su {{command}}.",
+          same: "{{agent}} ahora usa endpoints de API. Sigue con {{model}}, el modelo que ya usaba, a través de la pasarela.",
+          default:
+            "{{agent}} ahora usa endpoints de API. No tenía modelo configurado, así que empieza con {{model}}, el primero de sus propios modelos.",
           alike:
-            "{{agent}} usa endpoints de API · con {{model}} a través de la pasarela, el modelo al que apuntaba su {{previous}}",
+            "{{agent}} ahora usa endpoints de API. Estaba configurado en {{previous}}, así que empieza con {{model}}, el modelo al que apunta ese nombre.",
           first:
-            "{{agent}} usa endpoints de API · con {{model}}: ningún endpoint ofrece {{previous}}, el modelo que usaba",
+            "{{agent}} ahora usa endpoints de API. Ningún endpoint ofrece {{previous}}, el modelo que usaba, así que empieza con {{model}}.",
           firstUnset:
-            "{{agent}} usa endpoints de API · con {{model}}: no tenía modelo configurado, así que el primero disponible",
+            "{{agent}} ahora usa endpoints de API. No tenía modelo configurado, así que empieza con {{model}}, el primero disponible.",
         },
         keepClaudeAiLogin: "Mantener la sesión de claude.ai",
         keepClaudeAiLoginHint:

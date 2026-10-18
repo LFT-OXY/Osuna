@@ -3,6 +3,7 @@ import type {
   ApiEndpoint,
   ApiEndpointAgentIssue,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import { selectAgentApiEndpointsView } from "./agent-settings";
 
 const NOW = new Date("2026-10-14T12:00:00.000Z");
@@ -24,6 +25,7 @@ function endpoint(overrides: Partial<ApiEndpoint> & { id: string }): ApiEndpoint
 
 function view(input: {
   endpoints: ApiEndpoint[];
+  endpointModelGroups?: ApiEndpointModelGroup[] | null;
   enabled?: boolean;
   defaultModelId?: string | null;
   gatewayUnavailable?: { code: string; message: string } | null;
@@ -40,6 +42,7 @@ function view(input: {
       agentIssues: input.agentIssues ?? {},
     },
     provider: "claude",
+    endpointModelGroups: input.endpointModelGroups ?? null,
     now: NOW,
   });
 }
@@ -88,13 +91,18 @@ describe("the default model on an agent page", () => {
     expect(result.defaultModelId).toBe("b1");
   });
 
-  it("lists each endpoint's models after the bare names when the host gives the endpoint identifiers", () => {
+  it("lists each endpoint's models after the bare names, from the model selector's groups", () => {
+    const groupModel = (id: string) => ({ provider: "claude", id, label: "shared" });
     const result = view({
       enabled: true,
       defaultModelId: "relay-b/shared",
       endpoints: [
-        endpoint({ id: "a", name: "Relay A", slug: "relay-a", models: [{ id: "shared" }] }),
-        endpoint({ id: "b", name: "Relay B", slug: "relay-b", models: [{ id: "shared" }] }),
+        endpoint({ id: "a", name: "Relay A", models: [{ id: "shared" }] }),
+        endpoint({ id: "b", name: "Relay B", models: [{ id: "shared" }] }),
+      ],
+      endpointModelGroups: [
+        { name: "Relay A", models: [groupModel("relay-a/shared")] },
+        { name: "Relay B", models: [groupModel("relay-b/shared")] },
       ],
     });
     expect(result.modelOptions).toEqual([
@@ -306,6 +314,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         agentIssues: {},
       },
       provider: "claude",
+      endpointModelGroups: null,
       now: NOW,
     });
     expect(kept.keepsClaudeAiLogin).toBe(true);
@@ -318,6 +327,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         agentIssues: {},
       },
       provider: "codex",
+      endpointModelGroups: null,
       now: NOW,
     });
     expect(codex.keepsClaudeAiLogin).toBeNull();

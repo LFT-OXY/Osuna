@@ -216,6 +216,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
           const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
           if (result.error)
             setActionFailure({ code: result.error.code, message: describeError(result.error) });
+          // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove after 2027-04-18. 老主机不回 connection。
           if (!result.error && result.connection) {
             setLastConnection({ provider, connection: result.connection });
           }

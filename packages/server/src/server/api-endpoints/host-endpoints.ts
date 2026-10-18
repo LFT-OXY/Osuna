@@ -111,11 +111,17 @@ export function isDefaultModelChoice(
   return typeof id === "string" && defaultModelChoices(state).includes(id);
 }
 
-/** 默认模型指定的那一家与它的模型；光秃秃的名字、或那家已不提供时为 null。 */
+/** 默认模型指定的那一家与它的模型。 */
+export interface NamedDefaultModel {
+  endpoint: StoredApiEndpoint;
+  model: ApiEndpointModel;
+}
+
+/** 光秃秃的名字、或那家已不提供时为 null。 */
 export function namedDefaultModel(
   state: ApiEndpointState,
   id: string | null,
-): { endpoint: StoredApiEndpoint; model: ApiEndpointModel } | null {
+): NamedDefaultModel | null {
   if (id === null) return null;
   for (const group of endpointModelGroups(state)) {
     const entry = group.models.find((model) => model.id === id);

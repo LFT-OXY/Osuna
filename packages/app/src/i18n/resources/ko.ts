@@ -2613,18 +2613,20 @@ export const ko: TranslationResources = {
         defaultModelPick: "{{agent}} 기본 모델",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
         connection: {
-          kept: "{{agent}}에서 서드파티 API 사용 중 · {{model}}을(를) 그대로 사용",
+          kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:
-            "{{agent}}에서 서드파티 API 사용 중 · 마지막으로 끌 때 쓰던 {{model}}(으)로 돌아감",
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 마지막으로 끌 때 쓰던 {{model}}(으)로 돌아갔습니다.",
           joined:
-            "{{agent}}에서 서드파티 API 사용 중 · 마지막으로 직접 고른 모델을 계속 쓰고, 서드파티 API 모델이 {{command}}에 추가됨",
-          same: "{{agent}}에서 서드파티 API 사용 중 · 쓰던 모델 {{model}}을(를) 게이트웨이를 거쳐 계속 사용",
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 마지막으로 직접 고른 모델을 계속 쓰고, 서드파티 API 모델이 {{command}}에 추가되었습니다.",
+          same: "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 쓰던 모델 {{model}}을(를) 게이트웨이를 거쳐 계속 사용합니다.",
+          default:
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 설정된 모델이 없어 자체 목록의 첫 번째 모델 {{model}}(으)로 시작합니다.",
           alike:
-            "{{agent}}에서 서드파티 API 사용 중 · 쓰던 {{previous}}이(가) 가리키는 {{model}}을(를) 게이트웨이를 거쳐 사용",
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. {{previous}}(으)로 설정되어 있어 그것이 가리키는 {{model}}(으)로 시작합니다.",
           first:
-            "{{agent}}에서 서드파티 API 사용 중 · 쓰던 모델 {{previous}}을(를) 제공하는 서드파티 API가 없어 {{model}} 사용",
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 쓰던 모델 {{previous}}을(를) 제공하는 서드파티 API가 없어 {{model}}(으)로 시작합니다.",
           firstUnset:
-            "{{agent}}에서 서드파티 API 사용 중 · 설정된 모델이 없어 첫 번째 모델 {{model}} 사용",
+            "{{agent}}이(가) 이제 서드파티 API를 사용합니다. 설정된 모델이 없어 처음 제공되는 {{model}}(으)로 시작합니다.",
         },
         keepClaudeAiLogin: "claude.ai 로그인 유지",
         keepClaudeAiLoginHint:

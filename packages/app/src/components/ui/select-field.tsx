@@ -11,7 +11,12 @@ import {
 } from "react-native";
 import { ChevronDown } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import {
+  Combobox,
+  ComboboxItem,
+  type ComboboxDesktopPlacement,
+  type ComboboxOption,
+} from "@/components/ui/combobox";
 import {
   createControlGeometry,
   resolveControlInteractionStyles,
@@ -62,6 +67,8 @@ export interface SelectFieldProps<TValue> {
   renderOption?: (input: SelectFieldRenderOptionInput<TValue>) => ReactElement;
   triggerLeading?: ReactNode;
   field?: boolean;
+  // 桌面端弹层朝哪边开；放在页面靠下位置的选择框用 top-start，免得列表伸出窗口底边。
+  desktopPlacement?: ComboboxDesktopPlacement;
   testID?: string;
   triggerTestID?: string;
 }
@@ -195,6 +202,7 @@ export function SelectField<TValue>({
   renderOption,
   triggerLeading,
   field = true,
+  desktopPlacement,
   testID,
   triggerTestID,
 }: SelectFieldProps<TValue>): ReactElement {
@@ -331,6 +339,7 @@ export function SelectField<TValue>({
         onOpenChange={setOpen}
         anchorRef={anchorRef}
         renderOption={renderComboboxOption}
+        desktopPlacement={desktopPlacement}
       />
     </>
   );

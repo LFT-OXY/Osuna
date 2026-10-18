@@ -525,33 +525,38 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 | 项 | magpie（`internal/agent/applied.go`） | Osuna（`default-model-pick.ts`） |
 | --- | --- | --- |
-| 顺序 | `ConnectHow`：已接入 → kept；`connect`：`reconnect` → again；`Join` → joined；`same` / `default` / `alike` / own / sub / first | kept（开关本来开着，或 CLI 配置还指向中转站且它的模型有接口提供）→ again → joined → same → alike → first |
+| 顺序 | `ConnectHow`：已接入 → kept；`connect`：`reconnect` → again；`Join` → joined；same / default / alike / own / sub / first | joined（ChatGPT 登录、模型归 Codex 自己时排最前）→ kept（开关本来开着，或 CLI 配置还指向中转站且它的模型有接口提供）→ again → same → default → alike → first |
 | CLI 现在的模型 | `connectWas`：字段值去掉最后一个斜杠前的前缀；Claude Code 读 settings.json 的 `model` | 同；Claude Code 读 `model`（`readClaudeModel`），Codex 读顶层 `model`（`readCodexModel`）；另去掉 `[1m]` |
-| same | 去掉前缀后与 magpie 模型 id 相同或差 `[1m]`，按「登录的账号 > 订阅 > key」取 | 原样是能选的名字（光秃秃或「接口标识/模型名」）就用它；否则去掉前缀后与接口模型同名或只差写法（`sameModel`，claude-opus-4.6 即 claude-opus-4-6），取光秃秃的名字。Osuna 没有账号与订阅，不分档 |
+| same | 去掉前缀后与 magpie 模型 id 相同或差 `[1m]`，按「登录的账号 > 订阅 > key」取 | 原样是能选的名字（光秃秃或「接口标识/模型名」）就用它；否则去掉前缀后与接口模型同名或只差写法（`sameModel`），取光秃秃的名字。Osuna 没有账号与订阅，不分档 |
+| default | CLI 没设模型：取它自己那一组的第一个，有就沿用 | Claude Code：models.dev 上 Anthropic 的 claude- 文字模型按发布日期新的在前的第一个（照 magpie `catalog.Provider` + `textModel` + `claudeOwn`，存进 `models-dev.json` 的 `claude`，旧缓存下次下载补上）；Codex：`models_cache.json` 里可见、priority 最小的那个（`codexOwnFirstModel`） |
 | alike | 没有连字符的别名，名字里有 `-别名-` 的模型 | 先找第一家为这个档位配了映射的接口，取「接口标识/映射到的模型」（工单写「档位名指向的映射模型」）；再照 magpie 按名字找这一族，光秃秃的名字在前 |
-| again | 断开时记 `reconnection{Magpie, Routed, Left}`（`<id>.reconnect`），所有字段都还是断开后的样子、记下的值 magpie 还在路由才放回 | 切回官方时在接管记录文件里记 `reconnect: { model: 默认模型, left: 还原后 CLI 配置里的模型 }`；CLI 的模型还等于 `left`、记下的默认模型还能选才放回。下一次接管整份重写记录时去掉。「保留当前设置」不还原、不记 |
-| joined | `Join` 接得上（ChatGPT 登录、用内置 openai 或 CC Switch 镜像）就不挑 | 同（`codexKeepsOwnModel` + 登录方式）；Osuna 的默认模型（只给 Osuna 自己的新对话）保留原来的、不能用时取第一个。ChatGPT 登录、用户自己的服务商（09 号）时写进 `model` 的就是挑中的默认模型，光秃秃的换成第一家的「接口标识/模型名」（原来单独的 `magpieConnectPick` 去掉，挑法统一） |
+| again | 断开时记 `reconnection{Magpie, Routed, Left}`，所有字段都还是断开后的样子、记下的值 magpie 还在路由才放回 | 切回官方时在接管记录文件里记 `reconnect: { model: 默认模型, left: 还原后 CLI 配置里的模型 }`；CLI 的模型还等于 `left`、记下的默认模型还能选才放回。下一次接管整份重写记录时去掉。「保留当前设置」不还原、不记 |
+| joined | `Join` 接得上（ChatGPT 登录、内置 openai 或 CC Switch 镜像）就不挑 | 同（`codexKeepsOwnModel` + 登录方式），且排在 kept、again 之前：这种接法 config.toml 的 `model` 归 Codex，关掉再打开也照旧报 joined，与写进去的一致。Osuna 的默认模型（只给 Osuna 自己的新对话）保留原来的、不能用时取第一个 |
+| ChatGPT 登录、用户自己的服务商 | `connect` 挑一个 magpie 模型 `set` 上（值是 `provider/model`） | 挑中的光秃秃名字换成第一家提供它的「接口标识/模型名」再存成默认模型；写进 `model` 的就是它，`connection.model` 与之相同 |
 | 没有模型 | `NoModelsError` / `AllHiddenError` | 照旧 `no_usable_model` |
-| 结果给界面 | `Connection{How, Field, Value}`，GUI 弹 7 秒的状态条（`connectedSaid`） | `set_agent_settings.response` 的可选 `connection: { how, model, previousModel }`；设置页在开关说明下面写一句，直到下一次改设置。kept、alike、没设模型的 first 各有自己的一句（magpie 的 kept 只说「已接入」，alike 与 same 同一句） |
-| 默认模型的写法 | 一律 `provider/model` | 光秃秃的模型名或「接口标识/模型名」都行（ADR 0012）；后者中转站先发给那家（routing.ts 第 1 步），冷却时换同名的别家 |
+| 结果给界面 | `Connection{How, Field, Value}`，GUI 弹 7 秒的状态条（`connectedSaid`） | `set_agent_settings.response` 的可选 `connection: { how, model, previousModel }`；设置页在开关说明下面写一句，直到下一次改设置。kept、alike、没设模型的 first 各有自己的一句 |
+| 默认模型的写法 | 一律 `provider/model` | 光秃秃的模型名或「接口标识/模型名」（ADR 0012）；后者中转站先发给那家，冷却时换同名的别家 |
+| 指定某一家的选项 | — | 接口标识不进接口列表的回复（规范：任何回复都不带标识）；app 取提供方快照里聊天模型选择器同一份 `apiEndpointModelGroups`（id 就是「接口标识/模型名」，组名是接口名），显示「模型名（接口名）」；主机没声明 `apiEndpointCliWiring` 时不列 |
 
 ### 剩下与 magpie 不同的
 
-- **没做 `default`**：CLI 没设模型时 magpie 取它自己列表里的第一个（Claude Code 是 models.dev 上最新的 Anthropic 模型，Codex 是它的模型目录），接口有就沿用、说「原先未设模型，改用它自己列表中的第一个」。Osuna 不读 CLI 自己的模型列表，models.dev 缓存（`models-dev.json`）也只按模型名存资料、没有厂商与发布顺序，所以没设模型时直接 first，界面说「原先未设模型，改用第一个」。要做得给 models.dev 缓存加上 Anthropic 的发布顺序、读 Codex 的 `models_cache.json`，留给评审决定。
+- **Codex 的 default 比 magpie 多**：magpie 的 `connect` 只认 `o.Group == a.Name` 的选项为「它自己的」，Codex 自己的模型分组是 "OpenAI" 或服务商 id（`codex.go` `modelOptions` 的 `group("OpenAI", …)`），不等于 "Codex"，所以 magpie 对 Codex 从不走 default。Osuna 按协调要求照 `models_cache.json` 做了。
+- **Claude Code 的 default 只在 settings.json 没指别的地址时与 magpie 相同**：magpie 的分组名在 `ANTHROPIC_BASE_URL` 指向别处时变成「Claude Code · 主机名」，也就不走 default；Osuna 接管前不看这个。
 - **没有 `magpie`、OwnVia 与账号 / 订阅分档**：Osuna 没有「唯一设置是 provider」的 App，也没有经中转站的 ChatGPT 账号与订阅。
 - **again 只比模型一个字段**：Osuna 在这里负责的 CLI 选择只有模型；magpie 比它改过的所有字段。
-- **ChatGPT 登录的 Codex 不走 again**：joined 优先，模型归 Codex 自己，与「写进 CLI 配置的模型一致」对得上。
 - **CLI 还指向中转站时的 kept 照样重写配置**：magpie 什么都不做；Osuna 打开开关一律按当前设置接管。
+- **界面**：一行说明，不是 7 秒的状态条；kept、alike、default 与 first 分开说。
 
 ### 要判断的地方
 
-- 接口标识随列表发给 app（`ApiEndpoint.slug`，可选）：默认模型本身就带标识，app 要它才能显示「模型名（接口名）」。原来「任何响应都不带标识」的用例（`api-endpoint-host-wide.e2e.test.ts`）改成断言每家都带标识、key 不出现。
 - 指定某一家的默认模型在那家关掉或去掉这个模型、别家还有同名的时，变成光秃秃的名字；都没有就取第一个（`settleAgentSettings`）。
 - 老客户端：`activeModels` 的 isDefault 标去掉标识后的模型名；`projectedDefaultModelId` 只在默认模型指定的是这一家时去掉标识。
+- 「接口标识/模型名」的选项来自快照，开关刚打开、快照还没推到时只有光秃秃的名字；快照里去掉了已下线的模型，所以已下线的那家那个模型不在选项里。
+- 默认模型下拉在桌面端朝上开（`SelectField` 新增的 `desktopPlacement`，透传 Combobox 已有的 top-start）：这一行在提供方页最下面一张卡片里，朝下开会伸出窗口底边。窄窗口底部弹层标题与选项左边距不一样是 Combobox 弹层原有的样式，本张没动。
 
 ### 测试
 
-- 纯逻辑：`default-model-pick.test.ts`（六种挑法、`[1m]` 与前缀与写法差别、映射优先于名字、没有模型）、`host-endpoints.test.ts`（选项、指定某家时的目标接口、失踪规则）、`codex-config-patch.test.ts`（用户自己的服务商写挑中的默认模型）。
-- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`：kept（重新应用、「保留当前设置」后再打开）、again（改过后不再放回）、same、alike（magpie TestConnectKeepsTheModel）、first、joined、没有模型时拒绝，各自断言返回的挑法与 settings.json / config.toml 里的模型；Codex API key 接法下「接口标识/模型名」写进 `model` 且在模型目录里；Claude Code 的「relay-b/kimi-k2」先到 B、B 回 503 换到 A、冷却期间直接到 A。`api-endpoint-chatgpt-backend.e2e.test.ts`：ChatGPT 接法合并的清单里有这个名字。
-- 浏览器 `settings-api-endpoints.spec.ts`：打开后的一句说明、选项同时有光秃秃的名字和「模型名（接口名）」、只读目录下保存失败留在原处且模型不变、保存成功写进 settings.json。另把「删除接口」用例里 `toEqual` 改成 `toMatchObject`（18 号的 `resetApiEndpoints` 让列表多带 `keepsClaudeAiLogin: false`，与本张无关但整份跑会挂）。
-- 截图：`screenshots/19-claude-code-page_just-turned-on_desktop-1280_{en,zh}.png`、`19-default-model-dropdown_open_{desktop-1280,compact-390}_{en,zh}.png`。
+- 纯逻辑：`default-model-pick.test.ts`（七种挑法、ChatGPT 接法先前关掉过仍是 joined、只认「接口标识/模型名」时的写法、`[1m]` 与前缀与写法差别、映射优先于名字、没有模型）、`models-dev.test.ts`（Claude Code 自己的模型新的在前、去掉非文字模型、重启后还在）、`codex-models-cache.test.ts`（`codexOwnFirstModel`）、`host-endpoints.test.ts`、`codex-config-patch.test.ts`。
+- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`：kept（重新应用、「保留当前设置」后再打开）、again（改过后不再放回）、same、default（Claude Code 按 models.dev 缓存、Codex 按 models_cache.json）、alike（magpie TestConnectKeepsTheModel）、first、joined（先开关一轮再打开）、ChatGPT 登录 + 用户自己服务商时 `connection.model` 与 config.toml 的 `model` 同为 `relay-a/glm-4.6`、没有模型时拒绝；Codex API key 接法下「接口标识/模型名」写进 `model` 且在模型目录里；Claude Code 的「relay-b/kimi-k2」先到 B、B 回 503 换到 A、冷却期间直接到 A。`api-endpoint-chatgpt-backend.e2e.test.ts`：ChatGPT 接法合并的清单里有这个名字。`api-endpoint-host-wide.e2e.test.ts` 照旧断言回复里没有标识。
+- 浏览器 `settings-api-endpoints.spec.ts`：打开后的一句说明、选项同时有光秃秃的名字和「模型名（接口名）」、只读目录下保存失败留在原处且模型不变、保存成功写进 settings.json。另把「删除接口」用例里 `toEqual` 改成 `toMatchObject`（18 号的 `resetApiEndpoints` 让列表多带 `keepsClaudeAiLogin: false`）。
+- 截图：`screenshots/19-claude-code-page_just-turned-on_desktop-1280_{en,zh}.png`（中文那张是同一台 daemon 上第二次打开，说的是 again）、`19-default-model-dropdown_open_{desktop-1280,compact-390}_{en,zh}.png`。

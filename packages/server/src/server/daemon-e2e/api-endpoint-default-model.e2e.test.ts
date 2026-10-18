@@ -84,7 +84,21 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     await mkdir(claudeDir, { recursive: true });
     await mkdir(codexHome, { recursive: true });
     signIn = "api_key";
+    // models.dev 的缓存（不联网）：Claude Code 自己的模型新的在前，magpie 的 claudeOwn。
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    await mkdir(endpointsDir, { recursive: true });
+    await writeFile(
+      path.join(endpointsDir, "models-dev.json"),
+      JSON.stringify({
+        fetchedAt: new Date().toISOString(),
+        etag: null,
+        models: {},
+        claude: ["claude-opus-4-6", "claude-sonnet-4-5"],
+      }),
+    );
     daemon = await createTestPaseoDaemon({
+      paseoHomeRoot: root,
+      cleanup: false,
       apiEndpoints: {
         env: { CLAUDE_CONFIG_DIR: claudeDir, CODEX_HOME: codexHome },
         homeDir: root,
@@ -240,15 +254,71 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     expect(result.connection ?? null).toBeNull();
   });
 
-  test("joined: Codex signed in with ChatGPT keeps its own model, written as it was", async () => {
+  test("joined: Codex signed in with ChatGPT keeps its own model, written as it was, switched off and on again too", async () => {
     await twoEndpoints();
     signIn = "chatgpt";
     await writeFile(configPath, `model = "gpt-5.5"\n`);
+    await turnOn("codex");
+    await turnOn("codex", "relay-b/glm-4.6");
+    await turnOff("codex");
+    expect(await codexModel()).toBe("gpt-5.5");
 
     const result = await turnOn("codex");
 
     expect(result.connection).toMatchObject({ how: "joined", previousModel: "gpt-5.5" });
     expect(await codexModel()).toBe("gpt-5.5");
+  });
+
+  test("Codex signed in with ChatGPT on a provider of the user's own: the pick is the name written into config.toml", async () => {
+    await twoEndpoints();
+    signIn = "chatgpt";
+    await writeFile(
+      configPath,
+      `model_provider = "mine"\nmodel = "glm-4.6"\n\n[model_providers.mine]\nname = "Mine"\nbase_url = "https://mine.example/v1"\n`,
+    );
+
+    const result = await turnOn("codex");
+
+    expect(result.connection).toEqual({
+      how: "same",
+      model: "relay-a/glm-4.6",
+      previousModel: "glm-4.6",
+    });
+    expect(await codexModel()).toBe("relay-a/glm-4.6");
+  });
+
+  test("default: Claude Code with no model set goes on with the newest of its own an endpoint offers", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{}\n`);
+
+    const result = await turnOn("claude");
+
+    expect(result.connection).toEqual({
+      how: "default",
+      model: "claude-opus-4-6",
+      previousModel: null,
+    });
+    expect(await claudeModel()).toBe("claude-opus-4-6");
+  });
+
+  test("default: Codex with no model set goes on with the first of its own model list an endpoint offers", async () => {
+    await twoEndpoints();
+    await writeFile(configPath, `approval_policy = "never"\n`);
+    await writeFile(
+      path.join(path.dirname(configPath), "models_cache.json"),
+      JSON.stringify({
+        etag: '"list-1"',
+        models: [
+          { slug: "gpt-5.5", priority: 2 },
+          { slug: "glm-4.6", priority: 1 },
+        ],
+      }),
+    );
+
+    const result = await turnOn("codex");
+
+    expect(result.connection).toMatchObject({ how: "default", model: "glm-4.6" });
+    expect(await codexModel()).toBe("glm-4.6");
   });
 
   test("Codex on an API key: one endpoint's default model is written and is in Codex's model list", async () => {

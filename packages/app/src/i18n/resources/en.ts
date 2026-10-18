@@ -2663,18 +2663,20 @@ export const en = {
         defaultModelPick: "Default model for {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
         connection: {
-          kept: "{{agent}} uses API endpoints · stays on {{model}}, as it was",
+          kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:
-            "{{agent}} uses API endpoints · back on {{model}}, the default model when the switch was last turned off",
+            "{{agent}} now uses API endpoints. It's back on {{model}}, the model it used when the switch was last turned off.",
           joined:
-            "{{agent}} uses API endpoints · it stays on its own last pick; the endpoints' models join its {{command}}",
-          same: "{{agent}} uses API endpoints · on {{model}} through the gateway, the model it was on",
+            "{{agent}} now uses API endpoints. It stays on the model it last picked itself, and the endpoints' models are added to its {{command}}.",
+          same: "{{agent}} now uses API endpoints. It stays on {{model}}, the model it was already using, through the gateway.",
+          default:
+            "{{agent}} now uses API endpoints. It had no model set, so it starts on {{model}}, the first of its own models.",
           alike:
-            "{{agent}} uses API endpoints · on {{model}} through the gateway, the model its {{previous}} stood for",
+            "{{agent}} now uses API endpoints. It was set to {{previous}}, so it starts on {{model}}, the model that name stands for.",
           first:
-            "{{agent}} uses API endpoints · on {{model}}: no endpoint offers {{previous}}, the model it was on",
+            "{{agent}} now uses API endpoints. No endpoint offers {{previous}}, the model it was using, so it starts on {{model}}.",
           firstUnset:
-            "{{agent}} uses API endpoints · on {{model}}: it had no model set, so the first one offered",
+            "{{agent}} now uses API endpoints. It had no model set, so it starts on {{model}}, the first model offered.",
         },
         keepClaudeAiLogin: "Keep claude.ai sign-in",
         keepClaudeAiLoginHint:

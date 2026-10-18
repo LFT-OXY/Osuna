@@ -13,7 +13,7 @@ import {
   type ModelsDevIndex,
   type SamplingByHost,
 } from "./model-facts.js";
-import { parseJson } from "./upstream-http.js";
+import { isRecord, parseJson } from "./upstream-http.js";
 
 /*
  * models.dev 的公开模型资料（上下文、回复上限、思考档位、能否看图），给 Claude Code 的模型提示与 Codex 的模型目录用。
@@ -35,6 +35,8 @@ const CacheFileSchema = z.object({
   models: z.record(z.string(), ModelFactsSchema),
   // 旧缓存没有；下次下载补上。
   sampling: z.record(z.string(), z.record(z.string(), z.boolean())).optional(),
+  // Claude Code 自己的模型，新发布的在前（claudeCodeOwnModels）；旧缓存没有，下次下载补上。
+  claude: z.array(z.string()).optional(),
 });
 type CacheFile = z.infer<typeof CacheFileSchema>;
 
@@ -77,6 +79,11 @@ export class ModelsDevCatalog {
     this.cache = this.readCache();
     this.index = this.cache?.models ?? {};
     this.sampling = this.cache?.sampling ?? {};
+  }
+
+  /** Claude Code 自己的模型（Anthropic 的 claude- 文字模型），新发布的在前；还没下载过为空。 */
+  claudeCodeModels(): string[] {
+    return this.cache?.claude ?? [];
   }
 
   /** 按模型名查；不知道的是空对象。 */
@@ -152,7 +159,9 @@ export class ModelsDevCatalog {
       const models = indexModelsDev(raw);
       if (Object.keys(models).length === 0) throw new Error("models.dev listed no models");
       const sampling = indexSamplingByHost(raw);
-      this.writeCache({ fetchedAt, etag: response.headers.get("etag"), models, sampling });
+      const claude = claudeCodeOwnModels(raw);
+      const newEtag = response.headers.get("etag");
+      this.writeCache({ fetchedAt, etag: newEtag, models, sampling, claude });
       this.index = models;
       this.sampling = sampling;
       this.onUpdated();
@@ -182,4 +191,57 @@ export class ModelsDevCatalog {
     this.cache = CacheFileSchema.parse(cache);
     writePrivateFileAtomicSync(this.filePath, `${JSON.stringify(this.cache)}\n`);
   }
+}
+
+// Claude Code 自己的模型照 magpie（https://github.com/yetone/magpie，internal/catalog/catalog.go 的 Provider 与 textModel、
+// internal/agent/claude.go 的 claudeOwn）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+const NOT_TEXT_MODEL = [
+  "embed",
+  "-tts",
+  "image",
+  "audio",
+  "-live",
+  "robotics",
+  "computer-use",
+  "deep-research",
+  "transcribe",
+  "realtime",
+  "moderation",
+  "whisper",
+  "dall-e",
+  "sora",
+];
+
+interface ReleasedModel {
+  id: string;
+  released: string;
+}
+
+/**
+ * models.dev 上 Anthropic 的 claude- 文字模型，按发布日期新的在前、同一天按 id：打开开关时 CLI 没设模型，
+ * magpie 拿其中第一个当 Claude Code 自己的默认（default-model-pick.ts 的 default）。
+ */
+export function claudeCodeOwnModels(raw: unknown): string[] {
+  if (!isRecord(raw)) return [];
+  const anthropic = raw.anthropic;
+  if (!isRecord(anthropic) || !isRecord(anthropic.models)) return [];
+  const models: ReleasedModel[] = [];
+  for (const [id, model] of Object.entries(anthropic.models)) {
+    if (!id.startsWith("claude") || !isRecord(model) || !isTextModel({ id, model })) continue;
+    const released = typeof model.release_date === "string" ? model.release_date : "";
+    models.push({ id, released });
+  }
+  models.sort((a, b) => {
+    if (a.released !== b.released) return a.released > b.released ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
+  });
+  return models.map((model) => model.id);
+}
+
+function isTextModel(input: { id: string; model: Record<string, unknown> }): boolean {
+  const modalities = isRecord(input.model.modalities) ? input.model.modalities : {};
+  const output = Array.isArray(modalities.output) ? modalities.output : [];
+  const isWithoutText = output.length > 0 && !output.includes("text");
+  if (isWithoutText) return false;
+  return !NOT_TEXT_MODEL.some((word) => input.id.includes(word));
 }

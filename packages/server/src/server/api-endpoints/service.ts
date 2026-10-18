@@ -75,7 +75,12 @@ import {
   codexEndpointEntries,
   type CodexModelEntry,
 } from "./codex-model-catalog.js";
-import { codexListTag, markCodexModelsCacheStale } from "./codex-models-cache.js";
+import {
+  codexListTag,
+  codexOwnFirstModel,
+  markCodexModelsCacheStale,
+  readCodexModelsCache,
+} from "./codex-models-cache.js";
 import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
@@ -119,8 +124,19 @@ import { testUpstreamConnection } from "./upstream-connection.js";
 import {
   pickDefaultModel,
   type DefaultModelPick,
+  type DefaultModelPickInput,
   type DefaultModelReconnect,
 } from "./default-model-pick.js";
+
+/** 让一个 Agent 的 CLI 配置跟上：wiring 为 null 时切回官方；agent 是落下后的设置，切回官方时记下它的默认模型（again）。 */
+interface CliSync {
+  provider: ApiEndpointProvider;
+  wiring: CliWiring | null;
+  agent: ApiEndpointAgentSettings;
+}
+
+/** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
+type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
@@ -533,11 +549,15 @@ export class ApiEndpointService {
     if (!agent.enabled) return null;
     const agentProvider = supported;
     // 默认模型指定了某一家就标那一家，否则标含它的第一家。
-    const named = namedDefaultModel(state, agent.defaultModelId) !== null;
+    const isNamed = namedDefaultModel(state, agent.defaultModelId) !== null;
     let defaultMarked = false;
-    function toDefinition({ id, model }: EndpointGroupModel): AgentModelDefinition {
-      const isDefault =
-        !defaultMarked && (named ? id === agent.defaultModelId : model.id === agent.defaultModelId);
+    function isDefaultEntry({ id, model }: EndpointGroupModel): boolean {
+      if (isNamed) return id === agent.defaultModelId;
+      return model.id === agent.defaultModelId;
+    }
+    function toDefinition(entry: EndpointGroupModel): AgentModelDefinition {
+      const { id, model } = entry;
+      const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
       const label = model.label ?? model.id;
       return { provider: agentProvider, id, label, isDefault };
@@ -708,9 +728,14 @@ export class ApiEndpointService {
         { ...state, agents: { ...state.agents, [supported]: agent } },
         reapply ? { rewrite: supported } : {},
       );
-      const connection: ApiEndpointConnection | null = pick
-        ? { how: pick.how, model: pick.defaultModelId, previousModel: pick.previousModel }
-        : null;
+      let connection: ApiEndpointConnection | null = null;
+      if (pick) {
+        connection = {
+          how: pick.how,
+          model: pick.defaultModelId,
+          previousModel: pick.previousModel,
+        };
+      }
       return { agent: next.agents[supported], connection };
     });
   }
@@ -723,38 +748,60 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
   ): DefaultModelPick | null {
-    const filePath =
-      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
-    const text = readOptionalFile(filePath)?.toString("utf8") ?? null;
-    const record =
-      provider === "claude" ? this.store.readClaudeTakeover() : this.store.readCodexTakeover();
-    const cliModel = provider === "claude" ? readClaudeModel(text) : readCodexModel(text);
-    const joinsOwnModel =
-      provider === "codex" && this.codexUsesChatGpt() && codexKeepsOwnModel(text);
-    return pickDefaultModel({
-      state,
-      provider,
-      cliModel,
-      isWired: this.cliPointsAtGateway(provider),
-      reconnect: record.reconnect ?? null,
-      joinsOwnModel,
-    });
+    const cli = provider === "claude" ? this.claudePickInput() : this.codexPickInput();
+    return pickDefaultModel({ state, provider, ...cli });
   }
 
-  /** CLI 配置现在指向中转站（官方模式下也查，例如「保留当前设置」之后）。 */
-  private cliPointsAtGateway(provider: ApiEndpointProvider): boolean {
-    const gatewayUrl = this.gatewayUrlFor(provider);
-    if (gatewayUrl === null) return false;
-    const status =
-      provider === "claude"
-        ? this.inspectClaude({ enabled: false, defaultModelId: null })
-        : this.inspectCodex(false);
-    const baseUrl = status.baseUrl === null ? null : trimTrailingSlashes(status.baseUrl);
-    const gatewayUrls =
-      provider === "claude"
-        ? [gatewayUrl]
-        : [`${gatewayUrl}${CODEX_GATEWAY_SUFFIX}`, `${gatewayUrl}${CHATGPT_BACKEND_PATH}`];
-    return baseUrl !== null && gatewayUrls.includes(baseUrl);
+  /** Claude Code 自己的默认照 magpie 取 models.dev 上最新的 Claude（claudeOwn）。 */
+  private claudePickInput(): CliPickInput {
+    const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
+    return {
+      cliModel: readClaudeModel(text),
+      ownDefaultModel: this.modelsDev.claudeCodeModels()[0] ?? null,
+      isWired: this.claudePointsAtGateway(),
+      reconnect: this.store.readClaudeTakeover().reconnect ?? null,
+      joinsOwnModel: false,
+      writesEndpointName: false,
+    };
+  }
+
+  /**
+   * ChatGPT 登录时：用着内置 openai 或镜像的 Codex 模型归它自己（joined）；用着用户自己的服务商时写进去的是
+   * 「接口标识/模型名」（09 号工单）。Codex 自己的默认取 models_cache.json 里排在最前的。
+   */
+  private codexPickInput(): CliPickInput {
+    const configPath = this.resolveCodexConfigPath();
+    const text = readOptionalFile(configPath)?.toString("utf8") ?? null;
+    const usesChatGpt = this.codexUsesChatGpt();
+    const keepsOwnModel = codexKeepsOwnModel(text);
+    return {
+      cliModel: readCodexModel(text),
+      ownDefaultModel: codexOwnFirstModel(readCodexModelsCache(path.dirname(configPath))),
+      isWired: this.codexPointsAtGateway(),
+      reconnect: this.store.readCodexTakeover().reconnect ?? null,
+      joinsOwnModel: usesChatGpt && keepsOwnModel,
+      writesEndpointName: usesChatGpt && !keepsOwnModel,
+    };
+  }
+
+  /** settings.json 现在指向中转站（官方模式下也查，例如「保留当前设置」之后）。 */
+  private claudePointsAtGateway(): boolean {
+    const gatewayUrl = this.gatewayUrlFor("claude");
+    const { baseUrl } = this.inspectClaude({ enabled: false, defaultModelId: null });
+    if (gatewayUrl === null || baseUrl === null) return false;
+    return trimTrailingSlashes(baseUrl) === gatewayUrl;
+  }
+
+  /** config.toml 生效的地址是中转站的服务商地址或 ChatGPT 后端地址。 */
+  private codexPointsAtGateway(): boolean {
+    const gatewayUrl = this.gatewayUrlFor("codex");
+    const { baseUrl } = this.inspectCodex(false);
+    if (gatewayUrl === null || baseUrl === null) return false;
+    const gatewayUrls = [
+      `${gatewayUrl}${CODEX_GATEWAY_SUFFIX}`,
+      `${gatewayUrl}${CHATGPT_BACKEND_PATH}`,
+    ];
+    return gatewayUrls.includes(trimTrailingSlashes(baseUrl));
   }
 
   /**
@@ -859,18 +906,22 @@ export class ApiEndpointService {
       // 先有目录文件，config.toml 才指向它。
       if (catalog !== null && catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalog);
       for (const provider of changed) {
-        this.syncCli(provider, this.cliWiring(next, provider, tokens), next.agents[provider]);
+        this.syncCli({
+          provider,
+          wiring: this.cliWiring(next, provider, tokens),
+          agent: next.agents[provider],
+        });
         synced.push(provider);
       }
     } catch (error) {
       // 已经改好的 CLI 配置和目录退回去，状态整个不保存。
       for (const provider of synced) {
         try {
-          this.syncCli(
+          this.syncCli({
             provider,
-            this.cliWiring(previous, provider, previousTokens),
-            previous.agents[provider],
-          );
+            wiring: this.cliWiring(previous, provider, previousTokens),
+            agent: previous.agents[provider],
+          });
         } catch (revertError) {
           this.logger.error({ err: revertError, provider }, "Failed to revert CLI config");
         }
@@ -902,12 +953,8 @@ export class ApiEndpointService {
     if (!usesModelFacts(previous) && usesModelFacts(next)) this.modelsDev.wake();
   }
 
-  /** `agent` 是落下后的设置：切回官方时记下它的默认模型，再打开时放回（again）。 */
-  private syncCli(
-    provider: ApiEndpointProvider,
-    wiring: CliWiring | null,
-    agent: ApiEndpointAgentSettings,
-  ): void {
+  private syncCli(input: CliSync): void {
+    const { provider, wiring, agent } = input;
     if (!wiring) {
       this.restoreOfficial(provider, agent.defaultModelId);
     } else if (provider === "codex") {
@@ -950,7 +997,7 @@ export class ApiEndpointService {
     const isUpToDate = written?.url === url && written.token === wiring.token;
     const isRewired = provider === "codex" && this.codexWiringChanged();
     if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded && !isRewired) return;
-    this.syncCli(provider, wiring, state.agents[provider]);
+    this.syncCli({ provider, wiring, agent: state.agents[provider] });
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
 
@@ -1081,11 +1128,11 @@ export class ApiEndpointService {
       return;
     }
     try {
-      this.syncCli(
-        "claude",
-        this.cliWiring(state, "claude", this.store.readGatewayTokens()),
-        state.agents.claude,
-      );
+      this.syncCli({
+        provider: "claude",
+        wiring: this.cliWiring(state, "claude", this.store.readGatewayTokens()),
+        agent: state.agents.claude,
+      });
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to rewrite the Claude model hints");
     }
@@ -1656,11 +1703,11 @@ export class ApiEndpointService {
         return;
       }
       try {
-        this.syncCli(
-          "codex",
-          this.cliWiring(state, "codex", this.store.readGatewayTokens()),
-          state.agents.codex,
-        );
+        this.syncCli({
+          provider: "codex",
+          wiring: this.cliWiring(state, "codex", this.store.readGatewayTokens()),
+          agent: state.agents.codex,
+        });
         this.staleCodexModels(state);
         this.onActiveEndpointChanged("codex");
       } catch (error) {
@@ -1871,7 +1918,7 @@ export class ApiEndpointService {
     return { health, issues, baseUrl: result.baseUrl };
   }
 
-  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。 */
+  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
   private toWire(
     state: ApiEndpointState,
     endpoint: StoredApiEndpoint,
@@ -1899,7 +1946,6 @@ export class ApiEndpointService {
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
       searchesWeb: endpoint.searchesWeb === true,
-      slug: endpoint.slug,
     };
   }
 
@@ -2004,11 +2050,13 @@ function enabledAgentSettings(input: {
   return { ...agent, enabled: true, defaultModelId };
 }
 
+/** 写进接管记录的 reconnect；没有默认模型时不写。 */
+interface ReconnectRecord {
+  reconnect?: DefaultModelReconnect;
+}
+
 /** 切回官方时要记下的默认模型与 CLI 配置里留下的模型；没有默认模型就不记。 */
-function reconnectRecord(
-  defaultModelId: string | null,
-  left: string | null,
-): { reconnect?: DefaultModelReconnect } {
+function reconnectRecord(defaultModelId: string | null, left: string | null): ReconnectRecord {
   return defaultModelId === null ? {} : { reconnect: { model: defaultModelId, left } };
 }
 

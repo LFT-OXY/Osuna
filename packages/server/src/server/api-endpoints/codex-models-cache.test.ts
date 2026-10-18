@@ -8,6 +8,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   codexCachedModels,
+  codexOwnFirstModel,
   isListTagged,
   markCodexModelsCacheStale,
   staleModelsCache,
@@ -60,6 +61,22 @@ describe("codexCachedModels", () => {
     expect(codexCachedModels(null)).toEqual([]);
     expect(codexCachedModels("not json")).toEqual([]);
     expect(codexCachedModels('{"models":"nope"}')).toEqual([]);
+  });
+});
+
+describe("codexOwnFirstModel", () => {
+  it("is the first of Codex's own listed models by priority", () => {
+    const cache = JSON.stringify({
+      etag: 'W/"abc+osuna-1a2b3c"',
+      models: [
+        { slug: "gpt-5.4", priority: 5 },
+        { slug: "relay-a/kimi-k2", priority: 0 },
+        { slug: "codex-auto-review", priority: 1, visibility: "hide" },
+        { slug: "gpt-5.5", priority: 2, visibility: "list" },
+      ],
+    });
+    expect(codexOwnFirstModel(cache)).toBe("gpt-5.5");
+    expect(codexOwnFirstModel(null)).toBeNull();
   });
 });
 

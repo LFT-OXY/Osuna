@@ -57,6 +57,21 @@ export function codexCachedModels(text: string | null): unknown[] {
   });
 }
 
+/**
+ * Codex 自己列表里的第一个（/model 里排在最前的：可见、priority 最小），打开开关时 Codex 没设模型就当它的默认
+ * （default-model-pick.ts 的 default）。没有缓存或没有可见的为 null。
+ */
+export function codexOwnFirstModel(text: string | null): string | null {
+  const listed = codexCachedModels(text).filter((model) => {
+    const isListed = isRecord(model) && (model.visibility ?? "list") === "list";
+    return isListed && slugOf(model) !== "";
+  });
+  const priorityOf = (model: unknown) =>
+    isRecord(model) && typeof model.priority === "number" ? model.priority : Number.MAX_VALUE;
+  const [first] = listed.toSorted((a, b) => priorityOf(a) - priorityOf(b));
+  return first === undefined ? null : slugOf(first);
+}
+
 function etagOf(cache: Record<string, unknown>): string {
   return typeof cache.etag === "string" ? cache.etag : "";
 }

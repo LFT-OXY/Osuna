@@ -2654,18 +2654,20 @@ export const fr: TranslationResources = {
         defaultModelPick: "Modèle par défaut de {{agent}}",
         defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
         connection: {
-          kept: "{{agent}} utilise les points d'accès API · reste sur {{model}}, comme avant",
+          kept: "{{agent}} utilise déjà les points d'accès API. Il reste sur {{model}}.",
           again:
-            "{{agent}} utilise les points d'accès API · de retour sur {{model}}, le modèle par défaut lors de la dernière désactivation",
+            "{{agent}} utilise maintenant les points d'accès API. Il revient sur {{model}}, le modèle utilisé lors de la dernière désactivation.",
           joined:
-            "{{agent}} utilise les points d'accès API · garde son dernier choix ; les modèles des points d'accès rejoignent son {{command}}",
-          same: "{{agent}} utilise les points d'accès API · sur {{model}} via la passerelle, le modèle qu'il utilisait",
+            "{{agent}} utilise maintenant les points d'accès API. Il garde le dernier modèle qu'il a choisi, et les modèles des points d'accès s'ajoutent à son {{command}}.",
+          same: "{{agent}} utilise maintenant les points d'accès API. Il reste sur {{model}}, le modèle qu'il utilisait déjà, via la passerelle.",
+          default:
+            "{{agent}} utilise maintenant les points d'accès API. Aucun modèle n'était défini : il démarre sur {{model}}, le premier de ses propres modèles.",
           alike:
-            "{{agent}} utilise les points d'accès API · sur {{model}} via la passerelle, le modèle que désignait son {{previous}}",
+            "{{agent}} utilise maintenant les points d'accès API. Il était réglé sur {{previous}} : il démarre sur {{model}}, le modèle que désigne ce nom.",
           first:
-            "{{agent}} utilise les points d'accès API · sur {{model}} : aucun point d'accès ne propose {{previous}}, le modèle qu'il utilisait",
+            "{{agent}} utilise maintenant les points d'accès API. Aucun point d'accès ne propose {{previous}}, le modèle qu'il utilisait : il démarre sur {{model}}.",
           firstUnset:
-            "{{agent}} utilise les points d'accès API · sur {{model}} : aucun modèle n'était défini, donc le premier proposé",
+            "{{agent}} utilise maintenant les points d'accès API. Aucun modèle n'était défini : il démarre sur {{model}}, le premier proposé.",
         },
         keepClaudeAiLogin: "Garder la connexion claude.ai",
         keepClaudeAiLoginHint:

@@ -206,7 +206,7 @@ function ConnectionLine({
   const labelOf = useDefaultModelLabel();
   const picked = options.find((option) => option.id === connection.model);
   const model = picked ? labelOf(picked) : connection.model;
-  const values = {
+  const values: ConnectionValues = {
     agent: providerLabel,
     model,
     previous: connection.previousModel ?? "",
@@ -224,12 +224,24 @@ function ConnectionLine({
 
 type Translate = ReturnType<typeof useTranslation>["t"];
 
-function connectionText(input: {
+/** 一句说明里填进去的：CLI 名称、挑中的默认模型、CLI 原来的模型、CLI 里挑模型的命令。 */
+interface ConnectionValues {
+  agent: string;
+  model: string;
+  previous: string;
+  command: string;
+}
+
+interface ConnectionTextInput {
   t: Translate;
   how: string;
-  values: { agent: string; model: string; previous: string; command: string };
-}): string | null {
-  const { t, how, values } = input;
+  values: ConnectionValues;
+}
+
+function connectionText(input: ConnectionTextInput): string | null {
+  const { t, how } = input;
+  // i18next 的插值参数要是字典类型：展开成对象字面量。
+  const values = { ...input.values };
   const key = "settings.apiEndpoints.agent.connection";
   switch (how) {
     case "kept":
@@ -240,6 +252,8 @@ function connectionText(input: {
       return t(`${key}.joined`, values);
     case "same":
       return t(`${key}.same`, values);
+    case "default":
+      return t(`${key}.default`, values);
     case "alike":
       return t(`${key}.alike`, values);
     case "first":
@@ -301,6 +315,8 @@ function DefaultModelRow({
           title={title}
           size="sm"
           disabled={busy}
+          // 这一行在提供方页最下面一张卡片里：列表朝上开，不伸出窗口底边。
+          desktopPlacement="top-start"
           testID="agent-api-endpoints-default-model"
           triggerTestID="agent-api-endpoints-default-model-trigger"
         />

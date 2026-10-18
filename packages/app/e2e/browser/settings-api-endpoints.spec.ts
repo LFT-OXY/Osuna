@@ -733,7 +733,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     await test.step("on: Claude goes on with the model it was on, and the page says so", async () => {
       await section.getByTestId("agent-api-endpoints-switch").click();
       await expect(section.getByTestId("agent-api-endpoints-connection")).toHaveText(
-        "Claude uses API endpoints · on glm-4.6 through the gateway, the model it was on",
+        "Claude now uses API endpoints. It stays on glm-4.6, the model it was already using, through the gateway.",
       );
       await expect(defaultModelTrigger(page)).toHaveText("glm-4.6");
     });

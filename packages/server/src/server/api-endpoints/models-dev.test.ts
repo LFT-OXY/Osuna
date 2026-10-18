@@ -115,6 +115,37 @@ describe("ModelsDevCatalog", () => {
     expect(h.create().takesSampling({ ...ask, hosts: ["relay.example"] })).toBeUndefined();
   });
 
+  // magpie 的 claudeOwn：models.dev 上 Anthropic 的文字模型，新发布的在前（catalog.Provider、textModel）。
+  test("lists Claude Code's own models newest first, across restarts", async () => {
+    const h = await harness();
+    h.respond = async () =>
+      new Response(
+        JSON.stringify({
+          anthropic: {
+            models: {
+              "claude-sonnet-4-5": { release_date: "2025-09-29" },
+              "claude-opus-4-6": { release_date: "2026-02-05" },
+              "claude-opus-4-6-20260205": { release_date: "2026-02-05" },
+              "claude-embed-1": { release_date: "2026-05-01" },
+              "claude-voice-1": { release_date: "2026-06-01", modalities: { output: ["audio"] } },
+            },
+          },
+          other: { models: { "claude-mythos-9": { release_date: "2026-09-01" } } },
+        }),
+        { status: 200 },
+      );
+    const catalog = h.create();
+    expect(catalog.claudeCodeModels()).toEqual([]);
+
+    catalog.start();
+    await h.fire();
+    catalog.dispose();
+
+    const newestFirst = ["claude-opus-4-6", "claude-opus-4-6-20260205", "claude-sonnet-4-5"];
+    expect(catalog.claudeCodeModels()).toEqual(newestFirst);
+    expect(h.create().claudeCodeModels()).toEqual(newestFirst);
+  });
+
   test("knows nothing before the first download, then keeps what it fetched across restarts", async () => {
     const h = await harness();
     const catalog = h.create();
