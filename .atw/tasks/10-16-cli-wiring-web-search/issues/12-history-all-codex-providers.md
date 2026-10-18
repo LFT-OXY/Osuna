@@ -9,7 +9,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：用夹具准备记在两个不同 Codex 服务商名下的对话，列表里两条都有，各带自己的服务商。
 - [ ] 新字段可选，协议兼容测试通过。

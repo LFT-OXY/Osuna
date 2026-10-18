@@ -202,6 +202,7 @@ consumer while every old consumer keeps the filtered result.
   The workspace id is not optional sugar: the app opens the row through `navigateToAgent`, which
   falls back to the host-level agent route (no `pin`) for an agent it cannot find in the session
   store, and archived agents are never there.
+- Codex model providers (cli-wiring-web-search ticket 12): the built-in Codex lists with `thread/list` `modelProviders: []` (every provider); a custom Codex provider lists only its own. Each descriptor carries optional `codexModelProvider` (no capability flag: display only, old daemons omit it and the row shows no label). When a custom Codex provider and the built-in one list the same handle, `dropStockCodexRowsCustomCodexOwns` (`agent-manager.ts`) keeps only the custom row — the built-in one can't resume a provider it has no table for; other derived providers (custom Claude) are never deduped. So the final list can hold fewer than `limit` rows. The app row reads "Codex model provider <id>" on its second line before the directory (directory truncates first, then the label, the id last); the time sits on the title line.
 - Owner resolution: active in-memory agents first, then active stored records, then archived
   records, first writer wins per handle key (`sessionId` and `nativeHandle` both map). An archived
   twin therefore never shadows a live agent.
