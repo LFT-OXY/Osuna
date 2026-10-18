@@ -583,7 +583,7 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 | Claude Code 写什么 | `effort` 字段：low–xhigh 写顶层 `effortLevel`，Claude 模型另写 `modelSettings.<claudeName>.effortLevel`，并删掉 `CLAUDE_CODE_EFFORT_LEVEL`；max 写这个变量 | 同；没设（null）时一个都不碰，上次写过的放回原值。写过的键记原值（`thinking.keys`）与为 modelSettings 新建的容器（`thinking.created`），关掉开关时放回 / 删掉 |
 | Ultra Code | 独立的 `ultracode` 开关，与档位任意组合，只在模型支持 xhigh 时可开；off 删掉 | 同：`usesUltraCode`（true 写 `ultracode: true`，false 拿掉，没设不碰）；选档位从不碰 `ultracode`；设置页是一个 Switch，只在默认模型支持 xhigh 时出现 |
 | Claude Code 的选项 | `claudeEffortsFor`：Claude 模型按 2.1.285 的表，别家模型五档都给 | 同 |
-| Claude Code 换模型后 | 不改文件，读时 `claudeClamp`（不高于它的最高一档） | 同：设置不改，设置页显示 clamp 后的那一档；Claude Code 自己也这样降（`I()`） |
+| Claude Code 换模型后 | 不改文件，读时 `claudeClamp`（不高于它的最高一档） | 同：存下的设置不改；daemon 回给客户端的设置照 magpie 的 Get 报 clamp 后的那一档，默认模型不支持 xhigh 时 Ultra Code 报关（文件里的 `ultracode` 留着，换回支持的模型又报开）；Claude Code 自己也这样降（`I()`）。app 不另算 |
 | Codex 的选项与设置 | `Set` 收任何档位；选项是模型收的档位 | 同：Codex 收任何非空档位，不要求先有默认模型；设置页列模型收的档位 |
 | Codex 换模型后 | `settle`：不收就 `codexcat.ModelDefault`（最近一档，没有就 medium、high、第一档）；不知道档位时不动 | 同，只在默认模型变了时做 |
 | CLI 自己存下的档位 | 跟着走（`Follow`） | 不算被改过；跟着改 Osuna 的设置留给 21 号工单 |

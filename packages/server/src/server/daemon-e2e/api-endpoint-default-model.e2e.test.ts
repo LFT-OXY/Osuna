@@ -486,10 +486,33 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
 
       // Opus 4.6 没有 xhigh：设置不改，Claude Code 自己按 high 跑；不会改成 max 锁住所有会话。
       const moved = await turnOn("claude", "claude-opus-4-6");
-      expect(moved.agent?.defaultThinkingOptionId).toBe("xhigh");
+      const stored = JSON.parse(
+        await readFile(path.join(daemon.paseoHome, "api-endpoints", "endpoints.json"), "utf8"),
+      ) as { agents: { claude: { defaultThinkingOptionId?: string } } };
+      expect(stored.agents.claude.defaultThinkingOptionId).toBe("xhigh");
       const settings = await claudeSettings();
       expect(settings.effortLevel).toBe("xhigh");
       expect(settings.env).not.toHaveProperty("CLAUDE_CODE_EFFORT_LEVEL");
+      // 显示照 magpie 的 claudeClamp：Opus 4.6 跑在 high。
+      expect(moved.agent?.defaultThinkingOptionId).toBe("high");
+      expect((await client.apiEndpointList("claude")).agents?.claude?.defaultThinkingOptionId).toBe(
+        "high",
+      );
+    });
+
+    test("Ultra Code reads as off on a default model without xhigh, and as on again on one with it", async () => {
+      await relayC();
+      await twoEndpoints();
+      await turnOn("claude", "glm-5.3");
+      expect(await setUltraCode(true)).toMatchObject({ agent: { usesUltraCode: true } });
+
+      const moved = await turnOn("claude", "claude-opus-4-6");
+      expect(moved.agent?.usesUltraCode).toBe(false);
+      expect((await client.apiEndpointList("claude")).agents?.claude?.usesUltraCode).toBe(false);
+
+      const back = await turnOn("claude", "glm-5.3");
+      expect(back.agent?.usesUltraCode).toBe(true);
+      expect((await claudeSettings()).ultracode).toBe(true);
     });
 
     test("Codex: any level Codex takes goes into model_reasoning_effort; a new model moves it to its nearest; switching off puts the user's own back", async () => {

@@ -477,7 +477,7 @@ export class ApiEndpointService {
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
       activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
-      agents: state.agents,
+      agents: this.shownAgents(state),
       health: status.health,
       cliBaseUrl: enabled ? null : status.baseUrl,
       runningSessionCount: this.countLiveSessions(supported),
@@ -524,7 +524,35 @@ export class ApiEndpointService {
   }
 
   agentSettings(provider: string): ApiEndpointAgentSettings {
-    return this.readState().agents[requireProvider(provider)];
+    const state = this.readState();
+    return this.shownAgent(state, requireProvider(provider));
+  }
+
+  /** 每个 Agent 回给客户端的设置（shownAgent）。 */
+  private shownAgents(
+    state: ApiEndpointState,
+  ): Record<ApiEndpointProvider, ApiEndpointAgentSettings> {
+    return { claude: this.shownAgent(state, "claude"), codex: this.shownAgent(state, "codex") };
+  }
+
+  /**
+   * 回给客户端的设置照 magpie 的 Get：Claude Code 的默认思考档位按 claudeClamp 显示默认模型实际跑的那一档，
+   * Ultra Code 只在默认模型支持 xhigh 时算开（settings.json 里留着的 ultracode 对别的模型不起作用）。存下的设置不改；
+   * Codex 原样（magpie 只在换模型时 settle）。
+   */
+  private shownAgent(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+  ): ApiEndpointAgentSettings {
+    const agent = state.agents[provider];
+    if (provider !== "claude") return agent;
+    const levels = this.claudeLevels(state, agent);
+    const chosen = agent.defaultThinkingOptionId ?? null;
+    const shown = chosen === null ? null : claudeClamp(chosen, levels);
+    const thinking = chosen === null ? {} : { defaultThinkingOptionId: shown ?? chosen };
+    const isUltraCodeShownOff = agent.usesUltraCode === true && !takesUltraCode(levels);
+    const ultraCode = isUltraCodeShownOff ? { usesUltraCode: false } : {};
+    return { ...agent, ...thinking, ...ultraCode };
   }
 
   /** 老客户端眼里当前启用的接口；官方模式、不支持的提供方或文件读不懂时为 null。 */
@@ -815,7 +843,7 @@ export class ApiEndpointService {
           previousModel: pick.previousModel,
         };
       }
-      return { agent: next.agents[supported], connection };
+      return { agent: this.shownAgent(next, supported), connection };
     });
   }
 
@@ -1000,7 +1028,7 @@ export class ApiEndpointService {
           ...state,
           agents: { ...state.agents, [supported]: { ...agent, enabled: false } },
         });
-        return next.agents[supported];
+        return this.shownAgent(next, supported);
       } catch (error) {
         forget.undo();
         throw error;

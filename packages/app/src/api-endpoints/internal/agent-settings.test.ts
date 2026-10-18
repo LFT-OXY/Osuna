@@ -389,13 +389,13 @@ describe("the default thinking on an agent page", () => {
     });
   });
 
-  it("shows a level the model doesn't take as the one it runs at, and no Ultra Code without xhigh", () => {
+  it("shows the level the host reports, and no Ultra Code without xhigh", () => {
     const shown = view({
       endpoints,
       endpointModelGroups: groups,
       enabled: true,
       defaultModelId: "relay-a/claude-opus-4-6",
-      defaultThinkingOptionId: "xhigh",
+      defaultThinkingOptionId: "high",
       usesUltraCode: true,
     });
     expect(shown.defaultThinking).toMatchObject({ value: "high", usesUltraCode: null });

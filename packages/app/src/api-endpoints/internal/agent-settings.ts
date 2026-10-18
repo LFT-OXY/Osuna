@@ -121,8 +121,8 @@ export interface DefaultThinkingOption {
 }
 
 /**
- * 默认思考档位（glossary「默认思考档位」）：显示的档位（null 为没设；默认模型不收设的那档时，照 magpie 的 claudeClamp
- * 显示它实际跑的那一档）、默认模型能选的档位、Ultra Code（null 为这个模型没有），以及每个会话都锁在的档位（主机说的）。
+ * 默认思考档位（glossary「默认思考档位」）：主机报的档位（null 为没设；Claude Code 的主机已按默认模型实际跑的那一档报）、
+ * 默认模型能选的档位、Ultra Code（null 为这个模型没有），以及每个会话都锁在的档位（主机说的）。
  */
 export interface DefaultThinkingView {
   value: string | null;
@@ -133,8 +133,6 @@ export interface DefaultThinkingView {
 
 // 与 Osuna 对话里 Claude 的 Ultra Code 档位同一个 id。
 const ULTRA_CODE_OPTION_ID = "ultracode";
-// 档位由弱到强（Codex 认得的名字，Claude Code 的五档在其中）。
-const LEVEL_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 export interface AgentApiEndpointsView {
   enabled: boolean;
@@ -244,24 +242,11 @@ function defaultThinkingView(input: {
   if (options.length === 0) return null;
   const hasUltraCode = thinkingOptions.some((option) => option.id === ULTRA_CODE_OPTION_ID);
   return {
-    value: input.value === null ? null : clampedLevel(input.value, options),
+    value: input.value,
     options,
     usesUltraCode: hasUltraCode ? input.usesUltraCode : null,
     lockedAt: input.lockedAt,
   };
-}
-
-/** magpie claudeClamp：模型不收的档位显示成它不高于的最高一档，都比它高就取最低的；认不出的照原样。 */
-function clampedLevel(value: string, options: DefaultThinkingOption[]): string {
-  if (options.some((option) => option.id === value)) return value;
-  const at = LEVEL_ORDER.indexOf(value);
-  if (at < 0) return value;
-  let clamped = options[0]?.id ?? value;
-  for (const option of options) {
-    const rank = LEVEL_ORDER.indexOf(option.id);
-    if (rank >= 0 && rank <= at) clamped = option.id;
-  }
-  return clamped;
 }
 
 /** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
