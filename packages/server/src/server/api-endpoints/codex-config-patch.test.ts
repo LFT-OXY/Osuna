@@ -537,6 +537,28 @@ model_provider = "picked"
     expect(restore(moved.text, moved.takeover)).toBe(withKeptTable(MIRROR_CONFIG));
   });
 
+  it("keeps a mirror it pointed at the gateway on record after a profile names it, and Official takes base_url off", () => {
+    const first = applyChatGpt(MIRROR_CONFIG);
+    const named = `${first.text}\n[profiles.p]\nmodel_provider = "custom"\n`;
+    const again = applyChatGpt(named, first.takeover);
+
+    expect(again.takeover.mirrors).toEqual(first.takeover.mirrors);
+    expect(inspect(again.text, again.takeover).modifiedKeys).toEqual([]);
+    expect(toValue(restore(again.text, again.takeover))).toEqual(
+      toValue(withKeptTable(`${MIRROR_CONFIG}\n[profiles.p]\nmodel_provider = "custom"\n`)),
+    );
+  });
+
+  it("drops a mirror from the record once its address is no longer the one it wrote", () => {
+    const first = applyChatGpt(MIRROR_CONFIG);
+    const changed = first.text.replace(
+      `\nbase_url = "${CHATGPT_URL}"`,
+      `\nbase_url = "https://mine.example"`,
+    );
+
+    expect(applyChatGpt(changed, first.takeover).takeover.mirrors).toBeUndefined();
+  });
+
   it("gives the mirror back when the sign-in changes to an API key", () => {
     const chatgpt = applyChatGpt(MIRROR_CONFIG);
     const provider = applyWith({ text: chatgpt.text, takeover: chatgpt.takeover });

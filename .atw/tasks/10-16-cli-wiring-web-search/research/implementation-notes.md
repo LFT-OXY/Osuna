@@ -274,15 +274,12 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 | --- | --- | --- |
 | 怎么认镜像表 | `isCCSwitchMirror`：id 不是 `openai`、不是 magpie 的；`name = "OpenAI"`、`requires_openai_auth = true`；`base_url` 没有或为空，或是 magpie 的 ChatGPT 后端地址且在 `codex.mirrors` 记录里（failover 那条 Osuna 没有） | 同；id 不是 `openai`、不是 `osuna_api_endpoint`，「在记录里」= 接管记录 `mirrors.<id>.written` 与表里的地址相同（端口变了也认得出，跟着改成新地址）。09 号认用户自己的 `model_provider` 用的是同一个判断 |
 | profile 点名的镜像 | `profileNamed`：任何 `[profiles.*]` 的 `model_provider` 点名的表不动 | 同 |
+| 只认哪种写法的表 | `edit.TOMLTables` / `parseTOMLFile`（`internal/edit/toml.go`）只列 `[…]` 表头，内联表、点号键写的服务商不在其中 | 同：只认 `[model_providers.<id>]` 表头写的表（`findOwnTable`） |
 | 什么时候接 | `takeMirrors` 只在 `viaBase()`（经 `openai_base_url` 接着）时 | 只在 ChatGPT 接法；API key、未登录不动 |
 | 写什么 | 表里 `base_url = <magpie 的 ChatGPT 后端>` | `base_url` = 写进 `openai_base_url` 的同一个中转站 ChatGPT 后端地址；表里有空的 `base_url` 就原地换值，没有就插在表的最后一个键后面 |
-| 记录 | `stash` 的 `codex.mirrors`：只记 id | 接管记录 `mirrors.<id> = { original, written }`：照 ADR 0004 记原写法（没有，或 `""`），比 magpie 多记 |
+| 记录 | `stash` 的 `codex.mirrors`：只记 id，只增不减 | 接管记录 `mirrors.<id> = { original, written }`：照 ADR 0004 记原写法（没有，或 `""`），比 magpie 多记。同样只增不减：记过的表地址还是 Osuna 写的就一直记着，之后被 profile 点名、改了名也不去掉（这种表不再改写，端口变了也留在旧地址），关开关照样拿掉；地址已不是 Osuna 写的才去掉 |
 | 撤出 | `giveMirrors`：地址还是 magpie 的才删 `base_url`；被改过的照现在的样子留着 | 同；原来写着 `base_url = ""` 的放回 `""`。切回官方、换成服务商接法（登录方式变了）都走这条 |
-| 被外部改了 | 不查（`Check` 不看镜像表），下次 `takeMirrors` 也不再认它 | 地址不是上次写的（含整张表被删）就算 `model_providers.<id>.base_url` 被改，进提示区「不再经过中转站」（工单要求，比 magpie 多做）；「重新应用」时它不再像镜像就不接、从记录里去掉，提示随之消失 |
-
-### 比 magpie 少做或更严的
-
-- 只认用自己的 `[model_providers.<id>]` 表头写的镜像表；写成内联表（`model_providers = { … }`）或点号键（`[model_providers]` 下 `custom.name = …`）的不动。原因：Osuna 按节点位置拼文本（ADR 0004），这两种写法插不进新键，拼出来要么不合法、要么被 `verify` 整个拒绝，会连带开关打不开；CC Switch 自己写的是表头形式（magpie 的用例 `TestCodexTakesCCSwitchMirrorForItsThreads` 也是）。
+| 被外部改了 | 不查（`Check` 不看镜像表），下次 `takeMirrors` 也不再认它 | 地址不是上次写的（含整张表被删）就算 `model_providers.<id>.base_url` 被改，进提示区「不再经过中转站」（工单要求，比 magpie 多做）；「重新应用」时地址不是 Osuna 写的就从记录里去掉、不再接，提示随之消失 |
 
 ### 不在本张范围
 

@@ -1977,10 +1977,11 @@ function notThroughGatewayIssues(
   filePath: string,
   modifiedKeys: string[],
 ): AgentIssue[] {
-  const keys = modifiedKeys.filter(
-    (key) =>
-      ROUTING_KEYS[provider].includes(key) || (provider === "codex" && isCodexMirrorKey(key)),
-  );
+  const keys = modifiedKeys.filter((key) => {
+    const isRoutingKey = ROUTING_KEYS[provider].includes(key);
+    const isCodexMirrorAddress = provider === "codex" && isCodexMirrorKey(key);
+    return isRoutingKey || isCodexMirrorAddress;
+  });
   if (keys.length === 0) return [];
   const changed = keys.join(", ");
   return [

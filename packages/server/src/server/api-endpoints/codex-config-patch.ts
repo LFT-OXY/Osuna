@@ -172,20 +172,17 @@ export function applyCodexApiEndpoint(input: {
       holdsProviderTable(value, table) &&
       Object.entries(mirrors).every(([id, record]) => mirrorBaseUrl(value, id) === record.written),
   );
-  const hasMirrors = Object.keys(mirrors).length > 0;
-  return (
-    failure ?? {
-      kind: "patched",
-      text: bom + text,
-      takeover: { keys, table, fileCreated, ...(hasMirrors ? { mirrors } : {}) },
-    }
-  );
+  const takeover: CodexConfigTakeover = { keys, table, fileCreated };
+  if (Object.keys(mirrors).length > 0) takeover.mirrors = mirrors;
+  return failure ?? { kind: "patched", text: bom + text, takeover };
 }
 
 /**
  * magpie `takeMirrors`：内置 openai 以外的服务商不跟 openai_base_url 走，记在 CC Switch 镜像表名下的对话会直连 ChatGPT、
  * 用不了接口模型（magpie #1796），所以把镜像表的 base_url 也指到中转站的 ChatGPT 后端。profile 点名的表归用户挑，不动；
- * 只认用自己的 [model_providers.<id>] 表头写的表（CC Switch 的写法），内联表、点号键写的不动。
+ * 只认用自己的 [model_providers.<id>] 表头写的表（magpie 的 edit.TOMLTables 同样只列表头）。
+ * 记录只增不减（magpie 的 `codex.mirrors`）：记过的表地址还是 Osuna 写的就一直记着，后来被 profile 点名、改了名也一样，
+ * 关开关时照样拿掉；地址已不是 Osuna 写的才从记录里去掉。
  */
 function takeMirrors(input: {
   text: string;
@@ -193,11 +190,13 @@ function takeMirrors(input: {
   url: string;
   recorded: Record<string, CodexMirrorRecord>;
   eol: string;
-}): { text: string; mirrors: Record<string, CodexMirrorRecord> } {
+}): MirrorsTaken {
   const { value, url, recorded, eol } = input;
   const program = parse(input.text);
   const named = profileNamedProviders(value);
-  const mirrors: Record<string, CodexMirrorRecord> = {};
+  const mirrors = Object.fromEntries(
+    Object.entries(recorded).filter(([id, record]) => mirrorBaseUrl(value, id) === record.written),
+  );
   let text = input.text;
   for (const id of providerIds(value)) {
     const isTakeable =
@@ -205,14 +204,20 @@ function takeMirrors(input: {
       isCCSwitchMirror({ value, providerId: id, recorded: recorded[id] }) &&
       findOwnTable(program, id) !== null;
     if (!isTakeable) continue;
-    const node = findTableKeyValue(parse(text), id, "base_url");
-    const original: CodexOriginalValue =
-      recorded[id]?.original ??
-      (node ? { present: true, raw: sliceNode(text, node.value) } : { present: false });
+    const node = findTableKeyValue({ program: parse(text), providerId: id, key: "base_url" });
+    const originalInFile: CodexOriginalValue = node
+      ? { present: true, raw: sliceNode(text, node.value) }
+      : { present: false };
+    const original = recorded[id]?.original ?? originalInFile;
     mirrors[id] = { original, written: url };
     text = setTableValue({ text, id, raw: tomlString(url), eol });
   }
   return { text, mirrors };
+}
+
+interface MirrorsTaken {
+  text: string;
+  mirrors: Record<string, CodexMirrorRecord>;
 }
 
 /** magpie `giveMirrors`：拿掉写进镜像表的地址（原来有写法就放回）；之后被改过的表照现在的样子留着。 */
@@ -668,11 +673,12 @@ function findOwnTable(program: AST.TOMLProgram, providerId: string): AST.TOMLTab
   return table ?? null;
 }
 
-function findTableKeyValue(
-  program: AST.TOMLProgram,
-  providerId: string,
-  key: string,
-): AST.TOMLKeyValue | null {
+function findTableKeyValue(input: {
+  program: AST.TOMLProgram;
+  providerId: string;
+  key: string;
+}): AST.TOMLKeyValue | null {
+  const { program, providerId, key } = input;
   for (const node of findOwnTable(program, providerId)?.body ?? []) {
     const [only, ...rest] = node.key.keys;
     if (only && rest.length === 0 && keyName(only) === key) return node;
@@ -684,7 +690,7 @@ function findTableKeyValue(
 function setTableValue(input: { text: string; id: string; raw: string; eol: string }): string {
   const { text, id, raw, eol } = input;
   const program = parse(text);
-  const existing = findTableKeyValue(program, id, "base_url");
+  const existing = findTableKeyValue({ program, providerId: id, key: "base_url" });
   if (existing) {
     const [start, end] = existing.value.range;
     return text.slice(0, start) + raw + text.slice(end);
@@ -697,7 +703,7 @@ function setTableValue(input: { text: string; id: string; raw: string; eol: stri
 }
 
 function removeTableKey(text: string, id: string): string {
-  const node = findTableKeyValue(parse(text), id, "base_url");
+  const node = findTableKeyValue({ program: parse(text), providerId: id, key: "base_url" });
   return node ? removeLine(text, node) : text;
 }
 

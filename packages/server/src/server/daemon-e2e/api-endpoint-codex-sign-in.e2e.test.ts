@@ -363,6 +363,29 @@ ${await table()}`);
     expect(await config()).toBe(await keptConfig(MIRROR_CONFIG));
   });
 
+  test("a mirror a profile names after it was pointed at the gateway still gets base_url taken off on Official", async () => {
+    await writeFile(configPath, MIRROR_CONFIG);
+    await createEndpoint();
+    await setCodex(true);
+    const profile = `\n[profiles.p]\nmodel_provider = "custom"\n`;
+    await writeFile(configPath, (await config()) + profile);
+
+    await restart();
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.error).toBeNull();
+    // profile 点名的表不再改写（照 magpie），但仍记着、不算被外部改过。
+    expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+    await setCodex(false);
+    expect(await config()).toBe(
+      `${MIRROR_CONFIG}\n[profiles.p]\nmodel_provider = "custom"\n\n${await table()}`,
+    );
+  });
+
   test("an API key sign-in leaves CC Switch's OpenAI mirror alone", async () => {
     signIn = "api_key";
     await writeFile(configPath, MIRROR_CONFIG);
