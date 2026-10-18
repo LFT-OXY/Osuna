@@ -10,7 +10,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假环境里 `HTTP_PROXY` 指向本机一个不转发的假代理 → 提示「代理不转发」，修复说明是「环境变量」那一种；`NO_PROXY=127.0.0.1` 时不提示；`NO_PROXY=localhost` 时照样提示（Codex 不认这种写法）。
 - [ ] 纯逻辑用例覆盖代理来源的判断：环境变量大小写、系统代理、`NO_PROXY` 的各种写法、`respect_system_proxy`。
