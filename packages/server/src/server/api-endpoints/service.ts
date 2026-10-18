@@ -285,11 +285,6 @@ interface ApiEndpointFileStatus {
   baseUrl: string | null;
 }
 
-export interface CodexLocation {
-  codexHome: string;
-  env: NodeJS.ProcessEnv;
-}
-
 /**
  * 管理第三方接口，并在总开关打开/关掉时改写 CLI 自身的配置文件，让它指向 daemon 内置中转站（ADR 0004、0007）。
  * 所有变更串行执行：改文件是「读—算—写」，并发的两次切换会互相覆盖接管记录。
@@ -1263,11 +1258,6 @@ export class ApiEndpointService {
       homeDir: this.homeDir,
     });
     return path.join(path.dirname(hooksPath), "config.toml");
-  }
-
-  /** 正被改写的 config.toml 所在的 Codex 目录与定位它用的环境；挪 Codex 对话在同一处找对话文件与状态库。 */
-  resolveCodexLocation(): CodexLocation {
-    return { codexHome: path.dirname(this.resolveCodexConfigPath()), env: this.env };
   }
 
   /**

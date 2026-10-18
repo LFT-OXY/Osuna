@@ -83,7 +83,10 @@ export type CodexConversationMoveOutcome =
     }
   | { kind: "active"; threadId: string }
   | { kind: "not_found"; threadId: string }
-  | { kind: "failed"; threadId: string; message: string };
+  /** 改对话文件时失败：已改的文件已用备份改回。备份那一步之前就失败时没有备份。 */
+  | { kind: "failed"; threadId: string; message: string; backupPath: string | null }
+  /** 对话文件已挪，某个状态库没改成（magpie 同样不回滚文件）。 */
+  | { kind: "state_database_failed"; threadId: string; message: string; backupPath: string };
 
 export interface MoveCodexConversationInput extends CodexConversationMoveTarget {
   threadId: string;
@@ -126,29 +129,47 @@ async function moveNow(input: MoveCodexConversationInput): Promise<CodexConversa
   if (isActive) return { kind: "active", threadId };
   const stateDatabases = await findStateDatabases(input.stateDirectory);
 
+  let backup: Backup | null = null;
+  let changed: string[];
+  let sqlite: Sqlite | null;
+  let from: string | null;
   try {
-    const sqlite = stateDatabases.length > 0 ? requireSqlite() : null;
+    sqlite = stateDatabases.length > 0 ? requireSqlite() : null;
     if (files.some(isPacked)) requireZstd();
-    const from = await firstMetaProvider(files);
-    const backup = await backUp({ backupRoot: input.backupRoot, threadId, from, to, now, files });
-    const changed = await rewriteAll({ files, to, backup });
-    const movedDatabases: string[] = [];
+    from = await firstMetaProvider(files);
+    backup = await backUp({ backupRoot: input.backupRoot, threadId, from, to, now, files });
+    changed = await rewriteAll({ files, to, backup });
+  } catch (error) {
+    return {
+      kind: "failed",
+      threadId,
+      message: errorMessage(error),
+      backupPath: backup?.directory ?? null,
+    };
+  }
+  const movedDatabases: string[] = [];
+  try {
     for (const database of stateDatabases) {
       if (sqlite && moveThreadRow({ sqlite, database, threadId, to })) {
         movedDatabases.push(database);
       }
     }
+  } catch (error) {
     return {
-      kind: "moved",
+      kind: "state_database_failed",
       threadId,
-      from,
-      files: changed,
-      stateDatabases: movedDatabases,
+      message: errorMessage(error),
       backupPath: backup.directory,
     };
-  } catch (error) {
-    return { kind: "failed", threadId, message: errorMessage(error) };
   }
+  return {
+    kind: "moved",
+    threadId,
+    from,
+    files: changed,
+    stateDatabases: movedDatabases,
+    backupPath: backup.directory,
+  };
 }
 
 /** 这段对话的所有对话文件（含压缩过的孪生文件），按路径排好。 */
@@ -576,15 +597,7 @@ function moveThreadRow(input: {
 }): boolean {
   const db = new input.sqlite.DatabaseSync(input.database);
   try {
-    db.exec("PRAGMA busy_timeout = 5000");
-    const columns = TableColumnCountSchema.parse(
-      db
-        .prepare(
-          "SELECT count(*) AS count FROM pragma_table_info('threads') WHERE name IN ('id', 'model_provider')",
-        )
-        .get(),
-    );
-    if (columns.count !== 2) return false;
+    if (!hasThreadsTable(db)) return false;
     const result = db
       .prepare("UPDATE threads SET model_provider = ? WHERE id = ?")
       .run(input.to, input.threadId);
@@ -595,6 +608,23 @@ function moveThreadRow(input: {
     );
   } finally {
     db.close();
+  }
+}
+
+/** magpie 同样把查不了表结构（不是 SQLite 文件、打不开等）当作没有 threads 表。 */
+function hasThreadsTable(db: SqliteDatabase): boolean {
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    const columns = TableColumnCountSchema.safeParse(
+      db
+        .prepare(
+          "SELECT count(*) AS count FROM pragma_table_info('threads') WHERE name IN ('id', 'model_provider')",
+        )
+        .get(),
+    );
+    return columns.success && columns.data.count === 2;
+  } catch {
+    return false;
   }
 }
 

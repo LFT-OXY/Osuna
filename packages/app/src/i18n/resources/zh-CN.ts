@@ -2251,7 +2251,6 @@ export const zhCN: TranslationResources = {
         targetPlaceholder: "选择 Codex 服务商",
         targetEmpty: "没有别的 Codex 服务商",
         sourceBuiltin: "Codex 内置",
-        sourceOsuna: "Osuna 自己的",
         backupNote: "Osuna 会先备份对话文件。挪回 {{from}} 就是撤销。",
         rebuildNote:
           "挪完后续一次这段对话。在那之前 Codex 若重建状态库，会照旧在 {{from}} 下续它。",
@@ -2259,6 +2258,9 @@ export const zhCN: TranslationResources = {
         moving: "正在挪动...",
         moved: "已挪到 {{to}}",
         notMoved: "对话没有挪动",
+        movedPartly: "已挪动，但 Codex 的状态库没有更新",
+        backupAt: "备份：{{path}}",
+        unavailableNoTable: "config.toml 里没有它，挪过去续不上",
         skippedActive: "它在最近一分钟内写过，可能还在运行。等它空闲后再试。",
         skippedNotFound: "Osuna 找不到这段对话的文件。",
         listFailed: "无法列出 Codex 服务商",

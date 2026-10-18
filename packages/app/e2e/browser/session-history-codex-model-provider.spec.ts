@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, type Page } from "../support/fixtures";
@@ -14,9 +14,11 @@ import {
 const threadsFile = path.join(tmpdir(), `session-history-codex-threads-${process.pid}.json`);
 // 挪对话改写的是 CODEX_HOME 里的对话文件：指到临时目录，绝不碰开发者的 ~/.codex。
 const codexHome = mkdtempSync(path.join(tmpdir(), "paseo-e2e-session-history-codex-"));
+// 假 Claude Code 的会话从这里读，用来对照非 Codex 的行。
+const claudeConfigDir = mkdtempSync(path.join(tmpdir(), "paseo-e2e-session-history-claude-"));
 
 test.use({
-  e2eDaemonEnvironment: { CODEX_HOME: codexHome },
+  e2eDaemonEnvironment: { CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeConfigDir },
   e2eDaemonConfig: {
     version: 1,
     agents: {
@@ -26,7 +28,10 @@ test.use({
           command: [process.execPath, path.resolve("e2e/fixtures/session-history-codex.mjs")],
           env: { SESSION_HISTORY_CODEX_THREADS: threadsFile },
         },
-        claude: { enabled: false },
+        claude: {
+          enabled: true,
+          command: [process.execPath, path.resolve("e2e/fixtures/session-history-claude.mjs")],
+        },
         copilot: { enabled: false },
         opencode: { enabled: false },
         pi: { enabled: false },
@@ -40,6 +45,7 @@ test.describe("Session history", () => {
   test.afterEach(async () => {
     await rm(threadsFile, { force: true });
     await rm(path.join(codexHome, "sessions"), { recursive: true, force: true });
+    await rm(path.join(claudeConfigDir, "projects"), { recursive: true, force: true });
   });
 
   test("names the Codex model provider of each Codex conversation", async ({ page }) => {
@@ -112,6 +118,59 @@ test.describe("Session history", () => {
     }
   });
 
+  test("offers the move only on Codex rows", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-move-only-" });
+    await seedGatewayConversation({ repoPath: workspace.repoPath, isIdle: true });
+    await seedClaudeSession(workspace.repoPath);
+
+    try {
+      await openSessionHistoryRow(page, workspace.workspaceId);
+      await page.getByTestId("session-history-scope-host").click();
+      const claudeRow = page.getByTestId(`session-history-row-claude-${CLAUDE_SESSION}`);
+      await expect(claudeRow).toBeVisible({ timeout: 30_000 });
+      await claudeRow.hover();
+      await page.getByTestId(`session-history-kebab-claude:${CLAUDE_SESSION}`).click();
+      await expect(
+        page.getByTestId(`session-history-menu-copy-resume-command-claude:${CLAUDE_SESSION}`),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`session-history-menu-move-codex-model-provider-claude:${CLAUDE_SESSION}`),
+      ).toHaveCount(0);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("keeps a failed move in place with its backup until it is tried again", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-move-failed-" });
+    const rollout = await seedGatewayConversation({ repoPath: workspace.repoPath, isIdle: true });
+    const before = await readFile(rollout, "utf8");
+    // 对话文件所在目录不可写：旁边的临时文件建不出来，挪动失败、文件不变。
+    await chmod(path.dirname(rollout), 0o555);
+
+    try {
+      const row = await openSessionHistoryRow(page, workspace.workspaceId);
+      const sheet = await openMoveSheet({ page, row });
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+
+      const error = sheet.getByTestId("move-codex-conversation-error");
+      await expect(error).toContainText("Conversation not moved", { timeout: 30_000 });
+      await expect(error).toContainText("Backup: ");
+      await expect(error).toContainText("codex-model-provider-moves");
+      expect(await readFile(rollout, "utf8")).toBe(before);
+
+      await chmod(path.dirname(rollout), 0o755);
+      await page.getByTestId("move-codex-conversation-confirm").click();
+      await expect(sheet).toBeHidden({ timeout: 30_000 });
+      expect(await readFile(rollout, "utf8")).toContain('"model_provider":"openai"');
+    } finally {
+      await chmod(path.dirname(rollout), 0o755);
+      await workspace.cleanup();
+    }
+  });
+
   test("says why a Codex conversation written just now was not moved", async ({ page }) => {
     const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-move-active-" });
     const rollout = await seedGatewayConversation({ repoPath: workspace.repoPath, isIdle: false });
@@ -136,6 +195,22 @@ test.describe("Session history", () => {
 });
 
 const GATEWAY_THREAD = "thread-gateway";
+const CLAUDE_SESSION = "5f0c2d3e-0000-4000-8000-00000000c1a0";
+
+/** 一段 Claude Code 会话：假 Claude 的 CLAUDE_CONFIG_DIR/projects 下的一个会话文件。 */
+async function seedClaudeSession(repoPath: string): Promise<void> {
+  const directory = path.join(claudeConfigDir, "projects", "-session-history-claude");
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    path.join(directory, `${CLAUDE_SESSION}.jsonl`),
+    `${JSON.stringify({
+      type: "custom-title",
+      customTitle: "Tidy the README",
+      sessionId: CLAUDE_SESSION,
+      cwd: repoPath,
+    })}\n`,
+  );
+}
 
 /** 一段记在中转站服务商名下的对话：对话文件放进临时 CODEX_HOME，假 Codex 列表时读它。 */
 async function seedGatewayConversation(input: {

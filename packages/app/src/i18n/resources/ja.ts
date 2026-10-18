@@ -2281,7 +2281,6 @@ export const ja: TranslationResources = {
         targetPlaceholder: "Codex モデルプロバイダーを選択",
         targetEmpty: "ほかの Codex モデルプロバイダーはありません",
         sourceBuiltin: "Codex に内蔵",
-        sourceOsuna: "Osuna 独自",
         backupNote:
           "Osuna は先に会話ファイルをバックアップします。{{from}} に戻すと移動を取り消せます。",
         rebuildNote:
@@ -2290,6 +2289,9 @@ export const ja: TranslationResources = {
         moving: "移動中...",
         moved: "{{to}} に移動しました",
         notMoved: "会話は移動されていません",
+        movedPartly: "移動しましたが、Codex の状態データベースは更新されていません",
+        backupAt: "バックアップ: {{path}}",
+        unavailableNoTable: "config.toml にないため再開できません",
         skippedActive:
           "直近 1 分以内に書き込まれており、まだ実行中の可能性があります。アイドルになってから再試行してください。",
         skippedNotFound: "Osuna はこの会話のファイルを見つけられません。",

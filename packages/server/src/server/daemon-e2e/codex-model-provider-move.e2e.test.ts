@@ -20,8 +20,15 @@ import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo
 
 /*
  * 挪 Codex 对话（ADR 0011）：CODEX_HOME 是临时目录里手写的对话文件与状态库，绝不碰真实的 ~/.codex。
- * 期望值都是手写的整行文本，不按实现的改法去推。
+ * 对话在 Codex 提供方自己的 CODEX_HOME 里（提供方设置的环境变量），与第三方接口改写的那份 config.toml
+ * 所在目录故意不同：挪动必须在会话历史列出对话的那一处进行。期望值都是手写的整行文本，不按实现的改法去推。
  */
+
+// 假 Codex：只答 --version；挪动不起 Codex，提供方仍需要一个命令，免得去找真的 codex。
+const FAKE_CODEX_SOURCE = String.raw`
+if (process.argv[2] === "--version") process.stdout.write("codex-cli 0.163.0\n");
+process.exit(0);
+`;
 
 // @types/node 还停在 20：zstd 与 node:sqlite 都没有类型。
 interface ZlibWithZstd {
@@ -112,19 +119,32 @@ describe.skipIf(process.platform === "win32")(
   () => {
     let tempRoot: string;
     let codexHome: string;
+    let gatewayCodexHome: string;
     let daemon: TestPaseoDaemon | undefined;
     let client: DaemonClient | undefined;
 
     beforeEach(async () => {
       tempRoot = await mkdtemp(path.join(tmpdir(), "codex-model-provider-move-"));
-      codexHome = path.join(tempRoot, "codex-home");
+      codexHome = path.join(tempRoot, "provider-codex-home");
+      gatewayCodexHome = path.join(tempRoot, "gateway-codex-home");
       await mkdir(codexHome, { recursive: true });
+      await mkdir(gatewayCodexHome, { recursive: true });
+      const fakeCodex = path.join(tempRoot, "bin", "codex");
+      await mkdir(path.dirname(fakeCodex), { recursive: true });
+      await writeFile(fakeCodex, `#!${process.execPath}\n${FAKE_CODEX_SOURCE}`);
+      await chmod(fakeCodex, 0o755);
       daemon = await createTestPaseoDaemon({
         agentClients: {},
+        providerOverrides: {
+          claude: { enabled: false },
+          pi: { enabled: false },
+          omp: { enabled: false },
+          codex: { command: [fakeCodex], env: { CODEX_HOME: codexHome } },
+        },
         apiEndpoints: {
           env: {
             CLAUDE_CONFIG_DIR: path.join(tempRoot, "claude-config"),
-            CODEX_HOME: codexHome,
+            CODEX_HOME: gatewayCodexHome,
           },
           homeDir: tempRoot,
         },
@@ -176,6 +196,7 @@ describe.skipIf(process.platform === "win32")(
       const packedTime = await mtimeMs(packedPath());
 
       const result = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
         threadIds: [THREAD_A],
         to: "osuna_api_endpoint",
       });
@@ -226,11 +247,13 @@ describe.skipIf(process.platform === "win32")(
       const packedBefore = await readFile(packedPath());
 
       const there = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
         threadIds: [THREAD_A],
         to: "osuna_api_endpoint",
       });
       expect(there.moved).toHaveLength(1);
       const back = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
         threadIds: [THREAD_A],
         to: "openai",
       });
@@ -255,6 +278,7 @@ describe.skipIf(process.platform === "win32")(
       const plainBefore = await readFile(plainPath());
 
       const result = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
         threadIds: [THREAD_A],
         to: "osuna_api_endpoint",
       });
@@ -288,13 +312,19 @@ describe.skipIf(process.platform === "win32")(
       await chmod(secondDir, 0o555);
       try {
         const result = await client!.codexSessionMoveModelProvider({
+          providerId: "codex",
           threadIds: [THREAD_C],
           to: "osuna_api_endpoint",
         });
 
         expect(result.moved).toEqual([]);
         expect(result.skipped).toEqual([
-          { threadId: THREAD_C, reason: "failed", message: expect.any(String) },
+          {
+            threadId: THREAD_C,
+            reason: "failed",
+            message: expect.any(String),
+            backupPath: expect.stringContaining(daemon!.paseoHome),
+          },
         ]);
         expect((await readFile(first)).equals(firstBefore)).toBe(true);
         expectSameTime({ actual: await mtimeMs(first), expected: firstTime });
@@ -305,7 +335,12 @@ describe.skipIf(process.platform === "win32")(
       }
     }, 60_000);
 
-    test("lists the providers a conversation can go to", async () => {
+    test("lists the providers a conversation can go to from the Codex provider's own config", async () => {
+      // 第三方接口那份 config.toml 里有 Osuna 的表，但对话所在的 CODEX_HOME 里没有：列的是后者。
+      await writeFile(
+        path.join(gatewayCodexHome, "config.toml"),
+        '[model_providers.osuna_api_endpoint]\nname = "Osuna"\n[model_providers.elsewhere]\n',
+      );
       await writeFile(
         path.join(codexHome, "config.toml"),
         [
@@ -324,15 +359,93 @@ describe.skipIf(process.platform === "win32")(
         ].join("\n"),
       );
 
-      const result = await client!.codexSessionListModelProviders();
+      const result = await client!.codexSessionListModelProviders("codex");
 
       expect(result.error).toBeNull();
       expect(result.modelProviders).toEqual([
         { id: "openai", source: "builtin" },
-        { id: "osuna_api_endpoint", source: "osuna", name: "Osuna" },
+        { id: "osuna_api_endpoint", source: "osuna", name: "Osuna", unavailableReason: "no_table" },
         { id: "cc", source: "config", name: "CC Switch" },
         { id: "bare", source: "config" },
       ]);
+    }, 60_000);
+
+    test("offers Osuna's own provider once its table is in config.toml", async () => {
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        '[model_providers.osuna_api_endpoint]\nname = "Osuna"\nbase_url = "http://127.0.0.1:1/v1"\n',
+      );
+
+      const result = await client!.codexSessionListModelProviders("codex");
+
+      expect(result.modelProviders).toEqual([
+        { id: "openai", source: "builtin" },
+        { id: "osuna_api_endpoint", source: "osuna", name: "Osuna" },
+      ]);
+    }, 60_000);
+
+    test("still moves when config.toml can't be read and skips a state database it can't inspect", async () => {
+      await seedConversationA();
+      await writeFile(path.join(codexHome, "config.toml"), "this is = = not toml [[[");
+      // 不是 SQLite 文件：查不了表结构，magpie 当作没有 threads 表跳过。
+      await writeFile(path.join(codexHome, "state_9.sqlite"), "not a database");
+
+      const result = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
+        threadIds: [THREAD_A],
+        to: "osuna_api_endpoint",
+      });
+
+      expect(result.error).toBeNull();
+      expect(result.skipped).toEqual([]);
+      expect(result.moved.map((entry) => entry.stateDatabases)).toEqual([[stateDbPath()]]);
+      expect(await readFile(plainPath(), "utf8")).toContain(
+        '"model_provider":"osuna_api_endpoint"',
+      );
+    }, 60_000);
+
+    test("says the files moved when a state database refuses the change, and where the backup is", async () => {
+      await seedConversationA();
+      const db = new sqlite.DatabaseSync(stateDbPath());
+      db.exec(
+        "CREATE TRIGGER keep_provider BEFORE UPDATE ON threads BEGIN SELECT RAISE(ABORT, 'held by Codex'); END",
+      );
+      db.close();
+
+      const result = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
+        threadIds: [THREAD_A],
+        to: "osuna_api_endpoint",
+      });
+
+      expect(result.moved).toEqual([]);
+      expect(result.skipped).toEqual([
+        {
+          threadId: THREAD_A,
+          reason: "state_database_failed",
+          message: expect.stringContaining("held by Codex"),
+          backupPath: expect.stringContaining(daemon!.paseoHome),
+        },
+      ]);
+      expect(await readFile(plainPath(), "utf8")).toContain(
+        '"model_provider":"osuna_api_endpoint"',
+      );
+      expect(readThreadProviders(stateDbPath())[THREAD_A]).toBe("openai");
+      const backupPath = result.skipped[0]!.backupPath!;
+      expect(JSON.parse(await readFile(path.join(backupPath, "move.json"), "utf8")).id).toBe(
+        THREAD_A,
+      );
+    }, 60_000);
+
+    test("refuses a provider that is not a Codex provider", async () => {
+      const result = await client!.codexSessionMoveModelProvider({
+        providerId: "claude",
+        threadIds: [THREAD_A],
+        to: "openai",
+      });
+
+      expect(result.error?.code).toBe("invalid_input");
+      expect(result.moved).toEqual([]);
     }, 60_000);
   },
 );

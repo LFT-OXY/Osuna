@@ -91,7 +91,12 @@ export function SessionHistoryView({
   const movingConversation = useMemo(
     () =>
       movingRow?.codexModelProvider
-        ? { serverId, threadId: movingRow.providerHandleId, from: movingRow.codexModelProvider }
+        ? {
+            serverId,
+            providerId: movingRow.providerId,
+            threadId: movingRow.providerHandleId,
+            from: movingRow.codexModelProvider,
+          }
         : null,
     [movingRow, serverId],
   );

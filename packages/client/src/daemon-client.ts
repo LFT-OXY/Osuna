@@ -6418,13 +6418,14 @@ export class DaemonClient {
     });
   }
 
-  /** 能把 Codex 对话挪去的 Codex 服务商：config.toml 里的表、内置 openai、Osuna 自己的。 */
+  /** 能把这个 Codex 系提供方的对话挪去的 Codex 服务商：config.toml 里的表、内置 openai、Osuna 自己的。 */
   async codexSessionListModelProviders(
+    providerId: string,
     requestId?: string,
   ): Promise<CodexSessionListModelProvidersPayload> {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
-      message: { type: "provider.codex.session.list_model_providers.request" },
+      message: { type: "provider.codex.session.list_model_providers.request", providerId },
     });
   }
 

@@ -1005,7 +1005,8 @@ export class Session {
     });
     this.codexConversationSession = createCodexConversationSession({
       host: { emit: (msg) => this.emit(msg) },
-      apiEndpointService,
+      isAvailable: Boolean(apiEndpointService),
+      resolveLocation: (providerId) => this.agentManager.resolveCodexLocation(providerId),
       paseoHome: this.paseoHome,
       logger: this.sessionLogger,
     });
@@ -3071,7 +3072,7 @@ export class Session {
       case "provider.codex.session.list_model_providers.request":
       case "provider.codex.session.move_model_provider.request":
         if (!this.codexConversationSession) {
-          // 挪 Codex 对话的 Codex 目录跟着第三方接口服务走；没有它的 daemon 也不声明 apiEndpointCliWiring。
+          // 挪 Codex 对话与第三方接口服务同在；没有它的 daemon 也不声明 apiEndpointCliWiring。
           this.emit({
             type: "rpc_error",
             payload: {

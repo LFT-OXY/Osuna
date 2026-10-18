@@ -10,7 +10,7 @@ The facts behind this are in task `10-16-cli-wiring-web-search`, `research/codex
 - **Leave active conversations alone.** A conversation whose file was written in the last minute is not moved, and the result says which ones were skipped.
 - **Back up first.** Before any change, Osuna copies each conversation file, compressed twins included, into a backup folder of its own, with a record of the conversation id, the old and new provider, the time, and which copy belongs to which file. The backup is for manual recovery only.
 - **Change the provider and nothing else.** In each file, every session-start entry that names a provider gets the new one; every other byte stays. A compressed file is compressed again. Each file is written beside the original, flushed, given back its modification time, and renamed over it. Then the conversation's row in each of Codex's state databases gets the new provider.
-- **Roll back on failure.** If any step fails, the files already changed are restored from the backup.
+- **Roll back a failed file step.** If changing a conversation file fails, the files already changed are restored from the backup. If a state database then refuses the change, the files stay moved, as in magpie, and the result says so and names the backup.
 - **Undo is moving it back.** Moving a conversation back to the provider it had restores it, since entries without a provider were never changed.
 
 ## Considered Options

@@ -483,11 +483,15 @@ export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession
 // 超过 lint 的复杂度上限，而漏掉任何一个都不报类型错，功能只是静默消失。
 function forwardOsunaClientMethods(
   inner: AgentClient,
-): Pick<AgentClient, "discoverCommands" | "resolveInstalledVersion" | "resolveCliLaunch"> {
+): Pick<
+  AgentClient,
+  "discoverCommands" | "resolveInstalledVersion" | "resolveCliLaunch" | "codexLocation"
+> {
   return {
     discoverCommands: inner.discoverCommands?.bind(inner),
     resolveInstalledVersion: inner.resolveInstalledVersion?.bind(inner),
     resolveCliLaunch: inner.resolveCliLaunch?.bind(inner),
+    codexLocation: inner.codexLocation?.bind(inner),
   };
 }
 

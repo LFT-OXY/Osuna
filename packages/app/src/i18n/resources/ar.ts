@@ -2260,7 +2260,6 @@ export const ar: TranslationResources = {
         targetPlaceholder: "اختر مزوّد نماذج Codex",
         targetEmpty: "لا يوجد مزوّد نماذج Codex آخر",
         sourceBuiltin: "مدمج في Codex",
-        sourceOsuna: "الخاص بـ Osuna",
         backupNote:
           "يأخذ Osuna نسخة احتياطية من ملفات المحادثة أولاً. نقلها مرة أخرى إلى {{from}} يلغي النقل.",
         rebuildNote:
@@ -2269,6 +2268,9 @@ export const ar: TranslationResources = {
         moving: "جارٍ النقل...",
         moved: "نُقلت إلى {{to}}",
         notMoved: "لم تُنقل المحادثة",
+        movedPartly: "نُقلت، لكن قاعدة بيانات حالة Codex لم تُحدَّث",
+        backupAt: "النسخة الاحتياطية: {{path}}",
+        unavailableNoTable: "غير موجود في config.toml؛ لا يمكن المتابعة هناك",
         skippedActive:
           "كُتب فيها خلال الدقيقة الأخيرة وقد تكون لا تزال قيد التشغيل. حاول مرة أخرى عندما تصبح خاملة.",
         skippedNotFound: "لا يجد Osuna ملفات هذه المحادثة.",

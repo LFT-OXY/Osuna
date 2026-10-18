@@ -55,6 +55,7 @@ import {
   type AgentTimelineItem,
   type AgentUsage,
   type AgentRuntimeInfo,
+  type CodexLocation,
   type ImportedTimelineEntry,
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
@@ -1203,6 +1204,11 @@ export class AgentManager {
    * 内置 Codex 列出所有 Codex 服务商名下的对话，于是派生自 Codex 的自定义提供方开的对话会被两边都列出；
    * 这种对话归自定义提供方（它带着自己的设置续），内置 Codex 那一条去掉。别的提供方不受影响。
    */
+  /** 这个提供方是 Codex 系时它的 CODEX_HOME（挪 Codex 对话在这里找文件）；别的提供方为 null。 */
+  resolveCodexLocation(provider: AgentProvider): CodexLocation | null {
+    return this.clients.get(provider)?.codexLocation?.() ?? null;
+  }
+
   private dropStockCodexRowsCustomCodexOwns(
     sessions: ManagedImportableProviderSession[],
   ): ManagedImportableProviderSession[] {

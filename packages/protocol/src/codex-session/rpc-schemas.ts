@@ -15,17 +15,21 @@ export type CodexSessionError = z.infer<typeof CodexSessionErrorSchema>;
 /**
  * 能挪去的 Codex 服务商。`source`：builtin（内置 openai）、osuna（Osuna 自己的服务商）、
  * config（config.toml 里 [model_providers.<id>] 的表）。`name` 是表里写的 name，没写就没有。
+ * `unavailableReason` 有值时不能选：no_table 表示 config.toml 里没有这张表，挪过去的对话续不上。
  */
 export const CodexSessionModelProviderSchema = z.object({
   id: z.string(),
   source: z.string(),
   name: z.string().optional(),
+  unavailableReason: z.string().optional(),
 });
 export type CodexSessionModelProvider = z.infer<typeof CodexSessionModelProviderSchema>;
 
 export const CodexSessionListModelProvidersRequestSchema = z.object({
   type: z.literal("provider.codex.session.list_model_providers.request"),
   requestId: z.string(),
+  // 会话历史里这一行的提供方（codex 或派生自它的自定义提供方）：读的是它的 CODEX_HOME 里的 config.toml。
+  providerId: z.string(),
 });
 export type CodexSessionListModelProvidersRequest = z.infer<
   typeof CodexSessionListModelProvidersRequestSchema
@@ -46,6 +50,8 @@ export type CodexSessionListModelProvidersResponse = z.infer<
 export const CodexSessionMoveModelProviderRequestSchema = z.object({
   type: z.literal("provider.codex.session.move_model_provider.request"),
   requestId: z.string(),
+  // 会话历史列出这些对话的提供方：在它的 CODEX_HOME 里找对话文件与状态库。
+  providerId: z.string(),
   threadIds: z.array(z.string()),
   to: z.string(),
 });
@@ -64,13 +70,15 @@ export const CodexSessionMovedSchema = z.object({
 export type CodexSessionMoved = z.infer<typeof CodexSessionMovedSchema>;
 
 /**
- * 没挪的一段对话。`reason`：active（一分钟内写过）、not_found（找不到对话文件）、
- * failed（中途失败，已改的文件已用备份改回；`message` 是 daemon 的原话）。
+ * 没挪完的一段对话。`reason`：active（一分钟内写过，什么都没动）、not_found（找不到对话文件）、
+ * failed（改对话文件时失败，已改的文件已用备份改回）、state_database_failed（对话文件已挪，
+ * 某个状态库没改成，照 magpie 不回滚）。`message` 是 daemon 的原话；做过备份时带 `backupPath`。
  */
 export const CodexSessionMoveSkippedSchema = z.object({
   threadId: z.string(),
   reason: z.string(),
   message: z.string(),
+  backupPath: z.string().optional(),
 });
 export type CodexSessionMoveSkipped = z.infer<typeof CodexSessionMoveSkippedSchema>;
 

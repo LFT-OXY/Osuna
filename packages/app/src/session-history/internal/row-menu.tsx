@@ -29,7 +29,10 @@ const ThemedArrowRightLeft = withUnistyles(ArrowRightLeft);
 const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapping} />;
 const importLeadingIcon = <ThemedImport size={14} uniProps={foregroundMutedColorMapping} />;
 const moveLeadingIcon = <ThemedArrowRightLeft size={14} uniProps={foregroundMutedColorMapping} />;
+// 「Move to another Codex model provider…」在英文下要约 316pt 才不被截断（图标、左右内边距加文字），取 320。
 const MENU_WIDTH = 320;
+// 行有两行字时 kebab 在行中间：菜单往下多让一些，不压住第一行的第二行字。
+const MENU_OFFSET = 12;
 
 function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
   return (
@@ -138,6 +141,7 @@ export function SessionHistoryRowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
+        offset={MENU_OFFSET}
         width={MENU_WIDTH}
         sheetTitle={t("panels.sessionHistory.row.menu")}
       >

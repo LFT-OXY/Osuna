@@ -31,6 +31,7 @@ import {
   type AgentTimelineItem,
   type ToolCallTimelineItem,
   type AgentUsage,
+  type CodexLocation,
   type FetchCatalogOptions,
   type ImportableProviderSession,
   type ImportProviderSessionContext,
@@ -7252,6 +7253,12 @@ export class CodexAppServerAgentClient implements AgentClient {
       codexHome: resolveCodexHomeDir(buildCodexAppServerEnv(this.runtimeSettings, launchEnv)),
       customCodexConfig: this.customProviderConfig(),
     };
+  }
+
+  /** 列会话的 app-server 用的同一个 CODEX_HOME：会话历史列出的对话就在这里。 */
+  codexLocation(): CodexLocation {
+    const env = buildCodexAppServerEnv(this.runtimeSettings);
+    return { codexHome: resolveCodexHomeDir(env), env };
   }
 
   private customProviderConfig(): CodexCustomProviderConfig | null {

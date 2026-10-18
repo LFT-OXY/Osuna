@@ -554,6 +554,11 @@ export interface AgentSlashCommand {
   kind?: AgentSlashCommandKind;
 }
 
+export interface CodexLocation {
+  codexHome: string;
+  env: NodeJS.ProcessEnv;
+}
+
 export interface ListImportableSessionsOptions {
   providerOptions?: ProviderOptions;
   limit?: number;
@@ -832,6 +837,8 @@ export interface AgentClient {
   listImportableSessions?(
     options?: ListImportableSessionsOptions,
   ): Promise<ImportableProviderSession[]>;
+  /** Codex 系提供方：它的对话文件、状态库与 config.toml 所在的 CODEX_HOME，以及它运行时的环境。 */
+  codexLocation?(): CodexLocation;
   importSession?(
     input: ImportProviderSessionInput,
     context: ImportProviderSessionContext,

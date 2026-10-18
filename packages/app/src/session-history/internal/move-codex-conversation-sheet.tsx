@@ -4,14 +4,19 @@ import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { CodexSessionModelProvider } from "@getpaseo/protocol/codex-session/rpc-schemas";
+import type {
+  CodexSessionModelProvider,
+  CodexSessionMoveSkipped,
+} from "@getpaseo/protocol/codex-session/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ComboboxItem } from "@/components/ui/combobox";
 import {
   SelectField,
   type SelectFieldDisplay,
   type SelectFieldOption,
+  type SelectFieldRenderOptionInput,
 } from "@/components/ui/select-field";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -25,16 +30,24 @@ export type MoveCodexConversationClient = Pick<
 /** 要挪的那段对话：会话历史的一行。 */
 export interface MoveCodexConversationTarget {
   serverId: string;
+  /** 会话历史列出它的提供方（codex 或派生自它的自定义提供方）：daemon 在它的 CODEX_HOME 里挪。 */
+  providerId: string;
   threadId: string;
   /** 它现在记在哪个 Codex 服务商名下。 */
   from: string;
 }
 
-/** 没挪成：`skipped` 是 daemon 跳过了它（原因已翻译），`failed` 是请求或改写失败（daemon 原话）。 */
+/**
+ * 没挪完。`skipped`：daemon 跳过了它，什么都没动（原因已翻译）；`failed`：请求或改对话文件失败，
+ * 已改的文件已改回；`partly`：对话文件已挪、状态库没改成。后两种是 daemon 原话，做过备份时带备份目录。
+ */
+type MoveNotDoneKind = "skipped" | "failed" | "partly";
+
 class MoveNotDoneError extends Error {
   constructor(
     message: string,
-    readonly kind: "skipped" | "failed",
+    readonly kind: MoveNotDoneKind,
+    readonly backupPath: string | null,
   ) {
     super(message);
     this.name = "MoveNotDoneError";
@@ -64,12 +77,12 @@ export function MoveCodexConversationSheet({
     null,
   );
   const providersQuery = useFetchQuery({
-    queryKey: ["codex-session-model-providers", conversation.serverId],
+    queryKey: ["codex-session-model-providers", conversation.serverId, conversation.providerId],
     dataShape: "list",
     staleTimeMs: 0,
     retry: false,
     queryFn: async () => {
-      const payload = await client.codexSessionListModelProviders();
+      const payload = await client.codexSessionListModelProviders(conversation.providerId);
       if (payload.error) throw new Error(payload.error.message);
       return payload.modelProviders;
     },
@@ -77,33 +90,64 @@ export function MoveCodexConversationSheet({
   const moveMutation = useMutation({
     mutationFn: async (to: string) => {
       const payload = await client.codexSessionMoveModelProvider({
+        providerId: conversation.providerId,
         threadIds: [conversation.threadId],
         to,
       });
-      if (payload.error) throw new MoveNotDoneError(payload.error.message, "failed");
+      if (payload.error) throw new MoveNotDoneError(payload.error.message, "failed", null);
       const skip = payload.skipped[0];
-      if (skip) throw skippedError({ reason: skip.reason, message: skip.message, t });
+      if (skip) throw notDoneError({ skip, t });
       return to;
     },
     onSuccess: onMoved,
   });
 
+  const targets = useMemo(() => {
+    const others = (providersQuery.data ?? []).filter((p) => p.id !== conversation.from);
+    // 不能选的放最后：下拉打开时第一行是高亮的，不该落在一个点不了的选项上。
+    return [
+      ...others.filter((p) => !p.unavailableReason),
+      ...others.filter((p) => p.unavailableReason),
+    ];
+  }, [conversation.from, providersQuery.data]);
   const options = useMemo<SelectFieldOption<string>[]>(
     () =>
-      (providersQuery.data ?? [])
-        .filter((provider) => provider.id !== conversation.from)
-        .map((provider) => ({
-          id: provider.id,
-          value: provider.id,
-          label: provider.id,
-          description: describeProvider({ provider, t }),
-          testID: `move-codex-conversation-target-${provider.id}`,
-        })),
-    [conversation.from, providersQuery.data, t],
+      targets.map((provider) => ({
+        id: provider.id,
+        value: provider.id,
+        label: provider.name ?? provider.id,
+        description: describeProvider({ provider, t }),
+        testID: `move-codex-conversation-target-${provider.id}`,
+      })),
+    [targets, t],
   );
-  const handleChange = useCallback((id: string, display: SelectFieldDisplay) => {
-    setSelected({ id, display });
-  }, []);
+  const unavailableIds = useMemo(
+    () => new Set(targets.filter((p) => p.unavailableReason).map((p) => p.id)),
+    [targets],
+  );
+  const handleChange = useCallback(
+    (id: string, display: SelectFieldDisplay) => {
+      if (!unavailableIds.has(id)) setSelected({ id, display });
+    },
+    [unavailableIds],
+  );
+  const renderOption = useCallback(
+    ({ option, selected: isSelected, active, onPress }: SelectFieldRenderOptionInput<string>) => {
+      const isUnavailable = unavailableIds.has(option.id);
+      return (
+        <ComboboxItem
+          testID={option.testID}
+          label={option.label}
+          description={option.description}
+          selected={isSelected}
+          active={active}
+          disabled={isUnavailable}
+          onPress={onPress}
+        />
+      );
+    },
+    [unavailableIds],
+  );
   const isMoving = moveMutation.isPending;
   const selectedId = selected?.id ?? null;
   const { mutate } = moveMutation;
@@ -144,7 +188,15 @@ export function MoveCodexConversationSheet({
   );
 
   const moveError = moveMutation.error;
-  const isSkipped = moveError instanceof MoveNotDoneError && moveError.kind === "skipped";
+  const notDone = moveError instanceof MoveNotDoneError ? moveError : null;
+  const errorTitle =
+    notDone?.kind === "partly"
+      ? t("panels.sessionHistory.move.movedPartly")
+      : t("panels.sessionHistory.move.notMoved");
+  const errorVariant = notDone?.kind === "failed" || !notDone ? "error" : "warning";
+  const errorBackup = notDone?.backupPath
+    ? `\n${t("panels.sessionHistory.move.backupAt", { path: notDone.backupPath })}`
+    : "";
 
   return (
     <AdaptiveModalSheet
@@ -164,6 +216,7 @@ export function MoveCodexConversationSheet({
           onChange={handleChange}
           placeholder={t("panels.sessionHistory.move.targetPlaceholder")}
           emptyText={t("panels.sessionHistory.move.targetEmpty")}
+          renderOption={renderOption}
           loading={providersQuery.isPending}
           disabled={isMoving}
           size={isCompact ? "md" : "sm"}
@@ -192,9 +245,9 @@ export function MoveCodexConversationSheet({
         {moveError ? (
           <Alert
             size="sm"
-            variant={isSkipped ? "warning" : "error"}
-            title={t("panels.sessionHistory.move.notMoved")}
-            description={moveError.message}
+            variant={errorVariant}
+            title={errorTitle}
+            description={`${moveError.message}${errorBackup}`}
             testID="move-codex-conversation-error"
           />
         ) : null}
@@ -203,29 +256,35 @@ export function MoveCodexConversationSheet({
   );
 }
 
-function skippedError(input: {
-  reason: string;
-  message: string;
+function notDoneError(input: {
+  skip: CodexSessionMoveSkipped;
   t: (key: string) => string;
 }): MoveNotDoneError {
-  const { reason, message, t } = input;
-  if (reason === "active") {
-    return new MoveNotDoneError(t("panels.sessionHistory.move.skippedActive"), "skipped");
+  const { skip, t } = input;
+  const backupPath = skip.backupPath ?? null;
+  switch (skip.reason) {
+    case "active":
+      return new MoveNotDoneError(t("panels.sessionHistory.move.skippedActive"), "skipped", null);
+    case "not_found":
+      return new MoveNotDoneError(t("panels.sessionHistory.move.skippedNotFound"), "skipped", null);
+    case "state_database_failed":
+      return new MoveNotDoneError(skip.message, "partly", backupPath);
+    default:
+      return new MoveNotDoneError(skip.message, "failed", backupPath);
   }
-  if (reason === "not_found") {
-    return new MoveNotDoneError(t("panels.sessionHistory.move.skippedNotFound"), "skipped");
-  }
-  return new MoveNotDoneError(message, "failed");
 }
 
+/** 名字在前，id 在后；内置 openai 没有名字，说明它是 Codex 内置的。不能选的写明原因。 */
 function describeProvider(input: {
   provider: CodexSessionModelProvider;
-  t: (key: string) => string;
+  t: (key: string, options?: Record<string, string>) => string;
 }): string | undefined {
   const { provider, t } = input;
+  if (provider.unavailableReason) {
+    return t("panels.sessionHistory.move.unavailableNoTable");
+  }
   if (provider.source === "builtin") return t("panels.sessionHistory.move.sourceBuiltin");
-  if (provider.source === "osuna") return t("panels.sessionHistory.move.sourceOsuna");
-  return provider.name;
+  return provider.name ? provider.id : undefined;
 }
 
 const styles = StyleSheet.create((theme) => ({

@@ -7,9 +7,8 @@ import type {
   CodexSessionMoveSkipped,
 } from "@getpaseo/protocol/codex-session/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
-import type { ApiEndpointService, CodexLocation } from "../../api-endpoints/service.js";
+import type { CodexLocation } from "../../agent/agent-sdk-types.js";
 import {
-  CodexConfigUnreadableError,
   readCodexConversationSettings,
   type CodexConversationSettings,
 } from "../../codex-conversations/model-providers.js";
@@ -41,36 +40,40 @@ const SKIP_MESSAGES = {
   not_found: "No Codex conversation file has this id",
 } as const;
 
-/** 挪 Codex 对话的 Codex 目录跟着第三方接口服务走：daemon 没有这项服务时为 null。 */
-export function createCodexConversationSession(options: {
-  host: CodexConversationSessionHost;
-  apiEndpointService: ApiEndpointService | undefined;
-  paseoHome: string;
-  logger: pino.Logger;
-}): CodexConversationSession | null {
-  const { apiEndpointService } = options;
-  if (!apiEndpointService) return null;
-  return new CodexConversationSession({
-    host: options.host,
-    resolveLocation: () => apiEndpointService.resolveCodexLocation(),
-    paseoHome: options.paseoHome,
-    logger: options.logger,
-  });
+class NotACodexProviderError extends Error {
+  constructor(readonly providerId: string) {
+    super(`"${providerId}" is not a Codex provider`);
+    this.name = "NotACodexProviderError";
+  }
 }
 
 /**
- * 把 Codex 对话挪到另一个 Codex 服务商（ADR 0011）。Codex 目录与第三方接口改写的 config.toml 是同一处
- * （`resolveLocation`），所以列出的「Osuna 自己的服务商」就是那里的表。
+ * 挪 Codex 对话与 apiEndpointCliWiring 能力位同在：daemon 没有第三方接口服务时为 null（也不声明能力位）。
+ */
+export function createCodexConversationSession(options: {
+  host: CodexConversationSessionHost;
+  isAvailable: boolean;
+  resolveLocation: (providerId: string) => CodexLocation | null;
+  paseoHome: string;
+  logger: pino.Logger;
+}): CodexConversationSession | null {
+  if (!options.isAvailable) return null;
+  return new CodexConversationSession(options);
+}
+
+/**
+ * 把 Codex 对话挪到另一个 Codex 服务商（ADR 0011）。在会话历史列出它的那个提供方的 CODEX_HOME 里找
+ * 对话文件、状态库与 config.toml（magpie 按文件所在的 Codex 目录 codexHomeOf 找状态库）。
  */
 export class CodexConversationSession {
   private readonly host: CodexConversationSessionHost;
-  private readonly resolveLocation: () => CodexLocation;
+  private readonly resolveLocation: (providerId: string) => CodexLocation | null;
   private readonly backupRoot: string;
   private readonly logger: pino.Logger;
 
   constructor(options: {
     host: CodexConversationSessionHost;
-    resolveLocation: () => CodexLocation;
+    resolveLocation: (providerId: string) => CodexLocation | null;
     paseoHome: string;
     logger: pino.Logger;
   }) {
@@ -91,7 +94,7 @@ export class CodexConversationSession {
 
   private async handleList(request: ListRequest): Promise<void> {
     try {
-      const settings = await this.readSettings();
+      const { settings } = await this.readSettings(request.providerId);
       this.host.emit({
         type: "provider.codex.session.list_model_providers.response",
         payload: {
@@ -121,8 +124,7 @@ export class CodexConversationSession {
       return;
     }
     try {
-      const { codexHome } = this.resolveLocation();
-      const settings = await this.readSettings();
+      const { codexHome, settings } = await this.readSettings(request.providerId);
       const outcomes: CodexConversationMoveOutcome[] = [];
       for (const threadId of request.threadIds) {
         const outcome = await moveCodexConversation({
@@ -133,10 +135,10 @@ export class CodexConversationSession {
           to,
           now: new Date(),
         });
-        if (outcome.kind === "failed") {
+        if (outcome.kind === "failed" || outcome.kind === "state_database_failed") {
           this.logger.warn(
-            { threadId, to, reason: outcome.message },
-            "Codex conversation not moved",
+            { threadId, to, kind: outcome.kind, reason: outcome.message },
+            "Codex conversation not fully moved",
           );
         }
         outcomes.push(outcome);
@@ -162,8 +164,7 @@ export class CodexConversationSession {
         moved.push(entry);
         continue;
       }
-      const message = outcome.kind === "failed" ? outcome.message : SKIP_MESSAGES[outcome.kind];
-      skipped.push({ threadId: outcome.threadId, reason: outcome.kind, message });
+      skipped.push(toSkipped(outcome));
     }
     this.host.emit({
       type: "provider.codex.session.move_model_provider.response",
@@ -171,10 +172,38 @@ export class CodexConversationSession {
     });
   }
 
-  private async readSettings(): Promise<CodexConversationSettings> {
-    const { codexHome, env } = this.resolveLocation();
+  private async readSettings(
+    providerId: string,
+  ): Promise<{ codexHome: string; settings: CodexConversationSettings }> {
+    const location = this.resolveLocation(providerId);
+    if (!location) throw new NotACodexProviderError(providerId);
+    const { codexHome, env } = location;
     const configText = await readOptionalText(path.join(codexHome, "config.toml"));
-    return readCodexConversationSettings({ configText, codexHome, env });
+    return { codexHome, settings: readCodexConversationSettings({ configText, codexHome, env }) };
+  }
+}
+
+function toSkipped(
+  outcome: Exclude<CodexConversationMoveOutcome, { kind: "moved" }>,
+): CodexSessionMoveSkipped {
+  switch (outcome.kind) {
+    case "active":
+    case "not_found":
+      return {
+        threadId: outcome.threadId,
+        reason: outcome.kind,
+        message: SKIP_MESSAGES[outcome.kind],
+      };
+    case "failed":
+    case "state_database_failed": {
+      const backup = outcome.backupPath ? { backupPath: outcome.backupPath } : {};
+      return {
+        threadId: outcome.threadId,
+        reason: outcome.kind,
+        message: outcome.message,
+        ...backup,
+      };
+    }
   }
 }
 
@@ -188,8 +217,8 @@ async function readOptionalText(filePath: string): Promise<string | null> {
 }
 
 function toWireError(error: unknown): CodexSessionError {
-  if (error instanceof CodexConfigUnreadableError) {
-    return { code: "config_unparsable", message: error.message };
+  if (error instanceof NotACodexProviderError) {
+    return { code: "invalid_input", message: error.message };
   }
   return {
     code: "internal_error",

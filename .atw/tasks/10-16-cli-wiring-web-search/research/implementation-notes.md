@@ -331,11 +331,12 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 要判断的地方
 
-- **在哪个 Codex 目录里挪**：第三方接口改写的那份 `config.toml` 所在目录（`ApiEndpointService.resolveCodexLocation`，CODEX_HOME 优先，缺省 `~/.codex`），与 09 号判断登录方式用的是同一处。Codex 提供方设置里另设了 `CODEX_HOME` 的话，会话历史列出的对话在那边、挪动在这边找不到（结果是 `not_found`）；这和 09 号接受的限制相同。
-- **目标列表**：内置 `openai`、`osuna_api_endpoint`（名字写 Osuna，config.toml 里没有这张表也列出，照工单「Osuna 自己的服务商」）、config.toml 里每张 `[model_providers.<id>]`（有 `name` 就带上）。对话现在的服务商不在下拉里。目标 id 只按 magpie 的 `codexProviderRe` 校验，不要求在列表里。
+- **在哪个 Codex 目录里挪**（审查后改）：会话历史列出这一行的那个提供方的 CODEX_HOME（`AgentClient.codexLocation`，Codex 提供方设置里的环境变量优先，缺省 `~/.codex`；派生自 Codex 的自定义提供方用它自己的环境），请求带 `providerId`。对话文件、状态库与列目标读的 config.toml 都在这里，相当于 magpie 的 `codexHomeOf(文件)`。与第三方接口改写的那份 config.toml 不是一处时，e2e 有用例。
+- **目标列表**：内置 `openai`、`osuna_api_endpoint`（名字写 Osuna；这个 CODEX_HOME 的 config.toml 里没有这张表时照样列出但不能选，`unavailableReason: "no_table"`，下拉里写明续不上、排在最后）、config.toml 里每张 `[model_providers.<id>]`（有 `name` 就带上）。对话现在的服务商不在下拉里。目标 id 只按 magpie 的 `codexProviderRe` 校验，不要求在列表里。
 - **能力位**：沿用还没发布的 `apiEndpointCliWiring`（v0.17.0），只改了注释；daemon 没有第三方接口服务时两个 RPC 回 `rpc_error`（`codex_conversations_unavailable`），也不声明这个能力位。
 - **修改时间**：Node 的 `utimes` 只到微秒级，Codex 的文件是纳秒级，所以「修改时间不变」是毫秒以内相同（e2e 按 1 毫秒以内比）；magpie 的 Go 能保留到纳秒。
 - **压缩文件挪回去**：解开后的内容与原来逐字节相同；压缩后的字节取决于压缩器（Codex app 自己压的与 Node 压的会不同），e2e 比的是解开后的内容，未压缩的文件比的是原字节。
+- **失败的两种**（审查后改，ADR 0011 同步）：改对话文件时失败 → 已改的文件用备份改回，结果 `failed`；文件都改完、某个状态库 `UPDATE` 失败 → 文件留在新服务商（照 magpie），结果 `state_database_failed`，界面标题写「已挪动，但状态库没有更新」。两种都带 `backupPath`（备份那一步之前失败的没有）。读不懂的 config.toml 当作空的、查不了 `pragma_table_info` 的库当作没有 threads 表跳过，都照 magpie。
 - **比 magpie 多做的**：开始改之前先确认 Node 有 `node:sqlite`（有状态库时）和 zstd（有压缩文件时），没有就整段不动、报原因，避免文件挪了库没改。
 - 同一时间只挪一段对话（模块内的队列，相当于 magpie 的 `mu`）。
 - 对话框归 `session-history/view.tsx`：`AdaptiveModalSheet` 会把 jsdom 单元测试解析不了的模块带进 `index.tsx`。
@@ -363,4 +364,6 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端：`codex-model-provider-move.e2e.test.ts`（POSIX）——挪动只改服务商、修改时间不变、状态库已改、备份与 `move.json` 在；挪回逐字节相同；一分钟内写过的被跳过；第二个文件所在目录不可写时第一个被改回；列目标。去掉改回或状态库那一步时对应用例失败（已验证）。
 - 协议：`messages.codex-session.test.ts`。
 - app 浏览器：`session-history-codex-model-provider.spec.ts` 加挪动成功、一分钟内写过两种；假 Codex 有 `path` 时按对话文件第一行报服务商。
-- 截图：`screenshots/13-session-history_row-menu-open_desktop-1280_{en,zh}.png`、`13-move-dialog_target-chosen_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex、临时 CODEX_HOME。
+- 浏览器另有（审查后加）：Claude 的行没有这一项（假 Claude 只答 `--version`，会话从临时 CLAUDE_CONFIG_DIR 读）；挪动失败时错误连同备份目录留在框里，再按「挪动」重试成功。jsdom 单元测试打不开行菜单（菜单组件在 jsdom 里渲染不出），所以放在浏览器测试里。
+- 截图：`screenshots/13-session-history_{row-menu-open,claude-row-menu-open}_desktop-1280_{en,zh}.png`、`13-move-dialog_{target-list-open,target-chosen}_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex 与假 Claude、临时 CODEX_HOME 与 CLAUDE_CONFIG_DIR。
+- 行菜单宽度：英文「Move to another Codex model provider…」实测文字 261pt、菜单项 302pt，280 宽时被截断，所以留 320；菜单往下让 12pt，不压住两行的行。

@@ -2310,7 +2310,6 @@ export const fr: TranslationResources = {
         targetPlaceholder: "Choisir un fournisseur de modèles Codex",
         targetEmpty: "Aucun autre fournisseur de modèles Codex",
         sourceBuiltin: "Intégré à Codex",
-        sourceOsuna: "Propre à Osuna",
         backupNote:
           "Osuna sauvegarde d'abord les fichiers de la conversation. La redéplacer vers {{from}} annule le déplacement.",
         rebuildNote:
@@ -2319,6 +2318,9 @@ export const fr: TranslationResources = {
         moving: "Déplacement...",
         moved: "Déplacée vers {{to}}",
         notMoved: "Conversation non déplacée",
+        movedPartly: "Déplacée, mais la base d'état de Codex n'a pas été mise à jour",
+        backupAt: "Sauvegarde : {{path}}",
+        unavailableNoTable: "Absent de config.toml ; impossible d'y reprendre",
         skippedActive:
           "Elle a été écrite au cours de la dernière minute et est peut-être encore en cours. Réessayez quand elle sera inactive.",
         skippedNotFound: "Osuna ne trouve pas les fichiers de cette conversation.",

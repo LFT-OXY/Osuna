@@ -2285,7 +2285,6 @@ export const en = {
         targetPlaceholder: "Choose a Codex model provider",
         targetEmpty: "No other Codex model provider",
         sourceBuiltin: "Built into Codex",
-        sourceOsuna: "Osuna's own",
         backupNote:
           "Osuna backs up the conversation files first. Moving it back to {{from}} undoes the move.",
         rebuildNote:
@@ -2294,6 +2293,9 @@ export const en = {
         moving: "Moving...",
         moved: "Moved to {{to}}",
         notMoved: "Conversation not moved",
+        movedPartly: "Moved, but Codex's state database wasn't updated",
+        backupAt: "Backup: {{path}}",
+        unavailableNoTable: "Not in config.toml; it couldn't continue there",
         skippedActive:
           "It was written to in the last minute and may still be running. Try again once it is idle.",
         skippedNotFound: "Osuna can't find this conversation's files.",

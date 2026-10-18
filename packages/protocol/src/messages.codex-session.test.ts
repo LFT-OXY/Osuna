@@ -7,6 +7,7 @@ describe("provider.codex.session.list_model_providers", () => {
     const request = {
       type: "provider.codex.session.list_model_providers.request" as const,
       requestId: "req-1",
+      providerId: "codex",
     };
     expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
 
@@ -16,7 +17,12 @@ describe("provider.codex.session.list_model_providers", () => {
         requestId: "req-1",
         modelProviders: [
           { id: "openai", source: "builtin" },
-          { id: "osuna_api_endpoint", source: "osuna", name: "Osuna" },
+          {
+            id: "osuna_api_endpoint",
+            source: "osuna",
+            name: "Osuna",
+            unavailableReason: "no_table",
+          },
           { id: "cc", source: "config", name: "CC Switch" },
         ],
         error: null,
@@ -31,6 +37,7 @@ describe("provider.codex.session.move_model_provider", () => {
     const request = {
       type: "provider.codex.session.move_model_provider.request" as const,
       requestId: "req-2",
+      providerId: "codex",
       threadIds: ["thread-a", "thread-b"],
       to: "osuna_api_endpoint",
     };
@@ -50,7 +57,15 @@ describe("provider.codex.session.move_model_provider", () => {
             backupPath: "/home/me/.paseo/codex-model-provider-moves/20261018T120000.000-thread-a",
           },
         ],
-        skipped: [{ threadId: "thread-b", reason: "active", message: "written just now" }],
+        skipped: [
+          { threadId: "thread-b", reason: "active", message: "written just now" },
+          {
+            threadId: "thread-d",
+            reason: "state_database_failed",
+            message: "state_5.sqlite is locked",
+            backupPath: "/home/me/.paseo/codex-model-provider-moves/20261018T120000.000-thread-d",
+          },
+        ],
         error: null,
       },
     };

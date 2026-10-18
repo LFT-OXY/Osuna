@@ -290,9 +290,12 @@ thread's row in each state_*.sqlite that has a threads table) follows
 MoveCodexProvider, setMetaProvider, rewriteCodexProvider, moveCodexThread,
 keptCopy and codexMetaProvider in magpie's internal/sessions/codex_provider.go,
 rolloutName and rolloutTwin in sessions.go, and ActiveWindow and recent in
-manage.go:
+manage.go; where the state databases are (CODEX_SQLITE_HOME, then
+config.toml's sqlite_home) and reading a config.toml that doesn't parse as an
+empty one follow codexStateDBs and readCodexConfig in codex_provider.go:
 
   packages/server/src/server/codex-conversations/move-to-model-provider.ts
+  packages/server/src/server/codex-conversations/model-providers.ts
 
 Keeping the daemon's own state files' last good generation (a .bak written
 before each write, a file that doesn't parse read from its .bak and copied

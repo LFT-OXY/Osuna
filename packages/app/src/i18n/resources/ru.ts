@@ -2293,7 +2293,6 @@ export const ru: TranslationResources = {
         targetPlaceholder: "Выберите провайдера моделей Codex",
         targetEmpty: "Других провайдеров моделей Codex нет",
         sourceBuiltin: "Встроен в Codex",
-        sourceOsuna: "Собственный провайдер Osuna",
         backupNote:
           "Osuna сначала делает резервную копию файлов разговора. Перенос обратно к {{from}} отменяет перенос.",
         rebuildNote:
@@ -2302,6 +2301,9 @@ export const ru: TranslationResources = {
         moving: "Перенос...",
         moved: "Перенесено к {{to}}",
         notMoved: "Разговор не перенесён",
+        movedPartly: "Перенесено, но база состояния Codex не обновлена",
+        backupAt: "Резервная копия: {{path}}",
+        unavailableNoTable: "Нет в config.toml; там не продолжить",
         skippedActive:
           "В него писали в последнюю минуту, и он может ещё выполняться. Повторите, когда он освободится.",
         skippedNotFound: "Osuna не находит файлы этого разговора.",

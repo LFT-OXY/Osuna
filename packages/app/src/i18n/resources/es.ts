@@ -2310,7 +2310,6 @@ export const es: TranslationResources = {
         targetPlaceholder: "Elige un proveedor de modelos de Codex",
         targetEmpty: "No hay otro proveedor de modelos de Codex",
         sourceBuiltin: "Integrado en Codex",
-        sourceOsuna: "Propio de Osuna",
         backupNote:
           "Osuna hace primero una copia de seguridad de los archivos de la conversación. Volver a moverla a {{from}} deshace el cambio.",
         rebuildNote:
@@ -2319,6 +2318,9 @@ export const es: TranslationResources = {
         moving: "Moviendo...",
         moved: "Movida a {{to}}",
         notMoved: "La conversación no se movió",
+        movedPartly: "Se movió, pero la base de datos de estado de Codex no se actualizó",
+        backupAt: "Copia de seguridad: {{path}}",
+        unavailableNoTable: "No está en config.toml; no podría continuar ahí",
         skippedActive:
           "Se escribió en el último minuto y puede que siga en ejecución. Inténtalo de nuevo cuando esté inactiva.",
         skippedNotFound: "Osuna no encuentra los archivos de esta conversación.",

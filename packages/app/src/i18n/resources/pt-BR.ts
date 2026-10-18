@@ -2296,7 +2296,6 @@ export const ptBR: TranslationResources = {
         targetPlaceholder: "Escolha um provedor de modelos do Codex",
         targetEmpty: "Nenhum outro provedor de modelos do Codex",
         sourceBuiltin: "Integrado ao Codex",
-        sourceOsuna: "Do próprio Osuna",
         backupNote:
           "O Osuna faz primeiro um backup dos arquivos da conversa. Movê-la de volta para {{from}} desfaz a mudança.",
         rebuildNote:
@@ -2305,6 +2304,9 @@ export const ptBR: TranslationResources = {
         moving: "Movendo...",
         moved: "Movida para {{to}}",
         notMoved: "A conversa não foi movida",
+        movedPartly: "Movida, mas o banco de dados de estado do Codex não foi atualizado",
+        backupAt: "Backup: {{path}}",
+        unavailableNoTable: "Não está no config.toml; não daria para continuar",
         skippedActive:
           "Ela foi gravada no último minuto e pode ainda estar em execução. Tente de novo quando estiver ociosa.",
         skippedNotFound: "O Osuna não encontra os arquivos desta conversa.",
