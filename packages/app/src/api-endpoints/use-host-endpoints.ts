@@ -37,6 +37,12 @@ export function hostEndpointsQueryKey(serverId: string) {
   return ["api-endpoints", serverId, LIST_PROVIDER] as const;
 }
 
+/** 切换或改设置失败：主机给的错误码（本地失败时为 null）与给用户看的说明。 */
+interface ActionFailure {
+  code: string | null;
+  message: string;
+}
+
 /** 「使用第三方接口」总开关与默认模型的一次修改。 */
 export type AgentSettingsChange = Pick<
   ApiEndpointSetAgentSettingsRequest,
@@ -55,6 +61,8 @@ export interface UseHostEndpointsResult {
   pendingEndpointId: string | null;
   // 切换或恢复失败的原因；留在列表顶部，直到用户关掉或下一次操作。
   actionError: string | null;
+  // actionError 来自主机拒绝时的错误码（如 config_unparsable）；断线等本地失败为 null。
+  actionErrorCode: string | null;
   dismissActionError: () => void;
   setEnabled: (endpoint: ApiEndpoint, enabled: boolean) => void;
   resume: (endpoint: ApiEndpoint) => void;
@@ -83,17 +91,17 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   const [pendingEndpointId, setPendingEndpointId] = useState<string | null>(null);
   const [pendingAgent, setPendingAgent] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionFailure, setActionFailure] = useState<ActionFailure | null>(null);
   const [pendingIssueAction, setPendingIssueAction] = useState<AgentIssueActionState | null>(null);
   const [issueActionError, setIssueActionError] =
     useState<UseHostEndpointsResult["issueActionError"]>(null);
   const queryKey = useMemo(() => hostEndpointsQueryKey(serverId), [serverId]);
   // 读不懂的配置文件用界面语言说明原因；其余照主机原文。
   const describeError = useCallback(
-    (error: ApiEndpointError): string =>
-      error.code === "config_unparsable" && error.params
-        ? describeUnparsableFile(t, error.params)
-        : error.message,
+    (error: ApiEndpointError): string => {
+      if (error.code !== "config_unparsable" || !error.params) return error.message;
+      return describeUnparsableFile(t, error.params);
+    },
     [t],
   );
 
@@ -152,15 +160,16 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     async (endpoint: ApiEndpoint, change: { enabled?: boolean; clearCooldown?: boolean }) => {
       if (!client) return;
       setPendingEndpointId(endpoint.id);
-      setActionError(null);
+      setActionFailure(null);
       try {
         const result = await client.apiEndpointSetEndpointState({
           endpointId: endpoint.id,
           ...change,
         });
-        if (result.error) setActionError(describeError(result.error));
+        if (result.error)
+          setActionFailure({ code: result.error.code, message: describeError(result.error) });
       } catch (error) {
-        setActionError(toErrorMessage(error));
+        setActionFailure({ code: null, message: toErrorMessage(error) });
       } finally {
         await refresh();
         setPendingEndpointId(null);
@@ -191,12 +200,13 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!client) return;
       void (async () => {
         setPendingAgent(provider);
-        setActionError(null);
+        setActionFailure(null);
         try {
           const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
-          if (result.error) setActionError(describeError(result.error));
+          if (result.error)
+            setActionFailure({ code: result.error.code, message: describeError(result.error) });
         } catch (error) {
-          setActionError(toErrorMessage(error));
+          setActionFailure({ code: null, message: toErrorMessage(error) });
         } finally {
           await refresh();
           setPendingAgent(null);
@@ -268,13 +278,14 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
-  const dismissActionError = useCallback(() => setActionError(null), []);
+  const dismissActionError = useCallback(() => setActionFailure(null), []);
   const dismissIssueActionError = useCallback(() => setIssueActionError(null), []);
 
   return {
     state,
     pendingEndpointId,
-    actionError,
+    actionError: actionFailure?.message ?? null,
+    actionErrorCode: actionFailure?.code ?? null,
     dismissActionError,
     setEnabled,
     resume,

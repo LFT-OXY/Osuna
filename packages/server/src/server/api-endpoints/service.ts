@@ -118,16 +118,22 @@ const CODEX_GATEWAY_SUFFIX = "/v1";
 // 测试连接要等模型真正回一句话，比列出模型慢。
 const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
+export interface ApiEndpointRequestErrorInput {
+  code: ApiEndpointErrorCode;
+  message: string;
+  // app 用来按界面语言说明原因的参数（如 config_unparsable 的 file、reason）；多数错误没有。
+  params?: Record<string, string>;
+}
+
 export class ApiEndpointRequestError extends Error {
   readonly code: ApiEndpointErrorCode;
-  // app 用来按界面语言说明原因的参数（如 config_unparsable 的 file、reason）；多数错误没有。
   readonly params: Record<string, string> | undefined;
 
-  constructor(code: ApiEndpointErrorCode, message: string, params?: Record<string, string>) {
-    super(message);
+  constructor(input: ApiEndpointRequestErrorInput) {
+    super(input.message);
     this.name = "ApiEndpointRequestError";
-    this.code = code;
-    this.params = params;
+    this.code = input.code;
+    this.params = input.params;
   }
 }
 
@@ -471,11 +477,14 @@ export class ApiEndpointService {
       const state = this.readState();
       const existing = input.endpointId ? findEndpoint(state, input.endpointId) : null;
       if (input.endpointId && !existing) {
-        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       const apiKey = input.apiKey?.trim() ? input.apiKey.trim() : undefined;
       if (!existing && !apiKey) {
-        throw new ApiEndpointRequestError("invalid_input", "API key is required");
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: "API key is required",
+        });
       }
       const isLegacyForm = input.baseUrls === undefined;
       const fields = isLegacyForm
@@ -526,7 +535,7 @@ export class ApiEndpointService {
       const supported = requireProvider(provider);
       const state = this.readState();
       if (!findEndpoint(state, endpointId)) {
-        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       const next = await this.commit(state, {
         ...state,
@@ -560,13 +569,13 @@ export class ApiEndpointService {
       }
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint || this.store.getApiKey(endpointId) === null) {
-        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       if (endpoint.models.length === 0) {
-        throw new ApiEndpointRequestError(
-          "no_usable_model",
-          "This endpoint has no models selected",
-        );
+        throw new ApiEndpointRequestError({
+          code: "no_usable_model",
+          message: "This endpoint has no models selected",
+        });
       }
       const defaultModelId = projectedDefaultModelId(state.agents[supported], endpoint);
       const next = await this.commit(
@@ -657,7 +666,7 @@ export class ApiEndpointService {
       const state = this.readState();
       const endpoint = findEndpoint(state, input.endpointId);
       if (!endpoint) {
-        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       if (input.clearCooldown) this.cooldowns.clear(endpoint.id);
       if (input.enabled === undefined || input.enabled === endpoint.enabled) return;
@@ -1028,7 +1037,7 @@ export class ApiEndpointService {
       code: "gateway_not_ready",
       message: "The daemon has not finished starting",
     };
-    return new ApiEndpointRequestError(issue.code, issue.message);
+    return new ApiEndpointRequestError({ code: issue.code, message: issue.message });
   }
 
   /** 读不懂时记一条错误日志，按 endpoints_unparsable 拒绝请求。 */
@@ -1041,7 +1050,7 @@ export class ApiEndpointService {
         { err: error, filePath: error.filePath },
         "API endpoints file could not be parsed",
       );
-      throw new ApiEndpointRequestError("endpoints_unparsable", error.message);
+      throw new ApiEndpointRequestError({ code: "endpoints_unparsable", message: error.message });
     }
   }
 
@@ -1075,7 +1084,8 @@ export class ApiEndpointService {
       signal,
       timeoutMs: this.upstreamTimeoutMs,
     });
-    if (!result.ok) throw new ApiEndpointRequestError(result.error.code, result.error.message);
+    if (!result.ok)
+      throw new ApiEndpointRequestError({ code: result.error.code, message: result.error.message });
     if (format !== null && input.endpointId) {
       await this.keepCatalog(input.endpointId, result.models);
     }
@@ -1122,7 +1132,7 @@ export class ApiEndpointService {
     }
     const modelId = input.modelId?.trim();
     if (!modelId) {
-      throw new ApiEndpointRequestError("invalid_input", "A model is required");
+      throw new ApiEndpointRequestError({ code: "invalid_input", message: "A model is required" });
     }
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
@@ -1137,7 +1147,7 @@ export class ApiEndpointService {
       timeoutMs: this.connectionTestTimeoutMs,
     });
     if (outcome.kind === "cancelled") {
-      throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
     return outcome.result;
   }
@@ -1164,7 +1174,7 @@ export class ApiEndpointService {
       });
       if (!listed.ok) {
         if (listed.error.code === "cancelled") {
-          throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+          throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
         }
         const status = listed.error.status ?? null;
         const code = status === 401 || status === 403 ? "auth_failed" : listed.error.code;
@@ -1188,7 +1198,8 @@ export class ApiEndpointService {
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
-    if (signal.aborted) throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+    if (signal.aborted)
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     return testResultOf(detection, elapsed());
   }
 
@@ -1230,7 +1241,7 @@ export class ApiEndpointService {
       probeTimeoutMs: this.connectionTestTimeoutMs,
     });
     if (outcome.kind === "cancelled") {
-      throw new ApiEndpointRequestError("cancelled", "Request cancelled");
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
     return outcome.results;
   }
@@ -1242,12 +1253,12 @@ export class ApiEndpointService {
     if (input.endpointId) {
       const endpointId = input.endpointId;
       if (!findEndpoint(this.readState(), endpointId)) {
-        throw new ApiEndpointRequestError("not_found", "API endpoint not found");
+        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       const saved = this.store.getApiKey(input.endpointId);
       if (saved !== null) return saved;
     }
-    throw new ApiEndpointRequestError("invalid_input", "API key is required");
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: "API key is required" });
   }
 
   resolveClaudeSettingsPath(): string {
@@ -1565,10 +1576,10 @@ export class ApiEndpointService {
       ...(this.beforeConfigRecheck ? { beforeRecheck: this.beforeConfigRecheck } : {}),
     });
     if (result.kind === "conflict") {
-      throw new ApiEndpointRequestError(
-        "config_conflict",
-        `${input.filePath} kept changing while Osuna was writing it, so nothing was written`,
-      );
+      throw new ApiEndpointRequestError({
+        code: "config_conflict",
+        message: `${input.filePath} kept changing while Osuna was writing it, so nothing was written`,
+      });
     }
     return result.value;
   }
@@ -1682,10 +1693,10 @@ function findProvider(provider: string): ApiEndpointProvider | undefined {
 function requireProvider(provider: string): ApiEndpointProvider {
   const supported = findProvider(provider);
   if (!supported) {
-    throw new ApiEndpointRequestError(
-      "unsupported_provider",
-      `API endpoints are not supported for provider '${provider}'`,
-    );
+    throw new ApiEndpointRequestError({
+      code: "unsupported_provider",
+      message: `API endpoints are not supported for provider '${provider}'`,
+    });
   }
   return supported;
 }
@@ -1740,17 +1751,17 @@ function enabledAgentSettings(
   const models = usableModels(state);
   const first = models[0];
   if (!first) {
-    throw new ApiEndpointRequestError(
-      "no_usable_model",
-      "Turn on an API endpoint and select at least one of its models first",
-    );
+    throw new ApiEndpointRequestError({
+      code: "no_usable_model",
+      message: "Turn on an API endpoint and select at least one of its models first",
+    });
   }
   const isUsable = (id: string | null | undefined) => models.some((model) => model.id === id);
   if (requested && !isUsable(requested)) {
-    throw new ApiEndpointRequestError(
-      "invalid_input",
-      "The default model must be one of the models selected on an endpoint that is on",
-    );
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "The default model must be one of the models selected on an endpoint that is on",
+    });
   }
   const current = state.agents[provider].defaultModelId;
   if (requested) return { enabled: true, defaultModelId: requested };
@@ -1819,7 +1830,10 @@ function validateFields(
   for (const format of API_ENDPOINT_REQUEST_FORMATS) {
     const entries = rawBaseUrls.filter((entry) => entry.format === format && entry.url.trim());
     if (entries.length > 1) {
-      throw new ApiEndpointRequestError("invalid_input", `Only one ${format} base URL is allowed`);
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Only one ${format} base URL is allowed`,
+      });
     }
     if (entries[0]) baseUrls.push({ format, url: normalizeBaseUrl(entries[0].url) });
   }
@@ -1827,13 +1841,16 @@ function validateFields(
     (entry) => !API_ENDPOINT_REQUEST_FORMATS.some((format) => format === entry.format),
   );
   if (unknown) {
-    throw new ApiEndpointRequestError(
-      "invalid_input",
-      `Unknown request format '${unknown.format}'`,
-    );
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown request format '${unknown.format}'`,
+    });
   }
   if (baseUrls.length === 0) {
-    throw new ApiEndpointRequestError("invalid_input", "At least one base URL is required");
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "At least one base URL is required",
+    });
   }
   const models = validateModels(input.models);
   const modelMapping = validateModelMapping(input.modelMapping, models);
@@ -1858,7 +1875,7 @@ function validateLegacyFields(
 ): EndpointFields {
   const name = validateName(input.name);
   if (input.baseUrl === undefined || input.defaultModelId === undefined) {
-    throw new ApiEndpointRequestError("invalid_input", "Base URL is required");
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: "Base URL is required" });
   }
   const url = legacyAgentBaseUrl(provider, normalizeBaseUrl(input.baseUrl));
   const format = AGENT_REQUEST_FORMAT[provider];
@@ -1869,20 +1886,26 @@ function validateLegacyFields(
   });
   const models = validateModels(input.models);
   if (models.length === 0) {
-    throw new ApiEndpointRequestError("invalid_input", "At least one model is required");
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "At least one model is required",
+    });
   }
   const defaultModelId = input.defaultModelId.trim();
   if (!models.some((model) => model.id === defaultModelId)) {
-    throw new ApiEndpointRequestError(
-      "invalid_input",
-      "The default model must be one of the models",
-    );
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "The default model must be one of the models",
+    });
   }
   let modelMapping: ApiEndpointModelMapping | undefined;
   if (apiEndpointHasModelMapping(provider)) {
     modelMapping = validateModelMapping(input.modelMapping, models);
   } else if (input.modelMapping && validateModelMapping(input.modelMapping, models)) {
-    throw new ApiEndpointRequestError("invalid_input", "Only Claude endpoints have model mapping");
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "Only Claude endpoints have model mapping",
+    });
   } else {
     modelMapping = keepValidMapping(existing?.modelMapping, models);
   }
@@ -1898,7 +1921,7 @@ function validateLegacyFields(
 function validateName(raw: string): string {
   const name = raw.trim();
   if (!name) {
-    throw new ApiEndpointRequestError("invalid_input", "Name is required");
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: "Name is required" });
   }
   return name;
 }
@@ -1924,10 +1947,10 @@ function validateModelMapping(
     const modelId = raw?.[tier]?.trim();
     if (!modelId) continue;
     if (!models.some((model) => model.id === modelId)) {
-      throw new ApiEndpointRequestError(
-        "invalid_input",
-        `The ${tier} mapping must be one of the models`,
-      );
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `The ${tier} mapping must be one of the models`,
+      });
     }
     mapping[tier] = modelId;
   }
@@ -1951,7 +1974,10 @@ function keepValidMapping(
 function requireFormat(format: string): ApiEndpointRequestFormat {
   const known = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === format);
   if (!known) {
-    throw new ApiEndpointRequestError("invalid_input", `Unknown request format '${format}'`);
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown request format '${format}'`,
+    });
   }
   return known;
 }
@@ -1981,14 +2007,17 @@ function testResultOf(
 function normalizeBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!URL.canParse(trimmed)) {
-    throw new ApiEndpointRequestError("invalid_input", "Base URL is not a valid URL");
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "Base URL is not a valid URL",
+    });
   }
   const url = new URL(trimmed);
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new ApiEndpointRequestError(
-      "invalid_input",
-      "Base URL must start with http:// or https://",
-    );
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "Base URL must start with http:// or https://",
+    });
   }
   return trimmed.replace(/\/+$/, "");
 }
@@ -2001,11 +2030,11 @@ interface UnparsableFile {
 }
 
 function unparsable(file: UnparsableFile): ApiEndpointRequestError {
-  return new ApiEndpointRequestError(
-    "config_unparsable",
-    `${file.filePath} could not be parsed, so nothing was written: ${file.detail}`,
-    unparsableParams(file),
-  );
+  return new ApiEndpointRequestError({
+    code: "config_unparsable",
+    message: `${file.filePath} could not be parsed, so nothing was written: ${file.detail}`,
+    params: unparsableParams(file),
+  });
 }
 
 function unparsableStatus(file: UnparsableFile): ApiEndpointFileStatus {

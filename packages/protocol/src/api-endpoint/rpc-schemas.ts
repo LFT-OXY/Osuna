@@ -116,9 +116,8 @@ export const ApiEndpointSchema = z.object({
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
-/** `code` 是字符串，daemon 新增错误码时老客户端照常解析并显示 message。 */
 /**
- * 请求被拒的原因。`params` 是 app 用界面语言说明时要的参数，值都是字符串；老 daemon 不发。
+ * 请求被拒的原因。`code` 是字符串，daemon 新增错误码时老客户端照常解析并显示 message。`params` 是 app 用界面语言说明时要的参数，值都是字符串；老 daemon 不发。
  * config_unparsable：file、detail（解析器原文）；settings.json 另有 reason（syntax 带 line、column，
  * root_not_object，key_not_object / key_not_array 带 key）。
  */

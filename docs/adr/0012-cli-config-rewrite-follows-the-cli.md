@@ -33,7 +33,7 @@ The status check reports these cases. The app translates them from a code and pa
 
 **Keep current settings** keeps the file as it is now. When Osuna's Codex model provider table itself was changed outside Osuna (its URL or token), the daemon records that and stops rewriting the table on start, an exception to [ADR 0010](0010-codex-wiring-and-gateway-caller-recognition.md)'s "on every start the daemon rewrites the table". The table is Osuna's again the next time the switch is turned on. Cost: Codex conversations recorded under that table resume at whatever address the user put there, not through the gateway.
 
-"Endpoint not answering" is not a case: Osuna only writes a local address, so it can only happen when the address was changed, which is the first case. The comments case exists because Claude Code skips a `settings.json` it cannot read; in the terminal it shows an error, but sessions Osuna starts through the SDK would go to the official API with no message (inferred from Claude Code's documentation, not observed).
+"Endpoint not answering" is not a case: Osuna only writes a local address, so it can only happen when the address was changed, which is the first case. The comments case exists because Claude Code skips a `settings.json` it cannot read; in the terminal it shows an error, but sessions Osuna starts through the SDK go to the official API with no message (verified in Claude Code 2.1.302's shipped code, read but not run).
 
 ## Keys Osuna now owns
 

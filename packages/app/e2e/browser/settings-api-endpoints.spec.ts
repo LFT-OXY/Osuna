@@ -962,6 +962,12 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
       );
       await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
       expect(await readFile(settingsPath, "utf8")).toBe(broken);
+      // 一个区块一次一条：提示区同样的「读不懂」先收起，关掉红色那条后再出现。
+      await expect(issue(page, "configUnparsable")).toHaveCount(0);
+      await failure.getByRole("button", { name: "Dismiss" }).click();
+      await expect(issue(page, "configUnparsable")).toContainText(
+        `${settingsPath} has a syntax error near line 3, column 3.`,
+      );
     } finally {
       await writeFile(settingsPath, "{}\n");
     }

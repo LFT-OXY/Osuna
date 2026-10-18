@@ -37,6 +37,8 @@ export interface AgentApiEndpointsSectionProps {
   view: AgentApiEndpointsView;
   busy: boolean;
   actionError: string | null;
+  // 主机拒绝时的错误码；本地失败为 null。
+  actionErrorCode: string | null;
   onDismissError: () => void;
   onToggle: (enabled: boolean) => void;
   onDefaultModelChange: (modelId: string) => void;
@@ -50,6 +52,7 @@ export function AgentApiEndpointsSection({
   view,
   busy,
   actionError,
+  actionErrorCode,
   onDismissError,
   onToggle,
   onDefaultModelChange,
@@ -58,6 +61,14 @@ export function AgentApiEndpointsSection({
 }: AgentApiEndpointsSectionProps) {
   const { t } = useTranslation();
   const switchHint = useSwitchHint(providerLabel, view.enableBlockedBy);
+  // 同一区块一次只留一条：打开被拒的原因已在提示区「读不懂」那条里，就只留红色的那条。
+  const isRefusalRepeatedByIssue =
+    actionErrorCode === "config_unparsable" &&
+    view.issues.some((issue) => issue.kind === "configUnparsable");
+  const issues = useMemo(() => {
+    if (!isRefusalRepeatedByIssue) return view.issues;
+    return view.issues.filter((issue) => issue.kind !== "configUnparsable");
+  }, [isRefusalRepeatedByIssue, view.issues]);
   return (
     <AgentApiEndpointsFrame>
       {actionError ? (
@@ -76,7 +87,7 @@ export function AgentApiEndpointsSection({
         </View>
       ) : null}
       {issueActions ? (
-        <AgentIssuesArea providerLabel={providerLabel} issues={view.issues} {...issueActions} />
+        <AgentIssuesArea providerLabel={providerLabel} issues={issues} {...issueActions} />
       ) : null}
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>

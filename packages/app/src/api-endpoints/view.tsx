@@ -126,6 +126,7 @@ function AgentApiEndpoints({
       view={selectAgentApiEndpointsView({ state, provider, now })}
       busy={endpoints.pendingAgent === provider}
       actionError={endpoints.actionError}
+      actionErrorCode={endpoints.actionErrorCode}
       onDismissError={endpoints.dismissActionError}
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}

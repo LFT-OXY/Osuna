@@ -416,7 +416,8 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 - **读写**（`claude-settings-patch.ts`）：开头的 BOM 读时摘下、写回时放回；用 `jsonc-parser` 的 `parse`（`allowTrailingComma`）读，语法错误照旧拒绝。`inspectClaudeSettings` 多给 `isReadableByClaudeCode`：照 Claude Code 的读法（去 BOM 后严格 `JSON.parse`）判断。
 - **注释留在原行**：`jsonc-parser` 的 `modify` 往容器末尾加键时插在上一个值紧后面，上一行末尾的 `// 注释` 会被挤到新键那一行；删末尾的键时从上一个值紧后面删起，会把那条注释一起删掉。`editBesideComment` 认出这两种情况：加键时新键另起一行放在注释之后（上一个值本来带尾随逗号，新键也带；没有就在上一个值后补逗号），删键时只删那几行并对称地处理逗号，所以「打开再关掉」逐字节还原。其他情况照 `modify` 的做法。
-- **提示区**：新 code `settings_has_comments`（params：file），只在 Claude Code 的开关开着、文件带注释或尾随逗号时给（开关关着时这份文件跟 Osuna 无关）。不进老的 `health`。app 里是 warning 提示，正文写后果，带 outline 的「如何修复」按钮，点开显示修复步骤（不发请求）；`AgentIssueView.hasFixSteps` 标出哪些情况带它，24、28 号工单可复用。
+- **提示区**：新 code `settings_has_comments`（params：file），只在 Claude Code 的开关开着、文件带注释或尾随逗号时给。这是对工单的理解：工单说的后果（Osuna 的 Claude 对话不经中转站、直接走官方）只在开关开着时成立；开关关着时 Osuna 不管这份文件。不进老的 `health`。app 里是 warning 提示，正文写后果，带 outline 的「如何修复」按钮，点开显示修复步骤（不发请求）；`AgentIssueView.hasFixSteps` 标出哪些情况带它，24、28 号工单可复用。
+- **一个区块一次一条**：打开开关被拒（`config_unparsable`）时，提示区里同样内容的「读不懂」先收起，只留红色那条；关掉红色那条后提示区的再出现。提示与拒绝里的文件路径把主目录缩写成 `~`（`shortenPath`）。
 - **读不懂时用界面语言说明**：`config_unparsable` 的 params 在 settings.json 上多给 `reason`（`syntax` 带 `line`、`column`；`root_not_object`；`key_not_object` / `key_not_array` 带 `key`）。请求被拒的 `ApiEndpointError` 加了可选 `params`（同样的参数），app 打开开关、启用接口、提示区按钮失败时都按它翻译（`config-unparsable-copy.ts`）；没有 reason（Codex 的 config.toml、老主机）照旧显示文件与解析器原文。
 
 ### 测试

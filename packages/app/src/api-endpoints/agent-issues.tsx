@@ -1,13 +1,20 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { ChevronRight } from "lucide-react-native";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { createControlGeometry } from "@/components/ui/control-geometry";
+import { mutedIconColorMapping } from "@/components/ui/icon-color";
+import { isWeb } from "@/constants/platform";
+import { ICON_SIZE } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
+import { shortenPath } from "@/utils/shorten-path";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import type { AgentIssueAction, AgentIssueView } from "./internal/agent-settings";
+
+const ThemedChevron = withUnistyles(ChevronRight);
 
 /*
  * 提供方页「第三方接口」区的提示区：Osuna 读状态时查出的「设置被改过」，每条一块，带处理按钮（ADR 0012）。
@@ -78,12 +85,7 @@ function IssueBlock({
   pendingAction: AgentIssueAction | null;
   onAction: (action: AgentIssueAction) => void;
 }) {
-  const { t } = useTranslation();
   const { title, description, fixSteps } = useIssueCopy(providerLabel, issue);
-  const [isFixOpen, setIsFixOpen] = useState(false);
-  const toggleFix = useCallback(() => setIsFixOpen((open) => !open), []);
-  const fixButtonState = useMemo(() => ({ expanded: isFixOpen }), [isFixOpen]);
-  const hasFixSteps = issue.hasFixSteps && fixSteps !== undefined;
   return (
     <Alert
       variant="warning"
@@ -92,26 +94,7 @@ function IssueBlock({
       description={description}
       testID={`agent-api-endpoints-issue-${issue.kind}`}
     >
-      {hasFixSteps ? (
-        <View style={styles.fix}>
-          <View style={styles.actions}>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={toggleFix}
-              accessibilityState={fixButtonState}
-              testID="agent-api-endpoints-issue-how-to-fix"
-            >
-              {t("settings.apiEndpoints.agent.issues.howToFix")}
-            </Button>
-          </View>
-          {isFixOpen ? (
-            <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
-              {fixSteps}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+      {issue.hasFixSteps && fixSteps ? <FixStepsDisclosure steps={fixSteps} /> : null}
       {issue.actions.length > 0 ? (
         <View style={styles.actions}>
           {issue.actions.map((action) => (
@@ -125,6 +108,50 @@ function IssueBlock({
         </View>
       ) : null}
     </Alert>
+  );
+}
+
+/** 「如何修复」：点一下展开修复步骤，再点收起；箭头朝右是收着，朝下是展开（同 SettingsCollapsibleRow）。 */
+function FixStepsDisclosure({ steps }: { steps: string }) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const toggle = useCallback(() => setIsOpen((open) => !open), []);
+  const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
+  // React Native Web 不会把 accessibilityState.expanded 映射成 aria-expanded。
+  const webExpandedProps = useMemo(
+    () => (isWeb ? ({ "aria-expanded": isOpen } as const) : null),
+    [isOpen],
+  );
+  const chevronStyle = useMemo(() => [isOpen && styles.chevronOpen], [isOpen]);
+  const chevron = useMemo(
+    () => (
+      <View style={chevronStyle}>
+        <ThemedChevron size={ICON_SIZE.sm} uniProps={mutedIconColorMapping} />
+      </View>
+    ),
+    [chevronStyle],
+  );
+  return (
+    <View style={styles.fix}>
+      <View style={styles.actions}>
+        <Button
+          {...webExpandedProps}
+          variant="outline"
+          size="sm"
+          onPress={toggle}
+          accessibilityState={accessibilityState}
+          trailing={chevron}
+          testID="agent-api-endpoints-issue-how-to-fix"
+        >
+          {t("settings.apiEndpoints.agent.issues.howToFix")}
+        </Button>
+      </View>
+      {isOpen ? (
+        <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
+          {steps}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -219,7 +246,7 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
         }),
         description: t("settings.apiEndpoints.agent.issues.settingsHasCommentsDetail", {
           agent: providerLabel,
-          file: params.file,
+          file: shortenPath(params.file),
         }),
         fixSteps: t("settings.apiEndpoints.agent.issues.settingsHasCommentsFix", {
           agent: providerLabel,
@@ -254,11 +281,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   fix: {
     flex: 1,
-    gap: theme.spacing[2],
+    gap: theme.spacing[3],
   },
-  // 与 Alert sm 的说明同字号，用正文色：点开后它是要照着做的内容。
+  // 与 Alert 的说明同字号同色。
   fixSteps: {
     ...createControlGeometry(theme).alert.sm.text,
-    color: theme.colors.foreground,
+    color: theme.colors.foregroundMuted,
+  },
+  chevronOpen: {
+    transform: [{ rotate: "90deg" }],
   },
 }));

@@ -489,10 +489,15 @@ function parsesAsStrictJson(body: string): boolean {
 }
 
 /** 开头的 BOM 读时摘下、写回时放回。 */
-function splitBom(text: string): { bom: string; body: string } {
-  return text.startsWith(BOM)
-    ? { bom: BOM, body: text.slice(BOM.length) }
-    : { bom: "", body: text };
+interface BomSplit {
+  // 开头的 BOM，没有时为空串。
+  bom: string;
+  body: string;
+}
+
+function splitBom(text: string): BomSplit {
+  if (!text.startsWith(BOM)) return { bom: "", body: text };
+  return { bom: BOM, body: text.slice(BOM.length) };
 }
 
 /** 拿掉 Osuna 写的那条 "WebSearch"，以及因它而建、现在空了的 deny 与 permissions；不是 Osuna 的不动。 */
@@ -636,12 +641,15 @@ function besideTrailingComment(text: string, change: Edit): TrailingComment | nu
  * - 加键：新键另起一行放在注释之后；上一个值原本带尾随逗号，新键也带，没有就在上一个值后补逗号。
  * - 删键：只删被删的那几行；被删的键带尾随逗号就连它一起删，不带就把上一个值后的逗号也拿掉。
  */
-function editBesideComment(input: {
+interface BesideCommentEdit {
   text: string;
+  // jsonc-parser 不带格式算出的那一处改动。
   change: Edit;
   commented: TrailingComment;
   formatting: FormattingOptions;
-}): string {
+}
+
+function editBesideComment(input: BesideCommentEdit): string {
   const { text, change, formatting } = input;
   const { lineEnd, hasComma } = input.commented;
   const valueEnd = change.offset;
@@ -654,7 +662,9 @@ function editBesideComment(input: {
     }
     return `${text.slice(0, valueEnd)}${separator}${text.slice(removedEnd)}`;
   }
-  const head = hasComma ? text.slice(0, lineEnd) : `${text.slice(0, valueEnd)},${separator}`;
+  // 上一个值带尾随逗号就整行留着；不带就在值后补上逗号。
+  let head = text.slice(0, lineEnd);
+  if (!hasComma) head = `${text.slice(0, valueEnd)},${separator}`;
   // 新键与上一个键同样缩进；值里的对象、数组再按文件格式展开。
   const lineStart = text.lastIndexOf("\n", valueEnd) + 1;
   const indent = /^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? "";
