@@ -468,3 +468,22 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - `login-shell-env.test.ts`：假 shell（临时目录里的脚本，不读任何配置）答出变量、一分钟内不再问、Windows 不问、起不来时答空；假 fish 与登录 shell 一起问、登录 shell 的值在前；`terminalShells` 按装没装、配置目录在不在、`XDG_CONFIG_HOME`、登录 shell 本身挑出 fish 与 nushell（找 shell 一律换成假的）；解析标记、没展开的引用、nushell 的问法。`gateway-reach.test.ts`：哪些地址算可能的代理、答案记 20 秒。daemon 端到端另加：登录 shell 的值先于 daemon 环境；托管地址是转到中转站的假代理时不报，同一代理换成不通到中转站的路径时报。
 - 浏览器（`settings-api-endpoints.spec.ts`）：托管设置里的开关在设置页写明来源与改法，没有「重新应用」，「如何修复」展开步骤，管理员删掉后提示消失。
 - 截图：`screenshots/16-claude-code-page_cloud-switch-in-managed-settings-fix-open_desktop-1280_{en,zh}.png`（截图里的托管文件路径是临时目录）。
+
+## 17 Claude Code 的四个修正
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 带点的 Claude 版本 | `ClaudeSpelled`（`internal/provider/claudedash.go`）：opus/sonnet/haiku/fable/mythos 的点版本换连字符，连字符写法本身在售、或两个在售 id 换完一样时不改；拆出 `:档位` 与 `[1m]` | 一样（`claude-spelling.ts`）。在售 = 开着的接口已选模型的光秃秃 id 加 `标识/模型名`（去掉已下线的）。写进 `model` 与 Osuna 写的 `modelPicker`；后台小任务与 Subagent 模型由 22 号工单调同一个函数。magpie 还改四个档位变量，Osuna 接管时本来就拿掉它们 |
+| 读回 | `ClaudeRead` 把连字符写法认回在售 id | 不需要单独做：中转站的 `sameModel` 已把连字符写法认回这家自己的写法（第 4 步）；接管记录里记的就是写进去的连字符写法，比对不会误报 |
+| 到 max 无 xhigh 也报 xhigh | `claudeCapabilities`（d1c485f7） | 一样（`claude-model-hints.ts`）；名字是 Claude 的模型本来就整个不报，不变 |
+| 什么算会被审查 | `AutoModeReviewed`：Claude 订阅账号、名字匹配 `(?:^\|[/.:-])claude-`、Anthropic 地址的主机是 `api.anthropic.com` | 后两条一样（`host-endpoints.ts` 的 `isAutoModeReviewed`）；Osuna 没有 Claude 订阅账号这种接口 |
+| 能到的模型 | `claudeReviewed`：Claude Code 列表里的条目（含路由组成员、provider 兜底）与当前模型 | 开着、选了模型的接口：已选模型与档位映射到的模型（Osuna 没有路由组与兜底；第 4 项的兜底是默认模型，已在已选模型里）。没选模型的接口不算，即使地址是 `api.anthropic.com` |
+| 写与拿掉 | `writeReview` / `dropReview`：用户写了的不碰，自己写的记在 stash；每次设模型与 Sync 重算；断开时删 | 同样的归属规则，记在接管记录的 `hintEnv` 里（规则与模型提示完全相同，没加新字段）；`cliFingerprint` 带上它，加一家 `api.anthropic.com` 的接口就重写；关掉开关时删掉自己写的 |
+| 档位名兜底 | `claudeTierStandIn`：Claude 家族 id（`claudeFamily`）一律换成档位变量或主模型，在售的也换；未知客户端（hook、脚本）请求未在售的也换；只在 settings.json 指向 magpie 时 | 只替换原来的 404（routing.ts 第 6 步）：在售的同名模型、配了映射的档位照旧优先，因为工单写的是「没有开着的接口为这个档位配映射时」。认 `claudeFamily` 和光秃秃的档位名（opus 等，工单列了；Claude Code 自己会先解析别名，这条只多接住别的调用方）。只在 Claude Code 的开关开着、调用方认作 Claude Code 时（认不出时按 Anthropic 路径算 Claude Code，所以 hook 脚本也接住）。换成存的默认模型，不读 settings.json 的当前模型：ADR 0012 里 CLI 选的模型会被收成默认模型 |
+
+### 测试
+
+- 纯逻辑：`claude-spelling.test.ts`（改写、保留前缀 `[1m]` `:high`、五个家族、别家 id 不改、连字符写法在售与两个撞车时不改）；`claude-model-hints.test.ts`（到 max 无 xhigh 报 xhigh）；`host-endpoints.test.ts`（各种 Claude 名字、`api.anthropic.com`、映射到的 Claude、关着的和没选模型的不算）；`claude-settings-patch.test.ts`（写 0、能审查时拿掉、用户写的 1 和 0 都不碰、还原逐字节）；`gateway/routing.test.ts`（档位名与内置 id 按默认模型找、默认模型带标识时直达；开关关着、Codex、非档位名、带厂商前缀的不兜底）。
+- daemon 端到端：`api-endpoint-claude.e2e.test.ts`（`claude-opus-4.6` 写成连字符、`glm-4.6` 不改、用户 modelPicker 里的点写法不改；`CLAUDE_CODE_AUTO_MODE_SERVER=0`，加 `api.anthropic.com` 接口后拿掉，关掉后逐字节还原；用户写的不动）；`api-endpoint-gateway.e2e.test.ts`（`haiku` 与 `claude-haiku-4-5-20251001` 没映射时假上游收到默认模型 `glm-4.6`）。原有用例里接口模型都不是 Claude 的，settings.json 多了 `CLAUDE_CODE_AUTO_MODE_SERVER`，已照改。

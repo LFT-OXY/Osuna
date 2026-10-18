@@ -10,6 +10,7 @@ import {
   type StoredApiEndpoint,
 } from "./store.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
+import { hostOf } from "./model-facts.js";
 
 /*
  * 主机级接口的规则：都是对 endpoints.json 内容的纯计算，读写与 CLI 配置改写在 service 里。
@@ -152,4 +153,29 @@ export function projectedDefaultModelId(
   if (agent.enabled && has(agent.defaultModelId)) return agent.defaultModelId;
   if (has(endpoint.legacyDefaultModelId)) return endpoint.legacyDefaultModelId;
   return endpoint.models[0]?.id ?? "";
+}
+
+// 「会被 Anthropic 审查」照 magpie（https://github.com/yetone/magpie，internal/gateway/automode.go 的 AutoModeReviewed、
+// internal/agent/claude.go 的 claudeReviewed）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+// 名字是 Claude 的模型：Anthropic 自己、前面的中转、Bedrock / Vertex 给它起的名字（anthropic.claude-…）。
+const ANTHROPIC_MODEL = /(?:^|[/.:-])claude-/i;
+const ANTHROPIC_API_HOST = "api.anthropic.com";
+
+/**
+ * 经中转站能到的模型里有没有会被 Anthropic 审查 Claude Code 自动模式动作的：开着的接口选了的模型和档位映射到的模型，
+ * 名字是 Claude 的，或这家的 Anthropic 地址是 api.anthropic.com。都没有时 Claude Code 应写 CLAUDE_CODE_AUTO_MODE_SERVER=0。
+ */
+export function isAutoModeReviewed(state: ApiEndpointState): boolean {
+  return state.endpoints.some((endpoint) => {
+    if (!endpoint.enabled) return false;
+    const models = [
+      ...endpoint.models.map((model) => model.id),
+      ...Object.values(endpoint.modelMapping ?? {}).filter((model) => typeof model === "string"),
+    ];
+    if (models.length === 0) return false;
+    const isOnAnthropicApi = endpoint.baseUrls.some(
+      (entry) => entry.format === "anthropic_messages" && hostOf(entry.url) === ANTHROPIC_API_HOST,
+    );
+    return isOnAnthropicApi || models.some((model) => ANTHROPIC_MODEL.test(model));
+  });
 }

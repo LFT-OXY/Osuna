@@ -1,5 +1,5 @@
 // 规则移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 claude1M / claudeWindow /
-// claudeOutput / claudeCaps / claudeCapabilities）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+// claudeOutput / claudeCaps / claudeCapabilities，含提交 d1c485f7 的「到 max 无 xhigh 也报 xhigh」）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { bareModelId, type ModelFacts } from "./model-facts.js";
 
@@ -97,7 +97,8 @@ function capabilitiesOf(models: ClaudeHintModel[]): string {
 function capabilityNames(efforts: string[]): string[] {
   if (!efforts.some((effort) => CLAUDE_EFFORTS.has(effort))) return [];
   const caps = ["effort"];
-  if (efforts.includes("xhigh")) caps.push("xhigh_effort");
+  // 能到 max 却没有 xhigh 的也报 xhigh：Claude Code 的 Ultra Code 要 xhigh_effort，中转站会把 xhigh 按 max 发出。
+  if (efforts.includes("xhigh") || efforts.includes("max")) caps.push("xhigh_effort");
   if (efforts.includes("max")) caps.push("max_effort");
   return caps;
 }

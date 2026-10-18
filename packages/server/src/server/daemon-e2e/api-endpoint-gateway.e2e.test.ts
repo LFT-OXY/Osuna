@@ -728,6 +728,27 @@ describe("passing requests through to an endpoint that speaks the agent's format
     });
   });
 
+  test("a Claude tier name no endpoint maps is sent as Claude Code's default model, not a 404", async () => {
+    const upstreamB = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamB });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      agents: { claude: { defaultModelId: string } };
+    };
+    file.agents.claude.defaultModelId = "glm-4.6";
+    await writeFile(endpointsPath, JSON.stringify(file));
+
+    for (const model of ["haiku", "claude-haiku-4-5-20251001"]) {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({ model, max_tokens: 1, messages: [] }),
+      );
+      expect(response.status, model).toBe(200);
+      expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    }
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["glm-4.6", "glm-4.6"]);
+  });
+
   test("a model no enabled endpoint offers is an error in the agent's format", async () => {
     const { gateway } = await start();
 
@@ -4893,7 +4914,12 @@ experimental_bearer_token = "${token}"
     const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
     expect(JSON.parse(await readFile(home.settingsPath, "utf8"))).toEqual({
       theme: "dark",
-      env: { ANTHROPIC_BASE_URL: gateway, ANTHROPIC_AUTH_TOKEN: claude, ANTHROPIC_API_KEY: "" },
+      env: {
+        ANTHROPIC_BASE_URL: gateway,
+        ANTHROPIC_AUTH_TOKEN: claude,
+        ANTHROPIC_API_KEY: "",
+        CLAUDE_CODE_AUTO_MODE_SERVER: "0",
+      },
       permissions: { deny: ["WebSearch"] },
       model: "kimi-k2",
       modelPicker: {

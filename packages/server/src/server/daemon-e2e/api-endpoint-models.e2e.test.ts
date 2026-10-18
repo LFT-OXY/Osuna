@@ -212,6 +212,7 @@ describe("API endpoint models over the daemon RPC", () => {
       "ANTHROPIC_BASE_URL",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_AUTO_MODE_SERVER",
     ]);
 
     await client.apiEndpointSetActive("claude", null);

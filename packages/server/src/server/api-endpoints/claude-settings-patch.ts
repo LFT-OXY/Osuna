@@ -1,4 +1,4 @@
-// modelPicker 的归属规则、云平台开关的拿掉与放回移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker、dropClouds / putClouds）
+// modelPicker 的归属规则、云平台开关的拿掉与放回、自动模式审查的开关移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker、dropClouds / putClouds、writeReview / dropReview）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -35,6 +35,8 @@ import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.j
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
  * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
  *   键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，不碰也不删。
+ * - env 下的 CLAUDE_CODE_AUTO_MODE_SERVER=0：经中转站能到的模型都不会被 Anthropic 审查时写，免得 Claude Code
+ *   先请服务器审查、拿不到再弹「这个会话不符合条件」的提示（ADR 0012）。归属规则同模型提示，记在同一份记录里。
  * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
  *   用户之后又自己设了的除外；关着的开关和云平台的其他变量不动（ADR 0012，照 magpie 的 dropClouds / putClouds）。
  */
@@ -47,6 +49,9 @@ const REMOVED_ENV_KEYS = [
 ];
 
 const WEB_SEARCH_RULE = "WebSearch";
+const AUTO_MODE_SERVER_KEY = "CLAUDE_CODE_AUTO_MODE_SERVER";
+// 按模型提示的归属规则写的 env 键：文件里没有、或还是 Osuna 上次写的值，才归 Osuna。
+const OWNED_WHILE_UNTOUCHED_ENV_KEYS = [...CLAUDE_HINT_ENV_KEYS, AUTO_MODE_SERVER_KEY];
 const BOM = "\uFEFF";
 
 const OriginalValueSchema = z.discriminatedUnion("present", [
@@ -90,7 +95,7 @@ export const ClaudeSettingsTakeoverSchema = z.object({
   // 文件里现在的 modelPicker 是 Osuna 写的才有 written；为 null 时文件里的（如果有）是用户的。
   // COMPAT(claudeModelPickerRecord): 工单 17 以前的记录没有它，按没写过处理；remove after 2027-04-15.
   modelPicker: z.object({ written: z.array(ModelPickerOptionSchema).nullable() }).optional(),
-  // Osuna 写着的模型提示：文件里的值等于这里记的才算 Osuna 的。
+  // Osuna 写着的模型提示与 CLAUDE_CODE_AUTO_MODE_SERVER：文件里的值等于这里记的才算 Osuna 的。
   // COMPAT(claudeModelHintRecord): 工单 18 以前的记录没有它，按没写过处理；remove after 2027-04-15.
   hintEnv: z.record(z.string(), z.string()).optional(),
   // 拿掉的云平台开关与它们原来的值（字符串或 JSON 的 true，照用户写的）。
@@ -125,7 +130,8 @@ export type ClaudeSettingsRestoreResult =
 
 /**
  * CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示，
- * 以及是否放开 WebSearch（至少一家开着的接口「自己能联网搜索」）。
+ * 是否放开 WebSearch（至少一家开着的接口「自己能联网搜索」），以及经中转站能到的模型里有没有会被 Anthropic
+ * 审查自动模式动作的（没有就写 CLAUDE_CODE_AUTO_MODE_SERVER=0）。
  */
 export interface ClaudeGatewayWiring {
   baseUrl: string;
@@ -134,6 +140,7 @@ export interface ClaudeGatewayWiring {
   modelPicker: ClaudeModelPickerOption[];
   hintEnv: ClaudeHintEnv;
   allowWebSearch: boolean;
+  isAutoModeReviewed: boolean;
 }
 
 /**
@@ -187,7 +194,7 @@ export function applyClaudeApiEndpoint(input: {
   const hintEnv = writeHintEnv({
     text,
     envObject,
-    hints: input.wiring.hintEnv,
+    hints: { ...input.wiring.hintEnv, ...autoModeServerEnv(input.wiring.isAutoModeReviewed) },
     takeover: input.takeover,
     formatting,
   });
@@ -244,6 +251,11 @@ function dropClouds(input: {
   return { text, record };
 }
 
+/** 能到的模型都不会被审查时让 Claude Code 只在本地分类；有一个会被审查就不写。 */
+function autoModeServerEnv(isAutoModeReviewed: boolean): Partial<Record<string, string>> {
+  return isAutoModeReviewed ? {} : { [AUTO_MODE_SERVER_KEY]: "0" };
+}
+
 interface HintEnvPatch {
   text: string;
   record: NonNullable<ClaudeSettingsTakeover["hintEnv"]>;
@@ -253,13 +265,13 @@ interface HintEnvPatch {
 function writeHintEnv(input: {
   text: string;
   envObject: Record<string, unknown> | undefined;
-  hints: ClaudeHintEnv;
+  hints: Partial<Record<string, string>>;
   takeover: ClaudeSettingsTakeover | null;
   formatting: FormattingOptions;
 }): HintEnvPatch {
   let { text } = input;
   const record: Record<string, string> = {};
-  for (const key of CLAUDE_HINT_ENV_KEYS) {
+  for (const key of OWNED_WHILE_UNTOUCHED_ENV_KEYS) {
     const current = input.envObject?.[key];
     const isOurs = current !== undefined && current === input.takeover?.hintEnv?.[key];
     if (current !== undefined && !isOurs) continue;

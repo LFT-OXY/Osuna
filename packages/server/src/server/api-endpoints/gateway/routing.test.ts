@@ -98,6 +98,55 @@ describe("routing a requested model name to an endpoint", () => {
     ).toEqual(route([selectsSonnet, "claude-sonnet-4-5"]));
   });
 
+  test("a Claude tier name no endpoint maps goes to Claude Code's default model", () => {
+    const withDefault = (defaultModelId: string) => ({
+      ...state([alpha, beta]),
+      agents: {
+        claude: { enabled: true, defaultModelId },
+        codex: { enabled: true, defaultModelId: null },
+      },
+    });
+    for (const model of [
+      "haiku",
+      "opus",
+      "claude-haiku-4-5-20251001",
+      "claude-3-5-sonnet-20241022",
+    ]) {
+      expect(
+        resolveGatewayRoute({ state: withDefault("glm-4.6"), agent: "claude", model }),
+      ).toEqual(route([beta, "glm-4.6"]));
+    }
+    // 默认模型指定了某家时照样直达那家，后面跟着同名的其他家。
+    expect(
+      resolveGatewayRoute({ state: withDefault("beta/kimi-k2"), agent: "claude", model: "sonnet" }),
+    ).toEqual(route([beta, "kimi-k2"], [alpha, "kimi-k2"]));
+  });
+
+  test("the tier fallback is only for Claude tier names while Claude Code's switch is on", () => {
+    const on = {
+      ...state([alpha, beta]),
+      agents: {
+        claude: { enabled: true, defaultModelId: "glm-4.6" },
+        codex: { enabled: true, defaultModelId: "glm-4.6" },
+      },
+    };
+    const off = {
+      ...on,
+      agents: { ...on.agents, claude: { enabled: false, defaultModelId: "glm-4.6" } },
+    };
+    const isFound = (input: {
+      state: ApiEndpointState;
+      agent: "claude" | "codex";
+      model: string;
+    }) => resolveGatewayRoute(input).ok;
+    expect(isFound({ state: off, agent: "claude", model: "haiku" })).toBe(false);
+    expect(isFound({ state: on, agent: "codex", model: "claude-haiku-4-5" })).toBe(false);
+    // 不是档位名的、带厂商前缀的不算（照 magpie 的 claudeFamily）。
+    for (const model of ["no-such-model", "haiku-lite", "anthropic/claude-haiku-4.5"]) {
+      expect(isFound({ state: on, agent: "claude", model })).toBe(false);
+    }
+  });
+
   test("Codex requests never go through the Claude tier mapping", () => {
     const mapped = { ...beta, modelMapping: { haiku: "glm-4.6" } };
     expect(

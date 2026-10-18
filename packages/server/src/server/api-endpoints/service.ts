@@ -42,6 +42,7 @@ import {
 } from "./gateway-reach.js";
 import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
 import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
+import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
@@ -91,6 +92,7 @@ import {
   settleAgentSettings,
   endpointModelGroups,
   type EndpointGroupModel,
+  isAutoModeReviewed,
   usableModels,
 } from "./host-endpoints.js";
 import {
@@ -885,6 +887,7 @@ export class ApiEndpointService {
       token,
       ...this.cliModels(state, provider, agent.defaultModelId),
       allowWebSearch: someEndpointSearchesWeb(state),
+      isAutoModeReviewed: isAutoModeReviewed(state),
     };
   }
 
@@ -915,10 +918,15 @@ export class ApiEndpointService {
         description: group.endpoint.name,
       })),
     );
+    // 带点的 Claude 版本写成连字符（只在能唯一对回时），中转站再认回这家自己的写法。
+    const served = [
+      ...usableModels(listed).map((model) => model.id),
+      ...rows.map((row) => row.hint.id),
+    ];
     return {
-      model: markOneMillion(start),
+      model: claudeSpelled({ model: markOneMillion(start), served }),
       modelPicker: rows.map((row) => ({
-        model: markOneMillion(row.hint),
+        model: claudeSpelled({ model: markOneMillion(row.hint), served }),
         label: row.label,
         description: row.description,
       })),
@@ -1052,6 +1060,7 @@ export class ApiEndpointService {
       tokens[provider] ?? null,
       this.cliModels(state, provider, agent.defaultModelId),
       provider === "claude" && someEndpointSearchesWeb(state),
+      provider === "claude" && isAutoModeReviewed(state),
     ]);
   }
 

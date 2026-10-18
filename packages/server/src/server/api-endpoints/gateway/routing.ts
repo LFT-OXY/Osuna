@@ -1,5 +1,6 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/provider.go 的 MessagesFirst、internal/gateway/gateway.go 的 usable、
-// internal/provider/group.go 的 sameModel、internal/provider/closest.go 的 Closest、internal/gateway/unknown_model.go）
+// internal/provider/group.go 的 sameModel、internal/provider/closest.go 的 Closest、internal/gateway/unknown_model.go，
+// internal/gateway/gateway.go 的 claudeFamily 与 internal/agent/claude.go 的 claudeStandInAt）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -15,7 +16,9 @@ import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from ".
  * 2. 整个名字是某家已选的模型（模型名本身可能带斜杠，如 `moonshotai/kimi-k2`）；
  * 3. 标识那家已删除 / 已关闭 / 没选这个模型：视同不可用，斜杠后的光秃秃模型名换同名的家；
  * 4. 只差写法的同一个模型（sameModel）：斜杠前不是任何一家的标识时就是厂商前缀，一并忽略；
- * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型。
+ * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型；
+ * 6. 没有一家映射这个档位、Claude Code 的开关开着时，档位名（opus 等）或 Claude Code 内置的档位 id
+ *    （claude-haiku-4-5-20251001 这类）改按 Claude Code 的默认模型找，不回 404（照 magpie 的 claudeStandInAt）。
  * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
  * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
  * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
@@ -40,6 +43,16 @@ function claudeTierOf(model: string): ApiEndpointModelTier | null {
   );
 }
 
+// Claude Code 内置的档位 id（照 magpie 的 claudeFamily）：不论版本，按家族认；带厂商前缀的 `a/claude-…` 不算。
+const CLAUDE_FAMILY_ID = /^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|fable)(?:[-.@:]|$)/;
+const CLAUDE_TIER_NAMES: ReadonlySet<string> = new Set(API_ENDPOINT_MODEL_TIERS);
+
+/** 名字是 Claude 档位名或 Claude Code 内置的档位 id。 */
+function isClaudeTierRequest(model: string): boolean {
+  const name = model.toLowerCase().replace(/\[1m\]$/, "");
+  return CLAUDE_TIER_NAMES.has(name) || CLAUDE_FAMILY_ID.test(name);
+}
+
 export interface GatewayRouteInput {
   state: ApiEndpointState;
   // 去掉一周内下线的模型之后的状态；缺省即 state（没有下线的模型）。
@@ -51,7 +64,9 @@ export interface GatewayRouteInput {
 export function resolveGatewayRoute(input: GatewayRouteInput): GatewayRoute {
   const listed = input.listed ?? input.state;
   const model = input.model.replaceAll("~", "/");
-  const chosen = chooseEndpoint({ state: input.state, listed, agent: input.agent, model });
+  const chosen =
+    chooseEndpoint({ state: input.state, listed, agent: input.agent, model }) ??
+    tierFallback({ state: input.state, listed, agent: input.agent, model });
   if (!chosen) {
     return { ok: false, message: unknownModel(listed, input.model) };
   }
@@ -143,6 +158,15 @@ function chooseEndpoint(input: Required<GatewayRouteInput>): GatewayCandidate | 
     }
   }
   return null;
+}
+
+/** 第 6 步：没配映射的 Claude 档位改按 Claude Code 的默认模型找。 */
+function tierFallback(input: Required<GatewayRouteInput>): GatewayCandidate | null {
+  const claude = input.state.agents.claude;
+  const isFallbackAsked =
+    input.agent === "claude" && claude.enabled && isClaudeTierRequest(input.model);
+  if (!isFallbackAsked || claude.defaultModelId === null) return null;
+  return chooseEndpoint({ ...input, model: claude.defaultModelId });
 }
 
 /** 找不到模型时的说法：附上最接近的三个 id（magpie 的 unknownModel）。 */

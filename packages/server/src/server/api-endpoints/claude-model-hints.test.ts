@@ -26,6 +26,16 @@ describe("markOneMillion", () => {
 });
 
 describe("claudeHintEnv", () => {
+  test("a model that reaches max without xhigh is said to have xhigh, so Claude Code allows Ultra Code", () => {
+    // 照 magpie d1c485f7：中转站把 xhigh 按模型自己的档位发出（最近一档、平局取高，即 max）。
+    expect(
+      claudeHintEnv({
+        start: { id: "glm-5.3", facts: { efforts: ["low", "high", "max"] } },
+        listed: [{ id: "relay/kimi-k3", facts: { efforts: ["low", "high"] } }],
+      }).CLAUDE_CODE_MODEL_CAPABILITIES,
+    ).toBe("glm-5.3=effort,xhigh_effort,max_effort;relay/kimi-k3=effort");
+  });
+
   test("the start model's window, the least reply length, and each model's effort levels", () => {
     expect(
       claudeHintEnv({
@@ -41,7 +51,7 @@ describe("claudeHintEnv", () => {
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
       // 模型名小写（Claude Code 比较前会把模型转成小写，模式不转）；起始模型在前。
       CLAUDE_CODE_MODEL_CAPABILITIES:
-        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,max_effort",
+        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort",
     });
   });
 

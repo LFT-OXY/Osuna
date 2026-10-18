@@ -157,6 +157,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
         ANTHROPIC_BASE_URL: gatewayUrl(),
         ANTHROPIC_AUTH_TOKEN: token,
         ANTHROPIC_API_KEY: "",
+        // 接口模型都不是 Claude：Claude Code 的自动模式不请服务器审查。
+        CLAUDE_CODE_AUTO_MODE_SERVER: "0",
       },
       model: "relay/sonnet",
       // 终端 /model 列出这家的已选模型：`标识/模型名`、模型名、接口名。
@@ -218,6 +220,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       "ANTHROPIC_BASE_URL",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_AUTO_MODE_SERVER",
     ]);
 
     await client.apiEndpointSetActive("claude", null);
@@ -522,6 +525,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     "DISABLE_TELEMETRY": "1", // 关遥测
     "ANTHROPIC_AUTH_TOKEN": "${token}",
     "ANTHROPIC_API_KEY": "",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
   },
   "theme": "dark",
   "model": "relay/sonnet",
@@ -1193,7 +1197,7 @@ describe("Claude Code is told what the endpoint models can do", () => {
       CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
       CLAUDE_CODE_MODEL_CAPABILITIES:
-        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,max_effort",
+        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort",
     });
     // 这几个值不算 Osuna 负责的键，健康检查不会因为它们报「被外部改动」。
     expect((await client.apiEndpointList("claude")).health ?? []).toEqual([]);
@@ -1216,6 +1220,79 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(switched.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
 
     await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  async function switchOnWith(models: string[]): Promise<void> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      apiKey: SECRET,
+      models: models.map((id) => ({ id })),
+      defaultModelId: models[0],
+    });
+    const endpointId = saved.endpoint?.id;
+    if (!endpointId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("claude", endpointId);
+  }
+
+  test("a dotted Claude version is written with hyphens; other vendors' ids are not", async () => {
+    await start(USER_SETTINGS);
+    await switchOnWith(["claude-opus-4.6", "glm-4.6"]);
+
+    const switched = await settings();
+    expect(switched.model).toBe("claude-opus-4-6");
+    expect(switched.modelPicker.options.map((row: { model: string }) => row.model)).toEqual([
+      "relay/claude-opus-4-6",
+      "relay/glm-4.6",
+    ]);
+  });
+
+  test("a dotted Claude version the user wrote stays as it is", async () => {
+    const own = USER_SETTINGS.replace(
+      `"env": {`,
+      `"modelPicker": { "options": [{ "model": "claude-opus-4.6", "label": "Mine", "description": "" }] },
+  "env": {`,
+    );
+    await start(own);
+    await switchOnWith(["claude-opus-4.6"]);
+
+    expect((await settings()).modelPicker.options[0].model).toBe("claude-opus-4.6");
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  test("CLAUDE_CODE_AUTO_MODE_SERVER=0 while nothing reachable is reviewed, gone once an api.anthropic.com endpoint is on and after Official", async () => {
+    await start(USER_SETTINGS);
+    await switchOnWith(["glm-4.6", "kimi-k2"]);
+    expect((await settings()).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+
+    const anthropic = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Anthropic",
+      baseUrls: [{ format: "anthropic_messages", url: "https://api.anthropic.com" }],
+      apiKey: SECRET,
+      models: [{ id: "glm-4.6" }],
+    });
+    expect(anthropic.error).toBeNull();
+    expect((await settings()).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBeUndefined();
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("an auto mode review the user set is theirs", async () => {
+    const own = USER_SETTINGS.replace(
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example"`,
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "1"`,
+    );
+    await start(own);
+    await switchOnWith(["glm-4.6"]);
+    expect((await settings()).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("1");
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(own);
   });
 

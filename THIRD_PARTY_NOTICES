@@ -483,6 +483,25 @@ liveModel's modalities in internal/catalog/live.go:
   packages/server/src/server/api-endpoints/model-facts.ts
   packages/server/src/server/api-endpoints/upstream-models.ts
 
+Writing a dotted Claude version with hyphens for Claude Code only when that
+spelling comes back to exactly one served id follows ClaudeDashed, claudeSplit,
+undashIn and ClaudeSpelled in magpie's internal/provider/claudedash.go, and its
+tests reuse the cases in that file's comments; reporting xhigh for a model that
+reaches max without it follows claudeCapabilities in internal/agent/claude.go
+(commit d1c485f7); writing CLAUDE_CODE_AUTO_MODE_SERVER=0 while no reachable
+model is reviewed by Anthropic follows AutoModeReviewed and anthropicModel in
+internal/gateway/automode.go and anthropic.go, and claudeReviewed, writeReview
+and dropReview in internal/agent/claude.go; sending a Claude tier id no endpoint
+maps to Claude Code's default model follows claudeFamily and claudeTierStandIn in
+internal/gateway/gateway.go and claudeStandInAt in internal/agent/claude.go:
+
+  packages/server/src/server/api-endpoints/claude-spelling.ts
+  packages/server/src/server/api-endpoints/claude-spelling.test.ts
+  packages/server/src/server/api-endpoints/claude-model-hints.ts
+  packages/server/src/server/api-endpoints/host-endpoints.ts
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+  packages/server/src/server/api-endpoints/gateway/routing.ts
+
 The settings page's model families (which model name prefix belongs to which
 vendor) follow magpie's internal/agent/icons.go, and the vendor logos are
 magpie's internal/gui/assets/icons/ (claude-color, openai, gemini-color,

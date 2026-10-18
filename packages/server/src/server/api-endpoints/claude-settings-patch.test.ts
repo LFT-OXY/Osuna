@@ -13,6 +13,7 @@ const GATEWAY = {
   modelPicker: [],
   hintEnv: {},
   allowWebSearch: false,
+  isAutoModeReviewed: true,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -535,6 +536,35 @@ describe("applyClaudeApiEndpoint", () => {
 
     const restored = JSON.parse(restore(again.text, again.takeover)).env;
     expect(restored).toEqual({ DISABLE_TELEMETRY: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "50000" });
+  });
+
+  it("turns the auto mode review off while no reachable model is reviewed, and takes it out once one is", () => {
+    const unreviewed = { ...GATEWAY, isAutoModeReviewed: false };
+    const first = applyClaudeApiEndpoint({
+      text: USER_SETTINGS,
+      wiring: unreviewed,
+      takeover: null,
+    });
+    if (first.kind !== "patched") throw new Error("Expected a patch");
+    expect(JSON.parse(first.text).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+    expect(restore(first.text, first.takeover)).toBe(USER_SETTINGS);
+
+    const reviewed = apply(first.text, first.takeover);
+    expect(JSON.parse(reviewed.text).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBeUndefined();
+    expect(restore(reviewed.text, reviewed.takeover)).toBe(USER_SETTINGS);
+  });
+
+  it("leaves the auto mode review the user set alone, while switched and after Official", () => {
+    for (const value of ["1", "0"]) {
+      const own = setEnv(USER_SETTINGS, "CLAUDE_CODE_AUTO_MODE_SERVER", value);
+      const wiring = { ...GATEWAY, isAutoModeReviewed: false };
+      const first = applyClaudeApiEndpoint({ text: own, wiring, takeover: null });
+      if (first.kind !== "patched") throw new Error("Expected a patch");
+      expect(JSON.parse(first.text).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe(value);
+      const again = apply(first.text, first.takeover);
+      expect(JSON.parse(again.text).env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe(value);
+      expect(restore(again.text, again.takeover)).toBe(own);
+    }
   });
 
   it.each([
