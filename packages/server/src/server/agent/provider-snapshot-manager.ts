@@ -23,7 +23,7 @@ import {
   type ApiEndpointModelGroupsLookup,
   type LockedThinkingLookup,
   type SubagentThinkingLookup,
-  type CliOwnModelsLookup,
+  type SideModelOptionsLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -144,7 +144,7 @@ export interface ProviderSnapshotManagerOptions {
   apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   lockedThinking?: LockedThinkingLookup;
   subagentThinking?: SubagentThinkingLookup;
-  cliOwnModels?: CliOwnModelsLookup;
+  sideModelOptions?: SideModelOptionsLookup;
 }
 
 type ApiEndpointSnapshotFields = Pick<
@@ -153,7 +153,7 @@ type ApiEndpointSnapshotFields = Pick<
   | "apiEndpointModelGroups"
   | "lockedThinkingOptionId"
   | "subagentThinkingOptions"
-  | "cliOwnModels"
+  | "sideModelOptions"
 >;
 
 interface ProviderSnapshotRefreshOptions {
@@ -286,7 +286,7 @@ export class ProviderSnapshotManager {
   private readonly apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   private readonly lockedThinking?: LockedThinkingLookup;
   private readonly subagentThinking?: SubagentThinkingLookup;
-  private readonly cliOwnModels?: CliOwnModelsLookup;
+  private readonly sideModelOptions?: SideModelOptionsLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -316,7 +316,7 @@ export class ProviderSnapshotManager {
     this.apiEndpointModelGroups = options.apiEndpointModelGroups;
     this.lockedThinking = options.lockedThinking;
     this.subagentThinking = options.subagentThinking;
-    this.cliOwnModels = options.cliOwnModels;
+    this.sideModelOptions = options.sideModelOptions;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -955,7 +955,7 @@ export class ProviderSnapshotManager {
       apiEndpointModelGroups: this.apiEndpointModelGroups?.(provider) ?? undefined,
       lockedThinkingOptionId: this.lockedThinking?.(provider) ?? undefined,
       subagentThinkingOptions: this.subagentThinking?.(provider) ?? undefined,
-      cliOwnModels: this.cliOwnModels?.(provider) ?? undefined,
+      sideModelOptions: this.sideModelOptions?.(provider) ?? undefined,
     };
   }
 

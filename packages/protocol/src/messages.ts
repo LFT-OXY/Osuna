@@ -326,6 +326,7 @@ import type {
   AgentCapabilityFlags,
   AgentModelDefinition,
   ApiEndpointModelGroup,
+  ApiEndpointSideModelOption,
   AgentMode,
   AgentPermissionRequest,
   AgentPermissionResponse,
@@ -421,6 +422,12 @@ const ApiEndpointModelGroupSchema = z.object({
   models: z.array(AgentModelDefinitionSchema),
 }) satisfies z.ZodType<ApiEndpointModelGroup>;
 
+const ApiEndpointSideModelOptionSchema = z.object({
+  id: z.string(),
+  model: z.string(),
+  endpointName: z.string().nullable(),
+}) satisfies z.ZodType<ApiEndpointSideModelOption>;
+
 export const ProviderSnapshotEntrySchema = z.object({
   provider: AgentProviderSchema,
   status: ProviderStatusSchema,
@@ -447,8 +454,9 @@ export const ProviderSnapshotEntrySchema = z.object({
   lockedThinkingOptionId: z.string().optional(),
   // Subagent 思考档位能选的档位（Subagent 模型的，跟主模型时是 CLI 配置里主模型的）；Claude Code 与 Codex 的总开关开着才有，老 daemon 不发。
   subagentThinkingOptions: z.array(AgentSelectOptionSchema).optional(),
-  // 用 ChatGPT 登录的 Codex 自己的模型（id 是 /model 里的写法），默认 Subagent 模型与记忆模型也能选；总开关开着才有，老 daemon 不发。
-  cliOwnModels: z.array(AgentSelectOptionSchema).optional(),
+  // Codex 的默认 Subagent 模型与记忆模型的选项：用 ChatGPT 登录时 Codex 自己的模型在前（id 是 /model 里的写法），
+  // 再是接口的模型；总开关开着才有，老 daemon 不发。
+  sideModelOptions: z.array(ApiEndpointSideModelOptionSchema).optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version: z.string().optional(),
 });

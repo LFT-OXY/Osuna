@@ -124,6 +124,16 @@ export interface ApiEndpointModelGroup {
   models: AgentModelDefinition[];
 }
 
+/**
+ * Codex 的默认 Subagent 模型与记忆模型的一个选项：id 是发回 daemon 的值，model 是显示的模型名，
+ * endpointName 是出处（某家接口的名字，或 Codex 自己的模型的 "ChatGPT"）；光秃秃的、哪家都行的为 null。
+ */
+export interface ApiEndpointSideModelOption {
+  id: string;
+  model: string;
+  endpointName: string | null;
+}
+
 export interface ProviderSnapshotEntry {
   provider: AgentProvider;
   status: ProviderStatus;
@@ -149,8 +159,8 @@ export interface ProviderSnapshotEntry {
   lockedThinkingOptionId?: string;
   // Subagent 思考档位能选的档位（Claude Code 与 Codex）；总开关开着才有。
   subagentThinkingOptions?: AgentSelectOption[];
-  // 用 ChatGPT 登录的 Codex 自己的模型，默认 Subagent 模型与记忆模型也能选；总开关开着才有。
-  cliOwnModels?: AgentSelectOption[];
+  // Codex 的默认 Subagent 模型与记忆模型的选项（用 ChatGPT 登录时 Codex 自己的模型在前，同名的光秃秃名字指它）；总开关开着才有。
+  sideModelOptions?: ApiEndpointSideModelOption[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }

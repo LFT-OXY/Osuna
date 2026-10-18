@@ -4,6 +4,7 @@ import type {
   AgentFeatureToggle,
   AgentProviderNotice,
   ApiEndpointModelGroup,
+  ApiEndpointSideModelOption,
   AgentTaskItem,
   JsonValue,
   ProviderOptions,
@@ -16,6 +17,7 @@ import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
 export type {
   ApiEndpointModelGroup,
+  ApiEndpointSideModelOption,
   AgentFeature,
   AgentFeatureSelect,
   AgentFeatureToggle,
@@ -152,8 +154,8 @@ export interface ProviderSnapshotEntry {
   lockedThinkingOptionId?: string;
   // Subagent 思考档位能选的档位（Claude Code 与 Codex）；总开关开着才有。
   subagentThinkingOptions?: AgentSelectOption[];
-  // 用 ChatGPT 登录的 Codex 自己的模型，默认 Subagent 模型与记忆模型也能选；总开关开着才有。
-  cliOwnModels?: AgentSelectOption[];
+  // Codex 的默认 Subagent 模型与记忆模型的选项（用 ChatGPT 登录时 Codex 自己的模型在前）；总开关开着才有。
+  sideModelOptions?: ApiEndpointSideModelOption[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }
@@ -794,8 +796,10 @@ export type LockedThinkingLookup = (provider: AgentProvider) => string | null;
 /** Subagent 思考档位能选的档位（Claude Code 与 Codex）；没有为 null。 */
 export type SubagentThinkingLookup = (provider: AgentProvider) => AgentSelectOption[] | null;
 
-/** 用 ChatGPT 登录的 Codex 自己的模型；没有为 null。 */
-export type CliOwnModelsLookup = (provider: AgentProvider) => AgentSelectOption[] | null;
+/** Codex 的默认 Subagent 模型与记忆模型的选项；没有为 null。 */
+export type SideModelOptionsLookup = (
+  provider: AgentProvider,
+) => ApiEndpointSideModelOption[] | null;
 
 /** 总开关开着时按接口分组的可选模型；官方模式或不支持的提供方为 null。 */
 export type ApiEndpointModelGroupsLookup = (

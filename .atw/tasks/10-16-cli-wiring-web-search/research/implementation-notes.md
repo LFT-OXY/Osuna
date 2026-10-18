@@ -691,7 +691,10 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 与 magpie 不同、要判断的地方
 
-- **Codex 自己的模型**（审查后补，照 magpie `modelOptions` 与 `models()`）：用 ChatGPT 登录时，两个下拉在接口模型前列出 Codex 自己的模型（读 `models_cache.json` 里可见的，经快照 `cliOwnModels` 给 app，标「（ChatGPT）」），同名时光秃秃的名字指它自己的；档位按缓存条目的 `supported_reasoning_levels` 校验与给选项，换到不收的模型时同样拿掉；手改成它们的照文件跟，不报被改过、不写回。用 API key 时 Codex 只读 Osuna 的模型目录，magpie 的 asProvider 同样只算 magpie 的模型，所以不列。magpie 用内置的 `catalog.Codex()`，Osuna 用 Codex 自己存的清单（工单 19 已在读）。
+- **Codex 自己的模型**（审查后补，照 magpie `modelOptions` 与 `models()`）：用 ChatGPT 登录时，两个下拉在接口模型前列出 Codex 自己的模型（读 `models_cache.json` 里可见的，经快照 `cliOwnModels` 给 app，标「（ChatGPT）」），同名时光秃秃的名字指它自己的；档位按缓存条目的 `supported_reasoning_levels` 校验与给选项，换到不收的模型时同样拿掉；手改成它们的照文件跟，不报被改过、不写回。选项由 daemon 合好经快照 `sideModelOptions` 给，同名去重也在 daemon。magpie 用内置的 `catalog.Codex()`，Osuna 用 Codex 自己存的清单（工单 19 已在读）。
+- **API key 接法下不列 Codex 自己的模型**（magpie 的 `modelOptions` 在各种接法下都列 own，这里偏离，依据读 openai/codex @ `8c076942` 源码，未运行 Codex）：
+  - 默认 Subagent 模型：config.toml 写了 `model_catalog_json`（Osuna 的 API key 接法），模型管理器只用这份目录（`codex-rs/model-provider/src/provider.rs:401-405`，`StaticModelsManager::new(…, model_catalog)`；`core/src/thread_manager.rs:453-461` 传入 `config.model_catalog`）。派 Subagent 时 `default_subagent_model` 在这份清单里按名字找（`core/src/agent/child_config.rs:212-228`），找不到报「Unknown model `{x}` for spawn_agent」（`child_config.rs:326-352`）。目录里只有接口模型，所以 Codex 自己的模型名会让每次没指定模型的 spawn 失败。
+  - 记忆模型：记忆请求走会话的 `model_provider`（`memories/write/src/runtime.rs:146-147`），模型名就是 `extract_model`（`memories/write/src/phase1.rs:162`）；API key 接法下这是 Osuna 的中转站，中转站对哪家接口都没有的模型回 404（`packages/server/src/server/api-endpoints/gateway/gateway.ts:557-560`），没有转给 ChatGPT 的路。
 - **改回没设**：magpie 删键；Osuna 照 ADR 0004 放回接管前用户自己的写法。
 - magpie 另有「subagent model」（中转站强制改 Subagent 请求的模型），不在本工单。
 

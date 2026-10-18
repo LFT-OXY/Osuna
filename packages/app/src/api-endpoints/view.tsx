@@ -96,11 +96,11 @@ function AgentApiEndpoints({
     const options = providerEntry?.subagentThinkingOptions ?? [];
     return options.map((option) => ({ id: option.id, label: option.label }));
   }, [hasIssues, providerEntry]);
-  // 用 ChatGPT 登录的 Codex 自己的模型，Subagent 与记忆模型也能选（主机给）。
-  const cliOwnModels = useMemo(() => {
+  // Codex 的默认 Subagent 模型与记忆模型的选项由主机合好（用 ChatGPT 登录时 Codex 自己的模型在前）。
+  const sideModelOptions = useMemo(() => {
     if (!hasIssues) return [];
-    const models = providerEntry?.cliOwnModels ?? [];
-    return models.map((model) => ({ id: model.id, label: model.label }));
+    const options = providerEntry?.sideModelOptions ?? [];
+    return options.map(({ id, model, endpointName }) => ({ id, model, endpointName }));
   }, [hasIssues, providerEntry]);
   const lastConnection = endpoints.lastConnection;
   const isOwnConnection = lastConnection?.provider === provider;
@@ -191,7 +191,7 @@ function AgentApiEndpoints({
         endpointModelGroups,
         lockedThinkingOptionId,
         subagentThinkingOptions,
-        cliOwnModels,
+        sideModelOptions,
         now,
       })}
       busy={endpoints.pendingAgent === provider}

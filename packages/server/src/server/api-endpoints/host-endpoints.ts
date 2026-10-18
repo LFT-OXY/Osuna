@@ -142,11 +142,13 @@ export function bareDefaultModel(state: ApiEndpointState, id: string | null): st
  * 默认模型失踪规则：打开着总开关的 Agent，默认模型不再能选时，指定的那家不再提供而别家还有同名的就改成光秃秃的名字，
  * 否则改成最早开着接口的第一个已选模型；一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
  */
-export function settleAgentSettings(
-  state: ApiEndpointState,
-  // 用 ChatGPT 登录的 Codex 自己的模型：Subagent 与记忆模型选了它们时不算没人提供。
-  codexOwnModels: readonly string[] = [],
-): ApiEndpointState {
+export function settleAgentSettings(input: {
+  state: ApiEndpointState;
+  // 用 ChatGPT 登录的 Codex 自己的模型：Subagent 与记忆模型选了它们时不算没人提供。省略为没有。
+  codexOwnModels?: readonly string[];
+}): ApiEndpointState {
+  const { state } = input;
+  const codexOwnModels = input.codexOwnModels ?? [];
   const models = usableModels(state);
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {

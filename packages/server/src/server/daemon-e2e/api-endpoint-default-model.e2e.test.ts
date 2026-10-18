@@ -76,10 +76,18 @@ function cachedLevels(...efforts: string[]): { effort: string; description: stri
   return efforts.map((effort) => ({ effort, description: effort }));
 }
 
-/** 快照里 Codex 自己的模型（用 ChatGPT 登录时才有）。 */
-async function codexOwnModelsOf(client: DaemonClient) {
+/** 快照里 Codex 的默认 Subagent 模型与记忆模型的选项。 */
+async function codexSideOptionsOf(client: DaemonClient) {
   const snapshot = await client.getProvidersSnapshot();
-  return snapshot.entries.find((candidate) => candidate.provider === "codex")?.cliOwnModels;
+  return snapshot.entries.find((candidate) => candidate.provider === "codex")?.sideModelOptions;
+}
+
+function isNamedFirst(option: { model: string }): boolean {
+  return option.model === "first";
+}
+
+function optionId(option: { id: string }): string {
+  return option.id;
 }
 
 function isRelayB(endpoint: { name: string }): boolean {
@@ -1061,7 +1069,9 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       return { agents: value.agents, memories: value.memories };
     }
 
-    const codexOwnModels = () => codexOwnModelsOf(client);
+    const codexSideOptions = () => codexSideOptionsOf(client);
+    const firstOptions = async () => (await codexSideOptionsOf(client))?.filter(isNamedFirst);
+    const sideOptionIds = async () => (await codexSideOptionsOf(client))?.map(optionId);
 
     async function codexSubagentLevels(): Promise<string[] | undefined> {
       const snapshot = await client.getProvidersSnapshot();
@@ -1186,9 +1196,16 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       );
       await turnOn("codex");
 
-      await expect.poll(codexOwnModels, { timeout: 10_000 }).toEqual([
-        { id: "gpt-5.5", label: "GPT-5.5" },
-        { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+      await expect.poll(codexSideOptions, { timeout: 10_000 }).toEqual([
+        { id: "gpt-5.5", model: "GPT-5.5", endpointName: "ChatGPT" },
+        { id: "gpt-5.4-mini", model: "GPT-5.4 Mini", endpointName: "ChatGPT" },
+        { id: "first", model: "first", endpointName: null },
+        { id: "glm-4.6", model: "glm-4.6", endpointName: null },
+        { id: "claude-opus-4-6", model: "claude-opus-4-6", endpointName: null },
+        { id: "relay-a/first", model: "first", endpointName: "Relay A" },
+        { id: "relay-a/glm-4.6", model: "glm-4.6", endpointName: "Relay A" },
+        { id: "relay-b/claude-opus-4-6", model: "claude-opus-4-6", endpointName: "Relay B" },
+        { id: "relay-b/glm-4.6", model: "glm-4.6", endpointName: "Relay B" },
       ]);
       // 没设 Subagent 模型：主对话在 Codex 自己的 gpt-5.5 上，档位按它的。
       await expect
@@ -1213,14 +1230,50 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       // 手改成 Codex 自己的模型：跟过去，不算被改过，之后的改写也不写回。
       await setCodex({ memoryModelId: "glm-4.6" });
       const text = await readFile(configPath, "utf8");
-      await writeFile(configPath, text.replaceAll('"relay-a/glm-4.6"', '"gpt-5.5"'));
+      await writeFile(
+        configPath,
+        text
+          .replaceAll('"relay-a/glm-4.6"', '"gpt-5.5"')
+          .replace('default_subagent_model = "gpt-5.4-mini"', 'default_subagent_model = "gpt-5.5"'),
+      );
       const list = await client.apiEndpointList("codex");
-      expect(list.agents?.codex).toMatchObject({ memoryModelId: "gpt-5.5" });
+      expect(list.agents?.codex).toMatchObject({
+        subagentModelId: "gpt-5.5",
+        memoryModelId: "gpt-5.5",
+      });
       expect(list.health).toEqual([]);
       await setCodex({ subagentThinkingOptionId: "low" });
       expect(await codexTables()).toMatchObject({
+        agents: { default_subagent_model: "gpt-5.5", default_subagent_reasoning_effort: "low" },
         memories: { extract_model: "gpt-5.5", consolidation_model: "gpt-5.5" },
       });
+    });
+
+    test("signed in with ChatGPT, a bare name Codex has itself is offered once, as Codex's own", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      await writeFile(
+        path.join(path.dirname(configPath), "models_cache.json"),
+        JSON.stringify({ etag: '"list-1"', models: [{ slug: "first", priority: 1 }] }),
+      );
+      await turnOn("codex");
+
+      await expect.poll(firstOptions, { timeout: 10_000 }).toEqual([
+        { id: "first", model: "first", endpointName: "ChatGPT" },
+        { id: "relay-a/first", model: "first", endpointName: "Relay A" },
+      ]);
+    });
+
+    test("on an API key Codex reads only Osuna's model list, so none of its own are offered", async () => {
+      await twoEndpoints();
+      await writeFile(
+        path.join(path.dirname(configPath), "models_cache.json"),
+        JSON.stringify({ etag: '"list-1"', models: [{ slug: "gpt-5.5", priority: 1 }] }),
+      );
+      await turnOn("codex", "first");
+
+      await expect.poll(sideOptionIds, { timeout: 10_000 }).not.toContain("gpt-5.5");
+      expect((await setCodex({ subagentModelId: "gpt-5.5" })).error?.code).toBe("invalid_input");
     });
 
     test("only Codex has a memory model, and both models must be ones an endpoint that is on selected", async () => {

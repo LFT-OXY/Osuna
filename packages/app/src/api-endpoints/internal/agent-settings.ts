@@ -156,7 +156,7 @@ export interface ClaudeSideModelsView {
  * Subagent 思考档位的选项由主机按 Subagent 跑的模型给。
  */
 export interface CodexSideModelsView {
-  // 两个模型下拉的选项：用 ChatGPT 登录时 Codex 自己的模型在前（照 magpie modelOptions），再是默认模型的那些。
+  // 两个模型下拉的选项，照主机给的（用 ChatGPT 登录时 Codex 自己的模型在前）。
   modelOptions: DefaultModelOption[];
   subagentModel: DefaultModelOption | null;
   subagentThinking: SubagentThinkingView;
@@ -168,9 +168,6 @@ export interface SubagentThinkingView {
   value: string | null;
   options: DefaultThinkingOption[];
 }
-
-// Codex 自己的模型在选项里标的出处（产品名，不翻译）。
-const CODEX_OWN_MODELS_GROUP = "ChatGPT";
 
 // 与 Osuna 对话里 Claude 的 Ultra Code 档位同一个 id。
 const ULTRA_CODE_OPTION_ID = "ultracode";
@@ -206,8 +203,8 @@ export function selectAgentApiEndpointsView(input: {
   lockedThinkingOptionId: string | null;
   // 提供方快照里 Subagent 思考档位能选的档位（主机按 Subagent 模型或文件里的主模型给）；主机不支持这几项时为 null，不显示。
   subagentThinkingOptions: DefaultThinkingOption[] | null;
-  // 提供方快照里 Codex 自己的模型（用 ChatGPT 登录时主机才给）；没有为空。
-  cliOwnModels: DefaultThinkingOption[];
+  // 提供方快照里 Codex 的默认 Subagent 模型与记忆模型的选项（主机已合好）；没有为空。
+  sideModelOptions: DefaultModelOption[];
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
@@ -263,9 +260,8 @@ export function selectAgentApiEndpointsView(input: {
   const codexSideModels = codexSideModelsView({
     provider,
     agent,
-    modelOptions,
     subagentThinkingOptions: input.subagentThinkingOptions,
-    cliOwnModels: input.cliOwnModels,
+    sideModelOptions: input.sideModelOptions,
   });
 
   return {
@@ -333,22 +329,13 @@ function claudeSideModelsView(input: {
 function codexSideModelsView(input: {
   provider: string;
   agent: ApiEndpointAgentSettings;
-  modelOptions: DefaultModelOption[];
   subagentThinkingOptions: DefaultThinkingOption[] | null;
-  cliOwnModels: DefaultThinkingOption[];
+  sideModelOptions: DefaultModelOption[];
 }): CodexSideModelsView | null {
   const { agent, subagentThinkingOptions } = input;
   const isShown = input.provider === "codex" && agent.enabled && subagentThinkingOptions !== null;
   if (!isShown) return null;
-  // 光秃秃的名字在 ChatGPT 接法下指 Codex 自己的模型：同名时留它自己的那条。
-  const own = input.cliOwnModels.map((model) => ({
-    id: model.id,
-    model: model.label,
-    endpointName: CODEX_OWN_MODELS_GROUP,
-  }));
-  const ownIds = new Set(own.map((option) => option.id));
-  const endpointOptions = input.modelOptions.filter((option) => !ownIds.has(option.id));
-  const modelOptions = [...own, ...endpointOptions];
+  const modelOptions = input.sideModelOptions;
   return {
     modelOptions,
     subagentModel: displayedDefaultModel(modelOptions, agent.subagentModelId ?? null),

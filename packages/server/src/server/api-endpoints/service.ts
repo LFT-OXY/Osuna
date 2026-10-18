@@ -35,6 +35,7 @@ import type {
   AgentModelDefinition,
   AgentSelectOption,
   ApiEndpointModelGroup,
+  ApiEndpointSideModelOption,
 } from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 import {
@@ -1061,16 +1062,34 @@ export class ApiEndpointService {
   }
 
   /**
-   * Codex 的 Subagent 与记忆模型能选的 Codex 自己的模型（照 magpie modelOptions 的 own）；总开关关着、不是 Codex
-   * 或用 API key 时为 null。
+   * Codex 的默认 Subagent 模型与记忆模型的选项（照 magpie modelOptions）：用 ChatGPT 登录时 Codex 自己的模型在前，
+   * 再是开着的接口的模型（光秃秃的名字去重，再是每家的「接口标识/模型名」）；同名时光秃秃的名字指 Codex 自己的，
+   * 不再列接口的那条。总开关关着或不是 Codex 时为 null。
    */
-  cliOwnModels(provider: string): AgentSelectOption[] | null {
+  sideModelOptions(provider: string): ApiEndpointSideModelOption[] | null {
     const state = this.readStateForSnapshot();
     if (!state || findProvider(provider) !== "codex") return null;
     if (!state.agents.codex.enabled) return null;
-    const own = this.codexOwnModels();
-    if (own.length === 0) return null;
-    return own.map((model) => ({ id: model.slug, label: model.label }));
+    const listed = this.retiredModels.listed(state);
+    const options: ApiEndpointSideModelOption[] = this.codexOwnModels().map((model) => ({
+      id: model.slug,
+      model: model.label,
+      endpointName: CODEX_OWN_MODELS_SOURCE,
+    }));
+    const ids = new Set(options.map((option) => option.id));
+    const add = (option: ApiEndpointSideModelOption) => {
+      if (ids.has(option.id)) return;
+      ids.add(option.id);
+      options.push(option);
+    };
+    for (const model of usableModels(listed))
+      add({ id: model.id, model: model.id, endpointName: null });
+    for (const group of endpointModelGroups(listed)) {
+      for (const { id, model } of group.models) {
+        add({ id, model: model.id, endpointName: group.endpoint.name });
+      }
+    }
+    return options;
   }
 
   /** Codex 认得的 Subagent 与记忆模型：开着的接口的已选模型，ChatGPT 接法下另有 Codex 自己的。 */
@@ -1541,7 +1560,7 @@ export class ApiEndpointService {
     const ownModels = this.codexOwnModels().map((model) => model.slug);
     const settled = this.settleThinking({
       previous,
-      next: settleAgentSettings(proposed, ownModels),
+      next: settleAgentSettings({ state: proposed, codexOwnModels: ownModels }),
     });
     const next = this.settleSubagentThinking(settled);
     for (const provider of API_ENDPOINT_PROVIDERS) {
@@ -2831,6 +2850,9 @@ function enabledAgentSettings(input: {
   if (!defaultModelId) throw new Error("No default model was picked");
   return { ...agent, enabled: true, defaultModelId };
 }
+
+// Codex 自己的模型在选项里标的出处（产品名，不翻译）。
+const CODEX_OWN_MODELS_SOURCE = "ChatGPT";
 
 // Codex 的 Subagent 跑的模型档位不清楚时给的选项（magpie subagent_effort 的 static）。
 const CODEX_UNKNOWN_SUBAGENT_LEVELS = ["low", "medium", "high", "xhigh"];

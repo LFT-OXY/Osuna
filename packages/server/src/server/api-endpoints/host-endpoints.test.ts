@@ -98,13 +98,15 @@ describe("one endpoint's default model", () => {
     ]);
     const named = withDefault([relay, backup], "backup/glm-4.6");
     expect(agentTargetEndpoint(named, "claude")?.id).toBe("ep_b");
-    expect(settleAgentSettings(named).agents.claude.defaultModelId).toBe("backup/glm-4.6");
+    expect(settleAgentSettings({ state: named }).agents.claude.defaultModelId).toBe(
+      "backup/glm-4.6",
+    );
   });
 
   test("becomes the bare name when that endpoint is off, and the first model when no one offers it", () => {
     const off = withDefault([relay, { ...backup, enabled: false }], "backup/glm-4.6");
-    expect(settleAgentSettings(off).agents.claude.defaultModelId).toBe("glm-4.6");
+    expect(settleAgentSettings({ state: off }).agents.claude.defaultModelId).toBe("glm-4.6");
     const gone = withDefault([relay], "backup/qwen3");
-    expect(settleAgentSettings(gone).agents.claude.defaultModelId).toBe("glm-4.6");
+    expect(settleAgentSettings({ state: gone }).agents.claude.defaultModelId).toBe("glm-4.6");
   });
 });
