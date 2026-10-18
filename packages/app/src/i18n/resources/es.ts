@@ -2747,6 +2747,28 @@ export const es: TranslationResources = {
           keepCurrentHint:
             "Mantener la configuración actual lo desactiva y deja el archivo como está; {{agent}} sigue lo que diga.",
         },
+        reopen: {
+          title: "Hay copias de {{agent}} en ejecución con la configuración anterior",
+          osunaSessions_one:
+            "{{count}} agente de {{agent}} en Osuna: recárgalo (Recargar agente en el menú de su pestaña).",
+          osunaSessions_other:
+            "{{count}} agentes de {{agent}} en Osuna: recarga cada uno (Recargar agente en el menú de su pestaña).",
+          cli: "En un terminal ({{copies}}, el primero iniciado a las {{time}}): cierra {{agent}} y vuelve a iniciarlo.",
+          ide: "En un editor como VS Code o Cursor ({{copies}}, el primero iniciado a las {{time}}): recarga la ventana del editor.",
+          app: "La app de {{agent}} (iniciada a las {{time}}): cerrar su ventana no la cierra. Sal con ⌘Q y vuelve a abrirla.",
+          embedded:
+            "El {{agent}} propio de {{app}} (iniciado a las {{time}}): cierra {{app}} y vuelve a abrirla.",
+          appServer:
+            "El app-server en segundo plano que comparten las sesiones de {{agent}} (iniciado a las {{time}}) sigue con la configuración anterior. Reinícialo con:",
+          appServerRestarted:
+            "Osuna reinició el app-server en segundo plano que comparten las sesiones de {{agent}}",
+          appServerRestartedDetail:
+            "Ninguna sesión lo estaba usando, así que las nuevas sesiones de {{agent}} ya tienen la configuración nueva. Si la app de {{agent}} está abierta, ciérrala y vuelve a abrirla para verla allí.",
+          appServerRestartedLine:
+            "Osuna reinició el app-server en segundo plano que comparten las sesiones de {{agent}}, que ninguna sesión usaba: las nuevas sesiones de {{agent}} ya tienen la configuración nueva.",
+          claudeNote:
+            "{{agent}} usa enseguida las variables de entorno recién escritas; las variables eliminadas, el modelo y el nivel de razonamiento solo se aplican al reabrir la sesión.",
+        },
         issues: {
           updateHost:
             "Actualiza Osuna en este host para ver aquí cuándo se cambia la configuración de {{agent}} fuera de Osuna.",

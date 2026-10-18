@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   ApiEndpoint,
   ApiEndpointAgentIssue,
+  ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import { selectAgentApiEndpointsView } from "./agent-settings";
@@ -42,6 +43,7 @@ function view(input: {
   sideModelOptions?: { id: string; model: string; endpointName: string | null }[];
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
+  reopenHints?: Record<string, ApiEndpointReopenHint[]>;
 }) {
   return selectAgentApiEndpointsView({
     state: {
@@ -63,6 +65,7 @@ function view(input: {
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
       agentIssues: input.agentIssues ?? {},
+      reopenHints: input.reopenHints ?? {},
     },
     provider: input.provider ?? "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
@@ -394,6 +397,91 @@ describe("the settings issues on an agent page", () => {
   });
 });
 
+describe("who to reopen on an agent page", () => {
+  it("reads each kind the host reports, and keeps one it doesn't know as its message", () => {
+    const result = view({
+      endpoints: [],
+      provider: "codex",
+      reopenHints: {
+        claude: [{ kind: "cli", count: 9, since: "2026-10-19T08:00:00.000Z", message: "claude" }],
+        codex: [
+          { kind: "osuna_sessions", count: 2, message: "2 sessions" },
+          { kind: "cli", count: 1, since: "2026-10-19T08:00:00.000Z", message: "terminal" },
+          {
+            kind: "embedded",
+            count: 1,
+            since: "2026-10-19T07:00:00.000Z",
+            app: "Agents Anywhere",
+            message: "embedded",
+          },
+          {
+            kind: "app_server",
+            since: "2026-10-19T06:00:00.000Z",
+            command: "codex app-server daemon restart",
+            message: "app-server",
+          },
+          { kind: "app_server_restarted", since: "not a time", message: "restarted" },
+          { kind: "a_future_kind", message: "something new" },
+        ],
+      },
+    });
+    expect(result.reopen).toEqual([
+      {
+        kind: "osunaSessions",
+        count: 2,
+        since: null,
+        app: null,
+        command: null,
+        message: "2 sessions",
+      },
+      {
+        kind: "cli",
+        count: 1,
+        since: new Date("2026-10-19T08:00:00.000Z"),
+        app: null,
+        command: null,
+        message: "terminal",
+      },
+      {
+        kind: "embedded",
+        count: 1,
+        since: new Date("2026-10-19T07:00:00.000Z"),
+        app: "Agents Anywhere",
+        command: null,
+        message: "embedded",
+      },
+      {
+        kind: "appServer",
+        count: null,
+        since: new Date("2026-10-19T06:00:00.000Z"),
+        app: null,
+        command: "codex app-server daemon restart",
+        message: "app-server",
+      },
+      {
+        kind: "appServerRestarted",
+        count: null,
+        since: null,
+        app: null,
+        command: null,
+        message: "restarted",
+      },
+      {
+        kind: "unknown",
+        count: null,
+        since: null,
+        app: null,
+        command: null,
+        message: "something new",
+      },
+    ]);
+  });
+
+  it("is empty for a host that doesn't report it", () => {
+    expect(view({ endpoints: [] }).reopen).toEqual([]);
+  });
+});
+
 describe("Keep claude.ai sign-in on an agent page", () => {
   it("is off unless the host says it is on, and Codex has no such option", () => {
     expect(view({ endpoints: [] }).keepsClaudeAiLogin).toBe(false);
@@ -407,6 +495,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         },
         gatewayUnavailable: null,
         agentIssues: {},
+        reopenHints: {},
       },
       provider: "claude",
       endpointModelGroups: null,
@@ -423,6 +512,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         agents: { codex: { enabled: false, defaultModelId: null } },
         gatewayUnavailable: null,
         agentIssues: {},
+        reopenHints: {},
       },
       provider: "codex",
       endpointModelGroups: null,

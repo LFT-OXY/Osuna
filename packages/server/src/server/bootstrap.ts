@@ -164,6 +164,7 @@ import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoi
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
 import { ApiEndpointStore } from "./api-endpoints/store.js";
 import { createCodexSignInReader } from "./api-endpoints/codex-sign-in.js";
+import { findCodexCommand } from "./agent/providers/codex-app-server-agent.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -516,6 +517,9 @@ export interface PaseoDaemonConfig {
     // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
     | "now"
     | "readCliUse"
+    // 列进程与执行 CLI 命令的适配器：测试 daemon 一律给假的（paseo-daemon.ts）。
+    | "hostProcesses"
+    | "findCodexCommand"
   > &
     ApiEndpointGatewayOverrides &
     RetiredModelsOverrides;
@@ -1056,6 +1060,10 @@ export async function createPaseoDaemon(
     },
     // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
     countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
+    countSessionsStartedBefore: (input) => agentManager.countLiveAgentsStartedBefore(input),
+    // 重启 Codex 后台 app-server 用用户配的 codex 命令。
+    findCodexCommand: ({ env }) =>
+      findCodexCommand({ runtimeSettings: config.agentProviderSettings?.codex, env }),
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,

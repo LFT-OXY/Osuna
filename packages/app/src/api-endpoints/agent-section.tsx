@@ -66,7 +66,10 @@ export interface AgentApiEndpointsSectionProps {
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
   // 主机声明了 apiEndpointCliWiring 时为提示区的处理；否则为 null，请用户更新主机。
-  issueActions: Omit<AgentIssuesAreaProps, "providerLabel" | "issues"> | null;
+  issueActions: Omit<
+    AgentIssuesAreaProps,
+    "providerLabel" | "provider" | "issues" | "reopen"
+  > | null;
 }
 
 export function AgentApiEndpointsSection({
@@ -122,7 +125,13 @@ export function AgentApiEndpointsSection({
         </View>
       ) : null}
       {issueActions ? (
-        <AgentIssuesArea providerLabel={providerLabel} issues={issues} {...issueActions} />
+        <AgentIssuesArea
+          providerLabel={providerLabel}
+          provider={view.provider}
+          issues={issues}
+          reopen={view.reopen}
+          {...issueActions}
+        />
       ) : null}
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>

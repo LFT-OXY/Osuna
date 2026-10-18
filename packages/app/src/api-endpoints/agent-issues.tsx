@@ -13,7 +13,8 @@ import { settingsStyles } from "@/styles/settings";
 import { shortenPath } from "@/utils/shorten-path";
 import { describeBypassed } from "./bypassed-copy";
 import { describeUnparsableFile } from "./config-unparsable-copy";
-import type { AgentIssueAction, AgentIssueView } from "./internal/agent-settings";
+import { describeReopenHints, type ReopenHintsCopy } from "./reopen-hints-copy";
+import type { AgentIssueAction, AgentIssueView, ReopenHintView } from "./internal/agent-settings";
 
 const ThemedChevron = withUnistyles(ChevronDown);
 
@@ -24,7 +25,11 @@ const ThemedChevron = withUnistyles(ChevronDown);
 
 export interface AgentIssuesAreaProps {
   providerLabel: string;
+  // claude、codex：Claude Code 另有一句哪些改动立刻用上。
+  provider: string;
   issues: AgentIssueView[];
+  // 要重开才用上新设置的副本（PRD 第 36 条），合成一块显示在最后。
+  reopen: ReopenHintView[];
   // 正在做的处理；做的时候所有按钮都不能点。
   pendingAction: AgentIssueAction | null;
   // 上次处理失败的原因，留着直到重试或关掉。
@@ -35,13 +40,21 @@ export interface AgentIssuesAreaProps {
 
 export function AgentIssuesArea({
   providerLabel,
+  provider,
   issues,
+  reopen,
   pendingAction,
   actionError,
   onAction,
   onDismissError,
 }: AgentIssuesAreaProps) {
-  if (issues.length === 0 && actionError === null) return null;
+  const { t, i18n } = useTranslation();
+  const reopenCopy = useMemo(
+    () => describeReopenHints({ t, provider, providerLabel, hints: reopen, locale: i18n.language }),
+    [t, provider, providerLabel, reopen, i18n.language],
+  );
+  const isEmpty = issues.length === 0 && actionError === null && reopenCopy === null;
+  if (isEmpty) return null;
   return (
     <View style={styles.area} testID="agent-api-endpoints-issues">
       {issues.map((issue) => (
@@ -54,6 +67,7 @@ export function AgentIssuesArea({
           onAction={onAction}
         />
       ))}
+      {reopenCopy ? <ReopenBlock copy={reopenCopy} /> : null}
       {actionError ? (
         <ActionErrorBlock
           providerLabel={providerLabel}
@@ -122,6 +136,35 @@ function IssueBlock({
           ) : null}
         </View>
       ) : null}
+    </Alert>
+  );
+}
+
+/** 要重开谁：一块 info，每类一行；要用户执行的命令另起一行，等宽、完整显示。 */
+function ReopenBlock({ copy }: { copy: ReopenHintsCopy }) {
+  return (
+    <Alert variant="info" size="sm" title={copy.title} testID="agent-api-endpoints-reopen">
+      <View style={styles.reopenLines}>
+        {copy.lines.map((line) => (
+          <View key={line.text} style={styles.reopenLine} testID="agent-api-endpoints-reopen-line">
+            <Text style={styles.reopenText}>{line.text}</Text>
+            {line.command !== null ? (
+              <Text
+                selectable
+                style={styles.reopenCommand}
+                testID="agent-api-endpoints-reopen-command"
+              >
+                {line.command}
+              </Text>
+            ) : null}
+          </View>
+        ))}
+        {copy.note !== null ? (
+          <Text style={styles.reopenText} testID="agent-api-endpoints-reopen-note">
+            {copy.note}
+          </Text>
+        ) : null}
+      </View>
     </Alert>
   );
 }
@@ -434,6 +477,33 @@ const styles = StyleSheet.create((theme) => ({
   fixSteps: {
     ...createControlGeometry(theme).alert.sm.text,
     color: theme.colors.foregroundMuted,
+  },
+  // Alert 的 children 排成一行：占满整行才会折行。
+  reopenLines: {
+    flex: 1,
+    minWidth: 0,
+    gap: theme.spacing[2],
+  },
+  reopenLine: {
+    gap: theme.spacing[1],
+  },
+  // 与 Alert 的说明同字号同色。
+  reopenText: {
+    ...createControlGeometry(theme).alert.sm.text,
+    color: theme.colors.foregroundMuted,
+  },
+  // 命令完整显示：没有空格也能在任意处断行，不顶出框。
+  reopenCommand: {
+    ...createControlGeometry(theme).alert.sm.text,
+    fontFamily: theme.fontFamily.mono,
+    color: theme.colors.foreground,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surface2,
+    overflowWrap: "anywhere" as const,
   },
   chevronOpen: {
     transform: [{ rotate: "180deg" }],

@@ -141,6 +141,10 @@ const zhCNRetiredTermExemptKeys = [
   "settings.apiEndpoints.agent.keepClaudeAiLoginHint",
   // Codex config.toml 里的表名 [features] 照原样写。
   "settings.apiEndpoints.agent.issues.codexMultiAgentV2OnFix",
+  // Codex 的后台进程叫 app-server（它的命令 `codex app-server daemon restart`），照原样写。
+  "settings.apiEndpoints.agent.reopen.appServer",
+  "settings.apiEndpoints.agent.reopen.appServerRestarted",
+  "settings.apiEndpoints.agent.reopen.appServerRestartedLine",
 ];
 
 function findRetiredZhCNTerms(): string[] {

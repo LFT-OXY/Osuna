@@ -435,6 +435,24 @@ cases of continuation_test.go:
   packages/server/src/server/api-endpoints/gateway/keepalive.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+Who to reopen after a CLI config is rewritten (copies started more than a
+second before the rewrite, sorted into terminal, editor, desktop app and
+another app's own copy, the shared Codex app-server and its helpers left out)
+follows startsWith, StaleCopies, codexCopyKind and daemonHelper in magpie's
+internal/agent/connectinfo.go and the STALE_HOW words of
+internal/gui/assets/app.js; restarting Codex's shared app-server when it
+started before the rewrite and no codex client is on it follows
+isManagedDaemon, daemonPIDs, parsePIDFile, findCodexDaemon,
+KeepCodexDaemonCurrent, pidFileBehind, daemonStarted, codexClients,
+isCodexClient and splitExe in internal/provider/codex_daemon.go; listing the
+processes (ps's etime, PowerShell's Win32_Process) follows List and parseList
+in internal/proc/list.go, list_other.go and list_windows.go:
+
+  packages/server/src/server/api-endpoints/reopen-hints.ts
+  packages/server/src/server/api-endpoints/reopen-hints.test.ts
+  packages/server/src/server/api-endpoints/host-processes.ts
+  packages/app/src/api-endpoints/reopen-hints-copy.ts
+
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:
 

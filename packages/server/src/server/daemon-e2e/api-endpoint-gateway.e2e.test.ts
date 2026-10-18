@@ -28,6 +28,7 @@ import { isRecord } from "../api-endpoints/upstream-http.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
+import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
@@ -5042,6 +5043,8 @@ describe("the CLI configs follow the gateway across daemon starts", () => {
         CODEX_HOME: path.join(home.root, "codex"),
       },
       homeDir: home.root,
+      // 直接起的 daemon 不经 paseo-daemon.ts：同样给假的进程表，绝不读真的。
+      hostProcesses: new FakeHostProcesses(),
     };
   }
 

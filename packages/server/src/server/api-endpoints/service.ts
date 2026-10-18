@@ -40,7 +40,10 @@ import type {
   ApiEndpointModelGroup,
   ApiEndpointSideModelOption,
 } from "../agent/agent-sdk-types.js";
-import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
+import {
+  findCodexCommand,
+  normalizeOpenAICompatibleBaseUrl,
+} from "../agent/providers/codex-app-server-agent.js";
 import {
   CLAUDE_CLOUD_SWITCH_KEYS,
   claudeManagedSettingsFiles,
@@ -128,6 +131,8 @@ import {
 } from "./cli-bypass.js";
 import type { RetiredModels } from "./retired-models.js";
 import { switchOffFileChange } from "./switch-off-preview.js";
+import { createSystemHostProcesses, type HostProcesses } from "./host-processes.js";
+import { CliReopenHints, type FindCodexCommand, type ReopenHintsSubject } from "./reopen-hints.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import { someEndpointSearchesWeb } from "./gateway/web-search.js";
 import {
@@ -341,6 +346,12 @@ export interface ApiEndpointServiceOptions {
   onActiveEndpointChanged?: (provider: ApiEndpointProvider) => void;
   // 该提供方下还活着的 Agent session 数；改写 CLI 配置会影响到它们，列表查询时带给 App 写进确认框。
   countLiveSessions: (provider: ApiEndpointProvider) => number;
+  // 该提供方下 before 之前启动、还活着的 Agent session 数：提示区说它们要重开才用上新设置。
+  countSessionsStartedBefore: (input: { provider: ApiEndpointProvider; before: Date }) => number;
+  // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）；缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
+  hostProcesses?: HostProcesses;
+  // 执行 `codex app-server daemon restart` 用哪个 codex；缺省按默认找，daemon 传用户配的 codex 命令。
+  findCodexCommand?: FindCodexCommand;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
   // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着）；缺省不下载。
@@ -448,6 +459,7 @@ export type ApiEndpointListResult = Required<
     | "agents"
     | "gatewayUnavailable"
     | "agentIssues"
+    | "reopenHints"
   >
 >;
 
@@ -493,6 +505,8 @@ export class ApiEndpointService {
   private readonly now: () => Date;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
+  private readonly countSessionsStartedBefore: ApiEndpointServiceOptions["countSessionsStartedBefore"];
+  private readonly reopenHints: CliReopenHints;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
@@ -525,6 +539,14 @@ export class ApiEndpointService {
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
+    this.countSessionsStartedBefore = options.countSessionsStartedBefore;
+    const { hostProcesses } = options;
+    this.reopenHints = new CliReopenHints({
+      hostProcesses: () => hostProcesses ?? createSystemHostProcesses(),
+      findCodexCommand: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+      logger: this.logger,
+      ownPid: process.pid,
+    });
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
@@ -586,6 +608,9 @@ export class ApiEndpointService {
       if (bypassed !== null) issues.push(bypassed);
     }
     const status = statuses[supported];
+    const reopenHints = await this.reopenHints.read({
+      subjects: { claude: this.reopenSubject("claude"), codex: this.reopenSubject("codex") },
+    });
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
       activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
@@ -595,7 +620,31 @@ export class ApiEndpointService {
       runningSessionCount: this.countLiveSessions(supported),
       gatewayUnavailable: this.gatewayUnavailable(),
       agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
+      reopenHints,
     };
+  }
+
+  /** 刚改写了配置的 CLI：记下改写时刻；Codex 共用的后台 app-server 还是改写之前的设置，没人连着就重启它，不等它。 */
+  private recordCliRewrites(synced: ApiEndpointProvider[]): void {
+    // 这之前 CLI 的使用不再算「被绕过」（「重新应用」也走这里）。
+    const rewrittenAt = this.now();
+    for (const provider of synced) this.store.recordCliRewrite({ provider, at: rewrittenAt });
+    if (!synced.includes("codex")) return;
+    const codexHome = path.dirname(this.resolveCodexConfigPath());
+    this.reopenHints
+      .checkCodexAppServer({ codexHome, changedAt: rewrittenAt })
+      .catch((error: unknown) => {
+        this.logger.error({ err: error }, "Failed to check Codex's app-server");
+      });
+  }
+
+  /** 读状态时一个 CLI 要重开谁的依据：配置目录、最近一次改写、Osuna 里改写之前启动的会话数。 */
+  private reopenSubject(provider: ApiEndpointProvider): ReopenHintsSubject {
+    const changedAt = this.store.readCliRewrittenAt(provider);
+    const cliDir = path.dirname(this.resolveCliConfigPath(provider));
+    if (changedAt === null) return { cliDir, changedAt, osunaSessions: 0 };
+    const osunaSessions = this.countSessionsStartedBefore({ provider, before: changedAt });
+    return { cliDir, changedAt, osunaSessions };
   }
 
   /**
@@ -1747,8 +1796,7 @@ export class ApiEndpointService {
     }
     this.store.writeState(next);
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
-    // 这之前 CLI 的使用不再算「被绕过」（「重新应用」也走这里）。
-    for (const provider of synced) this.store.recordCliRewrite({ provider, at: this.now() });
+    this.recordCliRewrites(synced);
     this.staleCodexModels(next);
     this.announceCommitted(previous, next);
     return next;

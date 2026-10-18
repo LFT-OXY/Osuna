@@ -213,6 +213,24 @@ export const ApiEndpointAgentIssueSchema = z.object({
 export type ApiEndpointAgentIssue = z.infer<typeof ApiEndpointAgentIssueSchema>;
 
 /**
+ * 提示区里一类还在用旧设置、要重开才用上新设置的副本（PRD 第 36 条），读状态时查。`kind` 是字符串，app 按它翻译，
+ * 认不出的照 `message`（英文）显示：osuna_sessions（count：Osuna 里在最近一次改写之前启动、还在运行的会话）；
+ * cli、ide、app、embedded（count，since：其中最早的启动时间，ISO；embedded 另有 app：带这个 CLI 的应用名）：
+ * 最近一次改写之前启动的终端、编辑器、桌面应用、别的应用自带的 CLI 进程；
+ * app_server（since、command：Codex 共用的后台 app-server 早于改写启动，有客户端连着或自动重启没成，要用户执行 command）；
+ * app_server_restarted（since：Osuna 已重启那个 app-server）。后面可能加新的 kind。
+ */
+export const ApiEndpointReopenHintSchema = z.object({
+  kind: z.string(),
+  count: z.number().optional(),
+  since: z.string().optional(),
+  app: z.string().optional(),
+  command: z.string().optional(),
+  message: z.string(),
+});
+export type ApiEndpointReopenHint = z.infer<typeof ApiEndpointReopenHintSchema>;
+
+/**
  * `activeEndpointId: null` 表示「官方」；否则是持有该 Agent 默认模型、开着的接口里最早建的一家（投影）。
  * `agents` 是每个 Agent 的设置，按 provider 索引；老 daemon 不发。`health` 为空即正常；
  * `cliBaseUrl` 只在官方模式下给出，是 CLI 自身配置实际指向的地址。
@@ -235,6 +253,8 @@ export const ApiEndpointListResponseSchema = z.object({
     gatewayUnavailable: ApiEndpointHealthIssueSchema.nullable().optional(),
     // 每个 Agent 的提示区，按 provider 索引，与请求的 provider 无关；老 daemon 不发。
     agentIssues: z.record(z.string(), z.array(ApiEndpointAgentIssueSchema)).optional(),
+    // 每个 Agent 要重开的副本，按 provider 索引，与请求的 provider 无关；老 daemon 不发。
+    reopenHints: z.record(z.string(), z.array(ApiEndpointReopenHintSchema)).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

@@ -1,0 +1,34 @@
+import type {
+  HostCommand,
+  HostCommandResult,
+  HostProcess,
+  HostProcesses,
+  HostProcessesError,
+} from "../api-endpoints/host-processes.js";
+
+/**
+ * 假的「进程与命令」：列出用例给的进程，记下执行过的命令、回用例给的结果，什么都不真的跑。
+ * 测试 daemon 缺省就用它（paseo-daemon.ts），真的实现在测试里一造就抛错。
+ */
+export class FakeHostProcesses implements HostProcesses {
+  processes: HostProcess[] = [];
+  runs: HostCommand[] = [];
+  lists = 0;
+  // 设了就让 list 抛它（问不到系统）。
+  listError: HostProcessesError | null = null;
+  runResult: HostCommandResult = { exitCode: 0, output: "" };
+  // 执行命令时顺带做的事（如重启后 Codex 改写进程记录文件）。
+  onRun: ((command: HostCommand) => void) | null = null;
+
+  async list(): Promise<HostProcess[]> {
+    this.lists += 1;
+    if (this.listError !== null) throw this.listError;
+    return this.processes;
+  }
+
+  async run(command: HostCommand): Promise<HostCommandResult> {
+    this.runs.push(command);
+    this.onRun?.(command);
+    return this.runResult;
+  }
+}

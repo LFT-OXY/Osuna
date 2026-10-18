@@ -468,6 +468,11 @@ interface ManagedAgentBase {
    * 只有 registerSession 会写入；可选是因为测试里手搭的 ManagedAgent 不经过它。
    */
   createAgentsCapability?: CreateAgentsCapability;
+  /**
+   * 这个 session 起来的时刻（重新加载后是新的）：CLI 配置在这之后改写的，它要重开才用上。
+   * 只有 registerSession 会写入；可选是因为测试里手搭的 ManagedAgent 不经过它。
+   */
+  sessionStartedAt?: Date;
   config: AgentSessionConfig;
   runtimeInfo?: AgentRuntimeInfo;
   createdAt: Date;
@@ -1113,6 +1118,22 @@ export class AgentManager {
       if (!agent.internal && agent.provider === provider && LIVE_STATUSES.has(agent.lifecycle)) {
         count += 1;
       }
+    }
+    return count;
+  }
+
+  /** 该提供方下 before 之前起来、还活着的 session 数（第三方接口改写 CLI 配置之后它们要重开）。 */
+  countLiveAgentsStartedBefore(input: { provider: AgentProvider; before: Date }): number {
+    let count = 0;
+    for (const agent of this.agents.values()) {
+      const startedAt = agent.sessionStartedAt;
+      const isCounted =
+        !agent.internal &&
+        agent.provider === input.provider &&
+        LIVE_STATUSES.has(agent.lifecycle) &&
+        startedAt !== undefined &&
+        startedAt < input.before;
+      if (isCounted) count += 1;
     }
     return count;
   }
@@ -3864,6 +3885,7 @@ export class AgentManager {
       session,
       capabilities: session.capabilities,
       createAgentsCapability: params.createAgentsCapability,
+      sessionStartedAt: now,
       config,
       runtimeInfo: undefined,
       lifecycle: "initializing",

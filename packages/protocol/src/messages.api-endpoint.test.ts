@@ -727,6 +727,28 @@ describe("API endpoint settings issues (apiEndpointCliWiring)", () => {
     expect(SessionOutboundMessageSchema.parse(listResponse)).toEqual(listResponse);
   });
 
+  it("parses a list with reopenHints, and a hint kind it does not know", () => {
+    const withHints = {
+      ...listResponse,
+      payload: {
+        ...listResponse.payload,
+        reopenHints: {
+          claude: [{ kind: "osuna_sessions", count: 2, message: "2 Claude Code sessions" }],
+          codex: [
+            {
+              kind: "app_server",
+              since: "2026-10-19T08:00:00.000Z",
+              command: "codex app-server daemon restart",
+              message: "Codex's background app-server",
+            },
+            { kind: "a_future_kind", message: "something new" },
+          ],
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(withHints)).toEqual(withHints);
+  });
+
   it("parses set_agent_settings with and without reapply", () => {
     const base = {
       type: "provider.api_endpoint.set_agent_settings.request" as const,

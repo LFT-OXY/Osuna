@@ -12,6 +12,10 @@
  * 4. 不起开发者真实的登录 shell：查 Claude Code 云平台开关时问登录 shell 的进程（带 PASEO_SHELL_PROBE=1）
  *    同样换掉，daemon 按没问到处理。
  *
+ * 5. 不读本机真实的进程表、不重启真的 Codex 后台 app-server：第三方接口列进程（`ps`，Windows 上 PowerShell 的
+ *    Win32_Process）换成一个打印 PASEO_E2E_PROCESS_TABLE_PATH 文件内容（没设就什么都不打）的进程；
+ *    `codex app-server daemon restart` 换成立刻以 0 退出的进程，并记一行到 PASEO_E2E_UPGRADE_RECORD_PATH。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -85,21 +89,58 @@ export function isLoginShellProbe(options) {
   return options?.env?.PASEO_SHELL_PROBE === "1";
 }
 
+/** 第三方接口列本机进程（host-processes.ts）：ps，或 Windows 上问 Win32_Process 的 PowerShell。 */
+export function isProcessListing(command, args) {
+  const name = commandName(command);
+  const list = Array.isArray(args) ? args.map(String) : [];
+  // 只换列全部进程的那种；daemon 别处 `ps -p <pid>` 查自己起的进程照常。
+  if (name === "ps") return list.includes("-A");
+  return name === "powershell" && list.some((arg) => arg.includes("Win32_Process"));
+}
+
+/** 重启 Codex 后台 app-server（reopen-hints.ts）。 */
+export function isCodexAppServerRestart(_command, args) {
+  const list = Array.isArray(args) ? args.map(String) : [];
+  const at = list.indexOf("app-server");
+  return at >= 0 && list[at + 1] === "daemon" && list[at + 2] === "restart";
+}
+
+/** 换上的进程：打印假的进程表，或什么都不做、以 0 退出。 */
+function fakeProcessArgs(command, args) {
+  if (isProcessListing(command, args)) {
+    const table = process.env.PASEO_E2E_PROCESS_TABLE_PATH ?? "";
+    return [
+      "-e",
+      "const f=process.argv[1];if(f){try{process.stdout.write(require('fs').readFileSync(f,'utf8'))}catch{}}",
+      table,
+    ];
+  }
+  return ["-e", "process.exit(0)"];
+}
+
 const realSpawn = childProcess.spawn;
 childProcess.spawn = function sealedSpawn(command, args, options) {
   const spawnOptionsOf = Array.isArray(args) ? options : args;
+  const isFaked = isProcessListing(command, args) || isCodexAppServerRestart(command, args);
   const isSealed =
     isGlobalInstallCommand(command, args) ||
     isCodexSignInProbe(command, args) ||
     isLoginShellProbe(spawnOptionsOf);
-  if (!isSealed) {
+  if (!isSealed && !isFaked) {
     return realSpawn.apply(this, arguments);
   }
   const record = process.env.PASEO_E2E_UPGRADE_RECORD_PATH;
-  if (record) {
+  const isRecorded = record && !isProcessListing(command, args);
+  if (isRecorded) {
     appendFileSync(record, `${JSON.stringify({ command, args, at: Date.now() })}\n`);
   }
   const spawnOptions = Array.isArray(args) ? options : args;
+  if (isFaked) {
+    return realSpawn(process.execPath, fakeProcessArgs(command, args), {
+      ...spawnOptions,
+      shell: false,
+    });
+  }
   return realSpawn(
     process.execPath,
     ["-e", "process.stderr.write('blocked by the e2e upgrade seal\\n'); process.exit(1)"],

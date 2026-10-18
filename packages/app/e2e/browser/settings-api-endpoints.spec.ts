@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
@@ -47,6 +47,8 @@ test.use({
     CODEX_HOME: path.join(cliHome, "codex"),
     // Claude Code 的托管设置也指到临时目录。
     PASEO_CLAUDE_MANAGED_SETTINGS_DIR: path.join(cliHome, "managed"),
+    // 列进程时 daemon 读到的是这份假进程表（封条换掉 ps），绝不是本机真实的。
+    PASEO_E2E_PROCESS_TABLE_PATH: path.join(cliHome, "process-table.txt"),
   },
 });
 
@@ -1881,6 +1883,57 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
       await expect(override.getByRole("button")).toHaveCount(0);
     } finally {
       await writeFile(configPath, "");
+    }
+  });
+
+  test("after a rewrite, the copies still on the old settings are listed with how to reopen each", async ({
+    page,
+  }) => {
+    const codexDir = path.join(cliHome, "codex");
+    const pidFile = path.join(codexDir, "app-server-daemon", "app-server.pid");
+    const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000);
+    // ps 的格式：pid、父 pid、已运行时间、命令行。终端里的 Codex 两小时前启动，还有一个刚启动的不算；
+    // 后台 app-server 有一个终端 codex 连着，Osuna 不重启它。
+    const table = [
+      "  4101     1    02:00:00 /opt/homebrew/bin/codex",
+      "  4102     1    00:00:01 /opt/homebrew/bin/codex resume --last",
+      `  4103     1    03:00:00 ${codexDir}/packages/app-server-daemon/releases/0.163.0/bin/codex app-server --listen unix:///x --managed-daemon`,
+      "  4104     1    01:00:00 /Users/me/.local/bin/claude",
+    ].join("\n");
+    await writeFile(path.join(cliHome, "process-table.txt"), `${table}\n`);
+    await mkdir(path.dirname(pidFile), { recursive: true });
+    await writeFile(pidFile, JSON.stringify({ pid: 4103 }));
+    await utimes(pidFile, threeHoursAgo, threeHoursAgo);
+    try {
+      await seedApiEndpoint(client, {
+        name: "Relay A",
+        baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+        models: ["kimi-k2"],
+      });
+      const on = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+      expect(on.error).toBeNull();
+
+      await openAgentPage(page, "codex");
+      const reopen = agentSection(page).getByTestId("agent-api-endpoints-reopen");
+      await expect(reopen).toContainText(
+        "Running copies of Codex still have the settings from before",
+      );
+      // 同一 worker 里别的用例留下的 Osuna 会话也会算进来，这里只看终端与 app-server 两行。
+      const lines = reopen.getByTestId("agent-api-endpoints-reopen-line");
+      const terminal = lines.filter({ hasText: "In a terminal" });
+      await expect(terminal).toHaveCount(1);
+      await expect(terminal).toContainText("In a terminal (1, first started at");
+      await expect(terminal).toContainText("quit Codex and start it again.");
+      await expect(
+        lines.filter({ hasText: "The background app-server Codex sessions share (started at" }),
+      ).toHaveCount(1);
+      const command = reopen.getByTestId("agent-api-endpoints-reopen-command");
+      await expect(command).toHaveText("codex app-server daemon restart");
+      await expect(command).toBeInViewport({ ratio: 1 });
+      await expect(reopen.getByTestId("agent-api-endpoints-reopen-note")).toHaveCount(0);
+    } finally {
+      await writeFile(path.join(cliHome, "process-table.txt"), "");
+      await rm(path.join(codexDir, "app-server-daemon"), { recursive: true, force: true });
     }
   });
 

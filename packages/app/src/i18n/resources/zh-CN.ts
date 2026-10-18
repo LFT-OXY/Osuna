@@ -2708,6 +2708,26 @@ export const zhCN: TranslationResources = {
           keepCurrentHint:
             "「保留当前设置」会直接关掉，文件保持现在的样子，{{agent}} 照文件里写的走。",
         },
+        reopen: {
+          title: "还有运行中的 {{agent}} 在用改之前的设置",
+          osunaSessions_one:
+            "Osuna 里有 {{count}} 个 {{agent}} 的 Agent：在它的标签菜单里点「重新加载 Agent」。",
+          osunaSessions_other:
+            "Osuna 里有 {{count}} 个 {{agent}} 的 Agent：逐个在标签菜单里点「重新加载 Agent」。",
+          cli: "终端里的（{{copies}} 个，最早 {{time}} 启动）：退出 {{agent}} 再重新启动。",
+          ide: "VS Code、Cursor 等编辑器里的（{{copies}} 个，最早 {{time}} 启动）：重新加载编辑器窗口。",
+          app: "{{agent}} 应用（{{time}} 启动）：关掉窗口它仍在运行，用 ⌘Q 退出后再打开。",
+          embedded: "{{app}} 自带的 {{agent}}（{{time}} 启动）：完全退出 {{app}} 再打开。",
+          appServer:
+            "{{agent}} 会话共用的后台 app-server（{{time}} 启动）还是改之前的设置，用这条命令重启它：",
+          appServerRestarted: "Osuna 已重启 {{agent}} 会话共用的后台 app-server",
+          appServerRestartedDetail:
+            "当时没有会话连着它，新开的 {{agent}} 会话已用上新设置。如果 {{agent}} 应用开着，退出后再打开才能看到。",
+          appServerRestartedLine:
+            "Osuna 已重启 {{agent}} 会话共用的后台 app-server（当时没有会话连着它），新开的 {{agent}} 会话已用上新设置。",
+          claudeNote:
+            "新写入的环境变量 {{agent}} 会立刻用上；删掉的变量、模型和思考档位要重开会话才生效。",
+        },
         issues: {
           updateHost: "更新这台主机上的 Osuna 后，{{agent}} 的配置被别的程序改了会在这里提示。",
           notThroughGateway: "{{agent}} 已不经过中转站：配置被别的程序改了",

@@ -3,6 +3,7 @@ import type {
   ApiEndpointAgentIssue,
   ApiEndpointAgentSettings,
   ApiEndpointHealthIssue,
+  ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
 import {
@@ -131,6 +132,58 @@ function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
 }
 
 /**
+ * 提示区里一类要重开才用上新设置的副本（PRD 第 36 条）：Osuna 自己的会话、终端 / 编辑器 / 桌面应用 / 别的应用自带的 CLI、
+ * Codex 共用的后台 app-server（要用户执行 command）与 Osuna 已重启它。认不出的 kind 照主机给的英文原文。
+ */
+export type ReopenHintKind =
+  | "osunaSessions"
+  | "cli"
+  | "ide"
+  | "app"
+  | "embedded"
+  | "appServer"
+  | "appServerRestarted"
+  | "unknown";
+
+export interface ReopenHintView {
+  kind: ReopenHintKind;
+  count: number | null;
+  // 最早的启动时间；没有或读不出为 null。
+  since: Date | null;
+  app: string | null;
+  command: string | null;
+  message: string;
+}
+
+const REOPEN_KINDS: Record<string, Exclude<ReopenHintKind, "unknown">> = {
+  osuna_sessions: "osunaSessions",
+  cli: "cli",
+  ide: "ide",
+  app: "app",
+  embedded: "embedded",
+  app_server: "appServer",
+  app_server_restarted: "appServerRestarted",
+};
+
+/** 主机给的 ISO 时间；没有或读不出为 null。 */
+function readTime(text: string | undefined): Date | null {
+  const at = new Date(text ?? "");
+  if (Number.isNaN(at.getTime())) return null;
+  return at;
+}
+
+function toReopenView(hint: ApiEndpointReopenHint): ReopenHintView {
+  return {
+    kind: REOPEN_KINDS[hint.kind] ?? "unknown",
+    count: hint.count ?? null,
+    since: readTime(hint.since),
+    app: hint.app ?? null,
+    command: hint.command ?? null,
+    message: hint.message,
+  };
+}
+
+/**
  * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（endpointName 为 null，哪家提供都行），
  * 或「接口标识/模型名」（指定这一家，显示成「模型名（接口名）」）。
  */
@@ -194,6 +247,8 @@ export interface SubagentThinkingView {
 const ULTRA_CODE_OPTION_ID = "ultracode";
 
 export interface AgentApiEndpointsView {
+  // 这一页的提供方（claude、codex）。
+  provider: string;
   enabled: boolean;
   // 总开关关着时打不开的原因；开着时总能关，恒为 null。
   enableBlockedBy: AgentSwitchBlock | null;
@@ -205,6 +260,8 @@ export interface AgentApiEndpointsView {
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
   issues: AgentIssueView[];
+  // 提示区里要重开的副本，按主机给的顺序。
+  reopen: ReopenHintView[];
   // 「保留 claude.ai 登录」开着没有（ADR 0012）；只有 Claude Code 有这个选项，别的 Agent 为 null。
   keepsClaudeAiLogin: boolean | null;
   // 总开关关着、默认模型没有档位或主机太旧（快照里没有分组）时为 null，不显示这一行。
@@ -286,6 +343,7 @@ export function selectAgentApiEndpointsView(input: {
   });
 
   return {
+    provider,
     enabled: agent.enabled,
     enableBlockedBy,
     defaultModelId: agent.defaultModelId,
@@ -293,6 +351,7 @@ export function selectAgentApiEndpointsView(input: {
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
+    reopen: (state.reopenHints[provider] ?? []).map(toReopenView),
     keepsClaudeAiLogin,
     defaultThinking,
     sideModels,

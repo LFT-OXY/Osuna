@@ -2706,6 +2706,27 @@ export const ko: TranslationResources = {
           keepCurrentHint:
             "‘현재 설정 유지’는 끄고 파일을 그대로 둡니다. {{agent}}은(는) 파일에 적힌 대로 동작합니다.",
         },
+        reopen: {
+          title: "실행 중인 {{agent}}가 아직 변경 전 설정을 쓰고 있습니다",
+          osunaSessions_one:
+            "Osuna의 {{agent}} 에이전트 {{count}}개: 탭 메뉴에서 '에이전트 다시 로드'를 누르세요.",
+          osunaSessions_other:
+            "Osuna의 {{agent}} 에이전트 {{count}}개: 각각 탭 메뉴에서 '에이전트 다시 로드'를 누르세요.",
+          cli: "터미널에서 실행 중({{copies}}개, 처음 시작 {{time}}): {{agent}}를 종료하고 다시 시작하세요.",
+          ide: "VS Code, Cursor 같은 편집기에서 실행 중({{copies}}개, 처음 시작 {{time}}): 편집기 창을 다시 로드하세요.",
+          app: "{{agent}} 앱({{time}} 시작): 창을 닫아도 계속 실행됩니다. ⌘Q로 종료한 뒤 다시 여세요.",
+          embedded: "{{app}}에 내장된 {{agent}}({{time}} 시작): {{app}}를 종료하고 다시 여세요.",
+          appServer:
+            "{{agent}} 세션이 함께 쓰는 백그라운드 app-server({{time}} 시작)가 아직 변경 전 설정입니다. 다음 명령으로 다시 시작하세요:",
+          appServerRestarted:
+            "Osuna가 {{agent}} 세션이 함께 쓰는 백그라운드 app-server를 다시 시작했습니다",
+          appServerRestartedDetail:
+            "쓰는 세션이 없었으므로 새 {{agent}} 세션에는 새 설정이 적용됩니다. {{agent}} 앱이 열려 있다면 종료하고 다시 열어야 보입니다.",
+          appServerRestartedLine:
+            "Osuna가 {{agent}} 세션이 함께 쓰는 백그라운드 app-server를 다시 시작했습니다(쓰는 세션 없음). 새 {{agent}} 세션에는 새 설정이 적용됩니다.",
+          claudeNote:
+            "{{agent}}는 새로 쓴 환경 변수를 바로 사용합니다. 삭제한 변수, 모델, 사고 수준은 세션을 다시 열어야 적용됩니다.",
+        },
         issues: {
           updateHost:
             "이 호스트의 Osuna를 업데이트하면 {{agent}} 설정이 Osuna 밖에서 바뀌었을 때 여기에 표시됩니다.",

@@ -2749,6 +2749,28 @@ export const fr: TranslationResources = {
           keepCurrentHint:
             "Conserver les réglages actuels le désactive et laisse le fichier tel quel ; {{agent}} suit ce qu'il contient.",
         },
+        reopen: {
+          title: "Des copies de {{agent}} en cours ont encore les anciens réglages",
+          osunaSessions_one:
+            "{{count}} agent {{agent}} dans Osuna : rechargez-le (Recharger l’agent dans le menu de son onglet).",
+          osunaSessions_other:
+            "{{count}} agents {{agent}} dans Osuna : rechargez-les un par un (Recharger l’agent dans le menu de leur onglet).",
+          cli: "Dans un terminal ({{copies}}, le premier lancé à {{time}}) : quittez {{agent}} et relancez-le.",
+          ide: "Dans un éditeur comme VS Code ou Cursor ({{copies}}, le premier lancé à {{time}}) : rechargez la fenêtre de l’éditeur.",
+          app: "L’app {{agent}} (lancée à {{time}}) : fermer sa fenêtre ne la quitte pas. Quittez-la avec ⌘Q et rouvrez-la.",
+          embedded:
+            "Le {{agent}} intégré à {{app}} (lancé à {{time}}) : quittez {{app}} et rouvrez-la.",
+          appServer:
+            "L’app-server en arrière-plan que partagent les sessions {{agent}} (lancé à {{time}}) a encore les anciens réglages. Redémarrez-le avec :",
+          appServerRestarted:
+            "Osuna a redémarré l’app-server en arrière-plan que partagent les sessions {{agent}}",
+          appServerRestartedDetail:
+            "Aucune session ne l’utilisait : les nouvelles sessions {{agent}} ont les nouveaux réglages. Si l’app {{agent}} est ouverte, quittez-la et rouvrez-la pour les voir.",
+          appServerRestartedLine:
+            "Osuna a redémarré l’app-server en arrière-plan que partagent les sessions {{agent}}, qu’aucune session n’utilisait : les nouvelles sessions {{agent}} ont les nouveaux réglages.",
+          claudeNote:
+            "{{agent}} prend tout de suite les variables d’environnement nouvellement écrites ; les variables supprimées, le modèle et le niveau de réflexion ne s’appliquent qu’après réouverture de la session.",
+        },
         issues: {
           updateHost:
             "Mettez à jour Osuna sur cet hôte pour voir ici quand les réglages de {{agent}} sont modifiés en dehors d'Osuna.",

@@ -15,6 +15,7 @@ import { createTestAgentClients } from "./fake-agent-client.js";
 import type { PushNotificationSender } from "../push/index.js";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { AGENT_PROVIDER_DEFINITIONS } from "@getpaseo/protocol/provider-manifest";
+import { FakeHostProcesses } from "./fake-host-processes.js";
 
 interface TestPaseoDaemonOptions {
   daemonVersion?: string;
@@ -242,6 +243,8 @@ async function prepareTestDaemonConfig(
       claudeManagedSettingsDir: path.join(paseoHomeRoot, "claude-managed"),
       // 绝不起开发者真实的登录 shell：缺省答「什么都没设」，关心它的用例自己传假的。
       readLoginShellEnv: async () => ({}),
+      // 绝不读真实的进程表、不跑真的 codex：缺省一个什么都没在跑的假适配器，关心它的用例自己传。
+      hostProcesses: new FakeHostProcesses(),
       ...(options.apiEndpoints ?? {
         env: {
           CLAUDE_CONFIG_DIR: path.join(paseoHomeRoot, "claude-config"),

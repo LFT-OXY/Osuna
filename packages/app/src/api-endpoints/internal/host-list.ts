@@ -5,6 +5,7 @@ import {
   type ApiEndpointAgentSettings,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
+  type ApiEndpointReopenHint,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
@@ -26,6 +27,8 @@ export type HostEndpointsLoadState =
       gatewayUnavailable: ApiEndpointHealthIssue | null;
       // 每个 Agent 的「设置被改过」，按 provider 索引；主机没声明 apiEndpointCliWiring 时为空。
       agentIssues: Record<string, ApiEndpointAgentIssue[]>;
+      // 每个 Agent 要重开的副本，按 provider 索引；老主机不发时为空。
+      reopenHints: Record<string, ApiEndpointReopenHint[]>;
     };
 
 export function selectHostEndpointsState(input: {
@@ -40,6 +43,7 @@ export function selectHostEndpointsState(input: {
       agents: input.data.agents ?? {},
       gatewayUnavailable: input.data.gatewayUnavailable ?? null,
       agentIssues: input.data.agentIssues ?? {},
+      reopenHints: input.data.reopenHints ?? {},
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

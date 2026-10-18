@@ -608,6 +608,26 @@ async function resolveCodexLaunchPrefix(runtimeSettings?: ProviderRuntimeSetting
   };
 }
 
+/**
+ * 执行 Codex 自己的子命令（如 `app-server daemon restart`）要用的程序、前置参数与环境，按用户配置的 codex 命令；
+ * 找不到 codex 时为 null。
+ */
+export async function findCodexCommand(input: {
+  runtimeSettings?: ProviderRuntimeSettings;
+  env: Record<string, string>;
+}): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv } | null> {
+  const launch = await resolveCodexLaunch(input.runtimeSettings);
+  const availability = await checkCodexLaunchAvailable(launch);
+  if (!availability.available) return null;
+  let command = availability.resolvedPath ?? launch.command;
+  if (launch.source === "override") command = launch.command;
+  return {
+    command,
+    args: launch.args,
+    env: buildCodexAppServerEnv(input.runtimeSettings, input.env),
+  };
+}
+
 /** `codex --version` 的原始输出，按用户配置的 codex 命令执行；找不到 codex 时抛错。 */
 export async function probeCodexVersion(
   runtimeSettings: ProviderRuntimeSettings | undefined,

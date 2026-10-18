@@ -47,8 +47,9 @@ describe("selectHostEndpointsState", () => {
       endpoints: [endpoint({ id: "a" })],
       agents: { claude: { enabled: true, defaultModelId: "claude-sonnet-4-5" } },
       gatewayUnavailable: null,
-      // 老主机不发 agentIssues：提示区为空。
+      // 老主机不发 agentIssues、reopenHints：提示区为空。
       agentIssues: {},
+      reopenHints: {},
     });
   });
 
@@ -66,6 +67,22 @@ describe("selectHostEndpointsState", () => {
       error: null,
     });
     expect(ready).toMatchObject({ agentIssues: { claude: [], codex: [issue] } });
+  });
+
+  it("reads who to reopen for each agent", () => {
+    const hint = { kind: "osuna_sessions", count: 1, message: "1 Codex session" };
+    const ready = selectHostEndpointsState({
+      data: {
+        requestId: "r",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        reopenHints: { claude: [], codex: [hint] },
+        error: null,
+      },
+      error: null,
+    });
+    expect(ready).toMatchObject({ reopenHints: { claude: [], codex: [hint] } });
   });
 
   it("reports the daemon's error, and a failed request", () => {
