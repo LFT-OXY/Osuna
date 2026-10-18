@@ -125,6 +125,7 @@ function IssueBlock({
   const toggleFix = useCallback(() => setIsFixOpen((open) => !open), []);
   const steps = issue.hasFixSteps ? fixSteps : undefined;
   const hasButtons = steps !== undefined || issue.actions.length > 0;
+  const isStepsShown = steps !== undefined && isFixOpen;
   return (
     <Alert
       variant="warning"
@@ -134,8 +135,9 @@ function IssueBlock({
       testID={`agent-api-endpoints-issue-${issue.kind}`}
     >
       {hasButtons ? (
-        // 「如何修复」和处理按钮同一排，展开的步骤占满下面一整行。
+        // 展开的步骤接在说明下面、按钮上面；「如何修复」和处理按钮同一排。
         <View style={styles.fix}>
+          {isStepsShown ? <FixStepsView steps={steps} /> : null}
           <View style={styles.actions}>
             {steps !== undefined ? (
               <HowToFixButton isOpen={isFixOpen} onToggle={toggleFix} />
@@ -149,11 +151,6 @@ function IssueBlock({
               />
             ))}
           </View>
-          {steps !== undefined && isFixOpen ? (
-            <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
-              {steps}
-            </Text>
-          ) : null}
         </View>
       ) : null}
     </Alert>
@@ -169,7 +166,9 @@ function ReopenBlock({ copy, onDismiss }: { copy: ReopenHintsCopy; onDismiss: ()
         {copy.lines.map((line) => (
           <View key={line.text} style={styles.reopenLine} testID="agent-api-endpoints-reopen-line">
             <Text style={styles.reopenText}>{line.text}</Text>
-            {line.command !== null ? <ReopenCommand command={line.command} /> : null}
+            {line.command !== null ? (
+              <CommandLine command={line.command} testID="agent-api-endpoints-reopen-command" />
+            ) : null}
           </View>
         ))}
         {copy.note !== null ? (
@@ -192,8 +191,34 @@ function ReopenBlock({ copy, onDismiss }: { copy: ReopenHintsCopy; onDismiss: ()
   );
 }
 
+/** 修复步骤：一段话，或分几步、要执行的命令单独一行。 */
+function FixStepsView({ steps }: { steps: FixSteps }) {
+  if (typeof steps === "string") {
+    return (
+      <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
+        {steps}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.fixList} testID="agent-api-endpoints-issue-fix-steps">
+      {steps.map((step, index) => (
+        <View key={step.text} style={styles.fixStep}>
+          <Text style={styles.fixSteps}>{`${index + 1}.`}</Text>
+          <View style={styles.fixStepBody}>
+            <Text style={styles.fixSteps}>{step.text}</Text>
+            {step.command !== null ? (
+              <CommandLine command={step.command} testID="agent-api-endpoints-issue-fix-command" />
+            ) : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** 一条要用户执行的命令：与同页的安装、升级命令同样的等宽字和「复制」。 */
-function ReopenCommand({ command }: { command: string }) {
+function CommandLine({ command, testID }: { command: string; testID: string }) {
   const { t } = useTranslation();
   const toast = useToast();
   const handleCopy = useCallback(() => {
@@ -208,7 +233,7 @@ function ReopenCommand({ command }: { command: string }) {
         style={styles.reopenCommand}
         selectable
         dataSet={CODE_SURFACE_DATASET}
-        testID="agent-api-endpoints-reopen-command"
+        testID={testID}
       >
         {command}
       </UiText>
@@ -322,11 +347,19 @@ function ActionErrorBlock({
   );
 }
 
+/** 修复的一步；要用户执行的命令单独给出，等宽显示、可复制。 */
+interface FixStep {
+  text: string;
+  command: string | null;
+}
+
+/** 「如何修复」点开后的内容：一段话，或分几步。 */
+type FixSteps = string | FixStep[];
+
 interface IssueCopy {
   title: string;
   description?: string;
-  // 「如何修复」点开后的步骤。
-  fixSteps?: string;
+  fixSteps?: FixSteps;
 }
 
 /** 按 code 与参数翻译；认不出的照主机给的英文原文。文件路径、键名、解析器原文不翻译。 */
@@ -531,16 +564,28 @@ interface ProxyFixInput {
   values: Record<string, string | undefined>;
 }
 
-/** 「如何修复」按 daemon 判断的代理来源（magpie 的三种说法）；认不出为 null。 */
-function proxyFixSteps(input: ProxyFixInput): string | null {
+// 写进 shell 配置文件的那一行（magpie 的说法）；是命令，不翻译。
+const NO_PROXY_EXPORT = "export NO_PROXY=127.0.0.1";
+
+/** 「如何修复」中间那一步，按 daemon 判断的代理来源（magpie 的三种说法）；认不出为 null。 */
+function proxyFixStep(input: ProxyFixInput): FixStep | null {
   const { t, values } = input;
   switch (input.fix) {
     case "environment":
-      return t("settings.apiEndpoints.agent.issues.codexProxiedFixEnvironment", values);
+      return {
+        text: t("settings.apiEndpoints.agent.issues.codexProxiedFixEnvironment", values),
+        command: null,
+      };
     case "windows":
-      return t("settings.apiEndpoints.agent.issues.codexProxiedFixWindows", values);
+      return {
+        text: t("settings.apiEndpoints.agent.issues.codexProxiedFixWindows", values),
+        command: null,
+      };
     case "other":
-      return t("settings.apiEndpoints.agent.issues.codexProxiedFixOther", values);
+      return {
+        text: t("settings.apiEndpoints.agent.issues.codexProxiedFixOther", values),
+        command: NO_PROXY_EXPORT,
+      };
     default:
       return null;
   }
@@ -558,12 +603,19 @@ function codexProxiedCopy(input: {
   const from = proxyFromLabel({ t, from: params.from });
   if (from === null) return { title, description: issue.message };
   const values = { agent: providerLabel, host: params.host, proxy: params.proxy, from };
-  const fixSteps = proxyFixSteps({ t, fix: params.fix, values });
-  if (fixSteps === null) return { title, description: issue.message };
+  const fixStep = proxyFixStep({ t, fix: params.fix, values });
+  if (fixStep === null) return { title, description: issue.message };
   return {
     title,
     description: t("settings.apiEndpoints.agent.issues.codexProxiedDetail", values),
-    fixSteps,
+    fixSteps: [
+      { text: t("settings.apiEndpoints.agent.issues.codexProxiedFixDirect"), command: null },
+      fixStep,
+      {
+        text: t("settings.apiEndpoints.agent.issues.codexProxiedFixReopen", values),
+        command: null,
+      },
+    ],
   };
 }
 
@@ -588,6 +640,18 @@ const styles = StyleSheet.create((theme) => ({
   fix: {
     flex: 1,
     gap: theme.spacing[3],
+  },
+  fixList: {
+    gap: theme.spacing[2],
+  },
+  fixStep: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+  },
+  fixStepBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: theme.spacing[1],
   },
   // 与 Alert 的说明同字号同色。
   fixSteps: {

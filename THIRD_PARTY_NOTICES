@@ -462,11 +462,17 @@ wordings follow codexEnv, codexProxyFor, systemProxyName, reqwestNoProxy,
 systemBypassed, realProxyProbe, codexThroughProxy and codexProxiedDetail in
 magpie's internal/agent/codex_proxy.go and probed and proxied in reach.go;
 reading the system proxy follows parseScutil, parseWindows, system, System and
-Redact in internal/netproxy:
+Redact in internal/netproxy; the NO_PROXY entries added to the Codex Osuna
+starts follow withProxy in internal/netproxy/netproxy.go; the app's notice and
+its three fix texts follow codexProxiedDetail and the "proxied" title in
+internal/gui/assets/app.js and i18n.js:
 
   packages/server/src/server/api-endpoints/codex-proxy.ts
   packages/server/src/server/api-endpoints/system-proxy.ts
   packages/server/src/server/api-endpoints/host-processes.ts
+  packages/server/src/server/agent/providers/codex-app-server-agent.ts
+  packages/app/src/api-endpoints/agent-issues.tsx
+  packages/app/src/i18n/resources/*.ts (settings.apiEndpoints.agent.issues.codexProxied*)
 
 Request-format auto-detection (each format's base URL, the model asked, the
 smallest request) follows magpie's internal/provider/detect.go and test.go:

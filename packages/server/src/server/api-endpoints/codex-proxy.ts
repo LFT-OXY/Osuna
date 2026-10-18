@@ -300,6 +300,14 @@ export interface ProbeThroughProxyInput {
   userAgent: string;
 }
 
+/** 中转站地址不是 http://：daemon 只在明文 TCP 上监听，出现就是调用方传错了。 */
+export class GatewayProbeAddressError extends Error {
+  constructor(readonly base: string) {
+    super(`The gateway is only probed over http://, not ${base}`);
+    this.name = "GatewayProbeAddressError";
+  }
+}
+
 /** 经代理问 base 的根路径，答出中转站的自我介绍才算通；生产发 HTTP，测试可换。 */
 export type ProbeThroughProxy = (input: ProbeThroughProxyInput) => Promise<boolean>;
 
@@ -310,7 +318,7 @@ export type ProbeThroughProxy = (input: ProbeThroughProxyInput) => Promise<boole
 export function probeThroughProxy(input: ProbeThroughProxyInput): Promise<boolean> {
   const target = new URL(`${input.base.replace(/\/+$/, "")}/`);
   if (target.protocol !== "http:") {
-    throw new Error(`The gateway is only probed over http://, not ${input.base}`);
+    throw new GatewayProbeAddressError(input.base);
   }
   const proxy = parseProxyUrl(input.proxy);
   if (proxy === null) return Promise.resolve(false);
@@ -441,20 +449,22 @@ export class CodexProxyCheck {
   async read(input: CodexProxyCheckInput): Promise<CodexProxyFinding | null> {
     const key = `${input.base} ${input.respectsSystemProxy}`;
     if (this.pending?.key !== key) {
-      const done = this.check(input).then((finding) => {
-        const result = { key, finding };
-        this.last = result;
-        return result;
-      });
-      const pending = { key, done };
-      this.pending = pending;
-      void done
+      // 查不成（读环境、读系统代理或问代理时出错）只记日志、当作没有问题：这是旁支检查，不挡列表。
+      const done = this.check(input)
         .catch((error: unknown) => {
           this.options.logger.error({ err: error }, "Failed to check Codex's proxy");
+          return null;
         })
-        .finally(() => {
-          if (this.pending === pending) this.pending = null;
+        .then((finding) => {
+          const result = { key, finding };
+          this.last = result;
+          return result;
         });
+      const pending = { key, done };
+      this.pending = pending;
+      void done.finally(() => {
+        if (this.pending === pending) this.pending = null;
+      });
     }
     const waited = await waitAtMost({ task: this.pending.done, ms: CHECK_WAIT_MS });
     if (waited !== null) return waited.finding;
@@ -470,6 +480,9 @@ export class CodexProxyCheck {
     const { platform } = this.options;
     const route = codexProxyFor({ ...input, env, system, platform });
     if (route === null) return null;
+    // 读不出的代理地址既问不了、也说不出给用户看：不提示。
+    const proxy = redactProxy(route.proxy);
+    if (proxy === "") return null;
     const [isReachedThroughProxy, isReachedDirectly] = await Promise.all([
       this.probe({ base: input.base, proxy: route.proxy }),
       this.options.reachesGateway(input.base),
@@ -478,7 +491,7 @@ export class CodexProxyCheck {
     if (!isProxied) return null;
     return {
       host: new URL(input.base).host,
-      proxy: redactProxy(route.proxy),
+      proxy,
       from: codexProxyFrom({ source: route.source, platform }),
       fix: codexProxyFix({ source: route.source, platform }),
     };

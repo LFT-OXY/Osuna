@@ -10,8 +10,7 @@ import path from "node:path";
 /*
  * 终端里现在打开的 shell 有哪些变量：起登录 shell（先 -ilc，答不上再 -lc），让它在两个标记之间
  * 用 NUL 隔开打印要问的变量。终端也可能开的是 fish 或 nushell：装了、且配置目录在（首次运行时建）的
- * 一并问，同时问；每个变量取第一个答出它的，登录 shell 在前。一分钟内再问同一组变量用上次的答案
- * （Claude Code 的云平台开关与 Codex 的代理各问各的一组）；
+ * 一并问，同时问；每个变量取第一个答出它的，登录 shell 在前。一分钟内再问用上次的答案；
  * Windows 不问（magpie 同样）。
  * shell 起在自己的会话里（detached），不抢 daemon 的终端；带 PASEO_SHELL_PROBE=1，e2e 封条据此拦下。
  */
@@ -42,22 +41,23 @@ export type FindShell = (name: string) => string | null;
 
 interface CachedAnswer {
   at: number;
+  keys: string;
   vars: LoginShellVars;
 }
 
-/** 带一分钟缓存的读取器，每组变量各记各的；同时来的几次问同一组合成一次。 */
+/** 带一分钟缓存的读取器；同时来的几次问合成一次。 */
 export function createLoginShellEnvReader(options: LoginShellEnvReaderOptions): ReadLoginShellEnv {
   const platform = options.platform ?? process.platform;
   const spawn = options.spawn ?? defaultSpawn;
   const now = options.now ?? Date.now;
-  const cache = new Map<string, CachedAnswer>();
-  const pending = new Map<string, Promise<CachedAnswer>>();
+  let cached: CachedAnswer | null = null;
+  let pending: Promise<CachedAnswer> | null = null;
 
   return async (keys) => {
     if (platform === "win32") return {};
     const wanted = keys.join("\0");
-    const cached = cache.get(wanted);
-    if (cached && now() - cached.at < CACHE_MS) return cached.vars;
+    const isFresh = cached !== null && cached.keys === wanted && now() - cached.at < CACHE_MS;
+    if (cached && isFresh) return cached.vars;
     const shells = [
       loginShell(options.env),
       ...terminalShells({
@@ -67,16 +67,13 @@ export function createLoginShellEnvReader(options: LoginShellEnvReaderOptions): 
         findShell: options.findShell ?? findShell,
       }),
     ];
-    let asking = pending.get(wanted);
-    if (asking === undefined) {
-      asking = askShells({ env: options.env, spawn, keys, shells })
-        .then((vars) => ({ at: now(), vars }))
-        .finally(() => pending.delete(wanted));
-      pending.set(wanted, asking);
-    }
-    const answer = await asking;
-    cache.set(wanted, answer);
-    return answer.vars;
+    pending ??= askShells({ env: options.env, spawn, keys, shells })
+      .then((vars) => ({ at: now(), keys: wanted, vars }))
+      .finally(() => {
+        pending = null;
+      });
+    cached = await pending;
+    return cached.vars;
   };
 }
 

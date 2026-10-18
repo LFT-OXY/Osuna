@@ -18,6 +18,9 @@
  *    系统代理读 PASEO_E2E_SYSTEM_PROXY_PATH 文件（SystemProxy 的 JSON，没设或没有这个文件就是没设代理），
  *    不跑 scutil、不读注册表。
  *
+ * 6. 不带开发者的代理：daemon 自己的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（各种大小写）在这里删掉，
+ *    查 Codex 经哪个代理时只会读到用例给的假系统代理（上面第 5 条）。spawn-node.ts 的 withUpgradeSeal 同样会删。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -119,6 +122,11 @@ function readFakeProcessTable() {
     });
   }
   return processes;
+}
+
+const PROXY_VARS = new Set(["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]);
+for (const key of Object.keys(process.env)) {
+  if (PROXY_VARS.has(key.toUpperCase())) delete process.env[key];
 }
 
 const NO_SYSTEM_PROXY = { url: null, http: null, socks: null, bypass: [] };

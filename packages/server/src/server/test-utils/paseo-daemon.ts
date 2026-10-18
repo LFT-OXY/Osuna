@@ -243,6 +243,11 @@ async function prepareTestDaemonConfig(
       claudeManagedSettingsDir: path.join(paseoHomeRoot, "claude-managed"),
       // 绝不起开发者真实的登录 shell：缺省答「什么都没设」，关心它的用例自己传假的。
       readLoginShellEnv: async () => ({}),
+      // 绝不带上开发者自己的代理变量，也绝不经代理发请求：关心代理的用例自己传本机假代理与真的探测。
+      proxyEnv: {},
+      probeThroughProxy: async () => {
+        throw new Error("The test daemon never probes a proxy: pass probeThroughProxy");
+      },
       // 绝不读真实的进程表、不跑真的 codex：缺省一个什么都没在跑的假适配器，关心它的用例自己传。
       hostProcesses: new FakeHostProcesses(),
       ...(options.apiEndpoints ?? {

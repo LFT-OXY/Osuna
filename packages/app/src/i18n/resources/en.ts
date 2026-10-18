@@ -2833,12 +2833,16 @@ export const en = {
             "{{agent}} sends its requests for Osuna ({{host}}) through the proxy at {{proxy}}, set in {{from}}. That proxy doesn't pass them on to Osuna, so every turn fails with 502 Bad Gateway, whichever model it's on. {{agent}} chats in Osuna already go around the proxy.",
           codexProxiedFromWindowsSettings: "Windows proxy settings",
           codexProxiedFromSystemSettings: "the system proxy settings",
+          codexProxiedFixDirect:
+            "Have the proxy send 127.0.0.1 direct: add a DIRECT rule for 127.0.0.0/8, or use rule mode instead of global.",
           codexProxiedFixEnvironment:
-            "Have the proxy send 127.0.0.1 direct: add a DIRECT rule for 127.0.0.0/8, or use rule mode instead of global. Or add 127.0.0.1 to NO_PROXY where {{from}} is set (your shell profile, such as ~/.zshrc, if it's there). Then quit and reopen {{agent}}. Until then, Switch to official puts {{agent}}'s settings back as they were.",
+            "Or add 127.0.0.1 to NO_PROXY where {{from}} is set (your shell profile, such as ~/.zshrc, if it's there).",
           codexProxiedFixWindows:
-            "Have the proxy send 127.0.0.1 direct: add a DIRECT rule for 127.0.0.0/8, or use rule mode instead of global. Or add 127.0.0.1 to \"Don't use the proxy server for addresses beginning with\" in Windows proxy settings (127.* there isn't enough for {{agent}}). Then quit and reopen {{agent}}. Until then, Switch to official puts {{agent}}'s settings back as they were.",
+            "Or add 127.0.0.1 to \"Don't use the proxy server for addresses beginning with\" in Windows proxy settings (127.* there isn't enough for {{agent}}).",
           codexProxiedFixOther:
-            "Have the proxy send 127.0.0.1 direct: add a DIRECT rule for 127.0.0.0/8, or use rule mode instead of global. Or add export NO_PROXY=127.0.0.1 to your shell profile (~/.zshrc): {{agent}} in a terminal and the ChatGPT app's {{agent}} both read it. Then quit and reopen {{agent}}. Until then, Switch to official puts {{agent}}'s settings back as they were.",
+            "Or add this line to your shell profile (~/.zshrc). {{agent}} in a terminal and the ChatGPT app's {{agent}} both read it:",
+          codexProxiedFixReopen:
+            "Then quit and reopen {{agent}}. Until then, Switch to official puts {{agent}}'s settings back as they were.",
           howToFix: "How to fix",
           codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
           codexProfileOverrideDetail:

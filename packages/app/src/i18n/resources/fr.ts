@@ -2833,12 +2833,16 @@ export const fr: TranslationResources = {
             "{{agent}} envoie ses requêtes pour Osuna ({{host}}) via le proxy {{proxy}}, défini dans {{from}}. Ce proxy ne les transmet pas à Osuna : chaque tour échoue avec 502 Bad Gateway, quel que soit le modèle. Les conversations {{agent}} dans Osuna contournent déjà le proxy.",
           codexProxiedFromWindowsSettings: "les paramètres de proxy de Windows",
           codexProxiedFromSystemSettings: "les paramètres de proxy du système",
+          codexProxiedFixDirect:
+            "Faites passer 127.0.0.1 en direct dans le proxy : ajoutez une règle DIRECT pour 127.0.0.0/8, ou utilisez le mode règles plutôt que le mode global.",
           codexProxiedFixEnvironment:
-            "Faites passer 127.0.0.1 en direct dans le proxy : ajoutez une règle DIRECT pour 127.0.0.0/8, ou utilisez le mode règles plutôt que le mode global. Ou ajoutez 127.0.0.1 à NO_PROXY là où {{from}} est défini (votre profil de shell, comme ~/.zshrc, s'il s'y trouve). Puis quittez et rouvrez {{agent}}. D'ici là, Revenir à l'officiel remet les paramètres de {{agent}} comme avant.",
+            "Ou ajoutez 127.0.0.1 à NO_PROXY là où {{from}} est défini (votre profil de shell, comme ~/.zshrc, s'il s'y trouve).",
           codexProxiedFixWindows:
-            "Faites passer 127.0.0.1 en direct dans le proxy : ajoutez une règle DIRECT pour 127.0.0.0/8, ou utilisez le mode règles plutôt que le mode global. Ou ajoutez 127.0.0.1 à « Ne pas utiliser le serveur proxy pour les adresses commençant par » dans les paramètres de proxy de Windows (127.* n'y suffit pas pour {{agent}}). Puis quittez et rouvrez {{agent}}. D'ici là, Revenir à l'officiel remet les paramètres de {{agent}} comme avant.",
+            "Ou ajoutez 127.0.0.1 à « Ne pas utiliser le serveur proxy pour les adresses commençant par » dans les paramètres de proxy de Windows (127.* n'y suffit pas pour {{agent}}).",
           codexProxiedFixOther:
-            "Faites passer 127.0.0.1 en direct dans le proxy : ajoutez une règle DIRECT pour 127.0.0.0/8, ou utilisez le mode règles plutôt que le mode global. Ou ajoutez export NO_PROXY=127.0.0.1 à votre profil de shell (~/.zshrc) : {{agent}} dans un terminal et le {{agent}} de l'app ChatGPT le lisent tous les deux. Puis quittez et rouvrez {{agent}}. D'ici là, Revenir à l'officiel remet les paramètres de {{agent}} comme avant.",
+            "Ou ajoutez cette ligne à votre profil de shell (~/.zshrc). {{agent}} dans un terminal et le {{agent}} de l'app ChatGPT la lisent tous les deux :",
+          codexProxiedFixReopen:
+            "Puis quittez et rouvrez {{agent}}. D'ici là, Revenir à l'officiel remet les paramètres de {{agent}} comme avant.",
           howToFix: "Comment corriger",
           codexProfileOverride:
             "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",

@@ -1928,8 +1928,18 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
       await notice.getByRole("button", { name: "How to fix" }).click();
       const steps = notice.getByTestId("agent-api-endpoints-issue-fix-steps");
       await expect(steps).toContainText("add a DIRECT rule for 127.0.0.0/8");
-      await expect(steps).toContainText("add export NO_PROXY=127.0.0.1 to your shell profile");
+      await expect(steps).toContainText("Or add this line to your shell profile (~/.zshrc).");
+      await expect(steps.getByTestId("agent-api-endpoints-issue-fix-command")).toHaveText(
+        "export NO_PROXY=127.0.0.1",
+      );
+      await expect(steps.getByRole("button", { name: "Copy" })).toBeVisible();
+      await steps.scrollIntoViewIfNeeded();
       await expect(steps).toBeInViewport({ ratio: 1 });
+      // 展开的步骤在说明下面、按钮上面。
+      const stepsBox = await steps.boundingBox();
+      const buttonBox = await issueButton(page, "switchToOfficial").boundingBox();
+      if (stepsBox === null || buttonBox === null) throw new Error("The notice isn't laid out");
+      expect(stepsBox.y + stepsBox.height).toBeLessThanOrEqual(buttonBox.y);
     } finally {
       await rm(systemProxyPath, { force: true });
       // daemon 把设了的系统代理记 15 秒：等提示消失再交给下一个用例。

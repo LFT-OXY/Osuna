@@ -138,9 +138,8 @@ export function createSystemProxyReader(input: {
 
 /** 代理地址去掉账号密码再给人看（magpie 的 Redact）；读不出的地址为空串。 */
 export function redactProxy(raw: string): string {
-  const parsed = parseProxyUrl(raw);
-  if (parsed === null) return "";
-  const url = parsed;
+  const url = parseProxyUrl(raw);
+  if (url === null) return "";
   const hasAccount = url.username !== "" || url.password !== "";
   if (!hasAccount) return raw;
   url.username = "";

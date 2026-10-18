@@ -145,6 +145,7 @@ import {
   codexProxiedMessage,
   CodexProxyCheck,
   probeThroughProxy,
+  type ProbeThroughProxy,
   type ProxyEnv,
 } from "./codex-proxy.js";
 import { createSystemProxyReader, NO_SYSTEM_PROXY, type SystemProxy } from "./system-proxy.js";
@@ -359,6 +360,10 @@ export interface ApiEndpointServiceOptions {
   readLoginShellEnv?: ReadLoginShellEnv;
   // 问一个代理地址后面是不是中转站；缺省发 HTTP，测试可换。
   probeGatewayAt?: ProbeGatewayAt;
+  // 经 Codex 的代理问中转站（codex-proxy.ts）；缺省真的发，测试 daemon 一律换成假的，只有起了本机假代理的用例用真的。
+  probeThroughProxy?: ProbeThroughProxy;
+  // daemon 自己的代理变量（登录 shell 没答出时 Codex 用它们）；缺省取 env，测试 daemon 一律给空的，绝不带上开发者的代理。
+  proxyEnv?: ProxyEnv;
   // Claude Code 托管设置所在的目录；缺省按系统（claude-cloud-switches.ts），
   // 环境里有 PASEO_CLAUDE_MANAGED_SETTINGS_DIR 时用它。测试一律指到临时目录，绝不读真实的系统目录。
   claudeManagedSettingsDir?: string;
@@ -459,6 +464,9 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
 
 const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
 
+// 问登录 shell 的变量：云平台开关与代理变量一次问齐（magpie proc 的 shellVars 连同 ProxyVars），共用一分钟的答案。
+const LOGIN_SHELL_KEYS: readonly string[] = [...CLAUDE_CLOUD_SWITCH_KEYS, ...CODEX_PROXY_ENV_KEYS];
+
 /** 只是提醒、不说明设置有问题的提示；有它们时照样看是不是被绕过。 */
 const NOTICE_CODES: ReadonlySet<ApiEndpointAgentIssueCode> = new Set<ApiEndpointAgentIssueCode>([
   "codex_multi_agent_v2_on",
@@ -537,6 +545,7 @@ export class ApiEndpointService {
   private readonly countSessionsStartedBefore: ApiEndpointServiceOptions["countSessionsStartedBefore"];
   private readonly reopenHints: CliReopenHints;
   private readonly codexProxy: CodexProxyCheck;
+  private readonly proxyEnv: ProxyEnv;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
@@ -565,6 +574,7 @@ export class ApiEndpointService {
       defaultClaudeManagedSettingsDir(process.platform);
     this.readLoginShellEnv =
       options.readLoginShellEnv ?? createLoginShellEnvReader({ env: this.env });
+    this.proxyEnv = options.proxyEnv ?? this.env;
     this.reachesGateway = createGatewayReach({ probe: options.probeGatewayAt ?? probeGatewayAt });
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
@@ -595,7 +605,7 @@ export class ApiEndpointService {
       readSystemProxy: createSystemProxyReader({
         read: () => this.readSystemProxy(hostProcesses),
       }),
-      probeThroughProxy,
+      probeThroughProxy: options.probeThroughProxy ?? probeThroughProxy,
       reachesGateway: this.reachesGateway,
       userAgent: `Osuna/${options.daemonVersion}`,
       platform: process.platform,
@@ -2912,7 +2922,7 @@ export class ApiEndpointService {
     // CLAUDE_CONFIG_DIR 设了时 Claude Code 读它下面的 .claude.json，否则读家目录下的。
     const configDir = this.env.CLAUDE_CONFIG_DIR?.trim();
     const globalConfigPath = path.join(configDir || this.homeDir, ".claude.json");
-    const loginShellVars = await this.readLoginShellEnv(CLAUDE_CLOUD_SWITCH_KEYS);
+    const loginShellVars = await this.readLoginShellEnv(LOGIN_SHELL_KEYS);
     const finding = findClaudeCloudSwitch({
       managed,
       settings: readClaudeEnvFile(this.resolveClaudeSettingsPath()),
@@ -2952,9 +2962,9 @@ export class ApiEndpointService {
 
   /** Codex 读到的代理变量：登录 shell 的，没有再用 daemon 自己的（magpie 的 codexEnv）。 */
   private async readCodexProxyEnv(): Promise<ProxyEnv> {
-    const shell = await this.readLoginShellEnv(CODEX_PROXY_ENV_KEYS);
+    const shell = await this.readLoginShellEnv(LOGIN_SHELL_KEYS);
     const env: Record<string, string | undefined> = {};
-    for (const key of CODEX_PROXY_ENV_KEYS) env[key] = shell[key] ?? this.env[key];
+    for (const key of CODEX_PROXY_ENV_KEYS) env[key] = shell[key] ?? this.proxyEnv[key];
     return env;
   }
 

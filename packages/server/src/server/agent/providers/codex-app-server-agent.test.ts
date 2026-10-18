@@ -3233,16 +3233,20 @@ describe("Codex app-server provider", () => {
     }
   });
 
-  test("Codex started by Osuna goes around a proxy to 127.0.0.1, keeping NO_PROXY's own entries", () => {
-    const noProxyOf = (env: Record<string, string>) =>
-      buildCodexAppServerEnv({ env: { NO_PROXY: "", no_proxy: "", ...env } }).NO_PROXY;
-    expect(noProxyOf({})).toBe("127.0.0.1");
-    expect(noProxyOf({ NO_PROXY: "corp.example, 10.0.0.0/8" })).toBe(
-      "corp.example, 10.0.0.0/8,127.0.0.1",
-    );
-    // Codex 先读大写的，没有才读小写的：写成大写时带上小写的值。
-    expect(noProxyOf({ no_proxy: "localhost" })).toBe("localhost,127.0.0.1");
-    expect(noProxyOf({ NO_PROXY: "localhost, 127.0.0.1" })).toBe("localhost, 127.0.0.1");
+  test("Codex started by Osuna goes around a proxy to this computer, keeping NO_PROXY's own entries", () => {
+    const noProxyOf = (env: Record<string, string>) => {
+      const built = buildCodexAppServerEnv({ env: { NO_PROXY: "", no_proxy: "", ...env } });
+      return [built.NO_PROXY, built.no_proxy];
+    };
+    const loopback = "localhost,127.0.0.1,::1";
+    expect(noProxyOf({})).toEqual([loopback, loopback]);
+    const kept = "corp.example,10.0.0.0/8,localhost,127.0.0.1,::1";
+    expect(noProxyOf({ NO_PROXY: "corp.example, 10.0.0.0/8" })).toEqual([kept, kept]);
+    // Codex 先读大写的，没有才读小写的：从小写的值算起，两个都写上。
+    const fromLower = "corp.example,localhost,127.0.0.1,::1";
+    expect(noProxyOf({ no_proxy: "corp.example" })).toEqual([fromLower, fromLower]);
+    const already = "127.0.0.1,localhost,::1";
+    expect(noProxyOf({ NO_PROXY: "127.0.0.1, localhost,::1" })).toEqual([already, already]);
   });
 
   test("builds app-server env from launch-context env overrides", () => {

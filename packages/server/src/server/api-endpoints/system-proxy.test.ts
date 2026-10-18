@@ -105,14 +105,15 @@ describe("createSystemProxyReader", () => {
       now: () => now,
     });
     expect(await read()).toEqual(NO_SYSTEM_PROXY);
-    answer = parseWindowsProxy({ server: "p:1", override: "" });
+    const set = parseWindowsProxy({ server: "p:1", override: "" });
+    answer = set;
     now = 2_000;
     expect(await read()).toEqual(NO_SYSTEM_PROXY);
     now = 2_001;
-    expect(await read()).toEqual(answer);
+    expect(await read()).toEqual(set);
     answer = NO_SYSTEM_PROXY;
     now = 17_001;
-    expect((await read()).url).toBe("http://p:1");
+    expect(await read()).toEqual(set);
     now = 17_002;
     expect(await read()).toEqual(NO_SYSTEM_PROXY);
     expect(reads).toBe(3);

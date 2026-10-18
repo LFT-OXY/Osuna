@@ -1,11 +1,5 @@
 import { writeFileSync } from "node:fs";
-import {
-  createServer,
-  request as httpRequest,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
@@ -17,6 +11,8 @@ import { CODEX_API_ENDPOINT_PROVIDER_ID } from "../api-endpoints/codex-config-pa
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
+import { passOn } from "../test-utils/forwarding-proxy.js";
+import { probeThroughProxy } from "../api-endpoints/codex-proxy.js";
 
 const ID = CODEX_API_ENDPOINT_PROVIDER_ID;
 
@@ -1218,6 +1214,8 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
         homeDir: root,
         readLoginShellEnv: async () => shellVars,
         hostProcesses,
+        // 真的经代理问：代理都是这里起在本机回环上的假代理。
+        probeThroughProxy,
       },
     });
     client = await connect(daemon);
@@ -1250,18 +1248,31 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
     return `127.0.0.1:${daemon.port}`;
   }
 
+  // 三种修法各自的那句（magpie codexProxiedDetail 原文，magpie 换成 Osuna）。
+  const FIXES = {
+    environment:
+      "or add 127.0.0.1 to NO_PROXY where HTTP_PROXY is set (your shell profile, such as ~/.zshrc, if it's there), ",
+    other:
+      "or add export NO_PROXY=127.0.0.1 to your shell profile (~/.zshrc): Codex in a terminal and the ChatGPT app's Codex both read it, ",
+  };
+
+  function proxiedMessage(input: { from: string; fix: keyof typeof FIXES }): string {
+    return (
+      `Codex sends its requests for Osuna (${gatewayHost()}) through the proxy at ${proxyUrl}, set in ${input.from}, ` +
+      "and that proxy doesn't pass them on to Osuna: every turn fails, with 502 Bad Gateway, whichever model it is on. " +
+      "Have the proxy send 127.0.0.1 direct (a DIRECT rule for 127.0.0.0/8, or rule mode rather than global), " +
+      FIXES[input.fix] +
+      "then quit and reopen Codex. Until then, Switch to official puts Codex's config back as it was."
+    );
+  }
+
   test("HTTP_PROXY set in the login shell to a proxy that answers 502: proxied, fixed in the environment", async () => {
     shellVars = { http_proxy: proxyUrl };
     expect(await codexIssues()).toEqual([
       {
         code: "codex_proxied",
         params: { host: gatewayHost(), proxy: proxyUrl, from: "HTTP_PROXY", fix: "environment" },
-        message:
-          `Codex sends its requests for Osuna (${gatewayHost()}) through the proxy at ${proxyUrl}, set in HTTP_PROXY, ` +
-          "and that proxy doesn't pass them on to Osuna: every turn fails, with 502 Bad Gateway, whichever model it is on. " +
-          "Have the proxy send 127.0.0.1 direct (a DIRECT rule for 127.0.0.0/8, or rule mode rather than global), " +
-          "or add 127.0.0.1 to NO_PROXY where HTTP_PROXY is set (your shell profile, such as ~/.zshrc, if it's there), " +
-          "then quit and reopen Codex. Until then, Switch to official puts Codex's config back as it was.",
+        message: proxiedMessage({ from: "HTTP_PROXY", fix: "environment" }),
       },
     ]);
     // 这是 Osuna 自己发出的请求：问的是中转站的根路径，带 Osuna 的身份。
@@ -1274,6 +1285,12 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
   });
 
   test("NO_PROXY=127.0.0.1 goes around the proxy: nothing to say, nothing asked", async () => {
+    shellVars = { HTTP_PROXY: proxyUrl, NO_PROXY: "127.0.0.1" };
+    expect(await codexIssues()).toEqual([]);
+    expect(proxied).toEqual([]);
+  });
+
+  test("127.0.0.1 among other NO_PROXY entries goes around it too", async () => {
     shellVars = { HTTP_PROXY: proxyUrl, NO_PROXY: "localhost,127.0.0.1" };
     expect(await codexIssues()).toEqual([]);
     expect(proxied).toEqual([]);
@@ -1285,7 +1302,7 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
       {
         code: "codex_proxied",
         params: { host: gatewayHost(), proxy: proxyUrl, from: "HTTP_PROXY", fix: "environment" },
-        message: expect.stringContaining("set in HTTP_PROXY"),
+        message: proxiedMessage({ from: "HTTP_PROXY", fix: "environment" }),
       },
     ]);
   });
@@ -1302,7 +1319,7 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
           from: "system_settings",
           fix: "other",
         },
-        message: expect.stringContaining("or add export NO_PROXY=127.0.0.1 to your shell profile"),
+        message: proxiedMessage({ from: "the system's proxy settings", fix: "other" }),
       },
     ]);
   });
@@ -1327,12 +1344,3 @@ describe("Codex reaching the gateway through a proxy that doesn't pass its reque
     expect(proxied).toEqual([]);
   });
 });
-
-/** 转发的假代理：把 absolute-form 的请求原样发给目标，再把回答交回去。 */
-function passOn(request: IncomingMessage, response: ServerResponse): void {
-  const forwarded = httpRequest(request.url ?? "", { method: request.method }, (reply) => {
-    response.writeHead(reply.statusCode ?? 502, reply.headers);
-    reply.pipe(response);
-  });
-  forwarded.end();
-}

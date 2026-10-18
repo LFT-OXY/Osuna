@@ -2780,12 +2780,16 @@ export const zhCN: TranslationResources = {
             "{{agent}} 发给 Osuna（{{host}}）的请求经过代理 {{proxy}}（设在{{from}}）。代理没把请求转给 Osuna，所以不管用哪个模型，每一轮都报 502 Bad Gateway。Osuna 里的 {{agent}} 对话已经绕开了这个代理。",
           codexProxiedFromWindowsSettings: "Windows 的代理设置",
           codexProxiedFromSystemSettings: "系统的代理设置",
+          codexProxiedFixDirect:
+            "让代理直连 127.0.0.1：给 127.0.0.0/8 加一条 DIRECT 规则，或把代理从全局模式改成规则模式。",
           codexProxiedFixEnvironment:
-            "让代理直连 127.0.0.1：给 127.0.0.0/8 加一条 DIRECT 规则，或把代理从全局模式改成规则模式。也可以在设置 {{from}} 的地方把 127.0.0.1 加进 NO_PROXY（在 shell 配置文件里的话，比如 ~/.zshrc）。然后退出并重新打开 {{agent}}。改好之前，「切回官方」会把 {{agent}} 的设置恢复原样。",
+            "或者在设置 {{from}} 的地方把 127.0.0.1 加进 NO_PROXY（在 shell 配置文件里的话，比如 ~/.zshrc）。",
           codexProxiedFixWindows:
-            "让代理直连 127.0.0.1：给 127.0.0.0/8 加一条 DIRECT 规则，或把代理从全局模式改成规则模式。也可以在 Windows 的代理设置里，把 127.0.0.1 加进「请勿对以下列条目开头的地址使用代理服务器」（那里写 127.* 对 {{agent}} 不管用）。然后退出并重新打开 {{agent}}。改好之前，「切回官方」会把 {{agent}} 的设置恢复原样。",
+            "或者在 Windows 的代理设置里，把 127.0.0.1 加进「请勿对以下列条目开头的地址使用代理服务器」（那里写 127.* 对 {{agent}} 不管用）。",
           codexProxiedFixOther:
-            "让代理直连 127.0.0.1：给 127.0.0.0/8 加一条 DIRECT 规则，或把代理从全局模式改成规则模式。也可以在 shell 配置文件（~/.zshrc）里加一行 export NO_PROXY=127.0.0.1：终端里的 {{agent}} 和 ChatGPT 应用里的 {{agent}} 都会读它。然后退出并重新打开 {{agent}}。改好之前，「切回官方」会把 {{agent}} 的设置恢复原样。",
+            "或者在 shell 配置文件（~/.zshrc）里加上这一行，终端里的 {{agent}} 和 ChatGPT 应用里的 {{agent}} 都会读它：",
+          codexProxiedFixReopen:
+            "然后退出并重新打开 {{agent}}。改好之前，「切回官方」会把 {{agent}} 的设置恢复原样。",
           howToFix: "如何修复",
           codexProfileOverride: "Codex 的 profile「{{profile}}」盖过了第三方接口",
           codexProfileOverrideDetail:

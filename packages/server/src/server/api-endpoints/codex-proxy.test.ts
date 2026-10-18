@@ -1,12 +1,7 @@
-import {
-  createServer,
-  request as httpRequest,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 import {
+  CodexProxyCheck,
   codexProxiedMessage,
   codexProxyFix,
   codexProxyFor,
@@ -18,6 +13,8 @@ import {
   type CodexProxySource,
 } from "./codex-proxy.js";
 import { NO_SYSTEM_PROXY, type SystemProxy } from "./system-proxy.js";
+import { passOn } from "../test-utils/forwarding-proxy.js";
+import { createTestLogger } from "../../test-utils/test-logger.js";
 
 const BASE = "http://127.0.0.1:6769/api-endpoint-gateway";
 const PROXY = "http://127.0.0.1:7890";
@@ -304,11 +301,62 @@ describe("probeThroughProxy (a fake proxy on loopback)", () => {
   });
 });
 
-/** 转发的假代理：把 absolute-form 的请求原样发给目标，再把回答交回去。 */
-function passOn(request: IncomingMessage, response: ServerResponse): void {
-  const forwarded = httpRequest(request.url ?? "", { method: request.method }, (reply) => {
-    response.writeHead(reply.statusCode ?? 502, reply.headers);
-    reply.pipe(response);
+describe("CodexProxyCheck", () => {
+  const GATEWAY = "http://127.0.0.1:6769/api-endpoint-gateway";
+
+  function check(input: {
+    env: Record<string, string>;
+    readEnv?: () => Promise<Record<string, string>>;
+    probeThroughProxy?: () => Promise<boolean>;
+  }): CodexProxyCheck {
+    return new CodexProxyCheck({
+      readEnv: input.readEnv ?? (async () => input.env),
+      readSystemProxy: async () => NO_SYSTEM_PROXY,
+      probeThroughProxy: input.probeThroughProxy ?? (async () => false),
+      reachesGateway: async () => true,
+      userAgent: "Osuna/1",
+      platform: "darwin",
+      logger: createTestLogger(),
+    });
+  }
+
+  test("reached directly but not through the proxy: the finding, the account left out", async () => {
+    const found = await check({ env: { HTTP_PROXY: "http://me:pw@127.0.0.1:7890" } }).read({
+      base: GATEWAY,
+      respectsSystemProxy: false,
+    });
+    expect(found).toEqual({
+      host: "127.0.0.1:6769",
+      proxy: "http://127.0.0.1:7890",
+      from: "HTTP_PROXY",
+      fix: "environment",
+    });
   });
-  forwarded.end();
-}
+
+  test("a check that fails is no finding, never an error for the list", async () => {
+    const input = { base: GATEWAY, respectsSystemProxy: false };
+    const env = { HTTP_PROXY: PROXY };
+    const failingEnv = check({
+      env,
+      readEnv: async () => {
+        throw new Error("the shell went away");
+      },
+    });
+    expect(await failingEnv.read(input)).toBeNull();
+    const failingProbe = check({
+      env,
+      probeThroughProxy: async () => {
+        throw new Error("probe crashed");
+      },
+    });
+    expect(await failingProbe.read(input)).toBeNull();
+  });
+
+  test("an address that can't be read is not told", async () => {
+    const found = await check({ env: { HTTP_PROXY: "http://[bad" } }).read({
+      base: GATEWAY,
+      respectsSystemProxy: false,
+    });
+    expect(found).toBeNull();
+  });
+});

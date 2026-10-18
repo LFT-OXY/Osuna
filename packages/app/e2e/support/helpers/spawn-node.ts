@@ -20,6 +20,12 @@ const NO_CLAUDE_MANAGED_SETTINGS_DIR = path.join(
   "paseo-e2e-no-claude-managed-settings",
 );
 
+/*
+ * 开发者终端里的代理变量也不带进测试 daemon：查 Codex 经哪个代理时 daemon 会读它们并经代理发请求，
+ * 测试只许打用例自己起在本机回环上的假代理。各种大小写都去掉。
+ */
+const PROXY_VARS = new Set(["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]);
+
 export function withUpgradeSeal(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
   const base = env ?? process.env;
   const seal = `--import ${pathToFileURL(UPGRADE_SEAL_PATH).href}`;
@@ -33,7 +39,8 @@ export function withUpgradeSeal(env: NodeJS.ProcessEnv | undefined): NodeJS.Proc
       base.PASEO_CLAUDE_MANAGED_SETTINGS_DIR ?? NO_CLAUDE_MANAGED_SETTINGS_DIR,
   };
   for (const key of Object.keys(sealed)) {
-    if (key.startsWith("CLAUDE_CODE_USE_")) delete sealed[key];
+    const isProxyVar = PROXY_VARS.has(key.toUpperCase());
+    if (key.startsWith("CLAUDE_CODE_USE_") || isProxyVar) delete sealed[key];
   }
   return sealed;
 }

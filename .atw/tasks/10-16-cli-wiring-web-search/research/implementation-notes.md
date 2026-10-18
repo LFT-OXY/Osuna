@@ -855,3 +855,13 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端 `api-endpoint-codex.e2e.test.ts`「Codex reaching the gateway through a proxy that doesn't pass its requests on」：登录 shell 的 `http_proxy` 指向不转发的假代理 → 整份比对 `codex_proxied`（环境变量那种修法）且假代理收到的是中转站根路径、`Osuna/` 身份；`NO_PROXY=localhost,127.0.0.1` 不提示也不探测；`NO_PROXY=localhost` 照样提示；系统代理（带账号，提示里去掉）→ `system_settings` / `other`；转发的代理不提示；总开关关着不查。
 - app：`agent-settings.test.ts`（「如何修复」与「切回官方」）；浏览器测试「Codex behind a system proxy that doesn't pass its requests on…」。
 - 截图（无头 Chromium、临时 CODEX_HOME、假系统代理与本机不转发的假代理）：`screenshots/28-codex-page_proxied_desktop-1280_{en,zh}.png`。
+
+### 审查修正（28 号第一轮）
+
+- 测试不碰开发者的代理：`createTestPaseoDaemon` 缺省 `proxyEnv: {}`、`probeThroughProxy` 一调就抛（只有起了本机假代理的用例传真的）；`withUpgradeSeal` 与封条删掉各种大小写的 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`。
+- 检查出错（读环境、问代理抛错）记日志、当作没有问题，不让列表失败；中转站地址不是 http:// 抛 `GatewayProbeAddressError`；读不出的代理地址不提示。
+- 登录 shell 照 magpie 的 `shellVars` 一次问齐云平台开关与代理变量（`LOGIN_SHELL_KEYS`），读取器改回只缓存一组。
+- 绕开照 magpie `withProxy`：`NO_PROXY` 与 `no_proxy` 补上 `localhost,127.0.0.1,::1`，原有的项在前。
+- 「如何修复」分三步，`export NO_PROXY=127.0.0.1` 单独一行、等宽、带「复制」（与安装命令同一组件）；展开的步骤对所有提示都放在说明下面、按钮上面。截图重拍。
+- 端到端加 `NO_PROXY=127.0.0.1` 原样一项不提示；英文原文整份比对。
+- 浏览器用例「Codex's model list that can't be written leaves the switch off」本机必挂：目录文件被换成文件夹时，27 号的 `cliStartupReads` 读 `codex-models.json` 抛 EISDIR，列表请求失败（15915bb68 引入），不是本工单的改动。

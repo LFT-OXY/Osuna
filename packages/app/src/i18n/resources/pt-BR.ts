@@ -2815,12 +2815,16 @@ export const ptBR: TranslationResources = {
             "{{agent}} envia as solicitações para o Osuna ({{host}}) pelo proxy {{proxy}}, definido em {{from}}. Esse proxy não as repassa ao Osuna, então todo turno falha com 502 Bad Gateway, seja qual for o modelo. Os chats do {{agent}} no Osuna já contornam o proxy.",
           codexProxiedFromWindowsSettings: "as configurações de proxy do Windows",
           codexProxiedFromSystemSettings: "as configurações de proxy do sistema",
+          codexProxiedFixDirect:
+            "Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global.",
           codexProxiedFixEnvironment:
-            "Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione 127.0.0.1 ao NO_PROXY onde {{from}} está definido (seu perfil de shell, como ~/.zshrc, se estiver lá). Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.",
+            "Ou adicione 127.0.0.1 ao NO_PROXY onde {{from}} está definido (seu perfil de shell, como ~/.zshrc, se estiver lá).",
           codexProxiedFixWindows:
-            'Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione 127.0.0.1 a "Não usar o servidor proxy para endereços que comecem com" nas configurações de proxy do Windows (127.* ali não basta para o {{agent}}). Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.',
+            'Ou adicione 127.0.0.1 a "Não usar o servidor proxy para endereços que comecem com" nas configurações de proxy do Windows (127.* ali não basta para o {{agent}}).',
           codexProxiedFixOther:
-            "Faça o proxy enviar 127.0.0.1 direto: adicione uma regra DIRECT para 127.0.0.0/8, ou use o modo de regras em vez do global. Ou adicione export NO_PROXY=127.0.0.1 ao seu perfil de shell (~/.zshrc): o {{agent}} no terminal e o {{agent}} do app do ChatGPT leem isso. Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.",
+            "Ou adicione esta linha ao seu perfil de shell (~/.zshrc). O {{agent}} no terminal e o {{agent}} do app do ChatGPT leem isso:",
+          codexProxiedFixReopen:
+            "Depois feche e abra o {{agent}} de novo. Até lá, Voltar ao oficial deixa as configurações do {{agent}} como estavam.",
           howToFix: "Como corrigir",
           codexProfileOverride: 'O perfil "{{profile}}" do Codex se sobrepõe aos endpoints de API',
           codexProfileOverrideDetail:

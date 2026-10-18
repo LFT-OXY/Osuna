@@ -3419,19 +3419,23 @@ export function buildCodexAppServerEnv(
 }
 
 /**
- * Osuna 起的 Codex 直连本机中转站：NO_PROXY 加上 127.0.0.1（已有值时追加）。Codex 的 reqwest 先读 NO_PROXY、
- * 没有再读 no_proxy，对 IP 只认精确 IP 或网段（codex-rs http-client/src/outbound_proxy.rs:901-906，
- * hyper-util matcher.rs），所以写大写的、带上原来小写的值。终端里的 Codex 不归 Osuna 管，只在提示区说（codex-proxy.ts）。
+ * Osuna 起的 Codex 直连本机中转站：NO_PROXY 补上 localhost、127.0.0.1、::1（magpie netproxy.go withProxy 的那三项），
+ * 原有的项保留在前。Codex 的 reqwest 先读 NO_PROXY、没有再读 no_proxy，对 IP 只认精确 IP 或网段
+ * （codex-rs http-client/src/outbound_proxy.rs:901-906，hyper-util matcher.rs），所以从原来的值（大写优先）算起，
+ * 大小写两个都写成同一个值（同 magpie）。终端里的 Codex 不归 Osuna 管，只在提示区说（codex-proxy.ts）。
  */
 function withLoopbackNoProxy(env: ExternalProcessEnv): ExternalProcessEnv {
   const existing = (env.NO_PROXY || env.no_proxy || "").trim();
-  const entries = existing.split(",").map((entry) => entry.trim());
-  if (entries.includes(LOOPBACK_NO_PROXY)) return { ...env, NO_PROXY: existing };
-  if (existing === "") return { ...env, NO_PROXY: LOOPBACK_NO_PROXY };
-  return { ...env, NO_PROXY: `${existing},${LOOPBACK_NO_PROXY}` };
+  const entries = existing
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  const missing = LOOPBACK_NO_PROXY.filter((entry) => !entries.includes(entry));
+  const noProxy = [...entries, ...missing].join(",");
+  return { ...env, NO_PROXY: noProxy, no_proxy: noProxy };
 }
 
-const LOOPBACK_NO_PROXY = "127.0.0.1";
+const LOOPBACK_NO_PROXY = ["localhost", "127.0.0.1", "::1"];
 
 function buildCodexAppServerInitializeParams(): {
   clientInfo: { name: string; title: string; version: string };

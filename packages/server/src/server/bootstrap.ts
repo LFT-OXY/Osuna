@@ -509,6 +509,8 @@ export interface PaseoDaemonConfig {
     | "claudeManagedSettingsDir"
     | "readLoginShellEnv"
     | "probeGatewayAt"
+    | "probeThroughProxy"
+    | "proxyEnv"
     | "beforeConfigRecheck"
     | "isModelsDevAutoUpdate"
     | "modelsDevFetch"
