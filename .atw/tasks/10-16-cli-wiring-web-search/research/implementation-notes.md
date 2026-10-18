@@ -743,3 +743,29 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - endpoints.json 读不懂时不改模型，spawn_agent 照样补 Codex 自己的模型。
 - config.toml 读不懂时两条都报（第二轮改回）：magpie 的 `GetTOMLTop` 读不懂时退回逐行找，Codex 仍算经过 magpie，`Check` 在 `GetTOMLTable` 报解析错（行上的「unwired」），`Notice` 另给 `codexV1ReadErrorNotice`（`internal/agent/codex.go:162-171`、`1300-1305`）。两条说的是两件事：改不了配置、查不了 multi_agent_v2。
 - 提示标题照开关的原名加引号（「Codex Subagent 可用任意模型」/ "Codex Subagents can use any model"），截图重拍。
+
+## 25 「被绕过」提示
+
+### 判断规则（对照 magpie 7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 什么时候看 | `Drift` 先查配置（unwired、replaced、unreachable、proxied），都没有才看 bypassed，且模型是 magpie 的（`onMagpie`） | 总开关开着、提示区里除了两条 multi_agent_v2 提醒没有别的问题时才看（`NOTICE_CODES`）。比 magpie 多看一种：ChatGPT 接法下用 Codex 自己的模型时 magpie 不看，Osuna 那时请求也经中转站（ChatGPT 后端那组路径），照样看 |
+| 用过的时刻 | `LastUsed`：Claude Code 读 settings.json 同目录的 `history.jsonl`（`timestamp` 毫秒、`display`），Codex 读 CODEX_HOME 的 `history.jsonl`（`ts` 秒、`text`）；`lastJSONLTime` 只看末尾 64 KB，跳过斜杠命令，取最大值、精确到秒 | 同（`cli-bypass.ts` `readCliUse`，唯一读 CLI 记录的入口，目录由服务按 `CLAUDE_CONFIG_DIR` / `CODEX_HOME` 给，测试用临时目录） |
+| 中转站收到的时刻 | `usage.Saw` 在主转发与 Codex 直通处记（进程内），`LastSeen` 另读用量日志末尾 | `GatewaySightings`（只在内存）：中转站认出调用方后，Agent 路径、count_tokens、ChatGPT 后端那组路径一到就记，不管成败。不读日志：判断要求「用过」晚于 daemon 启动，启动前收到的请求不会改变结果 |
+| bypassed（用过） | `bypassed(used, rec.At, lastSeen)`：`used` 晚于进程启动、晚于最近一次 `record`、距现在超过 30 秒，且 `lastSeen` 早于 `used - 2s` | 同（`findCliBypass`）；daemon 启动时刻是服务创建时 |
+| bypassed（Codex 的连接记录） | `Reached(rec.At)`：CODEX_HOME 下名字最后的 `logs_*.sqlite`，`target = codex_api::endpoint::responses_websocket`、`ts` 晚于 max(改写时刻, 一天前)、最新 20 条；连的地址不是网关也不是配置写着的地址、且网关没在它前 2 秒后收到过 → 发去了别处；那次连接被拒 → 当时 magpie 没在运行 | 同（`readCodexLastRequest`，`node:sqlite` 只读打开，打不开或结构不对当没有）；「配置写着的地址」是接管记录里写进去的中转站地址。主机比较照 magpie `HostOf` 带端口 |
+| 改写时刻 | `applied.json` 的 `at`，每次 `record`（含 `Reapply`）更新 | `api-endpoints/cli-rewrites.json`：`commit` 每改写一个 CLI 的配置就记（含 `reapply: true`，文件字节没变也记）。要落盘：连接记录那条没有「晚于 daemon 启动」的限制，重启后只靠它挡住改写之前的连接 |
+| 按钮 | 小标「Apply again」直接重写；`Reapply` 刷新记录，之前的使用不再算 | 「重新应用」「切回官方」（PRD 第 34 条）；重新应用走现有 `reapply: true`，切回官方走现有规则 |
+
+### 文案
+
+- 三种说法按 `params.how`：`used`、`elsewhere`（带 `host`）、`refused`；`at` 是 ISO 时间，app 按看的人的语言显示时:分。英文 `message` 照 magpie 的三句 Detail，把 magpie 换成 the gateway / Osuna。
+- 标题照 magpie 515（「{agent} 最近绕过了 magpie，重新应用后请重启」）拆成标题与说明：标题说被绕过，说明讲可能的原因与「重新应用后请重启」。
+
+### 测试
+
+- 纯逻辑 `cli-bypass.test.ts`：用过且没收到、收到过（含 2 秒余量）、改写之前 / 启动之前 / 30 秒以内不算；Codex 连到别处、被拒、配置写着的地址也算中转站（带端口）；history.jsonl 的毫秒与秒、斜杠命令、半行；日志库取最新、改写之前不算、别的结构当没有。
+- daemon 端到端（拨动注入的时钟）：`api-endpoint-claude.e2e.test.ts` 与 `api-endpoint-codex.e2e.test.ts`「used without going through the gateway (bypassed)」——改写之后有新写入、中转站没收到 → 提示；中转站收到过 → 不提示；改写之前、30 秒以内不算；重新应用后消失、之前的使用不再算，之后再绕过又提示；切回官方还原文件、不提示；Claude 设置不再经过中转站时只报那条；Codex 应用连到 chatgpt.com 报 elsewhere，改写之前的连接不算。
+- app：`agent-settings.test.ts`（bypassed 给「重新应用」「切回官方」）。
+- 截图（无头 Chromium、临时 CODEX_HOME、假数据，真时钟等过 30 秒余量）：`screenshots/25-codex-page_bypassed_desktop-1280_{en,zh}.png`；点「重新应用」后提示消失。

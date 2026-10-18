@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -855,5 +856,188 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
         start: "minimal",
         input: ["text", "image"],
       });
+  });
+});
+
+describe("Codex used without going through the gateway (bypassed)", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let codexHome: string;
+  let configPath: string;
+  let upstream: Server;
+  // 接口服务与中转站共用的时钟，测试拨动它，不必真的等 30 秒的余量。
+  let clock: Date;
+  // 整秒起步：Codex 的记录按秒。
+  const start = new Date(Math.floor(Date.now() / 1000) * 1000);
+
+  function after(seconds: number): Date {
+    return new Date(start.getTime() + seconds * 1000);
+  }
+
+  function unixSeconds(seconds: number): number {
+    return Math.trunc(after(seconds).getTime() / 1000);
+  }
+
+  beforeEach(async () => {
+    clock = start;
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-bypass-"));
+    tempRoots.push(root);
+    codexHome = path.join(root, "codex-home");
+    configPath = path.join(codexHome, "config.toml");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(configPath, USER_CONFIG);
+    // 假上游：Responses 格式的一句回答。
+    upstream = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "resp_1",
+          object: "response",
+          status: "completed",
+          model: "gpt-relay",
+          output: [
+            { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: { env: { CODEX_HOME: codexHome }, homeDir: root, now: () => clock },
+    });
+    client = await connect(daemon);
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function switchOnAt(seconds: number): Promise<void> {
+    const address = upstream.address();
+    if (address === null || typeof address === "string") throw new Error("No upstream port");
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Relay",
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      apiKey: SECRET,
+      models: [{ id: "gpt-relay" }],
+      defaultModelId: "gpt-relay",
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    clock = after(seconds);
+    await client.apiEndpointSetActive("codex", saved.endpoint.id);
+  }
+
+  async function typedAt(...seconds: number[]): Promise<void> {
+    const lines = seconds.map((at) =>
+      JSON.stringify({ session_id: "s-1", ts: unixSeconds(at), text: "fix the bug" }),
+    );
+    await writeFile(path.join(codexHome, "history.jsonl"), `${lines.join("\n")}\n`);
+  }
+
+  /** Codex 应用与 TUI 的日志库里记下一次模型连接。 */
+  function connectedAt(input: { seconds: number; url: string }): void {
+    const db = new DatabaseSync(path.join(codexHome, "logs_2.sqlite"));
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, ts INTEGER, ts_nanos INTEGER, target TEXT, feedback_log_body TEXT)",
+    );
+    db.prepare(
+      "INSERT INTO logs (ts, ts_nanos, target, feedback_log_body) VALUES (?, 0, 'codex_api::endpoint::responses_websocket', ?)",
+    ).run(unixSeconds(input.seconds), `connecting to websocket: ${input.url}`);
+    db.close();
+  }
+
+  async function codexIssues(): Promise<unknown> {
+    return (await client.apiEndpointList("codex")).agentIssues?.codex;
+  }
+
+  function bypassedAt(seconds: number): unknown {
+    return [
+      {
+        code: "bypassed",
+        params: { how: "used", at: after(seconds).toISOString() },
+        message: expect.stringContaining("none of its requests reached the gateway"),
+      },
+    ];
+  }
+
+  test("used after the rewrite with no request reaching the gateway: bypassed", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(100);
+
+    expect(await codexIssues()).toEqual(bypassedAt(20));
+  });
+
+  test("a request the gateway received means it came through", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(21);
+    const reply = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "codex_cli_rs/0.130.0" },
+      body: JSON.stringify({ model: "gpt-relay", input: "fix the bug", stream: false }),
+    });
+    expect(reply.status).toBe(200);
+    clock = after(100);
+
+    expect(await codexIssues()).toEqual([]);
+  });
+
+  test("a use before the rewrite, or within the last thirty seconds, doesn't count", async () => {
+    await switchOnAt(10);
+    await typedAt(5);
+    clock = after(100);
+    expect(await codexIssues()).toEqual([]);
+
+    await typedAt(5, 90);
+    expect(await codexIssues()).toEqual([]);
+  });
+
+  test("the Codex app's newest model connection going somewhere else is bypassed; one before the rewrite isn't", async () => {
+    connectedAt({ seconds: 5, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    await switchOnAt(10);
+    clock = after(100);
+    expect(await codexIssues()).toEqual([]);
+
+    connectedAt({ seconds: 40, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    expect(await codexIssues()).toEqual([
+      {
+        code: "bypassed",
+        params: { how: "elsewhere", at: after(40).toISOString(), host: "chatgpt.com" },
+        message: expect.stringContaining("went to chatgpt.com"),
+      },
+    ]);
+  });
+
+  test("Re-apply clears it and earlier uses no longer count; Official restores the file", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(100);
+    expect(await codexIssues()).toEqual(bypassedAt(20));
+
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.error).toBeNull();
+    clock = after(300);
+    expect(await codexIssues()).toEqual([]);
+
+    await typedAt(20, 200);
+    expect(await codexIssues()).toEqual(bypassedAt(200));
+    const off = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+    expect(off.agent?.enabled).toBe(false);
+    // 顶层键还原，Osuna 的服务商表留在末尾（ADR 0010）。
+    const restored = await readFile(configPath, "utf8");
+    expect(restored.slice(0, USER_CONFIG.length)).toBe(USER_CONFIG);
+    expect(await codexIssues()).toEqual([]);
   });
 });

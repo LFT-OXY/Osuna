@@ -25,6 +25,7 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { judgeCaller } from "./callers.js";
+import type { GatewaySightings } from "../cli-bypass.js";
 import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
   DEFAULT_CHATGPT_BASE_URL,
@@ -178,6 +179,8 @@ export function createApiEndpointGateway(options: {
   daemonVersion: string;
   // 用 ChatGPT 登录的 Codex 的模型清单里接在后面的接口模型、它们的标记与 CODEX_HOME（ADR 0010）。
   codexChatGptListing: () => ChatGptModelsListing;
+  // 每个提供方最近一次收到请求的时刻，接口服务据此判断「被绕过」。
+  sightings: GatewaySightings;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -224,6 +227,7 @@ export function createApiEndpointGateway(options: {
     // ChatGPT 后端那组路径只有 Codex 走（ADR 0010）：ChatGPT 自带模型原样转给 ChatGPT，接口模型照常选路。
     const chatgptRest = chatgptBackendRest(req.path);
     if (chatgptRest !== null) {
+      options.sightings.saw("codex");
       const served = serveChatGptBackend({
         req,
         res,
@@ -274,6 +278,8 @@ export function createApiEndpointGateway(options: {
     }
     // count_tokens 只有 Claude Code 发。
     const agent = caller.agent ?? target?.agent ?? "claude";
+    // 照 magpie 的 usage.Saw：模型请求一到就记，不管后面成不成。
+    options.sightings.saw(agent);
     const handled = target
       ? handleAgentRequest({
           req,

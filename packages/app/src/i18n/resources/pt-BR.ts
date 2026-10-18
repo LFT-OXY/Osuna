@@ -2775,6 +2775,13 @@ export const ptBR: TranslationResources = {
             "O modelo em {{file}} foi trocado para {{model}} fora do Osuna, e nenhum endpoint de API ativado o oferece. Aplique de novo para voltar a {{defaultModel}}, ou mantenha as configurações atuais para continuar em {{model}} sem este aviso.",
           modelReplacedToDefaultDetail:
             "O modelo foi removido de {{file}} fora do Osuna, então {{agent}} começa no próprio modelo padrão, que nenhum endpoint de API ativado oferece. Aplique de novo para voltar a {{defaultModel}}, ou mantenha as configurações atuais para deixar como está sem este aviso.",
+          bypassed: "O {{agent}} foi usado sem passar pelo gateway",
+          bypassedUsedDetail:
+            "O {{agent}} foi usado às {{time}}, mas nenhuma das solicitações dele chegou ao gateway. Uma cópia aberta antes da última mudança do Osuna nas configurações pode ainda estar usando as antigas, ou algo fora do arquivo de configurações está passando por cima delas. Aplique de novo e depois reinicie o {{agent}}.",
+          bypassedElsewhereDetail:
+            "A última solicitação do {{agent}} ({{time}}) foi para {{host}}, não para o gateway. Provavelmente ele foi aberto antes de o Osuna mudar as configurações e ainda usa as antigas. Aplique de novo e depois feche e abra o {{agent}} de novo.",
+          bypassedRefusedDetail:
+            "O {{agent}} não conseguiu chegar ao gateway às {{time}}: o Osuna não estava rodando, então ele não tem nenhum dos modelos dos endpoints de API. Aplique de novo e depois feche e abra o {{agent}} de novo.",
           reapply: "Aplicar de novo",
           switchToOfficial: "Voltar ao oficial",
           keepCurrent: "Manter configurações atuais",

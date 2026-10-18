@@ -57,6 +57,8 @@ export type AgentIssueKind =
   | "codexMultiAgentV2On"
   // 「Codex Subagent 可用任意模型」开着，却读不了 config.toml（params.file、detail）。
   | "codexMultiAgentV2Unreadable"
+  // 设置没问题，但 CLI 最近用过、请求却没到中转站（params.how：used / elsewhere / refused，at：ISO 时间，elsewhere 另有 host）。
+  | "bypassed"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -82,6 +84,7 @@ const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   model_replaced: "modelReplaced",
   codex_multi_agent_v2_on: "codexMultiAgentV2On",
   codex_multi_agent_v2_unreadable: "codexMultiAgentV2Unreadable",
+  bypassed: "bypassed",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
@@ -100,6 +103,8 @@ const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   // Osuna 不改 Codex 自己的 multi_agent_v2：只给「如何修复」。
   codexMultiAgentV2On: [],
   codexMultiAgentV2Unreadable: [],
+  // 照 magpie 的 bypassed：重新应用（之前的使用不再算），或切回官方。
+  bypassed: ["reapply", "switchToOfficial"],
   unknown: [],
 };
 

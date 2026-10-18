@@ -200,7 +200,9 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
  * claude_ai_login_token_set（file：保留 claude.ai 登录开着，口令却被填回去）、
  * claude_ai_login_token_empty（file、how：empty / missing；保留 claude.ai 登录关着，口令却是空的或没了）、
  * codex_multi_agent_v2_on（file：「Codex Subagent 可用任意模型」开着，config.toml 里 Codex 自己的 multi_agent_v2 也开着、盖过它）、
- * codex_multi_agent_v2_unreadable（file、detail：「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2）。
+ * codex_multi_agent_v2_unreadable（file、detail：「Codex Subagent 可用任意模型」开着，却读不了 config.toml、查不了 multi_agent_v2）、
+ * bypassed（how：used / elsewhere / refused，at：ISO 时间，elsewhere 另有 host：设置没问题，但 CLI 自己的记录显示最近一次改写之后
+ * 用过，中转站却没收到它的请求）。
  * 后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
  */
 export const ApiEndpointAgentIssueSchema = z.object({

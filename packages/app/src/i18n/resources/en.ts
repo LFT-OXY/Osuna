@@ -2795,6 +2795,13 @@ export const en = {
             "The model in {{file}} was changed to {{model}} outside Osuna, and none of your enabled API endpoints serve it. Apply again to go back to {{defaultModel}}, or keep current settings to stay on {{model}} without this warning.",
           modelReplacedToDefaultDetail:
             "The model was removed from {{file}} outside Osuna, so {{agent}} starts on its own default model, and none of your enabled API endpoints serve it. Apply again to go back to {{defaultModel}}, or keep current settings to leave it as it is without this warning.",
+          bypassed: "{{agent}} was used without going through the gateway",
+          bypassedUsedDetail:
+            "{{agent}} was used at {{time}}, but none of its requests reached the gateway. A copy started before Osuna last changed its settings may still run on the old ones, or something outside its settings file overrides them. Apply again, then restart {{agent}}.",
+          bypassedElsewhereDetail:
+            "{{agent}}'s last request ({{time}}) went to {{host}}, not the gateway. It was likely started before Osuna changed its settings and still runs on the old ones. Apply again, then quit and reopen {{agent}}.",
+          bypassedRefusedDetail:
+            "{{agent}} couldn't reach the gateway at {{time}}: Osuna wasn't running then, so it has none of the API endpoint models. Apply again, then quit and reopen {{agent}}.",
           reapply: "Apply again",
           switchToOfficial: "Switch to official",
           keepCurrent: "Keep current settings",

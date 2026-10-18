@@ -2,6 +2,7 @@
 // 跟着 CLI 自己存下的选择走与「模型被换掉」照 internal/agent/claude.go 的 Follow、internal/agent/applied.go 的 Drift（replaced）与 Keep；
 // 后台小任务与 Subagent 模型照 internal/agent/claude.go 的 writeTiers、tierWith 与 subagent、subagent_effort 字段；
 // Codex 的默认 Subagent 模型、档位与记忆模型照 internal/agent/codex.go 的 subagents、subagent_effort、memories 字段与 settle、dropSubEffort
+// 「被绕过」只在设置本身没问题时看、改写时刻随「重新应用」更新，照 internal/agent/applied.go 的 Drift、record 与 Reapply
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -116,6 +117,7 @@ import { FIXED_EFFORTS, askedAt } from "./gateway/fixed-effort.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
 import { agentsV1Tag } from "./codex-agent-versions.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
+import { findCliBypass, readCliUse, type CliBypass, type GatewaySightings } from "./cli-bypass.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import { someEndpointSearchesWeb } from "./gateway/web-search.js";
@@ -310,6 +312,8 @@ export interface ApiEndpointServiceOptions {
   cooldowns: EndpointCooldowns;
   // 中转站记下的已下线模型；给 Agent 选模型的列表都去掉它们，接口页与默认模型不受影响。
   retiredModels: RetiredModels;
+  // 中转站记下的每个提供方最近一次收到请求的时刻；列表据此判断「被绕过」。
+  sightings: GatewaySightings;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
   // 查云平台开关时，登录 shell 没答出的变量也看它（magpie 的 claudeShellEnv）。
   env?: NodeJS.ProcessEnv;
@@ -350,6 +354,9 @@ type ApiEndpointAgentIssueCode =
   | "codex_profile_override"
   // settings.json 带注释或尾随逗号：Osuna 照改，但 Claude Code 自己读不了、整份跳过。
   | "settings_has_comments"
+  // 设置没问题，但 CLI 自己的记录显示最近一次改写之后用过，中转站却没收到它的请求（params.how：used / elsewhere / refused，
+  // at：那次的 ISO 时间；elsewhere 另有 host）。
+  | "bypassed"
   // 云平台开关开着（托管设置、settings.json、~/.claude.json 或登录 shell）：请求发给云平台，不经过中转站。
   | "cloud_switch_on"
   // 托管设置的 ANTHROPIC_BASE_URL 不指向中转站，盖过 Osuna 写的地址。
@@ -400,6 +407,12 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
 };
 
 const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
+
+/** 只是提醒、不说明设置有问题的提示；有它们时照样看是不是被绕过。 */
+const NOTICE_CODES: ReadonlySet<string> = new Set([
+  "codex_multi_agent_v2_on",
+  "codex_multi_agent_v2_unreadable",
+]);
 
 interface HealthIssue extends ApiEndpointHealthIssue {
   code: ApiEndpointHealthCode;
@@ -474,6 +487,9 @@ export class ApiEndpointService {
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
+  private readonly sightings: GatewaySightings;
+  // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
+  private readonly startedAt: Date;
   private readonly modelsDev: ModelsDevCatalog;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
@@ -503,6 +519,8 @@ export class ApiEndpointService {
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
+    this.sightings = options.sightings;
+    this.startedAt = this.now();
     this.readCodexSignIn =
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
@@ -544,6 +562,14 @@ export class ApiEndpointService {
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
     if (state.agents.claude.enabled) {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));
+    }
+    // 照 magpie：设置本身有问题时先说那个，没有问题才看是不是被绕过。
+    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
+      const issues = statuses[agentProvider].issues;
+      const isSettingsRight = issues.every((issue) => NOTICE_CODES.has(issue.code));
+      const isChecked = state.agents[agentProvider].enabled && isSettingsRight;
+      const bypassed = isChecked ? this.bypassedIssue(agentProvider) : null;
+      if (bypassed !== null) issues.push(bypassed);
     }
     const status = statuses[supported];
     return {
@@ -1662,6 +1688,8 @@ export class ApiEndpointService {
     }
     this.store.writeState(next);
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
+    // 这之前 CLI 的使用不再算「被绕过」（「重新应用」也走这里）。
+    for (const provider of synced) this.store.recordCliRewrite({ provider, at: this.now() });
     this.staleCodexModels(next);
     this.announceCommitted(previous, next);
     return next;
@@ -2736,6 +2764,33 @@ export class ApiEndpointService {
    * 「Codex Subagent 可用任意模型」开着、Codex 经过中转站时，Codex 自己的 multi_agent_v2 开着就盖过它（magpie codexSubAgentsV1Warning）：
    * 只提示，Osuna 不改这个键。读不了文件时另一条，不当作没开。
    */
+  /** CLI 自己的记录显示最近一次改写之后用过，中转站却没收到（cli-bypass.ts）；没有为 null。 */
+  private bypassedIssue(provider: ApiEndpointProvider): AgentIssue | null {
+    const configPath =
+      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
+    const rewrittenAt = this.store.readCliRewrittenAt(provider);
+    const now = this.now();
+    const use = readCliUse({
+      provider,
+      configDir: path.dirname(configPath),
+      since: rewrittenAt,
+      now,
+    });
+    const gatewayUrls = [this.gatewayUrlFor(provider), this.writtenGateway(provider)?.url].filter(
+      (url): url is string => url !== null && url !== undefined,
+    );
+    const bypass = findCliBypass({
+      use,
+      startedAt: this.startedAt,
+      rewrittenAt,
+      lastSeen: this.sightings.lastSeen(provider),
+      gatewayUrls,
+      now,
+    });
+    if (bypass === null) return null;
+    return bypassedIssue({ agent: AGENT_NAMES[provider], bypass });
+  }
+
   private codexMultiAgentV2Issue(state: ApiEndpointState): AgentIssue | null {
     const agent = state.agents.codex;
     const isChecked = agent.enabled && agent.allowsAnySubagentModel === true;
@@ -3390,6 +3445,33 @@ function claudeTokenFinding(input: {
       message: `${where} is ${how}, so Claude Code sends the gateway its claude.ai sign-in, if it has one, not the gateway's token. To keep it so, turn on Keep claude.ai sign-in`,
     },
   };
+}
+
+/** 「被绕过」的提示；英文照 magpie 的说明，时间是 daemon 本地的时:分。 */
+function bypassedIssue(input: { agent: string; bypass: CliBypass }): AgentIssue {
+  const { agent, bypass } = input;
+  const at = bypass.at.toISOString();
+  const clock = bypass.at.toTimeString().slice(0, 5);
+  switch (bypass.how) {
+    case "used":
+      return {
+        code: "bypassed",
+        params: { how: "used", at },
+        message: `${agent} was used at ${clock} but none of its requests reached the gateway — one started before Osuna set it up still runs on its old config: restart it`,
+      };
+    case "elsewhere":
+      return {
+        code: "bypassed",
+        params: { how: "elsewhere", at, host: bypass.host },
+        message: `${agent}'s last request (${clock}) went to ${bypass.host}, not the gateway — it was started before Osuna set it up and still runs on its old config: quit and reopen it`,
+      };
+    case "refused":
+      return {
+        code: "bypassed",
+        params: { how: "refused", at },
+        message: `${agent} couldn't reach the gateway at ${clock} — Osuna wasn't running then, so it has none of the API endpoint models: quit and reopen it`,
+      };
+  }
 }
 
 function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue[] {

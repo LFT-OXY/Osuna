@@ -374,6 +374,24 @@ describe("the settings issues on an agent page", () => {
       ["modelReplaced", ["reapply", "keepReplacedModel"], false],
     ]);
   });
+
+  it("offers to apply again or switch to official when the CLI was used without going through the gateway", () => {
+    const params = { how: "used", at: "2026-10-18T09:12:00.000Z" };
+    const result = view({
+      endpoints: [],
+      agentIssues: { codex: [{ code: "bypassed", params, message: "bypassed" }] },
+      provider: "codex",
+    });
+    expect(result.issues).toEqual([
+      {
+        kind: "bypassed",
+        params,
+        message: "bypassed",
+        actions: ["reapply", "switchToOfficial"],
+        hasFixSteps: false,
+      },
+    ]);
+  });
 });
 
 describe("Keep claude.ai sign-in on an agent page", () => {

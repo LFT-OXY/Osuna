@@ -718,6 +718,19 @@ codex_subagent_test.go:
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
 
+The Bypassed hint (a CLI used since the daemon last rewrote its config with
+none of its requests reaching the gateway, read from the prompts in its
+history.jsonl and, for Codex, the model connections in its logs_*.sqlite;
+the time of the last rewrite renewed by Apply again) follows the bypassed
+cases of Drift, bypassed, lastJSONLTime, sameHost, record and Reapply in
+magpie's internal/agent/applied.go, LastUsed, Reached and codexReached in
+internal/agent/codex.go, LastUsed in internal/agent/claude.go, HostOf in
+internal/provider/provider.go, and Saw and LastSeen in
+internal/usage/usage.go:
+
+  packages/server/src/server/api-endpoints/cli-bypass.ts
+  packages/server/src/server/api-endpoints/service.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

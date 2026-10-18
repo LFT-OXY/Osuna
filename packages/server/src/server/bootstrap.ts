@@ -158,6 +158,7 @@ import {
   type ApiEndpointGatewayOverrides,
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
+import { GatewaySightings } from "./api-endpoints/cli-bypass.js";
 import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
@@ -512,6 +513,8 @@ export interface PaseoDaemonConfig {
     | "modelsDevFetch"
     | "modelsDevTimers"
     | "readCodexSignIn"
+    // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
+    | "now"
   > &
     ApiEndpointGatewayOverrides &
     RetiredModelsOverrides;
@@ -646,6 +649,11 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   }
 
   return initialConfig;
+}
+
+/** 接口服务与中转站共用的时钟；只有进程内 daemon 测试换掉它。 */
+function apiEndpointClock(config: PaseoDaemonConfig): () => Date {
+  return config.apiEndpoints?.now ?? (() => new Date());
 }
 
 export async function createPaseoDaemon(
@@ -797,6 +805,8 @@ export async function createPaseoDaemon(
   // itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
+  // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
+  const apiEndpointSightings = new GatewaySightings(apiEndpointClock(config));
   // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
   const apiEndpointRetiredModels = createRetiredModels({
     config,
@@ -817,6 +827,7 @@ export async function createPaseoDaemon(
       // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
       modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
       codexChatGptListing: () => apiEndpointService.codexChatGptListing(),
+      sightings: apiEndpointSightings,
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1030,6 +1041,7 @@ export async function createPaseoDaemon(
     logger,
     cooldowns: apiEndpointCooldowns,
     retiredModels: apiEndpointRetiredModels,
+    sightings: apiEndpointSightings,
     onActiveEndpointChanged: (provider) => {
       void providerSnapshotManager
         .refreshSettingsSnapshot({ providers: [provider] })

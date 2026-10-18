@@ -231,7 +231,7 @@ interface IssueCopy {
 
 /** 按 code 与参数翻译；认不出的照主机给的英文原文。文件路径、键名、解析器原文不翻译。 */
 function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { params } = issue;
   switch (issue.kind) {
     case "notThroughGateway":
@@ -343,9 +343,38 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           file: shortenPath(params.file),
         }),
       };
+    case "bypassed":
+      return bypassedCopy({ t, providerLabel, issue, locale: i18n.language });
     case "unknown":
       return { title: issue.message };
   }
+}
+
+const BYPASSED_DETAIL_KEYS: Record<string, string> = {
+  used: "settings.apiEndpoints.agent.issues.bypassedUsedDetail",
+  elsewhere: "settings.apiEndpoints.agent.issues.bypassedElsewhereDetail",
+  refused: "settings.apiEndpoints.agent.issues.bypassedRefusedDetail",
+};
+
+/** 被绕过：说明按怎么看出来的（params.how），时间按看的人的语言显示时:分。认不出的 how 照主机原文。 */
+function bypassedCopy(input: {
+  t: Translate;
+  providerLabel: string;
+  issue: AgentIssueView;
+  locale: string;
+}): IssueCopy {
+  const { t, providerLabel, issue, locale } = input;
+  const { params } = issue;
+  const title = t("settings.apiEndpoints.agent.issues.bypassed", { agent: providerLabel });
+  const detailKey = BYPASSED_DETAIL_KEYS[params.how];
+  if (detailKey === undefined) return { title, description: issue.message };
+  const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(
+    new Date(params.at),
+  );
+  return {
+    title,
+    description: t(detailKey, { agent: providerLabel, time, host: params.host }),
+  };
 }
 
 type Translate = ReturnType<typeof useTranslation>["t"];

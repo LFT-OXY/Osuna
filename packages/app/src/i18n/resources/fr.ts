@@ -2794,6 +2794,13 @@ export const fr: TranslationResources = {
             "Le modèle de {{file}} a été remplacé par {{model}} en dehors d'Osuna, et aucun point d'accès activé ne le propose. Réappliquez pour revenir à {{defaultModel}}, ou gardez les réglages actuels pour rester sur {{model}} sans cet avertissement.",
           modelReplacedToDefaultDetail:
             "Le modèle a été retiré de {{file}} en dehors d'Osuna : {{agent}} démarre donc sur son propre modèle par défaut, qu'aucun point d'accès activé ne propose. Réappliquez pour revenir à {{defaultModel}}, ou gardez les réglages actuels pour laisser les choses ainsi sans cet avertissement.",
+          bypassed: "{{agent}} a été utilisé sans passer par la passerelle",
+          bypassedUsedDetail:
+            "{{agent}} a été utilisé à {{time}}, mais aucune de ses requêtes n'est arrivée à la passerelle. Une copie lancée avant le dernier changement de ses réglages par Osuna tourne peut-être encore avec les anciens, ou quelque chose en dehors de son fichier de réglages les remplace. Réappliquez, puis redémarrez {{agent}}.",
+          bypassedElsewhereDetail:
+            "La dernière requête de {{agent}} ({{time}}) est allée à {{host}}, pas à la passerelle. Il a sans doute été lancé avant qu'Osuna change ses réglages et tourne encore avec les anciens. Réappliquez, puis quittez et rouvrez {{agent}}.",
+          bypassedRefusedDetail:
+            "{{agent}} n'a pas pu joindre la passerelle à {{time}} : Osuna ne tournait pas à ce moment-là, il n'a donc aucun des modèles des points d'accès. Réappliquez, puis quittez et rouvrez {{agent}}.",
           reapply: "Réappliquer",
           switchToOfficial: "Revenir à l'officiel",
           keepCurrent: "Garder les réglages actuels",

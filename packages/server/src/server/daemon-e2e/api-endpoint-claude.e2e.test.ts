@@ -1725,3 +1725,178 @@ describe("Claude Code's cloud-platform switches and managed settings", () => {
     }
   });
 });
+
+describe("Claude Code used without going through the gateway (bypassed)", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let claudeConfigDir: string;
+  let settingsPath: string;
+  let upstream: Server;
+  // 接口服务与中转站共用的时钟，测试拨动它，不必真的等 30 秒的余量。
+  let clock: Date;
+  // 整秒起步：history.jsonl 的时间按秒比，同 magpie。
+  const start = new Date(Math.floor(Date.now() / 1000) * 1000);
+
+  function after(seconds: number): Date {
+    return new Date(start.getTime() + seconds * 1000);
+  }
+
+  beforeEach(async () => {
+    clock = start;
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-bypass-"));
+    tempRoots.push(root);
+    claudeConfigDir = path.join(root, "claude");
+    settingsPath = path.join(claudeConfigDir, "settings.json");
+    await mkdir(claudeConfigDir, { recursive: true });
+    await writeFile(settingsPath, USER_SETTINGS);
+    // 假上游：Anthropic 格式的一句回答。
+    upstream = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "sonnet",
+          content: [{ type: "text", text: "hi" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+        homeDir: root,
+        now: () => clock,
+      },
+    });
+    client = await connect(daemon);
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  async function switchOnAt(seconds: number): Promise<void> {
+    const address = upstream.address();
+    if (address === null || typeof address === "string") throw new Error("No upstream port");
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      apiKey: SECRET,
+      models: [{ id: "sonnet" }],
+      defaultModelId: "sonnet",
+    });
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    clock = after(seconds);
+    await client.apiEndpointSetActive("claude", saved.endpoint.id);
+  }
+
+  async function typedAt(...seconds: number[]): Promise<void> {
+    const lines = seconds.map((at) =>
+      JSON.stringify({ display: "fix the bug", timestamp: after(at).getTime(), project: "/p" }),
+    );
+    await writeFile(path.join(claudeConfigDir, "history.jsonl"), `${lines.join("\n")}\n`);
+  }
+
+  async function claudeIssues(): Promise<unknown> {
+    return (await client.apiEndpointList("claude")).agentIssues?.claude;
+  }
+
+  function bypassedAt(seconds: number): unknown {
+    return [
+      {
+        code: "bypassed",
+        params: { how: "used", at: after(seconds).toISOString() },
+        message: expect.stringContaining("none of its requests reached the gateway"),
+      },
+    ];
+  }
+
+  test("used after the rewrite with no request reaching the gateway: bypassed", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(100);
+
+    expect(await claudeIssues()).toEqual(bypassedAt(20));
+  });
+
+  test("a request the gateway received means it came through", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(21);
+    const reply = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "claude-cli/2.1.0" },
+      body: JSON.stringify({
+        model: "sonnet",
+        max_tokens: 16,
+        messages: [{ role: "user", content: "fix the bug" }],
+      }),
+    });
+    expect(reply.status).toBe(200);
+    clock = after(100);
+
+    expect(await claudeIssues()).toEqual([]);
+  });
+
+  test("a use before the rewrite, or within the last thirty seconds, doesn't count", async () => {
+    await switchOnAt(10);
+    await typedAt(5);
+    clock = after(100);
+    expect(await claudeIssues()).toEqual([]);
+
+    await typedAt(5, 90);
+    expect(await claudeIssues()).toEqual([]);
+  });
+
+  test("Re-apply clears it and earlier uses no longer count; Official restores the file", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(100);
+    expect(await claudeIssues()).toEqual(bypassedAt(20));
+
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.error).toBeNull();
+    clock = after(300);
+    expect(await claudeIssues()).toEqual([]);
+
+    // 重新应用之后又绕过一次，照样提示；切回官方后不再提示、文件还原。
+    await typedAt(20, 200);
+    expect(await claudeIssues()).toEqual(bypassedAt(200));
+    const off = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(off.agent?.enabled).toBe(false);
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+    expect(await claudeIssues()).toEqual([]);
+  });
+
+  test("settings that no longer go through the gateway say that, not bypassed", async () => {
+    await switchOnAt(10);
+    await typedAt(20);
+    clock = after(100);
+    const switched = await readFile(settingsPath, "utf8");
+    await writeFile(
+      settingsPath,
+      switched.replace(
+        `"http://127.0.0.1:${daemon.port}/api-endpoint-gateway"`,
+        '"https://other-tool.example"',
+      ),
+    );
+
+    expect(await claudeIssues()).toEqual([
+      expect.objectContaining({ code: "not_through_gateway" }),
+    ]);
+  });
+});
