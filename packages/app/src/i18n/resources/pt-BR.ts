@@ -2647,6 +2647,9 @@ export const ptBR: TranslationResources = {
         defaultThinkingUnset: "Não definido ({{agent}} decide)",
         defaultThinkingMaxLock:
           "Em Max, todas as sessões do {{agent}} ficam presas em Max, incluindo os chats no Osuna, e /effort não consegue baixar.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "O {{agent}} planeja um fluxo de trabalho para cada tarefa relevante, em qualquer nível de raciocínio. Só em modelos que aceitam Extra High.",
         connection: {
           kept: "{{agent}} já usa endpoints de API. Continua em {{model}}.",
           again:

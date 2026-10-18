@@ -15,6 +15,7 @@ const GATEWAY = {
   allowWebSearch: false,
   isAutoModeReviewed: true,
   defaultThinking: null,
+  ultraCode: null,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -951,6 +952,7 @@ describe("default thinking in settings.json", () => {
   function applyThinking(input: {
     text: string | null;
     defaultThinking: string | null;
+    ultraCode?: boolean | null;
     model?: string;
     takeover?: ClaudeSettingsTakeover | null;
   }) {
@@ -958,6 +960,7 @@ describe("default thinking in settings.json", () => {
       ...GATEWAY,
       model: input.model ?? GATEWAY.model,
       defaultThinking: input.defaultThinking,
+      ultraCode: input.ultraCode ?? null,
     };
     const result = applyClaudeApiEndpoint({
       text: input.text,
@@ -1000,14 +1003,19 @@ describe("default thinking in settings.json", () => {
     expect(settings.effortLevel).toBeUndefined();
   });
 
-  it("writes Ultra Code as ultracode on at xhigh", () => {
-    const { text } = applyThinking({ text: USER_SETTINGS, defaultThinking: "ultracode" });
-    const settings = JSON.parse(text);
-    expect(settings.ultracode).toBe(true);
-    expect(settings.effortLevel).toBe("xhigh");
+  it("turns Ultra Code on and off on its own, beside any level", () => {
+    const on = applyThinking({ text: USER_SETTINGS, defaultThinking: "medium", ultraCode: true });
+    expect(JSON.parse(on.text)).toMatchObject({ ultracode: true, effortLevel: "medium" });
+    const off = applyThinking({
+      text: on.text,
+      defaultThinking: "medium",
+      ultraCode: false,
+      takeover: on.takeover,
+    });
+    expect(JSON.parse(off.text).ultracode).toBeUndefined();
   });
 
-  it("takes out the user's max variable and ultracode beside a lower level, and puts them back on Official", () => {
+  it("takes out the user's max variable beside a lower level and keeps their own ultracode; Official puts it all back", () => {
     const before = `{
   "env": {
     "CLAUDE_CODE_EFFORT_LEVEL": "max"
@@ -1019,7 +1027,7 @@ describe("default thinking in settings.json", () => {
     const patched = applyThinking({ text: before, defaultThinking: "medium" });
     const settings = JSON.parse(patched.text);
     expect(settings.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
-    expect(settings.ultracode).toBeUndefined();
+    expect(settings.ultracode).toBe(true);
     expect(settings.effortLevel).toBe("medium");
     // 拿掉又放回的键排到最后，值与接管前相同。
     expect(JSON.parse(restoreText(patched.text, patched.takeover))).toEqual(JSON.parse(before));
@@ -1028,7 +1036,8 @@ describe("default thinking in settings.json", () => {
   it("puts every key it wrote back as it was on Official, containers it made included", () => {
     const patched = applyThinking({
       text: USER_SETTINGS,
-      defaultThinking: "ultracode",
+      defaultThinking: "xhigh",
+      ultraCode: true,
       model: "claude-opus-5-5",
     });
     expect(restoreText(patched.text, patched.takeover)).toBe(USER_SETTINGS);

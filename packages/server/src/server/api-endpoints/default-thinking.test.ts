@@ -1,44 +1,28 @@
-// 档位表的用例照 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 claudeEffortsFor 与 claudeName）
+// 档位表的用例照 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 claudeEffortsFor、claudeName 与 claudeClamp）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, it } from "vitest";
 import { claudeModelName } from "./claude-model-name.js";
 import {
+  claudeClamp,
   defaultThinkingLevels,
-  settleDefaultThinking,
+  settleCodexThinking,
+  takesUltraCode,
   thinkingOptionsOf,
 } from "./default-thinking.js";
 
 describe("defaultThinkingLevels", () => {
-  it("offers another vendor's model the Claude Code levels it takes, xhigh when it reaches max, and Ultra Code with xhigh", () => {
+  it("offers another vendor's model all five Claude Code levels, whatever its known levels, as magpie does", () => {
     expect(
       defaultThinkingLevels({
         provider: "claude",
         modelId: "glm-5.3",
         facts: { efforts: ["low", "high", "max"] },
       }),
-    ).toEqual(["low", "high", "xhigh", "max", "ultracode"]);
-    expect(
-      defaultThinkingLevels({
-        provider: "claude",
-        modelId: "relay-a/kimi-k2",
-        facts: { efforts: ["low", "medium", "high"] },
-      }),
-    ).toEqual(["low", "medium", "high"]);
-  });
-
-  it("offers every Claude Code level for a model without known levels and none for a levelless one", () => {
-    expect(defaultThinkingLevels({ provider: "claude", modelId: "mystery", facts: {} })).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-      "ultracode",
-    ]);
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect(
       defaultThinkingLevels({ provider: "claude", modelId: "plain", facts: { efforts: [] } }),
-    ).toEqual([]);
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
   });
 
   it("offers a Claude model the levels Claude Code sends it at, as magpie's claudeEffortsFor", () => {
@@ -51,13 +35,6 @@ describe("defaultThinkingLevels", () => {
     expect(
       defaultThinkingLevels({ provider: "claude", modelId: "claude-haiku-4-5", facts: {} }),
     ).toEqual([]);
-    expect(
-      defaultThinkingLevels({
-        provider: "claude",
-        modelId: "relay/claude-opus-5-5[1m]",
-        facts: {},
-      }),
-    ).toEqual(["low", "medium", "high", "xhigh", "max", "ultracode"]);
   });
 
   it("offers Codex every level the model takes, and four when none are known", () => {
@@ -75,26 +52,38 @@ describe("defaultThinkingLevels", () => {
       "xhigh",
     ]);
   });
+
+  it("has Ultra Code only where the model takes xhigh", () => {
+    expect(takesUltraCode(["low", "medium", "high", "max"])).toBe(false);
+    expect(takesUltraCode(["low", "medium", "high", "xhigh", "max"])).toBe(true);
+  });
 });
 
-describe("settleDefaultThinking", () => {
+describe("claudeClamp", () => {
+  it("runs a level the model doesn't take at the highest one not above it", () => {
+    expect(claudeClamp("xhigh", ["low", "medium", "high", "max"])).toBe("high");
+    expect(claudeClamp("max", ["low", "medium", "high"])).toBe("high");
+    expect(claudeClamp("high", ["low", "medium", "high"])).toBe("high");
+    expect(claudeClamp("high", [])).toBeNull();
+  });
+});
+
+describe("settleCodexThinking", () => {
   it("keeps a level the model takes and moves one it doesn't to the nearest, a tie going up", () => {
     const levels = ["low", "high", "max"];
-    expect(settleDefaultThinking({ levels, chosen: "high" })).toBe("high");
-    expect(settleDefaultThinking({ levels, chosen: "medium" })).toBe("high");
-    expect(settleDefaultThinking({ levels, chosen: "xhigh" })).toBe("max");
-    expect(settleDefaultThinking({ levels, chosen: null })).toBeNull();
+    expect(settleCodexThinking({ levels, chosen: "high" })).toBe("high");
+    expect(settleCodexThinking({ levels, chosen: "medium" })).toBe("high");
+    expect(settleCodexThinking({ levels, chosen: "xhigh" })).toBe("max");
+    expect(settleCodexThinking({ levels, chosen: null })).toBeNull();
   });
 
-  it("moves Ultra Code to the level nearest xhigh when the model has no xhigh", () => {
-    expect(settleDefaultThinking({ levels: ["low", "medium", "high"], chosen: "ultracode" })).toBe(
-      "high",
-    );
+  it("falls back to medium, then high, then the first level when none is near, as ModelDefault", () => {
+    expect(settleCodexThinking({ levels: ["low", "medium"], chosen: "turbo" })).toBe("medium");
+    expect(settleCodexThinking({ levels: ["fast", "deep"], chosen: "turbo" })).toBe("fast");
   });
 
-  it("drops the choice when the model has no level near it", () => {
-    expect(settleDefaultThinking({ levels: [], chosen: "high" })).toBeNull();
-    expect(settleDefaultThinking({ levels: ["low"], chosen: "turbo" })).toBeNull();
+  it("leaves the level alone while the model's levels are unknown", () => {
+    expect(settleCodexThinking({ levels: [], chosen: "high" })).toBe("high");
   });
 });
 
@@ -108,16 +97,15 @@ describe("claudeModelName", () => {
 });
 
 describe("thinkingOptionsOf", () => {
-  it("labels Claude Code's levels as the chat does and marks the default", () => {
+  it("labels both CLIs' levels the same way", () => {
     expect(
-      thinkingOptionsOf({ provider: "claude", levels: ["high", "xhigh", "ultracode"] }),
+      thinkingOptionsOf({ levels: ["minimal", "high", "xhigh", "ultracode", "turbo"] }),
     ).toEqual([
+      { id: "minimal", label: "Minimal" },
       { id: "high", label: "High" },
       { id: "xhigh", label: "Extra High" },
       { id: "ultracode", label: "Ultra Code" },
-    ]);
-    expect(thinkingOptionsOf({ provider: "codex", levels: ["minimal"] })).toEqual([
-      { id: "minimal", label: "minimal" },
+      { id: "turbo", label: "Turbo" },
     ]);
   });
 });

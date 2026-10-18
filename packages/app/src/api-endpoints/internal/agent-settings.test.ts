@@ -29,6 +29,8 @@ function view(input: {
   enabled?: boolean;
   defaultModelId?: string | null;
   defaultThinkingOptionId?: string | null;
+  usesUltraCode?: boolean;
+  lockedThinkingOptionId?: string | null;
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
 }) {
@@ -41,6 +43,7 @@ function view(input: {
           enabled: input.enabled ?? false,
           defaultModelId: input.defaultModelId ?? null,
           defaultThinkingOptionId: input.defaultThinkingOptionId,
+          usesUltraCode: input.usesUltraCode,
         },
       },
       gatewayUnavailable: input.gatewayUnavailable ?? null,
@@ -48,6 +51,7 @@ function view(input: {
     },
     provider: "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
+    lockedThinkingOptionId: input.lockedThinkingOptionId ?? null,
     now: NOW,
   });
 }
@@ -320,6 +324,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       },
       provider: "claude",
       endpointModelGroups: null,
+      lockedThinkingOptionId: null,
       now: NOW,
     });
     expect(kept.keepsClaudeAiLogin).toBe(true);
@@ -333,6 +338,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       },
       provider: "codex",
       endpointModelGroups: null,
+      lockedThinkingOptionId: null,
       now: NOW,
     });
     expect(codex.keepsClaudeAiLogin).toBeNull();
@@ -343,7 +349,8 @@ describe("the default thinking on an agent page", () => {
   const thinkingOptions = [
     { id: "low", label: "Low" },
     { id: "high", label: "High" },
-    { id: "max", label: "Max" },
+    { id: "xhigh", label: "Extra High" },
+    { id: "ultracode", label: "Ultra Code" },
   ];
   const groups: ApiEndpointModelGroup[] = [
     {
@@ -352,37 +359,57 @@ describe("the default thinking on an agent page", () => {
         { provider: "claude", id: "relay-a/glm-5.3", label: "glm-5.3", thinkingOptions },
         {
           provider: "claude",
-          id: "relay-a/kimi-k2",
-          label: "kimi-k2",
-          thinkingOptions: [{ id: "high", label: "High" }],
+          id: "relay-a/claude-opus-4-6",
+          label: "claude-opus-4-6",
+          thinkingOptions: [
+            { id: "low", label: "Low" },
+            { id: "high", label: "High" },
+            { id: "max", label: "Max" },
+          ],
         },
       ],
     },
   ];
-  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "kimi-k2" }] })];
+  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "claude-opus-4-6" }] })];
 
-  it("offers the default model's levels, as the chat model selector has them", () => {
+  it("offers the default model's levels and Ultra Code as its own switch", () => {
     const shown = view({
       endpoints,
       endpointModelGroups: groups,
       enabled: true,
       defaultModelId: "glm-5.3",
       defaultThinkingOptionId: "high",
+      usesUltraCode: true,
     });
-    expect(shown.defaultThinking).toEqual({ value: "high", options: thinkingOptions });
+    expect(shown.defaultThinking).toEqual({
+      value: "high",
+      options: thinkingOptions.slice(0, 3),
+      usesUltraCode: true,
+      lockedAt: null,
+    });
   });
 
-  it("reads the levels of the endpoint a default model names", () => {
+  it("shows a level the model doesn't take as the one it runs at, and no Ultra Code without xhigh", () => {
     const shown = view({
       endpoints,
       endpointModelGroups: groups,
       enabled: true,
-      defaultModelId: "relay-a/kimi-k2",
+      defaultModelId: "relay-a/claude-opus-4-6",
+      defaultThinkingOptionId: "xhigh",
+      usesUltraCode: true,
     });
-    expect(shown.defaultThinking).toEqual({
-      value: null,
-      options: [{ id: "high", label: "High" }],
+    expect(shown.defaultThinking).toMatchObject({ value: "high", usesUltraCode: null });
+  });
+
+  it("says every session is locked when the host says so", () => {
+    const shown = view({
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      lockedThinkingOptionId: "max",
     });
+    expect(shown.defaultThinking?.lockedAt).toBe("max");
   });
 
   it("is not offered while the switch is off, the model has no levels, or the host is too old", () => {

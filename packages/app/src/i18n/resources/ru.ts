@@ -2643,6 +2643,9 @@ export const ru: TranslationResources = {
         defaultThinkingUnset: "Не задан (решает {{agent}})",
         defaultThinkingMaxLock:
           "При Max все сеансы {{agent}} закреплены на Max, включая чаты в Osuna, и /effort не может его понизить.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}} планирует рабочий процесс для каждой существенной задачи при любом уровне размышлений. Только для моделей с поддержкой Extra High.",
         connection: {
           kept: "{{agent}} уже использует сторонние API. Модель остаётся {{model}}.",
           again:

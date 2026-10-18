@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { AgentIssuesArea, AgentIssuesUpdateHost, type AgentIssuesAreaProps } from "./agent-issues";
@@ -49,8 +50,7 @@ export interface AgentApiEndpointsSectionProps {
   onDefaultModelChange: (modelId: string) => void;
   // 默认思考档位；null 为不设。
   onDefaultThinkingChange: (thinkingOptionId: string | null) => void;
-  // 默认思考档位选 Max 会锁住所有会话：只有 Claude Code（CLAUDE_CODE_EFFORT_LEVEL）；Codex 的 max 只是一档。
-  maxLocksSessions: boolean;
+  onUltraCodeChange: (usesUltraCode: boolean) => void;
   onManage: () => void;
   // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
   onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
@@ -69,7 +69,7 @@ export function AgentApiEndpointsSection({
   onToggle,
   onDefaultModelChange,
   onDefaultThinkingChange,
-  maxLocksSessions,
+  onUltraCodeChange,
   onManage,
   onKeepClaudeAiLoginChange,
   issueActions,
@@ -144,10 +144,17 @@ export function AgentApiEndpointsSection({
         {view.defaultThinking ? (
           <DefaultThinkingRow
             providerLabel={providerLabel}
-            locksAtMax={maxLocksSessions}
             thinking={view.defaultThinking}
             busy={busy}
             onChange={onDefaultThinkingChange}
+          />
+        ) : null}
+        {view.defaultThinking?.usesUltraCode != null ? (
+          <UltraCodeRow
+            providerLabel={providerLabel}
+            value={view.defaultThinking.usesUltraCode}
+            busy={busy}
+            onChange={onUltraCodeChange}
           />
         ) : null}
         {showsKeepClaudeAiLogin ? (
@@ -309,15 +316,16 @@ function DefaultModelRow({
     [labelOf, value],
   );
   const title = t("settings.apiEndpoints.agent.defaultModelPick", { agent: providerLabel });
+  const isCompact = useIsCompactFormFactor();
   return (
-    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+    <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>{t("settings.apiEndpoints.agent.defaultModel")}</Text>
         <Text style={settingsStyles.rowHint}>
           {t("settings.apiEndpoints.agent.defaultModelHint")}
         </Text>
       </View>
-      <View style={styles.select}>
+      <View style={isCompact ? styles.selectStacked : styles.select}>
         <SelectField
           field={false}
           label={title}
@@ -344,16 +352,14 @@ function DefaultModelRow({
 // 「不设」在下拉里的 id：档位 id 不会是空串。
 const UNSET_THINKING = "";
 
-/** 默认思考档位：终端新会话从这一档起步；Claude Code 选 Max 时写明会锁住所有会话。 */
+/** 默认思考档位：终端新会话从这一档起步；主机说每个会话都锁住时（Claude Code 的 max）写明。 */
 function DefaultThinkingRow({
   providerLabel,
-  locksAtMax,
   thinking,
   busy,
   onChange,
 }: {
   providerLabel: string;
-  locksAtMax: boolean;
   thinking: DefaultThinkingView;
   busy: boolean;
   onChange: (thinkingOptionId: string | null) => void;
@@ -386,9 +392,10 @@ function DefaultThinkingRow({
     return selected ? { label: selected.label } : null;
   }, [selectOptions, selectedId]);
   const title = t("settings.apiEndpoints.agent.defaultThinkingPick", { agent: providerLabel });
-  const isLockedAtMax = locksAtMax && thinking.value === "max";
+  const isLocked = thinking.lockedAt !== null;
+  const isCompact = useIsCompactFormFactor();
   return (
-    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+    <View style={[settingsStyles.row, settingsStyles.rowBorder, isCompact && styles.rowStacked]}>
       <View style={settingsStyles.rowContent}>
         <Text style={settingsStyles.rowTitle}>
           {t("settings.apiEndpoints.agent.defaultThinking")}
@@ -396,7 +403,7 @@ function DefaultThinkingRow({
         <Text style={settingsStyles.rowHint}>
           {t("settings.apiEndpoints.agent.defaultThinkingHint")}
         </Text>
-        {isLockedAtMax ? (
+        {isLocked ? (
           <UiText
             variant="caption"
             color="statusWarning"
@@ -406,7 +413,7 @@ function DefaultThinkingRow({
           </UiText>
         ) : null}
       </View>
-      <View style={styles.select}>
+      <View style={isCompact ? styles.selectStacked : styles.select}>
         <SelectField
           field={false}
           label={title}
@@ -425,6 +432,38 @@ function DefaultThinkingRow({
           triggerTestID="agent-api-endpoints-default-thinking-trigger"
         />
       </View>
+    </View>
+  );
+}
+
+/** Ultra Code（照 magpie 的 ultracode 开关）：与思考档位分开，只在默认模型支持 xhigh 时出现。 */
+function UltraCodeRow({
+  providerLabel,
+  value,
+  busy,
+  onChange,
+}: {
+  providerLabel: string;
+  value: boolean;
+  busy: boolean;
+  onChange: (usesUltraCode: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.apiEndpoints.agent.ultraCode")}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.apiEndpoints.agent.ultraCodeHint", { agent: providerLabel })}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={busy}
+        accessibilityLabel={t("settings.apiEndpoints.agent.ultraCode")}
+        testID="agent-api-endpoints-ultra-code"
+      />
     </View>
   );
 }
@@ -524,6 +563,15 @@ const styles = StyleSheet.create((theme) => ({
   select: {
     width: 260,
     flexShrink: 1,
+  },
+  // 窄窗口：下拉放到说明下面、占满整行，标题和说明不被挤断。
+  rowStacked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: theme.spacing[2],
+  },
+  selectStacked: {
+    width: "100%",
   },
   summary: {
     flexDirection: "row",

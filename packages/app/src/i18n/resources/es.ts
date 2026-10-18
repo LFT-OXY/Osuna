@@ -2662,6 +2662,9 @@ export const es: TranslationResources = {
         defaultThinkingUnset: "Sin definir (decide {{agent}})",
         defaultThinkingMaxLock:
           "Con Max, todas las sesiones de {{agent}} quedan fijas en Max, incluidos los chats de Osuna, y /effort no puede bajarlo.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}} planifica un flujo de trabajo para cada tarea sustancial, con cualquier nivel de razonamiento. Solo en modelos que admiten Extra High.",
         connection: {
           kept: "{{agent}} ya usa endpoints de API. Sigue con {{model}}.",
           again:

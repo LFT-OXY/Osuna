@@ -181,6 +181,7 @@ interface ApiEndpointSeedClient {
     defaultModelId?: string;
     keepsClaudeAiLogin?: boolean;
     defaultThinkingOptionId?: string | null;
+    usesUltraCode?: boolean;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
   apiEndpointFetchModels(options: {
     provider: string;

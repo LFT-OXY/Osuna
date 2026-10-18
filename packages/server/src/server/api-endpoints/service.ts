@@ -77,10 +77,13 @@ import {
   type CodexModelEntry,
 } from "./codex-model-catalog.js";
 import {
+  claudeClamp,
   defaultThinkingLevels,
-  settleDefaultThinking,
+  settleCodexThinking,
+  takesUltraCode,
   thinkingOptionsOf,
 } from "./default-thinking.js";
+import { CLAUDE_ULTRA_CODE } from "./claude-model-name.js";
 import {
   codexListTag,
   codexOwnFirstModel,
@@ -228,6 +231,8 @@ export interface ApiEndpointAgentSettingsInput {
   keepsClaudeAiLogin?: boolean;
   // 默认思考档位：null 为不设，省略即不变。
   defaultThinkingOptionId?: string | null;
+  // Ultra Code，只给 Claude Code；省略即不变。
+  usesUltraCode?: boolean;
 }
 
 /** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
@@ -558,26 +563,33 @@ export class ApiEndpointService {
   }
 
   /**
-   * Osuna 对话里接口模型的思考档位：选项同默认思考档位（Claude Code 的 Ultra Code 也在里面）；新对话没有记住的选择时
-   * 从默认思考档位起步（这个模型不收就取最近的一档），没设时 Claude Code 从 high 起、Codex 从 config.toml 里的那档起。
+   * Osuna 对话里接口模型的思考档位：选项同默认思考档位，Claude Code 的模型支持 xhigh 时另有 Ultra Code（对话里它是一档）。
+   * 新对话没有记住的选择时从默认思考档位起步：Claude Code 开着 Ultra Code 就是 Ultra Code，否则按 claudeClamp 取这个模型
+   * 跑得到的一档，没设时从 high 起；Codex 取 ModelDefault，没设时按 config.toml 里的那档。
    */
   private chatThinking(
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
   ): (modelId: string) => ChatThinking {
-    const chosen = state.agents[provider].defaultThinkingOptionId ?? null;
+    const agent = state.agents[provider];
+    const chosen = agent.defaultThinkingOptionId ?? null;
     const codexOwn = provider === "codex" ? this.codexReasoningEffort() : null;
     return (modelId) => {
       const levels = this.thinkingLevelsFor({ state, provider, modelId });
       if (levels.length === 0) return {};
-      const fallback =
-        provider === "claude"
-          ? settleDefaultThinking({ levels, chosen: CLAUDE_START_THINKING })
-          : codexDefaultLevel(levels, codexOwn);
-      const settled = settleDefaultThinking({ levels, chosen });
+      if (provider === "codex") {
+        return {
+          thinkingOptions: thinkingOptionsOf({ levels }),
+          defaultThinkingOptionId: codexDefaultLevel(levels, chosen ?? codexOwn),
+        };
+      }
+      const hasUltraCode = takesUltraCode(levels);
+      const options = hasUltraCode ? [...levels, CLAUDE_ULTRA_CODE] : levels;
+      const startsAtUltraCode = hasUltraCode && agent.usesUltraCode === true;
+      const level = claudeClamp(chosen ?? CLAUDE_START_THINKING, levels) ?? levels[0];
       return {
-        thinkingOptions: thinkingOptionsOf({ provider, levels }),
-        defaultThinkingOptionId: settled ?? fallback ?? levels[0],
+        thinkingOptions: thinkingOptionsOf({ levels: options }),
+        defaultThinkingOptionId: startsAtUltraCode ? CLAUDE_ULTRA_CODE : level,
       };
     };
   }
@@ -777,11 +789,17 @@ export class ApiEndpointService {
       const withLogin = setsClaudeAiLogin
         ? { ...enabledOrOff, keepsClaudeAiLogin: input.keepsClaudeAiLogin }
         : enabledOrOff;
-      const agent = this.withDefaultThinking({
+      const withThinking = this.withDefaultThinking({
         state,
         provider: supported,
         agent: withLogin,
         requested: input.defaultThinkingOptionId,
+      });
+      const agent = this.withUltraCode({
+        state,
+        provider: supported,
+        agent: withThinking,
+        requested: input.usesUltraCode,
       });
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
@@ -801,31 +819,67 @@ export class ApiEndpointService {
     });
   }
 
-  /** 设默认思考档位：要是默认模型能选的档位；省略时不变（换默认模型后的取法在 commit 里）。 */
+  /**
+   * 设默认思考档位（照 magpie 的 Set）：Claude Code 要是默认模型收的档位（claudeTakes）；Codex 收它认的任何档位，
+   * 不要求先有默认模型。省略时不变（Codex 换默认模型后的取法在 commit 里）。
+   */
   private withDefaultThinking(input: {
     state: ApiEndpointState;
     provider: ApiEndpointProvider;
     agent: ApiEndpointAgentSettings;
     requested: string | null | undefined;
   }): ApiEndpointAgentSettings {
-    const { state, provider, agent, requested } = input;
-    if (requested === undefined) return agent;
-    if (requested === null) return { ...agent, defaultThinkingOptionId: null };
-    const model = agent.defaultModelId;
-    if (model === null) {
+    const { state, provider, agent } = input;
+    if (input.requested === undefined) return agent;
+    if (input.requested === null) return { ...agent, defaultThinkingOptionId: null };
+    const requested = input.requested.trim();
+    if (requested === "") {
       throw new ApiEndpointRequestError({
         code: "invalid_input",
-        message: "Pick a default model before its default thinking",
+        message: "The default thinking can't be empty",
       });
     }
-    const levels = this.thinkingLevelsFor({ state, provider, modelId: model });
+    if (provider === "codex") return { ...agent, defaultThinkingOptionId: requested };
+    const levels = this.claudeLevels(state, agent);
     if (!levels.includes(requested)) {
       throw new ApiEndpointRequestError({
         code: "invalid_input",
-        message: `The default thinking must be one of the levels ${model} takes: ${levels.join(", ")}`,
+        message: `Claude Code runs ${agent.defaultModelId ?? "the default model"} at ${levels.join(", ") || "no level"}, not ${requested}`,
       });
     }
     return { ...agent, defaultThinkingOptionId: requested };
+  }
+
+  /** 开关 Ultra Code（照 magpie 的 ultracode 字段）：只有 Claude Code；打开要求默认模型支持 xhigh。省略时不变。 */
+  private withUltraCode(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    agent: ApiEndpointAgentSettings;
+    requested: boolean | undefined;
+  }): ApiEndpointAgentSettings {
+    const { state, provider, agent, requested } = input;
+    if (requested === undefined) return agent;
+    if (provider !== "claude") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "Only Claude Code has Ultra Code",
+      });
+    }
+    const isRefused = requested && !takesUltraCode(this.claudeLevels(state, agent));
+    if (isRefused) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Claude Code has Ultra Code only on a model that takes xhigh, and ${agent.defaultModelId ?? "the default model"} doesn't`,
+      });
+    }
+    return { ...agent, usesUltraCode: requested };
+  }
+
+  /** Claude Code 默认模型收的档位；还没有默认模型时为空。 */
+  private claudeLevels(state: ApiEndpointState, agent: ApiEndpointAgentSettings): string[] {
+    const modelId = agent.defaultModelId;
+    if (modelId === null) return [];
+    return this.thinkingLevelsFor({ state, provider: "claude", modelId });
   }
 
   /** 默认模型是这个模型时默认思考档位能选的档位；资料按中转站先发给的那家查。 */
@@ -842,19 +896,28 @@ export class ApiEndpointService {
     });
   }
 
-  /** 换了默认模型（或模型资料变了）后，新模型不收的默认思考档位改到最近一档（照 magpie）。 */
-  private settleThinking(state: ApiEndpointState): ApiEndpointState {
-    const agents = { ...state.agents };
-    for (const provider of API_ENDPOINT_PROVIDERS) {
-      const agent = agents[provider];
-      const chosen = agent.defaultThinkingOptionId ?? null;
-      const modelId = agent.defaultModelId;
-      if (!agent.enabled || modelId === null || chosen === null) continue;
-      const levels = this.thinkingLevelsFor({ state, provider, modelId });
-      const settled = settleDefaultThinking({ levels, chosen });
-      if (settled !== chosen) agents[provider] = { ...agent, defaultThinkingOptionId: settled };
-    }
-    return { ...state, agents };
+  /**
+   * Codex 换了默认模型后，新模型不收的默认思考档位照 magpie 的 settle 改掉；设档位本身照它的 Set 原样写下。
+   * Claude Code 不改：magpie 只在显示时 claudeClamp，Claude Code 自己也把模型不收的档位降到不高于它的一档。
+   */
+  private settleThinking(input: {
+    previous: ApiEndpointState;
+    next: ApiEndpointState;
+  }): ApiEndpointState {
+    const state = input.next;
+    const agent = state.agents.codex;
+    const chosen = agent.defaultThinkingOptionId ?? null;
+    const modelId = agent.defaultModelId;
+    const isModelChanged = input.previous.agents.codex.defaultModelId !== modelId;
+    const isSettled = !agent.enabled || modelId === null || chosen === null || !isModelChanged;
+    if (isSettled) return state;
+    const levels = this.thinkingLevelsFor({ state, provider: "codex", modelId });
+    const settled = settleCodexThinking({ levels, chosen });
+    if (settled === chosen) return state;
+    return {
+      ...state,
+      agents: { ...state.agents, codex: { ...agent, defaultThinkingOptionId: settled } },
+    };
   }
 
   /**
@@ -996,7 +1059,7 @@ export class ApiEndpointService {
       rewrite?: ApiEndpointProvider;
     } = {},
   ): Promise<ApiEndpointState> {
-    const next = this.settleThinking(settleAgentSettings(proposed));
+    const next = this.settleThinking({ previous, next: settleAgentSettings(proposed) });
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
         this.requireGateway();
@@ -1163,6 +1226,7 @@ export class ApiEndpointService {
       allowWebSearch: someEndpointSearchesWeb(state),
       isAutoModeReviewed: isAutoModeReviewed(state),
       defaultThinking: agent.defaultThinkingOptionId ?? null,
+      ultraCode: provider === "claude" ? (agent.usesUltraCode ?? null) : null,
     };
   }
 
@@ -1345,6 +1409,7 @@ export class ApiEndpointService {
       provider === "claude" && someEndpointSearchesWeb(state),
       provider === "claude" && isAutoModeReviewed(state),
       agent.defaultThinkingOptionId ?? null,
+      agent.usesUltraCode ?? null,
     ]);
   }
 
@@ -2136,6 +2201,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
   return JSON.stringify([
     agent.defaultModelId,
     agent.defaultThinkingOptionId ?? null,
+    agent.usesUltraCode ?? null,
     usableModels(state),
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [

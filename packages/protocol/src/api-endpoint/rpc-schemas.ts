@@ -71,14 +71,16 @@ export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
  * 或「接口标识/模型名」（先用那家，不行再自动切换到提供同名模型的别家，ADR 0012）。
  * keepsClaudeAiLogin 只对 Claude Code 有意义：「保留 claude.ai 登录」（ADR 0012），开着时 CLI 配置里的口令写成空值；
  * 没有即为关，老 daemon 不发。
- * defaultThinkingOptionId 是「默认思考档位」：终端新会话与 Osuna 新对话从这一档起步，取值是默认模型的思考档位 id
- * （Claude Code 另有 ultracode）；null 或没有为没设，用 CLI 自己的。老 daemon 不发。
+ * defaultThinkingOptionId 是「默认思考档位」：终端新会话与 Osuna 新对话从这一档起步，取值是思考档位 id；
+ * null 或没有为没设，用 CLI 自己的。usesUltraCode 只对 Claude Code 有意义：Ultra Code 开（true）、关（false），
+ * 没有为没设、不碰 settings.json 里的 ultracode。老 daemon 都不发。
  */
 export const ApiEndpointAgentSettingsSchema = z.object({
   enabled: z.boolean(),
   defaultModelId: z.string().nullable(),
   keepsClaudeAiLogin: z.boolean().optional(),
   defaultThinkingOptionId: z.string().nullable().optional(),
+  usesUltraCode: z.boolean().optional(),
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
@@ -308,8 +310,9 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * 关掉时忽略 defaultModelId，从不被拒。失败时 `agent` 是该 Agent 未变的设置。
  * `reapply`（「重新应用」，与 enabled: true 一起）：设置没变也按当前设置重写 CLI 配置，盖掉外部改动；老 daemon 忽略它。
  * `keepsClaudeAiLogin`：只给 Claude Code，设「保留 claude.ai 登录」，总开关开着、关着都能设；省略即不变，老 daemon 忽略它。
- * `defaultThinkingOptionId`：设「默认思考档位」，要是默认模型能选的档位；null 为不设，省略即不变（换了默认模型时
- * daemon 把新模型不支持的档位改到最近一档）。老 daemon 忽略它。
+ * `defaultThinkingOptionId`：设「默认思考档位」；null 为不设，省略即不变。Claude Code 要是默认模型收的档位，
+ * Codex 收它认的任何档位（换了默认模型时 daemon 把新模型不收的改到最近一档）。老 daemon 忽略它。
+ * `usesUltraCode`：只给 Claude Code，开关 Ultra Code，打开要求默认模型支持 xhigh；省略即不变。老 daemon 忽略它。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -320,6 +323,7 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   reapply: z.boolean().optional(),
   keepsClaudeAiLogin: z.boolean().optional(),
   defaultThinkingOptionId: z.string().nullable().optional(),
+  usesUltraCode: z.boolean().optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema

@@ -2633,6 +2633,9 @@ export const ja: TranslationResources = {
         defaultThinkingUnset: "設定しない（{{agent}} に任せる）",
         defaultThinkingMaxLock:
           "Max にすると、Osuna のチャットを含む {{agent}} のすべてのセッションが Max に固定され、/effort でも下げられません。",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}} は思考レベルに関係なく、実質的なタスクごとにワークフローを計画します。Extra High に対応したモデルでのみ使えます。",
         connection: {
           kept: "{{agent}} はすでにサードパーティ API を使っています。{{model}} のままです。",
           again:

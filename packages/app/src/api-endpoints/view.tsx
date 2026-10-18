@@ -82,11 +82,13 @@ function AgentApiEndpoints({
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // 指定某一家的默认模型取聊天模型选择器同一份分组（「接口标识/模型名」）。
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不收「接口标识/模型名」的默认模型。
+  const providerEntry = providerEntries?.find((candidate) => candidate.provider === provider);
   const endpointModelGroups = useMemo(() => {
     if (!hasIssues) return null;
-    const entry = providerEntries?.find((candidate) => candidate.provider === provider);
-    return entry?.apiEndpointModelGroups ?? null;
-  }, [hasIssues, provider, providerEntries]);
+    return providerEntry?.apiEndpointModelGroups ?? null;
+  }, [hasIssues, providerEntry]);
+  // 每个会话都锁在哪一档由主机说（只有 Claude Code 的 max 会）。
+  const lockedThinkingOptionId = providerEntry?.lockedThinkingOptionId ?? null;
   const lastConnection = endpoints.lastConnection;
   const isOwnConnection = lastConnection?.provider === provider;
   const connection = isOwnConnection ? lastConnection.connection : null;
@@ -102,6 +104,10 @@ function AgentApiEndpoints({
   const handleDefaultThinkingChange = useCallback(
     (defaultThinkingOptionId: string | null) =>
       setAgentSettings(provider, { enabled: true, defaultThinkingOptionId }),
+    [provider, setAgentSettings],
+  );
+  const handleUltraCodeChange = useCallback(
+    (usesUltraCode: boolean) => setAgentSettings(provider, { enabled: true, usesUltraCode }),
     [provider, setAgentSettings],
   );
   // 总开关开着、关着都能设，开关保持原样。
@@ -147,7 +153,13 @@ function AgentApiEndpoints({
   return (
     <AgentApiEndpointsSection
       providerLabel={providerLabel}
-      view={selectAgentApiEndpointsView({ state, provider, endpointModelGroups, now })}
+      view={selectAgentApiEndpointsView({
+        state,
+        provider,
+        endpointModelGroups,
+        lockedThinkingOptionId,
+        now,
+      })}
       busy={endpoints.pendingAgent === provider}
       actionError={endpoints.actionError}
       actionErrorCode={endpoints.actionErrorCode}
@@ -156,7 +168,7 @@ function AgentApiEndpoints({
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onDefaultThinkingChange={handleDefaultThinkingChange}
-      maxLocksSessions={provider === "claude"}
+      onUltraCodeChange={handleUltraCodeChange}
       onManage={handleManage}
       // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}

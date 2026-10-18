@@ -2632,6 +2632,9 @@ export const zhCN: TranslationResources = {
         defaultThinkingUnset: "不设（由 {{agent}} 决定）",
         defaultThinkingMaxLock:
           "选 Max 后，{{agent}} 的所有会话都锁在 Max，包括 Osuna 里的对话，会话里用 /effort 也调不低",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}} 为每个实质任务先规划一套工作流程，与思考档位无关；只在模型支持 Extra High 时可用",
         connection: {
           kept: "{{agent}} 已在用第三方接口，默认模型仍是 {{model}}。",
           again: "{{agent}} 已改用第三方接口，回到上次关掉开关前用的 {{model}}。",

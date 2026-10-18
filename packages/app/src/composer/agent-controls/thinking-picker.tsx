@@ -62,7 +62,8 @@ export function ThinkingPicker({
           options={options}
           selectedId={selectedId}
           provider={provider}
-          disabled={disabled}
+          // 有说明时每个会话都锁在某一档、这里选的不起作用：滑条跟着置灰。
+          disabled={disabled || note !== undefined}
           onSelect={onSelect}
         />
         {note ? (

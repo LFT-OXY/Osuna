@@ -397,7 +397,7 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     expect(upstreamA.models).toEqual(["kimi-k2", "kimi-k2"]);
   });
   describe("default thinking", () => {
-    // Relay C：glm-5.3（low、high、max）与查不到资料的 kimi-k2（五档都给）。
+    // Relay C：glm-5.3（Codex 里 low、high、max）与查不到资料的 kimi-k2（Codex 里四档）。
     async function relayC(): Promise<void> {
       await saveEndpoint({ name: "Relay C", models: ["glm-5.3", "kimi-k2"] });
     }
@@ -412,11 +412,19 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       });
     }
 
+    function setUltraCode(usesUltraCode: boolean) {
+      return client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        usesUltraCode,
+      });
+    }
+
     async function claudeSettings(): Promise<Record<string, unknown>> {
       return JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
     }
 
-    test("Claude Code: high at the top, max in CLAUDE_CODE_EFFORT_LEVEL, Ultra Code as ultracode; switching off restores the file", async () => {
+    test("Claude Code: high at the top, max in CLAUDE_CODE_EFFORT_LEVEL, Ultra Code as ultracode beside the level; switching off restores the file", async () => {
       await relayC();
       await twoEndpoints();
       const before = `{
@@ -447,45 +455,60 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(atMax.modelSettings).toBeUndefined();
 
       await turnOn("claude", "kimi-k2");
-      await setThinking("claude", "ultracode");
+      await setThinking("claude", "medium");
+      expect(await setUltraCode(true)).toMatchObject({
+        error: null,
+        agent: { defaultThinkingOptionId: "medium", usesUltraCode: true },
+      });
       const ultra = await claudeSettings();
-      expect(ultra).toMatchObject({ ultracode: true, effortLevel: "xhigh" });
+      expect(ultra).toMatchObject({ ultracode: true, effortLevel: "medium" });
       expect((ultra.env as Record<string, unknown>).CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
 
+      await setUltraCode(false);
+      expect((await claudeSettings()).ultracode).toBeUndefined();
+
+      await setUltraCode(true);
       await turnOff("claude");
       expect(await readFile(settingsPath, "utf8")).toBe(before);
     });
 
-    test("Ultra Code only where the model takes xhigh; a new default model moves the level to its nearest", async () => {
+    test("Ultra Code only where the model takes xhigh; a level the new model doesn't take stays as set, as magpie", async () => {
       await relayC();
       await twoEndpoints();
       await turnOn("claude", "claude-opus-4-6");
 
-      const refused = await setThinking("claude", "ultracode");
-      expect(refused.error?.code).toBe("invalid_input");
+      expect((await setUltraCode(true)).error?.code).toBe("invalid_input");
+      expect((await setThinking("claude", "xhigh")).error?.code).toBe("invalid_input");
 
-      // glm-5.3 到 max：中转站把 xhigh 按 max 发出，所以有 Ultra Code。
+      // 别家模型五档都给，有 Ultra Code。
       await turnOn("claude", "glm-5.3");
-      expect(await setThinking("claude", "ultracode")).toMatchObject({ error: null });
+      expect(await setThinking("claude", "xhigh")).toMatchObject({ error: null });
 
+      // Opus 4.6 没有 xhigh：设置不改，Claude Code 自己按 high 跑；不会改成 max 锁住所有会话。
       const moved = await turnOn("claude", "claude-opus-4-6");
-      expect(moved.agent?.defaultThinkingOptionId).toBe("max");
-      expect((await claudeSettings()).env).toMatchObject({ CLAUDE_CODE_EFFORT_LEVEL: "max" });
-      expect((await claudeSettings()).ultracode).toBeUndefined();
+      expect(moved.agent?.defaultThinkingOptionId).toBe("xhigh");
+      const settings = await claudeSettings();
+      expect(settings.effortLevel).toBe("xhigh");
+      expect(settings.env).not.toHaveProperty("CLAUDE_CODE_EFFORT_LEVEL");
     });
 
-    test("Codex: model_reasoning_effort at the top; switching off puts the user's own back", async () => {
+    test("Codex: any level Codex takes goes into model_reasoning_effort; a new model moves it to its nearest; switching off puts the user's own back", async () => {
       await relayC();
       const before = `model_reasoning_effort = "low"\n`;
       await writeFile(configPath, before);
       await turnOn("codex", "glm-5.3");
 
-      expect(await setThinking("codex", "max")).toMatchObject({
+      expect(await setThinking("codex", "xhigh")).toMatchObject({
         error: null,
-        agent: { defaultThinkingOptionId: "max" },
+        agent: { defaultThinkingOptionId: "xhigh" },
       });
+      expect(await setThinking("codex", "max")).toMatchObject({ error: null });
       expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("max");
-      expect((await setThinking("codex", "xhigh")).error?.code).toBe("invalid_input");
+
+      // kimi-k2 没有资料，Codex 里四档：max 改到最近的 xhigh。
+      const moved = await turnOn("codex", "kimi-k2");
+      expect(moved.agent?.defaultThinkingOptionId).toBe("xhigh");
+      expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("xhigh");
 
       await turnOff("codex");
       expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("low");
@@ -497,7 +520,7 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       await setThinking("claude", "high");
 
       await expect.poll(glmThinking, { timeout: 10_000 }).toEqual({
-        options: ["low", "high", "xhigh", "max", "ultracode"],
+        options: ["low", "medium", "high", "xhigh", "max", "ultracode"],
         start: "high",
         locked: undefined,
       });
@@ -506,6 +529,9 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       await expect
         .poll(glmThinking, { timeout: 10_000 })
         .toMatchObject({ start: "max", locked: "max" });
+
+      await setUltraCode(true);
+      await expect.poll(glmThinking, { timeout: 10_000 }).toMatchObject({ start: "ultracode" });
     });
   });
 });

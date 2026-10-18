@@ -2621,6 +2621,9 @@ export const ko: TranslationResources = {
         defaultThinkingUnset: "설정 안 함({{agent}}이(가) 결정)",
         defaultThinkingMaxLock:
           "Max로 두면 Osuna 채팅을 포함한 {{agent}}의 모든 세션이 Max로 고정되며 /effort로도 낮출 수 없습니다.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}}이(가) 사고 수준과 관계없이 실질적인 작업마다 워크플로를 계획합니다. Extra High를 지원하는 모델에서만 쓸 수 있습니다.",
         connection: {
           kept: "{{agent}}은(는) 이미 서드파티 API를 사용 중입니다. {{model}}을(를) 그대로 사용합니다.",
           again:

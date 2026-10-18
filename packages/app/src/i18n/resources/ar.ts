@@ -2608,6 +2608,9 @@ export const ar: TranslationResources = {
         defaultThinkingUnset: "غير محدد (يقرر {{agent}})",
         defaultThinkingMaxLock:
           "عند Max تُثبَّت كل جلسات {{agent}} على Max، بما فيها الدردشات في Osuna، ولا يمكن لـ /effort خفضه.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "يخطط {{agent}} لسير عمل لكل مهمة جوهرية، أيًّا كان مستوى التفكير. متاح فقط للنماذج التي تدعم Extra High.",
         connection: {
           kept: "يستخدم {{agent}} واجهات API الخارجية بالفعل. يبقى على {{model}}.",
           again:

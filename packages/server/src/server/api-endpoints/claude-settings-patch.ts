@@ -16,7 +16,7 @@ import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switches.js";
 import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
-import { CLAUDE_ULTRA_CODE, claudeModelName } from "./claude-model-name.js";
+import { claudeModelName } from "./claude-model-name.js";
 
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
@@ -40,10 +40,11 @@ import { CLAUDE_ULTRA_CODE, claudeModelName } from "./claude-model-name.js";
  *   先请服务器审查、拿不到再弹「这个会话不符合条件」的提示（ADR 0012）。归属规则同模型提示，记在同一份记录里。
  * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
  *   用户之后又自己设了的除外；关着的开关和云平台的其他变量不动（ADR 0012，照 magpie 的 dropClouds / putClouds）。
- * - 默认思考档位（照 magpie 的 effort / ultracode 字段）：low–xhigh 写顶层 effortLevel，默认模型是 Claude 时另写
- *   modelSettings.<模型>.effortLevel（Opus 5.5 起只读这里）；max 写 env.CLAUDE_CODE_EFFORT_LEVEL（settings.json 存不下 max，
- *   这个变量盖过 /effort，所有会话锁在 max）；Ultra Code 写 ultracode: true 并按 xhigh 写档位。用户自己写的、会盖过这一档的
- *   CLAUDE_CODE_EFFORT_LEVEL 与 ultracode 拿掉。都记下原值，切回官方时放回；没设默认思考档位时一个都不碰。
+ * - 默认思考档位（照 magpie 的 effort 字段）：low–xhigh 写顶层 effortLevel，默认模型是 Claude 时另写
+ *   modelSettings.<模型>.effortLevel（Opus 5.5 起只读这里），并拿掉会盖过它的 CLAUDE_CODE_EFFORT_LEVEL；max 写
+ *   env.CLAUDE_CODE_EFFORT_LEVEL（settings.json 存不下 max，这个变量盖过 /effort，所有会话锁在 max）。
+ *   Ultra Code（照 magpie 的 ultracode 字段，与档位分开）：开写 ultracode: true，关拿掉。
+ *   都记下原值，切回官方时放回；没设的那一项一个键都不碰。
  *   CLI 自己存下的档位跟着走（第 30 条），不算被改过。
  */
 
@@ -66,7 +67,6 @@ const OriginalValueSchema = z.discriminatedUnion("present", [
 ]);
 export type OriginalValue = z.infer<typeof OriginalValueSchema>;
 
-// 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
 // 默认思考档位写过的一个键：JSON 路径、接管前的值、写进去的值（null 为拿掉）。
 const ThinkingKeyRecordSchema = z.object({
   path: z.array(z.string()),
@@ -82,6 +82,7 @@ const ThinkingRecordSchema = z.object({
 });
 type ThinkingRecord = z.infer<typeof ThinkingRecordSchema>;
 
+// 接管前整个文件的样子：不存在、空对象（留原文，恢复成空时逐字节还原）、或有内容。
 const OriginalFileSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("absent") }),
   z.object({ kind: z.literal("empty"), text: z.string() }),
@@ -166,6 +167,8 @@ export interface ClaudeGatewayWiring {
   allowWebSearch: boolean;
   isAutoModeReviewed: boolean;
   defaultThinking: string | null;
+  // Ultra Code：true 开、false 关，null 为没设、不碰。
+  ultraCode: boolean | null;
 }
 
 /**
@@ -244,6 +247,7 @@ export function applyClaudeApiEndpoint(input: {
     text,
     before: parsed.settings,
     level: input.wiring.defaultThinking,
+    ultraCode: input.wiring.ultraCode,
     model: input.wiring.model,
     takeover: input.takeover,
     formatting,
@@ -285,37 +289,33 @@ interface ThinkingKey {
 }
 
 interface ThinkingKeysInput {
-  level: string;
+  level: string | null;
+  ultraCode: boolean | null;
   model: string;
   settings: ParsedSettings;
-  // 文件里有、或 Osuna 记着的键：会盖过这一档，要拿掉。
+  // 文件里有、或 Osuna 记着的键。
   isHeld: (path: string[]) => boolean;
 }
 
-/** 默认思考档位要写的键（照 magpie 的 effort 与 ultracode 字段）。 */
+/** 默认思考档位与 Ultra Code 要写的键（照 magpie 的 effort 与 ultracode 字段）。 */
 function thinkingKeys(input: ThinkingKeysInput): ThinkingKey[] {
+  const keys = effortKeys(input);
+  if (input.ultraCode === true) keys.push({ path: ULTRACODE_PATH, value: true });
+  const isUltraCodeDropped = input.ultraCode === false && input.isHeld(ULTRACODE_PATH);
+  if (isUltraCodeDropped) keys.push({ path: ULTRACODE_PATH, value: null });
+  return keys;
+}
+
+function effortKeys(input: ThinkingKeysInput): ThinkingKey[] {
   const { level } = input;
-  const keys: ThinkingKey[] = [];
-  const dropIfHeld = (path: string[]) => {
-    if (input.isHeld(path)) keys.push({ path, value: null });
-  };
-  if (level === "max") {
-    keys.push({ path: EFFORT_ENV_PATH, value: "max" });
-    dropIfHeld(ULTRACODE_PATH);
-    return keys;
-  }
-  const isUltraCode = level === CLAUDE_ULTRA_CODE;
-  const effort = isUltraCode ? "xhigh" : level;
+  if (level === null) return [];
+  if (level === "max") return [{ path: EFFORT_ENV_PATH, value: "max" }];
   // 别家的模型和 Opus 5.5 以前的 Claude 读顶层；之后在 Claude Code 里换到别家模型时也从这一档起步（magpie 同样两处都写）。
-  keys.push({ path: ["effortLevel"], value: effort });
+  const keys: ThinkingKey[] = [{ path: ["effortLevel"], value: level }];
   const modelPath = modelEffortPath(input.settings, claudeModelName(input.model));
-  if (modelPath) keys.push({ path: modelPath, value: effort });
-  dropIfHeld(EFFORT_ENV_PATH);
-  if (isUltraCode) {
-    keys.push({ path: ULTRACODE_PATH, value: true });
-  } else {
-    dropIfHeld(ULTRACODE_PATH);
-  }
+  if (modelPath) keys.push({ path: modelPath, value: level });
+  // 会话读的是这个变量，它盖过写在文件里的档位（magpie 同样拿掉）。
+  if (input.isHeld(EFFORT_ENV_PATH)) keys.push({ path: EFFORT_ENV_PATH, value: null });
   return keys;
 }
 
@@ -335,11 +335,12 @@ interface ThinkingPatch {
   record: ThinkingRecord;
 }
 
-/** 写默认思考档位；上次写过、这次不写的键放回原值，Osuna 建的、现在空了的容器删掉。level 为 null 时只做后两件。 */
+/** 写默认思考档位与 Ultra Code；上次写过、这次不写的键放回原值，Osuna 建的、现在空了的容器删掉。 */
 function writeThinking(input: {
   text: string;
   before: ParsedSettings;
   level: string | null;
+  ultraCode: boolean | null;
   model: string;
   takeover: ClaudeSettingsTakeover | null;
   formatting: FormattingOptions;
@@ -349,10 +350,13 @@ function writeThinking(input: {
   const recordAt = (path: string[]) => recorded.keys.find((key) => samePath(key.path, path));
   const wasCreated = (path: string[]) => recorded.created.some((made) => samePath(made, path));
   const isHeld = (path: string[]) => valueAt(before, path).present || recordAt(path) !== undefined;
-  const wanted =
-    input.level === null
-      ? []
-      : thinkingKeys({ level: input.level, model: input.model, settings: before, isHeld });
+  const wanted = thinkingKeys({
+    level: input.level,
+    ultraCode: input.ultraCode,
+    model: input.model,
+    settings: before,
+    isHeld,
+  });
   let { text } = input;
   const keys: ThinkingKeyRecord[] = [];
   const created: string[][] = [];

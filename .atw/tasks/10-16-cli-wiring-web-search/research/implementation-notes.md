@@ -576,27 +576,31 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 对照 magpie（7597c132）
 
+审查后改成完全照 magpie：
+
 | 项 | magpie | Osuna |
 | --- | --- | --- |
-| Claude Code 写什么 | `effort` 字段：low–xhigh 写顶层 `effortLevel`，Claude 模型另写 `modelSettings.<claudeName>.effortLevel`；max 写 `env.CLAUDE_CODE_EFFORT_LEVEL`；非 max 时删掉已有的这个变量；`""` 删模型那一档与顶层 | 同；没设（null）时一个都不碰，上次写过的放回原值。所有写过的键记原值（`thinking.keys`）、为 modelSettings 新建的容器（`thinking.created`），关掉开关时放回 / 删掉 |
-| Ultra Code | 独立的 `ultracode` 字段（on / off），只在模型支持 xhigh 时可开 | 是默认思考档位里的一档（与 Osuna 对话的思考档位一致）：写 `ultracode: true`，档位按 xhigh 写；选别的档位时拿掉用户已有的 `ultracode`（会盖过选的档位），关掉时放回 |
-| 选 max 时的 ultracode | 不动 | 拿掉（单选：选了 max 就不是 Ultra Code），关掉时放回 |
-| Claude Code 的选项 | `claudeEffortsFor`：Claude 模型按 2.1.285 的表；别家模型五档都给 | Claude 模型同 magpie；别家模型按已知资料里它收的档位（能到 max 的也算有 xhigh，同 17 号工单），查不到资料时五档都给，资料说没有档位时不显示这一行。工单写「选项来自默认模型的档位」，比 magpie 窄 |
-| Codex 写什么 | 顶层 `model_reasoning_effort`，`""` 删掉 | 同；没设时不碰，关掉时放回用户原来的 |
-| 换模型后 | Codex：`settle` 把不收的档位改成 `codexcat.ModelDefault`（最近一档，没有就取中间档）；Claude Code：只在读时 `claudeClamp`（取不高于它的最高一档），不改文件 | 两边都在每次落设置时改到最近一档（一样近取强的，`nearestEffort`）；Ultra Code 按 xhigh 找；附近没有能选的档位时改成没设 |
-| CLI 自己存下的档位 | 跟着走（`Follow`） | 不算被改过（Claude 的思考档位键、Codex 的 `model_reasoning_effort` 不进「设置被改过」）；跟着改 Osuna 的设置留给 21 号工单 |
+| Claude Code 写什么 | `effort` 字段：low–xhigh 写顶层 `effortLevel`，Claude 模型另写 `modelSettings.<claudeName>.effortLevel`，并删掉 `CLAUDE_CODE_EFFORT_LEVEL`；max 写这个变量 | 同；没设（null）时一个都不碰，上次写过的放回原值。写过的键记原值（`thinking.keys`）与为 modelSettings 新建的容器（`thinking.created`），关掉开关时放回 / 删掉 |
+| Ultra Code | 独立的 `ultracode` 开关，与档位任意组合，只在模型支持 xhigh 时可开；off 删掉 | 同：`usesUltraCode`（true 写 `ultracode: true`，false 拿掉，没设不碰）；选档位从不碰 `ultracode`；设置页是一个 Switch，只在默认模型支持 xhigh 时出现 |
+| Claude Code 的选项 | `claudeEffortsFor`：Claude 模型按 2.1.285 的表，别家模型五档都给 | 同 |
+| Claude Code 换模型后 | 不改文件，读时 `claudeClamp`（不高于它的最高一档） | 同：设置不改，设置页显示 clamp 后的那一档；Claude Code 自己也这样降（`I()`） |
+| Codex 的选项与设置 | `Set` 收任何档位；选项是模型收的档位 | 同：Codex 收任何非空档位，不要求先有默认模型；设置页列模型收的档位 |
+| Codex 换模型后 | `settle`：不收就 `codexcat.ModelDefault`（最近一档，没有就 medium、high、第一档）；不知道档位时不动 | 同，只在默认模型变了时做 |
+| CLI 自己存下的档位 | 跟着走（`Follow`） | 不算被改过；跟着改 Osuna 的设置留给 21 号工单 |
 | 正在跑的会话 | 提示「重开会话才用上」 | 没做，留给 27 号工单 |
-| Osuna 自己的对话 | — | 接口模型带思考档位选项，新对话没有记住的选择时从默认思考档位起步（模型不收就取最近一档；没设时 Claude 从 high 起、Codex 从 config.toml 的那档起）；没选 Ultra Code 时明确传 `settings.ultracode: false` |
+| Osuna 自己的对话 | — | 接口模型带思考档位（Claude 支持 xhigh 时另有 Ultra Code 一档）；新对话从默认思考档位起步（Claude 按 clamp，开着 Ultra Code 时是 Ultra Code；Codex 按 ModelDefault）；没选 Ultra Code 时明确传 `settings.ultracode: false` |
+| 锁住的说明 | — | 设置页与对话都按快照的 `lockedThinkingOptionId` 显示，规则只在 daemon；对话里锁住时滑条置灰 |
 
 ### 要判断的地方
 
 - 新对话没选模型时（没有记住的选择），草稿的思考档位原来不显示；现在按实际会用的默认模型和它的起步档位显示，与提交时一样（`composer/draft/input-draft.ts` 的 `shownFormState`）。影响所有提供方的新对话草稿。
-- 接口模型在 Osuna 对话里的思考档位选项原来没有（分组里的模型不带档位），现在由 daemon 按默认思考档位同一套规则给出；Claude 的接口模型因此不再有原来的固定四档。
-- Codex 模型目录的 `default_reasoning_level` 跟默认思考档位走（开着开关且设了时），没设时照旧跟 config.toml。
+- 接口模型在 Osuna 对话里的思考档位原来没有，现在由 daemon 给出；档位显示名两个 CLI 一致（Low、Extra High…）。
+- 窄窗口下默认模型与默认思考档位的下拉放到说明下面、占满整行。
+- 下拉里选中的一行与悬停的一行用同一种底色（Combobox 现有样式），选中的另有勾；截图前把指针移开。没有改 Combobox。
 
 ### 测试
 
-- 纯逻辑：`default-thinking.test.ts`（选项、换模型后的取法、Claude 模型名）、`claude-settings-patch.test.ts`（high、Claude 模型的 modelSettings、max、Ultra Code、拿掉并放回用户的变量与 ultracode、换档位后放回、没设时不碰、CLI 改的档位不算被改过）、`codex-config-patch.test.ts`（写入与放回、两种接法、CLI 改的不算被改过）、`agent.test.ts`（没选 Ultra Code 时 `ultracode: false`）、app `agent-settings.test.ts`。
-- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「default thinking」：Claude Code 的 high / modelSettings / max / Ultra Code 与关掉后逐字节还原；不支持 xhigh 时拒绝 Ultra Code、换模型后改到 max；Codex 写入、拒绝不收的档位、关掉放回；快照里接口模型的档位、起步档位与 `lockedThinkingOptionId`。
-- 浏览器 `settings-api-endpoints.spec.ts`：选项、只读目录下保存失败留在原处、Max 写进环境变量并显示锁住的说明、High 写进 effortLevel、新对话从 High 起步、Max 时对话浮层写明原因。
-- 截图：`screenshots/20-claude-code-page_default-thinking-max_desktop-1280_{en,zh}.png`、`20-codex-page_default-thinking-dropdown-open_compact-390_{en,zh}.png`、`20-chat-thinking_locked-at-max_desktop-1280_{en,zh}.png`。
+- 纯逻辑：`default-thinking.test.ts`（选项、claudeClamp、Codex 的 settle 与 ModelDefault、Claude 模型名）、`claude-settings-patch.test.ts`（high、Claude 模型的 modelSettings、max、Ultra Code 单独开关、拿掉用户的档位变量但留着他的 ultracode、换档位后放回、没设时不碰、CLI 改的档位不算被改过）、`codex-config-patch.test.ts`（写入与放回、两种接法、CLI 改的不算被改过）、`agent.test.ts`（没选 Ultra Code 时 `ultracode: false`）、app `agent-settings.test.ts`。
+- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「default thinking」：Claude Code 的 high / modelSettings / max / Ultra Code 开关与关掉后逐字节还原；不支持 xhigh 时拒绝 Ultra Code 与 xhigh、换到不收的模型后设置不改；Codex 收任何档位、换模型后改到最近一档、关掉放回；快照里接口模型的档位、起步档位与 `lockedThinkingOptionId`。
+- 浏览器 `settings-api-endpoints.spec.ts`：选项与 Ultra Code 开关、只读目录下保存失败留在原处、Max 写进环境变量并显示锁住的说明、High 写进 effortLevel、Ultra Code 单独开关不动档位、新对话从 High 起步、Max 时对话浮层写明原因。
+- 截图：`screenshots/20-claude-code-page_default-thinking-max_desktop-1280_{en,zh}.png`、`20-codex-page_default-thinking-rows_compact-390_{en,zh}.png`、`20-codex-page_default-thinking-dropdown-open_compact-390_{en,zh}.png`、`20-chat-thinking_locked-at-max_desktop-1280_{en,zh}.png`。

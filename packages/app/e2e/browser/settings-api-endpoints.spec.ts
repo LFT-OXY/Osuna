@@ -801,13 +801,14 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
       const section = agentSection(page);
       const trigger = section.getByTestId("agent-api-endpoints-default-thinking-trigger");
 
-      await test.step("not set at first, with the model's levels and Ultra Code to pick from", async () => {
+      await test.step("not set at first, with the model's levels to pick from and Ultra Code beside them", async () => {
         await expect(trigger).toHaveText("Not set (Claude decides)");
+        await expect(section.getByTestId("agent-api-endpoints-ultra-code")).toBeVisible();
         await trigger.click();
         for (const [id, label] of [
           ["high", "High"],
+          ["xhigh", "Extra High"],
           ["max", "Max"],
-          ["ultracode", "Ultra Code"],
         ]) {
           await expect(
             page.getByTestId(`agent-api-endpoints-default-thinking-option-${id}`),
@@ -851,6 +852,15 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
           section.getByTestId("agent-api-endpoints-default-thinking-max-lock"),
         ).toHaveCount(0);
         await expect.poll(claudeSettingsEffort).toBe("high");
+      });
+
+      await test.step("Ultra Code turns on and off on its own, leaving the level as it is", async () => {
+        const ultraCode = section.getByTestId("agent-api-endpoints-ultra-code");
+        await ultraCode.click();
+        await expect.poll(claudeSettingsUltraCode).toBe(true);
+        await ultraCode.click();
+        await expect.poll(claudeSettingsUltraCode).toBeUndefined();
+        expect(await claudeSettingsEffort()).toBe("high");
       });
 
       await test.step("a new chat with nothing remembered starts at the default thinking", async () => {
@@ -1483,6 +1493,7 @@ function defaultModelTrigger(page: Page): Locator {
 interface ClaudeSettingsFile {
   model?: string;
   effortLevel?: string;
+  ultracode?: boolean;
   env?: Record<string, string>;
 }
 
@@ -1500,6 +1511,10 @@ async function readClaudeSettings(): Promise<ClaudeSettingsFile> {
 
 async function claudeSettingsModel(): Promise<string | undefined> {
   return (await readClaudeSettings()).model;
+}
+
+async function claudeSettingsUltraCode(): Promise<boolean | undefined> {
+  return (await readClaudeSettings()).ultracode;
 }
 
 async function claudeSettingsEffortVariable(): Promise<string | undefined> {

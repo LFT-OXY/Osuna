@@ -196,8 +196,7 @@ export function codexDefaultLevel(levels: readonly string[], chosen: string | nu
   return levels[0] ?? "medium";
 }
 
-/** levels 里离 want 最近的一档（magpie NearestEffort）：一样近取强的，不取 none；want 不是认得的档位时为 null。 */
-export function nearestLevel(want: string, levels: readonly string[]): string | null {
+function nearestLevel(want: string, levels: readonly string[]): string | null {
   if (levels.includes(want)) return want;
   const at = EFFORT_RANK.indexOf(want);
   if (at < 0) return null;

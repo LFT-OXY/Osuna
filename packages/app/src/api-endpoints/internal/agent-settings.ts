@@ -120,11 +120,21 @@ export interface DefaultThinkingOption {
   label: string;
 }
 
-/** 默认思考档位（glossary「默认思考档位」）：现在的档位（null 为没设）与默认模型能选的档位。 */
+/**
+ * 默认思考档位（glossary「默认思考档位」）：显示的档位（null 为没设；默认模型不收设的那档时，照 magpie 的 claudeClamp
+ * 显示它实际跑的那一档）、默认模型能选的档位、Ultra Code（null 为这个模型没有），以及每个会话都锁在的档位（主机说的）。
+ */
 export interface DefaultThinkingView {
   value: string | null;
   options: DefaultThinkingOption[];
+  usesUltraCode: boolean | null;
+  lockedAt: string | null;
 }
+
+// 与 Osuna 对话里 Claude 的 Ultra Code 档位同一个 id。
+const ULTRA_CODE_OPTION_ID = "ultracode";
+// 档位由弱到强（Codex 认得的名字，Claude Code 的五档在其中）。
+const LEVEL_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 export interface AgentApiEndpointsView {
   enabled: boolean;
@@ -149,6 +159,8 @@ export function selectAgentApiEndpointsView(input: {
   provider: string;
   // 提供方快照里按接口分组的模型（id 是「接口标识/模型名」）；主机认不出指定某一家的默认模型时为 null。
   endpointModelGroups: ApiEndpointModelGroup[] | null;
+  // 提供方快照说每个会话都锁在的思考档位（第三方接口的默认思考档位是 max 时）；没有为 null。
+  lockedThinkingOptionId: string | null;
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
@@ -190,6 +202,8 @@ export function selectAgentApiEndpointsView(input: {
       groups: input.endpointModelGroups ?? [],
       defaultModelId: agent.defaultModelId,
       value: agent.defaultThinkingOptionId ?? null,
+      usesUltraCode: agent.usesUltraCode === true,
+      lockedAt: input.lockedThinkingOptionId,
     });
   }
 
@@ -207,25 +221,47 @@ export function selectAgentApiEndpointsView(input: {
 }
 
 /**
- * 选项来自默认模型在聊天模型选择器里的那一条（主机按这个模型的档位给出，Claude Code 的 Ultra Code 也在里面）：
- * 指定某一家的找那一家，光秃秃的名字找第一家提供它的。
+ * 选项来自默认模型在聊天模型选择器里的那一条（主机按这个模型的档位给出；Claude Code 支持 xhigh 时里面有 Ultra Code，
+ * 这里拆出来做开关）：指定某一家的找那一家，光秃秃的名字找第一家提供它的。
  */
 function defaultThinkingView(input: {
   groups: ApiEndpointModelGroup[];
   defaultModelId: string | null;
   value: string | null;
+  usesUltraCode: boolean;
+  lockedAt: string | null;
 }): DefaultThinkingView | null {
   const { defaultModelId } = input;
   if (defaultModelId === null) return null;
   const models = input.groups.flatMap((group) => group.models);
   const named = models.find((model) => model.id === defaultModelId);
   const bare = models.find((model) => model.id.slice(model.id.indexOf("/") + 1) === defaultModelId);
-  const options = (named ?? bare)?.thinkingOptions ?? [];
+  const thinkingOptions = (named ?? bare)?.thinkingOptions ?? [];
+  const options = thinkingOptions
+    .filter((option) => option.id !== ULTRA_CODE_OPTION_ID)
+    .map((option) => ({ id: option.id, label: option.label }));
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove after 2027-04-18. 老 daemon 的分组模型不带思考档位，这一行不显示（没有档位的模型同样不显示）。
   if (options.length === 0) return null;
+  const hasUltraCode = thinkingOptions.some((option) => option.id === ULTRA_CODE_OPTION_ID);
   return {
-    value: input.value,
-    options: options.map((option) => ({ id: option.id, label: option.label })),
+    value: input.value === null ? null : clampedLevel(input.value, options),
+    options,
+    usesUltraCode: hasUltraCode ? input.usesUltraCode : null,
+    lockedAt: input.lockedAt,
   };
+}
+
+/** magpie claudeClamp：模型不收的档位显示成它不高于的最高一档，都比它高就取最低的；认不出的照原样。 */
+function clampedLevel(value: string, options: DefaultThinkingOption[]): string {
+  if (options.some((option) => option.id === value)) return value;
+  const at = LEVEL_ORDER.indexOf(value);
+  if (at < 0) return value;
+  let clamped = options[0]?.id ?? value;
+  for (const option of options) {
+    const rank = LEVEL_ORDER.indexOf(option.id);
+    if (rank >= 0 && rank <= at) clamped = option.id;
+  }
+  return clamped;
 }
 
 /** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */

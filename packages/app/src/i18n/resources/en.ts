@@ -2671,6 +2671,9 @@ export const en = {
         defaultThinkingUnset: "Not set ({{agent}} decides)",
         defaultThinkingMaxLock:
           "At Max, every {{agent}} session is held at Max, chats in Osuna included, and /effort can't lower it.",
+        ultraCode: "Ultra Code",
+        ultraCodeHint:
+          "{{agent}} plans a workflow for each substantive task, at whatever thinking level. Only for models that support Extra High.",
         connection: {
           kept: "{{agent}} already uses API endpoints. It stays on {{model}}.",
           again:
