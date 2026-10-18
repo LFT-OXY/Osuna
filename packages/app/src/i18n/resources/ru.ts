@@ -299,6 +299,8 @@ export const ru: TranslationResources = {
     archived: {
       callout: "Этот агент находится в архиве",
       unarchive: "Разархивировать",
+      codexModelProviderMissing:
+        "Codex не может продолжить разговор этого агента: он записан за провайдером моделей Codex, которого больше нет в настройках Codex. Перенесите его к другому провайдеру моделей Codex и снова разархивируйте.",
     },
   },
   sessions: {
@@ -2293,6 +2295,7 @@ export const ru: TranslationResources = {
       },
       move: {
         menuItem: "Перенести к другому провайдеру моделей Codex…",
+        action: "Перенести разговор…",
         title: "Перенести к другому провайдеру моделей Codex",
         targetLabel: "Перенести к",
         targetPlaceholder: "Выберите провайдера моделей Codex",
@@ -2329,6 +2332,7 @@ export const ru: TranslationResources = {
         loadFailed: "Не удалось загрузить сессии",
         openFailed: "Не удалось открыть терминал для этой сессии",
         importFailed: "Не удалось импортировать эту сессию",
+        resumeFailed: "Codex не может продолжить этот разговор",
         codexModelProviderMissing:
           "Этот разговор записан за провайдером моделей Codex {{provider}}, которого больше нет в настройках Codex, поэтому Codex не может его продолжить. Перенесите его к другому провайдеру моделей Codex и повторите.",
       },

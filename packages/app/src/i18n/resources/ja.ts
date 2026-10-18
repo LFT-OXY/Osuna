@@ -300,6 +300,8 @@ export const ja: TranslationResources = {
     archived: {
       callout: "このエージェントはアーカイブされています",
       unarchive: "アーカイブ解除",
+      codexModelProviderMissing:
+        "Codex はこのエージェントの会話を再開できません。Codex の設定にもう存在しない Codex モデルプロバイダーに記録されています。別の Codex モデルプロバイダーへ移動してから、もう一度アーカイブ解除してください。",
     },
   },
   sessions: {
@@ -2281,6 +2283,7 @@ export const ja: TranslationResources = {
       },
       move: {
         menuItem: "別の Codex モデルプロバイダーへ移動…",
+        action: "会話を移動…",
         title: "別の Codex モデルプロバイダーへ移動",
         targetLabel: "移動先",
         targetPlaceholder: "Codex モデルプロバイダーを選択",
@@ -2317,6 +2320,7 @@ export const ja: TranslationResources = {
         loadFailed: "セッションを読み込めませんでした",
         openFailed: "このセッションのターミナルを開けませんでした",
         importFailed: "このセッションをインポートできませんでした",
+        resumeFailed: "Codex はこの会話を再開できません",
         codexModelProviderMissing:
           "この会話は Codex モデルプロバイダー {{provider}} に記録されていますが、Codex の設定にもう存在しないため再開できません。別の Codex モデルプロバイダーへ移動してから再試行してください。",
       },

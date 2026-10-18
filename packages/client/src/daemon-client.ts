@@ -1149,7 +1149,7 @@ export class AgentImportError extends Error {
   }
 }
 
-class DaemonRpcError extends Error {
+export class DaemonRpcError extends Error {
   readonly requestId: string;
   readonly requestType?: string;
   readonly code?: string;

@@ -301,6 +301,8 @@ export const ptBR: TranslationResources = {
     archived: {
       callout: "Este agente está arquivado",
       unarchive: "Desarquivar",
+      codexModelProviderMissing:
+        "O Codex não consegue continuar a conversa deste agente: ela está registrada em um provedor de modelos do Codex que não está mais na configuração do Codex. Mova-a para outro provedor de modelos do Codex e desarquive de novo.",
     },
   },
   sessions: {
@@ -2296,6 +2298,7 @@ export const ptBR: TranslationResources = {
       },
       move: {
         menuItem: "Mover para outro provedor de modelos do Codex…",
+        action: "Mover conversa…",
         title: "Mover para outro provedor de modelos do Codex",
         targetLabel: "Mover para",
         targetPlaceholder: "Escolha um provedor de modelos do Codex",
@@ -2332,6 +2335,7 @@ export const ptBR: TranslationResources = {
         loadFailed: "Não foi possível carregar as sessões",
         openFailed: "Não foi possível abrir um terminal para esta sessão",
         importFailed: "Não foi possível importar esta sessão",
+        resumeFailed: "O Codex não consegue continuar esta conversa",
         codexModelProviderMissing:
           "Esta conversa está registrada no provedor de modelos do Codex {{provider}}, que não está mais na configuração do Codex, então o Codex não consegue continuá-la. Mova-a para outro provedor de modelos do Codex e tente de novo.",
       },

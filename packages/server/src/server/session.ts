@@ -286,8 +286,7 @@ function resolveWorkspaceSetupRuntime(
   return runtime ?? new WorkspaceSetupRuntime();
 }
 import { WorktreeRequestError, toWorktreeWireError } from "./worktree-errors.js";
-import { CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE } from "@getpaseo/protocol/codex-session/rpc-schemas";
-import { isCodexModelProviderMissing } from "./codex-conversations/model-provider-missing.js";
+import { toAgentResumeWireError } from "./agent-resume-errors.js";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import {
   createProjectDirectory,
@@ -693,6 +692,13 @@ interface ClientActivity {
   lastActivityAt: Date;
   appVisible: boolean;
   appVisibilityChangedAt: Date;
+}
+
+/** 刷新（取消归档、重新载入）失败的码：工作树错误照旧，续不上的 Codex 对话带可识别的原因。 */
+function toRefreshAgentErrorCode(error: unknown): string {
+  if (error instanceof WorktreeRequestError) return error.code;
+  const resumeError = toAgentResumeWireError(error);
+  return resumeError.code === "unknown" ? "agent_refresh_failed" : resumeError.code;
 }
 
 export class Session {
@@ -4609,7 +4615,8 @@ export class Session {
         });
       }
     } catch (error) {
-      const message = getErrorMessage(error);
+      const wireError = toAgentResumeWireError(error);
+      const message = wireError.message;
       this.sessionLogger.error({ err: error }, "Failed to resume agent");
       if (requestId) {
         this.emit({
@@ -4618,7 +4625,7 @@ export class Session {
             requestId,
             requestType: msg.type,
             error: message,
-            code: "agent_resume_failed",
+            code: wireError.code === "unknown" ? "agent_resume_failed" : wireError.code,
           },
         });
       }
@@ -4681,7 +4688,8 @@ export class Session {
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const wireError = toAgentResumeWireError(error);
+      const message = wireError.message;
       this.sessionLogger.error({ err: error }, "Failed to import agent");
       this.emit({
         type: "status",
@@ -4689,9 +4697,7 @@ export class Session {
           status: "agent_create_failed",
           requestId,
           error: message,
-          ...(isCodexModelProviderMissing(error)
-            ? { errorCode: CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE }
-            : {}),
+          errorCode: wireError.code,
         },
       });
       this.emit({
@@ -4714,35 +4720,18 @@ export class Session {
 
     try {
       await this.restoreOwningWorkspaceForLegacyAgentRefresh(agentId);
-      await unarchiveAgentState(this.agentStorage, this.agentManager, agentId);
+      const originalArchivedAt = (await this.agentStorage.get(agentId))?.archivedAt ?? null;
+      const didUnarchive = await unarchiveAgentState(this.agentStorage, this.agentManager, agentId);
       let snapshot: ManagedAgent;
-      const existing = this.agentManager.getAgent(agentId);
-      if (existing) {
-        await this.interruptAgentIfRunning(agentId);
-        snapshot = await this.agentManager.reloadAgentSession(agentId, undefined, {
-          rehydrateFromDisk: true,
-        });
-      } else {
-        const record = await this.agentStorage.get(agentId);
-        if (!record) {
-          throw new Error(`Agent not found: ${agentId}`);
+      try {
+        snapshot = await this.reloadOrResumeAgentForRefresh(agentId);
+      } catch (error) {
+        // 与 resume_agent_request 一样：续不上就放回归档，「取消归档」失败后 Agent 仍是归档的，错误留在原处。
+        const wasArchived = didUnarchive && originalArchivedAt !== null;
+        if (wasArchived) {
+          await this.agentManager.archiveSnapshot(agentId, originalArchivedAt);
         }
-        const registeredProviderIds = this.providerSnapshotManager.listRegisteredProviderIds();
-        if (!isStoredAgentProviderAvailable(record, registeredProviderIds)) {
-          throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
-        }
-        if (!toAgentPersistenceHandle(registeredProviderIds, record.persistence)) {
-          throw new Error(`Agent ${agentId} cannot be refreshed because it lacks persistence`);
-        }
-        // Share the loader's per-agent in-flight operation with timeline fetches.
-        // Unarchiving publishes the record before provider resume finishes, so
-        // the agent pane can otherwise race this request and resume it twice.
-        snapshot = await ensureAgentLoaded(agentId, {
-          agentManager: this.agentManager,
-          agentStorage: this.agentStorage,
-          broadcastTimeline: true,
-          logger: this.sessionLogger,
-        });
+        throw error;
       }
       await this.agentManager.hydrateTimelineFromProvider(agentId, { broadcast: true });
       await this.agentUpdates.forwardLiveAgent(snapshot);
@@ -4768,7 +4757,7 @@ export class Session {
             requestId,
             requestType: msg.type,
             error: message,
-            code: error instanceof WorktreeRequestError ? error.code : "agent_refresh_failed",
+            code: toRefreshAgentErrorCode(error),
           },
         });
       }
@@ -4782,6 +4771,36 @@ export class Session {
         },
       });
     }
+  }
+
+  private async reloadOrResumeAgentForRefresh(agentId: string): Promise<ManagedAgent> {
+    const existing = this.agentManager.getAgent(agentId);
+    if (existing) {
+      await this.interruptAgentIfRunning(agentId);
+      return this.agentManager.reloadAgentSession(agentId, undefined, {
+        rehydrateFromDisk: true,
+      });
+    }
+    const record = await this.agentStorage.get(agentId);
+    if (!record) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+    const registeredProviderIds = this.providerSnapshotManager.listRegisteredProviderIds();
+    if (!isStoredAgentProviderAvailable(record, registeredProviderIds)) {
+      throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
+    }
+    if (!toAgentPersistenceHandle(registeredProviderIds, record.persistence)) {
+      throw new Error(`Agent ${agentId} cannot be refreshed because it lacks persistence`);
+    }
+    // Share the loader's per-agent in-flight operation with timeline fetches.
+    // Unarchiving publishes the record before provider resume finishes, so
+    // the agent pane can otherwise race this request and resume it twice.
+    return ensureAgentLoaded(agentId, {
+      agentManager: this.agentManager,
+      agentStorage: this.agentStorage,
+      broadcastTimeline: true,
+      logger: this.sessionLogger,
+    });
   }
 
   private async handleCancelAgentRequest(agentId: string, requestId?: string): Promise<void> {

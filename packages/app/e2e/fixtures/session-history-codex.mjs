@@ -77,6 +77,9 @@ function respond(method, params) {
       return resumeThread(params.threadId);
     case "thread/read":
       return { thread: { id: params.threadId, turns: [] } };
+    case "thread/archive":
+    case "thread/unarchive":
+      return {};
     default:
       throw new Error(`Unsupported Codex fixture request: ${method}`);
   }

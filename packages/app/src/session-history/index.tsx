@@ -155,9 +155,11 @@ function resolveRowSelection(input: {
   const { row, selectedRowKeys, selectionProviderId } = input;
   if (!selectedRowKeys) return "off";
   if (selectedRowKeys.has(row.key)) return "selected";
-  const isOtherProvider = selectionProviderId !== null && row.providerId !== selectionProviderId;
-  if (!row.codexModelProvider || isOtherProvider) return "unavailable";
-  return "unselected";
+  const hasSelectionProvider = selectionProviderId !== null;
+  const isOtherProvider = hasSelectionProvider && row.providerId !== selectionProviderId;
+  const isCodexRow = Boolean(row.codexModelProvider);
+  const isSelectable = isCodexRow && !isOtherProvider;
+  return isSelectable ? "unselected" : "unavailable";
 }
 
 /** The provider's icon; in selection mode, the selection ring where the row can be selected. */
@@ -247,7 +249,10 @@ function SessionHistoryRowItem({
     setContextMenuOpen(open);
     if (open) setIsHovered(false);
   }, []);
-  const kebab = useOpenKebabMenuVisibility(!isSelecting && (isHovered || isNative || isCompact));
+  const isKebabRevealed = isHovered || isNative || isCompact;
+  const showsKebab = !isSelecting && isKebabRevealed;
+  const kebab = useOpenKebabMenuVisibility(showsKebab);
+  const showsHover = isHovered && !isSelected;
 
   const handlePress = useCallback(() => {
     if (isSelecting) {
@@ -269,11 +274,11 @@ function SessionHistoryRowItem({
     ({ pressed }: PressableStateCallbackType) => [
       styles.row,
       isSelected && styles.rowSelected,
-      isHovered && !isSelected && styles.rowHovered,
+      showsHover && styles.rowHovered,
       pressed && styles.rowPressed,
       selection === "unavailable" && styles.rowUnavailable,
     ],
-    [isHovered, isSelected, selection],
+    [isSelected, selection, showsHover],
   );
   const accessibilityState = useMemo(
     () => (isSelecting ? { disabled, checked: isSelected } : { disabled }),
@@ -413,12 +418,9 @@ function ImportErrorAlert({
   onMoveCodexConversations: ((rows: readonly SessionHistoryRow[]) => void) | null;
 }) {
   const { t } = useTranslation();
-  const missingProvider =
-    error instanceof AgentImportError &&
-    error.code === CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE &&
-    failedRow?.codexModelProvider
-      ? failedRow.codexModelProvider
-      : null;
+  const isModelProviderMissing =
+    error instanceof AgentImportError && error.code === CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE;
+  const missingProvider = isModelProviderMissing ? (failedRow?.codexModelProvider ?? null) : null;
   const handleMove = useCallback(() => {
     if (currentRow) onMoveCodexConversations?.([currentRow]);
   }, [currentRow, onMoveCodexConversations]);
@@ -443,7 +445,7 @@ function ImportErrorAlert({
       <Alert
         size="sm"
         variant="error"
-        title={t("panels.sessionHistory.errors.importFailed")}
+        title={t("panels.sessionHistory.errors.resumeFailed")}
         description={t("panels.sessionHistory.errors.codexModelProviderMissing", {
           provider: missingProvider,
         })}
@@ -456,7 +458,7 @@ function ImportErrorAlert({
             onPress={handleMove}
             testID="session-history-import-error-move"
           >
-            {t("panels.sessionHistory.move.menuItem")}
+            {t("panels.sessionHistory.move.action")}
           </Button>
         ) : null}
       </Alert>
@@ -813,6 +815,11 @@ export function SessionHistorySurface({
     },
     [importMutation],
   );
+  const canMoveCodexRow = (row: SessionHistoryRow): boolean => {
+    const isCodexRow = Boolean(row.codexModelProvider);
+    const canHostMove = onMoveCodexConversations !== null;
+    return isCodexRow && canHostMove;
+  };
   const handleMoveCodexConversation = useCallback(
     (row: SessionHistoryRow) => onMoveCodexConversations?.([row]),
     [onMoveCodexConversations],
@@ -926,11 +933,7 @@ export function SessionHistorySurface({
               onToggleSelected={handleToggleSelected}
               onCopyResumeCommand={handleCopyResumeCommand}
               onImport={handleImport}
-              onMoveCodexConversation={
-                row.codexModelProvider && onMoveCodexConversations
-                  ? handleMoveCodexConversation
-                  : null
-              }
+              onMoveCodexConversation={canMoveCodexRow(row) ? handleMoveCodexConversation : null}
             />
           ))
         )}
@@ -1061,14 +1064,14 @@ const styles = StyleSheet.create((theme) => ({
     boxShadow: `inset 0 0 0 1px ${theme.colors.borderSidebarSelected}`,
   },
   rowUnavailable: {
-    opacity: 0.5,
+    opacity: theme.opacity[50],
   },
   selectionIndicator: {
     width: ROW_ICON_SIZE,
     height: ROW_ICON_SIZE,
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
-    borderColor: theme.colors.borderAccent,
+    borderColor: theme.colors.foregroundMuted,
     alignItems: "center",
     justifyContent: "center",
   },

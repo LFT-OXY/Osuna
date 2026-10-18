@@ -296,6 +296,8 @@ export const ko: TranslationResources = {
     archived: {
       callout: "이 에이전트는 보관되었습니다",
       unarchive: "보관 해제",
+      codexModelProviderMissing:
+        "Codex가 이 에이전트의 대화를 이어 갈 수 없습니다. Codex 설정에 더 이상 없는 Codex 모델 공급자에 기록되어 있습니다. 다른 Codex 모델 공급자로 옮긴 뒤 다시 보관 해제하세요.",
     },
   },
   sessions: {
@@ -2272,6 +2274,7 @@ export const ko: TranslationResources = {
       },
       move: {
         menuItem: "다른 Codex 모델 공급자로 이동…",
+        action: "대화 이동…",
         title: "다른 Codex 모델 공급자로 이동",
         targetLabel: "이동할 곳",
         targetPlaceholder: "Codex 모델 공급자 선택",
@@ -2308,6 +2311,7 @@ export const ko: TranslationResources = {
         loadFailed: "세션을 불러올 수 없습니다",
         openFailed: "이 세션의 터미널을 열 수 없습니다",
         importFailed: "이 세션을 가져올 수 없습니다",
+        resumeFailed: "Codex가 이 대화를 이어 갈 수 없습니다",
         codexModelProviderMissing:
           "이 대화는 Codex 모델 공급자 {{provider}}에 기록되어 있는데, Codex 설정에 더 이상 없어서 이어 갈 수 없습니다. 다른 Codex 모델 공급자로 옮긴 뒤 다시 시도하세요.",
       },

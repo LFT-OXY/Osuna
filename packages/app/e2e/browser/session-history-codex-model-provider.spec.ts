@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoWorkspace } from "../support/helpers/launcher";
-import { seedWorkspace } from "../support/helpers/seed-client";
+import { openAgentRoute } from "../support/helpers/mock-agent";
+import { seedWorkspace, type SeededWorkspace } from "../support/helpers/seed-client";
 import {
   ensureExplorerSidebar,
   waitForWorkspaceTabsVisible,
@@ -45,6 +46,7 @@ test.describe("Session history", () => {
   test.afterEach(async () => {
     await rm(threadsFile, { force: true });
     await rm(path.join(codexHome, "sessions"), { recursive: true, force: true });
+    await rm(path.join(codexHome, "config.toml"), { force: true });
     await rm(path.join(claudeConfigDir, "projects"), { recursive: true, force: true });
   });
 
@@ -302,9 +304,11 @@ test.describe("Session history", () => {
       await page.getByTestId(`session-history-menu-import-codex:${GATEWAY_THREAD}`).click();
 
       const error = page.getByTestId("session-history-import-error");
+      await expect(error).toContainText("Codex can't continue this conversation", {
+        timeout: 30_000,
+      });
       await expect(error).toContainText(
         "This conversation is filed under the Codex model provider osuna_api_endpoint",
-        { timeout: 30_000 },
       );
       await error.getByTestId("session-history-import-error-move").click();
       const sheet = page.getByTestId("move-codex-conversation-sheet");
@@ -321,6 +325,66 @@ test.describe("Session history", () => {
       await expect(row).toContainText("Osuna", { timeout: 30_000 });
       await expect(error).toBeHidden();
     } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("offers the move on the Agent page when an archived Codex agent can't resume", async ({
+    page,
+  }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-agent-" });
+    // 每条用例一段新对话：worker 的 daemon 是共用的，导入过的对话不能再导入。
+    const agentId = await seedArchivedAgentWhoseProviderIsGone({
+      workspace,
+      threadId: "thread-agent-moved",
+    });
+
+    try {
+      const error = await unarchiveUntilRefused({ page, workspace, agentId });
+      await expect(error).toContainText("Codex can't continue this agent's conversation");
+      await error.getByTestId("agent-unarchive-error-move").click();
+      const sheet = page.getByTestId("move-codex-conversation-sheet");
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+      await expect(sheet).toBeHidden({ timeout: 30_000 });
+      await expect(error).toBeHidden();
+
+      await page.getByRole("button", { name: "Unarchive" }).click();
+      await expect(page.getByRole("button", { name: "Unarchive" })).toBeHidden({
+        timeout: 30_000,
+      });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("keeps a failed move from the Agent page in the dialog", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-agent-failed-" });
+    const agentId = await seedArchivedAgentWhoseProviderIsGone({
+      workspace,
+      threadId: "thread-agent-failed",
+    });
+    const rollout = agentRollout("thread-agent-failed");
+    const before = await readFile(rollout, "utf8");
+    await chmod(path.dirname(rollout), 0o555);
+
+    try {
+      const error = await unarchiveUntilRefused({ page, workspace, agentId });
+      await error.getByTestId("agent-unarchive-error-move").click();
+      const sheet = page.getByTestId("move-codex-conversation-sheet");
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+
+      await expect(sheet.getByTestId("move-codex-conversation-error")).toContainText(
+        "Conversation not moved",
+        { timeout: 30_000 },
+      );
+      await expect(sheet).toBeVisible();
+      expect(await readFile(rollout, "utf8")).toBe(before);
+    } finally {
+      await chmod(path.dirname(rollout), 0o755);
       await workspace.cleanup();
     }
   });
@@ -344,10 +408,79 @@ async function seedClaudeSession(repoPath: string): Promise<void> {
   );
 }
 
+function agentRollout(threadId: string): string {
+  return path.join(
+    codexHome,
+    "sessions",
+    "2026",
+    "10",
+    "10",
+    `rollout-2026-10-17T10-00-00-${threadId}.jsonl`,
+  );
+}
+
+/**
+ * 一个已归档的 Codex Agent：对话先记在 cc 名下（config.toml 里有表）导入，再归档；之后 cc 从
+ * config.toml 里拿掉，取消归档时 Codex 就续不上。
+ */
+async function seedArchivedAgentWhoseProviderIsGone(input: {
+  workspace: SeededWorkspace;
+  threadId: string;
+}): Promise<string> {
+  const { workspace, threadId } = input;
+  await seedConversations({
+    repoPath: workspace.repoPath,
+    conversations: [{ id: threadId, name: "Tidy the parser", isIdle: true }],
+    provider: "cc",
+  });
+  await writeFile(path.join(codexHome, "config.toml"), '[model_providers.cc]\nname = "CC"\n');
+  const client = workspace.client as unknown as AgentSeedClient;
+  const agent = await client.importAgent({
+    providerId: "codex",
+    providerHandleId: threadId,
+    cwd: workspace.repoPath,
+    workspaceId: workspace.workspaceId,
+  });
+  await client.archiveAgent(agent.id);
+  await writeFile(path.join(codexHome, "config.toml"), "");
+  return agent.id;
+}
+
+/** 打开这个已归档 Agent 的页面并按「取消归档」，直到续不上的错误出来（页面刚连上时按钮可能还没就绪）。 */
+async function unarchiveUntilRefused(input: {
+  page: Page;
+  workspace: SeededWorkspace;
+  agentId: string;
+}) {
+  const { page, workspace, agentId } = input;
+  await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId });
+  const error = page.getByTestId("agent-unarchive-error");
+  await expect(page.getByText("Start chatting with this agent...")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(async () => {
+    await page.getByRole("button", { name: "Unarchive" }).click();
+    await expect(error).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000 });
+  return error;
+}
+
+/** 种子客户端就是完整的 DaemonClient；这里只用到导入与归档。 */
+interface AgentSeedClient {
+  importAgent(input: {
+    providerId: string;
+    providerHandleId: string;
+    cwd: string;
+    workspaceId: string;
+  }): Promise<{ id: string }>;
+  archiveAgent(agentId: string): Promise<unknown>;
+}
+
 /** 几段记在中转站服务商名下的对话：对话文件放进临时 CODEX_HOME，假 Codex 列表时读它们。返回对话文件路径。 */
 async function seedConversations(input: {
   repoPath: string;
   conversations: Array<{ id: string; name: string; isIdle: boolean }>;
+  provider?: string;
 }): Promise<string[]> {
   const anHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   const threads = [];
@@ -365,7 +498,7 @@ async function seedConversations(input: {
         payload: {
           id: conversation.id,
           cwd: input.repoPath,
-          model_provider: "osuna_api_endpoint",
+          model_provider: input.provider ?? "osuna_api_endpoint",
         },
       })}\n`,
     );

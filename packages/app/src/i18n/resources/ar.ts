@@ -295,6 +295,8 @@ export const ar: TranslationResources = {
     archived: {
       callout: "تمت أرشفة هذا الوكيل",
       unarchive: "إلغاء الأرشفة",
+      codexModelProviderMissing:
+        "لا يستطيع Codex متابعة محادثة هذا الوكيل: فهي مسجّلة تحت مزوّد نماذج Codex لم يعد موجوداً في إعدادات Codex. انقلها إلى مزوّد نماذج Codex آخر ثم ألغِ الأرشفة مرة أخرى.",
     },
   },
   sessions: {
@@ -2260,6 +2262,7 @@ export const ar: TranslationResources = {
       },
       move: {
         menuItem: "النقل إلى مزوّد نماذج Codex آخر…",
+        action: "نقل المحادثة…",
         title: "النقل إلى مزوّد نماذج Codex آخر",
         targetLabel: "النقل إلى",
         targetPlaceholder: "اختر مزوّد نماذج Codex",
@@ -2296,6 +2299,7 @@ export const ar: TranslationResources = {
         loadFailed: "تعذّر تحميل الجلسات",
         openFailed: "تعذّر فتح طرفية لهذه الجلسة",
         importFailed: "تعذّر استيراد هذه الجلسة",
+        resumeFailed: "لا يستطيع Codex متابعة هذه المحادثة",
         codexModelProviderMissing:
           "هذه المحادثة مسجّلة تحت مزوّد نماذج Codex {{provider}}، ولم يعد موجوداً في إعدادات Codex، لذا لا يستطيع Codex متابعتها. انقلها إلى مزوّد نماذج Codex آخر ثم حاول مرة أخرى.",
       },

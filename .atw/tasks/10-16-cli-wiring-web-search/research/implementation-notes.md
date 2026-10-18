@@ -383,3 +383,12 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端：`codex-model-provider-move.e2e.test.ts` 新用例——假 Codex 的 app-server 按对话文件第一行的服务商加载配置，config.toml 里没有这张表就照真 Codex 报错；导入失败带 `AgentImportError.code === "codex_model_provider_missing"`，挪到 `cc` 后再导入成功。去掉 session.ts 的映射时用例失败（已验证）。
 - app 浏览器：`session-history-codex-model-provider.spec.ts` 新增三条：多选三条（一条一分钟内写过）挪完两条成功一条跳过并说明；批量里一条目录不可写时原因与备份留在框里、文件不变；续不上时错误带说明与按钮，挪到 openai 后错误收起、再导入成功。假 Codex 夹具加了 `thread/resume`、`thread/read`。
 - 截图（无头 Chromium、假 Codex、临时 CODEX_HOME）：`screenshots/14-session-history_selection-3-selected_{desktop-1280,compact-390}_{en,zh}.png`、`14-move-dialog_batch-results_desktop-1280_{en,zh}.png`、`14-session-history_resume-error_desktop-1280_{en,zh}.png`。
+
+### 审查修正（14 号第一轮）
+
+- **Agent 页也覆盖**（用户 10-18 决定）：`toAgentResumeWireError`（`server/agent-resume-errors.ts`，照 `toWorktreeWireError` 的样子，以 `unknown` 收尾）统一给导入、`resume_agent_request`、`refresh_agent_request` 三处出码：导入的 `agent_create_failed.errorCode` 现在总是带码（认不出时 `unknown`）；另两处 `rpc_error.code` 认出时是 `codex_model_provider_missing`，否则照旧 `agent_resume_failed` / `agent_refresh_failed`。客户端导出 `DaemonRpcError`。
+- **app 里真正走的是 refresh**：app 不发 `resume_agent_request`（只有 CLI 用）；Agent 页上续一个已有 Agent 的入口是已归档 Agent 的「取消归档」（`refreshAgent`）。说明与「挪动对话…」按钮放在 `ArchivedAgentCallout`，对话框同一个（一段对话，Agent 的提供方与 thread id；daemon 只给码不给服务商 id，所以 `from` 为 null，说明用不点名的版本）。
+- **取消归档失败放回归档**：原来 refresh 先取消归档、续不上也不放回，Agent 变成未归档却没有运行，提示组件卸载、错误丢失。现在照 `resume_agent_request` 的做法续不上就 `archiveSnapshot` 放回；提示组件仍会被卸载又挂上一次，错误放在按主机与 Agent 分键的 store 里。
+- 没做：daemon 重启后打开一个未归档、续不上的 Agent，走的是 `fetch_agent_timeline` 的「Failed to load agent」页，那条路径的错误码要穿过时间线同步的几层状态，没有接。
+- 文字：按钮缩成「挪动对话…」（全称在对话框标题）；导入错误标题改成「Codex 续不上这段对话」；未选中的选择环描边用 `foregroundMuted`；不可选的行用 `theme.opacity[50]`。
+- 测试：daemon 端到端加「已有 Agent 续不上带码、取消归档失败仍是归档的、挪好后 refresh 与 resume 都成功」；浏览器加 Agent 页挪动成功与失败两条。截图 `screenshots/14-agent-page_resume-error_desktop-1280_{en,zh}.png`，其余 14-* 重拍。

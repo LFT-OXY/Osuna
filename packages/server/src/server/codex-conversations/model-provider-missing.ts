@@ -24,13 +24,3 @@ export class CodexModelProviderMissingError extends Error {
 export function findMissingCodexModelProvider(message: string): string | null {
   return MISSING_MODEL_PROVIDER.exec(message)?.[1] ?? null;
 }
-
-/** 错误本身或它的 cause 链上有没有「Codex 服务商不在了」。 */
-export function isCodexModelProviderMissing(error: unknown): boolean {
-  let current: unknown = error;
-  while (current instanceof Error) {
-    if (current instanceof CodexModelProviderMissingError) return true;
-    current = current.cause;
-  }
-  return false;
-}

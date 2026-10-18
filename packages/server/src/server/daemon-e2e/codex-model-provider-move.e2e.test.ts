@@ -15,7 +15,7 @@ import * as zlib from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { AgentImportError } from "@getpaseo/client/internal/daemon-client";
+import { AgentImportError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE } from "@getpaseo/protocol/codex-session/rpc-schemas";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
@@ -90,6 +90,9 @@ function respond(method, params) {
     }
     case "thread/read":
       return { thread: { id: params.threadId, turns: [] } };
+    case "thread/archive":
+    case "thread/unarchive":
+      return {};
     default:
       throw new Error("not supported by the fake: " + method);
   }
@@ -548,6 +551,49 @@ describe.skipIf(process.platform === "win32")(
         cwd,
       });
       expect(agent.provider).toBe("codex");
+    }, 60_000);
+
+    test("an existing agent that can't resume because its Codex model provider is gone says so by code, and resumes once moved", async () => {
+      await writeOldFile(plainPath(), rolloutText({ threadId: THREAD_A, provider: "cc" }));
+      await writeFile(path.join(codexHome, "config.toml"), '[model_providers.cc]\nname = "CC"\n');
+      const cwd = path.join(tempRoot, "repo");
+      await mkdir(cwd, { recursive: true });
+      const agent = await client!.importAgent({
+        providerId: "codex",
+        providerHandleId: THREAD_A,
+        cwd,
+      });
+      const handle = agent.persistence!;
+      // 归档后不再运行；之后 cc 从 Codex 设置里拿掉（比如关掉开关），这个 Agent 再续就会失败。
+      await client!.archiveAgent(agent.id);
+      await writeFile(path.join(codexHome, "config.toml"), "");
+
+      const refreshRefused = await client!.refreshAgent(agent.id).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(refreshRefused).toBeInstanceOf(DaemonRpcError);
+      expect((refreshRefused as DaemonRpcError).code).toBe(CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE);
+      // 「取消归档」续不上时放回归档，Agent 页的错误与挪动按钮才留得住。
+      expect((await client!.fetchAgent(agent.id))?.agent.archivedAt).toBeTruthy();
+      const resumeRefused = await client!.resumeAgent(handle).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(resumeRefused).toBeInstanceOf(DaemonRpcError);
+      expect((resumeRefused as DaemonRpcError).code).toBe(CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE);
+
+      const moved = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
+        threadIds: [THREAD_A],
+        to: "openai",
+      });
+      expect(moved.moved.map((entry) => entry.from)).toEqual(["cc"]);
+
+      const refreshed = await client!.refreshAgent(agent.id);
+      expect(refreshed.agentId).toBe(agent.id);
+      const resumed = await client!.resumeAgent(handle);
+      expect(resumed.provider).toBe("codex");
     }, 60_000);
 
     test("refuses a provider that is not a Codex provider", async () => {

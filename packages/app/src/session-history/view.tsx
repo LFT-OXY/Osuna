@@ -22,6 +22,10 @@ import {
 } from "./internal/move-codex-conversation-sheet";
 import { useSessionHistoryScopeStore } from "./internal/scope-store";
 
+// The Agent page offers the same move when an archived Codex agent can't be resumed.
+export { MoveCodexConversationSheet };
+export type { MoveCodexConversationsOutcome, MoveCodexConversationsTarget };
+
 /*
  * Kept out of `index.tsx` on purpose: the clipboard and the import navigation
  * pull in modules the unit runner cannot parse, and the surface's jsdom test

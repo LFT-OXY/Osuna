@@ -292,6 +292,8 @@ export const en = {
     archived: {
       callout: "This agent is archived",
       unarchive: "Unarchive",
+      codexModelProviderMissing:
+        "Codex can't continue this agent's conversation: it is filed under a Codex model provider that is no longer in Codex's config. Move it to another Codex model provider, then unarchive again.",
     },
   },
   sessions: {
@@ -2285,6 +2287,7 @@ export const en = {
       },
       move: {
         menuItem: "Move to another Codex model provider…",
+        action: "Move conversation…",
         title: "Move to another Codex model provider",
         targetLabel: "Move to",
         targetPlaceholder: "Choose a Codex model provider",
@@ -2321,6 +2324,7 @@ export const en = {
         loadFailed: "Could not load sessions",
         openFailed: "Could not open a terminal for this session",
         importFailed: "Could not import this session",
+        resumeFailed: "Codex can't continue this conversation",
         codexModelProviderMissing:
           "This conversation is filed under the Codex model provider {{provider}}, which is no longer in Codex's config, so Codex can't continue it. Move it to another Codex model provider, then try again.",
       },

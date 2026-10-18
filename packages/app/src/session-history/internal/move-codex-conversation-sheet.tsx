@@ -34,8 +34,8 @@ export type MoveCodexConversationClient = Pick<
 export interface MoveCodexConversationThread {
   threadId: string;
   title: string;
-  /** 它现在记在哪个 Codex 服务商名下。 */
-  from: string;
+  /** 它现在记在哪个 Codex 服务商名下；Agent 页续不上时 daemon 只给原因码，不知道是哪一个，为 null。 */
+  from: string | null;
 }
 
 /** 要挪的对话：会话历史里同一个提供方列出的一行或几行。 */
@@ -106,9 +106,9 @@ export function MoveCodexConversationSheet({
   const { threads } = conversations;
   const isBatch = threads.length > 1;
   // 都记在同一个服务商名下时才有「现在的服务商」：挪去那里没有意义，不列。
-  const sharedFrom = threads.every((thread) => thread.from === threads[0]?.from)
-    ? (threads[0]?.from ?? null)
-    : null;
+  const firstFrom = threads[0]?.from ?? null;
+  const isAllFromOneProvider = threads.every((thread) => thread.from === firstFrom);
+  const sharedFrom = isAllFromOneProvider ? firstFrom : null;
   const [selected, setSelected] = useState<{ id: string; display: SelectFieldDisplay } | null>(
     null,
   );
@@ -142,7 +142,10 @@ export function MoveCodexConversationSheet({
         isComplete: result.skipped.length === 0,
       }),
   });
-  const batchResult = isBatch && moveMutation.data?.skipped.length ? moveMutation.data : null;
+  const hasSkippedResults = (moveMutation.data?.skipped.length ?? 0) > 0;
+  // 几段一起挪、有没挪成的：框留着逐条说明。一段对话没挪成走错误提示，不走这里。
+  const showsBatchResults = isBatch && hasSkippedResults;
+  const batchResult = showsBatchResults ? (moveMutation.data ?? null) : null;
 
   const targets = useMemo(() => {
     const others = (providersQuery.data ?? []).filter((p) => p.id !== sharedFrom);
@@ -342,7 +345,9 @@ function MoveErrorAlert({ error }: { error: Error | null }) {
     notDone?.kind === "partly"
       ? t("panels.sessionHistory.move.movedPartly")
       : t("panels.sessionHistory.move.notMoved");
-  const variant = notDone?.kind === "failed" || !notDone ? "error" : "warning";
+  // 跳过与「文件已挪、状态库没改」是提醒；改文件失败与请求失败是错误。
+  const isWarning = notDone?.kind === "skipped" || notDone?.kind === "partly";
+  const variant = isWarning ? "warning" : "error";
   const backup = notDone?.backupPath
     ? `\n${t("panels.sessionHistory.move.backupAt", { path: notDone.backupPath })}`
     : "";

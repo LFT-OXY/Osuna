@@ -295,6 +295,8 @@ export const zhCN: TranslationResources = {
     archived: {
       callout: "此 Agent 已归档",
       unarchive: "取消归档",
+      codexModelProviderMissing:
+        "Codex 续不上这个 Agent 的对话：它记在一个 Codex 设置里已经没有的 Codex 服务商名下。把它挪到另一个 Codex 服务商后再取消归档。",
     },
   },
   sessions: {
@@ -2251,6 +2253,7 @@ export const zhCN: TranslationResources = {
       },
       move: {
         menuItem: "挪到另一个 Codex 服务商…",
+        action: "挪动对话…",
         title: "挪到另一个 Codex 服务商",
         targetLabel: "挪到",
         targetPlaceholder: "选择 Codex 服务商",
@@ -2284,6 +2287,7 @@ export const zhCN: TranslationResources = {
         loadFailed: "无法加载会话",
         openFailed: "无法为此会话打开终端",
         importFailed: "无法导入此会话",
+        resumeFailed: "Codex 续不上这段对话",
         codexModelProviderMissing:
           "这段对话记在 Codex 服务商 {{provider}} 名下，Codex 设置里已经没有它，所以续不上。把它挪到另一个 Codex 服务商后再试。",
       },

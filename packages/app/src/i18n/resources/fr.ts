@@ -301,6 +301,8 @@ export const fr: TranslationResources = {
     archived: {
       callout: "Cet agent est archivé",
       unarchive: "Désarchiver",
+      codexModelProviderMissing:
+        "Codex ne peut pas reprendre la conversation de cet agent : elle est rattachée à un fournisseur de modèles Codex qui n'est plus dans la configuration de Codex. Déplacez-la vers un autre fournisseur de modèles Codex, puis désarchivez de nouveau.",
     },
   },
   sessions: {
@@ -2310,6 +2312,7 @@ export const fr: TranslationResources = {
       },
       move: {
         menuItem: "Déplacer vers un autre fournisseur de modèles Codex…",
+        action: "Déplacer la conversation…",
         title: "Déplacer vers un autre fournisseur de modèles Codex",
         targetLabel: "Déplacer vers",
         targetPlaceholder: "Choisir un fournisseur de modèles Codex",
@@ -2346,6 +2349,7 @@ export const fr: TranslationResources = {
         loadFailed: "Impossible de charger les sessions",
         openFailed: "Impossible d'ouvrir un terminal pour cette session",
         importFailed: "Impossible d'importer cette session",
+        resumeFailed: "Codex ne peut pas reprendre cette conversation",
         codexModelProviderMissing:
           "Cette conversation est rattachée au fournisseur de modèles Codex {{provider}}, qui n'est plus dans la configuration de Codex : Codex ne peut pas la reprendre. Déplacez-la vers un autre fournisseur de modèles Codex, puis réessayez.",
       },
