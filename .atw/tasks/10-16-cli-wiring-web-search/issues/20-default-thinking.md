@@ -13,7 +13,7 @@
 
 **Blocked by:** 17, 19
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（Claude Code）：选 high 写顶层 `effortLevel`（Claude 模型时另写 `modelSettings`）；选 max 写 `env.CLAUDE_CODE_EFFORT_LEVEL=max`；选 Ultra Code 写 `ultracode: true`；关掉开关后这些都还原。
 - [ ] 端到端（Codex）：写顶层 `model_reasoning_effort`，关掉后还原。

@@ -1434,3 +1434,4 @@ if (input.format !== undefined) await this.keepCatalog(input.endpointId!, models
 if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId, result.models);
 ```
 
+- Default thinking wire fields (cli-wiring-web-search ticket 20), all optional, old daemons neither send nor read them: agent settings and `set_agent_settings` carry `defaultThinkingOptionId: z.string().nullable().optional()` (null = unset, omitted = unchanged) and `usesUltraCode: z.boolean().optional()` (Claude Code only); `ProviderSnapshotEntry.lockedThinkingOptionId?: string` is present only when every session of that provider runs at one level (Claude Code default thinking max). Responses report the clamped Claude level, not the stored one. The app hides the default-thinking row when the model groups carry no `thinkingOptions` (old daemon) — tagged `COMPAT(apiEndpointCliWiring)`.

@@ -604,3 +604,9 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「default thinking」：Claude Code 的 high / modelSettings / max / Ultra Code 开关与关掉后逐字节还原；不支持 xhigh 时拒绝 Ultra Code 与 xhigh、换到不收的模型后设置不改；Codex 收任何档位、换模型后改到最近一档、关掉放回；快照里接口模型的档位、起步档位与 `lockedThinkingOptionId`。
 - 浏览器 `settings-api-endpoints.spec.ts`：选项与 Ultra Code 开关、只读目录下保存失败留在原处、Max 写进环境变量并显示锁住的说明、High 写进 effortLevel、Ultra Code 单独开关不动档位、新对话从 High 起步、Max 时对话浮层写明原因。
 - 截图：`screenshots/20-claude-code-page_default-thinking-max_desktop-1280_{en,zh}.png`、`20-codex-page_default-thinking-rows_compact-390_{en,zh}.png`、`20-codex-page_default-thinking-dropdown-open_compact-390_{en,zh}.png`、`20-chat-thinking_locked-at-max_desktop-1280_{en,zh}.png`。
+
+### 留给 29 号工单（用户 2026-10-18 决定）
+
+- 下拉（Combobox）里选项文字左边距约 12px、标题约 24px，没对齐。
+- 下拉里选中行与悬停行同一种底色（全局 Combobox 样式），选中行只靠勾区分。
+- 对话思考档位浮层左上角（「Max」左边）有一块很淡的胶囊形残影。
