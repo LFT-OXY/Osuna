@@ -8,7 +8,7 @@
 
 **Blocked by:** 10, 23
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：设了强制 Subagent 模型时，带 Subagent 标记的请求到达假上游时模型是它；主对话请求不变。
 - [ ] 带 `spawn_agent` 的请求，工具说明里补上了其余模型（不超过 200 个）；不带的请求不变。
