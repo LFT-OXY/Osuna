@@ -742,13 +742,37 @@ export class ApiEndpointService {
   /** CLI 启动时读的文件与其中 Osuna 写的那部分（magpie startsWith）；Codex 连同 Osuna 的模型目录。 */
   private cliStartupReads(provider: ApiEndpointProvider): CliStartupReads {
     const configPath = this.resolveCliConfigPath(provider);
-    const text = readOptionalFile(configPath)?.toString("utf8") ?? null;
+    const text = this.readForReopenHints({
+      file: configPath,
+      read: () => readOptionalFile(configPath)?.toString("utf8") ?? null,
+    });
     if (provider === "claude") return { files: [configPath], reads: readClaudeStartupReads(text) };
-    const catalog = this.store.readCodexModelCatalog() ?? "";
+    const catalog =
+      this.readForReopenHints({
+        file: this.store.codexModelCatalogPath,
+        read: () => this.store.readCodexModelCatalog(),
+      }) ?? "";
     return {
       files: [configPath, this.store.codexModelCatalogPath],
       reads: `${readCodexStartupReads(text)}\n${catalog}`,
     };
+  }
+
+  /**
+   * 「要重开谁」读 CLI 启动时读的文件：读不了（如那个位置是个文件夹）只记日志、按空的算，不让列表失败；
+   * 不是 errno 的错照常抛。
+   */
+  private readForReopenHints(input: { file: string; read: () => string | null }): string | null {
+    try {
+      return input.read();
+    } catch (error) {
+      if (!isErrnoException(error)) throw error;
+      this.logger.warn(
+        { err: error, file: input.file },
+        "Could not read what the CLI reads at start",
+      );
+      return null;
+    }
   }
 
   /**

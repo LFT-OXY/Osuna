@@ -281,4 +281,14 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     });
     expect(fake.runs).toEqual([]);
   });
+
+  test("a model list Osuna can't read (a folder in its place) doesn't fail the list", async () => {
+    await switchOn("codex");
+    const catalogPath = path.join(daemon.paseoHome, "api-endpoints", "codex-models.json");
+    await rm(catalogPath);
+    await mkdir(path.join(catalogPath, "held"), { recursive: true });
+    const listed = await client.apiEndpointList("codex");
+    expect(listed.error).toBeNull();
+    expect(listed.reopenHints).toEqual({ claude: [], codex: [] });
+  });
 });
