@@ -370,8 +370,10 @@ function wiringRaws(
 
 /** 这次写进 [agents]、[memories] 的原文（含引号），按「表名.键名」；没设的不在里面。 */
 function tableRaws(wiring: CodexGatewayWiring): Record<string, string> {
-  const listedName = (model: string) =>
-    wiring.chatgptBaseUrl === null ? model : chatgptListedName(model, wiring.endpointModels);
+  const listedName = (model: string) => {
+    if (wiring.chatgptBaseUrl === null) return model;
+    return chatgptListedName(model, wiring.endpointModels);
+  };
   const raws: Record<string, string> = {};
   const subagentModel = wiring.subagent?.model ?? null;
   const subagentEffort = wiring.subagent?.effort ?? null;
@@ -443,7 +445,8 @@ function originalInTable(
   tableKey: TableKey,
 ): CodexOriginalValue {
   const node = findKeyInTable(findNamedTable(file.program, tableKey.table), tableKey.key);
-  return node ? { present: true, raw: sliceNode(file.text, node.value) } : { present: false };
+  if (!node) return { present: false };
+  return { present: true, raw: sliceNode(file.text, node.value) };
 }
 
 function putBackInTable(input: {
@@ -455,7 +458,8 @@ function putBackInTable(input: {
   const { text, tableKey, original, eol } = input;
   if (original.present) return setTableKeyValue({ text, tableKey, raw: original.raw, eol });
   const node = findKeyInTable(findNamedTable(parse(text), tableKey.table), tableKey.key);
-  return node ? removeLine(text, node) : text;
+  if (!node) return text;
+  return removeLine(text, node);
 }
 
 /**
@@ -625,7 +629,8 @@ function changedTableValue(input: {
   const name = tableKeyName(input.tableKey);
   const now = stringOrNull(valueAt(input.value, name));
   const written = input.takeover.keys[name]?.written ?? null;
-  return now === written ? null : { now };
+  if (now === written) return null;
+  return { now };
 }
 
 /** 记忆模型（照 magpie memories 字段的 Get：consolidation_model，没有再看 extract_model）：两个键有一个变了就算变了。 */
@@ -647,7 +652,8 @@ function valueAt(value: Record<string, unknown>, name: string): unknown {
   const tableKey = TABLE_KEYS.find((candidate) => tableKeyName(candidate) === name);
   if (!tableKey) return value[name];
   const table = value[tableKey.table];
-  return isRecord(table) ? table[tableKey.key] : undefined;
+  if (!isRecord(table)) return undefined;
+  return table[tableKey.key];
 }
 
 /**
@@ -1106,8 +1112,9 @@ function setTableKeyValue(input: {
   if (!table) {
     const block = `[${tableKey.table}]${eol}${line}${eol}`;
     if (text === "") return block;
-    const separator = text.endsWith("\n") ? eol : eol + eol;
-    return text + separator + block;
+    // 文件末尾没有换行时先补上，再空一行。
+    if (!text.endsWith("\n")) return text + eol + eol + block;
+    return text + eol + block;
   }
   const existing = findKeyInTable(table, tableKey.key);
   if (existing) {
