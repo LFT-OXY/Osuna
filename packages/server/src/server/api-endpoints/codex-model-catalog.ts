@@ -3,7 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。档位说明文字取自 openai/codex（Apache-2.0），同见该文件。
 
 import { CODEX_BASE_INSTRUCTIONS } from "./codex-base-instructions.js";
-import { usableModels } from "./host-endpoints.js";
+import { endpointModelGroups, usableModels } from "./host-endpoints.js";
 import type { ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
@@ -81,6 +81,34 @@ export function buildCodexModelCatalog(
   );
   return `${JSON.stringify({ models: entries }, null, 2)}\n`;
 }
+
+/**
+ * 用 ChatGPT 登录的 Codex 的 /model 里接在 ChatGPT 自带模型后面的接口模型（ADR 0010）：开着的接口的已选模型，
+ * 写成「接口标识/模型名」，顺序同聊天模型选择器，能力按这家这个模型的已知资料写。priority 从 1 起，
+ * 中转站合并清单时再排到 ChatGPT 自带模型之后。
+ */
+export function codexEndpointEntries(
+  state: ApiEndpointState,
+  reasoningEffort: string | null,
+  factsFor: CodexModelFactsLookup,
+): CodexModelEntry[] {
+  return endpointModelGroups(state)
+    .flatMap((group) =>
+      group.models.map(({ id, model }) => ({ id, model, endpoint: group.endpoint })),
+    )
+    .map(({ id, model, endpoint }, index) =>
+      codexModelEntry({
+        slug: id,
+        displayName: model.label ?? model.id,
+        visibility: "list",
+        priority: index + 1,
+        facts: factsFor(endpoint, model.id),
+        reasoningEffort,
+      }),
+    );
+}
+
+export type CodexModelEntry = ReturnType<typeof codexModelEntry>;
 
 export interface CodexModelEntryInput {
   slug: string;

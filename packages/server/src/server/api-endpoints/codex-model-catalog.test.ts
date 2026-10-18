@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCodexModelCatalog,
   codexDefaultLevel,
+  codexEndpointEntries,
   codexModelEntry,
   codexReasoningLevels,
 } from "./codex-model-catalog.js";
@@ -261,5 +262,28 @@ describe("codexDefaultLevel", () => {
     { levels: ["thinking-hard"], chosen: "high", level: "thinking-hard" },
   ])("levels $levels started at $chosen default to $level", ({ levels, chosen, level }) => {
     expect(codexDefaultLevel(levels, chosen)).toBe(level);
+  });
+});
+
+describe("codexEndpointEntries", () => {
+  it("lists every on endpoint's picked models as <slug>/<model>, in the chat model picker's order, with what is known of them", () => {
+    const listed = codexEndpointEntries(STATE, "high", (owner, modelId) =>
+      owner.slug === "relay-b" && modelId === "glm-4.6"
+        ? { context: 200_000, efforts: ["low", "high"], images: false }
+        : {},
+    );
+    expect(
+      listed.map((entry) => [entry.slug, entry.display_name, entry.visibility, entry.priority]),
+    ).toEqual([
+      ["relay-a/kimi-k2", "kimi-k2", "list", 1],
+      ["relay-a/gpt-5.5", "GPT 5.5", "list", 2],
+      ["relay-b/kimi-k2", "Kimi", "list", 3],
+      ["relay-b/glm-4.6", "glm-4.6", "list", 4],
+    ]);
+    const glm = listed[3]!;
+    expect(glm.context_window).toBe(200_000);
+    expect(glm.supported_reasoning_levels.map((level) => level.effort)).toEqual(["low", "high"]);
+    expect(glm.default_reasoning_level).toBe("high");
+    expect(glm.input_modalities).toEqual(["text"]);
   });
 });

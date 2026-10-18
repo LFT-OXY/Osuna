@@ -1,5 +1,5 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend_test.go 的
-// TestCodexNativeModelStaysNative 与 TestCodexWebSocketUpgradeRequired）
+// TestCodexNativeModelStaysNative 与 TestCodexWebSocketUpgradeRequired；gateway.go 的 codexClientHeader 与 codex_backend.go 的 codexHeader）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { describe, expect, test } from "vitest";
@@ -7,7 +7,10 @@ import {
   apiKeyRefusedMessage,
   chatgptBackendRest,
   chatgptTarget,
+  codexIdentityHeaders,
+  isEndpointModel,
   isWebSocketHandshake,
+  noWebSearchReply,
   relayedHeaders,
 } from "./chatgpt-backend.js";
 
@@ -108,5 +111,69 @@ describe("a WebSocket handshake", () => {
     expect(isWebSocketHandshake({ upgrade: "WebSocket" })).toBe(true);
     expect(isWebSocketHandshake({ upgrade: "h2c" })).toBe(false);
     expect(isWebSocketHandshake({})).toBe(false);
+  });
+});
+
+describe("headers an endpoint gets from a Codex signed in with ChatGPT", () => {
+  test("only those that say the request is Codex's, never its ChatGPT sign-in", () => {
+    expect(
+      codexIdentityHeaders({
+        host: "127.0.0.1:6767",
+        authorization: "Bearer chatgpt-token",
+        "chatgpt-account-id": "acct-1",
+        cookie: "__cf_bm=1",
+        "x-oai-attestation": "att",
+        "x-openai-actor-authorization": "actor",
+        "x-openai-codex-luna-reserve": "1",
+        "x-codex-turn-state": "ts-1",
+        "content-encoding": "zstd",
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        "user-agent": "codex_cli_rs/0.163.0",
+        originator: "codex_cli_rs",
+        version: "0.163.0",
+        "session-id": "s1",
+        "thread-id": "t1",
+        session_id: "s1",
+        conversation_id: "c1",
+        "x-client-request-id": "t1",
+        "x-codex-turn-metadata": '{"turn_id":"t1"}',
+        "x-codex-beta-features": "unified_exec",
+        "x-openai-subagent": "review",
+      }),
+    ).toEqual({
+      "content-type": "application/json",
+      accept: "text/event-stream",
+      "user-agent": "codex_cli_rs/0.163.0",
+      originator: "codex_cli_rs",
+      version: "0.163.0",
+      "session-id": "s1",
+      "thread-id": "t1",
+      session_id: "s1",
+      conversation_id: "c1",
+      "x-client-request-id": "t1",
+      "x-codex-turn-metadata": '{"turn_id":"t1"}',
+      "x-codex-beta-features": "unified_exec",
+      "x-openai-subagent": "review",
+    });
+  });
+});
+
+describe("which model names are endpoint models", () => {
+  test("a name with an endpoint prefix is; a bare name is ChatGPT's", () => {
+    expect(isEndpointModel("relay-a/kimi-k2")).toBe(true);
+    expect(isEndpointModel("openrouter/moonshotai/kimi-k2")).toBe(true);
+    expect(isEndpointModel("gpt-5.5")).toBe(false);
+    expect(isEndpointModel(null)).toBe(false);
+  });
+});
+
+describe("Codex's own web search for an endpoint model", () => {
+  test("is a 200 whose output tells the model it cannot search", () => {
+    expect(noWebSearchReply("relay-a/kimi-k2")).toEqual({
+      encrypted_output: null,
+      output:
+        "Web search is not available for relay-a/kimi-k2: it is an API endpoint model, and Codex's web search (web.run) only works with ChatGPT's own models. Answer without searching the web.",
+    });
   });
 });

@@ -43,9 +43,11 @@ import {
   restoreCodexOfficial,
   type CodexConfigTakeover,
 } from "./codex-config-patch.js";
-import { buildCodexModelCatalog } from "./codex-model-catalog.js";
+import { buildCodexModelCatalog, codexEndpointEntries } from "./codex-model-catalog.js";
+import { codexListTag, markCodexModelsCacheStale } from "./codex-models-cache.js";
 import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
+import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
@@ -386,6 +388,7 @@ export class ApiEndpointService {
           this.logger.error({ err: error, provider }, "Failed to point the CLI at the gateway");
         }
       }
+      this.staleCodexModels(state);
     });
     // 先按上次的接法对账，不让启动等 Codex；登录方式变了再在后台改写。
     void this.followCodexSignIn();
@@ -718,6 +721,7 @@ export class ApiEndpointService {
     }
     this.store.writeState(next);
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
+    this.staleCodexModels(next);
     this.announceCommitted(previous, next);
     return next;
   }
@@ -930,6 +934,41 @@ export class ApiEndpointService {
     if (!state.agents.codex.enabled) return;
     const catalog = this.codexModelCatalog(state);
     if (catalog !== this.store.readCodexModelCatalog()) this.store.writeCodexModelCatalog(catalog);
+    this.staleCodexModels(state);
+  }
+
+  /**
+   * 用 ChatGPT 登录的 Codex 的模型清单里接在 ChatGPT 自带模型后面的接口模型（中转站合并清单时用）、
+   * 这部分清单的标记，与正被改写的 config.toml 所在的 CODEX_HOME（ChatGPT 拿不到时读 Codex 上次的清单）。
+   * 标记也跟着 Codex 的默认模型变。endpoints.json 读不懂时没有接口模型。
+   */
+  codexChatGptListing(): ChatGptModelsListing {
+    const codexHome = path.dirname(this.resolveCodexConfigPath());
+    const state = this.readStateForSnapshot();
+    const entries = state
+      ? codexEndpointEntries(
+          this.retiredModels.listed(state),
+          this.codexReasoningEffort(),
+          (endpoint, modelId) => this.modelFacts(endpoint, modelId),
+        )
+      : [];
+    const defaultModelId = state?.agents.codex.defaultModelId ?? null;
+    return { entries, tag: codexListTag({ entries, defaultModelId }), codexHome };
+  }
+
+  /**
+   * Codex 开着、按 ChatGPT 接法接着时，它存的模型清单不是现在这份就标成过期（magpie codexStaleCache），
+   * 下一个启动的 Codex 马上重拉。只动正被改写的 CODEX_HOME 里的缓存；写不成只记日志。
+   */
+  private staleCodexModels(state: ApiEndpointState): void {
+    if (!state.agents.codex.enabled) return;
+    if (!isChatGptWiring(this.store.readCodexTakeover().takeover)) return;
+    const { codexHome, tag } = this.codexChatGptListing();
+    try {
+      markCodexModelsCacheStale({ codexHome, tag });
+    } catch (error) {
+      this.logger.warn({ err: error }, "Could not mark Codex's model list stale");
+    }
   }
 
   /** CLI 配置里会写进去的一切；前后不同才改写文件。 */
@@ -1226,17 +1265,23 @@ export class ApiEndpointService {
 
   /** 目录的默认档跟着用户 config.toml 的 model_reasoning_effort；只在重新生成目录时读，读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
-    let effort: string | null = null;
+    return buildCodexModelCatalog(
+      this.retiredModels.listed(state),
+      this.codexReasoningEffort(),
+      (endpoint, modelId) => this.modelFacts(endpoint, modelId),
+    );
+  }
+
+  /** config.toml 顶层的 model_reasoning_effort；读不出按没设。 */
+  private codexReasoningEffort(): string | null {
     try {
-      effort = readCodexReasoningEffort(
+      return readCodexReasoningEffort(
         readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null,
       );
     } catch (error) {
       this.logger.warn({ err: error }, "Could not read Codex reasoning effort");
+      return null;
     }
-    return buildCodexModelCatalog(this.retiredModels.listed(state), effort, (endpoint, modelId) =>
-      this.modelFacts(endpoint, modelId),
-    );
   }
 
   private restoreOfficial(provider: ApiEndpointProvider): void {
@@ -1393,6 +1438,7 @@ export class ApiEndpointService {
       }
       try {
         this.syncCli("codex", this.cliWiring(state, "codex", this.store.readGatewayTokens()));
+        this.staleCodexModels(state);
         this.onActiveEndpointChanged("codex");
       } catch (error) {
         this.logger.warn({ err: error }, "Failed to rewire Codex for its sign-in");

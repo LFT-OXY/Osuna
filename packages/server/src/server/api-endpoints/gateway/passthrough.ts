@@ -129,6 +129,8 @@ export async function attemptEndpoint(input: {
   refusals?: ShapeRefusals;
   // count_tokens 不保活。
   keepAlive?: AgentKeepAlive;
+  // 只把这些 Agent 的请求头转给上游（ChatGPT 登录的 Codex 只带表明身份的头）；缺省是 Agent 的全部请求头。
+  forwardedHeaders?: IncomingHttpHeaders;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, refusals } = input;
   const { originalUrl } = input.req;
@@ -146,7 +148,7 @@ export async function attemptEndpoint(input: {
       res,
       url,
       headers: upstreamHeaders({
-        headers: input.req.headers,
+        headers: input.forwardedHeaders ?? input.req.headers,
         apiKey,
         keys,
         dropsReviewBeta,

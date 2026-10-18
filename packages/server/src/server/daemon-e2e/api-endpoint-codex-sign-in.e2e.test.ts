@@ -168,6 +168,63 @@ ${await table()}`;
     expect(await readFile(authPath, "utf8")).toBe(AUTH_JSON);
   });
 
+  test("Codex's cached model list is marked stale when the switch turns on and when the endpoint models change", async () => {
+    // 照 magpie codexStaleCache：只改 fetched_at，其余照 Codex 写的留着；只动这个临时 CODEX_HOME。
+    const cachePath = path.join(codexHome, "models_cache.json");
+    const fresh = (etag: string) =>
+      writeFile(
+        cachePath,
+        JSON.stringify({
+          fetched_at: "2026-10-18T08:00:00Z",
+          etag,
+          client_version: "0.163.0",
+          models: [{ slug: "gpt-5.5" }],
+        }),
+      );
+    const cache = async () =>
+      JSON.parse(await readFile(cachePath, "utf8")) as { fetched_at: string; etag: string };
+    await fresh('W/"list-1"');
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Relay",
+      baseUrls: [{ format: "openai_responses", url: "https://relay.example/v1" }],
+      apiKey: "sk-relay-secret",
+      models: [{ id: "gpt-x" }],
+    });
+    expect(saved.error).toBeNull();
+    expect((await cache()).fetched_at).toBe("2026-10-18T08:00:00Z");
+
+    await setCodex(true);
+    expect(await cache()).toEqual({
+      fetched_at: "1970-01-01T00:00:00Z",
+      etag: 'W/"list-1"',
+      client_version: "0.163.0",
+      models: [{ slug: "gpt-5.5" }],
+    });
+
+    // Codex 重拉过（带着旧的标记）；接口的已选模型变了，又标成过期。
+    await fresh('W/"list-1+osuna-000000000000"');
+    const changed = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId: saved.endpoint!.id,
+      name: "Relay",
+      baseUrls: [{ format: "openai_responses", url: "https://relay.example/v1" }],
+      models: [{ id: "gpt-x" }, { id: "gpt-y" }],
+    });
+    expect(changed.error).toBeNull();
+    expect((await cache()).fetched_at).toBe("1970-01-01T00:00:00Z");
+  });
+
+  test("an API key sign-in leaves Codex's cached model list alone", async () => {
+    signIn = "api_key";
+    const cachePath = path.join(codexHome, "models_cache.json");
+    const text = JSON.stringify({ fetched_at: "2026-10-18T08:00:00Z", etag: '"list-1"' });
+    await writeFile(cachePath, text);
+    await createEndpoint();
+    await setCodex(true);
+    expect(await readFile(cachePath, "utf8")).toBe(text);
+  });
+
   test.each(["api_key", "signed_out"] as const)(
     "signed in with %s: Osuna's provider table, model_provider and model_catalog_json as before",
     async (kind) => {

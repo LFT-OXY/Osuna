@@ -1,8 +1,10 @@
 // 候选排序与最后一家原地重试移植自 magpie（https://github.com/yetone/magpie，internal/gateway/fallback.go），换格式重问照 gateway.go 的 markUnfit 与 usable，
 // 已下线模型的记下与恢复照 gateway.go 的 provider.Retire 与 routing.go 的 servedCandidate，对话太长时的跳过与换家照 gateway.go 对 roomy、tooLongUnsaid、withRoom 的调用，
-// 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)
+// 拒答换家与全都拒答时交出的照 gateway.go 的 refusals、handBack 与 failTo(refusedStatus)，
+// ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import type { IncomingHttpHeaders } from "node:http";
 import os from "node:os";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
@@ -25,9 +27,17 @@ import {
   DEFAULT_CHATGPT_BASE_URL,
   DEFAULT_OPENAI_API_BASE_URL,
   chatgptBackendRest,
+  codexIdentityHeaders,
+  isEndpointModel,
+  noWebSearchReply,
   relayToChatGpt,
   type ChatGptBases,
 } from "./chatgpt-backend.js";
+import {
+  CHATGPT_MODELS_WAIT_MS,
+  answerChatGptModels,
+  type ChatGptModelsListing,
+} from "./chatgpt-models.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -66,7 +76,7 @@ import { attemptTranslated } from "./translated.js";
 import { parseAnthropicRequest } from "./translation/anthropic.js";
 import { RequestShapeError, estimateInputTokens, type GatewayRequest } from "./translation/ir.js";
 import { protocolOf } from "./translation/protocols.js";
-import { readAgentBody } from "./request-body.js";
+import { decodeAgentBody, readAgentBody, readRawBody } from "./request-body.js";
 import { joinToolRuns, orphanedToolOutputs, pairToolItems } from "./translation/responses.js";
 import {
   ANSWERED_BY_HEADER,
@@ -88,6 +98,8 @@ import {
  * 挂在 daemon 密码中间件与全局 JSON 解析之前：请求体自己读，不受 100 kb 上限。
  * 认调用方（callers.ts，ADR 0010）：本机回环来的、不带转发头的请求一律收，网页发来的拒收；
  * 口令只说明是哪个 Agent，对不上时按 User-Agent 认，再认不出按请求路径。
+ * 用 ChatGPT 登录的 Codex 走 ChatGPT 后端那组路径（serveChatGptBackend）：光秃秃的模型名原样转给 ChatGPT，
+ * 「接口标识/模型名」照下面的规则选路，发给接口的只有 Codex 的身份头，ChatGPT 令牌与账号 id 从不带。
  * 每次请求都重读接口与口令文件，接口页的改动立刻生效。
  *
  * 每家接口按 chooseRequestFormat 挑格式：有 Agent 自己格式的地址就直通，否则经中间格式翻译过去。
@@ -127,6 +139,8 @@ export interface ApiEndpointGatewayOverrides {
   // 只给测试把 ChatGPT 后端与 OpenAI API 换成本机的假后端，从不连真的 chatgpt.com。
   gatewayChatGptBaseUrl?: string;
   gatewayOpenAiApiBaseUrl?: string;
+  // 只给测试缩短等 ChatGPT 模型清单的时间（缺省 3 秒）。
+  gatewayChatGptModelsWaitMs?: number;
 }
 
 /** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
@@ -147,6 +161,8 @@ export function createApiEndpointGateway(options: {
   modelFacts: ModelFactsLookup;
   // daemon 自己的版本：CLI 没带 User-Agent 时写 Osuna/<版本>。
   daemonVersion: string;
+  // 用 ChatGPT 登录的 Codex 的模型清单里接在后面的接口模型、它们的标记与 CODEX_HOME（ADR 0010）。
+  codexChatGptListing: () => ChatGptModelsListing;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -165,9 +181,13 @@ export function createApiEndpointGateway(options: {
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
   };
-  const chatgptBases: ChatGptBases = {
-    chatgpt: options.overrides?.gatewayChatGptBaseUrl ?? DEFAULT_CHATGPT_BASE_URL,
-    openAiApi: options.overrides?.gatewayOpenAiApiBaseUrl ?? DEFAULT_OPENAI_API_BASE_URL,
+  const chatgpt: ChatGptBackend = {
+    bases: {
+      chatgpt: options.overrides?.gatewayChatGptBaseUrl ?? DEFAULT_CHATGPT_BASE_URL,
+      openAiApi: options.overrides?.gatewayOpenAiApiBaseUrl ?? DEFAULT_OPENAI_API_BASE_URL,
+    },
+    listing: options.codexChatGptListing,
+    modelsWaitMs: options.overrides?.gatewayChatGptModelsWaitMs ?? CHATGPT_MODELS_WAIT_MS,
   };
 
   return (req, res) => {
@@ -185,10 +205,30 @@ export function createApiEndpointGateway(options: {
       return;
     }
 
-    // ChatGPT 后端那组路径只有 Codex 走（ADR 0010），全部原样转给 ChatGPT。
-    if (chatgptBackendRest(req.path) !== null) {
-      logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
-      relayToChatGpt({ req, res, bases: chatgptBases, logger });
+    // ChatGPT 后端那组路径只有 Codex 走（ADR 0010）：ChatGPT 自带模型原样转给 ChatGPT，接口模型照常选路。
+    const chatgptRest = chatgptBackendRest(req.path);
+    if (chatgptRest !== null) {
+      const served = serveChatGptBackend({
+        req,
+        res,
+        rest: chatgptRest,
+        chatgpt,
+        store,
+        logger,
+        failover,
+      });
+      void served.catch((error: unknown) => {
+        logger.error({ err: error }, "API endpoint gateway request crashed");
+        if (!res.headersSent) {
+          sendAgentError({
+            res,
+            wire: "openai",
+            error: { status: 500, message: "API endpoint gateway error" },
+          });
+        } else {
+          res.destroy();
+        }
+      });
       return;
     }
     const isWarmUp = req.path === "/api/hello" && (req.method === "GET" || req.method === "HEAD");
@@ -240,6 +280,91 @@ export function createApiEndpointGateway(options: {
   };
 }
 
+interface ChatGptBackend {
+  bases: ChatGptBases;
+  listing: () => ChatGptModelsListing;
+  modelsWaitMs: number;
+}
+
+// 要先看模型名再决定转给 ChatGPT 还是接口的路径。
+const CHATGPT_ROUTED_PATHS = new Set(["/responses", "/responses/compact", "/alpha/search"]);
+
+/**
+ * ChatGPT 后端那组路径（ADR 0010）：模型清单合并接口模型；对话、压缩与搜索先读出请求体看模型名，
+ * 带接口标识的按接口处理（对话照常选路换家、只带 Codex 的身份头，压缩照 magpie 拒绝，搜索回 200 和说明），
+ * 光秃秃的名字（或读不出模型名的）把原样的字节转给 ChatGPT。其余路径原样转。
+ */
+async function serveChatGptBackend(input: {
+  req: Request;
+  res: Response;
+  rest: string;
+  chatgpt: ChatGptBackend;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+}): Promise<void> {
+  const { req, res, rest, chatgpt, logger } = input;
+  const listTag = () => chatgpt.listing().tag;
+  const relay = (body?: Buffer) => {
+    logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
+    relayToChatGpt({ req, res, bases: chatgpt.bases, logger, body, listTag });
+  };
+  if (req.method === "GET" && rest === "/models") {
+    await answerChatGptModels({ req, res, ...chatgpt, waitMs: chatgpt.modelsWaitMs, logger });
+    return;
+  }
+  if (req.method !== "POST" || !CHATGPT_ROUTED_PATHS.has(rest)) {
+    relay();
+    return;
+  }
+  const limit = input.failover.bodyLimitBytes;
+  const raw = await readRawBody({ req, limit });
+  if (raw.kind === "broken") return;
+  if (raw.kind === "tooLarge") {
+    sendAgentError({ res, wire: "openai", error: { status: 413, message: raw.message } });
+    return;
+  }
+  const decoded = await decodeAgentBody({
+    raw: raw.body,
+    encoding: req.headers["content-encoding"],
+    limit,
+    logger,
+  });
+  const parsed = decoded.kind === "read" ? parseJson(decoded.body.toString("utf8")) : null;
+  const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
+  if (decoded.kind !== "read" || model === null || !isEndpointModel(model)) {
+    relay(raw.body);
+    return;
+  }
+  if (rest === "/responses/compact") {
+    sendAgentError({
+      res,
+      wire: "openai",
+      error: {
+        status: 400,
+        message: `/responses/compact is not supported for API endpoint models (${model})`,
+      },
+    });
+    return;
+  }
+  if (rest === "/alpha/search") {
+    res.status(200).json(noWebSearchReply(model));
+    return;
+  }
+  await handleAgentRequest({
+    req,
+    res,
+    agent: "codex",
+    wire: "openai",
+    format: "openai_responses",
+    store: input.store,
+    logger,
+    failover: input.failover,
+    read: decoded.body,
+    forwardedHeaders: codexIdentityHeaders(req.headers),
+  });
+}
+
 interface Failover {
   cooldowns: EndpointCooldowns;
   retired: RetiredModels;
@@ -265,6 +390,8 @@ async function routeAgentRequest(input: {
   store: ApiEndpointStore;
   logger: pino.Logger;
   failover: Failover;
+  // 已经读出并解开的请求体（ChatGPT 后端那组路径先读出来看过模型名）；没有就从请求里读。
+  read?: Buffer;
 }): Promise<{
   body: Buffer;
   parsed: unknown;
@@ -274,11 +401,14 @@ async function routeAgentRequest(input: {
   const { res, wire } = input;
   const reply = (status: number, message: string) =>
     sendAgentError({ res, wire, error: { status, message } });
-  const read = await readAgentBody({
-    req: input.req,
-    limit: input.failover.bodyLimitBytes,
-    logger: input.logger,
-  });
+  const read =
+    input.read === undefined
+      ? await readAgentBody({
+          req: input.req,
+          limit: input.failover.bodyLimitBytes,
+          logger: input.logger,
+        })
+      : { kind: "read" as const, body: input.read };
   if (read.kind === "tooLarge") {
     reply(413, read.message);
     return null;
@@ -455,6 +585,8 @@ async function handleAgentRequest(input: {
   store: ApiEndpointStore;
   logger: pino.Logger;
   failover: Failover;
+  read?: Buffer;
+  forwardedHeaders?: IncomingHttpHeaders;
 }): Promise<void> {
   const { req, res, wire, store } = input;
   const since = Date.now();
@@ -720,6 +852,7 @@ async function askInTurn(input: {
   tokens: number | null;
   windowOf: WindowOf;
   keepAlive: AgentKeepAlive;
+  forwardedHeaders?: IncomingHttpHeaders;
 }): Promise<void> {
   const { res, wire, logger, tokens, windowOf } = input;
   const { cooldowns, sticks, retired } = input.failover;
@@ -920,6 +1053,7 @@ async function askUntilSettled(input: {
   format: AgentPath["format"];
   failover: Failover;
   keepAlive: AgentKeepAlive;
+  forwardedHeaders?: IncomingHttpHeaders;
 }): Promise<SettledAttempt> {
   const { res } = input;
   let askedEmptyAgain = false;
@@ -963,6 +1097,8 @@ interface EndpointAsk {
   format: AgentPath["format"];
   failover: Failover;
   keepAlive: AgentKeepAlive;
+  // 转给上游的 Agent 请求头；缺省是全部（attemptEndpoint）。
+  forwardedHeaders?: IncomingHttpHeaders;
 }
 
 /**
@@ -1054,7 +1190,13 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     keepAlive: input.keepAlive,
   };
   if (candidate.translated === null) {
-    return attemptEndpoint({ ...target, req: input.req, format: input.format, body: input.body });
+    return attemptEndpoint({
+      ...target,
+      req: input.req,
+      format: input.format,
+      body: input.body,
+      forwardedHeaders: input.forwardedHeaders,
+    });
   }
   // 只有在这个格式上自己会搜的那家才带搜索（ADR 0009）；不会搜的连同点名它的 tool_choice 一起拿掉。
   const searches = searchesWebItself(candidate.endpoint, candidate.format);

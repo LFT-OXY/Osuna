@@ -1,5 +1,6 @@
 // ChatGPT 后端路径的原样转发移植自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend.go 的
-// CodexPath、codexBackend 的 WebSocket 426、codexUpstream 的转发地址与 apiKey、codexKeyRefused、copyHeaders 与 hopHeader）
+// CodexPath、codexBackend 的 WebSocket 426、codexUpstream 的转发地址与 apiKey、codexKeyRefused、copyHeaders 与 hopHeader、
+// codexHeader；gateway.go 的 codexClientHeader；codex_search.go 的 alphaSearchReply）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import http, {
@@ -11,6 +12,7 @@ import https from "node:https";
 import type { Duplex } from "node:stream";
 import type { Request, Response } from "express";
 import type pino from "pino";
+import { withListTag } from "../codex-models-cache.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError } from "./agent-errors.js";
 import { readLimited } from "./upstream-call.js";
@@ -96,6 +98,65 @@ export function apiKeyRefusedMessage(body: string): string {
   );
 }
 
+/**
+ * 名字带接口标识（`<标识>/<模型名>`）的是接口模型，由中转站按标识选路；光秃秃的名字一律是 ChatGPT 自带的模型
+ * （ADR 0010）。ChatGPT 的模型名从不带斜杠。
+ */
+export function isEndpointModel(model: string | null): boolean {
+  return model !== null && model.includes("/");
+}
+
+/**
+ * 发给接口的请求头只留 Codex 表明身份的那些（magpie codexClientHeader）：User-Agent、originator、会话与线程 id、
+ * version、x-client-request-id 和 x-openai-* / x-codex-* 头，另加说明请求体格式的 Content-Type 与 Accept。
+ * ChatGPT 令牌、账号 id、Cookie、设备证明、只对这个 ChatGPT 账号有意义的 luna-reserve 与 turn-state 一律不带。
+ */
+export function codexIdentityHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders {
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name, value]) => value !== undefined && isCodexIdentityHeader(name.toLowerCase()),
+    ),
+  );
+}
+
+const CODEX_IDENTITY_HEADERS = new Set([
+  "content-type",
+  "accept",
+  "user-agent",
+  "originator",
+  "session-id",
+  "thread-id",
+  "session_id",
+  "conversation_id",
+  "x-client-request-id",
+  "version",
+]);
+
+function isCodexIdentityHeader(name: string): boolean {
+  const isSignIn =
+    name.includes("authorization") ||
+    name === "x-oai-attestation" ||
+    name === "x-openai-codex-luna-reserve" ||
+    name === "x-codex-turn-state";
+  if (isSignIn) return false;
+  return (
+    CODEX_IDENTITY_HEADERS.has(name) || name.startsWith("x-openai-") || name.startsWith("x-codex-")
+  );
+}
+
+/**
+ * 接口模型的 Codex 独立搜索（web.run 调 /alpha/search）的回答：200，output 是给模型看的一句说明。
+ * 不回 404：web.run 的任何失败 Codex 都当作这一轮结束（magpie codex_search.go）。
+ */
+export function noWebSearchReply(model: string): { encrypted_output: null; output: string } {
+  return {
+    encrypted_output: null,
+    output:
+      `Web search is not available for ${model}: it is an API endpoint model, and Codex's web search (web.run) ` +
+      "only works with ChatGPT's own models. Answer without searching the web.",
+  };
+}
+
 /** 去掉逐跳头与 Host，其余原样（请求头、回复头都用它）。 */
 export function relayedHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders {
   return Object.fromEntries(
@@ -128,12 +189,19 @@ export function answerChatGptWebSocket(input: {
   );
 }
 
-/** 原样转给 ChatGPT（或 API key 登录时的 OpenAI API），回复边收边回。 */
+/**
+ * 原样转给 ChatGPT（或 API key 登录时的 OpenAI API），回复边收边回。`body` 是已经读出来的原样字节
+ * （要先看模型名的那几条路径），没有就把请求体直接接过去。
+ * 回复的 X-Models-Etag 带上接口模型的标记（magpie modelsEtag），与清单的 ETag 一致，Codex 才不会每轮重拉清单，
+ * 接口模型变了它也会重拉。
+ */
 export function relayToChatGpt(input: {
   req: Request;
   res: Response;
   bases: ChatGptBases;
   logger: pino.Logger;
+  body?: Buffer;
+  listTag: () => string;
 }): void {
   const { req, res } = input;
   const signIn = { url: req.url, authorization: req.headers.authorization };
@@ -155,7 +223,12 @@ export function relayToChatGpt(input: {
       void sendApiKeyRefused({ res, reply });
       return;
     }
-    res.writeHead(reply.statusCode ?? 502, relayedHeaders(reply.headers));
+    const headers = relayedHeaders(reply.headers);
+    const modelsEtag = headers["x-models-etag"];
+    if (typeof modelsEtag === "string") {
+      headers["x-models-etag"] = withListTag(modelsEtag, input.listTag());
+    }
+    res.writeHead(reply.statusCode ?? 502, headers);
     reply.pipe(res);
     reply.once("error", () => res.destroy());
     reply.once("aborted", () => res.destroy());
@@ -177,7 +250,11 @@ export function relayToChatGpt(input: {
       },
     });
   });
-  req.pipe(upstream);
+  if (input.body === undefined) {
+    req.pipe(upstream);
+  } else {
+    upstream.end(input.body);
+  }
 }
 
 async function sendApiKeyRefused(input: { res: Response; reply: IncomingMessage }): Promise<void> {

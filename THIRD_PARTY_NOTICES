@@ -490,6 +490,27 @@ follows Join, putProvider and dropProvider in magpie's internal/agent/codex.go:
 
   packages/server/src/server/api-endpoints/codex-config-patch.ts
 
+Endpoint models in the model list of a Codex signed in with ChatGPT (the
+ChatGPT backend's list first, waiting 3 seconds and falling back to Codex's
+last list in models_cache.json, its 401 and 403 passed on, the endpoint models
+after it, and the list's mark in the ETag and X-Models-Etag), marking Codex's
+cached list stale, sending an endpoint only Codex's identity headers, refusing
+remote compaction and answering Codex's web search for an endpoint model
+follow codexModels, codexModelsWait, modelsEtag, codexHeader and the
+/responses/compact refusal in magpie's internal/gateway/codex_backend.go,
+codexClientHeader in internal/gateway/gateway.go, alphaSearchReply in
+internal/gateway/codex_search.go, Tag, WithTag, Tagged and CacheEntries in
+internal/codexcat/codexcat.go, MagpieAdded in internal/catalog/catalog.go and
+codexStaleCache in internal/agent/codex.go:
+
+  packages/server/src/server/api-endpoints/codex-models-cache.ts
+  packages/server/src/server/api-endpoints/codex-models-cache.test.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-models.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-models.test.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-backend.ts
+  packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

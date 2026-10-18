@@ -2,7 +2,7 @@
 // internal/gateway/request_bounds.go 的 decodedBody、readBoundedRequestBody、overLimit、sizeWord，gateway.go 的 writeError 里 413 的提示）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import type { Readable, Transform } from "node:stream";
+import { Readable, type Transform } from "node:stream";
 import * as zlib from "node:zlib";
 import type { Request } from "express";
 import type pino from "pino";
@@ -57,6 +57,58 @@ export async function readAgentBody(input: {
   if (stream === null) {
     return { kind: "unreadable", status: 400, message: "The request body could not be read" };
   }
+  input.logger.warn(
+    { encoding, err: read.error },
+    "API endpoint gateway could not decompress a request body",
+  );
+  return {
+    kind: "unreadable",
+    status: 400,
+    message: `The request body is not valid ${encoding} data`,
+  };
+}
+
+/**
+ * 读出原样的请求体字节，不解压（ChatGPT 后端那组路径：ChatGPT 自带模型的请求要原样转发，
+ * 先读出来才知道问的是哪个模型）。上限按原样的字节数算。
+ */
+export async function readRawBody(input: {
+  req: Request;
+  limit: number;
+}): Promise<
+  { kind: "read"; body: Buffer } | { kind: "tooLarge"; message: string } | { kind: "broken" }
+> {
+  const read = await readLimited({ source: input.req, limit: input.limit });
+  if (read.kind === "read") return read;
+  input.req.resume();
+  if (read.kind === "tooLarge") return { kind: "tooLarge", message: overLimit(input.limit) };
+  return { kind: "broken" };
+}
+
+/** 解开已经读出来的请求体（readRawBody 读的），与 readAgentBody 同样的编码、上限与说法。 */
+export async function decodeAgentBody(input: {
+  raw: Buffer;
+  encoding: string | undefined;
+  limit: number;
+  logger: pino.Logger;
+}): Promise<AgentBody> {
+  const { raw, limit } = input;
+  const encoding = (input.encoding ?? "").trim().toLowerCase();
+  const decoder = decoderFor(encoding);
+  if (decoder.kind === "unsupported") {
+    return { kind: "unreadable", status: 415, message: decoder.message };
+  }
+  const { stream } = decoder;
+  if (stream === null) {
+    return raw.length > limit
+      ? { kind: "tooLarge", message: overLimit(limit) }
+      : { kind: "read", body: raw };
+  }
+  Readable.from([raw]).pipe(stream);
+  const read = await readLimited({ source: stream, limit });
+  if (read.kind === "read") return read;
+  stream.destroy();
+  if (read.kind === "tooLarge") return { kind: "tooLarge", message: overLimit(limit) };
   input.logger.warn(
     { encoding, err: read.error },
     "API endpoint gateway could not decompress a request body",

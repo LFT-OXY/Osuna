@@ -1,5 +1,6 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend_test.go 的
-// TestCodexOwnModelPassesThrough、TestCodexWebSocketUpgradeRequired、TestCodexNativeModelStaysNative）
+// TestCodexOwnModelPassesThrough、TestCodexWebSocketUpgradeRequired、TestCodexNativeModelStaysNative；
+// codexModels、codexModelsWait、codexClientHeader 与 alphaSearchHere 的做法）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -13,6 +14,7 @@ import {
 import { connect, type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import * as zlib from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
@@ -98,28 +100,58 @@ async function startBackend(): Promise<FakeBackend> {
   return backend;
 }
 
+interface EndpointFixture {
+  id: string;
+  slug: string;
+  url: string;
+  models: Array<{ id: string; facts?: Record<string, unknown> }>;
+}
+
+const RELAY_A: EndpointFixture = {
+  id: "ep_a",
+  slug: "relay-a",
+  url: "http://127.0.0.1:9/v1",
+  models: [{ id: "gpt-5.5" }],
+};
+
 /** 起 daemon：Codex 开着；ChatGPT 后端与 OpenAI API 的地址换成本机的假后端。 */
-async function start(input: { chatgptBaseUrl: string; openAiApiBaseUrl?: string }) {
+async function start(input: {
+  chatgptBaseUrl: string;
+  openAiApiBaseUrl?: string;
+  endpoints?: EndpointFixture[];
+  modelsWaitMs?: number;
+}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-chatgpt-backend-"));
   tempRoots.push(root);
   const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+  const codexHome = path.join(root, "codex");
   await mkdir(endpointsDir, { recursive: true });
+  await mkdir(codexHome, { recursive: true });
+  const fixtures = input.endpoints ?? [RELAY_A];
   const endpoints = {
-    endpoints: [
-      {
-        id: "ep_a",
-        slug: "relay-a",
-        name: "Relay A",
-        baseUrls: [{ format: "openai_responses", url: "http://127.0.0.1:9/v1" }],
-        models: [{ id: "gpt-5.5" }],
-        enabled: true,
-        createdAt: "2026-10-01T00:00:00.000Z",
-        updatedAt: "2026-10-01T00:00:00.000Z",
+    endpoints: fixtures.map((fixture) => ({
+      id: fixture.id,
+      slug: fixture.slug,
+      name: fixture.slug.toUpperCase(),
+      baseUrls: [{ format: "openai_responses", url: fixture.url }],
+      models: fixture.models.map(({ id }) => ({ id })),
+      catalog: {
+        fetchedAt: "2026-10-01T00:00:00.000Z",
+        models: fixture.models.map(({ id, facts }) => ({ id, ...(facts ? { facts } : {}) })),
       },
-    ],
-    agents: { codex: { enabled: true, defaultModelId: "gpt-5.5" } },
+      enabled: true,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    })),
+    agents: { codex: { enabled: true, defaultModelId: fixtures[0]!.models[0]!.id } },
   };
   await writeFile(path.join(endpointsDir, "endpoints.json"), JSON.stringify(endpoints));
+  await writeFile(
+    path.join(endpointsDir, "keys.json"),
+    JSON.stringify({
+      keys: Object.fromEntries(fixtures.map((fixture) => [fixture.id, `sk-${fixture.slug}-key`])),
+    }),
+  );
   await writeFile(
     path.join(endpointsDir, "gateway-tokens.json"),
     JSON.stringify({ tokens: { codex: "gateway-token-codex-0123456789" } }),
@@ -128,15 +160,19 @@ async function start(input: { chatgptBaseUrl: string; openAiApiBaseUrl?: string 
     paseoHomeRoot: root,
     cleanup: false,
     apiEndpoints: {
-      env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
+      env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: codexHome },
       homeDir: root,
       gatewayChatGptBaseUrl: input.chatgptBaseUrl,
       gatewayOpenAiApiBaseUrl: input.openAiApiBaseUrl ?? "http://127.0.0.1:9/v1",
+      ...(input.modelsWaitMs === undefined
+        ? {}
+        : { gatewayChatGptModelsWaitMs: input.modelsWaitMs }),
     },
   });
   daemons.push(daemon);
   return {
     daemon,
+    codexHome,
     codexBase: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway/backend-api/codex`,
   };
 }
@@ -252,7 +288,7 @@ describe("Codex's ChatGPT requests through the gateway", () => {
     expect(compared(reached.headers)).toEqual(compared(headers));
   });
 
-  test("the model list, compaction, search and any other path go to ChatGPT as they came", async () => {
+  test("compaction, search and any other path go to ChatGPT as they came for ChatGPT's own models", async () => {
     const chatgpt = await startBackend();
     chatgpt.respond = (request, res) => {
       res.writeHead(200, { "content-type": "application/json", etag: '"list-1"' });
@@ -261,7 +297,6 @@ describe("Codex's ChatGPT requests through the gateway", () => {
     const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
 
     const calls = [
-      { method: "GET", path: "/models?client_version=0.130.0" },
       { method: "POST", path: "/responses/compact" },
       { method: "POST", path: "/alpha/search" },
       { method: "POST", path: "/memories/trace_summarize" },
@@ -442,5 +477,246 @@ describe("Codex's ChatGPT requests through the gateway", () => {
     expect(reply.status).toBe(502);
     const error = JSON.parse(reply.body.toString("utf8")) as { error: { message: string } };
     expect(error.error.message).toContain("ChatGPT can't be reached");
+  });
+});
+
+interface ListedModel {
+  slug: string;
+  priority: number;
+  context_window?: number;
+  supported_reasoning_levels?: Array<{ effort: string }>;
+  visibility?: string;
+}
+
+function modelsOf(reply: Reply): ListedModel[] {
+  return (JSON.parse(reply.body.toString("utf8")) as { models: ListedModel[] }).models;
+}
+
+const CHATGPT_MODELS = [
+  { slug: "gpt-5.5", display_name: "GPT-5.5", priority: 1, visibility: "list" },
+  { slug: "codex-auto-review", priority: 30, visibility: "hide" },
+];
+
+const KIMI_ON_TWO: EndpointFixture[] = [
+  {
+    id: "ep_a",
+    slug: "relay-a",
+    url: "",
+    models: [{ id: "kimi-k2", facts: { context: 262_144, efforts: ["low", "high"] } }],
+  },
+  { id: "ep_b", slug: "relay-b", url: "", models: [{ id: "kimi-k2" }] },
+];
+
+describe("endpoint models in the /model of a Codex signed in with ChatGPT", () => {
+  test("the model list is ChatGPT's first, then the endpoint models as <endpoint>/<model> with what is known of them", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: KIMI_ON_TWO.map((fixture) => ({ ...fixture, url: "http://127.0.0.1:9/v1" })),
+    });
+
+    const reply = await send({
+      url: `${codexBase}/models?client_version=0.163.0`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(reply.status).toBe(200);
+    const models = modelsOf(reply);
+    expect(models.map((model) => [model.slug, model.priority])).toEqual([
+      ["gpt-5.5", 1],
+      ["codex-auto-review", 30],
+      ["relay-a/kimi-k2", 103],
+      ["relay-b/kimi-k2", 104],
+    ]);
+    expect(models[0]).toEqual(CHATGPT_MODELS[0]);
+    expect(models[2]!.context_window).toBe(262_144);
+    expect(models[2]!.supported_reasoning_levels!.map((level) => level.effort)).toEqual([
+      "low",
+      "high",
+    ]);
+    expect(models[2]!.visibility).toBe("list");
+    expect(reply.headers.etag).toMatch(/^W\/"list-1\+osuna-[0-9a-f]+"$/);
+    // 清单请求带着 Codex 的登录原样到 ChatGPT（只是不要压缩过的回复）。
+    const reached = chatgpt.requests[0]!;
+    expect(reached.url).toBe("/backend-api/codex/models?client_version=0.163.0");
+    expect(reached.headers.authorization).toBe(`Bearer ${CHATGPT_TOKEN}`);
+    expect(reached.headers["chatgpt-account-id"]).toBe(ACCOUNT_ID);
+  });
+
+  test("ChatGPT not answering in time: Codex's last list of ChatGPT's models stands in", async () => {
+    const chatgpt = await startBackend();
+    // 不应答：连接一直挂着。
+    chatgpt.respond = () => {};
+    const { codexBase, codexHome } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      modelsWaitMs: 300,
+    });
+    // Codex 上次存下的清单：带着 Osuna 当时加的接口模型（换过的接口），读回来时去掉。
+    await writeFile(
+      path.join(codexHome, "models_cache.json"),
+      JSON.stringify({
+        fetched_at: "2026-10-18T00:00:00Z",
+        etag: 'W/"list-0+osuna-000000000000"',
+        models: [CHATGPT_MODELS[0], { slug: "relay-old/glm-4.6", priority: 102 }],
+      }),
+    );
+    const startedAt = Date.now();
+
+    const reply = await send({
+      url: `${codexBase}/models?client_version=0.163.0`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(3000);
+    expect(reply.status).toBe(200);
+    expect(modelsOf(reply).map((model) => model.slug)).toEqual(["gpt-5.5", "relay-a/gpt-5.5"]);
+    expect(reply.headers.etag).toMatch(/^\+osuna-[0-9a-f]+$/);
+  });
+
+  test("ChatGPT's 401 and 403 on the model list come back as they are", async () => {
+    for (const status of [401, 403]) {
+      const chatgpt = await startBackend();
+      const body = `{"detail":"refused with ${status}"}`;
+      chatgpt.respond = (_request, res) => {
+        res.writeHead(status, { "content-type": "application/json" });
+        res.end(body);
+      };
+      const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
+
+      const reply = await send({
+        url: `${codexBase}/models?client_version=0.163.0`,
+        method: "GET",
+        headers: codexHeaders(),
+      });
+
+      expect(reply.status).toBe(status);
+      expect(reply.body.toString("utf8")).toBe(body);
+    }
+  });
+
+  test("a turn on an endpoint model reaches that endpoint without the ChatGPT sign-in, and moves to the next one serving the model when it fails", async () => {
+    const chatgpt = await startBackend();
+    const relayA = await startBackend();
+    relayA.respond = (_request, res) => {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end('{"error":{"message":"overloaded"}}');
+    };
+    const relayB = await startBackend();
+    relayB.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(
+        sse(
+          '{"type":"response.created","response":{"id":"r1"}}',
+          '{"type":"response.output_text.delta","delta":"hi"}',
+          '{"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":1,"output_tokens":1}}}',
+        ),
+      );
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [
+        { ...KIMI_ON_TWO[0]!, url: `${relayA.url}/v1` },
+        { ...KIMI_ON_TWO[1]!, url: `${relayB.url}/v1` },
+      ],
+    });
+    // Codex 发给 ChatGPT 后端的请求体用 zstd 压过。
+    const body = zlib.zstdCompressSync(
+      Buffer.from('{"model":"relay-a/kimi-k2","input":"hi","stream":true}'),
+    );
+
+    const turn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-encoding": "zstd", "content-length": String(body.length) }),
+      body,
+    });
+
+    expect(turn.status).toBe(200);
+    expect(turn.body.toString("utf8")).toContain("response.completed");
+    expect(chatgpt.requests).toHaveLength(0);
+    expect(relayA.requests).toHaveLength(1);
+    expect(relayB.requests).toHaveLength(1);
+    for (const [relay, key] of [
+      [relayA, "sk-relay-a-key"],
+      [relayB, "sk-relay-b-key"],
+    ] as const) {
+      const reached = relay.requests[0]!;
+      expect(reached.url).toBe("/v1/responses");
+      expect(JSON.parse(reached.body.toString("utf8")).model).toBe("kimi-k2");
+      expect(reached.headers.authorization).toBe(`Bearer ${key}`);
+      expect(reached.headers["chatgpt-account-id"]).toBeUndefined();
+      expect(JSON.stringify(reached.headers)).not.toContain(CHATGPT_TOKEN);
+      expect(reached.headers["user-agent"]).toBe(CODEX_UA);
+      expect(reached.headers.originator).toBe("codex_cli_rs");
+      expect(reached.headers["session-id"]).toBe("019a-session");
+      expect(reached.headers["thread-id"]).toBe("019a-thread");
+      expect(reached.headers["x-codex-turn-metadata"]).toBe('{"turn_id":"t1"}');
+      expect(reached.headers["content-encoding"]).toBeUndefined();
+    }
+  });
+
+  test("remote compaction on an endpoint model is refused; search on one is a 200 saying it cannot search", async () => {
+    const chatgpt = await startBackend();
+    const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
+
+    const compactBody = Buffer.from('{"model":"relay-a/gpt-5.5","input":[]}');
+    const compact = await send({
+      url: `${codexBase}/responses/compact`,
+      headers: codexHeaders({ "content-length": String(compactBody.length) }),
+      body: compactBody,
+    });
+    expect(compact.status).toBe(400);
+    const refused = JSON.parse(compact.body.toString("utf8")) as { error: { message: string } };
+    expect(refused.error.message).toBe(
+      "/responses/compact is not supported for API endpoint models (relay-a/gpt-5.5)",
+    );
+
+    const searchBody = Buffer.from(
+      '{"model":"relay-a/gpt-5.5","commands":{"search_query":[{"q":"weather"}]}}',
+    );
+    const search = await send({
+      url: `${codexBase}/alpha/search`,
+      headers: codexHeaders({ "content-length": String(searchBody.length) }),
+      body: searchBody,
+    });
+    expect(search.status).toBe(200);
+    expect(JSON.parse(search.body.toString("utf8"))).toEqual({
+      encrypted_output: null,
+      output:
+        "Web search is not available for relay-a/gpt-5.5: it is an API endpoint model, and Codex's web search (web.run) only works with ChatGPT's own models. Answer without searching the web.",
+    });
+    expect(chatgpt.requests).toHaveLength(0);
+  });
+
+  test("a ChatGPT reply's X-Models-Etag carries the endpoint models' mark, as the list's ETag does", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (request, res) => {
+      const isList = request.url.startsWith("/backend-api/codex/models");
+      res.writeHead(200, {
+        "content-type": "application/json",
+        ...(isList ? { etag: '"list-1"' } : { "x-models-etag": '"list-1"' }),
+      });
+      res.end(isList ? JSON.stringify({ models: CHATGPT_MODELS }) : "{}");
+    };
+    const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
+
+    const list = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    const body = Buffer.from('{"model":"gpt-5.5","input":"hi"}');
+    const turn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-length": String(body.length) }),
+      body,
+    });
+
+    expect(turn.headers["x-models-etag"]).toBe(list.headers.etag);
   });
 });

@@ -240,3 +240,26 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 - 用 ChatGPT 登录时 app-server 每个会话仍会直接向 chatgpt.com 查一次工作区（账号接口走 `chatgpt_base_url`，不经过中转站），查失败（401、超时等）这一轮会报错。这与没开开关时一样。
 - 推断，未核实：开关打开前在同一个长期运行的 app-server 里已被路由改写过的会话（`previously_routed` 为 true），若不重开就换成新地址继续，可能仍被改写到工作区后端。这属于「改完设置正在运行的会话要重开」（27 号工单）的范围。
+
+## 10 接口模型并进 ChatGPT 登录的 /model
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie | Osuna |
+| --- | --- | --- |
+| 模型清单 | `codex_backend.go` `codexModels`：带 Codex 的请求头（去掉 `Accept-Encoding`）问 ChatGPT 的 `/models`，等 3 秒（`codexModelsWait`）；2xx 用它的清单；401、403 原样回；别的失败、超时用 `codexcat.CacheEntries`（`$CODEX_HOME/models_cache.json` 去掉 magpie 加的） | 同（`gateway/chatgpt-models.ts`）。缓存去掉的是带 `+osuna-` 标记的清单里的斜杠名字（同 `MagpieAdded` 的第二条；Osuna 的条目没有 ` via magpie` 那样的说明可认） |
+| 接口模型条目 | `codexcat.Entries(ms, len(own)+100)`，priority 接在后面 | 同：`codexEndpointEntries`（07 号的 `codexModelEntry`，visibility `list`），priority = ChatGPT 条数 + 100 + 序号；顺序同聊天模型选择器（`endpointModelGroups`），与 09 号 `magpieConnectPick` 的候选一致 |
+| ETag | `WithTag(backend ETag, CodexListTag())`，回复的 `X-Models-Etag` 同样加（`modelsEtag`） | 同，标记是 `+osuna-<sha256 前 12 位>`，算的是接口模型条目加 Codex 的默认模型（`codexChatGptListing`）。`X-Models-Etag` 不加的话 Codex 每轮都会因为和缓存的 ETag 不同而重拉清单 |
+| ChatGPT 清单里的自带模型 | 按用户在 magpie 里挑的、隐藏的、禁用的筛，可盖 V1 标记、auto-review | 原样：Osuna 没有这些设置 |
+| 对话请求 | 斜杠名字走 `serveAgent`；光秃秃的修补条目 id 后转 ChatGPT | 斜杠名字走 `handleAgentRequest`（选路、换家、冷却同 `/v1/responses`）；光秃秃的、没有模型名的、请求体解不开的，把原样的字节转给 ChatGPT（08 号「原样」不变） |
+| 发给接口的头 | `codexClientHeader`：User-Agent、originator、session-id、thread-id，加 `codexHeader`（`x-openai-*`、`x-codex-*`、version 等，去掉 authorization 类、`x-oai-attestation`、luna-reserve、turn-state） | 同一份名单（`codexIdentityHeaders`），另留 Content-Type 与 Accept（直通照原样带格式头）。翻译过去的请求本来就只带 Osuna 自己写的头 |
+| `/responses/compact` | 斜杠名字回 400「use a compaction_trigger on /responses」 | 回 400，说明去掉「use a compaction_trigger」：Osuna 不接 `compaction_trigger`（magpie 的 `codexInputAs` 那套），照写会误导 |
+| `/alpha/search` | 斜杠名字由 magpie 代搜（`alphaSearchHere`），做不到时 200 加说明 | 200，`output` 只有一句「这个模型不能联网搜索」（decisions.md Q9，Osuna 没有代搜） |
+| 缓存标过期 | `codexStaleCache`：缓存的 ETag 不带现在的标记、`fetched_at` 不是 1970 时改成 1970，其余照留；Join 与每次 Sync 都调 | 同（`codex-models-cache.ts`）。调用点：每次落下设置变更（含打开开关、默认模型、已选模型）、模型资料或下线模型重写目录后、登录方式变了重写接法后、daemon 启动对账后。只在 Codex 开着且接管记录是 ChatGPT 接法时；路径是正被改写的 `config.toml` 所在的 CODEX_HOME；没有缓存不新建 |
+
+### 要判断的地方
+
+- 标记里多算了 Codex 的默认模型：工单要求默认模型变了也标过期，清单本身不随它变，多一次重拉。
+- 等 ChatGPT 清单的 3 秒在 e2e 里用 `gatewayChatGptModelsWaitMs` 缩成 300 毫秒，常量 `CHATGPT_MODELS_WAIT_MS` 是 3000。
+- 走这几条要先看模型名的路径（`/responses`、`/responses/compact`、`/alpha/search`）时，ChatGPT 自带模型的请求体也先整个读出来再转（上限同中转站 64 MB，超了回 413）；magpie 同样先读。
+- 接口模型用 `/responses/compact` 被拒后，Codex 对接口模型的远程压缩会失败；magpie 靠 `compaction_trigger` 在 `/responses` 里自己做摘要，Osuna 没有这一套，留给以后的工单。
