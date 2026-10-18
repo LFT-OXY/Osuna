@@ -453,10 +453,18 @@ managed settings, settings.json, ~/.claude.json, then the login shell) follow
 claudeClouds, claudeSwitchOn, claudeCloud, dropClouds and putClouds in magpie's
 internal/agent/claude.go and ClaudeProviders in internal/agentenv/agentenv.go;
 reporting a managed ANTHROPIC_BASE_URL that wins over the gateway follows
-Check in claude.go:
+Check in claude.go, and telling an address that is a proxy reaching the
+gateway follows proxyBase, loopbackWithPath, reachesMagpie, magpieProbe and
+probedNow in internal/agent/reach.go and onAnotherMachine in zcode.go; asking
+the login shell for the switches (a one-minute cache, -ilc then -lc, the
+values printed between two marks, nushell asked through /bin/sh) follows
+LoginEnv, shellEnv, askShell, shellProbe and parseShellEnv in
+internal/proc/path_other.go:
 
   packages/server/src/server/api-endpoints/claude-cloud-switches.ts
   packages/server/src/server/api-endpoints/claude-settings-patch.ts
+  packages/server/src/server/api-endpoints/gateway-reach.ts
+  packages/server/src/server/api-endpoints/login-shell-env.ts
 
 What Claude Code is told about an endpoint model it doesn't know (the [1m]
 mark, CLAUDE_CODE_MAX_CONTEXT_TOKENS, CLAUDE_CODE_MAX_OUTPUT_TOKENS,

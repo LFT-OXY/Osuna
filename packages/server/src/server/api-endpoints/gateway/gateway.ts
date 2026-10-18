@@ -95,6 +95,7 @@ import {
   searchesWebItself,
   withWebSearchFor,
 } from "./web-search.js";
+import { GATEWAY_INFO_NAME } from "../gateway-reach.js";
 
 /*
  * 本机中转站：挂在 daemon 自己的 HTTP 监听上，替 CLI 把请求转给第三方接口。
@@ -239,6 +240,11 @@ export function createApiEndpointGateway(options: {
     const isWarmUp = req.path === "/api/hello" && (req.method === "GET" || req.method === "HEAD");
     if (isWarmUp) {
       res.status(200).json({ ok: true });
+      return;
+    }
+    // 自我介绍：代理后面的地址据此认出通到中转站（gateway-reach.ts，照 magpie 的根路径信息）。
+    if (req.path === "/" && req.method === "GET") {
+      res.status(200).json({ name: GATEWAY_INFO_NAME });
       return;
     }
     if (req.path === "/v1/models" && req.method === "GET") {

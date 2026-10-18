@@ -26,12 +26,21 @@ import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.j
 import type { AgentModelDefinition, ApiEndpointModelGroup } from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 import {
+  CLAUDE_CLOUD_SWITCH_KEYS,
   claudeManagedSettingsFiles,
   defaultClaudeManagedSettingsDir,
   findClaudeCloudSwitch,
   managedBaseUrl,
-  type ClaudeEnvFile,
+  readClaudeEnvFile,
+  type ClaudeCloudSwitchFinding,
 } from "./claude-cloud-switches.js";
+import {
+  createGatewayReach,
+  probeGatewayAt,
+  proxyBase,
+  type ProbeGatewayAt,
+} from "./gateway-reach.js";
+import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
 import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import {
   applyClaudeApiEndpoint,
@@ -200,9 +209,12 @@ export interface ApiEndpointServiceOptions {
   // 中转站记下的已下线模型；给 Agent 选模型的列表都去掉它们，接口页与默认模型不受影响。
   retiredModels: RetiredModels;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
-  // 也当作登录 shell 的环境查云平台开关：桌面端启动时已把登录 shell 的环境并进 daemon（login-shell-env.ts），
-  // Osuna 起的 Claude 会话也继承它。
+  // 查云平台开关时，登录 shell 没答出的变量也看它（magpie 的 claudeShellEnv）。
   env?: NodeJS.ProcessEnv;
+  // 问登录 shell 要变量（一分钟缓存）；缺省真的起登录 shell，测试一律换成假的。
+  readLoginShellEnv?: ReadLoginShellEnv;
+  // 问一个代理地址后面是不是中转站；缺省发 HTTP，测试可换。
+  probeGatewayAt?: ProbeGatewayAt;
   // Claude Code 托管设置所在的目录；缺省按系统（claude-cloud-switches.ts），
   // 环境里有 PASEO_CLAUDE_MANAGED_SETTINGS_DIR 时用它。测试一律指到临时目录，绝不读真实的系统目录。
   claudeManagedSettingsDir?: string;
@@ -323,6 +335,8 @@ export class ApiEndpointService {
   private readonly env: NodeJS.ProcessEnv;
   private readonly homeDir: string;
   private readonly claudeManagedSettingsDir: string;
+  private readonly readLoginShellEnv: ReadLoginShellEnv;
+  private readonly reachesGateway: (base: string) => Promise<boolean>;
   private readonly now: () => Date;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
@@ -348,6 +362,9 @@ export class ApiEndpointService {
       options.claudeManagedSettingsDir ??
       this.env.PASEO_CLAUDE_MANAGED_SETTINGS_DIR ??
       defaultClaudeManagedSettingsDir(process.platform);
+    this.readLoginShellEnv =
+      options.readLoginShellEnv ?? createLoginShellEnvReader({ env: this.env });
+    this.reachesGateway = createGatewayReach({ probe: options.probeGatewayAt ?? probeGatewayAt });
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
@@ -387,6 +404,10 @@ export class ApiEndpointService {
       claude: this.inspectClaude(state.agents.claude.enabled),
       codex: this.inspectCodex(state.agents.codex.enabled),
     };
+    // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
+    if (state.agents.claude.enabled) {
+      statuses.claude.issues.push(...(await this.claudeBypassIssues()));
+    }
     const status = statuses[supported];
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
@@ -1627,7 +1648,6 @@ export class ApiEndpointService {
         message: `${settingsPath} has comments or trailing commas. Claude Code can't read it and skips the whole file, so Claude sessions Osuna starts go to the official API. Remove the comments and trailing commas to fix this.`,
       });
     }
-    if (enabled) issues.push(...this.claudeBypassIssues(settingsPath));
     return {
       health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
       issues,
@@ -1636,18 +1656,13 @@ export class ApiEndpointService {
   }
 
   /** 托管设置的地址与开着的云平台开关：都会让 Claude Code 绕开中转站（ADR 0012）。 */
-  private claudeBypassIssues(settingsPath: string): AgentIssue[] {
+  private async claudeBypassIssues(): Promise<AgentIssue[]> {
     const issues: AgentIssue[] = [];
     const managed = claudeManagedSettingsFiles(this.claudeManagedSettingsDir).map(
       readClaudeEnvFile,
     );
     const managedUrl = managedBaseUrl(managed);
-    const gatewayUrl = this.gatewayUrlFor("claude");
-    const isManagedUrlElsewhere =
-      managedUrl !== null &&
-      (gatewayUrl === null ||
-        trimTrailingSlashes(managedUrl.url) !== trimTrailingSlashes(gatewayUrl));
-    if (managedUrl && isManagedUrlElsewhere) {
+    if (managedUrl && !(await this.pointsAtGateway(managedUrl.url))) {
       issues.push({
         code: "managed_base_url",
         params: { file: managedUrl.file, url: managedUrl.url },
@@ -1657,22 +1672,25 @@ export class ApiEndpointService {
     // CLAUDE_CONFIG_DIR 设了时 Claude Code 读它下面的 .claude.json，否则读家目录下的。
     const configDir = this.env.CLAUDE_CONFIG_DIR?.trim();
     const globalConfigPath = path.join(configDir || this.homeDir, ".claude.json");
+    const loginShellVars = await this.readLoginShellEnv(CLAUDE_CLOUD_SWITCH_KEYS);
     const finding = findClaudeCloudSwitch({
       managed,
-      settings: readClaudeEnvFile(settingsPath),
+      settings: readClaudeEnvFile(this.resolveClaudeSettingsPath()),
       globalConfig: readClaudeEnvFile(globalConfigPath),
-      shellEnv: this.env,
+      // 登录 shell 的，没有再看 daemon 自己的（magpie 的 claudeShellEnv）。
+      shellEnv: { ...this.env, ...loginShellVars },
     });
-    if (finding) {
-      const { source, file, key, cloud } = finding;
-      const where = file === null ? "your shell's environment" : file;
-      issues.push({
-        code: "cloud_switch_on",
-        params: { source, key, cloud, ...(file === null ? {} : { file }) },
-        message: `${key} is set in ${where}, so Claude Code sends its requests to ${cloud}, not to the gateway: take it out there to go through the gateway`,
-      });
-    }
+    if (finding) issues.push(cloudSwitchIssue(finding));
     return issues;
+  }
+
+  /** 地址是中转站自己的，或是一条问得到中转站的代理（照 magpie 的 reachesMagpie）。 */
+  private async pointsAtGateway(url: string): Promise<boolean> {
+    const gatewayUrl = this.gatewayUrlFor("claude");
+    if (gatewayUrl === null) return false;
+    if (trimTrailingSlashes(url) === trimTrailingSlashes(gatewayUrl)) return true;
+    const base = proxyBase({ value: url, gateway: gatewayUrl });
+    return base !== null && (await this.reachesGateway(base));
   }
 
   private inspectCodex(enabled: boolean): ApiEndpointFileStatus {
@@ -2099,21 +2117,17 @@ function unparsable(file: UnparsableFile): ApiEndpointRequestError {
   });
 }
 
-/** 照 Claude Code 的读法（去 BOM 后严格 JSON）取一份设置文件的 env；不存在、读不了、读不懂都按没有。 */
-function readClaudeEnvFile(file: string): ClaudeEnvFile {
-  try {
-    const text = readOptionalFile(file)?.toString("utf8");
-    if (text === undefined) return { file, env: null };
-    const parsed: unknown = JSON.parse(text.replace(/^\uFEFF/, ""));
-    const env = isPlainObject(parsed) ? parsed.env : undefined;
-    return { file, env: isPlainObject(env) ? env : null };
-  } catch {
-    return { file, env: null };
-  }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** shell 来源另给 daemon 的系统：修复步骤在 Windows 上讲系统的环境变量。 */
+function cloudSwitchIssue(finding: ClaudeCloudSwitchFinding): AgentIssue {
+  const { source, file, key, cloud } = finding;
+  const where = file ?? "your shell's environment";
+  const location: Record<string, string> =
+    file === null ? { platform: process.platform } : { file };
+  return {
+    code: "cloud_switch_on",
+    params: { source, key, cloud, ...location },
+    message: `${key} is set in ${where}, so Claude Code sends its requests to ${cloud}, not to the gateway: take it out there to go through the gateway`,
+  };
 }
 
 function trimTrailingSlashes(url: string): string {

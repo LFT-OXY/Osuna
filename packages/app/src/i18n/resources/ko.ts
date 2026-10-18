@@ -2651,6 +2651,8 @@ export const ko: TranslationResources = {
             "셸 환경에 {{key}}이(가) 설정되어 있습니다. Osuna와 터미널에서 여는 {{agent}} 모두 여기서 이 값을 받습니다.",
           cloudSwitchOnShellFix:
             "셸 설정 파일(~/.zshrc, ~/.bashrc 등)에서 {{key}}을(를) 설정하는 줄을 지우세요. 그런 다음 Osuna와 터미널을 종료했다가 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          cloudSwitchOnShellFixWindows:
+            'Windows에서 "환경 변수"를 검색해 "시스템 환경 변수 편집"(또는 "계정의 환경 변수 편집")을 여세요. 사용자 변수와 시스템 변수에서 {{key}}을(를) 지우거나 0으로 바꾸세요. 그런 다음 Osuna와 터미널을 종료했다가 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.',
           cloudSwitchOnSettingsDetail:
             "{{file}}에서 {{key}}이(가) 다시 켜졌습니다. 다시 적용하면 다시 빠집니다.",
           managedBaseUrl:

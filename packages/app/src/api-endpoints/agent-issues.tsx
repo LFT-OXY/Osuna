@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { createControlGeometry } from "@/components/ui/control-geometry";
@@ -14,7 +14,7 @@ import { shortenPath } from "@/utils/shorten-path";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import type { AgentIssueAction, AgentIssueView } from "./internal/agent-settings";
 
-const ThemedChevron = withUnistyles(ChevronRight);
+const ThemedChevron = withUnistyles(ChevronDown);
 
 /*
  * 提供方页「第三方接口」区的提示区：Osuna 读状态时查出的「设置被改过」，每条一块，带处理按钮（ADR 0012）。
@@ -125,7 +125,7 @@ function IssueBlock({
   );
 }
 
-/** 「如何修复」：点一下展开修复步骤，再点收起；箭头朝右是收着，朝下是展开（同 SettingsCollapsibleRow）。 */
+/** 「如何修复」：点一下展开修复步骤，再点收起；箭头朝下是收着，展开后转成朝上。 */
 function HowToFixButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
@@ -262,7 +262,7 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
         title: t("settings.apiEndpoints.agent.issues.managedBaseUrl", { agent: providerLabel }),
         description: t("settings.apiEndpoints.agent.issues.managedBaseUrlDetail", {
           agent: providerLabel,
-          file: params.file,
+          file: shortenPath(params.file),
           url: params.url,
         }),
         fixSteps: t("settings.apiEndpoints.agent.issues.managedBaseUrlFix", {
@@ -295,12 +295,8 @@ function cloudSwitchCopy(input: {
 }): IssueCopy {
   const { t, providerLabel, issue } = input;
   const { params } = issue;
-  const values = {
-    agent: providerLabel,
-    cloud: params.cloud,
-    key: params.key,
-    file: params.file ? shortenPath(params.file) : "",
-  };
+  const file = shortenPath(params.file);
+  const values = { agent: providerLabel, cloud: params.cloud, key: params.key, file };
   const title = t("settings.apiEndpoints.agent.issues.cloudSwitchOn", values);
   switch (params.source) {
     case "managed":
@@ -318,12 +314,18 @@ function cloudSwitchCopy(input: {
         ),
         fixSteps: t("settings.apiEndpoints.agent.issues.cloudSwitchOnGlobalConfigFix", values),
       };
-    case "shell":
+    case "shell": {
+      // 修复步骤按 daemon 的系统：Windows 没有 shell 配置文件，讲系统的环境变量。
+      const fixKey =
+        params.platform === "win32"
+          ? "settings.apiEndpoints.agent.issues.cloudSwitchOnShellFixWindows"
+          : "settings.apiEndpoints.agent.issues.cloudSwitchOnShellFix";
       return {
         title,
         description: t("settings.apiEndpoints.agent.issues.cloudSwitchOnShellDetail", values),
-        fixSteps: t("settings.apiEndpoints.agent.issues.cloudSwitchOnShellFix", values),
+        fixSteps: t(fixKey, values),
       };
+    }
     case "settings":
       return {
         title,
@@ -355,6 +357,6 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
   },
   chevronOpen: {
-    transform: [{ rotate: "90deg" }],
+    transform: [{ rotate: "180deg" }],
   },
 }));

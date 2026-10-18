@@ -2659,6 +2659,8 @@ export const zhCN: TranslationResources = {
             "你的 shell 环境里设了 {{key}}。Osuna 和你在终端里打开的 {{agent}} 都从这里拿到它。",
           cloudSwitchOnShellFix:
             "从 shell 的配置文件（如 ~/.zshrc 或 ~/.bashrc）里删掉设置 {{key}} 的那一行。之后退出并重新打开 Osuna 和终端，在 Osuna 里新开 Claude 对话。",
+          cloudSwitchOnShellFixWindows:
+            "在 Windows 里搜索「环境变量」，打开「编辑系统环境变量」（或「编辑账户的环境变量」）。在用户变量和系统变量里删掉 {{key}}，或改成 0。之后退出并重新打开 Osuna 和终端，在 Osuna 里新开 Claude 对话。",
           cloudSwitchOnSettingsDetail: "{{file}} 又打开了 {{key}}。点「重新应用」会再拿掉它。",
           managedBaseUrl: "{{agent}} 不经过中转站：托管设置写了别的地址",
           managedBaseUrlDetail:

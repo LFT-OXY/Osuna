@@ -9,6 +9,9 @@
  * 3. 不起真的 Codex 判断登录方式：第三方接口打开 Codex 开关、读状态时会起一个临时 app-server 问 account/read
  *    （带 `-c model_provider="openai"`），同样换成立刻以 1 退出的进程，daemon 按「判断不出」保持现在的接法。
  *
+ * 4. 不起开发者真实的登录 shell：查 Claude Code 云平台开关时问登录 shell 的进程（带 PASEO_SHELL_PROBE=1）
+ *    同样换掉，daemon 按没问到处理。
+ *
  * 2026-10-18 一条浏览器用例点中了升级按钮，测试 daemon 真的跑了 `brew upgrade --cask claude-code@latest`
  * 又被中途杀掉，弄坏了开发者本机的 Claude Code。
  */
@@ -77,9 +80,19 @@ export function isCodexSignInProbe(_command, args) {
   return list.includes("app-server") && list.includes('model_provider="openai"');
 }
 
+/** 查 Claude Code 云平台开关时问登录 shell 的进程（login-shell-env.ts 带 PASEO_SHELL_PROBE=1）。 */
+export function isLoginShellProbe(options) {
+  return options?.env?.PASEO_SHELL_PROBE === "1";
+}
+
 const realSpawn = childProcess.spawn;
 childProcess.spawn = function sealedSpawn(command, args, options) {
-  if (!isGlobalInstallCommand(command, args) && !isCodexSignInProbe(command, args)) {
+  const spawnOptionsOf = Array.isArray(args) ? options : args;
+  const isSealed =
+    isGlobalInstallCommand(command, args) ||
+    isCodexSignInProbe(command, args) ||
+    isLoginShellProbe(spawnOptionsOf);
+  if (!isSealed) {
     return realSpawn.apply(this, arguments);
   }
   const record = process.env.PASEO_E2E_UPGRADE_RECORD_PATH;

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
@@ -1261,6 +1261,13 @@ describe("Claude Code is told what the endpoint models can do", () => {
   });
 });
 
+/** 假代理把一个请求转给中转站，原样答回。 */
+async function forward(input: { url: string; res: ServerResponse }) {
+  const answer = await fetch(input.url);
+  input.res.writeHead(answer.status, { "content-type": "application/json" });
+  input.res.end(await answer.text());
+}
+
 describe("Claude Code's cloud-platform switches and managed settings", () => {
   let daemon: TestPaseoDaemon | null = null;
   let client: DaemonClient | null = null;
@@ -1287,13 +1294,16 @@ describe("Claude Code's cloud-platform switches and managed settings", () => {
     await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
-  // 假的登录 shell 环境：daemon 的 env 就是它，除了 CLAUDE_CONFIG_DIR 只放用例给的变量。
-  async function start(shellEnv: Record<string, string> = {}): Promise<DaemonClient> {
+  // daemon 自己的环境（除了 CLAUDE_CONFIG_DIR 只放用例给的变量）与假的登录 shell 答出的变量。
+  async function start(
+    input: { daemonEnv?: Record<string, string>; loginShell?: Record<string, string> } = {},
+  ): Promise<DaemonClient> {
     daemon = await createTestPaseoDaemon({
       apiEndpoints: {
-        env: { CLAUDE_CONFIG_DIR: claudeConfigDir, ...shellEnv },
+        env: { CLAUDE_CONFIG_DIR: claudeConfigDir, ...input.daemonEnv },
         homeDir: root,
         claudeManagedSettingsDir: managedDir,
+        readLoginShellEnv: async () => input.loginShell ?? {},
       },
     });
     client = await connect(daemon);
@@ -1403,7 +1413,7 @@ describe("Claude Code's cloud-platform switches and managed settings", () => {
     await writeFile(dropIn, JSON.stringify({ env: { CLAUDE_CODE_USE_BEDROCK: "1" } }));
     const globalConfigPath = path.join(claudeConfigDir, ".claude.json");
     await writeFile(globalConfigPath, JSON.stringify({ env: { CLAUDE_CODE_USE_VERTEX: true } }));
-    const rpc = await start({ CLAUDE_CODE_USE_FOUNDRY: "1" });
+    const rpc = await start({ daemonEnv: { CLAUDE_CODE_USE_FOUNDRY: "1" } });
     await switchOn(rpc);
 
     expect(await claudeIssues(rpc)).toEqual([
@@ -1436,7 +1446,12 @@ describe("Claude Code's cloud-platform switches and managed settings", () => {
     expect(await claudeIssues(rpc)).toEqual([
       {
         code: "cloud_switch_on",
-        params: { source: "shell", key: "CLAUDE_CODE_USE_FOUNDRY", cloud: "Microsoft Foundry" },
+        params: {
+          source: "shell",
+          key: "CLAUDE_CODE_USE_FOUNDRY",
+          cloud: "Microsoft Foundry",
+          platform: process.platform,
+        },
         message: expect.stringContaining("shell"),
       },
     ]);
@@ -1465,5 +1480,49 @@ describe("Claude Code's cloud-platform switches and managed settings", () => {
     const gateway = `http://127.0.0.1:${daemon?.port}/api-endpoint-gateway/`;
     await writeFile(managedFile, JSON.stringify({ env: { ANTHROPIC_BASE_URL: gateway } }));
     expect(await claudeIssues(rpc)).toEqual([]);
+  });
+
+  test("the login shell's own value goes before the daemon's environment", async () => {
+    const rpc = await start({
+      daemonEnv: { CLAUDE_CODE_USE_VERTEX: "1" },
+      loginShell: { CLAUDE_CODE_USE_VERTEX: "0", CLAUDE_CODE_USE_MANTLE: "1" },
+    });
+    await switchOn(rpc);
+
+    expect(await claudeIssues(rpc)).toEqual([
+      expect.objectContaining({
+        code: "cloud_switch_on",
+        params: expect.objectContaining({ source: "shell", key: "CLAUDE_CODE_USE_MANTLE" }),
+      }),
+    ]);
+  });
+
+  test("a managed address that is a proxy forwarding to the gateway goes through it", async () => {
+    const rpc = await start();
+    await switchOn(rpc);
+    const gatewayUrl = `http://127.0.0.1:${daemon?.port}/api-endpoint-gateway`;
+    // 假的合规代理：/corp 下的请求原样转给中转站。
+    const proxy = createServer((req, res) => {
+      void forward({ url: `${gatewayUrl}${(req.url ?? "").replace(/^\/corp/, "")}`, res });
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    const proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}/corp`;
+    const managedFile = path.join(managedDir, "managed-settings.json");
+    try {
+      await writeFile(managedFile, JSON.stringify({ env: { ANTHROPIC_BASE_URL: proxyUrl } }));
+      expect(await claudeIssues(rpc)).toEqual([]);
+
+      // 同样在本机、带路径，但后面不是中转站：照样提示。
+      const elsewhere = `${proxyUrl.replace("/corp", "/other")}`;
+      await writeFile(managedFile, JSON.stringify({ env: { ANTHROPIC_BASE_URL: elsewhere } }));
+      expect(await claudeIssues(rpc)).toEqual([
+        expect.objectContaining({
+          code: "managed_base_url",
+          params: { file: managedFile, url: elsewhere },
+        }),
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    }
   });
 });

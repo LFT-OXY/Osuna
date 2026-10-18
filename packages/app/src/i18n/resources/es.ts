@@ -2695,6 +2695,8 @@ export const es: TranslationResources = {
             "{{key}} está definida en el entorno de tu shell. Osuna y el {{agent}} que abres en la terminal la toman de ahí.",
           cloudSwitchOnShellFix:
             "Quita la línea que define {{key}} del perfil de tu shell, como ~/.zshrc o ~/.bashrc. Después cierra y vuelve a abrir Osuna y la terminal, e inicia chats nuevos de Claude en Osuna.",
+          cloudSwitchOnShellFixWindows:
+            'En Windows, busca "variables de entorno" y abre Editar las variables de entorno del sistema (o Editar las variables de entorno de esta cuenta). Borra {{key}} en Variables de usuario y Variables del sistema, o ponlo en 0. Después cierra y vuelve a abrir Osuna y la terminal, e inicia chats nuevos de Claude en Osuna.',
           cloudSwitchOnSettingsDetail:
             "{{file}} vuelve a activar {{key}}. Aplicar de nuevo lo quita.",
           managedBaseUrl:

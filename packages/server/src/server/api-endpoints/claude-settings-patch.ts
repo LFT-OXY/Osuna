@@ -349,7 +349,7 @@ export function restoreClaudeOfficial(input: {
     text = restoreValue(text, ["model"], input.takeover.model.original, formatting);
   }
   text = removeOwnHints(text, input.takeover, formatting);
-  text = putCloudsBack(text, input.takeover, formatting);
+  text = putCloudsBack({ text, takeover: input.takeover, formatting });
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
   }
@@ -370,16 +370,18 @@ export function restoreClaudeOfficial(input: {
 }
 
 /** 拿掉过的云平台开关放回原值；用户之后又自己设了的（不论开关）归用户，不动。 */
-function putCloudsBack(
-  text: string,
-  takeover: ClaudeSettingsTakeover,
-  formatting: FormattingOptions,
-): string {
-  let next = text;
-  for (const [key, value] of Object.entries(takeover.clouds ?? {})) {
+interface PutCloudsBackInput {
+  text: string;
+  takeover: ClaudeSettingsTakeover;
+  formatting: FormattingOptions;
+}
+
+function putCloudsBack(input: PutCloudsBackInput): string {
+  let next = input.text;
+  for (const [key, value] of Object.entries(input.takeover.clouds ?? {})) {
     const env = readSettings(next).env;
     if (env !== undefined && Object.hasOwn(env, key)) continue;
-    next = edit(next, ["env", key], value, formatting);
+    next = edit(next, ["env", key], value, input.formatting);
   }
   return next;
 }

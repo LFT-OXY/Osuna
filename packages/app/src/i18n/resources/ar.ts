@@ -2635,6 +2635,8 @@ export const ar: TranslationResources = {
             "المتغير {{key}} مضبوط في بيئة الصدفة لديك. يأخذه منها Osuna و{{agent}} الذي تشغّله في الطرفية.",
           cloudSwitchOnShellFix:
             "احذف السطر الذي يضبط {{key}} من ملف إعداد الصدفة، مثل ~/.zshrc أو ~/.bashrc. بعد ذلك أغلق Osuna والطرفية وافتحهما من جديد، وابدأ محادثات Claude جديدة في Osuna.",
+          cloudSwitchOnShellFixWindows:
+            "في Windows ابحث عن «متغيرات البيئة» وافتح «تحرير متغيرات بيئة النظام» (أو «تحرير متغيرات البيئة لحسابك»). احذف {{key}} من متغيرات المستخدم ومتغيرات النظام أو اجعله 0. بعد ذلك أغلق Osuna والطرفية وافتحهما من جديد، وابدأ محادثات Claude جديدة في Osuna.",
           cloudSwitchOnSettingsDetail: "أعاد {{file}} تفعيل {{key}}. «تطبيق مرة أخرى» يزيله.",
           managedBaseUrl: "لا يمر {{agent}} عبر البوابة: الإعدادات المُدارة تضبط عنوانًا آخر",
           managedBaseUrlDetail:

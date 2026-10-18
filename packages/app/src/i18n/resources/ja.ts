@@ -2665,6 +2665,8 @@ export const ja: TranslationResources = {
             "シェルの環境で {{key}} が設定されています。Osuna もターミナルで開く {{agent}} もここから受け取ります。",
           cloudSwitchOnShellFix:
             "シェルの設定ファイル（~/.zshrc や ~/.bashrc など）から {{key}} を設定している行を削除してください。そのあと Osuna とターミナルを終了して開き直し、Osuna では Claude チャットを新しく始めてください。",
+          cloudSwitchOnShellFixWindows:
+            "Windows で「環境変数」を検索し、「システム環境変数の編集」（または「アカウントの環境変数を編集」）を開いてください。ユーザー環境変数とシステム環境変数から {{key}} を削除するか 0 にしてください。そのあと Osuna とターミナルを終了して開き直し、Osuna では Claude チャットを新しく始めてください。",
           cloudSwitchOnSettingsDetail:
             "{{file}} で {{key}} が再びオンになっています。「再適用」で外せます。",
           managedBaseUrl:

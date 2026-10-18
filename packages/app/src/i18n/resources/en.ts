@@ -2700,6 +2700,8 @@ export const en = {
             "{{key}} is set in your shell's environment. Osuna and the {{agent}} you start in the terminal both get it from there.",
           cloudSwitchOnShellFix:
             "Remove the line that sets {{key}} from your shell profile, such as ~/.zshrc or ~/.bashrc. Then quit and reopen Osuna and your terminal, and start new Claude chats in Osuna.",
+          cloudSwitchOnShellFixWindows:
+            'In Windows, search for "environment variables" and open Edit the system environment variables (or Edit environment variables for your account). Delete {{key}} under User variables and System variables, or set it to 0. Then quit and reopen Osuna and your terminal, and start new Claude chats in Osuna.',
           cloudSwitchOnSettingsDetail: "{{file}} turns on {{key}} again. Apply again takes it out.",
           managedBaseUrl:
             "{{agent}} doesn't go through the gateway: its managed settings set another address",

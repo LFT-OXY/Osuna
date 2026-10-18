@@ -2,7 +2,7 @@
 // （https://github.com/yetone/magpie，internal/agent/claude.go 的 claudeClouds / claudeSwitchOn / claudeCloud）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 /*
@@ -47,21 +47,42 @@ export interface ClaudeEnvFile {
   env: Record<string, unknown> | null;
 }
 
+/** 按变量名找出写了它的那份文件；没有时为 null。 */
+type FindEnvFile = (key: string) => ClaudeEnvFile | null;
+
+/** 一处可能写了开关的地方。 */
+interface ClaudeEnvPlace {
+  source: ClaudeCloudSource;
+  find: FindEnvFile;
+}
+
+/** 写了某个变量的那一处。 */
+interface ClaudeEnvSetter {
+  source: ClaudeCloudSource;
+  file: ClaudeEnvFile;
+}
+
+export interface FindClaudeCloudSwitchInput {
+  // 按 Claude Code 的合并顺序排好的托管设置文件。
+  managed: ClaudeEnvFile[];
+  settings: ClaudeEnvFile;
+  globalConfig: ClaudeEnvFile;
+  // 登录 shell 的变量（没问到的再看 daemon 自己的环境）。
+  shellEnv: NodeJS.ProcessEnv;
+}
+
 /**
  * 哪个开着的开关把 Claude Code 带去云平台、写在哪；都没开时为 null。按名单顺序，每个开关看
  * 托管设置、用户 settings.json、~/.claude.json，最先有这个变量的那一处说了算（Claude Code 按
  * shell → ~/.claude.json → 用户设置 → 托管设置依次盖上去）；三处都没有才看登录 shell 的环境。
+ * 几处同时开着时只报第一个（magpie 的 claudeCloud 也是），去掉后下一次读状态再报下一个。
  * 项目自己的 .claude/settings.json 不看：Osuna 不知道 Claude Code 在哪些目录里跑。
  */
-export function findClaudeCloudSwitch(input: {
-  managed: ClaudeEnvFile[];
-  settings: ClaudeEnvFile;
-  globalConfig: ClaudeEnvFile;
-  shellEnv: NodeJS.ProcessEnv;
-}): ClaudeCloudSwitchFinding | null {
-  const managed = lastSetter(input.managed);
-  const files: { source: ClaudeCloudSource; find: (key: string) => ClaudeEnvFile | null }[] = [
-    { source: "managed", find: managed },
+export function findClaudeCloudSwitch(
+  input: FindClaudeCloudSwitchInput,
+): ClaudeCloudSwitchFinding | null {
+  const places: ClaudeEnvPlace[] = [
+    { source: "managed", find: lastSetter(input.managed) },
     { source: "settings", find: (key) => (hasKey(input.settings, key) ? input.settings : null) },
     {
       source: "global_config",
@@ -70,7 +91,7 @@ export function findClaudeCloudSwitch(input: {
   ];
   for (const key of CLAUDE_CLOUD_SWITCH_KEYS) {
     const cloud = CLAUDE_CLOUD_SWITCHES[key];
-    const setter = firstSetter(files, key);
+    const setter = firstSetter({ places, key });
     if (setter) {
       if (isClaudeSwitchOn(setter.file.env?.[key])) {
         return { source: setter.source, file: setter.file.file, key, cloud };
@@ -82,19 +103,21 @@ export function findClaudeCloudSwitch(input: {
   return null;
 }
 
-function firstSetter(
-  files: { source: ClaudeCloudSource; find: (key: string) => ClaudeEnvFile | null }[],
-  key: string,
-): { source: ClaudeCloudSource; file: ClaudeEnvFile } | null {
-  for (const { source, find } of files) {
-    const file = find(key);
+interface FirstSetterInput {
+  places: ClaudeEnvPlace[];
+  key: string;
+}
+
+function firstSetter(input: FirstSetterInput): ClaudeEnvSetter | null {
+  for (const { source, find } of input.places) {
+    const file = find(input.key);
     if (file) return { source, file };
   }
   return null;
 }
 
 /** 托管文件按合并顺序排好时，最后一份有这个变量的说了算（env 按变量逐个合并，后面的盖前面的）。 */
-function lastSetter(files: ClaudeEnvFile[]): (key: string) => ClaudeEnvFile | null {
+function lastSetter(files: ClaudeEnvFile[]): FindEnvFile {
   return (key) => files.findLast((file) => hasKey(file, key)) ?? null;
 }
 
@@ -102,8 +125,14 @@ function hasKey(file: ClaudeEnvFile, key: string): boolean {
   return file.env !== null && Object.hasOwn(file.env, key);
 }
 
-/** 托管设置里最终生效的 ANTHROPIC_BASE_URL 与写它的文件；没写或是空串时为 null。 */
-export function managedBaseUrl(managed: ClaudeEnvFile[]): { file: string; url: string } | null {
+/** 托管设置里最终生效的 ANTHROPIC_BASE_URL 与写它的文件。 */
+export interface ManagedBaseUrl {
+  file: string;
+  url: string;
+}
+
+/** 没写或是空串时为 null。 */
+export function managedBaseUrl(managed: ClaudeEnvFile[]): ManagedBaseUrl | null {
   const setter = lastSetter(managed)("ANTHROPIC_BASE_URL");
   const raw = setter?.env?.ANTHROPIC_BASE_URL;
   if (!setter || typeof raw !== "string" || raw.trim() === "") return null;
@@ -123,14 +152,55 @@ export function defaultClaudeManagedSettingsDir(platform: NodeJS.Platform): stri
  */
 export function claudeManagedSettingsFiles(dir: string): string[] {
   const dropInDir = path.join(dir, "managed-settings.d");
-  let dropIns: string[] = [];
-  try {
-    dropIns = readdirSync(dropInDir)
-      .filter((name) => !name.startsWith(".") && name.endsWith(".json"))
-      .sort()
-      .map((name) => path.join(dropInDir, name));
-  } catch {
-    // 目录不存在或读不了：没有 drop-in。
-  }
+  const dropIns = readOptionalDir(dropInDir)
+    .filter((name) => !name.startsWith(".") && name.endsWith(".json"))
+    .sort()
+    .map((name) => path.join(dropInDir, name));
   return [path.join(dir, "managed-settings.json"), ...dropIns];
+}
+
+/** 目录不存在（或那里不是目录）时没有条目；别的读不了的情况照样抛出。 */
+function readOptionalDir(dir: string): string[] {
+  try {
+    return readdirSync(dir);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw error;
+  }
+}
+
+/**
+ * 照 Claude Code 的读法（去 BOM 后严格 JSON）取一份设置文件的 env。不存在、读不懂（Claude Code 同样
+ * 当它没写）、或 env 不是对象时 env 为 null；别的读不了的情况照样抛出。
+ */
+export function readClaudeEnvFile(file: string): ClaudeEnvFile {
+  const text = readOptionalText(file);
+  if (text === null) return { file, env: null };
+  const parsed = parseStrictJson(text.replace(/^\uFEFF/, ""));
+  const env = isPlainObject(parsed) ? parsed.env : undefined;
+  return { file, env: isPlainObject(env) ? env : null };
+}
+
+function readOptionalText(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** 读不懂的 JSON 按没有；只接 JSON.parse 的语法错误。 */
+function parseStrictJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

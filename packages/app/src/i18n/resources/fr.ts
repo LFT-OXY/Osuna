@@ -2697,6 +2697,8 @@ export const fr: TranslationResources = {
             "{{key}} est défini dans l'environnement de votre shell. Osuna et le {{agent}} que vous lancez dans le terminal le reçoivent de là.",
           cloudSwitchOnShellFix:
             "Supprimez la ligne qui définit {{key}} dans le profil de votre shell, par exemple ~/.zshrc ou ~/.bashrc. Quittez et rouvrez ensuite Osuna et votre terminal, puis ouvrez de nouvelles discussions Claude dans Osuna.",
+          cloudSwitchOnShellFixWindows:
+            "Dans Windows, cherchez « variables d'environnement » et ouvrez Modifier les variables d'environnement système (ou Modifier les variables d'environnement pour votre compte). Supprimez {{key}} dans les variables utilisateur et les variables système, ou mettez-le à 0. Quittez et rouvrez ensuite Osuna et votre terminal, puis ouvrez de nouvelles discussions Claude dans Osuna.",
           cloudSwitchOnSettingsDetail: "{{file}} réactive {{key}}. Réappliquer le retire.",
           managedBaseUrl:
             "{{agent}} ne passe pas par la passerelle : ses réglages gérés imposent une autre adresse",
