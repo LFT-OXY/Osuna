@@ -1451,12 +1451,21 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(await codexIssues()).toEqual([]);
     });
 
-    test("a config.toml Osuna can't read is told once, as unreadable, not again for multi_agent_v2", async () => {
+    test("a config.toml Osuna can't read is told apart: it can't be changed, and multi_agent_v2 can't be checked", async () => {
       await saveEndpoint({ name: "Relay A", models: ["first"] });
       await turnOn("codex", "first");
       await setCodex({ allowsAnySubagentModel: true });
       await writeFile(configPath, "model = \n");
 
+      const issues = await codexIssues();
+      expect(issueCodes(issues)).toEqual(["config_unparsable", "codex_multi_agent_v2_unreadable"]);
+      expect(issues[1]).toEqual({
+        code: "codex_multi_agent_v2_unreadable",
+        params: { file: configPath, detail: expect.any(String) },
+        message: `Subagents on any model is on, but Osuna couldn't read ${configPath} to check Codex's own multi_agent_v2`,
+      });
+
+      await setCodex({ allowsAnySubagentModel: false });
       expect(issueCodes(await codexIssues())).toEqual(["config_unparsable"]);
     });
   });

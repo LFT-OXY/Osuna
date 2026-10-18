@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
 import type pino from "pino";
-import { isErrnoException } from "../pid-lock.js";
+import { isErrnoException } from "../../utils/errno.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 
 /*

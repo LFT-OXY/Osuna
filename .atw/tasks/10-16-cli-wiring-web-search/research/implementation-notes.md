@@ -740,5 +740,5 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 封存的任务交到接口模型上：照 magpie `sealedTaskError`（没有 lead 记录的那种）回 400，末尾接 `sealedWayOut`：开关关着让用户打开「Codex Subagents can use any model」，开着说这个对话仍在多 Agent V2 上。这段话发给 Codex，照 magpie 用英文（`codex-subagents.ts` 的 `sealedTaskMessage`）。只在 ChatGPT 后端那组路径上拒：那里封存任务的是 ChatGPT；API key 接法下没有 ChatGPT 自带模型。
 - 拿不到 ChatGPT 清单、缓存没标过 V1 时也记下缓存里的版本（magpie `CacheEntries` 的 `Remember`），所以 ChatGPT 一直连不上时关掉开关也能放回。
 - endpoints.json 读不懂时不改模型，spawn_agent 照样补 Codex 自己的模型。
-- config.toml 读不懂时只报 `config_unparsable`，不再另报 `codex_multi_agent_v2_unreadable`。
+- config.toml 读不懂时两条都报（第二轮改回）：magpie 的 `GetTOMLTop` 读不懂时退回逐行找，Codex 仍算经过 magpie，`Check` 在 `GetTOMLTable` 报解析错（行上的「unwired」），`Notice` 另给 `codexV1ReadErrorNotice`（`internal/agent/codex.go:162-171`、`1300-1305`）。两条说的是两件事：改不了配置、查不了 multi_agent_v2。
 - 提示标题照开关的原名加引号（「Codex Subagent 可用任意模型」/ "Codex Subagents can use any model"），截图重拍。

@@ -538,13 +538,9 @@ export class ApiEndpointService {
       const replaced = this.modelReplacedIssue(state, agentProvider);
       if (replaced) statuses[agentProvider].issues.push(replaced);
     }
-    // 读不懂的 config.toml 已经有「读不懂」那条，不再另说查不了 multi_agent_v2。
-    const isCodexUnparsable = statuses.codex.issues.some(
-      (issue) => issue.code === "config_unparsable",
-    );
+    // 读不懂的 config.toml 照 magpie 两条都说：「读不懂」说改不了配置，这条说查不了 multi_agent_v2。
     const multiAgentV2 = this.codexMultiAgentV2Issue(state);
-    const isMultiAgentV2Told = multiAgentV2 !== null && !isCodexUnparsable;
-    if (isMultiAgentV2Told) statuses.codex.issues.push(multiAgentV2);
+    if (multiAgentV2 !== null) statuses.codex.issues.push(multiAgentV2);
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
     if (state.agents.claude.enabled) {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));

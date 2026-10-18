@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { uptime } from "node:os";
 import { getHostName } from "./host-name.js";
 import { z } from "zod";
+import { isErrnoException } from "../utils/errno.js";
 
 export const pidLockInfoSchema = z.object({
   pid: z.number().int().positive(),
@@ -24,10 +25,6 @@ export interface PidLockInfo extends z.infer<typeof pidLockInfoSchema> {}
 function parsePidLockInfo(raw: unknown): PidLockInfo | null {
   const result = pidLockInfoSchema.safeParse(raw);
   return result.success ? result.data : null;
-}
-
-export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && "code" in err;
 }
 
 export class PidLockError extends Error {

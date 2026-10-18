@@ -6,7 +6,7 @@ import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import type { Request, Response } from "express";
 import type pino from "pino";
-import { isErrnoException } from "../../pid-lock.js";
+import { isErrnoException } from "../../../utils/errno.js";
 import type { CodexModelEntry } from "../codex-model-catalog.js";
 import {
   isAgentsV1Marked,

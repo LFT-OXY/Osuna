@@ -405,7 +405,7 @@ function shapeChatGptTurn(input: {
   });
 }
 
-/** endpoints.json 读不懂时为 null：Codex 自己的模型照常转给 ChatGPT，只是不改请求。 */
+/** endpoints.json 读不懂时为 null：Codex 自己的模型照常转给 ChatGPT，不改到强制 Subagent 模型，spawn_agent 只补 Codex 自己的模型。 */
 function stateForShaping(input: {
   store: ApiEndpointStore;
   logger: pino.Logger;
