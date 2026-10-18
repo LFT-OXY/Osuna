@@ -89,6 +89,13 @@ function AgentApiEndpoints({
   }, [hasIssues, providerEntry]);
   // 每个会话都锁在哪一档由主机说（只有 Claude Code 的 max 会）。
   const lockedThinkingOptionId = providerEntry?.lockedThinkingOptionId ?? null;
+  // Subagent 思考档位的选项由主机按 Subagent 模型或 settings.json 里的主模型给（照 magpie 的 subagent_effort）。
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有后台小任务与 Subagent 这几项。
+  const subagentThinkingOptions = useMemo(() => {
+    if (!hasIssues) return null;
+    const options = providerEntry?.subagentThinkingOptions ?? [];
+    return options.map((option) => ({ id: option.id, label: option.label }));
+  }, [hasIssues, providerEntry]);
   const lastConnection = endpoints.lastConnection;
   const isOwnConnection = lastConnection?.provider === provider;
   const connection = isOwnConnection ? lastConnection.connection : null;
@@ -173,6 +180,7 @@ function AgentApiEndpoints({
         provider,
         endpointModelGroups,
         lockedThinkingOptionId,
+        subagentThinkingOptions,
         now,
       })}
       busy={endpoints.pendingAgent === provider}

@@ -22,19 +22,19 @@ import { sseEvent } from "./translation/sse.js";
 describe("a Claude Code request passed through to another vendor's model", () => {
   test("a Claude model gets the body byte for byte", () => {
     const body = `{"model":"claude-sonnet-4-5", "thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[]}`;
-    expect(fitAnthropicBody(body, "claude-sonnet-4-5")).toBe(body);
+    expect(fitAnthropicBody({ text: body, model: "claude-sonnet-4-5" })).toBe(body);
   });
 
   test("Claude's adaptive thinking and effort are taken out, the rest left as it was", () => {
     const body = `{"model":"glm-4.6", "max_tokens" : 32000,"thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[{"role":"user","content":"hi"}]}`;
-    expect(fitAnthropicBody(body, "glm-4.6")).toBe(
+    expect(fitAnthropicBody({ text: body, model: "glm-4.6" })).toBe(
       `{"model":"glm-4.6", "max_tokens" : 32000,"messages":[{"role":"user","content":"hi"}]}`,
     );
   });
 
   test("the effort goes and a structured output format beside it stays", () => {
     const body = `{"model":"kimi-k2","thinking":{"type":"adaptive"},"output_config":{"effort":"low","format":{"type":"json_schema","schema":{"type":"object"}}},"messages":[]}`;
-    expect(JSON.parse(fitAnthropicBody(body, "kimi-k2"))).toEqual({
+    expect(JSON.parse(fitAnthropicBody({ text: body, model: "kimi-k2" }))).toEqual({
       model: "kimi-k2",
       output_config: { format: { type: "json_schema", schema: { type: "object" } } },
       messages: [],
@@ -43,7 +43,7 @@ describe("a Claude Code request passed through to another vendor's model", () =>
 
   test("a request that doesn't mention thinking is told thinking is off", () => {
     const body = `{"model":"kimi-k2","max_tokens":512,"messages":[{"role":"user","content":"Title this"}]}`;
-    expect(JSON.parse(fitAnthropicBody(body, "kimi-k2"))).toEqual({
+    expect(JSON.parse(fitAnthropicBody({ text: body, model: "kimi-k2" }))).toEqual({
       model: "kimi-k2",
       max_tokens: 512,
       messages: [{ role: "user", content: "Title this" }],
@@ -54,8 +54,8 @@ describe("a Claude Code request passed through to another vendor's model", () =>
   test("thinking with a budget, or turned off, goes as the agent sent it", () => {
     const enabled = `{"model":"kimi-k2","thinking":{"type":"enabled","budget_tokens":4096},"messages":[]}`;
     const disabled = `{"model":"kimi-k2","thinking":{"type":"disabled"},"messages":[]}`;
-    expect(fitAnthropicBody(enabled, "kimi-k2")).toBe(enabled);
-    expect(fitAnthropicBody(disabled, "kimi-k2")).toBe(disabled);
+    expect(fitAnthropicBody({ text: enabled, model: "kimi-k2" })).toBe(enabled);
+    expect(fitAnthropicBody({ text: disabled, model: "kimi-k2" })).toBe(disabled);
   });
 });
 
@@ -125,7 +125,9 @@ describe("a Claude Code conversation passed through to DeepSeek's Anthropic endp
 	{"role":"user","content":"thanks, now commit"}]}`;
 
   test("each tool turn goes with a thinking block, Claude's sealed thinking as a space; the rest as it came", () => {
-    const sent = JSON.parse(fitAnthropicBody(conversation("deepseek-flash"), "deepseek-flash")) as {
+    const sent = JSON.parse(
+      fitAnthropicBody({ text: conversation("deepseek-flash"), model: "deepseek-flash" }),
+    ) as {
       messages: unknown[];
     };
     const original = JSON.parse(conversation("deepseek-flash")) as { messages: unknown[] };
@@ -164,7 +166,9 @@ describe("a Claude Code conversation passed through to DeepSeek's Anthropic endp
   });
 
   test("another vendor's model is sent the conversation as it came", () => {
-    expect(fitAnthropicBody(conversation("glm-5.2"), "glm-5.2")).toBe(conversation("glm-5.2"));
+    expect(fitAnthropicBody({ text: conversation("glm-5.2"), model: "glm-5.2" })).toBe(
+      conversation("glm-5.2"),
+    );
   });
 });
 

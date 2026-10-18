@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
@@ -6,6 +7,7 @@ import {
   readClaudeCliPicks,
   restoreClaudeOfficial,
   type ClaudeSettingsTakeover,
+  type ClaudeSubagentWiring,
 } from "./claude-settings-patch.js";
 
 const GATEWAY = {
@@ -19,7 +21,7 @@ const GATEWAY = {
   defaultThinking: null,
   ultraCode: null,
   backgroundModel: null,
-  subagentModel: null,
+  subagent: null,
 };
 
 // 接口模型的提示：起始模型的上下文、最短的回复上限、各模型的思考档位。
@@ -99,6 +101,18 @@ function setEnv(text: string, key: string, value: string): string {
   const settings = JSON.parse(text) as { env: Record<string, string> };
   settings.env[key] = value;
   return `${JSON.stringify(settings, null, 2)}\n`;
+}
+
+// 测试要动的 env，其余键照原样带着。
+const SettingsWithEnvSchema = z
+  .object({ env: z.record(z.string(), z.unknown()) })
+  .catchall(z.unknown());
+
+/** 拿掉 env 里的一个键，模拟用户手删。 */
+function withoutEnv(text: string, key: string): string {
+  const settings = SettingsWithEnvSchema.parse(JSON.parse(text));
+  const env = Object.fromEntries(Object.entries(settings.env).filter(([name]) => name !== key));
+  return `${JSON.stringify({ ...settings, env }, null, 2)}\n`;
 }
 
 function restore(text: string | null, takeover: ClaudeSettingsTakeover) {
@@ -304,11 +318,10 @@ describe("applyClaudeApiEndpoint", () => {
     const second = applyClaudeApiEndpoint({
       text: first.text,
       wiring: {
+        ...GATEWAY,
         baseUrl: "http://127.0.0.1:7000/api-endpoint-gateway",
         token: "t2",
         model: "glm",
-        modelPicker: [],
-        hintEnv: {},
       },
       takeover: first.takeover,
     });
@@ -1238,7 +1251,7 @@ describe("background task and Subagent models in settings.json", () => {
   function wired(input: {
     text: string | null;
     backgroundModel?: string | null;
-    subagentModel?: string | null;
+    subagent?: ClaudeSubagentWiring | null;
     takeover?: ClaudeSettingsTakeover | null;
   }) {
     const result = applyClaudeApiEndpoint({
@@ -1246,7 +1259,7 @@ describe("background task and Subagent models in settings.json", () => {
       wiring: {
         ...GATEWAY,
         backgroundModel: input.backgroundModel ?? null,
-        subagentModel: input.subagentModel ?? null,
+        subagent: input.subagent ?? null,
       },
       takeover: input.takeover ?? null,
     });
@@ -1258,7 +1271,7 @@ describe("background task and Subagent models in settings.json", () => {
     const { text, takeover } = wired({
       text: USER_SETTINGS,
       backgroundModel: "glm-4.6",
-      subagentModel: "claude-opus-4-6:high",
+      subagent: { model: "claude-opus-4-6", effort: "high" },
     });
     const env = JSON.parse(text).env;
     expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBe("glm-4.6");
@@ -1281,7 +1294,11 @@ describe("background task and Subagent models in settings.json", () => {
 
   it("drops what it wrote once unset again, keeping the first originals", () => {
     const own = setEnv(USER_SETTINGS, "CLAUDE_CODE_SUBAGENT_MODEL", "my-subagent");
-    const first = wired({ text: own, backgroundModel: "glm-4.6", subagentModel: "kimi-k2:low" });
+    const first = wired({
+      text: own,
+      backgroundModel: "glm-4.6",
+      subagent: { model: "kimi-k2", effort: "low" },
+    });
     const second = wired({ text: first.text, takeover: first.takeover });
     const env = JSON.parse(second.text).env;
     expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBeUndefined();
@@ -1289,17 +1306,28 @@ describe("background task and Subagent models in settings.json", () => {
     expect(JSON.parse(restore(second.text, second.takeover))).toEqual(JSON.parse(own));
   });
 
+  it("puts a level set alone after the main model the file holds, the CLI's own one included (magpie setSubagent)", () => {
+    const first = wired({ text: USER_SETTINGS, subagent: { model: null, effort: "high" } });
+    expect(JSON.parse(first.text).env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("kimi-k2:high");
+
+    const saved = `${JSON.stringify({ ...JSON.parse(first.text), model: "glm-4.6[1m]" }, null, 2)}\n`;
+    const again = wired({
+      text: saved,
+      subagent: { model: null, effort: "high" },
+      takeover: first.takeover,
+    });
+    expect(JSON.parse(again.text).env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("glm-4.6:high[1m]");
+  });
+
   it("reads the Subagent model the file holds once it is no longer what Osuna wrote", () => {
-    const first = wired({ text: USER_SETTINGS, subagentModel: "kimi-k2:low" });
+    const first = wired({ text: USER_SETTINGS, subagent: { model: "kimi-k2", effort: "low" } });
     expect(readClaudeCliPicks({ text: first.text, takeover: first.takeover })?.subagent).toBeNull();
 
     const edited = setEnv(first.text, "CLAUDE_CODE_SUBAGENT_MODEL", "glm-4.6:high");
     expect(readClaudeCliPicks({ text: edited, takeover: first.takeover })?.subagent).toEqual({
       now: "glm-4.6:high",
     });
-    const settings = JSON.parse(first.text) as { env: Record<string, string> };
-    delete settings.env.CLAUDE_CODE_SUBAGENT_MODEL;
-    const removed = `${JSON.stringify(settings, null, 2)}\n`;
+    const removed = withoutEnv(first.text, "CLAUDE_CODE_SUBAGENT_MODEL");
     expect(readClaudeCliPicks({ text: removed, takeover: first.takeover })?.subagent).toEqual({
       now: null,
     });

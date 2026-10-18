@@ -8584,6 +8584,35 @@ describe("a model asked for at an effort of its own, as the Subagent model is wr
     expect(body.output_config).toEqual({ effort: "high" });
   });
 
+  test("a level the model lacks reaches it as the nearest it has (magpie fitLevel)", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway } = await start({
+      upstreamA,
+      modelsA: ["claude-sonnet-5-5"],
+      claudeDefaultModel: "claude-sonnet-5-5",
+      modelsDev: { "claude-sonnet-5-5": { efforts: ["low", "medium", "high"] } },
+    });
+
+    await fetch(
+      `${gateway}/v1/messages?beta=true`,
+      claudeRequest(askedAt("claude-sonnet-5-5:max")),
+    );
+
+    expect(receivedBody(upstreamA.requests[0]).output_config).toEqual({ effort: "high" });
+  });
+
+  test("another vendor's model on an Anthropic address keeps adaptive thinking at that effort, as magpie sends it", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway } = await start({ upstreamA });
+
+    await fetch(`${gateway}/v1/messages?beta=true`, claudeRequest(askedAt("kimi-k2:high")));
+
+    const body = receivedBody(upstreamA.requests[0]);
+    expect(body.model).toBe("kimi-k2");
+    expect(body.thinking).toEqual({ type: "adaptive" });
+    expect(body.output_config).toEqual({ effort: "high" });
+  });
+
   test("a Chat endpoint is sent the model without the suffix, at that reasoning_effort", async () => {
     const chat = await startUpstream();
     chat.respond = (_request, res) => chatStream(res);

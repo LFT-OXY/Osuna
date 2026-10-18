@@ -187,6 +187,8 @@ export function selectAgentApiEndpointsView(input: {
   endpointModelGroups: ApiEndpointModelGroup[] | null;
   // 提供方快照说每个会话都锁在的思考档位（第三方接口的默认思考档位是 max 时）；没有为 null。
   lockedThinkingOptionId: string | null;
+  // 提供方快照里 Subagent 思考档位能选的档位（主机按 Subagent 模型或文件里的主模型给）；主机不支持这几项时为 null，不显示。
+  subagentThinkingOptions: DefaultThinkingOption[] | null;
   now: Date;
 }): AgentApiEndpointsView {
   const { state, provider, now } = input;
@@ -237,7 +239,7 @@ export function selectAgentApiEndpointsView(input: {
     provider,
     agent,
     modelOptions,
-    groups: input.endpointModelGroups ?? [],
+    subagentThinkingOptions: input.subagentThinkingOptions,
   });
 
   return {
@@ -280,25 +282,22 @@ function defaultThinkingView(input: {
   };
 }
 
-/** 后台小任务模型与 Subagent 的显示；只有 Claude Code、总开关开着、主机报了这几项时才有。 */
+/** 后台小任务模型与 Subagent 的显示；只有 Claude Code、总开关开着、主机支持时才有。 */
 function claudeSideModelsView(input: {
   provider: string;
   agent: ApiEndpointAgentSettings;
   modelOptions: DefaultModelOption[];
-  groups: ApiEndpointModelGroup[];
+  subagentThinkingOptions: DefaultThinkingOption[] | null;
 }): ClaudeSideModelsView | null {
-  const { agent, modelOptions } = input;
-  // COMPAT(apiEndpointClaudeSideModels): added in v0.17.0, remove after 2027-04-18. 老 daemon 不报这几项，也不收。
-  const reportsSideModels = agent.backgroundModelId !== undefined;
-  const showsSideModels = input.provider === "claude" && agent.enabled && reportsSideModels;
-  if (!showsSideModels) return null;
-  const subagentModelId = agent.subagentModelId ?? null;
+  const { agent, modelOptions, subagentThinkingOptions } = input;
+  const isShown = input.provider === "claude" && agent.enabled && subagentThinkingOptions !== null;
+  if (!isShown) return null;
   return {
     backgroundModel: displayedDefaultModel(modelOptions, agent.backgroundModelId ?? null),
-    subagentModel: displayedDefaultModel(modelOptions, subagentModelId),
+    subagentModel: displayedDefaultModel(modelOptions, agent.subagentModelId ?? null),
     subagentThinking: {
       value: agent.subagentThinkingOptionId ?? null,
-      options: modelLevels(input.groups, subagentModelId ?? agent.defaultModelId),
+      options: subagentThinkingOptions,
     },
   };
 }
@@ -319,14 +318,6 @@ function levelsWithoutUltraCode(options: DefaultThinkingOption[]): DefaultThinki
   return options
     .filter((option) => option.id !== ULTRA_CODE_OPTION_ID)
     .map((option) => ({ id: option.id, label: option.label }));
-}
-
-function modelLevels(
-  groups: ApiEndpointModelGroup[],
-  modelId: string | null,
-): DefaultThinkingOption[] {
-  if (modelId === null) return [];
-  return levelsWithoutUltraCode(modelThinkingOptions(groups, modelId));
 }
 
 /** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */

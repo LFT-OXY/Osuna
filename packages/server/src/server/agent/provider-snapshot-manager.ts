@@ -22,6 +22,7 @@ import {
   type ActiveApiEndpointLookup,
   type ApiEndpointModelGroupsLookup,
   type LockedThinkingLookup,
+  type SubagentThinkingLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -141,6 +142,7 @@ export interface ProviderSnapshotManagerOptions {
   activeApiEndpoint?: ActiveApiEndpointLookup;
   apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   lockedThinking?: LockedThinkingLookup;
+  subagentThinking?: SubagentThinkingLookup;
 }
 
 interface ProviderSnapshotRefreshOptions {
@@ -272,6 +274,7 @@ export class ProviderSnapshotManager {
   private readonly activeApiEndpoint?: ActiveApiEndpointLookup;
   private readonly apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   private readonly lockedThinking?: LockedThinkingLookup;
+  private readonly subagentThinking?: SubagentThinkingLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -300,6 +303,7 @@ export class ProviderSnapshotManager {
     this.activeApiEndpoint = options.activeApiEndpoint;
     this.apiEndpointModelGroups = options.apiEndpointModelGroups;
     this.lockedThinking = options.lockedThinking;
+    this.subagentThinking = options.subagentThinking;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -1110,6 +1114,7 @@ export class ProviderSnapshotManager {
       const activeApiEndpoint = this.activeApiEndpoint?.(provider) ?? undefined;
       const apiEndpointModelGroups = this.apiEndpointModelGroups?.(provider) ?? undefined;
       const lockedThinkingOptionId = this.lockedThinking?.(provider) ?? undefined;
+      const subagentThinkingOptions = this.subagentThinking?.(provider) ?? undefined;
       const models = normalizeAgentModelCatalog(catalogModels);
       if (models.length !== catalogModels.length) {
         this.logger.warn(
@@ -1128,6 +1133,7 @@ export class ProviderSnapshotManager {
         activeApiEndpoint,
         apiEndpointModelGroups,
         lockedThinkingOptionId,
+        subagentThinkingOptions,
         modes: catalog.modes,
         version,
         fetchedAt: new Date().toISOString(),

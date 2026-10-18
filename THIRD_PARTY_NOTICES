@@ -662,10 +662,11 @@ agent's own format) follows claudeEnv, claudeOwnEnv, writeTiers, tierAt,
 tierWith and the subagent and subagent_effort fields in magpie's
 internal/agent/claude.go, MemberEffort and MemberEfforts in
 internal/provider/groupeffort.go, askedAt in internal/gateway/gateway.go, and
-withFixedEffort and withEffort in internal/gateway/decide.go:
+withFixedEffort, withEffort and fitLevel in internal/gateway/decide.go:
 
   packages/server/src/server/api-endpoints/gateway/fixed-effort.ts
   packages/server/src/server/api-endpoints/gateway/gateway.ts
+  packages/server/src/server/api-endpoints/gateway/passthrough.ts
   packages/server/src/server/api-endpoints/claude-settings-patch.ts
   packages/server/src/server/api-endpoints/service.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts

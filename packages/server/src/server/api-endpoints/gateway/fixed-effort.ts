@@ -1,12 +1,12 @@
 // 移植自 magpie（https://github.com/yetone/magpie，internal/gateway/gateway.go 的 askedAt、internal/provider/groupeffort.go 的
-// MemberEffort 与 MemberEfforts、internal/gateway/decide.go 的 withFixedEffort 与 withEffort）。
+// MemberEffort 与 MemberEfforts、internal/gateway/decide.go 的 withFixedEffort、withEffort 与 fitLevel）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { applyEdits, modify, type JSONPath } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ONE_MILLION_MARK } from "../claude-model-hints.js";
 import { isRecord, parseJson } from "../upstream-http.js";
-import { budgetOf, effortOf } from "./translation/ir.js";
+import { budgetOf, effortOf, nearestEffort } from "./translation/ir.js";
 
 /*
  * 「模型名:档位」（Claude Code 的 Subagent 模型带了思考档位，[1m] 在档位后面）：中转站按模型名选接口，
@@ -28,13 +28,34 @@ export interface AskedAt {
 export function askedAt(input: { id: string; isListed: (id: string) => boolean }): AskedAt {
   const { id } = input;
   const isMarked = id.endsWith(ONE_MILLION_MARK);
-  const bare = isMarked ? id.slice(0, -ONE_MILLION_MARK.length) : id;
+  let bare = id;
+  let mark = "";
+  if (isMarked) {
+    bare = id.slice(0, -ONE_MILLION_MARK.length);
+    mark = ONE_MILLION_MARK;
+  }
   const colon = bare.lastIndexOf(":");
-  const effort = colon > 0 ? fixedEffortOf(bare.slice(colon + 1)) : null;
+  let effort: FixedEffort | null = null;
+  if (colon > 0) effort = fixedEffortOf(bare.slice(colon + 1));
   const isWhole = effort === null || input.isListed(bare) || input.isListed(id);
   if (isWhole) return { model: id, effort: null };
-  const mark = isMarked ? ONE_MILLION_MARK : "";
   return { model: `${bare.slice(0, colon)}${mark}`, effort };
+}
+
+/**
+ * magpie fitLevel：这家这个模型自己的档位里离要的最近的一档（一样近取高）；档位不知道时照要的发，但不超过 high 以上的 xhigh。
+ * none 照发（关掉思考）。
+ */
+export function fitFixedEffort(input: {
+  effort: FixedEffort;
+  levels: readonly string[] | undefined;
+}): FixedEffort {
+  if (input.effort === "none") return "none";
+  const levels = [...(input.levels ?? [])];
+  const nearest = nearestEffort(input.effort, levels);
+  const isUnknownXhigh = levels.length === 0 && nearest === "xhigh";
+  if (isUnknownXhigh) return "high";
+  return fixedEffortOf(nearest) ?? input.effort;
 }
 
 function fixedEffortOf(value: string): FixedEffort | null {
@@ -96,7 +117,8 @@ function anthropicAt(input: AnthropicAtInput): string {
 function budgetWithin(input: { body: Record<string, unknown>; budget: number }): number {
   const maxTokens = input.body.max_tokens;
   const hasMaxTokens = typeof maxTokens === "number" && maxTokens > 0;
-  return hasMaxTokens ? Math.min(input.budget, maxTokens - 1) : input.budget;
+  if (!hasMaxTokens) return input.budget;
+  return Math.min(input.budget, maxTokens - 1);
 }
 
 function edited(text: string, path: JSONPath, value: unknown): string {

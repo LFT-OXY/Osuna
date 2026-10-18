@@ -168,12 +168,13 @@ function withoutUnservedSideModels(
   state: ApiEndpointState,
   agent: ApiEndpointAgentSettings,
 ): ApiEndpointAgentSettings {
-  const isBackgroundGone = isUnserved(state, agent.backgroundModelId);
-  const isSubagentGone = isUnserved(state, agent.subagentModelId);
-  if (!isBackgroundGone && !isSubagentGone) return agent;
-  const background = isBackgroundGone ? { backgroundModelId: null } : {};
-  const subagent = isSubagentGone ? { subagentModelId: null } : {};
-  return { ...agent, ...background, ...subagent };
+  let settled = agent;
+  if (isUnserved(state, agent.backgroundModelId)) settled = { ...settled, backgroundModelId: null };
+  // 照 magpie 的 subagentOwn：整个变量都不写，档位一起忘掉。
+  if (isUnserved(state, agent.subagentModelId)) {
+    settled = { ...settled, subagentModelId: null, subagentThinkingOptionId: null };
+  }
+  return settled;
 }
 
 function isUnserved(state: ApiEndpointState, id: string | null | undefined): boolean {

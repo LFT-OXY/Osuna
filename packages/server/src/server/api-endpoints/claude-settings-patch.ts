@@ -15,7 +15,11 @@ import {
 import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switches.js";
-import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
+import {
+  CLAUDE_HINT_ENV_KEYS,
+  ONE_MILLION_MARK,
+  type ClaudeHintEnv,
+} from "./claude-model-hints.js";
 import { claudeModelName } from "./claude-model-name.js";
 import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
 
@@ -185,9 +189,19 @@ export interface ClaudeGatewayWiring {
   defaultThinking: string | null;
   // Ultra Code：true 开、false 关，null 为没设、不碰。
   ultraCode: boolean | null;
-  // 后台小任务模型与 Subagent 模型（已是写给 Claude Code 的写法，Subagent 可带「:档位」）；null 为没设，跟主模型。
+  // 后台小任务模型（已是写给 Claude Code 的写法）；null 为没设，跟主模型。
   backgroundModel: string | null;
-  subagentModel: string | null;
+  // Subagent 的模型与档位；null 为都没设，跟主模型。
+  subagent: ClaudeSubagentWiring | null;
+}
+
+/**
+ * Subagent 的模型（已是写给 Claude Code 的写法；null 为跟主模型）与固定的档位（null 为不固定）。
+ * 只设了档位时照 magpie 的 setSubagent 接在文件里的主模型后面（CLI 自己换过的就是它的）。
+ */
+export interface ClaudeSubagentWiring {
+  model: string | null;
+  effort: string | null;
 }
 
 /**
@@ -212,7 +226,20 @@ export function applyClaudeApiEndpoint(input: {
   let text = baseText;
   const envRecords: ClaudeSettingsTakeover["env"] = {};
 
-  const env = gatewayEnv(input.wiring, envObject, input.takeover);
+  const held = heldCliModel({
+    settings: parsed.settings,
+    takeover: input.takeover,
+    shouldRewriteModel: input.shouldRewriteModel === true,
+  });
+  // 这次写完后文件里的主模型：CLI 自己换过的留着。
+  let mainModel: string | null = input.wiring.model;
+  if (held) mainModel = fileModel(parsed.settings);
+  const env = gatewayEnv({
+    wiring: input.wiring,
+    envObject,
+    takeover: input.takeover,
+    subagentModel: subagentValue({ subagent: input.wiring.subagent, mainModel }),
+  });
   for (const [key, value] of Object.entries(env)) {
     const original = input.takeover?.env[key]?.original ?? originalValue(envObject, key);
     envRecords[key] = { original, written: value };
@@ -581,12 +608,34 @@ function writeModelPicker(input: {
   };
 }
 
+/** Subagent 变量要写的值：只设档位时接在主模型后面（主模型没了就不写）；都没设为 null。 */
+function subagentValue(input: {
+  subagent: ClaudeSubagentWiring | null;
+  mainModel: string | null;
+}): string | null {
+  const { subagent } = input;
+  if (subagent === null) return null;
+  const model = subagent.model ?? input.mainModel;
+  if (model === null) return null;
+  return claudeModelAt({ model, effort: subagent.effort });
+}
+
+/** 「模型名:档位」，档位接在 [1m] 之前（照 magpie 的 tierWith）；没有档位时原样。 */
+export function claudeModelAt(input: { model: string; effort: string | null }): string {
+  const { model, effort } = input;
+  if (effort === null) return model;
+  if (!model.endsWith(ONE_MILLION_MARK)) return `${model}:${effort}`;
+  return `${model.slice(0, -ONE_MILLION_MARK.length)}:${effort}${ONE_MILLION_MARK}`;
+}
+
 /** 这次要写的 env：值为 null 的是要删掉的键。接管前没有、之后也没出现的不记，不归 Osuna 管。 */
-function gatewayEnv(
-  wiring: ClaudeGatewayWiring,
-  envObject: Record<string, unknown> | undefined,
-  takeover: ClaudeSettingsTakeover | null,
-): Record<string, string | null> {
+function gatewayEnv(input: {
+  wiring: ClaudeGatewayWiring;
+  envObject: Record<string, unknown> | undefined;
+  takeover: ClaudeSettingsTakeover | null;
+  subagentModel: string | null;
+}): Record<string, string | null> {
+  const { wiring, envObject, takeover } = input;
   const env: Record<string, string | null> = {
     ANTHROPIC_BASE_URL: wiring.baseUrl,
     ANTHROPIC_AUTH_TOKEN: wiring.token,
@@ -597,7 +646,7 @@ function gatewayEnv(
     if (originalValue(envObject, key).present || takeover?.env[key]) env[key] = null;
   }
   if (wiring.backgroundModel !== null) env[BACKGROUND_MODEL_KEY] = wiring.backgroundModel;
-  if (wiring.subagentModel !== null) env[SUBAGENT_MODEL_KEY] = wiring.subagentModel;
+  if (input.subagentModel !== null) env[SUBAGENT_MODEL_KEY] = input.subagentModel;
   return env;
 }
 

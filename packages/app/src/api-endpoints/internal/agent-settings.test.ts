@@ -34,6 +34,7 @@ function view(input: {
   subagentModelId?: string | null;
   subagentThinkingOptionId?: string | null;
   lockedThinkingOptionId?: string | null;
+  subagentThinkingOptions?: { id: string; label: string }[] | null;
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
 }) {
@@ -58,6 +59,7 @@ function view(input: {
     provider: "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
     lockedThinkingOptionId: input.lockedThinkingOptionId ?? null,
+    subagentThinkingOptions: input.subagentThinkingOptions ?? null,
     now: NOW,
   });
 }
@@ -349,6 +351,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       provider: "claude",
       endpointModelGroups: null,
       lockedThinkingOptionId: null,
+      subagentThinkingOptions: null,
       now: NOW,
     });
     expect(kept.keepsClaudeAiLogin).toBe(true);
@@ -363,6 +366,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       provider: "codex",
       endpointModelGroups: null,
       lockedThinkingOptionId: null,
+      subagentThinkingOptions: null,
       now: NOW,
     });
     expect(codex.keepsClaudeAiLogin).toBeNull();
@@ -458,32 +462,22 @@ describe("the default thinking on an agent page", () => {
 });
 
 describe("the background task and Subagent models on the Claude Code page", () => {
+  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "claude-opus-4-6" }] })];
   const groups: ApiEndpointModelGroup[] = [
     {
       name: "Relay A",
       models: [
-        {
-          provider: "claude",
-          id: "relay-a/glm-5.3",
-          label: "glm-5.3",
-          thinkingOptions: [
-            { id: "low", label: "Low" },
-            { id: "high", label: "High" },
-            { id: "ultracode", label: "Ultra Code" },
-          ],
-        },
-        {
-          provider: "claude",
-          id: "relay-a/claude-opus-4-6",
-          label: "claude-opus-4-6",
-          thinkingOptions: [{ id: "max", label: "Max" }],
-        },
+        { provider: "claude", id: "relay-a/glm-5.3", label: "glm-5.3" },
+        { provider: "claude", id: "relay-a/claude-opus-4-6", label: "claude-opus-4-6" },
       ],
     },
   ];
-  const endpoints = [endpoint({ id: "a", models: [{ id: "glm-5.3" }, { id: "claude-opus-4-6" }] })];
+  const levels = [
+    { id: "low", label: "Low" },
+    { id: "max", label: "Max" },
+  ];
 
-  it("shows what the host reports, and the Subagent thinking from the Subagent model's levels", () => {
+  it("shows the models the host reports, and the Subagent thinking's levels as the host gives them", () => {
     const shown = view({
       endpoints,
       endpointModelGroups: groups,
@@ -492,6 +486,7 @@ describe("the background task and Subagent models on the Claude Code page", () =
       backgroundModelId: "relay-a/claude-opus-4-6",
       subagentModelId: "claude-opus-4-6",
       subagentThinkingOptionId: "max",
+      subagentThinkingOptions: levels,
     });
     expect(shown.sideModels).toEqual({
       backgroundModel: {
@@ -500,41 +495,34 @@ describe("the background task and Subagent models on the Claude Code page", () =
         endpointName: "Relay A",
       },
       subagentModel: { id: "claude-opus-4-6", model: "claude-opus-4-6", endpointName: null },
-      subagentThinking: { value: "max", options: [{ id: "max", label: "Max" }] },
+      subagentThinking: { value: "max", options: levels },
     });
   });
 
-  it("takes the Subagent thinking's levels from the default model while the Subagents follow it", () => {
+  it("follows the default model while nothing is set", () => {
     const shown = view({
       endpoints,
       endpointModelGroups: groups,
       enabled: true,
       defaultModelId: "glm-5.3",
-      backgroundModelId: null,
-      subagentModelId: null,
-      subagentThinkingOptionId: null,
+      subagentThinkingOptions: levels,
     });
     expect(shown.sideModels).toEqual({
       backgroundModel: null,
       subagentModel: null,
-      subagentThinking: {
-        value: null,
-        options: [
-          { id: "low", label: "Low" },
-          { id: "high", label: "High" },
-        ],
-      },
+      subagentThinking: { value: null, options: levels },
     });
   });
 
-  it("is not offered while the switch is off, or by a host that doesn't report them", () => {
-    const off = view({ endpoints, endpointModelGroups: groups, backgroundModelId: null });
+  it("is not offered while the switch is off, or by a host without them", () => {
+    const off = view({ endpoints, endpointModelGroups: groups, subagentThinkingOptions: levels });
     expect(off.sideModels).toBeNull();
     const old = view({
       endpoints,
       endpointModelGroups: groups,
       enabled: true,
       defaultModelId: "glm-5.3",
+      subagentThinkingOptions: null,
     });
     expect(old.sideModels).toBeNull();
   });

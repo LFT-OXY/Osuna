@@ -150,6 +150,8 @@ export interface ProviderSnapshotEntry {
   apiEndpointModelGroups?: ApiEndpointModelGroup[];
   // 每个会话都跑在这一档、选别的档位不起作用时才有（第三方接口的默认思考档位是 max）。
   lockedThinkingOptionId?: string;
+  // Claude Code 的 Subagent 思考档位能选的档位；总开关开着才有。
+  subagentThinkingOptions?: AgentSelectOption[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }
@@ -786,6 +788,9 @@ export type ActiveApiEndpointLookup = (provider: AgentProvider) => ApiEndpointRe
 
 /** 每个会话都锁在的思考档位（第三方接口的默认思考档位是 max）；没有锁为 null。 */
 export type LockedThinkingLookup = (provider: AgentProvider) => string | null;
+
+/** Claude Code 的 Subagent 思考档位能选的档位；没有为 null。 */
+export type SubagentThinkingLookup = (provider: AgentProvider) => AgentSelectOption[] | null;
 
 /** 总开关开着时按接口分组的可选模型；官方模式或不支持的提供方为 null。 */
 export type ApiEndpointModelGroupsLookup = (

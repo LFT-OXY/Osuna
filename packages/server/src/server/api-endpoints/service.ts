@@ -30,7 +30,11 @@ import {
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
-import type { AgentModelDefinition, ApiEndpointModelGroup } from "../agent/agent-sdk-types.js";
+import type {
+  AgentModelDefinition,
+  AgentSelectOption,
+  ApiEndpointModelGroup,
+} from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
 import {
   CLAUDE_CLOUD_SWITCH_KEYS,
@@ -48,12 +52,7 @@ import {
   type ProbeGatewayAt,
 } from "./gateway-reach.js";
 import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
-import {
-  ONE_MILLION_MARK,
-  claudeHintEnv,
-  markOneMillion,
-  type ClaudeHintModel,
-} from "./claude-model-hints.js";
+import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
@@ -65,6 +64,7 @@ import {
   restoreClaudeOfficial,
   type ClaudeAuthTokenState,
   type ClaudeGatewayWiring,
+  type ClaudeSubagentWiring,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
 import {
@@ -597,15 +597,8 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
   ): ApiEndpointAgentSettings {
-    const stored = state.agents[provider];
-    if (provider !== "claude") return stored;
-    // 没设也报 null：客户端凭有没有这几项认出主机会写它们。
-    const agent = {
-      ...stored,
-      backgroundModelId: stored.backgroundModelId ?? null,
-      subagentModelId: stored.subagentModelId ?? null,
-      subagentThinkingOptionId: stored.subagentThinkingOptionId ?? null,
-    };
+    const agent = state.agents[provider];
+    if (provider !== "claude") return agent;
     const levels = this.claudeLevels(state, agent);
     const chosen = agent.defaultThinkingOptionId ?? null;
     const shown = chosen === null ? null : claudeClamp(chosen, levels);
@@ -1503,48 +1496,58 @@ export class ApiEndpointService {
   }
 
   /**
-   * 后台小任务模型与 Subagent 模型写给 Claude Code 的样子（照 magpie 的 writeTiers）：1M 的模型标 [1m]，
-   * Subagent 带思考档位时写成「模型名:档位」（没设模型就跟主模型），带点的 Claude 版本写成连字符。没设为 null。
+   * 后台小任务模型与 Subagent 写给 Claude Code 的样子（照 magpie 的 writeTiers）：1M 的模型标 [1m]，带点的 Claude 版本写成连字符；
+   * Subagent 的档位与只设档位时接在哪个主模型后面由补丁按文件定（照 magpie 的 setSubagent）。没设为 null。
    */
   private claudeSideModels(
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
-  ): Pick<CliWiring, "backgroundModel" | "subagentModel"> {
+  ): Pick<CliWiring, "backgroundModel" | "subagent"> {
     const agent = state.agents[provider];
-    const none = { backgroundModel: null, subagentModel: null };
+    const none = { backgroundModel: null, subagent: null };
     if (provider !== "claude" || agent.defaultModelId === null) return none;
-    const level = agent.subagentThinkingOptionId ?? null;
+    const backgroundModelId = agent.backgroundModelId ?? null;
     const subagentModelId = agent.subagentModelId ?? null;
-    const subagentModel =
-      level === null ? subagentModelId : (subagentModelId ?? agent.defaultModelId);
-    const write = (modelId: string | null, effort: string | null) =>
-      modelId === null ? null : this.claudeEnvModel({ state, modelId, effort });
-    return {
-      backgroundModel: write(agent.backgroundModelId ?? null, null),
-      subagentModel: write(subagentModel, level),
-    };
+    const effort = agent.subagentThinkingOptionId ?? null;
+    let backgroundModel: string | null = null;
+    if (backgroundModelId !== null) backgroundModel = this.claudeEnvModel(state, backgroundModelId);
+    let model: string | null = null;
+    if (subagentModelId !== null) model = this.claudeEnvModel(state, subagentModelId);
+    const isSubagentSet = model !== null || effort !== null;
+    let subagent: ClaudeSubagentWiring | null = null;
+    if (isSubagentSet) subagent = { model, effort };
+    return { backgroundModel, subagent };
   }
 
-  /** 一个模型写进 Claude Code env 的写法；effort 非空时接在模型名后面、[1m] 之前。 */
-  private claudeEnvModel(input: {
-    state: ApiEndpointState;
-    modelId: string;
-    effort: string | null;
-  }): string {
-    const listed = this.retiredModels.listed(input.state);
-    const marked = markOneMillion({
-      id: input.modelId,
-      facts: this.startModelFacts(listed, input.modelId),
-    });
-    const isMarked = marked.endsWith(ONE_MILLION_MARK);
-    const bare = isMarked ? marked.slice(0, -ONE_MILLION_MARK.length) : marked;
-    const effort = input.effort === null ? "" : `:${input.effort}`;
-    const mark = isMarked ? ONE_MILLION_MARK : "";
+  /** 一个模型写进 Claude Code env 的写法（同起始模型）。 */
+  private claudeEnvModel(state: ApiEndpointState, modelId: string): string {
+    const listed = this.retiredModels.listed(state);
+    const marked = markOneMillion({ id: modelId, facts: this.startModelFacts(listed, modelId) });
     const served = [
       ...usableModels(listed).map((model) => model.id),
       ...defaultModelChoices(listed),
     ];
-    return claudeSpelled({ model: `${bare}${effort}${mark}`, served });
+    return claudeSpelled({ model: marked, served });
+  }
+
+  /**
+   * Claude Code 的 Subagent 思考档位能选的档位（照 magpie subagent_effort 字段的 Options：tierEfforts(cmp.Or(m, mainModel()))）：
+   * Subagent 模型的档位，跟主模型时是 settings.json 里现在的主模型的。总开关关着或不是 Claude Code 时为 null。
+   */
+  subagentThinkingOptions(provider: string): AgentSelectOption[] | null {
+    const state = this.readStateForSnapshot();
+    if (!state || findProvider(provider) !== "claude") return null;
+    const agent = state.agents.claude;
+    if (!agent.enabled || agent.defaultModelId === null) return null;
+    const modelId = agent.subagentModelId ?? this.claudeMainModel() ?? agent.defaultModelId;
+    const levels = this.thinkingLevelsFor({ state, provider: "claude", modelId });
+    return thinkingOptionsOf({ levels });
+  }
+
+  /** settings.json 里现在的主模型；读不到为 null。 */
+  private claudeMainModel(): string | null {
+    const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
+    return readClaudeModel(text);
   }
 
   /**

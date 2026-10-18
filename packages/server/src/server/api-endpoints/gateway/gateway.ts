@@ -10,7 +10,7 @@ import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { isDefaultModelChoice, usableModels } from "../host-endpoints.js";
+import { AGENT_REQUEST_FORMAT, isDefaultModelChoice, usableModels } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
@@ -55,7 +55,7 @@ import {
   type EndpointRest,
 } from "./cooldown.js";
 import { endpointFailure, lateRests, modelRetired, retryable } from "./failure.js";
-import { askedAt, withFixedEffort } from "./fixed-effort.js";
+import { askedAt, fitFixedEffort, withFixedEffort, type FixedEffort } from "./fixed-effort.js";
 import {
   largerWindows,
   overflowOf,
@@ -521,12 +521,7 @@ async function routeAgentRequest(input: {
   failover: Failover;
   // 已经读出并解开的请求体（ChatGPT 后端那组路径先读出来看过模型名）；没有就从请求里读。
   read?: Buffer;
-}): Promise<{
-  body: Buffer;
-  parsed: unknown;
-  model: string;
-  candidates: GatewayCandidate[];
-} | null> {
+}): Promise<RoutedRequest | null> {
   const { res, wire } = input;
   const reply = (status: number, message: string) =>
     sendAgentError({ res, wire, error: { status, message } });
@@ -554,11 +549,10 @@ async function routeAgentRequest(input: {
   }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
-  const { body, parsed, model } = withoutAskedEffort({
+  const { body, parsed, model, fixedEffort } = withoutAskedEffort({
     body: read.body,
     parsed: asked,
     model: askedModel,
-    wire,
     state,
   });
   const route = routeModel({ ...input, state, model });
@@ -573,34 +567,59 @@ async function routeAgentRequest(input: {
       reply(400, noWebSearchMessage(model));
       return null;
     }
-    return { body, parsed, model, candidates: searchers };
+    return { body, parsed, model, fixedEffort, candidates: searchers };
   }
-  return { body, parsed, model, candidates: route.candidates };
+  return { body, parsed, model, fixedEffort, candidates: route.candidates };
 }
 
-/** 拆掉「模型名:档位」后的请求：模型名去掉后缀，请求按 Agent 自己的格式改成这一档。 */
+/** 读出的请求与找到的候选；fixedEffort 是「模型名:档位」固定的档位，没有为 null。 */
+interface RoutedRequest extends AskedRequest {
+  candidates: GatewayCandidate[];
+}
+
+/** 拆掉「模型名:档位」后的请求：模型名去掉后缀；固定的档位另记，发给每家时按它的模型落定。 */
 interface AskedRequest {
   body: Buffer;
   parsed: unknown;
   model: string;
+  fixedEffort: FixedEffort | null;
 }
 
-/** 照 magpie 的 askedAt：每家都按这个模型问、按这一档问；整个名字是哪家选了的模型时原样。 */
+/** 照 magpie 的 askedAt：每家都按这个模型问；整个名字是哪家选了的模型时原样。count_tokens 只数这个模型。 */
 function withoutAskedEffort(input: {
   body: Buffer;
   parsed: unknown;
   model: string;
-  wire: AgentWire;
   state: ApiEndpointState;
 }): AskedRequest {
   const { state } = input;
   const split = askedAt({ id: input.model, isListed: (id) => isDefaultModelChoice(state, id) });
-  if (split.effort === null) return { body: input.body, parsed: input.parsed, model: input.model };
-  const format = input.wire === "anthropic" ? "anthropic_messages" : "openai_responses";
+  if (split.effort === null) {
+    return { body: input.body, parsed: input.parsed, model: input.model, fixedEffort: null };
+  }
   const original = input.body.toString("utf8");
   const renamed = applyEdits(original, modify(original, ["model"], split.model, {}));
-  const text = withFixedEffort({ format, text: renamed, effort: split.effort });
-  return { body: Buffer.from(text, "utf8"), parsed: parseJson(text), model: split.model };
+  return {
+    body: Buffer.from(renamed, "utf8"),
+    parsed: parseJson(renamed),
+    model: split.model,
+    fixedEffort: split.effort,
+  };
+}
+
+/** 按 Agent 自己的格式把请求改成固定的档位：翻译时由 requestForModel 按每家的模型落定（直通在 askOnce 里另落定）。 */
+function withAgentEffort(input: {
+  body: Buffer;
+  agent: ApiEndpointProvider;
+  fixedEffort: FixedEffort | null;
+}): Buffer {
+  if (input.fixedEffort === null) return input.body;
+  const text = withFixedEffort({
+    format: AGENT_REQUEST_FORMAT[input.agent],
+    text: input.body.toString("utf8"),
+    effort: input.fixedEffort,
+  });
+  return Buffer.from(text, "utf8");
 }
 
 /**
@@ -762,7 +781,9 @@ async function handleAgentRequest(input: {
 
   const routed = await routeAgentRequest(input);
   if (!routed) return;
-  const { body, parsed, model, candidates } = routed;
+  const { model, candidates, fixedEffort } = routed;
+  const body = withAgentEffort({ body: routed.body, agent: input.agent, fixedEffort });
+  const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
   const mended = mendedBody(input.format, body);
   // 翻译读的是修补过的请求，和直通发出去的一样。
   const translatable = mended === body ? parsed : parseJson(mended.toString("utf8"));
@@ -836,6 +857,7 @@ async function handleAgentRequest(input: {
       body: mended,
       parsed: translatable,
       model,
+      fixedEffort,
       conversation,
       plan: roomy.plan,
       tokens,
@@ -1013,6 +1035,7 @@ async function askInTurn(input: {
   // 修补过的请求读出来的样子：换到要翻译的格式时读成中间格式。
   parsed: unknown;
   model: string;
+  fixedEffort: FixedEffort | null;
   conversation: string;
   plan: AskableCandidate[];
   // 这次请求的本地估算；没估为 null。
@@ -1215,6 +1238,7 @@ async function askUntilSettled(input: {
   body: Buffer;
   parsed: unknown;
   model: string;
+  fixedEffort: FixedEffort | null;
   candidate: AskableCandidate;
   last: boolean;
   format: AgentPath["format"];
@@ -1262,6 +1286,8 @@ interface EndpointAsk {
   model: string;
   candidate: AskableCandidate;
   format: AgentPath["format"];
+  // 「模型名:档位」固定的档位；直通时按这家的模型落定后照发。
+  fixedEffort: FixedEffort | null;
   failover: Failover;
   keepAlive: AgentKeepAlive;
   // 转给上游的 Agent 请求头；缺省是全部（attemptEndpoint）。
@@ -1363,6 +1389,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
       format: input.format,
       body: input.body,
       forwardedHeaders: input.forwardedHeaders,
+      ...passedEffort(input),
     });
   }
   // 只有在这个格式上自己会搜的那家才带搜索（ADR 0009）；不会搜的连同点名它的 tool_choice 一起拿掉。
@@ -1376,6 +1403,14 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });
+}
+
+/** 直通时固定的档位按这家这个模型自己的档位落定（magpie fitLevel）；没固定时不带。 */
+function passedEffort(input: EndpointAsk): { fixedEffort?: FixedEffort } {
+  if (input.fixedEffort === null) return {};
+  const { candidate } = input;
+  const facts = input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel);
+  return { fixedEffort: fitFixedEffort({ effort: input.fixedEffort, levels: facts.efforts }) };
 }
 
 /** 发给上游的 User-Agent：直通与翻译都用 CLI 自己的，CLI 没带时用 Osuna/<版本>。 */

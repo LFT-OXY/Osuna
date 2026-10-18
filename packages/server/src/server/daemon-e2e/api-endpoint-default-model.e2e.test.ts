@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { z } from "zod";
 import type { CodexSignIn } from "../api-endpoints/codex-sign-in.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -56,6 +57,18 @@ interface ListedIssue {
 /** 文件最后写入的时刻（纳秒），看一次读状态有没有重写它。 */
 async function modifiedAt(file: string): Promise<bigint> {
   return (await stat(file, { bigint: true })).mtimeNs;
+}
+
+// settings.json 里测试要读的部分，其余键照原样带着。
+const ClaudeFileSchema = z
+  .object({ env: z.record(z.string(), z.unknown()).optional() })
+  .catchall(z.unknown());
+
+/** 快照里 Claude Code 的 Subagent 思考档位能选的档位。 */
+async function subagentLevelsOf(client: DaemonClient): Promise<string[] | undefined> {
+  const snapshot = await client.getProvidersSnapshot();
+  const entry = snapshot.entries.find((candidate) => candidate.provider === "claude");
+  return entry?.subagentThinkingOptions?.map((option) => option.id);
 }
 
 function isRelayB(endpoint: { name: string }): boolean {
@@ -853,11 +866,21 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       return client.apiEndpointSetAgentSettings({ provider, enabled: true, ...rest });
     }
 
+    const subagentLevels = () => subagentLevelsOf(client);
+
+    async function claudeFile(): Promise<z.infer<typeof ClaudeFileSchema>> {
+      return ClaudeFileSchema.parse(JSON.parse(await readFile(settingsPath, "utf8")));
+    }
+
     async function claudeEnv(): Promise<Record<string, unknown>> {
-      const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
-        env?: Record<string, unknown>;
-      };
-      return settings.env ?? {};
+      return (await claudeFile()).env ?? {};
+    }
+
+    /** 像用户手改那样改 settings.json 的 env，其余照旧。 */
+    async function editClaudeEnv(values: Record<string, string>): Promise<void> {
+      const settings = await claudeFile();
+      const next = { ...settings, env: { ...settings.env, ...values } };
+      await writeFile(settingsPath, `${JSON.stringify(next, null, 2)}\n`);
     }
 
     test("both go into env, a Subagent thinking as model:level, a dotted Claude version with hyphens; switching off restores the file", async () => {
@@ -931,11 +954,7 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       await turnOn("claude", "first");
       await setModels({ subagentModelId: "glm-4.6" });
 
-      const settings = JSON.parse(await readFile(settingsPath, "utf8")) as {
-        env: Record<string, unknown>;
-      };
-      settings.env.CLAUDE_CODE_SUBAGENT_MODEL = "claude-opus-4-6:low";
-      await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+      await editClaudeEnv({ CLAUDE_CODE_SUBAGENT_MODEL: "claude-opus-4-6:low" });
 
       const list = await client.apiEndpointList("claude");
       expect(list.agents?.claude).toMatchObject({
@@ -945,20 +964,66 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(list.health).toEqual([]);
     });
 
+    test("the Subagent thinking's levels come from the Subagent model, else the main model settings.json holds", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+      // 别家模型五档都给（照 magpie 的 claudeEffortsFor）。
+      await expect
+        .poll(subagentLevels, { timeout: 10_000 })
+        .toEqual(["low", "medium", "high", "xhigh", "max"]);
+
+      await setModels({ subagentModelId: "claude-opus-4-6" });
+      await expect
+        .poll(subagentLevels, { timeout: 10_000 })
+        .toEqual(["low", "medium", "high", "max"]);
+    });
+
+    test("a hand edit to a model no endpoint serves is an ordinary change outside Osuna, not a bypass of the gateway", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+      await setModels({ backgroundModelId: "glm-4.6", subagentModelId: "glm-4.6" });
+
+      await editClaudeEnv({
+        ANTHROPIC_SMALL_FAST_MODEL: "gpt-9",
+        CLAUDE_CODE_SUBAGENT_MODEL: "gpt-9:high",
+      });
+
+      const list = await client.apiEndpointList("claude");
+      expect(list.agents?.claude).toMatchObject({
+        backgroundModelId: "glm-4.6",
+        subagentModelId: "glm-4.6",
+      });
+      expect(list.health).toEqual([
+        expect.objectContaining({
+          code: "modified_externally",
+          message: expect.stringContaining(
+            "env.ANTHROPIC_SMALL_FAST_MODEL, env.CLAUDE_CODE_SUBAGENT_MODEL",
+          ),
+        }),
+      ]);
+      expect(issueCodes(list.agentIssues?.claude ?? [])).not.toContain("not_through_gateway");
+    });
+
     test("a model whose endpoint is turned off is dropped, and the Subagents follow the main model again", async () => {
       await saveEndpoint({ name: "Relay A", models: ["first"] });
       await saveEndpoint({ name: "Relay B", models: ["glm-4.6"] });
       await turnOn("claude", "first");
-      await setModels({ backgroundModelId: "glm-4.6", subagentModelId: "glm-4.6" });
+      await setModels({
+        backgroundModelId: "glm-4.6",
+        subagentModelId: "glm-4.6",
+        subagentThinkingOptionId: "high",
+      });
 
       const endpoints = (await client.apiEndpointList("claude")).endpoints ?? [];
       const relayB = endpoints.find(isRelayB);
       if (!relayB) throw new Error("Expected Relay B");
       await client.apiEndpointSetEndpointState({ endpointId: relayB.id, enabled: false });
 
+      // 照 magpie 的 subagentOwn：Subagent 整个变量都不写，档位一起忘掉。
       expect((await client.apiEndpointList("claude")).agents?.claude).toMatchObject({
         backgroundModelId: null,
         subagentModelId: null,
+        subagentThinkingOptionId: null,
       });
       expect(await claudeEnv()).not.toHaveProperty("ANTHROPIC_SMALL_FAST_MODEL");
       expect(await claudeEnv()).not.toHaveProperty("CLAUDE_CODE_SUBAGENT_MODEL");

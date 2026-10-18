@@ -652,25 +652,24 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 | 做什么 | magpie | Osuna |
 | --- | --- | --- |
 | 后台小任务模型 | 不单独设：`ANTHROPIC_SMALL_FAST_MODEL` 一律写 haiku 档位的模型（`writeTiers`） | 照工单单独一项 `backgroundModelId`，写 `env.ANTHROPIC_SMALL_FAST_MODEL`；没设时拿掉（接管前用户自己的记下、关掉放回），Claude Code 跟主模型。Osuna 没有 magpie 那种按档位写模型的做法（档位由中转站按各家映射翻译），所以不跟 haiku 档 |
-| Subagent 模型与档位 | `subagent`、`subagent_effort` 两个字段；只设档位时写「主模型:档位」；`tierWith` 把档位放在 `[1m]` 之前 | 同：`subagentModelId`、`subagentThinkingOptionId`；只设档位时写「默认模型:档位」，默认模型变了跟着重写 |
-| 档位能设什么 | `Set` 收 `MemberEfforts` 任一档（none–max），选项是模型的档位 | 同：收 none、minimal、low、medium、high、xhigh、max，不按模型的档位卡；设置页选项来自 Subagent 模型（跟主模型时是默认模型）在聊天模型选择器里的档位 |
+| Subagent 模型与档位 | `subagent`、`subagent_effort` 两个字段；只设档位时写「主模型:档位」；`tierWith` 把档位放在 `[1m]` 之前 | 同：`subagentModelId`、`subagentThinkingOptionId`；只设档位时接在写完后文件里的主模型后面（CLI 自己换过的就是它的，`claudeModelAt` 在补丁里拼） |
+| 档位能设什么 | `Set` 收 `MemberEfforts` 任一档（none–max），选项是模型的档位 | 同：收 none、minimal、low、medium、high、xhigh、max，不按模型的档位卡；选项由 daemon 放在提供方快照的 `subagentThinkingOptions`（Subagent 模型的档位，跟主模型时是 settings.json 里主模型的），app 照显示 |
 | 接管时用户自己的 `CLAUDE_CODE_SUBAGENT_MODEL` | 在 `claudeEnv` 里：记下、拿掉，断开时放回 | 同：加进接管时删掉的变量 |
 | 带点的 Claude 版本 | `spell` | `claudeSpelled`（工单 17），1M 的模型标 `[1m]`（`markOneMillion`） |
-| 中转站认「模型名:档位」 | `askedAt`：最后一段是档位名、整个名字不是哪家的模型才拆；`withFixedEffort` 按 Agent 自己的格式改档位，翻译时按模型落定 | 同：`gateway/fixed-effort.ts`，在 `routeAgentRequest` 里拆，「整个名字是哪家的模型」按 `isDefaultModelChoice`（开着的接口的已选模型与「接口标识/模型名」） |
+| 中转站认「模型名:档位」 | `askedAt`：最后一段是档位名、整个名字不是哪家的模型才拆；`withFixedEffort` 按 Agent 自己的格式改档位，翻译时按模型落定 | 同：`gateway/fixed-effort.ts`，在 `routeAgentRequest` 里拆，「整个名字是哪家的模型」按 `isDefaultModelChoice`；每个候选按自己模型的档位落定（`fitFixedEffort`，magpie `fitLevel`），直通在 `upstreamBody` 里改、翻译交给 `requestForModel`；count_tokens 只数去掉后缀的模型（magpie 同样） |
 | CLI 改了这两个变量 | Subagent 字段的 `Get` 读文件：换成 magpie 的模型就跟过去；后台小任务不回读，下次写入盖掉 | 同：Subagent 变量被改成某家提供的模型（可带档位）就跟过去，删掉就跟主模型；哪家都没有的不跟，仍算「被改过」，下次改写写回 Osuna 的。后台小任务变量被改仍算「被改过」（工单以前就是这样），改写时盖掉 |
-| 模型不再有人提供 | `subagentOwn` 只认 magpie 在售的，不是就删掉 | 同：`settleAgentSettings` 把没人提供的两项改回没设 |
+| 模型不再有人提供 | `subagentOwn` 只认 magpie 在售的，不是就删掉 | 同：`settleAgentSettings` 把没人提供的后台小任务模型改回没设；Subagent 模型没人提供时连档位一起忘掉 |
 
 ### 与 magpie 不同、要判断的地方
 
-- **直通给 Anthropic 地址的非 Claude 模型**：Osuna 原有的 `fitAnthropicBody` 会去掉 Claude Code 带的自适应思考与 `output_config.effort`（别家不认），所以固定的档位在这种直通里也被去掉，由模型按自己的默认想。Claude 模型直通、翻译成 Chat / Responses 时档位照设。magpie 不去掉。没有改这条已有规则。
-- **直通时不按模型的档位落定**：magpie 对每个候选 `fitLevel(fixed, c.p.Efforts(c.model))`；Osuna 翻译时由 `requestForModel` 落定，直通照设的发。
+- **直通给 Anthropic 地址的非 Claude 模型**：Osuna 原有的 `fitAnthropicBody` 会去掉 Claude Code 带的自适应思考与 `output_config.effort`；固定了档位时照 magpie 留着（自适应思考加 `output_config.effort`），没固定时照旧去掉。
 - **请求里不会有 `[1m]`**：Claude Code 发请求前去掉 `[1m]`，所以发来的是「模型名:档位」；`askedAt` 照 magpie 仍认得带 `[1m]` 的写法。
-- 老 daemon 不报这几项：app 凭 `backgroundModelId` 在不在决定显示这三行（`COMPAT(apiEndpointClaudeSideModels)`）；新 daemon 对 Claude Code 没设也报 null。
+- 老主机：app 按 `server_info.features.apiEndpointCliWiring` 一次决定显示这三行（同前几张工单）。
 
 ### 测试
 
 - 纯逻辑：`claude-settings-patch.test.ts`「background task and Subagent models」（写进 env、关掉逐字节还原、没设时拿掉用户自己的并放回、改回没设时放回原值、读出被改过的 Subagent 变量）。
-- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「background task and Subagent models」：两项写进 env、`claude-opus-4.6` 写成 `claude-opus-4-6:high`、只设档位写「默认模型:high」、改回没设拿掉、关掉开关后逐字节还原（原来有的放回、原来没有的删掉）；只有 Claude Code、模型要在售、档位要是 magpie 的那几档；手改成在售模型被跟过去且不报被改过；接口关掉后两项回到没设。
-- `api-endpoint-gateway.e2e.test.ts`「a model asked for at an effort of its own」：Anthropic（`output_config.effort`）、Chat（`reasoning_effort`）、Responses（`reasoning.effort`）各一例收到去掉后缀的模型名与 high；整个名字是某家的模型时原样。
+- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「background task and Subagent models」：两项写进 env、`claude-opus-4.6` 写成 `claude-opus-4-6:high`、只设档位写「默认模型:high」、改回没设拿掉、关掉开关后逐字节还原（原来有的放回、原来没有的删掉）；只有 Claude Code、模型要在售、档位要是 magpie 的那几档；手改成在售模型被跟过去且不报被改过；接口关掉后两项回到没设（Subagent 档位一起）；只设档位时选项来自主模型、设了 Subagent 模型后来自它（快照）；手改成没人提供的模型只报普通的「被改过」、不报「不再经过中转站」。补丁单测另有：只设档位时接在 CLI 自己换过的主模型后面（`glm-4.6:high[1m]`）。
+- `api-endpoint-gateway.e2e.test.ts`「a model asked for at an effort of its own」：Anthropic（`output_config.effort`）、Chat（`reasoning_effort`）、Responses（`reasoning.effort`）各一例收到去掉后缀的模型名与 high；模型没有 max 时 `:max` 落到最近的 high；Anthropic 地址上的别家模型留着自适应思考与档位；整个名字是某家的模型时原样。
 - app：`agent-settings.test.ts`；浏览器 `settings-api-endpoints.spec.ts`「the background task and Subagent models」：只读目录下保存失败留在原处、保存后写进 env（连字符写法与「模型:档位」）、改回与默认模型相同拿掉、关掉开关拿掉。
 - 截图：`screenshots/22-claude-code-page_side-models-set_{desktop-1280,compact-390}_{en,zh}.png`（无头 Chromium、临时 CLAUDE_CONFIG_DIR、假数据）。

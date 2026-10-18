@@ -6,6 +6,7 @@ import type {
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ApiEndpointRequestError,
+  type ApiEndpointAgentSettingsInput,
   type ApiEndpointService,
   type KeepCurrentSettingsCode,
 } from "../../api-endpoints/service.js";
@@ -208,17 +209,7 @@ export class ApiEndpointSession {
         : { defaultThinkingOptionId: request.defaultThinkingOptionId };
     const ultraCode =
       request.usesUltraCode === undefined ? {} : { usesUltraCode: request.usesUltraCode };
-    const sideModels = {
-      ...(request.backgroundModelId === undefined
-        ? {}
-        : { backgroundModelId: request.backgroundModelId }),
-      ...(request.subagentModelId === undefined
-        ? {}
-        : { subagentModelId: request.subagentModelId }),
-      ...(request.subagentThinkingOptionId === undefined
-        ? {}
-        : { subagentThinkingOptionId: request.subagentThinkingOptionId }),
-    };
+    const sideModels = sideModelsRequested(request);
     try {
       const { agent, connection } = await this.service.setAgentSettings(request.provider, {
         enabled: request.enabled,
@@ -477,4 +468,22 @@ function keepCurrentSettingsCode(code: string | undefined): KeepCurrentSettingsC
         message: `Keep current settings doesn't answer '${code}'`,
       });
   }
+}
+
+type SideModelsRequest = Pick<
+  ApiEndpointAgentSettingsInput,
+  "backgroundModelId" | "subagentModelId" | "subagentThinkingOptionId"
+>;
+
+/** 后台小任务模型、Subagent 模型与它的思考档位：只带客户端给了的（省略即不变，null 为不设）。 */
+function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
+  const requested: SideModelsRequest = {};
+  if (request.backgroundModelId !== undefined) {
+    requested.backgroundModelId = request.backgroundModelId;
+  }
+  if (request.subagentModelId !== undefined) requested.subagentModelId = request.subagentModelId;
+  if (request.subagentThinkingOptionId !== undefined) {
+    requested.subagentThinkingOptionId = request.subagentThinkingOptionId;
+  }
+  return requested;
 }

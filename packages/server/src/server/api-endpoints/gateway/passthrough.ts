@@ -52,6 +52,7 @@ import {
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
+import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
@@ -111,6 +112,8 @@ const DROPPED_REQUEST_HEADERS = new Set([
 ]);
 
 export async function attemptEndpoint(input: {
+  // 「模型名:档位」固定的档位，已按这家这个模型落定。
+  fixedEffort?: FixedEffort;
   req: Request;
   res: Response;
   format: ApiEndpointRequestFormat;
@@ -405,6 +408,8 @@ export interface PassthroughBodyInput {
   upstreamModel: string;
   endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls">;
   refusals?: ShapeRefusals;
+  // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
+  fixedEffort?: FixedEffort;
 }
 
 /**
@@ -420,8 +425,11 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   if (anthropic) {
     text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
   }
+  const { fixedEffort } = input;
+  const isEffortFixed = fixedEffort !== undefined && conversation;
+  if (isEffortFixed) text = withFixedEffort({ format: input.format, text, effort: fixedEffort });
   if (fits && anthropic) {
-    text = fitAnthropicBody(text, input.upstreamModel);
+    text = fitAnthropicBody({ text, model: input.upstreamModel, isEffortFixed });
     text = fitThinkingOff({
       text,
       model: input.upstreamModel,
@@ -569,7 +577,13 @@ function replaceModel(text: string, model: string): string {
  * 请求根本没提思考的（起标题之类的小请求）说思考关着：别家默认会想，白花 token。
  * DeepSeek 还要每个工具轮都带思考块（thinkingOnToolTurns）。
  */
-export function fitAnthropicBody(text: string, model: string): string {
+export function fitAnthropicBody(input: {
+  text: string;
+  model: string;
+  // 「模型名:档位」固定了档位：照 magpie 留着自适应思考与 output_config.effort。
+  isEffortFixed?: boolean;
+}): string {
+  const { text, model } = input;
   if (isAnthropicModel(model)) return text;
   const body = parseJson(text);
   if (!isRecord(body)) return text;
@@ -577,13 +591,15 @@ export function fitAnthropicBody(text: string, model: string): string {
   const edit = (path: (string | number)[], value: unknown) => {
     out = applyEdits(out, modify(out, path, value, {}));
   };
-  const thinking = isRecord(body.thinking) ? body.thinking : null;
-  if (body.thinking === undefined) edit(["thinking"], { type: "disabled" });
-  else if (thinking?.type === "adaptive") edit(["thinking"], undefined);
-  const config = isRecord(body.output_config) ? body.output_config : null;
-  if (config && config.effort !== undefined) {
-    const rest = Object.keys(config).filter((key) => key !== "effort");
-    edit(rest.length === 0 ? ["output_config"] : ["output_config", "effort"], undefined);
+  if (input.isEffortFixed !== true) {
+    const thinking = isRecord(body.thinking) ? body.thinking : null;
+    if (body.thinking === undefined) edit(["thinking"], { type: "disabled" });
+    else if (thinking?.type === "adaptive") edit(["thinking"], undefined);
+    const config = isRecord(body.output_config) ? body.output_config : null;
+    if (config && config.effort !== undefined) {
+      const rest = Object.keys(config).filter((key) => key !== "effort");
+      edit(rest.length === 0 ? ["output_config"] : ["output_config", "effort"], undefined);
+    }
   }
   if (replaysThinking(model) && Array.isArray(body.messages)) {
     for (const [index, content] of thinkingOnToolTurns(body.messages)) {

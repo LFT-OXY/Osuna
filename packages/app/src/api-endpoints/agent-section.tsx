@@ -550,10 +550,10 @@ function SideModelRow({
     ],
     [followsLabel, labelOf, options, testID],
   );
-  const selectedDisplay = useMemo<SelectFieldDisplay>(
-    () => (value === null ? { label: followsLabel } : { label: labelOf(value) }),
-    [followsLabel, labelOf, value],
-  );
+  const selectedDisplay = useMemo<SelectFieldDisplay>(() => {
+    if (value === null) return { label: followsLabel };
+    return { label: labelOf(value) };
+  }, [followsLabel, labelOf, value]);
   const handleChange = useCallback(
     (id: string) => onChange(id === FOLLOWS_DEFAULT_MODEL ? null : id),
     [onChange],
