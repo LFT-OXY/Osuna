@@ -8,7 +8,7 @@
 
 **Blocked by:** 20
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：两项设好后，`settings.json` 的 `env` 有对应的值；关掉开关后还原（原来没有就删掉）。
 - [ ] 请求模型是「模型名:high」时，假上游收到的是去掉后缀的模型名，档位按这家的格式设成 high（Anthropic、Responses、Chat 各一例）。
