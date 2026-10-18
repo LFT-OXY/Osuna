@@ -2743,6 +2743,11 @@ export const fr: TranslationResources = {
             "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] dans {{file}} définit {{keys}}, et Codex les utilise à la place de ce qu'Osuna a écrit. Retirez-les du profil ou ne le sélectionnez plus.",
+          modelReplaced: "{{agent}} est passé à un modèle qu'aucun point d'accès ne propose",
+          modelReplacedDetail:
+            "Le modèle de {{file}} a été remplacé par {{model}} en dehors d'Osuna, et aucun point d'accès activé ne le propose. Réappliquez pour revenir à {{defaultModel}}, ou gardez les réglages actuels pour rester sur {{model}} sans cet avertissement.",
+          modelReplacedToDefaultDetail:
+            "Le modèle a été retiré de {{file}} en dehors d'Osuna : {{agent}} démarre donc sur son propre modèle par défaut, qu'aucun point d'accès activé ne propose. Réappliquez pour revenir à {{defaultModel}}, ou gardez les réglages actuels pour laisser les choses ainsi sans cet avertissement.",
           reapply: "Réappliquer",
           switchToOfficial: "Revenir à l'officiel",
           keepCurrent: "Garder les réglages actuels",

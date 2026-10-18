@@ -2679,6 +2679,11 @@ export const ar: TranslationResources = {
           codexProfileOverride: 'ملف التعريف "{{profile}}" في Codex يتجاوز واجهات API الخارجية',
           codexProfileOverrideDetail:
             "‏[profiles.{{profile}}] في {{file}} يضبط {{keys}}، ويستخدمها Codex بدلًا مما كتبه Osuna. احذفها من ملف التعريف أو توقّف عن اختياره.",
+          modelReplaced: "تم تبديل {{agent}} إلى نموذج لا تقدّمه أي نقطة وصول",
+          modelReplacedDetail:
+            "تم تغيير النموذج في {{file}} إلى {{model}} خارج Osuna، ولا تقدّمه أي نقطة وصول مفعّلة. أعد التطبيق للرجوع إلى {{defaultModel}}، أو أبقِ الإعدادات الحالية للبقاء على {{model}} دون هذا التنبيه.",
+          modelReplacedToDefaultDetail:
+            "تمت إزالة النموذج من {{file}} خارج Osuna، لذا يبدأ {{agent}} بنموذجه الافتراضي الخاص، ولا تقدّمه أي نقطة وصول مفعّلة. أعد التطبيق للرجوع إلى {{defaultModel}}، أو أبقِ الإعدادات الحالية لتركه كما هو دون هذا التنبيه.",
           reapply: "تطبيق مرة أخرى",
           switchToOfficial: "العودة إلى الرسمي",
           keepCurrent: "إبقاء الإعدادات الحالية",

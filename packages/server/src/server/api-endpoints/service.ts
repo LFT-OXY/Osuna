@@ -1,4 +1,5 @@
-// 保留 claude.ai 登录时口令的两种不一致移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 Check）
+// 保留 claude.ai 登录时口令的两种不一致移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 Check）；
+// 跟着 CLI 自己存下的选择走与「模型被换掉」照 internal/agent/claude.go 的 Follow、internal/agent/applied.go 的 Drift（replaced）与 Keep
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -50,6 +51,8 @@ import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
+  keepClaudeCliModel,
+  readClaudeCliPicks,
   readClaudeModel,
   type ClaudeSettingsUnparsableReason,
   restoreClaudeOfficial,
@@ -60,7 +63,10 @@ import {
 import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
+  forgetCodexEffortOriginal,
   inspectCodexConfig,
+  keepCodexCliModel,
+  readCodexCliPicks,
   isCodexMirrorKey,
   codexKeepsOwnModel,
   readCodexCatalogPath,
@@ -84,6 +90,7 @@ import {
   thinkingOptionsOf,
 } from "./default-thinking.js";
 import { CLAUDE_ULTRA_CODE } from "./claude-model-name.js";
+import type { CliModelHold, CliPicks } from "./cli-model-hold.js";
 import {
   codexListTag,
   codexOwnFirstModel,
@@ -131,7 +138,9 @@ import {
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
 import {
+  mappedTierModel,
   pickDefaultModel,
+  servedModel,
   type DefaultModelPick,
   type DefaultModelPickInput,
   type DefaultModelReconnect,
@@ -142,6 +151,14 @@ interface CliSync {
   provider: ApiEndpointProvider;
   wiring: CliWiring | null;
   agent: ApiEndpointAgentSettings;
+  // CLI 自己换过的模型也写回默认模型（「重新应用」、在 Osuna 里换了默认模型）；省略为留着 CLI 的。
+  rewritesModel?: boolean;
+}
+
+/** 把中转站写进 CLI 配置：要写的内容，与 CLI 自己换过的模型要不要写回。 */
+interface CliEndpointWrite {
+  wiring: CliWiring;
+  rewritesModel: boolean;
 }
 
 /** Osuna 对话里一个接口模型的思考档位选项与新对话的起步档位；模型没有档位时为空。 */
@@ -316,7 +333,15 @@ type ApiEndpointAgentIssueCode =
   // 保留 claude.ai 登录开着，口令却被填回去。
   | "claude_ai_login_token_set"
   // 保留 claude.ai 登录关着，口令却是空的或没了（params.how：empty / missing）。
-  | "claude_ai_login_token_empty";
+  | "claude_ai_login_token_empty"
+  // CLI 自己把模型换成了哪家接口都没有的（params.model：换成的模型，没设为空串；params.defaultModel：Osuna 的默认模型）。
+  | "model_replaced";
+
+/** 「保留当前设置」回应的是哪条提示；省略为关掉总开关、不改回文件。 */
+interface KeepCurrentSettingsInput {
+  provider: string;
+  code?: string;
+}
 
 interface AgentIssue extends ApiEndpointAgentIssue {
   code: ApiEndpointAgentIssueCode;
@@ -463,12 +488,17 @@ export class ApiEndpointService {
   async list(provider: string): Promise<ApiEndpointListResult> {
     const supported = requireProvider(provider);
     await this.followCodexSignIn();
+    await this.exclusive(() => this.followCliPicks());
     const state = this.readState();
     const enabled = state.agents[supported].enabled;
     const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
       claude: this.inspectClaude(state.agents.claude),
       codex: this.inspectCodex(state.agents.codex.enabled),
     };
+    for (const agentProvider of API_ENDPOINT_PROVIDERS) {
+      const replaced = this.modelReplacedIssue(state, agentProvider);
+      if (replaced) statuses[agentProvider].issues.push(replaced);
+    }
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
     if (state.agents.claude.enabled) {
       statuses.claude.issues.push(...(await this.claudeBypassIssues()));
@@ -493,8 +523,9 @@ export class ApiEndpointService {
    * 关着的 Codex 留着的服务商表改指这次的端口（ADR 0010）。出错只记日志，不挡 daemon 启动。
    */
   async attachGateway(url: string | null): Promise<void> {
-    await this.exclusive(() => {
+    await this.exclusive(async () => {
       this.gateway = url === null ? { kind: "socket" } : { kind: "bound", url };
+      await this.followCliPicks();
       const state = this.readStateForSnapshot();
       if (!state) return;
       const current = this.store.readGatewayTokens();
@@ -664,7 +695,7 @@ export class ApiEndpointService {
   }
 
   save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
-    return this.exclusive(async () => {
+    return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const state = this.readState();
       const existing = input.endpointId ? findEndpoint(state, input.endpointId) : null;
@@ -727,7 +758,7 @@ export class ApiEndpointService {
 
   /** 接口是主机共用的，删除对所有 Agent 生效；返回值按 provider 投影。 */
   delete(provider: string, endpointId: string): Promise<{ activeEndpointId: string | null }> {
-    return this.exclusive(async () => {
+    return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const state = this.readState();
       if (!findEndpoint(state, endpointId)) {
@@ -751,7 +782,7 @@ export class ApiEndpointService {
     provider: string,
     endpointId: string | null,
   ): Promise<{ activeEndpointId: string | null }> {
-    return this.exclusive(async () => {
+    return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const state = this.readState();
       if (endpointId === null) {
@@ -797,7 +828,7 @@ export class ApiEndpointService {
     provider: string,
     input: ApiEndpointAgentSettingsInput,
   ): Promise<ApiEndpointAgentSettingsResult> {
-    return this.exclusive(async () => {
+    return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const setsClaudeAiLogin = input.keepsClaudeAiLogin !== undefined;
       if (setsClaudeAiLogin && supported !== "claude") {
@@ -1016,12 +1047,18 @@ export class ApiEndpointService {
    * 「保留当前设置」（ADR 0012）：关掉总开关，但不按接管记录改回 CLI 配置；接管记录一并忘掉，此后不再提示。
    * 先忘掉接管记录再落下关开关，commit 里的切回官方因此什么都不改；落不下时把接管记录放回去。
    */
-  keepCurrentSettings(provider: string): Promise<ApiEndpointAgentSettings> {
+  keepCurrentSettings(input: KeepCurrentSettingsInput): Promise<ApiEndpointAgentSettings> {
     return this.exclusive(async () => {
-      const supported = requireProvider(provider);
+      const supported = requireProvider(input.provider);
+      await this.followCliPicks();
       const state = this.readState();
       const agent = state.agents[supported];
       if (!agent.enabled) return agent;
+      // 「模型被换掉」的保留当前设置：CLI 现在的模型记作它自己的，不再提示，总开关照开（照 magpie 的 Keep）。
+      if (input.code === "model_replaced") {
+        this.keepCliModel({ provider: supported, held: "kept" });
+        return this.shownAgent(state, supported);
+      }
       const forget = this.forgetTakeover(supported);
       try {
         const next = await this.commit(state, {
@@ -1034,6 +1071,138 @@ export class ApiEndpointService {
         throw error;
       }
     });
+  }
+
+  /** 把 CLI 配置里现在的模型记作 CLI 自己的（跟过去的，或保留当前设置后不再提示的）：重写不碰它。 */
+  private keepCliModel(input: { provider: ApiEndpointProvider; held: CliModelHold }): void {
+    const { provider, held } = input;
+    if (provider === "claude") {
+      const record = this.store.readClaudeTakeover();
+      const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
+      const takeover = keepClaudeCliModel({ text, takeover: record.takeover, held });
+      this.store.writeClaudeTakeover({ ...record, takeover });
+      return;
+    }
+    const record = this.store.readCodexTakeover();
+    const text = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
+    const takeover = keepCodexCliModel({ text, takeover: record.takeover, held });
+    this.store.writeCodexTakeover({ ...record, takeover });
+  }
+
+  /** CLI 配置里自己存下的选择；没开开关、没有接管记录或读不懂时为 null。 */
+  private readCliPicks(provider: ApiEndpointProvider): CliPicks | null {
+    if (provider === "claude") {
+      const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
+      return readClaudeCliPicks({ text, takeover: this.store.readClaudeTakeover().takeover });
+    }
+    const text = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
+    return readCodexCliPicks({ text, takeover: this.store.readCodexTakeover().takeover });
+  }
+
+  /**
+   * CLI 存下的模型对上的默认模型（ADR 0012）：光秃秃的、带接口标识的、带 [1m] 的、只差写法的都算，
+   * Claude Code 的档位名按映射；ChatGPT 接法下光秃秃的名字是 ChatGPT 自带的，只认「接口标识/模型名」。对不上为 null。
+   */
+  private followedModel(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    cliModel: string | null;
+  }): string | null {
+    const { state, provider, cliModel } = input;
+    if (cliModel === null) return null;
+    if (provider === "codex" && this.isCodexChatGptWired()) {
+      const named = endpointModelGroups(state).flatMap((group) => group.models);
+      return named.find((entry) => entry.id === cliModel)?.id ?? null;
+    }
+    const served = servedModel(state, cliModel);
+    if (served !== null || provider !== "claude") return served;
+    return mappedTierModel(state, cliModel);
+  }
+
+  private isCodexChatGptWired(): boolean {
+    return isChatGptWiring(this.store.readCodexTakeover().takeover);
+  }
+
+  /**
+   * 照 magpie 的 Follow：读状态时与改写前，CLI 自己存下的选择跟着走。模型换成某家接口提供的就是新的默认模型、记作 CLI 的；
+   * Codex 用 ChatGPT 登录时在 /model 里选 ChatGPT 自带模型不算被改（magpie 的 Beside），同样记作它的；
+   * 之前已保留过的再换成别家都没有的，照样记作它的、不再提示（magpie 的 Keep 之后没有记录可比）。思考档位与 Ultra Code 换了就跟过去。
+   * 跟随默认模型的字段（模型提示、modelSettings 档位、Codex 模型目录）随之重写。写不成只记日志。
+   */
+  private async followCliPicks(): Promise<void> {
+    for (const provider of API_ENDPOINT_PROVIDERS) {
+      try {
+        await this.followCliPicksOf(provider);
+      } catch (error) {
+        if (!(error instanceof ApiEndpointRequestError)) throw error;
+        this.logger.warn({ err: error, provider }, "Could not follow the CLI's own picks");
+      }
+    }
+  }
+
+  private async followCliPicksOf(provider: ApiEndpointProvider): Promise<void> {
+    const state = this.readStateForSnapshot();
+    if (!state?.agents[provider].enabled || this.gatewayUrlFor(provider) === null) return;
+    const picks = this.readCliPicks(provider);
+    if (!picks) return;
+    const before = state.agents[provider];
+    let agent = before;
+    let held: CliModelHold | null = null;
+    if (picks.model) {
+      const followed = this.followedModel({ state, provider, cliModel: picks.model.now });
+      const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
+      if (followed !== null) agent = { ...agent, defaultModelId: followed };
+      if (followed !== null || isChatGptOwnModel) held = "followed";
+      else if (picks.model.isKept) held = "kept";
+    }
+    const isLevelFollowed =
+      picks.level !== null && picks.level.now !== (agent.defaultThinkingOptionId ?? null);
+    if (picks.level && isLevelFollowed) {
+      agent = { ...agent, defaultThinkingOptionId: picks.level.now };
+      if (provider === "codex" && picks.level.now === null) this.forgetCodexEffortOriginal();
+    }
+    if (picks.ultraCode) agent = { ...agent, usesUltraCode: picks.ultraCode.isOn };
+    if (held !== null) this.keepCliModel({ provider, held });
+    if (agent === before) return;
+    await this.commit(
+      state,
+      { ...state, agents: { ...state.agents, [provider]: agent } },
+      { followsCli: true },
+    );
+    this.logger.info({ provider }, "Followed the CLI's own picks");
+  }
+
+  private forgetCodexEffortOriginal(): void {
+    const record = this.store.readCodexTakeover();
+    if (!record.takeover) return;
+    this.store.writeCodexTakeover({
+      ...record,
+      takeover: forgetCodexEffortOriginal(record.takeover),
+    });
+  }
+
+  /** 「模型被换掉」：CLI 自己换成了哪家接口都没有的模型，还没保留过（ADR 0012）。 */
+  private modelReplacedIssue(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+  ): AgentIssue | null {
+    const agent = state.agents[provider];
+    if (!agent.enabled) return null;
+    const picks = this.readCliPicks(provider);
+    const model = picks?.model;
+    if (!model || model.isKept) return null;
+    if (this.followedModel({ state, provider, cliModel: model.now }) !== null) return null;
+    const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
+    if (isChatGptOwnModel) return null;
+    const file =
+      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
+    const now = model.now ?? "";
+    const shown = model.now ?? `${AGENT_NAMES[provider]}'s own default`;
+    return {
+      code: "model_replaced",
+      params: { file, model: now, defaultModel: agent.defaultModelId ?? "" },
+      message: `${AGENT_NAMES[provider]}'s model was changed to ${shown} in ${file}, which no API endpoint serves`,
+    };
   }
 
   /** 忘掉接管记录（备份留着，只供手动找回）；返回放回去的办法。 */
@@ -1058,7 +1227,7 @@ export class ApiEndpointService {
 
   /** 接口开关与「立刻恢复」。关掉开关按默认模型失踪规则处理各 Agent。 */
   setEndpointState(input: ApiEndpointStateInput): Promise<void> {
-    return this.exclusive(async () => {
+    return this.exclusiveFollowing(async () => {
       const state = this.readState();
       const endpoint = findEndpoint(state, input.endpointId);
       if (!endpoint) {
@@ -1085,6 +1254,8 @@ export class ApiEndpointService {
       keys?: Record<string, string>;
       // 老客户端的「重新应用」：内容没变也重写这个 Agent 的 CLI 配置，盖掉外部改动。
       rewrite?: ApiEndpointProvider;
+      // 这次变更是跟着 CLI 自己存下的选择：默认模型变了也不写回 CLI 配置里的模型。
+      followsCli?: boolean;
     } = {},
   ): Promise<ApiEndpointState> {
     const next = this.settleThinking({ previous, next: settleAgentSettings(proposed) });
@@ -1118,6 +1289,7 @@ export class ApiEndpointService {
           provider,
           wiring: this.cliWiring(next, provider, tokens),
           agent: next.agents[provider],
+          rewritesModel: rewritesCliModel({ previous, next, provider, options }),
         });
         synced.push(provider);
       }
@@ -1163,12 +1335,13 @@ export class ApiEndpointService {
 
   private syncCli(input: CliSync): void {
     const { provider, wiring, agent } = input;
+    const rewritesModel = input.rewritesModel === true;
     if (!wiring) {
       this.restoreOfficial(provider, agent.defaultModelId);
     } else if (provider === "codex") {
-      this.writeCodexEndpoint(wiring);
+      this.writeCodexEndpoint({ wiring, rewritesModel });
     } else {
-      this.writeClaudeEndpoint(wiring);
+      this.writeClaudeEndpoint({ wiring, rewritesModel });
     }
   }
 
@@ -1353,7 +1526,7 @@ export class ApiEndpointService {
    * Claude Code 的模型选择列表，再通知客户端刷新开着总开关的 Agent。接口与默认模型都不动。
    */
   retiredModelsChanged(): Promise<void> {
-    return this.exclusive(() => {
+    return this.exclusiveFollowing(() => {
       const state = this.readStateForSnapshot();
       if (!state) return;
       this.rewriteCodexCatalog(state);
@@ -1366,7 +1539,7 @@ export class ApiEndpointService {
 
   /** models.dev 更新了：开着的 Agent 按新资料重写 Codex 模型目录与 Claude Code 的模型提示。 */
   private refreshModelFacts(): Promise<void> {
-    return this.exclusive(() => {
+    return this.exclusiveFollowing(() => {
       const state = this.readStateForSnapshot();
       if (!state) return;
       this.rewriteCodexCatalog(state);
@@ -1525,7 +1698,7 @@ export class ApiEndpointService {
    * 清单带的模型资料改变了 Codex 模型目录或 Claude Code 的模型提示时，跟着重写。
    */
   private keepCatalog(endpointId: string, models: ListedModel[]): Promise<void> {
-    return this.exclusive(() => {
+    return this.exclusiveFollowing(() => {
       const state = this.readState();
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint) return;
@@ -1755,7 +1928,8 @@ export class ApiEndpointService {
     }
   }
 
-  private writeClaudeEndpoint(wiring: CliWiring): void {
+  private writeClaudeEndpoint(input: CliEndpointWrite): void {
+    const { wiring, rewritesModel } = input;
     const settingsPath = this.resolveClaudeSettingsPath();
     const record = this.store.readClaudeTakeover();
     // 这次首次改写做出的副本；比对不通过重试时收回，免得留下多份。
@@ -1767,6 +1941,7 @@ export class ApiEndpointService {
           text,
           wiring,
           takeover: record.takeover,
+          rewritesModel,
         });
         if (result.kind === "unparsable") {
           throw unparsable({
@@ -1839,7 +2014,8 @@ export class ApiEndpointService {
    * 先算好 config.toml 的新内容（解析失败就什么都不写），再写接管记录，重读比对通过后替换 config.toml。
    * config.toml 替换不成时接管记录退回切换前的样子。
    */
-  private writeCodexEndpoint(wiring: CliWiring): void {
+  private writeCodexEndpoint(input: CliEndpointWrite): void {
+    const { wiring, rewritesModel } = input;
     const configPath = this.resolveCodexConfigPath();
     const record = this.store.readCodexTakeover();
     let createdBackup: string | null = null;
@@ -1857,6 +2033,7 @@ export class ApiEndpointService {
               : null,
           },
           takeover: record.takeover,
+          rewritesModel,
         });
         if (result.kind === "unparsable")
           throw unparsable({ filePath: configPath, detail: result.message });
@@ -1912,7 +2089,7 @@ export class ApiEndpointService {
   private async followCodexSignIn(): Promise<void> {
     if (!this.readStateForSnapshot()?.agents.codex.enabled) return;
     await this.checkCodexSignIn();
-    await this.exclusive(() => {
+    await this.exclusiveFollowing(() => {
       const state = this.readStateForSnapshot();
       if (!state?.agents.codex.enabled || !this.codexWiringChanged()) return;
       if (this.gatewayUrlFor("codex") === null) return;
@@ -2179,6 +2356,14 @@ export class ApiEndpointService {
     };
   }
 
+  /** 先让 CLI 自己存下的选择跟过去，再做会改写 CLI 配置的事：改写不盖掉它们（ADR 0012）。 */
+  private exclusiveFollowing<T>(run: () => T | Promise<T>): Promise<T> {
+    return this.exclusive(async () => {
+      await this.followCliPicks();
+      return run();
+    });
+  }
+
   private exclusive<T>(run: () => T | Promise<T>): Promise<T> {
     const next = this.queue.then(run);
     this.queue = next.catch(() => undefined);
@@ -2269,6 +2454,22 @@ function enabledAgentSettings(input: {
   // 有可用模型时总挑得出来。
   if (!defaultModelId) throw new Error("No default model was picked");
   return { ...agent, enabled: true, defaultModelId };
+}
+
+/**
+ * 这次改写要不要盖掉 CLI 自己换过的模型：「重新应用」，或在 Osuna 里换了默认模型（跟着 CLI 换的不算）。
+ */
+function rewritesCliModel(input: {
+  previous: ApiEndpointState;
+  next: ApiEndpointState;
+  provider: ApiEndpointProvider;
+  options: { rewrite?: ApiEndpointProvider; followsCli?: boolean };
+}): boolean {
+  const { previous, next, provider, options } = input;
+  if (provider === options.rewrite) return true;
+  const isDefaultModelChanged =
+    previous.agents[provider].defaultModelId !== next.agents[provider].defaultModelId;
+  return isDefaultModelChanged && options.followsCli !== true;
 }
 
 /** 写进接管记录的 reconnect；没有默认模型时不写。 */

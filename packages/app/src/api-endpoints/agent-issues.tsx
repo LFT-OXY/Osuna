@@ -162,6 +162,7 @@ const ACTION_LABEL_KEYS: Record<AgentIssueAction, string> = {
   reapply: "settings.apiEndpoints.agent.issues.reapply",
   switchToOfficial: "settings.apiEndpoints.agent.issues.switchToOfficial",
   keepCurrent: "settings.apiEndpoints.agent.issues.keepCurrent",
+  keepReplacedModel: "settings.apiEndpoints.agent.issues.keepCurrent",
   keepClaudeAiLogin: "settings.apiEndpoints.agent.issues.keepClaudeAiLogin",
   stopKeepingClaudeAiLogin: "settings.apiEndpoints.agent.issues.stopKeepingClaudeAiLogin",
 };
@@ -291,6 +292,21 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           agent: providerLabel,
         }),
         description: t(detailKey, { agent: providerLabel, file: shortenPath(params.file) }),
+      };
+    }
+    case "modelReplaced": {
+      const isRemoved = params.model === "";
+      const detailKey = isRemoved
+        ? "settings.apiEndpoints.agent.issues.modelReplacedToDefaultDetail"
+        : "settings.apiEndpoints.agent.issues.modelReplacedDetail";
+      return {
+        title: t("settings.apiEndpoints.agent.issues.modelReplaced", { agent: providerLabel }),
+        description: t(detailKey, {
+          agent: providerLabel,
+          file: shortenPath(params.file),
+          model: params.model,
+          defaultModel: params.defaultModel,
+        }),
       };
     }
     case "codexProfileOverride":

@@ -1158,6 +1158,61 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
     expect(await readFile(path.join(claudeDir(), "settings.json"), "utf8")).toBe(changed);
   });
 
+  test("Model replaced says which model Claude Code was switched to: Apply again and Keep current settings each fail in place, then do what they say", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const on = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(on.error).toBeNull();
+    const settingsPath = path.join(claudeDir(), "settings.json");
+    // 终端里的 /model 换成了哪家接口都没有的模型。
+    const switchModel = async () => {
+      const settings = await readClaudeSettings();
+      await writeFile(settingsPath, JSON.stringify({ ...settings, model: "gpt-9" }, null, 2));
+    };
+    await switchModel();
+    const host = await failKeepCurrentSettings(page);
+    await openClaudeCodePage(page);
+
+    await expect(issue(page, "modelReplaced")).toContainText(
+      "Claude was switched to a model no API endpoint serves",
+    );
+    await expect(issue(page, "modelReplaced")).toContainText("was changed to gpt-9 outside Osuna");
+    await expect(issueButton(page, "reapply")).toBeVisible();
+    await expect(issueButton(page, "keepReplacedModel")).toHaveText("Keep current settings");
+
+    await test.step("Apply again fails in place, then writes the default model back", async () => {
+      await pressWhileReadOnly(page, "reapply");
+      await expect(issue(page, "modelReplaced")).toBeVisible();
+      await expect.poll(claudeSettingsModel).toBe("gpt-9");
+      await issueError(page).getByRole("button", { name: "Dismiss" }).click();
+      await issueButton(page, "reapply").click();
+      await expect(issue(page, "modelReplaced")).toHaveCount(0);
+      await expect.poll(claudeSettingsModel).toBe("claude-sonnet-4-5");
+    });
+
+    await test.step("Keep current settings fails in place, then stops the warning with the switch on", async () => {
+      await switchModel();
+      await page.reload();
+      await expect(issue(page, "modelReplaced")).toBeVisible();
+      await issueButton(page, "keepReplacedModel").click();
+      await expect(issueError(page)).toContainText(
+        'Couldn\'t finish "Keep current settings" for Claude',
+      );
+      await expect(issue(page, "modelReplaced")).toBeVisible();
+
+      host.failing = false;
+      await issueButton(page, "keepReplacedModel").click();
+      await expect(issue(page, "modelReplaced")).toHaveCount(0);
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+      expect((await readClaudeSettings()).model).toBe("gpt-9");
+    });
+  });
+
   test("a settings file Osuna can't read is explained in the UI language, with no actions", async ({
     page,
   }) => {

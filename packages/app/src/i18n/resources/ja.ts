@@ -2712,6 +2712,12 @@ export const ja: TranslationResources = {
             "Codex のプロファイル「{{profile}}」がサードパーティ API を上書きしています",
           codexProfileOverrideDetail:
             "{{file}} の [profiles.{{profile}}] が {{keys}} を設定しているため、Codex は Osuna が書いた値ではなくそちらを使います。プロファイルから削除するか、選択をやめてください。",
+          modelReplaced:
+            "{{agent}} のモデルが、どのエンドポイントも提供していないモデルに切り替えられました",
+          modelReplacedDetail:
+            "{{file}} のモデルが Osuna の外で {{model}} に変更されましたが、オンのエンドポイントはどれもこのモデルを提供していません。再適用すると {{defaultModel}} に戻ります。現在の設定を保持すると {{model}} のまま、この警告は表示されなくなります。",
+          modelReplacedToDefaultDetail:
+            "{{file}} からモデルが Osuna の外で削除されたため、{{agent}} は自身の既定モデルで起動しますが、オンのエンドポイントはどれもそれを提供していません。再適用すると {{defaultModel}} に戻ります。現在の設定を保持するとこのまま、この警告は表示されなくなります。",
           reapply: "再適用",
           switchToOfficial: "公式に戻す",
           keepCurrent: "現在の設定を保持",

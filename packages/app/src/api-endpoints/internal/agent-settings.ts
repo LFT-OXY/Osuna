@@ -25,11 +25,15 @@ export interface AgentEndpointsSummary {
   cooling: { name: string; remaining: CooldownRemaining } | null;
 }
 
-/** 提示区一条可以做的处理：重新应用、切回官方、保留当前设置，以及打开、关掉「保留 claude.ai 登录」。 */
+/**
+ * 提示区一条可以做的处理：重新应用、切回官方、保留当前设置，以及打开、关掉「保留 claude.ai 登录」。
+ * 「模型被换掉」的保留当前设置（keepReplacedModel）只留下 CLI 的模型、总开关照开，与关掉总开关的那个分开。
+ */
 export type AgentIssueAction =
   | "reapply"
   | "switchToOfficial"
   | "keepCurrent"
+  | "keepReplacedModel"
   | "keepClaudeAiLogin"
   | "stopKeepingClaudeAiLogin";
 
@@ -46,6 +50,8 @@ export type AgentIssueKind =
   | "claudeAiLoginTokenSet"
   // 保留 claude.ai 登录关着，口令却是空的或没了（params.how：empty / missing）。
   | "claudeAiLoginTokenEmpty"
+  // CLI 自己把模型换成了哪家接口都没有的（params.model 为空串是删掉了模型，params.defaultModel 是 Osuna 的默认模型）。
+  | "modelReplaced"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -68,6 +74,7 @@ const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   managed_base_url: "managedBaseUrl",
   claude_ai_login_token_set: "claudeAiLoginTokenSet",
   claude_ai_login_token_empty: "claudeAiLoginTokenEmpty",
+  model_replaced: "modelReplaced",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
@@ -81,6 +88,8 @@ const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   // 照 magpie 的两种不一致：按选项把口令写回该有的样子，或者改选项迁就文件。
   claudeAiLoginTokenSet: ["reapply", "stopKeepingClaudeAiLogin"],
   claudeAiLoginTokenEmpty: ["keepClaudeAiLogin", "reapply"],
+  // 照 magpie 的 replaced：写回默认模型，或留下 CLI 的模型不再提示。
+  modelReplaced: ["reapply", "keepReplacedModel"],
   unknown: [],
 };
 

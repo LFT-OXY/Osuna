@@ -245,7 +245,10 @@ export class ApiEndpointSession {
     >,
   ): Promise<void> {
     try {
-      const agent = await this.service.keepCurrentSettings(request.provider);
+      const agent = await this.service.keepCurrentSettings({
+        provider: request.provider,
+        ...(request.code ? { code: request.code } : {}),
+      });
       this.host.emit({
         type: "provider.api_endpoint.keep_current_settings.response",
         payload: { requestId: request.requestId, provider: request.provider, agent, error: null },

@@ -639,6 +639,21 @@ internal/agent/codex.go, and ModelDefault in internal/codexcat/codexcat.go:
   packages/server/src/server/api-endpoints/claude-settings-patch.ts
   packages/server/src/server/api-endpoints/codex-config-patch.ts
 
+Following the model and thinking level a CLI saved itself (a model an endpoint
+serves becomes the default model and is left as the CLI wrote it, one no
+endpoint serves is reported as replaced with Re-apply and Keep current
+settings, a ChatGPT model picked beside the ChatGPT sign-in is no warning, and
+the level Claude Code would read is taken from its env, the model's
+modelSettings, then the top effortLevel) follows Follow, claudeTopEffort,
+claudeReadsTop and the effort field's Get in magpie's internal/agent/claude.go,
+and Drift (replaced), Reapply and Keep in internal/agent/applied.go:
+
+  packages/server/src/server/api-endpoints/cli-model-hold.ts
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+  packages/server/src/server/api-endpoints/codex-config-patch.ts
+  packages/server/src/server/api-endpoints/service.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

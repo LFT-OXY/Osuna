@@ -360,11 +360,14 @@ export type ApiEndpointSetAgentSettingsResponse = z.infer<
 /**
  * 「保留当前设置」：关掉该 Agent 的「使用第三方接口」总开关，但 CLI 配置文件保持现在的样子、不按接管记录改回，
  * 此后不再提示设置被改过。总开关已经关着时什么都不做。失败时 `agent` 是该 Agent 未变的设置。
+ * `code`：回应的是哪条提示。`model_replaced`（模型被换掉）只留下 CLI 现在的模型、不再提示，总开关照开；
+ * 省略时是上面的意思。老 daemon 忽略它，但它们也不报 model_replaced。
  */
 export const ApiEndpointKeepCurrentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.keep_current_settings.request"),
   requestId: z.string(),
   provider: z.string(),
+  code: z.string().optional(),
 });
 export type ApiEndpointKeepCurrentSettingsRequest = z.infer<
   typeof ApiEndpointKeepCurrentSettingsRequestSchema

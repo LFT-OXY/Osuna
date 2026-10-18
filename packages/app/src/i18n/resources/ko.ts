@@ -2697,6 +2697,11 @@ export const ko: TranslationResources = {
           codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
           codexProfileOverrideDetail:
             "{{file}}의 [profiles.{{profile}}]이(가) {{keys}}을(를) 설정해서 Codex는 Osuna가 쓴 값 대신 그것을 씁니다. 프로필에서 지우거나 선택하지 마세요.",
+          modelReplaced: "{{agent}}의 모델이 어떤 엔드포인트도 제공하지 않는 모델로 바뀌었습니다",
+          modelReplacedDetail:
+            "{{file}}의 모델이 Osuna 밖에서 {{model}}(으)로 바뀌었고, 켜져 있는 엔드포인트 중 이 모델을 제공하는 곳이 없습니다. 다시 적용하면 {{defaultModel}}(으)로 돌아가고, 현재 설정 유지를 누르면 {{model}}을(를) 그대로 두고 이 경고를 더 표시하지 않습니다.",
+          modelReplacedToDefaultDetail:
+            "{{file}}에서 모델이 Osuna 밖에서 삭제되어 {{agent}}이(가) 자체 기본 모델로 시작하는데, 켜져 있는 엔드포인트 중 그 모델을 제공하는 곳이 없습니다. 다시 적용하면 {{defaultModel}}(으)로 돌아가고, 현재 설정 유지를 누르면 지금대로 두고 이 경고를 더 표시하지 않습니다.",
           reapply: "다시 적용",
           switchToOfficial: "공식으로 전환",
           keepCurrent: "현재 설정 유지",

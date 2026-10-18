@@ -436,10 +436,12 @@ experimental_bearer_token = "${token}"
       expect(listed.agentIssues?.claude).toEqual([]);
     });
 
-    test("a changed token or model_provider counts too; a changed model alone does not", async () => {
+    test("a changed token or model_provider counts too; a changed model alone is only Model replaced", async () => {
       const switched = await switchOn();
       await writeFile(configPath, switched.replace(`model = "relay/gpt"`, `model = "gpt-5"`));
-      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+      expect((await client.apiEndpointList("codex")).agentIssues?.codex).toMatchObject([
+        { code: "model_replaced" },
+      ]);
 
       const token = await codexToken();
       await writeFile(configPath, switched.replace(`"${token}"`, `"sk-other"`));
@@ -485,7 +487,7 @@ experimental_bearer_token = "${token}"
       const changed = switched.replace(`model_provider = "${ID}"`, `model_provider = "mine"`);
       await writeFile(configPath, changed);
 
-      const kept = await client.apiEndpointKeepCurrentSettings("codex");
+      const kept = await client.apiEndpointKeepCurrentSettings({ provider: "codex" });
 
       expect(kept).toMatchObject({ provider: "codex", agent: { enabled: false }, error: null });
       expect(await readFile(configPath, "utf8")).toBe(changed);
@@ -520,7 +522,7 @@ experimental_bearer_token = "${token}"
         .replace(`"${await codexToken()}"`, '"sk-mine"');
       await writeFile(configPath, changed);
 
-      const kept = await client.apiEndpointKeepCurrentSettings("codex");
+      const kept = await client.apiEndpointKeepCurrentSettings({ provider: "codex" });
       expect(kept).toMatchObject({ agent: { enabled: false }, error: null });
       expect(await readFile(configPath, "utf8")).toBe(changed);
       expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);

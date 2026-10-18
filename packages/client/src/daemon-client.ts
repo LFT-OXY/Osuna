@@ -713,6 +713,11 @@ export type ApiEndpointSetAgentSettingsOptions = Omit<
   "type" | "requestId"
 >;
 
+export type ApiEndpointKeepCurrentSettingsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.keep_current_settings.request" }>,
+  "type" | "requestId"
+>;
+
 export type ApiEndpointSetEndpointStateOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_endpoint_state.request" }>,
   "type" | "requestId"
@@ -6364,14 +6369,17 @@ export class DaemonClient {
     });
   }
 
-  /** 「保留当前设置」：关掉总开关，CLI 配置保持现在的样子，不再提示设置被改过。 */
+  /**
+   * 「保留当前设置」：关掉总开关，CLI 配置保持现在的样子，不再提示设置被改过。
+   * `code: "model_replaced"` 回应「模型被换掉」：只留下 CLI 现在的模型，总开关照开。
+   */
   async apiEndpointKeepCurrentSettings(
-    provider: string,
+    options: ApiEndpointKeepCurrentSettingsOptions,
     requestId?: string,
   ): Promise<ApiEndpointKeepCurrentSettingsPayload> {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
-      message: { type: "provider.api_endpoint.keep_current_settings.request", provider },
+      message: { type: "provider.api_endpoint.keep_current_settings.request", ...options },
     });
   }
 

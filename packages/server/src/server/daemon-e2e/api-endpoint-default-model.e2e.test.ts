@@ -48,6 +48,19 @@ async function modelThinking(client: DaemonClient, modelId: string) {
   };
 }
 
+interface ListedIssue {
+  code: string;
+  params?: Record<string, string>;
+}
+
+function issueCodes(issues: ListedIssue[]): string[] {
+  return issues.map((issue) => issue.code);
+}
+
+function modelReplaced(issues: ListedIssue[]): ListedIssue | undefined {
+  return issues.find((issue) => issue.code === "model_replaced");
+}
+
 async function startUpstream(text: string): Promise<FakeUpstream> {
   const upstream: FakeUpstream = {
     url: "",
@@ -255,7 +268,7 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     expect(reapplied.connection).toMatchObject({ how: "kept", model: "relay-b/glm-4.6" });
 
     // 「保留当前设置」后 settings.json 还指向中转站、写着 relay-b/glm-4.6。
-    expect((await client.apiEndpointKeepCurrentSettings("claude")).error).toBeNull();
+    expect((await client.apiEndpointKeepCurrentSettings({ provider: "claude" })).error).toBeNull();
     const result = await turnOn("claude");
 
     expect(result.connection).toMatchObject({ how: "kept", model: "relay-b/glm-4.6" });
@@ -396,6 +409,182 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
     expect(upstreamB.models).toEqual(["kimi-k2", "kimi-k2"]);
     expect(upstreamA.models).toEqual(["kimi-k2", "kimi-k2"]);
   });
+  describe("following the CLI's own picks", () => {
+    // 照 magpie 的 Follow 与 Drift 的 replaced：CLI 自己存下的选择跟着走，换成哪家都没有的模型才提示。
+
+    /** 像 CLI 那样改 settings.json 的顶层键，其余照旧。 */
+    async function setClaudeKeys(values: Record<string, unknown>): Promise<void> {
+      const settings = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
+      await writeFile(settingsPath, `${JSON.stringify({ ...settings, ...values }, null, 2)}\n`);
+    }
+
+    async function setCodexTopKey(key: string, value: string): Promise<void> {
+      const text = await readFile(configPath, "utf8");
+      const line = new RegExp(`^${key} = .*$`, "m");
+      const next = line.test(text)
+        ? text.replace(line, `${key} = "${value}"`)
+        : `${key} = "${value}"\n${text}`;
+      await writeFile(configPath, next);
+    }
+
+    async function listed(provider: string) {
+      const list = await client.apiEndpointList(provider);
+      expect(list.error).toBeNull();
+      const issues = list.agentIssues?.[provider] ?? [];
+      return {
+        agent: list.agents?.[provider],
+        issueCodes: issueCodes(issues),
+        replaced: modelReplaced(issues),
+        health: list.health,
+      };
+    }
+
+    // 加一家接口：CLI 配置跟着重写（模型列表变了）。
+    async function addRelayC(): Promise<void> {
+      await saveEndpoint({ name: "Relay C", models: ["kimi-k2"] });
+    }
+
+    test.each([
+      { saved: "claude-opus-4-6", defaultModelId: "claude-opus-4-6" },
+      { saved: "relay-b/glm-4.6", defaultModelId: "relay-b/glm-4.6" },
+      { saved: "glm-4.6[1m]", defaultModelId: "glm-4.6" },
+    ])(
+      "Claude Code: /model saving $saved, which an endpoint serves, becomes the default model and stays through a rewrite",
+      async ({ saved, defaultModelId }) => {
+        await twoEndpoints();
+        await turnOn("claude", "first");
+
+        await setClaudeKeys({ model: saved });
+
+        const now = await listed("claude");
+        expect(now.agent?.defaultModelId).toBe(defaultModelId);
+        expect(now.issueCodes).not.toContain("model_replaced");
+        expect(now.health).toEqual([]);
+
+        await addRelayC();
+        expect(await claudeModel()).toBe(saved);
+        expect((await listed("claude")).health).toEqual([]);
+      },
+    );
+
+    test("Claude Code: a model no endpoint serves is reported as replaced; re-apply writes the default model back, keep current settings stops the warning with the switch on", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+
+      await setClaudeKeys({ model: "gpt-9" });
+      const replaced = await listed("claude");
+      expect(replaced.replaced?.params).toMatchObject({ model: "gpt-9", file: settingsPath });
+      expect(replaced.agent?.defaultModelId).toBe("first");
+      // 之后的重写不改回 CLI 存下的模型。
+      await addRelayC();
+      expect(await claudeModel()).toBe("gpt-9");
+
+      const reapplied = await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        reapply: true,
+      });
+      expect(reapplied.error).toBeNull();
+      expect(await claudeModel()).toBe("first");
+      expect((await listed("claude")).issueCodes).not.toContain("model_replaced");
+
+      await setClaudeKeys({ model: "gpt-9" });
+      const kept = await client.apiEndpointKeepCurrentSettings({
+        provider: "claude",
+        code: "model_replaced",
+      });
+      expect(kept.error).toBeNull();
+      expect(kept.agent?.enabled).toBe(true);
+      const after = await listed("claude");
+      expect(after.issueCodes).not.toContain("model_replaced");
+      expect(after.health).toEqual([]);
+      expect(after.agent?.enabled).toBe(true);
+      await saveEndpoint({ name: "Relay D", models: ["kimi-k3"] });
+      expect(await claudeModel()).toBe("gpt-9");
+    });
+
+    test("Codex on an API key: /model saving an endpoint's model becomes the default model; one no endpoint serves is reported", async () => {
+      await twoEndpoints();
+      await writeFile(configPath, `model = "gpt-9"\n`);
+      await turnOn("codex", "first");
+
+      await setCodexTopKey("model", "relay-b/glm-4.6");
+      const followed = await listed("codex");
+      expect(followed.agent?.defaultModelId).toBe("relay-b/glm-4.6");
+      expect(followed.issueCodes).not.toContain("model_replaced");
+      await addRelayC();
+      expect(await codexModel()).toBe("relay-b/glm-4.6");
+      expect((await listed("codex")).health).toEqual([]);
+
+      await setCodexTopKey("model", "gpt-9");
+      const replaced = await listed("codex");
+      expect(replaced.replaced?.params).toMatchObject({ model: "gpt-9", file: configPath });
+      expect(replaced.agent?.defaultModelId).toBe("relay-b/glm-4.6");
+    });
+
+    test("Codex signed in with ChatGPT: an endpoint's model picked in /model becomes the default model; one of ChatGPT's own is no warning and stays", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      await writeFile(
+        configPath,
+        `model_provider = "mine"\nmodel = "glm-4.6"\n\n[model_providers.mine]\nname = "Mine"\nbase_url = "https://mine.example/v1"\n`,
+      );
+      await turnOn("codex");
+      expect(await codexModel()).toBe("relay-a/glm-4.6");
+
+      await setCodexTopKey("model", "relay-b/glm-4.6");
+      expect((await listed("codex")).agent?.defaultModelId).toBe("relay-b/glm-4.6");
+
+      await setCodexTopKey("model", "gpt-5.5");
+      const beside = await listed("codex");
+      expect(beside.issueCodes).not.toContain("model_replaced");
+      expect(beside.health).toEqual([]);
+      expect(beside.agent?.defaultModelId).toBe("relay-b/glm-4.6");
+      await addRelayC();
+      expect(await codexModel()).toBe("gpt-5.5");
+    });
+
+    test("thinking: a level the CLI saved (effortLevel, modelSettings, model_reasoning_effort) becomes the default thinking and stays through a rewrite", async () => {
+      await saveEndpoint({ name: "Relay C", models: ["glm-5.3", "kimi-k2"] });
+      await twoEndpoints();
+      await turnOn("claude", "glm-5.3");
+      await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        defaultThinkingOptionId: "high",
+      });
+
+      // 别家模型读顶层 effortLevel。
+      await setClaudeKeys({ effortLevel: "low" });
+      expect((await listed("claude")).agent?.defaultThinkingOptionId).toBe("low");
+      await saveEndpoint({ name: "Relay D", models: ["kimi-k3"] });
+      expect(JSON.parse(await readFile(settingsPath, "utf8"))).toMatchObject({
+        effortLevel: "low",
+      });
+
+      // Claude 模型：/effort 只写 modelSettings。
+      await turnOn("claude", "claude-opus-4-6");
+      await setClaudeKeys({ modelSettings: { "claude-opus-4-6": { effortLevel: "medium" } } });
+      expect((await listed("claude")).agent?.defaultThinkingOptionId).toBe("medium");
+      await saveEndpoint({ name: "Relay E", models: ["kimi-k4"] });
+      expect(JSON.parse(await readFile(settingsPath, "utf8"))).toMatchObject({
+        modelSettings: { "claude-opus-4-6": { effortLevel: "medium" } },
+      });
+
+      // Codex 的 model_reasoning_effort。
+      await turnOn("codex", "glm-5.3");
+      await client.apiEndpointSetAgentSettings({
+        provider: "codex",
+        enabled: true,
+        defaultThinkingOptionId: "high",
+      });
+      await setCodexTopKey("model_reasoning_effort", "low");
+      expect((await listed("codex")).agent?.defaultThinkingOptionId).toBe("low");
+      await saveEndpoint({ name: "Relay F", models: ["kimi-k5"] });
+      expect(parseToml(await readFile(configPath, "utf8")).model_reasoning_effort).toBe("low");
+    });
+  });
+
   describe("default thinking", () => {
     // Relay C：glm-5.3（Codex 里 low、high、max）与查不到资料的 kimi-k2（Codex 里四档）。
     async function relayC(): Promise<void> {

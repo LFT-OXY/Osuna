@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
+  keepClaudeCliModel,
+  readClaudeCliPicks,
   restoreClaudeOfficial,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
@@ -1094,5 +1096,136 @@ describe("default thinking in settings.json", () => {
     });
     if (inspection.kind !== "parsed") throw new Error("Expected parsed");
     expect(inspection.modifiedKeys).toEqual([]);
+  });
+});
+
+describe("the CLI's own picks in settings.json", () => {
+  function patched(input: { text: string; defaultThinking?: string | null; model?: string }) {
+    const result = applyClaudeApiEndpoint({
+      text: input.text,
+      wiring: {
+        ...GATEWAY,
+        model: input.model ?? GATEWAY.model,
+        defaultThinking: input.defaultThinking ?? null,
+      },
+      takeover: null,
+    });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result;
+  }
+
+  function edited(text: string, change: (settings: Record<string, unknown>) => void): string {
+    const settings = JSON.parse(text) as Record<string, unknown>;
+    change(settings);
+    return `${JSON.stringify(settings, null, 2)}\n`;
+  }
+
+  function rewrite(input: {
+    text: string;
+    takeover: ClaudeSettingsTakeover | null;
+    rewritesModel?: boolean;
+  }) {
+    const result = applyClaudeApiEndpoint({
+      text: input.text,
+      wiring: { ...GATEWAY, model: "glm-4.6" },
+      takeover: input.takeover,
+      rewritesModel: input.rewritesModel,
+    });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result;
+  }
+
+  it("reads a model /model saved, and nothing while the file holds what Osuna wrote", () => {
+    const first = patched({ text: USER_SETTINGS });
+    expect(readClaudeCliPicks({ text: first.text, takeover: first.takeover })?.model).toBeNull();
+
+    const saved = edited(first.text, (settings) => {
+      settings.model = "relay/kimi-k2[1m]";
+    });
+    expect(readClaudeCliPicks({ text: saved, takeover: first.takeover })?.model).toEqual({
+      now: "relay/kimi-k2[1m]",
+      isKept: false,
+    });
+  });
+
+  it("leaves a model the CLI saved through a rewrite, and writes the default model back only when told to", () => {
+    const first = patched({ text: USER_SETTINGS });
+    const saved = edited(first.text, (settings) => {
+      settings.model = "gpt-9";
+    });
+
+    const kept = rewrite({ text: saved, takeover: first.takeover });
+    expect(JSON.parse(kept.text).model).toBe("gpt-9");
+    // 记录不变：还是「模型被换掉」。
+    expect(readClaudeCliPicks({ text: kept.text, takeover: kept.takeover })?.model?.now).toBe(
+      "gpt-9",
+    );
+
+    const reapplied = rewrite({ text: kept.text, takeover: kept.takeover, rewritesModel: true });
+    expect(JSON.parse(reapplied.text).model).toBe("glm-4.6");
+    expect(readClaudeCliPicks({ text: reapplied.text, takeover: reapplied.takeover })?.model).toBe(
+      null,
+    );
+  });
+
+  it("keeps the CLI's model as kept: no longer changed, untouched by a rewrite, put back to the original on switch-off", () => {
+    const first = patched({ text: USER_SETTINGS });
+    const saved = edited(first.text, (settings) => {
+      settings.model = "gpt-9";
+    });
+    const takeover = keepClaudeCliModel({ text: saved, takeover: first.takeover, held: "kept" });
+    expect(readClaudeCliPicks({ text: saved, takeover })?.model).toBeNull();
+    const inspection = inspectClaudeSettings({ text: saved, takeover });
+    if (inspection.kind !== "parsed") throw new Error("Expected parsed");
+    expect(inspection.modifiedKeys).toEqual([]);
+
+    const again = rewrite({ text: saved, takeover });
+    expect(JSON.parse(again.text).model).toBe("gpt-9");
+    const moved = edited(again.text, (settings) => {
+      settings.model = "gpt-10";
+    });
+    expect(readClaudeCliPicks({ text: moved, takeover: again.takeover })?.model).toEqual({
+      now: "gpt-10",
+      isKept: true,
+    });
+
+    const restored = restoreClaudeOfficial({ text: again.text, takeover: again.takeover });
+    if (restored.kind !== "patched") throw new Error("Expected a patch");
+    expect(restored.text).toBe(USER_SETTINGS);
+  });
+
+  it("reads a level /effort saved as Claude Code reads it: its env, the model's modelSettings, then the top one", () => {
+    const first = patched({
+      text: USER_SETTINGS,
+      defaultThinking: "high",
+      model: "claude-opus-5-5",
+    });
+    const read = (change: (settings: Record<string, unknown>) => void) =>
+      readClaudeCliPicks({ text: edited(first.text, change), takeover: first.takeover })?.level;
+
+    expect(
+      read((settings) => {
+        settings.modelSettings = { "claude-opus-5-5": { effortLevel: "low" } };
+      }),
+    ).toEqual({ now: "low" });
+    // Opus 5.5 不读顶层：只改顶层时它跑的仍是 Osuna 写的那档，不算换了。
+    expect(
+      read((settings) => {
+        settings.effortLevel = "low";
+      }),
+    ).toBeNull();
+    expect(
+      read((settings) => {
+        settings.env = { ...(settings.env as object), CLAUDE_CODE_EFFORT_LEVEL: "max" };
+      }),
+    ).toEqual({ now: "max" });
+
+    const other = patched({ text: USER_SETTINGS, defaultThinking: "high" });
+    const topOnly = edited(other.text, (settings) => {
+      settings.effortLevel = "medium";
+    });
+    expect(readClaudeCliPicks({ text: topOnly, takeover: other.takeover })?.level).toEqual({
+      now: "medium",
+    });
   });
 });

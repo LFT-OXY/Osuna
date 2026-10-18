@@ -2745,6 +2745,11 @@ export const en = {
           codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] in {{file}} sets {{keys}}, and Codex uses those instead of what Osuna wrote. Remove them from the profile, or stop selecting it.",
+          modelReplaced: "{{agent}} was switched to a model no API endpoint serves",
+          modelReplacedDetail:
+            "The model in {{file}} was changed to {{model}} outside Osuna, and no API endpoint that's on serves it. Apply again to go back to {{defaultModel}}, or keep current settings to stay on {{model}} without this warning.",
+          modelReplacedToDefaultDetail:
+            "The model was removed from {{file}} outside Osuna, so {{agent}} starts on its own default model, which no API endpoint that's on serves. Apply again to go back to {{defaultModel}}, or keep current settings to leave it as it is without this warning.",
           reapply: "Apply again",
           switchToOfficial: "Switch to official",
           keepCurrent: "Keep current settings",

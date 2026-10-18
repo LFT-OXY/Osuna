@@ -149,16 +149,24 @@ function aliasModel(state: ApiEndpointState, cliModel: string | null): string | 
   if (cliModel === null) return null;
   const cur = modelIdOf(cliModel);
   if (cur === "" || cur.includes("-")) return null;
-  const tier = API_ENDPOINT_MODEL_TIERS.find((entry) => entry === cur.toLowerCase());
-  if (tier) {
-    for (const group of endpointModelGroups(state)) {
-      const mapped = group.endpoint.modelMapping?.[tier];
-      const entry = group.models.find(({ model }) => model.id === mapped);
-      if (entry) return entry.id;
-    }
-  }
+  const mapped = mappedTierModel(state, cliModel);
+  if (mapped !== null) return mapped;
   const family = `-${cur}-`;
   return (
     defaultModelChoices(state).find((choice) => `${modelIdOf(choice)}-`.includes(family)) ?? null
   );
+}
+
+/** 光秃秃的档位名（opus 等，可带 [1m]）：第一家为这个档位配了映射的接口与映射到的模型（「接口标识/模型名」）；没有为 null。 */
+export function mappedTierModel(state: ApiEndpointState, cliModel: string): string | null {
+  const tier = API_ENDPOINT_MODEL_TIERS.find(
+    (entry) => entry === modelIdOf(cliModel).toLowerCase(),
+  );
+  if (!tier) return null;
+  for (const group of endpointModelGroups(state)) {
+    const mapped = group.endpoint.modelMapping?.[tier];
+    const entry = group.models.find(({ model }) => model.id === mapped);
+    if (entry) return entry.id;
+  }
+  return null;
 }

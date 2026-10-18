@@ -306,6 +306,24 @@ describe("the settings issues on an agent page", () => {
       ["claudeAiLoginTokenEmpty", ["keepClaudeAiLogin", "reapply"], false],
     ]);
   });
+
+  it("offers to apply again or keep the CLI's model when it was switched to one no endpoint serves", () => {
+    const result = view({
+      endpoints: [],
+      agentIssues: {
+        claude: [
+          {
+            code: "model_replaced",
+            params: { file: "f", model: "gpt-9", defaultModel: "glm-4.6" },
+            message: "replaced",
+          },
+        ],
+      },
+    });
+    expect(result.issues.map((item) => [item.kind, item.actions, item.hasFixSteps])).toEqual([
+      ["modelReplaced", ["reapply", "keepReplacedModel"], false],
+    ]);
+  });
 });
 
 describe("Keep claude.ai sign-in on an agent page", () => {

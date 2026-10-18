@@ -9,6 +9,8 @@ import {
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
   isCodexMirrorKey,
+  keepCodexCliModel,
+  readCodexCliPicks,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -953,5 +955,71 @@ describe("default thinking in config.toml", () => {
     });
     if (inspection.kind !== "parsed") throw new Error("Expected parsed");
     expect(inspection.modifiedKeys).toEqual([]);
+  });
+});
+
+describe("Codex's own picks in config.toml", () => {
+  function patch(input: {
+    text: string;
+    takeover: CodexConfigTakeover | null;
+    rewritesModel?: boolean;
+    defaultThinking?: string | null;
+  }) {
+    const result = applyCodexApiEndpoint({
+      text: input.text,
+      wiring: { ...GATEWAY, defaultThinking: input.defaultThinking ?? null },
+      takeover: input.takeover,
+      rewritesModel: input.rewritesModel,
+    });
+    if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
+    return result;
+  }
+
+  function topLevel(text: string): Record<string, unknown> {
+    const value: unknown = getStaticTOMLValue(parseTOML(text));
+    if (typeof value !== "object" || value === null) throw new Error("Expected a table");
+    return Object.fromEntries(Object.entries(value));
+  }
+
+  it("reads a model and a level /model saved, leaves the model through a rewrite, and writes it back only when told to", () => {
+    const first = patch({ text: USER_CONFIG, takeover: null, defaultThinking: "high" });
+    expect(readCodexCliPicks({ text: first.text, takeover: first.takeover })).toEqual({
+      model: null,
+      level: null,
+      ultraCode: null,
+    });
+
+    const saved = first.text
+      .replace(`model = "relay/gpt"`, `model = "gpt-9"`)
+      .replace(`model_reasoning_effort = "high"`, `model_reasoning_effort = "low"`);
+    expect(readCodexCliPicks({ text: saved, takeover: first.takeover })).toEqual({
+      model: { now: "gpt-9", isKept: false },
+      level: { now: "low" },
+      ultraCode: null,
+    });
+
+    const kept = patch({ text: saved, takeover: first.takeover, defaultThinking: "low" });
+    expect(topLevel(kept.text).model).toBe("gpt-9");
+
+    const reapplied = patch({ text: kept.text, takeover: kept.takeover, rewritesModel: true });
+    expect(topLevel(reapplied.text).model).toBe("relay/gpt");
+  });
+
+  it("keeps Codex's model as kept: not changed, untouched by a rewrite, original back on switch-off", () => {
+    const first = patch({ text: USER_CONFIG, takeover: null });
+    const saved = first.text.replace(`model = "relay/gpt"`, `model = "gpt-9"`);
+    const takeover = keepCodexCliModel({ text: saved, takeover: first.takeover, held: "kept" });
+    if (!takeover) throw new Error("Expected a takeover");
+    expect(readCodexCliPicks({ text: saved, takeover })?.model).toBeNull();
+    const inspection = inspectCodexConfig({ text: saved, takeover });
+    if (inspection.kind !== "parsed") throw new Error("Expected parsed");
+    expect(inspection.modifiedKeys).toEqual([]);
+
+    const again = patch({ text: saved, takeover });
+    expect(topLevel(again.text).model).toBe("gpt-9");
+
+    const restored = restoreCodexOfficial({ text: again.text, takeover: again.takeover });
+    if (restored.kind !== "patched") throw new Error("Expected a patch");
+    expect(topLevel(restored.text).model).toBe("gpt-5.1-codex");
   });
 });

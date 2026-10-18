@@ -586,7 +586,7 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 | Claude Code 换模型后 | 不改文件，读时 `claudeClamp`（不高于它的最高一档） | 同：存下的设置不改；daemon 回给客户端的设置照 magpie 的 Get 报 clamp 后的那一档，默认模型不支持 xhigh 时 Ultra Code 报关（文件里的 `ultracode` 留着，换回支持的模型又报开）；Claude Code 自己也这样降（`I()`）。app 不另算 |
 | Codex 的选项与设置 | `Set` 收任何档位；选项是模型收的档位 | 同：Codex 收任何非空档位，不要求先有默认模型；设置页列模型收的档位 |
 | Codex 换模型后 | `settle`：不收就 `codexcat.ModelDefault`（最近一档，没有就 medium、high、第一档）；不知道档位时不动 | 同，只在默认模型变了时做 |
-| CLI 自己存下的档位 | 跟着走（`Follow`） | 不算被改过；跟着改 Osuna 的设置留给 21 号工单 |
+| CLI 自己存下的档位 | 跟着走（`Follow`） | 不算被改过；21 号工单起跟着改 Osuna 的设置 |
 | 正在跑的会话 | 提示「重开会话才用上」 | 没做，留给 27 号工单 |
 | Osuna 自己的对话 | — | 接口模型带思考档位（Claude 支持 xhigh 时另有 Ultra Code 一档）；新对话从默认思考档位起步（Claude 按 clamp，开着 Ultra Code 时是 Ultra Code；Codex 按 ModelDefault）；没选 Ultra Code 时明确传 `settings.ultracode: false` |
 | 锁住的说明 | — | 设置页与对话都按快照的 `lockedThinkingOptionId` 显示，规则只在 daemon；对话里锁住时滑条置灰 |
@@ -610,3 +610,34 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 下拉（Combobox）里选项文字左边距约 12px、标题约 24px，没对齐。
 - 下拉里选中行与悬停行同一种底色（全局 Combobox 样式），选中行只靠勾区分。
 - 对话思考档位浮层左上角（「Max」左边）有一块很淡的胶囊形残影。
+
+## 21 跟着 CLI 里存下的模型与思考档位走
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 什么时候看 | `Follow` 在画 Agents 页时跑（`gui/api.go`），`Drift` 读状态时算 | 读状态（`list`）时，以及每个会改写 CLI 配置的操作之前（`exclusiveFollowing`；`attachGateway` 在绑定地址之后） |
+| 换成 magpie 的模型 | `Follow`：`/model` 选的 magpie 模型就是新的主模型，跟随它的档位与 Subagent 一起换过去（`set(bare)`） | 换成某家接口提供的（光秃秃、`接口标识/模型名`、带 `[1m]`、只差写法，`servedModel`；Claude Code 的档位名按映射，`mappedTierModel`）就是新的默认模型，`commit(…, { followsCli: true })` 重写跟随默认模型的字段（模型提示、`modelSettings` 档位路径、Codex 模型目录与起步档位）。不提示 |
+| 写回模型 | `set(bare)` 按 magpie 自己的写法重写 `model` | 不重写：CLI 存下的原样留着（ADR 0012「Osuna never writes back over a model the CLI saved」；工单要求重写后 `model` 仍是它，如 `glm-4.6[1m]`）。接管记录的模型记 `held: "followed"` 与现在的值 |
+| 换成别的 | `Drift` 的 `replaced`：字段离开了 magpie 模型 | 提示区 `model_replaced`（`file`、`model`、`defaultModel`；CLI 删掉了模型时 `model` 为空串，文案说改用它自己的默认）。之后的重写不碰这个模型 |
+| 重新应用 | `Reapply`：写回被换掉的字段与其余设过的 | `set_agent_settings { reapply: true }`：整份重写、写回默认模型（`rewritesModel`），清掉 `held` |
+| 保留当前设置 | `Keep`：忘掉记录，不再报 | `keep_current_settings { code: "model_replaced" }`：记 `held: "kept"`，总开关照开；之后再换成别家都没有的也不提示（magpie 之后没有记录可比），换成接口提供的照样跟过去 |
+| ChatGPT 登录的 Codex | `Joined` / `Beside`：在它自己的 `/model` 里选 ChatGPT 模型不算 | 同：只认 `接口标识/模型名`；选 ChatGPT 自带模型不提示，记 `held: "followed"`，重写不改回 |
+| 档位 | effort 字段的 `Get`：`CLAUDE_CODE_EFFORT_LEVEL` → 这个模型的 `modelSettings` → 顶层（`claudeReadsTop`）；Codex 读 `model_reasoning_effort` | 同样的读法（`CLAUDE_TOP_EFFORT` 照 `claudeTopEffort`）；读到的与 Osuna 写的那档不同就跟过去，重写时按新档写，不改回。Ultra Code：Osuna 写过的 `ultracode` 被改了就跟过去 |
+| Osuna 换默认模型 | `Pick` 走 `Apply` | 在 Osuna 里换默认模型（或接口关掉、删掉后默认模型变了）照样写 `model`、清掉 `held`（`rewritesCliModel`） |
+
+### 与 magpie 不同、要判断的地方
+
+- **默认思考档位没设时不跟**：Osuna 的「没设」就是用 CLI 自己的，不写任何档位键，所以 CLI 改了档位什么都不用做；magpie 没有「没设」这一态，它的 effort 字段永远显示文件里的值。设置页这时照旧显示没设。
+- **Codex 删掉档位**（`/model` 选 Default）：跟成没设，并忘掉接管前的原值，关掉开关时不把旧档位放回（magpie 关掉时也不碰档位）。Claude Code 的 `/effort auto` 删掉 `modelSettings` 里的档位：读顶层的模型照读 Osuna 写的顶层，档位看作没变；只读 `modelSettings` 的模型（Opus 5.5 起）跟成没设，Osuna 写过的档位键放回接管前的样子。
+- **不重写模型**：magpie Follow 会按自己的写法重写 `model`，Osuna 留着 CLI 的写法，理由见上表。
+- **Claude Code 内置的 Claude id**（如 `claude-opus-4-6`，没有接口提供）报「模型被换掉」，与 magpie 相同；中转站本身会把这种 id 兜底到档位映射或默认模型（工单 17）。
+- 跟着走的写入失败（`config_conflict`、读不懂）只记日志，读状态照常；别的错误照抛。
+
+### 测试
+
+- 纯逻辑：`claude-settings-patch.test.ts`「the CLI's own picks」（读出 `/model` 存下的、重写不碰、`rewritesModel` 写回、`kept` 后不算被改、关掉还原逐字节；档位按环境变量 → `modelSettings` → 顶层读，Opus 5.5 只改顶层不算）；`codex-config-patch.test.ts`「Codex's own picks」（模型与档位、重写不碰与写回、`kept` 与关掉还原）。
+- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「following the CLI's own picks」：Claude Code 光秃秃 / 带标识 / 带 `[1m]` 三例变成默认模型、没有提示、加一家接口后 `model` 原样；哪家都没有的报 `model_replaced`、重写不改回、「重新应用」写回、「保留当前设置」后不再提示且开关照开、再加接口也不改回；Codex API key 接法同样；ChatGPT 接法下 `接口标识/模型名` 跟过去、ChatGPT 自带模型不提示也不改回；`effortLevel`、`modelSettings`、`model_reasoning_effort` 跟到默认思考档位、重写不改回。`api-endpoint-claude.e2e.test.ts`、`api-endpoint-codex.e2e.test.ts` 原来「只改模型不报」的用例改成只报 `model_replaced`。
+- app：`agent-settings.test.ts`（`model_replaced` → 重新应用、保留当前设置）；浏览器 `settings-api-endpoints.spec.ts`「Model replaced」：写明换成的模型、两个按钮，「重新应用」与「保留当前设置」各自失败留在原处、成功后照说的做。
+- 截图（无头 Chromium、临时 CLAUDE_CONFIG_DIR、假数据）：`screenshots/21-claude-code-page_model-replaced_desktop-1280_{en,zh}.png`（文件路径是临时目录）。

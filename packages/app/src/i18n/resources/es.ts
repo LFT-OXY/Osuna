@@ -2741,6 +2741,11 @@ export const es: TranslationResources = {
           codexProfileOverride: 'El perfil "{{profile}}" de Codex se impone a los endpoints de API',
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] en {{file}} define {{keys}}, y Codex usa eso en lugar de lo que escribió Osuna. Quítalos del perfil o deja de seleccionarlo.",
+          modelReplaced: "{{agent}} pasó a un modelo que ningún endpoint de API ofrece",
+          modelReplacedDetail:
+            "El modelo de {{file}} se cambió a {{model}} fuera de Osuna, y ningún endpoint de API activado lo ofrece. Vuelve a aplicar para regresar a {{defaultModel}}, o mantén la configuración actual para seguir con {{model}} sin este aviso.",
+          modelReplacedToDefaultDetail:
+            "El modelo se quitó de {{file}} fuera de Osuna, así que {{agent}} arranca con su propio modelo predeterminado, que ningún endpoint de API activado ofrece. Vuelve a aplicar para regresar a {{defaultModel}}, o mantén la configuración actual para dejarlo así sin este aviso.",
           reapply: "Aplicar de nuevo",
           switchToOfficial: "Volver al oficial",
           keepCurrent: "Mantener la configuración actual",

@@ -784,7 +784,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       ]);
     });
 
-    test("a changed token counts too; a changed model alone does not", async () => {
+    test("a changed token counts too; a changed model alone is only Model replaced", async () => {
       const endpointId = await createEndpoint();
       await client.apiEndpointSetActive("claude", endpointId);
       const switched = JSON.parse(await readFile(settingsPath, "utf8")) as {
@@ -792,7 +792,9 @@ describe("Claude API endpoint over the daemon RPC", () => {
         env: Record<string, string>;
       };
       await writeFile(settingsPath, JSON.stringify({ ...switched, model: "other-model" }));
-      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toMatchObject([
+        { code: "model_replaced" },
+      ]);
 
       await writeFile(
         settingsPath,
@@ -834,7 +836,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     test("keeping the current settings turns the switch off, leaves the file as changed and stops warning", async () => {
       const { modified } = await switchOnThenRepoint();
 
-      const kept = await client.apiEndpointKeepCurrentSettings("claude");
+      const kept = await client.apiEndpointKeepCurrentSettings({ provider: "claude" });
 
       expect(kept).toMatchObject({ provider: "claude", error: null });
       expect(kept.agent?.enabled).toBe(false);
@@ -846,7 +848,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     });
 
     test("keeping the current settings while the switch is off changes nothing", async () => {
-      const kept = await client.apiEndpointKeepCurrentSettings("claude");
+      const kept = await client.apiEndpointKeepCurrentSettings({ provider: "claude" });
       expect(kept).toMatchObject({ agent: { enabled: false }, error: null });
       expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
     });

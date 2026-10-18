@@ -1,9 +1,10 @@
 // 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider、
-// isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段）
+// isCCSwitchMirror、takeMirrors、giveMirrors；默认思考档位照 effort 字段；Codex 自己换过的模型照 internal/agent/applied.go 的 Drift 与 Keep）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
 import { z } from "zod";
+import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
 
 /*
  * Codex 的 config.toml 补丁（编辑规则见 ADR 0004，写什么见 ADR 0007 与 0010）：用 toml-eslint-parser 拿到节点的精确位置，
@@ -13,6 +14,8 @@ import { z } from "zod";
  * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）；用 ChatGPT 登录时另有顶层 openai_base_url，
  * model_provider 与 model_catalog_json 改为拿掉（ADR 0010），CC Switch 的 OpenAI 镜像表的 base_url 也指到中转站。切回官方时顶层键还原、专用表留着：
  * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
+ * 顶层 model 被 Codex 自己换过（TUI 的 /model）之后归 Codex（照 magpie 的 Follow，ADR 0012）：之后的重写不碰它，
+ * 直到「重新应用」或在 Osuna 里换默认模型（rewritesModel）。
  */
 
 /**
@@ -60,10 +63,15 @@ type CodexMirrorRecord = z.infer<typeof CodexMirrorRecordSchema>;
  * v0.15 的记录没有 table 与 fileCreated（那时专用表用 auth.command 读 key）。
  */
 export const CodexConfigTakeoverSchema = z.object({
-  // written 为 null：Osuna 拿掉了这个键（ChatGPT 登录时的 model_provider 与 model_catalog_json）。
+  // written 为 null：Osuna 拿掉了这个键（ChatGPT 登录时的 model_provider 与 model_catalog_json），或 Codex 删掉了 model。
+  // held（只用在 model 上）：文件里的 model 归 Codex（见 cli-model-hold.ts），written 记着它，重写时不碰。
   keys: z.record(
     z.string(),
-    z.object({ original: CodexOriginalValueSchema, written: z.string().nullable() }),
+    z.object({
+      original: CodexOriginalValueSchema,
+      written: z.string().nullable(),
+      held: CliModelHoldSchema.optional(),
+    }),
   ),
   // 专用表上次写入的地址与口令。
   table: CodexProviderTableRecordSchema.optional(),
@@ -122,6 +130,8 @@ export function applyCodexApiEndpoint(input: {
   text: string | null;
   wiring: CodexGatewayWiring;
   takeover: CodexConfigTakeover | null;
+  // 「重新应用」或在 Osuna 里换了默认模型：Codex 换过的 model 也写回。省略为不写回。
+  rewritesModel?: boolean;
 }): CodexConfigPatchResult {
   const [bom, baseText] = splitBom(input.text ?? "");
   const parsed = parseConfig(baseText);
@@ -139,10 +149,24 @@ export function applyCodexApiEndpoint(input: {
   const raws = wiringRaws(wiring, chatgptModel(parsed.value, originalOf, wiring));
   const table: CodexProviderTableRecord = { baseUrl: wiring.baseUrl, bearerToken: wiring.token };
   const keys: CodexConfigTakeover["keys"] = {};
+  // ChatGPT 接法下模型归 Codex 时（raws 里没有 model）不用留。
+  let heldModel: CodexKeyRecord | null = null;
+  if (raws.model !== undefined) {
+    heldModel = heldCliModel({
+      value: parsed.value,
+      record: input.takeover?.keys.model,
+      rewritesModel: input.rewritesModel === true,
+    });
+  }
+  const isModelHeld = heldModel !== null;
   let text = baseText;
   for (const key of TOP_LEVEL_KEYS) {
     const raw = raws[key];
     const original = originalOf(key);
+    if (key === "model" && heldModel) {
+      keys.model = heldModel;
+      continue;
+    }
     if (raw === undefined) {
       // 换了登录方式：这种接法不负责的键（openai_base_url，或 ChatGPT 接法下的 model）放回接管前的样子，不再记。
       if (input.takeover?.keys[key]) text = putBack(text, key, original, eol);
@@ -170,12 +194,8 @@ export function applyCodexApiEndpoint(input: {
   // COMPAT(codexLegacyProviderTable): v0.15 的记录没有 fileCreated，按文件原本存在处理；remove after 2027-04-14.
   const fileCreated = input.takeover ? (input.takeover.fileCreated ?? false) : input.text === null;
 
-  const failure = verify(
-    text,
-    (value) =>
-      Object.entries(keys).every(([key, record]) => holdsWritten(value[key], record.written)) &&
-      holdsProviderTable(value, table) &&
-      Object.entries(mirrors).every(([id, record]) => mirrorBaseUrl(value, id) === record.written),
+  const failure = verify(text, (value) =>
+    holdsEverything({ value, keys, isModelHeld, table, mirrors }),
   );
   const takeover: CodexConfigTakeover = { keys, table, fileCreated };
   if (Object.keys(mirrors).length > 0) takeover.mirrors = mirrors;
@@ -361,6 +381,108 @@ function mirrorKey(providerId: string): string {
 /** 提示区用：这个负责的键是镜像表的地址（被外部改了就不再经过中转站）。 */
 export function isCodexMirrorKey(key: string): boolean {
   return key.startsWith("model_providers.") && key.endsWith(".base_url");
+}
+
+type CodexKeyRecord = CodexConfigTakeover["keys"][string];
+
+/** 拼完的文件里，这次写的每一项都在（Codex 自己换过、留着的 model 不查）。 */
+function holdsEverything(input: {
+  value: Record<string, unknown>;
+  keys: CodexConfigTakeover["keys"];
+  isModelHeld: boolean;
+  table: CodexProviderTableRecord;
+  mirrors: Record<string, CodexMirrorRecord>;
+}): boolean {
+  const { value, isModelHeld } = input;
+  const holdsKeys = Object.entries(input.keys).every(
+    ([key, record]) => (key === "model" && isModelHeld) || holdsWritten(value[key], record.written),
+  );
+  const holdsMirrors = Object.entries(input.mirrors).every(
+    ([id, record]) => mirrorBaseUrl(value, id) === record.written,
+  );
+  return holdsKeys && holdsProviderTable(value, input.table) && holdsMirrors;
+}
+
+/**
+ * Codex 自己换过的 model（不再是记下的写入值，或已记作 Codex 的）：原样留着，记录不变；不归 Codex 时为 null。
+ * 照 magpie：Osuna 不改回 CLI 存下的模型（ADR 0012）。
+ */
+function heldCliModel(input: {
+  value: Record<string, unknown>;
+  record: CodexKeyRecord | undefined;
+  rewritesModel: boolean;
+}): CodexKeyRecord | null {
+  const { record } = input;
+  if (!record || input.rewritesModel) return null;
+  const isChangedByCli = !holdsWritten(input.value.model, record.written);
+  return record.held !== undefined || isChangedByCli ? record : null;
+}
+
+/**
+ * Codex 自己存下、与 Osuna 记下的写入值不同的选择（照 magpie 的 Follow 与 effort 字段的 Get）；没有 Ultra Code。
+ * 文件读不懂或没有接管记录时为 null。
+ */
+export function readCodexCliPicks(input: {
+  text: string | null;
+  takeover: CodexConfigTakeover | null;
+}): CliPicks | null {
+  const { takeover } = input;
+  if (!takeover) return null;
+  const value = parsedTopLevel(input.text);
+  if (value === null) return null;
+  const modelRecord = takeover.keys.model;
+  const levelRecord = takeover.keys.model_reasoning_effort;
+  const isModelChanged =
+    modelRecord !== undefined && !holdsWritten(value.model, modelRecord.written);
+  const isLevelChanged =
+    levelRecord !== undefined && !holdsWritten(value.model_reasoning_effort, levelRecord.written);
+  return {
+    model: isModelChanged
+      ? { now: stringOrNull(value.model), isKept: modelRecord.held === "kept" }
+      : null,
+    level: isLevelChanged ? { now: stringOrNull(value.model_reasoning_effort) } : null,
+    ultraCode: null,
+  };
+}
+
+/**
+ * 把文件里现在的 model 记作 Codex 的（held 说是跟过去的还是保留当前设置留下的）：重写不碰。
+ * 文件读不懂或没记过 model 时原样返回。
+ */
+export function keepCodexCliModel(input: {
+  text: string | null;
+  takeover: CodexConfigTakeover | null;
+  held: CliModelHold;
+}): CodexConfigTakeover | null {
+  const { takeover } = input;
+  const record = takeover?.keys.model;
+  if (!takeover || !record) return takeover;
+  const value = parsedTopLevel(input.text);
+  if (value === null) return takeover;
+  const model = { ...record, written: stringOrNull(value.model), held: input.held };
+  return { ...takeover, keys: { ...takeover.keys, model } };
+}
+
+/**
+ * Codex 把 model_reasoning_effort 删掉（选了模型自己的默认）后跟过去：关开关时也不放回接管前的档位，文件照现在的样子（magpie 同样不放回）。
+ */
+export function forgetCodexEffortOriginal(takeover: CodexConfigTakeover): CodexConfigTakeover {
+  const record = takeover.keys.model_reasoning_effort;
+  if (!record) return takeover;
+  const absent: CodexOriginalValue = { present: false };
+  const forgotten = { ...record, original: absent };
+  return { ...takeover, keys: { ...takeover.keys, model_reasoning_effort: forgotten } };
+}
+
+/** 顶层的值；文件不存在为空表，读不懂为 null。 */
+function parsedTopLevel(text: string | null): Record<string, unknown> | null {
+  if (text === null) return {};
+  const parsed = parseConfig(splitBom(text)[1]);
+  return parsed.kind === "unparsable" ? null : parsed.value;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 /** 接管记录里这个键的写入值是否还在：null 是拿掉了，文件里就不该有它。 */
