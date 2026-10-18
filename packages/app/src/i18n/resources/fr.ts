@@ -2283,6 +2283,11 @@ export const fr: TranslationResources = {
         refresh: "Actualiser",
         refreshing: "Actualisation...",
       },
+      selection: {
+        count_one: "{{count}} sélectionnée",
+        count_other: "{{count}} sélectionnées",
+        move: "Déplacer…",
+      },
       empty: {
         workspace: "Cet espace de travail n'a pas encore de sessions de fournisseurs.",
         project: "Ce projet n'a pas encore de session de fournisseur.",
@@ -2325,11 +2330,24 @@ export const fr: TranslationResources = {
           "Elle a été écrite au cours de la dernière minute et est peut-être encore en cours. Réessayez quand elle sera inactive.",
         skippedNotFound: "Osuna ne trouve pas les fichiers de cette conversation.",
         listFailed: "Impossible de lister les fournisseurs de modèles Codex",
+        conversationCount_one: "{{count}} conversation",
+        conversationCount_other: "{{count}} conversations",
+        backupNoteMany:
+          "Osuna sauvegarde d'abord les fichiers des conversations. Redéplacer une conversation vers son ancien fournisseur de modèles Codex annule le déplacement.",
+        rebuildNoteMany:
+          "Reprenez chaque conversation une fois après le déplacement. D'ici là, si Codex reconstruit sa base d'état, Codex la reprendra de nouveau avec son ancien fournisseur de modèles Codex.",
+        movedMany_one: "{{count}} conversation déplacée vers {{to}}",
+        movedMany_other: "{{count}} conversations déplacées vers {{to}}",
+        resultsSummary: "{{moved}} sur {{total}} déplacées",
+        resultNotMoved: "Non déplacée",
+        resultWithReason: "{{status}} : {{reason}}",
       },
       errors: {
         loadFailed: "Impossible de charger les sessions",
         openFailed: "Impossible d'ouvrir un terminal pour cette session",
         importFailed: "Impossible d'importer cette session",
+        codexModelProviderMissing:
+          "Cette conversation est rattachée au fournisseur de modèles Codex {{provider}}, qui n'est plus dans la configuration de Codex : Codex ne peut pas la reprendre. Déplacez-la vers un autre fournisseur de modèles Codex, puis réessayez.",
       },
     },
     diff: {

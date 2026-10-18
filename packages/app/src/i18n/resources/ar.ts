@@ -2233,6 +2233,11 @@ export const ar: TranslationResources = {
         refresh: "تحديث",
         refreshing: "جارٍ التحديث...",
       },
+      selection: {
+        count_one: "المحدد: {{count}}",
+        count_other: "المحدد: {{count}}",
+        move: "نقل…",
+      },
       empty: {
         workspace: "لا توجد جلسات موفّرين في مساحة العمل هذه بعد.",
         project: "لا توجد جلسات موفّرين في هذا المشروع بعد.",
@@ -2275,11 +2280,24 @@ export const ar: TranslationResources = {
           "كُتب فيها خلال الدقيقة الأخيرة وقد تكون لا تزال قيد التشغيل. حاول مرة أخرى عندما تصبح خاملة.",
         skippedNotFound: "لا يجد Osuna ملفات هذه المحادثة.",
         listFailed: "تعذّر عرض مزوّدي نماذج Codex",
+        conversationCount_one: "المحادثات: {{count}}",
+        conversationCount_other: "المحادثات: {{count}}",
+        backupNoteMany:
+          "يأخذ Osuna نسخة احتياطية من ملفات المحادثات أولاً. نقل محادثة مرة أخرى إلى مزوّد نماذج Codex السابق يلغي النقل.",
+        rebuildNoteMany:
+          "تابع كل محادثة مرة واحدة بعد النقل. وحتى ذلك الحين، إذا أعاد Codex بناء قاعدة بيانات الحالة، فسيتابعها Codex مرة أخرى عبر مزوّد نماذج Codex السابق.",
+        movedMany_one: "نُقلت إلى {{to}}: {{count}}",
+        movedMany_other: "نُقلت إلى {{to}}: {{count}}",
+        resultsSummary: "نُقل {{moved}} من {{total}}",
+        resultNotMoved: "لم تُنقل",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "تعذّر تحميل الجلسات",
         openFailed: "تعذّر فتح طرفية لهذه الجلسة",
         importFailed: "تعذّر استيراد هذه الجلسة",
+        codexModelProviderMissing:
+          "هذه المحادثة مسجّلة تحت مزوّد نماذج Codex {{provider}}، ولم يعد موجوداً في إعدادات Codex، لذا لا يستطيع Codex متابعتها. انقلها إلى مزوّد نماذج Codex آخر ثم حاول مرة أخرى.",
       },
     },
     diff: {

@@ -2266,6 +2266,11 @@ export const ru: TranslationResources = {
         refresh: "Обновить",
         refreshing: "Обновление...",
       },
+      selection: {
+        count_one: "Выбрано: {{count}}",
+        count_other: "Выбрано: {{count}}",
+        move: "Перенести…",
+      },
       empty: {
         workspace: "В этом рабочем пространстве пока нет сессий провайдеров.",
         project: "В этом проекте пока нет сессий провайдеров.",
@@ -2308,11 +2313,24 @@ export const ru: TranslationResources = {
           "В него писали в последнюю минуту, и он может ещё выполняться. Повторите, когда он освободится.",
         skippedNotFound: "Osuna не находит файлы этого разговора.",
         listFailed: "Не удалось получить список провайдеров моделей Codex",
+        conversationCount_one: "Разговоров: {{count}}",
+        conversationCount_other: "Разговоров: {{count}}",
+        backupNoteMany:
+          "Osuna сначала делает резервную копию файлов разговоров. Перенос разговора обратно к прежнему провайдеру моделей Codex отменяет перенос.",
+        rebuildNoteMany:
+          "После переноса продолжите каждый разговор хотя бы раз. До этого, если Codex пересоберёт базу состояния, Codex снова продолжит его через прежнего провайдера моделей Codex.",
+        movedMany_one: "Перенесено к {{to}}: {{count}}",
+        movedMany_other: "Перенесено к {{to}}: {{count}}",
+        resultsSummary: "Перенесено: {{moved}} из {{total}}",
+        resultNotMoved: "Не перенесён",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "Не удалось загрузить сессии",
         openFailed: "Не удалось открыть терминал для этой сессии",
         importFailed: "Не удалось импортировать эту сессию",
+        codexModelProviderMissing:
+          "Этот разговор записан за провайдером моделей Codex {{provider}}, которого больше нет в настройках Codex, поэтому Codex не может его продолжить. Перенесите его к другому провайдеру моделей Codex и повторите.",
       },
     },
     diff: {

@@ -152,7 +152,9 @@ function renderSurface(
         onOpenAgent={onOpenAgent}
         onCopyResumeCommand={onCopyResumeCommand}
         onImported={onImported}
-        onMoveCodexConversation={null}
+        onMoveCodexConversations={null}
+        selectedRowKeys={null}
+        onSelectedRowKeysChange={vi.fn()}
       />
     </QueryClientProvider>
   );

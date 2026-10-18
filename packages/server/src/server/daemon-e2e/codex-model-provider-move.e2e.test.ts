@@ -15,6 +15,8 @@ import * as zlib from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
+import { AgentImportError } from "@getpaseo/client/internal/daemon-client";
+import { CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE } from "@getpaseo/protocol/codex-session/rpc-schemas";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
@@ -24,10 +26,84 @@ import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo
  * 所在目录故意不同：挪动必须在会话历史列出对话的那一处进行。期望值都是手写的整行文本，不按实现的改法去推。
  */
 
-// 假 Codex：只答 --version；挪动不起 Codex，提供方仍需要一个命令，免得去找真的 codex。
+// 假 Codex：答 --version；app-server 只答导入要的几个请求。thread/resume 照真 Codex：按对话文件第一行
+// session_meta 记的服务商加载配置，内置 openai 与 config.toml 里有表的服务商才认，否则报配置加载失败。
+// 挪动本身不起 Codex。
 const FAKE_CODEX_SOURCE = String.raw`
-if (process.argv[2] === "--version") process.stdout.write("codex-cli 0.163.0\n");
-process.exit(0);
+const fs = require("node:fs");
+const path = require("node:path");
+const readline = require("node:readline");
+if (process.argv[2] === "--version") {
+  process.stdout.write("codex-cli 0.163.0\n");
+  process.exit(0);
+}
+if (process.argv[2] !== "app-server") process.exit(1);
+const codexHome = process.env.CODEX_HOME;
+const model = {
+  id: "gpt-6.1-sol",
+  model: "gpt-6.1-sol",
+  displayName: "GPT-6.1 Sol",
+  isDefault: true,
+  defaultReasoningEffort: "medium",
+  supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Medium" }],
+};
+function findRollout(dir, threadId) {
+  if (!fs.existsSync(dir)) return null;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = findRollout(full, threadId);
+      if (found) return found;
+    } else if (entry.name.includes(threadId) && entry.name.endsWith(".jsonl")) {
+      return full;
+    }
+  }
+  return null;
+}
+function knownProviders() {
+  const file = path.join(codexHome, "config.toml");
+  const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  const ids = [...text.matchAll(/^\[model_providers\.([^\]]+)\]/gm)].map((match) => match[1]);
+  return new Set(["openai", ...ids]);
+}
+function respond(method, params) {
+  switch (method) {
+    case "initialize":
+      return {};
+    case "model/list":
+      return { data: [model] };
+    case "config/read":
+      return { config: { model: model.id, model_reasoning_effort: "medium" } };
+    case "collaborationMode/list":
+    case "skills/list":
+    case "thread/loaded/list":
+      return { data: [] };
+    case "thread/resume": {
+      const rollout = findRollout(path.join(codexHome, "sessions"), params.threadId);
+      if (!rollout) throw new Error("no rollout found for thread id " + params.threadId);
+      const meta = JSON.parse(fs.readFileSync(rollout, "utf8").split("\n")[0]);
+      const provider = meta.payload.model_provider;
+      if (!knownProviders().has(provider)) {
+        throw new Error("failed to load configuration: Model provider \u0060" + provider + "\u0060 not found");
+      }
+      return { thread: { id: params.threadId } };
+    }
+    case "thread/read":
+      return { thread: { id: params.threadId, turns: [] } };
+    default:
+      throw new Error("not supported by the fake: " + method);
+  }
+}
+const reply = (message) => process.stdout.write(JSON.stringify(message) + "\n");
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.id === undefined) return;
+  try {
+    reply({ id: message.id, result: respond(message.method, message.params || {}) });
+  } catch (error) {
+    reply({ id: message.id, error: { code: -32603, message: error.message } });
+  }
+});
 `;
 
 // @types/node 还停在 20：zstd 与 node:sqlite 都没有类型。
@@ -435,6 +511,43 @@ describe.skipIf(process.platform === "win32")(
       expect(JSON.parse(await readFile(path.join(backupPath, "move.json"), "utf8")).id).toBe(
         THREAD_A,
       );
+    }, 60_000);
+
+    test("a resume refused because its Codex model provider is gone says so by code, and works once moved", async () => {
+      // 对话记在一个 config.toml 里已经没有表的服务商名下（比如关掉开关前的中转站）。
+      await writeOldFile(plainPath(), rolloutText({ threadId: THREAD_A, provider: "gone_relay" }));
+      await writeFile(path.join(codexHome, "config.toml"), '[model_providers.cc]\nname = "CC"\n');
+      const cwd = path.join(tempRoot, "repo");
+      await mkdir(cwd, { recursive: true });
+
+      const refused = await client!
+        .importAgent({ providerId: "codex", providerHandleId: THREAD_A, cwd })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+
+      expect(refused).toBeInstanceOf(AgentImportError);
+      expect((refused as AgentImportError).code).toBe(CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE);
+      expect((refused as AgentImportError).message).toContain(
+        "Model provider `gone_relay` not found",
+      );
+
+      const moved = await client!.codexSessionMoveModelProvider({
+        providerId: "codex",
+        threadIds: [THREAD_A],
+        to: "cc",
+      });
+      expect(moved.moved.map((entry) => [entry.threadId, entry.from])).toEqual([
+        [THREAD_A, "gone_relay"],
+      ]);
+
+      const agent = await client!.importAgent({
+        providerId: "codex",
+        providerHandleId: THREAD_A,
+        cwd,
+      });
+      expect(agent.provider).toBe("codex");
     }, 60_000);
 
     test("refuses a provider that is not a Codex provider", async () => {

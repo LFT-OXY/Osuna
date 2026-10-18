@@ -2224,6 +2224,11 @@ export const zhCN: TranslationResources = {
         refresh: "刷新",
         refreshing: "正在刷新...",
       },
+      selection: {
+        count_one: "已选 {{count}} 条",
+        count_other: "已选 {{count}} 条",
+        move: "挪动…",
+      },
       empty: {
         workspace: "此工作区还没有提供方会话。",
         project: "此项目还没有提供方会话。",
@@ -2264,11 +2269,23 @@ export const zhCN: TranslationResources = {
         skippedActive: "它在最近一分钟内写过，可能还在运行。等它空闲后再试。",
         skippedNotFound: "Osuna 找不到这段对话的文件。",
         listFailed: "无法列出 Codex 服务商",
+        conversationCount_one: "{{count}} 段对话",
+        conversationCount_other: "{{count}} 段对话",
+        backupNoteMany: "Osuna 会先备份对话文件。把对话挪回它原来的 Codex 服务商就是撤销。",
+        rebuildNoteMany:
+          "挪完后把每段对话续一次。在那之前 Codex 若重建状态库，会照旧在原来的 Codex 服务商下续它。",
+        movedMany_one: "已把 {{count}} 段对话挪到 {{to}}",
+        movedMany_other: "已把 {{count}} 段对话挪到 {{to}}",
+        resultsSummary: "已挪动 {{moved}} / {{total}} 段",
+        resultNotMoved: "没有挪动",
+        resultWithReason: "{{status}}：{{reason}}",
       },
       errors: {
         loadFailed: "无法加载会话",
         openFailed: "无法为此会话打开终端",
         importFailed: "无法导入此会话",
+        codexModelProviderMissing:
+          "这段对话记在 Codex 服务商 {{provider}} 名下，Codex 设置里已经没有它，所以续不上。把它挪到另一个 Codex 服务商后再试。",
       },
     },
     diff: {

@@ -2283,6 +2283,11 @@ export const es: TranslationResources = {
         refresh: "Actualizar",
         refreshing: "Actualizando...",
       },
+      selection: {
+        count_one: "{{count}} seleccionada",
+        count_other: "{{count}} seleccionadas",
+        move: "Mover…",
+      },
       empty: {
         workspace: "Este espacio de trabajo aún no tiene sesiones de proveedores.",
         project: "Este proyecto aún no tiene sesiones de proveedor.",
@@ -2325,11 +2330,24 @@ export const es: TranslationResources = {
           "Se escribió en el último minuto y puede que siga en ejecución. Inténtalo de nuevo cuando esté inactiva.",
         skippedNotFound: "Osuna no encuentra los archivos de esta conversación.",
         listFailed: "No se pudieron listar los proveedores de modelos de Codex",
+        conversationCount_one: "{{count}} conversación",
+        conversationCount_other: "{{count}} conversaciones",
+        backupNoteMany:
+          "Osuna hace primero una copia de seguridad de los archivos de las conversaciones. Volver a mover una conversación a su proveedor de modelos de Codex anterior deshace el cambio.",
+        rebuildNoteMany:
+          "Continúa cada conversación una vez después de moverla. Hasta entonces, si Codex reconstruye su base de datos de estado, Codex la continuará de nuevo con su proveedor de modelos de Codex anterior.",
+        movedMany_one: "{{count}} conversación movida a {{to}}",
+        movedMany_other: "{{count}} conversaciones movidas a {{to}}",
+        resultsSummary: "{{moved}} de {{total}} movidas",
+        resultNotMoved: "No se movió",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "No se pudieron cargar las sesiones",
         openFailed: "No se pudo abrir una terminal para esta sesión",
         importFailed: "No se pudo importar esta sesión",
+        codexModelProviderMissing:
+          "Esta conversación está registrada con el proveedor de modelos de Codex {{provider}}, que ya no está en la configuración de Codex, así que Codex no puede continuarla. Muévela a otro proveedor de modelos de Codex y vuelve a intentarlo.",
       },
     },
     diff: {

@@ -15,7 +15,11 @@ import {
   type SessionHistoryImportResult,
   type SessionHistoryRow,
 } from "./index";
-import { MoveCodexConversationSheet } from "./internal/move-codex-conversation-sheet";
+import {
+  MoveCodexConversationSheet,
+  type MoveCodexConversationsOutcome,
+  type MoveCodexConversationsTarget,
+} from "./internal/move-codex-conversation-sheet";
 import { useSessionHistoryScopeStore } from "./internal/scope-store";
 
 /*
@@ -77,29 +81,39 @@ export function SessionHistoryView({
     [t, toast],
   );
   const queryClient = useQueryClient();
-  const [movingRow, setMovingRow] = useState<SessionHistoryRow | null>(null);
-  const handleCloseMove = useCallback(() => setMovingRow(null), []);
-  const handleMovedCodexConversation = useCallback(
-    (to: string) => {
-      setMovingRow(null);
-      // 这一行换了 Codex 服务商：这台主机的会话历史列表全部重列，行上才显示新的服务商。
-      void queryClient.invalidateQueries({ queryKey: ["session-history", serverId] });
-      toast.show(t("panels.sessionHistory.move.moved", { to }), { variant: "success" });
+  const [movingRows, setMovingRows] = useState<readonly SessionHistoryRow[] | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<ReadonlySet<string> | null>(null);
+  const handleCloseMove = useCallback(() => setMovingRows(null), []);
+  const handleMovedCodexConversations = useCallback(
+    (outcome: MoveCodexConversationsOutcome) => {
+      if (outcome.movedCount > 0) {
+        // 这些行换了 Codex 服务商：这台主机的会话历史列表全部重列，行上才显示新的服务商。
+        void queryClient.invalidateQueries({ queryKey: ["session-history", serverId] });
+        setSelectedRowKeys(null);
+      }
+      if (!outcome.isComplete) return;
+      // 没挪成的留在框里逐条说明；全部挪好才关掉并提示。
+      setMovingRows(null);
+      const message =
+        outcome.movedCount > 1
+          ? t("panels.sessionHistory.move.movedMany", {
+              count: outcome.movedCount,
+              to: outcome.to,
+            })
+          : t("panels.sessionHistory.move.moved", { to: outcome.to });
+      toast.show(message, { variant: "success" });
     },
     [queryClient, serverId, t, toast],
   );
-  const movingConversation = useMemo(
-    () =>
-      movingRow?.codexModelProvider
-        ? {
-            serverId,
-            providerId: movingRow.providerId,
-            threadId: movingRow.providerHandleId,
-            from: movingRow.codexModelProvider,
-          }
-        : null,
-    [movingRow, serverId],
-  );
+  const movingConversations = useMemo<MoveCodexConversationsTarget | null>(() => {
+    const threads = (movingRows ?? []).flatMap((row) =>
+      row.codexModelProvider
+        ? [{ threadId: row.providerHandleId, title: row.title, from: row.codexModelProvider }]
+        : [],
+    );
+    const providerId = movingRows?.[0]?.providerId;
+    return providerId && threads.length > 0 ? { serverId, providerId, threads } : null;
+  }, [movingRows, serverId]);
   // 与 Import session 面板相同的导入后去向：本 workspace 的 agent 直接开 tab，别的 workspace 先打开其项目。
   const handleImported = useCallback(
     (result: SessionHistoryImportResult) => {
@@ -134,15 +148,17 @@ export function SessionHistoryView({
         onOpenAgent={handleOpenAgent}
         onCopyResumeCommand={handleCopyResumeCommand}
         onImported={handleImported}
-        onMoveCodexConversation={canMoveCodexConversations ? setMovingRow : null}
+        onMoveCodexConversations={canMoveCodexConversations ? setMovingRows : null}
+        selectedRowKeys={selectedRowKeys}
+        onSelectedRowKeysChange={setSelectedRowKeys}
       />
-      {movingConversation && client ? (
+      {movingConversations && client ? (
         <MoveCodexConversationSheet
-          key={movingConversation.threadId}
+          key={movingConversations.threads.map((thread) => thread.threadId).join(" ")}
           client={client}
-          conversation={movingConversation}
+          conversations={movingConversations}
           onClose={handleCloseMove}
-          onMoved={handleMovedCodexConversation}
+          onMoved={handleMovedCodexConversations}
         />
       ) : null}
     </>

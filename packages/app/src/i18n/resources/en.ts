@@ -2258,6 +2258,11 @@ export const en = {
         refresh: "Refresh",
         refreshing: "Refreshing...",
       },
+      selection: {
+        count_one: "{{count}} selected",
+        count_other: "{{count}} selected",
+        move: "Move…",
+      },
       empty: {
         workspace: "No provider sessions in this workspace yet.",
         project: "No provider sessions in this project yet.",
@@ -2300,11 +2305,24 @@ export const en = {
           "It was written to in the last minute and may still be running. Try again once it is idle.",
         skippedNotFound: "Osuna can't find this conversation's files.",
         listFailed: "Could not list Codex model providers",
+        conversationCount_one: "{{count}} conversation",
+        conversationCount_other: "{{count}} conversations",
+        backupNoteMany:
+          "Osuna backs up the conversation files first. Moving a conversation back to the Codex model provider it had undoes the move.",
+        rebuildNoteMany:
+          "Continue each conversation once after moving. Until then, if Codex rebuilds its state database, Codex continues it under the Codex model provider it had.",
+        movedMany_one: "Moved {{count}} conversation to {{to}}",
+        movedMany_other: "Moved {{count}} conversations to {{to}}",
+        resultsSummary: "{{moved}} of {{total}} moved",
+        resultNotMoved: "Not moved",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "Could not load sessions",
         openFailed: "Could not open a terminal for this session",
         importFailed: "Could not import this session",
+        codexModelProviderMissing:
+          "This conversation is filed under the Codex model provider {{provider}}, which is no longer in Codex's config, so Codex can't continue it. Move it to another Codex model provider, then try again.",
       },
     },
     diff: {

@@ -6,6 +6,13 @@ import { z } from "zod";
  * 原因、来源等用字符串而非枚举：以后加新值时老客户端照常解析。
  */
 
+/**
+ * 续 Codex 对话失败、因为它记的 Codex 服务商已不在 Codex 设置里（Codex 报 ``Model provider `…` not found``）：
+ * 导入失败的 `agent_create_failed.errorCode` 带这个值，app 据此给出「挪到另一个 Codex 服务商」，不去匹配英文原文。
+ * 老 daemon 不发，老客户端忽略。
+ */
+export const CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE = "codex_model_provider_missing";
+
 export const CodexSessionErrorSchema = z.object({
   code: z.string(),
   message: z.string(),

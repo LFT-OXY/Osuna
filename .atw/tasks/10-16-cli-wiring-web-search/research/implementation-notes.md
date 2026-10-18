@@ -367,3 +367,19 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 浏览器另有（审查后加）：Claude 的行没有这一项（假 Claude 只答 `--version`，会话从临时 CLAUDE_CONFIG_DIR 读）；挪动失败时错误连同备份目录留在框里，再按「挪动」重试成功。jsdom 单元测试打不开行菜单（菜单组件在 jsdom 里渲染不出），所以放在浏览器测试里。
 - 截图：`screenshots/13-session-history_{row-menu-open,claude-row-menu-open}_desktop-1280_{en,zh}.png`、`13-move-dialog_{target-list-open,target-chosen}_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex 与假 Claude、临时 CODEX_HOME 与 CLAUDE_CONFIG_DIR。
 - 行菜单宽度：英文「Move to another Codex model provider…」实测文字 261pt、菜单项 302pt，280 宽时被截断，所以留 320；菜单往下让 12pt，不压住两行的行。
+
+## 14 多选批量挪；续不上时报错里给挪动按钮
+
+### 做法
+
+- **续不上的原因码**：Codex 的 `thread/resume` 报 ``Model provider `<id>` not found``（app-server 前面加 `failed to load configuration: `）时，`ensureThreadLoaded` 抛 `CodexModelProviderMissingError`（`codex-conversations/model-provider-missing.ts`，带服务商 id，原文照旧）。导入失败的 `agent_create_failed` 带 `errorCode: "codex_model_provider_missing"`（协议常量 `CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE`，`errorCode` 本来就是可选字符串，协议不变）。客户端 `importAgent` 改抛 `AgentImportError`（`message` 不变，多一个 `code`）。app 只看这个码，不匹配英文。
+- **只覆盖会话历史的「导入」**：会话历史里能续对话的只有两条路：点行在终端里跑 `codex resume`（错误在终端里，界面接不到）与「导入为 Osuna Agent」（走 app-server 的 `thread/resume`）。报错和按钮放在后者的导入错误里；已有 Agent 在 Agent 页续不上的情况没有做（那里没有挪动对话框）。
+- **导入错误**：有这个码且这一行是 Codex 行时，标题照旧，正文换成界面语言的说明（带服务商 id），下面一个 outline 按钮「挪到另一个 Codex 服务商…」打开同一个对话框。挪好、列表重列后这一行的服务商变了，错误自动收起；再导入成功。
+- **多选**：工具栏多一个「选择」图标（只在主机有 `apiEndpointCliWiring` 时出现）。进入后工具栏换成「已选 N 条 / 取消 / 挪动…」；行首的提供方图标换成圆形选择环，选中时 accent 填充加勾，行用 `surfaceSidebarSelected` 加 1px 内描边（docs/design.md 行状态），点行切换选中，kebab 藏起。只有 Codex 行能选；一次挪动在一个提供方的 CODEX_HOME 里进行，所以选了一行后别的提供方的行变灰不能选。选中的 key 放在 `view.tsx`（受控），挪好后由它退出选择模式。
+- **批量对话框**：同一个 `MoveCodexConversationSheet`，参数改成一组对话（`threads`）。标题下写「N 段对话」；目标列表只在所有对话都在同一个服务商名下时去掉那一个；备份与重建说明用不点名服务商的版本。全部挪好：关掉并提示「已把 N 段对话挪到 X」。有没挪成的：框留着，逐条列出「已挪到 X」或「没有挪动：原因」（失败带备份目录，状态库失败用「已挪动，但 Codex 的状态库没有更新」），底部只剩「关闭」；已挪的那些立刻重列。请求本身失败（`payload.error` 或断线）时错误留在框里、可重试。只挪一条时行为同 13 号。
+
+### 测试
+
+- daemon 端到端：`codex-model-provider-move.e2e.test.ts` 新用例——假 Codex 的 app-server 按对话文件第一行的服务商加载配置，config.toml 里没有这张表就照真 Codex 报错；导入失败带 `AgentImportError.code === "codex_model_provider_missing"`，挪到 `cc` 后再导入成功。去掉 session.ts 的映射时用例失败（已验证）。
+- app 浏览器：`session-history-codex-model-provider.spec.ts` 新增三条：多选三条（一条一分钟内写过）挪完两条成功一条跳过并说明；批量里一条目录不可写时原因与备份留在框里、文件不变；续不上时错误带说明与按钮，挪到 openai 后错误收起、再导入成功。假 Codex 夹具加了 `thread/resume`、`thread/read`。
+- 截图（无头 Chromium、假 Codex、临时 CODEX_HOME）：`screenshots/14-session-history_selection-3-selected_{desktop-1280,compact-390}_{en,zh}.png`、`14-move-dialog_batch-results_desktop-1280_{en,zh}.png`、`14-session-history_resume-error_desktop-1280_{en,zh}.png`。

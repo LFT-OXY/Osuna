@@ -121,6 +121,10 @@ import {
 } from "../provider-notices.js";
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
 import {
+  CodexModelProviderMissingError,
+  findMissingCodexModelProvider,
+} from "../../codex-conversations/model-provider-missing.js";
+import {
   applyCodexToolPolicy,
   CodexProviderOptionsSchema,
   type CodexProviderOptions,
@@ -4156,7 +4160,14 @@ export class CodexAppServerAgentSession implements AgentSession {
         return;
       }
       this.logger.warn({ error, threadId }, "Failed to resume persisted Codex thread");
-      throw new Error(`Failed to resume Codex thread ${threadId}: ${message}`, { cause: error });
+      const resumeMessage = `Failed to resume Codex thread ${threadId}: ${message}`;
+      const missingModelProvider = findMissingCodexModelProvider(message);
+      if (missingModelProvider) {
+        throw new CodexModelProviderMissingError(resumeMessage, missingModelProvider, {
+          cause: error,
+        });
+      }
+      throw new Error(resumeMessage, { cause: error });
     }
   }
 

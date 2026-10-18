@@ -90,7 +90,11 @@ provider's row, which resumes it with that provider's settings.
 
 A Codex row's menu offers "Move to another Codex model provider…" when the host advertises
 `apiEndpointCliWiring`. The dialog belongs to `session-history/view.tsx`, not the surface, because
-`AdaptiveModalSheet` pulls in modules the surface's jsdom test cannot parse. The rules for moving
+`AdaptiveModalSheet` pulls in modules the surface's jsdom test cannot parse. The view also holds
+the selection-mode keys, so a finished move can end selection mode. One move works in one
+provider's `CODEX_HOME`, so once a row is selected, rows of other providers can't be selected.
+When an import fails with `agent_create_failed.errorCode` `codex_model_provider_missing`, the
+import error offers the same dialog and hides once the row is listed under another provider. The rules for moving
 are in [ADR 0011](adr/0011-osuna-moves-codex-conversations-between-providers.md); the backups are in
 [data-model.md](data-model.md#directory-layout).
 

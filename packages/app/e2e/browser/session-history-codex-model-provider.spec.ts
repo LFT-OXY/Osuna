@@ -192,6 +192,138 @@ test.describe("Session history", () => {
       await workspace.cleanup();
     }
   });
+
+  test("moves several selected Codex conversations at once and says which were skipped", async ({
+    page,
+  }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-batch-" });
+    const [first, second, busy] = await seedConversations({
+      repoPath: workspace.repoPath,
+      conversations: [
+        { id: "thread-batch-1", name: "Rename the parser", isIdle: true },
+        { id: "thread-batch-2", name: "Fix the flaky test", isIdle: true },
+        { id: "thread-batch-3", name: "Still running", isIdle: false },
+      ],
+    });
+    const busyBefore = await readFile(busy, "utf8");
+
+    try {
+      await openSessionHistory(page, workspace.workspaceId);
+      await page.getByTestId("session-history-select").click();
+      for (const id of ["thread-batch-1", "thread-batch-2", "thread-batch-3"]) {
+        const row = page.getByTestId(`session-history-row-codex-${id}`);
+        await row.click();
+        await expect(row).toHaveAttribute("aria-checked", "true");
+      }
+      await expect(page.getByTestId("session-history-selection-count")).toHaveText("3 selected");
+      await page.getByTestId("session-history-selection-move").click();
+
+      const sheet = page.getByTestId("move-codex-conversation-sheet");
+      await expect(sheet).toContainText("3 conversations");
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+
+      const results = sheet.getByTestId("move-codex-conversation-results");
+      await expect(results).toBeVisible({ timeout: 30_000 });
+      await expect(
+        sheet.getByTestId("move-codex-conversation-result-thread-batch-1"),
+      ).toContainText("Moved to openai");
+      await expect(
+        sheet.getByTestId("move-codex-conversation-result-thread-batch-2"),
+      ).toContainText("Moved to openai");
+      await expect(
+        sheet.getByTestId("move-codex-conversation-result-thread-batch-3"),
+      ).toContainText("written to in the last minute");
+      expect(await readFile(first, "utf8")).toContain('"model_provider":"openai"');
+      expect(await readFile(second, "utf8")).toContain('"model_provider":"openai"');
+      expect(await readFile(busy, "utf8")).toBe(busyBefore);
+
+      await page.getByTestId("move-codex-conversation-cancel").click();
+      await expect(sheet).toBeHidden();
+      await expect(page.getByTestId("session-history-select")).toBeVisible();
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("keeps the dialog open with the reason and backup when one conversation of a batch fails", async ({
+    page,
+  }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-batch-failed-" });
+    const [first, second] = await seedConversations({
+      repoPath: workspace.repoPath,
+      conversations: [
+        { id: "thread-batch-1", name: "Rename the parser", isIdle: true },
+        { id: "thread-batch-2", name: "Fix the flaky test", isIdle: true },
+      ],
+    });
+    const before = await readFile(second, "utf8");
+    // 第二段对话的目录不可写：它挪不成，已改的改回，原因与备份留在框里。
+    await chmod(path.dirname(second), 0o555);
+
+    try {
+      await openSessionHistory(page, workspace.workspaceId);
+      await page.getByTestId("session-history-select").click();
+      await page.getByTestId("session-history-row-codex-thread-batch-1").click();
+      await page.getByTestId("session-history-row-codex-thread-batch-2").click();
+      await page.getByTestId("session-history-selection-move").click();
+      const sheet = page.getByTestId("move-codex-conversation-sheet");
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+
+      const failed = sheet.getByTestId("move-codex-conversation-result-thread-batch-2");
+      await expect(failed).toContainText("Not moved", { timeout: 30_000 });
+      await expect(failed).toContainText("codex-model-provider-moves");
+      await expect(
+        sheet.getByTestId("move-codex-conversation-result-thread-batch-1"),
+      ).toContainText("Moved to openai");
+      expect(await readFile(first, "utf8")).toContain('"model_provider":"openai"');
+      expect(await readFile(second, "utf8")).toBe(before);
+      await expect(sheet).toBeVisible();
+    } finally {
+      await chmod(path.dirname(second), 0o755);
+      await workspace.cleanup();
+    }
+  });
+
+  test("offers the move when a resume fails because the Codex model provider is gone", async ({
+    page,
+  }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "session-history-codex-resume-" });
+    // 对话记在 osuna_api_endpoint 名下，临时 CODEX_HOME 的 config.toml 里没有这张表。
+    await seedGatewayConversation({ repoPath: workspace.repoPath, isIdle: true });
+
+    try {
+      const row = await openSessionHistoryRow(page, workspace.workspaceId);
+      await row.hover();
+      await page.getByTestId(`session-history-kebab-codex:${GATEWAY_THREAD}`).click();
+      await page.getByTestId(`session-history-menu-import-codex:${GATEWAY_THREAD}`).click();
+
+      const error = page.getByTestId("session-history-import-error");
+      await expect(error).toContainText(
+        "This conversation is filed under the Codex model provider osuna_api_endpoint",
+        { timeout: 30_000 },
+      );
+      await error.getByTestId("session-history-import-error-move").click();
+      const sheet = page.getByTestId("move-codex-conversation-sheet");
+      await expect(sheet).toBeVisible();
+      await page.getByTestId("move-codex-conversation-target-trigger").click();
+      await page.getByTestId("move-codex-conversation-target-openai").click();
+      await page.getByTestId("move-codex-conversation-confirm").click();
+      await expect(sheet).toBeHidden({ timeout: 30_000 });
+      await expect(error).toBeHidden();
+
+      await row.hover();
+      await page.getByTestId(`session-history-kebab-codex:${GATEWAY_THREAD}`).click();
+      await page.getByTestId(`session-history-menu-import-codex:${GATEWAY_THREAD}`).click();
+      await expect(row).toContainText("Osuna", { timeout: 30_000 });
+      await expect(error).toBeHidden();
+    } finally {
+      await workspace.cleanup();
+    }
+  });
 });
 
 const GATEWAY_THREAD = "thread-gateway";
@@ -212,46 +344,68 @@ async function seedClaudeSession(repoPath: string): Promise<void> {
   );
 }
 
-/** 一段记在中转站服务商名下的对话：对话文件放进临时 CODEX_HOME，假 Codex 列表时读它。 */
+/** 几段记在中转站服务商名下的对话：对话文件放进临时 CODEX_HOME，假 Codex 列表时读它们。返回对话文件路径。 */
+async function seedConversations(input: {
+  repoPath: string;
+  conversations: Array<{ id: string; name: string; isIdle: boolean }>;
+}): Promise<string[]> {
+  const anHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const threads = [];
+  const rollouts = [];
+  for (const [index, conversation] of input.conversations.entries()) {
+    // 每段对话一个日期目录，好让一段的目录不可写而不影响别的。
+    const directory = path.join(codexHome, "sessions", "2026", "10", String(10 + index));
+    const rollout = path.join(directory, `rollout-2026-10-17T10-00-00-${conversation.id}.jsonl`);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      rollout,
+      `${JSON.stringify({
+        timestamp: "2026-10-17T10:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          id: conversation.id,
+          cwd: input.repoPath,
+          model_provider: "osuna_api_endpoint",
+        },
+      })}\n`,
+    );
+    if (conversation.isIdle) await utimes(rollout, anHourAgo, anHourAgo);
+    threads.push({
+      id: conversation.id,
+      cwd: input.repoPath,
+      name: conversation.name,
+      path: rollout,
+      updatedAt: Math.floor(Date.now() / 1000) - 120 - index,
+    });
+    rollouts.push(rollout);
+  }
+  await writeFile(threadsFile, JSON.stringify(threads));
+  return rollouts;
+}
+
+/** 一段记在中转站服务商名下的对话。 */
 async function seedGatewayConversation(input: {
   repoPath: string;
   isIdle: boolean;
 }): Promise<string> {
-  const directory = path.join(codexHome, "sessions", "2026", "10", "17");
-  const rollout = path.join(directory, `rollout-2026-10-17T10-00-00-${GATEWAY_THREAD}.jsonl`);
-  await mkdir(directory, { recursive: true });
-  await writeFile(
-    rollout,
-    `${JSON.stringify({
-      timestamp: "2026-10-17T10:00:00.000Z",
-      type: "session_meta",
-      payload: { id: GATEWAY_THREAD, cwd: input.repoPath, model_provider: "osuna_api_endpoint" },
-    })}\n`,
-  );
-  if (input.isIdle) {
-    const anHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    await utimes(rollout, anHourAgo, anHourAgo);
-  }
-  await writeFile(
-    threadsFile,
-    JSON.stringify([
-      {
-        id: GATEWAY_THREAD,
-        cwd: input.repoPath,
-        name: "Started through the gateway",
-        path: rollout,
-        updatedAt: Math.floor(Date.now() / 1000) - 120,
-      },
-    ]),
-  );
-  return rollout;
+  const [rollout] = await seedConversations({
+    repoPath: input.repoPath,
+    conversations: [
+      { id: GATEWAY_THREAD, name: "Started through the gateway", isIdle: input.isIdle },
+    ],
+  });
+  return rollout!;
 }
 
-async function openSessionHistoryRow(page: Page, workspaceId: string) {
+async function openSessionHistory(page: Page, workspaceId: string) {
   await gotoWorkspace(page, workspaceId);
   await waitForWorkspaceTabsVisible(page);
   const explorer = await ensureExplorerSidebar(page);
   await explorer.getByTestId("workspace-tab-session_history").click();
+}
+
+async function openSessionHistoryRow(page: Page, workspaceId: string) {
+  await openSessionHistory(page, workspaceId);
   const row = page.getByTestId(`session-history-row-codex-${GATEWAY_THREAD}`);
   await expect(row).toBeVisible({ timeout: 30_000 });
   return row;

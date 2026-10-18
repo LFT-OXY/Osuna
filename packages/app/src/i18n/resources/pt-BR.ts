@@ -2269,6 +2269,11 @@ export const ptBR: TranslationResources = {
         refresh: "Atualizar",
         refreshing: "Atualizando...",
       },
+      selection: {
+        count_one: "{{count}} selecionada",
+        count_other: "{{count}} selecionadas",
+        move: "Mover…",
+      },
       empty: {
         workspace: "Este workspace ainda não tem sessões de provedores.",
         project: "Este projeto ainda não tem sessões de provedor.",
@@ -2311,11 +2316,24 @@ export const ptBR: TranslationResources = {
           "Ela foi gravada no último minuto e pode ainda estar em execução. Tente de novo quando estiver ociosa.",
         skippedNotFound: "O Osuna não encontra os arquivos desta conversa.",
         listFailed: "Não foi possível listar os provedores de modelos do Codex",
+        conversationCount_one: "{{count}} conversa",
+        conversationCount_other: "{{count}} conversas",
+        backupNoteMany:
+          "O Osuna faz primeiro um backup dos arquivos das conversas. Mover uma conversa de volta para o provedor de modelos do Codex anterior desfaz a mudança.",
+        rebuildNoteMany:
+          "Continue cada conversa uma vez depois de movê-la. Até lá, se o Codex reconstruir o banco de dados de estado, o Codex vai continuá-la de novo com o provedor de modelos do Codex anterior.",
+        movedMany_one: "{{count}} conversa movida para {{to}}",
+        movedMany_other: "{{count}} conversas movidas para {{to}}",
+        resultsSummary: "{{moved}} de {{total}} movidas",
+        resultNotMoved: "Não foi movida",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "Não foi possível carregar as sessões",
         openFailed: "Não foi possível abrir um terminal para esta sessão",
         importFailed: "Não foi possível importar esta sessão",
+        codexModelProviderMissing:
+          "Esta conversa está registrada no provedor de modelos do Codex {{provider}}, que não está mais na configuração do Codex, então o Codex não consegue continuá-la. Mova-a para outro provedor de modelos do Codex e tente de novo.",
       },
     },
     diff: {

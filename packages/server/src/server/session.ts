@@ -286,6 +286,8 @@ function resolveWorkspaceSetupRuntime(
   return runtime ?? new WorkspaceSetupRuntime();
 }
 import { WorktreeRequestError, toWorktreeWireError } from "./worktree-errors.js";
+import { CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE } from "@getpaseo/protocol/codex-session/rpc-schemas";
+import { isCodexModelProviderMissing } from "./codex-conversations/model-provider-missing.js";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import {
   createProjectDirectory,
@@ -4687,6 +4689,9 @@ export class Session {
           status: "agent_create_failed",
           requestId,
           error: message,
+          ...(isCodexModelProviderMissing(error)
+            ? { errorCode: CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE }
+            : {}),
         },
       });
       this.emit({

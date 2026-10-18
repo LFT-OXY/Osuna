@@ -1138,6 +1138,17 @@ export class DaemonConnectionError extends Error {
   }
 }
 
+/** 导入（续）一段提供方会话失败；`code` 是 daemon 给的可识别原因，没有时为 null。 */
+export class AgentImportError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+  ) {
+    super(message);
+    this.name = "AgentImportError";
+  }
+}
+
 class DaemonRpcError extends Error {
   readonly requestId: string;
   readonly requestType?: string;
@@ -3339,7 +3350,7 @@ export class DaemonClient {
     });
 
     if (status.status === "agent_create_failed") {
-      throw new Error(status.error);
+      throw new AgentImportError(status.error, status.errorCode ?? null);
     }
 
     return status.agent;

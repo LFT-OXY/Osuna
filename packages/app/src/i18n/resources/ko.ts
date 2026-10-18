@@ -2245,6 +2245,11 @@ export const ko: TranslationResources = {
         refresh: "새로고침",
         refreshing: "새로고침 중...",
       },
+      selection: {
+        count_one: "{{count}}개 선택됨",
+        count_other: "{{count}}개 선택됨",
+        move: "이동…",
+      },
       empty: {
         workspace: "이 워크스페이스에는 아직 프로바이더 세션이 없습니다.",
         project: "이 프로젝트에는 아직 프로바이더 세션이 없습니다.",
@@ -2287,11 +2292,24 @@ export const ko: TranslationResources = {
           "최근 1분 안에 기록되어 아직 실행 중일 수 있습니다. 유휴 상태가 되면 다시 시도하세요.",
         skippedNotFound: "Osuna가 이 대화의 파일을 찾을 수 없습니다.",
         listFailed: "Codex 모델 공급자를 나열할 수 없습니다",
+        conversationCount_one: "대화 {{count}}개",
+        conversationCount_other: "대화 {{count}}개",
+        backupNoteMany:
+          "Osuna가 먼저 대화 파일을 백업합니다. 대화를 원래 Codex 모델 공급자로 다시 옮기면 이동이 취소됩니다.",
+        rebuildNoteMany:
+          "이동한 뒤 각 대화를 한 번 이어서 진행하세요. 그 전에 Codex가 상태 데이터베이스를 다시 만들면 Codex는 다시 원래 Codex 모델 공급자에서 이어 갑니다.",
+        movedMany_one: "대화 {{count}}개를 {{to}}(으)로 이동했습니다",
+        movedMany_other: "대화 {{count}}개를 {{to}}(으)로 이동했습니다",
+        resultsSummary: "{{total}}개 중 {{moved}}개 이동",
+        resultNotMoved: "이동하지 않음",
+        resultWithReason: "{{status}}: {{reason}}",
       },
       errors: {
         loadFailed: "세션을 불러올 수 없습니다",
         openFailed: "이 세션의 터미널을 열 수 없습니다",
         importFailed: "이 세션을 가져올 수 없습니다",
+        codexModelProviderMissing:
+          "이 대화는 Codex 모델 공급자 {{provider}}에 기록되어 있는데, Codex 설정에 더 이상 없어서 이어 갈 수 없습니다. 다른 Codex 모델 공급자로 옮긴 뒤 다시 시도하세요.",
       },
     },
     diff: {

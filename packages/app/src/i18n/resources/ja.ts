@@ -2254,6 +2254,11 @@ export const ja: TranslationResources = {
         refresh: "更新",
         refreshing: "更新中...",
       },
+      selection: {
+        count_one: "{{count}} 件選択中",
+        count_other: "{{count}} 件選択中",
+        move: "移動…",
+      },
       empty: {
         workspace: "このワークスペースにはまだプロバイダーセッションがありません。",
         project: "このプロジェクトにはまだプロバイダーセッションがありません。",
@@ -2296,11 +2301,24 @@ export const ja: TranslationResources = {
           "直近 1 分以内に書き込まれており、まだ実行中の可能性があります。アイドルになってから再試行してください。",
         skippedNotFound: "Osuna はこの会話のファイルを見つけられません。",
         listFailed: "Codex モデルプロバイダーを一覧表示できませんでした",
+        conversationCount_one: "{{count}} 件の会話",
+        conversationCount_other: "{{count}} 件の会話",
+        backupNoteMany:
+          "Osuna は先に会話ファイルをバックアップします。会話を元の Codex モデルプロバイダーに戻すと移動を取り消せます。",
+        rebuildNoteMany:
+          "移動後にそれぞれの会話を一度再開してください。それまでに Codex が状態データベースを再構築すると、Codex は再び元の Codex モデルプロバイダーで再開します。",
+        movedMany_one: "{{count}} 件の会話を {{to}} に移動しました",
+        movedMany_other: "{{count}} 件の会話を {{to}} に移動しました",
+        resultsSummary: "{{total}} 件中 {{moved}} 件を移動",
+        resultNotMoved: "移動されていません",
+        resultWithReason: "{{status}}：{{reason}}",
       },
       errors: {
         loadFailed: "セッションを読み込めませんでした",
         openFailed: "このセッションのターミナルを開けませんでした",
         importFailed: "このセッションをインポートできませんでした",
+        codexModelProviderMissing:
+          "この会話は Codex モデルプロバイダー {{provider}} に記録されていますが、Codex の設定にもう存在しないため再開できません。別の Codex モデルプロバイダーへ移動してから再試行してください。",
       },
     },
     diff: {
