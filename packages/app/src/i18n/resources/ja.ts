@@ -2698,6 +2698,23 @@ export const ja: TranslationResources = {
         summaryCooling_hours_one: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
         summaryCooling_hours_other: "{{name}} はクールダウン中、{{count}} 時間後に復帰",
         saveFailed: "{{agent}} のサードパーティ API 設定を変更できませんでした",
+        switchOffPreview: {
+          title: "{{agent}} のサードパーティ API をオフにしますか？",
+          intro: "{{agent}} はオンにする前の設定に戻ります。元に戻す箇所は次のとおりです。",
+          loading: "元に戻す箇所を読み込み中…",
+          fallback:
+            "Osuna は {{agent}} の設定に書き込んだ内容（アドレス、トークン、モデル、思考レベル）をすべて取り除き、{{agent}} の以前の設定に戻します。",
+          unavailable: "変更を一つずつ表示できませんでした：{{reason}}",
+          valueBefore: "オンにする前の値",
+          now: "現在：{{line}}",
+          moreLines_one: "ほか {{count}} 行",
+          moreLines_other: "ほか {{count}} 行",
+          created: "新規作成",
+          deleted: "削除",
+          codexNote:
+            "Osuna の Codex モデルプロバイダーは残るため、それで開いた会話は引き続き開けます。",
+          confirm: "オフにして元に戻す",
+        },
         issues: {
           updateHost:
             "このホストの Osuna を更新すると、{{agent}} の設定が Osuna 以外で変更されたときにここに表示されます。",

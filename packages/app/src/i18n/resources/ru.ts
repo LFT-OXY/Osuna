@@ -2708,6 +2708,23 @@ export const ru: TranslationResources = {
         summaryCooling_hours_one: "{{name}} остывает, вернётся через {{count}} час",
         summaryCooling_hours_other: "{{name}} остывает, вернётся через {{count}} часа",
         saveFailed: "Не удалось изменить настройки сторонних API для {{agent}}",
+        switchOffPreview: {
+          title: "Отключить сторонние API для {{agent}}?",
+          intro: "{{agent}} вернётся к состоянию до включения. Вот что будет восстановлено.",
+          loading: "Читаем, что изменится…",
+          fallback:
+            "Osuna уберёт всё, что записал в конфигурацию {{agent}} (адрес, токен, модели и уровень размышления), и вернёт прежние настройки {{agent}}.",
+          unavailable: "Не удалось перечислить изменения по одному: {{reason}}",
+          valueBefore: "Прежнее значение",
+          now: "Сейчас: {{line}}",
+          moreLines_one: "Ещё строк: {{count}}",
+          moreLines_other: "Ещё строк: {{count}}",
+          created: "Создан",
+          deleted: "Удалён",
+          codexNote:
+            "Провайдер моделей Codex от Osuna остаётся, поэтому открытые через него беседы по-прежнему открываются.",
+          confirm: "Отключить и восстановить",
+        },
         issues: {
           updateHost:
             "Обновите Osuna на этом хосте, чтобы здесь было видно, когда настройки {{agent}} меняют вне Osuna.",

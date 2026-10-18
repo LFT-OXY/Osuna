@@ -561,6 +561,76 @@ experimental_bearer_token = "${token}"
     });
   });
 
+  describe("previewing what switching off restores", () => {
+    async function fileState(): Promise<{ text: string; mtimeMs: number }> {
+      return {
+        text: await readFile(configPath, "utf8"),
+        mtimeMs: (await stat(configPath)).mtimeMs,
+      };
+    }
+
+    test("lists the owned keys put back and the catalog line taken out, keeps Osuna's table, writes nothing", async () => {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("codex", endpointId);
+      const before = await fileState();
+
+      const previewed = await client.apiEndpointPreviewSwitchOff("codex");
+
+      expect(previewed).toEqual({
+        requestId: expect.any(String),
+        provider: "codex",
+        preview: {
+          files: [
+            {
+              path: "~/codex-home/config.toml",
+              change: "edited",
+              lines: [
+                {
+                  op: "restored",
+                  text: 'model = "gpt-5.1-codex" # default',
+                  was: 'model = "relay/gpt" # default',
+                },
+                {
+                  op: "restored",
+                  text: 'model_provider = "mine"',
+                  was: `model_provider = "${ID}"`,
+                },
+                { op: "removed", text: `model_catalog_json = ${JSON.stringify(catalogPath())}` },
+              ],
+            },
+          ],
+          keepsCodexModelProvider: true,
+        },
+        error: null,
+      });
+      expect(await fileState()).toEqual(before);
+      const off = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+      expect(off.error).toBeNull();
+      expect(await readFile(configPath, "utf8")).toBe(await keptConfig());
+    });
+
+    test("a config.toml that does not parse can't be previewed: the reason comes back, nothing written", async () => {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("codex", endpointId);
+      await writeFile(configPath, `model = "a"\nmodel = "b"\n`);
+      const before = await fileState();
+
+      const previewed = await client.apiEndpointPreviewSwitchOff("codex");
+
+      expect(previewed).toEqual({
+        requestId: expect.any(String),
+        provider: "codex",
+        preview: null,
+        error: {
+          code: "config_unparsable",
+          params: { file: configPath, detail: expect.any(String) },
+          message: expect.stringContaining(configPath),
+        },
+      });
+      expect(await fileState()).toEqual(before);
+    });
+  });
+
   test("Official shows where config.toml itself points", async () => {
     expect(await client.apiEndpointList("codex")).toMatchObject({
       activeEndpointId: null,

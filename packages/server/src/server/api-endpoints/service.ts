@@ -27,6 +27,8 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
+  type ApiEndpointSwitchOffFile,
+  type ApiEndpointSwitchOffPreview,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
@@ -125,6 +127,7 @@ import {
   type ReadCliUse,
 } from "./cli-bypass.js";
 import type { RetiredModels } from "./retired-models.js";
+import { switchOffFileChange } from "./switch-off-preview.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import { someEndpointSearchesWeb } from "./gateway/web-search.js";
 import {
@@ -1332,6 +1335,55 @@ export class ApiEndpointService {
   }
 
   /**
+   * 关「使用第三方接口」前的预览（照 magpie 的 DisconnectPreview）：用关开关同一份还原计划（claudeRestorePlan、
+   * codexRestorePlan）在 CLI 配置的当前内容上算出关掉以后的样子，逐行比较。什么都不写，也不先跟 CLI 的选择走
+   * （那会改写文件）。总开关关着或没有接管记录时没有要改的。读不懂时抛 config_unparsable。
+   */
+  previewSwitchOff(provider: string): Promise<ApiEndpointSwitchOffPreview> {
+    return this.exclusive(() => {
+      const supported = requireProvider(provider);
+      const agent = this.readState().agents[supported];
+      const file = agent.enabled ? this.switchOffFile(supported, agent.defaultModelId) : null;
+      const files = file === null ? [] : [file];
+      return {
+        files,
+        // 还原从不拿掉 Osuna 的 Codex 服务商（ADR 0010），记在它名下的对话还能打开。
+        keepsCodexModelProvider: supported === "codex",
+      };
+    });
+  }
+
+  private switchOffFile(
+    provider: ApiEndpointProvider,
+    defaultModelId: string | null,
+  ): ApiEndpointSwitchOffFile | null {
+    if (provider === "claude") {
+      const { takeover } = this.store.readClaudeTakeover();
+      if (!takeover) return null;
+      const filePath = this.resolveClaudeSettingsPath();
+      const before = readOptionalFile(filePath)?.toString("utf8") ?? null;
+      const plan = claudeRestorePlan({ filePath, text: before, takeover, defaultModelId });
+      return switchOffFileChange({
+        path: filePath,
+        homeDir: this.homeDir,
+        before,
+        after: plan.change,
+      });
+    }
+    const { takeover } = this.store.readCodexTakeover();
+    if (!takeover) return null;
+    const filePath = this.resolveCodexConfigPath();
+    const before = readOptionalFile(filePath)?.toString("utf8") ?? null;
+    const plan = codexRestorePlan({ filePath, text: before, takeover, defaultModelId });
+    return switchOffFileChange({
+      path: filePath,
+      homeDir: this.homeDir,
+      before,
+      after: plan.change,
+    });
+  }
+
+  /**
    * 「保留当前设置」（ADR 0012）：关掉总开关，但不按接管记录改回 CLI 配置；接管记录一并忘掉，此后不再提示。
    * 先忘掉接管记录再落下关开关，commit 里的切回官方因此什么都不改；落不下时把接管记录放回去。
    */
@@ -2462,24 +2514,8 @@ export class ApiEndpointService {
     const settingsPath = this.resolveClaudeSettingsPath();
     this.writeConfigFile({
       filePath: settingsPath,
-      compute: (text) => {
-        const result = restoreClaudeOfficial({ text, takeover });
-        if (result.kind === "unparsable") {
-          throw unparsable({
-            filePath: settingsPath,
-            detail: result.message,
-            reason: result.reason,
-          });
-        }
-        let change: ConfigFileChange = { kind: "keep" };
-        let left: string | null = null;
-        if (result.kind === "patched") {
-          change = { kind: "write", text: result.text };
-          left = readClaudeModel(result.text);
-        }
-        if (result.kind === "delete") change = { kind: "delete" };
-        return { change, value: reconnectRecord(defaultModelId, left) };
-      },
+      compute: (text) =>
+        claudeRestorePlan({ filePath: settingsPath, text, takeover, defaultModelId }),
       commit: (value) =>
         this.store.writeClaudeTakeover({
           takeover: null,
@@ -2611,19 +2647,7 @@ export class ApiEndpointService {
     const configPath = this.resolveCodexConfigPath();
     this.writeConfigFile({
       filePath: configPath,
-      compute: (text) => {
-        const result = restoreCodexOfficial({ text, takeover });
-        if (result.kind === "unparsable")
-          throw unparsable({ filePath: configPath, detail: result.message });
-        let change: ConfigFileChange = { kind: "keep" };
-        let left: string | null = null;
-        if (result.kind === "patched") {
-          change = { kind: "write", text: result.text };
-          left = readCodexModel(result.text);
-        }
-        if (result.kind === "delete") change = { kind: "delete" };
-        return { change, value: reconnectRecord(defaultModelId, left) };
-      },
+      compute: (text) => codexRestorePlan({ filePath: configPath, text, takeover, defaultModelId }),
       commit: (value) =>
         this.store.writeCodexTakeover({ ...record, takeover: null, reconnect: value.reconnect }),
       rollback: () => this.store.writeCodexTakeover(record),
@@ -3072,6 +3096,50 @@ function shouldRewriteCliModel(input: {
 }
 
 /** 写进接管记录的 reconnect；没有默认模型时不写。 */
+/** 关掉时还原 CLI 配置的计划。 */
+interface RestorePlanInput<Takeover> {
+  filePath: string;
+  text: string | null;
+  takeover: Takeover;
+  defaultModelId: string | null;
+}
+
+/** 关掉时 settings.json 怎么改回（关开关与关前预览共用）；读不懂时抛 config_unparsable。 */
+function claudeRestorePlan(
+  input: RestorePlanInput<ClaudeSettingsTakeover>,
+): ConfigFilePlan<ReconnectRecord> {
+  const result = restoreClaudeOfficial({ text: input.text, takeover: input.takeover });
+  if (result.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: result.message, reason: result.reason });
+  }
+  let change: ConfigFileChange = { kind: "keep" };
+  let left: string | null = null;
+  if (result.kind === "patched") {
+    change = { kind: "write", text: result.text };
+    left = readClaudeModel(result.text);
+  }
+  if (result.kind === "delete") change = { kind: "delete" };
+  return { change, value: reconnectRecord(input.defaultModelId, left) };
+}
+
+/** 关掉时 config.toml 怎么改回（关开关与关前预览共用）；读不懂时抛 config_unparsable。 */
+function codexRestorePlan(
+  input: RestorePlanInput<CodexConfigTakeover>,
+): ConfigFilePlan<ReconnectRecord> {
+  const result = restoreCodexOfficial({ text: input.text, takeover: input.takeover });
+  if (result.kind === "unparsable") {
+    throw unparsable({ filePath: input.filePath, detail: result.message });
+  }
+  let change: ConfigFileChange = { kind: "keep" };
+  let left: string | null = null;
+  if (result.kind === "patched") {
+    change = { kind: "write", text: result.text };
+    left = readCodexModel(result.text);
+  }
+  if (result.kind === "delete") change = { kind: "delete" };
+  return { change, value: reconnectRecord(input.defaultModelId, left) };
+}
+
 interface ReconnectRecord {
   reconnect?: DefaultModelReconnect;
 }

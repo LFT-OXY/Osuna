@@ -2735,6 +2735,24 @@ export const en = {
         summaryCooling_hours_one: "{{name}} cooling down, back in {{count}} hour",
         summaryCooling_hours_other: "{{name}} cooling down, back in {{count}} hours",
         saveFailed: "Couldn't change the API endpoint settings for {{agent}}",
+        switchOffPreview: {
+          title: "Turn off API endpoints for {{agent}}?",
+          intro:
+            "{{agent}} goes back to how it was before this was turned on. These are the places put back.",
+          loading: "Reading what changes…",
+          fallback:
+            "Osuna takes out everything it wrote into {{agent}}'s config — the address, token, models and thinking — and puts back the settings {{agent}} had before.",
+          unavailable: "The changes couldn't be listed one by one: {{reason}}",
+          valueBefore: "Value before",
+          now: "Now: {{line}}",
+          moreLines_one: "{{count}} more line",
+          moreLines_other: "{{count}} more lines",
+          created: "Created",
+          deleted: "Deleted",
+          codexNote:
+            "Osuna's Codex model provider stays, so conversations opened on it still open.",
+          confirm: "Turn off and restore",
+        },
         issues: {
           updateHost:
             "Update Osuna on this host to see here when {{agent}}'s settings are changed outside Osuna.",

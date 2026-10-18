@@ -157,6 +157,8 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.set_active.request": "daemon.manage",
   "provider.api_endpoint.set_agent_settings.request": "daemon.manage",
   "provider.api_endpoint.keep_current_settings.request": "daemon.manage",
+  // 预览只读，但列出 CLI 配置的内容，与关开关同一级。
+  "provider.api_endpoint.preview_switch_off.request": "daemon.manage",
   "provider.codex.session.list_model_providers.request": "daemon.read",
   "provider.codex.session.move_model_provider.request": "daemon.manage",
   "provider.api_endpoint.set_endpoint_state.request": "daemon.manage",
@@ -406,6 +408,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.set_active.response": "daemon.manage",
   "provider.api_endpoint.set_agent_settings.response": "daemon.manage",
   "provider.api_endpoint.keep_current_settings.response": "daemon.manage",
+  "provider.api_endpoint.preview_switch_off.response": "daemon.manage",
   "provider.codex.session.list_model_providers.response": "daemon.read",
   "provider.codex.session.move_model_provider.response": "daemon.manage",
   "provider.api_endpoint.set_endpoint_state.response": "daemon.manage",

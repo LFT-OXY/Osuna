@@ -636,6 +636,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
 
     await test.step("off again: the CLI is official and the default model is hidden", async () => {
       await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+      await confirmSwitchOff(page);
       await expect(agentSection(page).getByTestId("agent-api-endpoints-default-model")).toHaveCount(
         0,
       );
@@ -968,6 +969,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
 
       await test.step("switching off takes the Subagent model out of the file", async () => {
         await section.getByTestId("agent-api-endpoints-switch").click();
+        await confirmSwitchOff(page);
         await expect(section.getByTestId("agent-api-endpoints-subagent-model")).toHaveCount(0);
         await expect.poll(claudeSettingsSubagentModel).toBeUndefined();
       });
@@ -1040,6 +1042,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
 
       await test.step("switching off takes them out of the file", async () => {
         await section.getByTestId("agent-api-endpoints-switch").click();
+        await confirmSwitchOff(page);
         await expect(section.getByTestId("agent-api-endpoints-memory-model")).toHaveCount(0);
         await expect.poll(readCodexConfig).not.toContain("default_subagent_model");
         expect(await readCodexConfig()).not.toContain("extract_model");
@@ -1293,6 +1296,170 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
       });
     } finally {
       await workspace.cleanup();
+    }
+  });
+});
+
+test.describe("Turning Use API endpoints off previews what it puts back", () => {
+  const settingsPath = path.join(cliHome, "claude", "settings.json");
+  const HAND_WRITTEN = `{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://hand-written.example"
+  },
+  "model": "opus"
+}
+`;
+
+  // 确认框里的东西直接按 testID 找：窄窗口里底部抽屉的外层不算可见。
+  function inSheet(page: Page, testId: string): Locator {
+    return page.getByTestId(testId).filter({ visible: true });
+  }
+
+  function readClaudeSettingsText(): Promise<string> {
+    return readFile(settingsPath, "utf8");
+  }
+
+  async function switchClaudeOn(): Promise<void> {
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(settingsPath, HAND_WRITTEN);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const on = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(on.error).toBeNull();
+  }
+
+  test("reading, then the lines per file; Cancel changes nothing and the confirm turns it off", async ({
+    page,
+  }) => {
+    try {
+      await switchClaudeOn();
+      const switched = await readFile(settingsPath, "utf8");
+      const preview = await holdSwitchOffPreview(page);
+      await openClaudeCodePage(page);
+      const toggle = agentSection(page).getByTestId("agent-api-endpoints-switch");
+
+      await test.step("reading what changes until the host answers", async () => {
+        await toggle.click();
+        await expect(page.getByText("Turn off API endpoints for Claude?")).toBeVisible();
+        await expect(inSheet(page, "switch-off-loading")).toHaveText("Reading what changes…");
+      });
+
+      await test.step("the file's lines: values put back with what they are now, lines taken out", async () => {
+        preview.release();
+        const file = inSheet(page, `switch-off-file-${settingsPath}`);
+        await expect(file).toBeVisible();
+        await expect(inSheet(page, "switch-off-loading")).toHaveCount(0);
+        const model = file.getByTestId("switch-off-line").filter({ hasText: '"model": "opus"' });
+        await expect(model).toContainText("Value before");
+        await expect(model).toContainText('Now: "model": "claude-sonnet-4-5",');
+        await expect(
+          file.getByTestId("switch-off-line").filter({ hasText: '"ANTHROPIC_AUTH_TOKEN": ••••' }),
+        ).toBeVisible();
+        await expect(inSheet(page, "switch-off-codex-note")).toHaveCount(0);
+      });
+
+      await test.step("Cancel leaves the switch on and the file as it is", async () => {
+        await inSheet(page, "switch-off-cancel").click();
+        await expect(page.getByText("Turn off API endpoints for Claude?")).toHaveCount(0);
+        await expect(toggle).toBeChecked();
+        expect(await readFile(settingsPath, "utf8")).toBe(switched);
+      });
+
+      await test.step("confirming turns it off and puts the file back", async () => {
+        await toggle.click();
+        await confirmSwitchOff(page);
+        await expect(toggle).not.toBeChecked();
+        await expect.poll(readClaudeSettingsText).toBe(HAND_WRITTEN);
+      });
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await writeFile(settingsPath, "{}\n");
+    }
+  });
+
+  test("a long file folds into N more lines", async ({ page }) => {
+    try {
+      await switchClaudeOn();
+      await openClaudeCodePage(page);
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+      const file = inSheet(page, `switch-off-file-${settingsPath}`);
+      const more = file.getByTestId("switch-off-more-lines");
+      await expect(more).toBeVisible();
+      await expect(file.getByTestId("switch-off-line")).toHaveCount(8);
+      const label = (await more.textContent()) ?? "";
+      const hidden = Number(/\d+/.exec(label)?.[0]);
+      expect(label).toBe(`${hidden} more lines`);
+      await more.click();
+      await expect(file.getByTestId("switch-off-line")).toHaveCount(8 + hidden);
+      await expect(more).toHaveCount(0);
+      await inSheet(page, "switch-off-cancel").click();
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await writeFile(settingsPath, "{}\n");
+    }
+  });
+
+  test("a file Osuna can't read is described in words with the reason, and can still be confirmed", async ({
+    page,
+  }) => {
+    const broken = '{\n  "theme": "dark"\n  "model": "opus"\n}\n';
+    try {
+      await switchClaudeOn();
+      await writeFile(settingsPath, broken);
+      await openClaudeCodePage(page);
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+
+      await expect(inSheet(page, "switch-off-described")).toContainText(
+        "Osuna takes out everything it wrote into Claude's config",
+      );
+      await expect(inSheet(page, "switch-off-unavailable")).toContainText(
+        `${settingsPath} has a syntax error near line 3, column 3.`,
+      );
+      await expect(inSheet(page, "switch-off-confirm")).toBeEnabled();
+      // 确认照常送出关开关；文件读不懂，daemon 改不回，拒绝的原因照旧留在区块顶上。
+      await confirmSwitchOff(page);
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-error")).toContainText(
+        `${settingsPath} has a syntax error near line 3, column 3.`,
+      );
+      expect(await readFile(settingsPath, "utf8")).toBe(broken);
+    } finally {
+      await writeFile(settingsPath, HAND_WRITTEN);
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await writeFile(settingsPath, "{}\n");
+    }
+  });
+
+  test("Codex says its Osuna model provider stays, and the confirm stays reachable on a narrow window", async ({
+    page,
+  }) => {
+    const configPath = path.join(cliHome, "codex", "config.toml");
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "openai_responses", url: `${relay.origin}/good/v1` }],
+      models: ["kimi-k2"],
+    });
+    try {
+      const on = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: true });
+      expect(on.error).toBeNull();
+      await openAgentPage(page, "codex");
+      // 窄窗口下侧栏收起，先在宽窗口里进到 Codex 页再收窄。
+      await page.setViewportSize({ width: 390, height: 844 });
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+
+      await expect(inSheet(page, "switch-off-codex-note")).toHaveText(
+        "Osuna's Codex model provider stays, so conversations opened on it still open.",
+      );
+      await expect(inSheet(page, `switch-off-file-${configPath}`)).toBeVisible();
+      await expect(inSheet(page, "switch-off-confirm")).toBeInViewport();
+      await confirmSwitchOff(page);
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+      await expect.poll(readCodexConfig).not.toContain('model_provider = "osuna_api_endpoint"');
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
+      await rm(configPath, { force: true });
     }
   });
 });
@@ -1720,6 +1887,37 @@ async function failSearchesWebSave(page: Page): Promise<{ failing: boolean }> {
     });
   });
   return host;
+}
+
+/** 关「使用第三方接口」的确认框里按确认。 */
+async function confirmSwitchOff(page: Page): Promise<void> {
+  await page.getByTestId("switch-off-confirm").filter({ visible: true }).click();
+}
+
+/** 关开关前的预览请求先扣下，`release` 之后才送到 daemon：确认框停在「正在读取」。 */
+async function holdSwitchOffPreview(page: Page): Promise<{ release: () => void }> {
+  const held: string[] = [];
+  const host = { isHolding: true, forward: (_message: string) => {} };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    host.forward = (message) => server.send(message);
+    ws.onMessage((message) => {
+      const isPreview =
+        typeof message === "string" && message.includes("preview_switch_off.request");
+      if (host.isHolding && isPreview) {
+        held.push(message);
+        return;
+      }
+      server.send(message);
+    });
+  });
+  return {
+    release: () => {
+      host.isHolding = false;
+      for (const message of held.splice(0)) host.forward(message);
+    },
+  };
 }
 
 /** 从 server_info 去掉 apiEndpointCliWiring，模拟 v0.16 的主机。 */

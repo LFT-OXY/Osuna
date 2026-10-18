@@ -2689,6 +2689,22 @@ export const zhCN: TranslationResources = {
         summaryCooling_hours_one: "{{name}} 冷却中，{{count}} 小时后恢复",
         summaryCooling_hours_other: "{{name}} 冷却中，{{count}} 小时后恢复",
         saveFailed: "没能修改 {{agent}} 的第三方接口设置",
+        switchOffPreview: {
+          title: "关闭 {{agent}} 的第三方接口？",
+          intro: "{{agent}} 将恢复打开前的设置，以下是要改回的地方。",
+          loading: "正在读取要改回的地方…",
+          fallback:
+            "Osuna 会移除它写进 {{agent}} 配置的所有内容（接口地址、口令、模型和思考档位），还原 {{agent}} 之前的设置。",
+          unavailable: "没能逐条列出：{{reason}}",
+          valueBefore: "打开前的值",
+          now: "现在：{{line}}",
+          moreLines_one: "还有 {{count}} 行",
+          moreLines_other: "还有 {{count}} 行",
+          created: "新建",
+          deleted: "删除",
+          codexNote: "Osuna 的 Codex 服务商保留，用它开过的对话还能打开。",
+          confirm: "关闭并改回",
+        },
         issues: {
           updateHost: "更新这台主机上的 Osuna 后，{{agent}} 的配置被别的程序改了会在这里提示。",
           notThroughGateway: "{{agent}} 已不经过中转站：配置被别的程序改了",

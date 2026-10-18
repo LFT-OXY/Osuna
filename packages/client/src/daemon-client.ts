@@ -664,6 +664,10 @@ type ApiEndpointSetAgentSettingsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_agent_settings.response" }
 >["payload"];
+type ApiEndpointPreviewSwitchOffPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.preview_switch_off.response" }
+>["payload"];
 type ApiEndpointKeepCurrentSettingsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.keep_current_settings.response" }
@@ -6380,6 +6384,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.keep_current_settings.request", ...options },
+    });
+  }
+
+  /** 关「使用第三方接口」之前的预览：关掉会改回、删除、新建的设置，什么都不写。 */
+  async apiEndpointPreviewSwitchOff(
+    provider: string,
+    requestId?: string,
+  ): Promise<ApiEndpointPreviewSwitchOffPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.preview_switch_off.request", provider },
     });
   }
 

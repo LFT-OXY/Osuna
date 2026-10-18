@@ -2726,6 +2726,24 @@ export const es: TranslationResources = {
         summaryCooling_hours_one: "{{name}} en enfriamiento, vuelve en {{count}} hora",
         summaryCooling_hours_other: "{{name}} en enfriamiento, vuelve en {{count}} horas",
         saveFailed: "No se pudo cambiar la configuración de endpoints de API de {{agent}}",
+        switchOffPreview: {
+          title: "¿Desactivar los endpoints de API para {{agent}}?",
+          intro:
+            "{{agent}} vuelve a como estaba antes de activarlo. Estos son los lugares que se restauran.",
+          loading: "Leyendo qué cambia…",
+          fallback:
+            "Osuna quita todo lo que escribió en la configuración de {{agent}} (la dirección, el token, los modelos y el razonamiento) y restaura la configuración que {{agent}} tenía antes.",
+          unavailable: "No se pudieron listar los cambios uno por uno: {{reason}}",
+          valueBefore: "Valor anterior",
+          now: "Ahora: {{line}}",
+          moreLines_one: "{{count}} línea más",
+          moreLines_other: "{{count}} líneas más",
+          created: "Creado",
+          deleted: "Eliminado",
+          codexNote:
+            "El proveedor de modelos de Codex de Osuna se mantiene, así que las conversaciones abiertas con él siguen abriéndose.",
+          confirm: "Desactivar y restaurar",
+        },
         issues: {
           updateHost:
             "Actualiza Osuna en este host para ver aquí cuándo se cambia la configuración de {{agent}} fuera de Osuna.",

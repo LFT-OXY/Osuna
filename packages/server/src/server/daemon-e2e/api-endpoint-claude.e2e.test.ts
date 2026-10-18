@@ -871,6 +871,134 @@ describe("Claude API endpoint over the daemon RPC", () => {
     });
   });
 
+  describe("previewing what switching off restores", () => {
+    async function fileState(): Promise<{ text: string; mtimeMs: number }> {
+      return {
+        text: await readFile(settingsPath, "utf8"),
+        mtimeMs: (await stat(settingsPath)).mtimeMs,
+      };
+    }
+
+    test("lists the lines put back and taken out, writes nothing, and matches what switching off does", async () => {
+      const handWritten = `{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://hand-written.example",
+    "ANTHROPIC_MODEL": "my-model"
+  },
+  "model": "opus"
+}
+`;
+      await writeFile(settingsPath, handWritten);
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      const before = await fileState();
+
+      const previewed = await client.apiEndpointPreviewSwitchOff("claude");
+
+      expect(previewed).toEqual({
+        requestId: expect.any(String),
+        provider: "claude",
+        preview: {
+          files: [
+            {
+              path: "~/claude/settings.json",
+              change: "edited",
+              lines: [
+                {
+                  op: "restored",
+                  text: '    "ANTHROPIC_BASE_URL": "https://hand-written.example",',
+                  was: `    "ANTHROPIC_BASE_URL": "${gatewayUrl()}",`,
+                },
+                { op: "added", text: '    "ANTHROPIC_MODEL": "my-model"' },
+                // 中转站口令遮住。
+                { op: "removed", text: '    "ANTHROPIC_AUTH_TOKEN": ••••' },
+                { op: "removed", text: '    "ANTHROPIC_API_KEY": "",' },
+                { op: "removed", text: '    "CLAUDE_CODE_AUTO_MODE_SERVER": "0"' },
+                { op: "restored", text: '  "model": "opus"', was: '  "model": "relay/sonnet",' },
+                { op: "removed", text: '  "permissions": {' },
+                { op: "removed", text: '    "deny": [' },
+                { op: "removed", text: '      "WebSearch"' },
+                { op: "removed", text: '  "modelPicker": {' },
+                { op: "removed", text: '    "options": [' },
+                { op: "removed", text: '        "model": "relay/relay/sonnet",' },
+                { op: "removed", text: '        "label": "relay/sonnet",' },
+                { op: "removed", text: '        "description": "Relay"' },
+                { op: "removed", text: '        "model": "relay/relay/haiku",' },
+                { op: "removed", text: '        "label": "relay/haiku",' },
+                { op: "removed", text: '        "description": "Relay"' },
+              ],
+            },
+          ],
+          keepsCodexModelProvider: false,
+        },
+        error: null,
+      });
+      expect(await fileState()).toEqual(before);
+      const off = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      expect(off.error).toBeNull();
+      expect(await readFile(settingsPath, "utf8")).toBe(handWritten);
+    });
+
+    test("a settings.json Osuna made is listed as deleted", async () => {
+      await rm(settingsPath);
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      const before = await fileState();
+
+      const previewed = await client.apiEndpointPreviewSwitchOff("claude");
+
+      expect(previewed).toEqual({
+        requestId: expect.any(String),
+        provider: "claude",
+        preview: {
+          files: [{ path: "~/claude/settings.json", change: "removed", lines: [] }],
+          keepsCodexModelProvider: false,
+        },
+        error: null,
+      });
+      expect(await fileState()).toEqual(before);
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await expect(stat(settingsPath)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    test("with the switch off there is nothing to restore", async () => {
+      expect(await client.apiEndpointPreviewSwitchOff("claude")).toEqual({
+        requestId: expect.any(String),
+        provider: "claude",
+        preview: { files: [], keepsCodexModelProvider: false },
+        error: null,
+      });
+    });
+
+    test("a settings.json that does not parse can't be previewed: the reason comes back, nothing written", async () => {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      const broken = `{\n  "env": {\n    "A": "1"\n    "B": "2"\n  }\n}\n`;
+      await writeFile(settingsPath, broken);
+      const before = await fileState();
+
+      const previewed = await client.apiEndpointPreviewSwitchOff("claude");
+
+      expect(previewed).toEqual({
+        requestId: expect.any(String),
+        provider: "claude",
+        preview: null,
+        error: {
+          code: "config_unparsable",
+          params: {
+            file: settingsPath,
+            detail: "CommaExpected at line 4, column 5",
+            reason: "syntax",
+            line: "4",
+            column: "5",
+          },
+          message: expect.stringContaining(settingsPath),
+        },
+      });
+      expect(await fileState()).toEqual(before);
+    });
+  });
+
   test("Official shows where settings.json itself points", async () => {
     const endpointId = await createEndpoint();
     expect(await client.apiEndpointList("claude")).toMatchObject({

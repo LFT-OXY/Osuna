@@ -97,6 +97,8 @@ import {
   ApiEndpointListRequestSchema,
   ApiEndpointListResponseSchema,
   ApiEndpointModeMismatchSchema,
+  ApiEndpointPreviewSwitchOffRequestSchema,
+  ApiEndpointPreviewSwitchOffResponseSchema,
   ApiEndpointRefSchema,
   ApiEndpointSaveRequestSchema,
   ApiEndpointSaveResponseSchema,
@@ -3568,6 +3570,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetActiveRequestSchema,
   ApiEndpointSetAgentSettingsRequestSchema,
   ApiEndpointKeepCurrentSettingsRequestSchema,
+  ApiEndpointPreviewSwitchOffRequestSchema,
   ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
@@ -3939,7 +3942,7 @@ export const ServerInfoStatusPayloadSchema = z
         apiEndpointGateway: z.boolean().optional(),
         // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
         // 任务 10-16 的新界面：列表带 agentIssues，支持 set_agent_settings 的 reapply 与 keep_current_settings，
-        // 以及 provider.codex.session.*（把 Codex 对话挪到另一个 Codex 服务商）。
+        // provider.codex.session.*（把 Codex 对话挪到另一个 Codex 服务商），以及关开关前的 preview_switch_off。
         apiEndpointCliWiring: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7341,6 +7344,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetActiveResponseSchema,
   ApiEndpointSetAgentSettingsResponseSchema,
   ApiEndpointKeepCurrentSettingsResponseSchema,
+  ApiEndpointPreviewSwitchOffResponseSchema,
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,

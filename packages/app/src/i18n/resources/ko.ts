@@ -2686,6 +2686,23 @@ export const ko: TranslationResources = {
         summaryCooling_hours_one: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
         summaryCooling_hours_other: "{{name}} 쿨다운 중, {{count}}시간 후 복구",
         saveFailed: "{{agent}}의 서드파티 API 설정을 바꾸지 못했습니다",
+        switchOffPreview: {
+          title: "{{agent}}의 서드파티 API를 끌까요?",
+          intro: "{{agent}}이(가) 켜기 전 설정으로 돌아갑니다. 되돌리는 곳은 다음과 같습니다.",
+          loading: "되돌릴 곳을 읽는 중…",
+          fallback:
+            "Osuna가 {{agent}} 설정에 쓴 모든 내용(주소, 토큰, 모델, 사고 수준)을 빼고 {{agent}}의 이전 설정을 되돌립니다.",
+          unavailable: "변경 사항을 하나씩 나열하지 못했습니다: {{reason}}",
+          valueBefore: "켜기 전 값",
+          now: "현재: {{line}}",
+          moreLines_one: "{{count}}줄 더 보기",
+          moreLines_other: "{{count}}줄 더 보기",
+          created: "새로 만듦",
+          deleted: "삭제",
+          codexNote:
+            "Osuna의 Codex 모델 공급자는 남아 있으므로 그것으로 연 대화는 계속 열 수 있습니다.",
+          confirm: "끄고 되돌리기",
+        },
         issues: {
           updateHost:
             "이 호스트의 Osuna를 업데이트하면 {{agent}} 설정이 Osuna 밖에서 바뀌었을 때 여기에 표시됩니다.",

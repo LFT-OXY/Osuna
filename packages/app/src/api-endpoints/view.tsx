@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
@@ -25,6 +26,7 @@ import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
+import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
@@ -106,10 +108,27 @@ function AgentApiEndpoints({
   const isOwnConnection = lastConnection?.provider === provider;
   const connection = isOwnConnection ? lastConnection.connection : null;
 
+  const client = useHostRuntimeClient(serverId);
+  // 关总开关前先给确认框看会改回什么。
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有预览，直接关。
+  const [isConfirmingSwitchOff, setIsConfirmingSwitchOff] = useState(false);
   const handleToggle = useCallback(
-    (enabled: boolean) => setAgentSettings(provider, { enabled }),
-    [provider, setAgentSettings],
+    (enabled: boolean) => {
+      const asksFirst = !enabled && hasIssues;
+      if (asksFirst) {
+        setIsConfirmingSwitchOff(true);
+        return;
+      }
+      setAgentSettings(provider, { enabled });
+    },
+    [hasIssues, provider, setAgentSettings],
   );
+  const showsSwitchOffSheet = isConfirmingSwitchOff && client !== null;
+  const cancelSwitchOff = useCallback(() => setIsConfirmingSwitchOff(false), []);
+  const confirmSwitchOff = useCallback(() => {
+    setIsConfirmingSwitchOff(false);
+    setAgentSettings(provider, { enabled: false });
+  }, [provider, setAgentSettings]);
   const handleDefaultModelChange = useCallback(
     (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
     [provider, setAgentSettings],
@@ -193,37 +212,49 @@ function AgentApiEndpoints({
     return <AgentNotice text={state.message} />;
   }
   return (
-    <AgentApiEndpointsSection
-      providerLabel={providerLabel}
-      view={selectAgentApiEndpointsView({
-        state,
-        provider,
-        endpointModelGroups,
-        lockedThinkingOptionId,
-        subagentThinkingOptions,
-        sideModelOptions,
-        now,
-      })}
-      busy={endpoints.pendingAgent === provider}
-      actionError={endpoints.actionError}
-      actionErrorCode={endpoints.actionErrorCode}
-      onDismissError={endpoints.dismissActionError}
-      connection={connection}
-      onToggle={handleToggle}
-      onDefaultModelChange={handleDefaultModelChange}
-      onDefaultThinkingChange={handleDefaultThinkingChange}
-      onUltraCodeChange={handleUltraCodeChange}
-      onBackgroundModelChange={handleBackgroundModelChange}
-      onSubagentModelChange={handleSubagentModelChange}
-      onSubagentThinkingChange={handleSubagentThinkingChange}
-      onMemoryModelChange={handleMemoryModelChange}
-      onForcedSubagentModelChange={handleForcedSubagentModelChange}
-      onAnySubagentModelChange={handleAnySubagentModelChange}
-      onManage={handleManage}
-      // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
-      onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}
-      issueActions={issueActions}
-    />
+    <>
+      <AgentApiEndpointsSection
+        providerLabel={providerLabel}
+        view={selectAgentApiEndpointsView({
+          state,
+          provider,
+          endpointModelGroups,
+          lockedThinkingOptionId,
+          subagentThinkingOptions,
+          sideModelOptions,
+          now,
+        })}
+        busy={endpoints.pendingAgent === provider}
+        actionError={endpoints.actionError}
+        actionErrorCode={endpoints.actionErrorCode}
+        onDismissError={endpoints.dismissActionError}
+        connection={connection}
+        onToggle={handleToggle}
+        onDefaultModelChange={handleDefaultModelChange}
+        onDefaultThinkingChange={handleDefaultThinkingChange}
+        onUltraCodeChange={handleUltraCodeChange}
+        onBackgroundModelChange={handleBackgroundModelChange}
+        onSubagentModelChange={handleSubagentModelChange}
+        onSubagentThinkingChange={handleSubagentThinkingChange}
+        onMemoryModelChange={handleMemoryModelChange}
+        onForcedSubagentModelChange={handleForcedSubagentModelChange}
+        onAnySubagentModelChange={handleAnySubagentModelChange}
+        onManage={handleManage}
+        // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
+        onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}
+        issueActions={issueActions}
+      />
+      {showsSwitchOffSheet ? (
+        <SwitchOffSheet
+          client={client}
+          serverId={serverId}
+          provider={provider}
+          providerLabel={providerLabel}
+          onCancel={cancelSwitchOff}
+          onConfirm={confirmSwitchOff}
+        />
+      ) : null}
+    </>
   );
 }
 

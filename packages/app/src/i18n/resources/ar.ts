@@ -2672,6 +2672,23 @@ export const ar: TranslationResources = {
         summaryCooling_hours_one: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
         summaryCooling_hours_other: "{{name}} في فترة تهدئة، تعود بعد {{count}} ساعة",
         saveFailed: "تعذّر تغيير إعدادات واجهات API الخارجية لـ {{agent}}",
+        switchOffPreview: {
+          title: "إيقاف واجهات API الخارجية لـ {{agent}}؟",
+          intro: "يعود {{agent}} إلى ما كان عليه قبل التشغيل. هذه هي المواضع التي تُستعاد.",
+          loading: "جارٍ قراءة ما سيتغيّر…",
+          fallback:
+            "يزيل Osuna كل ما كتبه في إعدادات {{agent}} (العنوان والرمز المميز والنماذج ومستوى التفكير) ويعيد الإعدادات التي كانت لدى {{agent}} من قبل.",
+          unavailable: "تعذّر سرد التغييرات واحدًا تلو الآخر: {{reason}}",
+          valueBefore: "القيمة السابقة",
+          now: "الآن: {{line}}",
+          moreLines_one: "سطور أخرى: {{count}}",
+          moreLines_other: "سطور أخرى: {{count}}",
+          created: "أُنشئ",
+          deleted: "حُذف",
+          codexNote:
+            "يبقى موفّر نماذج Codex الخاص بـ Osuna، لذا تظل المحادثات التي فُتحت عليه قابلة للفتح.",
+          confirm: "إيقاف واستعادة",
+        },
         issues: {
           updateHost: "حدّث Osuna على هذا المضيف لترى هنا متى تُغيَّر إعدادات {{agent}} خارج Osuna.",
           notThroughGateway: "لم يعد {{agent}} يمر عبر البوابة: غُيّرت إعداداته خارج Osuna",

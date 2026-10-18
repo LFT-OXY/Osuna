@@ -771,3 +771,29 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - app：`agent-settings.test.ts`（bypassed 给「重新应用」「切回官方」）；`bypassed-copy.test.ts`（时间按语言显示；缺时间、时间读不出、认不出的 how 照主机原文）。
 - 修正轮加的端到端（Codex）：重启前中转站收到过请求，重启前连到别处的记录不报，重启后再连到别处照报；没有改写时刻记录时，daemon 起来之前的连接不报。
 - 截图（无头 Chromium、临时 CODEX_HOME、假数据，真时钟等过 30 秒余量）：`screenshots/25-codex-page_bypassed_desktop-1280_{en,zh}.png`；点「重新应用」后提示消失。
+
+## 26 关开关前预览会改回什么
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 怎么算 | `DisconnectPreview`（`internal/agent/preview.go`）：把 Agent 的配置目录与 magpie 自己的文件拷进临时 home，另起进程（`agent-disconnect-dry-run`）真跑一遍 `Disconnect`，再逐文件比 | Osuna 的还原本来就是纯函数：`previewSwitchOff` 在当前内容上调关开关同一份计划 `claudeRestorePlan` / `codexRestorePlan`（也是 `restoreClaudeOfficial` / `restoreCodexOfficial` 的 `compute`），把计划的结果与当前内容逐行比。结果相同，不用拷文件、不起进程，什么都不写（e2e 比对内容与 mtime） |
+| 逐行比较 | `diffLines`、`sameLines`（Myers，4000 处改动以内）、`lineKey` / `indent` 配成改回、`mask` 遮密钥、单独的括号不列 | 照搬（`switch-off-preview.ts`），用例取自 `TestDiffLines`、`TestMask`。线上用 `removed` / `added` / `restored` 代替 `-` / `+` / `~` |
+| 列哪些文件 | Agent 配置目录里的文件；magpie 自己的文件不列 | 关开关只改 settings.json / config.toml；Osuna 自己的 `codex-models.json` 不列，同 magpie |
+| 确认框 | `askDisconnect`：标题、一句说明、逐文件列表（每个文件前 8 行，多 2 行以上折成「{n} more lines」）、读取中「Reading what changes…」、拿不到时旧的文字说明、Codex 另一句供应商表保留 | 同。比 magpie 多：改回的一行另起一行写「现在：…」（magpie 只放在悬停提示里，工单要求看得见）；算不出时说明后面跟原因（读不懂的文件照 `describeUnparsableFile`） |
+| 遮密钥的例外 | 值为 `magpie` 的不遮（magpie 自己写的假 key） | Osuna 不写这种字面值，中转站口令照样遮住 |
+| 缓存 | `previews[a.id]` 先显示上次的再刷新 | React Query 缓存同样先显示上次的再刷新 |
+
+### 要判断的地方
+
+- 只在关「使用第三方接口」开关时弹；提示区的「切回官方」照旧直接关（工单只写了开关）。要不要也先预览，留给编排者 / 用户定。
+- 文件读不懂时预览算不出，确认照常送出关开关；daemon 改不回读不懂的文件，照旧拒绝并在区块顶上说原因（现有行为，没改）。
+- 主机没声明 `apiEndpointCliWiring` 时不弹框，直接关（新 RPC 跟这个能力位）。
+
+### 测试
+
+- 纯逻辑 `switch-off-preview.test.ts`（server）：magpie 的大文件、配对、相同内容、括号、大块拿掉；遮密钥；新建、删除、不变、家目录外的路径。
+- daemon 端到端：Claude（改回、放回、拿掉逐行与关掉后的文件一致；Osuna 建的文件列为删除；开关关着时没有；读不懂时回 `config_unparsable`）与 Codex（两行改回、目录行拿掉、`keepsCodexModelProvider`，关掉后与 `keptConfig` 一致；读不懂）；都比对预览前后内容与 mtime。
+- app：`internal/switch-off-preview.test.ts`（折叠、认不出的种类改文字、算不出）；浏览器测试「Turning Use API endpoints off previews what it puts back」：扣住预览请求看「正在读取」、放开后的逐行、取消不改文件、确认后关掉并改回；折叠「还有 N 行」展开；读不懂时文字说明加原因、仍可确认；Codex 窄窗口说明可见、确认按钮在视口内。原来三处关开关的步骤补上确认。
+- 截图（无头 Chromium、临时 HOME、假数据）：`screenshots/26-switch-off-sheet_long-list_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_codex_compact-390_{en,zh}.png`、`26-switch-off-sheet_unreadable_desktop-1280_{en,zh}.png`。

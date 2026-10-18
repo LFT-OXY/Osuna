@@ -763,6 +763,48 @@ describe("API endpoint settings issues (apiEndpointCliWiring)", () => {
     expect(SessionOutboundMessageSchema.parse(failed)).toEqual(failed);
   });
 
+  it("parses preview_switch_off and its response, with changes and when none can be had", () => {
+    const request = {
+      type: "provider.api_endpoint.preview_switch_off.request" as const,
+      requestId: "req-4",
+      provider: "codex",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const previewed = {
+      type: "provider.api_endpoint.preview_switch_off.response" as const,
+      payload: {
+        requestId: "req-4",
+        provider: "codex",
+        preview: {
+          files: [
+            {
+              path: "~/.codex/config.toml",
+              change: "edited",
+              lines: [
+                { op: "restored", text: 'model = "gpt-5"', was: 'model = "glm-4.6"' },
+                { op: "removed", text: 'model_catalog_json = "/x/catalog.json"' },
+                { op: "added", text: 'model_reasoning_effort = "high"' },
+              ],
+            },
+            { path: "~/.codex/old.toml", change: "removed", lines: [] },
+          ],
+          keepsCodexModelProvider: true,
+        },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(previewed)).toEqual(previewed);
+    const unavailable = {
+      ...previewed,
+      payload: {
+        ...previewed.payload,
+        preview: null,
+        error: { code: "config_unparsable", params: { file: "/x" }, message: "bad" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(unavailable)).toEqual(unavailable);
+  });
+
   it("parses a host that advertises apiEndpointCliWiring, and an older one without it", () => {
     const base = { status: "server_info" as const, serverId: "srv_1" };
     const current = ServerInfoStatusPayloadSchema.parse({

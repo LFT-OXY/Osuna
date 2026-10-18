@@ -2728,6 +2728,24 @@ export const fr: TranslationResources = {
         summaryCooling_hours_one: "{{name}} en refroidissement, de retour dans {{count}} heure",
         summaryCooling_hours_other: "{{name}} en refroidissement, de retour dans {{count}} heures",
         saveFailed: "Impossible de modifier les réglages des points d'accès API de {{agent}}",
+        switchOffPreview: {
+          title: "Désactiver les points d'accès API pour {{agent}} ?",
+          intro:
+            "{{agent}} revient à son état d'avant l'activation. Voici les endroits remis en place.",
+          loading: "Lecture des changements…",
+          fallback:
+            "Osuna retire tout ce qu'il a écrit dans la configuration de {{agent}} (l'adresse, le jeton, les modèles et la réflexion) et remet les réglages que {{agent}} avait avant.",
+          unavailable: "Les changements n'ont pas pu être listés un par un : {{reason}}",
+          valueBefore: "Valeur d'avant",
+          now: "Actuellement : {{line}}",
+          moreLines_one: "{{count}} ligne de plus",
+          moreLines_other: "{{count}} lignes de plus",
+          created: "Créé",
+          deleted: "Supprimé",
+          codexNote:
+            "Le fournisseur de modèles Codex d'Osuna reste, donc les conversations ouvertes avec lui s'ouvrent toujours.",
+          confirm: "Désactiver et restaurer",
+        },
         issues: {
           updateHost:
             "Mettez à jour Osuna sur cet hôte pour voir ici quand les réglages de {{agent}} sont modifiés en dehors d'Osuna.",

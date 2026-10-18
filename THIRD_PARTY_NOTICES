@@ -731,6 +731,19 @@ internal/usage/usage.go:
   packages/server/src/server/api-endpoints/cli-bypass.ts
   packages/server/src/server/api-endpoints/service.ts
 
+The preview of what turning Use API endpoints off puts back (each file's
+lines taken out, put in, and going back to their value before, values that
+read as secrets masked, a file's first eight lines and the rest folded)
+follows FileChange, LineDiff, diffLines, sameLines, splitLines, lineKey,
+indent and mask in magpie's internal/agent/preview.go and changesList and
+askDisconnect in internal/gui/assets/app.js, and its tests reuse cases from
+TestDiffLines and TestMask in preview_test.go:
+
+  packages/server/src/server/api-endpoints/switch-off-preview.ts
+  packages/server/src/server/api-endpoints/switch-off-preview.test.ts
+  packages/app/src/api-endpoints/internal/switch-off-preview.ts
+  packages/app/src/api-endpoints/switch-off-sheet.tsx
+
 MIT License
 
 Copyright (c) 2026 yetone

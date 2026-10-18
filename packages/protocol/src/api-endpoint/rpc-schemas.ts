@@ -415,6 +415,66 @@ export type ApiEndpointKeepCurrentSettingsResponse = z.infer<
 >;
 
 /**
+ * 关「使用第三方接口」会改的一行（照 magpie 的 LineDiff）。`op`：removed（Osuna 写的行拿掉）、
+ * added（放回接入前的一行）、restored（同一个键改回接入前的值，`was` 是现在这一行）。像密钥的值已遮住。
+ * 用字符串而非枚举：以后加新值时老客户端照常解析。
+ */
+export const ApiEndpointSwitchOffLineSchema = z.object({
+  op: z.string(),
+  text: z.string(),
+  was: z.string().optional(),
+});
+export type ApiEndpointSwitchOffLine = z.infer<typeof ApiEndpointSwitchOffLineSchema>;
+
+/**
+ * 关掉后一个文件的变化（照 magpie 的 FileChange）。`path` 在家目录下时以 `~/` 开头。
+ * `change`：edited（改几行）、created（新建，`lines` 是它的内容）、removed（删掉，没有 `lines`）。
+ */
+export const ApiEndpointSwitchOffFileSchema = z.object({
+  path: z.string(),
+  change: z.string(),
+  lines: z.array(ApiEndpointSwitchOffLineSchema),
+});
+export type ApiEndpointSwitchOffFile = z.infer<typeof ApiEndpointSwitchOffFileSchema>;
+
+/**
+ * 关掉会改的文件，空数组表示没有要改的。`keepsCodexModelProvider`：Osuna 的 Codex 服务商留在 config.toml 里，
+ * 用它开过的对话还能打开（只有 Codex 为 true）。
+ */
+export const ApiEndpointSwitchOffPreviewSchema = z.object({
+  files: z.array(ApiEndpointSwitchOffFileSchema),
+  keepsCodexModelProvider: z.boolean(),
+});
+export type ApiEndpointSwitchOffPreview = z.infer<typeof ApiEndpointSwitchOffPreviewSchema>;
+
+/**
+ * 关「使用第三方接口」之前的预览：用真正关掉时同一套还原逻辑，在 CLI 配置的当前内容上算出关掉以后的样子，
+ * 什么都不写。算不出（如文件读不懂，`config_unparsable`）时 `preview` 为 null、`error` 说明原因，
+ * app 改用文字说明，仍可确认关掉。只有新客户端在 apiEndpointCliWiring 为 true 时才发。
+ */
+export const ApiEndpointPreviewSwitchOffRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.preview_switch_off.request"),
+  requestId: z.string(),
+  provider: z.string(),
+});
+export type ApiEndpointPreviewSwitchOffRequest = z.infer<
+  typeof ApiEndpointPreviewSwitchOffRequestSchema
+>;
+
+export const ApiEndpointPreviewSwitchOffResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.preview_switch_off.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: z.string(),
+    preview: ApiEndpointSwitchOffPreviewSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointPreviewSwitchOffResponse = z.infer<
+  typeof ApiEndpointPreviewSwitchOffResponseSchema
+>;
+
+/**
  * 一家接口的状态：`enabled` 是接口开关（对所有 Agent 生效）；`clearCooldown` 是「立刻恢复」，
  * 清掉这家的冷却。关掉开关可能让某个 Agent 的默认模型改变或回到官方，规则同删除。
  */

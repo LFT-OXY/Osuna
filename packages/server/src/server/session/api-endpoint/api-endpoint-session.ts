@@ -25,6 +25,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_active.request"
       | "provider.api_endpoint.set_agent_settings.request"
       | "provider.api_endpoint.keep_current_settings.request"
+      | "provider.api_endpoint.preview_switch_off.request"
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
@@ -76,6 +77,8 @@ export class ApiEndpointSession {
         return this.handleSetAgentSettings(request);
       case "provider.api_endpoint.keep_current_settings.request":
         return this.handleKeepCurrentSettings(request);
+      case "provider.api_endpoint.preview_switch_off.request":
+        return this.handlePreviewSwitchOff(request);
       case "provider.api_endpoint.set_endpoint_state.request":
         return this.handleSetEndpointState(request);
       case "provider.api_endpoint.fetch_models.request":
@@ -265,6 +268,31 @@ export class ApiEndpointSession {
           requestId: request.requestId,
           provider: request.provider,
           agent: this.currentAgentSettings(request.provider),
+          error: this.toWireError(error, request),
+        },
+      });
+    }
+  }
+
+  private async handlePreviewSwitchOff(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.preview_switch_off.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const preview = await this.service.previewSwitchOff(request.provider);
+      this.host.emit({
+        type: "provider.api_endpoint.preview_switch_off.response",
+        payload: { requestId: request.requestId, provider: request.provider, preview, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.preview_switch_off.response",
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          preview: null,
           error: this.toWireError(error, request),
         },
       });
