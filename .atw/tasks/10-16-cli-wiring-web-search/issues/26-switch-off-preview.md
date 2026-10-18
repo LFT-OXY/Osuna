@@ -8,7 +8,7 @@
 
 **Blocked by:** 02, 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：预览列出的改回、删除、新建项，与确认后文件的实际变化一致（Claude Code、Codex 各一例）；预览前后文件的内容与修改时间都没变。
 - [ ] 文件读不懂时预览返回「算不出」，app 显示文字说明，仍可确认关掉。
