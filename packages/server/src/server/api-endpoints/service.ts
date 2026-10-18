@@ -13,6 +13,7 @@ import {
   type ApiEndpointAgentIssue,
   type ApiEndpointAgentSettings,
   type ApiEndpointBaseUrl,
+  type ApiEndpointConnection,
   type ApiEndpointCooldown,
   type ApiEndpointFormatDetection,
   type ApiEndpointHealthIssue,
@@ -49,6 +50,7 @@ import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
+  readClaudeModel,
   type ClaudeSettingsUnparsableReason,
   restoreClaudeOfficial,
   type ClaudeAuthTokenState,
@@ -60,7 +62,9 @@ import {
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
   isCodexMirrorKey,
+  codexKeepsOwnModel,
   readCodexCatalogPath,
+  readCodexModel,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -88,7 +92,10 @@ import {
 import {
   AGENT_REQUEST_FORMAT,
   agentTargetEndpoint,
+  bareDefaultModel,
   findEndpoint,
+  isDefaultModelChoice,
+  namedDefaultModel,
   generateEndpointSlug,
   legacyAgentBaseUrl,
   projectedBaseUrl,
@@ -109,6 +116,11 @@ import {
   type StoredApiEndpoint,
 } from "./store.js";
 import { testUpstreamConnection } from "./upstream-connection.js";
+import {
+  pickDefaultModel,
+  type DefaultModelPick,
+  type DefaultModelReconnect,
+} from "./default-model-pick.js";
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
@@ -186,6 +198,12 @@ export interface ApiEndpointAgentSettingsInput {
   reapply?: boolean;
   // 「保留 claude.ai 登录」，只给 Claude Code；省略即不变。
   keepsClaudeAiLogin?: boolean;
+}
+
+/** 改完的设置；打开总开关且没指定默认模型时另有默认模型是怎么挑的。 */
+export interface ApiEndpointAgentSettingsResult {
+  agent: ApiEndpointAgentSettings;
+  connection: ApiEndpointConnection | null;
 }
 
 export interface ApiEndpointStateInput {
@@ -493,11 +511,13 @@ export class ApiEndpointService {
     if (!state || !supported) return null;
     const agent = state.agents[supported];
     if (!agent.enabled) return null;
+    // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
+    const defaultModel = bareDefaultModel(state, agent.defaultModelId);
     return usableModels(this.retiredModels.listed(state)).map((model) => ({
       provider: supported,
       id: model.id,
       label: model.label ?? model.id,
-      isDefault: model.id === agent.defaultModelId,
+      isDefault: model.id === defaultModel,
     }));
   }
 
@@ -512,9 +532,12 @@ export class ApiEndpointService {
     const agent = state.agents[supported];
     if (!agent.enabled) return null;
     const agentProvider = supported;
+    // 默认模型指定了某一家就标那一家，否则标含它的第一家。
+    const named = namedDefaultModel(state, agent.defaultModelId) !== null;
     let defaultMarked = false;
     function toDefinition({ id, model }: EndpointGroupModel): AgentModelDefinition {
-      const isDefault = !defaultMarked && model.id === agent.defaultModelId;
+      const isDefault =
+        !defaultMarked && (named ? id === agent.defaultModelId : model.id === agent.defaultModelId);
       if (isDefault) defaultMarked = true;
       const label = model.label ?? model.id;
       return { provider: agentProvider, id, label, isDefault };
@@ -658,7 +681,7 @@ export class ApiEndpointService {
   setAgentSettings(
     provider: string,
     input: ApiEndpointAgentSettingsInput,
-  ): Promise<ApiEndpointAgentSettings> {
+  ): Promise<ApiEndpointAgentSettingsResult> {
     return this.exclusive(async () => {
       const supported = requireProvider(provider);
       const setsClaudeAiLogin = input.keepsClaudeAiLogin !== undefined;
@@ -670,8 +693,10 @@ export class ApiEndpointService {
       }
       if (supported === "codex" && input.enabled) await this.checkCodexSignIn();
       const state = this.readState();
+      const requested = input.defaultModelId?.trim();
+      const pick = input.enabled && !requested ? this.pickDefaultModel(state, supported) : null;
       const enabledOrOff = input.enabled
-        ? enabledAgentSettings(state, supported, input.defaultModelId?.trim())
+        ? enabledAgentSettings({ state, provider: supported, requested, pick })
         : // 关掉总开关从不被拒；默认模型留着，下次打开时还能用就沿用。
           { ...state.agents[supported], enabled: false };
       const agent = setsClaudeAiLogin
@@ -683,8 +708,53 @@ export class ApiEndpointService {
         { ...state, agents: { ...state.agents, [supported]: agent } },
         reapply ? { rewrite: supported } : {},
       );
-      return next.agents[supported];
+      const connection: ApiEndpointConnection | null = pick
+        ? { how: pick.how, model: pick.defaultModelId, previousModel: pick.previousModel }
+        : null;
+      return { agent: next.agents[supported], connection };
     });
+  }
+
+  /**
+   * 打开总开关时照 magpie 挑默认模型（default-model-pick.ts）：读 CLI 配置里现在的模型、它是否还指向中转站、
+   * 上次关掉时记下的模型；用 ChatGPT 登录、模型归 Codex 自己时是 joined。读不出的配置按没设（打开时写配置会照旧报错）。
+   */
+  private pickDefaultModel(
+    state: ApiEndpointState,
+    provider: ApiEndpointProvider,
+  ): DefaultModelPick | null {
+    const filePath =
+      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
+    const text = readOptionalFile(filePath)?.toString("utf8") ?? null;
+    const record =
+      provider === "claude" ? this.store.readClaudeTakeover() : this.store.readCodexTakeover();
+    const cliModel = provider === "claude" ? readClaudeModel(text) : readCodexModel(text);
+    const joinsOwnModel =
+      provider === "codex" && this.codexUsesChatGpt() && codexKeepsOwnModel(text);
+    return pickDefaultModel({
+      state,
+      provider,
+      cliModel,
+      isWired: this.cliPointsAtGateway(provider),
+      reconnect: record.reconnect ?? null,
+      joinsOwnModel,
+    });
+  }
+
+  /** CLI 配置现在指向中转站（官方模式下也查，例如「保留当前设置」之后）。 */
+  private cliPointsAtGateway(provider: ApiEndpointProvider): boolean {
+    const gatewayUrl = this.gatewayUrlFor(provider);
+    if (gatewayUrl === null) return false;
+    const status =
+      provider === "claude"
+        ? this.inspectClaude({ enabled: false, defaultModelId: null })
+        : this.inspectCodex(false);
+    const baseUrl = status.baseUrl === null ? null : trimTrailingSlashes(status.baseUrl);
+    const gatewayUrls =
+      provider === "claude"
+        ? [gatewayUrl]
+        : [`${gatewayUrl}${CODEX_GATEWAY_SUFFIX}`, `${gatewayUrl}${CHATGPT_BACKEND_PATH}`];
+    return baseUrl !== null && gatewayUrls.includes(baseUrl);
   }
 
   /**
@@ -789,14 +859,18 @@ export class ApiEndpointService {
       // 先有目录文件，config.toml 才指向它。
       if (catalog !== null && catalog !== catalogBefore) this.store.writeCodexModelCatalog(catalog);
       for (const provider of changed) {
-        this.syncCli(provider, this.cliWiring(next, provider, tokens));
+        this.syncCli(provider, this.cliWiring(next, provider, tokens), next.agents[provider]);
         synced.push(provider);
       }
     } catch (error) {
       // 已经改好的 CLI 配置和目录退回去，状态整个不保存。
       for (const provider of synced) {
         try {
-          this.syncCli(provider, this.cliWiring(previous, provider, previousTokens));
+          this.syncCli(
+            provider,
+            this.cliWiring(previous, provider, previousTokens),
+            previous.agents[provider],
+          );
         } catch (revertError) {
           this.logger.error({ err: revertError, provider }, "Failed to revert CLI config");
         }
@@ -828,9 +902,14 @@ export class ApiEndpointService {
     if (!usesModelFacts(previous) && usesModelFacts(next)) this.modelsDev.wake();
   }
 
-  private syncCli(provider: ApiEndpointProvider, wiring: CliWiring | null): void {
+  /** `agent` 是落下后的设置：切回官方时记下它的默认模型，再打开时放回（again）。 */
+  private syncCli(
+    provider: ApiEndpointProvider,
+    wiring: CliWiring | null,
+    agent: ApiEndpointAgentSettings,
+  ): void {
     if (!wiring) {
-      this.restoreOfficial(provider);
+      this.restoreOfficial(provider, agent.defaultModelId);
     } else if (provider === "codex") {
       this.writeCodexEndpoint(wiring);
     } else {
@@ -871,7 +950,7 @@ export class ApiEndpointService {
     const isUpToDate = written?.url === url && written.token === wiring.token;
     const isRewired = provider === "codex" && this.codexWiringChanged();
     if (isUpToDate && !isPickerUnrecorded && !isHintUnrecorded && !isRewired) return;
-    this.syncCli(provider, wiring);
+    this.syncCli(provider, wiring, state.agents[provider]);
     this.logger.info({ provider }, "CLI config pointed at the API endpoint gateway");
   }
 
@@ -968,6 +1047,9 @@ export class ApiEndpointService {
 
   /** 起始模型是不带接口标识的模型名，中转站先发给最早开着、选了它的那家：资料也按那家查。 */
   private startModelFacts(state: ApiEndpointState, modelId: string): ModelFacts {
+    // 指定了某一家的默认模型按那一家查。
+    const named = namedDefaultModel(state, modelId);
+    if (named) return this.modelFacts(named.endpoint, named.model.id);
     const endpoint = state.endpoints.find(
       (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
     );
@@ -999,7 +1081,11 @@ export class ApiEndpointService {
       return;
     }
     try {
-      this.syncCli("claude", this.cliWiring(state, "claude", this.store.readGatewayTokens()));
+      this.syncCli(
+        "claude",
+        this.cliWiring(state, "claude", this.store.readGatewayTokens()),
+        state.agents.claude,
+      );
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to rewrite the Claude model hints");
     }
@@ -1395,11 +1481,11 @@ export class ApiEndpointService {
     }
   }
 
-  private restoreOfficial(provider: ApiEndpointProvider): void {
+  private restoreOfficial(provider: ApiEndpointProvider, defaultModelId: string | null): void {
     if (provider === "codex") {
-      this.restoreCodexOfficial();
+      this.restoreCodexOfficial(defaultModelId);
     } else {
-      this.restoreClaudeOfficial();
+      this.restoreClaudeOfficial(defaultModelId);
     }
   }
 
@@ -1447,7 +1533,7 @@ export class ApiEndpointService {
     this.logger.info({ settingsPath }, "Claude settings pointed at the API endpoint gateway");
   }
 
-  private restoreClaudeOfficial(): void {
+  private restoreClaudeOfficial(defaultModelId: string | null): void {
     const record = this.store.readClaudeTakeover();
     const { takeover } = record;
     if (!takeover) return;
@@ -1464,11 +1550,20 @@ export class ApiEndpointService {
           });
         }
         let change: ConfigFileChange = { kind: "keep" };
-        if (result.kind === "patched") change = { kind: "write", text: result.text };
+        let left: string | null = null;
+        if (result.kind === "patched") {
+          change = { kind: "write", text: result.text };
+          left = readClaudeModel(result.text);
+        }
         if (result.kind === "delete") change = { kind: "delete" };
-        return { change, value: null };
+        return { change, value: reconnectRecord(defaultModelId, left) };
       },
-      commit: () => this.store.writeClaudeTakeover({ takeover: null, backup: record.backup }),
+      commit: (value) =>
+        this.store.writeClaudeTakeover({
+          takeover: null,
+          backup: record.backup,
+          reconnect: value.reconnect,
+        }),
       rollback: () => this.store.writeClaudeTakeover(record),
     });
     this.logger.info({ settingsPath }, "Claude settings restored to Official");
@@ -1561,7 +1656,11 @@ export class ApiEndpointService {
         return;
       }
       try {
-        this.syncCli("codex", this.cliWiring(state, "codex", this.store.readGatewayTokens()));
+        this.syncCli(
+          "codex",
+          this.cliWiring(state, "codex", this.store.readGatewayTokens()),
+          state.agents.codex,
+        );
         this.staleCodexModels(state);
         this.onActiveEndpointChanged("codex");
       } catch (error) {
@@ -1581,7 +1680,7 @@ export class ApiEndpointService {
     return takeover !== null && isChatGptWiring(takeover) !== this.codexUsesChatGpt();
   }
 
-  private restoreCodexOfficial(): void {
+  private restoreCodexOfficial(defaultModelId: string | null): void {
     const record = this.store.readCodexTakeover();
     const { takeover } = record;
     if (!takeover) return;
@@ -1593,11 +1692,16 @@ export class ApiEndpointService {
         if (result.kind === "unparsable")
           throw unparsable({ filePath: configPath, detail: result.message });
         let change: ConfigFileChange = { kind: "keep" };
-        if (result.kind === "patched") change = { kind: "write", text: result.text };
+        let left: string | null = null;
+        if (result.kind === "patched") {
+          change = { kind: "write", text: result.text };
+          left = readCodexModel(result.text);
+        }
         if (result.kind === "delete") change = { kind: "delete" };
-        return { change, value: null };
+        return { change, value: reconnectRecord(defaultModelId, left) };
       },
-      commit: () => this.store.writeCodexTakeover({ ...record, takeover: null }),
+      commit: (value) =>
+        this.store.writeCodexTakeover({ ...record, takeover: null, reconnect: value.reconnect }),
       rollback: () => this.store.writeCodexTakeover(record),
     });
     this.store.removeLegacyCodexKeyFile();
@@ -1767,7 +1871,7 @@ export class ApiEndpointService {
     return { health, issues, baseUrl: result.baseUrl };
   }
 
-  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
+  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。 */
   private toWire(
     state: ApiEndpointState,
     endpoint: StoredApiEndpoint,
@@ -1795,6 +1899,7 @@ export class ApiEndpointService {
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
       searchesWeb: endpoint.searchesWeb === true,
+      slug: endpoint.slug,
     };
   }
 
@@ -1872,31 +1977,39 @@ function toWireModel(model: ListedModel): ApiEndpointModel {
   return model.label === undefined ? { id: model.id } : { id: model.id, label: model.label };
 }
 
-/** 打开总开关后的设置；没有可用模型或指定的默认模型不可用时拒绝。 */
-function enabledAgentSettings(
-  state: ApiEndpointState,
-  provider: ApiEndpointProvider,
-  requested: string | undefined,
-): ApiEndpointAgentSettings {
-  const models = usableModels(state);
-  const first = models[0];
-  if (!first) {
+/** 打开总开关后的设置；没有可用模型或指定的默认模型不可用时拒绝。没指定时用照 magpie 挑中的（pick）。 */
+function enabledAgentSettings(input: {
+  state: ApiEndpointState;
+  provider: ApiEndpointProvider;
+  requested: string | undefined;
+  pick: DefaultModelPick | null;
+}): ApiEndpointAgentSettings {
+  const { state, requested, pick } = input;
+  if (usableModels(state).length === 0) {
     throw new ApiEndpointRequestError({
       code: "no_usable_model",
       message: "Turn on an API endpoint and select at least one of its models first",
     });
   }
-  const isUsable = (id: string | null | undefined) => models.some((model) => model.id === id);
-  if (requested && !isUsable(requested)) {
+  if (requested && !isDefaultModelChoice(state, requested)) {
     throw new ApiEndpointRequestError({
       code: "invalid_input",
       message: "The default model must be one of the models selected on an endpoint that is on",
     });
   }
-  const agent = state.agents[provider];
-  const current = agent.defaultModelId;
-  if (requested) return { ...agent, enabled: true, defaultModelId: requested };
-  return { ...agent, enabled: true, defaultModelId: isUsable(current) ? current : first.id };
+  const agent = state.agents[input.provider];
+  const defaultModelId = requested || pick?.defaultModelId;
+  // 有可用模型时总挑得出来。
+  if (!defaultModelId) throw new Error("No default model was picked");
+  return { ...agent, enabled: true, defaultModelId };
+}
+
+/** 切回官方时要记下的默认模型与 CLI 配置里留下的模型；没有默认模型就不记。 */
+function reconnectRecord(
+  defaultModelId: string | null,
+  left: string | null,
+): { reconnect?: DefaultModelReconnect } {
+  return defaultModelId === null ? {} : { reconnect: { model: defaultModelId, left } };
 }
 
 /** 按 id 替换，找不到就追加到末尾（创建顺序）。 */

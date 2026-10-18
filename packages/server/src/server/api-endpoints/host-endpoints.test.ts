@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { isAutoModeReviewed } from "./host-endpoints.js";
+import {
+  agentTargetEndpoint,
+  defaultModelChoices,
+  isAutoModeReviewed,
+  settleAgentSettings,
+} from "./host-endpoints.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 function endpoint(input: Pick<StoredApiEndpoint, "id" | "slug"> & Partial<StoredApiEndpoint>) {
@@ -71,5 +76,35 @@ describe("isAutoModeReviewed", () => {
       baseUrls: [{ format: "anthropic_messages", url: "https://api.anthropic.com/" }],
     });
     expect(isAutoModeReviewed(state([relay, off, empty]))).toBe(false);
+  });
+});
+
+describe("one endpoint's default model", () => {
+  const backup = endpoint({ id: "ep_b", slug: "backup", models: [{ id: "glm-4.6" }] });
+
+  function withDefault(endpoints: StoredApiEndpoint[], defaultModelId: string): ApiEndpointState {
+    const value = state(endpoints);
+    value.agents.claude.defaultModelId = defaultModelId;
+    return value;
+  }
+
+  test("is offered beside the bare names, and points the CLI at that endpoint", () => {
+    expect(defaultModelChoices(state([relay, backup]))).toEqual([
+      "glm-4.6",
+      "kimi-k2",
+      "relay/glm-4.6",
+      "relay/kimi-k2",
+      "backup/glm-4.6",
+    ]);
+    const named = withDefault([relay, backup], "backup/glm-4.6");
+    expect(agentTargetEndpoint(named, "claude")?.id).toBe("ep_b");
+    expect(settleAgentSettings(named).agents.claude.defaultModelId).toBe("backup/glm-4.6");
+  });
+
+  test("becomes the bare name when that endpoint is off, and the first model when no one offers it", () => {
+    const off = withDefault([relay, { ...backup, enabled: false }], "backup/glm-4.6");
+    expect(settleAgentSettings(off).agents.claude.defaultModelId).toBe("glm-4.6");
+    const gone = withDefault([relay], "backup/qwen3");
+    expect(settleAgentSettings(gone).agents.claude.defaultModelId).toBe("glm-4.6");
   });
 });

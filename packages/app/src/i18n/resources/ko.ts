@@ -2611,6 +2611,21 @@ export const ko: TranslationResources = {
         defaultModel: "기본 모델",
         defaultModelHint: "터미널의 새 세션과 첫 새 채팅이 이 모델로 시작합니다.",
         defaultModelPick: "{{agent}} 기본 모델",
+        defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        connection: {
+          kept: "{{agent}}에서 서드파티 API 사용 중 · {{model}}을(를) 그대로 사용",
+          again:
+            "{{agent}}에서 서드파티 API 사용 중 · 마지막으로 끌 때 쓰던 {{model}}(으)로 돌아감",
+          joined:
+            "{{agent}}에서 서드파티 API 사용 중 · 마지막으로 직접 고른 모델을 계속 쓰고, 서드파티 API 모델이 {{command}}에 추가됨",
+          same: "{{agent}}에서 서드파티 API 사용 중 · 쓰던 모델 {{model}}을(를) 게이트웨이를 거쳐 계속 사용",
+          alike:
+            "{{agent}}에서 서드파티 API 사용 중 · 쓰던 {{previous}}이(가) 가리키는 {{model}}을(를) 게이트웨이를 거쳐 사용",
+          first:
+            "{{agent}}에서 서드파티 API 사용 중 · 쓰던 모델 {{previous}}을(를) 제공하는 서드파티 API가 없어 {{model}} 사용",
+          firstUnset:
+            "{{agent}}에서 서드파티 API 사용 중 · 설정된 모델이 없어 첫 번째 모델 {{model}} 사용",
+        },
         keepClaudeAiLogin: "claude.ai 로그인 유지",
         keepClaudeAiLoginHint:
           "켜면 {{agent}}가 게이트웨이를 거치는 동안에도 claude.ai 로그인을 유지하므로 음성, claude.ai 커넥터, /usage의 요금제 한도, 클라우드 세션을 그대로 쓸 수 있습니다. Osuna는 이 로그인을 서드파티 API에 넘기지 않습니다. Remote Control과 ultrareview는 계속 쓸 수 없습니다. {{agent}}는 Anthropic 자체 주소에서만 이를 제공합니다.",

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   ApiEndpoint,
+  ApiEndpointConnection,
   ApiEndpointError,
   ApiEndpointListResponse,
   ApiEndpointSetAgentSettingsRequest,
@@ -49,6 +50,12 @@ export type AgentSettingsChange = Pick<
   "enabled" | "defaultModelId" | "keepsClaudeAiLogin"
 >;
 
+/** 打开总开关时主机挑默认模型的办法，给那个 Agent 的设置页说一句（ADR 0012）。 */
+export interface AgentConnectionState {
+  provider: string;
+  connection: ApiEndpointConnection;
+}
+
 /** 提示区里正在做的处理，或做失败的那一次。 */
 export interface AgentIssueActionState {
   provider: string;
@@ -70,6 +77,8 @@ export interface UseHostEndpointsResult {
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
   setAgentSettings: (provider: string, settings: AgentSettingsChange) => void;
+  // 上次打开总开关时默认模型是怎么挑的；下一次改设置时清掉。老主机不给。
+  lastConnection: AgentConnectionState | null;
   // 提示区的处理：正在做的、失败的原因（留在提示区里，直到重试或关掉）。
   pendingIssueAction: AgentIssueActionState | null;
   issueActionError: (AgentIssueActionState & { message: string }) | null;
@@ -92,6 +101,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const [pendingEndpointId, setPendingEndpointId] = useState<string | null>(null);
   const [pendingAgent, setPendingAgent] = useState<string | null>(null);
   const [actionFailure, setActionFailure] = useState<ActionFailure | null>(null);
+  const [lastConnection, setLastConnection] = useState<AgentConnectionState | null>(null);
   const [pendingIssueAction, setPendingIssueAction] = useState<AgentIssueActionState | null>(null);
   const [issueActionError, setIssueActionError] =
     useState<UseHostEndpointsResult["issueActionError"]>(null);
@@ -201,10 +211,14 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       void (async () => {
         setPendingAgent(provider);
         setActionFailure(null);
+        setLastConnection(null);
         try {
           const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
           if (result.error)
             setActionFailure({ code: result.error.code, message: describeError(result.error) });
+          if (!result.error && result.connection) {
+            setLastConnection({ provider, connection: result.connection });
+          }
         } catch (error) {
           setActionFailure({ code: null, message: toErrorMessage(error) });
         } finally {
@@ -222,6 +236,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       void (async () => {
         setPendingIssueAction({ provider, action });
         setIssueActionError(null);
+        setLastConnection(null);
         try {
           const result = await sendIssueAction(client, provider, action);
           if (result.error) {
@@ -291,6 +306,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     resume,
     pendingAgent,
     setAgentSettings,
+    lastConnection,
     pendingIssueAction,
     issueActionError,
     runIssueAction,

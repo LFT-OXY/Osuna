@@ -546,7 +546,7 @@ test.describe("Settings API endpoints", () => {
       await expect(page.getByTestId("api-endpoints-list").filter({ visible: true })).toBeVisible();
       await expect(row(page, first)).toHaveCount(0);
       const list = await client.apiEndpointList("claude");
-      expect(list.agents?.claude).toEqual({ enabled: true, defaultModelId: "gpt-5" });
+      expect(list.agents?.claude).toMatchObject({ enabled: true, defaultModelId: "gpt-5" });
     });
 
     await test.step("deleting the last endpoint sends the agent back to official", async () => {
@@ -708,6 +708,76 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
       await expect(toggle).not.toBeChecked();
       await expect.poll(claudeToken).toBe(gatewayToken);
     });
+  });
+
+  test("turning the switch on says how the default model was picked, and the default model can name one endpoint", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["first", "glm-4.6"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["glm-4.6"],
+    });
+    const settingsPath = path.join(cliHome, "claude", "settings.json");
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(settingsPath, `{ "model": "glm-4.6" }\n`);
+    // 留下的模型会被后面的用例当成 CLI 原来的模型：用例最后关掉开关、删掉这份文件。
+    await openClaudeCodePage(page);
+    const section = agentSection(page);
+
+    await test.step("on: Claude goes on with the model it was on, and the page says so", async () => {
+      await section.getByTestId("agent-api-endpoints-switch").click();
+      await expect(section.getByTestId("agent-api-endpoints-connection")).toHaveText(
+        "Claude uses API endpoints · on glm-4.6 through the gateway, the model it was on",
+      );
+      await expect(defaultModelTrigger(page)).toHaveText("glm-4.6");
+    });
+
+    await test.step("the options list the bare names and each endpoint's models", async () => {
+      await defaultModelTrigger(page).click();
+      for (const [id, label] of [
+        ["first", "first"],
+        ["glm-4.6", "glm-4.6"],
+        ["relay-a/glm-4.6", "glm-4.6 (Relay A)"],
+        ["relay-b/glm-4.6", "glm-4.6 (Relay B)"],
+      ]) {
+        await expect(page.getByTestId(`agent-api-endpoints-default-option-${id}`)).toHaveText(
+          label,
+        );
+      }
+    });
+
+    await test.step("a failed save stays in place and leaves the model", async () => {
+      const claudeDir = path.join(cliHome, "claude");
+      await chmod(claudeDir, 0o500);
+      try {
+        await page.getByTestId("agent-api-endpoints-default-option-relay-b/glm-4.6").click();
+        await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+          "Couldn't change the API endpoint settings for Claude",
+        );
+      } finally {
+        await chmod(claudeDir, 0o700);
+      }
+      await expect(defaultModelTrigger(page)).toHaveText("glm-4.6");
+      expect(await claudeSettingsModel()).toBe("glm-4.6");
+      await section.getByRole("button", { name: "Dismiss" }).click();
+    });
+
+    await test.step("saving one endpoint's model writes that name into the CLI", async () => {
+      await defaultModelTrigger(page).click();
+      await page.getByTestId("agent-api-endpoints-default-option-relay-b/glm-4.6").click();
+      await expect(defaultModelTrigger(page)).toHaveText("glm-4.6 (Relay B)");
+      await expect.poll(claudeSettingsModel).toBe("relay-b/glm-4.6");
+      await expect(section.getByTestId("agent-api-endpoints-connection")).toHaveCount(0);
+    });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    await rm(settingsPath, { force: true });
   });
 
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({

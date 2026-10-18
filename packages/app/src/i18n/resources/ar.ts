@@ -2598,6 +2598,21 @@ export const ar: TranslationResources = {
         defaultModel: "النموذج الافتراضي",
         defaultModelHint: "تبدأ به جلسات الطرفية الجديدة وأول محادثة جديدة.",
         defaultModelPick: "النموذج الافتراضي لـ {{agent}}",
+        defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        connection: {
+          kept: "يستخدم {{agent}} واجهات API الخارجية · يبقى على {{model}} كما كان",
+          again:
+            "يستخدم {{agent}} واجهات API الخارجية · عاد إلى {{model}}، النموذج الافتراضي عند آخر إيقاف للمفتاح",
+          joined:
+            "يستخدم {{agent}} واجهات API الخارجية · يبقى على آخر اختيار له، وتنضم نماذج واجهات API الخارجية إلى {{command}}",
+          same: "يستخدم {{agent}} واجهات API الخارجية · على {{model}} عبر البوابة، النموذج الذي كان يستخدمه",
+          alike:
+            "يستخدم {{agent}} واجهات API الخارجية · على {{model}} عبر البوابة، النموذج الذي كان يشير إليه {{previous}}",
+          first:
+            "يستخدم {{agent}} واجهات API الخارجية · على {{model}}: لا توفر أي واجهة API خارجية {{previous}}، النموذج الذي كان يستخدمه",
+          firstUnset:
+            "يستخدم {{agent}} واجهات API الخارجية · على {{model}}: لم يكن له نموذج محدد، فاختير أول نموذج متاح",
+        },
         keepClaudeAiLogin: "الإبقاء على تسجيل الدخول إلى claude.ai",
         keepClaudeAiLoginHint:
           "عند التشغيل، يبقي {{agent}} على تسجيل دخوله إلى claude.ai أثناء المرور عبر البوابة، فيستمر عمل الصوت وموصلات claude.ai وحدود الخطة في /usage والجلسات السحابية. لا يمرر Osuna تسجيل الدخول هذا إلى أي واجهة API خارجية أبدًا. يبقى Remote Control وultrareview غير متاحين: لا يوفرهما {{agent}} إلا على عنوان Anthropic نفسه.",

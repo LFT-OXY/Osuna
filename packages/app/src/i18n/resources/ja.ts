@@ -2623,6 +2623,21 @@ export const ja: TranslationResources = {
         defaultModelHint:
           "ターミナルの新しいセッションと最初の新規チャットはこのモデルで始まります。",
         defaultModelPick: "{{agent}} の既定のモデル",
+        defaultModelOnEndpoint: "{{model}}（{{endpoint}}）",
+        connection: {
+          kept: "{{agent}} はサードパーティ API を使用中 · {{model}} のまま変わりません",
+          again:
+            "{{agent}} はサードパーティ API を使用中 · 前回オフにしたときの {{model}} に戻りました",
+          joined:
+            "{{agent}} はサードパーティ API を使用中 · モデルは前回自分で選んだもののままで、サードパーティ API のモデルが {{command}} に加わります",
+          same: "{{agent}} はサードパーティ API を使用中 · 使っていたモデル {{model}} をゲートウェイ経由で使用",
+          alike:
+            "{{agent}} はサードパーティ API を使用中 · 使っていた {{previous}} が指す {{model}} をゲートウェイ経由で使用",
+          first:
+            "{{agent}} はサードパーティ API を使用中 · 使っていた {{previous}} を提供するサードパーティ API がないため、{{model}} を使用",
+          firstUnset:
+            "{{agent}} はサードパーティ API を使用中 · モデルが未設定だったため、最初の {{model}} を使用",
+        },
         keepClaudeAiLogin: "claude.ai のサインインを維持",
         keepClaudeAiLoginHint:
           "オンにすると、{{agent}} はゲートウェイ経由でも claude.ai のサインインを維持するため、音声入力、claude.ai コネクタ、/usage のプラン上限、クラウドセッションがそのまま使えます。Osuna がこのサインインをサードパーティ API に渡すことはありません。Remote Control と ultrareview は引き続き使えません。{{agent}} は Anthropic 自身のアドレスでのみ提供しています。",

@@ -67,7 +67,8 @@ export const ApiEndpointBaseUrlSchema = z.object({
 export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
 
 /**
- * 每个 Agent 的设置：enabled 为「使用第三方接口」总开关；defaultModelId 是不带接口标识的模型名。
+ * 每个 Agent 的设置：enabled 为「使用第三方接口」总开关；defaultModelId 是光秃秃的模型名，
+ * 或「接口标识/模型名」（先用那家，不行再自动切换到提供同名模型的别家，ADR 0012）。
  * keepsClaudeAiLogin 只对 Claude Code 有意义：「保留 claude.ai 登录」（ADR 0012），开着时 CLI 配置里的口令写成空值；
  * 没有即为关，老 daemon 不发。
  */
@@ -118,6 +119,8 @@ export const ApiEndpointSchema = z.object({
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
   searchesWeb: z.boolean().optional(),
+  // 接口标识：默认模型可以写成「接口标识/模型名」指定这一家（ADR 0012），app 据此显示成「模型名（接口名）」；老 daemon 不发。
+  slug: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -300,7 +303,7 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
 
 /**
  * 设置一个 Agent 的「使用第三方接口」总开关与默认模型。只在至少一家接口开着且已选模型时能打开；
- * 打开时省略 defaultModelId 就保留当前的（还能用的话），否则取最早建的开着接口的第一个已选模型；
+ * 打开时省略 defaultModelId 就照 magpie 依次挑（见 ApiEndpointConnectionSchema），结果在 `connection` 里；
  * 关掉时忽略 defaultModelId，从不被拒。失败时 `agent` 是该 Agent 未变的设置。
  * `reapply`（「重新应用」，与 enabled: true 一起）：设置没变也按当前设置重写 CLI 配置，盖掉外部改动；老 daemon 忽略它。
  * `keepsClaudeAiLogin`：只给 Claude Code，设「保留 claude.ai 登录」，总开关开着、关着都能设；省略即不变，老 daemon 忽略它。
@@ -318,12 +321,27 @@ export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema
 >;
 
+/**
+ * 打开总开关时默认模型是怎么挑的（ADR 0012，照 magpie 的 Connection）。`how` 是字符串，后面会加新的：
+ * kept（本来就开着或 CLI 还指向中转站，原样不动）、again（回到上次关掉前用的）、joined（用 ChatGPT 登录的 Codex 保持它自己选的模型，
+ * 接口模型并进 /model）、same（沿用 CLI 原来的模型）、alike（CLI 用的档位名指向的模型）、first（没有接口提供原来的模型，取第一个）。
+ * `model` 是挑中的默认模型，`previousModel` 是挑之前 CLI 配置里的模型（没设为 null）。
+ */
+export const ApiEndpointConnectionSchema = z.object({
+  how: z.string(),
+  model: z.string(),
+  previousModel: z.string().nullable(),
+});
+export type ApiEndpointConnection = z.infer<typeof ApiEndpointConnectionSchema>;
+
 export const ApiEndpointSetAgentSettingsResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.response"),
   payload: z.object({
     requestId: z.string(),
     provider: z.string(),
     agent: ApiEndpointAgentSettingsSchema.nullable(),
+    // 打开总开关且没指定默认模型时才有；老 daemon 不发。
+    connection: ApiEndpointConnectionSchema.nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

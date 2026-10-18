@@ -2661,6 +2661,21 @@ export const en = {
         defaultModel: "Default model",
         defaultModelHint: "New terminal sessions and the first new chat start with it.",
         defaultModelPick: "Default model for {{agent}}",
+        defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        connection: {
+          kept: "{{agent}} uses API endpoints · stays on {{model}}, as it was",
+          again:
+            "{{agent}} uses API endpoints · back on {{model}}, the default model when the switch was last turned off",
+          joined:
+            "{{agent}} uses API endpoints · it stays on its own last pick; the endpoints' models join its {{command}}",
+          same: "{{agent}} uses API endpoints · on {{model}} through the gateway, the model it was on",
+          alike:
+            "{{agent}} uses API endpoints · on {{model}} through the gateway, the model its {{previous}} stood for",
+          first:
+            "{{agent}} uses API endpoints · on {{model}}: no endpoint offers {{previous}}, the model it was on",
+          firstUnset:
+            "{{agent}} uses API endpoints · on {{model}}: it had no model set, so the first one offered",
+        },
         keepClaudeAiLogin: "Keep claude.ai sign-in",
         keepClaudeAiLoginHint:
           "When on, {{agent}} keeps its claude.ai sign-in while it goes through the gateway, so voice, claude.ai connectors, plan limits in /usage and cloud sessions keep working. Osuna never passes the sign-in on to an API endpoint. Remote Control and ultrareview stay off: {{agent}} has them only on Anthropic's own address.",

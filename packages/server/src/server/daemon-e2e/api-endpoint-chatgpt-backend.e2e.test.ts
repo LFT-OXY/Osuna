@@ -124,6 +124,8 @@ async function start(input: {
   openAiApiBaseUrl?: string;
   endpoints?: EndpointFixture[];
   modelsWaitMs?: number;
+  // Codex 的默认模型；缺省第一家的第一个模型。
+  defaultModelId?: string;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-chatgpt-backend-"));
   tempRoots.push(root);
@@ -147,7 +149,12 @@ async function start(input: {
       createdAt: "2026-10-01T00:00:00.000Z",
       updatedAt: "2026-10-01T00:00:00.000Z",
     })),
-    agents: { codex: { enabled: true, defaultModelId: fixtures[0]!.models[0]!.id } },
+    agents: {
+      codex: {
+        enabled: true,
+        defaultModelId: input.defaultModelId ?? fixtures[0]!.models[0]!.id,
+      },
+    },
   };
   await writeFile(path.join(endpointsDir, "endpoints.json"), JSON.stringify(endpoints));
   await writeFile(
@@ -548,6 +555,27 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     expect(reached.url).toBe("/backend-api/codex/models?client_version=0.163.0");
     expect(reached.headers.authorization).toBe(`Bearer ${CHATGPT_TOKEN}`);
     expect(reached.headers["chatgpt-account-id"]).toBe(ACCOUNT_ID);
+  });
+
+  test("a default model naming one endpoint is in the merged list, so Codex knows it", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: KIMI_ON_TWO.map((fixture) => ({ ...fixture, url: "http://127.0.0.1:9/v1" })),
+      defaultModelId: "relay-b/kimi-k2",
+    });
+
+    const reply = await send({
+      url: `${codexBase}/models?client_version=0.163.0`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    expect(modelsOf(reply).map((model) => model.slug)).toContain("relay-b/kimi-k2");
   });
 
   test("ChatGPT not answering in time: Codex's last list of ChatGPT's models stands in", async () => {

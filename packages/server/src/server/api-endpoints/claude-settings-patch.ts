@@ -430,6 +430,15 @@ export type ClaudeSettingsInspection =
     }
   | ClaudeSettingsUnparsable;
 
+/** 顶层 model（Claude Code 新会话的模型）；没设、不是字符串或文件读不懂为 null。 */
+export function readClaudeModel(text: string | null): string | null {
+  if (text === null) return null;
+  const parsed = parseSettings(splitBom(text).body);
+  if (parsed.kind === "unparsable") return null;
+  const { model } = parsed.settings;
+  return typeof model === "string" ? model : null;
+}
+
 /** 口令没写（missing）、空值（empty，Claude Code 当作没设）或有值（set）。 */
 export type ClaudeAuthTokenState = "missing" | "empty" | "set";
 

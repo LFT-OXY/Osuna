@@ -1,4 +1,5 @@
 import type {
+  ApiEndpoint,
   ApiEndpointAgentIssue,
   ApiEndpointHealthIssue,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -102,13 +103,25 @@ function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
   };
 }
 
+/**
+ * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（endpointName 为 null，哪家提供都行），
+ * 或「接口标识/模型名」（指定这一家，显示成「模型名（接口名）」）。
+ */
+export interface DefaultModelOption {
+  id: string;
+  model: string;
+  endpointName: string | null;
+}
+
 export interface AgentApiEndpointsView {
   enabled: boolean;
   // 总开关关着时打不开的原因；开着时总能关，恒为 null。
   enableBlockedBy: AgentSwitchBlock | null;
   defaultModelId: string | null;
-  // 开着的接口的已选模型，按创建顺序合并去重的光秃秃模型名。
-  modelOptions: string[];
+  // 当前默认模型的显示；对不上任何选项时照原样（endpointName 为 null）。
+  defaultModel: DefaultModelOption | null;
+  // 先是开着的接口的已选模型，按创建顺序合并去重的光秃秃名字；主机给了接口标识时再接上每家的「接口标识/模型名」。
+  modelOptions: DefaultModelOption[];
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
   issues: AgentIssueView[];
@@ -124,12 +137,7 @@ export function selectAgentApiEndpointsView(input: {
   const { state, provider, now } = input;
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
-  const modelOptions: string[] = [];
-  for (const endpoint of enabledEndpoints) {
-    for (const model of endpoint.models) {
-      if (!modelOptions.includes(model.id)) modelOptions.push(model.id);
-    }
-  }
+  const modelOptions = defaultModelOptions(enabledEndpoints);
 
   let enableBlockedBy: AgentSwitchBlock | null = null;
   if (!agent.enabled) {
@@ -159,9 +167,39 @@ export function selectAgentApiEndpointsView(input: {
     enabled: agent.enabled,
     enableBlockedBy,
     defaultModelId: agent.defaultModelId,
+    defaultModel: displayedDefaultModel(modelOptions, agent.defaultModelId),
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
     keepsClaudeAiLogin,
   };
+}
+
+/** 光秃秃的名字在前（按创建顺序去重），再是每家的「接口标识/模型名」；老主机不给接口标识就只有前一种。 */
+function defaultModelOptions(enabledEndpoints: ApiEndpoint[]): DefaultModelOption[] {
+  const options: DefaultModelOption[] = [];
+  const ids = new Set<string>();
+  const add = (option: DefaultModelOption) => {
+    if (ids.has(option.id)) return;
+    ids.add(option.id);
+    options.push(option);
+  };
+  for (const endpoint of enabledEndpoints) {
+    for (const model of endpoint.models) add({ id: model.id, model: model.id, endpointName: null });
+  }
+  for (const endpoint of enabledEndpoints) {
+    if (!endpoint.slug) continue;
+    for (const model of endpoint.models) {
+      add({ id: `${endpoint.slug}/${model.id}`, model: model.id, endpointName: endpoint.name });
+    }
+  }
+  return options;
+}
+
+function displayedDefaultModel(
+  options: DefaultModelOption[],
+  id: string | null,
+): DefaultModelOption | null {
+  if (id === null) return null;
+  return options.find((option) => option.id === id) ?? { id, model: id, endpointName: null };
 }

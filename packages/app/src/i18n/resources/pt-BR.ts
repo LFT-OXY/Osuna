@@ -2637,6 +2637,21 @@ export const ptBR: TranslationResources = {
         defaultModel: "Modelo padrão",
         defaultModelHint: "Novas sessões de terminal e o primeiro chat novo começam com ele.",
         defaultModelPick: "Modelo padrão do {{agent}}",
+        defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        connection: {
+          kept: "{{agent}} usa endpoints de API · continua em {{model}}, como estava",
+          again:
+            "{{agent}} usa endpoints de API · de volta a {{model}}, o modelo padrão da última vez que foi desligado",
+          joined:
+            "{{agent}} usa endpoints de API · continua na própria última escolha; os modelos dos endpoints entram no {{command}}",
+          same: "{{agent}} usa endpoints de API · em {{model}} pelo gateway, o modelo que usava",
+          alike:
+            "{{agent}} usa endpoints de API · em {{model}} pelo gateway, o modelo indicado pelo seu {{previous}}",
+          first:
+            "{{agent}} usa endpoints de API · em {{model}}: nenhum endpoint oferece {{previous}}, o modelo que usava",
+          firstUnset:
+            "{{agent}} usa endpoints de API · em {{model}}: não havia modelo definido, então o primeiro disponível",
+        },
         keepClaudeAiLogin: "Manter o login do claude.ai",
         keepClaudeAiLoginHint:
           "Quando ativado, {{agent}} mantém o login do claude.ai enquanto passa pelo gateway, então voz, conectores do claude.ai, limites do plano em /usage e sessões na nuvem continuam funcionando. O Osuna nunca repassa o login a um endpoint de API. Remote Control e ultrareview continuam indisponíveis: {{agent}} só os oferece no endereço da própria Anthropic.",

@@ -9,7 +9,6 @@ import {
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
   isCodexMirrorKey,
-  magpieConnectPick,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
   restoreCodexOfficial,
@@ -413,13 +412,20 @@ ${RELAY_BLOCK}`);
     );
   });
 
-  it("on a provider of the user's own: takes it out and writes the model magpie's connect picks", () => {
+  it("on a provider of the user's own: takes it out and writes the default model under the first endpoint offering it", () => {
     const endpointModels = ["relay/other", "relay/gpt-5.1-codex", "backup/gpt-5.1-codex"];
     const { text, takeover } = applyWith({
       text: USER_CONFIG,
       takeover: null,
-      wiring: { chatgptBaseUrl: CHATGPT_URL, endpointModels },
+      wiring: { chatgptBaseUrl: CHATGPT_URL, endpointModels, model: "gpt-5.1-codex" },
     });
+    // 默认模型指定了某一家时照写那一家。
+    const named = applyWith({
+      text: USER_CONFIG,
+      takeover: null,
+      wiring: { chatgptBaseUrl: CHATGPT_URL, endpointModels, model: "backup/gpt-5.1-codex" },
+    });
+    expect(toValue(named.text)).toMatchObject({ model: "backup/gpt-5.1-codex" });
 
     expect(text).toBe(`# my codex config
 model = "relay/gpt-5.1-codex"   # the one I like
@@ -591,23 +597,6 @@ model_provider = "picked"
     expect(toValue(restore(changed, takeover))).toMatchObject({
       model_providers: { custom: { base_url: "https://mine.example" } },
     });
-  });
-});
-
-describe("magpieConnectPick", () => {
-  const options = ["relay/gpt-5", "relay/glm-4.6", "backup/claude-opus-4-1", "backup/glm-4.6"];
-
-  it("takes the first endpoint serving the model Codex was on, its prefix and [1m] read off", () => {
-    expect(magpieConnectPick("glm-4.6", options)).toBe("relay/glm-4.6");
-    expect(magpieConnectPick("mine/glm-4.6", options)).toBe("relay/glm-4.6");
-    expect(magpieConnectPick("glm-4.6", ["x/glm-4.6[1m]"])).toBe("x/glm-4.6[1m]");
-  });
-
-  it("then a model of the family a bare alias names, then the first", () => {
-    expect(magpieConnectPick("opus", options)).toBe("backup/claude-opus-4-1");
-    expect(magpieConnectPick("gpt-9", options)).toBe("relay/gpt-5");
-    expect(magpieConnectPick(null, options)).toBe("relay/gpt-5");
-    expect(magpieConnectPick("gpt-9", [])).toBeNull();
   });
 });
 

@@ -95,8 +95,43 @@ export function endpointModelGroups(state: ApiEndpointState): EndpointModelGroup
 }
 
 /**
- * 默认模型失踪规则：打开着总开关的 Agent，默认模型不在可用模型里时改成最早开着接口的第一个已选模型；
- * 一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
+ * 默认模型能选的名字（ADR 0012）：先是光秃秃的模型名（usableModels 的顺序，哪家提供都行），
+ * 再是每家的「接口标识/模型名」（先用那家，不行再自动切换到提供同名模型的别家）。
+ */
+export function defaultModelChoices(state: ApiEndpointState): string[] {
+  const bare = usableModels(state).map((model) => model.id);
+  const named = endpointModelGroups(state).flatMap((group) => group.models.map(({ id }) => id));
+  return [...bare, ...named.filter((id) => !bare.includes(id))];
+}
+
+export function isDefaultModelChoice(
+  state: ApiEndpointState,
+  id: string | null | undefined,
+): id is string {
+  return typeof id === "string" && defaultModelChoices(state).includes(id);
+}
+
+/** 默认模型指定的那一家与它的模型；光秃秃的名字、或那家已不提供时为 null。 */
+export function namedDefaultModel(
+  state: ApiEndpointState,
+  id: string | null,
+): { endpoint: StoredApiEndpoint; model: ApiEndpointModel } | null {
+  if (id === null) return null;
+  for (const group of endpointModelGroups(state)) {
+    const entry = group.models.find((model) => model.id === id);
+    if (entry) return { endpoint: group.endpoint, model: entry.model };
+  }
+  return null;
+}
+
+/** 默认模型去掉接口标识后的模型名；光秃秃的照原样。 */
+export function bareDefaultModel(state: ApiEndpointState, id: string | null): string | null {
+  return namedDefaultModel(state, id)?.model.id ?? id;
+}
+
+/**
+ * 默认模型失踪规则：打开着总开关的 Agent，默认模型不再能选时，指定的那家不再提供而别家还有同名的就改成光秃秃的名字，
+ * 否则改成最早开着接口的第一个已选模型；一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
  */
 export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
   const models = usableModels(state);
@@ -104,17 +139,22 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
   for (const provider of API_ENDPOINT_PROVIDERS) {
     const agent = agents[provider];
     if (!agent.enabled) continue;
-    if (models.some((model) => model.id === agent.defaultModelId)) continue;
+    if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
     const first = models[0];
-    agents[provider] = first
-      ? { ...agent, enabled: true, defaultModelId: first.id }
-      : { ...agent, enabled: false };
+    if (!first) {
+      agents[provider] = { ...agent, enabled: false };
+      continue;
+    }
+    const current = agent.defaultModelId ?? "";
+    const bare = current.slice(current.indexOf("/") + 1);
+    const isBareOffered = current.includes("/") && models.some((model) => model.id === bare);
+    agents[provider] = { ...agent, enabled: true, defaultModelId: isBareOffered ? bare : first.id };
   }
   return { ...state, agents };
 }
 
 /**
- * CLI 当前指向的接口：总开关开着时，持有默认模型、开着的接口里最早建的一家；官方为 null。
+ * CLI 当前指向的接口：总开关开着时，默认模型指定的那家，否则持有默认模型、开着的接口里最早建的一家；官方为 null。
  * 老客户端的 activeEndpointId 就是它。
  */
 export function agentTargetEndpoint(
@@ -123,6 +163,8 @@ export function agentTargetEndpoint(
 ): StoredApiEndpoint | null {
   const agent = state.agents[provider];
   if (!agent.enabled) return null;
+  const named = namedDefaultModel(state, agent.defaultModelId);
+  if (named) return named.endpoint;
   return (
     state.endpoints.find(
       (endpoint) =>
@@ -150,7 +192,12 @@ export function projectedDefaultModelId(
 ): string {
   const has = (id: string | null | undefined): id is string =>
     typeof id === "string" && endpoint.models.some((model) => model.id === id);
-  if (agent.enabled && has(agent.defaultModelId)) return agent.defaultModelId;
+  // 指定了这家的默认模型，老客户端看到的是去掉接口标识的名字。
+  const prefix = `${endpoint.slug}/`;
+  const current = agent.defaultModelId?.startsWith(prefix)
+    ? agent.defaultModelId.slice(prefix.length)
+    : agent.defaultModelId;
+  if (agent.enabled && has(current)) return current;
   if (has(endpoint.legacyDefaultModelId)) return endpoint.legacyDefaultModelId;
   return endpoint.models[0]?.id ?? "";
 }

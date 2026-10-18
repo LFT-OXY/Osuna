@@ -2652,6 +2652,21 @@ export const fr: TranslationResources = {
         defaultModelHint:
           "Les nouvelles sessions du terminal et la première nouvelle discussion démarrent avec lui.",
         defaultModelPick: "Modèle par défaut de {{agent}}",
+        defaultModelOnEndpoint: "{{model}} ({{endpoint}})",
+        connection: {
+          kept: "{{agent}} utilise les points d'accès API · reste sur {{model}}, comme avant",
+          again:
+            "{{agent}} utilise les points d'accès API · de retour sur {{model}}, le modèle par défaut lors de la dernière désactivation",
+          joined:
+            "{{agent}} utilise les points d'accès API · garde son dernier choix ; les modèles des points d'accès rejoignent son {{command}}",
+          same: "{{agent}} utilise les points d'accès API · sur {{model}} via la passerelle, le modèle qu'il utilisait",
+          alike:
+            "{{agent}} utilise les points d'accès API · sur {{model}} via la passerelle, le modèle que désignait son {{previous}}",
+          first:
+            "{{agent}} utilise les points d'accès API · sur {{model}} : aucun point d'accès ne propose {{previous}}, le modèle qu'il utilisait",
+          firstUnset:
+            "{{agent}} utilise les points d'accès API · sur {{model}} : aucun modèle n'était défini, donc le premier proposé",
+        },
         keepClaudeAiLogin: "Garder la connexion claude.ai",
         keepClaudeAiLoginHint:
           "Activé, {{agent}} garde sa connexion claude.ai quand il passe par la passerelle : la voix, les connecteurs claude.ai, les limites du forfait dans /usage et les sessions cloud continuent de fonctionner. Osuna ne transmet jamais cette connexion à un point d'accès API. Remote Control et ultrareview restent indisponibles : {{agent}} ne les propose que sur l'adresse d'Anthropic.",

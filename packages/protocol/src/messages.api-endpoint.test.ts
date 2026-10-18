@@ -600,6 +600,16 @@ describe("host-wide API endpoints", () => {
       },
     };
     expect(SessionOutboundMessageSchema.parse(rejected)).toEqual(rejected);
+    // 打开时默认模型怎么挑的（ADR 0012）；默认模型可以指定某一家。
+    const connected = {
+      ...response,
+      payload: {
+        ...response.payload,
+        agent: { enabled: true, defaultModelId: "relay-b/glm-4.6" },
+        connection: { how: "same", model: "relay-b/glm-4.6", previousModel: "glm-4.6" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(connected)).toEqual(connected);
   });
 
   it("parses set_endpoint_state for the switch and for resuming now", () => {

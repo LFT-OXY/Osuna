@@ -258,8 +258,9 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
   });
 });
 
-describe("the identifier and the keys stay inside the daemon", () => {
-  test("no response carries the identifier; keys.json is private", async () => {
+describe("the keys stay inside the daemon", () => {
+  // 接口标识随列表给出：默认模型可以写成「接口标识/模型名」，app 据此显示「模型名（接口名）」（ADR 0012）。
+  test("no response carries a key; keys.json is private; each endpoint carries its identifier", async () => {
     const { client, daemon } = await startWithLegacyFile();
     const saved = await client.apiEndpointSave({
       provider: "claude",
@@ -271,10 +272,15 @@ describe("the identifier and the keys stay inside the daemon", () => {
     expect(saved.error).toBeNull();
     expect(JSON.stringify(saved)).not.toContain("sk-e");
 
-    const listed = JSON.stringify(await client.apiEndpointList("claude"));
-    expect(listed).not.toContain("slug");
-    expect(listed).not.toContain("relay-a");
-    expect(listed).not.toContain("sk-a");
+    const list = await client.apiEndpointList("claude");
+    expect(JSON.stringify(list)).not.toContain("sk-a");
+    expect(list.endpoints.map((endpoint) => endpoint.slug)).toEqual([
+      "relay-a",
+      "relay-b",
+      "api-1",
+      "relay-a-2",
+      "relay-e",
+    ]);
 
     const keysPath = path.join(daemon.paseoHome, "api-endpoints", "keys.json");
     if (process.platform !== "win32") {

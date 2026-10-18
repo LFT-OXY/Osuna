@@ -135,12 +135,17 @@ export class ApiEndpointsFileUnparsableError extends Error {
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
 type KeysFile = z.infer<typeof KeysFileSchema>;
 
+// 上次关掉开关时的默认模型与关掉后 CLI 配置里留下的模型；再打开时 CLI 的模型没变过就放回（default-model-pick.ts 的 again）。
+// 下一次接管时随整份记录重写而去掉。
+const DefaultModelReconnectSchema = z.object({ model: z.string(), left: z.string().nullable() });
+
 const ClaudeTakeoverFileSchema = z.object({
   // null：当前没有接管（官方模式）。
   takeover: ClaudeSettingsTakeoverSchema.nullable(),
   // 首次改写前的完整副本，整个生命周期只做一次。null：还没改写过；
   // path 为 null：首次改写时文件不存在，没有可备份的。
   backup: z.object({ path: z.string().nullable() }).nullable(),
+  reconnect: DefaultModelReconnectSchema.optional(),
 });
 export type ClaudeTakeoverFile = z.infer<typeof ClaudeTakeoverFileSchema>;
 
@@ -151,6 +156,7 @@ const CodexTakeoverFileSchema = z.object({
   backup: z.object({ path: z.string().nullable() }).nullable(),
   // 「保留当前设置」时 Osuna 的服务商表已被外部改过：这张表归用户，启动时不再改写，直到再打开开关（ADR 0012）。
   tableKept: z.boolean().optional(),
+  reconnect: DefaultModelReconnectSchema.optional(),
 });
 export type CodexTakeoverFile = z.infer<typeof CodexTakeoverFileSchema>;
 

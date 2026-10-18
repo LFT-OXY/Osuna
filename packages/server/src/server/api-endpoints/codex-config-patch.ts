@@ -74,8 +74,8 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
 /**
  * CLI 指向的中转站：地址（以 /v1 结尾）、该 Agent 的口令、新会话的起始模型、模型目录文件。
  * chatgptBaseUrl 非 null 表示 Codex 用 ChatGPT 登录：写进 openai_base_url 的中转站 ChatGPT 后端地址，
- * 起始模型这时不写，model 归 Codex 自己；只有原本用着用户自己的服务商时，照 magpie 的 connect 从
- * endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里挑一个写上。
+ * 起始模型这时不写，model 归 Codex 自己；只有原本用着用户自己的服务商时，照 magpie 的 connect 写上默认模型，
+ * 光秃秃的换成 endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里第一家的写法。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -270,6 +270,7 @@ function wiringRaws(
  * ChatGPT 登录时要写的 model，不写为 null。接管前用的是用户自己的服务商（不是 openai、也不是 CC Switch 的
  * OpenAI 镜像）时，magpie 的 Join 不接（codex.go `Join`），`connect` 接着挑一个 magpie 模型 `set` 上：
  * 服务商照样拿掉、模型写成挑中的那个（applied.go `connect`）。用户 2026-10-18 决定完全照 magpie。
+ * 挑中的就是默认模型（default-model-pick.ts）；这种接法下光秃秃的名字指 ChatGPT 自带模型，所以写成第一家提供它的「接口标识/模型名」。
  */
 function chatgptModel(
   value: Record<string, unknown>,
@@ -278,10 +279,22 @@ function chatgptModel(
 ): string | null {
   const provider = originalOf("model_provider");
   if (!provider.present) return null;
-  const providerId = readRaw(provider.raw);
-  if (providerId === "openai" || isCCSwitchMirror({ value, providerId })) return null;
-  const model = originalOf("model");
-  return magpieConnectPick(model.present ? readRaw(model.raw) : null, wiring.endpointModels);
+  if (keepsOwnModel({ value, providerId: readRaw(provider.raw) })) return null;
+  return endpointModelFor(wiring.model, wiring.endpointModels);
+}
+
+/** ChatGPT 接法下 Codex 的模型归它自己（magpie 的 Join 接得上）：没写服务商、内置 openai，或 CC Switch 的 OpenAI 镜像。 */
+function keepsOwnModel(input: { value: Record<string, unknown>; providerId: unknown }): boolean {
+  const { value, providerId } = input;
+  if (providerId === undefined || providerId === "openai") return true;
+  return typeof providerId === "string" && isCCSwitchMirror({ value, providerId });
+}
+
+/** 默认模型在「接口标识/模型名」里的写法：本身就是就照用，光秃秃的取第一家提供它的。 */
+function endpointModelFor(model: string, endpointModels: string[]): string | null {
+  if (endpointModels.includes(model)) return model;
+  const named = endpointModels.find((option) => option.slice(option.indexOf("/") + 1) === model);
+  return named ?? endpointModels[0] ?? null;
 }
 
 /**
@@ -336,24 +349,6 @@ function mirrorKey(providerId: string): string {
 /** 提示区用：这个负责的键是镜像表的地址（被外部改了就不再经过中转站）。 */
 export function isCodexMirrorKey(key: string): boolean {
   return key.startsWith("model_providers.") && key.endsWith(".base_url");
-}
-
-/**
- * magpie `connect` 挑模型的办法（applied.go，Osuna 没有 Codex 自带模型与订阅那几档）：Codex 原来的模型去掉
- * 前缀（`connectWas`）后，先找同名的（含带 [1m] 的），再找光秃秃的档位名所指那一族的，都没有取第一个。
- */
-export function magpieConnectPick(current: string | null, options: string[]): string | null {
-  const cur = current === null ? "" : current.slice(current.lastIndexOf("/") + 1).trim();
-  const idOf = (option: string) => option.slice(option.lastIndexOf("/") + 1);
-  const same = options.find((option) => {
-    const id = idOf(option);
-    return cur !== "" && (id === cur || id.replace(/\[1m\]$/, "") === cur);
-  });
-  if (same) return same;
-  const alike = options.find(
-    (option) => cur !== "" && !cur.includes("-") && `${idOf(option)}-`.includes(`-${cur}-`),
-  );
-  return alike ?? options[0] ?? null;
 }
 
 /** 接管记录里这个键的写入值是否还在：null 是拿掉了，文件里就不该有它。 */
@@ -455,6 +450,23 @@ export function readCodexReasoningEffort(text: string | null): string | null {
   if (parsed.kind === "unparsable") return null;
   const effort = parsed.value.model_reasoning_effort;
   return typeof effort === "string" ? effort : null;
+}
+
+/** 顶层的 model（Codex 新会话的模型）；没设、不是字符串或文件读不出为 null。 */
+export function readCodexModel(text: string | null): string | null {
+  if (text === null) return null;
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return null;
+  const model = parsed.value.model;
+  return typeof model === "string" ? model : null;
+}
+
+/** 用 ChatGPT 登录时 Codex 的模型是否归它自己（顶层服务商没写、是 openai 或 CC Switch 的镜像）；文件读不出按归它自己算。 */
+export function codexKeepsOwnModel(text: string | null): boolean {
+  if (text === null) return true;
+  const parsed = parseConfig(splitBom(text)[1]);
+  if (parsed.kind === "unparsable") return true;
+  return keepsOwnModel({ value: parsed.value, providerId: parsed.value.model_provider });
 }
 
 /** 顶层的 model_catalog_json；没设、不是字符串或文件读不出为 null。 */

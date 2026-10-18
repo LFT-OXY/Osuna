@@ -2623,6 +2623,18 @@ export const zhCN: TranslationResources = {
         defaultModel: "默认模型",
         defaultModelHint: "终端新会话、第一次新建对话从它开始",
         defaultModelPick: "{{agent}} 的默认模型",
+        defaultModelOnEndpoint: "{{model}}（{{endpoint}}）",
+        connection: {
+          kept: "{{agent}} 已在用第三方接口 · 默认模型 {{model}} 保持不变",
+          again: "{{agent}} 已改用第三方接口 · 回到上次关掉前用的 {{model}}",
+          joined:
+            "{{agent}} 已改用第三方接口 · 仍用它上次选的模型，第三方接口的模型已加入 {{command}}",
+          same: "{{agent}} 已改用第三方接口 · 经中转站继续用它原来的模型 {{model}}",
+          alike: "{{agent}} 已改用第三方接口 · 经中转站改用它原来的 {{previous}} 所指的 {{model}}",
+          first:
+            "{{agent}} 已改用第三方接口 · 没有接口提供它原来的模型 {{previous}}，改用 {{model}}",
+          firstUnset: "{{agent}} 已改用第三方接口 · 原先未设模型，改用第一个：{{model}}",
+        },
         keepClaudeAiLogin: "保留 claude.ai 登录",
         keepClaudeAiLoginHint:
           "打开后，{{agent}} 走中转站时仍用 claude.ai 登录，语音、claude.ai 连接器、/usage 里的套餐额度和云端会话照常能用；Osuna 从不把这份登录转给第三方接口。Remote Control 和 ultrareview 仍不能用：{{agent}} 只在 Anthropic 自己的地址上提供它们。",

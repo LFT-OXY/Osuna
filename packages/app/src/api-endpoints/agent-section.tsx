@@ -16,10 +16,12 @@ import { Text as UiText } from "@/components/ui/text";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { AgentIssuesArea, AgentIssuesUpdateHost, type AgentIssuesAreaProps } from "./agent-issues";
+import type { ApiEndpointConnection } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type {
   AgentApiEndpointsView,
   AgentEndpointsSummary,
   AgentSwitchBlock,
+  DefaultModelOption,
 } from "./internal/agent-settings";
 
 /*
@@ -40,6 +42,8 @@ export interface AgentApiEndpointsSectionProps {
   // 主机拒绝时的错误码；本地失败为 null。
   actionErrorCode: string | null;
   onDismissError: () => void;
+  // 刚打开总开关时默认模型是怎么挑的；没有为 null。
+  connection: ApiEndpointConnection | null;
   onToggle: (enabled: boolean) => void;
   onDefaultModelChange: (modelId: string) => void;
   onManage: () => void;
@@ -56,6 +60,7 @@ export function AgentApiEndpointsSection({
   actionError,
   actionErrorCode,
   onDismissError,
+  connection,
   onToggle,
   onDefaultModelChange,
   onManage,
@@ -104,6 +109,13 @@ export function AgentApiEndpointsSection({
             <Text style={settingsStyles.rowHint} testID="agent-api-endpoints-switch-hint">
               {switchHint}
             </Text>
+            {view.enabled && connection ? (
+              <ConnectionLine
+                providerLabel={providerLabel}
+                connection={connection}
+                options={view.modelOptions}
+              />
+            ) : null}
           </View>
           <Switch
             value={view.enabled}
@@ -116,7 +128,7 @@ export function AgentApiEndpointsSection({
         {view.enabled ? (
           <DefaultModelRow
             providerLabel={providerLabel}
-            value={view.defaultModelId}
+            value={view.defaultModel}
             options={view.modelOptions}
             busy={busy}
             onChange={onDefaultModelChange}
@@ -165,6 +177,78 @@ function useSwitchHint(providerLabel: string, block: AgentSwitchBlock | null): s
   return block.issue.message;
 }
 
+/** 默认模型的显示：指定某一家的写成「模型名（接口名）」。 */
+function useDefaultModelLabel(): (option: DefaultModelOption) => string {
+  const { t } = useTranslation();
+  return useCallback(
+    (option: DefaultModelOption) =>
+      option.endpointName === null
+        ? option.model
+        : t("settings.apiEndpoints.agent.defaultModelOnEndpoint", {
+            model: option.model,
+            endpoint: option.endpointName,
+          }),
+    [t],
+  );
+}
+
+/** 刚打开总开关时默认模型是怎么挑的（照 magpie 的 connectedSaid）；认不出的挑法不说。 */
+function ConnectionLine({
+  providerLabel,
+  connection,
+  options,
+}: {
+  providerLabel: string;
+  connection: ApiEndpointConnection;
+  options: DefaultModelOption[];
+}) {
+  const { t } = useTranslation();
+  const labelOf = useDefaultModelLabel();
+  const picked = options.find((option) => option.id === connection.model);
+  const model = picked ? labelOf(picked) : connection.model;
+  const values = {
+    agent: providerLabel,
+    model,
+    previous: connection.previousModel ?? "",
+    // CLI 里挑模型的命令，两个 CLI 都是 /model。
+    command: "/model",
+  };
+  const text = connectionText({ t, how: connection.how, values });
+  if (text === null) return null;
+  return (
+    <Text style={settingsStyles.rowHint} testID="agent-api-endpoints-connection">
+      {text}
+    </Text>
+  );
+}
+
+type Translate = ReturnType<typeof useTranslation>["t"];
+
+function connectionText(input: {
+  t: Translate;
+  how: string;
+  values: { agent: string; model: string; previous: string; command: string };
+}): string | null {
+  const { t, how, values } = input;
+  const key = "settings.apiEndpoints.agent.connection";
+  switch (how) {
+    case "kept":
+      return t(`${key}.kept`, values);
+    case "again":
+      return t(`${key}.again`, values);
+    case "joined":
+      return t(`${key}.joined`, values);
+    case "same":
+      return t(`${key}.same`, values);
+    case "alike":
+      return t(`${key}.alike`, values);
+    case "first":
+      return values.previous === "" ? t(`${key}.firstUnset`, values) : t(`${key}.first`, values);
+    default:
+      return null;
+  }
+}
+
 function DefaultModelRow({
   providerLabel,
   value,
@@ -173,25 +257,26 @@ function DefaultModelRow({
   onChange,
 }: {
   providerLabel: string;
-  value: string | null;
-  options: string[];
+  value: DefaultModelOption | null;
+  options: DefaultModelOption[];
   busy: boolean;
   onChange: (modelId: string) => void;
 }) {
   const { t } = useTranslation();
+  const labelOf = useDefaultModelLabel();
   const selectOptions = useMemo<SelectFieldOption<string>[]>(
     () =>
-      options.map((modelId) => ({
-        id: modelId,
-        value: modelId,
-        label: modelId,
-        testID: `agent-api-endpoints-default-option-${modelId}`,
+      options.map((option) => ({
+        id: option.id,
+        value: option.id,
+        label: labelOf(option),
+        testID: `agent-api-endpoints-default-option-${option.id}`,
       })),
-    [options],
+    [labelOf, options],
   );
   const selectedDisplay = useMemo<SelectFieldDisplay | null>(
-    () => (value === null ? null : { label: value }),
-    [value],
+    () => (value === null ? null : { label: labelOf(value) }),
+    [labelOf, value],
   );
   const title = t("settings.apiEndpoints.agent.defaultModelPick", { agent: providerLabel });
   return (
@@ -206,7 +291,7 @@ function DefaultModelRow({
         <SelectField
           field={false}
           label={title}
-          value={value}
+          value={value?.id ?? null}
           selectedDisplay={selectedDisplay}
           options={selectOptions}
           onChange={onChange}

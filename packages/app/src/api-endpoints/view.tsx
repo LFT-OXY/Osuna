@@ -135,6 +135,9 @@ function AgentApiEndpoints({
       actionError={endpoints.actionError}
       actionErrorCode={endpoints.actionErrorCode}
       onDismissError={endpoints.dismissActionError}
+      connection={
+        endpoints.lastConnection?.provider === provider ? endpoints.lastConnection.connection : null
+      }
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onManage={handleManage}

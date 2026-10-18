@@ -84,8 +84,38 @@ describe("the default model on an agent page", () => {
         endpoint({ id: "b", models: [{ id: "b1" }, { id: "shared" }] }),
       ],
     });
-    expect(result.modelOptions).toEqual(["shared", "a1", "b1"]);
+    expect(result.modelOptions.map((option) => option.id)).toEqual(["shared", "a1", "b1"]);
     expect(result.defaultModelId).toBe("b1");
+  });
+
+  it("lists each endpoint's models after the bare names when the host gives the endpoint identifiers", () => {
+    const result = view({
+      enabled: true,
+      defaultModelId: "relay-b/shared",
+      endpoints: [
+        endpoint({ id: "a", name: "Relay A", slug: "relay-a", models: [{ id: "shared" }] }),
+        endpoint({ id: "b", name: "Relay B", slug: "relay-b", models: [{ id: "shared" }] }),
+      ],
+    });
+    expect(result.modelOptions).toEqual([
+      { id: "shared", model: "shared", endpointName: null },
+      { id: "relay-a/shared", model: "shared", endpointName: "Relay A" },
+      { id: "relay-b/shared", model: "shared", endpointName: "Relay B" },
+    ]);
+    expect(result.defaultModel).toEqual({
+      id: "relay-b/shared",
+      model: "shared",
+      endpointName: "Relay B",
+    });
+  });
+
+  it("shows a default model no option names as it is", () => {
+    const result = view({
+      enabled: true,
+      defaultModelId: "gone/x",
+      endpoints: [endpoint({ id: "a" })],
+    });
+    expect(result.defaultModel).toEqual({ id: "gone/x", model: "gone/x", endpointName: null });
   });
 });
 

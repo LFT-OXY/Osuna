@@ -198,7 +198,7 @@ export class ApiEndpointSession {
     >,
   ): Promise<void> {
     try {
-      const agent = await this.service.setAgentSettings(request.provider, {
+      const { agent, connection } = await this.service.setAgentSettings(request.provider, {
         enabled: request.enabled,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.reapply !== undefined ? { reapply: request.reapply } : {}),
@@ -208,7 +208,13 @@ export class ApiEndpointSession {
       });
       this.host.emit({
         type: "provider.api_endpoint.set_agent_settings.response",
-        payload: { requestId: request.requestId, provider: request.provider, agent, error: null },
+        payload: {
+          requestId: request.requestId,
+          provider: request.provider,
+          agent,
+          connection,
+          error: null,
+        },
       });
     } catch (error) {
       this.host.emit({

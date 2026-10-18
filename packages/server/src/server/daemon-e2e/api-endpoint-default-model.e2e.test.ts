@@ -1,0 +1,314 @@
+// 挑法的用例照 magpie（https://github.com/yetone/magpie，internal/agent/connect_pick_test.go 的 TestConnectKeepsTheModel）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
+import { createServer, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { CodexSignIn } from "../api-endpoints/codex-sign-in.js";
+import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+import { DaemonClient } from "../test-utils/daemon-client.js";
+
+/*
+ * 打开「使用第三方接口」时默认模型怎么挑（ADR 0012、PRD 第 28、29 条）：返回的挑法与写进 CLI 配置的模型一致；
+ * 默认模型可以指定某一家（接口标识/模型名），中转站先发给那家、那家冷却时换同名的别家。
+ * 登录方式只经可替换的适配器得到，不起真的 Codex；CLI 配置目录都在临时目录里。
+ */
+
+interface FakeUpstream {
+  url: string;
+  models: string[];
+  respond: (res: ServerResponse) => void;
+}
+
+const servers: Server[] = [];
+const tempRoots: string[] = [];
+
+/** config.toml 的顶层键。 */
+function parseToml(text: string): Record<string, unknown> {
+  const value: unknown = getStaticTOMLValue(parseTOML(text));
+  if (typeof value !== "object" || value === null) throw new Error("Expected a TOML table");
+  return Object.fromEntries(Object.entries(value));
+}
+
+async function startUpstream(text: string): Promise<FakeUpstream> {
+  const upstream: FakeUpstream = {
+    url: "",
+    models: [],
+    respond: (res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    },
+  };
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString() || "{}") as { model?: string };
+      upstream.models.push(body.model ?? "");
+      upstream.respond(res);
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+describe.skipIf(process.platform === "win32")("picking the default model on switch-on", () => {
+  let root: string;
+  let settingsPath: string;
+  let configPath: string;
+  let signIn: CodexSignIn;
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-default-model-"));
+    tempRoots.push(root);
+    const claudeDir = path.join(root, "claude");
+    const codexHome = path.join(root, "codex");
+    settingsPath = path.join(claudeDir, "settings.json");
+    configPath = path.join(codexHome, "config.toml");
+    await mkdir(claudeDir, { recursive: true });
+    await mkdir(codexHome, { recursive: true });
+    signIn = "api_key";
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: claudeDir, CODEX_HOME: codexHome },
+        homeDir: root,
+        readCodexSignIn: async () => signIn,
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    for (const server of servers.splice(0)) {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function saveEndpoint(input: { name: string; url?: string; models: string[] }) {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: input.name,
+      baseUrls: [
+        { format: "anthropic_messages", url: input.url ?? "https://relay.example" },
+        { format: "openai_responses", url: `${input.url ?? "https://relay.example"}/v1` },
+      ],
+      apiKey: `sk-${input.name}`,
+      models: input.models.map((id) => ({ id })),
+    });
+    expect(saved.error).toBeNull();
+    const id = saved.endpoint?.id;
+    if (!id) throw new Error("Expected a saved endpoint");
+    expect(
+      (await client.apiEndpointSetEndpointState({ endpointId: id, enabled: true })).error,
+    ).toBe(null);
+  }
+
+  /** 两家：Relay A 选了 first 与 glm-4.6，Relay B 选了 claude-opus-4-6 与 glm-4.6。 */
+  async function twoEndpoints(): Promise<void> {
+    await saveEndpoint({ name: "Relay A", models: ["first", "glm-4.6"] });
+    await saveEndpoint({ name: "Relay B", models: ["claude-opus-4-6", "glm-4.6"] });
+  }
+
+  async function turnOn(provider: string, defaultModelId?: string) {
+    const result = await client.apiEndpointSetAgentSettings({
+      provider,
+      enabled: true,
+      ...(defaultModelId ? { defaultModelId } : {}),
+    });
+    expect(result.error).toBeNull();
+    return result;
+  }
+
+  async function turnOff(provider: string): Promise<void> {
+    expect((await client.apiEndpointSetAgentSettings({ provider, enabled: false })).error).toBe(
+      null,
+    );
+  }
+
+  async function claudeModel(): Promise<unknown> {
+    return (JSON.parse(await readFile(settingsPath, "utf8")) as { model?: unknown }).model;
+  }
+
+  async function codexModel(): Promise<unknown> {
+    return parseToml(await readFile(configPath, "utf8")).model;
+  }
+
+  test("same: Claude Code goes on with the model it is on", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{ "model": "glm-4.6" }\n`);
+
+    const result = await turnOn("claude");
+
+    expect(result.connection).toEqual({
+      how: "same",
+      model: "glm-4.6",
+      previousModel: "glm-4.6",
+    });
+    expect(result.agent?.defaultModelId).toBe("glm-4.6");
+    expect(await claudeModel()).toBe("glm-4.6");
+  });
+
+  test("alike: Claude Code on the opus alias goes to the Claude Opus an endpoint offers", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{ "model": "opus" }\n`);
+
+    const result = await turnOn("claude");
+
+    expect(result.connection).toMatchObject({ how: "alike", model: "claude-opus-4-6" });
+    expect(await claudeModel()).toBe("claude-opus-4-6");
+  });
+
+  test("first: no endpoint offers the model Claude Code is on", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{ "model": "gpt-9" }\n`);
+
+    const result = await turnOn("claude");
+
+    expect(result.connection).toEqual({ how: "first", model: "first", previousModel: "gpt-9" });
+    expect(await claudeModel()).toBe("first");
+  });
+
+  test("again: switched off and on, the default model of the switch-off comes back", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{ "model": "glm-4.6" }\n`);
+    await turnOn("claude");
+    await turnOn("claude", "relay-b/glm-4.6");
+    expect(await claudeModel()).toBe("relay-b/glm-4.6");
+    await turnOff("claude");
+    expect(await claudeModel()).toBe("glm-4.6");
+
+    const result = await turnOn("claude");
+
+    expect(result.connection).toMatchObject({ how: "again", model: "relay-b/glm-4.6" });
+    expect(await claudeModel()).toBe("relay-b/glm-4.6");
+
+    // 关掉后 CLI 的模型被改过：不再放回。
+    await turnOff("claude");
+    await writeFile(settingsPath, `{ "model": "opus" }\n`);
+    expect((await turnOn("claude")).connection).toMatchObject({
+      how: "alike",
+      model: "claude-opus-4-6",
+    });
+  });
+
+  test("kept: a switch already on, or a CLI still pointed at the gateway, stays on its model", async () => {
+    await twoEndpoints();
+    await writeFile(settingsPath, `{ "model": "glm-4.6" }\n`);
+    await turnOn("claude", "relay-b/glm-4.6");
+
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.connection).toMatchObject({ how: "kept", model: "relay-b/glm-4.6" });
+
+    // 「保留当前设置」后 settings.json 还指向中转站、写着 relay-b/glm-4.6。
+    expect((await client.apiEndpointKeepCurrentSettings("claude")).error).toBeNull();
+    const result = await turnOn("claude");
+
+    expect(result.connection).toMatchObject({ how: "kept", model: "relay-b/glm-4.6" });
+    expect(await claudeModel()).toBe("relay-b/glm-4.6");
+  });
+
+  test("with no endpoint offering a model the switch is refused, as before", async () => {
+    const result = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+
+    expect(result.error?.code).toBe("no_usable_model");
+    expect(result.connection ?? null).toBeNull();
+  });
+
+  test("joined: Codex signed in with ChatGPT keeps its own model, written as it was", async () => {
+    await twoEndpoints();
+    signIn = "chatgpt";
+    await writeFile(configPath, `model = "gpt-5.5"\n`);
+
+    const result = await turnOn("codex");
+
+    expect(result.connection).toMatchObject({ how: "joined", previousModel: "gpt-5.5" });
+    expect(await codexModel()).toBe("gpt-5.5");
+  });
+
+  test("Codex on an API key: one endpoint's default model is written and is in Codex's model list", async () => {
+    await twoEndpoints();
+    await writeFile(configPath, `model = "gpt-9"\n`);
+
+    const result = await turnOn("codex", "relay-b/glm-4.6");
+
+    expect(result.connection ?? null).toBeNull();
+    expect(await codexModel()).toBe("relay-b/glm-4.6");
+    const catalogFile = parseToml(await readFile(configPath, "utf8")).model_catalog_json;
+    if (typeof catalogFile !== "string") throw new Error("Expected model_catalog_json");
+    const catalog = JSON.parse(await readFile(catalogFile, "utf8")) as {
+      models: Array<{ slug: string }>;
+    };
+    expect(catalog.models.map((model) => model.slug)).toContain("relay-b/glm-4.6");
+  });
+
+  test("one endpoint's default model goes to that endpoint first, and to another offering it while it cools down", async () => {
+    const upstreamA = await startUpstream("from A");
+    const upstreamB = await startUpstream("from B");
+    await saveEndpoint({ name: "Relay A", url: upstreamA.url, models: ["kimi-k2"] });
+    await saveEndpoint({ name: "Relay B", url: upstreamB.url, models: ["kimi-k2"] });
+    await turnOn("claude", "relay-b/kimi-k2");
+    const model = await claudeModel();
+    expect(model).toBe("relay-b/kimi-k2");
+    const tokens = JSON.parse(
+      await readFile(path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json"), "utf8"),
+    ) as { tokens: Record<string, string> };
+    const ask = () =>
+      fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/messages`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${tokens.tokens.claude}`,
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 16,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      });
+
+    const first = await ask();
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await first.text()).toContain("from B");
+
+    upstreamB.respond = (res) => {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "busy" } }));
+    };
+    const failedOver = await ask();
+    expect(failedOver.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await failedOver.text()).toContain("from A");
+
+    const whileCooling = await ask();
+    expect(whileCooling.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    await whileCooling.text();
+    expect(upstreamB.models).toEqual(["kimi-k2", "kimi-k2"]);
+    expect(upstreamA.models).toEqual(["kimi-k2", "kimi-k2"]);
+  });
+});
