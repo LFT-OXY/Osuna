@@ -46,30 +46,44 @@ const GatewaySeenFileSchema = z.object({
 });
 type GatewaySeenFile = z.infer<typeof GatewaySeenFileSchema>;
 
+/** 记下的时刻读写不成时只记一条警告：它只影响提示，不能挡住请求或 daemon 启动。 */
+export interface SightingsLogger {
+  warn(details: object, message: string): void;
+}
+
 export interface GatewaySightingsOptions {
   now: () => Date;
   // 记下的时刻落在这里，daemon 重启后还在（magpie 的 LastSeen 重启后读用量日志的末尾）。
   filePath: string;
+  logger: SightingsLogger;
 }
 
 /** 中转站记下每个提供方最近一次收到请求的时刻（magpie usage.Saw 与 LastSeen）。 */
 export class GatewaySightings {
   private readonly now: () => Date;
   private readonly filePath: string;
+  private readonly logger: SightingsLogger;
   private seen: GatewaySeenFile;
+  private isWriteScheduled = false;
 
   constructor(options: GatewaySightingsOptions) {
     this.now = options.now;
     this.filePath = options.filePath;
-    this.seen = readGatewaySeen(options.filePath);
+    this.logger = options.logger;
+    this.seen = readGatewaySeen({ filePath: options.filePath, logger: options.logger });
   }
 
-  /** 精确到秒落盘：同一秒里的请求只写一次。 */
+  /** 先记进内存；落盘精确到秒、同一秒只写一次，挪到请求之外做，写不成不影响请求。 */
   saw(provider: ApiEndpointProvider): void {
     const at = new Date(Math.trunc(this.now().getTime() / 1000) * 1000).toISOString();
     if (this.seen[provider] === at) return;
-    this.seen = GatewaySeenFileSchema.parse({ ...this.seen, [provider]: at });
-    writePrivateFileAtomicSync(this.filePath, `${JSON.stringify(this.seen, null, 2)}\n`);
+    this.seen = { ...this.seen, [provider]: at };
+    if (this.isWriteScheduled) return;
+    this.isWriteScheduled = true;
+    setImmediate(() => {
+      this.isWriteScheduled = false;
+      this.write();
+    });
   }
 
   /** 收到过的最近一次；从没收到过为 null。 */
@@ -78,15 +92,42 @@ export class GatewaySightings {
     if (at === undefined) return null;
     return new Date(at);
   }
+
+  private write(): void {
+    const content = `${JSON.stringify(GatewaySeenFileSchema.parse(this.seen), null, 2)}\n`;
+    try {
+      writePrivateFileAtomicSync(this.filePath, content);
+    } catch (error) {
+      if (!isErrnoException(error)) throw error;
+      this.logger.warn(
+        { filePath: this.filePath, code: error.code },
+        "Couldn't save when the gateway last received each agent's request",
+      );
+    }
+  }
 }
 
-/** 读不到或读不懂当作从没收到过：它只影响提示。 */
-function readGatewaySeen(filePath: string): GatewaySeenFile {
-  const text = readOptionalFile(filePath)?.toString("utf8") ?? null;
+/** 读不到、读不懂都当作从没收到过（记一条警告）：它只影响提示，daemon 照常起来。 */
+function readGatewaySeen(input: { filePath: string; logger: SightingsLogger }): GatewaySeenFile {
+  let text: string | null;
+  try {
+    text = readOptionalFile(input.filePath)?.toString("utf8") ?? null;
+  } catch (error) {
+    if (!isErrnoException(error)) throw error;
+    input.logger.warn(
+      { filePath: input.filePath, code: error.code },
+      "Couldn't read when the gateway last received each agent's request",
+    );
+    return {};
+  }
   if (text === null) return {};
   const parsed = GatewaySeenFileSchema.safeParse(parseJson(text));
-  if (!parsed.success) return {};
-  return parsed.data;
+  if (parsed.success) return parsed.data;
+  input.logger.warn(
+    { filePath: input.filePath },
+    "Couldn't parse when the gateway last received each agent's request",
+  );
+  return {};
 }
 
 /** Codex 日志库里一次模型连接：什么时候、连的地址、那里是不是没人应答。 */

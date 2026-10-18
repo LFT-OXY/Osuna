@@ -1,9 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { findCliBypass, readCliUse, type FindCliBypassInput } from "./cli-bypass.js";
+import {
+  findCliBypass,
+  GatewaySightings,
+  readCliUse,
+  type FindCliBypassInput,
+} from "./cli-bypass.js";
 
 const GATEWAY = "http://127.0.0.1:6768/api-endpoint-gateway";
 const T0 = new Date("2026-10-18T10:00:00.000Z");
@@ -197,5 +202,70 @@ describe("readCliUse", () => {
       lastPromptAt: null,
       lastRequest: null,
     });
+  });
+});
+
+describe("GatewaySightings", () => {
+  let dir: string;
+  let warnings: string[];
+  const logger = { warn: (_details: object, message: string) => void warnings.push(message) };
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), "osuna-gateway-seen-"));
+    warnings = [];
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function afterWrites(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  test("a request seen is kept to the second and read back after a restart", async () => {
+    const filePath = path.join(dir, "gateway-seen.json");
+    const sightings = new GatewaySightings({ now: () => at(10.7), filePath, logger });
+    sightings.saw("codex");
+    expect(sightings.lastSeen("codex")).toEqual(at(10));
+    await afterWrites();
+
+    const restarted = new GatewaySightings({ now: () => at(99), filePath, logger });
+    expect([restarted.lastSeen("codex"), restarted.lastSeen("claude")]).toEqual([at(10), null]);
+    expect(warnings).toEqual([]);
+  });
+
+  test("a file that can't be written leaves the request alone and keeps the time in memory", async () => {
+    // 该是目录的地方是个文件：写不进去（ENOTDIR / EEXIST）。
+    const notADirectory = path.join(dir, "not-a-directory");
+    writeFileSync(notADirectory, "");
+    const filePath = path.join(notADirectory, "gateway-seen.json");
+    const sightings = new GatewaySightings({ now: () => at(10), filePath, logger });
+
+    expect(() => sightings.saw("claude")).not.toThrow();
+    await afterWrites();
+
+    expect(sightings.lastSeen("claude")).toEqual(at(10));
+    // 启动时读同样读不了（ENOTDIR），当作从没收到过。
+    expect(warnings).toEqual([
+      "Couldn't read when the gateway last received each agent's request",
+      "Couldn't save when the gateway last received each agent's request",
+    ]);
+  });
+
+  test("a file that can't be read or parsed counts as never seen, with a warning", () => {
+    const directory = path.join(dir, "in-the-way");
+    mkdirSync(directory);
+    const unreadable = new GatewaySightings({ now: () => at(10), filePath: directory, logger });
+    const garbled = path.join(dir, "garbled.json");
+    writeFileSync(garbled, "{ not json");
+    const unparsable = new GatewaySightings({ now: () => at(10), filePath: garbled, logger });
+
+    expect([unreadable.lastSeen("codex"), unparsable.lastSeen("codex")]).toEqual([null, null]);
+    expect(warnings).toEqual([
+      "Couldn't read when the gateway last received each agent's request",
+      "Couldn't parse when the gateway last received each agent's request",
+    ]);
+    expect(readFileSync(garbled, "utf8")).toBe("{ not json");
   });
 });

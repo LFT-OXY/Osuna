@@ -810,6 +810,7 @@ export async function createPaseoDaemon(
   const apiEndpointSightings = new GatewaySightings({
     now: apiEndpointClock(config),
     filePath: path.join(config.paseoHome, "api-endpoints", "gateway-seen.json"),
+    logger,
   });
   // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
   const apiEndpointRetiredModels = createRetiredModels({
