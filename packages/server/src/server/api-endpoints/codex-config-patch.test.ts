@@ -1,3 +1,6 @@
+// CC Switch 镜像表的用例取自 magpie（https://github.com/yetone/magpie，internal/agent/codex_ccswitch_test.go 的 TestCodexTakesCCSwitchMirrorForItsThreads）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { describe, expect, it } from "vitest";
 import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
 import { ProviderOverridesSchema } from "../agent/provider-launch-config.js";
@@ -5,6 +8,7 @@ import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  isCodexMirrorKey,
   magpieConnectPick,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
@@ -455,6 +459,116 @@ requires_openai_auth = true
   it("is stable: applying again yields the same bytes", () => {
     const first = applyChatGpt(USER_CONFIG);
     expect(applyChatGpt(first.text, first.takeover)).toEqual(first);
+  });
+});
+
+// CC Switch 写的「OpenAI 镜像」：另一个 id、name = "OpenAI"、要求 OpenAI 登录、没有 base_url。
+const MIRROR_CONFIG = `model = "gpt-5.5"
+
+[model_providers.custom]
+name = "OpenAI"
+requires_openai_auth = true
+wire_api = "responses"   # CC Switch
+
+[features]
+web_search = true
+`;
+
+describe("CC Switch's OpenAI mirror under a ChatGPT sign-in", () => {
+  it("points the mirror at the gateway's ChatGPT backend and Official takes base_url off again", () => {
+    const { text, takeover } = applyChatGpt(MIRROR_CONFIG);
+
+    expect(text).toContain(`wire_api = "responses"   # CC Switch
+base_url = "${CHATGPT_URL}"
+
+[features]`);
+    expect(restore(text, takeover)).toBe(withKeptTable(MIRROR_CONFIG));
+  });
+
+  it("leaves tables that don't look like a mirror, and a mirror a profile names", () => {
+    const config = `[model_providers.relay]
+name = "OpenAI"
+requires_openai_auth = true
+base_url = "https://relay.example/v1"
+
+[model_providers.other]
+name = "Other"
+requires_openai_auth = true
+
+[model_providers.keyed]
+name = "OpenAI"
+
+[model_providers.picked]
+name = "OpenAI"
+requires_openai_auth = true
+
+[profiles.p]
+model_provider = "picked"
+`;
+    const { text, takeover } = applyChatGpt(config);
+
+    expect(text).toBe(`openai_base_url = "${CHATGPT_URL}"\n${withKeptTable(config)}`);
+    expect(takeover.mirrors).toBeUndefined();
+  });
+
+  it("leaves the mirror alone under an API key or no sign-in", () => {
+    const { text, takeover } = apply(MIRROR_CONFIG);
+
+    expect(toValue(text)).toMatchObject({ model_providers: { custom: { name: "OpenAI" } } });
+    expect(text).toContain(`wire_api = "responses"   # CC Switch\n\n[features]`);
+    expect(takeover.mirrors).toBeUndefined();
+  });
+
+  it("follows the gateway to a new port and keeps the first original", () => {
+    const first = applyChatGpt(MIRROR_CONFIG);
+    const movedUrl = CHATGPT_URL.replace("6767", "7000");
+    const moved = applyWith({
+      text: first.text,
+      takeover: first.takeover,
+      wiring: { chatgptBaseUrl: movedUrl },
+    });
+
+    expect(toValue(moved.text)).toMatchObject({
+      model_providers: { custom: { base_url: movedUrl } },
+    });
+    expect(moved.takeover.mirrors).toEqual({
+      custom: { original: { present: false }, written: movedUrl },
+    });
+    expect(restore(moved.text, moved.takeover)).toBe(withKeptTable(MIRROR_CONFIG));
+  });
+
+  it("gives the mirror back when the sign-in changes to an API key", () => {
+    const chatgpt = applyChatGpt(MIRROR_CONFIG);
+    const provider = applyWith({ text: chatgpt.text, takeover: chatgpt.takeover });
+
+    expect(provider.text).toBe(apply(MIRROR_CONFIG).text);
+    expect(provider.takeover.mirrors).toBeUndefined();
+  });
+
+  it("puts back an empty base_url the mirror had", () => {
+    const config = MIRROR_CONFIG.replace(
+      `wire_api = "responses"   # CC Switch`,
+      `base_url = ""\nwire_api = "responses"`,
+    );
+    const { text, takeover } = applyChatGpt(config);
+
+    expect(text).toContain(`base_url = "${CHATGPT_URL}"\nwire_api`);
+    expect(restore(text, takeover)).toBe(withKeptTable(config));
+  });
+
+  it("counts a mirror whose address changed as not through the gateway, and leaves it on Official", () => {
+    const { text, takeover } = applyChatGpt(MIRROR_CONFIG);
+    expect(inspect(text, takeover).modifiedKeys).toEqual([]);
+
+    const changed = text.replace(
+      `\nbase_url = "${CHATGPT_URL}"`,
+      `\nbase_url = "https://mine.example"`,
+    );
+    expect(inspect(changed, takeover).modifiedKeys).toEqual(["model_providers.custom.base_url"]);
+    expect(isCodexMirrorKey("model_providers.custom.base_url")).toBe(true);
+    expect(toValue(restore(changed, takeover))).toMatchObject({
+      model_providers: { custom: { base_url: "https://mine.example" } },
+    });
   });
 });
 

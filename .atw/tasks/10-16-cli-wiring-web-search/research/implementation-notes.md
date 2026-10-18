@@ -265,3 +265,26 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 走这几条要先看模型名的路径（`/responses`、`/responses/compact`、`/alpha/search`）时，ChatGPT 自带模型的请求体也先整个读出来再转（上限同中转站 64 MB，超了回 413）；magpie 同样先读。
 - 压缩的补救照 magpie 做了（用户 2026-10-18 决定，`gateway/codex-compaction-fallback.ts`、`codex-compaction-answer.ts`）：摘要请求被 404、条目找不到的 400、中转站的「Upstream request failed」（4xx，不含 401、403、429）、「response protection is unavailable」（含开口后以它断掉的流）拒绝时，以纯文字的对话再问一次（`plainCompact`：去掉 `previous_response_id`，对话最多 40 万字、去掉最早的）；再失败就本地拼「摘要」（`localSummary`：用户的话最多 8 万字、最近的，加最后一次回复），压缩照样完成（magpie #866、#1008、#1270）。同一段对话（`prompt_cache_key`）在同一个模型上连续失败 3 次、每次间隔不到 5 分钟，之后直接回 400 说明、不问模型，到最后一次失败满 5 分钟为止；401、403 不算，有摘要就清零（`CompactionFailures`，magpie `compactFails` #2274），只记在内存里。
 - 压缩仍比 magpie 少做的：服务商设成原生压缩时保留 trigger（`NativeCompaction`，#1099，Osuna 没有这个设置）；ChatGPT 自带模型请求里去掉推理条目（与压缩无关）。
+
+## 11 CC Switch 的 OpenAI 镜像服务商
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie（`internal/agent/codex.go`） | Osuna（`codex-config-patch.ts`） |
+| --- | --- | --- |
+| 怎么认镜像表 | `isCCSwitchMirror`：id 不是 `openai`、不是 magpie 的；`name = "OpenAI"`、`requires_openai_auth = true`；`base_url` 没有或为空，或是 magpie 的 ChatGPT 后端地址且在 `codex.mirrors` 记录里（failover 那条 Osuna 没有） | 同；id 不是 `openai`、不是 `osuna_api_endpoint`，「在记录里」= 接管记录 `mirrors.<id>.written` 与表里的地址相同（端口变了也认得出，跟着改成新地址）。09 号认用户自己的 `model_provider` 用的是同一个判断 |
+| profile 点名的镜像 | `profileNamed`：任何 `[profiles.*]` 的 `model_provider` 点名的表不动 | 同 |
+| 什么时候接 | `takeMirrors` 只在 `viaBase()`（经 `openai_base_url` 接着）时 | 只在 ChatGPT 接法；API key、未登录不动 |
+| 写什么 | 表里 `base_url = <magpie 的 ChatGPT 后端>` | `base_url` = 写进 `openai_base_url` 的同一个中转站 ChatGPT 后端地址；表里有空的 `base_url` 就原地换值，没有就插在表的最后一个键后面 |
+| 记录 | `stash` 的 `codex.mirrors`：只记 id | 接管记录 `mirrors.<id> = { original, written }`：照 ADR 0004 记原写法（没有，或 `""`），比 magpie 多记 |
+| 撤出 | `giveMirrors`：地址还是 magpie 的才删 `base_url`；被改过的照现在的样子留着 | 同；原来写着 `base_url = ""` 的放回 `""`。切回官方、换成服务商接法（登录方式变了）都走这条 |
+| 被外部改了 | 不查（`Check` 不看镜像表），下次 `takeMirrors` 也不再认它 | 地址不是上次写的（含整张表被删）就算 `model_providers.<id>.base_url` 被改，进提示区「不再经过中转站」（工单要求，比 magpie 多做）；「重新应用」时它不再像镜像就不接、从记录里去掉，提示随之消失 |
+
+### 比 magpie 少做或更严的
+
+- 只认用自己的 `[model_providers.<id>]` 表头写的镜像表；写成内联表（`model_providers = { … }`）或点号键（`[model_providers]` 下 `custom.name = …`）的不动。原因：Osuna 按节点位置拼文本（ADR 0004），这两种写法插不进新键，拼出来要么不合法、要么被 `verify` 整个拒绝，会连带开关打不开；CC Switch 自己写的是表头形式（magpie 的用例 `TestCodexTakesCCSwitchMirrorForItsThreads` 也是）。
+
+### 不在本张范围
+
+- magpie 同一处的 `takeTables`（CC Switch 的普通中转表也指向 magpie）、`putThreadTables`（给对话点名但已不存在的服务商补表）、多号 failover 写镜像（`codex.mirror_failover`）：工单只要镜像表。
+- 「保留当前设置」会忘掉接管记录，镜像表照被指着中转站的样子留下（ADR 0012 的「保留」）；之后再打开开关，这张表的地址不在记录里、不像镜像，不再接（magpie 同样只认记录里的）。

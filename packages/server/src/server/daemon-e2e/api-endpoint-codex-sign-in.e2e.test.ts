@@ -329,4 +329,73 @@ ${await table()}`);
     // 被改过就不替用户改回：照旧等「重新应用」。
     expect(await config()).toContain("https://proxy.example/backend-api/codex");
   });
+
+  // CC Switch 写的「OpenAI 镜像」服务商表：记在它名下的对话不跟 openai_base_url 走（magpie #1796）。
+  const MIRROR_CONFIG = `${USER_CONFIG}
+[model_providers.custom]
+name = "OpenAI"
+requires_openai_auth = true
+wire_api = "responses"
+`;
+
+  test("CC Switch's OpenAI mirror points at the gateway's ChatGPT backend while on, and is itself again on Official", async () => {
+    await writeFile(configPath, MIRROR_CONFIG);
+    await createEndpoint();
+    await setCodex(true);
+
+    expect(await config()).toBe(`# my codex config
+approval_policy = "never"
+openai_base_url = "${chatgptUrl()}"
+
+[projects."/Users/me/My Code"]
+trust_level = "trusted"
+
+[model_providers.custom]
+name = "OpenAI"
+requires_openai_auth = true
+wire_api = "responses"
+base_url = "${chatgptUrl()}"
+
+${await table()}`);
+    expect((await client.apiEndpointList("codex")).agentIssues?.codex).toEqual([]);
+
+    await setCodex(false);
+    expect(await config()).toBe(await keptConfig(MIRROR_CONFIG));
+  });
+
+  test("an API key sign-in leaves CC Switch's OpenAI mirror alone", async () => {
+    signIn = "api_key";
+    await writeFile(configPath, MIRROR_CONFIG);
+    await createEndpoint();
+    await setCodex(true);
+
+    expect(await config()).toContain(
+      `wire_api = "responses"\n\n[model_providers.osuna_api_endpoint]`,
+    );
+  });
+
+  test("a mirror's address changed by another program is told as no longer through the gateway", async () => {
+    await writeFile(configPath, MIRROR_CONFIG);
+    await createEndpoint();
+    await setCodex(true);
+    await writeFile(
+      configPath,
+      (await config()).replace(
+        `\nbase_url = "${chatgptUrl()}"`,
+        `\nbase_url = "https://cc.example/v1"`,
+      ),
+    );
+
+    const listed = await client.apiEndpointList("codex");
+    expect(listed.agentIssues?.codex).toEqual([
+      expect.objectContaining({
+        code: "not_through_gateway",
+        params: expect.objectContaining({ keys: "model_providers.custom.base_url" }),
+      }),
+    ]);
+
+    // 切回官方时，被改过的镜像表照现在的样子留着。
+    await setCodex(false);
+    expect(await config()).toContain(`base_url = "https://cc.example/v1"`);
+  });
 });

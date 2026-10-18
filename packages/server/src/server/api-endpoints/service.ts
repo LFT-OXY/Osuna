@@ -37,6 +37,7 @@ import {
   applyCodexApiEndpoint,
   CODEX_API_ENDPOINT_PROVIDER_ID,
   inspectCodexConfig,
+  isCodexMirrorKey,
   readCodexCatalogPath,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
@@ -217,7 +218,8 @@ interface AgentIssue extends ApiEndpointAgentIssue {
 }
 
 /**
- * 这些负责的键被外部改了，CLI 的请求就不再经过中转站（地址、口令；Codex 另有选哪个服务商、模型目录）。
+ * 这些负责的键被外部改了，CLI 的请求就不再经过中转站（地址、口令；Codex 另有选哪个服务商、模型目录，
+ * 以及 ChatGPT 接法下 CC Switch 镜像表的地址，见 isCodexMirrorKey）。
  * 其余负责的键被改仍只算 modified_externally，不进提示区。
  */
 const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
@@ -1975,7 +1977,10 @@ function notThroughGatewayIssues(
   filePath: string,
   modifiedKeys: string[],
 ): AgentIssue[] {
-  const keys = modifiedKeys.filter((key) => ROUTING_KEYS[provider].includes(key));
+  const keys = modifiedKeys.filter(
+    (key) =>
+      ROUTING_KEYS[provider].includes(key) || (provider === "codex" && isCodexMirrorKey(key)),
+  );
   if (keys.length === 0) return [];
   const changed = keys.join(", ");
   return [

@@ -485,10 +485,15 @@ TestCodexNativeModelStaysNative in codex_backend_test.go:
 
 Wiring a Codex signed in with ChatGPT beside its sign-in (openai_base_url at
 the gateway's ChatGPT backend path, model_provider and model_catalog_json taken
-out, Codex's own last model kept, the gateway's provider table still written)
-follows Join, putProvider and dropProvider in magpie's internal/agent/codex.go:
+out, Codex's own last model kept, the gateway's provider table still written,
+CC Switch's OpenAI mirror tables pointed at the gateway's ChatGPT backend and
+given back) follows Join, putProvider, dropProvider, isCCSwitchMirror,
+takeMirrors and giveMirrors in magpie's internal/agent/codex.go, and its tests
+reuse cases from TestCodexTakesCCSwitchMirrorForItsThreads in
+codex_ccswitch_test.go:
 
   packages/server/src/server/api-endpoints/codex-config-patch.ts
+  packages/server/src/server/api-endpoints/codex-config-patch.test.ts
 
 Endpoint models in the model list of a Codex signed in with ChatGPT (the
 ChatGPT backend's list first, waiting 3 seconds and falling back to Codex's

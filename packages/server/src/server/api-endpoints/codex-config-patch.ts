@@ -1,4 +1,5 @@
-// 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider）
+// 用 ChatGPT 登录时的接法照 magpie（https://github.com/yetone/magpie，internal/agent/codex.go 的 Join、putProvider、dropProvider、
+// isCCSwitchMirror、takeMirrors、giveMirrors）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { getStaticTOMLValue, parseTOML, type AST } from "toml-eslint-parser";
@@ -10,7 +11,7 @@ import { z } from "zod";
  *
  * 负责的键：顶层 model_provider / model / model_catalog_json，以及整张专用表
  * [model_providers.osuna_api_endpoint]（daemon 中转站地址与口令明文）；用 ChatGPT 登录时另有顶层 openai_base_url，
- * model_provider 与 model_catalog_json 改为拿掉（ADR 0010）。切回官方时顶层键还原、专用表留着：
+ * model_provider 与 model_catalog_json 改为拿掉（ADR 0010），CC Switch 的 OpenAI 镜像表的 base_url 也指到中转站。切回官方时顶层键还原、专用表留着：
  * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
  */
 
@@ -44,6 +45,13 @@ type CodexOriginalValue = z.infer<typeof CodexOriginalValueSchema>;
 const CodexProviderTableRecordSchema = z.object({ baseUrl: z.string(), bearerToken: z.string() });
 export type CodexProviderTableRecord = z.infer<typeof CodexProviderTableRecordSchema>;
 
+// 镜像表的 base_url：接管前的写法（通常没有）与写入的中转站地址。
+const CodexMirrorRecordSchema = z.object({
+  original: CodexOriginalValueSchema,
+  written: z.string(),
+});
+type CodexMirrorRecord = z.infer<typeof CodexMirrorRecordSchema>;
+
 /**
  * 接管记录：顶层负责的键接管前的写法，以及上次写入的值（检测外部改动用）。
  * v0.15 的记录没有 table 与 fileCreated（那时专用表用 auth.command 读 key）。
@@ -56,6 +64,8 @@ export const CodexConfigTakeoverSchema = z.object({
   ),
   // 专用表上次写入的地址与口令。
   table: CodexProviderTableRecordSchema.optional(),
+  // ChatGPT 接法下指到中转站的 CC Switch OpenAI 镜像表，按服务商 id。
+  mirrors: z.record(z.string(), CodexMirrorRecordSchema).optional(),
   // 接管前文件不存在：切回官方后只剩 Osuna 写的东西时把文件删掉。
   fileCreated: z.boolean().optional(),
 });
@@ -136,6 +146,20 @@ export function applyCodexApiEndpoint(input: {
     keys[key] = { original, written: raw === null ? null : readRaw(raw) };
     text = raw === null ? removeTopLevelKey(text, key) : setTopLevelValue({ text, key, raw, eol });
   }
+  const recordedMirrors = input.takeover?.mirrors ?? {};
+  let mirrors: Record<string, CodexMirrorRecord> = {};
+  if (wiring.chatgptBaseUrl === null) {
+    // 换成服务商接法：镜像表不再归 Osuna，放回接管前的样子。
+    text = giveMirrors({ text, mirrors: recordedMirrors, eol });
+  } else {
+    ({ text, mirrors } = takeMirrors({
+      text,
+      value: parsed.value,
+      url: wiring.chatgptBaseUrl,
+      recorded: recordedMirrors,
+      eol,
+    }));
+  }
   // 旧版本写的 auth.command 子表一并拿掉。
   text = appendProviderTable({ text: removeProviderTables(text), table, eol });
   // COMPAT(codexLegacyProviderTable): v0.15 的记录没有 fileCreated，按文件原本存在处理；remove after 2027-04-14.
@@ -145,15 +169,72 @@ export function applyCodexApiEndpoint(input: {
     text,
     (value) =>
       Object.entries(keys).every(([key, record]) => holdsWritten(value[key], record.written)) &&
-      holdsProviderTable(value, table),
+      holdsProviderTable(value, table) &&
+      Object.entries(mirrors).every(([id, record]) => mirrorBaseUrl(value, id) === record.written),
   );
+  const hasMirrors = Object.keys(mirrors).length > 0;
   return (
     failure ?? {
       kind: "patched",
       text: bom + text,
-      takeover: { keys, table, fileCreated },
+      takeover: { keys, table, fileCreated, ...(hasMirrors ? { mirrors } : {}) },
     }
   );
+}
+
+/**
+ * magpie `takeMirrors`：内置 openai 以外的服务商不跟 openai_base_url 走，记在 CC Switch 镜像表名下的对话会直连 ChatGPT、
+ * 用不了接口模型（magpie #1796），所以把镜像表的 base_url 也指到中转站的 ChatGPT 后端。profile 点名的表归用户挑，不动；
+ * 只认用自己的 [model_providers.<id>] 表头写的表（CC Switch 的写法），内联表、点号键写的不动。
+ */
+function takeMirrors(input: {
+  text: string;
+  value: Record<string, unknown>;
+  url: string;
+  recorded: Record<string, CodexMirrorRecord>;
+  eol: string;
+}): { text: string; mirrors: Record<string, CodexMirrorRecord> } {
+  const { value, url, recorded, eol } = input;
+  const program = parse(input.text);
+  const named = profileNamedProviders(value);
+  const mirrors: Record<string, CodexMirrorRecord> = {};
+  let text = input.text;
+  for (const id of providerIds(value)) {
+    const isTakeable =
+      !named.has(id) &&
+      isCCSwitchMirror({ value, providerId: id, recorded: recorded[id] }) &&
+      findOwnTable(program, id) !== null;
+    if (!isTakeable) continue;
+    const node = findTableKeyValue(parse(text), id, "base_url");
+    const original: CodexOriginalValue =
+      recorded[id]?.original ??
+      (node ? { present: true, raw: sliceNode(text, node.value) } : { present: false });
+    mirrors[id] = { original, written: url };
+    text = setTableValue({ text, id, raw: tomlString(url), eol });
+  }
+  return { text, mirrors };
+}
+
+/** magpie `giveMirrors`：拿掉写进镜像表的地址（原来有写法就放回）；之后被改过的表照现在的样子留着。 */
+function giveMirrors(input: {
+  text: string;
+  mirrors: Record<string, CodexMirrorRecord>;
+  eol: string;
+}): string {
+  let text = input.text;
+  for (const [id, record] of Object.entries(input.mirrors)) {
+    const program = parse(text);
+    const value = getStaticTOMLValue(program);
+    const isStillOurs =
+      isRecord(value) &&
+      mirrorBaseUrl(value, id) === record.written &&
+      findOwnTable(program, id) !== null;
+    if (!isStillOurs) continue;
+    text = record.original.present
+      ? setTableValue({ text, id, raw: record.original.raw, eol: input.eol })
+      : removeTableKey(text, id);
+  }
+  return text;
 }
 
 /**
@@ -193,21 +274,63 @@ function chatgptModel(
   const provider = originalOf("model_provider");
   if (!provider.present) return null;
   const providerId = readRaw(provider.raw);
-  if (providerId === "openai" || isCCSwitchMirror(value, providerId)) return null;
+  if (providerId === "openai" || isCCSwitchMirror({ value, providerId })) return null;
   const model = originalOf("model");
   return magpieConnectPick(model.present ? readRaw(model.raw) : null, wiring.endpointModels);
 }
 
-/** magpie `isCCSwitchMirror`：名叫 OpenAI、要求 OpenAI 登录、没有自己的地址的服务商表。 */
-function isCCSwitchMirror(value: Record<string, unknown>, providerId: string): boolean {
+/**
+ * magpie `isCCSwitchMirror`：名叫 OpenAI、要求 OpenAI 登录、没有自己的地址的服务商表；
+ * 地址是 Osuna 上次写进去的那个（`recorded`）也算，接管着时才认得出。
+ */
+function isCCSwitchMirror(input: {
+  value: Record<string, unknown>;
+  providerId: string;
+  recorded?: CodexMirrorRecord;
+}): boolean {
+  const { value, providerId, recorded } = input;
+  if (providerId === "openai" || providerId === CODEX_API_ENDPOINT_PROVIDER_ID) return false;
   const providers = value.model_providers;
   const table = isRecord(providers) ? providers[providerId] : undefined;
-  return (
-    isRecord(table) &&
-    table.name === "OpenAI" &&
-    table.requires_openai_auth === true &&
-    (table.base_url === undefined || table.base_url === "")
+  if (!isRecord(table) || table.name !== "OpenAI" || table.requires_openai_auth !== true) {
+    return false;
+  }
+  const hasNoAddress = table.base_url === undefined || table.base_url === "";
+  const holdsOurAddress = recorded !== undefined && table.base_url === recorded.written;
+  return hasNoAddress || holdsOurAddress;
+}
+
+function providerIds(value: Record<string, unknown>): string[] {
+  return isRecord(value.model_providers) ? Object.keys(value.model_providers) : [];
+}
+
+/** magpie `profileNamed`：config.toml 里各个 [profiles.<name>] 点名的服务商。 */
+function profileNamedProviders(value: Record<string, unknown>): Set<string> {
+  const profiles = isRecord(value.profiles) ? Object.values(value.profiles) : [];
+  return new Set(
+    profiles.flatMap((profile) =>
+      isRecord(profile) && typeof profile.model_provider === "string"
+        ? [profile.model_provider]
+        : [],
+    ),
   );
+}
+
+/** 服务商表的 base_url；没有表、没有地址或不是字符串为 undefined。 */
+function mirrorBaseUrl(value: Record<string, unknown>, providerId: string): unknown {
+  const providers = value.model_providers;
+  const table = isRecord(providers) ? providers[providerId] : undefined;
+  return isRecord(table) ? table.base_url : undefined;
+}
+
+/** 写进接管记录与提示区的镜像表的键名。 */
+function mirrorKey(providerId: string): string {
+  return `model_providers.${providerId}.base_url`;
+}
+
+/** 提示区用：这个负责的键是镜像表的地址（被外部改了就不再经过中转站）。 */
+export function isCodexMirrorKey(key: string): boolean {
+  return key.startsWith("model_providers.") && key.endsWith(".base_url");
 }
 
 /**
@@ -269,6 +392,7 @@ export function restoreCodexOfficial(input: {
     const record = input.takeover.keys[key];
     if (record) text = putBack(text, key, record.original, eol);
   }
+  text = giveMirrors({ text, mirrors: input.takeover.mirrors ?? {}, eol });
   // 文件是 Osuna 建的：顶层键拿掉后专用表前面的空行也是当初补的。
   if (input.takeover.fileCreated) text = text.replace(/^(?:\r?\n)+/, "");
   const failure = verify(text, () => true);
@@ -354,15 +478,7 @@ export function inspectCodexConfig(input: {
     value = parsed.value;
   }
 
-  const modifiedKeys: string[] = [];
-  for (const key of TOP_LEVEL_KEYS) {
-    const record = input.takeover?.keys[key];
-    if (record && !holdsWritten(value[key], record.written)) modifiedKeys.push(key);
-  }
-  const table = input.takeover?.table;
-  if (table && !holdsProviderTable(value, table)) {
-    modifiedKeys.push(`model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`);
-  }
+  const modifiedKeys = modifiedOwnedKeys(value, input.takeover);
 
   const profile = typeof value.profile === "string" ? value.profile : null;
   const profiles = isRecord(value.profiles) ? value.profiles : {};
@@ -382,6 +498,26 @@ export function inspectCodexConfig(input: {
     profileOverride,
     baseUrl: effectiveBaseUrl(value, profileTable),
   };
+}
+
+/** 不再是上次写入值的负责的键；没有接管记录时为空。 */
+function modifiedOwnedKeys(
+  value: Record<string, unknown>,
+  takeover: CodexConfigTakeover | null,
+): string[] {
+  const modifiedKeys: string[] = [];
+  for (const key of TOP_LEVEL_KEYS) {
+    const record = takeover?.keys[key];
+    if (record && !holdsWritten(value[key], record.written)) modifiedKeys.push(key);
+  }
+  const table = takeover?.table;
+  if (table && !holdsProviderTable(value, table)) {
+    modifiedKeys.push(`model_providers.${CODEX_API_ENDPOINT_PROVIDER_ID}`);
+  }
+  for (const [id, record] of Object.entries(takeover?.mirrors ?? {})) {
+    if (mirrorBaseUrl(value, id) !== record.written) modifiedKeys.push(mirrorKey(id));
+  }
+  return modifiedKeys;
 }
 
 /** 生效的 provider：profile 优先于顶层，缺省是内置 openai，它的地址由 openai_base_url 覆盖。 */
@@ -504,7 +640,11 @@ function setTopLevelValue(input: {
 
 function removeTopLevelKey(text: string, key: TopLevelKey): string {
   const node = findTopLevelKeyValue(parse(text), key);
-  if (!node) return text;
+  return node ? removeLine(text, node) : text;
+}
+
+/** 拿掉一个键值所在的整行。 */
+function removeLine(text: string, node: AST.TOMLKeyValue): string {
   const start = findLineStart(text, node.range[0]);
   const lineEnd = findLineEnd(text, node.range[1]);
   // 最后一行没有换行符：拿掉的是它前面那个换行。
@@ -513,6 +653,52 @@ function removeTopLevelKey(text: string, key: TopLevelKey): string {
     return text.slice(0, previous);
   }
   return text.slice(0, start) + text.slice(skipEol(text, lineEnd));
+}
+
+/** 用自己的 [model_providers.<id>] 表头写的表；没有（内联表、点号键或干脆没有）为 null。 */
+function findOwnTable(program: AST.TOMLProgram, providerId: string): AST.TOMLTable | null {
+  const table = program.body[0].body.find(
+    (node): node is AST.TOMLTable =>
+      node.type === "TOMLTable" &&
+      node.kind === "standard" &&
+      node.resolvedKey.length === 2 &&
+      node.resolvedKey[0] === "model_providers" &&
+      node.resolvedKey[1] === providerId,
+  );
+  return table ?? null;
+}
+
+function findTableKeyValue(
+  program: AST.TOMLProgram,
+  providerId: string,
+  key: string,
+): AST.TOMLKeyValue | null {
+  for (const node of findOwnTable(program, providerId)?.body ?? []) {
+    const [only, ...rest] = node.key.keys;
+    if (only && rest.length === 0 && keyName(only) === key) return node;
+  }
+  return null;
+}
+
+/** 表里有 base_url 就只换值那一段；没有就新起一行，插在表的最后一个键后面（空表放在表头下面）。 */
+function setTableValue(input: { text: string; id: string; raw: string; eol: string }): string {
+  const { text, id, raw, eol } = input;
+  const program = parse(text);
+  const existing = findTableKeyValue(program, id, "base_url");
+  if (existing) {
+    const [start, end] = existing.value.range;
+    return text.slice(0, start) + raw + text.slice(end);
+  }
+  const table = findOwnTable(program, id);
+  if (!table) return text;
+  const after = table.body.at(-1)?.range[1] ?? table.range[0];
+  const lineEnd = findLineEnd(text, after);
+  return `${text.slice(0, lineEnd)}${eol}base_url = ${raw}${text.slice(lineEnd)}`;
+}
+
+function removeTableKey(text: string, id: string): string {
+  const node = findTableKeyValue(parse(text), id, "base_url");
+  return node ? removeLine(text, node) : text;
 }
 
 function providerTables(program: AST.TOMLProgram): AST.TOMLTable[] {
