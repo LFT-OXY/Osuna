@@ -438,10 +438,12 @@ cases of continuation_test.go:
 Who to reopen after a CLI config is rewritten (copies started more than a
 second before the rewrite, sorted into terminal, editor, desktop app and
 another app's own copy, the shared Codex app-server and its helpers left out)
-follows startsWith, StaleCopies, codexCopyKind and daemonHelper in magpie's
-internal/agent/connectinfo.go and the STALE_HOW words of
-internal/gui/assets/app.js; restarting Codex's shared app-server when it
-started before the rewrite and no codex client is on it follows
+follows startsWith, changedAt, StaleCopies, codexCopyKind and daemonHelper in
+magpie's internal/agent/connectinfo.go and the STALE_HOW words, ago and
+staleSeen of internal/gui/assets/app.js; restarting Codex's shared app-server
+when it started before the change and no codex client is on it, looking again
+every 15 seconds, follows KeepCodexDaemonCurrent and codexDaemonEvery in
+internal/agent/codex_daemon.go and processCodexHome,
 isManagedDaemon, daemonPIDs, parsePIDFile, findCodexDaemon,
 KeepCodexDaemonCurrent, pidFileBehind, daemonStarted, codexClients,
 isCodexClient and splitExe in internal/provider/codex_daemon.go; listing the

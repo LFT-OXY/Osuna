@@ -11,11 +11,15 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 import { HostProcessesError, type HostProcess } from "./host-processes.js";
 import {
+  CliReopenHints,
+  cliChangedAt,
   findStaleCopies,
   isCodexClient,
   isManagedDaemon,
   keepCodexAppServerCurrent,
   parsePidFile,
+  REOPEN_CHECK_EVERY_MS,
+  type ReopenHintsSubjects,
 } from "./reopen-hints.js";
 
 const NOW = new Date("2026-10-19T10:00:00.000Z");
@@ -187,10 +191,43 @@ describe("findStaleCopies", () => {
         ownPid: OWN_PID,
       }),
     ).toEqual([
-      { kind: "app", app: null, count: 1, since: hoursAgo(72) },
+      { kind: "app", app: "ChatGPT", count: 1, since: hoursAgo(72) },
       { kind: "ide", app: null, count: 1, since: hoursAgo(5) },
       { kind: "embedded", app: "Agents Anywhere", count: 1, since: hoursAgo(20) },
       { kind: "cli", app: null, count: 2, since: hoursAgo(20) },
+    ]);
+  });
+
+  test("one row per desktop app: the ChatGPT app and the Codex app are reopened apart", () => {
+    const processes = [
+      proc({
+        pid: 60,
+        startedAt: hoursAgo(30),
+        commandLine: `${app} -c x=true app-server --analytics-default-enabled`,
+      }),
+      proc({
+        pid: 61,
+        startedAt: hoursAgo(8),
+        commandLine:
+          "/Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://",
+      }),
+      proc({
+        pid: 62,
+        startedAt: hoursAgo(9),
+        commandLine: "/Applications/Codex.app/Contents/Resources/codex exec-server --remote x",
+      }),
+    ];
+    expect(
+      findStaleCopies({
+        provider: "codex",
+        processes,
+        changedAt: hoursAgo(2),
+        cliDir: codexDir,
+        ownPid: OWN_PID,
+      }),
+    ).toEqual([
+      { kind: "app", app: "ChatGPT", count: 1, since: hoursAgo(30) },
+      { kind: "app", app: "Codex", count: 1, since: hoursAgo(9) },
     ]);
   });
 
@@ -289,7 +326,8 @@ describe("keepCodexAppServerCurrent", () => {
     return keepCodexAppServerCurrent({
       codexHome,
       changedAt,
-      hostProcesses: fake,
+      readCodexHome: (pid) => fake.readCodexHome(pid),
+      listProcesses: () => fake.list(),
       restart: async () => {
         restarts += 1;
         if (restartError !== null) throw restartError;
@@ -332,7 +370,9 @@ describe("keepCodexAppServerCurrent", () => {
   test("a restart that fails is said, not taken for one done", async () => {
     writePidFile({ name: "daemon.pid", body: "50", at: started });
     fake.processes = [daemon(50)];
-    restartError = new HostProcessesError("codex app-server daemon restart: no daemon");
+    restartError = new HostProcessesError({
+      message: "codex app-server daemon restart: no daemon",
+    });
     expect(await check(NOW)).toEqual({
       kind: "restart_failed",
       since: started,
@@ -365,8 +405,25 @@ describe("keepCodexAppServerCurrent", () => {
 
   test("processes that can't be listed: current", async () => {
     writePidFile({ name: "app-server.pid", body: "50", at: started });
-    fake.listError = new HostProcessesError("no ps");
+    fake.listError = new HostProcessesError({ message: "no ps" });
     expect(await check(NOW)).toEqual({ kind: "current" });
+  });
+
+  test("a daemon or a client of another CODEX_HOME, where that can be read, is left out", async () => {
+    writePidFile({ name: "app-server.pid", body: "50", at: started });
+    fake.processes = [
+      daemon(50),
+      daemon(51),
+      proc({ pid: 100, startedAt: started, commandLine: "codex" }),
+    ];
+    fake.codexHomes.set(50, "/elsewhere/.codex");
+    fake.codexHomes.set(100, "/elsewhere/.codex");
+    fake.codexHomes.set(51, codexHome);
+    // 进程记录文件点名的 50 是别的 home 的：取这个 home 的 51，它没有进程记录文件，不知道何时启动。
+    expect(await check(NOW)).toEqual({ kind: "current" });
+    fake.codexHomes.set(50, codexHome);
+    expect(await check(NOW)).toEqual({ kind: "restarted", since: started });
+    expect(restarts).toBe(1);
   });
 
   test("picks the daemon the pid file names when several run", async () => {
@@ -375,5 +432,199 @@ describe("keepCodexAppServerCurrent", () => {
     expect(await check(NOW)).toEqual({ kind: "restarted", since: started });
     fake.processes = [daemon(20)];
     expect(await check(NOW)).toEqual({ kind: "current" });
+  });
+});
+
+describe("cliChangedAt", () => {
+  let dir: string;
+  let file: string;
+  const written = hoursAgo(5);
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(os.tmpdir(), "reopen-changed-"));
+    file = path.join(dir, "config.toml");
+    writeFileSync(file, "x");
+    utimesSync(file, written, written);
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a digest first seen is put at the files' latest write, and remembered", () => {
+    expect(cliChangedAt({ startup: { files: [file], reads: "a" }, stored: null })).toEqual({
+      changedAt: written,
+      remember: { digest: expect.stringMatching(/^[0-9a-f]{16}$/), at: written },
+    });
+  });
+
+  test("the same digest keeps the time it was first seen, whatever the files' times say", () => {
+    const first = cliChangedAt({ startup: { files: [file], reads: "a" }, stored: null });
+    utimesSync(file, NOW, NOW);
+    expect(
+      cliChangedAt({ startup: { files: [file], reads: "a" }, stored: first.remember }),
+    ).toEqual({ changedAt: written, remember: null });
+    expect(
+      cliChangedAt({ startup: { files: [file], reads: "b" }, stored: first.remember }),
+    ).toEqual({
+      changedAt: NOW,
+      remember: { digest: expect.stringMatching(/^[0-9a-f]{16}$/), at: NOW },
+    });
+  });
+
+  test("no file there: nothing changed", () => {
+    expect(
+      cliChangedAt({ startup: { files: [path.join(dir, "missing")], reads: "a" }, stored: null }),
+    ).toEqual({ changedAt: null, remember: null });
+  });
+});
+
+describe("CliReopenHints", () => {
+  let codexHome: string;
+  let fake: FakeHostProcesses;
+  let subjects: ReopenHintsSubjects;
+  let ticks: (() => void)[];
+  let cancelled: number;
+  const started = hoursAgo(3);
+  const logger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+
+  function writePidFile(input: { pid: number; at: Date }): void {
+    const file = path.join(codexHome, "app-server-daemon", "app-server.pid");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, String(input.pid));
+    utimesSync(file, input.at, input.at);
+  }
+
+  function daemon(pid: number): HostProcess {
+    return proc({
+      pid,
+      startedAt: started,
+      commandLine: `${codexHome}/packages/app-server-daemon/releases/0.163.0/bin/codex app-server --managed-daemon`,
+    });
+  }
+
+  function hints(): CliReopenHints {
+    return new CliReopenHints({
+      hostProcesses: () => fake,
+      findCodexCommand: async ({ env }) => ({ command: "/fake/codex", args: [], env }),
+      subjects: () => subjects,
+      timers: {
+        schedule: (handler, ms) => {
+          expect(ms).toBe(REOPEN_CHECK_EVERY_MS);
+          ticks.push(handler);
+          return () => {
+            cancelled += 1;
+          };
+        },
+      },
+      now: () => NOW,
+      logger,
+      ownPid: OWN_PID,
+    });
+  }
+
+  /** 触发排着的那次查看，等它看完、排好下一次。 */
+  async function tick(): Promise<void> {
+    const handler = ticks.shift();
+    if (handler === undefined) throw new Error("No look scheduled");
+    const before = ticks.length;
+    handler();
+    await expect.poll(() => ticks.length).toBe(before + 1);
+  }
+
+  beforeEach(() => {
+    codexHome = mkdtempSync(path.join(os.tmpdir(), "reopen-class-"));
+    fake = new FakeHostProcesses();
+    ticks = [];
+    cancelled = 0;
+    subjects = {
+      claude: { cliDir: "/Users/me/.claude", changedAt: null, osunaSessions: 0 },
+      codex: { cliDir: codexHome, changedAt: hoursAgo(2), osunaSessions: 0 },
+    };
+  });
+
+  afterEach(() => {
+    rmSync(codexHome, { recursive: true, force: true });
+  });
+
+  test("restarts the app-server on a later look, once its last client is gone (magpie codexDaemonEvery)", async () => {
+    writePidFile({ pid: 50, at: started });
+    fake.processes = [daemon(50), proc({ pid: 100, startedAt: hoursAgo(1), commandLine: "codex" })];
+    const reopen = hints();
+    reopen.start();
+    expect(await reopen.read()).toEqual({
+      claude: [],
+      codex: [
+        {
+          kind: "app_server",
+          since: started.toISOString(),
+          command: "codex app-server daemon restart",
+          message:
+            "Background app-server (started 3 hours ago): restart it with codex app-server daemon restart",
+        },
+      ],
+    });
+    expect(fake.runs).toEqual([]);
+
+    fake.processes = [daemon(50)];
+    await tick();
+    expect(fake.runs).toEqual([
+      {
+        command: "/fake/codex",
+        args: ["app-server", "daemon", "restart"],
+        env: { CODEX_HOME: codexHome },
+        timeoutMs: 90_000,
+      },
+    ]);
+    expect(await reopen.read()).toEqual({
+      claude: [],
+      codex: [
+        {
+          kind: "app_server_restarted",
+          since: started.toISOString(),
+          message:
+            "Osuna restarted the background app-server codex sessions share, which none was on, so new codex sessions have the new settings; restart the Codex app, if it is open, to see them there.",
+        },
+      ],
+    });
+    reopen.dispose();
+    expect(cancelled).toBe(1);
+  });
+
+  test("reading again for the same change uses what was last seen, without listing the processes", async () => {
+    writePidFile({ pid: 50, at: started });
+    fake.processes = [daemon(50), proc({ pid: 100, startedAt: hoursAgo(1), commandLine: "codex" })];
+    const reopen = hints();
+    await reopen.read();
+    const lists = fake.lists;
+    await reopen.read();
+    expect(fake.lists).toBe(lists);
+  });
+
+  test("Claude Code's hints end with what its running sessions take at once", async () => {
+    subjects.claude = { cliDir: "/Users/me/.claude", changedAt: hoursAgo(2), osunaSessions: 2 };
+    subjects.codex = { cliDir: codexHome, changedAt: null, osunaSessions: 0 };
+    fake.processes = [
+      proc({ pid: 10, startedAt: hoursAgo(26), commandLine: "/Users/me/.local/bin/claude" }),
+    ];
+    expect((await hints().read()).claude).toEqual([
+      {
+        kind: "osuna_sessions",
+        count: 2,
+        message:
+          "2 Claude Code agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
+      },
+      {
+        kind: "cli",
+        count: 1,
+        since: hoursAgo(26).toISOString(),
+        message: "1 × Claude Code in a terminal, started yesterday: quit it and start it again.",
+      },
+      {
+        kind: "claude_live_env",
+        message:
+          "Claude Code picks up newly written environment variables right away; removed variables, the model and the thinking level take effect only once a session is reopened.",
+      },
+    ]);
   });
 });

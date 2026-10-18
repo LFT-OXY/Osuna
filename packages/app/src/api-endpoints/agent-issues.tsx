@@ -2,18 +2,22 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown, Copy } from "lucide-react-native";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { createControlGeometry } from "@/components/ui/control-geometry";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
+import { Text as UiText } from "@/components/ui/text";
 import { isWeb } from "@/constants/platform";
+import { useToast } from "@/contexts/toast-context";
+import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
+import { copyToClipboard } from "@/utils/copy-to-clipboard";
 import { ICON_SIZE } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
 import { shortenPath } from "@/utils/shorten-path";
 import { describeBypassed } from "./bypassed-copy";
 import { describeUnparsableFile } from "./config-unparsable-copy";
-import { describeReopenHints, type ReopenHintsCopy } from "./reopen-hints-copy";
+import { describeReopenHints, reopenSignature, type ReopenHintsCopy } from "./reopen-hints-copy";
 import type { AgentIssueAction, AgentIssueView, ReopenHintView } from "./internal/agent-settings";
 
 const ThemedChevron = withUnistyles(ChevronDown);
@@ -25,8 +29,6 @@ const ThemedChevron = withUnistyles(ChevronDown);
 
 export interface AgentIssuesAreaProps {
   providerLabel: string;
-  // claude、codex：Claude Code 另有一句哪些改动立刻用上。
-  provider: string;
   issues: AgentIssueView[];
   // 要重开才用上新设置的副本（PRD 第 36 条），合成一块显示在最后。
   reopen: ReopenHintView[];
@@ -40,7 +42,6 @@ export interface AgentIssuesAreaProps {
 
 export function AgentIssuesArea({
   providerLabel,
-  provider,
   issues,
   reopen,
   pendingAction,
@@ -50,10 +51,19 @@ export function AgentIssuesArea({
 }: AgentIssuesAreaProps) {
   const { t, i18n } = useTranslation();
   const reopenCopy = useMemo(
-    () => describeReopenHints({ t, provider, providerLabel, hints: reopen, locale: i18n.language }),
-    [t, provider, providerLabel, reopen, i18n.language],
+    () =>
+      describeReopenHints({
+        t,
+        providerLabel,
+        hints: reopen,
+        locale: i18n.language,
+        now: new Date(),
+      }),
+    [t, providerLabel, reopen, i18n.language],
   );
-  const isEmpty = issues.length === 0 && actionError === null && reopenCopy === null;
+  const reopenSeen = useReopenSeen({ providerLabel, hints: reopen });
+  const shownReopen = reopenSeen.isSeen ? null : reopenCopy;
+  const isEmpty = issues.length === 0 && actionError === null && shownReopen === null;
   if (isEmpty) return null;
   return (
     <View style={styles.area} testID="agent-api-endpoints-issues">
@@ -67,7 +77,7 @@ export function AgentIssuesArea({
           onAction={onAction}
         />
       ))}
-      {reopenCopy ? <ReopenBlock copy={reopenCopy} /> : null}
+      {shownReopen ? <ReopenBlock copy={shownReopen} onDismiss={reopenSeen.dismiss} /> : null}
       {actionError ? (
         <ActionErrorBlock
           providerLabel={providerLabel}
@@ -140,23 +150,35 @@ function IssueBlock({
   );
 }
 
-/** 要重开谁：一块 info，每类一行；要用户执行的命令另起一行，等宽、完整显示。 */
-function ReopenBlock({ copy }: { copy: ReopenHintsCopy }) {
+// 每个 Agent 点「知道了」时看到的那些副本；副本变了才再显示（magpie staleSeen，只记在内存里）。
+const seenReopen = new Map<string, string>();
+
+interface ReopenSeen {
+  isSeen: boolean;
+  dismiss: () => void;
+}
+
+function useReopenSeen(input: { providerLabel: string; hints: ReopenHintView[] }): ReopenSeen {
+  const { providerLabel, hints } = input;
+  const signature = useMemo(() => reopenSignature(hints), [hints]);
+  const [seen, setSeen] = useState(() => seenReopen.get(providerLabel) ?? null);
+  const dismiss = useCallback(() => {
+    seenReopen.set(providerLabel, signature);
+    setSeen(signature);
+  }, [providerLabel, signature]);
+  return { isSeen: seen === signature, dismiss };
+}
+
+/** 要重开谁：一块 info，每类一行；要用户执行的命令另起一行，与安装命令一样等宽、可复制。 */
+function ReopenBlock({ copy, onDismiss }: { copy: ReopenHintsCopy; onDismiss: () => void }) {
+  const { t } = useTranslation();
   return (
     <Alert variant="info" size="sm" title={copy.title} testID="agent-api-endpoints-reopen">
       <View style={styles.reopenLines}>
         {copy.lines.map((line) => (
           <View key={line.text} style={styles.reopenLine} testID="agent-api-endpoints-reopen-line">
             <Text style={styles.reopenText}>{line.text}</Text>
-            {line.command !== null ? (
-              <Text
-                selectable
-                style={styles.reopenCommand}
-                testID="agent-api-endpoints-reopen-command"
-              >
-                {line.command}
-              </Text>
-            ) : null}
+            {line.command !== null ? <ReopenCommand command={line.command} /> : null}
           </View>
         ))}
         {copy.note !== null ? (
@@ -164,8 +186,51 @@ function ReopenBlock({ copy }: { copy: ReopenHintsCopy }) {
             {copy.note}
           </Text>
         ) : null}
+        <View style={styles.actions}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onDismiss}
+            testID="agent-api-endpoints-reopen-dismiss"
+          >
+            {t("settings.apiEndpoints.agent.reopen.gotIt")}
+          </Button>
+        </View>
       </View>
     </Alert>
+  );
+}
+
+/** 一条要用户执行的命令：与同页的安装、升级命令同样的等宽字和「复制」。 */
+function ReopenCommand({ command }: { command: string }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const handleCopy = useCallback(() => {
+    void copyToClipboard(command)
+      .then(() => toast.copied(t("settings.providers.install.copyLabel")))
+      .catch(() => toast.error(t("settings.providers.install.copyFailed")));
+  }, [command, t, toast]);
+  return (
+    <View style={styles.reopenCommandLine}>
+      <UiText
+        variant="caption"
+        style={styles.reopenCommand}
+        selectable
+        dataSet={CODE_SURFACE_DATASET}
+        testID="agent-api-endpoints-reopen-command"
+      >
+        {command}
+      </UiText>
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={Copy}
+        onPress={handleCopy}
+        accessibilityLabel={t("settings.providers.install.copyAccessibility", { command })}
+      >
+        {t("settings.providers.install.copy")}
+      </Button>
+    </View>
   );
 }
 
@@ -492,18 +557,17 @@ const styles = StyleSheet.create((theme) => ({
     ...createControlGeometry(theme).alert.sm.text,
     color: theme.colors.foregroundMuted,
   },
-  // 命令完整显示：没有空格也能在任意处断行，不顶出框。
+  reopenCommandLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[4],
+  },
+  // 与安装命令同样的等宽字；长了折行，不顶出框。
   reopenCommand: {
-    ...createControlGeometry(theme).alert.sm.text,
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: theme.spacing[1.5],
     fontFamily: theme.fontFamily.mono,
-    color: theme.colors.foreground,
-    alignSelf: "flex-start",
-    maxWidth: "100%",
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[1],
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surface2,
-    overflowWrap: "anywhere" as const,
   },
   chevronOpen: {
     transform: [{ rotate: "180deg" }],

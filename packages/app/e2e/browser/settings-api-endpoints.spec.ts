@@ -1922,15 +1922,19 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
       const lines = reopen.getByTestId("agent-api-endpoints-reopen-line");
       const terminal = lines.filter({ hasText: "In a terminal" });
       await expect(terminal).toHaveCount(1);
-      await expect(terminal).toContainText("In a terminal (1, first started at");
-      await expect(terminal).toContainText("quit Codex and start it again.");
+      await expect(terminal).toHaveText(
+        "In a terminal (1, first started 2 hours ago): quit Codex and start it again.",
+      );
       await expect(
-        lines.filter({ hasText: "The background app-server Codex sessions share (started at" }),
+        lines.filter({ hasText: "Background app-server (started 3 hours ago): restart it with" }),
       ).toHaveCount(1);
       const command = reopen.getByTestId("agent-api-endpoints-reopen-command");
       await expect(command).toHaveText("codex app-server daemon restart");
       await expect(command).toBeInViewport({ ratio: 1 });
       await expect(reopen.getByTestId("agent-api-endpoints-reopen-note")).toHaveCount(0);
+      // 「知道了」收起这一块，副本没变就不再出现。
+      await reopen.getByTestId("agent-api-endpoints-reopen-dismiss").click();
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-reopen")).toHaveCount(0);
     } finally {
       await writeFile(path.join(cliHome, "process-table.txt"), "");
       await rm(path.join(codexDir, "app-server-daemon"), { recursive: true, force: true });

@@ -68,6 +68,7 @@ import {
   keepClaudeCliModel,
   readClaudeCliPicks,
   readClaudeModel,
+  readClaudeStartupReads,
   type ClaudeSettingsUnparsableReason,
   restoreClaudeOfficial,
   type ClaudeAuthTokenState,
@@ -86,6 +87,7 @@ import {
   codexKeepsOwnModel,
   readCodexCatalogPath,
   readCodexModel,
+  readCodexStartupReads,
   readCodexMultiAgentV2,
   readCodexReasoningEffort,
   refreshCodexProviderTable,
@@ -132,7 +134,13 @@ import {
 import type { RetiredModels } from "./retired-models.js";
 import { switchOffFileChange } from "./switch-off-preview.js";
 import { createSystemHostProcesses, type HostProcesses } from "./host-processes.js";
-import { CliReopenHints, type FindCodexCommand, type ReopenHintsSubject } from "./reopen-hints.js";
+import {
+  CliReopenHints,
+  cliChangedAt,
+  type CliStartupReads,
+  type FindCodexCommand,
+  type ReopenHintsSubject,
+} from "./reopen-hints.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import { someEndpointSearchesWeb } from "./gateway/web-search.js";
 import {
@@ -204,7 +212,8 @@ type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
-import type { UsagePricingTimers } from "../usage/pricing/service.js";
+import { isErrnoException } from "../../utils/errno.js";
+import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
 import {
   fetchUpstreamModels,
   type ListedModel,
@@ -359,6 +368,8 @@ export interface ApiEndpointServiceOptions {
   // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
   modelsDevFetch?: typeof globalThis.fetch;
   modelsDevTimers?: UsagePricingTimers;
+  // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
+  reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
   readCodexSignIn?: ReadCodexSignIn;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
@@ -544,9 +555,16 @@ export class ApiEndpointService {
     this.reopenHints = new CliReopenHints({
       hostProcesses: () => hostProcesses ?? createSystemHostProcesses(),
       findCodexCommand: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+      subjects: () => ({
+        claude: this.reopenSubject("claude"),
+        codex: this.reopenSubject("codex"),
+      }),
+      timers: options.reopenHintsTimers ?? REAL_PRICING_TIMERS,
+      now: this.now,
       logger: this.logger,
       ownPid: process.pid,
     });
+    this.reopenHints.start();
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
@@ -608,9 +626,7 @@ export class ApiEndpointService {
       if (bypassed !== null) issues.push(bypassed);
     }
     const status = statuses[supported];
-    const reopenHints = await this.reopenHints.read({
-      subjects: { claude: this.reopenSubject("claude"), codex: this.reopenSubject("codex") },
-    });
+    const reopenHints = await this.reopenHints.read();
     return {
       endpoints: state.endpoints.map((endpoint) => this.toWire(state, endpoint, supported)),
       activeEndpointId: agentTargetEndpoint(state, supported)?.id ?? null,
@@ -624,27 +640,62 @@ export class ApiEndpointService {
     };
   }
 
-  /** 刚改写了配置的 CLI：记下改写时刻；Codex 共用的后台 app-server 还是改写之前的设置，没人连着就重启它，不等它。 */
+  /**
+   * 刚改写了配置的 CLI：记下改写时刻；在后台看一次要重开谁，Codex 共用的后台 app-server 还是改动之前的设置、
+   * 没人连着就重启它，不等它。
+   */
   private recordCliRewrites(synced: ApiEndpointProvider[]): void {
     // 这之前 CLI 的使用不再算「被绕过」（「重新应用」也走这里）。
     const rewrittenAt = this.now();
     for (const provider of synced) this.store.recordCliRewrite({ provider, at: rewrittenAt });
-    if (!synced.includes("codex")) return;
-    const codexHome = path.dirname(this.resolveCodexConfigPath());
-    this.reopenHints
-      .checkCodexAppServer({ codexHome, changedAt: rewrittenAt })
-      .catch((error: unknown) => {
-        this.logger.error({ err: error }, "Failed to check Codex's app-server");
-      });
+    if (synced.length === 0) return;
+    this.reopenHints.refresh().catch((error: unknown) => {
+      this.logger.error({ err: error }, "Failed to look at the running CLI copies");
+    });
   }
 
-  /** 读状态时一个 CLI 要重开谁的依据：配置目录、最近一次改写、Osuna 里改写之前启动的会话数。 */
+  /** daemon 停下：不再每隔一会儿看要重开谁。 */
+  dispose(): void {
+    this.reopenHints.dispose();
+  }
+
+  /** 一个 CLI 要重开谁的依据：配置目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
   private reopenSubject(provider: ApiEndpointProvider): ReopenHintsSubject {
-    const changedAt = this.store.readCliRewrittenAt(provider);
     const cliDir = path.dirname(this.resolveCliConfigPath(provider));
+    const changedAt = this.cliChangedAt(provider);
     if (changedAt === null) return { cliDir, changedAt, osunaSessions: 0 };
     const osunaSessions = this.countSessionsStartedBefore({ provider, before: changedAt });
     return { cliDir, changedAt, osunaSessions };
+  }
+
+  /** Osuna 改写过的 CLI 启动时读的那部分最近一次变了的时刻；Osuna 从没改写过它为 null（不是 Osuna 的事）。 */
+  private cliChangedAt(provider: ApiEndpointProvider): Date | null {
+    if (this.store.readCliRewrittenAt(provider) === null) return null;
+    const { changedAt, remember } = cliChangedAt({
+      startup: this.cliStartupReads(provider),
+      stored: this.store.readCliStartRead(provider),
+    });
+    if (remember === null) return changedAt;
+    try {
+      this.store.writeCliStartRead({ provider, read: remember });
+    } catch (error) {
+      // 记不下只影响提示：下次照样按文件的修改时刻算。
+      if (!isErrnoException(error)) throw error;
+      this.logger.warn({ err: error, provider }, "Failed to remember what the CLI reads at start");
+    }
+    return changedAt;
+  }
+
+  /** CLI 启动时读的文件与其中 Osuna 写的那部分（magpie startsWith）；Codex 连同 Osuna 的模型目录。 */
+  private cliStartupReads(provider: ApiEndpointProvider): CliStartupReads {
+    const configPath = this.resolveCliConfigPath(provider);
+    const text = readOptionalFile(configPath)?.toString("utf8") ?? null;
+    if (provider === "claude") return { files: [configPath], reads: readClaudeStartupReads(text) };
+    const catalog = this.store.readCodexModelCatalog() ?? "";
+    return {
+      files: [configPath, this.store.codexModelCatalogPath],
+      reads: `${readCodexStartupReads(text)}\n${catalog}`,
+    };
   }
 
   /**

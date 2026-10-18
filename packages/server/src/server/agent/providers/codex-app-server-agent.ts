@@ -1,4 +1,5 @@
 import { validateProviderOptions } from "../provider-options.js";
+import type { HostProgram } from "../../api-endpoints/host-processes.js";
 import {
   getAgentStreamEventTurnId,
   type AgentPermissionAction,
@@ -615,7 +616,7 @@ async function resolveCodexLaunchPrefix(runtimeSettings?: ProviderRuntimeSetting
 export async function findCodexCommand(input: {
   runtimeSettings?: ProviderRuntimeSettings;
   env: Record<string, string>;
-}): Promise<{ command: string; args: string[]; env: NodeJS.ProcessEnv } | null> {
+}): Promise<HostProgram | null> {
   const launch = await resolveCodexLaunch(input.runtimeSettings);
   const availability = await checkCodexLaunchAvailable(launch);
   if (!availability.available) return null;

@@ -133,54 +133,70 @@ function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
 
 /**
  * 提示区里一类要重开才用上新设置的副本（PRD 第 36 条）：Osuna 自己的会话、终端 / 编辑器 / 桌面应用 / 别的应用自带的 CLI、
- * Codex 共用的后台 app-server（要用户执行 command）与 Osuna 已重启它。认不出的 kind 照主机给的英文原文。
+ * Codex 共用的后台 app-server（要用户执行 command）与 Osuna 已重启它，以及 Claude Code 哪些改动立刻用上（liveEnv）。
+ * 认不出的 kind、缺了该有的字段的照主机给的英文原文（unknown）。
  */
-export type ReopenHintKind =
-  | "osunaSessions"
-  | "cli"
-  | "ide"
-  | "app"
-  | "embedded"
-  | "appServer"
-  | "appServerRestarted"
-  | "unknown";
-
-export interface ReopenHintView {
-  kind: ReopenHintKind;
-  count: number | null;
-  // 最早的启动时间；没有或读不出为 null。
-  since: Date | null;
-  app: string | null;
-  command: string | null;
-  message: string;
-}
-
-const REOPEN_KINDS: Record<string, Exclude<ReopenHintKind, "unknown">> = {
-  osuna_sessions: "osunaSessions",
-  cli: "cli",
-  ide: "ide",
-  app: "app",
-  embedded: "embedded",
-  app_server: "appServer",
-  app_server_restarted: "appServerRestarted",
-};
+export type ReopenHintView =
+  | { kind: "osunaSessions"; count: number }
+  | { kind: "cli" | "ide"; count: number; since: Date }
+  | { kind: "app" | "embedded"; app: string; since: Date }
+  | { kind: "appServer"; since: Date; command: string }
+  | { kind: "appServerRestarted" }
+  | { kind: "liveEnv" }
+  | { kind: "unknown"; message: string };
 
 /** 主机给的 ISO 时间；没有或读不出为 null。 */
 function readTime(text: string | undefined): Date | null {
-  const at = new Date(text ?? "");
+  if (text === undefined) return null;
+  const at = new Date(text);
   if (Number.isNaN(at.getTime())) return null;
   return at;
 }
 
+/** 按 kind 读出该有的字段；缺了就是 null，照原文显示。 */
+const REOPEN_READERS = new Map<string, (hint: ApiEndpointReopenHint) => ReopenHintView | null>([
+  ["osuna_sessions", readOsunaSessions],
+  ["cli", (hint) => countedCopy({ kind: "cli", hint })],
+  ["ide", (hint) => countedCopy({ kind: "ide", hint })],
+  ["app", (hint) => namedCopy({ kind: "app", hint })],
+  ["embedded", (hint) => namedCopy({ kind: "embedded", hint })],
+  ["app_server", readAppServer],
+  ["app_server_restarted", () => ({ kind: "appServerRestarted" })],
+  ["claude_live_env", () => ({ kind: "liveEnv" })],
+]);
+
+function readOsunaSessions(hint: ApiEndpointReopenHint): ReopenHintView | null {
+  if (hint.count === undefined) return null;
+  return { kind: "osunaSessions", count: hint.count };
+}
+
+function readAppServer(hint: ApiEndpointReopenHint): ReopenHintView | null {
+  const since = readTime(hint.since);
+  if (since === null || hint.command === undefined) return null;
+  return { kind: "appServer", since, command: hint.command };
+}
+
+function countedCopy(input: {
+  kind: "cli" | "ide";
+  hint: ApiEndpointReopenHint;
+}): ReopenHintView | null {
+  const since = readTime(input.hint.since);
+  if (since === null || input.hint.count === undefined) return null;
+  return { kind: input.kind, count: input.hint.count, since };
+}
+
+function namedCopy(input: {
+  kind: "app" | "embedded";
+  hint: ApiEndpointReopenHint;
+}): ReopenHintView | null {
+  const since = readTime(input.hint.since);
+  if (since === null || input.hint.app === undefined) return null;
+  return { kind: input.kind, app: input.hint.app, since };
+}
+
 function toReopenView(hint: ApiEndpointReopenHint): ReopenHintView {
-  return {
-    kind: REOPEN_KINDS[hint.kind] ?? "unknown",
-    count: hint.count ?? null,
-    since: readTime(hint.since),
-    app: hint.app ?? null,
-    command: hint.command ?? null,
-    message: hint.message,
-  };
+  const view = REOPEN_READERS.get(hint.kind)?.(hint) ?? null;
+  return view ?? { kind: "unknown", message: hint.message };
 }
 
 /**
@@ -247,8 +263,6 @@ export interface SubagentThinkingView {
 const ULTRA_CODE_OPTION_ID = "ultracode";
 
 export interface AgentApiEndpointsView {
-  // 这一页的提供方（claude、codex）。
-  provider: string;
   enabled: boolean;
   // 总开关关着时打不开的原因；开着时总能关，恒为 null。
   enableBlockedBy: AgentSwitchBlock | null;
@@ -343,7 +357,6 @@ export function selectAgentApiEndpointsView(input: {
   });
 
   return {
-    provider,
     enabled: agent.enabled,
     enableBlockedBy,
     defaultModelId: agent.defaultModelId,

@@ -2755,21 +2755,22 @@ export const fr: TranslationResources = {
             "{{count}} agent {{agent}} dans Osuna : rechargez-le (Recharger l’agent dans le menu de son onglet).",
           osunaSessions_other:
             "{{count}} agents {{agent}} dans Osuna : rechargez-les un par un (Recharger l’agent dans le menu de leur onglet).",
-          cli: "Dans un terminal ({{copies}}, le premier lancé à {{time}}) : quittez {{agent}} et relancez-le.",
-          ide: "Dans un éditeur comme VS Code ou Cursor ({{copies}}, le premier lancé à {{time}}) : rechargez la fenêtre de l’éditeur.",
-          app: "L’app {{agent}} (lancée à {{time}}) : fermer sa fenêtre ne la quitte pas. Quittez-la avec ⌘Q et rouvrez-la.",
+          cli: "Dans un terminal ({{copies}}, le premier lancé {{ago}}) : quittez {{agent}} et relancez-le.",
+          ide: "Dans un éditeur comme VS Code ou Cursor ({{copies}}, le premier lancé {{ago}}) : rechargez la fenêtre de l’éditeur.",
+          app: "L’app {{app}} (lancée {{ago}}) : fermer sa fenêtre ne la quitte pas. Quittez-la avec ⌘Q et rouvrez-la.",
           embedded:
-            "Le {{agent}} intégré à {{app}} (lancé à {{time}}) : quittez {{app}} et rouvrez-la.",
-          appServer:
-            "L’app-server en arrière-plan que partagent les sessions {{agent}} (lancé à {{time}}) a encore les anciens réglages. Redémarrez-le avec :",
+            "Le {{agent}} intégré à {{app}} (lancé {{ago}}) : quittez {{app}} et rouvrez-la.",
+          appServer: "App-server en arrière-plan (lancé {{ago}}) : redémarrez-le avec",
           appServerRestarted:
             "Osuna a redémarré l’app-server en arrière-plan que partagent les sessions {{agent}}",
           appServerRestartedDetail:
             "Aucune session ne l’utilisait : les nouvelles sessions {{agent}} ont les nouveaux réglages. Si l’app {{agent}} est ouverte, quittez-la et rouvrez-la pour les voir.",
           appServerRestartedLine:
             "Osuna a redémarré l’app-server en arrière-plan que partagent les sessions {{agent}}, qu’aucune session n’utilisait : les nouvelles sessions {{agent}} ont les nouveaux réglages.",
-          claudeNote:
+          liveEnv:
             "{{agent}} prend tout de suite les variables d’environnement nouvellement écrites ; les variables supprimées, le modèle et le niveau de réflexion ne s’appliquent qu’après réouverture de la session.",
+          justNow: "à l’instant",
+          gotIt: "Compris",
         },
         issues: {
           updateHost:

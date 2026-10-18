@@ -127,7 +127,6 @@ export function AgentApiEndpointsSection({
       {issueActions ? (
         <AgentIssuesArea
           providerLabel={providerLabel}
-          provider={view.provider}
           issues={issues}
           reopen={view.reopen}
           {...issueActions}

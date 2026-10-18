@@ -1,8 +1,9 @@
-import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { z } from "zod";
 import { HostProcessesError, type HostProcess } from "../api-endpoints/host-processes.js";
 import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
@@ -14,6 +15,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  */
 
 const FAKE_CODEX = "/fake/bin/codex";
+const CliStartReadsSchema = z.object({ codex: z.object({ digest: z.string(), at: z.string() }) });
 const RESTART_ARGS = ["app-server", "daemon", "restart"];
 
 async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
@@ -33,16 +35,15 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
   let codexHome: string;
   let claudeDir: string;
   let fake: FakeHostProcesses;
-  // 接口服务的时钟，比真的时钟晚一小时：Osuna 会话按真的时钟记启动时间，都早于改写。
-  let clock: Date;
-  const start = new Date(Math.floor(Date.now() / 1000) * 1000 + 3_600_000);
+  // 改动时刻取 CLI 配置文件的修改时刻（真的时钟）：进程的启动时间都相对现在说。
+  let now: number;
 
-  function after(seconds: number): Date {
-    return new Date(start.getTime() + seconds * 1000);
+  function ago(seconds: number): Date {
+    return new Date(now - seconds * 1000);
   }
 
   beforeEach(async () => {
-    clock = start;
+    now = Date.now();
     root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-reopen-"));
     codexHome = path.join(root, "codex-home");
     claudeDir = path.join(root, "claude");
@@ -55,7 +56,6 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
       apiEndpoints: {
         env: { CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeDir },
         homeDir: root,
-        now: () => clock,
         hostProcesses: fake,
         findCodexCommand: async ({ env }) => ({ command: FAKE_CODEX, args: [], env }),
       },
@@ -69,84 +69,93 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     await rm(root, { recursive: true, force: true });
   });
 
-  async function switchOnAt(input: {
-    provider: "claude" | "codex";
-    seconds: number;
-  }): Promise<void> {
+  async function switchOn(provider: "claude" | "codex"): Promise<void> {
     const saved = await client.apiEndpointSave({
-      provider: input.provider,
-      name: `Relay ${input.provider}`,
+      provider,
+      name: `Relay ${provider}`,
       baseUrl: "https://relay.example/v1",
       apiKey: "sk-relay",
-      models: [{ id: `relay-${input.provider}` }],
-      defaultModelId: `relay-${input.provider}`,
+      models: [{ id: `relay-${provider}` }],
+      defaultModelId: `relay-${provider}`,
     });
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
-    clock = after(input.seconds);
-    await client.apiEndpointSetActive(input.provider, saved.endpoint.id);
+    await client.apiEndpointSetActive(provider, saved.endpoint.id);
   }
 
-  function running(input: { pid: number; seconds: number; commandLine: string }): HostProcess {
-    return {
-      pid: input.pid,
-      parentPid: 1,
-      startedAt: after(input.seconds),
-      commandLine: input.commandLine,
-    };
+  function running(input: { pid: number; startedAt: Date; commandLine: string }): HostProcess {
+    return { parentPid: 1, ...input };
   }
 
   /** Codex 给后台 app-server 记的进程记录文件，修改时间就是它的启动时间。 */
-  function writePidFile(input: { pid: number; seconds: number }): void {
+  function writePidFile(input: { pid: number; at: Date }): void {
     const file = path.join(codexHome, "app-server-daemon", "app-server.pid");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ pid: input.pid }));
-    utimesSync(file, after(input.seconds), after(input.seconds));
+    utimesSync(file, input.at, input.at);
   }
 
   function appServer(pid: number): HostProcess {
     return running({
       pid,
-      seconds: -500,
+      startedAt: ago(500),
       commandLine: `${codexHome}/packages/app-server-daemon/releases/0.163.0/bin/codex app-server --listen unix:///x --managed-daemon`,
     });
   }
 
+  const CLAUDE_LIVE_ENV = {
+    kind: "claude_live_env",
+    message:
+      "Claude Code picks up newly written environment variables right away; removed variables, the model and the thinking level take effect only once a session is reopened.",
+  };
+
+  const APP_SERVER_LEFT = () => ({
+    kind: "app_server",
+    since: ago(500).toISOString(),
+    command: "codex app-server daemon restart",
+    message:
+      "Background app-server (started 8 minutes ago): restart it with codex app-server daemon restart",
+  });
+
   async function reopenHints(): Promise<unknown> {
-    clock = after(100);
     return (await client.apiEndpointList("codex")).reopenHints;
   }
 
   test("terminal Claude Code and Codex started before the rewrite are listed, ones started after aren't", async () => {
     fake.processes = [
-      running({ pid: 10, seconds: -60, commandLine: "/Users/me/.local/bin/claude" }),
-      running({ pid: 11, seconds: 50, commandLine: "/Users/me/.local/bin/claude --resume" }),
-      running({ pid: 20, seconds: -120, commandLine: "/opt/homebrew/bin/codex -m gpt-6" }),
-      running({ pid: 21, seconds: 50, commandLine: "/opt/homebrew/bin/codex" }),
+      running({ pid: 10, startedAt: ago(3_600), commandLine: "/Users/me/.local/bin/claude" }),
+      running({
+        pid: 11,
+        startedAt: ago(-60),
+        commandLine: "/Users/me/.local/bin/claude --resume",
+      }),
+      running({ pid: 20, startedAt: ago(7_200), commandLine: "/opt/homebrew/bin/codex -m gpt-6" }),
+      running({ pid: 21, startedAt: ago(-60), commandLine: "/opt/homebrew/bin/codex" }),
       // Osuna 自己起的不算终端里的。
       {
         pid: 30,
         parentPid: process.pid,
-        startedAt: after(-60),
+        startedAt: ago(3_600),
         commandLine: "/opt/homebrew/bin/codex app-server",
       },
     ];
-    await switchOnAt({ provider: "claude", seconds: 10 });
-    await switchOnAt({ provider: "codex", seconds: 10 });
+    await switchOn("claude");
+    await switchOn("codex");
     expect(await reopenHints()).toEqual({
       claude: [
         {
           kind: "cli",
           count: 1,
-          since: after(-60).toISOString(),
-          message: expect.stringContaining("Claude Code in a terminal, started"),
+          since: ago(3_600).toISOString(),
+          message: "1 × Claude Code in a terminal, started 1 hour ago: quit it and start it again.",
         },
+        CLAUDE_LIVE_ENV,
       ],
       codex: [
         {
           kind: "cli",
           count: 1,
-          since: after(-120).toISOString(),
-          message: expect.stringContaining("Codex in a terminal, started"),
+          since: ago(7_200).toISOString(),
+          message: "1 × Codex in a terminal, started 2 hours ago: quit it and start it again.",
         },
       ],
     });
@@ -154,7 +163,7 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
   });
 
   test("nothing to reopen before anything is rewritten, and no process is listed", async () => {
-    fake.processes = [running({ pid: 10, seconds: -60, commandLine: "claude" })];
+    fake.processes = [running({ pid: 10, startedAt: ago(60), commandLine: "claude" })];
     expect(await reopenHints()).toEqual({ claude: [], codex: [] });
     expect(fake.lists).toBe(0);
   });
@@ -163,42 +172,42 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     await client.createAgent({ provider: "claude", cwd: root, title: "c1" });
     await client.createAgent({ provider: "claude", cwd: root, title: "c2" });
     await client.createAgent({ provider: "codex", cwd: root, title: "x1" });
-    await switchOnAt({ provider: "claude", seconds: 10 });
-    await switchOnAt({ provider: "codex", seconds: 10 });
+    await switchOn("claude");
+    await switchOn("codex");
     expect(await reopenHints()).toEqual({
       claude: [
         {
           kind: "osuna_sessions",
           count: 2,
           message:
-            "2 Claude Code session(s) in Osuna started before Osuna last changed Claude Code's settings: reload each (Reload agent in its tab's menu) to use the new ones.",
+            "2 Claude Code agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
         },
+        CLAUDE_LIVE_ENV,
       ],
       codex: [
         {
           kind: "osuna_sessions",
           count: 1,
-          message:
-            "1 Codex session(s) in Osuna started before Osuna last changed Codex's settings: reload each (Reload agent in its tab's menu) to use the new ones.",
+          message: "1 Codex agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
         },
       ],
     });
   });
 
   test("the app-server, started before the rewrite with no client on it, is restarted with this CODEX_HOME", async () => {
-    writePidFile({ pid: 500, seconds: -500 });
+    writePidFile({ pid: 500, at: ago(500) });
     fake.processes = [appServer(500)];
     // 重启后 Codex 改写进程记录文件。
-    fake.onRun = () => writePidFile({ pid: 501, seconds: 20 });
-    await switchOnAt({ provider: "codex", seconds: 10 });
+    fake.onRun = () => writePidFile({ pid: 501, at: ago(-20) });
+    await switchOn("codex");
     expect(await reopenHints()).toEqual({
       claude: [],
       codex: [
         {
           kind: "app_server_restarted",
-          since: after(-500).toISOString(),
+          since: ago(500).toISOString(),
           message:
-            "Osuna restarted the app-server codex sessions share, which none was on, so new codex sessions have the new settings; restart the Codex app, if it is open, to see them there.",
+            "Osuna restarted the background app-server codex sessions share, which none was on, so new codex sessions have the new settings; restart the Codex app, if it is open, to see them there.",
         },
       ],
     });
@@ -206,54 +215,60 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
       {
         command: FAKE_CODEX,
         args: RESTART_ARGS,
-        env: expect.objectContaining({ CODEX_HOME: codexHome }),
+        env: { CODEX_HOME: codexHome },
         timeoutMs: 90_000,
       },
     ]);
   });
 
   test("with a client on the app-server, it isn't restarted and the hint gives the command", async () => {
-    writePidFile({ pid: 500, seconds: -500 });
-    fake.processes = [appServer(500), running({ pid: 600, seconds: 30, commandLine: "codex" })];
-    await switchOnAt({ provider: "codex", seconds: 10 });
-    const hints = await reopenHints();
-    expect(hints).toEqual({
-      claude: [],
-      codex: [
-        {
-          kind: "app_server",
-          since: after(-500).toISOString(),
-          command: "codex app-server daemon restart",
-          message: expect.stringContaining("restart it with codex app-server daemon restart"),
-        },
-      ],
-    });
+    writePidFile({ pid: 500, at: ago(500) });
+    fake.processes = [
+      appServer(500),
+      running({ pid: 600, startedAt: ago(-30), commandLine: "codex" }),
+    ];
+    await switchOn("codex");
+    expect(await reopenHints()).toEqual({ claude: [], codex: [APP_SERVER_LEFT()] });
     expect(fake.runs).toEqual([]);
   });
 
   test("a restart that fails leaves the command to the user", async () => {
-    writePidFile({ pid: 500, seconds: -500 });
+    writePidFile({ pid: 500, at: ago(500) });
     fake.processes = [appServer(500)];
     fake.runResult = { exitCode: 1, output: "Error: no daemon to restart\n" };
-    await switchOnAt({ provider: "codex", seconds: 10 });
-    expect(await reopenHints()).toEqual({
-      claude: [],
-      codex: [
-        {
-          kind: "app_server",
-          since: after(-500).toISOString(),
-          command: "codex app-server daemon restart",
-          message: expect.stringContaining("restart it with codex app-server daemon restart"),
-        },
-      ],
+    await switchOn("codex");
+    expect(await reopenHints()).toEqual({ claude: [], codex: [APP_SERVER_LEFT()] });
+  });
+
+  test("a Re-apply that changes nothing doesn't move the change time", async () => {
+    fake.processes = [
+      running({ pid: 20, startedAt: ago(1_800), commandLine: "/opt/homebrew/bin/codex" }),
+    ];
+    await switchOn("codex");
+    await reopenHints();
+    // 把记下的改动时刻挪到一小时前：半小时前启动的终端 Codex 就不算旧副本。
+    const file = path.join(daemon.paseoHome, "api-endpoints", "cli-start-reads.json");
+    const stored = CliStartReadsSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+    writeFileSync(
+      file,
+      JSON.stringify({ codex: { ...stored.codex, at: ago(3_600).toISOString() } }),
+    );
+    expect(await reopenHints()).toEqual({ claude: [], codex: [] });
+    // 「重新应用」照样改写一遍文件，内容没变：改动时刻不动，它照样不算。
+    const reapplied = await client.apiEndpointSetAgentSettings({
+      provider: "codex",
+      enabled: true,
+      reapply: true,
     });
+    expect(reapplied.error).toBeNull();
+    expect(await reopenHints()).toEqual({ claude: [], codex: [] });
   });
 
   test("processes that can't be listed block neither the list nor the other hints", async () => {
     await client.createAgent({ provider: "codex", cwd: root, title: "x1" });
-    writePidFile({ pid: 500, seconds: -500 });
-    fake.listError = new HostProcessesError("ps didn't start");
-    await switchOnAt({ provider: "codex", seconds: 10 });
+    writePidFile({ pid: 500, at: ago(500) });
+    fake.listError = new HostProcessesError({ message: "ps didn't start" });
+    await switchOn("codex");
     const listed = await client.apiEndpointList("codex");
     expect(listed.error).toBeNull();
     expect(listed.reopenHints).toEqual({
@@ -262,7 +277,7 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
         {
           kind: "osuna_sessions",
           count: 1,
-          message: expect.stringContaining("1 Codex session(s)"),
+          message: "1 Codex agent(s) in Osuna: reload each one (Reload agent in its tab's menu).",
         },
       ],
     });

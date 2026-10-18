@@ -398,7 +398,7 @@ describe("the settings issues on an agent page", () => {
 });
 
 describe("who to reopen on an agent page", () => {
-  it("reads each kind the host reports, and keeps one it doesn't know as its message", () => {
+  it("reads each kind the host reports, and keeps one it doesn't know, or one missing what it needs, as its message", () => {
     const result = view({
       endpoints: [],
       provider: "codex",
@@ -407,6 +407,14 @@ describe("who to reopen on an agent page", () => {
         codex: [
           { kind: "osuna_sessions", count: 2, message: "2 sessions" },
           { kind: "cli", count: 1, since: "2026-10-19T08:00:00.000Z", message: "terminal" },
+          { kind: "ide", count: 1, since: "not a time", message: "editor" },
+          {
+            kind: "app",
+            count: 1,
+            since: "2026-10-19T07:30:00.000Z",
+            app: "ChatGPT",
+            message: "app",
+          },
           {
             kind: "embedded",
             count: 1,
@@ -420,60 +428,26 @@ describe("who to reopen on an agent page", () => {
             command: "codex app-server daemon restart",
             message: "app-server",
           },
-          { kind: "app_server_restarted", since: "not a time", message: "restarted" },
+          { kind: "app_server_restarted", since: "2026-10-19T06:00:00.000Z", message: "restarted" },
+          { kind: "claude_live_env", message: "env" },
           { kind: "a_future_kind", message: "something new" },
         ],
       },
     });
     expect(result.reopen).toEqual([
-      {
-        kind: "osunaSessions",
-        count: 2,
-        since: null,
-        app: null,
-        command: null,
-        message: "2 sessions",
-      },
-      {
-        kind: "cli",
-        count: 1,
-        since: new Date("2026-10-19T08:00:00.000Z"),
-        app: null,
-        command: null,
-        message: "terminal",
-      },
-      {
-        kind: "embedded",
-        count: 1,
-        since: new Date("2026-10-19T07:00:00.000Z"),
-        app: "Agents Anywhere",
-        command: null,
-        message: "embedded",
-      },
+      { kind: "osunaSessions", count: 2 },
+      { kind: "cli", count: 1, since: new Date("2026-10-19T08:00:00.000Z") },
+      { kind: "unknown", message: "editor" },
+      { kind: "app", app: "ChatGPT", since: new Date("2026-10-19T07:30:00.000Z") },
+      { kind: "embedded", app: "Agents Anywhere", since: new Date("2026-10-19T07:00:00.000Z") },
       {
         kind: "appServer",
-        count: null,
         since: new Date("2026-10-19T06:00:00.000Z"),
-        app: null,
         command: "codex app-server daemon restart",
-        message: "app-server",
       },
-      {
-        kind: "appServerRestarted",
-        count: null,
-        since: null,
-        app: null,
-        command: null,
-        message: "restarted",
-      },
-      {
-        kind: "unknown",
-        count: null,
-        since: null,
-        app: null,
-        command: null,
-        message: "something new",
-      },
+      { kind: "appServerRestarted" },
+      { kind: "liveEnv" },
+      { kind: "unknown", message: "something new" },
     ]);
   });
 

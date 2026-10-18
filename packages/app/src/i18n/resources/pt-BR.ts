@@ -2738,21 +2738,22 @@ export const ptBR: TranslationResources = {
             "{{count}} agente do {{agent}} no Osuna: recarregue-o (Recarregar agente no menu da aba).",
           osunaSessions_other:
             "{{count}} agentes do {{agent}} no Osuna: recarregue cada um (Recarregar agente no menu da aba).",
-          cli: "Em um terminal ({{copies}}, o primeiro iniciado às {{time}}): feche o {{agent}} e inicie de novo.",
-          ide: "Em um editor como VS Code ou Cursor ({{copies}}, o primeiro iniciado às {{time}}): recarregue a janela do editor.",
-          app: "O app do {{agent}} (iniciado às {{time}}): fechar a janela não encerra o app. Saia com ⌘Q e abra de novo.",
+          cli: "Em um terminal ({{copies}}, o primeiro iniciado {{ago}}): feche o {{agent}} e inicie de novo.",
+          ide: "Em um editor como VS Code ou Cursor ({{copies}}, o primeiro iniciado {{ago}}): recarregue a janela do editor.",
+          app: "O app {{app}} (iniciado {{ago}}): fechar a janela não encerra o app. Saia com ⌘Q e abra de novo.",
           embedded:
-            "O {{agent}} próprio do {{app}} (iniciado às {{time}}): saia do {{app}} e abra de novo.",
-          appServer:
-            "O app-server em segundo plano que as sessões do {{agent}} compartilham (iniciado às {{time}}) ainda tem as configurações anteriores. Reinicie com:",
+            "O {{agent}} próprio do {{app}} (iniciado {{ago}}): saia do {{app}} e abra de novo.",
+          appServer: "App-server em segundo plano (iniciado {{ago}}): reinicie com",
           appServerRestarted:
             "O Osuna reiniciou o app-server em segundo plano que as sessões do {{agent}} compartilham",
           appServerRestartedDetail:
             "Nenhuma sessão o usava, então as novas sessões do {{agent}} já têm as novas configurações. Se o app do {{agent}} estiver aberto, saia e abra de novo para vê-las lá.",
           appServerRestartedLine:
             "O Osuna reiniciou o app-server em segundo plano que as sessões do {{agent}} compartilham, que nenhuma sessão usava: as novas sessões do {{agent}} já têm as novas configurações.",
-          claudeNote:
+          liveEnv:
             "O {{agent}} usa na hora as variáveis de ambiente recém-escritas; variáveis removidas, o modelo e o nível de raciocínio só valem depois de reabrir a sessão.",
+          justNow: "agora mesmo",
+          gotIt: "Entendi",
         },
         issues: {
           updateHost:

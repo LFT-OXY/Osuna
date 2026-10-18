@@ -11,7 +11,10 @@ import type {
  * 测试 daemon 缺省就用它（paseo-daemon.ts），真的实现在测试里一造就抛错。
  */
 export class FakeHostProcesses implements HostProcesses {
+  reportsStartTimes = true;
   processes: HostProcess[] = [];
+  // 按 pid 给的 CODEX_HOME；没给的当作读不到。
+  codexHomes = new Map<number, string>();
   runs: HostCommand[] = [];
   lists = 0;
   // 设了就让 list 抛它（问不到系统）。
@@ -24,6 +27,10 @@ export class FakeHostProcesses implements HostProcesses {
     this.lists += 1;
     if (this.listError !== null) throw this.listError;
     return this.processes;
+  }
+
+  async readCodexHome(pid: number): Promise<string | null> {
+    return this.codexHomes.get(pid) ?? null;
   }
 
   async run(command: HostCommand): Promise<HostCommandResult> {

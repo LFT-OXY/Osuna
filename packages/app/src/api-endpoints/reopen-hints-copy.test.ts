@@ -1,49 +1,46 @@
 import { createInstance } from "i18next";
 import { beforeAll, describe, expect, it } from "vitest";
 import { en } from "@/i18n/resources/en";
+import { zhCN } from "@/i18n/resources/zh-CN";
 import type { ReopenHintView } from "./internal/agent-settings";
-import { describeReopenHints } from "./reopen-hints-copy";
+import { agoOf, describeReopenHints, reopenSignature } from "./reopen-hints-copy";
 
 const i18n = createInstance();
 
 beforeAll(async () => {
-  await i18n.init({ lng: "en", resources: { en: { translation: en } } });
+  await i18n.init({
+    lng: "en",
+    resources: { en: { translation: en }, "zh-CN": { translation: zhCN } },
+  });
 });
 
-const AT_0912 = new Date(2026, 9, 19, 9, 12);
+const NOW = new Date("2026-10-19T12:00:00.000Z");
 
-function hint(overrides: Partial<ReopenHintView> & Pick<ReopenHintView, "kind">): ReopenHintView {
-  return {
-    count: null,
-    since: null,
-    app: null,
-    command: null,
-    message: "host's words",
-    ...overrides,
-  };
+function hoursAgo(hours: number): Date {
+  return new Date(NOW.getTime() - hours * 3_600_000);
 }
 
-function copy(input: { provider: string; providerLabel: string; hints: ReopenHintView[] }) {
-  return describeReopenHints({ t: i18n.t, locale: "en-GB", ...input });
+function copy(input: { providerLabel: string; hints: ReopenHintView[] }) {
+  return describeReopenHints({ t: i18n.t, locale: "en", now: NOW, ...input });
 }
 
 describe("who to reopen", () => {
   it("is nothing when there is nothing to reopen", () => {
-    expect(copy({ provider: "codex", providerLabel: "Codex", hints: [] })).toBeNull();
+    expect(copy({ providerLabel: "Codex", hints: [] })).toBeNull();
   });
 
-  it("says, one line per kind, how each is reopened, with the command whole", () => {
+  it("says, one line per kind, how each is reopened and how long ago it started, with the command whole", () => {
     expect(
       copy({
-        provider: "codex",
         providerLabel: "Codex",
         hints: [
-          hint({ kind: "osunaSessions", count: 2 }),
-          hint({ kind: "cli", count: 1, since: AT_0912 }),
-          hint({ kind: "ide", count: 2, since: AT_0912 }),
-          hint({ kind: "app", count: 1, since: AT_0912 }),
-          hint({ kind: "embedded", count: 1, since: AT_0912, app: "Agents Anywhere" }),
-          hint({ kind: "appServer", since: AT_0912, command: "codex app-server daemon restart" }),
+          { kind: "osunaSessions", count: 2 },
+          { kind: "cli", count: 1, since: hoursAgo(3) },
+          { kind: "ide", count: 2, since: hoursAgo(50) },
+          { kind: "app", app: "ChatGPT", since: hoursAgo(24 * 9) },
+          { kind: "app", app: "Codex", since: hoursAgo(0.5) },
+          { kind: "embedded", app: "Agents Anywhere", since: hoursAgo(1) },
+          { kind: "appServer", since: hoursAgo(5), command: "codex app-server daemon restart" },
         ],
       }),
     ).toEqual({
@@ -54,23 +51,27 @@ describe("who to reopen", () => {
           command: null,
         },
         {
-          text: "In a terminal (1, first started at 09:12): quit Codex and start it again.",
+          text: "In a terminal (1, first started 3 hours ago): quit Codex and start it again.",
           command: null,
         },
         {
-          text: "In an editor such as VS Code or Cursor (2, first started at 09:12): reload the editor's window.",
+          text: "In an editor such as VS Code or Cursor (2, first started 2 days ago): reload the editor's window.",
           command: null,
         },
         {
-          text: "The Codex app (started at 09:12): closing its window keeps it running. Quit it with ⌘Q and open it again.",
+          text: "The ChatGPT app (started last week): closing its window keeps it running. Quit it with ⌘Q and open it again.",
           command: null,
         },
         {
-          text: "Agents Anywhere's own Codex (started at 09:12): quit Agents Anywhere and open it again.",
+          text: "The Codex app (started 30 minutes ago): closing its window keeps it running. Quit it with ⌘Q and open it again.",
           command: null,
         },
         {
-          text: "The background app-server Codex sessions share (started at 09:12) still has the settings from before. Restart it with:",
+          text: "Agents Anywhere's own Codex (started 1 hour ago): quit Agents Anywhere and open it again.",
+          command: null,
+        },
+        {
+          text: "Background app-server (started 5 hours ago): restart it with",
           command: "codex app-server daemon restart",
         },
       ],
@@ -78,12 +79,11 @@ describe("who to reopen", () => {
     });
   });
 
-  it("says plainly what Claude Code takes at once and what only once reopened", () => {
+  it("adds what Claude Code takes at once when the host says so", () => {
     expect(
       copy({
-        provider: "claude",
         providerLabel: "Claude Code",
-        hints: [hint({ kind: "osunaSessions", count: 1 })],
+        hints: [{ kind: "osunaSessions", count: 1 }, { kind: "liveEnv" }],
       }),
     ).toEqual({
       title: "Running copies of Claude Code still have the settings from before",
@@ -98,13 +98,7 @@ describe("who to reopen", () => {
   });
 
   it("says the app-server was restarted, on its own as the title", () => {
-    expect(
-      copy({
-        provider: "codex",
-        providerLabel: "Codex",
-        hints: [hint({ kind: "appServerRestarted", since: AT_0912 })],
-      }),
-    ).toEqual({
+    expect(copy({ providerLabel: "Codex", hints: [{ kind: "appServerRestarted" }] })).toEqual({
       title: "Osuna restarted the background app-server Codex sessions share",
       lines: [
         {
@@ -116,23 +110,38 @@ describe("who to reopen", () => {
     });
   });
 
-  it("falls back to the host's words for a kind it doesn't know or a time it can't read", () => {
+  it("falls back to the host's words for a kind it doesn't know", () => {
     expect(
       copy({
-        provider: "codex",
         providerLabel: "Codex",
-        hints: [
-          hint({ kind: "unknown", message: "Something new to reopen" }),
-          hint({ kind: "cli", count: 1, message: "Codex in a terminal, started 09:12: quit it" }),
-        ],
+        hints: [{ kind: "unknown", message: "Something new to reopen" }],
       }),
     ).toEqual({
       title: "Running copies of Codex still have the settings from before",
-      lines: [
-        { text: "Something new to reopen", command: null },
-        { text: "Codex in a terminal, started 09:12: quit it", command: null },
-      ],
+      lines: [{ text: "Something new to reopen", command: null }],
       note: null,
     });
+  });
+});
+
+describe("how long ago", () => {
+  it("is said in the reader's language, and just now under a minute", () => {
+    const zh = i18n.getFixedT("zh-CN");
+    expect(agoOf({ t: zh, since: hoursAgo(3), now: NOW, locale: "zh-CN" })).toBe("3小时前");
+    expect(agoOf({ t: zh, since: hoursAgo(24), now: NOW, locale: "zh-CN" })).toBe("昨天");
+    expect(
+      agoOf({ t: zh, since: new Date(NOW.getTime() - 20_000), now: NOW, locale: "zh-CN" }),
+    ).toBe("刚刚");
+  });
+});
+
+describe("the copies a dismissal covers", () => {
+  it("changes when the copies change", () => {
+    const one: ReopenHintView[] = [{ kind: "cli", count: 1, since: hoursAgo(3) }];
+    const two: ReopenHintView[] = [{ kind: "cli", count: 2, since: hoursAgo(3) }];
+    expect(reopenSignature(one)).toBe(
+      reopenSignature([{ kind: "cli", count: 1, since: hoursAgo(3) }]),
+    );
+    expect(reopenSignature(one)).not.toBe(reopenSignature(two));
   });
 });

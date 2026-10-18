@@ -673,6 +673,25 @@ export function forgetCodexEffortOriginal(takeover: CodexConfigTakeover): CodexC
   return { ...takeover, keys: { ...takeover.keys, model_reasoning_effort: forgotten } };
 }
 
+/**
+ * Codex 启动时读进来、Osuna 替它写的那部分（magpie startsWith）：顶层的服务商、模型、目录、地址与思考档位，
+ * 和 Osuna 的服务商表；读不懂时是整份文本，改了什么都算改过。拿来比较，不用来读值。
+ */
+export function readCodexStartupReads(text: string | null): string {
+  const top = parsedTopLevel(text);
+  if (top === null) return text ?? "";
+  const tables = top.model_providers;
+  const table = isRecord(tables) ? tables[CODEX_API_ENDPOINT_PROVIDER_ID] : undefined;
+  return JSON.stringify({
+    model_provider: top.model_provider,
+    model: top.model,
+    model_catalog_json: top.model_catalog_json,
+    openai_base_url: top.openai_base_url,
+    model_reasoning_effort: top.model_reasoning_effort,
+    table,
+  });
+}
+
 /** 顶层的值；文件不存在为空表，读不懂为 null。 */
 function parsedTopLevel(text: string | null): Record<string, unknown> | null {
   if (text === null) return {};

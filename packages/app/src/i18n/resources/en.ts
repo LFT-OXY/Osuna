@@ -2762,20 +2762,20 @@ export const en = {
             "{{count}} {{agent}} agent in Osuna: reload it (Reload agent in its tab's menu).",
           osunaSessions_other:
             "{{count}} {{agent}} agents in Osuna: reload each one (Reload agent in its tab's menu).",
-          cli: "In a terminal ({{copies}}, first started at {{time}}): quit {{agent}} and start it again.",
-          ide: "In an editor such as VS Code or Cursor ({{copies}}, first started at {{time}}): reload the editor's window.",
-          app: "The {{agent}} app (started at {{time}}): closing its window keeps it running. Quit it with ⌘Q and open it again.",
-          embedded:
-            "{{app}}'s own {{agent}} (started at {{time}}): quit {{app}} and open it again.",
-          appServer:
-            "The background app-server {{agent}} sessions share (started at {{time}}) still has the settings from before. Restart it with:",
+          cli: "In a terminal ({{copies}}, first started {{ago}}): quit {{agent}} and start it again.",
+          ide: "In an editor such as VS Code or Cursor ({{copies}}, first started {{ago}}): reload the editor's window.",
+          app: "The {{app}} app (started {{ago}}): closing its window keeps it running. Quit it with ⌘Q and open it again.",
+          embedded: "{{app}}'s own {{agent}} (started {{ago}}): quit {{app}} and open it again.",
+          appServer: "Background app-server (started {{ago}}): restart it with",
           appServerRestarted: "Osuna restarted the background app-server {{agent}} sessions share",
           appServerRestartedDetail:
             "No session was using it, so new {{agent}} sessions have the new settings. If the {{agent}} app is open, quit it and open it again to see them there.",
           appServerRestartedLine:
             "Osuna restarted the background app-server {{agent}} sessions share, which no session was using: new {{agent}} sessions have the new settings.",
-          claudeNote:
+          liveEnv:
             "{{agent}} picks up newly written environment variables right away; removed variables, the model and the thinking level take effect only once a session is reopened.",
+          justNow: "just now",
+          gotIt: "Got it",
         },
         issues: {
           updateHost:

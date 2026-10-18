@@ -755,6 +755,24 @@ export function readClaudeModel(text: string | null): string | null {
   return typeof model === "string" ? model : null;
 }
 
+/**
+ * Claude Code 启动时读进来、Osuna 替它写的那部分（magpie startsWith 的 env 与 model，另加思考档位）；
+ * 读不懂时是整份文本，改了什么都算改过。拿来比较，不用来读值。
+ */
+export function readClaudeStartupReads(text: string | null): string {
+  if (text === null) return "";
+  const parsed = parseSettings(splitBom(text).body);
+  if (parsed.kind === "unparsable") return text;
+  const { settings } = parsed;
+  return JSON.stringify({
+    env: settings.env,
+    model: settings.model,
+    effortLevel: settings.effortLevel,
+    ultracode: settings.ultracode,
+    modelSettings: settings.modelSettings,
+  });
+}
+
 /** 口令没写（missing）、空值（empty，Claude Code 当作没设）或有值（set）。 */
 export type ClaudeAuthTokenState = "missing" | "empty" | "set";
 

@@ -31,6 +31,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - gateway-tokens.json：每个开过总开关的 Agent 一个中转站口令，只说明是哪个 Agent；关掉总开关不作废（ADR 0010）；
  * - retired-models.json：厂商说已下线的「接口 + 模型」与时间，一周内不进列表（retired-models.ts）；
  * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
+ * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
@@ -174,7 +175,22 @@ const CliRewritesFileSchema = z.object({
 });
 type CliRewritesFile = z.infer<typeof CliRewritesFileSchema>;
 
+// 每个 Agent 启动时读的那部分的摘要与它变成这样的时刻（magpie stash 的 "<agent>.started"）。
+const CliStartReadSchema = z.object({ digest: z.string(), at: z.string().datetime() });
+const CliStartReadsFileSchema = z.object({
+  claude: CliStartReadSchema.optional(),
+  codex: CliStartReadSchema.optional(),
+});
+type CliStartReadsFile = z.infer<typeof CliStartReadsFileSchema>;
+
+/** 启动时读的那部分的摘要，和它从什么时候起是这样的。 */
+export interface CliStartRead {
+  digest: string;
+  at: Date;
+}
+
 const ENDPOINTS_FILE = "endpoints.json";
+const CLI_START_READS_FILE = "cli-start-reads.json";
 const CLI_REWRITES_FILE = "cli-rewrites.json";
 const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
 const CODEX_AGENT_VERSIONS_FILE = "codex-agent-versions.json";
@@ -305,6 +321,19 @@ export class ApiEndpointStore {
     this.writeJson(CLI_REWRITES_FILE, CliRewritesFileSchema.parse(next));
   }
 
+  /** 上次见到的、这个 Agent 启动时读的那部分；没见过、或文件读不懂（只影响提示）为 null。 */
+  readCliStartRead(provider: ApiEndpointProvider): CliStartRead | null {
+    const entry = this.readCliStartReads()[provider];
+    if (entry === undefined) return null;
+    return { digest: entry.digest, at: new Date(entry.at) };
+  }
+
+  writeCliStartRead(input: { provider: ApiEndpointProvider; read: CliStartRead }): void {
+    const entry = { digest: input.read.digest, at: input.read.at.toISOString() };
+    const next = { ...this.readCliStartReads(), [input.provider]: entry };
+    this.writeJson(CLI_START_READS_FILE, CliStartReadsFileSchema.parse(next));
+  }
+
   readClaudeTakeover(): ClaudeTakeoverFile {
     const raw = this.readJson("takeover-claude.json");
     return raw === null ? { takeover: null, backup: null } : ClaudeTakeoverFileSchema.parse(raw);
@@ -383,6 +412,19 @@ export class ApiEndpointStore {
       throw error;
     }
     const parsed = CliRewritesFileSchema.safeParse(raw ?? {});
+    if (!parsed.success) return {};
+    return parsed.data;
+  }
+
+  private readCliStartReads(): CliStartReadsFile {
+    let raw: unknown;
+    try {
+      raw = this.readJson(CLI_START_READS_FILE);
+    } catch (error) {
+      if (error instanceof SyntaxError) return {};
+      throw error;
+    }
+    const parsed = CliStartReadsFileSchema.safeParse(raw ?? {});
     if (!parsed.success) return {};
     return parsed.data;
   }

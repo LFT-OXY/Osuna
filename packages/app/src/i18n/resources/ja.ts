@@ -2724,21 +2724,23 @@ export const ja: TranslationResources = {
             "Osuna の {{agent}} エージェント {{count}} 件：タブのメニューで「エージェントを再読み込み」してください。",
           osunaSessions_other:
             "Osuna の {{agent}} エージェント {{count}} 件：それぞれタブのメニューで「エージェントを再読み込み」してください。",
-          cli: "ターミナルのもの（{{copies}} 件、最初の起動 {{time}}）：{{agent}} を終了してもう一度起動してください。",
-          ide: "VS Code や Cursor などのエディタのもの（{{copies}} 件、最初の起動 {{time}}）：エディタのウィンドウを再読み込みしてください。",
-          app: "{{agent}} アプリ（{{time}} に起動）：ウィンドウを閉じても動き続けます。⌘Q で終了してから開き直してください。",
+          cli: "ターミナルのもの（{{copies}} 件、最初の起動は{{ago}}）：{{agent}} を終了してもう一度起動してください。",
+          ide: "VS Code や Cursor などのエディタのもの（{{copies}} 件、最初の起動は{{ago}}）：エディタのウィンドウを再読み込みしてください。",
+          app: "{{app}} アプリ（{{ago}}に起動）：ウィンドウを閉じても動き続けます。⌘Q で終了してから開き直してください。",
           embedded:
-            "{{app}} に内蔵された {{agent}}（{{time}} に起動）：{{app}} を終了して開き直してください。",
+            "{{app}} に内蔵された {{agent}}（{{ago}}に起動）：{{app}} を終了して開き直してください。",
           appServer:
-            "{{agent}} のセッションが共有するバックグラウンドの app-server（{{time}} に起動）はまだ変更前の設定です。次のコマンドで再起動してください：",
+            "バックグラウンドの app-server（{{ago}}に起動）：次のコマンドで再起動してください",
           appServerRestarted:
             "Osuna が {{agent}} のセッション共有のバックグラウンド app-server を再起動しました",
           appServerRestartedDetail:
             "使っているセッションがなかったため、新しい {{agent}} セッションには新しい設定が反映されます。{{agent}} アプリを開いている場合は、終了して開き直すと反映されます。",
           appServerRestartedLine:
             "Osuna が {{agent}} のセッション共有のバックグラウンド app-server を再起動しました（使っているセッションはありませんでした）。新しい {{agent}} セッションには新しい設定が反映されます。",
-          claudeNote:
+          liveEnv:
             "{{agent}} は新しく書き込まれた環境変数をすぐに使います。削除された変数、モデル、思考レベルはセッションを開き直すまで反映されません。",
+          justNow: "たった今",
+          gotIt: "了解",
         },
         issues: {
           updateHost:

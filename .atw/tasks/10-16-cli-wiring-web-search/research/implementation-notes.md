@@ -808,20 +808,22 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 | 做什么 | magpie | Osuna |
 | --- | --- | --- |
-| 谁算旧副本 | `StaleCopies`（`internal/agent/connectinfo.go`）：最近一次改写之前启动（差一秒内算同时）的 CLI 进程，按 `codexCopyKind` 分终端、编辑器、桌面应用、别的应用自带的；后台 app-server 与它的帮手另算 | 照搬（`reopen-hints.ts` `findStaleCopies`）；另把 daemon 自己起的子进程排除，单列「Osuna 里的会话」按提供方计数（`AgentManager.countLiveAgentsStartedBefore`，按 session 起来的时刻） |
-| 列进程 | `internal/proc` 的 `ps -A -o pid,ppid,etime,args`；Windows 只问 `codex%` 的 Win32_Process | 照搬（`host-processes.ts`），经可替换的 `HostProcesses` 适配器；28 号的代理探测也用它 |
-| 后台 app-server | `KeepCodexDaemonCurrent`（`internal/provider/codex_daemon.go`）：进程记录文件的修改时间早于改写、没有 codex 客户端连着就执行 `codex app-server daemon restart`，有就留给用户 | 同；每次改写 Codex 之后在后台查一次，读状态时也查（最多等 3 秒，一次只查一个）；重启没成与有客户端连着一样给命令 |
-| 文案 | `STALE_HOW`（`internal/gui/assets/app.js`）每类一句，`{when}` 是相对时间（「2 hours ago」） | 每类一行、同样的说法；时间按看的人的语言显示时:分（与 25 号「被绕过」一致）；命令单独一行、等宽、完整显示。Claude Code 另加一句哪些改动立刻用上（PRD 第 37 条） |
+| 改动时刻 | `changedAt`（`internal/agent/connectinfo.go`）：CLI 启动时读的那部分的摘要存进 stash，摘要不变就用记下的时刻，第一次见到的摘要取文件最近的修改时刻 | 同（`cliChangedAt`，存 `cli-start-reads.json`）。Claude Code 读 env、model 外另加思考档位的键；Codex 读顶层键、Osuna 的服务商表和 `codex-models.json`。只对 Osuna 改写过的 CLI 算 |
+| 谁算旧副本 | `StaleCopies`：改动前一秒以前启动的 CLI 进程，按 `codexCopyKind` 分类，一个应用的进程算一份 | 照搬（`findStaleCopies`），每个桌面应用的包一行（ChatGPT 与 Codex 分开）；另把 daemon 自己起的子进程排除，单列「Osuna 里的会话」按提供方计数 |
+| 列进程 | `internal/proc`，Windows 只问 `codex%` 的、不带启动时间 | 照搬（`host-processes.ts`），经可替换的 `HostProcesses` 适配器，28 号的代理探测也用它；Windows 只为后台 app-server 列（magpie #2341） |
+| 后台 app-server | `KeepCodexDaemonCurrent`：进程记录文件早于改动、没有 codex 客户端就重启，有就留给用户；改动之后和每 15 秒看一次；别的 `CODEX_HOME` 的进程按 `processCodexHome`（Linux）排除 | 同；在后台看，列表请求读上一次看到的，只有改动时刻变了、还没看过时等最多 3 秒；daemon 停下时停掉 |
+| 文案 | `STALE_HOW` 每类一句，`ago` 相对时间，「Got it」按 `staleSeen` 收起 | 同，9 种语言；命令单独一行、等宽、带「复制」，与同页安装命令一致；Claude Code 哪些改动立刻用上由 daemon 发（`claude_live_env`） |
 
 ### 要判断的地方
 
-- 测试一律不碰真实进程表与 codex：vitest 里一造真的适配器就抛错（看 `VITEST`），进程内测试 daemon 缺省给 `FakeHostProcesses`；Playwright 的 daemon 经 `daemon-upgrade-seal.mjs` 把 `ps -A` 换成打印 `PASEO_E2E_PROCESS_TABLE_PATH`、把 `app-server daemon restart` 换成以 0 退出并记录。
+- 测试一律不碰真实进程表与 codex：vitest 里一造真的适配器就抛 `RealHostProcessesInTestError`，进程内测试 daemon 缺省给 `FakeHostProcesses`；Playwright 的 daemon 经 `daemon-upgrade-seal.mjs` 把 `ps -A` 换成打印 `PASEO_E2E_PROCESS_TABLE_PATH`、把 `app-server daemon restart` 换成以 0 退出并记录。
 - 列进程、重启出错（`HostProcessesError`）只记日志、少这几行，不挡列表与改写。
-- 改写之前从没记过时间（`cli-rewrites.json` 没有这一项）的 CLI 不列任何东西，也不列进程。
+- 「知道了」只记在内存里（同 magpie），副本变了再出现。
+- 截图里「Osuna 里 2 个 Codex 会话」一行是在 WebSocket 回复里补的（daemon 真会给的形状与原文）：测试 daemon 不能起真的 codex 会话。
 
 ### 测试
 
-- 纯逻辑：`host-processes.test.ts`（etime、ps 输出）、`reopen-hints.test.ts`（分类、客户端、进程记录文件、重启三种结果）。
-- daemon 端到端 `api-endpoint-reopen-hints.e2e.test.ts`（假适配器）：改写前后启动的终端 Claude Code / Codex、没改写不列进程、Osuna 会话按提供方计数、没客户端时重启（记录到命令与 CODEX_HOME）、有客户端给命令、重启失败给命令、列不了进程不挡别的。
-- app：`reopen-hints-copy.test.ts`、`internal/agent-settings.test.ts`、`internal/host-list.test.ts`；浏览器测试「after a rewrite, the copies still on the old settings are listed…」。
+- 纯逻辑：`host-processes.test.ts`、`reopen-hints.test.ts`（分类、每个桌面应用一行、客户端、进程记录文件、别的 CODEX_HOME、重启三种结果、`cliChangedAt`、`CliReopenHints` 用注入的计时器：客户端走了之后下一次看时重启、`dispose` 停掉、同一改动不重复列进程、Claude Code 最后一条）。
+- daemon 端到端 `api-endpoint-reopen-hints.e2e.test.ts`（假适配器，整份比对）：改动前后启动的终端 Claude Code / Codex、没改写不列进程、Osuna 会话按提供方计数、没客户端时重启、有客户端给命令、重启失败给命令、「重新应用」不改内容时改动时刻不动、列不了进程不挡别的。
+- app：`reopen-hints-copy.test.ts`（含中文的「多久之前」）、`internal/agent-settings.test.ts`、`internal/host-list.test.ts`；浏览器测试「after a rewrite, the copies still on the old settings are listed…」（含「知道了」）。
 - 截图（无头 Chromium、临时 HOME、假进程表）：`screenshots/27-codex-page_reopen-hints_{desktop-1280,compact-390}_{en,zh}.png`。

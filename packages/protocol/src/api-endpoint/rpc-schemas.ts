@@ -213,12 +213,13 @@ export const ApiEndpointAgentIssueSchema = z.object({
 export type ApiEndpointAgentIssue = z.infer<typeof ApiEndpointAgentIssueSchema>;
 
 /**
- * 提示区里一类还在用旧设置、要重开才用上新设置的副本（PRD 第 36 条），读状态时查。`kind` 是字符串，app 按它翻译，
- * 认不出的照 `message`（英文）显示：osuna_sessions（count：Osuna 里在最近一次改写之前启动、还在运行的会话）；
- * cli、ide、app、embedded（count，since：其中最早的启动时间，ISO；embedded 另有 app：带这个 CLI 的应用名）：
- * 最近一次改写之前启动的终端、编辑器、桌面应用、别的应用自带的 CLI 进程；
- * app_server（since、command：Codex 共用的后台 app-server 早于改写启动，有客户端连着或自动重启没成，要用户执行 command）；
- * app_server_restarted（since：Osuna 已重启那个 app-server）。后面可能加新的 kind。
+ * 提示区里一类还在用旧设置、要重开才用上新设置的副本（PRD 第 36 条）。`kind` 是字符串，app 按它翻译，
+ * 认不出的、缺了该有的字段的照 `message`（英文）显示：osuna_sessions（count：Osuna 里在 CLI 启动时读的那部分
+ * 最近一次变了之前启动、还在运行的会话）；cli、ide（count，since：其中最早的启动时间，ISO）：终端、编辑器里的 CLI；
+ * app、embedded（count，since，app：桌面应用或自带这个 CLI 的应用名，每个应用一行）；
+ * app_server（since、command：Codex 共用的后台 app-server 早于改动启动，有客户端连着或自动重启没成，要用户执行 command）；
+ * app_server_restarted（since：Osuna 已重启那个 app-server）；claude_live_env（Claude Code 哪些改动正在跑的会话立刻用上，
+ * 有要重开的才发）。后面可能加新的 kind。
  */
 export const ApiEndpointReopenHintSchema = z.object({
   kind: z.string(),

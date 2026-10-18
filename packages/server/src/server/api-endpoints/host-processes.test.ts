@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { createSystemHostProcesses, parseElapsed, parseProcessList } from "./host-processes.js";
+import {
+  createSystemHostProcesses,
+  parseElapsed,
+  parseProcessList,
+  RealHostProcessesInTestError,
+} from "./host-processes.js";
 
 const NOW = new Date("2026-10-19T10:00:00.000Z");
 
@@ -63,8 +68,6 @@ describe("parseProcessList", () => {
 
 describe("createSystemHostProcesses", () => {
   test("refuses to be made inside a test run", () => {
-    expect(() => createSystemHostProcesses()).toThrow(
-      "The real process table and commands are never used in tests: pass a fake HostProcesses",
-    );
+    expect(() => createSystemHostProcesses()).toThrow(RealHostProcessesInTestError);
   });
 });

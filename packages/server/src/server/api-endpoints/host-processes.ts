@@ -1,7 +1,10 @@
 // 列进程的读法（ps 的 etime 与 PowerShell 的 Win32_Process）移植自 magpie（https://github.com/yetone/magpie，
-// internal/proc/list.go、list_other.go、list_windows.go 的 List 与 parseList，internal/agent/connectinfo.go 的 running 与 elapsed）
+// internal/proc/list.go、list_other.go、list_windows.go 的 List 与 parseList，internal/agent/connectinfo.go 的 running 与 elapsed），
+// 读进程的 CODEX_HOME 移植自 internal/provider/codex_daemon.go 的 processCodexHome
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { readFile } from "node:fs/promises";
+import { isErrnoException } from "../../utils/errno.js";
 import { spawnProcess } from "../../utils/spawn.js";
 
 /*
@@ -19,10 +22,14 @@ export interface HostProcess {
   commandLine: string;
 }
 
-export interface HostCommand {
+/** 一个程序：可执行文件、前置参数与环境。 */
+export interface HostProgram {
   command: string;
   args: string[];
   env: NodeJS.ProcessEnv;
+}
+
+export interface HostCommand extends HostProgram {
   timeoutMs: number;
 }
 
@@ -33,17 +40,29 @@ export interface HostCommandResult {
 }
 
 export interface HostProcesses {
+  // 列出的进程带不带启动时间（Windows 的不带）：不带时只为查 Codex 的后台 app-server 才列（magpie #2341）。
+  readonly reportsStartTimes: boolean;
   /** 本机在跑的进程；问不到系统时抛 HostProcessesError，不是「什么都没在跑」。 */
   list(): Promise<HostProcess[]>;
+  /** 进程启动时的 CODEX_HOME；读不到（只有 Linux 读得到自己用户的）或没设为 null。 */
+  readCodexHome(pid: number): Promise<string | null>;
   /** 执行一条命令直到它退出；起不来或超时抛 HostProcessesError，退出码不是 0 照常返回。 */
   run(command: HostCommand): Promise<HostCommandResult>;
 }
 
 /** 适配器没办成：起不来、超时、问不到系统。调用方当作这次查不到，不挡别的事。 */
 export class HostProcessesError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  constructor(input: { message: string; cause?: unknown }) {
+    super(input.message, { cause: input.cause });
     this.name = "HostProcessesError";
+  }
+}
+
+/** 测试里造了真的适配器：用例要传假的。 */
+export class RealHostProcessesInTestError extends Error {
+  constructor() {
+    super("The real process table and commands are never used in tests: pass a fake HostProcesses");
+    this.name = "RealHostProcessesInTestError";
   }
 }
 
@@ -110,13 +129,11 @@ function parseWindowsProcessList(output: string): HostProcess[] {
  * 测试里（vitest 设了 VITEST）一造就抛错。
  */
 export function createSystemHostProcesses(): HostProcesses {
-  if (process.env.VITEST) {
-    throw new Error(
-      "The real process table and commands are never used in tests: pass a fake HostProcesses",
-    );
-  }
+  if (process.env.VITEST) throw new RealHostProcessesInTestError();
   const isWindows = process.platform === "win32";
   return {
+    reportsStartTimes: !isWindows,
+    readCodexHome: readLinuxCodexHome,
     async list() {
       if (isWindows) {
         const result = await runCommand({
@@ -146,11 +163,26 @@ export function createSystemHostProcesses(): HostProcesses {
   };
 }
 
+/** Linux 上读 /proc/<pid>/environ 里的 CODEX_HOME；别的系统、别人的进程读不到，为 null。 */
+async function readLinuxCodexHome(pid: number): Promise<string | null> {
+  if (process.platform !== "linux") return null;
+  let environ: string;
+  try {
+    environ = await readFile(`/proc/${pid}/environ`, "utf8");
+  } catch (error) {
+    if (isErrnoException(error)) return null;
+    throw error;
+  }
+  const entry = environ.split("\0").find((pair) => pair.startsWith("CODEX_HOME="));
+  if (entry === undefined) return null;
+  return entry.slice("CODEX_HOME=".length) || null;
+}
+
 function requireSuccess(input: { name: string; result: HostCommandResult }): void {
   if (input.result.exitCode !== 0) {
-    throw new HostProcessesError(
-      `${input.name} failed (exit ${input.result.exitCode}): ${lastLine(input.result.output)}`,
-    );
+    throw new HostProcessesError({
+      message: `${input.name} failed (exit ${input.result.exitCode}): ${lastLine(input.result.output)}`,
+    });
   }
 }
 
@@ -182,12 +214,17 @@ function runCommand(command: HostCommand): Promise<HostCommandResult> {
     child.stderr?.on("data", keep(stderr));
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new HostProcessesError(`${command.command} didn't finish in ${command.timeoutMs} ms`));
+      reject(
+        new HostProcessesError({
+          message: `${command.command} didn't finish in ${command.timeoutMs} ms`,
+        }),
+      );
     }, command.timeoutMs);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(
-        new HostProcessesError(`${command.command} didn't start: ${error.message}`, {
+        new HostProcessesError({
+          message: `${command.command} didn't start: ${error.message}`,
           cause: error,
         }),
       );
