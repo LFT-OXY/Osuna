@@ -166,6 +166,7 @@ describe("applyClaudeApiEndpoint", () => {
       webSearchDeny: { added: true, permissionsCreated: true, denyCreated: true },
       modelPicker: { written: null },
       hintEnv: {},
+      clouds: {},
     });
   });
 
@@ -816,6 +817,90 @@ describe("settings.json read and written as JSONC", () => {
       kind: "unparsable",
       message: "CommaExpected at line 3, column 3",
       reason: { code: "syntax", line: 3, column: 3 },
+    });
+  });
+});
+
+describe("cloud-platform switches in settings.json", () => {
+  const WITH_CLOUDS = `{
+  "env": {
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "CLAUDE_CODE_USE_VERTEX": "0",
+    "CLAUDE_CODE_USE_FOUNDRY": true,
+    "AWS_REGION": "us-east-1"
+  }
+}
+`;
+
+  function envOf(text: string): Record<string, unknown> {
+    return (JSON.parse(text) as { env: Record<string, unknown> }).env;
+  }
+
+  it("takes out the switches that are on, leaves the ones that are off and the other cloud variables", () => {
+    const { text } = apply(WITH_CLOUDS);
+    const env = envOf(text);
+    expect(env).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    expect(env).not.toHaveProperty("CLAUDE_CODE_USE_FOUNDRY");
+    expect(env.CLAUDE_CODE_USE_VERTEX).toBe("0");
+    expect(env.AWS_REGION).toBe("us-east-1");
+  });
+
+  it("reads yes, on and TRUE as on, and an empty value as off", () => {
+    const { text } = apply(`{
+  "env": {
+    "CLAUDE_CODE_USE_MANTLE": " Yes ",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS": "on",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD": "TRUE",
+    "CLAUDE_CODE_USE_BEDROCK": ""
+  }
+}
+`);
+    expect(envOf(text)).toMatchObject({ CLAUDE_CODE_USE_BEDROCK: "" });
+    expect(Object.keys(envOf(text)).filter((key) => key.startsWith("CLAUDE_CODE_USE_"))).toEqual([
+      "CLAUDE_CODE_USE_BEDROCK",
+    ]);
+  });
+
+  it("puts the switches back as they were written on Official", () => {
+    const { text, takeover } = apply(WITH_CLOUDS);
+    const restored = restoreClaudeOfficial({ text, takeover });
+    if (restored.kind !== "patched") throw new Error(restored.kind);
+    expect(JSON.parse(restored.text)).toEqual(JSON.parse(WITH_CLOUDS));
+  });
+
+  it("keeps a switch the user set again while the switch was on", () => {
+    const { text, takeover } = apply(WITH_CLOUDS);
+    const edited = text.replace('"env": {', '"env": {\n    "CLAUDE_CODE_USE_BEDROCK": "true",');
+    const restored = restoreClaudeOfficial({ text: edited, takeover });
+    if (restored.kind !== "patched") throw new Error(restored.kind);
+    expect(envOf(restored.text).CLAUDE_CODE_USE_BEDROCK).toBe("true");
+    expect(envOf(restored.text).CLAUDE_CODE_USE_FOUNDRY).toBe(true);
+  });
+
+  it("takes out a switch the user turned on again since, and keeps the first value it took out", () => {
+    const first = apply(WITH_CLOUDS);
+    const edited = first.text.replace(
+      '"env": {',
+      '"env": {\n    "CLAUDE_CODE_USE_MANTLE": "1",\n    "CLAUDE_CODE_USE_BEDROCK": "yes",',
+    );
+    const second = apply(edited, first.takeover);
+    expect(envOf(second.text)).not.toHaveProperty("CLAUDE_CODE_USE_MANTLE");
+    expect(envOf(second.text)).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    const restored = restoreClaudeOfficial({ text: second.text, takeover: second.takeover });
+    if (restored.kind !== "patched") throw new Error(restored.kind);
+    expect(envOf(restored.text)).toMatchObject({
+      CLAUDE_CODE_USE_BEDROCK: "yes",
+      CLAUDE_CODE_USE_MANTLE: "1",
+      CLAUDE_CODE_USE_FOUNDRY: true,
+    });
+  });
+
+  it("puts back nothing for a record from before switches were taken out", () => {
+    const { text, takeover } = apply(USER_SETTINGS);
+    const { clouds: _clouds, ...oldRecord } = takeover;
+    expect(restoreClaudeOfficial({ text, takeover: oldRecord })).toEqual({
+      kind: "patched",
+      text: USER_SETTINGS,
     });
   });
 });

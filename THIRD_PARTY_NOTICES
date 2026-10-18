@@ -446,6 +446,18 @@ writePicker and dropPicker in magpie's internal/agent/claude.go:
 
   packages/server/src/server/api-endpoints/claude-settings-patch.ts
 
+Claude Code's cloud-platform switches (which ones, the clouds they name, which
+values count as on, taking the ones that are on out of settings.json and
+putting them back unless the user set them again, and finding where one is set:
+managed settings, settings.json, ~/.claude.json, then the login shell) follow
+claudeClouds, claudeSwitchOn, claudeCloud, dropClouds and putClouds in magpie's
+internal/agent/claude.go and ClaudeProviders in internal/agentenv/agentenv.go;
+reporting a managed ANTHROPIC_BASE_URL that wins over the gateway follows
+Check in claude.go:
+
+  packages/server/src/server/api-endpoints/claude-cloud-switches.ts
+  packages/server/src/server/api-endpoints/claude-settings-patch.ts
+
 What Claude Code is told about an endpoint model it doesn't know (the [1m]
 mark, CLAUDE_CODE_MAX_CONTEXT_TOKENS, CLAUDE_CODE_MAX_OUTPUT_TOKENS,
 CLAUDE_CODE_MODEL_CAPABILITIES, and leaving a value the user set alone)

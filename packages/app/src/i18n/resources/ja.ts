@@ -2652,6 +2652,27 @@ export const ja: TranslationResources = {
             "{{file}} にコメントか末尾のカンマがあります。Osuna は変更を書き込みましたが、{{agent}} はファイル全体を読み飛ばします。ターミナルでは設定エラーが表示され、Osuna の Claude チャットはサードパーティ API を通らず公式に直接つながります。コメントを消せば元に戻ります。",
           settingsHasCommentsFix:
             "ファイル内の // と /* */ のコメントと、閉じの } や ] の直前にあるカンマをすべて消して保存してください。Osuna の変更はそのまま残ります。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
+          cloudSwitchOn: "{{agent}} のリクエストはゲートウェイを通らず {{cloud}} に送られています",
+          cloudSwitchOnManagedDetail:
+            "{{agent}} の管理設定（{{file}}）で {{key}} がオンになっています。管理設定はこのコンピューターの管理者が配布するもので、あなた自身の設定より優先されるため、Osuna では外せません。",
+          cloudSwitchOnManagedFix:
+            "このコンピューターの管理者に、{{agent}} の管理設定から {{key}} を削除するか 0 にするよう依頼してください。このファイルの変更には管理者権限が必要です。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}} の env で {{key}} がオンになっています。Osuna はこのファイルを変更しません。",
+          cloudSwitchOnGlobalConfigFix:
+            "{{file}} を開き、「env」から「{{key}}」を削除して保存してください。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
+          cloudSwitchOnShellDetail:
+            "シェルの環境で {{key}} が設定されています。Osuna もターミナルで開く {{agent}} もここから受け取ります。",
+          cloudSwitchOnShellFix:
+            "シェルの設定ファイル（~/.zshrc や ~/.bashrc など）から {{key}} を設定している行を削除してください。そのあと Osuna とターミナルを終了して開き直し、Osuna では Claude チャットを新しく始めてください。",
+          cloudSwitchOnSettingsDetail:
+            "{{file}} で {{key}} が再びオンになっています。「再適用」で外せます。",
+          managedBaseUrl:
+            "{{agent}} はゲートウェイを経由していません：管理設定に別のアドレスがあります",
+          managedBaseUrlDetail:
+            "{{agent}} の管理設定（{{file}}）で ANTHROPIC_BASE_URL が {{url}} になっています。管理設定は Osuna が書き込むゲートウェイのアドレスより優先されます。",
+          managedBaseUrlFix:
+            "このコンピューターの管理者に、{{agent}} の管理設定から ANTHROPIC_BASE_URL を削除するよう依頼してください。このファイルの変更には管理者権限が必要です。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
           howToFix: "直し方",
           codexProfileOverride:
             "Codex のプロファイル「{{profile}}」がサードパーティ API を上書きしています",

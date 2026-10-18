@@ -2682,6 +2682,27 @@ export const es: TranslationResources = {
             "{{file}} tiene comentarios o comas finales. Osuna aplicó sus cambios igualmente, pero {{agent}} ignora el archivo entero: en la terminal muestra un error de ajustes, y los chats de Claude en Osuna van a la API oficial en lugar de a tus endpoints de API. Se arregla al quitar los comentarios.",
           settingsHasCommentsFix:
             "Borra todos los comentarios // y /* */ del archivo y cualquier coma justo antes de un } o ] de cierre, y guarda. Los cambios de Osuna se mantienen. Después vuelve a abrir {{agent}} en la terminal e inicia chats nuevos de Claude en Osuna.",
+          cloudSwitchOn: "{{agent}} envía sus solicitudes a {{cloud}}, no por la pasarela",
+          cloudSwitchOnManagedDetail:
+            "La configuración administrada de {{agent}} ({{file}}) activa {{key}}. La configuración administrada la pone quien administra este equipo y tiene prioridad sobre la tuya, así que Osuna no puede quitarla.",
+          cloudSwitchOnManagedFix:
+            "Pide a quien administra este equipo que quite {{key}} de la configuración administrada de {{agent}} o que lo ponga en 0. Cambiar ese archivo requiere permisos de administrador. Después vuelve a abrir {{agent}} en la terminal e inicia chats nuevos de Claude en Osuna.",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}} activa {{key}} en su env. Osuna no cambia este archivo.",
+          cloudSwitchOnGlobalConfigFix:
+            'Abre {{file}}, borra "{{key}}" del bloque "env" y guarda. Después vuelve a abrir {{agent}} en la terminal e inicia chats nuevos de Claude en Osuna.',
+          cloudSwitchOnShellDetail:
+            "{{key}} está definida en el entorno de tu shell. Osuna y el {{agent}} que abres en la terminal la toman de ahí.",
+          cloudSwitchOnShellFix:
+            "Quita la línea que define {{key}} del perfil de tu shell, como ~/.zshrc o ~/.bashrc. Después cierra y vuelve a abrir Osuna y la terminal, e inicia chats nuevos de Claude en Osuna.",
+          cloudSwitchOnSettingsDetail:
+            "{{file}} vuelve a activar {{key}}. Aplicar de nuevo lo quita.",
+          managedBaseUrl:
+            "{{agent}} no pasa por la pasarela: su configuración administrada fija otra dirección",
+          managedBaseUrlDetail:
+            "La configuración administrada de {{agent}} ({{file}}) fija ANTHROPIC_BASE_URL en {{url}}. La configuración administrada tiene prioridad sobre la dirección de la pasarela que escribe Osuna.",
+          managedBaseUrlFix:
+            "Pide a quien administra este equipo que quite ANTHROPIC_BASE_URL de la configuración administrada de {{agent}}. Cambiar ese archivo requiere permisos de administrador. Después vuelve a abrir {{agent}} en la terminal e inicia chats nuevos de Claude en Osuna.",
           howToFix: "Cómo arreglarlo",
           codexProfileOverride: 'El perfil "{{profile}}" de Codex se impone a los endpoints de API',
           codexProfileOverrideDetail:

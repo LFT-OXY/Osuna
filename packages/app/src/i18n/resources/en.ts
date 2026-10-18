@@ -2687,6 +2687,26 @@ export const en = {
             "{{file}} has comments or trailing commas. Osuna made its changes anyway, but {{agent}} skips the whole file: in the terminal it shows a settings error, and Claude chats in Osuna go to the official API instead of your API endpoints. This goes away once the comments are removed.",
           settingsHasCommentsFix:
             "Delete every // and /* */ comment in the file, and any comma right before a closing } or ], then save. Osuna's changes stay. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
+          cloudSwitchOn: "{{agent}} sends its requests to {{cloud}}, not through the gateway",
+          cloudSwitchOnManagedDetail:
+            "{{agent}}'s managed settings ({{file}}) turn on {{key}}. Managed settings are set by whoever manages this computer and win over your own, so Osuna can't take it out.",
+          cloudSwitchOnManagedFix:
+            "Ask whoever manages this computer to remove {{key}} from {{agent}}'s managed settings, or set it to 0. Changing that file needs administrator rights. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}} turns on {{key}} in its env. Osuna doesn't change this file.",
+          cloudSwitchOnGlobalConfigFix:
+            'Open {{file}}, delete "{{key}}" from its "env" block, and save. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.',
+          cloudSwitchOnShellDetail:
+            "{{key}} is set in your shell's environment. Osuna and the {{agent}} you start in the terminal both get it from there.",
+          cloudSwitchOnShellFix:
+            "Remove the line that sets {{key}} from your shell profile, such as ~/.zshrc or ~/.bashrc. Then quit and reopen Osuna and your terminal, and start new Claude chats in Osuna.",
+          cloudSwitchOnSettingsDetail: "{{file}} turns on {{key}} again. Apply again takes it out.",
+          managedBaseUrl:
+            "{{agent}} doesn't go through the gateway: its managed settings set another address",
+          managedBaseUrlDetail:
+            "{{agent}}'s managed settings ({{file}}) set ANTHROPIC_BASE_URL to {{url}}. Managed settings win over the gateway address Osuna writes.",
+          managedBaseUrlFix:
+            "Ask whoever manages this computer to remove ANTHROPIC_BASE_URL from {{agent}}'s managed settings. Changing that file needs administrator rights. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
           howToFix: "How to fix",
           codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
           codexProfileOverrideDetail:

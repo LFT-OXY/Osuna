@@ -2647,6 +2647,24 @@ export const zhCN: TranslationResources = {
             "{{file}} 里有注释或尾随逗号。Osuna 照样改好了，但 {{agent}} 会跳过整份文件：终端里会弹出配置错误，Osuna 里的 Claude 对话会直接走官方，不经过你的第三方接口。删掉注释后恢复。",
           settingsHasCommentsFix:
             "删掉文件里所有 // 和 /* */ 注释，以及紧挨着 } 或 ] 前面的逗号，然后保存。Osuna 的改动会留着。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
+          cloudSwitchOn: "{{agent}} 的请求发往 {{cloud}}，不经过中转站",
+          cloudSwitchOnManagedDetail:
+            "{{agent}} 的托管设置（{{file}}）打开了 {{key}}。托管设置由这台电脑的管理员下发，会盖过你自己的设置，Osuna 拿不掉它。",
+          cloudSwitchOnManagedFix:
+            "请这台电脑的管理员从 {{agent}} 的托管设置里删掉 {{key}}，或改成 0。改这份文件需要管理员权限。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
+          cloudSwitchOnGlobalConfigDetail: "{{file}} 的 env 里打开了 {{key}}。Osuna 不改这份文件。",
+          cloudSwitchOnGlobalConfigFix:
+            "打开 {{file}}，从「env」里删掉「{{key}}」，然后保存。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
+          cloudSwitchOnShellDetail:
+            "你的 shell 环境里设了 {{key}}。Osuna 和你在终端里打开的 {{agent}} 都从这里拿到它。",
+          cloudSwitchOnShellFix:
+            "从 shell 的配置文件（如 ~/.zshrc 或 ~/.bashrc）里删掉设置 {{key}} 的那一行。之后退出并重新打开 Osuna 和终端，在 Osuna 里新开 Claude 对话。",
+          cloudSwitchOnSettingsDetail: "{{file}} 又打开了 {{key}}。点「重新应用」会再拿掉它。",
+          managedBaseUrl: "{{agent}} 不经过中转站：托管设置写了别的地址",
+          managedBaseUrlDetail:
+            "{{agent}} 的托管设置（{{file}}）把 ANTHROPIC_BASE_URL 设成了 {{url}}。托管设置会盖过 Osuna 写的中转站地址。",
+          managedBaseUrlFix:
+            "请这台电脑的管理员从 {{agent}} 的托管设置里删掉 ANTHROPIC_BASE_URL。改这份文件需要管理员权限。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
           howToFix: "如何修复",
           codexProfileOverride: "Codex 的 profile「{{profile}}」盖过了第三方接口",
           codexProfileOverrideDetail:

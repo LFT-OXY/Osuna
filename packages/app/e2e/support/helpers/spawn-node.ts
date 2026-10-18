@@ -1,5 +1,6 @@
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { once } from "node:events";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -9,13 +10,32 @@ import { pathToFileURL } from "node:url";
  */
 const UPGRADE_SEAL_PATH = path.resolve(__dirname, "../daemon-upgrade-seal.mjs");
 
+/*
+ * 同一处还挡住 Claude Code 的托管设置与云平台开关：测试 daemon 的 env 来自跑测试的终端，
+ * 不能读到本机真实的托管设置目录，也不能带上开发者 shell 里的 CLAUDE_CODE_USE_*。
+ * 用例要托管设置时自己传 PASEO_CLAUDE_MANAGED_SETTINGS_DIR。
+ */
+const NO_CLAUDE_MANAGED_SETTINGS_DIR = path.join(
+  os.tmpdir(),
+  "paseo-e2e-no-claude-managed-settings",
+);
+
 export function withUpgradeSeal(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
   const base = env ?? process.env;
   const seal = `--import ${pathToFileURL(UPGRADE_SEAL_PATH).href}`;
   const nodeOptions = base.NODE_OPTIONS?.includes(seal)
     ? base.NODE_OPTIONS
     : [base.NODE_OPTIONS, seal].filter(Boolean).join(" ");
-  return { ...base, NODE_OPTIONS: nodeOptions };
+  const sealed: NodeJS.ProcessEnv = {
+    ...base,
+    NODE_OPTIONS: nodeOptions,
+    PASEO_CLAUDE_MANAGED_SETTINGS_DIR:
+      base.PASEO_CLAUDE_MANAGED_SETTINGS_DIR ?? NO_CLAUDE_MANAGED_SETTINGS_DIR,
+  };
+  for (const key of Object.keys(sealed)) {
+    if (key.startsWith("CLAUDE_CODE_USE_")) delete sealed[key];
+  }
+  return sealed;
 }
 
 /**

@@ -170,6 +170,32 @@ describe("the settings issues on an agent page", () => {
     ]);
   });
 
+  it("offers fix steps with Switch to official and Keep current for a bypass Osuna can't undo", () => {
+    const issue = (source: string) => ({
+      code: "cloud_switch_on",
+      params: { source, key: "CLAUDE_CODE_USE_BEDROCK", cloud: "Amazon Bedrock" },
+      message: "cloud",
+    });
+    const result = view({
+      endpoints: [],
+      agentIssues: {
+        claude: [
+          { code: "managed_base_url", params: { file: "f", url: "u" }, message: "managed" },
+          issue("managed"),
+          issue("shell"),
+          issue("settings"),
+        ],
+      },
+    });
+    expect(result.issues.map((item) => [item.kind, item.actions, item.hasFixSteps])).toEqual([
+      ["managedBaseUrl", ["switchToOfficial", "keepCurrent"], true],
+      ["cloudSwitchOn", ["switchToOfficial", "keepCurrent"], true],
+      ["cloudSwitchOn", ["switchToOfficial", "keepCurrent"], true],
+      // 又写回 settings.json 的：重新应用会再拿掉它。
+      ["cloudSwitchOn", ["reapply", "switchToOfficial", "keepCurrent"], false],
+    ]);
+  });
+
   it("offers fix steps, not actions, for a settings file with comments", () => {
     const result = view({
       endpoints: [],

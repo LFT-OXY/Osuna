@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
@@ -44,6 +44,8 @@ test.use({
   e2eDaemonEnvironment: {
     CLAUDE_CONFIG_DIR: path.join(cliHome, "claude"),
     CODEX_HOME: path.join(cliHome, "codex"),
+    // Claude Code 的托管设置也指到临时目录。
+    PASEO_CLAUDE_MANAGED_SETTINGS_DIR: path.join(cliHome, "managed"),
   },
 });
 
@@ -1018,6 +1020,48 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
     } finally {
       await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
       await writeFile(settingsPath, "{}\n");
+    }
+  });
+
+  test("a cloud-platform switch in the managed settings says where it is set and how to fix it", async ({
+    page,
+  }) => {
+    const managedFile = path.join(cliHome, "managed", "managed-settings.json");
+    await mkdir(path.dirname(managedFile), { recursive: true });
+    await writeFile(managedFile, JSON.stringify({ env: { CLAUDE_CODE_USE_BEDROCK: "1" } }));
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    try {
+      const on = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+      expect(on.error).toBeNull();
+
+      await openClaudeCodePage(page);
+      const notice = issue(page, "cloudSwitchOn");
+      await expect(notice).toContainText(
+        "Claude sends its requests to Amazon Bedrock, not through the gateway",
+      );
+      await expect(notice).toContainText(
+        `Claude's managed settings (${managedFile}) turn on CLAUDE_CODE_USE_BEDROCK.`,
+      );
+      await expect(issueButton(page, "reapply")).toHaveCount(0);
+      await expect(issueButton(page, "switchToOfficial")).toBeVisible();
+      await notice.getByRole("button", { name: "How to fix" }).click();
+      await expect(notice.getByTestId("agent-api-endpoints-issue-fix-steps")).toContainText(
+        "Ask whoever manages this computer to remove CLAUDE_CODE_USE_BEDROCK",
+      );
+
+      await test.step("once the administrator takes it out, the notice goes", async () => {
+        await writeFile(managedFile, JSON.stringify({ env: {} }));
+        await openClaudeCodePage(page);
+        await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+        await expect(issue(page, "cloudSwitchOn")).toHaveCount(0);
+      });
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await rm(path.dirname(managedFile), { recursive: true, force: true });
     }
   });
 

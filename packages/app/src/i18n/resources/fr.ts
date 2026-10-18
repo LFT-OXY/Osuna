@@ -2684,6 +2684,26 @@ export const fr: TranslationResources = {
             "{{file}} contient des commentaires ou des virgules finales. Osuna a quand même fait ses modifications, mais {{agent}} ignore tout le fichier : dans le terminal il affiche une erreur de réglages, et les discussions Claude dans Osuna passent par l'API officielle au lieu de vos points d'accès API. Tout rentre dans l'ordre une fois les commentaires supprimés.",
           settingsHasCommentsFix:
             "Supprimez tous les commentaires // et /* */ du fichier ainsi que toute virgule placée juste avant un } ou un ] fermant, puis enregistrez. Les modifications d'Osuna restent en place. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
+          cloudSwitchOn: "{{agent}} envoie ses requêtes à {{cloud}}, pas par la passerelle",
+          cloudSwitchOnManagedDetail:
+            "Les réglages gérés de {{agent}} ({{file}}) activent {{key}}. Les réglages gérés sont imposés par l'administrateur de cet ordinateur et l'emportent sur les vôtres : Osuna ne peut pas le retirer.",
+          cloudSwitchOnManagedFix:
+            "Demandez à l'administrateur de cet ordinateur de retirer {{key}} des réglages gérés de {{agent}}, ou de le mettre à 0. Modifier ce fichier demande des droits d'administrateur. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}} active {{key}} dans son env. Osuna ne modifie pas ce fichier.",
+          cloudSwitchOnGlobalConfigFix:
+            "Ouvrez {{file}}, supprimez « {{key}} » du bloc « env » et enregistrez. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
+          cloudSwitchOnShellDetail:
+            "{{key}} est défini dans l'environnement de votre shell. Osuna et le {{agent}} que vous lancez dans le terminal le reçoivent de là.",
+          cloudSwitchOnShellFix:
+            "Supprimez la ligne qui définit {{key}} dans le profil de votre shell, par exemple ~/.zshrc ou ~/.bashrc. Quittez et rouvrez ensuite Osuna et votre terminal, puis ouvrez de nouvelles discussions Claude dans Osuna.",
+          cloudSwitchOnSettingsDetail: "{{file}} réactive {{key}}. Réappliquer le retire.",
+          managedBaseUrl:
+            "{{agent}} ne passe pas par la passerelle : ses réglages gérés imposent une autre adresse",
+          managedBaseUrlDetail:
+            "Les réglages gérés de {{agent}} ({{file}}) fixent ANTHROPIC_BASE_URL à {{url}}. Les réglages gérés l'emportent sur l'adresse de la passerelle qu'écrit Osuna.",
+          managedBaseUrlFix:
+            "Demandez à l'administrateur de cet ordinateur de retirer ANTHROPIC_BASE_URL des réglages gérés de {{agent}}. Modifier ce fichier demande des droits d'administrateur. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
           howToFix: "Comment corriger",
           codexProfileOverride:
             "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",

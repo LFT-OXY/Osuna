@@ -86,6 +86,10 @@ function IssueBlock({
   onAction: (action: AgentIssueAction) => void;
 }) {
   const { title, description, fixSteps } = useIssueCopy(providerLabel, issue);
+  const [isFixOpen, setIsFixOpen] = useState(false);
+  const toggleFix = useCallback(() => setIsFixOpen((open) => !open), []);
+  const steps = issue.hasFixSteps ? fixSteps : undefined;
+  const hasButtons = steps !== undefined || issue.actions.length > 0;
   return (
     <Alert
       variant="warning"
@@ -94,17 +98,27 @@ function IssueBlock({
       description={description}
       testID={`agent-api-endpoints-issue-${issue.kind}`}
     >
-      {issue.hasFixSteps && fixSteps ? <FixStepsDisclosure steps={fixSteps} /> : null}
-      {issue.actions.length > 0 ? (
-        <View style={styles.actions}>
-          {issue.actions.map((action) => (
-            <IssueActionButton
-              key={action}
-              action={action}
-              pendingAction={pendingAction}
-              onAction={onAction}
-            />
-          ))}
+      {hasButtons ? (
+        // 「如何修复」和处理按钮同一排，展开的步骤占满下面一整行。
+        <View style={styles.fix}>
+          <View style={styles.actions}>
+            {steps !== undefined ? (
+              <HowToFixButton isOpen={isFixOpen} onToggle={toggleFix} />
+            ) : null}
+            {issue.actions.map((action) => (
+              <IssueActionButton
+                key={action}
+                action={action}
+                pendingAction={pendingAction}
+                onAction={onAction}
+              />
+            ))}
+          </View>
+          {steps !== undefined && isFixOpen ? (
+            <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
+              {steps}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </Alert>
@@ -112,10 +126,8 @@ function IssueBlock({
 }
 
 /** 「如何修复」：点一下展开修复步骤，再点收起；箭头朝右是收着，朝下是展开（同 SettingsCollapsibleRow）。 */
-function FixStepsDisclosure({ steps }: { steps: string }) {
+function HowToFixButton({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
-  const toggle = useCallback(() => setIsOpen((open) => !open), []);
   const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
   // React Native Web 不会把 accessibilityState.expanded 映射成 aria-expanded。
   const webExpandedProps = useMemo(
@@ -132,26 +144,17 @@ function FixStepsDisclosure({ steps }: { steps: string }) {
     [chevronStyle],
   );
   return (
-    <View style={styles.fix}>
-      <View style={styles.actions}>
-        <Button
-          {...webExpandedProps}
-          variant="outline"
-          size="sm"
-          onPress={toggle}
-          accessibilityState={accessibilityState}
-          trailing={chevron}
-          testID="agent-api-endpoints-issue-how-to-fix"
-        >
-          {t("settings.apiEndpoints.agent.issues.howToFix")}
-        </Button>
-      </View>
-      {isOpen ? (
-        <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
-          {steps}
-        </Text>
-      ) : null}
-    </View>
+    <Button
+      {...webExpandedProps}
+      variant="outline"
+      size="sm"
+      onPress={onToggle}
+      accessibilityState={accessibilityState}
+      trailing={chevron}
+      testID="agent-api-endpoints-issue-how-to-fix"
+    >
+      {t("settings.apiEndpoints.agent.issues.howToFix")}
+    </Button>
   );
 }
 
@@ -252,6 +255,20 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           agent: providerLabel,
         }),
       };
+    case "cloudSwitchOn":
+      return cloudSwitchCopy({ t, providerLabel, issue });
+    case "managedBaseUrl":
+      return {
+        title: t("settings.apiEndpoints.agent.issues.managedBaseUrl", { agent: providerLabel }),
+        description: t("settings.apiEndpoints.agent.issues.managedBaseUrlDetail", {
+          agent: providerLabel,
+          file: params.file,
+          url: params.url,
+        }),
+        fixSteps: t("settings.apiEndpoints.agent.issues.managedBaseUrlFix", {
+          agent: providerLabel,
+        }),
+      };
     case "codexProfileOverride":
       return {
         title: t("settings.apiEndpoints.agent.issues.codexProfileOverride", {
@@ -265,6 +282,55 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
       };
     case "unknown":
       return { title: issue.message };
+  }
+}
+
+type Translate = ReturnType<typeof useTranslation>["t"];
+
+/** 云平台开关：标题一样，说明与修复步骤按写在哪（params.source）。认不出的来源照主机原文。 */
+function cloudSwitchCopy(input: {
+  t: Translate;
+  providerLabel: string;
+  issue: AgentIssueView;
+}): IssueCopy {
+  const { t, providerLabel, issue } = input;
+  const { params } = issue;
+  const values = {
+    agent: providerLabel,
+    cloud: params.cloud,
+    key: params.key,
+    file: params.file ? shortenPath(params.file) : "",
+  };
+  const title = t("settings.apiEndpoints.agent.issues.cloudSwitchOn", values);
+  switch (params.source) {
+    case "managed":
+      return {
+        title,
+        description: t("settings.apiEndpoints.agent.issues.cloudSwitchOnManagedDetail", values),
+        fixSteps: t("settings.apiEndpoints.agent.issues.cloudSwitchOnManagedFix", values),
+      };
+    case "global_config":
+      return {
+        title,
+        description: t(
+          "settings.apiEndpoints.agent.issues.cloudSwitchOnGlobalConfigDetail",
+          values,
+        ),
+        fixSteps: t("settings.apiEndpoints.agent.issues.cloudSwitchOnGlobalConfigFix", values),
+      };
+    case "shell":
+      return {
+        title,
+        description: t("settings.apiEndpoints.agent.issues.cloudSwitchOnShellDetail", values),
+        fixSteps: t("settings.apiEndpoints.agent.issues.cloudSwitchOnShellFix", values),
+      };
+    case "settings":
+      return {
+        title,
+        description: t("settings.apiEndpoints.agent.issues.cloudSwitchOnSettingsDetail", values),
+      };
+    default:
+      return { title, description: issue.message };
   }
 }
 

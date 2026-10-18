@@ -2622,6 +2622,25 @@ export const ar: TranslationResources = {
             "يحتوي {{file}} على تعليقات أو فواصل زائدة في النهاية. أجرى Osuna تغييراته رغم ذلك، لكن {{agent}} يتخطى الملف كله: يعرض خطأ في الإعدادات في الطرفية، وتذهب محادثات Claude في Osuna إلى الواجهة الرسمية بدلًا من واجهات API الخارجية. يزول هذا بعد حذف التعليقات.",
           settingsHasCommentsFix:
             "احذف كل تعليقات // و /* */ في الملف وأي فاصلة تسبق } أو ] مباشرة، ثم احفظ. تبقى تغييرات Osuna كما هي. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.",
+          cloudSwitchOn: "يرسل {{agent}} طلباته إلى {{cloud}}، لا عبر البوابة",
+          cloudSwitchOnManagedDetail:
+            "تُفعّل الإعدادات المُدارة لـ {{agent}} ({{file}}) المتغير {{key}}. يضع الإعدادات المُدارة من يدير هذا الحاسوب، وهي تتقدّم على إعداداتك، لذا لا يستطيع Osuna إزالته.",
+          cloudSwitchOnManagedFix:
+            "اطلب ممن يدير هذا الحاسوب حذف {{key}} من الإعدادات المُدارة لـ {{agent}} أو جعله 0. تعديل هذا الملف يحتاج صلاحيات المسؤول. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.",
+          cloudSwitchOnGlobalConfigDetail:
+            "يُفعّل {{file}} المتغير {{key}} في env الخاص به. لا يغيّر Osuna هذا الملف.",
+          cloudSwitchOnGlobalConfigFix:
+            'افتح {{file}} واحذف "{{key}}" من كتلة "env" ثم احفظ. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.',
+          cloudSwitchOnShellDetail:
+            "المتغير {{key}} مضبوط في بيئة الصدفة لديك. يأخذه منها Osuna و{{agent}} الذي تشغّله في الطرفية.",
+          cloudSwitchOnShellFix:
+            "احذف السطر الذي يضبط {{key}} من ملف إعداد الصدفة، مثل ~/.zshrc أو ~/.bashrc. بعد ذلك أغلق Osuna والطرفية وافتحهما من جديد، وابدأ محادثات Claude جديدة في Osuna.",
+          cloudSwitchOnSettingsDetail: "أعاد {{file}} تفعيل {{key}}. «تطبيق مرة أخرى» يزيله.",
+          managedBaseUrl: "لا يمر {{agent}} عبر البوابة: الإعدادات المُدارة تضبط عنوانًا آخر",
+          managedBaseUrlDetail:
+            "تضبط الإعدادات المُدارة لـ {{agent}} ({{file}}) قيمة ANTHROPIC_BASE_URL على {{url}}. الإعدادات المُدارة تتقدّم على عنوان البوابة الذي يكتبه Osuna.",
+          managedBaseUrlFix:
+            "اطلب ممن يدير هذا الحاسوب حذف ANTHROPIC_BASE_URL من الإعدادات المُدارة لـ {{agent}}. تعديل هذا الملف يحتاج صلاحيات المسؤول. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.",
           howToFix: "طريقة الإصلاح",
           codexProfileOverride: 'ملف التعريف "{{profile}}" في Codex يتجاوز واجهات API الخارجية',
           codexProfileOverrideDetail:

@@ -31,6 +31,10 @@ export type AgentIssueKind =
   | "configUnparsable"
   | "codexProfileOverride"
   | "settingsHasComments"
+  // 云平台开关开着：params.source 说写在哪（managed、settings、global_config、shell）。
+  | "cloudSwitchOn"
+  // 托管设置的 ANTHROPIC_BASE_URL 不指向中转站。
+  | "managedBaseUrl"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -49,6 +53,8 @@ const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   config_unparsable: "configUnparsable",
   codex_profile_override: "codexProfileOverride",
   settings_has_comments: "settingsHasComments",
+  cloud_switch_on: "cloudSwitchOn",
+  managed_base_url: "managedBaseUrl",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
@@ -56,19 +62,29 @@ const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   configUnparsable: [],
   codexProfileOverride: [],
   settingsHasComments: [],
+  // 写在 Osuna 改不了的地方：重新应用没用，只能切回官方或保留当前设置。
+  cloudSwitchOn: ["switchToOfficial", "keepCurrent"],
+  managedBaseUrl: ["switchToOfficial", "keepCurrent"],
   unknown: [],
 };
 
-const KINDS_WITH_FIX_STEPS: ReadonlySet<AgentIssueKind> = new Set(["settingsHasComments"]);
+const KINDS_WITH_FIX_STEPS: ReadonlySet<AgentIssueKind> = new Set([
+  "settingsHasComments",
+  "cloudSwitchOn",
+  "managedBaseUrl",
+]);
 
 function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
   const kind = ISSUE_KINDS[issue.code] ?? "unknown";
+  const params = issue.params ?? {};
+  // 开关又写回了 Osuna 管的 settings.json：重新应用会再拿掉它，和「不再经过中转站」一样处理。
+  const isCloudSwitchInSettings = kind === "cloudSwitchOn" && params.source === "settings";
   return {
     kind,
-    params: issue.params ?? {},
+    params,
     message: issue.message,
-    actions: ISSUE_ACTIONS[kind],
-    hasFixSteps: KINDS_WITH_FIX_STEPS.has(kind),
+    actions: isCloudSwitchInSettings ? ISSUE_ACTIONS.notThroughGateway : ISSUE_ACTIONS[kind],
+    hasFixSteps: KINDS_WITH_FIX_STEPS.has(kind) && !isCloudSwitchInSettings,
   };
 }
 

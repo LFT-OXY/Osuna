@@ -2665,6 +2665,26 @@ export const ptBR: TranslationResources = {
             "{{file}} tem comentários ou vírgulas finais. O Osuna fez as alterações mesmo assim, mas o {{agent}} ignora o arquivo inteiro: no terminal mostra um erro de configurações, e os chats do Claude no Osuna vão para a API oficial em vez dos seus endpoints de API. Isso volta ao normal quando os comentários forem removidos.",
           settingsHasCommentsFix:
             "Apague todos os comentários // e /* */ do arquivo e qualquer vírgula logo antes de um } ou ] de fechamento, e salve. As alterações do Osuna continuam lá. Depois abra o {{agent}} de novo no terminal e inicie novos chats do Claude no Osuna.",
+          cloudSwitchOn: "O {{agent}} envia as solicitações para {{cloud}}, não pelo gateway",
+          cloudSwitchOnManagedDetail:
+            "As configurações gerenciadas do {{agent}} ({{file}}) ativam {{key}}. Configurações gerenciadas vêm de quem administra este computador e valem mais que as suas, então o Osuna não consegue tirá-la.",
+          cloudSwitchOnManagedFix:
+            "Peça a quem administra este computador para remover {{key}} das configurações gerenciadas do {{agent}}, ou para colocá-la em 0. Mudar esse arquivo exige permissão de administrador. Depois abra o {{agent}} de novo no terminal e inicie novos chats do Claude no Osuna.",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}} ativa {{key}} no env. O Osuna não muda este arquivo.",
+          cloudSwitchOnGlobalConfigFix:
+            'Abra {{file}}, apague "{{key}}" do bloco "env" e salve. Depois abra o {{agent}} de novo no terminal e inicie novos chats do Claude no Osuna.',
+          cloudSwitchOnShellDetail:
+            "{{key}} está definida no ambiente do seu shell. O Osuna e o {{agent}} que você abre no terminal pegam o valor dali.",
+          cloudSwitchOnShellFix:
+            "Remova a linha que define {{key}} do perfil do seu shell, como ~/.zshrc ou ~/.bashrc. Depois feche e abra de novo o Osuna e o terminal, e inicie novos chats do Claude no Osuna.",
+          cloudSwitchOnSettingsDetail: "{{file}} ativou {{key}} de novo. Aplicar de novo tira ela.",
+          managedBaseUrl:
+            "O {{agent}} não passa pelo gateway: as configurações gerenciadas definem outro endereço",
+          managedBaseUrlDetail:
+            "As configurações gerenciadas do {{agent}} ({{file}}) definem ANTHROPIC_BASE_URL como {{url}}. Configurações gerenciadas valem mais que o endereço do gateway que o Osuna escreve.",
+          managedBaseUrlFix:
+            "Peça a quem administra este computador para remover ANTHROPIC_BASE_URL das configurações gerenciadas do {{agent}}. Mudar esse arquivo exige permissão de administrador. Depois abra o {{agent}} de novo no terminal e inicie novos chats do Claude no Osuna.",
           howToFix: "Como corrigir",
           codexProfileOverride: 'O perfil "{{profile}}" do Codex se sobrepõe aos endpoints de API',
           codexProfileOverrideDetail:

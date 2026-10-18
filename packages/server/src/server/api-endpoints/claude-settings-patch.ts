@@ -1,4 +1,4 @@
-// modelPicker 的归属规则移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker）
+// modelPicker 的归属规则、云平台开关的拿掉与放回移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker、dropClouds / putClouds）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import {
@@ -14,6 +14,7 @@ import {
 } from "jsonc-parser";
 import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switches.js";
 import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
 
 /*
@@ -34,6 +35,8 @@ import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.j
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
  * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
  *   键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，不碰也不删。
+ * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
+ *   用户之后又自己设了的除外；关着的开关和云平台的其他变量不动（ADR 0012，照 magpie 的 dropClouds / putClouds）。
  */
 
 /** 接管期间不能留在 env 里的变量。 */
@@ -90,6 +93,9 @@ export const ClaudeSettingsTakeoverSchema = z.object({
   // Osuna 写着的模型提示：文件里的值等于这里记的才算 Osuna 的。
   // COMPAT(claudeModelHintRecord): 工单 18 以前的记录没有它，按没写过处理；remove after 2027-04-15.
   hintEnv: z.record(z.string(), z.string()).optional(),
+  // 拿掉的云平台开关与它们原来的值（字符串或 JSON 的 true，照用户写的）。
+  // COMPAT(claudeCloudSwitchRecord): 工单 16 以前的记录没有它，按没拿掉过处理；remove after 2027-04-18.
+  clouds: z.record(z.string(), z.unknown()).optional(),
 });
 export type ClaudeSettingsTakeover = z.infer<typeof ClaudeSettingsTakeoverSchema>;
 
@@ -196,6 +202,9 @@ export function applyClaudeApiEndpoint(input: {
   });
   text = modelPicker.text;
 
+  const clouds = dropClouds({ text, envObject, takeover: input.takeover, formatting });
+  text = clouds.text;
+
   return {
     kind: "patched",
     text: `${bom}${text}`,
@@ -207,8 +216,32 @@ export function applyClaudeApiEndpoint(input: {
       webSearchDeny: webSearchDeny.record,
       modelPicker: modelPicker.record,
       hintEnv: hintEnv.record,
+      clouds: clouds.record,
     },
   };
+}
+
+interface CloudsPatch {
+  text: string;
+  record: NonNullable<ClaudeSettingsTakeover["clouds"]>;
+}
+
+/** 拿掉 env 里开着的云平台开关，原值记下；之前拿掉过的记录留着，这次又开的覆盖同名项。 */
+function dropClouds(input: {
+  text: string;
+  envObject: Record<string, unknown> | undefined;
+  takeover: ClaudeSettingsTakeover | null;
+  formatting: FormattingOptions;
+}): CloudsPatch {
+  let { text } = input;
+  const record = { ...input.takeover?.clouds };
+  for (const key of CLAUDE_CLOUD_SWITCH_KEYS) {
+    const value = input.envObject?.[key];
+    if (!isClaudeSwitchOn(value)) continue;
+    record[key] = value;
+    text = edit(text, ["env", key], undefined, input.formatting);
+  }
+  return { text, record };
 }
 
 interface HintEnvPatch {
@@ -316,6 +349,7 @@ export function restoreClaudeOfficial(input: {
     text = restoreValue(text, ["model"], input.takeover.model.original, formatting);
   }
   text = removeOwnHints(text, input.takeover, formatting);
+  text = putCloudsBack(text, input.takeover, formatting);
   if (input.takeover.envCreated) {
     text = removeIfEmptyObject(text, ["env"], formatting);
   }
@@ -333,6 +367,21 @@ export function restoreClaudeOfficial(input: {
   }
 
   return { kind: "patched", text: `${bom}${text}` };
+}
+
+/** 拿掉过的云平台开关放回原值；用户之后又自己设了的（不论开关）归用户，不动。 */
+function putCloudsBack(
+  text: string,
+  takeover: ClaudeSettingsTakeover,
+  formatting: FormattingOptions,
+): string {
+  let next = text;
+  for (const [key, value] of Object.entries(takeover.clouds ?? {})) {
+    const env = readSettings(next).env;
+    if (env !== undefined && Object.hasOwn(env, key)) continue;
+    next = edit(next, ["env", key], value, formatting);
+  }
+  return next;
 }
 
 /** 还是 Osuna 写的那个值的提示键删掉；用户改过的归用户，留着。 */

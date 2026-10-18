@@ -426,3 +426,42 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端（`api-endpoint-claude.e2e.test.ts`）：带 BOM 打开、BOM 在、关掉逐字节还原；带注释、尾随逗号打开后整份文本逐字比对，关掉还原；列表在开着且带注释时返回 `settings_has_comments`，删掉注释后消失，开关关着时不报；JSONC 也读不懂时拒绝并带 `reason`、行列。
 - 浏览器（`settings-api-endpoints.spec.ts`）：带注释的文件照改、提示写后果、「如何修复」开合、删掉注释后提示消失；读不懂的文件在提示区和打开开关被拒时都用界面语言说明行列。
 - 截图（无头 Chromium、临时 CLAUDE_CONFIG_DIR）：`screenshots/15-claude-code-page_settings-has-comments_desktop-1280_{en,zh}.png`、`15-claude-code-page_settings-has-comments-fix-open_desktop-1280_{en,zh}.png`、`15-claude-code-page_switch-refused-unparsable_desktop-1280_{en,zh}.png`。
+
+## 16 云平台开关与管理员设置
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 开关名单与云的叫法 | `agentenv.ClaudeProviders`、`claudeClouds` | 一样（`claude-cloud-switches.ts`） |
+| 什么算开着 | `claudeSwitchOn`：1/true/yes/on，不分大小写、去空白 | 一样；JSON 的 true、数字 1 按字符串比（magpie 的 `GetJSON` 同样把它们读成 "true"/"1"） |
+| 接管时拿掉 | `dropClouds`：settings.json 里开着的原样记进 stash 后删掉；每次写接入与 Sync 都做 | 每次 `applyClaudeApiEndpoint`（打开、重新应用、模型等变化引起的重写）都做；原值记进接管记录的 `clouds`，已有的保留、这次新拿掉的覆盖同名项（magpie 的 stash 也是覆盖） |
+| 关掉时放回 | `putClouds`：settings.json 里已经有这个变量（不论开关）就不放 | 一样；放回的键排在 env 末尾（magpie 的 `SetJSON` 也是追加），所以不是逐字节还原 |
+| 关着的开关、云的其他变量 | 不动 | 一样 |
+| 写在哪 | `claudeCloud`：每个开关依次看托管设置、用户 settings.json、`~/.claude.json`（`CLAUDE_CONFIG_DIR` 时是它下面的），最先有这个变量的说了算；都没有才看登录 shell | 一样；只报第一个（magpie 也只返回一条） |
+| 托管设置的文件 | 只读 `managed-settings.json`；Windows 用 `C:\ProgramData\ClaudeCode` | 另读 `managed-settings.d/*.json`（按 Claude Code 文档：先主文件，再按字母序、跳过点开头与非 .json，env 逐键合并、后者盖前者，所以取最后一份有这个变量的）；Windows 用 `C:\Program Files\ClaudeCode`（decisions.md Q4）。MDM plist、注册表、服务器下发的不读，同 magpie |
+| 托管的 `ANTHROPIC_BASE_URL` | `Check`：非空、不是网关、也不 `reachesMagpie`（探测本机代理是否通到 magpie）时报 | 非空且去掉末尾 `/` 后不等于中转站地址时报 `managed_base_url`。**少做了代理探测**：Osuna 对用户 settings.json 的地址也只比写入值、不认通到中转站的转发（03 号工单），托管设置照同一口径 |
+| 登录 shell 的环境 | `proc.LoginEnv`：起登录 shell 问，一分钟缓存 | **用 daemon 自己的环境**（服务的 `env` 入口，缺省 `process.env`）。依据：桌面端启动时已把登录 shell 的环境并进自己再拉起 daemon（`packages/desktop/src/login-shell-env.ts` `inheritLoginShellEnv`），从终端起的 daemon 本来就带终端的环境；Osuna 起的 Claude 会话继承的正是它。代价：改了 shell 配置后要重启 Osuna 才看得到变化，提示的修复步骤据此写「退出并重新打开 Osuna 和终端」。另一个好处是读状态不再起 shell 进程 |
+| 读设置文件 | `edit.GetJSON` | 照 Claude Code 的读法：去 BOM 后严格 `JSON.parse`；不存在、读不了、读不懂都按没写 |
+
+### 线上形状
+
+- `agentIssues` 新增两种 code，都只在 Claude Code 开关开着时给（关着时中转站不在用）：
+  - `cloud_switch_on`：params `source`（`managed` / `settings` / `global_config` / `shell`）、`key`、`cloud`，有文件时带 `file`。
+  - `managed_base_url`：params `file`、`url`。
+- 都不进老的 `health`。
+- app 里两者同属「不再经过中转站」（ADR 0012）。写在 Osuna 改不了的地方（托管设置、`~/.claude.json`、shell、托管地址）时没有「重新应用」，只给「切回官方」「保留当前设置」和带步骤的「如何修复」；写回 settings.json 的照「不再经过中转站」给三个按钮、不给修复步骤（重新应用就会再拿掉它）。
+- 「如何修复」与处理按钮现在同一排，展开的步骤占满下面一整行（15 号的写法在有按钮时把步骤挤在左半边）。
+
+### 可替换的入口
+
+- 托管设置目录：服务选项 `claudeManagedSettingsDir`；缺省先看环境里的 `PASEO_CLAUDE_MANAGED_SETTINGS_DIR`，再按系统。进程内测试 daemon（`paseo-daemon.ts`）一律给临时目录，放在用例自己的 `apiEndpoints` 之前，传了 `env` 的用例也不会读到系统目录。
+- app e2e 的 daemon 是真进程：`withUpgradeSeal` 给所有 e2e daemon 设 `PASEO_CLAUDE_MANAGED_SETTINGS_DIR`（缺省一个不存在的临时路径），并去掉从终端带来的 `CLAUDE_CODE_USE_*`。
+- `~/.claude.json` 跟着服务的 `env.CLAUDE_CONFIG_DIR` 与 `homeDir`；登录 shell 环境就是服务的 `env`。
+
+### 测试
+
+- 纯逻辑：`claude-settings-patch.test.ts`（拿掉开着的、留下关着的与其他云变量；yes/on/TRUE 算开、空串算关；放回；用户又设了的不覆盖；重新应用时又开的再拿掉、原值都能放回；旧记录没有 `clouds` 时什么都不放）；`claude-cloud-switches.test.ts`（各来源、优先顺序、关着的盖过下层开着的、drop-in 取最后一份、托管地址、drop-in 文件顺序）。
+- daemon 端到端（`api-endpoint-claude.e2e.test.ts`）：工单的端到端验收（BEDROCK=1 拿掉、VERTEX=0 不动、关掉放回、中途用户自己写了的不覆盖）；settings.json 又写回开关时报出、重新应用拿掉；托管 drop-in、`.claude.json`、shell 各一条提示写明来源；托管地址不指向中转站时提示、改成中转站地址后消失。全部用临时目录与假环境。
+- 浏览器（`settings-api-endpoints.spec.ts`）：托管设置里的开关在设置页写明来源与改法，没有「重新应用」，「如何修复」展开步骤，管理员删掉后提示消失。
+- 截图：`screenshots/16-claude-code-page_cloud-switch-in-managed-settings-fix-open_desktop-1280_{en,zh}.png`（截图里的托管文件路径是临时目录）。

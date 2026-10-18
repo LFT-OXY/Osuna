@@ -25,6 +25,13 @@ import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claud
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
 import type { AgentModelDefinition, ApiEndpointModelGroup } from "../agent/agent-sdk-types.js";
 import { normalizeOpenAICompatibleBaseUrl } from "../agent/providers/codex-app-server-agent.js";
+import {
+  claudeManagedSettingsFiles,
+  defaultClaudeManagedSettingsDir,
+  findClaudeCloudSwitch,
+  managedBaseUrl,
+  type ClaudeEnvFile,
+} from "./claude-cloud-switches.js";
 import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import {
   applyClaudeApiEndpoint,
@@ -193,7 +200,12 @@ export interface ApiEndpointServiceOptions {
   // 中转站记下的已下线模型；给 Agent 选模型的列表都去掉它们，接口页与默认模型不受影响。
   retiredModels: RetiredModels;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
+  // 也当作登录 shell 的环境查云平台开关：桌面端启动时已把登录 shell 的环境并进 daemon（login-shell-env.ts），
+  // Osuna 起的 Claude 会话也继承它。
   env?: NodeJS.ProcessEnv;
+  // Claude Code 托管设置所在的目录；缺省按系统（claude-cloud-switches.ts），
+  // 环境里有 PASEO_CLAUDE_MANAGED_SETTINGS_DIR 时用它。测试一律指到临时目录，绝不读真实的系统目录。
+  claudeManagedSettingsDir?: string;
   homeDir?: string;
   now?: () => Date;
   // 某个 Agent 的总开关、默认模型、可用模型或指向的接口变了之后调用；daemon 据此刷新该提供方的快照。
@@ -223,7 +235,11 @@ type ApiEndpointAgentIssueCode =
   | "config_unparsable"
   | "codex_profile_override"
   // settings.json 带注释或尾随逗号：Osuna 照改，但 Claude Code 自己读不了、整份跳过。
-  | "settings_has_comments";
+  | "settings_has_comments"
+  // 云平台开关开着（托管设置、settings.json、~/.claude.json 或登录 shell）：请求发给云平台，不经过中转站。
+  | "cloud_switch_on"
+  // 托管设置的 ANTHROPIC_BASE_URL 不指向中转站，盖过 Osuna 写的地址。
+  | "managed_base_url";
 
 interface AgentIssue extends ApiEndpointAgentIssue {
   code: ApiEndpointAgentIssueCode;
@@ -306,6 +322,7 @@ export class ApiEndpointService {
   private readonly logger: pino.Logger;
   private readonly env: NodeJS.ProcessEnv;
   private readonly homeDir: string;
+  private readonly claudeManagedSettingsDir: string;
   private readonly now: () => Date;
   private readonly onActiveEndpointChanged: (provider: ApiEndpointProvider) => void;
   private readonly countLiveSessions: (provider: ApiEndpointProvider) => number;
@@ -327,6 +344,10 @@ export class ApiEndpointService {
     this.store = new ApiEndpointStore({ paseoHome: options.paseoHome, logger: this.logger });
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
+    this.claudeManagedSettingsDir =
+      options.claudeManagedSettingsDir ??
+      this.env.PASEO_CLAUDE_MANAGED_SETTINGS_DIR ??
+      defaultClaudeManagedSettingsDir(process.platform);
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
@@ -1606,11 +1627,52 @@ export class ApiEndpointService {
         message: `${settingsPath} has comments or trailing commas. Claude Code can't read it and skips the whole file, so Claude sessions Osuna starts go to the official API. Remove the comments and trailing commas to fix this.`,
       });
     }
+    if (enabled) issues.push(...this.claudeBypassIssues(settingsPath));
     return {
       health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
       issues,
       baseUrl: result.baseUrl,
     };
+  }
+
+  /** 托管设置的地址与开着的云平台开关：都会让 Claude Code 绕开中转站（ADR 0012）。 */
+  private claudeBypassIssues(settingsPath: string): AgentIssue[] {
+    const issues: AgentIssue[] = [];
+    const managed = claudeManagedSettingsFiles(this.claudeManagedSettingsDir).map(
+      readClaudeEnvFile,
+    );
+    const managedUrl = managedBaseUrl(managed);
+    const gatewayUrl = this.gatewayUrlFor("claude");
+    const isManagedUrlElsewhere =
+      managedUrl !== null &&
+      (gatewayUrl === null ||
+        trimTrailingSlashes(managedUrl.url) !== trimTrailingSlashes(gatewayUrl));
+    if (managedUrl && isManagedUrlElsewhere) {
+      issues.push({
+        code: "managed_base_url",
+        params: { file: managedUrl.file, url: managedUrl.url },
+        message: `Claude Code's managed settings (${managedUrl.file}) set ANTHROPIC_BASE_URL to ${managedUrl.url}, which wins over the gateway's`,
+      });
+    }
+    // CLAUDE_CONFIG_DIR 设了时 Claude Code 读它下面的 .claude.json，否则读家目录下的。
+    const configDir = this.env.CLAUDE_CONFIG_DIR?.trim();
+    const globalConfigPath = path.join(configDir || this.homeDir, ".claude.json");
+    const finding = findClaudeCloudSwitch({
+      managed,
+      settings: readClaudeEnvFile(settingsPath),
+      globalConfig: readClaudeEnvFile(globalConfigPath),
+      shellEnv: this.env,
+    });
+    if (finding) {
+      const { source, file, key, cloud } = finding;
+      const where = file === null ? "your shell's environment" : file;
+      issues.push({
+        code: "cloud_switch_on",
+        params: { source, key, cloud, ...(file === null ? {} : { file }) },
+        message: `${key} is set in ${where}, so Claude Code sends its requests to ${cloud}, not to the gateway: take it out there to go through the gateway`,
+      });
+    }
+    return issues;
   }
 
   private inspectCodex(enabled: boolean): ApiEndpointFileStatus {
@@ -2035,6 +2097,27 @@ function unparsable(file: UnparsableFile): ApiEndpointRequestError {
     message: `${file.filePath} could not be parsed, so nothing was written: ${file.detail}`,
     params: unparsableParams(file),
   });
+}
+
+/** 照 Claude Code 的读法（去 BOM 后严格 JSON）取一份设置文件的 env；不存在、读不了、读不懂都按没有。 */
+function readClaudeEnvFile(file: string): ClaudeEnvFile {
+  try {
+    const text = readOptionalFile(file)?.toString("utf8");
+    if (text === undefined) return { file, env: null };
+    const parsed: unknown = JSON.parse(text.replace(/^\uFEFF/, ""));
+    const env = isPlainObject(parsed) ? parsed.env : undefined;
+    return { file, env: isPlainObject(env) ? env : null };
+  } catch {
+    return { file, env: null };
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function trimTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, "");
 }
 
 function unparsableStatus(file: UnparsableFile): ApiEndpointFileStatus {

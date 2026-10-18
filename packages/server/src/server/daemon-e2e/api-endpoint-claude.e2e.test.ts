@@ -1260,3 +1260,210 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 });
+
+describe("Claude Code's cloud-platform switches and managed settings", () => {
+  let daemon: TestPaseoDaemon | null = null;
+  let client: DaemonClient | null = null;
+  let root: string;
+  let claudeConfigDir: string;
+  let settingsPath: string;
+  let managedDir: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-clouds-"));
+    tempRoots.push(root);
+    claudeConfigDir = path.join(root, "claude");
+    settingsPath = path.join(claudeConfigDir, "settings.json");
+    managedDir = path.join(root, "managed");
+    await mkdir(claudeConfigDir, { recursive: true });
+    await mkdir(managedDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    client = null;
+    daemon = null;
+    await Promise.all(tempRoots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  // 假的登录 shell 环境：daemon 的 env 就是它，除了 CLAUDE_CONFIG_DIR 只放用例给的变量。
+  async function start(shellEnv: Record<string, string> = {}): Promise<DaemonClient> {
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: claudeConfigDir, ...shellEnv },
+        homeDir: root,
+        claudeManagedSettingsDir: managedDir,
+      },
+    });
+    client = await connect(daemon);
+    return client;
+  }
+
+  async function switchOn(rpc: DaemonClient): Promise<void> {
+    const saved = await rpc.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrl: "https://relay.example/api",
+      apiKey: SECRET,
+      models: [{ id: "relay/sonnet" }],
+      defaultModelId: "relay/sonnet",
+    });
+    const endpointId = saved.endpoint?.id;
+    if (!endpointId) throw new Error("Expected a saved endpoint");
+    const on = await rpc.apiEndpointSetActive("claude", endpointId);
+    expect(on).toMatchObject({ activeEndpointId: endpointId, error: null });
+  }
+
+  async function switchOff(rpc: DaemonClient): Promise<void> {
+    const off = await rpc.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(off.error).toBeNull();
+  }
+
+  async function settingsEnv(): Promise<Record<string, unknown>> {
+    const parsed = JSON.parse(await readFile(settingsPath, "utf8")) as {
+      env?: Record<string, unknown>;
+    };
+    return parsed.env ?? {};
+  }
+
+  async function claudeIssues(rpc: DaemonClient) {
+    return (await rpc.apiEndpointList("claude")).agentIssues?.claude ?? [];
+  }
+
+  test("a switch that is on is taken out and put back; one that is off stays; one the user set again is theirs", async () => {
+    await writeFile(
+      settingsPath,
+      `{\n  "env": {\n    "CLAUDE_CODE_USE_BEDROCK": "1",\n    "CLAUDE_CODE_USE_VERTEX": "0",\n    "AWS_REGION": "us-east-1"\n  }\n}\n`,
+    );
+    const rpc = await start();
+
+    await switchOn(rpc);
+    let env = await settingsEnv();
+    expect(env).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    expect(env).toMatchObject({ CLAUDE_CODE_USE_VERTEX: "0", AWS_REGION: "us-east-1" });
+    expect(await claudeIssues(rpc)).toEqual([]);
+
+    await switchOff(rpc);
+    env = await settingsEnv();
+    expect(env).toEqual({
+      CLAUDE_CODE_USE_VERTEX: "0",
+      AWS_REGION: "us-east-1",
+      CLAUDE_CODE_USE_BEDROCK: "1",
+    });
+
+    // 再打开，开着期间用户自己又写了一个（关着的值）：关掉时不覆盖。
+    const again = await rpc.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+    expect(again.error).toBeNull();
+    expect(await settingsEnv()).not.toHaveProperty("CLAUDE_CODE_USE_BEDROCK");
+    const switched = JSON.parse(await readFile(settingsPath, "utf8")) as {
+      env: Record<string, unknown>;
+    };
+    switched.env.CLAUDE_CODE_USE_BEDROCK = "0";
+    await writeFile(settingsPath, JSON.stringify(switched, null, 2));
+    await switchOff(rpc);
+    expect((await settingsEnv()).CLAUDE_CODE_USE_BEDROCK).toBe("0");
+  });
+
+  test("a switch set again in settings.json while the switch is on is reported, and Re-apply takes it out", async () => {
+    const rpc = await start();
+    await switchOn(rpc);
+    const switched = JSON.parse(await readFile(settingsPath, "utf8")) as {
+      env: Record<string, unknown>;
+    };
+    switched.env.CLAUDE_CODE_USE_MANTLE = "yes";
+    await writeFile(settingsPath, JSON.stringify(switched, null, 2));
+
+    expect(await claudeIssues(rpc)).toEqual([
+      {
+        code: "cloud_switch_on",
+        params: {
+          source: "settings",
+          file: settingsPath,
+          key: "CLAUDE_CODE_USE_MANTLE",
+          cloud: "Amazon Bedrock (Mantle)",
+        },
+        message: expect.stringContaining("CLAUDE_CODE_USE_MANTLE"),
+      },
+    ]);
+
+    const reapplied = await rpc.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      reapply: true,
+    });
+    expect(reapplied.error).toBeNull();
+    expect(await settingsEnv()).not.toHaveProperty("CLAUDE_CODE_USE_MANTLE");
+    expect(await claudeIssues(rpc)).toEqual([]);
+  });
+
+  test("switches in managed settings, ~/.claude.json and the login shell are each reported with where they are set", async () => {
+    const dropIn = path.join(managedDir, "managed-settings.d", "20-cloud.json");
+    await mkdir(path.dirname(dropIn), { recursive: true });
+    await writeFile(dropIn, JSON.stringify({ env: { CLAUDE_CODE_USE_BEDROCK: "1" } }));
+    const globalConfigPath = path.join(claudeConfigDir, ".claude.json");
+    await writeFile(globalConfigPath, JSON.stringify({ env: { CLAUDE_CODE_USE_VERTEX: true } }));
+    const rpc = await start({ CLAUDE_CODE_USE_FOUNDRY: "1" });
+    await switchOn(rpc);
+
+    expect(await claudeIssues(rpc)).toEqual([
+      {
+        code: "cloud_switch_on",
+        params: {
+          source: "managed",
+          file: dropIn,
+          key: "CLAUDE_CODE_USE_BEDROCK",
+          cloud: "Amazon Bedrock",
+        },
+        message: expect.stringContaining(dropIn),
+      },
+    ]);
+
+    await rm(dropIn);
+    expect(await claudeIssues(rpc)).toEqual([
+      expect.objectContaining({
+        code: "cloud_switch_on",
+        params: {
+          source: "global_config",
+          file: globalConfigPath,
+          key: "CLAUDE_CODE_USE_VERTEX",
+          cloud: "Google Vertex AI",
+        },
+      }),
+    ]);
+
+    await writeFile(globalConfigPath, JSON.stringify({ env: {} }));
+    expect(await claudeIssues(rpc)).toEqual([
+      {
+        code: "cloud_switch_on",
+        params: { source: "shell", key: "CLAUDE_CODE_USE_FOUNDRY", cloud: "Microsoft Foundry" },
+        message: expect.stringContaining("shell"),
+      },
+    ]);
+    // 写不到的地方不动；关着开关时也不提示。
+    await switchOff(rpc);
+    expect(await claudeIssues(rpc)).toEqual([]);
+  });
+
+  test("a managed ANTHROPIC_BASE_URL that does not point at the gateway reads as not going through it", async () => {
+    const managedFile = path.join(managedDir, "managed-settings.json");
+    await writeFile(
+      managedFile,
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://corp-gateway.example" } }),
+    );
+    const rpc = await start();
+    await switchOn(rpc);
+
+    expect(await claudeIssues(rpc)).toEqual([
+      {
+        code: "managed_base_url",
+        params: { file: managedFile, url: "https://corp-gateway.example" },
+        message: expect.stringContaining("https://corp-gateway.example"),
+      },
+    ]);
+
+    const gateway = `http://127.0.0.1:${daemon?.port}/api-endpoint-gateway/`;
+    await writeFile(managedFile, JSON.stringify({ env: { ANTHROPIC_BASE_URL: gateway } }));
+    expect(await claudeIssues(rpc)).toEqual([]);
+  });
+});

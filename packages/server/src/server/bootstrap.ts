@@ -504,6 +504,7 @@ export interface PaseoDaemonConfig {
     ApiEndpointServiceOptions,
     | "env"
     | "homeDir"
+    | "claudeManagedSettingsDir"
     | "beforeConfigRecheck"
     | "isModelsDevAutoUpdate"
     | "modelsDevFetch"

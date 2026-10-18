@@ -2638,6 +2638,27 @@ export const ko: TranslationResources = {
             "{{file}}에 주석이나 끝 쉼표가 있습니다. Osuna는 그래도 변경을 적용했지만, {{agent}}는 파일 전체를 건너뜁니다. 터미널에서는 설정 오류가 뜨고, Osuna의 Claude 채팅은 서드파티 API를 거치지 않고 공식 API로 바로 갑니다. 주석을 지우면 돌아옵니다.",
           settingsHasCommentsFix:
             "파일의 // 와 /* */ 주석, 그리고 닫는 } 나 ] 바로 앞의 쉼표를 모두 지우고 저장하세요. Osuna의 변경은 그대로 남습니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          cloudSwitchOn: "{{agent}}의 요청이 게이트웨이를 거치지 않고 {{cloud}}(으)로 갑니다",
+          cloudSwitchOnManagedDetail:
+            "{{agent}}의 관리 설정({{file}})에서 {{key}}을(를) 켜 두었습니다. 관리 설정은 이 컴퓨터의 관리자가 배포하며 내 설정보다 우선하므로 Osuna가 뺄 수 없습니다.",
+          cloudSwitchOnManagedFix:
+            "이 컴퓨터의 관리자에게 {{agent}}의 관리 설정에서 {{key}}을(를) 지우거나 0으로 바꿔 달라고 요청하세요. 이 파일을 바꾸려면 관리자 권한이 필요합니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          cloudSwitchOnGlobalConfigDetail:
+            "{{file}}의 env에서 {{key}}을(를) 켜 두었습니다. Osuna는 이 파일을 바꾸지 않습니다.",
+          cloudSwitchOnGlobalConfigFix:
+            '{{file}}을(를) 열어 "env"에서 "{{key}}"을(를) 지우고 저장하세요. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.',
+          cloudSwitchOnShellDetail:
+            "셸 환경에 {{key}}이(가) 설정되어 있습니다. Osuna와 터미널에서 여는 {{agent}} 모두 여기서 이 값을 받습니다.",
+          cloudSwitchOnShellFix:
+            "셸 설정 파일(~/.zshrc, ~/.bashrc 등)에서 {{key}}을(를) 설정하는 줄을 지우세요. 그런 다음 Osuna와 터미널을 종료했다가 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          cloudSwitchOnSettingsDetail:
+            "{{file}}에서 {{key}}이(가) 다시 켜졌습니다. 다시 적용하면 다시 빠집니다.",
+          managedBaseUrl:
+            "{{agent}}이(가) 게이트웨이를 거치지 않습니다: 관리 설정에 다른 주소가 있습니다",
+          managedBaseUrlDetail:
+            "{{agent}}의 관리 설정({{file}})에서 ANTHROPIC_BASE_URL을 {{url}}(으)로 설정했습니다. 관리 설정은 Osuna가 쓰는 게이트웨이 주소보다 우선합니다.",
+          managedBaseUrlFix:
+            "이 컴퓨터의 관리자에게 {{agent}}의 관리 설정에서 ANTHROPIC_BASE_URL을 지워 달라고 요청하세요. 이 파일을 바꾸려면 관리자 권한이 필요합니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
           howToFix: "해결 방법",
           codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
           codexProfileOverrideDetail:
