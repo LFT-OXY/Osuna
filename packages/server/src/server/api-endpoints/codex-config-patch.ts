@@ -15,7 +15,7 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  * model_provider 与 model_catalog_json 改为拿掉（ADR 0010），CC Switch 的 OpenAI 镜像表的 base_url 也指到中转站。切回官方时顶层键还原、专用表留着：
  * 记在这个服务商名下的 Codex 对话关掉开关后还要能续，daemon 每次启动按新端口改写它。
  * 顶层 model 被 Codex 自己换过（TUI 的 /model）之后归 Codex（照 magpie 的 Follow，ADR 0012）：之后的重写不碰它，
- * 直到「重新应用」或在 Osuna 里换默认模型（rewritesModel）。
+ * 直到「重新应用」或在 Osuna 里换默认模型（shouldRewriteModel）。
  */
 
 /**
@@ -131,7 +131,7 @@ export function applyCodexApiEndpoint(input: {
   wiring: CodexGatewayWiring;
   takeover: CodexConfigTakeover | null;
   // 「重新应用」或在 Osuna 里换了默认模型：Codex 换过的 model 也写回。省略为不写回。
-  rewritesModel?: boolean;
+  shouldRewriteModel?: boolean;
 }): CodexConfigPatchResult {
   const [bom, baseText] = splitBom(input.text ?? "");
   const parsed = parseConfig(baseText);
@@ -155,7 +155,7 @@ export function applyCodexApiEndpoint(input: {
     heldModel = heldCliModel({
       value: parsed.value,
       record: input.takeover?.keys.model,
-      rewritesModel: input.rewritesModel === true,
+      shouldRewriteModel: input.shouldRewriteModel === true,
     });
   }
   const isModelHeld = heldModel !== null;
@@ -394,13 +394,15 @@ function holdsEverything(input: {
   mirrors: Record<string, CodexMirrorRecord>;
 }): boolean {
   const { value, isModelHeld } = input;
-  const holdsKeys = Object.entries(input.keys).every(
-    ([key, record]) => (key === "model" && isModelHeld) || holdsWritten(value[key], record.written),
-  );
+  const holdsKeys = Object.entries(input.keys).every(([key, record]) => {
+    const isLeftToCodex = key === "model" && isModelHeld;
+    return isLeftToCodex || holdsWritten(value[key], record.written);
+  });
   const holdsMirrors = Object.entries(input.mirrors).every(
     ([id, record]) => mirrorBaseUrl(value, id) === record.written,
   );
-  return holdsKeys && holdsProviderTable(value, input.table) && holdsMirrors;
+  const holdsTable = holdsProviderTable(value, input.table);
+  return holdsKeys && holdsTable && holdsMirrors;
 }
 
 /**
@@ -410,12 +412,13 @@ function holdsEverything(input: {
 function heldCliModel(input: {
   value: Record<string, unknown>;
   record: CodexKeyRecord | undefined;
-  rewritesModel: boolean;
+  shouldRewriteModel: boolean;
 }): CodexKeyRecord | null {
   const { record } = input;
-  if (!record || input.rewritesModel) return null;
+  if (!record || input.shouldRewriteModel) return null;
   const isChangedByCli = !holdsWritten(input.value.model, record.written);
-  return record.held !== undefined || isChangedByCli ? record : null;
+  const isHeldByCli = record.held !== undefined || isChangedByCli;
+  return isHeldByCli ? record : null;
 }
 
 /**
@@ -430,19 +433,17 @@ export function readCodexCliPicks(input: {
   if (!takeover) return null;
   const value = parsedTopLevel(input.text);
   if (value === null) return null;
+  const now = stringOrNull(value.model);
   const modelRecord = takeover.keys.model;
-  const levelRecord = takeover.keys.model_reasoning_effort;
-  const isModelChanged =
+  let model: CliPicks["model"] = null;
+  // ChatGPT 接法下模型归 Codex、Osuna 没记 model：文件里的就是它自己选的（magpie 一律读文件）。
+  const isOwnedByCodex = modelRecord === undefined && now !== null;
+  if (isOwnedByCodex) model = { now, isKept: false };
+  const isChangedByCodex =
     modelRecord !== undefined && !holdsWritten(value.model, modelRecord.written);
-  const isLevelChanged =
-    levelRecord !== undefined && !holdsWritten(value.model_reasoning_effort, levelRecord.written);
-  return {
-    model: isModelChanged
-      ? { now: stringOrNull(value.model), isKept: modelRecord.held === "kept" }
-      : null,
-    level: isLevelChanged ? { now: stringOrNull(value.model_reasoning_effort) } : null,
-    ultraCode: null,
-  };
+  if (modelRecord && isChangedByCodex) model = { now, isKept: modelRecord.held === "kept" };
+  const level = stringOrNull(value.model_reasoning_effort);
+  return { model, level, isUltraCodeOn: null };
 }
 
 /**

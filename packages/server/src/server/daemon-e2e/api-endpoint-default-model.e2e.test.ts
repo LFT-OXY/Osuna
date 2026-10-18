@@ -3,7 +3,7 @@
 
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
@@ -542,6 +542,74 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(beside.agent?.defaultModelId).toBe("relay-b/glm-4.6");
       await addRelayC();
       expect(await codexModel()).toBe("gpt-5.5");
+    });
+
+    test("Codex signed in with ChatGPT on its own provider: an endpoint's model picked in /model becomes the default model, though Osuna wrote no model", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      await writeFile(configPath, `model = "gpt-5.5"\n`);
+      expect((await turnOn("codex")).connection).toMatchObject({ how: "joined" });
+
+      await setCodexTopKey("model", "relay-a/glm-4.6");
+      const followed = await listed("codex");
+      expect(followed.agent?.defaultModelId).toBe("relay-a/glm-4.6");
+      expect(followed.issueCodes).not.toContain("model_replaced");
+
+      await setCodexTopKey("model", "gpt-5.5");
+      const beside = await listed("codex");
+      expect(beside.issueCodes).not.toContain("model_replaced");
+      expect(beside.agent?.defaultModelId).toBe("relay-a/glm-4.6");
+      expect(await codexModel()).toBe("gpt-5.5");
+    });
+
+    test("a model followed while settings.json can't be written is followed on the next read", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+      await setClaudeKeys({ model: "relay-b/glm-4.6" });
+
+      const claudeDir = path.dirname(settingsPath);
+      await chmod(claudeDir, 0o500);
+      try {
+        await client.apiEndpointList("claude");
+      } finally {
+        await chmod(claudeDir, 0o700);
+      }
+
+      expect((await listed("claude")).agent?.defaultModelId).toBe("relay-b/glm-4.6");
+      expect(await claudeModel()).toBe("relay-b/glm-4.6");
+    });
+
+    test("Keep current settings refuses a prompt it doesn't know and leaves the switch on", async () => {
+      await twoEndpoints();
+      await turnOn("claude", "first");
+
+      const kept = await client.apiEndpointKeepCurrentSettings({
+        provider: "claude",
+        code: "other",
+      });
+
+      expect(kept.error?.code).toBe("invalid_input");
+      expect((await listed("claude")).agent?.enabled).toBe(true);
+    });
+
+    test("thinking set in the CLI follows even when Osuna's default thinking is unset, and so does Ultra Code", async () => {
+      await saveEndpoint({ name: "Relay C", models: ["glm-5.3", "kimi-k2"] });
+      await turnOn("claude", "glm-5.3");
+      expect((await listed("claude")).agent?.defaultThinkingOptionId ?? null).toBeNull();
+
+      await setClaudeKeys({ effortLevel: "medium", ultracode: true });
+      const followed = await listed("claude");
+      expect(followed.agent).toMatchObject({
+        defaultThinkingOptionId: "medium",
+        usesUltraCode: true,
+      });
+
+      await setClaudeKeys({ ultracode: false });
+      expect((await listed("claude")).agent?.usesUltraCode).toBe(false);
+
+      await writeFile(configPath, `model_reasoning_effort = "low"\n`);
+      await turnOn("codex", "glm-5.3");
+      expect((await listed("codex")).agent?.defaultThinkingOptionId).toBe("low");
     });
 
     test("thinking: a level the CLI saved (effortLevel, modelSettings, model_reasoning_effort) becomes the default thinking and stays through a rewrite", async () => {

@@ -962,14 +962,14 @@ describe("Codex's own picks in config.toml", () => {
   function patch(input: {
     text: string;
     takeover: CodexConfigTakeover | null;
-    rewritesModel?: boolean;
+    shouldRewriteModel?: boolean;
     defaultThinking?: string | null;
   }) {
     const result = applyCodexApiEndpoint({
       text: input.text,
       wiring: { ...GATEWAY, defaultThinking: input.defaultThinking ?? null },
       takeover: input.takeover,
-      rewritesModel: input.rewritesModel,
+      shouldRewriteModel: input.shouldRewriteModel,
     });
     if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
     return result;
@@ -985,8 +985,8 @@ describe("Codex's own picks in config.toml", () => {
     const first = patch({ text: USER_CONFIG, takeover: null, defaultThinking: "high" });
     expect(readCodexCliPicks({ text: first.text, takeover: first.takeover })).toEqual({
       model: null,
-      level: null,
-      ultraCode: null,
+      level: "high",
+      isUltraCodeOn: null,
     });
 
     const saved = first.text
@@ -994,14 +994,14 @@ describe("Codex's own picks in config.toml", () => {
       .replace(`model_reasoning_effort = "high"`, `model_reasoning_effort = "low"`);
     expect(readCodexCliPicks({ text: saved, takeover: first.takeover })).toEqual({
       model: { now: "gpt-9", isKept: false },
-      level: { now: "low" },
-      ultraCode: null,
+      level: "low",
+      isUltraCodeOn: null,
     });
 
     const kept = patch({ text: saved, takeover: first.takeover, defaultThinking: "low" });
     expect(topLevel(kept.text).model).toBe("gpt-9");
 
-    const reapplied = patch({ text: kept.text, takeover: kept.takeover, rewritesModel: true });
+    const reapplied = patch({ text: kept.text, takeover: kept.takeover, shouldRewriteModel: true });
     expect(topLevel(reapplied.text).model).toBe("relay/gpt");
   });
 

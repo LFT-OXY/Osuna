@@ -1123,13 +1123,13 @@ describe("the CLI's own picks in settings.json", () => {
   function rewrite(input: {
     text: string;
     takeover: ClaudeSettingsTakeover | null;
-    rewritesModel?: boolean;
+    shouldRewriteModel?: boolean;
   }) {
     const result = applyClaudeApiEndpoint({
       text: input.text,
       wiring: { ...GATEWAY, model: "glm-4.6" },
       takeover: input.takeover,
-      rewritesModel: input.rewritesModel,
+      shouldRewriteModel: input.shouldRewriteModel,
     });
     if (result.kind !== "patched") throw new Error(`Expected a patch, got ${result.kind}`);
     return result;
@@ -1161,7 +1161,11 @@ describe("the CLI's own picks in settings.json", () => {
       "gpt-9",
     );
 
-    const reapplied = rewrite({ text: kept.text, takeover: kept.takeover, rewritesModel: true });
+    const reapplied = rewrite({
+      text: kept.text,
+      takeover: kept.takeover,
+      shouldRewriteModel: true,
+    });
     expect(JSON.parse(reapplied.text).model).toBe("glm-4.6");
     expect(readClaudeCliPicks({ text: reapplied.text, takeover: reapplied.takeover })?.model).toBe(
       null,
@@ -1207,25 +1211,23 @@ describe("the CLI's own picks in settings.json", () => {
       read((settings) => {
         settings.modelSettings = { "claude-opus-5-5": { effortLevel: "low" } };
       }),
-    ).toEqual({ now: "low" });
-    // Opus 5.5 不读顶层：只改顶层时它跑的仍是 Osuna 写的那档，不算换了。
+    ).toBe("low");
+    // Opus 5.5 不读顶层：只改顶层时它跑的仍是 Osuna 写的那档。
     expect(
       read((settings) => {
         settings.effortLevel = "low";
       }),
-    ).toBeNull();
+    ).toBe("high");
     expect(
       read((settings) => {
         settings.env = { ...(settings.env as object), CLAUDE_CODE_EFFORT_LEVEL: "max" };
       }),
-    ).toEqual({ now: "max" });
+    ).toBe("max");
 
     const other = patched({ text: USER_SETTINGS, defaultThinking: "high" });
     const topOnly = edited(other.text, (settings) => {
       settings.effortLevel = "medium";
     });
-    expect(readClaudeCliPicks({ text: topOnly, takeover: other.takeover })?.level).toEqual({
-      now: "medium",
-    });
+    expect(readClaudeCliPicks({ text: topOnly, takeover: other.takeover })?.level).toBe("medium");
   });
 });

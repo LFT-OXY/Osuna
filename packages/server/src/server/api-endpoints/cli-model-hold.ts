@@ -18,19 +18,12 @@ export interface CliModelPick {
   isKept: boolean;
 }
 
-/** CLI 现在读到的档位不再是 Osuna 写的那档：现在的（删掉了为 null）。 */
-export interface CliLevelPick {
-  now: string | null;
-}
-
-/** Osuna 写过的 Ultra Code 被改过：现在开没开。 */
-export interface CliUltraCodePick {
-  isOn: boolean;
-}
-
-/** CLI 自己存下、与接管记录不同的选择；没变的为 null（Codex 没有 Ultra Code，恒为 null）。 */
+/**
+ * CLI 配置里现在的选择（照 magpie 一律读文件）：model 只在与接管记录不同时有；level 是 CLI 现在读到的档位（没有为 null）；
+ * isUltraCodeOn 是 Ultra Code 开没开（Codex 没有，为 null）。档位与 Ultra Code 由调用方和 Osuna 的设置比。
+ */
 export interface CliPicks {
   model: CliModelPick | null;
-  level: CliLevelPick | null;
-  ultraCode: CliUltraCodePick | null;
+  level: string | null;
+  isUltraCodeOn: boolean | null;
 }

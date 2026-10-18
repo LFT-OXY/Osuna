@@ -182,6 +182,8 @@ function IssueActionButton({
     <Button
       variant="outline"
       size="sm"
+      style={styles.actionButton}
+      textStyle={styles.actionText}
       onPress={handlePress}
       disabled={pendingAction !== null}
       loading={pendingAction === action}
@@ -386,6 +388,13 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing[2],
+  },
+  // 按钮放不下时整个换到下一行，文字不在词中间断开。
+  actionButton: {
+    flexShrink: 0,
+  },
+  actionText: {
+    flexShrink: 0,
   },
   fix: {
     flex: 1,

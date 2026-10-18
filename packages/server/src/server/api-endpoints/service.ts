@@ -152,13 +152,13 @@ interface CliSync {
   wiring: CliWiring | null;
   agent: ApiEndpointAgentSettings;
   // CLI 自己换过的模型也写回默认模型（「重新应用」、在 Osuna 里换了默认模型）；省略为留着 CLI 的。
-  rewritesModel?: boolean;
+  shouldRewriteModel?: boolean;
 }
 
 /** 把中转站写进 CLI 配置：要写的内容，与 CLI 自己换过的模型要不要写回。 */
 interface CliEndpointWrite {
   wiring: CliWiring;
-  rewritesModel: boolean;
+  shouldRewriteModel: boolean;
 }
 
 /** Osuna 对话里一个接口模型的思考档位选项与新对话的起步档位；模型没有档位时为空。 */
@@ -337,10 +337,19 @@ type ApiEndpointAgentIssueCode =
   // CLI 自己把模型换成了哪家接口都没有的（params.model：换成的模型，没设为空串；params.defaultModel：Osuna 的默认模型）。
   | "model_replaced";
 
-/** 「保留当前设置」回应的是哪条提示；省略为关掉总开关、不改回文件。 */
+/** 「保留当前设置」回应的提示：model_replaced 只留下 CLI 的模型；省略为关掉总开关、不改回文件。 */
+export type KeepCurrentSettingsCode = "model_replaced";
+
 interface KeepCurrentSettingsInput {
   provider: string;
-  code?: string;
+  code?: KeepCurrentSettingsCode;
+}
+
+/** 跟着 CLI 走之后的设置、CLI 的模型记成哪种归属，以及要不要忘掉 Codex 接管前的档位。 */
+interface FollowedCliPicks {
+  agent: ApiEndpointAgentSettings;
+  held: CliModelHold | null;
+  isEffortOriginalForgotten: boolean;
 }
 
 interface AgentIssue extends ApiEndpointAgentIssue {
@@ -1110,13 +1119,14 @@ export class ApiEndpointService {
   }): string | null {
     const { state, provider, cliModel } = input;
     if (cliModel === null) return null;
-    if (provider === "codex" && this.isCodexChatGptWired()) {
+    const isChatGptWiredCodex = provider === "codex" && this.isCodexChatGptWired();
+    if (isChatGptWiredCodex) {
       const named = endpointModelGroups(state).flatMap((group) => group.models);
       return named.find((entry) => entry.id === cliModel)?.id ?? null;
     }
     const served = servedModel(state, cliModel);
-    if (served !== null || provider !== "claude") return served;
-    return mappedTierModel(state, cliModel);
+    const isTierNameLeft = served === null && provider === "claude";
+    return isTierNameLeft ? mappedTierModel(state, cliModel) : served;
   }
 
   private isCodexChatGptWired(): boolean {
@@ -1142,34 +1152,61 @@ export class ApiEndpointService {
 
   private async followCliPicksOf(provider: ApiEndpointProvider): Promise<void> {
     const state = this.readStateForSnapshot();
-    if (!state?.agents[provider].enabled || this.gatewayUrlFor(provider) === null) return;
+    const isWired =
+      state?.agents[provider].enabled === true && this.gatewayUrlFor(provider) !== null;
+    if (!state || !isWired) return;
     const picks = this.readCliPicks(provider);
     if (!picks) return;
     const before = state.agents[provider];
-    let agent = before;
+    const followed = this.followedCliPicks({ state, provider, picks });
+    const { agent } = followed;
+    // 先落下跟过去的设置，再记模型归 CLI：落不下时记录不动，下次照样跟。
+    if (agent !== before) {
+      await this.commit(
+        state,
+        { ...state, agents: { ...state.agents, [provider]: agent } },
+        { isFollowingCli: true },
+      );
+      this.logger.info({ provider }, "Followed the CLI's own picks");
+    }
+    if (followed.held !== null) this.keepCliModel({ provider, held: followed.held });
+    if (followed.isEffortOriginalForgotten) this.forgetCodexEffortOriginal();
+  }
+
+  /**
+   * 跟过去后的设置（照 magpie：档位与 Ultra Code 一律读文件），与 CLI 的模型要记成哪种归属（不用记为 null）；
+   * Codex 删掉了档位时，接管前的档位也不再放回。
+   */
+  private followedCliPicks(input: {
+    state: ApiEndpointState;
+    provider: ApiEndpointProvider;
+    picks: CliPicks;
+  }): FollowedCliPicks {
+    const { state, provider, picks } = input;
+    let agent = state.agents[provider];
     let held: CliModelHold | null = null;
     if (picks.model) {
       const followed = this.followedModel({ state, provider, cliModel: picks.model.now });
       const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
-      if (followed !== null) agent = { ...agent, defaultModelId: followed };
-      if (followed !== null || isChatGptOwnModel) held = "followed";
-      else if (picks.model.isKept) held = "kept";
+      if (followed !== null) {
+        if (followed !== agent.defaultModelId) agent = { ...agent, defaultModelId: followed };
+        held = "followed";
+      } else if (isChatGptOwnModel) {
+        held = "followed";
+      } else if (picks.model.isKept) {
+        held = "kept";
+      }
     }
-    const isLevelFollowed =
-      picks.level !== null && picks.level.now !== (agent.defaultThinkingOptionId ?? null);
-    if (picks.level && isLevelFollowed) {
-      agent = { ...agent, defaultThinkingOptionId: picks.level.now };
-      if (provider === "codex" && picks.level.now === null) this.forgetCodexEffortOriginal();
+    const isLevelChanged = picks.level !== (agent.defaultThinkingOptionId ?? null);
+    if (isLevelChanged) agent = { ...agent, defaultThinkingOptionId: picks.level };
+    const isUltraCodeOn = picks.isUltraCodeOn;
+    if (isUltraCodeOn !== null) {
+      const isUltraCodeChanged = isUltraCodeOn !== (agent.usesUltraCode === true);
+      if (isUltraCodeChanged) agent = { ...agent, usesUltraCode: isUltraCodeOn };
     }
-    if (picks.ultraCode) agent = { ...agent, usesUltraCode: picks.ultraCode.isOn };
-    if (held !== null) this.keepCliModel({ provider, held });
-    if (agent === before) return;
-    await this.commit(
-      state,
-      { ...state, agents: { ...state.agents, [provider]: agent } },
-      { followsCli: true },
-    );
-    this.logger.info({ provider }, "Followed the CLI's own picks");
+    const isEffortOriginalForgotten =
+      provider === "codex" && isLevelChanged && picks.level === null;
+    return { agent, held, isEffortOriginalForgotten };
   }
 
   private forgetCodexEffortOriginal(): void {
@@ -1190,7 +1227,8 @@ export class ApiEndpointService {
     if (!agent.enabled) return null;
     const picks = this.readCliPicks(provider);
     const model = picks?.model;
-    if (!model || model.isKept) return null;
+    if (!model) return null;
+    if (model.isKept) return null;
     if (this.followedModel({ state, provider, cliModel: model.now }) !== null) return null;
     const isChatGptOwnModel = provider === "codex" && this.isCodexChatGptWired();
     if (isChatGptOwnModel) return null;
@@ -1201,7 +1239,7 @@ export class ApiEndpointService {
     return {
       code: "model_replaced",
       params: { file, model: now, defaultModel: agent.defaultModelId ?? "" },
-      message: `${AGENT_NAMES[provider]}'s model was changed to ${shown} in ${file}, which no API endpoint serves`,
+      message: `${AGENT_NAMES[provider]}'s model was changed to ${shown} in ${file}, and none of your enabled API endpoints serve it`,
     };
   }
 
@@ -1255,7 +1293,7 @@ export class ApiEndpointService {
       // 老客户端的「重新应用」：内容没变也重写这个 Agent 的 CLI 配置，盖掉外部改动。
       rewrite?: ApiEndpointProvider;
       // 这次变更是跟着 CLI 自己存下的选择：默认模型变了也不写回 CLI 配置里的模型。
-      followsCli?: boolean;
+      isFollowingCli?: boolean;
     } = {},
   ): Promise<ApiEndpointState> {
     const next = this.settleThinking({ previous, next: settleAgentSettings(proposed) });
@@ -1289,7 +1327,7 @@ export class ApiEndpointService {
           provider,
           wiring: this.cliWiring(next, provider, tokens),
           agent: next.agents[provider],
-          rewritesModel: rewritesCliModel({ previous, next, provider, options }),
+          shouldRewriteModel: shouldRewriteCliModel({ previous, next, provider, options }),
         });
         synced.push(provider);
       }
@@ -1335,13 +1373,13 @@ export class ApiEndpointService {
 
   private syncCli(input: CliSync): void {
     const { provider, wiring, agent } = input;
-    const rewritesModel = input.rewritesModel === true;
+    const shouldRewriteModel = input.shouldRewriteModel === true;
     if (!wiring) {
       this.restoreOfficial(provider, agent.defaultModelId);
     } else if (provider === "codex") {
-      this.writeCodexEndpoint({ wiring, rewritesModel });
+      this.writeCodexEndpoint({ wiring, shouldRewriteModel });
     } else {
-      this.writeClaudeEndpoint({ wiring, rewritesModel });
+      this.writeClaudeEndpoint({ wiring, shouldRewriteModel });
     }
   }
 
@@ -1929,7 +1967,7 @@ export class ApiEndpointService {
   }
 
   private writeClaudeEndpoint(input: CliEndpointWrite): void {
-    const { wiring, rewritesModel } = input;
+    const { wiring, shouldRewriteModel } = input;
     const settingsPath = this.resolveClaudeSettingsPath();
     const record = this.store.readClaudeTakeover();
     // 这次首次改写做出的副本；比对不通过重试时收回，免得留下多份。
@@ -1941,7 +1979,7 @@ export class ApiEndpointService {
           text,
           wiring,
           takeover: record.takeover,
-          rewritesModel,
+          shouldRewriteModel,
         });
         if (result.kind === "unparsable") {
           throw unparsable({
@@ -2015,7 +2053,7 @@ export class ApiEndpointService {
    * config.toml 替换不成时接管记录退回切换前的样子。
    */
   private writeCodexEndpoint(input: CliEndpointWrite): void {
-    const { wiring, rewritesModel } = input;
+    const { wiring, shouldRewriteModel } = input;
     const configPath = this.resolveCodexConfigPath();
     const record = this.store.readCodexTakeover();
     let createdBackup: string | null = null;
@@ -2033,7 +2071,7 @@ export class ApiEndpointService {
               : null,
           },
           takeover: record.takeover,
-          rewritesModel,
+          shouldRewriteModel,
         });
         if (result.kind === "unparsable")
           throw unparsable({ filePath: configPath, detail: result.message });
@@ -2459,17 +2497,17 @@ function enabledAgentSettings(input: {
 /**
  * 这次改写要不要盖掉 CLI 自己换过的模型：「重新应用」，或在 Osuna 里换了默认模型（跟着 CLI 换的不算）。
  */
-function rewritesCliModel(input: {
+function shouldRewriteCliModel(input: {
   previous: ApiEndpointState;
   next: ApiEndpointState;
   provider: ApiEndpointProvider;
-  options: { rewrite?: ApiEndpointProvider; followsCli?: boolean };
+  options: { rewrite?: ApiEndpointProvider; isFollowingCli?: boolean };
 }): boolean {
   const { previous, next, provider, options } = input;
   if (provider === options.rewrite) return true;
   const isDefaultModelChanged =
     previous.agents[provider].defaultModelId !== next.agents[provider].defaultModelId;
-  return isDefaultModelChanged && options.followsCli !== true;
+  return isDefaultModelChanged && options.isFollowingCli !== true;
 }
 
 /** 写进接管记录的 reconnect；没有默认模型时不写。 */

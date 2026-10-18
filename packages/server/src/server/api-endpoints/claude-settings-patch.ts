@@ -48,7 +48,7 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  *   都记下原值，切回官方时放回；没设的那一项一个键都不碰。
  *   CLI 自己存下的档位跟着走（第 30 条），不算被改过。
  * - 顶层 model 被 CLI 自己换过（/model）之后归 CLI（照 magpie 的 Follow，ADR 0012）：之后的重写不碰它，
- *   直到「重新应用」或在 Osuna 里换默认模型（rewritesModel）。
+ *   直到「重新应用」或在 Osuna 里换默认模型（shouldRewriteModel）。
  */
 
 /** 接管期间不能留在 env 里的变量。 */
@@ -191,7 +191,7 @@ export function applyClaudeApiEndpoint(input: {
   wiring: ClaudeGatewayWiring;
   takeover: ClaudeSettingsTakeover | null;
   // 「重新应用」或在 Osuna 里换了默认模型：CLI 换过的 model 也写回默认模型。省略为不写回。
-  rewritesModel?: boolean;
+  shouldRewriteModel?: boolean;
 }): ClaudeSettingsPatchResult {
   const { bom, body } = splitBom(input.text ?? "");
   const baseText = body.trim() === "" ? "{}\n" : body;
@@ -221,7 +221,7 @@ export function applyClaudeApiEndpoint(input: {
     settings: parsed.settings,
     model: input.wiring.model,
     takeover: input.takeover,
-    rewritesModel: input.rewritesModel === true,
+    shouldRewriteModel: input.shouldRewriteModel === true,
     formatting,
   });
   text = model.text;
@@ -298,7 +298,7 @@ function writeModel(input: {
   settings: ParsedSettings;
   model: string;
   takeover: ClaudeSettingsTakeover | null;
-  rewritesModel: boolean;
+  shouldRewriteModel: boolean;
   formatting: FormattingOptions;
 }): ModelPatch {
   const held = heldCliModel(input);
@@ -317,12 +317,13 @@ function writeModel(input: {
 function heldCliModel(input: {
   settings: ParsedSettings;
   takeover: ClaudeSettingsTakeover | null;
-  rewritesModel: boolean;
+  shouldRewriteModel: boolean;
 }): NonNullable<ClaudeSettingsTakeover["model"]> | null {
   const recorded = input.takeover?.model;
-  if (!recorded || input.rewritesModel) return null;
+  if (!recorded || input.shouldRewriteModel) return null;
   const isChangedByCli = fileModel(input.settings) !== recorded.written;
-  return recorded.held !== undefined || isChangedByCli ? recorded : null;
+  const isHeldByCli = recorded.held !== undefined || isChangedByCli;
+  return isHeldByCli ? recorded : null;
 }
 
 /** 文件里的顶层 model；没有或不是字符串为 null。 */
@@ -767,22 +768,11 @@ export function readClaudeCliPicks(input: {
   }
   const now = fileModel(settings);
   const recorded = takeover.model;
-  const isModelChanged = recorded !== undefined && now !== recorded.written;
-  const model = isModelChanged ? { now, isKept: recorded.held === "kept" } : null;
-  const keys = takeover.thinking?.keys ?? [];
-  // Osuna 写的档位：effortLevel、modelSettings 与 max 的环境变量写的是同一档。
-  const written = keys.find((key) => typeof key.written === "string")?.written;
+  let model: CliPicks["model"] = null;
+  const isChangedByCli = recorded !== undefined && now !== recorded.written;
+  if (recorded && isChangedByCli) model = { now, isKept: recorded.held === "kept" };
   const level = claudeLevelIn(settings, now ?? recorded?.written ?? "");
-  const isLevelChanged = typeof written === "string" && level !== written;
-  const ultraCodeKey = keys.find((key) => samePath(key.path, ULTRACODE_PATH));
-  const isUltraOn = settings.ultracode === true;
-  const isUltraCodeChanged =
-    ultraCodeKey !== undefined && isUltraOn !== (ultraCodeKey.written === true);
-  return {
-    model,
-    level: isLevelChanged ? { now: level } : null,
-    ultraCode: isUltraCodeChanged ? { isOn: isUltraOn } : null,
-  };
+  return { model, level, isUltraCodeOn: settings.ultracode === true };
 }
 
 /** magpie claudeTopEffort：读顶层 effortLevel 的 Claude 模型；Opus 5.5 起只读 modelSettings，别家的模型读顶层。 */

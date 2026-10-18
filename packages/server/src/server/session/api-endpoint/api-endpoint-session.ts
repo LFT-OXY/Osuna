@@ -4,7 +4,11 @@ import type {
   ApiEndpointError,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
-import { ApiEndpointRequestError, type ApiEndpointService } from "../../api-endpoints/service.js";
+import {
+  ApiEndpointRequestError,
+  type ApiEndpointService,
+  type KeepCurrentSettingsCode,
+} from "../../api-endpoints/service.js";
 
 export interface ApiEndpointSessionHost {
   emit(msg: SessionOutboundMessage): void;
@@ -245,10 +249,8 @@ export class ApiEndpointSession {
     >,
   ): Promise<void> {
     try {
-      const agent = await this.service.keepCurrentSettings({
-        provider: request.provider,
-        ...(request.code ? { code: request.code } : {}),
-      });
+      const code = keepCurrentSettingsCode(request.code);
+      const agent = await this.service.keepCurrentSettings({ provider: request.provider, code });
       this.host.emit({
         type: "provider.api_endpoint.keep_current_settings.response",
         payload: { requestId: request.requestId, provider: request.provider, agent, error: null },
@@ -448,5 +450,19 @@ export class ApiEndpointSession {
       code: "unknown",
       message: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+/** 「保留当前设置」回应的提示：省略为关掉总开关；认得的只有 model_replaced，别的明确拒绝。 */
+function keepCurrentSettingsCode(code: string | undefined): KeepCurrentSettingsCode | undefined {
+  switch (code) {
+    case undefined:
+    case "model_replaced":
+      return code;
+    default:
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Keep current settings doesn't answer '${code}'`,
+      });
   }
 }
