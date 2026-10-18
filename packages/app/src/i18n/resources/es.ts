@@ -2736,6 +2736,7 @@ export const es: TranslationResources = {
           unavailable: "No se pudieron listar los cambios uno por uno: {{reason}}",
           valueBefore: "Valor anterior",
           now: "Ahora: {{line}}",
+          nowAbsent: "Ahora: no está en el archivo",
           moreLines_one: "{{count}} línea más",
           moreLines_other: "{{count}} líneas más",
           created: "Creado",
@@ -2743,6 +2744,8 @@ export const es: TranslationResources = {
           codexNote:
             "El proveedor de modelos de Codex de Osuna se mantiene, así que las conversaciones abiertas con él siguen abriéndose.",
           confirm: "Desactivar y restaurar",
+          keepCurrentHint:
+            "Mantener la configuración actual lo desactiva y deja el archivo como está; {{agent}} sigue lo que diga.",
         },
         issues: {
           updateHost:

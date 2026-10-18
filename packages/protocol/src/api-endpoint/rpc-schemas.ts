@@ -437,13 +437,9 @@ export const ApiEndpointSwitchOffFileSchema = z.object({
 });
 export type ApiEndpointSwitchOffFile = z.infer<typeof ApiEndpointSwitchOffFileSchema>;
 
-/**
- * 关掉会改的文件，空数组表示没有要改的。`keepsCodexModelProvider`：Osuna 的 Codex 服务商留在 config.toml 里，
- * 用它开过的对话还能打开（只有 Codex 为 true）。
- */
+/** 关掉会改的文件，空数组表示没有要改的。 */
 export const ApiEndpointSwitchOffPreviewSchema = z.object({
   files: z.array(ApiEndpointSwitchOffFileSchema),
-  keepsCodexModelProvider: z.boolean(),
 });
 export type ApiEndpointSwitchOffPreview = z.infer<typeof ApiEndpointSwitchOffPreviewSchema>;
 

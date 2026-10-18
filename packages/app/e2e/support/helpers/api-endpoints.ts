@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile, rm } from "node:fs/promises";
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -7,6 +8,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { z } from "zod";
 import type {
   ApiEndpointBaseUrl,
   ApiEndpointListResponse,
@@ -182,6 +184,10 @@ interface ApiEndpointSeedClient {
     keepsClaudeAiLogin?: boolean;
     defaultThinkingOptionId?: string | null;
     usesUltraCode?: boolean;
+    backgroundModelId?: string | null;
+    subagentModelId?: string | null;
+    subagentThinkingOptionId?: string | null;
+    memoryModelId?: string | null;
     forcedSubagentModelId?: string | null;
     allowsAnySubagentModel?: boolean;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
@@ -228,16 +234,24 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
     await client.apiEndpointSetAgentSettings({ provider, enabled: false });
   }
   // 「保留 claude.ai 登录」与默认思考档位关着也记着，不清掉会带进下一个用例。
+  // 后台小任务、Subagent 与记忆模型也一样。
   await client.apiEndpointSetAgentSettings({
     provider: "claude",
     enabled: false,
     keepsClaudeAiLogin: false,
     defaultThinkingOptionId: null,
+    usesUltraCode: false,
+    backgroundModelId: null,
+    subagentModelId: null,
+    subagentThinkingOptionId: null,
   });
   await client.apiEndpointSetAgentSettings({
     provider: "codex",
     enabled: false,
     defaultThinkingOptionId: null,
+    subagentModelId: null,
+    subagentThinkingOptionId: null,
+    memoryModelId: null,
     forcedSubagentModelId: null,
     allowsAnySubagentModel: false,
   });
@@ -245,7 +259,27 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
   for (const endpoint of list.endpoints) {
     await client.apiEndpointDelete("claude", endpoint.id);
   }
+  await forgetTakeovers();
 }
+
+/**
+ * 开关关着时接管记录还留着上次关掉前的默认模型（reconnect），下次打开会挑它（ADR 0012 的 again）。
+ * 开关都关着、没有接管时删掉这两份记录，下一个用例从没接过的样子开始。
+ */
+async function forgetTakeovers(): Promise<void> {
+  const home = process.env.E2E_PASEO_HOME;
+  if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
+  for (const name of ["takeover-claude.json", "takeover-codex.json"]) {
+    const filePath = path.join(home, "api-endpoints", name);
+    if (!existsSync(filePath)) continue;
+    const text = await readFile(filePath, "utf8");
+    // 还接管着（关掉没成）就留着，不替 daemon 丢掉原值。
+    const { takeover } = TakeoverRecordSchema.parse(JSON.parse(text));
+    if (takeover === null) await rm(filePath);
+  }
+}
+
+const TakeoverRecordSchema = z.object({ takeover: z.unknown() });
 
 /**
  * 像 Claude Code 那样经 daemon 中转站发一条对话，让选中这个模型的接口按上游的回复进入冷却或需要检查。

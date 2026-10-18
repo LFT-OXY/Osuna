@@ -787,13 +787,16 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 要判断的地方
 
-- 只在关「使用第三方接口」开关时弹；提示区的「切回官方」照旧直接关（工单只写了开关）。要不要也先预览，留给编排者 / 用户定。
-- 文件读不懂时预览算不出，确认照常送出关开关；daemon 改不回读不懂的文件，照旧拒绝并在区块顶上说原因（现有行为，没改）。
-- 主机没声明 `apiEndpointCliWiring` 时不弹框，直接关（新 RPC 跟这个能力位）。
+- 照 magpie 每个断开入口都先 `askDisconnect`：总开关与提示区的「切回官方」都开同一个框，由框里关掉；失败原因留在框里。
+- 文件读不懂时预览算不出，确认照常送出关开关，daemon 改不回、拒绝（同 magpie）；用户 10-19 定：拒绝后框里另给「保留当前设置」（`keep_current_settings`，关掉、文件不动）。
+- Codex 那句说明照 magpie 按 Agent 是不是 Codex 显示，读取中、算不出时也在；线上不另带标志。
+- 主机没声明 `apiEndpointCliWiring` 时不弹框，直接关（浏览器测试覆盖）。
+- 放回的一行（接入前有、现在没有的键）写「现在：文件里没有这一项」。
+- e2e 的 `resetApiEndpoints` 另清后台小任务、Subagent、记忆模型，并在开关都关着时删掉接管记录（含 reconnect），免得上一个用例关掉前的默认模型被下一个用例按 again 挑回来（24 号用例之后 Codex 用例必挂的原因）。
 
 ### 测试
 
 - 纯逻辑 `switch-off-preview.test.ts`（server）：magpie 的大文件、配对、相同内容、括号、大块拿掉；遮密钥；新建、删除、不变、家目录外的路径。
-- daemon 端到端：Claude（改回、放回、拿掉逐行与关掉后的文件一致；Osuna 建的文件列为删除；开关关着时没有；读不懂时回 `config_unparsable`）与 Codex（两行改回、目录行拿掉、`keepsCodexModelProvider`，关掉后与 `keptConfig` 一致；读不懂）；都比对预览前后内容与 mtime。
-- app：`internal/switch-off-preview.test.ts`（折叠、认不出的种类改文字、算不出）；浏览器测试「Turning Use API endpoints off previews what it puts back」：扣住预览请求看「正在读取」、放开后的逐行、取消不改文件、确认后关掉并改回；折叠「还有 N 行」展开；读不懂时文字说明加原因、仍可确认；Codex 窄窗口说明可见、确认按钮在视口内。原来三处关开关的步骤补上确认。
-- 截图（无头 Chromium、临时 HOME、假数据）：`screenshots/26-switch-off-sheet_long-list_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_codex_compact-390_{en,zh}.png`、`26-switch-off-sheet_unreadable_desktop-1280_{en,zh}.png`。
+- daemon 端到端：Claude（改回、放回、拿掉逐行与关掉后的文件一致；Osuna 建的文件列为删除；开关关着时没有；读不懂时回 `config_unparsable`）与 Codex（两行改回、目录行拿掉，关掉后与 `keptConfig` 一致；读不懂）；都比对预览前后内容与 mtime。
+- app：`internal/switch-off-preview.test.ts`（折叠、认不出的种类改文字、算不出）；浏览器测试「Turning Use API endpoints off previews what it puts back」：扣住预览请求看「正在读取」、放开后整份逐行与「现在」行、取消不改文件、确认后关掉并改回；折叠「还有 4 行」展开；读不懂时文字说明加原因，确认被拒在框里、「保留当前设置」关掉且文件不动；Codex 读取中与列表时说明都在、窄窗口确认按钮在视口内；老主机直接关。提示区「切回官方」开同一个框，失败留在框里、重试后关掉。原来三处关开关的步骤补上确认。
+- 截图（无头 Chromium、临时 HOME、假数据；长列表图里第二个文件是截图时注入的假数据，用来看按文件分组）：`screenshots/26-switch-off-sheet_long-list_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_codex_compact-390_{en,zh}.png`、`26-switch-off-sheet_unreadable_desktop-1280_{en,zh}.png`、`26-switch-off-sheet_unreadable-refused_desktop-1280_{en,zh}.png`。

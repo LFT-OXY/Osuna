@@ -75,6 +75,9 @@ export interface AgentIssueActionState {
   action: AgentIssueAction;
 }
 
+/** 提示区里直接发给主机的处理。 */
+export type DirectIssueAction = Exclude<AgentIssueAction, "switchToOfficial">;
+
 export interface UseHostEndpointsResult {
   state: HostEndpointsLoadState;
   // 正在切换开关或「立刻恢复」的那一家。
@@ -95,7 +98,8 @@ export interface UseHostEndpointsResult {
   // 提示区的处理：正在做的、失败的原因（留在提示区里，直到重试或关掉）。
   pendingIssueAction: AgentIssueActionState | null;
   issueActionError: (AgentIssueActionState & { message: string }) | null;
-  runIssueAction: (provider: string, action: AgentIssueAction) => void;
+  // 「切回官方」不在这里：它先开关开关的确认框（switch-off-sheet.tsx），由框里关掉。
+  runIssueAction: (provider: string, action: DirectIssueAction) => void;
   dismissIssueActionError: () => void;
   save: (request: ConnectionSaveRequest) => Promise<ConnectionSaveResult>;
   detect: (
@@ -245,7 +249,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   );
 
   const runIssueAction = useCallback(
-    (provider: string, action: AgentIssueAction) => {
+    (provider: string, action: DirectIssueAction) => {
       if (!client) return;
       void (async () => {
         setPendingIssueAction({ provider, action });
@@ -333,19 +337,17 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
 type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
 
 /**
- * 重新应用 = 开着、按当前设置重写；切回官方 = 关开关并按接管记录还原；保留当前设置是单独的 RPC（「模型被换掉」时带上它的 code）；
+ * 重新应用 = 开着、按当前设置重写；保留当前设置是单独的 RPC（「模型被换掉」时带上它的 code）；
  * 「保留 claude.ai 登录」的两种处理只改这个选项，CLI 配置随之重写（提示只在开关开着时出现）。
  */
 function sendIssueAction(
   client: HostClient,
   provider: string,
-  action: AgentIssueAction,
+  action: DirectIssueAction,
 ): Promise<{ error: ApiEndpointError | null }> {
   switch (action) {
     case "reapply":
       return client.apiEndpointSetAgentSettings({ provider, enabled: true, reapply: true });
-    case "switchToOfficial":
-      return client.apiEndpointSetAgentSettings({ provider, enabled: false });
     case "keepCurrent":
       return client.apiEndpointKeepCurrentSettings({ provider });
     case "keepReplacedModel":

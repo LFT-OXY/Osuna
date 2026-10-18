@@ -929,7 +929,6 @@ describe("Claude API endpoint over the daemon RPC", () => {
               ],
             },
           ],
-          keepsCodexModelProvider: false,
         },
         error: null,
       });
@@ -952,7 +951,6 @@ describe("Claude API endpoint over the daemon RPC", () => {
         provider: "claude",
         preview: {
           files: [{ path: "~/claude/settings.json", change: "removed", lines: [] }],
-          keepsCodexModelProvider: false,
         },
         error: null,
       });
@@ -965,7 +963,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       expect(await client.apiEndpointPreviewSwitchOff("claude")).toEqual({
         requestId: expect.any(String),
         provider: "claude",
-        preview: { files: [], keepsCodexModelProvider: false },
+        preview: { files: [] },
         error: null,
       });
     });

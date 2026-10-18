@@ -2681,6 +2681,7 @@ export const ar: TranslationResources = {
           unavailable: "تعذّر سرد التغييرات واحدًا تلو الآخر: {{reason}}",
           valueBefore: "القيمة السابقة",
           now: "الآن: {{line}}",
+          nowAbsent: "الآن: غير موجود في الملف",
           moreLines_one: "سطور أخرى: {{count}}",
           moreLines_other: "سطور أخرى: {{count}}",
           created: "أُنشئ",
@@ -2688,6 +2689,8 @@ export const ar: TranslationResources = {
           codexNote:
             "يبقى موفّر نماذج Codex الخاص بـ Osuna، لذا تظل المحادثات التي فُتحت عليه قابلة للفتح.",
           confirm: "إيقاف واستعادة",
+          keepCurrentHint:
+            "«الإبقاء على الإعدادات الحالية» يوقفه ويترك الملف كما هو، ويتبع {{agent}} ما فيه.",
         },
         issues: {
           updateHost: "حدّث Osuna على هذا المضيف لترى هنا متى تُغيَّر إعدادات {{agent}} خارج Osuna.",

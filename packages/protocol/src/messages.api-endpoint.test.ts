@@ -788,7 +788,6 @@ describe("API endpoint settings issues (apiEndpointCliWiring)", () => {
             },
             { path: "~/.codex/old.toml", change: "removed", lines: [] },
           ],
-          keepsCodexModelProvider: true,
         },
         error: null,
       },

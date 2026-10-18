@@ -109,11 +109,11 @@ function AgentApiEndpoints({
   const connection = isOwnConnection ? lastConnection.connection : null;
 
   const client = useHostRuntimeClient(serverId);
-  // 关总开关前先给确认框看会改回什么。
-  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有预览，直接关。
+  // 关总开关与提示区的「切回官方」先开确认框，看会改回什么，由框里关掉。
   const [isConfirmingSwitchOff, setIsConfirmingSwitchOff] = useState(false);
   const handleToggle = useCallback(
     (enabled: boolean) => {
+      // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机没有预览，直接关。
       const asksFirst = !enabled && hasIssues;
       if (asksFirst) {
         setIsConfirmingSwitchOff(true);
@@ -123,12 +123,7 @@ function AgentApiEndpoints({
     },
     [hasIssues, provider, setAgentSettings],
   );
-  const showsSwitchOffSheet = isConfirmingSwitchOff && client !== null;
-  const cancelSwitchOff = useCallback(() => setIsConfirmingSwitchOff(false), []);
-  const confirmSwitchOff = useCallback(() => {
-    setIsConfirmingSwitchOff(false);
-    setAgentSettings(provider, { enabled: false });
-  }, [provider, setAgentSettings]);
+  const closeSwitchOff = useCallback(() => setIsConfirmingSwitchOff(false), []);
   const handleDefaultModelChange = useCallback(
     (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
     [provider, setAgentSettings],
@@ -179,7 +174,13 @@ function AgentApiEndpoints({
     [isEnabled, provider, setAgentSettings],
   );
   const handleIssueAction = useCallback(
-    (action: AgentIssueAction) => runIssueAction(provider, action),
+    (action: AgentIssueAction) => {
+      if (action === "switchToOfficial") {
+        setIsConfirmingSwitchOff(true);
+        return;
+      }
+      runIssueAction(provider, action);
+    },
     [provider, runIssueAction],
   );
   const issueActions = useMemo(() => {
@@ -244,14 +245,13 @@ function AgentApiEndpoints({
         onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}
         issueActions={issueActions}
       />
-      {showsSwitchOffSheet ? (
+      {isConfirmingSwitchOff ? (
         <SwitchOffSheet
           client={client}
           serverId={serverId}
           provider={provider}
           providerLabel={providerLabel}
-          onCancel={cancelSwitchOff}
-          onConfirm={confirmSwitchOff}
+          onClose={closeSwitchOff}
         />
       ) : null}
     </>

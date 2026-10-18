@@ -2698,12 +2698,15 @@ export const zhCN: TranslationResources = {
           unavailable: "没能逐条列出：{{reason}}",
           valueBefore: "打开前的值",
           now: "现在：{{line}}",
+          nowAbsent: "现在：文件里没有这一项",
           moreLines_one: "还有 {{count}} 行",
           moreLines_other: "还有 {{count}} 行",
           created: "新建",
           deleted: "删除",
           codexNote: "Osuna 的 Codex 服务商保留，用它开过的对话还能打开。",
           confirm: "关闭并改回",
+          keepCurrentHint:
+            "「保留当前设置」会直接关掉，文件保持现在的样子，{{agent}} 照文件里写的走。",
         },
         issues: {
           updateHost: "更新这台主机上的 Osuna 后，{{agent}} 的配置被别的程序改了会在这里提示。",

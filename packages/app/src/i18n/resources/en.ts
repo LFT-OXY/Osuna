@@ -2738,13 +2738,14 @@ export const en = {
         switchOffPreview: {
           title: "Turn off API endpoints for {{agent}}?",
           intro:
-            "{{agent}} goes back to how it was before this was turned on. These are the places put back.",
+            "{{agent}} goes back to how it was before this was turned on. Here is what gets put back.",
           loading: "Reading what changes…",
           fallback:
             "Osuna takes out everything it wrote into {{agent}}'s config — the address, token, models and thinking — and puts back the settings {{agent}} had before.",
           unavailable: "The changes couldn't be listed one by one: {{reason}}",
           valueBefore: "Value before",
           now: "Now: {{line}}",
+          nowAbsent: "Now: not in the file",
           moreLines_one: "{{count}} more line",
           moreLines_other: "{{count}} more lines",
           created: "Created",
@@ -2752,6 +2753,8 @@ export const en = {
           codexNote:
             "Osuna's Codex model provider stays, so conversations opened on it still open.",
           confirm: "Turn off and restore",
+          keepCurrentHint:
+            "Keep current settings turns it off and leaves the file as it is, so {{agent}} follows what it says.",
         },
         issues: {
           updateHost:

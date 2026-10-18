@@ -2707,6 +2707,7 @@ export const ja: TranslationResources = {
           unavailable: "変更を一つずつ表示できませんでした：{{reason}}",
           valueBefore: "オンにする前の値",
           now: "現在：{{line}}",
+          nowAbsent: "現在：ファイルにこの項目はありません",
           moreLines_one: "ほか {{count}} 行",
           moreLines_other: "ほか {{count}} 行",
           created: "新規作成",
@@ -2714,6 +2715,8 @@ export const ja: TranslationResources = {
           codexNote:
             "Osuna の Codex モデルプロバイダーは残るため、それで開いた会話は引き続き開けます。",
           confirm: "オフにして元に戻す",
+          keepCurrentHint:
+            "「現在の設定を保持」はオフにしてファイルをそのまま残します。{{agent}} はファイルの内容どおりに動きます。",
         },
         issues: {
           updateHost:

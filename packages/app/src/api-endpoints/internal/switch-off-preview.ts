@@ -1,3 +1,6 @@
+// 每个文件先列几行、其余折叠照 magpie（https://github.com/yetone/magpie）internal/gui/assets/app.js 的 changesList。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import type {
   ApiEndpointSwitchOffFile,
   ApiEndpointSwitchOffLine,
@@ -41,39 +44,39 @@ export type SwitchOffPreviewInput =
 
 export type SwitchOffPreviewView =
   | { status: "loading" }
-  | { status: "listed"; files: SwitchOffFileView[]; keepsCodexModelProvider: boolean }
+  | { status: "listed"; files: SwitchOffFileView[] }
   // 没有逐条可列的：没有要改的、主机算不出（带原因）或给了认不出的改动种类。
-  | { status: "described"; reason: string | null; keepsCodexModelProvider: boolean };
+  | { status: "described"; reason: string | null };
 
 export function selectSwitchOffPreview(input: SwitchOffPreviewInput): SwitchOffPreviewView {
   if (input.status === "loading") return { status: "loading" };
-  if (input.status === "failed") {
-    return { status: "described", reason: input.reason, keepsCodexModelProvider: false };
+  if (input.status === "failed") return { status: "described", reason: input.reason };
+  const { files } = input.preview;
+  if (files.length === 0) return { status: "described", reason: null };
+  const views: SwitchOffFileView[] = [];
+  for (const file of files) {
+    const view = toFileView(file);
+    // 认不出的改动种类（更新的主机）：整份改用文字说明。
+    if (view === null) return { status: "described", reason: null };
+    views.push(view);
   }
-  const { files, keepsCodexModelProvider } = input.preview;
-  const views = files.map(toFileView);
-  const isAllKnown = views.every((view) => view !== null);
-  if (files.length === 0 || !isAllKnown) {
-    return { status: "described", reason: null, keepsCodexModelProvider };
-  }
-  return {
-    status: "listed",
-    files: views.filter((view) => view !== null),
-    keepsCodexModelProvider,
-  };
+  return { status: "listed", files: views };
 }
 
 function toFileView(file: ApiEndpointSwitchOffFile): SwitchOffFileView | null {
   const kind = fileKind(file.change);
-  const lines = file.lines.map(toLineView);
-  const isAllKnown = lines.every((line) => line !== null);
-  if (kind === null || !isAllKnown) return null;
-  const known = lines.filter((line) => line !== null);
-  if (known.length <= MOST_UNFOLDED) {
-    return { path: file.path, kind, firstLines: known, foldedLines: [] };
+  if (kind === null) return null;
+  const lines: SwitchOffLineView[] = [];
+  for (const [position, line] of file.lines.entries()) {
+    const view = toLineView(line, position);
+    if (view === null) return null;
+    lines.push(view);
   }
-  const firstLines = known.slice(0, FIRST_LINES);
-  const foldedLines = known.slice(FIRST_LINES);
+  if (lines.length <= MOST_UNFOLDED) {
+    return { path: file.path, kind, firstLines: lines, foldedLines: [] };
+  }
+  const firstLines = lines.slice(0, FIRST_LINES);
+  const foldedLines = lines.slice(FIRST_LINES);
   return { path: file.path, kind, firstLines, foldedLines };
 }
 

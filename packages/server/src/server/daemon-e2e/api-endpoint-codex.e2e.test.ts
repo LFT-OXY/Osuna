@@ -599,7 +599,6 @@ experimental_bearer_token = "${token}"
               ],
             },
           ],
-          keepsCodexModelProvider: true,
         },
         error: null,
       });

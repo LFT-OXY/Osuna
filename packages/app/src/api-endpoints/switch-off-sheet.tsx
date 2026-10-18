@@ -1,9 +1,15 @@
+// 确认框照 magpie（https://github.com/yetone/magpie）internal/gui/assets/app.js 的 askDisconnect 与 changesList 摆。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import React, { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Text, type TextColor } from "@/components/ui/text";
 import { useFetchQuery } from "@/data/query";
@@ -16,54 +22,105 @@ import {
   type SwitchOffPreviewInput,
 } from "./internal/switch-off-preview";
 
-export type SwitchOffPreviewClient = Pick<DaemonClient, "apiEndpointPreviewSwitchOff">;
+export type SwitchOffClient = Pick<
+  DaemonClient,
+  "apiEndpointPreviewSwitchOff" | "apiEndpointSetAgentSettings" | "apiEndpointKeepCurrentSettings"
+>;
 
 const SHEET_WIDTH = 560;
 
+/** 关掉的两种办法：按接管记录改回（确认），或文件保持现在的样子（保留当前设置）。 */
+type SwitchOffWay = "restore" | "keepCurrent";
+
+/** 主机拒绝关掉：给用户看的原因与错误码。 */
+class SwitchOffRefusedError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
+    super(message);
+    this.name = "SwitchOffRefusedError";
+  }
+}
+
 /**
- * 关「使用第三方接口」前的确认框（照 magpie 的 askDisconnect）：主机在当前文件上算出关掉后会改回、删除、新建的地方，
- * 按文件逐行列出；读取中说正在读，算不出时改用文字说明（带原因），仍可确认。确认后交给调用方关开关。
+ * 关「使用第三方接口」前的确认框：总开关与提示区的「切回官方」都从这里关（照 magpie 的 askDisconnect）。
+ * 主机在当前文件上算出关掉后会改回、删除、新建的地方，按文件逐行列出；读取中说正在读，算不出时改用文字说明（带原因），
+ * 仍可确认。确认由这里发出；主机拒绝时原因留在框里，文件读不懂时另给「保留当前设置」：关掉、文件不动。
  */
 export function SwitchOffSheet({
   client,
   serverId,
   provider,
   providerLabel,
-  onCancel,
-  onConfirm,
+  onClose,
 }: {
-  client: SwitchOffPreviewClient;
+  // 主机没连上时为 null：预览算不出，确认也按不了。
+  client: SwitchOffClient | null;
   serverId: string;
   provider: string;
   providerLabel: string;
-  onCancel: () => void;
-  onConfirm: () => void;
+  onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const describeError = useCallback(
+    (error: ApiEndpointError): string => {
+      // 读不懂的配置文件用界面语言说明原因；其余照主机原文。
+      if (error.code !== "config_unparsable") return error.message;
+      if (!error.params) return error.message;
+      return describeUnparsableFile(t, error.params);
+    },
+    [t],
+  );
   const previewQuery = useFetchQuery({
     queryKey: ["api-endpoint-switch-off-preview", serverId, provider],
     dataShape: "value",
     staleTimeMs: 0,
     retry: false,
-    queryFn: () => client.apiEndpointPreviewSwitchOff(provider),
+    enabled: client !== null,
+    queryFn: () => {
+      if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
+      return client.apiEndpointPreviewSwitchOff(provider);
+    },
   });
   const input = useMemo<SwitchOffPreviewInput>(() => {
-    const payload = previewQuery.data;
+    if (!client) return { status: "failed", reason: t("workspace.terminal.hostDisconnected") };
     if (previewQuery.error) {
       return { status: "failed", reason: toErrorMessage(previewQuery.error) };
     }
+    const payload = previewQuery.data;
     if (!payload) return { status: "loading" };
     if (payload.preview) return { status: "answered", preview: payload.preview };
-    const { error } = payload;
-    if (!error) throw new Error("The host returned neither a preview nor an error");
-    // 读不懂的配置文件用界面语言说明原因；其余照主机原文。
-    if (error.code === "config_unparsable" && error.params) {
-      return { status: "failed", reason: describeUnparsableFile(t, error.params) };
-    }
-    return { status: "failed", reason: error.message };
-  }, [previewQuery.data, previewQuery.error, t]);
+    if (payload.error) return { status: "failed", reason: describeError(payload.error) };
+    return { status: "failed", reason: "The host returned neither a preview nor an error" };
+  }, [client, describeError, previewQuery.data, previewQuery.error, t]);
   const view = selectSwitchOffPreview(input);
-  const keepsCodexModelProvider = view.status !== "loading" && view.keepsCodexModelProvider;
+
+  const switchOff = useMutation({
+    mutationFn: async (way: SwitchOffWay) => {
+      if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
+      const payload = await sendSwitchOff({ client, provider, way });
+      if (payload.error) {
+        throw new SwitchOffRefusedError(describeError(payload.error), payload.error.code);
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["api-endpoints", serverId] });
+      onClose();
+    },
+  });
+  const failure = switchOff.error;
+  const refusal = failure instanceof SwitchOffRefusedError ? failure : null;
+  // 文件读不懂、改不回时，另给「保留当前设置」：关掉，文件保持现在的样子。
+  const offersKeepCurrent = refusal?.code === "config_unparsable";
+  const isBusy = switchOff.isPending;
+  const canSwitchOff = client !== null && !isBusy;
+  const { mutate } = switchOff;
+  const restore = useCallback(() => mutate("restore"), [mutate]);
+  const keepCurrent = useCallback(() => mutate("keepCurrent"), [mutate]);
+  // 有逐条可列的才说「以下是要改回的地方」。
+  const showsIntro = view.status === "loading" || view.status === "listed";
 
   const header = useMemo<SheetHeader>(
     () => ({
@@ -74,30 +131,55 @@ export function SwitchOffSheet({
   const footer = useMemo(
     () => (
       <View style={styles.actions}>
-        <Button variant="secondary" size="sm" onPress={onCancel} testID="switch-off-cancel">
+        <Button
+          variant="secondary"
+          size="sm"
+          onPress={onClose}
+          disabled={isBusy}
+          testID="switch-off-cancel"
+        >
           {t("common.actions.cancel")}
         </Button>
-        <Button variant="destructive" size="sm" onPress={onConfirm} testID="switch-off-confirm">
+        {offersKeepCurrent ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={keepCurrent}
+            disabled={!canSwitchOff}
+            testID="switch-off-keep-current"
+          >
+            {t("settings.apiEndpoints.agent.issues.keepCurrent")}
+          </Button>
+        ) : null}
+        <Button
+          variant="destructive"
+          size="sm"
+          onPress={restore}
+          disabled={!canSwitchOff}
+          testID="switch-off-confirm"
+        >
           {t("settings.apiEndpoints.agent.switchOffPreview.confirm")}
         </Button>
       </View>
     ),
-    [onCancel, onConfirm, t],
+    [canSwitchOff, isBusy, keepCurrent, offersKeepCurrent, onClose, restore, t],
   );
 
   return (
     <AdaptiveModalSheet
       header={header}
       visible
-      onClose={onCancel}
+      onClose={onClose}
       footer={footer}
       desktopMaxWidth={SHEET_WIDTH}
       testID="switch-off-sheet"
     >
       <View style={styles.body}>
-        <Text variant="caption" color="foregroundMuted">
-          {t("settings.apiEndpoints.agent.switchOffPreview.intro", { agent: providerLabel })}
-        </Text>
+        {showsIntro ? (
+          <Text variant="caption" color="foregroundMuted">
+            {t("settings.apiEndpoints.agent.switchOffPreview.intro", { agent: providerLabel })}
+          </Text>
+        ) : null}
         {view.status === "loading" ? (
           <Text variant="caption" color="foregroundMuted" testID="switch-off-loading">
             {t("settings.apiEndpoints.agent.switchOffPreview.loading")}
@@ -113,13 +195,63 @@ export function SwitchOffSheet({
         {view.status === "described" ? (
           <DescribedChanges providerLabel={providerLabel} reason={view.reason} />
         ) : null}
-        {keepsCodexModelProvider ? (
+        {provider === "codex" ? (
           <Text variant="caption" color="foregroundMuted" testID="switch-off-codex-note">
             {t("settings.apiEndpoints.agent.switchOffPreview.codexNote")}
           </Text>
         ) : null}
+        {failure ? (
+          <SwitchOffFailure
+            providerLabel={providerLabel}
+            message={failure.message}
+            offersKeepCurrent={offersKeepCurrent}
+          />
+        ) : null}
       </View>
     </AdaptiveModalSheet>
+  );
+}
+
+function sendSwitchOff(input: {
+  client: SwitchOffClient;
+  provider: string;
+  way: SwitchOffWay;
+}): Promise<{ error: ApiEndpointError | null }> {
+  const { client, provider } = input;
+  switch (input.way) {
+    case "restore":
+      return client.apiEndpointSetAgentSettings({ provider, enabled: false });
+    case "keepCurrent":
+      return client.apiEndpointKeepCurrentSettings({ provider });
+  }
+}
+
+/** 关掉没成：原因；文件读不懂时说明「保留当前设置」会怎样。 */
+function SwitchOffFailure({
+  providerLabel,
+  message,
+  offersKeepCurrent,
+}: {
+  providerLabel: string;
+  message: string;
+  offersKeepCurrent: boolean;
+}) {
+  const { t } = useTranslation();
+  let description = message;
+  if (offersKeepCurrent) {
+    const keepHint = t("settings.apiEndpoints.agent.switchOffPreview.keepCurrentHint", {
+      agent: providerLabel,
+    });
+    description = `${message}\n${keepHint}`;
+  }
+  return (
+    <Alert
+      variant="error"
+      size="sm"
+      title={t("settings.apiEndpoints.agent.saveFailed", { agent: providerLabel })}
+      description={description}
+      testID="switch-off-error"
+    />
   );
 }
 
@@ -159,13 +291,7 @@ function ChangedFile({ file }: { file: SwitchOffFileView }) {
   return (
     <View style={styles.file} testID={`switch-off-file-${file.path}`}>
       <View style={styles.fileHeader}>
-        <Text
-          variant="caption"
-          weight="medium"
-          style={[styles.mono, styles.path]}
-          numberOfLines={1}
-          ellipsizeMode="head"
-        >
+        <Text variant="caption" weight="medium" style={[styles.mono, styles.wrapAnywhere]}>
           {file.path}
         </Text>
         {fileTag ? (
@@ -193,12 +319,20 @@ function ChangedFile({ file }: { file: SwitchOffFileView }) {
   );
 }
 
-/** 一行：拿掉的标 −；放回与改回的标 ↺ 与「打开前的值」，改回的另起一行写现在是什么。 */
+/**
+ * 一行：拿掉的标 −；放回与改回的标 ↺ 与「打开前的值」，另起一行写现在是什么——改回的是现在那一行，
+ * 放回的现在文件里没有这一项。
+ */
 function ChangedLine({ line }: { line: SwitchOffLineView }) {
   const { t } = useTranslation();
   const isRemoved = line.kind === "removed";
   const symbol = isRemoved ? "−" : "↺";
   const textColor: TextColor = isRemoved ? "foregroundMuted" : "foreground";
+  let now: string | null = null;
+  if (line.kind === "restored" && line.was !== null) {
+    now = t("settings.apiEndpoints.agent.switchOffPreview.now", { line: line.was.trim() });
+  }
+  if (line.kind === "added") now = t("settings.apiEndpoints.agent.switchOffPreview.nowAbsent");
   return (
     <View style={styles.line} testID="switch-off-line">
       <Text variant="caption" color="foregroundMuted" style={styles.symbol}>
@@ -209,7 +343,8 @@ function ChangedLine({ line }: { line: SwitchOffLineView }) {
           <Text
             variant="caption"
             color={textColor}
-            style={[styles.mono, styles.lineText, isRemoved && styles.removedText]}
+            style={[styles.mono, styles.wrapAnywhere, isRemoved && styles.removedText]}
+            testID="switch-off-line-text"
           >
             {line.text.trim()}
           </Text>
@@ -219,9 +354,14 @@ function ChangedLine({ line }: { line: SwitchOffLineView }) {
             </Text>
           )}
         </View>
-        {line.was === null ? null : (
-          <Text variant="micro" color="foregroundMuted" style={styles.mono}>
-            {t("settings.apiEndpoints.agent.switchOffPreview.now", { line: line.was.trim() })}
+        {now === null ? null : (
+          <Text
+            variant="micro"
+            color="foregroundMuted"
+            style={[styles.mono, styles.wrapAnywhere]}
+            testID="switch-off-line-now"
+          >
+            {now}
           </Text>
         )}
       </View>
@@ -255,8 +395,11 @@ const styles = StyleSheet.create((theme) => ({
   mono: {
     fontFamily: theme.fontFamily.mono,
   },
-  path: {
+  // 路径与配置行可能很长、没有空格：哪里都能断，不顶出框。
+  wrapAnywhere: {
     flexShrink: 1,
+    minWidth: 0,
+    overflowWrap: "anywhere" as const,
   },
   tag: {
     flexShrink: 0,
@@ -279,9 +422,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "baseline",
     flexWrap: "wrap",
     columnGap: theme.spacing[2],
-  },
-  lineText: {
-    flexShrink: 1,
   },
   removedText: {
     textDecorationLine: "line-through",

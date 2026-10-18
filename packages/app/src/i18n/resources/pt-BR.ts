@@ -2721,6 +2721,7 @@ export const ptBR: TranslationResources = {
           unavailable: "Não foi possível listar as mudanças uma a uma: {{reason}}",
           valueBefore: "Valor anterior",
           now: "Agora: {{line}}",
+          nowAbsent: "Agora: não está no arquivo",
           moreLines_one: "Mais {{count}} linha",
           moreLines_other: "Mais {{count}} linhas",
           created: "Criado",
@@ -2728,6 +2729,8 @@ export const ptBR: TranslationResources = {
           codexNote:
             "O provedor de modelos do Codex do Osuna continua, então as conversas abertas com ele ainda abrem.",
           confirm: "Desativar e restaurar",
+          keepCurrentHint:
+            "Manter as configurações atuais desativa e deixa o arquivo como está; o {{agent}} segue o que ele diz.",
         },
         issues: {
           updateHost:

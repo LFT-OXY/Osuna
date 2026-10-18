@@ -2717,6 +2717,7 @@ export const ru: TranslationResources = {
           unavailable: "Не удалось перечислить изменения по одному: {{reason}}",
           valueBefore: "Прежнее значение",
           now: "Сейчас: {{line}}",
+          nowAbsent: "Сейчас: в файле этого нет",
           moreLines_one: "Ещё строк: {{count}}",
           moreLines_other: "Ещё строк: {{count}}",
           created: "Создан",
@@ -2724,6 +2725,8 @@ export const ru: TranslationResources = {
           codexNote:
             "Провайдер моделей Codex от Osuna остаётся, поэтому открытые через него беседы по-прежнему открываются.",
           confirm: "Отключить и восстановить",
+          keepCurrentHint:
+            "«Сохранить текущие настройки» отключит интеграцию и оставит файл как есть; {{agent}} будет следовать тому, что в нём записано.",
         },
         issues: {
           updateHost:

@@ -2695,6 +2695,7 @@ export const ko: TranslationResources = {
           unavailable: "변경 사항을 하나씩 나열하지 못했습니다: {{reason}}",
           valueBefore: "켜기 전 값",
           now: "현재: {{line}}",
+          nowAbsent: "현재: 파일에 이 항목이 없음",
           moreLines_one: "{{count}}줄 더 보기",
           moreLines_other: "{{count}}줄 더 보기",
           created: "새로 만듦",
@@ -2702,6 +2703,8 @@ export const ko: TranslationResources = {
           codexNote:
             "Osuna의 Codex 모델 공급자는 남아 있으므로 그것으로 연 대화는 계속 열 수 있습니다.",
           confirm: "끄고 되돌리기",
+          keepCurrentHint:
+            "‘현재 설정 유지’는 끄고 파일을 그대로 둡니다. {{agent}}은(는) 파일에 적힌 대로 동작합니다.",
         },
         issues: {
           updateHost:

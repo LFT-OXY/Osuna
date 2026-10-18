@@ -36,7 +36,6 @@ describe("selectSwitchOffPreview", () => {
             },
             { path: "~/.codex/other.toml", change: "removed", lines: [] },
           ],
-          keepsCodexModelProvider: true,
         },
       }),
     ).toEqual({
@@ -54,7 +53,6 @@ describe("selectSwitchOffPreview", () => {
         },
         { path: "~/.codex/other.toml", kind: "removed", firstLines: [], foldedLines: [] },
       ],
-      keepsCodexModelProvider: true,
     });
   });
 
@@ -66,7 +64,6 @@ describe("selectSwitchOffPreview", () => {
           { path: "~/a.json", change: "edited", lines: removedLines(11) },
           { path: "~/b.json", change: "created", lines: removedLines(10) },
         ],
-        keepsCodexModelProvider: false,
       },
     });
 
@@ -81,7 +78,6 @@ describe("selectSwitchOffPreview", () => {
         },
         { path: "~/b.json", kind: "created", firstLines: removedViews(0, 10), foldedLines: [] },
       ],
-      keepsCodexModelProvider: false,
     });
   });
 
@@ -89,9 +85,9 @@ describe("selectSwitchOffPreview", () => {
     expect(
       selectSwitchOffPreview({
         status: "answered",
-        preview: { files: [], keepsCodexModelProvider: true },
+        preview: { files: [] },
       }),
-    ).toEqual({ status: "described", reason: null, keepsCodexModelProvider: true });
+    ).toEqual({ status: "described", reason: null });
   });
 
   it("a change it doesn't know, from a newer host, is described in words", () => {
@@ -100,19 +96,17 @@ describe("selectSwitchOffPreview", () => {
         status: "answered",
         preview: {
           files: [{ path: "~/a.json", change: "renamed", lines: [] }],
-          keepsCodexModelProvider: false,
         },
       }),
-    ).toEqual({ status: "described", reason: null, keepsCodexModelProvider: false });
+    ).toEqual({ status: "described", reason: null });
     expect(
       selectSwitchOffPreview({
         status: "answered",
         preview: {
           files: [{ path: "~/a.json", change: "edited", lines: [{ op: "moved", text: "x" }] }],
-          keepsCodexModelProvider: false,
         },
       }),
-    ).toEqual({ status: "described", reason: null, keepsCodexModelProvider: false });
+    ).toEqual({ status: "described", reason: null });
   });
 
   it("a preview the host couldn't make is described with the reason", () => {
@@ -121,7 +115,6 @@ describe("selectSwitchOffPreview", () => {
     ).toEqual({
       status: "described",
       reason: "settings.json has a syntax error",
-      keepsCodexModelProvider: false,
     });
   });
 });

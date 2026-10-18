@@ -1345,11 +1345,7 @@ export class ApiEndpointService {
       const agent = this.readState().agents[supported];
       const file = agent.enabled ? this.switchOffFile(supported, agent.defaultModelId) : null;
       const files = file === null ? [] : [file];
-      return {
-        files,
-        // 还原从不拿掉 Osuna 的 Codex 服务商（ADR 0010），记在它名下的对话还能打开。
-        keepsCodexModelProvider: supported === "codex",
-      };
+      return { files };
     });
   }
 
@@ -3095,7 +3091,6 @@ function shouldRewriteCliModel(input: {
   return isDefaultModelChanged && options.isFollowingCli !== true;
 }
 
-/** 写进接管记录的 reconnect；没有默认模型时不写。 */
 /** 关掉时还原 CLI 配置的计划。 */
 interface RestorePlanInput<Takeover> {
   filePath: string;
@@ -3140,6 +3135,7 @@ function codexRestorePlan(
   return { change, value: reconnectRecord(input.defaultModelId, left) };
 }
 
+/** 写进接管记录的 reconnect；没有默认模型时不写。 */
 interface ReconnectRecord {
   reconnect?: DefaultModelReconnect;
 }
