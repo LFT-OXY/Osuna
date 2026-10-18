@@ -6,7 +6,7 @@ ChatGPT 登录的接法下，开关开着时，把这种表的 `base_url` 也指
 
 **Blocked by:** 03, 09
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：配置里有镜像表时，打开开关后它的 `base_url` 指向中转站的 ChatGPT 后端地址，关掉后表恢复原样（没有 `base_url`）。
 - [ ] 不像镜像的表（有自己的 `base_url`、名字不是 OpenAI 等）不动；API key 接法下不动镜像表。
