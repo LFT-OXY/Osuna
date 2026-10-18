@@ -7,7 +7,7 @@
 
 **Blocked by:** 20
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：设好后 `config.toml` 有这四个键；关掉开关后还原；用户原有的 `[agents]`、`[memories]` 其他键不动。
 - [ ] 默认 Subagent 档位是新模型不支持的时被拿掉；选项只列模型能收的档位。
