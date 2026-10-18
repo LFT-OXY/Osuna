@@ -10,7 +10,7 @@
 
 **Blocked by:** 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（假适配器）：改写之后，早于改写启动的终端 Claude Code、Codex 进程各列一条；之后启动的不列。
 - [ ] 后台 app-server 早于改写启动、没有客户端连着 → 执行了重启命令（假实现记录到），提示说明已重启；有客户端连着 → 不执行，提示里有命令。
