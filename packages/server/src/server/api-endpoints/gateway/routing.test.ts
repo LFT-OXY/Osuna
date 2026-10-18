@@ -134,6 +134,14 @@ describe("routing a requested model name to an endpoint", () => {
         resolveGatewayRoute({ state: withDefault("glm-4.6"), agent: "claude", model }),
       ).toEqual(route([beta, "glm-4.6"]));
     }
+    // 对不上档位、也没人在售的 Claude id 一样（照 magpie 的 claudeStandInAt）。
+    expect(
+      resolveGatewayRoute({
+        state: withDefault("glm-4.6"),
+        agent: "claude",
+        model: "claude-mythos-5-1",
+      }),
+    ).toEqual(route([beta, "glm-4.6"]));
     // 默认模型指定了某家时照样直达那家，后面跟着同名的其他家。
     expect(
       resolveGatewayRoute({ state: withDefault("beta/kimi-k2"), agent: "claude", model: "sonnet" }),

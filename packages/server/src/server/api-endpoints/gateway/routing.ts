@@ -22,7 +22,8 @@ import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from ".
  * 3. 标识那家已删除 / 已关闭 / 没选这个模型：视同不可用，斜杠后的光秃秃模型名换同名的家；
  * 4. 只差写法的同一个模型（sameModel）：斜杠前不是任何一家的标识时就是厂商前缀，一并忽略；
  * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型；
- * 6. 没有一家映射这个档位、Claude Code 的开关开着时，档位名（opus 等）改按 Claude Code 的默认模型找，不回 404。
+ * 6. Claude Code 的开关开着时，档位名（opus 等）与 claude- 开头的 id（对不上档位的，如 claude-mythos-5-1）
+ *    都没找到，改按 Claude Code 的默认模型找，不回 404。
  * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
  * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
  * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
@@ -50,6 +51,8 @@ function claudeTierOf(model: string): ApiEndpointModelTier | null {
 // Claude Code 内置的档位 id（照 magpie 的 claudeFamily）：不论版本，按家族认；带厂商前缀的 `a/claude-…` 不算。
 const CLAUDE_FAMILY_ID = /^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|fable)(?:[-.@:]|$)/;
 const CLAUDE_TIER_NAMES: ReadonlySet<string> = new Set(API_ENDPOINT_MODEL_TIERS);
+// 没人在售的 Claude id（照 magpie 的 claudeStandInAt：对不上档位的换成主模型）；带厂商前缀的不算。
+const CLAUDE_ID = /^claude-/;
 
 /** 比较用的名字：小写，去掉 Claude Code 的 [1m]。 */
 function comparableName(model: string): string {
@@ -192,11 +195,12 @@ function claudeTierStandIn(input: Required<GatewayRouteInput>): GatewayCandidate
   return mapped ?? chooseEndpoint({ ...input, model: defaultModel });
 }
 
-/** 第 6 步：没配映射的档位名（opus 等）改按 Claude Code 的默认模型找。 */
+/** 第 6 步：没人在售、没配映射的档位名（opus 等）与 Claude id（claude-mythos-5-1 这类）改按 Claude Code 的默认模型找。 */
 function tierFallback(input: Required<GatewayRouteInput>): GatewayCandidate | null {
   const defaultModel = claudeDefaultModel(input);
-  const isFallbackAsked =
-    defaultModel !== null && CLAUDE_TIER_NAMES.has(comparableName(input.model));
+  const name = comparableName(input.model);
+  const isClaudeName = CLAUDE_TIER_NAMES.has(name) || CLAUDE_ID.test(name);
+  const isFallbackAsked = defaultModel !== null && isClaudeName;
   if (!isFallbackAsked) return null;
   return chooseEndpoint({ ...input, model: defaultModel });
 }

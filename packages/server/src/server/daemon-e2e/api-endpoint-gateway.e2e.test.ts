@@ -738,7 +738,8 @@ describe("passing requests through to an endpoint that speaks the agent's format
     file.agents.claude.defaultModelId = "glm-4.6";
     await writeFile(endpointsPath, JSON.stringify(file));
 
-    for (const model of ["haiku", "claude-haiku-4-5-20251001"]) {
+    // claude-mythos-5-1 对不上档位，也没人在售：一样换成默认模型（magpie 的 claudeStandInAt）。
+    for (const model of ["haiku", "claude-haiku-4-5-20251001", "claude-mythos-5-1"]) {
       const response = await fetch(
         `${gateway}/v1/messages`,
         claudeRequest({ model, max_tokens: 1, messages: [] }),
@@ -746,7 +747,7 @@ describe("passing requests through to an endpoint that speaks the agent's format
       expect(response.status, model).toBe(200);
       expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
     }
-    expect(upstreamB.requests.map(receivedModel)).toEqual(["glm-4.6", "glm-4.6"]);
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["glm-4.6", "glm-4.6", "glm-4.6"]);
   });
 
   test("a Claude Code tier id an endpoint selected still goes to the model its tier is mapped to", async () => {
