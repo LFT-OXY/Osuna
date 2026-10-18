@@ -392,3 +392,9 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 没做：daemon 重启后打开一个未归档、续不上的 Agent，走的是 `fetch_agent_timeline` 的「Failed to load agent」页，那条路径的错误码要穿过时间线同步的几层状态，没有接。
 - 文字：按钮缩成「挪动对话…」（全称在对话框标题）；导入错误标题改成「Codex 续不上这段对话」；未选中的选择环描边用 `foregroundMuted`；不可选的行用 `theme.opacity[50]`。
 - 测试：daemon 端到端加「已有 Agent 续不上带码、取消归档失败仍是归档的、挪好后 refresh 与 resume 都成功」；浏览器加 Agent 页挪动成功与失败两条。截图 `screenshots/14-agent-page_resume-error_desktop-1280_{en,zh}.png`，其余 14-* 重拍。
+
+### 14 · 用户决定与留待以后（2026-10-18，编排会话记）
+
+- 用户选「也做 Agent 页」：已覆盖已归档 Agent「取消归档」续不上（`refreshAgent`），以及导入、`resume_agent_request`。
+- 用户选「保留」：「取消归档」续不上时放回归档、报错留着（照 `resume_agent_request` 的做法）。
+- 用户选「另开工单以后做」：daemon 重启后打开未归档、续不上的 Codex Agent 显示「Failed to load agent」页，没有说明与挪动按钮——错误码要穿过时间线同步的几层，本任务不做。
