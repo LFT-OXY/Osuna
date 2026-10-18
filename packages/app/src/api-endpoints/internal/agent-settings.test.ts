@@ -37,6 +37,7 @@ function view(input: {
   memoryModelId?: string | null;
   lockedThinkingOptionId?: string | null;
   subagentThinkingOptions?: { id: string; label: string }[] | null;
+  cliOwnModels?: { id: string; label: string }[];
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
 }) {
@@ -63,6 +64,7 @@ function view(input: {
     endpointModelGroups: input.endpointModelGroups ?? null,
     lockedThinkingOptionId: input.lockedThinkingOptionId ?? null,
     subagentThinkingOptions: input.subagentThinkingOptions ?? null,
+    cliOwnModels: input.cliOwnModels ?? [],
     now: NOW,
   });
 }
@@ -355,6 +357,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       endpointModelGroups: null,
       lockedThinkingOptionId: null,
       subagentThinkingOptions: null,
+      cliOwnModels: [],
       now: NOW,
     });
     expect(kept.keepsClaudeAiLogin).toBe(true);
@@ -370,6 +373,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
       endpointModelGroups: null,
       lockedThinkingOptionId: null,
       subagentThinkingOptions: null,
+      cliOwnModels: [],
       now: NOW,
     });
     expect(codex.keepsClaudeAiLogin).toBeNull();
@@ -559,7 +563,7 @@ describe("Codex's default Subagent model and memory model", () => {
       memoryModelId: "glm-5.3",
       subagentThinkingOptions: levels,
     });
-    expect(shown.codexSideModels).toEqual({
+    expect(shown.codexSideModels).toMatchObject({
       subagentModel: { id: "relay-a/kimi-k2", model: "kimi-k2", endpointName: "Relay A" },
       subagentThinking: { value: "high", options: levels },
       memoryModel: { id: "glm-5.3", model: "glm-5.3", endpointName: null },
@@ -576,11 +580,29 @@ describe("Codex's default Subagent model and memory model", () => {
       defaultModelId: "glm-5.3",
       subagentThinkingOptions: levels,
     });
-    expect(shown.codexSideModels).toEqual({
+    expect(shown.codexSideModels).toMatchObject({
       subagentModel: null,
       subagentThinking: { value: null, options: levels },
       memoryModel: null,
     });
+  });
+
+  it("puts Codex's own models first, in place of an endpoint model of the same name", () => {
+    const shown = view({
+      provider: "codex",
+      endpoints: [endpoint({ id: "a", models: [{ id: "gpt-5.5" }, { id: "kimi-k2" }] })],
+      enabled: true,
+      defaultModelId: "kimi-k2",
+      subagentModelId: "gpt-5.5",
+      subagentThinkingOptions: levels,
+      cliOwnModels: [{ id: "gpt-5.5", label: "GPT-5.5" }],
+    });
+    const own = { id: "gpt-5.5", model: "GPT-5.5", endpointName: "ChatGPT" };
+    expect(shown.codexSideModels?.modelOptions).toEqual([
+      own,
+      { id: "kimi-k2", model: "kimi-k2", endpointName: null },
+    ]);
+    expect(shown.codexSideModels?.subagentModel).toEqual(own);
   });
 
   it("is not offered while the switch is off, by a host without it, or on Claude Code", () => {

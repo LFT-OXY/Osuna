@@ -83,6 +83,7 @@ import {
   refreshCodexProviderTable,
   restoreCodexOfficial,
   type CodexConfigTakeover,
+  type CodexSubagentWiring,
 } from "./codex-config-patch.js";
 import {
   buildCodexModelCatalog,
@@ -102,8 +103,10 @@ import type { CliModelHold, CliPicks, CliSidePick } from "./cli-model-hold.js";
 import {
   codexListTag,
   codexOwnFirstModel,
+  codexOwnModels,
   markCodexModelsCacheStale,
   readCodexModelsCache,
+  type CodexOwnModel,
 } from "./codex-models-cache.js";
 import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
@@ -421,7 +424,7 @@ export type ApiEndpointListResult = Required<
 type CliWiring = ClaudeGatewayWiring & {
   // Codex：开着的接口的「接口标识/模型名」，聊天模型选择器的顺序（ChatGPT 登录、用着用户自己的服务商时从中挑模型）。
   endpointModels: string[];
-  // Codex 的记忆模型（Osuna 的模型 id）；null 为没设，Claude Code 恒为 null。
+  // Codex 的记忆模型（已是写给 Codex 的写法）；null 为没设，Claude Code 恒为 null。
   memoryModel: string | null;
 };
 
@@ -1033,16 +1036,63 @@ export class ApiEndpointService {
    * 主模型是 ChatGPT 自带的或 Codex 自己的默认、档位不清楚时为空。
    */
   private codexSubagentLevels(state: ApiEndpointState, agent: ApiEndpointAgentSettings): string[] {
-    const modelId = agent.subagentModelId ?? this.codexMainModel(state, agent);
+    const modelId = agent.subagentModelId ?? this.codexMainModel(agent);
+    // ChatGPT 接法下 Codex 自己的模型在前（magpie models()：catalog.Codex() 加上接口的），光秃秃的名字指它们。
+    const own = this.codexOwnModels().find((model) => model.slug === modelId);
+    if (own) return own.levels;
     if (!isDefaultModelChoice(state, modelId)) return [];
     return this.thinkingLevelsFor({ state, provider: "codex", modelId });
   }
 
-  /** Codex 主对话的模型：ChatGPT 接法下模型归 Codex，读 config.toml（接口的模型才认得）；否则是默认模型。 */
-  private codexMainModel(state: ApiEndpointState, agent: ApiEndpointAgentSettings): string | null {
-    if (!this.isCodexChatGptWired()) return agent.defaultModelId;
+  /** Codex 主对话的模型（magpie get("model")）：ChatGPT 接法下模型归 Codex，读 config.toml；否则是默认模型。 */
+  private codexMainModel(agent: ApiEndpointAgentSettings): string | null {
+    if (!this.codexUsesChatGpt()) return agent.defaultModelId;
     const text = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
-    return this.followedModel({ state, provider: "codex", cliModel: readCodexModel(text) });
+    return readCodexModel(text);
+  }
+
+  /**
+   * 用 ChatGPT 登录时 Codex 自己的模型（它存的 models_cache.json，照 magpie 的 catalog.Codex()）：默认 Subagent 模型与
+   * 记忆模型也能选它们。用 API key 时 Codex 只认 Osuna 的模型目录，为空。
+   */
+  private codexOwnModels(): CodexOwnModel[] {
+    if (!this.codexUsesChatGpt()) return [];
+    return codexOwnModels(readCodexModelsCache(path.dirname(this.resolveCodexConfigPath())));
+  }
+
+  /**
+   * Codex 的 Subagent 与记忆模型能选的 Codex 自己的模型（照 magpie modelOptions 的 own）；总开关关着、不是 Codex
+   * 或用 API key 时为 null。
+   */
+  cliOwnModels(provider: string): AgentSelectOption[] | null {
+    const state = this.readStateForSnapshot();
+    if (!state || findProvider(provider) !== "codex") return null;
+    if (!state.agents.codex.enabled) return null;
+    const own = this.codexOwnModels();
+    if (own.length === 0) return null;
+    return own.map((model) => ({ id: model.slug, label: model.label }));
+  }
+
+  /** Codex 认得的 Subagent 与记忆模型：开着的接口的已选模型，ChatGPT 接法下另有 Codex 自己的。 */
+  private codexSideModel(state: ApiEndpointState, requested: string | null): string | null {
+    if (requested === null) return null;
+    const model = requested.trim();
+    const isOwn = this.codexOwnModels().some((own) => own.slug === model);
+    if (isOwn) return model;
+    return sideModel({ state, requested: model });
+  }
+
+  /**
+   * 写进 config.toml 的名字：ChatGPT 接法下光秃秃的名字指 Codex 自己的模型，所以是它自己的照写，
+   * 接口的写成第一家提供它的「接口标识/模型名」（/model 里的写法）；API key 时照写（模型目录两种都有）。
+   */
+  private codexListedName(state: ApiEndpointState, modelId: string): string {
+    if (!this.codexUsesChatGpt()) return modelId;
+    const isOwn = this.codexOwnModels().some((own) => own.slug === modelId);
+    const named = endpointModelGroups(state).flatMap((group) => group.models.map(({ id }) => id));
+    if (isOwn || named.includes(modelId)) return modelId;
+    const listed = named.find((id) => id.slice(id.indexOf("/") + 1) === modelId);
+    return listed ?? modelId;
   }
 
   /**
@@ -1078,10 +1128,13 @@ export class ApiEndpointService {
       agent = { ...agent, backgroundModelId: sideModel({ state, requested: backgroundModelId }) };
     }
     if (subagentModelId !== undefined) {
-      agent = { ...agent, subagentModelId: sideModel({ state, requested: subagentModelId }) };
+      let model: string | null = null;
+      if (provider === "codex") model = this.codexSideModel(state, subagentModelId);
+      else model = sideModel({ state, requested: subagentModelId });
+      agent = { ...agent, subagentModelId: model };
     }
     if (memoryModelId !== undefined) {
-      agent = { ...agent, memoryModelId: sideModel({ state, requested: memoryModelId }) };
+      agent = { ...agent, memoryModelId: this.codexSideModel(state, memoryModelId) };
     }
     if (subagentThinkingOptionId === undefined) return agent;
     if (provider === "claude") {
@@ -1109,7 +1162,7 @@ export class ApiEndpointService {
     const levels = this.codexSubagentLevels(state, agent);
     const isRefused = levels.length > 0 && !levels.includes(level);
     if (isRefused) {
-      const modelId = agent.subagentModelId ?? this.codexMainModel(state, agent) ?? "the model";
+      const modelId = agent.subagentModelId ?? this.codexMainModel(agent) ?? "the model";
       throw new ApiEndpointRequestError({
         code: "invalid_input",
         message: `Codex runs ${modelId} at ${levels.join(", ")}, not ${level}: it would refuse to start a subagent`,
@@ -1391,6 +1444,9 @@ export class ApiEndpointService {
   }): string | null {
     const { state, pick } = input;
     if (pick.now === null) return null;
+    // Codex 自己的模型（ChatGPT 接法下）也照文件跟（magpie 的 Get 读文件），不写回、不算被改过。
+    const isOwn = this.codexOwnModels().some((own) => own.slug === pick.now);
+    if (isOwn) return pick.now;
     const served = this.followedModel({ state, provider: "codex", cliModel: pick.now });
     return served ?? input.current;
   }
@@ -1482,7 +1538,11 @@ export class ApiEndpointService {
       isFollowingCli?: boolean;
     } = {},
   ): Promise<ApiEndpointState> {
-    const settled = this.settleThinking({ previous, next: settleAgentSettings(proposed) });
+    const ownModels = this.codexOwnModels().map((model) => model.slug);
+    const settled = this.settleThinking({
+      previous,
+      next: settleAgentSettings(proposed, ownModels),
+    });
     const next = this.settleSubagentThinking(settled);
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
@@ -1665,12 +1725,17 @@ export class ApiEndpointService {
     if (provider === "claude")
       return { ...this.claudeSideModels(state, provider), memoryModel: null };
     const agent = state.agents[provider];
-    const model = agent.subagentModelId ?? null;
+    const subagentModelId = agent.subagentModelId ?? null;
+    const memoryModelId = agent.memoryModelId ?? null;
     const effort = agent.subagentThinkingOptionId ?? null;
+    let model: string | null = null;
+    if (subagentModelId !== null) model = this.codexListedName(state, subagentModelId);
+    let memoryModel: string | null = null;
+    if (memoryModelId !== null) memoryModel = this.codexListedName(state, memoryModelId);
     const isSubagentSet = model !== null || effort !== null;
-    let subagent: ClaudeSubagentWiring | null = null;
+    let subagent: CodexSubagentWiring | null = null;
     if (isSubagentSet) subagent = { model, effort };
-    return { backgroundModel: null, subagent, memoryModel: agent.memoryModelId ?? null };
+    return { backgroundModel: null, subagent, memoryModel };
   }
 
   /**

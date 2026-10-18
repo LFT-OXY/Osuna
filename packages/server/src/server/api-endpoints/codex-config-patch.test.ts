@@ -1113,23 +1113,6 @@ generate_memories = true
     expect(sideTables(untouched.text)).toEqual(sideTables(SIDE_CONFIG));
   });
 
-  it("names a bare model the way /model lists it under the ChatGPT wiring", () => {
-    const patched = applyWith({
-      text: null,
-      takeover: null,
-      wiring: {
-        chatgptBaseUrl: "http://127.0.0.1:6767/api-endpoint-gateway/backend-api/codex",
-        endpointModels: ["relay/gpt", "zhipu/glm-4.6"],
-        subagent: { model: "glm-4.6", effort: null },
-        memoryModel: "relay/gpt",
-      },
-    });
-    expect(sideTables(patched.text)).toEqual({
-      agents: { default_subagent_model: "zhipu/glm-4.6" },
-      memories: { extract_model: "relay/gpt", consolidation_model: "relay/gpt" },
-    });
-  });
-
   it("reads what changed in the file since, and counts a changed model as modified but not a changed level", () => {
     const patched = applyWith({
       text: USER_CONFIG,

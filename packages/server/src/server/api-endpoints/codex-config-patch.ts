@@ -121,7 +121,7 @@ export type CodexConfigTakeover = z.infer<typeof CodexConfigTakeoverSchema>;
  * 光秃秃的换成 endpointModels（开着的接口的「接口标识/模型名」，聊天模型选择器的顺序）里第一家的写法。
  * defaultThinking 是默认思考档位，两种接法都写进 model_reasoning_effort；null 为没设，不碰用户自己的。
  * subagent 是默认 Subagent 模型与档位，memoryModel 是记忆模型（写进 extract_model 与 consolidation_model）；
- * null 为没设，不碰用户自己的。模型是 Osuna 的模型 id，ChatGPT 接法下光秃秃的写成第一家提供它的「接口标识/模型名」。
+ * null 为没设，不碰用户自己的。模型已是 Codex 认得的写法（ChatGPT 接法下由调用方换成 /model 里的写法）。
  */
 export interface CodexGatewayWiring {
   baseUrl: string;
@@ -370,30 +370,17 @@ function wiringRaws(
 
 /** 这次写进 [agents]、[memories] 的原文（含引号），按「表名.键名」；没设的不在里面。 */
 function tableRaws(wiring: CodexGatewayWiring): Record<string, string> {
-  const listedName = (model: string) => {
-    if (wiring.chatgptBaseUrl === null) return model;
-    return chatgptListedName(model, wiring.endpointModels);
-  };
   const raws: Record<string, string> = {};
   const subagentModel = wiring.subagent?.model ?? null;
   const subagentEffort = wiring.subagent?.effort ?? null;
-  if (subagentModel !== null) {
-    raws[tableKeyName(SUBAGENT_MODEL_KEY)] = tomlString(listedName(subagentModel));
-  }
+  if (subagentModel !== null) raws[tableKeyName(SUBAGENT_MODEL_KEY)] = tomlString(subagentModel);
   if (subagentEffort !== null) raws[tableKeyName(SUBAGENT_EFFORT_KEY)] = tomlString(subagentEffort);
   if (wiring.memoryModel !== null) {
-    const memory = tomlString(listedName(wiring.memoryModel));
+    const memory = tomlString(wiring.memoryModel);
     raws[tableKeyName(MEMORY_EXTRACT_KEY)] = memory;
     raws[tableKeyName(MEMORY_CONSOLIDATION_KEY)] = memory;
   }
   return raws;
-}
-
-/** ChatGPT 接法下 /model 里的写法：本身就是「接口标识/模型名」照用，光秃秃的取第一家提供它的。 */
-function chatgptListedName(model: string, endpointModels: string[]): string {
-  if (endpointModels.includes(model)) return model;
-  const named = endpointModels.find((option) => option.slice(option.indexOf("/") + 1) === model);
-  return named ?? model;
 }
 
 interface TableKeysApplied {

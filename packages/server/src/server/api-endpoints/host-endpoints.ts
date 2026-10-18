@@ -142,11 +142,20 @@ export function bareDefaultModel(state: ApiEndpointState, id: string | null): st
  * 默认模型失踪规则：打开着总开关的 Agent，默认模型不再能选时，指定的那家不再提供而别家还有同名的就改成光秃秃的名字，
  * 否则改成最早开着接口的第一个已选模型；一个可用模型都不剩时总开关关掉（回官方）。删除接口、关接口开关、去掉模型之后都走这里。
  */
-export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
+export function settleAgentSettings(
+  state: ApiEndpointState,
+  // 用 ChatGPT 登录的 Codex 自己的模型：Subagent 与记忆模型选了它们时不算没人提供。
+  codexOwnModels: readonly string[] = [],
+): ApiEndpointState {
   const models = usableModels(state);
   const agents = { ...state.agents };
   for (const provider of API_ENDPOINT_PROVIDERS) {
-    const agent = withoutUnservedSideModels({ state, provider, agent: agents[provider] });
+    const agent = withoutUnservedSideModels({
+      state,
+      provider,
+      agent: agents[provider],
+      codexOwnModels,
+    });
     agents[provider] = agent;
     if (!agent.enabled) continue;
     if (isDefaultModelChoice(state, agent.defaultModelId)) continue;
@@ -171,12 +180,17 @@ function withoutUnservedSideModels(input: {
   state: ApiEndpointState;
   provider: ApiEndpointProvider;
   agent: ApiEndpointAgentSettings;
+  codexOwnModels: readonly string[];
 }): ApiEndpointAgentSettings {
   const { state, agent } = input;
+  let ownModels: readonly string[] = [];
+  if (input.provider === "codex") ownModels = input.codexOwnModels;
+  const isGone = (id: string | null | undefined) =>
+    isUnserved(state, id) && !ownModels.includes(id ?? "");
   let settled = agent;
   if (isUnserved(state, agent.backgroundModelId)) settled = { ...settled, backgroundModelId: null };
-  if (isUnserved(state, agent.memoryModelId)) settled = { ...settled, memoryModelId: null };
-  if (isUnserved(state, agent.subagentModelId)) settled = { ...settled, subagentModelId: null };
+  if (isGone(agent.memoryModelId)) settled = { ...settled, memoryModelId: null };
+  if (isGone(agent.subagentModelId)) settled = { ...settled, subagentModelId: null };
   // 照 magpie 的 subagentOwn：Claude Code 整个变量都不写，档位一起忘掉；Codex 的档位是单独的键，留给 settle 按主模型看。
   const isClaudeSubagentGone =
     input.provider === "claude" && settled.subagentModelId !== agent.subagentModelId;

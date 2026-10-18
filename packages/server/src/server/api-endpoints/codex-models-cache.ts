@@ -72,6 +72,43 @@ export function codexOwnFirstModel(text: string | null): string | null {
   return first === undefined ? null : slugOf(first);
 }
 
+/** Codex 自己的一个模型：/model 里的写法、显示名与它收的档位（没写为空）。 */
+export interface CodexOwnModel {
+  slug: string;
+  label: string;
+  levels: string[];
+}
+
+/**
+ * Codex 自己列表里可见的模型，按 /model 的顺序（priority 小的在前），照 magpie 的 catalog.Codex()：
+ * 用 ChatGPT 登录时默认 Subagent 模型与记忆模型也能选它们，档位按条目的 supported_reasoning_levels。
+ */
+export function codexOwnModels(text: string | null): CodexOwnModel[] {
+  const listed = codexCachedModels(text).filter((model) => {
+    const isListed = isRecord(model) && (model.visibility ?? "list") === "list";
+    return isListed && slugOf(model) !== "";
+  });
+  const priorityOf = (model: unknown) =>
+    isRecord(model) && typeof model.priority === "number" ? model.priority : Number.MAX_VALUE;
+  return listed
+    .toSorted((a, b) => priorityOf(a) - priorityOf(b))
+    .map((model) => ({ slug: slugOf(model), label: labelOf(model), levels: levelsOf(model) }));
+}
+
+function labelOf(model: unknown): string {
+  if (isRecord(model) && typeof model.display_name === "string") return model.display_name;
+  return slugOf(model);
+}
+
+function levelsOf(model: unknown): string[] {
+  if (!isRecord(model) || !Array.isArray(model.supported_reasoning_levels)) return [];
+  const levels: string[] = [];
+  for (const level of model.supported_reasoning_levels) {
+    if (isRecord(level) && typeof level.effort === "string") levels.push(level.effort);
+  }
+  return levels;
+}
+
 function etagOf(cache: Record<string, unknown>): string {
   return typeof cache.etag === "string" ? cache.etag : "";
 }

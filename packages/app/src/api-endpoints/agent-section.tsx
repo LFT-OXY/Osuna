@@ -185,7 +185,6 @@ export function AgentApiEndpointsSection({
           <CodexSideModelRows
             providerLabel={providerLabel}
             sideModels={view.codexSideModels}
-            options={view.modelOptions}
             busy={busy}
             onSubagentModelChange={onSubagentModelChange}
             onSubagentThinkingChange={onSubagentThinkingChange}
@@ -534,7 +533,6 @@ function SideModelRows({
 function CodexSideModelRows({
   providerLabel,
   sideModels,
-  options,
   busy,
   onSubagentModelChange,
   onSubagentThinkingChange,
@@ -542,7 +540,6 @@ function CodexSideModelRows({
 }: {
   providerLabel: string;
   sideModels: CodexSideModelsView;
-  options: DefaultModelOption[];
   busy: boolean;
   onSubagentModelChange: (modelId: string | null) => void;
   onSubagentThinkingChange: (thinkingOptionId: string | null) => void;
@@ -558,7 +555,7 @@ function CodexSideModelRows({
         pickTitle={t("settings.apiEndpoints.agent.codexSubagentModelPick", agent)}
         unsetLabel={t("settings.apiEndpoints.agent.codexSubagentModelUnset")}
         value={sideModels.subagentModel}
-        options={options}
+        options={sideModels.modelOptions}
         busy={busy}
         onChange={onSubagentModelChange}
         testID="agent-api-endpoints-subagent-model"
@@ -578,7 +575,7 @@ function CodexSideModelRows({
         pickTitle={t("settings.apiEndpoints.agent.memoryModelPick", agent)}
         unsetLabel={t("settings.apiEndpoints.agent.memoryModelUnset", agent)}
         value={sideModels.memoryModel}
-        options={options}
+        options={sideModels.modelOptions}
         busy={busy}
         onChange={onMemoryModelChange}
         testID="agent-api-endpoints-memory-model"
@@ -611,13 +608,12 @@ function SideModelRow({
 }) {
   const { t } = useTranslation();
   const labelOf = useDefaultModelLabel();
-  const followsLabel = unsetLabel;
   const selectOptions = useMemo<SelectFieldOption<string>[]>(
     () => [
       {
         id: FOLLOWS_DEFAULT_MODEL,
         value: FOLLOWS_DEFAULT_MODEL,
-        label: followsLabel,
+        label: unsetLabel,
         testID: `${testID}-option-default`,
       },
       ...options.map((option) => ({
@@ -627,12 +623,12 @@ function SideModelRow({
         testID: `${testID}-option-${option.id}`,
       })),
     ],
-    [followsLabel, labelOf, options, testID],
+    [unsetLabel, labelOf, options, testID],
   );
   const selectedDisplay = useMemo<SelectFieldDisplay>(() => {
-    if (value === null) return { label: followsLabel };
+    if (value === null) return { label: unsetLabel };
     return { label: labelOf(value) };
-  }, [followsLabel, labelOf, value]);
+  }, [unsetLabel, labelOf, value]);
   const handleChange = useCallback(
     (id: string) => onChange(id === FOLLOWS_DEFAULT_MODEL ? null : id),
     [onChange],

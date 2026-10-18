@@ -75,6 +75,8 @@ const zhCNEnglishAllowlist = {
     "settings.apiEndpoints.formats.openai_chat",
     "settings.apiEndpoints.formats.openai_responses",
   ],
+  // 提供方自己定的功能名（Claude Code 的 Ultra Code）。
+  providerFeatures: ["settings.apiEndpoints.agent.ultraCode"],
   namedThemes: [
     "settings.appearance.theme.options.zinc",
     "settings.appearance.theme.options.midnight",

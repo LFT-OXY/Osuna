@@ -71,6 +71,17 @@ async function subagentLevelsOf(client: DaemonClient): Promise<string[] | undefi
   return entry?.subagentThinkingOptions?.map((option) => option.id);
 }
 
+/** Codex 自己存的模型清单里一个模型收的档位（models_cache.json 的写法）。 */
+function cachedLevels(...efforts: string[]): { effort: string; description: string }[] {
+  return efforts.map((effort) => ({ effort, description: effort }));
+}
+
+/** 快照里 Codex 自己的模型（用 ChatGPT 登录时才有）。 */
+async function codexOwnModelsOf(client: DaemonClient) {
+  const snapshot = await client.getProvidersSnapshot();
+  return snapshot.entries.find((candidate) => candidate.provider === "codex")?.cliOwnModels;
+}
+
 function isRelayB(endpoint: { name: string }): boolean {
   return endpoint.name === "Relay B";
 }
@@ -1050,6 +1061,8 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       return { agents: value.agents, memories: value.memories };
     }
 
+    const codexOwnModels = () => codexOwnModelsOf(client);
+
     async function codexSubagentLevels(): Promise<string[] | undefined> {
       const snapshot = await client.getProvidersSnapshot();
       const entry = snapshot.entries.find((candidate) => candidate.provider === "codex");
@@ -1144,6 +1157,69 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
           extract_model: "relay-b/claude-opus-4-6",
           consolidation_model: "relay-b/claude-opus-4-6",
         },
+      });
+    });
+
+    test("signed in with ChatGPT, Codex's own models are offered, checked against their own levels, and followed from the file", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      await writeFile(configPath, `model = "gpt-5.5"\n`);
+      await writeFile(
+        path.join(path.dirname(configPath), "models_cache.json"),
+        JSON.stringify({
+          etag: '"list-1"',
+          models: [
+            {
+              slug: "gpt-5.4-mini",
+              display_name: "GPT-5.4 Mini",
+              priority: 2,
+              supported_reasoning_levels: cachedLevels("low", "medium"),
+            },
+            {
+              slug: "gpt-5.5",
+              display_name: "GPT-5.5",
+              priority: 1,
+              supported_reasoning_levels: cachedLevels("low", "medium", "high", "xhigh"),
+            },
+          ],
+        }),
+      );
+      await turnOn("codex");
+
+      await expect.poll(codexOwnModels, { timeout: 10_000 }).toEqual([
+        { id: "gpt-5.5", label: "GPT-5.5" },
+        { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+      ]);
+      // 没设 Subagent 模型：主对话在 Codex 自己的 gpt-5.5 上，档位按它的。
+      await expect
+        .poll(codexSubagentLevels, { timeout: 10_000 })
+        .toEqual(["low", "medium", "high", "xhigh"]);
+      expect(await setCodex({ subagentThinkingOptionId: "xhigh" })).toMatchObject({ error: null });
+
+      // 换成收不了 xhigh 的 gpt-5.4-mini：档位拿掉，写的是 Codex 自己的名字。
+      const moved = await setCodex({ subagentModelId: "gpt-5.4-mini" });
+      expect(moved.agent).toMatchObject({
+        subagentModelId: "gpt-5.4-mini",
+        subagentThinkingOptionId: null,
+      });
+      expect(await codexTables()).toMatchObject({
+        agents: { default_subagent_model: "gpt-5.4-mini" },
+      });
+      await expect.poll(codexSubagentLevels, { timeout: 10_000 }).toEqual(["low", "medium"]);
+      expect((await setCodex({ subagentThinkingOptionId: "high" })).error?.code).toBe(
+        "invalid_input",
+      );
+
+      // 手改成 Codex 自己的模型：跟过去，不算被改过，之后的改写也不写回。
+      await setCodex({ memoryModelId: "glm-4.6" });
+      const text = await readFile(configPath, "utf8");
+      await writeFile(configPath, text.replaceAll('"relay-a/glm-4.6"', '"gpt-5.5"'));
+      const list = await client.apiEndpointList("codex");
+      expect(list.agents?.codex).toMatchObject({ memoryModelId: "gpt-5.5" });
+      expect(list.health).toEqual([]);
+      await setCodex({ subagentThinkingOptionId: "low" });
+      expect(await codexTables()).toMatchObject({
+        memories: { extract_model: "gpt-5.5", consolidation_model: "gpt-5.5" },
       });
     });
 

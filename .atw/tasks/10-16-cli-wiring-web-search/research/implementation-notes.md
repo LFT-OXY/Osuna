@@ -691,13 +691,13 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 与 magpie 不同、要判断的地方
 
-- **选项只有接口模型**：magpie 的 Subagent 与记忆模型下拉还列 Codex 自己的（ChatGPT / OpenAI）模型；Osuna 与默认模型一样只列开着的接口的已选模型。要列 ChatGPT 自带模型得另给 app 一份 Codex 自己的模型清单，留作待定。
+- **Codex 自己的模型**（审查后补，照 magpie `modelOptions` 与 `models()`）：用 ChatGPT 登录时，两个下拉在接口模型前列出 Codex 自己的模型（读 `models_cache.json` 里可见的，经快照 `cliOwnModels` 给 app，标「（ChatGPT）」），同名时光秃秃的名字指它自己的；档位按缓存条目的 `supported_reasoning_levels` 校验与给选项，换到不收的模型时同样拿掉；手改成它们的照文件跟，不报被改过、不写回。用 API key 时 Codex 只读 Osuna 的模型目录，magpie 的 asProvider 同样只算 magpie 的模型，所以不列。magpie 用内置的 `catalog.Codex()`，Osuna 用 Codex 自己存的清单（工单 19 已在读）。
 - **改回没设**：magpie 删键；Osuna 照 ADR 0004 放回接管前用户自己的写法。
 - magpie 另有「subagent model」（中转站强制改 Subagent 请求的模型），不在本工单。
 
 ### 测试
 
 - 纯逻辑：`codex-config-patch.test.ts`「the default Subagent model and level and the memory model」：四个键写入、用户的其他键与行尾注释不动、关掉逐字节还原；没有表时加表、重写不变、关掉删表；只设档位；改回没设放回用户的；ChatGPT 接法的写法；读出手改并只把模型算作被改过；没写过时读出用户自己的。
-- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「Codex's default Subagent model and memory model」：四个键与关掉还原；档位按模型校验、快照选项、换 Subagent 模型或主模型后拿掉不收的档位；ChatGPT 接法写成「接口标识/模型名」；只有 Codex 有记忆模型、模型要在售；手改成在售模型被跟、不在售的报被改过；接口关掉后两项回到没设、表拿掉。
+- daemon 端到端 `api-endpoint-default-model.e2e.test.ts`「Codex's default Subagent model and memory model」：ChatGPT 登录时 Codex 自己的模型在快照里、档位按它自己的、换模型拿掉不收的档位、手改成它的被跟且不写回；四个键与关掉还原；档位按模型校验、快照选项、换 Subagent 模型或主模型后拿掉不收的档位；ChatGPT 接法写成「接口标识/模型名」；只有 Codex 有记忆模型、模型要在售；手改成在售模型被跟、不在售的报被改过；接口关掉后两项回到没设、表拿掉。
 - app：`agent-settings.test.ts`；浏览器 `settings-api-endpoints.spec.ts`：记忆模型在只读目录下保存失败留在原处、四个键写进 config.toml、关掉开关拿掉。
 - 截图（无头 Chromium、临时 CODEX_HOME、假数据）：`screenshots/23-codex-page_subagent-and-memory-models-set_{desktop-1280,compact-390}_{en,zh}.png`。

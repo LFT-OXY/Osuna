@@ -676,11 +676,14 @@ Codex's default Subagent model and level and its memory model (the [agents]
 and [memories] keys written while routed and put back on switch-off, the
 level checked against the model the Subagent runs on and dropped when a new
 model doesn't take it, a model no endpoint serves dropped, and the file read
-back) follows the subagents, subagent_effort and memories fields, settle,
-dropSubEffort and dropSubagent in magpie's internal/agent/codex.go, and
-SetTOMLKey and DelTOMLKey in internal/edit/toml.go:
+back, Codex's own models offered beside the endpoints' under a ChatGPT
+sign-in) follows the subagents, subagent_effort and memories fields, models,
+modelOptions, settle, dropSubEffort and dropSubagent in magpie's
+internal/agent/codex.go, and SetTOMLKey and DelTOMLKey in
+internal/edit/toml.go:
 
   packages/server/src/server/api-endpoints/codex-config-patch.ts
+  packages/server/src/server/api-endpoints/codex-models-cache.ts
   packages/server/src/server/api-endpoints/service.ts
   packages/server/src/server/api-endpoints/host-endpoints.ts
   packages/server/src/server/daemon-e2e/api-endpoint-default-model.e2e.test.ts

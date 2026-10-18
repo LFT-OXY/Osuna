@@ -149,6 +149,8 @@ export interface ProviderSnapshotEntry {
   lockedThinkingOptionId?: string;
   // Subagent 思考档位能选的档位（Claude Code 与 Codex）；总开关开着才有。
   subagentThinkingOptions?: AgentSelectOption[];
+  // 用 ChatGPT 登录的 Codex 自己的模型，默认 Subagent 模型与记忆模型也能选；总开关开着才有。
+  cliOwnModels?: AgentSelectOption[];
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version?: string;
 }

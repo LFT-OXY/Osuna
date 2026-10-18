@@ -1068,6 +1068,7 @@ export async function createPaseoDaemon(
       apiEndpointModelGroups: (provider) => apiEndpointService.activeModelGroups(provider),
       lockedThinking: (provider) => apiEndpointService.lockedThinkingOptionId(provider),
       subagentThinking: (provider) => apiEndpointService.subagentThinkingOptions(provider),
+      cliOwnModels: (provider) => apiEndpointService.cliOwnModels(provider),
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;

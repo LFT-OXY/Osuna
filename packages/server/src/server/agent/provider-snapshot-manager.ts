@@ -23,6 +23,7 @@ import {
   type ApiEndpointModelGroupsLookup,
   type LockedThinkingLookup,
   type SubagentThinkingLookup,
+  type CliOwnModelsLookup,
   type ProviderCatalog as DiscoveredProviderCatalog,
   type ProviderModelOverride,
   type ProviderSnapshotEntry,
@@ -143,7 +144,17 @@ export interface ProviderSnapshotManagerOptions {
   apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   lockedThinking?: LockedThinkingLookup;
   subagentThinking?: SubagentThinkingLookup;
+  cliOwnModels?: CliOwnModelsLookup;
 }
+
+type ApiEndpointSnapshotFields = Pick<
+  ProviderSnapshotEntry,
+  | "activeApiEndpoint"
+  | "apiEndpointModelGroups"
+  | "lockedThinkingOptionId"
+  | "subagentThinkingOptions"
+  | "cliOwnModels"
+>;
 
 interface ProviderSnapshotRefreshOptions {
   cwd: string;
@@ -275,6 +286,7 @@ export class ProviderSnapshotManager {
   private readonly apiEndpointModelGroups?: ApiEndpointModelGroupsLookup;
   private readonly lockedThinking?: LockedThinkingLookup;
   private readonly subagentThinking?: SubagentThinkingLookup;
+  private readonly cliOwnModels?: CliOwnModelsLookup;
   private runtimeSettings: AgentProviderRuntimeSettingsMap | undefined;
   private providerOverrides: Record<string, ProviderOverride> | undefined;
   private baseProviderOverrides: Record<string, ProviderOverride> | undefined;
@@ -304,6 +316,7 @@ export class ProviderSnapshotManager {
     this.apiEndpointModelGroups = options.apiEndpointModelGroups;
     this.lockedThinking = options.lockedThinking;
     this.subagentThinking = options.subagentThinking;
+    this.cliOwnModels = options.cliOwnModels;
     this.runtimeSettings = options.runtimeSettings;
     this.providerOverrides = options.providerOverrides;
     this.baseProviderOverrides = options.providerOverrides;
@@ -935,6 +948,17 @@ export class ProviderSnapshotManager {
     });
   }
 
+  /** 「使用第三方接口」给快照加的几项；没有的省略。 */
+  private apiEndpointFields(provider: AgentProvider): ApiEndpointSnapshotFields {
+    return {
+      activeApiEndpoint: this.activeApiEndpoint?.(provider) ?? undefined,
+      apiEndpointModelGroups: this.apiEndpointModelGroups?.(provider) ?? undefined,
+      lockedThinkingOptionId: this.lockedThinking?.(provider) ?? undefined,
+      subagentThinkingOptions: this.subagentThinking?.(provider) ?? undefined,
+      cliOwnModels: this.cliOwnModels?.(provider) ?? undefined,
+    };
+  }
+
   private async refreshProviders(
     target: ProviderSnapshotTarget,
     providers: AgentProvider[],
@@ -1111,10 +1135,7 @@ export class ProviderSnapshotManager {
       );
       const catalogModels = overriddenModels ?? catalog.models;
       const isModelListAuthoritative = overriddenModels ? true : undefined;
-      const activeApiEndpoint = this.activeApiEndpoint?.(provider) ?? undefined;
-      const apiEndpointModelGroups = this.apiEndpointModelGroups?.(provider) ?? undefined;
-      const lockedThinkingOptionId = this.lockedThinking?.(provider) ?? undefined;
-      const subagentThinkingOptions = this.subagentThinking?.(provider) ?? undefined;
+      const apiEndpointFields = this.apiEndpointFields(provider);
       const models = normalizeAgentModelCatalog(catalogModels);
       if (models.length !== catalogModels.length) {
         this.logger.warn(
@@ -1130,10 +1151,7 @@ export class ProviderSnapshotManager {
         enabled: true,
         models,
         isModelListAuthoritative,
-        activeApiEndpoint,
-        apiEndpointModelGroups,
-        lockedThinkingOptionId,
-        subagentThinkingOptions,
+        ...apiEndpointFields,
         modes: catalog.modes,
         version,
         fetchedAt: new Date().toISOString(),
