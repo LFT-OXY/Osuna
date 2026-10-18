@@ -9,7 +9,7 @@
 
 **Blocked by:** 02, 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：改写之后，临时目录里的 Claude Code 会话记录有新写入、中转站没收到 Claude Code 的请求 → 提示「被绕过」；中转站收到过 → 不提示；改写之前的写入不算。
 - [ ] Codex 同上。
