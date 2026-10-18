@@ -2669,6 +2669,20 @@ export const es: TranslationResources = {
           configUnparsable:
             "Osuna no puede leer el archivo de configuración de {{agent}}, así que no puede cambiarlo",
           configUnparsableDetail: "{{file}}: {{detail}}",
+          unparsableSyntax:
+            "{{file}} tiene un error de sintaxis cerca de la línea {{line}}, columna {{column}}. Corrígelo y vuelve a intentarlo.",
+          unparsableRootNotObject:
+            "{{file}} no contiene un objeto JSON. Corrígelo y vuelve a intentarlo.",
+          unparsableKeyNotObject:
+            '"{{key}}" en {{file}} no es un objeto. Corrígelo y vuelve a intentarlo.',
+          unparsableKeyNotArray:
+            '"{{key}}" en {{file}} no es una lista. Corrígelo y vuelve a intentarlo.',
+          settingsHasComments: "{{agent}} no puede leer su archivo de ajustes: tiene comentarios",
+          settingsHasCommentsDetail:
+            "{{file}} tiene comentarios o comas finales. Osuna aplicó sus cambios igualmente, pero {{agent}} ignora el archivo entero: en la terminal muestra un error de ajustes, y los chats de Claude en Osuna van a la API oficial en lugar de a tus endpoints de API. Se arregla al quitar los comentarios.",
+          settingsHasCommentsFix:
+            "Borra todos los comentarios // y /* */ del archivo y cualquier coma justo antes de un } o ] de cierre, y guarda. Los cambios de Osuna se mantienen. Después vuelve a abrir {{agent}} en la terminal e inicia chats nuevos de Claude en Osuna.",
+          howToFix: "Cómo arreglarlo",
           codexProfileOverride: 'El perfil "{{profile}}" de Codex se impone a los endpoints de API',
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] en {{file}} define {{keys}}, y Codex usa eso en lugar de lo que escribió Osuna. Quítalos del perfil o deja de seleccionarlo.",

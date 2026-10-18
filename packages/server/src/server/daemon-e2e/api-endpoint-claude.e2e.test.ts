@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { parse as parseJsonc } from "jsonc-parser";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -448,17 +449,140 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(listed.endpoints.map((endpoint) => endpoint.id)).toEqual([endpointId]);
   });
 
-  test("refuses to write when settings.json does not parse", async () => {
+  test("refuses to write when settings.json isn't valid JSONC either, with the file and where", async () => {
     const endpointId = await createEndpoint();
-    const broken = `{ "env": { "A": "1", } }`;
+    const broken = `{\n  "env": {\n    "A": "1"\n    "B": "2"\n  }\n}\n`;
     await writeFile(settingsPath, broken);
 
     const activated = await client.apiEndpointSetActive("claude", endpointId);
 
     expect(activated.activeEndpointId).toBeNull();
-    expect(activated.error?.code).toBe("config_unparsable");
+    expect(activated.error).toEqual({
+      code: "config_unparsable",
+      params: {
+        file: settingsPath,
+        detail: "CommaExpected at line 4, column 5",
+        reason: "syntax",
+        line: "4",
+        column: "5",
+      },
+      message: expect.stringContaining(settingsPath),
+    });
     expect(await readFile(settingsPath, "utf8")).toBe(broken);
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBeNull();
+  });
+
+  describe("settings.json with a BOM, comments or trailing commas", () => {
+    const BOM = "\uFEFF";
+    // 用户自己写的 JSONC：注释紧挨着 Osuna 负责的键，结尾带逗号。
+    const COMMENTED = `{
+  // 我自己的中转站，切回官方时要回来
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://hand-written.example", /* 手填 */
+    "DISABLE_TELEMETRY": "1", // 关遥测
+  },
+  "theme": "dark",
+}
+`;
+
+    async function switchOn(): Promise<void> {
+      const endpointId = await createEndpoint();
+      const on = await client.apiEndpointSetActive("claude", endpointId);
+      expect(on).toMatchObject({ activeEndpointId: endpointId, error: null });
+    }
+
+    test("a leading BOM stays, the owned keys are written after it, and switching off restores the bytes", async () => {
+      await writeFile(settingsPath, `${BOM}${USER_SETTINGS}`);
+
+      await switchOn();
+
+      const switched = await readFile(settingsPath, "utf8");
+      expect(switched.startsWith(BOM)).toBe(true);
+      expect(JSON.parse(switched.slice(BOM.length)).env).toMatchObject({
+        ANTHROPIC_BASE_URL: gatewayUrl(),
+        ANTHROPIC_API_KEY: "",
+      });
+      // Claude Code 自己读得了带 BOM 的文件：不算「设置文件带注释」。
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      expect(await readFile(settingsPath, "utf8")).toBe(`${BOM}${USER_SETTINGS}`);
+    });
+
+    test("comments and trailing commas are kept word for word; only the owned keys change", async () => {
+      await writeFile(settingsPath, COMMENTED);
+
+      await switchOn();
+
+      const token = (await gatewayTokens()).claude;
+      expect(await readFile(settingsPath, "utf8")).toBe(`{
+  // 我自己的中转站，切回官方时要回来
+  "env": {
+    "ANTHROPIC_BASE_URL": "${gatewayUrl()}", /* 手填 */
+    "DISABLE_TELEMETRY": "1", // 关遥测
+    "ANTHROPIC_AUTH_TOKEN": "${token}",
+    "ANTHROPIC_API_KEY": "",
+  },
+  "theme": "dark",
+  "model": "relay/sonnet",
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  },
+  "modelPicker": {
+    "options": [
+      {
+        "model": "relay/relay/sonnet",
+        "label": "relay/sonnet",
+        "description": "Relay"
+      },
+      {
+        "model": "relay/relay/haiku",
+        "label": "relay/haiku",
+        "description": "Relay"
+      }
+    ]
+  },
+}
+`);
+
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      expect(await readFile(settingsPath, "utf8")).toBe(COMMENTED);
+    });
+
+    test("the list says Claude Code can't read the file while it has comments, and stops once they are gone", async () => {
+      await writeFile(settingsPath, COMMENTED);
+      await switchOn();
+
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "settings_has_comments",
+          params: { file: settingsPath },
+          message: expect.stringContaining(settingsPath),
+        },
+      ]);
+
+      const switched = await readFile(settingsPath, "utf8");
+      // 用户删掉注释与尾随逗号：同样的内容存成严格 JSON。
+      const withoutComments = JSON.stringify(parseJsonc(switched), null, 2);
+      await writeFile(settingsPath, withoutComments);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
+
+    test("a trailing comma alone counts too", async () => {
+      await writeFile(settingsPath, `{\n  "theme": "dark",\n}\n`);
+      await switchOn();
+
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        expect.objectContaining({ code: "settings_has_comments" }),
+      ]);
+    });
+
+    test("nothing is said while the switch is off", async () => {
+      await writeFile(settingsPath, COMMENTED);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
   });
 
   test("an owned key changed outside Osuna shows as modified; other keys don't count", async () => {
@@ -604,12 +728,17 @@ describe("Claude API endpoint over the daemon RPC", () => {
     });
 
     test("a settings.json that does not parse comes with the file and the reason", async () => {
-      await writeFile(settingsPath, `{ "env": { "A": "1", } }`);
+      await writeFile(settingsPath, `{ "env": "on" }`);
 
       expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
         {
           code: "config_unparsable",
-          params: { file: settingsPath, detail: expect.any(String) },
+          params: {
+            file: settingsPath,
+            detail: expect.any(String),
+            reason: "key_not_object",
+            key: "env",
+          },
           message: expect.stringContaining(settingsPath),
         },
       ]);
@@ -629,7 +758,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
   });
 
   test("reports a settings.json that does not parse", async () => {
-    await writeFile(settingsPath, `{ "env": { "A": "1", } }`);
+    await writeFile(settingsPath, `{ "env": { "A": "1" "B": "2" } }`);
 
     expect((await client.apiEndpointList("claude")).health).toEqual([
       { code: "config_unparsable", message: expect.stringContaining(settingsPath) },

@@ -30,6 +30,7 @@ export type AgentIssueKind =
   | "notThroughGateway"
   | "configUnparsable"
   | "codexProfileOverride"
+  | "settingsHasComments"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -39,20 +40,26 @@ export interface AgentIssueView {
   params: Record<string, string>;
   message: string;
   actions: AgentIssueAction[];
+  // 带「如何修复」：点开看修复步骤，不发请求。
+  hasFixSteps: boolean;
 }
 
 const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   not_through_gateway: "notThroughGateway",
   config_unparsable: "configUnparsable",
   codex_profile_override: "codexProfileOverride",
+  settings_has_comments: "settingsHasComments",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   notThroughGateway: ["reapply", "switchToOfficial", "keepCurrent"],
   configUnparsable: [],
   codexProfileOverride: [],
+  settingsHasComments: [],
   unknown: [],
 };
+
+const KINDS_WITH_FIX_STEPS: ReadonlySet<AgentIssueKind> = new Set(["settingsHasComments"]);
 
 function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
   const kind = ISSUE_KINDS[issue.code] ?? "unknown";
@@ -61,6 +68,7 @@ function toIssueView(issue: ApiEndpointAgentIssue): AgentIssueView {
     params: issue.params ?? {},
     message: issue.message,
     actions: ISSUE_ACTIONS[kind],
+    hasFixSteps: KINDS_WITH_FIX_STEPS.has(kind),
   };
 }
 

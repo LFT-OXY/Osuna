@@ -2677,6 +2677,17 @@ export const en = {
           notThroughGatewayDetail: "Changed in {{file}}: {{keys}}",
           configUnparsable: "Osuna can't read {{agent}}'s settings file, so it can't change it",
           configUnparsableDetail: "{{file}}: {{detail}}",
+          unparsableSyntax:
+            "{{file}} has a syntax error near line {{line}}, column {{column}}. Fix it, then try again.",
+          unparsableRootNotObject: "{{file}} doesn't hold a JSON object. Fix it, then try again.",
+          unparsableKeyNotObject: '"{{key}}" in {{file}} isn\'t an object. Fix it, then try again.',
+          unparsableKeyNotArray: '"{{key}}" in {{file}} isn\'t a list. Fix it, then try again.',
+          settingsHasComments: "{{agent}} can't read its settings file: it has comments",
+          settingsHasCommentsDetail:
+            "{{file}} has comments or trailing commas. Osuna made its changes anyway, but {{agent}} skips the whole file: in the terminal it shows a settings error, and Claude chats in Osuna go to the official API instead of your API endpoints. This goes away once the comments are removed.",
+          settingsHasCommentsFix:
+            "Delete every // and /* */ comment in the file, and any comma right before a closing } or ], then save. Osuna's changes stay. Then start {{agent}} again in the terminal, and start new Claude chats in Osuna.",
+          howToFix: "How to fix",
           codexProfileOverride: 'Codex\'s profile "{{profile}}" overrides the API endpoints',
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] in {{file}} sets {{keys}}, and Codex uses those instead of what Osuna wrote. Remove them from the profile, or stop selecting it.",

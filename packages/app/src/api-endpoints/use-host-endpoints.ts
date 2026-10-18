@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   ApiEndpoint,
+  ApiEndpointError,
   ApiEndpointListResponse,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -12,6 +13,7 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
+import { describeUnparsableFile } from "./config-unparsable-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
@@ -86,6 +88,14 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const [issueActionError, setIssueActionError] =
     useState<UseHostEndpointsResult["issueActionError"]>(null);
   const queryKey = useMemo(() => hostEndpointsQueryKey(serverId), [serverId]);
+  // 读不懂的配置文件用界面语言说明原因；其余照主机原文。
+  const describeError = useCallback(
+    (error: ApiEndpointError): string =>
+      error.code === "config_unparsable" && error.params
+        ? describeUnparsableFile(t, error.params)
+        : error.message,
+    [t],
+  );
 
   const query = useFetchQuery({
     queryKey,
@@ -148,7 +158,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
           endpointId: endpoint.id,
           ...change,
         });
-        if (result.error) setActionError(result.error.message);
+        if (result.error) setActionError(describeError(result.error));
       } catch (error) {
         setActionError(toErrorMessage(error));
       } finally {
@@ -156,7 +166,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         setPendingEndpointId(null);
       }
     },
-    [client, refresh],
+    [client, describeError, refresh],
   );
 
   const setEnabled = useCallback(
@@ -184,7 +194,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         setActionError(null);
         try {
           const result = await client.apiEndpointSetAgentSettings({ provider, ...settings });
-          if (result.error) setActionError(result.error.message);
+          if (result.error) setActionError(describeError(result.error));
         } catch (error) {
           setActionError(toErrorMessage(error));
         } finally {
@@ -193,7 +203,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         }
       })();
     },
-    [client, refresh],
+    [client, describeError, refresh],
   );
 
   const runIssueAction = useCallback(
@@ -205,7 +215,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         try {
           const result = await sendIssueAction(client, provider, action);
           if (result.error) {
-            setIssueActionError({ provider, action, message: result.error.message });
+            setIssueActionError({ provider, action, message: describeError(result.error) });
           }
         } catch (error) {
           setIssueActionError({ provider, action, message: toErrorMessage(error) });
@@ -215,7 +225,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         }
       })();
     },
-    [client, refresh],
+    [client, describeError, refresh],
   );
 
   const save = useCallback(
@@ -286,7 +296,7 @@ function sendIssueAction(
   client: HostClient,
   provider: string,
   action: AgentIssueAction,
-): Promise<{ error: { message: string } | null }> {
+): Promise<{ error: ApiEndpointError | null }> {
   switch (action) {
     case "reapply":
       return client.apiEndpointSetAgentSettings({ provider, enabled: true, reapply: true });

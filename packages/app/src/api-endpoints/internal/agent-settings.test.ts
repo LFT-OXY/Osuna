@@ -145,6 +145,7 @@ describe("the settings issues on an agent page", () => {
         params: notThroughGateway.params,
         message: notThroughGateway.message,
         actions: ["reapply", "switchToOfficial", "keepCurrent"],
+        hasFixSteps: false,
       },
     ]);
   });
@@ -169,13 +170,43 @@ describe("the settings issues on an agent page", () => {
     ]);
   });
 
+  it("offers fix steps, not actions, for a settings file with comments", () => {
+    const result = view({
+      endpoints: [],
+      agentIssues: {
+        claude: [
+          {
+            code: "settings_has_comments",
+            params: { file: "/home/me/.claude/settings.json" },
+            message: "has comments",
+          },
+        ],
+      },
+    });
+    expect(result.issues).toEqual([
+      {
+        kind: "settingsHasComments",
+        params: { file: "/home/me/.claude/settings.json" },
+        message: "has comments",
+        actions: [],
+        hasFixSteps: true,
+      },
+    ]);
+  });
+
   it("shows the host's own words for a case it does not know", () => {
     const result = view({
       endpoints: [],
       agentIssues: { claude: [{ code: "a_future_case", message: "Something new happened" }] },
     });
     expect(result.issues).toEqual([
-      { kind: "unknown", params: {}, message: "Something new happened", actions: [] },
+      {
+        kind: "unknown",
+        params: {},
+        message: "Something new happened",
+        actions: [],
+        hasFixSteps: false,
+      },
     ]);
   });
 

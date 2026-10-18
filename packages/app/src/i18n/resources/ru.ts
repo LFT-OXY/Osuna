@@ -2650,6 +2650,20 @@ export const ru: TranslationResources = {
           configUnparsable:
             "Osuna не может прочитать файл настроек {{agent}}, поэтому не может его изменить",
           configUnparsableDetail: "{{file}}: {{detail}}",
+          unparsableSyntax:
+            "В {{file}} синтаксическая ошибка около строки {{line}}, столбца {{column}}. Исправьте её и попробуйте ещё раз.",
+          unparsableRootNotObject: "В {{file}} не JSON-объект. Исправьте и попробуйте ещё раз.",
+          unparsableKeyNotObject:
+            "«{{key}}» в {{file}} — не объект. Исправьте и попробуйте ещё раз.",
+          unparsableKeyNotArray:
+            "«{{key}}» в {{file}} — не список. Исправьте и попробуйте ещё раз.",
+          settingsHasComments:
+            "{{agent}} не может прочитать свой файл настроек: в нём есть комментарии",
+          settingsHasCommentsDetail:
+            "В {{file}} есть комментарии или висячие запятые. Osuna всё равно внесла изменения, но {{agent}} пропускает файл целиком: в терминале показывает ошибку настроек, а чаты Claude в Osuna идут в официальный API, а не через ваши сторонние API. Всё вернётся, когда комментарии будут удалены.",
+          settingsHasCommentsFix:
+            "Удалите из файла все комментарии // и /* */ и запятые прямо перед закрывающими } или ], затем сохраните. Изменения Osuna останутся. После этого перезапустите {{agent}} в терминале и начните новые чаты Claude в Osuna.",
+          howToFix: "Как исправить",
           codexProfileOverride: "Профиль Codex «{{profile}}» перекрывает сторонние API",
           codexProfileOverrideDetail:
             "[profiles.{{profile}}] в {{file}} задаёт {{keys}}, и Codex использует их вместо того, что записал Osuna. Уберите их из профиля или не выбирайте его.",

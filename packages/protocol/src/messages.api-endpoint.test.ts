@@ -188,6 +188,22 @@ describe("provider.api_endpoint.delete and set_active", () => {
     };
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
+
+  it("parses a rejection that carries params for the app to explain it", () => {
+    const response = {
+      type: "provider.api_endpoint.set_active.response" as const,
+      payload: {
+        requestId: "req-6b",
+        activeEndpointId: null,
+        error: {
+          code: "config_unparsable",
+          params: { file: "/u/.claude/settings.json", reason: "syntax", line: "4", column: "5" },
+          message: "/u/.claude/settings.json could not be parsed",
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
 });
 
 describe("Claude model mapping", () => {

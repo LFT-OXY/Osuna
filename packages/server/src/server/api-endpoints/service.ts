@@ -29,6 +29,7 @@ import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-mo
 import {
   applyClaudeApiEndpoint,
   inspectClaudeSettings,
+  type ClaudeSettingsUnparsableReason,
   restoreClaudeOfficial,
   type ClaudeGatewayWiring,
   type ClaudeSettingsTakeover,
@@ -119,11 +120,14 @@ const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
 export class ApiEndpointRequestError extends Error {
   readonly code: ApiEndpointErrorCode;
+  // app 用来按界面语言说明原因的参数（如 config_unparsable 的 file、reason）；多数错误没有。
+  readonly params: Record<string, string> | undefined;
 
-  constructor(code: ApiEndpointErrorCode, message: string) {
+  constructor(code: ApiEndpointErrorCode, message: string, params?: Record<string, string>) {
     super(message);
     this.name = "ApiEndpointRequestError";
     this.code = code;
+    this.params = params;
   }
 }
 
@@ -211,7 +215,9 @@ type ApiEndpointHealthCode = "modified_externally" | "config_unparsable" | "code
 type ApiEndpointAgentIssueCode =
   | "not_through_gateway"
   | "config_unparsable"
-  | "codex_profile_override";
+  | "codex_profile_override"
+  // settings.json 带注释或尾随逗号：Osuna 照改，但 Claude Code 自己读不了、整份跳过。
+  | "settings_has_comments";
 
 interface AgentIssue extends ApiEndpointAgentIssue {
   code: ApiEndpointAgentIssueCode;
@@ -1316,7 +1322,13 @@ export class ApiEndpointService {
           wiring,
           takeover: record.takeover,
         });
-        if (result.kind === "unparsable") throw unparsable(settingsPath, result.message);
+        if (result.kind === "unparsable") {
+          throw unparsable({
+            filePath: settingsPath,
+            detail: result.message,
+            reason: result.reason,
+          });
+        }
         return {
           change: { kind: "write", text: result.text },
           value: { takeover: result.takeover, current },
@@ -1350,7 +1362,13 @@ export class ApiEndpointService {
       filePath: settingsPath,
       compute: (text) => {
         const result = restoreClaudeOfficial({ text, takeover });
-        if (result.kind === "unparsable") throw unparsable(settingsPath, result.message);
+        if (result.kind === "unparsable") {
+          throw unparsable({
+            filePath: settingsPath,
+            detail: result.message,
+            reason: result.reason,
+          });
+        }
         let change: ConfigFileChange = { kind: "keep" };
         if (result.kind === "patched") change = { kind: "write", text: result.text };
         if (result.kind === "delete") change = { kind: "delete" };
@@ -1385,7 +1403,8 @@ export class ApiEndpointService {
           },
           takeover: record.takeover,
         });
-        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        if (result.kind === "unparsable")
+          throw unparsable({ filePath: configPath, detail: result.message });
         return {
           change: { kind: "write", text: result.text },
           value: { takeover: result.takeover, current },
@@ -1477,7 +1496,8 @@ export class ApiEndpointService {
       filePath: configPath,
       compute: (text) => {
         const result = restoreCodexOfficial({ text, takeover });
-        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        if (result.kind === "unparsable")
+          throw unparsable({ filePath: configPath, detail: result.message });
         let change: ConfigFileChange = { kind: "keep" };
         if (result.kind === "patched") change = { kind: "write", text: result.text };
         if (result.kind === "delete") change = { kind: "delete" };
@@ -1508,7 +1528,8 @@ export class ApiEndpointService {
           text,
           table: { baseUrl: `${url}${CODEX_GATEWAY_SUFFIX}`, bearerToken: token },
         });
-        if (result.kind === "unparsable") throw unparsable(configPath, result.message);
+        if (result.kind === "unparsable")
+          throw unparsable({ filePath: configPath, detail: result.message });
         const change: ConfigFileChange =
           result.kind === "patched" && result.text !== text
             ? { kind: "write", text: result.text }
@@ -1558,10 +1579,25 @@ export class ApiEndpointService {
       text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
       takeover: enabled ? this.store.readClaudeTakeover().takeover : null,
     });
-    if (result.kind === "unparsable") return unparsableStatus(settingsPath, result.message);
+    if (result.kind === "unparsable") {
+      return unparsableStatus({
+        filePath: settingsPath,
+        detail: result.message,
+        reason: result.reason,
+      });
+    }
+    const issues = notThroughGatewayIssues("claude", settingsPath, result.modifiedKeys);
+    // 只在开关开着时提示：这时 Claude Code 跳过这份文件，就不经过中转站（ADR 0012）。
+    if (enabled && !result.isReadableByClaudeCode) {
+      issues.push({
+        code: "settings_has_comments",
+        params: { file: settingsPath },
+        message: `${settingsPath} has comments or trailing commas. Claude Code can't read it and skips the whole file, so Claude sessions Osuna starts go to the official API. Remove the comments and trailing commas to fix this.`,
+      });
+    }
     return {
       health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
-      issues: notThroughGatewayIssues("claude", settingsPath, result.modifiedKeys),
+      issues,
       baseUrl: result.baseUrl,
     };
   }
@@ -1572,7 +1608,8 @@ export class ApiEndpointService {
       text: readOptionalFile(configPath)?.toString("utf8") ?? null,
       takeover: enabled ? this.store.readCodexTakeover().takeover : null,
     });
-    if (result.kind === "unparsable") return unparsableStatus(configPath, result.message);
+    if (result.kind === "unparsable")
+      return unparsableStatus({ filePath: configPath, detail: result.message });
     const health = modifiedExternallyIssues(configPath, result.modifiedKeys);
     const issues = notThroughGatewayIssues("codex", configPath, result.modifiedKeys);
     if (result.profileOverride) {
@@ -1956,20 +1993,41 @@ function normalizeBaseUrl(raw: string): string {
   return trimmed.replace(/\/+$/, "");
 }
 
-function unparsable(filePath: string, detail: string): ApiEndpointRequestError {
+/** 读不懂的配置文件：路径、解析器原文；settings.json 另有结构化的原因。 */
+interface UnparsableFile {
+  filePath: string;
+  detail: string;
+  reason?: ClaudeSettingsUnparsableReason;
+}
+
+function unparsable(file: UnparsableFile): ApiEndpointRequestError {
   return new ApiEndpointRequestError(
     "config_unparsable",
-    `${filePath} could not be parsed, so nothing was written: ${detail}`,
+    `${file.filePath} could not be parsed, so nothing was written: ${file.detail}`,
+    unparsableParams(file),
   );
 }
 
-function unparsableStatus(filePath: string, detail: string): ApiEndpointFileStatus {
-  const message = `${filePath} could not be parsed: ${detail}`;
+function unparsableStatus(file: UnparsableFile): ApiEndpointFileStatus {
+  const message = `${file.filePath} could not be parsed: ${file.detail}`;
   return {
     health: [{ code: "config_unparsable", message }],
-    issues: [{ code: "config_unparsable", params: { file: filePath, detail }, message }],
+    issues: [{ code: "config_unparsable", params: unparsableParams(file), message }],
     baseUrl: null,
   };
+}
+
+/** file、detail（解析器原文）；settings.json 另给 reason 与它的参数，app 据此用界面语言说明。 */
+function unparsableParams({ filePath, detail, reason }: UnparsableFile): Record<string, string> {
+  const params: Record<string, string> = { file: filePath, detail };
+  if (reason === undefined) return params;
+  params.reason = reason.code;
+  if (reason.code === "syntax") {
+    params.line = String(reason.line);
+    params.column = String(reason.column);
+  }
+  if (reason.code === "key_not_object" || reason.code === "key_not_array") params.key = reason.key;
+  return params;
 }
 
 function notThroughGatewayIssues(

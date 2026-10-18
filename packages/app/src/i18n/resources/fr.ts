@@ -2670,6 +2670,21 @@ export const fr: TranslationResources = {
           configUnparsable:
             "Osuna ne peut pas lire le fichier de réglages de {{agent}}, il ne peut donc pas le modifier",
           configUnparsableDetail: "{{file}} : {{detail}}",
+          unparsableSyntax:
+            "{{file}} contient une erreur de syntaxe vers la ligne {{line}}, colonne {{column}}. Corrigez-la, puis réessayez.",
+          unparsableRootNotObject:
+            "{{file}} ne contient pas d'objet JSON. Corrigez-le, puis réessayez.",
+          unparsableKeyNotObject:
+            "« {{key}} » dans {{file}} n'est pas un objet. Corrigez-le, puis réessayez.",
+          unparsableKeyNotArray:
+            "« {{key}} » dans {{file}} n'est pas une liste. Corrigez-le, puis réessayez.",
+          settingsHasComments:
+            "{{agent}} ne peut pas lire son fichier de réglages : il contient des commentaires",
+          settingsHasCommentsDetail:
+            "{{file}} contient des commentaires ou des virgules finales. Osuna a quand même fait ses modifications, mais {{agent}} ignore tout le fichier : dans le terminal il affiche une erreur de réglages, et les discussions Claude dans Osuna passent par l'API officielle au lieu de vos points d'accès API. Tout rentre dans l'ordre une fois les commentaires supprimés.",
+          settingsHasCommentsFix:
+            "Supprimez tous les commentaires // et /* */ du fichier ainsi que toute virgule placée juste avant un } ou un ] fermant, puis enregistrez. Les modifications d'Osuna restent en place. Relancez ensuite {{agent}} dans le terminal et ouvrez de nouvelles discussions Claude dans Osuna.",
+          howToFix: "Comment corriger",
           codexProfileOverride:
             "Le profil « {{profile}} » de Codex prend le pas sur les points d'accès API",
           codexProfileOverrideDetail:

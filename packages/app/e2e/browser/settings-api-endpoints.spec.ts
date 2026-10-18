@@ -919,19 +919,99 @@ test.describe("Settings changed outside Osuna on the provider pages", () => {
     expect(await readFile(path.join(claudeDir(), "settings.json"), "utf8")).toBe(changed);
   });
 
-  test("a settings file Osuna can't read is explained, with no actions", async ({ page }) => {
+  test("a settings file Osuna can't read is explained in the UI language, with no actions", async ({
+    page,
+  }) => {
     await mkdir(claudeDir(), { recursive: true });
-    await writeFile(path.join(claudeDir(), "settings.json"), '{ "env": { "A": "1", } }');
+    await writeFile(path.join(claudeDir(), "settings.json"), '{ "env": { "A": "1" "B": "2" } }');
     try {
       await openClaudeCodePage(page);
       const unreadable = issue(page, "configUnparsable");
       await expect(unreadable).toContainText(
         "Osuna can't read Claude's settings file, so it can't change it",
       );
-      await expect(unreadable).toContainText(path.join(claudeDir(), "settings.json"));
+      await expect(unreadable).toContainText(
+        `${path.join(claudeDir(), "settings.json")} has a syntax error near line 1, column 21.`,
+      );
       await expect(unreadable.getByRole("button")).toHaveCount(0);
     } finally {
       await writeFile(path.join(claudeDir(), "settings.json"), "{}\n");
+    }
+  });
+
+  test("turning the switch on over a file that isn't JSONC either is refused, and says why", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const settingsPath = path.join(claudeDir(), "settings.json");
+    const broken = '{\n  "theme": "dark"\n  "model": "opus"\n}\n';
+    await mkdir(claudeDir(), { recursive: true });
+    await writeFile(settingsPath, broken);
+    try {
+      await openClaudeCodePage(page);
+      await agentSection(page).getByTestId("agent-api-endpoints-switch").click();
+
+      const failure = agentSection(page).getByTestId("agent-api-endpoints-error");
+      await expect(failure).toContainText("Couldn't change the API endpoint settings for Claude");
+      await expect(failure).toContainText(
+        `${settingsPath} has a syntax error near line 3, column 3.`,
+      );
+      await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).not.toBeChecked();
+      expect(await readFile(settingsPath, "utf8")).toBe(broken);
+    } finally {
+      await writeFile(settingsPath, "{}\n");
+    }
+  });
+
+  test("a settings file with comments is still changed, says Claude Code can't read it, and How to fix opens the steps", async ({
+    page,
+  }) => {
+    const settingsPath = path.join(claudeDir(), "settings.json");
+    const commented = '{\n  // mine\n  "theme": "dark",\n}\n';
+    await mkdir(claudeDir(), { recursive: true });
+    await writeFile(settingsPath, commented);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    try {
+      const on = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+      expect(on.error).toBeNull();
+      const written = await readFile(settingsPath, "utf8");
+      expect(written).toContain("  // mine\n");
+      expect(written).toContain("/api-endpoint-gateway");
+
+      await openClaudeCodePage(page);
+      const notice = issue(page, "settingsHasComments");
+      await expect(notice).toContainText("Claude can't read its settings file: it has comments");
+      await expect(notice).toContainText(
+        "Claude chats in Osuna go to the official API instead of your API endpoints",
+      );
+      const steps = notice.getByTestId("agent-api-endpoints-issue-fix-steps");
+      await expect(steps).toHaveCount(0);
+      await notice.getByRole("button", { name: "How to fix" }).click();
+      await expect(steps).toContainText("Delete every // and /* */ comment in the file");
+      await notice.getByRole("button", { name: "How to fix" }).click();
+      await expect(steps).toHaveCount(0);
+
+      await test.step("once the comments are gone, the notice goes", async () => {
+        const withoutComments = (await readFile(settingsPath, "utf8"))
+          .replace("  // mine\n", "")
+          .replace(/,(\s*[}\]])/g, "$1");
+        JSON.parse(withoutComments);
+        await writeFile(settingsPath, withoutComments);
+        await openClaudeCodePage(page);
+        await expect(agentSection(page).getByTestId("agent-api-endpoints-switch")).toBeChecked();
+        await expect(issue(page, "settingsHasComments")).toHaveCount(0);
+      });
+    } finally {
+      await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+      await writeFile(settingsPath, "{}\n");
     }
   });
 

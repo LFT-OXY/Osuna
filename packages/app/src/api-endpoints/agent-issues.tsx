@@ -1,10 +1,12 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { createControlGeometry } from "@/components/ui/control-geometry";
 import { settingsStyles } from "@/styles/settings";
+import { describeUnparsableFile } from "./config-unparsable-copy";
 import type { AgentIssueAction, AgentIssueView } from "./internal/agent-settings";
 
 /*
@@ -76,7 +78,12 @@ function IssueBlock({
   pendingAction: AgentIssueAction | null;
   onAction: (action: AgentIssueAction) => void;
 }) {
-  const { title, description } = useIssueCopy(providerLabel, issue);
+  const { t } = useTranslation();
+  const { title, description, fixSteps } = useIssueCopy(providerLabel, issue);
+  const [isFixOpen, setIsFixOpen] = useState(false);
+  const toggleFix = useCallback(() => setIsFixOpen((open) => !open), []);
+  const fixButtonState = useMemo(() => ({ expanded: isFixOpen }), [isFixOpen]);
+  const hasFixSteps = issue.hasFixSteps && fixSteps !== undefined;
   return (
     <Alert
       variant="warning"
@@ -85,6 +92,26 @@ function IssueBlock({
       description={description}
       testID={`agent-api-endpoints-issue-${issue.kind}`}
     >
+      {hasFixSteps ? (
+        <View style={styles.fix}>
+          <View style={styles.actions}>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={toggleFix}
+              accessibilityState={fixButtonState}
+              testID="agent-api-endpoints-issue-how-to-fix"
+            >
+              {t("settings.apiEndpoints.agent.issues.howToFix")}
+            </Button>
+          </View>
+          {isFixOpen ? (
+            <Text style={styles.fixSteps} testID="agent-api-endpoints-issue-fix-steps">
+              {fixSteps}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       {issue.actions.length > 0 ? (
         <View style={styles.actions}>
           {issue.actions.map((action) => (
@@ -160,11 +187,15 @@ function ActionErrorBlock({
   );
 }
 
+interface IssueCopy {
+  title: string;
+  description?: string;
+  // 「如何修复」点开后的步骤。
+  fixSteps?: string;
+}
+
 /** 按 code 与参数翻译；认不出的照主机给的英文原文。文件路径、键名、解析器原文不翻译。 */
-function useIssueCopy(
-  providerLabel: string,
-  issue: AgentIssueView,
-): { title: string; description?: string } {
+function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
   const { t } = useTranslation();
   const { params } = issue;
   switch (issue.kind) {
@@ -179,9 +210,19 @@ function useIssueCopy(
     case "configUnparsable":
       return {
         title: t("settings.apiEndpoints.agent.issues.configUnparsable", { agent: providerLabel }),
-        description: t("settings.apiEndpoints.agent.issues.configUnparsableDetail", {
+        description: describeUnparsableFile(t, params),
+      };
+    case "settingsHasComments":
+      return {
+        title: t("settings.apiEndpoints.agent.issues.settingsHasComments", {
+          agent: providerLabel,
+        }),
+        description: t("settings.apiEndpoints.agent.issues.settingsHasCommentsDetail", {
+          agent: providerLabel,
           file: params.file,
-          detail: params.detail,
+        }),
+        fixSteps: t("settings.apiEndpoints.agent.issues.settingsHasCommentsFix", {
+          agent: providerLabel,
         }),
       };
     case "codexProfileOverride":
@@ -210,5 +251,14 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing[2],
+  },
+  fix: {
+    flex: 1,
+    gap: theme.spacing[2],
+  },
+  // 与 Alert sm 的说明同字号，用正文色：点开后它是要照着做的内容。
+  fixSteps: {
+    ...createControlGeometry(theme).alert.sm.text,
+    color: theme.colors.foreground,
   },
 }));

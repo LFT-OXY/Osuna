@@ -537,7 +537,7 @@ describe("applyClaudeApiEndpoint", () => {
   });
 
   it.each([
-    ["invalid JSON", `{ "env": { "A": "1", } }`],
+    ["invalid JSONC", `{ "env": { "A": "1" "B": "2" } }`],
     ["a top-level array", `[]`],
     ["an env that is not an object", `{ "env": "oops" }`],
     ["a permissions.deny that is not an array", `{ "permissions": { "deny": "WebSearch" } }`],
@@ -689,6 +689,7 @@ describe("inspectClaudeSettings", () => {
       kind: "parsed",
       modifiedKeys: [],
       baseUrl: "https://mine.example",
+      isReadableByClaudeCode: true,
     });
     expect(inspect(USER_SETTINGS, null).baseUrl).toBeNull();
     expect(inspect('{ "env": { "ANTHROPIC_BASE_URL": "  " } }', null).baseUrl).toBeNull();
@@ -697,5 +698,124 @@ describe("inspectClaudeSettings", () => {
 
   it("reports a file that does not parse", () => {
     expect(inspectClaudeSettings({ text: "{ nope", takeover: null }).kind).toBe("unparsable");
+  });
+});
+
+describe("settings.json read and written as JSONC", () => {
+  const BOM = "﻿";
+
+  it("keeps a leading BOM: writes the owned keys after it and restores the exact bytes", () => {
+    const withBom = `${BOM}${USER_SETTINGS}`;
+    const { text, takeover } = apply(withBom);
+
+    expect(text.startsWith(BOM)).toBe(true);
+    expect(text.slice(BOM.length)).toBe(apply(USER_SETTINGS).text);
+    expect(restore(text, takeover)).toBe(withBom);
+  });
+
+  // 用户自己写的 JSONC：行注释、块注释、尾随逗号，注释紧挨着 Osuna 负责的键。
+  const COMMENTED = `{
+  // 我的中转站
+  "model": "opus", // 固定用 opus
+  "env": {
+    /* 口令在下面 */
+    "ANTHROPIC_BASE_URL": "https://mine.example",
+    "ANTHROPIC_AUTH_TOKEN": "sk-mine", // 别提交
+  },
+  "theme": "dark",
+}
+`;
+
+  it("edits only the owned values and keeps every comment, trailing comma and line break", () => {
+    const { text } = apply(COMMENTED);
+
+    expect(text).toBe(`{
+  // 我的中转站
+  "model": "kimi-k2", // 固定用 opus
+  "env": {
+    /* 口令在下面 */
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:6767/api-endpoint-gateway",
+    "ANTHROPIC_AUTH_TOKEN": "gw-token", // 别提交
+    "ANTHROPIC_API_KEY": "",
+  },
+  "theme": "dark",
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  },
+}
+`);
+  });
+
+  it("keeps a comment after the last key when that key has no trailing comma", () => {
+    const original = `{\n  "theme": "dark" // 暗色\n}\n`;
+    const { text, takeover } = apply(original);
+
+    expect(text).toBe(`{
+  "theme": "dark", // 暗色
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:6767/api-endpoint-gateway",
+    "ANTHROPIC_AUTH_TOKEN": "gw-token",
+    "ANTHROPIC_API_KEY": ""
+  },
+  "model": "kimi-k2",
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  }
+}
+`);
+    expect(restore(text, takeover)).toBe(original);
+  });
+
+  it("restores a commented file to its exact bytes, comments included", () => {
+    const { text, takeover } = apply(COMMENTED);
+    expect(restore(text, takeover)).toBe(COMMENTED);
+  });
+
+  it.each([
+    ["a line comment", `{\n  // mine\n  "theme": "dark"\n}\n`],
+    ["a block comment", `{\n  /* mine */ "theme": "dark"\n}\n`],
+    ["a trailing comma", `{\n  "theme": "dark",\n}\n`],
+  ])("accepts %s and reports that Claude Code can't read the file", (_label, original) => {
+    const { text, takeover } = apply(original);
+
+    expect(inspectClaudeSettings({ text, takeover })).toMatchObject({
+      kind: "parsed",
+      modifiedKeys: [],
+      isReadableByClaudeCode: false,
+    });
+    expect(restore(text, takeover)).toBe(original);
+  });
+
+  it("reads a file with only a BOM in front as one Claude Code can read", () => {
+    const { text, takeover } = apply(`${BOM}${USER_SETTINGS}`);
+    expect(inspectClaudeSettings({ text, takeover })).toMatchObject({
+      modifiedKeys: [],
+      isReadableByClaudeCode: true,
+    });
+  });
+
+  it("counts an owned key changed next to a comment, and the comment stays theirs", () => {
+    const { text, takeover } = apply(COMMENTED);
+    const edited = text.replace(`"gw-token", // 别提交`, `"sk-other", // 别提交`);
+    expect(inspectClaudeSettings({ text: edited, takeover })).toMatchObject({
+      modifiedKeys: ["env.ANTHROPIC_AUTH_TOKEN"],
+    });
+  });
+
+  it("refuses a file that isn't valid JSONC either, and says where", () => {
+    const result = applyClaudeApiEndpoint({
+      text: `{\n  "theme": "dark"\n  "model": "opus"\n}\n`,
+      wiring: GATEWAY,
+      takeover: null,
+    });
+    expect(result).toEqual({
+      kind: "unparsable",
+      message: "CommaExpected at line 3, column 3",
+      reason: { code: "syntax", line: 3, column: 3 },
+    });
   });
 });

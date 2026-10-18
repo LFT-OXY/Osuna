@@ -418,7 +418,9 @@ export class ApiEndpointSession {
         { code: error.code, requestType: request.type },
         "API endpoint request rejected",
       );
-      return { code: error.code, message: error.message };
+      return error.params
+        ? { code: error.code, params: error.params, message: error.message }
+        : { code: error.code, message: error.message };
     }
     this.logger.error({ err: error, requestType: request.type }, "API endpoint request failed");
     return {

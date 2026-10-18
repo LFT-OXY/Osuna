@@ -117,8 +117,14 @@ export const ApiEndpointSchema = z.object({
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
 /** `code` 是字符串，daemon 新增错误码时老客户端照常解析并显示 message。 */
+/**
+ * 请求被拒的原因。`params` 是 app 用界面语言说明时要的参数，值都是字符串；老 daemon 不发。
+ * config_unparsable：file、detail（解析器原文）；settings.json 另有 reason（syntax 带 line、column，
+ * root_not_object，key_not_object / key_not_array 带 key）。
+ */
 export const ApiEndpointErrorSchema = z.object({
   code: z.string(),
+  params: z.record(z.string(), z.string()).optional(),
   message: z.string(),
 });
 export type ApiEndpointError = z.infer<typeof ApiEndpointErrorSchema>;
@@ -166,8 +172,10 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
 
 /**
  * 提供方设置页提示区的一条「设置被改过」，读状态时检测。`code` 是字符串，app 按它翻译，认不出的照 `message`（英文）显示：
- * not_through_gateway（params：file、keys）、config_unparsable（file、detail）、
- * codex_profile_override（file、profile、keys）。后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
+ * not_through_gateway（params：file、keys）、config_unparsable（file、detail，settings.json 另有 reason 等，
+ * 同 ApiEndpointErrorSchema）、codex_profile_override（file、profile、keys）、
+ * settings_has_comments（file：settings.json 带注释或尾随逗号，Claude Code 读不了）。
+ * 后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
  */
 export const ApiEndpointAgentIssueSchema = z.object({
   code: z.string(),

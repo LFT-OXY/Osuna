@@ -398,3 +398,30 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 用户选「也做 Agent 页」：已覆盖已归档 Agent「取消归档」续不上（`refreshAgent`），以及导入、`resume_agent_request`。
 - 用户选「保留」：「取消归档」续不上时放回归档、报错留着（照 `resume_agent_request` 的做法）。
 - 用户选「另开工单以后做」：daemon 重启后打开未归档、续不上的 Codex Agent 显示「Failed to load agent」页，没有说明与挪动按钮——错误码要穿过时间线同步的几层，本任务不做。
+
+## 15 settings.json 带 BOM、带注释也照改
+
+### 先核实的推断：Osuna 的 Claude 对话遇到读不了的设置文件会怎样
+
+结论：**整份跳过、不弹窗、不报错，于是不经中转站直接走官方。**【源码核实】CC 2.1.302（`npm pack @anthropic-ai/claude-code-darwin-arm64@2.1.302` 放进空临时目录，只用 `strings` 读二进制，没有运行），SDK 0.3.246（仓库 `node_modules`）。
+
+- Osuna 经 SDK 的 `query()` 起 Claude（`agent/providers/claude/agent.ts`，`settingSources: ["user","project","local"]`，`pathToClaudeCodeExecutable` 是本机的 claude）。SDK 拉起 CLI 时带 `--output-format stream-json --verbose --input-format stream-json`，标准输入输出都是管道，没有 `-p`（`sdk.mjs`）。
+- CLI 判断非交互：`function yet(e){let n=lb("-p",e)||lb("--print",e),t=lb("--init-only",e),o=…"--sdk-url"…;return n||t||o||!process.stdout.isTTY}`。SDK 拉起的进程 stdout 不是 TTY，所以是非交互。
+- 「Settings Error」对话框只在交互会话里弹：`if(To){let{errors:h}=Bm(),M=ert(h);if(M.length>0&&(!w7o()||!b.handleInvalidSettings))nrt(M);else if(…handleInvalidSettings)…}`，`To` 只在走 `runOnboarding`（Ink 界面）时赋值。非交互时 `nrt` 只写调试日志：``Invalid setting skipped without dialog (automated session): ${file}: ${path}: ${message}``。
+- 读不了的文件整份跳过（第 11 题已核实：`ft` 解析失败返回 null，`{settings:null, errors:[…]}`）。用户设置不是 `startupFatal`（只有托管设置解析失败才是），所以会话照常启动。
+- Osuna 自己不往 SDK 会话的环境里塞 `ANTHROPIC_BASE_URL`（`agent/providers/claude/` 里没有），中转站地址只在 settings.json 的 `env` 里。文件被跳过，会话就用官方地址和本机的 claude.ai 登录。
+- 提示文字据此写：终端会弹设置错误，Osuna 里的 Claude 对话直接走官方；修好后要在终端重开、在 Osuna 新开对话（已经在跑的会话启动时没读到这份文件）。
+
+### 做法
+
+- **读写**（`claude-settings-patch.ts`）：开头的 BOM 读时摘下、写回时放回；用 `jsonc-parser` 的 `parse`（`allowTrailingComma`）读，语法错误照旧拒绝。`inspectClaudeSettings` 多给 `isReadableByClaudeCode`：照 Claude Code 的读法（去 BOM 后严格 `JSON.parse`）判断。
+- **注释留在原行**：`jsonc-parser` 的 `modify` 往容器末尾加键时插在上一个值紧后面，上一行末尾的 `// 注释` 会被挤到新键那一行；删末尾的键时从上一个值紧后面删起，会把那条注释一起删掉。`editBesideComment` 认出这两种情况：加键时新键另起一行放在注释之后（上一个值本来带尾随逗号，新键也带；没有就在上一个值后补逗号），删键时只删那几行并对称地处理逗号，所以「打开再关掉」逐字节还原。其他情况照 `modify` 的做法。
+- **提示区**：新 code `settings_has_comments`（params：file），只在 Claude Code 的开关开着、文件带注释或尾随逗号时给（开关关着时这份文件跟 Osuna 无关）。不进老的 `health`。app 里是 warning 提示，正文写后果，带 outline 的「如何修复」按钮，点开显示修复步骤（不发请求）；`AgentIssueView.hasFixSteps` 标出哪些情况带它，24、28 号工单可复用。
+- **读不懂时用界面语言说明**：`config_unparsable` 的 params 在 settings.json 上多给 `reason`（`syntax` 带 `line`、`column`；`root_not_object`；`key_not_object` / `key_not_array` 带 `key`）。请求被拒的 `ApiEndpointError` 加了可选 `params`（同样的参数），app 打开开关、启用接口、提示区按钮失败时都按它翻译（`config-unparsable-copy.ts`）；没有 reason（Codex 的 config.toml、老主机）照旧显示文件与解析器原文。
+
+### 测试
+
+- 纯逻辑（`claude-settings-patch.test.ts`）：BOM 保留与还原；行注释、块注释、尾随逗号照收且报 Claude Code 读不了；紧挨负责的键的注释（值替换、末尾加键、末尾删键）逐字保留并能还原；改在注释旁的负责的键照样算被改；JSONC 也读不懂时给出行列。
+- daemon 端到端（`api-endpoint-claude.e2e.test.ts`）：带 BOM 打开、BOM 在、关掉逐字节还原；带注释、尾随逗号打开后整份文本逐字比对，关掉还原；列表在开着且带注释时返回 `settings_has_comments`，删掉注释后消失，开关关着时不报；JSONC 也读不懂时拒绝并带 `reason`、行列。
+- 浏览器（`settings-api-endpoints.spec.ts`）：带注释的文件照改、提示写后果、「如何修复」开合、删掉注释后提示消失；读不懂的文件在提示区和打开开关被拒时都用界面语言说明行列。
+- 截图（无头 Chromium、临时 CLAUDE_CONFIG_DIR）：`screenshots/15-claude-code-page_settings-has-comments_desktop-1280_{en,zh}.png`、`15-claude-code-page_settings-has-comments-fix-open_desktop-1280_{en,zh}.png`、`15-claude-code-page_switch-refused-unparsable_desktop-1280_{en,zh}.png`。

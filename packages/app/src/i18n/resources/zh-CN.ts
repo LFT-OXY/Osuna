@@ -2637,6 +2637,17 @@ export const zhCN: TranslationResources = {
           notThroughGatewayDetail: "在 {{file}} 里改动的项：{{keys}}",
           configUnparsable: "Osuna 读不懂 {{agent}} 的配置文件，所以改不了它",
           configUnparsableDetail: "{{file}}：{{detail}}",
+          unparsableSyntax:
+            "{{file}} 第 {{line}} 行第 {{column}} 列附近有语法错误。改好后再试一次。",
+          unparsableRootNotObject: "{{file}} 里不是一个 JSON 对象。改好后再试一次。",
+          unparsableKeyNotObject: "{{file}} 里的「{{key}}」不是对象。改好后再试一次。",
+          unparsableKeyNotArray: "{{file}} 里的「{{key}}」不是列表。改好后再试一次。",
+          settingsHasComments: "{{agent}} 读不了自己的配置文件：里面有注释",
+          settingsHasCommentsDetail:
+            "{{file}} 里有注释或尾随逗号。Osuna 照样改好了，但 {{agent}} 会跳过整份文件：终端里会弹出配置错误，Osuna 里的 Claude 对话会直接走官方，不经过你的第三方接口。删掉注释后恢复。",
+          settingsHasCommentsFix:
+            "删掉文件里所有 // 和 /* */ 注释，以及紧挨着 } 或 ] 前面的逗号，然后保存。Osuna 的改动会留着。之后在终端里重新打开 {{agent}}，在 Osuna 里新开 Claude 对话。",
+          howToFix: "如何修复",
           codexProfileOverride: "Codex 的 profile「{{profile}}」盖过了第三方接口",
           codexProfileOverrideDetail:
             "在 {{file}} 里，[profiles.{{profile}}] 设了 {{keys}}。Codex 会用这些值，而不是 Osuna 写的值。从这个 profile 里删掉它们，或者不再选中它。",

@@ -2639,6 +2639,20 @@ export const ja: TranslationResources = {
           notThroughGatewayDetail: "{{file}} で変更された項目：{{keys}}",
           configUnparsable: "{{agent}} の設定ファイルを読めないため、Osuna は変更できません",
           configUnparsableDetail: "{{file}}：{{detail}}",
+          unparsableSyntax:
+            "{{file}} の {{line}} 行 {{column}} 列付近に構文エラーがあります。直してからもう一度お試しください。",
+          unparsableRootNotObject:
+            "{{file}} が JSON オブジェクトになっていません。直してからもう一度お試しください。",
+          unparsableKeyNotObject:
+            "{{file}} の「{{key}}」がオブジェクトではありません。直してからもう一度お試しください。",
+          unparsableKeyNotArray:
+            "{{file}} の「{{key}}」がリストではありません。直してからもう一度お試しください。",
+          settingsHasComments: "{{agent}} が自分の設定ファイルを読めません：コメントが入っています",
+          settingsHasCommentsDetail:
+            "{{file}} にコメントか末尾のカンマがあります。Osuna は変更を書き込みましたが、{{agent}} はファイル全体を読み飛ばします。ターミナルでは設定エラーが表示され、Osuna の Claude チャットはサードパーティ API を通らず公式に直接つながります。コメントを消せば元に戻ります。",
+          settingsHasCommentsFix:
+            "ファイル内の // と /* */ のコメントと、閉じの } や ] の直前にあるカンマをすべて消して保存してください。Osuna の変更はそのまま残ります。そのあとターミナルで {{agent}} を開き直し、Osuna では Claude チャットを新しく始めてください。",
+          howToFix: "直し方",
           codexProfileOverride:
             "Codex のプロファイル「{{profile}}」がサードパーティ API を上書きしています",
           codexProfileOverrideDetail:

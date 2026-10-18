@@ -1,7 +1,17 @@
 // modelPicker 的归属规则移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 writePicker / dropPicker）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { applyEdits, modify, type FormattingOptions, type JSONPath } from "jsonc-parser";
+import {
+  applyEdits,
+  format,
+  modify,
+  parse as parseJsonc,
+  printParseErrorCode,
+  type Edit,
+  type FormattingOptions,
+  type JSONPath,
+  type ParseError,
+} from "jsonc-parser";
 import { z } from "zod";
 import { API_ENDPOINT_MODEL_TIERS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.js";
@@ -9,6 +19,8 @@ import { CLAUDE_HINT_ENV_KEYS, type ClaudeHintEnv } from "./claude-model-hints.j
 /*
  * Claude Code 的 ~/.claude/settings.json 补丁：只改 Osuna 负责的键，其余字节不动。
  * 规则见 docs/adr/0004-api-endpoint-rewrites-cli-config.md，思路参考 cc-switch（MIT）的 live/ 模块。
+ * 按 JSONC 读写（ADR 0012）：开头的 BOM 读时摘下、写回时放回；注释、尾随逗号照认照留。
+ * Claude Code 自己是去 BOM 后严格 JSON.parse，带注释或尾随逗号的整份跳过，检查结果里报出来。
  *
  * 负责的键（ADR 0007 改了写什么）：
  * - env 下的 ANTHROPIC_BASE_URL（daemon 中转站）/ ANTHROPIC_AUTH_TOKEN（中转站口令）/ ANTHROPIC_API_KEY（置空）；
@@ -32,6 +44,7 @@ const REMOVED_ENV_KEYS = [
 ];
 
 const WEB_SEARCH_RULE = "WebSearch";
+const BOM = "\uFEFF";
 
 const OriginalValueSchema = z.discriminatedUnion("present", [
   z.object({ present: z.literal(true), value: z.unknown() }),
@@ -80,16 +93,29 @@ export const ClaudeSettingsTakeoverSchema = z.object({
 });
 export type ClaudeSettingsTakeover = z.infer<typeof ClaudeSettingsTakeoverSchema>;
 
+/** 读不懂的原因，app 按它用界面语言说明；message 是同一件事的英文。 */
+export type ClaudeSettingsUnparsableReason =
+  | { code: "syntax"; line: number; column: number }
+  | { code: "root_not_object" }
+  | { code: "key_not_object"; key: string }
+  | { code: "key_not_array"; key: string };
+
+interface ClaudeSettingsUnparsable {
+  kind: "unparsable";
+  message: string;
+  reason: ClaudeSettingsUnparsableReason;
+}
+
 export type ClaudeSettingsPatchResult =
   | { kind: "patched"; text: string; takeover: ClaudeSettingsTakeover }
-  | { kind: "unparsable"; message: string };
+  | ClaudeSettingsUnparsable;
 
 export type ClaudeSettingsRestoreResult =
   | { kind: "patched"; text: string }
   // 接管前文件不存在，恢复后又只剩一个空对象：把文件删掉。
   | { kind: "delete" }
   | { kind: "missing" }
-  | { kind: "unparsable"; message: string };
+  | ClaudeSettingsUnparsable;
 
 /**
  * CLI 指向的中转站：地址、该 Agent 的口令、新会话的起始模型、/model 里列出的接口模型、模型提示，
@@ -114,7 +140,8 @@ export function applyClaudeApiEndpoint(input: {
   wiring: ClaudeGatewayWiring;
   takeover: ClaudeSettingsTakeover | null;
 }): ClaudeSettingsPatchResult {
-  const baseText = input.text === null || input.text.trim() === "" ? "{}\n" : input.text;
+  const { bom, body } = splitBom(input.text ?? "");
+  const baseText = body.trim() === "" ? "{}\n" : body;
   const parsed = parseSettings(baseText);
   if (parsed.kind === "unparsable") return parsed;
 
@@ -171,7 +198,7 @@ export function applyClaudeApiEndpoint(input: {
 
   return {
     kind: "patched",
-    text,
+    text: `${bom}${text}`,
     takeover: {
       originalFile: input.takeover?.originalFile ?? classifyOriginalFile(input.text),
       env: envRecords,
@@ -276,11 +303,12 @@ export function restoreClaudeOfficial(input: {
   takeover: ClaudeSettingsTakeover;
 }): ClaudeSettingsRestoreResult {
   if (input.text === null) return { kind: "missing" };
-  const parsed = parseSettings(input.text);
+  const { bom, body } = splitBom(input.text);
+  const parsed = parseSettings(body);
   if (parsed.kind === "unparsable") return parsed;
 
-  const formatting = detectFormatting(input.text);
-  let text = input.text;
+  const formatting = detectFormatting(body);
+  let text = body;
   for (const [key, record] of Object.entries(input.takeover.env)) {
     text = restoreValue(text, ["env", key], record.original, formatting);
   }
@@ -304,7 +332,7 @@ export function restoreClaudeOfficial(input: {
     if (originalFile.kind === "empty") return { kind: "patched", text: originalFile.text };
   }
 
-  return { kind: "patched", text };
+  return { kind: "patched", text: `${bom}${text}` };
 }
 
 /** 还是 Osuna 写的那个值的提示键删掉；用户改过的归用户，留着。 */
@@ -328,8 +356,10 @@ export type ClaudeSettingsInspection =
       modifiedKeys: string[];
       // env.ANTHROPIC_BASE_URL：官方模式下用来提示 CLI 自身配置指向哪里。
       baseUrl: string | null;
+      // 带注释或尾随逗号时为 false：Claude Code 读不了，整份跳过。文件不存在算读得了。
+      isReadableByClaudeCode: boolean;
     }
-  | { kind: "unparsable"; message: string };
+  | ClaudeSettingsUnparsable;
 
 const WEB_SEARCH_DENY_LABEL = `permissions.deny "${WEB_SEARCH_RULE}"`;
 
@@ -339,15 +369,23 @@ export function inspectClaudeSettings(input: {
   takeover: ClaudeSettingsTakeover | null;
 }): ClaudeSettingsInspection {
   let settings: ParsedSettings = {};
+  let isReadableByClaudeCode = true;
   if (input.text !== null) {
-    const parsed = parseSettings(input.text);
+    const { body } = splitBom(input.text);
+    const parsed = parseSettings(body);
     if (parsed.kind === "unparsable") return parsed;
     settings = parsed.settings;
+    isReadableByClaudeCode = parsesAsStrictJson(body);
   }
   const modifiedKeys = input.takeover ? modifiedOwnedKeys(settings, input.takeover) : [];
   const rawBaseUrl = settings.env?.ANTHROPIC_BASE_URL;
   const baseUrl = typeof rawBaseUrl === "string" ? rawBaseUrl.trim() : "";
-  return { kind: "parsed", modifiedKeys, baseUrl: baseUrl === "" ? null : baseUrl };
+  return {
+    kind: "parsed",
+    modifiedKeys,
+    baseUrl: baseUrl === "" ? null : baseUrl,
+    isReadableByClaudeCode,
+  };
 }
 
 function modifiedOwnedKeys(settings: ParsedSettings, takeover: ClaudeSettingsTakeover): string[] {
@@ -369,8 +407,9 @@ function modifiedOwnedKeys(settings: ParsedSettings, takeover: ClaudeSettingsTak
 
 function classifyOriginalFile(text: string | null): OriginalFile {
   if (text === null) return { kind: "absent" };
-  if (text.trim() === "") return { kind: "empty", text };
-  const parsed: unknown = JSON.parse(text);
+  const { body } = splitBom(text);
+  if (body.trim() === "") return { kind: "empty", text };
+  const parsed: unknown = parseJsonc(body, [], JSONC_OPTIONS);
   return isRecord(parsed) && Object.keys(parsed).length === 0
     ? { kind: "empty", text }
     : { kind: "content" };
@@ -383,37 +422,77 @@ interface ParsedSettings {
   permissions?: { deny?: unknown[] };
 }
 
-type ParseResult =
-  | { kind: "parsed"; settings: ParsedSettings }
-  | { kind: "unparsable"; message: string };
+type ParseResult = { kind: "parsed"; settings: ParsedSettings } | ClaudeSettingsUnparsable;
 
+const JSONC_OPTIONS = { allowTrailingComma: true, disallowComments: false };
+
+/** 已摘掉 BOM 的文本；注释、尾随逗号照认，别的语法错误照旧算读不懂。 */
 function parseSettings(text: string): ParseResult {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch (error) {
-    return { kind: "unparsable", message: error instanceof Error ? error.message : String(error) };
-  }
+  const errors: ParseError[] = [];
+  const value: unknown = parseJsonc(text, errors, JSONC_OPTIONS);
+  const [firstError] = errors;
+  if (firstError) return syntaxError(text, firstError);
   if (!isRecord(value)) {
-    return { kind: "unparsable", message: "settings.json is not a JSON object" };
+    return {
+      kind: "unparsable",
+      message: "settings.json is not a JSON object",
+      reason: { code: "root_not_object" },
+    };
   }
-  if (value.env !== undefined && !isRecord(value.env)) {
-    return { kind: "unparsable", message: '"env" in settings.json is not an object' };
-  }
+  if (value.env !== undefined && !isRecord(value.env)) return keyNotObject("env");
   if (value.permissions !== undefined) {
-    if (!isRecord(value.permissions)) {
-      return { kind: "unparsable", message: '"permissions" in settings.json is not an object' };
-    }
+    if (!isRecord(value.permissions)) return keyNotObject("permissions");
     if (value.permissions.deny !== undefined && !Array.isArray(value.permissions.deny)) {
-      return { kind: "unparsable", message: '"permissions.deny" in settings.json is not an array' };
+      return {
+        kind: "unparsable",
+        message: '"permissions.deny" in settings.json is not an array',
+        reason: { code: "key_not_array", key: "permissions.deny" },
+      };
     }
   }
   return { kind: "parsed", settings: value as ParsedSettings };
 }
 
+function keyNotObject(key: string): ClaudeSettingsUnparsable {
+  return {
+    kind: "unparsable",
+    message: `"${key}" in settings.json is not an object`,
+    reason: { code: "key_not_object", key },
+  };
+}
+
 /** 只在已校验过的文本上调用。 */
 function readSettings(text: string): ParsedSettings {
-  return JSON.parse(text) as ParsedSettings;
+  return parseJsonc(text, [], JSONC_OPTIONS) as ParsedSettings;
+}
+
+function syntaxError(text: string, error: ParseError): ClaudeSettingsUnparsable {
+  const before = text.slice(0, error.offset).split("\n");
+  const line = before.length;
+  const column = (before.at(-1)?.length ?? 0) + 1;
+  return {
+    kind: "unparsable",
+    message: `${printParseErrorCode(error.error)} at line ${line}, column ${column}`,
+    reason: { code: "syntax", line, column },
+  };
+}
+
+/** Claude Code 读设置文件的方式：去掉 BOM 后严格 JSON.parse。 */
+function parsesAsStrictJson(body: string): boolean {
+  if (body.trim() === "") return true;
+  try {
+    JSON.parse(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 开头的 BOM 读时摘下、写回时放回。 */
+function splitBom(text: string): { bom: string; body: string } {
+  return text.startsWith(BOM)
+    ? { bom: BOM, body: text.slice(BOM.length) }
+    : { bom: "", body: text };
 }
 
 /** 拿掉 Osuna 写的那条 "WebSearch"，以及因它而建、现在空了的 deny 与 permissions；不是 Osuna 的不动。 */
@@ -518,7 +597,72 @@ function removeIfEmptyObject(text: string, path: JSONPath, formatting: Formattin
 }
 
 function edit(text: string, path: JSONPath, value: unknown, formatting: FormattingOptions): string {
+  const [change, ...others] = modify(text, path, value, {});
+  if (change !== undefined && others.length === 0) {
+    const commented = besideTrailingComment(text, change);
+    if (commented) return editBesideComment({ text, change, commented, formatting });
+  }
   return applyEdits(text, modify(text, path, value, { formattingOptions: formatting }));
+}
+
+// 上一个值后面、同一行只剩（逗号加）注释：这条注释属于上一行。
+const TRAILING_COMMENT = /^([ \t]*,)?(?:[ \t]*(?:\/\/[^\r\n]*|\/\*[^\r\n]*?\*\/))+[ \t]*$/;
+
+interface TrailingComment {
+  // 注释那一行的行尾（换行符之前）。
+  lineEnd: number;
+  hasComma: boolean;
+}
+
+/**
+ * jsonc-parser 在容器末尾加键时插在上一个值的紧后面，删末尾的键时从上一个值的紧后面删起；
+ * 上一行末尾有注释时，前者把注释挤到新键那一行，后者把注释一起删掉。认出这种情况交给 editBesideComment。
+ */
+function besideTrailingComment(text: string, change: Edit): TrailingComment | null {
+  const isAppend = change.length === 0 && change.content.startsWith(",");
+  const isRemoveLast = change.content === "" && /^[ \t]*,/.test(text.slice(change.offset));
+  if (!isAppend && !isRemoveLast) return null;
+  const lineBreak = text.slice(change.offset).search(/\r?\n/);
+  if (lineBreak === -1) return null;
+  const lineEnd = change.offset + lineBreak;
+  if (isRemoveLast && lineEnd >= change.offset + change.length) return null;
+  const rest = TRAILING_COMMENT.exec(text.slice(change.offset, lineEnd));
+  if (!rest) return null;
+  return { lineEnd, hasComma: rest[1] !== undefined };
+}
+
+/**
+ * 注释留在原来那一行，两个方向互为还原：
+ * - 加键：新键另起一行放在注释之后；上一个值原本带尾随逗号，新键也带，没有就在上一个值后补逗号。
+ * - 删键：只删被删的那几行；被删的键带尾随逗号就连它一起删，不带就把上一个值后的逗号也拿掉。
+ */
+function editBesideComment(input: {
+  text: string;
+  change: Edit;
+  commented: TrailingComment;
+  formatting: FormattingOptions;
+}): string {
+  const { text, change, formatting } = input;
+  const { lineEnd, hasComma } = input.commented;
+  const valueEnd = change.offset;
+  const separator = text.slice(valueEnd, lineEnd).replace(/^[ \t]*,/, "");
+  if (change.content === "") {
+    const removedEnd = change.offset + change.length;
+    const trailingComma = /^[ \t]*,/.exec(text.slice(removedEnd));
+    if (trailingComma) {
+      return `${text.slice(0, lineEnd)}${text.slice(removedEnd + trailingComma[0].length)}`;
+    }
+    return `${text.slice(0, valueEnd)}${separator}${text.slice(removedEnd)}`;
+  }
+  const head = hasComma ? text.slice(0, lineEnd) : `${text.slice(0, valueEnd)},${separator}`;
+  // 新键与上一个键同样缩进；值里的对象、数组再按文件格式展开。
+  const lineStart = text.lastIndexOf("\n", valueEnd) + 1;
+  const indent = /^[ \t]*/.exec(text.slice(lineStart))?.[0] ?? "";
+  const begin = head.length + (formatting.eol ?? "\n").length;
+  const property = `${indent}${change.content.slice(1)}${hasComma ? "," : ""}`;
+  const next = `${head}${formatting.eol ?? "\n"}${property}${text.slice(lineEnd)}`;
+  const range = { offset: begin, length: property.length };
+  return applyEdits(next, format(next, range, { ...formatting, keepLines: false }));
 }
 
 /** 按文件自身的缩进和换行写入新键；被插入的那一行会按该缩进重新排版。 */

@@ -2612,6 +2612,17 @@ export const ar: TranslationResources = {
           notThroughGatewayDetail: "تغيّر في {{file}}: {{keys}}",
           configUnparsable: "لا يستطيع Osuna قراءة ملف إعدادات {{agent}}، لذا لا يمكنه تغييره",
           configUnparsableDetail: "{{file}}: {{detail}}",
+          unparsableSyntax:
+            "يحتوي {{file}} على خطأ في الصياغة قرب السطر {{line}}، العمود {{column}}. أصلحه ثم حاول مرة أخرى.",
+          unparsableRootNotObject: "لا يحتوي {{file}} على كائن JSON. أصلحه ثم حاول مرة أخرى.",
+          unparsableKeyNotObject: "«{{key}}» في {{file}} ليس كائنًا. أصلحه ثم حاول مرة أخرى.",
+          unparsableKeyNotArray: "«{{key}}» في {{file}} ليس قائمة. أصلحه ثم حاول مرة أخرى.",
+          settingsHasComments: "لا يستطيع {{agent}} قراءة ملف إعداداته: فيه تعليقات",
+          settingsHasCommentsDetail:
+            "يحتوي {{file}} على تعليقات أو فواصل زائدة في النهاية. أجرى Osuna تغييراته رغم ذلك، لكن {{agent}} يتخطى الملف كله: يعرض خطأ في الإعدادات في الطرفية، وتذهب محادثات Claude في Osuna إلى الواجهة الرسمية بدلًا من واجهات API الخارجية. يزول هذا بعد حذف التعليقات.",
+          settingsHasCommentsFix:
+            "احذف كل تعليقات // و /* */ في الملف وأي فاصلة تسبق } أو ] مباشرة، ثم احفظ. تبقى تغييرات Osuna كما هي. بعد ذلك شغّل {{agent}} من جديد في الطرفية، وابدأ محادثات Claude جديدة في Osuna.",
+          howToFix: "طريقة الإصلاح",
           codexProfileOverride: 'ملف التعريف "{{profile}}" في Codex يتجاوز واجهات API الخارجية',
           codexProfileOverrideDetail:
             "‏[profiles.{{profile}}] في {{file}} يضبط {{keys}}، ويستخدمها Codex بدلًا مما كتبه Osuna. احذفها من ملف التعريف أو توقّف عن اختياره.",

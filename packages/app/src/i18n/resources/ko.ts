@@ -2627,6 +2627,18 @@ export const ko: TranslationResources = {
           notThroughGatewayDetail: "{{file}}에서 바뀐 항목: {{keys}}",
           configUnparsable: "{{agent}}의 설정 파일을 읽을 수 없어 Osuna가 바꿀 수 없습니다",
           configUnparsableDetail: "{{file}}: {{detail}}",
+          unparsableSyntax:
+            "{{file}}의 {{line}}번째 줄 {{column}}번째 칸 근처에 구문 오류가 있습니다. 고친 뒤 다시 시도하세요.",
+          unparsableRootNotObject: "{{file}}에 JSON 객체가 없습니다. 고친 뒤 다시 시도하세요.",
+          unparsableKeyNotObject:
+            '{{file}}의 "{{key}}"가 객체가 아닙니다. 고친 뒤 다시 시도하세요.',
+          unparsableKeyNotArray: '{{file}}의 "{{key}}"가 목록이 아닙니다. 고친 뒤 다시 시도하세요.',
+          settingsHasComments: "{{agent}}가 자기 설정 파일을 읽지 못합니다: 주석이 있습니다",
+          settingsHasCommentsDetail:
+            "{{file}}에 주석이나 끝 쉼표가 있습니다. Osuna는 그래도 변경을 적용했지만, {{agent}}는 파일 전체를 건너뜁니다. 터미널에서는 설정 오류가 뜨고, Osuna의 Claude 채팅은 서드파티 API를 거치지 않고 공식 API로 바로 갑니다. 주석을 지우면 돌아옵니다.",
+          settingsHasCommentsFix:
+            "파일의 // 와 /* */ 주석, 그리고 닫는 } 나 ] 바로 앞의 쉼표를 모두 지우고 저장하세요. Osuna의 변경은 그대로 남습니다. 그런 다음 터미널에서 {{agent}}를 다시 열고, Osuna에서는 Claude 채팅을 새로 시작하세요.",
+          howToFix: "해결 방법",
           codexProfileOverride: 'Codex 프로필 "{{profile}}"이(가) 서드파티 API를 덮어씁니다',
           codexProfileOverrideDetail:
             "{{file}}의 [profiles.{{profile}}]이(가) {{keys}}을(를) 설정해서 Codex는 Osuna가 쓴 값 대신 그것을 씁니다. 프로필에서 지우거나 선택하지 마세요.",
