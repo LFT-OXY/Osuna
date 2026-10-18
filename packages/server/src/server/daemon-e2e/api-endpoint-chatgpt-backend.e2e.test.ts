@@ -1,6 +1,6 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/gateway/codex_backend_test.go 的
 // TestCodexOwnModelPassesThrough、TestCodexWebSocketUpgradeRequired、TestCodexNativeModelStaysNative；
-// codexModels、codexModelsWait、codexClientHeader 与 alphaSearchHere 的做法）
+// codexModels、codexModelsWait、codexClientHeader、alphaSearchHere 与 codexCompact 的做法）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -16,6 +16,10 @@ import os from "node:os";
 import path from "node:path";
 import * as zlib from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
+import {
+  CODEX_COMPACT_PROMPT,
+  CODEX_SUMMARY_PREFIX,
+} from "../api-endpoints/gateway/codex-compaction.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 
 /*
@@ -164,9 +168,7 @@ async function start(input: {
       homeDir: root,
       gatewayChatGptBaseUrl: input.chatgptBaseUrl,
       gatewayOpenAiApiBaseUrl: input.openAiApiBaseUrl ?? "http://127.0.0.1:9/v1",
-      ...(input.modelsWaitMs === undefined
-        ? {}
-        : { gatewayChatGptModelsWaitMs: input.modelsWaitMs }),
+      gatewayChatGptModelsWaitMs: input.modelsWaitMs,
     },
   });
   daemons.push(daemon);
@@ -673,7 +675,7 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     expect(compact.status).toBe(400);
     const refused = JSON.parse(compact.body.toString("utf8")) as { error: { message: string } };
     expect(refused.error.message).toBe(
-      "/responses/compact is not supported for API endpoint models (relay-a/gpt-5.5)",
+      "/responses/compact is not supported for API endpoint models (relay-a/gpt-5.5); use a compaction_trigger on /responses",
     );
 
     const searchBody = Buffer.from(
@@ -718,5 +720,162 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     });
 
     expect(turn.headers["x-models-etag"]).toBe(list.headers.etag);
+  });
+});
+
+function userText(text: string) {
+  return { type: "message", role: "user", content: [{ type: "input_text", text }] };
+}
+
+interface CompactionItem {
+  type: string;
+  encrypted_content: string;
+}
+
+/** 流里 response.completed 的压缩条目。 */
+function compactionItemOf(reply: Reply): CompactionItem {
+  const events = reply.body
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map(
+      (line) =>
+        JSON.parse(line.slice(6)) as { type: string; response?: { output: CompactionItem[] } },
+    );
+  const completed = events.find((event) => event.type === "response.completed");
+  return completed!.response!.output[0]!;
+}
+
+describe("compaction of an endpoint model's conversation for a Codex signed in with ChatGPT", () => {
+  test("the compaction_trigger is summarised by the endpoint model, and the summary is read back in the next turn", async () => {
+    const chatgpt = await startBackend();
+    const relay = await startBackend();
+    relay.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(
+        sse(
+          '{"type":"response.created","response":{"id":"resp_42"}}',
+          '{"type":"response.output_text.delta","delta":"We fixed the parser."}',
+          '{"type":"response.output_item.done","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"We fixed the parser."}]}}',
+          '{"type":"response.completed","response":{"id":"resp_42","status":"completed","output":[]}}',
+        ),
+      );
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[1]!, slug: "relay-a", url: `${relay.url}/v1` }],
+    });
+    const turnMeta = '{"turn_id":"t9","compaction":{"implementation":"responses_compaction_v2"}}';
+    const trigger = zlib.zstdCompressSync(
+      Buffer.from(
+        JSON.stringify({
+          model: "relay-a/kimi-k2",
+          input: [userText("fix the parser"), { type: "compaction_trigger" }],
+          tools: [{ type: "function", name: "shell" }],
+          stream: true,
+        }),
+      ),
+    );
+
+    const compacted = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({
+        "content-encoding": "zstd",
+        "content-length": String(trigger.length),
+        "x-codex-turn-metadata": turnMeta,
+      }),
+      body: trigger,
+    });
+
+    expect(compacted.status).toBe(200);
+    const item = compactionItemOf(compacted);
+    expect(item.type).toBe("compaction");
+    expect(item.encrypted_content).toBe(
+      `osuna1:${Buffer.from("We fixed the parser.").toString("base64")}`,
+    );
+    const asked = relay.requests[0]!;
+    const askedBody = JSON.parse(asked.body.toString("utf8")) as {
+      input: unknown[];
+      tools: unknown[];
+      tool_choice: string;
+    };
+    expect(askedBody.input).toEqual([userText("fix the parser"), userText(CODEX_COMPACT_PROMPT)]);
+    expect(askedBody.tools).toEqual([]);
+    expect(askedBody.tool_choice).toBe("auto");
+    expect(asked.headers["x-codex-turn-metadata"]).toBe(
+      '{"turn_id":"t9","compaction":{"implementation":"responses"}}',
+    );
+    expect(asked.headers.authorization).toBe("Bearer sk-relay-a-key");
+    expect(JSON.stringify(asked.headers)).not.toContain(CHATGPT_TOKEN);
+
+    // 下一轮 Codex 原样带回这个条目：接口收到的是 Codex 读摘要时的那条用户消息。
+    const next = Buffer.from(
+      JSON.stringify({ model: "relay-a/kimi-k2", input: [item, userText("go on")], stream: true }),
+    );
+    const turn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-length": String(next.length) }),
+      body: next,
+    });
+    expect(turn.status).toBe(200);
+    const resumed = JSON.parse(relay.requests[1]!.body.toString("utf8")) as { input: unknown[] };
+    expect(resumed.input).toEqual([
+      userText(`${CODEX_SUMMARY_PREFIX}\nWe fixed the parser.`),
+      userText("go on"),
+    ]);
+    expect(chatgpt.requests).toHaveLength(0);
+  });
+
+  test("an endpoint failing the summary request gets its failure back to Codex as it came", async () => {
+    const chatgpt = await startBackend();
+    const relay = await startBackend();
+    relay.respond = (_request, res) => {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end('{"error":{"message":"bad key"}}');
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...KIMI_ON_TWO[1]!, slug: "relay-a", url: `${relay.url}/v1` }],
+    });
+    const body = Buffer.from(
+      JSON.stringify({ model: "relay-a/kimi-k2", input: [{ type: "compaction_trigger" }] }),
+    );
+
+    const reply = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-length": String(body.length) }),
+      body,
+    });
+
+    expect(reply.status).toBe(401);
+    expect(reply.body.toString("utf8")).toContain("bad key");
+  });
+
+  test("switched to a ChatGPT model, the summary Osuna made reaches ChatGPT as the message Codex would have made", async () => {
+    const chatgpt = await startBackend();
+    const { codexBase } = await start({ chatgptBaseUrl: `${chatgpt.url}/backend-api/codex` });
+    const item = {
+      type: "compaction",
+      id: "cmp_42",
+      encrypted_content: `osuna1:${Buffer.from("We fixed the parser.").toString("base64")}`,
+    };
+    const body = zlib.zstdCompressSync(
+      Buffer.from(JSON.stringify({ model: "gpt-5.5", input: [item, userText("go on")] })),
+    );
+
+    const reply = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ "content-encoding": "zstd", "content-length": String(body.length) }),
+      body,
+    });
+
+    expect(reply.status).toBe(200);
+    const reached = chatgpt.requests[0]!;
+    expect(reached.headers["content-encoding"]).toBeUndefined();
+    expect(reached.headers.authorization).toBe(`Bearer ${CHATGPT_TOKEN}`);
+    expect(JSON.parse(reached.body.toString("utf8"))).toEqual({
+      model: "gpt-5.5",
+      input: [userText(`${CODEX_SUMMARY_PREFIX}\nWe fixed the parser.`), userText("go on")],
+    });
   });
 });

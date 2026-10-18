@@ -495,9 +495,15 @@ ChatGPT backend's list first, waiting 3 seconds and falling back to Codex's
 last list in models_cache.json, its 401 and 403 passed on, the endpoint models
 after it, and the list's mark in the ETag and X-Models-Etag), marking Codex's
 cached list stale, sending an endpoint only Codex's identity headers, refusing
-remote compaction and answering Codex's web search for an endpoint model
-follow codexModels, codexModelsWait, modelsEtag, codexHeader and the
-/responses/compact refusal in magpie's internal/gateway/codex_backend.go,
+remote compaction and answering Codex's web search for an endpoint model,
+telling ChatGPT's models from endpoint models by the name, and compacting an
+endpoint model's conversation inside /responses (its compaction_trigger turned
+into Codex's summary request, the turn metadata saying local compaction, the
+summary handed back as a compaction item and read back in later turns)
+follow codexBackend, codexModels, codexModelsWait, modelsEtag, codexHeader,
+the /responses/compact refusal, codexInputAs, localCompactionTurn,
+localCompactionMeta, userMessage, codexCompact and compactReply in magpie's
+internal/gateway/codex_backend.go,
 codexClientHeader in internal/gateway/gateway.go, alphaSearchReply in
 internal/gateway/codex_search.go, Tag, WithTag, Tagged and CacheEntries in
 internal/codexcat/codexcat.go, MagpieAdded in internal/catalog/catalog.go and
@@ -507,6 +513,9 @@ codexStaleCache in internal/agent/codex.go:
   packages/server/src/server/api-endpoints/codex-models-cache.test.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-models.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-models.test.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction.ts
+  packages/server/src/server/api-endpoints/gateway/codex-compaction.test.ts
+  packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.ts
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
@@ -547,6 +556,12 @@ The descriptions of the four reasoning levels in that catalog are copied from
 codex-rs/models-manager/models.json (same commit):
 
   packages/server/src/server/api-endpoints/codex-model-catalog.ts
+
+The compaction prompt and the summary prefix the gateway uses to compact an
+endpoint model's conversation are Codex's own (prompts/templates/compact),
+copied verbatim by way of magpie's internal/gateway/codex_backend.go:
+
+  packages/server/src/server/api-endpoints/gateway/codex-compaction.ts
 
 Copyright 2025 OpenAI. Licensed under the Apache License, Version 2.0, whose
 full text is in this repository's LICENSE.

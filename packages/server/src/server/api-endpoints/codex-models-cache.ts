@@ -5,7 +5,13 @@
 
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { readOptionalFile, writeConfigFileGuarded } from "./config-file.js";
+import { applyEdits, modify } from "jsonc-parser";
+import {
+  readOptionalFile,
+  writeConfigFileGuarded,
+  type ConfigFileChange,
+  type GuardedConfigWriteResult,
+} from "./config-file.js";
 import { isRecord, parseJson } from "./upstream-http.js";
 
 /*
@@ -41,40 +47,62 @@ export function isListTagged(etag: string, tag: string): boolean {
  * （ChatGPT 的 slug 从不带斜杠），去掉。没有缓存或读不懂时为空。
  */
 export function codexCachedModels(text: string | null): unknown[] {
-  const cache = text === null ? null : parseJson(text);
+  if (text === null) return [];
+  const cache = parseJson(text);
   if (!isRecord(cache) || !Array.isArray(cache.models)) return [];
-  const etag = typeof cache.etag === "string" ? cache.etag : "";
-  const isTagged = etag.includes(TAG_MARK);
+  const isTagged = etagOf(cache).includes(TAG_MARK);
   return cache.models.filter((model) => {
-    const slug = isRecord(model) && typeof model.slug === "string" ? model.slug : "";
-    return !(isTagged && slug.includes("/"));
+    const isOsunaAdded = isTagged && slugOf(model).includes("/");
+    return !isOsunaAdded;
   });
 }
 
-/** 缓存的标记不是现在的、又还没标过期时，返回 fetched_at 改成 1970 年后的内容；不用改为 null。 */
+function etagOf(cache: Record<string, unknown>): string {
+  return typeof cache.etag === "string" ? cache.etag : "";
+}
+
+function slugOf(model: unknown): string {
+  if (isRecord(model) && typeof model.slug === "string") return model.slug;
+  return "";
+}
+
+/**
+ * 缓存的标记不是现在的、又还没标过期时，返回只把 fetched_at 改成 1970 年后的内容（其余逐字节不变，
+ * Codex 自己写的格式留着）；不用改为 null。
+ */
 export function staleModelsCache(text: string, tag: string): string | null {
   const cache = parseJson(text);
   if (!isRecord(cache)) return null;
-  const etag = typeof cache.etag === "string" ? cache.etag : "";
-  if (isListTagged(etag, tag) || cache.fetched_at === AGED) return null;
-  return `${JSON.stringify({ ...cache, fetched_at: AGED }, null, 2)}\n`;
+  const isCurrent = isListTagged(etagOf(cache), tag);
+  const isAged = cache.fetched_at === AGED;
+  if (isCurrent || isAged) return null;
+  return applyEdits(text, modify(text, ["fetched_at"], AGED, {}));
 }
 
-/** 只动传进来的这个 CODEX_HOME 里的缓存；没有缓存不新建。 */
-export function markCodexModelsCacheStale(input: { codexHome: string; tag: string }): void {
+export type CodexModelsCacheMark = GuardedConfigWriteResult<null>;
+
+/**
+ * 只动传进来的这个 CODEX_HOME 里的缓存；没有缓存不新建。Codex 同时在写它、三次都没写成时返回 conflict，
+ * 由调用方决定怎么报。
+ */
+export function markCodexModelsCacheStale(input: {
+  codexHome: string;
+  tag: string;
+}): CodexModelsCacheMark {
   const filePath = path.join(input.codexHome, CODEX_MODELS_CACHE_FILE);
-  writeConfigFileGuarded({
+  return writeConfigFileGuarded({
     filePath,
-    compute: (current) => {
-      const aged = current === null ? null : staleModelsCache(current.toString("utf8"), input.tag);
-      return {
-        change: aged === null ? { kind: "keep" } : { kind: "write", text: aged },
-        value: null,
-      };
-    },
+    compute: (current) => ({ change: staleChange({ current, tag: input.tag }), value: null }),
     commit: () => {},
     rollback: () => {},
   });
+}
+
+function staleChange(input: { current: Buffer | null; tag: string }): ConfigFileChange {
+  if (input.current === null) return { kind: "keep" };
+  const aged = staleModelsCache(input.current.toString("utf8"), input.tag);
+  if (aged === null) return { kind: "keep" };
+  return { kind: "write", text: aged };
 }
 
 /** 读这个 CODEX_HOME 里的缓存；没有为 null。 */

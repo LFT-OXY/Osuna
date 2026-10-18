@@ -86,7 +86,10 @@ function askChatGptModels(input: {
   bases: ChatGptBases;
   waitMs: number;
 }): Promise<ChatGptList> {
-  const query = input.req.url.includes("?") ? input.req.url.slice(input.req.url.indexOf("?")) : "";
+  const { url } = input.req;
+  const queryAt = url.indexOf("?");
+  let query = "";
+  if (queryAt !== -1) query = url.slice(queryAt);
   const target = new URL(`${input.bases.chatgpt.replace(/\/+$/, "")}/models${query}`);
   const headers = relayedHeaders(input.req.headers);
   // 要读清单：不要压缩过的回复。

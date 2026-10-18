@@ -87,25 +87,25 @@ export function buildCodexModelCatalog(
  * 写成「接口标识/模型名」，顺序同聊天模型选择器，能力按这家这个模型的已知资料写。priority 从 1 起，
  * 中转站合并清单时再排到 ChatGPT 自带模型之后。
  */
-export function codexEndpointEntries(
-  state: ApiEndpointState,
-  reasoningEffort: string | null,
-  factsFor: CodexModelFactsLookup,
-): CodexModelEntry[] {
-  return endpointModelGroups(state)
-    .flatMap((group) =>
-      group.models.map(({ id, model }) => ({ id, model, endpoint: group.endpoint })),
-    )
-    .map(({ id, model, endpoint }, index) =>
-      codexModelEntry({
-        slug: id,
-        displayName: model.label ?? model.id,
-        visibility: "list",
-        priority: index + 1,
-        facts: factsFor(endpoint, model.id),
-        reasoningEffort,
-      }),
-    );
+export function codexEndpointEntries(input: {
+  state: ApiEndpointState;
+  // config.toml 顶层的 model_reasoning_effort，没设为 null。
+  reasoningEffort: string | null;
+  factsFor: CodexModelFactsLookup;
+}): CodexModelEntry[] {
+  const listed = endpointModelGroups(input.state).flatMap((group) =>
+    group.models.map(({ id, model }) => ({ id, model, endpoint: group.endpoint })),
+  );
+  return listed.map(({ id, model, endpoint }, index) =>
+    codexModelEntry({
+      slug: id,
+      displayName: model.label ?? model.id,
+      visibility: "list",
+      priority: index + 1,
+      facts: input.factsFor(endpoint, model.id),
+      reasoningEffort: input.reasoningEffort,
+    }),
+  );
 }
 
 export type CodexModelEntry = ReturnType<typeof codexModelEntry>;

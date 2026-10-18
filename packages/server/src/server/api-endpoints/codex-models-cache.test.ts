@@ -85,6 +85,14 @@ describe("staleModelsCache", () => {
     });
   });
 
+  it("changes only fetched_at, keeping the rest of Codex's file byte for byte", () => {
+    const text =
+      '{\n    "fetched_at":   "2026-10-18T08:00:00Z" ,\n    "etag": "W/\\"abc\\"",\n    "models": [ {"slug":"gpt-5.5"} ]\n}';
+    expect(staleModelsCache(text, "1a2b3c")).toBe(
+      '{\n    "fetched_at":   "1970-01-01T00:00:00Z" ,\n    "etag": "W/\\"abc\\"",\n    "models": [ {"slug":"gpt-5.5"} ]\n}',
+    );
+  });
+
   it("leaves a cache of the current list, an already aged one and an unreadable one alone", () => {
     const current = JSON.stringify({
       fetched_at: "2026-10-18T08:00:00Z",
@@ -110,7 +118,10 @@ describe("markCodexModelsCacheStale", () => {
     const cachePath = path.join(codexHome, "models_cache.json");
     writeFileSync(cachePath, JSON.stringify({ fetched_at: "2026-10-18T08:00:00Z", etag: '"a"' }));
 
-    markCodexModelsCacheStale({ codexHome, tag: "1a2b3c" });
+    expect(markCodexModelsCacheStale({ codexHome, tag: "1a2b3c" })).toEqual({
+      kind: "written",
+      value: null,
+    });
 
     const written = JSON.parse(readFileSync(cachePath, "utf8")) as { fetched_at: string };
     expect(written.fetched_at).toBe("1970-01-01T00:00:00Z");

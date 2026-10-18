@@ -112,11 +112,11 @@ export function isEndpointModel(model: string | null): boolean {
  * ChatGPT 令牌、账号 id、Cookie、设备证明、只对这个 ChatGPT 账号有意义的 luna-reserve 与 turn-state 一律不带。
  */
 export function codexIdentityHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders {
-  return Object.fromEntries(
-    Object.entries(headers).filter(
-      ([name, value]) => value !== undefined && isCodexIdentityHeader(name.toLowerCase()),
-    ),
-  );
+  const identity = Object.entries(headers).filter(([name, value]) => {
+    const isSent = value !== undefined;
+    return isSent && isCodexIdentityHeader(name.toLowerCase());
+  });
+  return Object.fromEntries(identity);
 }
 
 const CODEX_IDENTITY_HEADERS = new Set([
@@ -148,7 +148,13 @@ function isCodexIdentityHeader(name: string): boolean {
  * 接口模型的 Codex 独立搜索（web.run 调 /alpha/search）的回答：200，output 是给模型看的一句说明。
  * 不回 404：web.run 的任何失败 Codex 都当作这一轮结束（magpie codex_search.go）。
  */
-export function noWebSearchReply(model: string): { encrypted_output: null; output: string } {
+/** Codex 的 SearchResponse：output 是给模型看的工具结果。 */
+export interface AlphaSearchReply {
+  encrypted_output: null;
+  output: string;
+}
+
+export function noWebSearchReply(model: string): AlphaSearchReply {
   return {
     encrypted_output: null,
     output:
@@ -201,6 +207,8 @@ export function relayToChatGpt(input: {
   bases: ChatGptBases;
   logger: pino.Logger;
   body?: Buffer;
+  // 发给 ChatGPT 的请求头；缺省是 Codex 的请求头去掉逐跳头与 Host。
+  headers?: IncomingHttpHeaders;
   listTag: () => string;
 }): void {
   const { req, res } = input;
@@ -210,7 +218,7 @@ export function relayToChatGpt(input: {
   const transport = target.protocol === "https:" ? https : http;
   const upstream: ClientRequest = transport.request(target, {
     method: req.method,
-    headers: relayedHeaders(req.headers),
+    headers: input.headers ?? relayedHeaders(req.headers),
   });
   // Codex 先断开（用户中断）：不再等 ChatGPT。
   const abandon = () => {

@@ -72,12 +72,13 @@ export async function readAgentBody(input: {
  * 读出原样的请求体字节，不解压（ChatGPT 后端那组路径：ChatGPT 自带模型的请求要原样转发，
  * 先读出来才知道问的是哪个模型）。上限按原样的字节数算。
  */
-export async function readRawBody(input: {
-  req: Request;
-  limit: number;
-}): Promise<
-  { kind: "read"; body: Buffer } | { kind: "tooLarge"; message: string } | { kind: "broken" }
-> {
+export type RawBody =
+  | { kind: "read"; body: Buffer }
+  | { kind: "tooLarge"; message: string }
+  // 读断了：只会是 CLI 自己走了。
+  | { kind: "broken" };
+
+export async function readRawBody(input: { req: Request; limit: number }): Promise<RawBody> {
   const read = await readLimited({ source: input.req, limit: input.limit });
   if (read.kind === "read") return read;
   input.req.resume();

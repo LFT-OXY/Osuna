@@ -267,11 +267,14 @@ describe("codexDefaultLevel", () => {
 
 describe("codexEndpointEntries", () => {
   it("lists every on endpoint's picked models as <slug>/<model>, in the chat model picker's order, with what is known of them", () => {
-    const listed = codexEndpointEntries(STATE, "high", (owner, modelId) =>
-      owner.slug === "relay-b" && modelId === "glm-4.6"
-        ? { context: 200_000, efforts: ["low", "high"], images: false }
-        : {},
-    );
+    const listed = codexEndpointEntries({
+      state: STATE,
+      reasoningEffort: "high",
+      factsFor: (owner, modelId) =>
+        owner.slug === "relay-b" && modelId === "glm-4.6"
+          ? { context: 200_000, efforts: ["low", "high"], images: false }
+          : {},
+    });
     expect(
       listed.map((entry) => [entry.slug, entry.display_name, entry.visibility, entry.priority]),
     ).toEqual([

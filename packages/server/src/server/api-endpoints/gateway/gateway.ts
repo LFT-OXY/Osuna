@@ -4,7 +4,7 @@
 // ChatGPT 后端路径按模型名分流（带斜杠的走接口、压缩拒绝、搜索回说明）照 codex_backend.go 的 codexBackend
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import type { IncomingHttpHeaders } from "node:http";
+import http, { type IncomingHttpHeaders } from "node:http";
 import os from "node:os";
 import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
@@ -31,6 +31,7 @@ import {
   isEndpointModel,
   noWebSearchReply,
   relayToChatGpt,
+  relayedHeaders,
   type ChatGptBases,
 } from "./chatgpt-backend.js";
 import {
@@ -38,6 +39,12 @@ import {
   answerChatGptModels,
   type ChatGptModelsListing,
 } from "./chatgpt-models.js";
+import {
+  answerCodexCompaction,
+  codexCompactionInput,
+  localCompactionTurn,
+  type CompactionAnswer,
+} from "./codex-compaction.js";
 import { CodexLastTurn } from "./codex-side-calls.js";
 import {
   COOLDOWN,
@@ -304,17 +311,13 @@ async function serveChatGptBackend(input: {
   failover: Failover;
 }): Promise<void> {
   const { req, res, rest, chatgpt, logger } = input;
-  const listTag = () => chatgpt.listing().tag;
-  const relay = (body?: Buffer) => {
-    logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
-    relayToChatGpt({ req, res, bases: chatgpt.bases, logger, body, listTag });
-  };
   if (req.method === "GET" && rest === "/models") {
     await answerChatGptModels({ req, res, ...chatgpt, waitMs: chatgpt.modelsWaitMs, logger });
     return;
   }
-  if (req.method !== "POST" || !CHATGPT_ROUTED_PATHS.has(rest)) {
-    relay();
+  const isRouted = req.method === "POST" && CHATGPT_ROUTED_PATHS.has(rest);
+  if (!isRouted) {
+    relayChatGpt({ ...input, sent: null });
     return;
   }
   const limit = input.failover.bodyLimitBytes;
@@ -330,27 +333,103 @@ async function serveChatGptBackend(input: {
     limit,
     logger,
   });
-  const parsed = decoded.kind === "read" ? parseJson(decoded.body.toString("utf8")) : null;
-  const model = isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : null;
-  if (decoded.kind !== "read" || model === null || !isEndpointModel(model)) {
-    relay(raw.body);
+  if (decoded.kind !== "read") {
+    relayChatGpt({ ...input, sent: { kind: "raw", body: raw.body } });
     return;
   }
+  const text = decoded.body.toString("utf8");
+  const model = modelOf(text);
+  const isForChatGpt = model === null || !isEndpointModel(model);
+  if (isForChatGpt) {
+    relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text }) });
+    return;
+  }
+  await serveEndpointModel({ ...input, model, text });
+}
+
+/** 请求体里的模型名；没有为 null。 */
+function modelOf(text: string): string | null {
+  const parsed = parseJson(text);
+  if (isRecord(parsed) && typeof parsed.model === "string") return parsed.model;
+  return null;
+}
+
+/** 转给 ChatGPT 的请求体：原样的字节；或读回了 Osuna 的压缩摘要、解开后改过的 JSON。 */
+type ChatGptBody = { kind: "raw"; body: Buffer } | { kind: "rewritten"; body: Buffer } | null;
+
+/** ChatGPT 自带模型的对话里带着 Osuna 做的压缩条目时换成摘要消息（ChatGPT 读不懂它）；别的原样。 */
+function chatgptBodyFor(input: { rest: string; raw: Buffer; text: string }): ChatGptBody {
+  if (input.rest !== "/responses") return { kind: "raw", body: input.raw };
+  const restored = codexCompactionInput({ text: input.text, isEndpointModel: false });
+  if (restored.kind === "unchanged") return { kind: "raw", body: input.raw };
+  return { kind: "rewritten", body: Buffer.from(restored.body) };
+}
+
+function relayChatGpt(input: {
+  req: Request;
+  res: Response;
+  chatgpt: ChatGptBackend;
+  logger: pino.Logger;
+  sent: ChatGptBody;
+}): void {
+  const { req, chatgpt, logger, sent } = input;
+  logger.debug({ agent: "codex", method: req.method, path: req.path }, "Relaying to ChatGPT");
+  const headers = relayedHeaders(req.headers);
+  if (sent?.kind === "rewritten") {
+    // 发出去的是解开后改过的 JSON：不再说压缩，长度按新内容。
+    delete headers["content-encoding"];
+    headers["content-length"] = String(sent.body.length);
+  }
+  relayToChatGpt({
+    req,
+    res: input.res,
+    bases: chatgpt.bases,
+    logger,
+    body: sent?.body,
+    headers,
+    listTag: () => chatgpt.listing().tag,
+  });
+}
+
+/**
+ * 接口模型（ADR 0010）：压缩照 magpie 拒绝 /responses/compact、在 /responses 里自己做摘要；搜索回 200 和说明；
+ * 对话照常选路换家，只带 Codex 的身份头。
+ */
+async function serveEndpointModel(input: {
+  req: Request;
+  res: Response;
+  rest: string;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+  model: string;
+  text: string;
+}): Promise<void> {
+  const { req, res, rest, model } = input;
   if (rest === "/responses/compact") {
-    sendAgentError({
-      res,
-      wire: "openai",
-      error: {
-        status: 400,
-        message: `/responses/compact is not supported for API endpoint models (${model})`,
-      },
-    });
+    const message = `/responses/compact is not supported for API endpoint models (${model}); use a compaction_trigger on /responses`;
+    sendAgentError({ res, wire: "openai", error: { status: 400, message } });
     return;
   }
   if (rest === "/alpha/search") {
     res.status(200).json(noWebSearchReply(model));
     return;
   }
+  const forwardedHeaders = codexIdentityHeaders(req.headers);
+  const read = codexCompactionInput({ text: input.text, isEndpointModel: true });
+  if (read.kind === "changed" && read.compacts) {
+    const body = Buffer.from(read.body);
+    const turn = localCompactionTurn(String(forwardedHeaders[TURN_METADATA_HEADER] ?? ""));
+    if (turn !== null) forwardedHeaders[TURN_METADATA_HEADER] = turn;
+    await answerCodexCompaction({
+      res,
+      model,
+      ask: () => askOwnGateway({ req, body, headers: forwardedHeaders }),
+    });
+    return;
+  }
+  let body = Buffer.from(input.text);
+  if (read.kind === "changed") body = Buffer.from(read.body);
   await handleAgentRequest({
     req,
     res,
@@ -358,10 +437,49 @@ async function serveChatGptBackend(input: {
     wire: "openai",
     format: "openai_responses",
     store: input.store,
-    logger,
+    logger: input.logger,
     failover: input.failover,
-    read: decoded.body,
-    forwardedHeaders: codexIdentityHeaders(req.headers),
+    read: body,
+    forwardedHeaders,
+  });
+}
+
+const TURN_METADATA_HEADER = "x-codex-turn-metadata";
+
+/**
+ * 摘要请求交给中转站自己的 /v1/responses（同一个本机端口），照常选路、换家、冷却，整份读回再改成压缩条目
+ * （magpie 把它交给自己的 serve、记在 recorder 里）。只带 Codex 的身份头。
+ */
+function askOwnGateway(input: {
+  req: Request;
+  body: Buffer;
+  headers: IncomingHttpHeaders;
+}): Promise<CompactionAnswer> {
+  const { localAddress, localPort } = input.req.socket;
+  if (localAddress === undefined || localPort === undefined) {
+    throw new Error("The gateway's own address is unknown");
+  }
+  let host = localAddress;
+  if (host.includes(":")) host = `[${host}]`;
+  const url = `http://${host}:${localPort}${API_ENDPOINT_GATEWAY_PATH}/v1/responses`;
+  const headers = { ...input.headers, "content-length": String(input.body.length) };
+  return new Promise((resolve, reject) => {
+    const asked = http.request(url, { method: "POST", headers }, (reply) => {
+      const chunks: Buffer[] = [];
+      reply.on("data", (chunk: Buffer) => chunks.push(chunk));
+      reply.once("error", reject);
+      reply.once("end", () => {
+        const answeredBy = reply.headers[ANSWERED_BY_HEADER.toLowerCase()];
+        resolve({
+          status: reply.statusCode ?? 502,
+          contentType: reply.headers["content-type"],
+          answeredBy: typeof answeredBy === "string" ? answeredBy : undefined,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+    asked.once("error", reject);
+    asked.end(input.body);
   });
 }
 

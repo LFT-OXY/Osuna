@@ -43,7 +43,11 @@ import {
   restoreCodexOfficial,
   type CodexConfigTakeover,
 } from "./codex-config-patch.js";
-import { buildCodexModelCatalog, codexEndpointEntries } from "./codex-model-catalog.js";
+import {
+  buildCodexModelCatalog,
+  codexEndpointEntries,
+  type CodexModelEntry,
+} from "./codex-model-catalog.js";
 import { codexListTag, markCodexModelsCacheStale } from "./codex-models-cache.js";
 import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
@@ -945,13 +949,14 @@ export class ApiEndpointService {
   codexChatGptListing(): ChatGptModelsListing {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();
-    const entries = state
-      ? codexEndpointEntries(
-          this.retiredModels.listed(state),
-          this.codexReasoningEffort(),
-          (endpoint, modelId) => this.modelFacts(endpoint, modelId),
-        )
-      : [];
+    let entries: CodexModelEntry[] = [];
+    if (state) {
+      entries = codexEndpointEntries({
+        state: this.retiredModels.listed(state),
+        reasoningEffort: this.codexReasoningEffort(),
+        factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
+      });
+    }
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
     return { entries, tag: codexListTag({ entries, defaultModelId }), codexHome };
   }
@@ -965,7 +970,11 @@ export class ApiEndpointService {
     if (!isChatGptWiring(this.store.readCodexTakeover().takeover)) return;
     const { codexHome, tag } = this.codexChatGptListing();
     try {
-      markCodexModelsCacheStale({ codexHome, tag });
+      const marked = markCodexModelsCacheStale({ codexHome, tag });
+      // Codex 正在改写它：不硬写，等它自己的缓存过期（几分钟）或下一次 X-Models-Etag 不同时重拉。
+      if (marked.kind === "conflict") {
+        this.logger.warn({ codexHome }, "Codex's model list kept changing; not marked stale");
+      }
     } catch (error) {
       this.logger.warn({ err: error }, "Could not mark Codex's model list stale");
     }
