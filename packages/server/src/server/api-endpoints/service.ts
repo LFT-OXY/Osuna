@@ -5,6 +5,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type pino from "pino";
 import {
   API_ENDPOINT_MODEL_TIERS,
@@ -1089,13 +1090,18 @@ export class ApiEndpointService {
       const record = this.store.readClaudeTakeover();
       const text = readOptionalFile(this.resolveClaudeSettingsPath())?.toString("utf8") ?? null;
       const takeover = keepClaudeCliModel({ text, takeover: record.takeover, held });
-      this.store.writeClaudeTakeover({ ...record, takeover });
+      // 读状态时每次都会走到这里：记录没变就不写。
+      if (!isDeepStrictEqual(takeover, record.takeover)) {
+        this.store.writeClaudeTakeover({ ...record, takeover });
+      }
       return;
     }
     const record = this.store.readCodexTakeover();
     const text = readOptionalFile(this.resolveCodexConfigPath())?.toString("utf8") ?? null;
     const takeover = keepCodexCliModel({ text, takeover: record.takeover, held });
-    this.store.writeCodexTakeover({ ...record, takeover });
+    if (!isDeepStrictEqual(takeover, record.takeover)) {
+      this.store.writeCodexTakeover({ ...record, takeover });
+    }
   }
 
   /** CLI 配置里自己存下的选择；没开开关、没有接管记录或读不懂时为 null。 */

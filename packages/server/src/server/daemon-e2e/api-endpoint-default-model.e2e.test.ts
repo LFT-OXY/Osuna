@@ -3,7 +3,7 @@
 
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
@@ -51,6 +51,11 @@ async function modelThinking(client: DaemonClient, modelId: string) {
 interface ListedIssue {
   code: string;
   params?: Record<string, string>;
+}
+
+/** 文件最后写入的时刻（纳秒），看一次读状态有没有重写它。 */
+async function modifiedAt(file: string): Promise<bigint> {
+  return (await stat(file, { bigint: true })).mtimeNs;
 }
 
 function issueCodes(issues: ListedIssue[]): string[] {
@@ -560,6 +565,22 @@ describe.skipIf(process.platform === "win32")("picking the default model on swit
       expect(beside.issueCodes).not.toContain("model_replaced");
       expect(beside.agent?.defaultModelId).toBe("relay-a/glm-4.6");
       expect(await codexModel()).toBe("gpt-5.5");
+    });
+
+    test("reading the state again leaves the takeover record alone when nothing changed", async () => {
+      await twoEndpoints();
+      signIn = "chatgpt";
+      // ChatGPT 登录、模型归 Codex：每次读状态都看到它自己的模型。
+      await writeFile(configPath, `model = "gpt-5.5"\n`);
+      await turnOn("codex");
+      await listed("codex");
+      const record = path.join(daemon.paseoHome, "api-endpoints", "takeover-codex.json");
+      const before = await modifiedAt(record);
+
+      await listed("codex");
+      await listed("codex");
+
+      expect(await modifiedAt(record)).toBe(before);
     });
 
     test("a model followed while settings.json can't be written is followed on the next read", async () => {
