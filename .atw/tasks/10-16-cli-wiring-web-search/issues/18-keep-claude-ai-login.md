@@ -10,7 +10,7 @@
 
 **Blocked by:** 02, 03
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：选项打开后 `settings.json` 的 `ANTHROPIC_AUTH_TOKEN` 为空；关掉选项后写回口令；关掉总开关时按接管记录还原。
 - [ ] 带 claude.ai 形式令牌和 `oauth-` beta 的请求：假上游收到的请求里没有这个令牌（用这家接口自己的 key），`anthropic-beta` 里没有 `oauth-` 项。
