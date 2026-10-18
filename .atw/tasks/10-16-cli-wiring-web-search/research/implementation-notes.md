@@ -487,3 +487,34 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 - 纯逻辑：`claude-spelling.test.ts`（改写、保留前缀 `[1m]` `:high`、五个家族、别家 id 不改、连字符写法在售与两个撞车时不改）；`claude-model-hints.test.ts`（到 max 无 xhigh 报 xhigh）；`host-endpoints.test.ts`（各种 Claude 名字、`api.anthropic.com`、映射到的 Claude、关着的和没选模型的不算）；`claude-settings-patch.test.ts`（写 0、能审查时拿掉、用户写的 1 和 0 都不碰、还原逐字节）；`gateway/routing.test.ts`（档位名、内置 id 与对不上档位的 `claude-mythos-5-1` 按默认模型找、默认模型带标识时直达；选了内置 id 的接口也让给档位映射、没映射换默认模型、默认模型就是它时照常、开关关着时照常；开关关着、Codex、非档位名、带厂商前缀的不兜底）。
 - daemon 端到端：`api-endpoint-claude.e2e.test.ts`（`claude-opus-4.6` 写成连字符、`glm-4.6` 不改、用户 modelPicker 里的点写法不改；`CLAUDE_CODE_AUTO_MODE_SERVER=0`，加 `api.anthropic.com` 接口后拿掉，关掉后逐字节还原；用户写的不动）；`api-endpoint-gateway.e2e.test.ts`（`haiku`、`claude-haiku-4-5-20251001` 与 `claude-mythos-5-1` 没映射时假上游收到默认模型 `glm-4.6`；一家选了 `claude-haiku-4-5-20251001`、另一家把 haiku 映射到 `glm-4.6` 时请求到映射那家）。原有用例里拿光秃秃的 Claude id 测别的事的两条（思考关闭的形状、Subagent 的搜索）改成带接口标识。原有用例里接口模型都不是 Claude 的，settings.json 多了 `CLAUDE_CODE_AUTO_MODE_SERVER`，已照改。
+
+## 18 保留 claude.ai 登录
+
+### 对照 magpie（7597c132）
+
+| 做什么 | magpie | Osuna |
+| --- | --- | --- |
+| 选项 | Claude Code 的 `login` 字段：`""`（magpie 的 key）或 `claudeai`（`internal/agent/claude.go` 的 `loginKey`、`claudeSignIns`），存在 stash 里，断开后留着 | Claude Code 设置页「使用第三方接口」区的 Switch「保留 claude.ai 登录」，默认关；存在 `endpoints.json` 的 `agents.claude.keepsClaudeAiLogin`，总开关关着也能设、关着也留着。线上是 `set_agent_settings` 的可选 `keepsClaudeAiLogin`（与 `enabled` 一起发，app 发当前的 `enabled`），列表的 `agents.claude` 带回来；给 Codex 回 `invalid_input`。随 `apiEndpointCliWiring` 能力位显示 |
+| 只在网关收任意 key 时提供 | `signInHere`：本机回环、WSL 镜像；共享到网络时只收共享 key，不提供 | Osuna 的中转站只在本机回环上收，恒可提供，不做这条判断 |
+| 写配置 | `wiredKey`：开着写空 `ANTHROPIC_AUTH_TOKEN`，关掉写回 key | 一样：`cliWiring` 的 token 写空，仍是负责的键、按接管记录还原；`cliFingerprint` 带上选项，切换就重写。接管记录里写入值为空串也算指向中转站（`writtenGateway`），启动对账不会每次重写 |
+| 没走 magpie 时设 | 拒绝（「先选一个经 magpie 的模型」） | 照存，下次打开总开关时生效（工单写「默认关」、未要求拒绝；关着时改它不碰文件）。比 magpie 宽：没有误导模型的风险 |
+| 认调用方 | 本机请求一律收 | 02 号已做：claude.ai 令牌不是口令，按 User-Agent 认 |
+| 不转发登录 | 网关从不带 Agent 的凭证 | 直通早就丢掉 `authorization`、`x-api-key`；翻译的请求不带 Agent 的头 |
+| `oauth-` beta | `askedBetas`：Agent 的 `anthropic-beta` 去掉 `oauth-` 开头的项，接口自己配的 beta 照发 | `fittedBetas`（`claude-code-fields.ts`）：直通时一律去掉 `oauth-` 项（与原来对非 Claude 去掉审查 beta 合在一起）。Osuna 的接口没有自己配的 beta |
+| 改报错 | `keepsSignIn` 包 `POST /v1/messages`、`/messages`、`/v1/messages/count_tokens`；只看请求的 `Authorization: Bearer sk-ant-oat…`（不看选项） | `keepClaudeSignIn`（`gateway/claude-signin.ts`）包同样判断的 Anthropic 路径与 count_tokens（Osuna 没有不带 `/v1` 的 `/messages`）。Node 里改写 `res.writeHead/write/end`：报错状态码扣到看见正文；401、正文含「OAuth token has been revoked」的 403 改 502 `api_error`，文字「<接口名> refused Osuna's credential (HTTP 401): <原因>」，接口名从「名字: 原因」拆出，拆不出用回复头 `x-osuna-api-endpoint` 的标识，再没有用「The API endpoint」；其余报错保持状态码、`x-api-key` 换成 `API key`；没有正文的 401 也改 502；开口 200 后流里 `event: error` 事件同样换掉 `x-api-key` |
+| 流里错误的认法 | 一次写入以 `event: error\n` 开头才换 | 一次写入里出现 `event: error\n` 就只换它之后的部分（直通的转发可能把前一帧和错误事件写在一起）；不动之前的模型输出 |
+| 日志 | 用量与 Recent calls 记接口原状态 | Osuna 的日志在包装之前就记了接口原状态与原话 |
+| count_tokens | 上游 401 照样改 | Osuna 的 count_tokens 上游失败时本地估算、回 200，CLI 本来就收不到 401；包装照装，保证一致 |
+| 两种不一致 | `Check`：开着却有口令 → 报；关着口令空或没了 → 报「建议设成 claude.ai」；地址被改先报地址 | 列表的 `agentIssues` 新增 `claude_ai_login_token_set`（file）与 `claude_ai_login_token_empty`（file、how：empty / missing），只在总开关开着时查；地址也被改时只报「不再经过中转站」。这两种不算「不再经过中转站」（中转站照收）。按钮：前者「重新应用」「不再保留 claude.ai 登录」，后者「保留 claude.ai 登录」「重新应用」。开着、口令被删掉是要的样子，不报也不算被改。magpie 只有文字、没有按钮（TUI 里改字段） |
+| `keyOurs` / 换端口 | 空口令只在 magpie 最后写的地址旁才算 magpie 的 | Osuna 按接管记录判断归属，没有「用户自己的地址配空口令」被误认的问题 |
+| 说明文字 | `claudeSignIns` 两个选项各一段 | 一段：打开后语音、claude.ai 连接器、`/usage` 套餐额度、云端会话能用，登录从不转给接口；Remote Control、ultrareview 仍不能用。9 种语言 |
+
+剩下与 magpie 不同的：没走中转站时也能设（magpie 拒绝）；不做「只在网关收任意 key 时提供」（Osuna 没有共享）；流里错误事件不要求出现在一次写入的开头；提示区带按钮。
+
+### 测试
+
+- daemon 端到端 `api-endpoint-gateway.e2e.test.ts`「Claude Code signed in to claude.ai」（照 magpie `claude_signin_test.go`）：假上游收到的请求里没有 claude.ai 令牌、用的是这家的 key、`anthropic-beta` 去掉 `oauth-` 项；401 → 502 带接口名与 `API key`；吊销的 403 → 502，别的 403 保持状态码；400 保持状态码换掉 `x-api-key`，带中转站口令的请求原样；带口令的 401 仍是 401；流里错误事件换掉 `x-api-key`。
+- daemon 端到端 `api-endpoint-claude.e2e.test.ts`「keeping Claude Code's claude.ai sign-in」：打开后口令为空、关掉写回、关总开关逐字节还原；总开关关着设、打开时生效；两种不一致各一条、对应处理后消失；Codex 拒绝。
+- 纯逻辑：`claude-settings-patch.test.ts`（口令三种状态）；app `agent-settings.test.ts`（两种提示的按钮、选项的读法）。
+- 浏览器 `settings-api-endpoints.spec.ts`：说明文字、只读目录下保存失败留在原处且口令不变、成功后口令为空、关掉写回。`resetApiEndpoints` 一并把选项关掉。
+- 截图：`screenshots/18-claude-code-page_keep-claude-ai-login-off_desktop-1280_{en,zh}.png`、`18-claude-code-page_token-empty-issue_desktop-1280_{en,zh}.png`。

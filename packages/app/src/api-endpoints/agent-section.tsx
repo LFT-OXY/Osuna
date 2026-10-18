@@ -43,6 +43,8 @@ export interface AgentApiEndpointsSectionProps {
   onToggle: (enabled: boolean) => void;
   onDefaultModelChange: (modelId: string) => void;
   onManage: () => void;
+  // 「保留 claude.ai 登录」；主机太旧时为 null，不显示这一行（Codex 页的 view 里本来就没有这个选项）。
+  onKeepClaudeAiLoginChange: ((keepsClaudeAiLogin: boolean) => void) | null;
   // 主机声明了 apiEndpointCliWiring 时为提示区的处理；否则为 null，请用户更新主机。
   issueActions: Omit<AgentIssuesAreaProps, "providerLabel" | "issues"> | null;
 }
@@ -57,6 +59,7 @@ export function AgentApiEndpointsSection({
   onToggle,
   onDefaultModelChange,
   onManage,
+  onKeepClaudeAiLoginChange,
   issueActions,
 }: AgentApiEndpointsSectionProps) {
   const { t } = useTranslation();
@@ -114,6 +117,14 @@ export function AgentApiEndpointsSection({
             options={view.modelOptions}
             busy={busy}
             onChange={onDefaultModelChange}
+          />
+        ) : null}
+        {view.keepsClaudeAiLogin !== null && onKeepClaudeAiLoginChange ? (
+          <KeepClaudeAiLoginRow
+            providerLabel={providerLabel}
+            value={view.keepsClaudeAiLogin}
+            busy={busy}
+            onChange={onKeepClaudeAiLoginChange}
           />
         ) : null}
         <ManageRow summary={view.summary} onPress={onManage} />
@@ -206,6 +217,40 @@ function DefaultModelRow({
           triggerTestID="agent-api-endpoints-default-model-trigger"
         />
       </View>
+    </View>
+  );
+}
+
+/** 「保留 claude.ai 登录」（ADR 0012）：说明打开后哪些能用、哪些仍不能用，用户自己决定。 */
+function KeepClaudeAiLoginRow({
+  providerLabel,
+  value,
+  busy,
+  onChange,
+}: {
+  providerLabel: string;
+  value: boolean;
+  busy: boolean;
+  onChange: (keepsClaudeAiLogin: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.apiEndpoints.agent.keepClaudeAiLogin")}
+        </Text>
+        <Text style={settingsStyles.rowHint} testID="agent-api-endpoints-keep-claude-ai-login-hint">
+          {t("settings.apiEndpoints.agent.keepClaudeAiLoginHint", { agent: providerLabel })}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={busy}
+        accessibilityLabel={t("settings.apiEndpoints.agent.keepClaudeAiLogin")}
+        testID="agent-api-endpoints-keep-claude-ai-login"
+      />
     </View>
   );
 }

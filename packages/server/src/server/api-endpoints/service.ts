@@ -1,3 +1,6 @@
+// 保留 claude.ai 登录时口令的两种不一致移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 Check）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
 import { randomBytes, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -48,6 +51,7 @@ import {
   inspectClaudeSettings,
   type ClaudeSettingsUnparsableReason,
   restoreClaudeOfficial,
+  type ClaudeAuthTokenState,
   type ClaudeGatewayWiring,
   type ClaudeSettingsTakeover,
 } from "./claude-settings-patch.js";
@@ -180,6 +184,8 @@ export interface ApiEndpointAgentSettingsInput {
   defaultModelId?: string;
   // 「重新应用」：开着时设置没变也按当前设置重写 CLI 配置。
   reapply?: boolean;
+  // 「保留 claude.ai 登录」，只给 Claude Code；省略即不变。
+  keepsClaudeAiLogin?: boolean;
 }
 
 export interface ApiEndpointStateInput {
@@ -253,7 +259,11 @@ type ApiEndpointAgentIssueCode =
   // 云平台开关开着（托管设置、settings.json、~/.claude.json 或登录 shell）：请求发给云平台，不经过中转站。
   | "cloud_switch_on"
   // 托管设置的 ANTHROPIC_BASE_URL 不指向中转站，盖过 Osuna 写的地址。
-  | "managed_base_url";
+  | "managed_base_url"
+  // 保留 claude.ai 登录开着，口令却被填回去。
+  | "claude_ai_login_token_set"
+  // 保留 claude.ai 登录关着，口令却是空的或没了（params.how：empty / missing）。
+  | "claude_ai_login_token_empty";
 
 interface AgentIssue extends ApiEndpointAgentIssue {
   code: ApiEndpointAgentIssueCode;
@@ -403,7 +413,7 @@ export class ApiEndpointService {
     const state = this.readState();
     const enabled = state.agents[supported].enabled;
     const statuses: Record<ApiEndpointProvider, ApiEndpointFileStatus> = {
-      claude: this.inspectClaude(state.agents.claude.enabled),
+      claude: this.inspectClaude(state.agents.claude),
       codex: this.inspectCodex(state.agents.codex.enabled),
     };
     // 托管地址与云平台开关：要问代理与登录 shell，只在列表里查（ADR 0012）。
@@ -551,7 +561,11 @@ export class ApiEndpointService {
       if (isLegacyForm && editsActiveEndpoint) {
         agents = {
           ...agents,
-          [supported]: { enabled: true, defaultModelId: fields.legacyDefaultModelId ?? null },
+          [supported]: {
+            ...agents[supported],
+            enabled: true,
+            defaultModelId: fields.legacyDefaultModelId ?? null,
+          },
         };
       }
       const next = await this.commit(
@@ -626,7 +640,10 @@ export class ApiEndpointService {
         state,
         {
           endpoints: withEndpoint(state.endpoints, { ...endpoint, enabled: true }),
-          agents: { ...state.agents, [supported]: { enabled: true, defaultModelId } },
+          agents: {
+            ...state.agents,
+            [supported]: { ...state.agents[supported], enabled: true, defaultModelId },
+          },
         },
         { rewrite: supported },
       );
@@ -644,12 +661,22 @@ export class ApiEndpointService {
   ): Promise<ApiEndpointAgentSettings> {
     return this.exclusive(async () => {
       const supported = requireProvider(provider);
+      const setsClaudeAiLogin = input.keepsClaudeAiLogin !== undefined;
+      if (setsClaudeAiLogin && supported !== "claude") {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: "Only Claude Code can keep its claude.ai sign-in",
+        });
+      }
       if (supported === "codex" && input.enabled) await this.checkCodexSignIn();
       const state = this.readState();
-      const agent = input.enabled
+      const enabledOrOff = input.enabled
         ? enabledAgentSettings(state, supported, input.defaultModelId?.trim())
         : // 关掉总开关从不被拒；默认模型留着，下次打开时还能用就沿用。
           { ...state.agents[supported], enabled: false };
+      const agent = setsClaudeAiLogin
+        ? { ...enabledOrOff, keepsClaudeAiLogin: input.keepsClaudeAiLogin }
+        : enabledOrOff;
       const reapply = input.enabled && input.reapply === true;
       const next = await this.commit(
         state,
@@ -854,7 +881,9 @@ export class ApiEndpointService {
       const env = this.store.readClaudeTakeover().takeover?.env;
       const url = env?.ANTHROPIC_BASE_URL?.written;
       const token = env?.ANTHROPIC_AUTH_TOKEN?.written;
-      return url?.endsWith(API_ENDPOINT_GATEWAY_PATH) && token ? { url, token } : null;
+      // 保留 claude.ai 登录时写的是空口令。
+      const isGatewayToken = typeof token === "string";
+      return url?.endsWith(API_ENDPOINT_GATEWAY_PATH) && isGatewayToken ? { url, token } : null;
     }
     const table = this.store.readCodexTakeover().takeover?.table;
     if (!table?.baseUrl.endsWith(CODEX_GATEWAY_SUFFIX)) return null;
@@ -882,9 +911,11 @@ export class ApiEndpointService {
     if (baseUrl === null) throw this.gatewayError();
     // nextGatewayTokens 给每个开着的 Agent 都发了口令。
     if (token === undefined) throw new Error(`No gateway token for ${provider}`);
+    // 保留 claude.ai 登录：口令写成空值，Claude Code 于是带着 claude.ai 登录来（ADR 0012）。
+    const keepsSignIn = provider === "claude" && agent.keepsClaudeAiLogin === true;
     return {
       baseUrl,
-      token,
+      token: keepsSignIn ? "" : token,
       ...this.cliModels(state, provider, agent.defaultModelId),
       allowWebSearch: someEndpointSearchesWeb(state),
       isAutoModeReviewed: isAutoModeReviewed(state),
@@ -963,7 +994,7 @@ export class ApiEndpointService {
    */
   private rewriteClaudeHints(state: ApiEndpointState): void {
     if (!state.agents.claude.enabled || this.gatewayUrlFor("claude") === null) return;
-    if (this.inspectClaude(true).health.length > 0) {
+    if (this.inspectClaude(state.agents.claude).health.length > 0) {
       this.logger.info("Claude settings changed outside Osuna; model hints left as they are");
       return;
     }
@@ -1058,6 +1089,7 @@ export class ApiEndpointService {
     return JSON.stringify([
       this.gatewayUrlFor(provider),
       tokens[provider] ?? null,
+      provider === "claude" && agent.keepsClaudeAiLogin === true,
       this.cliModels(state, provider, agent.defaultModelId),
       provider === "claude" && someEndpointSearchesWeb(state),
       provider === "claude" && isAutoModeReviewed(state),
@@ -1635,7 +1667,8 @@ export class ApiEndpointService {
     return result.value;
   }
 
-  private inspectClaude(enabled: boolean): ApiEndpointFileStatus {
+  private inspectClaude(agent: ApiEndpointAgentSettings): ApiEndpointFileStatus {
+    const { enabled } = agent;
     const settingsPath = this.resolveClaudeSettingsPath();
     const result = inspectClaudeSettings({
       text: readOptionalFile(settingsPath)?.toString("utf8") ?? null,
@@ -1648,7 +1681,15 @@ export class ApiEndpointService {
         reason: result.reason,
       });
     }
-    const issues = notThroughGatewayIssues("claude", settingsPath, result.modifiedKeys);
+    const token = claudeTokenFinding({
+      modifiedKeys: result.modifiedKeys,
+      authToken: result.authToken,
+      keepsClaudeAiLogin: agent.keepsClaudeAiLogin === true,
+      filePath: settingsPath,
+    });
+    const modifiedKeys = token.modifiedKeys;
+    const issues = notThroughGatewayIssues("claude", settingsPath, token.routingKeys);
+    if (token.issue) issues.push(token.issue);
     // 只在开关开着时提示：这时 Claude Code 跳过这份文件，就不经过中转站（ADR 0012）。
     if (enabled && !result.isReadableByClaudeCode) {
       issues.push({
@@ -1658,7 +1699,7 @@ export class ApiEndpointService {
       });
     }
     return {
-      health: modifiedExternallyIssues(settingsPath, result.modifiedKeys),
+      health: modifiedExternallyIssues(settingsPath, modifiedKeys),
       issues,
       baseUrl: result.baseUrl,
     };
@@ -1852,9 +1893,10 @@ function enabledAgentSettings(
       message: "The default model must be one of the models selected on an endpoint that is on",
     });
   }
-  const current = state.agents[provider].defaultModelId;
-  if (requested) return { enabled: true, defaultModelId: requested };
-  return { enabled: true, defaultModelId: isUsable(current) ? current : first.id };
+  const agent = state.agents[provider];
+  const current = agent.defaultModelId;
+  if (requested) return { ...agent, enabled: true, defaultModelId: requested };
+  return { ...agent, enabled: true, defaultModelId: isUsable(current) ? current : first.id };
 }
 
 /** 按 id 替换，找不到就追加到末尾（创建顺序）。 */
@@ -2184,6 +2226,58 @@ function notThroughGatewayIssues(
       message: `${AGENT_NAMES[provider]} no longer goes through the gateway: ${changed} in ${filePath} changed outside Osuna`,
     },
   ];
+}
+
+const CLAUDE_TOKEN_KEY = "env.ANTHROPIC_AUTH_TOKEN";
+
+/** 口令被外部改了之后：仍算被改过的负责键、算「不再经过中转站」的键，以及保留 claude.ai 登录的不一致。 */
+interface ClaudeTokenFinding {
+  modifiedKeys: string[];
+  routingKeys: string[];
+  issue: AgentIssue | null;
+}
+
+/**
+ * 照 magpie 的 Check（claude.go）看口令：保留 claude.ai 登录开着却填回了口令，或关着口令却是空的、没了，
+ * 各报一条，不算「不再经过中转站」（中转站照收，只是带的凭证不对）。开着、口令没了正是要的样子，不算被改。
+ * 地址也被改了时只报「不再经过中转站」。
+ */
+function claudeTokenFinding(input: {
+  modifiedKeys: string[];
+  authToken: ClaudeAuthTokenState;
+  keepsClaudeAiLogin: boolean;
+  filePath: string;
+}): ClaudeTokenFinding {
+  const { modifiedKeys, authToken, filePath } = input;
+  const unchanged = { modifiedKeys, routingKeys: modifiedKeys, issue: null };
+  const isTokenChanged = modifiedKeys.includes(CLAUDE_TOKEN_KEY);
+  const isAddressChanged = modifiedKeys.includes("env.ANTHROPIC_BASE_URL");
+  if (!isTokenChanged || isAddressChanged) return unchanged;
+  const otherKeys = modifiedKeys.filter((key) => key !== CLAUDE_TOKEN_KEY);
+  const where = `Claude Code's ANTHROPIC_AUTH_TOKEN (${filePath})`;
+  if (input.keepsClaudeAiLogin) {
+    if (authToken !== "set")
+      return { modifiedKeys: otherKeys, routingKeys: otherKeys, issue: null };
+    return {
+      modifiedKeys,
+      routingKeys: otherKeys,
+      issue: {
+        code: "claude_ai_login_token_set",
+        params: { file: filePath },
+        message: `${where} is set, so Claude Code sends the gateway that key, not its claude.ai sign-in as Osuna set it`,
+      },
+    };
+  }
+  if (authToken === "set") return unchanged;
+  return {
+    modifiedKeys,
+    routingKeys: otherKeys,
+    issue: {
+      code: "claude_ai_login_token_empty",
+      params: { file: filePath, how: authToken },
+      message: `${where} is ${authToken === "empty" ? "empty" : "gone"}, so Claude Code sends the gateway its claude.ai sign-in, if it has one, not the gateway's token. To keep it so, turn on Keep claude.ai sign-in`,
+    },
+  };
 }
 
 function modifiedExternallyIssues(filePath: string, keys: string[]): HealthIssue[] {

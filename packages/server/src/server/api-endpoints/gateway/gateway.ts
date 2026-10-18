@@ -23,6 +23,7 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { judgeCaller } from "./callers.js";
+import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
   DEFAULT_CHATGPT_BASE_URL,
   DEFAULT_OPENAI_API_BASE_URL,
@@ -632,6 +633,7 @@ async function countTokens(input: {
 }): Promise<void> {
   const { res } = input;
   const wire = "anthropic";
+  keepClaudeSignInOf(input);
   const routed = await routeAgentRequest({ ...input, wire });
   if (!routed) return;
   const { body, parsed, model, candidates } = routed;
@@ -651,6 +653,11 @@ async function countTokens(input: {
     if (!(error instanceof RequestShapeError)) throw error;
     sendAgentError({ res, wire, error: { status: 400, message: error.message } });
   }
+}
+
+/** claude.ai 登录的 Claude Code 发来的对话与 count_tokens：报错不能让它以为自己的登录失效（ADR 0012）。 */
+function keepClaudeSignInOf(input: { req: Request; res: Response }): void {
+  if (isClaudeSignIn(input.req.headers)) keepClaudeSignIn(input.res);
 }
 
 /** 转给这家的 Anthropic 地址数；它答了（或 Agent 走了）为 true，要本地估算为 false。 */
@@ -716,6 +723,7 @@ async function handleAgentRequest(input: {
 }): Promise<void> {
   const { req, res, wire, store } = input;
   const since = Date.now();
+  if (wire === "anthropic") keepClaudeSignInOf(input);
   const reply = (status: number, message: string, headers?: Record<string, string>) =>
     sendAgentError({ res, wire, error: { status, message }, headers });
 

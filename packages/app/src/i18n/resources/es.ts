@@ -2652,6 +2652,9 @@ export const es: TranslationResources = {
         defaultModel: "Modelo predeterminado",
         defaultModelHint: "Las sesiones nuevas de terminal y el primer chat nuevo empiezan con él.",
         defaultModelPick: "Modelo predeterminado de {{agent}}",
+        keepClaudeAiLogin: "Mantener la sesión de claude.ai",
+        keepClaudeAiLoginHint:
+          "Si está activado, {{agent}} mantiene su sesión de claude.ai mientras pasa por el gateway, así que la voz, los conectores de claude.ai, los límites del plan en /usage y las sesiones en la nube siguen funcionando. Osuna nunca pasa la sesión a un endpoint de API. Remote Control y ultrareview siguen desactivados: {{agent}} solo los ofrece en la dirección propia de Anthropic.",
         manage: "Gestionar endpoints de API",
         summaryOn_one: "{{count}} activo",
         summaryOn_other: "{{count}} activos",
@@ -2712,6 +2715,17 @@ export const es: TranslationResources = {
           reapply: "Aplicar de nuevo",
           switchToOfficial: "Volver al oficial",
           keepCurrent: "Mantener la configuración actual",
+          claudeAiLoginTokenSet: "{{agent}} envía un token en lugar de su sesión de claude.ai",
+          claudeAiLoginTokenSetDetail:
+            "Mantener la sesión de claude.ai está activado, pero ANTHROPIC_AUTH_TOKEN en {{file}} se volvió a rellenar, así que {{agent}} cierra la sesión de claude.ai mientras pasa por el gateway. Aplicar de nuevo lo vacía.",
+          claudeAiLoginTokenEmpty:
+            "{{agent}} envía su sesión de claude.ai en lugar del token del gateway",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN en {{file}} está vacío, así que {{agent}} envía al gateway su sesión de claude.ai, si la tiene. Activa Mantener la sesión de claude.ai para dejarlo así, o aplica de nuevo para volver a escribir el token.",
+          claudeAiLoginTokenMissingDetail:
+            "Se quitó ANTHROPIC_AUTH_TOKEN de {{file}}, así que {{agent}} envía al gateway su sesión de claude.ai, si la tiene. Activa Mantener la sesión de claude.ai para dejarlo así, o aplica de nuevo para volver a escribir el token.",
+          keepClaudeAiLogin: "Mantener la sesión de claude.ai",
+          stopKeepingClaudeAiLogin: "Dejar de mantener la sesión de claude.ai",
           actionFailed: "No se pudo «{{action}}» para {{agent}}",
         },
       },

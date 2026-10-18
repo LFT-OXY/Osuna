@@ -721,6 +721,7 @@ describe("inspectClaudeSettings", () => {
       modifiedKeys: [],
       baseUrl: "https://mine.example",
       isReadableByClaudeCode: true,
+      authToken: "missing",
     });
     expect(inspect(USER_SETTINGS, null).baseUrl).toBeNull();
     expect(inspect('{ "env": { "ANTHROPIC_BASE_URL": "  " } }', null).baseUrl).toBeNull();
@@ -729,6 +730,16 @@ describe("inspectClaudeSettings", () => {
 
   it("reports a file that does not parse", () => {
     expect(inspectClaudeSettings({ text: "{ nope", takeover: null }).kind).toBe("unparsable");
+  });
+
+  it("tells a missing, empty and set token apart, as Claude Code reads them", () => {
+    const tokenOf = (text: string) => {
+      const result = inspect(text, null);
+      return result.kind === "parsed" ? result.authToken : null;
+    };
+    expect(tokenOf('{ "env": {} }')).toBe("missing");
+    expect(tokenOf('{ "env": { "ANTHROPIC_AUTH_TOKEN": "" } }')).toBe("empty");
+    expect(tokenOf('{ "env": { "ANTHROPIC_AUTH_TOKEN": "tok" } }')).toBe("set");
   });
 });
 

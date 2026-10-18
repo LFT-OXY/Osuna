@@ -27,7 +27,7 @@ import { ENDED_SHORT, brokenTail, connectionLost, endedShort } from "./broken-re
 import {
   withAdvisorFitted,
   withoutBillingLine,
-  withoutReviewBeta,
+  fittedBetas,
   type AdvisorEndpoint,
 } from "./claude-code-fields.js";
 import type { AgentKeepAlive } from "./keepalive.js";
@@ -628,9 +628,8 @@ function upstreamHeaders(input: {
     if (value !== undefined && !DROPPED_REQUEST_HEADERS.has(name)) out[name] = value;
   }
   const betas = out["anthropic-beta"];
-  const fitsBetas = input.dropsReviewBeta && betas !== undefined;
-  if (fitsBetas) {
-    const kept = withoutReviewBeta(betas);
+  if (betas !== undefined) {
+    const kept = fittedBetas({ value: betas, dropsReviewBeta: input.dropsReviewBeta });
     if (kept === null) delete out["anthropic-beta"];
     else out["anthropic-beta"] = kept;
   }

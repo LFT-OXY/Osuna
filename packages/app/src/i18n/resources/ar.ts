@@ -2598,6 +2598,9 @@ export const ar: TranslationResources = {
         defaultModel: "النموذج الافتراضي",
         defaultModelHint: "تبدأ به جلسات الطرفية الجديدة وأول محادثة جديدة.",
         defaultModelPick: "النموذج الافتراضي لـ {{agent}}",
+        keepClaudeAiLogin: "الإبقاء على تسجيل الدخول إلى claude.ai",
+        keepClaudeAiLoginHint:
+          "عند التشغيل، يبقي {{agent}} على تسجيل دخوله إلى claude.ai أثناء المرور عبر البوابة، فيستمر عمل الصوت وموصلات claude.ai وحدود الخطة في /usage والجلسات السحابية. لا يمرر Osuna تسجيل الدخول هذا إلى أي واجهة API خارجية أبدًا. يبقى Remote Control وultrareview غير متاحين: لا يوفرهما {{agent}} إلا على عنوان Anthropic نفسه.",
         manage: "إدارة واجهات API الخارجية",
         summaryOn_one: "{{count}} مشغّلة",
         summaryOn_other: "{{count}} مشغّلة",
@@ -2650,6 +2653,16 @@ export const ar: TranslationResources = {
           reapply: "تطبيق مرة أخرى",
           switchToOfficial: "العودة إلى الرسمي",
           keepCurrent: "إبقاء الإعدادات الحالية",
+          claudeAiLoginTokenSet: "يرسل {{agent}} رمزًا بدلًا من تسجيل دخوله إلى claude.ai",
+          claudeAiLoginTokenSetDetail:
+            "خيار الإبقاء على تسجيل الدخول إلى claude.ai مفعّل، لكن ANTHROPIC_AUTH_TOKEN في {{file}} مُلئ من جديد، لذا يخرج {{agent}} من claude.ai أثناء المرور عبر البوابة. «تطبيق مرة أخرى» يفرغه.",
+          claudeAiLoginTokenEmpty: "يرسل {{agent}} تسجيل دخوله إلى claude.ai بدلًا من رمز البوابة",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN في {{file}} فارغ، لذا يرسل {{agent}} إلى البوابة تسجيل دخوله إلى claude.ai إن وُجد. فعّل الإبقاء على تسجيل الدخول إلى claude.ai لإبقاء ذلك، أو طبّق مرة أخرى لإعادة كتابة الرمز.",
+          claudeAiLoginTokenMissingDetail:
+            "حُذف ANTHROPIC_AUTH_TOKEN من {{file}}، لذا يرسل {{agent}} إلى البوابة تسجيل دخوله إلى claude.ai إن وُجد. فعّل الإبقاء على تسجيل الدخول إلى claude.ai لإبقاء ذلك، أو طبّق مرة أخرى لإعادة كتابة الرمز.",
+          keepClaudeAiLogin: "الإبقاء على تسجيل الدخول إلى claude.ai",
+          stopKeepingClaudeAiLogin: "إيقاف الإبقاء على تسجيل الدخول إلى claude.ai",
           actionFailed: 'تعذّر "{{action}}" لـ {{agent}}',
         },
       },

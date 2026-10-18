@@ -66,10 +66,15 @@ export const ApiEndpointBaseUrlSchema = z.object({
 });
 export type ApiEndpointBaseUrl = z.infer<typeof ApiEndpointBaseUrlSchema>;
 
-/** 每个 Agent 的设置：enabled 为「使用第三方接口」总开关；defaultModelId 是不带接口标识的模型名。 */
+/**
+ * 每个 Agent 的设置：enabled 为「使用第三方接口」总开关；defaultModelId 是不带接口标识的模型名。
+ * keepsClaudeAiLogin 只对 Claude Code 有意义：「保留 claude.ai 登录」（ADR 0012），开着时 CLI 配置里的口令写成空值；
+ * 没有即为关，老 daemon 不发。
+ */
 export const ApiEndpointAgentSettingsSchema = z.object({
   enabled: z.boolean(),
   defaultModelId: z.string().nullable(),
+  keepsClaudeAiLogin: z.boolean().optional(),
 });
 export type ApiEndpointAgentSettings = z.infer<typeof ApiEndpointAgentSettingsSchema>;
 
@@ -173,7 +178,9 @@ export type ApiEndpointHealthIssue = z.infer<typeof ApiEndpointHealthIssueSchema
  * 提供方设置页提示区的一条「设置被改过」，读状态时检测。`code` 是字符串，app 按它翻译，认不出的照 `message`（英文）显示：
  * not_through_gateway（params：file、keys）、config_unparsable（file、detail，settings.json 另有 reason 等，
  * 同 ApiEndpointErrorSchema）、codex_profile_override（file、profile、keys）、
- * settings_has_comments（file：settings.json 带注释或尾随逗号，Claude Code 读不了）。
+ * settings_has_comments（file：settings.json 带注释或尾随逗号，Claude Code 读不了）、
+ * claude_ai_login_token_set（file：保留 claude.ai 登录开着，口令却被填回去）、
+ * claude_ai_login_token_empty（file、how：empty / missing；保留 claude.ai 登录关着，口令却是空的或没了）。
  * 后面会加新的 code；params 的值都是字符串，keys 用 ", " 连接。
  */
 export const ApiEndpointAgentIssueSchema = z.object({
@@ -296,6 +303,7 @@ export type ApiEndpointSetActiveResponse = z.infer<typeof ApiEndpointSetActiveRe
  * 打开时省略 defaultModelId 就保留当前的（还能用的话），否则取最早建的开着接口的第一个已选模型；
  * 关掉时忽略 defaultModelId，从不被拒。失败时 `agent` 是该 Agent 未变的设置。
  * `reapply`（「重新应用」，与 enabled: true 一起）：设置没变也按当前设置重写 CLI 配置，盖掉外部改动；老 daemon 忽略它。
+ * `keepsClaudeAiLogin`：只给 Claude Code，设「保留 claude.ai 登录」，总开关开着、关着都能设；省略即不变，老 daemon 忽略它。
  */
 export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.set_agent_settings.request"),
@@ -304,6 +312,7 @@ export const ApiEndpointSetAgentSettingsRequestSchema = z.object({
   enabled: z.boolean(),
   defaultModelId: z.string().optional(),
   reapply: z.boolean().optional(),
+  keepsClaudeAiLogin: z.boolean().optional(),
 });
 export type ApiEndpointSetAgentSettingsRequest = z.infer<
   typeof ApiEndpointSetAgentSettingsRequestSchema

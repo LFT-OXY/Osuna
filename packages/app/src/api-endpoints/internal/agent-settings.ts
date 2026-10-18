@@ -23,8 +23,13 @@ export interface AgentEndpointsSummary {
   cooling: { name: string; remaining: CooldownRemaining } | null;
 }
 
-/** 提示区一条可以做的处理：重新应用、切回官方、保留当前设置。 */
-export type AgentIssueAction = "reapply" | "switchToOfficial" | "keepCurrent";
+/** 提示区一条可以做的处理：重新应用、切回官方、保留当前设置，以及打开、关掉「保留 claude.ai 登录」。 */
+export type AgentIssueAction =
+  | "reapply"
+  | "switchToOfficial"
+  | "keepCurrent"
+  | "keepClaudeAiLogin"
+  | "stopKeepingClaudeAiLogin";
 
 export type AgentIssueKind =
   | "notThroughGateway"
@@ -35,6 +40,10 @@ export type AgentIssueKind =
   | "cloudSwitchOn"
   // 托管设置的 ANTHROPIC_BASE_URL 不指向中转站。
   | "managedBaseUrl"
+  // 保留 claude.ai 登录开着，口令却被填回去。
+  | "claudeAiLoginTokenSet"
+  // 保留 claude.ai 登录关着，口令却是空的或没了（params.how：empty / missing）。
+  | "claudeAiLoginTokenEmpty"
   // 认不出的 code：照主机给的英文原文显示，不给按钮。
   | "unknown";
 
@@ -55,6 +64,8 @@ const ISSUE_KINDS: Record<string, Exclude<AgentIssueKind, "unknown">> = {
   settings_has_comments: "settingsHasComments",
   cloud_switch_on: "cloudSwitchOn",
   managed_base_url: "managedBaseUrl",
+  claude_ai_login_token_set: "claudeAiLoginTokenSet",
+  claude_ai_login_token_empty: "claudeAiLoginTokenEmpty",
 };
 
 const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
@@ -65,6 +76,9 @@ const ISSUE_ACTIONS: Record<AgentIssueKind, AgentIssueAction[]> = {
   // 写在 Osuna 改不了的地方：重新应用没用，只能切回官方或保留当前设置。
   cloudSwitchOn: ["switchToOfficial", "keepCurrent"],
   managedBaseUrl: ["switchToOfficial", "keepCurrent"],
+  // 照 magpie 的两种不一致：按选项把口令写回该有的样子，或者改选项迁就文件。
+  claudeAiLoginTokenSet: ["reapply", "stopKeepingClaudeAiLogin"],
+  claudeAiLoginTokenEmpty: ["keepClaudeAiLogin", "reapply"],
   unknown: [],
 };
 
@@ -98,6 +112,8 @@ export interface AgentApiEndpointsView {
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
   issues: AgentIssueView[];
+  // 「保留 claude.ai 登录」开着没有（ADR 0012）；只有 Claude Code 有这个选项，别的 Agent 为 null。
+  keepsClaudeAiLogin: boolean | null;
 }
 
 export function selectAgentApiEndpointsView(input: {
@@ -142,5 +158,6 @@ export function selectAgentApiEndpointsView(input: {
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
+    keepsClaudeAiLogin: provider === "claude" ? agent.keepsClaudeAiLogin === true : null,
   };
 }

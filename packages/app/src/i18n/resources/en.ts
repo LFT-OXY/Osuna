@@ -2661,6 +2661,9 @@ export const en = {
         defaultModel: "Default model",
         defaultModelHint: "New terminal sessions and the first new chat start with it.",
         defaultModelPick: "Default model for {{agent}}",
+        keepClaudeAiLogin: "Keep claude.ai sign-in",
+        keepClaudeAiLoginHint:
+          "When on, {{agent}} keeps its claude.ai sign-in while it goes through the gateway, so voice, claude.ai connectors, plan limits in /usage and cloud sessions keep working. Osuna never passes the sign-in on to an API endpoint. Remote Control and ultrareview stay off: {{agent}} has them only on Anthropic's own address.",
         manage: "Manage API endpoints",
         summaryOn_one: "{{count}} on",
         summaryOn_other: "{{count}} on",
@@ -2716,6 +2719,17 @@ export const en = {
           reapply: "Apply again",
           switchToOfficial: "Switch to official",
           keepCurrent: "Keep current settings",
+          claudeAiLoginTokenSet: "{{agent}} sends a token instead of its claude.ai sign-in",
+          claudeAiLoginTokenSetDetail:
+            "Keep claude.ai sign-in is on, but ANTHROPIC_AUTH_TOKEN in {{file}} was filled in again, so {{agent}} is signed out of claude.ai while it goes through the gateway. Apply again empties it.",
+          claudeAiLoginTokenEmpty:
+            "{{agent}} sends its claude.ai sign-in instead of the gateway token",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN in {{file}} is empty, so {{agent}} sends the gateway its claude.ai sign-in, if it has one. Turn on Keep claude.ai sign-in to keep it that way, or apply again to write the token back.",
+          claudeAiLoginTokenMissingDetail:
+            "ANTHROPIC_AUTH_TOKEN was removed from {{file}}, so {{agent}} sends the gateway its claude.ai sign-in, if it has one. Turn on Keep claude.ai sign-in to keep it that way, or apply again to write the token back.",
+          keepClaudeAiLogin: "Keep claude.ai sign-in",
+          stopKeepingClaudeAiLogin: "Stop keeping claude.ai sign-in",
           actionFailed: 'Couldn\'t finish "{{action}}" for {{agent}}',
         },
       },

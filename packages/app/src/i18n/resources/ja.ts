@@ -2623,6 +2623,9 @@ export const ja: TranslationResources = {
         defaultModelHint:
           "ターミナルの新しいセッションと最初の新規チャットはこのモデルで始まります。",
         defaultModelPick: "{{agent}} の既定のモデル",
+        keepClaudeAiLogin: "claude.ai のサインインを維持",
+        keepClaudeAiLoginHint:
+          "オンにすると、{{agent}} はゲートウェイ経由でも claude.ai のサインインを維持するため、音声入力、claude.ai コネクタ、/usage のプラン上限、クラウドセッションがそのまま使えます。Osuna がこのサインインをサードパーティ API に渡すことはありません。Remote Control と ultrareview は引き続き使えません。{{agent}} は Anthropic 自身のアドレスでのみ提供しています。",
         manage: "サードパーティ API を管理",
         summaryOn_one: "{{count}} 件オン",
         summaryOn_other: "{{count}} 件オン",
@@ -2683,6 +2686,18 @@ export const ja: TranslationResources = {
           reapply: "再適用",
           switchToOfficial: "公式に戻す",
           keepCurrent: "現在の設定を保持",
+          claudeAiLoginTokenSet:
+            "{{agent}} が claude.ai のサインインではなくトークンを送っています",
+          claudeAiLoginTokenSetDetail:
+            "claude.ai のサインインを維持がオンですが、{{file}} の ANTHROPIC_AUTH_TOKEN が再び入力されたため、{{agent}} はゲートウェイ経由の間 claude.ai からサインアウトされています。「再適用」で空に戻します。",
+          claudeAiLoginTokenEmpty:
+            "{{agent}} がゲートウェイのトークンではなく claude.ai のサインインを送っています",
+          claudeAiLoginTokenEmptyDetail:
+            "{{file}} の ANTHROPIC_AUTH_TOKEN が空のため、{{agent}} は claude.ai のサインイン（あれば）をゲートウェイに送ります。このままにするには「claude.ai のサインインを維持」をオンにし、トークンを書き戻すには「再適用」を押してください。",
+          claudeAiLoginTokenMissingDetail:
+            "{{file}} から ANTHROPIC_AUTH_TOKEN が削除されたため、{{agent}} は claude.ai のサインイン（あれば）をゲートウェイに送ります。このままにするには「claude.ai のサインインを維持」をオンにし、トークンを書き戻すには「再適用」を押してください。",
+          keepClaudeAiLogin: "claude.ai のサインインを維持",
+          stopKeepingClaudeAiLogin: "claude.ai のサインインを維持しない",
           actionFailed: "{{agent}} の「{{action}}」に失敗しました",
         },
       },

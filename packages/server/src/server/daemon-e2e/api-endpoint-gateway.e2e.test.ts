@@ -587,6 +587,167 @@ function answerResponsesWhole(res: ServerResponse): void {
 const OPENING_DELTA =
   'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n';
 
+/*
+ * claude.ai 登录的 Claude Code（工单 18，照 magpie 的 claude_signin.go、betas.go askedBetas 与 claude_signin_test.go）：
+ * 它把自己的 claude.ai 令牌当口令发来，中转站收下但从不转给接口；上游的 401、说 OAuth 令牌已吊销的 403
+ * 改成 502 并写明哪家接口，免得 Claude Code 以为自己的登录失效。
+ */
+describe("Claude Code signed in to claude.ai", () => {
+  function signedInRequest(body: unknown): RequestInit {
+    return {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLAUDE_AI_TOKEN}`,
+        "user-agent": CLAUDE_UA,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "claude-code-20250219,oauth-2025-04-20, context-1m-2025-08-07",
+      },
+      body: JSON.stringify(body),
+    };
+  }
+  const glmTurn = { model: "glm-4.6", max_tokens: 8, messages: [{ role: "user", content: "hi" }] };
+
+  /** 只有 B 选了 glm-4.6：它的错误直接交给 Claude Code。 */
+  async function startAnswering(answer: { status: number; body: string }) {
+    const upstreamB = await startUpstream();
+    upstreamB.respond = (_request, res) => {
+      res.writeHead(answer.status, { "content-type": "application/json" });
+      res.end(answer.body);
+    };
+    const harness = await start({ upstreamB });
+    return { ...harness, upstreamB };
+  }
+
+  test("the sign-in never reaches the endpoint, nor its oauth- beta; the endpoint's own key does", async () => {
+    const upstream = await startUpstream();
+    const { gateway } = await start({ upstreamA: upstream });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      signedInRequest({ ...glmTurn, model: "kimi-k2" }),
+    );
+
+    expect(response.status).toBe(200);
+    const received = upstream.requests[0]!;
+    expect(JSON.stringify(received.headers)).not.toContain(CLAUDE_AI_TOKEN);
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_A}`);
+    expect(received.headers["x-api-key"]).toBe(KEY_A);
+    expect(received.headers["anthropic-beta"]).toBe("claude-code-20250219,context-1m-2025-08-07");
+  });
+
+  test("an endpoint's 401 is told as a 502 naming the endpoint, x-api-key said as API key", async () => {
+    const { gateway } = await startAnswering({
+      status: 401,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "authentication_error", message: "invalid x-api-key" },
+      }),
+    });
+
+    const response = await fetch(`${gateway}/v1/messages`, signedInRequest(glmTurn));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: "Relay B refused Osuna's credential (HTTP 401): invalid API key",
+      },
+    });
+  });
+
+  test("a 403 saying the OAuth token was revoked is a 502 too; any other 403 keeps its status", async () => {
+    const revoked = await startAnswering({
+      status: 403,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "permission_error", message: "OAuth token has been revoked" },
+      }),
+    });
+    const told = await fetch(`${revoked.gateway}/v1/messages`, signedInRequest(glmTurn));
+    expect(told.status).toBe(502);
+    expect(await told.json()).toEqual({
+      type: "error",
+      error: {
+        type: "api_error",
+        message: "Relay B refused Osuna's credential (HTTP 403): OAuth token has been revoked",
+      },
+    });
+
+    const other = await startAnswering({
+      status: 403,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "permission_error", message: "this x-api-key has no access to glm-4.6" },
+      }),
+    });
+    const kept = await fetch(`${other.gateway}/v1/messages`, signedInRequest(glmTurn));
+    expect(kept.status).toBe(403);
+    const keptBody = (await kept.json()) as { error: { message: string } };
+    expect(keptBody.error.message).toBe("Relay B: this API key has no access to glm-4.6");
+  });
+
+  test("other errors keep their status with x-api-key said as API key; a request with the gateway's token is answered as before", async () => {
+    const { gateway } = await startAnswering({
+      status: 400,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", message: "X-Api-Key header is malformed" },
+      }),
+    });
+
+    const signedIn = await fetch(`${gateway}/v1/messages`, signedInRequest(glmTurn));
+    expect(signedIn.status).toBe(400);
+    expect(((await signedIn.json()) as { error: { message: string } }).error.message).toBe(
+      "Relay B: API key header is malformed",
+    );
+
+    const withToken = await fetch(`${gateway}/v1/messages`, claudeRequest(glmTurn));
+    expect(withToken.status).toBe(400);
+    expect(((await withToken.json()) as { error: { message: string } }).error.message).toBe(
+      "Relay B: X-Api-Key header is malformed",
+    );
+  });
+
+  test("with the gateway's token an endpoint's 401 stays a 401", async () => {
+    const { gateway } = await startAnswering({
+      status: 401,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "authentication_error", message: "invalid x-api-key" },
+      }),
+    });
+
+    const response = await fetch(`${gateway}/v1/messages`, claudeRequest(glmTurn));
+
+    expect(response.status).toBe(401);
+  });
+
+  test("a stream's error after its 200 says API key, not x-api-key", async () => {
+    const upstreamB = await startUpstream();
+    upstreamB.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write('event: message_start\ndata: {"type":"message_start"}\n\n');
+      res.write(OPENING_DELTA);
+      res.end(
+        'event: error\ndata: {"type":"error","error":{"type":"authentication_error","message":"x-api-key expired"}}\n\n',
+      );
+    };
+    const { gateway } = await start({ upstreamB });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      signedInRequest({ ...glmTurn, stream: true }),
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain('"message":"API key expired"');
+    expect(text.toLowerCase()).not.toContain("x-api-key");
+  });
+});
+
 describe("passing requests through to an endpoint that speaks the agent's format", () => {
   test("Claude requests reach the Anthropic address unchanged apart from the model and auth, and stream back", async () => {
     const upstream = await startUpstream();

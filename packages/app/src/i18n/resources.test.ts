@@ -135,6 +135,8 @@ const zhCNRetiredTermPattern =
 const zhCNRetiredTermExemptKeys = [
   ...zhCNEnglishAllowlist.placeholders,
   "settings.project.metadata.commitMessagePlaceholder",
+  // Claude Code 的功能名 Remote Control 照它自己的叫法。
+  "settings.apiEndpoints.agent.keepClaudeAiLoginHint",
 ];
 
 function findRetiredZhCNTerms(): string[] {

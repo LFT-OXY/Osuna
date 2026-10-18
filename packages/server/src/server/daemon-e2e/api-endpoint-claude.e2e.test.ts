@@ -630,6 +630,126 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
+  describe("keeping Claude Code's claude.ai sign-in (ADR 0012)", () => {
+    async function switchOn(): Promise<string> {
+      const endpointId = await createEndpoint();
+      await client.apiEndpointSetActive("claude", endpointId);
+      return JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN as string;
+    }
+    function keep(keepsClaudeAiLogin: boolean, enabled = true) {
+      return client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled,
+        keepsClaudeAiLogin,
+      });
+    }
+    async function writtenToken(): Promise<unknown> {
+      return JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_AUTH_TOKEN;
+    }
+
+    test("on writes the token empty, off writes it back, and switching off restores the file", async () => {
+      const token = await switchOn();
+
+      const kept = await keep(true);
+      expect(kept).toMatchObject({
+        error: null,
+        agent: { enabled: true, keepsClaudeAiLogin: true },
+      });
+      expect(await writtenToken()).toBe("");
+      expect((await client.apiEndpointList("claude")).agents?.claude?.keepsClaudeAiLogin).toBe(
+        true,
+      );
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+
+      expect(await keep(false)).toMatchObject({ error: null });
+      expect(await writtenToken()).toBe(token);
+
+      await keep(true);
+      expect(
+        await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false }),
+      ).toMatchObject({ error: null, agent: { enabled: false, keepsClaudeAiLogin: true } });
+      expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+    });
+
+    test("the choice is kept while switched off and applies when switched on again", async () => {
+      const endpointId = await createEndpoint();
+
+      expect(await keep(true, false)).toMatchObject({
+        error: null,
+        agent: { enabled: false, keepsClaudeAiLogin: true },
+      });
+      expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+
+      await client.apiEndpointSetActive("claude", endpointId);
+      expect(await writtenToken()).toBe("");
+    });
+
+    test("a token typed back in while it is on is reported; Re-apply empties it again", async () => {
+      const token = await switchOn();
+      await keep(true);
+      const kept = await readFile(settingsPath, "utf8");
+      await writeFile(
+        settingsPath,
+        kept.replace('"ANTHROPIC_AUTH_TOKEN": ""', `"ANTHROPIC_AUTH_TOKEN": "${token}"`),
+      );
+
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "claude_ai_login_token_set",
+          params: { file: settingsPath },
+          message: expect.stringContaining("ANTHROPIC_AUTH_TOKEN"),
+        },
+      ]);
+
+      await client.apiEndpointSetAgentSettings({
+        provider: "claude",
+        enabled: true,
+        reapply: true,
+      });
+      expect(await readFile(settingsPath, "utf8")).toBe(kept);
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
+
+    test("an empty or missing token while it is off is reported, not as leaving the gateway", async () => {
+      const token = await switchOn();
+      const switched = await readFile(settingsPath, "utf8");
+
+      await writeFile(settingsPath, switched.replace(`"${token}"`, '""'));
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "claude_ai_login_token_empty",
+          params: { file: settingsPath, how: "empty" },
+          message: expect.stringContaining("claude.ai"),
+        },
+      ]);
+
+      const parsed = JSON.parse(switched) as { env: Record<string, string> };
+      delete parsed.env.ANTHROPIC_AUTH_TOKEN;
+      await writeFile(settingsPath, JSON.stringify(parsed, null, 2));
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([
+        {
+          code: "claude_ai_login_token_empty",
+          params: { file: settingsPath, how: "missing" },
+          message: expect.stringContaining("claude.ai"),
+        },
+      ]);
+
+      // 「保留 claude.ai 登录」打开后就是要的样子，不再提示。
+      await keep(true);
+      expect(await writtenToken()).toBe("");
+      expect((await client.apiEndpointList("claude")).agentIssues?.claude).toEqual([]);
+    });
+
+    test("is refused for Codex", async () => {
+      const refused = await client.apiEndpointSetAgentSettings({
+        provider: "codex",
+        enabled: false,
+        keepsClaudeAiLogin: true,
+      });
+      expect(refused.error).toMatchObject({ code: "invalid_input" });
+    });
+  });
+
   describe("settings changed outside Osuna (agentIssues)", () => {
     async function switchOnThenRepoint(): Promise<{ switched: string; modified: string }> {
       const endpointId = await createEndpoint();

@@ -107,8 +107,8 @@ export function settleAgentSettings(state: ApiEndpointState): ApiEndpointState {
     if (models.some((model) => model.id === agent.defaultModelId)) continue;
     const first = models[0];
     agents[provider] = first
-      ? { enabled: true, defaultModelId: first.id }
-      : { enabled: false, defaultModelId: agent.defaultModelId };
+      ? { ...agent, enabled: true, defaultModelId: first.id }
+      : { ...agent, enabled: false };
   }
   return { ...state, agents };
 }

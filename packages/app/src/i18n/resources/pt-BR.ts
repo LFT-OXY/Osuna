@@ -2637,6 +2637,9 @@ export const ptBR: TranslationResources = {
         defaultModel: "Modelo padrão",
         defaultModelHint: "Novas sessões de terminal e o primeiro chat novo começam com ele.",
         defaultModelPick: "Modelo padrão do {{agent}}",
+        keepClaudeAiLogin: "Manter o login do claude.ai",
+        keepClaudeAiLoginHint:
+          "Quando ativado, {{agent}} mantém o login do claude.ai enquanto passa pelo gateway, então voz, conectores do claude.ai, limites do plano em /usage e sessões na nuvem continuam funcionando. O Osuna nunca repassa o login a um endpoint de API. Remote Control e ultrareview continuam indisponíveis: {{agent}} só os oferece no endereço da própria Anthropic.",
         manage: "Gerenciar endpoints de API",
         summaryOn_one: "{{count}} ativo",
         summaryOn_other: "{{count}} ativos",
@@ -2694,6 +2697,17 @@ export const ptBR: TranslationResources = {
           reapply: "Aplicar de novo",
           switchToOfficial: "Voltar ao oficial",
           keepCurrent: "Manter configurações atuais",
+          claudeAiLoginTokenSet: "{{agent}} envia um token em vez do login do claude.ai",
+          claudeAiLoginTokenSetDetail:
+            "Manter o login do claude.ai está ativado, mas ANTHROPIC_AUTH_TOKEN em {{file}} foi preenchido de novo, então {{agent}} sai do claude.ai enquanto passa pelo gateway. Aplicar de novo o esvazia.",
+          claudeAiLoginTokenEmpty:
+            "{{agent}} envia o login do claude.ai em vez do token do gateway",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN em {{file}} está vazio, então {{agent}} envia ao gateway o login do claude.ai, se tiver. Ative Manter o login do claude.ai para deixar assim, ou aplique de novo para escrever o token de volta.",
+          claudeAiLoginTokenMissingDetail:
+            "ANTHROPIC_AUTH_TOKEN foi removido de {{file}}, então {{agent}} envia ao gateway o login do claude.ai, se tiver. Ative Manter o login do claude.ai para deixar assim, ou aplique de novo para escrever o token de volta.",
+          keepClaudeAiLogin: "Manter o login do claude.ai",
+          stopKeepingClaudeAiLogin: "Parar de manter o login do claude.ai",
           actionFailed: 'Não foi possível "{{action}}" para o {{agent}}',
         },
       },

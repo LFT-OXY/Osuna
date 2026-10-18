@@ -2652,6 +2652,9 @@ export const fr: TranslationResources = {
         defaultModelHint:
           "Les nouvelles sessions du terminal et la première nouvelle discussion démarrent avec lui.",
         defaultModelPick: "Modèle par défaut de {{agent}}",
+        keepClaudeAiLogin: "Garder la connexion claude.ai",
+        keepClaudeAiLoginHint:
+          "Activé, {{agent}} garde sa connexion claude.ai quand il passe par la passerelle : la voix, les connecteurs claude.ai, les limites du forfait dans /usage et les sessions cloud continuent de fonctionner. Osuna ne transmet jamais cette connexion à un point d'accès API. Remote Control et ultrareview restent indisponibles : {{agent}} ne les propose que sur l'adresse d'Anthropic.",
         manage: "Gérer les points d'accès API",
         summaryOn_one: "{{count}} activé",
         summaryOn_other: "{{count}} activés",
@@ -2714,6 +2717,17 @@ export const fr: TranslationResources = {
           reapply: "Réappliquer",
           switchToOfficial: "Revenir à l'officiel",
           keepCurrent: "Garder les réglages actuels",
+          claudeAiLoginTokenSet: "{{agent}} envoie un jeton au lieu de sa connexion claude.ai",
+          claudeAiLoginTokenSetDetail:
+            "Garder la connexion claude.ai est activé, mais ANTHROPIC_AUTH_TOKEN a été rempli à nouveau dans {{file}} : {{agent}} est déconnecté de claude.ai quand il passe par la passerelle. Réappliquer le vide.",
+          claudeAiLoginTokenEmpty:
+            "{{agent}} envoie sa connexion claude.ai au lieu du jeton de la passerelle",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN est vide dans {{file}} : {{agent}} envoie à la passerelle sa connexion claude.ai, s'il en a une. Activez Garder la connexion claude.ai pour garder ce comportement, ou réappliquez pour réécrire le jeton.",
+          claudeAiLoginTokenMissingDetail:
+            "ANTHROPIC_AUTH_TOKEN a été supprimé de {{file}} : {{agent}} envoie à la passerelle sa connexion claude.ai, s'il en a une. Activez Garder la connexion claude.ai pour garder ce comportement, ou réappliquez pour réécrire le jeton.",
+          keepClaudeAiLogin: "Garder la connexion claude.ai",
+          stopKeepingClaudeAiLogin: "Ne plus garder la connexion claude.ai",
           actionFailed: "Impossible de « {{action}} » pour {{agent}}",
         },
       },

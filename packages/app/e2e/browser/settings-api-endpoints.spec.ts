@@ -658,6 +658,58 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     await expect(section.getByTestId("agent-api-endpoints-switch")).toBeDisabled();
   });
 
+  test("Keep claude.ai sign-in says what it changes, a failed save stays in place, and saving writes the token empty", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    expect(
+      (await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true })).error,
+    ).toBeNull();
+    const gatewayToken = (await readClaudeSettings()).env?.ANTHROPIC_AUTH_TOKEN;
+    expect(gatewayToken).toBeTruthy();
+    const claudeToken = async () => (await readClaudeSettings()).env?.ANTHROPIC_AUTH_TOKEN;
+    await openClaudeCodePage(page);
+    const section = agentSection(page);
+    const toggle = section.getByRole("switch", { name: "Keep claude.ai sign-in" });
+
+    await test.step("off: what works and what still doesn't is written next to the switch", async () => {
+      await expect(toggle).not.toBeChecked();
+      await expect(section.getByTestId("agent-api-endpoints-keep-claude-ai-login-hint")).toHaveText(
+        "When on, Claude keeps its claude.ai sign-in while it goes through the gateway, so voice, claude.ai connectors, plan limits in /usage and cloud sessions keep working. Osuna never passes the sign-in on to an API endpoint. Remote Control and ultrareview stay off: Claude has them only on Anthropic's own address.",
+      );
+    });
+
+    await test.step("a failed save stays in place and leaves the token", async () => {
+      const claudeDir = path.join(cliHome, "claude");
+      await chmod(claudeDir, 0o500);
+      try {
+        await toggle.click();
+        await expect(section.getByTestId("agent-api-endpoints-error")).toContainText(
+          "Couldn't change the API endpoint settings for Claude",
+        );
+      } finally {
+        await chmod(claudeDir, 0o700);
+      }
+      await expect(toggle).not.toBeChecked();
+      expect(await claudeToken()).toBe(gatewayToken);
+      await section.getByRole("button", { name: "Dismiss" }).click();
+      await expect(section.getByTestId("agent-api-endpoints-error")).toHaveCount(0);
+    });
+
+    await test.step("on: the token is written empty; off: it is written back", async () => {
+      await toggle.click();
+      await expect(toggle).toBeChecked();
+      await expect.poll(claudeToken).toBe("");
+      await toggle.click();
+      await expect(toggle).not.toBeChecked();
+      await expect.poll(claudeToken).toBe(gatewayToken);
+    });
+  });
+
   test("the model selector groups models by endpoint and keeps the endpoint picked", async ({
     page,
   }) => {

@@ -202,6 +202,9 @@ export class ApiEndpointSession {
         enabled: request.enabled,
         ...(request.defaultModelId !== undefined ? { defaultModelId: request.defaultModelId } : {}),
         ...(request.reapply !== undefined ? { reapply: request.reapply } : {}),
+        ...(request.keepsClaudeAiLogin !== undefined
+          ? { keepsClaudeAiLogin: request.keepsClaudeAiLogin }
+          : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.set_agent_settings.response",

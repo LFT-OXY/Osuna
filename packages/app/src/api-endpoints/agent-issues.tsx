@@ -162,6 +162,8 @@ const ACTION_LABEL_KEYS: Record<AgentIssueAction, string> = {
   reapply: "settings.apiEndpoints.agent.issues.reapply",
   switchToOfficial: "settings.apiEndpoints.agent.issues.switchToOfficial",
   keepCurrent: "settings.apiEndpoints.agent.issues.keepCurrent",
+  keepClaudeAiLogin: "settings.apiEndpoints.agent.issues.keepClaudeAiLogin",
+  stopKeepingClaudeAiLogin: "settings.apiEndpoints.agent.issues.stopKeepingClaudeAiLogin",
 };
 
 function IssueActionButton({
@@ -269,6 +271,28 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           agent: providerLabel,
         }),
       };
+    case "claudeAiLoginTokenSet":
+      return {
+        title: t("settings.apiEndpoints.agent.issues.claudeAiLoginTokenSet", {
+          agent: providerLabel,
+        }),
+        description: t("settings.apiEndpoints.agent.issues.claudeAiLoginTokenSetDetail", {
+          agent: providerLabel,
+          file: shortenPath(params.file),
+        }),
+      };
+    case "claudeAiLoginTokenEmpty": {
+      const detailKey =
+        params.how === "missing"
+          ? "settings.apiEndpoints.agent.issues.claudeAiLoginTokenMissingDetail"
+          : "settings.apiEndpoints.agent.issues.claudeAiLoginTokenEmptyDetail";
+      return {
+        title: t("settings.apiEndpoints.agent.issues.claudeAiLoginTokenEmpty", {
+          agent: providerLabel,
+        }),
+        description: t(detailKey, { agent: providerLabel, file: shortenPath(params.file) }),
+      };
+    }
     case "codexProfileOverride":
       return {
         title: t("settings.apiEndpoints.agent.issues.codexProfileOverride", {

@@ -43,10 +43,10 @@ interface ActionFailure {
   message: string;
 }
 
-/** 「使用第三方接口」总开关与默认模型的一次修改。 */
+/** 「使用第三方接口」总开关、默认模型与「保留 claude.ai 登录」的一次修改。 */
 export type AgentSettingsChange = Pick<
   ApiEndpointSetAgentSettingsRequest,
-  "enabled" | "defaultModelId"
+  "enabled" | "defaultModelId" | "keepsClaudeAiLogin"
 >;
 
 /** 提示区里正在做的处理，或做失败的那一次。 */
@@ -302,7 +302,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
 
 type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
 
-/** 重新应用 = 开着、按当前设置重写；切回官方 = 关开关并按接管记录还原；保留当前设置是单独的 RPC。 */
+/**
+ * 重新应用 = 开着、按当前设置重写；切回官方 = 关开关并按接管记录还原；保留当前设置是单独的 RPC；
+ * 「保留 claude.ai 登录」的两种处理只改这个选项，CLI 配置随之重写（提示只在开关开着时出现）。
+ */
 function sendIssueAction(
   client: HostClient,
   provider: string,
@@ -315,5 +318,17 @@ function sendIssueAction(
       return client.apiEndpointSetAgentSettings({ provider, enabled: false });
     case "keepCurrent":
       return client.apiEndpointKeepCurrentSettings(provider);
+    case "keepClaudeAiLogin":
+      return client.apiEndpointSetAgentSettings({
+        provider,
+        enabled: true,
+        keepsClaudeAiLogin: true,
+      });
+    case "stopKeepingClaudeAiLogin":
+      return client.apiEndpointSetAgentSettings({
+        provider,
+        enabled: true,
+        keepsClaudeAiLogin: false,
+      });
   }
 }

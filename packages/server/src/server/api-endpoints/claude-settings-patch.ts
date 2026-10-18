@@ -425,8 +425,13 @@ export type ClaudeSettingsInspection =
       baseUrl: string | null;
       // 带注释或尾随逗号时为 false：Claude Code 读不了，整份跳过。文件不存在算读得了。
       isReadableByClaudeCode: boolean;
+      // env.ANTHROPIC_AUTH_TOKEN 是什么样：保留 claude.ai 登录的两种不一致要看它（ADR 0012）。
+      authToken: ClaudeAuthTokenState;
     }
   | ClaudeSettingsUnparsable;
+
+/** 口令没写（missing）、空值（empty，Claude Code 当作没设）或有值（set）。 */
+export type ClaudeAuthTokenState = "missing" | "empty" | "set";
 
 const WEB_SEARCH_DENY_LABEL = `permissions.deny "${WEB_SEARCH_RULE}"`;
 
@@ -452,7 +457,14 @@ export function inspectClaudeSettings(input: {
     modifiedKeys,
     baseUrl: baseUrl === "" ? null : baseUrl,
     isReadableByClaudeCode,
+    authToken: authTokenState(settings.env),
   };
+}
+
+function authTokenState(env: Record<string, unknown> | undefined): ClaudeAuthTokenState {
+  if (env === undefined || !Object.hasOwn(env, "ANTHROPIC_AUTH_TOKEN")) return "missing";
+  // Claude Code 按真值判断口令：空串等于没设。
+  return env.ANTHROPIC_AUTH_TOKEN === "" ? "empty" : "set";
 }
 
 function modifiedOwnedKeys(settings: ParsedSettings, takeover: ClaudeSettingsTakeover): string[] {

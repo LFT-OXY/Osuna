@@ -2633,6 +2633,9 @@ export const ru: TranslationResources = {
         defaultModel: "Модель по умолчанию",
         defaultModelHint: "С неё начинаются новые сессии терминала и первый новый чат.",
         defaultModelPick: "Модель по умолчанию для {{agent}}",
+        keepClaudeAiLogin: "Сохранять вход в claude.ai",
+        keepClaudeAiLoginHint:
+          "Если включено, {{agent}} сохраняет вход в claude.ai, работая через шлюз, поэтому голосовой ввод, коннекторы claude.ai, лимиты тарифа в /usage и облачные сессии продолжают работать. Osuna никогда не передаёт этот вход стороннему API. Remote Control и ultrareview по-прежнему недоступны: {{agent}} предоставляет их только на собственном адресе Anthropic.",
         manage: "Управлять сторонними API",
         summaryOn_one: "{{count}} включён",
         summaryOn_other: "{{count}} включено",
@@ -2692,6 +2695,16 @@ export const ru: TranslationResources = {
           reapply: "Применить снова",
           switchToOfficial: "Вернуться к официальному",
           keepCurrent: "Оставить текущие настройки",
+          claudeAiLoginTokenSet: "{{agent}} отправляет токен вместо входа в claude.ai",
+          claudeAiLoginTokenSetDetail:
+            "«Сохранять вход в claude.ai» включено, но ANTHROPIC_AUTH_TOKEN в {{file}} снова заполнен, поэтому {{agent}} выходит из claude.ai, пока работает через шлюз. «Применить снова» очистит его.",
+          claudeAiLoginTokenEmpty: "{{agent}} отправляет вход в claude.ai вместо токена шлюза",
+          claudeAiLoginTokenEmptyDetail:
+            "ANTHROPIC_AUTH_TOKEN в {{file}} пуст, поэтому {{agent}} отправляет шлюзу свой вход в claude.ai, если он есть. Включите «Сохранять вход в claude.ai», чтобы так и оставить, или примените снова, чтобы вернуть токен.",
+          claudeAiLoginTokenMissingDetail:
+            "ANTHROPIC_AUTH_TOKEN удалён из {{file}}, поэтому {{agent}} отправляет шлюзу свой вход в claude.ai, если он есть. Включите «Сохранять вход в claude.ai», чтобы так и оставить, или примените снова, чтобы вернуть токен.",
+          keepClaudeAiLogin: "Сохранять вход в claude.ai",
+          stopKeepingClaudeAiLogin: "Не сохранять вход в claude.ai",
           actionFailed: "Не удалось «{{action}}» для {{agent}}",
         },
       },

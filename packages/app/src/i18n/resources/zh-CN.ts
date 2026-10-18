@@ -2623,6 +2623,9 @@ export const zhCN: TranslationResources = {
         defaultModel: "默认模型",
         defaultModelHint: "终端新会话、第一次新建对话从它开始",
         defaultModelPick: "{{agent}} 的默认模型",
+        keepClaudeAiLogin: "保留 claude.ai 登录",
+        keepClaudeAiLoginHint:
+          "打开后，{{agent}} 走中转站时仍用 claude.ai 登录，语音、claude.ai 连接器、/usage 里的套餐额度和云端会话照常能用；Osuna 从不把这份登录转给第三方接口。Remote Control 和 ultrareview 仍不能用：{{agent}} 只在 Anthropic 自己的地址上提供它们。",
         manage: "管理第三方接口",
         summaryOn_one: "{{count}} 个开着",
         summaryOn_other: "{{count}} 个开着",
@@ -2674,6 +2677,16 @@ export const zhCN: TranslationResources = {
           reapply: "重新应用",
           switchToOfficial: "切回官方",
           keepCurrent: "保留当前设置",
+          claudeAiLoginTokenSet: "{{agent}} 发的是口令，不是 claude.ai 登录",
+          claudeAiLoginTokenSetDetail:
+            "「保留 claude.ai 登录」开着，但 {{file}} 里的 ANTHROPIC_AUTH_TOKEN 又被填了回去，{{agent}} 走中转站时就退出了 claude.ai 登录。点「重新应用」会把它清空。",
+          claudeAiLoginTokenEmpty: "{{agent}} 发的是 claude.ai 登录，不是中转站口令",
+          claudeAiLoginTokenEmptyDetail:
+            "{{file}} 里的 ANTHROPIC_AUTH_TOKEN 是空的，{{agent}} 于是把 claude.ai 登录（如果有）发给中转站。想保持这样就打开「保留 claude.ai 登录」，或点「重新应用」把口令写回去。",
+          claudeAiLoginTokenMissingDetail:
+            "{{file}} 里的 ANTHROPIC_AUTH_TOKEN 被删掉了，{{agent}} 于是把 claude.ai 登录（如果有）发给中转站。想保持这样就打开「保留 claude.ai 登录」，或点「重新应用」把口令写回去。",
+          keepClaudeAiLogin: "保留 claude.ai 登录",
+          stopKeepingClaudeAiLogin: "不再保留 claude.ai 登录",
           actionFailed: "没能为 {{agent}} {{action}}",
         },
       },

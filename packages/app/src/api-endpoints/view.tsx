@@ -87,6 +87,13 @@ function AgentApiEndpoints({
     (defaultModelId: string) => setAgentSettings(provider, { enabled: true, defaultModelId }),
     [provider, setAgentSettings],
   );
+  // 总开关开着、关着都能设，开关保持原样。
+  const isEnabled = state.status === "ready" && state.agents[provider]?.enabled === true;
+  const handleKeepClaudeAiLoginChange = useCallback(
+    (keepsClaudeAiLogin: boolean) =>
+      setAgentSettings(provider, { enabled: isEnabled, keepsClaudeAiLogin }),
+    [isEnabled, provider, setAgentSettings],
+  );
   const handleIssueAction = useCallback(
     (action: AgentIssueAction) => runIssueAction(provider, action),
     [provider, runIssueAction],
@@ -131,6 +138,8 @@ function AgentApiEndpoints({
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onManage={handleManage}
+      // COMPAT(apiEndpointCliWiring): 老主机不认这个选项。
+      onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}
       issueActions={issueActions}
     />
   );

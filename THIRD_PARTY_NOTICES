@@ -591,6 +591,21 @@ codexStaleCache in internal/agent/codex.go:
   packages/server/src/server/api-endpoints/gateway/chatgpt-backend.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-chatgpt-backend.e2e.test.ts
 
+What Claude Code signed in to claude.ai is told when an endpoint refuses the
+gateway's key: a 401, or a 403 saying the OAuth token was revoked, told as a
+502 naming the endpoint, x-api-key said as API key in any other error and in a
+stream's error event (claudeSignIn, keepsSignIn, signInWriter and
+refusedMessage in internal/gateway/claude_signin.go), and the sign-in's oauth-
+beta never passed on (askedBetas in internal/gateway/betas.go), and the
+settings page's two warnings when the token doesn't match the Keep claude.ai
+sign-in option (Check in internal/agent/claude.go). Their tests follow
+claude_signin_test.go:
+
+  packages/server/src/server/api-endpoints/gateway/claude-signin.ts
+  packages/server/src/server/api-endpoints/gateway/claude-code-fields.ts
+  packages/server/src/server/api-endpoints/service.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

@@ -1,5 +1,5 @@
 // 计费行、自动模式审查 beta 与 advisor 工具的改法移植自 magpie（https://github.com/yetone/magpie，internal/gateway/billing_line.go 的 withoutBillingLine、
-// claude_subscription.go 的 billingHeader，automode.go 的 serverReview，advisor.go 的 advisorTools、advisorModel、advisorGoneIn、withoutAdvisor、advisorRefName）
+// claude_subscription.go 的 billingHeader，automode.go 的 serverReview，betas.go 的 askedBetas，advisor.go 的 advisorTools、advisorModel、advisorGoneIn、withoutAdvisor、advisorRefName）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { StoredApiEndpoint } from "../store.js";
@@ -24,6 +24,8 @@ const BILLING_HEADER = /^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*
 
 // Claude Code 让 API 审查自动模式动作时带的 beta（dangerous-tool-use-2026-09-03）。
 const REVIEW_BETA = "dangerous-tool-use-";
+// claude.ai 登录的 Claude Code 带的登录 beta（oauth-2025-04-20）：说的是一个从不离开中转站的凭证。
+const SIGN_IN_BETA = "oauth-";
 
 const ADVISOR_TOOL = "advisor_";
 // Claude Code 写在对话里的 advisor 说明的开头，与关掉 advisor 后它自己说的话。
@@ -65,17 +67,23 @@ export function withoutBillingLine(body: Body): Body {
 }
 
 /**
- * anthropic-beta 去掉自动模式审查的 beta：只有 Claude 会审查，别家看到不认识的 beta 可能整个请求都拒（magpie serverReview）。
- * 没有这个 beta 时原样交回；只剩它时为 null（这个请求头不发）。
+ * 转给上游的 anthropic-beta：claude.ai 登录的 beta 一律去掉，接口收到的就像带 Osuna 口令的 Claude Code 发的那样
+ * （magpie askedBetas）；发给非 Claude 模型时再去掉自动模式审查的 beta：只有 Claude 会审查，别家看到不认识的 beta
+ * 可能整个请求都拒（magpie serverReview）。没有要去掉的原样交回；什么都不剩时为 null（这个请求头不发）。
  */
-export function withoutReviewBeta(value: string | string[]): string | string[] | null {
-  const betas = [value]
+export function fittedBetas(input: {
+  value: string | string[];
+  dropsReviewBeta: boolean;
+}): string | string[] | null {
+  const named = [input.value]
     .flat()
     .flatMap((line) => line.split(","))
-    .map((beta) => beta.trim());
-  const named = betas.filter((beta) => beta !== "");
-  const kept = named.filter((beta) => !beta.startsWith(REVIEW_BETA));
-  if (kept.length === named.length) return value;
+    .map((beta) => beta.trim())
+    .filter((beta) => beta !== "");
+  const isDropped = (beta: string) =>
+    beta.startsWith(SIGN_IN_BETA) || (input.dropsReviewBeta && beta.startsWith(REVIEW_BETA));
+  const kept = named.filter((beta) => !isDropped(beta));
+  if (kept.length === named.length) return input.value;
   if (kept.length === 0) return null;
   return kept.join(",");
 }

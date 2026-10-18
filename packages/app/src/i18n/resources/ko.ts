@@ -2611,6 +2611,9 @@ export const ko: TranslationResources = {
         defaultModel: "기본 모델",
         defaultModelHint: "터미널의 새 세션과 첫 새 채팅이 이 모델로 시작합니다.",
         defaultModelPick: "{{agent}} 기본 모델",
+        keepClaudeAiLogin: "claude.ai 로그인 유지",
+        keepClaudeAiLoginHint:
+          "켜면 {{agent}}가 게이트웨이를 거치는 동안에도 claude.ai 로그인을 유지하므로 음성, claude.ai 커넥터, /usage의 요금제 한도, 클라우드 세션을 그대로 쓸 수 있습니다. Osuna는 이 로그인을 서드파티 API에 넘기지 않습니다. Remote Control과 ultrareview는 계속 쓸 수 없습니다. {{agent}}는 Anthropic 자체 주소에서만 이를 제공합니다.",
         manage: "서드파티 API 관리",
         summaryOn_one: "{{count}}개 켜짐",
         summaryOn_other: "{{count}}개 켜짐",
@@ -2668,6 +2671,17 @@ export const ko: TranslationResources = {
           reapply: "다시 적용",
           switchToOfficial: "공식으로 전환",
           keepCurrent: "현재 설정 유지",
+          claudeAiLoginTokenSet: "{{agent}}가 claude.ai 로그인 대신 토큰을 보내고 있습니다",
+          claudeAiLoginTokenSetDetail:
+            "claude.ai 로그인 유지가 켜져 있지만 {{file}}의 ANTHROPIC_AUTH_TOKEN이 다시 채워져, {{agent}}가 게이트웨이를 거치는 동안 claude.ai에서 로그아웃됩니다. 다시 적용하면 비웁니다.",
+          claudeAiLoginTokenEmpty:
+            "{{agent}}가 게이트웨이 토큰 대신 claude.ai 로그인을 보내고 있습니다",
+          claudeAiLoginTokenEmptyDetail:
+            "{{file}}의 ANTHROPIC_AUTH_TOKEN이 비어 있어 {{agent}}가 claude.ai 로그인(있다면)을 게이트웨이에 보냅니다. 이대로 두려면 claude.ai 로그인 유지를 켜고, 토큰을 다시 쓰려면 다시 적용하세요.",
+          claudeAiLoginTokenMissingDetail:
+            "{{file}}에서 ANTHROPIC_AUTH_TOKEN이 삭제되어 {{agent}}가 claude.ai 로그인(있다면)을 게이트웨이에 보냅니다. 이대로 두려면 claude.ai 로그인 유지를 켜고, 토큰을 다시 쓰려면 다시 적용하세요.",
+          keepClaudeAiLogin: "claude.ai 로그인 유지",
+          stopKeepingClaudeAiLogin: "claude.ai 로그인 유지 안 함",
           actionFailed: '{{agent}}의 "{{action}}"을(를) 하지 못했습니다',
         },
       },

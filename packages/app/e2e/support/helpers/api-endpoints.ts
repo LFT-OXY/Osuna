@@ -179,6 +179,7 @@ interface ApiEndpointSeedClient {
     provider: string;
     enabled: boolean;
     defaultModelId?: string;
+    keepsClaudeAiLogin?: boolean;
   }): Promise<ApiEndpointSetAgentSettingsResponse["payload"]>;
   apiEndpointFetchModels(options: {
     provider: string;
@@ -218,6 +219,12 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
   for (const provider of ["claude", "codex"]) {
     await client.apiEndpointSetAgentSettings({ provider, enabled: false });
   }
+  // 「保留 claude.ai 登录」关着也记着，不清掉会带进下一个用例。
+  await client.apiEndpointSetAgentSettings({
+    provider: "claude",
+    enabled: false,
+    keepsClaudeAiLogin: false,
+  });
   const list = await client.apiEndpointList("claude");
   for (const endpoint of list.endpoints) {
     await client.apiEndpointDelete("claude", endpoint.id);

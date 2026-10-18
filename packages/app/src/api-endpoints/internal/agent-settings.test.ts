@@ -239,4 +239,57 @@ describe("the settings issues on an agent page", () => {
   it("has no issues when the host sends none", () => {
     expect(view({ endpoints: [] }).issues).toEqual([]);
   });
+
+  it("offers to apply again or change Keep claude.ai sign-in when the token doesn't match it", () => {
+    const result = view({
+      endpoints: [],
+      agentIssues: {
+        claude: [
+          { code: "claude_ai_login_token_set", params: { file: "f" }, message: "set" },
+          {
+            code: "claude_ai_login_token_empty",
+            params: { file: "f", how: "missing" },
+            message: "empty",
+          },
+        ],
+      },
+    });
+    expect(result.issues.map((item) => [item.kind, item.actions, item.hasFixSteps])).toEqual([
+      ["claudeAiLoginTokenSet", ["reapply", "stopKeepingClaudeAiLogin"], false],
+      ["claudeAiLoginTokenEmpty", ["keepClaudeAiLogin", "reapply"], false],
+    ]);
+  });
+});
+
+describe("Keep claude.ai sign-in on an agent page", () => {
+  it("is off unless the host says it is on, and Codex has no such option", () => {
+    expect(view({ endpoints: [] }).keepsClaudeAiLogin).toBe(false);
+    const kept = selectAgentApiEndpointsView({
+      state: {
+        status: "ready",
+        endpoints: [],
+        agents: {
+          claude: { enabled: false, defaultModelId: null, keepsClaudeAiLogin: true },
+          codex: { enabled: false, defaultModelId: null },
+        },
+        gatewayUnavailable: null,
+        agentIssues: {},
+      },
+      provider: "claude",
+      now: NOW,
+    });
+    expect(kept.keepsClaudeAiLogin).toBe(true);
+    const codex = selectAgentApiEndpointsView({
+      state: {
+        status: "ready",
+        endpoints: [],
+        agents: { codex: { enabled: false, defaultModelId: null } },
+        gatewayUnavailable: null,
+        agentIssues: {},
+      },
+      provider: "codex",
+      now: NOW,
+    });
+    expect(codex.keepsClaudeAiLogin).toBeNull();
+  });
 });
