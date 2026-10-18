@@ -45,7 +45,7 @@ describe("findCliBypass", () => {
     expect(findCliBypass(bypassInput({ use: before, startedAt: at(-60) }))).toBeNull();
     const beforeStart = { lastPromptAt: at(100), lastRequest: null };
     expect(
-      findCliBypass(bypassInput({ use: beforeStart, startedAt: at(200), rewrittenAt: null })),
+      findCliBypass(bypassInput({ use: beforeStart, startedAt: at(200), rewrittenAt: at(-60) })),
     ).toBeNull();
     const recent = { lastPromptAt: at(100), lastRequest: null };
     expect(findCliBypass(bypassInput({ use: recent, now: at(130) }))).toBeNull();
@@ -123,14 +123,14 @@ describe("readCliUse", () => {
         JSON.stringify({ display: "add a test", timestamp: at(200).getTime() }),
       ].join("\n"),
     );
-    expect(readCliUse({ provider: "claude", configDir: dir, since: null, now: at(600) })).toEqual({
+    expect(readCliUse({ provider: "claude", configDir: dir, since: at(0), now: at(600) })).toEqual({
       lastPromptAt: at(200),
       lastRequest: null,
     });
   });
 
   test("no history.jsonl reads as never used", () => {
-    expect(readCliUse({ provider: "claude", configDir: dir, since: null, now: at(600) })).toEqual({
+    expect(readCliUse({ provider: "claude", configDir: dir, since: at(0), now: at(600) })).toEqual({
       lastPromptAt: null,
       lastRequest: null,
     });
@@ -193,7 +193,7 @@ describe("readCliUse", () => {
     const db = new DatabaseSync(path.join(dir, "logs_2.sqlite"));
     db.exec("CREATE TABLE something_else (id INTEGER)");
     db.close();
-    expect(readCliUse({ provider: "codex", configDir: dir, since: null, now: at(600) })).toEqual({
+    expect(readCliUse({ provider: "codex", configDir: dir, since: at(0), now: at(600) })).toEqual({
       lastPromptAt: null,
       lastRequest: null,
     });

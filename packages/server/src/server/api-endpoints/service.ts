@@ -117,7 +117,13 @@ import { FIXED_EFFORTS, askedAt } from "./gateway/fixed-effort.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
 import { agentsV1Tag } from "./codex-agent-versions.js";
 import type { EndpointCooldowns } from "./gateway/cooldown.js";
-import { findCliBypass, readCliUse, type CliBypass, type GatewaySightings } from "./cli-bypass.js";
+import {
+  findCliBypass,
+  readCliUse,
+  type CliBypass,
+  type GatewaySightings,
+  type ReadCliUse,
+} from "./cli-bypass.js";
 import type { RetiredModels } from "./retired-models.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
 import { someEndpointSearchesWeb } from "./gateway/web-search.js";
@@ -314,6 +320,8 @@ export interface ApiEndpointServiceOptions {
   retiredModels: RetiredModels;
   // 中转站记下的每个提供方最近一次收到请求的时刻；列表据此判断「被绕过」。
   sightings: GatewaySightings;
+  // 读 CLI 自己的记录（history.jsonl、Codex 的日志库）；缺省读 CLI 目录下的真实文件，测试指到临时目录或换成假的。
+  readCliUse?: ReadCliUse;
   // 定位 CLI 配置文件用；缺省取 daemon 自己的环境，测试注入临时目录。
   // 查云平台开关时，登录 shell 没答出的变量也看它（magpie 的 claudeShellEnv）。
   env?: NodeJS.ProcessEnv;
@@ -409,7 +417,7 @@ const ROUTING_KEYS: Record<ApiEndpointProvider, readonly string[]> = {
 const AGENT_NAMES: Record<ApiEndpointProvider, string> = { claude: "Claude Code", codex: "Codex" };
 
 /** 只是提醒、不说明设置有问题的提示；有它们时照样看是不是被绕过。 */
-const NOTICE_CODES: ReadonlySet<string> = new Set([
+const NOTICE_CODES: ReadonlySet<ApiEndpointAgentIssueCode> = new Set<ApiEndpointAgentIssueCode>([
   "codex_multi_agent_v2_on",
   "codex_multi_agent_v2_unreadable",
 ]);
@@ -488,6 +496,7 @@ export class ApiEndpointService {
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
   private readonly sightings: GatewaySightings;
+  private readonly readCliUse: ReadCliUse;
   // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   private readonly startedAt: Date;
   private readonly modelsDev: ModelsDevCatalog;
@@ -520,6 +529,7 @@ export class ApiEndpointService {
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
     this.sightings = options.sightings;
+    this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
     this.readCodexSignIn =
       options.readCodexSignIn ??
@@ -568,7 +578,8 @@ export class ApiEndpointService {
       const issues = statuses[agentProvider].issues;
       const isSettingsRight = issues.every((issue) => NOTICE_CODES.has(issue.code));
       const isChecked = state.agents[agentProvider].enabled && isSettingsRight;
-      const bypassed = isChecked ? this.bypassedIssue(agentProvider) : null;
+      if (!isChecked) continue;
+      const bypassed = this.bypassedIssue(agentProvider);
       if (bypassed !== null) issues.push(bypassed);
     }
     const status = statuses[supported];
@@ -2760,19 +2771,14 @@ export class ApiEndpointService {
     return base !== null && (await this.reachesGateway(base));
   }
 
-  /**
-   * 「Codex Subagent 可用任意模型」开着、Codex 经过中转站时，Codex 自己的 multi_agent_v2 开着就盖过它（magpie codexSubAgentsV1Warning）：
-   * 只提示，Osuna 不改这个键。读不了文件时另一条，不当作没开。
-   */
   /** CLI 自己的记录显示最近一次改写之后用过，中转站却没收到（cli-bypass.ts）；没有为 null。 */
   private bypassedIssue(provider: ApiEndpointProvider): AgentIssue | null {
-    const configPath =
-      provider === "claude" ? this.resolveClaudeSettingsPath() : this.resolveCodexConfigPath();
-    const rewrittenAt = this.store.readCliRewrittenAt(provider);
+    // 没记下改写时刻（打开开关后才升级到记它的版本）时，照 magpie 总有 rec.At 的样子从 daemon 起来时算。
+    const rewrittenAt = this.store.readCliRewrittenAt(provider) ?? this.startedAt;
     const now = this.now();
-    const use = readCliUse({
+    const use = this.readCliUse({
       provider,
-      configDir: path.dirname(configPath),
+      configDir: path.dirname(this.resolveCliConfigPath(provider)),
       since: rewrittenAt,
       now,
     });
@@ -2791,6 +2797,16 @@ export class ApiEndpointService {
     return bypassedIssue({ agent: AGENT_NAMES[provider], bypass });
   }
 
+  /** 这个 CLI 的配置文件：Claude Code 的 settings.json、Codex 的 config.toml。 */
+  private resolveCliConfigPath(provider: ApiEndpointProvider): string {
+    if (provider === "claude") return this.resolveClaudeSettingsPath();
+    return this.resolveCodexConfigPath();
+  }
+
+  /**
+   * 「Codex Subagent 可用任意模型」开着、Codex 经过中转站时，Codex 自己的 multi_agent_v2 开着就盖过它（magpie codexSubAgentsV1Warning）：
+   * 只提示，Osuna 不改这个键。读不了文件时另一条，不当作没开。
+   */
   private codexMultiAgentV2Issue(state: ApiEndpointState): AgentIssue | null {
     const agent = state.agents.codex;
     const isChecked = agent.enabled && agent.allowsAnySubagentModel === true;
@@ -3457,19 +3473,19 @@ function bypassedIssue(input: { agent: string; bypass: CliBypass }): AgentIssue 
       return {
         code: "bypassed",
         params: { how: "used", at },
-        message: `${agent} was used at ${clock} but none of its requests reached the gateway — one started before Osuna set it up still runs on its old config: restart it`,
+        message: `${agent} was used at ${clock} but none of its requests reached Osuna — one started before Osuna set it up still runs on its old config: apply again, then restart it`,
       };
     case "elsewhere":
       return {
         code: "bypassed",
         params: { how: "elsewhere", at, host: bypass.host },
-        message: `${agent}'s last request (${clock}) went to ${bypass.host}, not the gateway — it was started before Osuna set it up and still runs on its old config: quit and reopen it`,
+        message: `${agent}'s last request (${clock}) went to ${bypass.host}, not to Osuna — it was started before Osuna set it up and still runs on its old config: apply again, then quit and reopen it`,
       };
     case "refused":
       return {
         code: "bypassed",
         params: { how: "refused", at },
-        message: `${agent} couldn't reach the gateway at ${clock} — Osuna wasn't running then, so it has none of the API endpoint models: quit and reopen it`,
+        message: `${agent} couldn't reach Osuna at ${clock} — Osuna wasn't running then, so it has none of the API endpoints' models: apply again, then quit and reopen it`,
       };
   }
 }

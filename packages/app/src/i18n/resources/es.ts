@@ -2791,13 +2791,13 @@ export const es: TranslationResources = {
             "El modelo de {{file}} se cambió a {{model}} fuera de Osuna, y ningún endpoint de API activado lo ofrece. Vuelve a aplicar para regresar a {{defaultModel}}, o mantén la configuración actual para seguir con {{model}} sin este aviso.",
           modelReplacedToDefaultDetail:
             "El modelo se quitó de {{file}} fuera de Osuna, así que {{agent}} arranca con su propio modelo predeterminado, que ningún endpoint de API activado ofrece. Vuelve a aplicar para regresar a {{defaultModel}}, o mantén la configuración actual para dejarlo así sin este aviso.",
-          bypassed: "{{agent}} se usó sin pasar por la pasarela",
+          bypassed: "Las solicitudes de {{agent}} no pasaron por los endpoints de API de Osuna",
           bypassedUsedDetail:
-            "{{agent}} se usó a las {{time}}, pero ninguna de sus solicitudes llegó a la pasarela. Puede que una copia iniciada antes del último cambio de Osuna en su configuración siga con la anterior, o que algo fuera de su archivo de configuración la anule. Vuelve a aplicar y luego reinicia {{agent}}.",
+            "{{agent}} se usó a las {{time}}, pero ninguna de sus solicitudes llegó a Osuna. Puede que una copia iniciada antes del último cambio de Osuna en su configuración siga con la anterior, o que algo fuera de su archivo de configuración la anule.\nVuelve a aplicar y luego reinicia {{agent}}.",
           bypassedElsewhereDetail:
-            "La última solicitud de {{agent}} ({{time}}) fue a {{host}}, no a la pasarela. Seguramente se inició antes de que Osuna cambiara su configuración y sigue con la anterior. Vuelve a aplicar y luego cierra y vuelve a abrir {{agent}}.",
+            "La última solicitud de {{agent}} ({{time}}) fue a {{host}}, no a Osuna. Seguramente se inició antes de que Osuna cambiara su configuración y sigue con la anterior.\nVuelve a aplicar y luego cierra y vuelve a abrir {{agent}}.",
           bypassedRefusedDetail:
-            "{{agent}} no pudo llegar a la pasarela a las {{time}}: Osuna no estaba en marcha, así que no tiene ninguno de los modelos de los endpoints de API. Vuelve a aplicar y luego cierra y vuelve a abrir {{agent}}.",
+            "{{agent}} no pudo llegar a Osuna a las {{time}}: Osuna no estaba en marcha, así que no tiene ninguno de los modelos de los endpoints de API.\nVuelve a aplicar y luego cierra y vuelve a abrir {{agent}}.",
           reapply: "Aplicar de nuevo",
           switchToOfficial: "Volver al oficial",
           keepCurrent: "Mantener la configuración actual",

@@ -2744,13 +2744,13 @@ export const zhCN: TranslationResources = {
             "{{file}} 里的模型在 Osuna 之外被换成了 {{model}}，开着的接口都不提供它。\n点「重新应用」改回 {{defaultModel}}；点「保留当前设置」留着 {{model}}，不再提示。",
           modelReplacedToDefaultDetail:
             "{{file}} 里的模型在 Osuna 之外被删掉了，{{agent}} 改用它自己的默认模型，开着的接口都不提供它。\n点「重新应用」改回 {{defaultModel}}；点「保留当前设置」照现在这样，不再提示。",
-          bypassed: "{{agent}} 最近绕过了中转站",
+          bypassed: "{{agent}} 的请求没有经过第三方接口",
           bypassedUsedDetail:
-            "{{agent}} 在 {{time}} 用过，但中转站没收到它的请求。可能是 Osuna 上次改设置之前启动的那个还在用旧设置，或者设置文件之外的东西盖过了它。\n点「重新应用」后请重启 {{agent}}。",
+            "{{agent}} 在 {{time}} 用过，但 Osuna 没收到它的请求。可能是 Osuna 上次改设置之前启动的那个还在用旧设置，或者设置文件之外的东西盖过了它。\n点「重新应用」后请重启 {{agent}}。",
           bypassedElsewhereDetail:
-            "{{agent}} 最近一次请求（{{time}}）发给了 {{host}}，没经过中转站。多半是它在 Osuna 改设置之前就启动了，还在用旧设置。\n点「重新应用」后请退出 {{agent}} 再打开。",
+            "{{agent}} 最近一次请求（{{time}}）发给了 {{host}}，没经过 Osuna。多半是它在 Osuna 改设置之前就启动了，还在用旧设置。\n点「重新应用」后请退出 {{agent}} 再打开。",
           bypassedRefusedDetail:
-            "{{agent}} 在 {{time}} 连不上中转站：那时 Osuna 没在运行，所以它拿不到接口模型。\n点「重新应用」后请退出 {{agent}} 再打开。",
+            "{{agent}} 在 {{time}} 连不上 Osuna：那时 Osuna 没在运行，所以它拿不到第三方接口的模型。\n点「重新应用」后请退出 {{agent}} 再打开。",
           reapply: "重新应用",
           switchToOfficial: "切回官方",
           keepCurrent: "保留当前设置",

@@ -1816,7 +1816,7 @@ describe("Claude Code used without going through the gateway (bypassed)", () => 
       {
         code: "bypassed",
         params: { how: "used", at: after(seconds).toISOString() },
-        message: expect.stringContaining("none of its requests reached the gateway"),
+        message: expect.stringContaining("none of its requests reached Osuna"),
       },
     ];
   }
@@ -1896,7 +1896,11 @@ describe("Claude Code used without going through the gateway (bypassed)", () => 
     );
 
     expect(await claudeIssues()).toEqual([
-      expect.objectContaining({ code: "not_through_gateway" }),
+      {
+        code: "not_through_gateway",
+        params: { file: settingsPath, keys: "env.ANTHROPIC_BASE_URL" },
+        message: expect.stringContaining("env.ANTHROPIC_BASE_URL"),
+      },
     ]);
   });
 });

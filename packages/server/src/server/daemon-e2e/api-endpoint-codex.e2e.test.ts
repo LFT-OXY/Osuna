@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { DatabaseSync } from "node:sqlite";
+import { z } from "zod";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -29,6 +30,8 @@ base_url = "https://mine.example/v1"
 const AUTH_JSON = `{"OPENAI_API_KEY":null,"tokens":{"refresh_token":"rt-single-use"}}`;
 
 const SECRET = "sk-relay-codex-secret";
+
+const GatewayTokensSchema = z.object({ tokens: z.object({ codex: z.string() }) });
 
 const tempRoots: string[] = [];
 
@@ -864,6 +867,8 @@ describe("Codex used without going through the gateway (bypassed)", () => {
   let client: DaemonClient;
   let codexHome: string;
   let configPath: string;
+  let homeRoot: string;
+  let paseoHomeRoot: string;
   let upstream: Server;
   // 接口服务与中转站共用的时钟，测试拨动它，不必真的等 30 秒的余量。
   let clock: Date;
@@ -882,6 +887,9 @@ describe("Codex used without going through the gateway (bypassed)", () => {
     clock = start;
     const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-codex-bypass-"));
     tempRoots.push(root);
+    homeRoot = root;
+    paseoHomeRoot = path.join(root, "paseo");
+    await mkdir(paseoHomeRoot, { recursive: true });
     codexHome = path.join(root, "codex-home");
     configPath = path.join(codexHome, "config.toml");
     await mkdir(codexHome, { recursive: true });
@@ -903,11 +911,46 @@ describe("Codex used without going through the gateway (bypassed)", () => {
       );
     });
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
-    daemon = await createTestPaseoDaemon({
-      apiEndpoints: { env: { CODEX_HOME: codexHome }, homeDir: root, now: () => clock },
-    });
+    daemon = await startDaemon();
     client = await connect(daemon);
   });
+
+  // daemon 目录留在 paseoHomeRoot 下，重启后还是同一份（afterEach 统一删）。
+  function startDaemon(): Promise<TestPaseoDaemon> {
+    return createTestPaseoDaemon({
+      paseoHomeRoot,
+      cleanup: false,
+      apiEndpoints: { env: { CODEX_HOME: codexHome }, homeDir: homeRoot, now: () => clock },
+    });
+  }
+
+  async function restartAt(seconds: number): Promise<void> {
+    await client.close();
+    await daemon.close();
+    clock = after(seconds);
+    daemon = await startDaemon();
+    client = await connect(daemon);
+  }
+
+  async function sendThroughGatewayAt(seconds: number): Promise<void> {
+    clock = after(seconds);
+    const reply = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "codex_cli_rs/0.130.0" },
+      body: JSON.stringify({ model: "gpt-relay", input: "fix the bug", stream: false }),
+    });
+    expect(reply.status).toBe(200);
+  }
+
+  function elsewhereAt(seconds: number): unknown {
+    return [
+      {
+        code: "bypassed",
+        params: { how: "elsewhere", at: after(seconds).toISOString(), host: "chatgpt.com" },
+        message: expect.stringContaining("went to chatgpt.com"),
+      },
+    ];
+  }
 
   afterEach(async () => {
     await client?.close();
@@ -962,7 +1005,7 @@ describe("Codex used without going through the gateway (bypassed)", () => {
       {
         code: "bypassed",
         params: { how: "used", at: after(seconds).toISOString() },
-        message: expect.stringContaining("none of its requests reached the gateway"),
+        message: expect.stringContaining("none of its requests reached Osuna"),
       },
     ];
   }
@@ -978,13 +1021,7 @@ describe("Codex used without going through the gateway (bypassed)", () => {
   test("a request the gateway received means it came through", async () => {
     await switchOnAt(10);
     await typedAt(20);
-    clock = after(21);
-    const reply = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/responses`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "user-agent": "codex_cli_rs/0.130.0" },
-      body: JSON.stringify({ model: "gpt-relay", input: "fix the bug", stream: false }),
-    });
-    expect(reply.status).toBe(200);
+    await sendThroughGatewayAt(21);
     clock = after(100);
 
     expect(await codexIssues()).toEqual([]);
@@ -1007,13 +1044,30 @@ describe("Codex used without going through the gateway (bypassed)", () => {
     expect(await codexIssues()).toEqual([]);
 
     connectedAt({ seconds: 40, url: "wss://chatgpt.com/backend-api/codex/responses" });
-    expect(await codexIssues()).toEqual([
-      {
-        code: "bypassed",
-        params: { how: "elsewhere", at: after(40).toISOString(), host: "chatgpt.com" },
-        message: expect.stringContaining("went to chatgpt.com"),
-      },
-    ]);
+    expect(await codexIssues()).toEqual(elsewhereAt(40));
+  });
+
+  test("requests the gateway received before a daemon restart still count", async () => {
+    await switchOnAt(10);
+    connectedAt({ seconds: 40, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    await sendThroughGatewayAt(41);
+    await restartAt(100);
+    expect(await codexIssues()).toEqual([]);
+
+    connectedAt({ seconds: 110, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    expect(await codexIssues()).toEqual(elsewhereAt(110));
+  });
+
+  test("with no rewrite time on record, connections before the daemon started don't count", async () => {
+    await switchOnAt(10);
+    // 打开开关后才升级到记改写时刻的版本：没有这份记录。
+    await rm(path.join(daemon.paseoHome, "api-endpoints", "cli-rewrites.json"));
+    connectedAt({ seconds: 40, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    await restartAt(100);
+    expect(await codexIssues()).toEqual([]);
+
+    connectedAt({ seconds: 110, url: "wss://chatgpt.com/backend-api/codex/responses" });
+    expect(await codexIssues()).toEqual(elsewhereAt(110));
   });
 
   test("Re-apply clears it and earlier uses no longer count; Official restores the file", async () => {
@@ -1036,8 +1090,18 @@ describe("Codex used without going through the gateway (bypassed)", () => {
     const off = await client.apiEndpointSetAgentSettings({ provider: "codex", enabled: false });
     expect(off.agent?.enabled).toBe(false);
     // 顶层键还原，Osuna 的服务商表留在末尾（ADR 0010）。
-    const restored = await readFile(configPath, "utf8");
-    expect(restored.slice(0, USER_CONFIG.length)).toBe(USER_CONFIG);
+    const tokens = GatewayTokensSchema.parse(
+      JSON.parse(
+        await readFile(path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json"), "utf8"),
+      ),
+    );
+    expect(await readFile(configPath, "utf8")).toBe(`${USER_CONFIG}
+[model_providers.${ID}]
+name = "Osuna"
+base_url = "http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1"
+wire_api = "responses"
+experimental_bearer_token = "${tokens.tokens.codex}"
+`);
     expect(await codexIssues()).toEqual([]);
   });
 });

@@ -515,6 +515,7 @@ export interface PaseoDaemonConfig {
     | "readCodexSignIn"
     // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
     | "now"
+    | "readCliUse"
   > &
     ApiEndpointGatewayOverrides &
     RetiredModelsOverrides;
@@ -806,7 +807,10 @@ export async function createPaseoDaemon(
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
   // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
-  const apiEndpointSightings = new GatewaySightings(apiEndpointClock(config));
+  const apiEndpointSightings = new GatewaySightings({
+    now: apiEndpointClock(config),
+    filePath: path.join(config.paseoHome, "api-endpoints", "gateway-seen.json"),
+  });
   // 中转站记下厂商说已下线的模型；接口服务据此重写 CLI 的模型列表并通知客户端（apiEndpointService 在下面创建）。
   const apiEndpointRetiredModels = createRetiredModels({
     config,

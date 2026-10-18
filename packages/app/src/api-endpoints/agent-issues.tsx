@@ -11,6 +11,7 @@ import { isWeb } from "@/constants/platform";
 import { ICON_SIZE } from "@/styles/theme";
 import { settingsStyles } from "@/styles/settings";
 import { shortenPath } from "@/utils/shorten-path";
+import { describeBypassed } from "./bypassed-copy";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import type { AgentIssueAction, AgentIssueView } from "./internal/agent-settings";
 
@@ -344,37 +345,16 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
         }),
       };
     case "bypassed":
-      return bypassedCopy({ t, providerLabel, issue, locale: i18n.language });
+      return describeBypassed({
+        t,
+        providerLabel,
+        params,
+        message: issue.message,
+        locale: i18n.language,
+      });
     case "unknown":
       return { title: issue.message };
   }
-}
-
-const BYPASSED_DETAIL_KEYS: Record<string, string> = {
-  used: "settings.apiEndpoints.agent.issues.bypassedUsedDetail",
-  elsewhere: "settings.apiEndpoints.agent.issues.bypassedElsewhereDetail",
-  refused: "settings.apiEndpoints.agent.issues.bypassedRefusedDetail",
-};
-
-/** 被绕过：说明按怎么看出来的（params.how），时间按看的人的语言显示时:分。认不出的 how 照主机原文。 */
-function bypassedCopy(input: {
-  t: Translate;
-  providerLabel: string;
-  issue: AgentIssueView;
-  locale: string;
-}): IssueCopy {
-  const { t, providerLabel, issue, locale } = input;
-  const { params } = issue;
-  const title = t("settings.apiEndpoints.agent.issues.bypassed", { agent: providerLabel });
-  const detailKey = BYPASSED_DETAIL_KEYS[params.how];
-  if (detailKey === undefined) return { title, description: issue.message };
-  const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(
-    new Date(params.at),
-  );
-  return {
-    title,
-    description: t(detailKey, { agent: providerLabel, time, host: params.host }),
-  };
 }
 
 type Translate = ReturnType<typeof useTranslation>["t"];

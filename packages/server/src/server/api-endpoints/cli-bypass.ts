@@ -8,6 +8,8 @@ import path from "node:path";
 import { z } from "zod";
 import { isErrnoException } from "../../utils/errno.js";
 import type { ApiEndpointProvider } from "./store.js";
+import { writePrivateFileAtomicSync } from "../private-files.js";
+import { readOptionalFile } from "./config-file.js";
 import { isRecord, parseJson } from "./upstream-http.js";
 
 /*
@@ -37,23 +39,54 @@ const HISTORY_KEYS: Record<ApiEndpointProvider, { timeKey: string; textKey: stri
   codex: { timeKey: "ts", textKey: "text" },
 };
 
-/** 中转站记下每个提供方最近一次收到请求的时刻；只在内存里，daemon 重启清零（magpie usage.Saw）。 */
+// 每个提供方中转站最近一次收到请求的时刻（ISO 时间）。
+const GatewaySeenFileSchema = z.object({
+  claude: z.string().datetime().optional(),
+  codex: z.string().datetime().optional(),
+});
+type GatewaySeenFile = z.infer<typeof GatewaySeenFileSchema>;
+
+export interface GatewaySightingsOptions {
+  now: () => Date;
+  // 记下的时刻落在这里，daemon 重启后还在（magpie 的 LastSeen 重启后读用量日志的末尾）。
+  filePath: string;
+}
+
+/** 中转站记下每个提供方最近一次收到请求的时刻（magpie usage.Saw 与 LastSeen）。 */
 export class GatewaySightings {
-  private readonly seen = new Map<ApiEndpointProvider, Date>();
   private readonly now: () => Date;
+  private readonly filePath: string;
+  private seen: GatewaySeenFile;
 
-  constructor(now: () => Date) {
-    this.now = now;
+  constructor(options: GatewaySightingsOptions) {
+    this.now = options.now;
+    this.filePath = options.filePath;
+    this.seen = readGatewaySeen(options.filePath);
   }
 
+  /** 精确到秒落盘：同一秒里的请求只写一次。 */
   saw(provider: ApiEndpointProvider): void {
-    this.seen.set(provider, this.now());
+    const at = new Date(Math.trunc(this.now().getTime() / 1000) * 1000).toISOString();
+    if (this.seen[provider] === at) return;
+    this.seen = GatewaySeenFileSchema.parse({ ...this.seen, [provider]: at });
+    writePrivateFileAtomicSync(this.filePath, `${JSON.stringify(this.seen, null, 2)}\n`);
   }
 
-  /** 这个 daemon 收到过的最近一次；没收到过为 null。 */
+  /** 收到过的最近一次；从没收到过为 null。 */
   lastSeen(provider: ApiEndpointProvider): Date | null {
-    return this.seen.get(provider) ?? null;
+    const at = this.seen[provider];
+    if (at === undefined) return null;
+    return new Date(at);
   }
+}
+
+/** 读不到或读不懂当作从没收到过：它只影响提示。 */
+function readGatewaySeen(filePath: string): GatewaySeenFile {
+  const text = readOptionalFile(filePath)?.toString("utf8") ?? null;
+  if (text === null) return {};
+  const parsed = GatewaySeenFileSchema.safeParse(parseJson(text));
+  if (!parsed.success) return {};
+  return parsed.data;
 }
 
 /** Codex 日志库里一次模型连接：什么时候、连的地址、那里是不是没人应答。 */
@@ -73,12 +106,15 @@ export interface ReadCliUseInput {
   provider: ApiEndpointProvider;
   // CLI 的目录：Claude Code 是 settings.json 所在的，Codex 是 CODEX_HOME。
   configDir: string;
-  // 只找这个时刻之后的模型连接（最近一次改写；没有为 null）。
-  since: Date | null;
+  // 只找这个时刻之后的模型连接（最近一次改写）。
+  since: Date;
   now: Date;
 }
 
-/** 读 CLI 自己的记录的唯一入口。 */
+/** 读 CLI 自己的记录的入口；服务可以换掉它（ApiEndpointServiceOptions.readCliUse）。 */
+export type ReadCliUse = (input: ReadCliUseInput) => CliUse;
+
+/** 缺省的入口：读 configDir 下 CLI 自己的文件。 */
 export function readCliUse(input: ReadCliUseInput): CliUse {
   const keys = HISTORY_KEYS[input.provider];
   const lastPromptAt = readLastPromptAt({
@@ -106,8 +142,8 @@ export interface FindCliBypassInput {
   use: CliUse;
   // 这个 daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   startedAt: Date;
-  // 最近一次改写 CLI 配置的时刻；之前的使用不算。没有为 null。
-  rewrittenAt: Date | null;
+  // 最近一次改写 CLI 配置的时刻，之前的使用不算（没记下时由调用方取 daemon 起来的时刻）。
+  rewrittenAt: Date;
   lastSeen: Date | null;
   // 中转站现在的地址与 CLI 配置里写着的地址：连到这两处都算到了中转站。
   gatewayUrls: string[];
@@ -133,7 +169,7 @@ export function findCliBypass(input: FindCliBypassInput): CliBypass | null {
 function isBypassedUse(input: FindCliBypassInput & { used: Date }): boolean {
   const used = input.used.getTime();
   const isAfterStart = used > input.startedAt.getTime();
-  const isAfterRewrite = input.rewrittenAt === null || used > input.rewrittenAt.getTime();
+  const isAfterRewrite = used > input.rewrittenAt.getTime();
   const isPastGrace = input.now.getTime() - used > SENT_GRACE_MS;
   const isMissed = seenBefore(input.lastSeen, used - CLOCK_SLACK_MS);
   return isAfterStart && isAfterRewrite && isPastGrace && isMissed;
@@ -238,15 +274,16 @@ const CONNECTING = "connecting to websocket: ";
  */
 function readCodexLastRequest(input: {
   codexHome: string;
-  since: Date | null;
+  since: Date;
   now: Date;
 }): CliModelRequest | null {
   const newest = newestCodexLogDatabase(input.codexHome);
   if (newest === null) return null;
+  // @types/node 还停在 20、没有 node:sqlite 的类型：经 getBuiltinModule 取到再用 zod 认。
   const sqlite = SqliteModuleSchema.safeParse(process.getBuiltinModule("node:sqlite"));
   if (!sqlite.success) return null;
   const from = Math.max(
-    Math.trunc((input.since?.getTime() ?? 0) / 1000),
+    Math.trunc(input.since.getTime() / 1000),
     Math.trunc((input.now.getTime() - CODEX_LOG_WINDOW_MS) / 1000),
   );
   let rows: unknown[];
