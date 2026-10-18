@@ -4,7 +4,11 @@ import type {
   HostProcess,
   HostProcesses,
   HostProcessesError,
+  HostProgram,
 } from "../api-endpoints/host-processes.js";
+
+/** 假的 codex：执行命令时记下的程序路径，从不真的去找、去跑。 */
+export const FAKE_CODEX_PATH = "/fake/bin/codex";
 
 /**
  * 假的「进程与命令」：列出用例给的进程，记下执行过的命令、回用例给的结果，什么都不真的跑。
@@ -20,6 +24,8 @@ export class FakeHostProcesses implements HostProcesses {
   // 设了就让 list 抛它（问不到系统）。
   listError: HostProcessesError | null = null;
   runResult: HostCommandResult = { exitCode: 0, output: "" };
+  // 设成 false 就当作没装 codex。
+  hasCodex = true;
   // 执行命令时顺带做的事（如重启后 Codex 改写进程记录文件）。
   onRun: ((command: HostCommand) => void) | null = null;
 
@@ -31,6 +37,11 @@ export class FakeHostProcesses implements HostProcesses {
 
   async readCodexHome(pid: number): Promise<string | null> {
     return this.codexHomes.get(pid) ?? null;
+  }
+
+  async findCodex(input: { env: Record<string, string> }): Promise<HostProgram | null> {
+    if (!this.hasCodex) return null;
+    return { command: FAKE_CODEX_PATH, args: [], env: input.env };
   }
 
   async run(command: HostCommand): Promise<HostCommandResult> {

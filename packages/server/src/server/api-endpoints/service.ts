@@ -133,12 +133,15 @@ import {
 } from "./cli-bypass.js";
 import type { RetiredModels } from "./retired-models.js";
 import { switchOffFileChange } from "./switch-off-preview.js";
-import { createSystemHostProcesses, type HostProcesses } from "./host-processes.js";
+import {
+  createSystemHostProcesses,
+  type FindCodexCommand,
+  type HostProcesses,
+} from "./host-processes.js";
 import {
   CliReopenHints,
   cliChangedAt,
   type CliStartupReads,
-  type FindCodexCommand,
   type ReopenHintsSubject,
 } from "./reopen-hints.js";
 import { API_ENDPOINT_GATEWAY_PATH } from "./gateway/gateway.js";
@@ -359,7 +362,7 @@ export interface ApiEndpointServiceOptions {
   countSessionsStartedBefore: (input: { provider: ApiEndpointProvider; before: Date }) => number;
   // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）；缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
   hostProcesses?: HostProcesses;
-  // 执行 `codex app-server daemon restart` 用哪个 codex；缺省按默认找，daemon 传用户配的 codex 命令。
+  // 真的适配器找哪个 codex 执行它自己的命令；缺省按默认找，daemon 传用户配的 codex 命令（假的适配器自己答）。
   findCodexCommand?: FindCodexCommand;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
@@ -553,8 +556,11 @@ export class ApiEndpointService {
     this.countSessionsStartedBefore = options.countSessionsStartedBefore;
     const { hostProcesses } = options;
     this.reopenHints = new CliReopenHints({
-      hostProcesses: () => hostProcesses ?? createSystemHostProcesses(),
-      findCodexCommand: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+      hostProcesses: () =>
+        hostProcesses ??
+        createSystemHostProcesses({
+          findCodex: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+        }),
       subjects: () => ({
         claude: this.reopenSubject("claude"),
         codex: this.reopenSubject("codex"),
@@ -649,7 +655,7 @@ export class ApiEndpointService {
     const rewrittenAt = this.now();
     for (const provider of synced) this.store.recordCliRewrite({ provider, at: rewrittenAt });
     if (synced.length === 0) return;
-    this.reopenHints.refresh().catch((error: unknown) => {
+    this.reopenHints.refresh({ includesCopies: true }).catch((error: unknown) => {
       this.logger.error({ err: error }, "Failed to look at the running CLI copies");
     });
   }

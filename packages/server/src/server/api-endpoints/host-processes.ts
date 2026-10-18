@@ -29,6 +29,11 @@ export interface HostProgram {
   env: NodeJS.ProcessEnv;
 }
 
+/** 找 codex 命令（用户在提供方设置里配的那个），环境盖上 env；找不到为 null。 */
+export type FindCodexCommand = (input: {
+  env: Record<string, string>;
+}) => Promise<HostProgram | null>;
+
 export interface HostCommand extends HostProgram {
   timeoutMs: number;
 }
@@ -46,6 +51,8 @@ export interface HostProcesses {
   list(): Promise<HostProcess[]>;
   /** 进程启动时的 CODEX_HOME；读不到（只有 Linux 读得到自己用户的）或没设为 null。 */
   readCodexHome(pid: number): Promise<string | null>;
+  /** 执行 Codex 自己的命令要用的 codex，环境盖上 env（CODEX_HOME）；找不到为 null。 */
+  findCodex: FindCodexCommand;
   /** 执行一条命令直到它退出；起不来或超时抛 HostProcessesError，退出码不是 0 照常返回。 */
   run(command: HostCommand): Promise<HostCommandResult>;
 }
@@ -128,12 +135,15 @@ function parseWindowsProcessList(output: string): HostProcess[] {
  * 真的实现。Windows 照 magpie 只问名字以 codex 开头的进程（问全部很慢），也不带启动时间。
  * 测试里（vitest 设了 VITEST）一造就抛错。
  */
-export function createSystemHostProcesses(): HostProcesses {
+export function createSystemHostProcesses(input: { findCodex: FindCodexCommand }): HostProcesses {
   if (process.env.VITEST) throw new RealHostProcessesInTestError();
+  const sealed = sealedHostProcesses();
+  if (sealed !== null) return sealed;
   const isWindows = process.platform === "win32";
   return {
     reportsStartTimes: !isWindows,
     readCodexHome: readLinuxCodexHome,
+    findCodex: input.findCodex,
     async list() {
       if (isWindows) {
         const result = await runCommand({
@@ -161,6 +171,23 @@ export function createSystemHostProcesses(): HostProcesses {
     },
     run: runCommand,
   };
+}
+
+// 浏览器测试的 daemon 由 e2e 封条（packages/app/e2e/support/daemon-upgrade-seal.mjs）在这里装上假的适配器，
+// 列进程、读 CODEX_HOME、找 codex、执行命令都不碰本机；生产里没有它。
+const SEALED_HOST_PROCESSES = Symbol.for("paseo.e2e.hostProcesses");
+
+function sealedHostProcesses(): HostProcesses | null {
+  const sealed: unknown = Reflect.get(globalThis, SEALED_HOST_PROCESSES);
+  if (!isHostProcesses(sealed)) return null;
+  return sealed;
+}
+
+function isHostProcesses(value: unknown): value is HostProcesses {
+  if (typeof value !== "object" || value === null) return false;
+  const methods = ["list", "readCodexHome", "findCodex", "run"];
+  const hasMethods = methods.every((name) => typeof Reflect.get(value, name) === "function");
+  return hasMethods && typeof Reflect.get(value, "reportsStartTimes") === "boolean";
 }
 
 /** Linux 上读 /proc/<pid>/environ 里的 CODEX_HOME；别的系统、别人的进程读不到，为 null。 */

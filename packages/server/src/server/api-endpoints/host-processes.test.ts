@@ -68,6 +68,8 @@ describe("parseProcessList", () => {
 
 describe("createSystemHostProcesses", () => {
   test("refuses to be made inside a test run", () => {
-    expect(() => createSystemHostProcesses()).toThrow(RealHostProcessesInTestError);
+    expect(() => createSystemHostProcesses({ findCodex: async () => null })).toThrow(
+      RealHostProcessesInTestError,
+    );
   });
 });

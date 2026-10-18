@@ -816,9 +816,10 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 要判断的地方
 
-- 测试一律不碰真实进程表与 codex：vitest 里一造真的适配器就抛 `RealHostProcessesInTestError`，进程内测试 daemon 缺省给 `FakeHostProcesses`；Playwright 的 daemon 经 `daemon-upgrade-seal.mjs` 把 `ps -A` 换成打印 `PASEO_E2E_PROCESS_TABLE_PATH`、把 `app-server daemon restart` 换成以 0 退出并记录。
+- 测试一律不碰真实进程表、进程环境与 codex：找 codex 也在适配器里。vitest 里一造真的适配器就抛 `RealHostProcessesInTestError`，进程内测试 daemon 缺省给 `FakeHostProcesses`；Playwright 的 daemon 由 `daemon-upgrade-seal.mjs` 装上假的适配器（`Symbol.for("paseo.e2e.hostProcesses")`，进程表读 `PASEO_E2E_PROCESS_TABLE_PATH`，命令只记录）。
+- 每 15 秒那次只看后台 app-server 的进程记录文件，落后了才列进程；找旧副本的列进程只在改写之后和有人看提示区时（上次列过超过 15 秒在后台再列）。
 - 列进程、重启出错（`HostProcessesError`）只记日志、少这几行，不挡列表与改写。
-- 「知道了」只记在内存里（同 magpie），副本变了再出现。
+- 「知道了」按主机与提供方记在内存里（`stores/reopen-seen-store.ts`，同 magpie），副本变了再出现。
 - 截图里「Osuna 里 2 个 Codex 会话」一行是在 WebSocket 回复里补的（daemon 真会给的形状与原文）：测试 daemon 不能起真的 codex 会话。
 
 ### 测试

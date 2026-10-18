@@ -38,6 +38,9 @@ export interface AgentIssuesAreaProps {
   actionError: { action: AgentIssueAction; message: string } | null;
   onAction: (action: AgentIssueAction) => void;
   onDismissError: () => void;
+  // 这台主机这个提供方上次点「知道了」时那些副本的指纹；没点过为 null。
+  seenReopen: string | null;
+  onDismissReopen: (signature: string) => void;
 }
 
 export function AgentIssuesArea({
@@ -48,6 +51,8 @@ export function AgentIssuesArea({
   actionError,
   onAction,
   onDismissError,
+  seenReopen,
+  onDismissReopen,
 }: AgentIssuesAreaProps) {
   const { t, i18n } = useTranslation();
   const reopenCopy = useMemo(
@@ -61,8 +66,13 @@ export function AgentIssuesArea({
       }),
     [t, providerLabel, reopen, i18n.language],
   );
-  const reopenSeen = useReopenSeen({ providerLabel, hints: reopen });
-  const shownReopen = reopenSeen.isSeen ? null : reopenCopy;
+  const reopenSignatureNow = useMemo(() => reopenSignature(reopen), [reopen]);
+  const dismissReopen = useCallback(
+    () => onDismissReopen(reopenSignatureNow),
+    [onDismissReopen, reopenSignatureNow],
+  );
+  const isReopenSeen = seenReopen === reopenSignatureNow;
+  const shownReopen = isReopenSeen ? null : reopenCopy;
   const isEmpty = issues.length === 0 && actionError === null && shownReopen === null;
   if (isEmpty) return null;
   return (
@@ -77,7 +87,7 @@ export function AgentIssuesArea({
           onAction={onAction}
         />
       ))}
-      {shownReopen ? <ReopenBlock copy={shownReopen} onDismiss={reopenSeen.dismiss} /> : null}
+      {shownReopen ? <ReopenBlock copy={shownReopen} onDismiss={dismissReopen} /> : null}
       {actionError ? (
         <ActionErrorBlock
           providerLabel={providerLabel}
@@ -148,25 +158,6 @@ function IssueBlock({
       ) : null}
     </Alert>
   );
-}
-
-// 每个 Agent 点「知道了」时看到的那些副本；副本变了才再显示（magpie staleSeen，只记在内存里）。
-const seenReopen = new Map<string, string>();
-
-interface ReopenSeen {
-  isSeen: boolean;
-  dismiss: () => void;
-}
-
-function useReopenSeen(input: { providerLabel: string; hints: ReopenHintView[] }): ReopenSeen {
-  const { providerLabel, hints } = input;
-  const signature = useMemo(() => reopenSignature(hints), [hints]);
-  const [seen, setSeen] = useState(() => seenReopen.get(providerLabel) ?? null);
-  const dismiss = useCallback(() => {
-    seenReopen.set(providerLabel, signature);
-    setSeen(signature);
-  }, [providerLabel, signature]);
-  return { isSeen: seen === signature, dismiss };
 }
 
 /** 要重开谁：一块 info，每类一行；要用户执行的命令另起一行，与安装命令一样等宽、可复制。 */

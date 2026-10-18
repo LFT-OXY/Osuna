@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { reopenSeenKey, useReopenSeenStore } from "@/stores/reopen-seen-store";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -183,6 +184,14 @@ function AgentApiEndpoints({
     },
     [provider, runIssueAction],
   );
+  const seenReopen = useReopenSeenStore(
+    (store) => store.seen[reopenSeenKey({ serverId, provider })] ?? null,
+  );
+  const markReopenSeen = useReopenSeenStore((store) => store.markSeen);
+  const handleDismissReopen = useCallback(
+    (signature: string) => markReopenSeen({ serverId, provider, signature }),
+    [markReopenSeen, provider, serverId],
+  );
   const issueActions = useMemo(() => {
     if (!hasIssues) return null;
     const pending = endpoints.pendingIssueAction;
@@ -192,9 +201,13 @@ function AgentApiEndpoints({
       actionError: failed?.provider === provider ? failed : null,
       onAction: handleIssueAction,
       onDismissError: endpoints.dismissIssueActionError,
+      seenReopen,
+      onDismissReopen: handleDismissReopen,
     };
   }, [
     endpoints.dismissIssueActionError,
+    handleDismissReopen,
+    seenReopen,
     endpoints.issueActionError,
     endpoints.pendingIssueAction,
     handleIssueAction,

@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
+import { FAKE_CODEX_PATH, FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 import { HostProcessesError, type HostProcess } from "./host-processes.js";
 import {
   CliReopenHints,
@@ -506,7 +506,6 @@ describe("CliReopenHints", () => {
   function hints(): CliReopenHints {
     return new CliReopenHints({
       hostProcesses: () => fake,
-      findCodexCommand: async ({ env }) => ({ command: "/fake/codex", args: [], env }),
       subjects: () => subjects,
       timers: {
         schedule: (handler, ms) => {
@@ -570,7 +569,7 @@ describe("CliReopenHints", () => {
     await tick();
     expect(fake.runs).toEqual([
       {
-        command: "/fake/codex",
+        command: FAKE_CODEX_PATH,
         args: ["app-server", "daemon", "restart"],
         env: { CODEX_HOME: codexHome },
         timeoutMs: 90_000,
@@ -589,6 +588,25 @@ describe("CliReopenHints", () => {
     });
     reopen.dispose();
     expect(cancelled).toBe(1);
+  });
+
+  test("a periodic look reads only the app-server's pid record, and lists no processes while it is current", async () => {
+    // 后台 app-server 在改动之后才起来：进程记录文件说它没落后。
+    writePidFile({ pid: 50, at: hoursAgo(1) });
+    fake.processes = [daemon(50), proc({ pid: 10, startedAt: hoursAgo(5), commandLine: "codex" })];
+    const reopen = hints();
+    reopen.start();
+    await reopen.read();
+    expect(fake.lists).toBe(1);
+    await tick();
+    await tick();
+    expect(fake.lists).toBe(1);
+    expect(fake.runs).toEqual([]);
+    // 没写过进程记录文件也一样。
+    rmSync(path.join(codexHome, "app-server-daemon"), { recursive: true });
+    await tick();
+    expect(fake.lists).toBe(1);
+    reopen.dispose();
   });
 
   test("reading again for the same change uses what was last seen, without listing the processes", async () => {

@@ -17,7 +17,6 @@ import {
   lastLine,
   type HostProcess,
   type HostProcesses,
-  type HostProgram,
 } from "./host-processes.js";
 import type { ApiEndpointProvider, CliStartRead } from "./store.js";
 
@@ -401,11 +400,6 @@ export function cliChangedAt(input: {
   return { changedAt: modifiedAt, remember: { digest, at: modifiedAt } };
 }
 
-/** 找 codex 命令，环境盖上 env（CODEX_HOME）；找不到为 null。 */
-export type FindCodexCommand = (input: {
-  env: Record<string, string>;
-}) => Promise<HostProgram | null>;
-
 /** 用户自己执行时的那条命令（magpie CodexDaemonRestart）。 */
 export const CODEX_APP_SERVER_RESTART_COMMAND = "codex app-server daemon restart";
 
@@ -430,7 +424,6 @@ export type ReopenHintsSubjects = Record<ApiEndpointProvider, ReopenHintsSubject
 export interface CliReopenHintsOptions {
   // 第一次要用时才造：真的实现在测试里一造就抛错。
   hostProcesses: () => HostProcesses;
-  findCodexCommand: FindCodexCommand;
   // 每次看都重新问：改动时刻与会话数随时在变。
   subjects: () => ReopenHintsSubjects;
   timers: UsagePricingTimers;
@@ -449,7 +442,14 @@ interface ReopenLook {
   key: string;
   codexChangedAt: number | null;
   processes: HostProcess[];
+  // 这次改动下最近一次列进程找旧副本的时刻；还没列过为 null。
+  copiesListedAt: number | null;
   codex: CodexAppServerCheck;
+}
+
+/** 这次看要不要列进程找旧副本：每隔一会儿的那次只看后台 app-server 的进程记录文件（magpie codexDaemonEvery）。 */
+interface LookScope {
+  includesCopies: boolean;
 }
 
 /** 这次查看对应的改动：两个 CLI 的目录与改动时刻；变了就要重新看。 */
@@ -464,8 +464,9 @@ function lookKey(subjects: ReopenHintsSubjects): string {
 }
 
 /**
- * 改完提示要重开谁（PRD 第 36 条）。在后台看：改写之后、每隔 REOPEN_CHECK_EVERY_MS，一次只看一个；读状态用最近一次
- * 看到的，只有这次改动还没看过时等一会儿。列进程、执行重启出错只记日志，当作这次查不到，不挡提示区与 daemon。
+ * 改完提示要重开谁（PRD 第 36 条）。在后台看，一次只看一个：改写之后列进程找旧副本；每隔 REOPEN_CHECK_EVERY_MS 只看
+ * 后台 app-server 的进程记录文件，它说落后了才列进程（magpie KeepCodexDaemonCurrent）。读状态用最近一次看到的，
+ * 这次改动还没找过旧副本时等一会儿，找过但已经旧了就在后台再找。列进程、执行重启出错只记日志，不挡提示区与 daemon。
  */
 export class CliReopenHints {
   private readonly options: CliReopenHintsOptions;
@@ -500,17 +501,17 @@ export class CliReopenHints {
     if (this.isDisposed) return;
     this.cancelTick = this.options.timers.schedule(() => {
       this.cancelTick = null;
-      void this.refresh()
+      void this.refresh({ includesCopies: false })
         .catch((error: unknown) => {
-          this.options.logger.error({ err: error }, "Failed to look at the running CLI copies");
+          this.options.logger.error({ err: error }, "Failed to look at Codex's app-server");
         })
         .finally(() => this.scheduleTick());
     }, REOPEN_CHECK_EVERY_MS);
   }
 
   /** 看一次，排在正在看的那次后面；返回这次看完。 */
-  refresh(): Promise<void> {
-    const next = this.looking.then(() => this.look());
+  refresh(scope: LookScope): Promise<void> {
+    const next = this.looking.then(() => this.look(scope));
     // 出错留给等它的人；排队的下一次照样跑。
     this.looking = next.then(
       () => undefined,
@@ -519,8 +520,9 @@ export class CliReopenHints {
     return next;
   }
 
-  private async look(): Promise<void> {
+  private async look(scope: LookScope): Promise<void> {
     const subjects = this.options.subjects();
+    const key = lookKey(subjects);
     let listed: Promise<HostProcess[]> | null = null;
     const listProcesses = () => {
       listed ??= this.hostProcesses().list();
@@ -535,14 +537,33 @@ export class CliReopenHints {
         listProcesses,
       });
     }
-    const isAnyChanged = subjects.claude.changedAt !== null || codex.changedAt !== null;
-    // 不带启动时间的进程表认不出旧副本，只为后台 app-server 列（magpie #2341）。
-    const needsCopies = isAnyChanged && this.hostProcesses().reportsStartTimes;
-    let processes: HostProcess[] = [];
-    if (needsCopies) processes = await this.listOrNothing(listProcesses);
     const codexChangedAt = codex.changedAt?.getTime() ?? null;
     const kept = this.keptCheck({ check, codexChangedAt });
-    this.seen = { key: lookKey(subjects), codexChangedAt, processes, codex: kept };
+    const copies = await this.copiesLook({ subjects, key, scope, listProcesses });
+    this.seen = { key, codexChangedAt, ...copies, codex: kept };
+  }
+
+  /** 这次看到的进程：要找旧副本就列（列不出为空），否则留着同一次改动下上次列的。 */
+  private async copiesLook(input: {
+    subjects: ReopenHintsSubjects;
+    key: string;
+    scope: LookScope;
+    listProcesses: () => Promise<HostProcess[]>;
+  }): Promise<Pick<ReopenLook, "processes" | "copiesListedAt">> {
+    const previous = this.seenFor(input.key);
+    if (!input.scope.includesCopies) {
+      return {
+        processes: previous?.processes ?? [],
+        copiesListedAt: previous?.copiesListedAt ?? null,
+      };
+    }
+    const { claude, codex } = input.subjects;
+    const isAnyChanged = claude.changedAt !== null || codex.changedAt !== null;
+    // 不带启动时间的进程表认不出旧副本，只为后台 app-server 列（magpie #2341）。
+    const needsCopies = isAnyChanged && this.hostProcesses().reportsStartTimes;
+    const listedAt = this.options.now().getTime();
+    if (!needsCopies) return { processes: [], copiesListedAt: listedAt };
+    return { processes: await this.listOrNothing(input.listProcesses), copiesListedAt: listedAt };
   }
 
   /** 重启过之后新的 app-server 不再落后：同一次改动之内照旧说「已重启」。 */
@@ -582,7 +603,7 @@ export class CliReopenHints {
   }
 
   private async restartCodexAppServer(codexHome: string): Promise<void> {
-    const codex = await this.options.findCodexCommand({ env: { CODEX_HOME: codexHome } });
+    const codex = await this.hostProcesses().findCodex({ env: { CODEX_HOME: codexHome } });
     if (codex === null) {
       throw new HostProcessesError({
         message: "The codex CLI isn't installed, or Osuna can't find it",
@@ -613,8 +634,13 @@ export class CliReopenHints {
   async read(): Promise<Record<ApiEndpointProvider, ApiEndpointReopenHint[]>> {
     const subjects = this.options.subjects();
     const key = lookKey(subjects);
-    if (this.seen?.key !== key) {
-      await waitAtMost({ task: this.refresh(), ms: FIRST_LOOK_WAIT_MS });
+    const listedAt = this.seenFor(key)?.copiesListedAt ?? null;
+    if (listedAt === null) {
+      await waitAtMost({ task: this.refresh({ includesCopies: true }), ms: FIRST_LOOK_WAIT_MS });
+    } else if (this.options.now().getTime() - listedAt >= REOPEN_CHECK_EVERY_MS) {
+      this.refresh({ includesCopies: true }).catch((error: unknown) => {
+        this.options.logger.error({ err: error }, "Failed to look at the running CLI copies");
+      });
     }
     const seen = this.seenFor(key);
     return {

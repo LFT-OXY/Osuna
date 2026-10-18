@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { HostProcessesError, type HostProcess } from "../api-endpoints/host-processes.js";
-import { FakeHostProcesses } from "../test-utils/fake-host-processes.js";
+import { FAKE_CODEX_PATH, FakeHostProcesses } from "../test-utils/fake-host-processes.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
@@ -14,7 +14,6 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  * 进程表与 `codex app-server daemon restart` 一律经假的「进程与命令」，什么都不真的读、真的跑。
  */
 
-const FAKE_CODEX = "/fake/bin/codex";
 const CliStartReadsSchema = z.object({ codex: z.object({ digest: z.string(), at: z.string() }) });
 const RESTART_ARGS = ["app-server", "daemon", "restart"];
 
@@ -57,7 +56,6 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
         env: { CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeDir },
         homeDir: root,
         hostProcesses: fake,
-        findCodexCommand: async ({ env }) => ({ command: FAKE_CODEX, args: [], env }),
       },
     });
     client = await connect(daemon);
@@ -213,7 +211,7 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     });
     expect(fake.runs).toEqual([
       {
-        command: FAKE_CODEX,
+        command: FAKE_CODEX_PATH,
         args: RESTART_ARGS,
         env: { CODEX_HOME: codexHome },
         timeoutMs: 90_000,

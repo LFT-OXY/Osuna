@@ -519,7 +519,6 @@ export interface PaseoDaemonConfig {
     | "readCliUse"
     // 列进程与执行 CLI 命令的适配器：测试 daemon 一律给假的（paseo-daemon.ts）。
     | "hostProcesses"
-    | "findCodexCommand"
     | "reopenHintsTimers"
   > &
     ApiEndpointGatewayOverrides &
