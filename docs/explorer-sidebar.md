@@ -88,6 +88,12 @@ Stock Codex asks Codex for the conversations of every
 provider extending Codex started is listed by both, so the daemon keeps only the custom
 provider's row, which resumes it with that provider's settings.
 
+A Codex row's menu offers "Move to another Codex model provider…" when the host advertises
+`apiEndpointCliWiring`. The dialog belongs to `session-history/view.tsx`, not the surface, because
+`AdaptiveModalSheet` pulls in modules the surface's jsdom test cannot parse. The rules for moving
+are in [ADR 0011](adr/0011-osuna-moves-codex-conversations-between-providers.md); the backups are in
+[data-model.md](data-model.md#directory-layout).
+
 The view asks with `includeImported: true`, so sessions Paseo already owns stay in the list with
 their `importedAgentId` and `importedAgentWorkspaceId`. Such a row carries a Paseo badge and
 opens that agent through `navigateToAgent` with the workspace id and `pin`, the same call the

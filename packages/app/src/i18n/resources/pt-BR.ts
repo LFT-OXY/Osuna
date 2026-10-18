@@ -2289,6 +2289,27 @@ export const ptBR: TranslationResources = {
         importing: "Importando...",
         codexModelProvider: "Provedor de modelos do Codex",
       },
+      move: {
+        menuItem: "Mover para outro provedor de modelos do Codex…",
+        title: "Mover para outro provedor de modelos do Codex",
+        targetLabel: "Mover para",
+        targetPlaceholder: "Escolha um provedor de modelos do Codex",
+        targetEmpty: "Nenhum outro provedor de modelos do Codex",
+        sourceBuiltin: "Integrado ao Codex",
+        sourceOsuna: "Do próprio Osuna",
+        backupNote:
+          "O Osuna faz primeiro um backup dos arquivos da conversa. Movê-la de volta para {{from}} desfaz a mudança.",
+        rebuildNote:
+          "Continue a conversa uma vez depois de movê-la. Até lá, se o Codex reconstruir o banco de dados de estado, o Codex vai continuá-la de novo com {{from}}.",
+        confirm: "Mover",
+        moving: "Movendo...",
+        moved: "Movida para {{to}}",
+        notMoved: "A conversa não foi movida",
+        skippedActive:
+          "Ela foi gravada no último minuto e pode ainda estar em execução. Tente de novo quando estiver ociosa.",
+        skippedNotFound: "O Osuna não encontra os arquivos desta conversa.",
+        listFailed: "Não foi possível listar os provedores de modelos do Codex",
+      },
       errors: {
         loadFailed: "Não foi possível carregar as sessões",
         openFailed: "Não foi possível abrir um terminal para esta sessão",

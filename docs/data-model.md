@@ -79,6 +79,10 @@ $PASEO_HOME/
 │   ├── {file}.bak                       # Last good copy of endpoints.json, keys.json and gateway-tokens.json
 │   ├── {file}.bad-{time}                # A copy of one of those three that failed to parse
 │   └── backups/                         # Byte copy of a CLI config file before its first managed write
+├── codex-model-provider-moves/          # One folder per moved Codex conversation (ADR 0011), mode 0700; never read back
+│   └── {UTC time}-{threadId}/
+│       ├── move.json                    # { id, from, to, at, items: [{ from: original path, name }] }
+│       └── files/{n}-{file name}        # Each conversation file as it was, mode and time kept
 ├── command-catalog.json                 # Last process-reported command list per provider + cwd
 ├── usage/
 │   ├── buckets-YYYY-MM.jsonl             # Token increments per (source, model, session, cwd, UTC 15-min bucket)

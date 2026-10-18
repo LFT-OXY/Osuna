@@ -2303,6 +2303,27 @@ export const fr: TranslationResources = {
         importing: "Importation...",
         codexModelProvider: "Fournisseur de modèles Codex",
       },
+      move: {
+        menuItem: "Déplacer vers un autre fournisseur de modèles Codex…",
+        title: "Déplacer vers un autre fournisseur de modèles Codex",
+        targetLabel: "Déplacer vers",
+        targetPlaceholder: "Choisir un fournisseur de modèles Codex",
+        targetEmpty: "Aucun autre fournisseur de modèles Codex",
+        sourceBuiltin: "Intégré à Codex",
+        sourceOsuna: "Propre à Osuna",
+        backupNote:
+          "Osuna sauvegarde d'abord les fichiers de la conversation. La redéplacer vers {{from}} annule le déplacement.",
+        rebuildNote:
+          "Reprenez la conversation une fois après le déplacement. D'ici là, si Codex reconstruit sa base d'état, Codex la reprendra de nouveau avec {{from}}.",
+        confirm: "Déplacer",
+        moving: "Déplacement...",
+        moved: "Déplacée vers {{to}}",
+        notMoved: "Conversation non déplacée",
+        skippedActive:
+          "Elle a été écrite au cours de la dernière minute et est peut-être encore en cours. Réessayez quand elle sera inactive.",
+        skippedNotFound: "Osuna ne trouve pas les fichiers de cette conversation.",
+        listFailed: "Impossible de lister les fournisseurs de modèles Codex",
+      },
       errors: {
         loadFailed: "Impossible de charger les sessions",
         openFailed: "Impossible d'ouvrir un terminal pour cette session",

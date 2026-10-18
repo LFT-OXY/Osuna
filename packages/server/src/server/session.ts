@@ -192,6 +192,10 @@ import {
   createApiEndpointSession,
   type ApiEndpointSession,
 } from "./session/api-endpoint/api-endpoint-session.js";
+import {
+  createCodexConversationSession,
+  type CodexConversationSession,
+} from "./session/codex-conversation/codex-conversation-session.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { UsageSession } from "./session/usage/usage-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
@@ -808,6 +812,7 @@ export class Session {
   private readonly scheduleSession: ScheduleSession;
   private readonly usageStatsSession: UsageStatsSession | null;
   private readonly apiEndpointSession: ApiEndpointSession | null;
+  private readonly codexConversationSession: CodexConversationSession | null;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly usageSession: UsageSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -996,6 +1001,12 @@ export class Session {
     this.apiEndpointSession = createApiEndpointSession({
       host: { emit: (msg) => this.emit(msg) },
       service: apiEndpointService,
+      logger: this.sessionLogger,
+    });
+    this.codexConversationSession = createCodexConversationSession({
+      host: { emit: (msg) => this.emit(msg) },
+      apiEndpointService,
+      paseoHome: this.paseoHome,
       logger: this.sessionLogger,
     });
     this.providerCatalogSession = new ProviderCatalogSession({
@@ -3057,6 +3068,22 @@ export class Session {
         return this.providerCatalogSession.handleProviderVersionCheckRequest(msg);
       case "provider.upgrade.request":
         return this.providerCatalogSession.handleProviderUpgradeRequest(msg);
+      case "provider.codex.session.list_model_providers.request":
+      case "provider.codex.session.move_model_provider.request":
+        if (!this.codexConversationSession) {
+          // 挪 Codex 对话的 Codex 目录跟着第三方接口服务走；没有它的 daemon 也不声明 apiEndpointCliWiring。
+          this.emit({
+            type: "rpc_error",
+            payload: {
+              requestId: msg.requestId,
+              requestType: msg.type,
+              error: "Moving Codex conversations is not available on this daemon",
+              code: "codex_conversations_unavailable",
+            },
+          });
+          return Promise.resolve();
+        }
+        return this.codexConversationSession.handle(msg);
       default:
         return this.dispatchApiEndpointMessage(msg);
     }

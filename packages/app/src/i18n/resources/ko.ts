@@ -2265,6 +2265,27 @@ export const ko: TranslationResources = {
         importing: "가져오는 중...",
         codexModelProvider: "Codex 모델 공급자",
       },
+      move: {
+        menuItem: "다른 Codex 모델 공급자로 이동…",
+        title: "다른 Codex 모델 공급자로 이동",
+        targetLabel: "이동할 곳",
+        targetPlaceholder: "Codex 모델 공급자 선택",
+        targetEmpty: "다른 Codex 모델 공급자가 없습니다",
+        sourceBuiltin: "Codex 기본 제공",
+        sourceOsuna: "Osuna 전용",
+        backupNote:
+          "Osuna가 먼저 대화 파일을 백업합니다. {{from}}(으)로 다시 옮기면 이동이 취소됩니다.",
+        rebuildNote:
+          "이동한 뒤 이 대화를 한 번 이어서 진행하세요. 그 전에 Codex가 상태 데이터베이스를 다시 만들면 Codex는 다시 {{from}}에서 이어 갑니다.",
+        confirm: "이동",
+        moving: "이동 중...",
+        moved: "{{to}}(으)로 이동했습니다",
+        notMoved: "대화를 이동하지 않았습니다",
+        skippedActive:
+          "최근 1분 안에 기록되어 아직 실행 중일 수 있습니다. 유휴 상태가 되면 다시 시도하세요.",
+        skippedNotFound: "Osuna가 이 대화의 파일을 찾을 수 없습니다.",
+        listFailed: "Codex 모델 공급자를 나열할 수 없습니다",
+      },
       errors: {
         loadFailed: "세션을 불러올 수 없습니다",
         openFailed: "이 세션의 터미널을 열 수 없습니다",

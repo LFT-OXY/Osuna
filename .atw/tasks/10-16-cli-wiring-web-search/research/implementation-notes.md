@@ -312,3 +312,55 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - daemon 端到端：`codex-history-all-model-providers.e2e.test.ts`，假 Codex 照上表的规则过滤夹具里两个服务商的对话；Osuna 不传空数组时这条用例失败（已验证）。
 - app 浏览器：`session-history-codex-model-provider.spec.ts`，夹具 `e2e/fixtures/session-history-codex.mjs`。
 - 截图：`screenshots/12-session-history_two-codex-model-providers_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex、临时 daemon 目录。
+
+## 13 把一段 Codex 对话挪到另一个 Codex 服务商
+
+### 对照 magpie（7597c132）的结论
+
+| 项 | magpie（`internal/sessions/codex_provider.go`） | Osuna（`codex-conversations/move-to-model-provider.ts`） |
+| --- | --- | --- |
+| 找文件 | `codexFilesIn`：`sessions/`、`archived_sessions/` 下按 `rolloutName` 认，加 `rolloutTwin`（压缩的孪生文件） | 同；按路径排序后逐个改（中途失败的顺序因此确定） |
+| 一分钟内写过 | 任一文件 `recent` 就整段拒绝（`ErrActive`），什么都不写 | 同，结果 `skipped` 的 `reason: "active"` |
+| 备份 | `<magpie 目录>/trash/codex-provider/<时间>-<id>/files/<序号>-<文件名>` + `move.json`（id、from、to、at、items） | `$PASEO_HOME/codex-model-provider-moves/<UTC 时间>-<id>/`，同样的布局与字段；目录 0700、`move.json` 0600（对话内容是私人的） |
+| 改哪一行 | 前 1024 字节含 `"type":"session_meta"`、顶层 type 是 session_meta、`payload.model_provider` 是字符串且不等于目标 | 同；用按字节走的小扫描器找到值的字节范围原地换掉，不重新序列化 |
+| 写回 | 旁边的临时文件、`Sync`、保留修改时间、改名替换；压缩的照样 zstd 压回 | 同；Node 自带的 `zlib.createZstdCompress/Decompress`，按行流式处理 |
+| 中途失败 | 已改的文件用备份 `keptCopy` 改回 | 同 |
+| 状态库 | 每个 `state_*.sqlite`：有 `threads` 表（id、model_provider 两列）才 `UPDATE`；失败报「文件挪了、库没改」 | 同（`process.getBuiltinModule("node:sqlite")`，`busy_timeout = 5000`）；目录照 magpie：`CODEX_SQLITE_HOME`，其次 config.toml 的 `sqlite_home`，缺省 CODEX_HOME |
+| 设置快照 | `thread_settings_applied` 里的旧服务商不改（已知局限） | 同 |
+| 入口 | GUI `POST /api/sessions/codex-provider`，一次多条 | 新 RPC `provider.codex.session.move_model_provider`（一组 thread id + 目标），另有 `provider.codex.session.list_model_providers` 给对话框列目标；本张界面只挪一条，多选归 14 号 |
+
+### 要判断的地方
+
+- **在哪个 Codex 目录里挪**：第三方接口改写的那份 `config.toml` 所在目录（`ApiEndpointService.resolveCodexLocation`，CODEX_HOME 优先，缺省 `~/.codex`），与 09 号判断登录方式用的是同一处。Codex 提供方设置里另设了 `CODEX_HOME` 的话，会话历史列出的对话在那边、挪动在这边找不到（结果是 `not_found`）；这和 09 号接受的限制相同。
+- **目标列表**：内置 `openai`、`osuna_api_endpoint`（名字写 Osuna，config.toml 里没有这张表也列出，照工单「Osuna 自己的服务商」）、config.toml 里每张 `[model_providers.<id>]`（有 `name` 就带上）。对话现在的服务商不在下拉里。目标 id 只按 magpie 的 `codexProviderRe` 校验，不要求在列表里。
+- **能力位**：沿用还没发布的 `apiEndpointCliWiring`（v0.17.0），只改了注释；daemon 没有第三方接口服务时两个 RPC 回 `rpc_error`（`codex_conversations_unavailable`），也不声明这个能力位。
+- **修改时间**：Node 的 `utimes` 只到微秒级，Codex 的文件是纳秒级，所以「修改时间不变」是毫秒以内相同（e2e 按 1 毫秒以内比）；magpie 的 Go 能保留到纳秒。
+- **压缩文件挪回去**：解开后的内容与原来逐字节相同；压缩后的字节取决于压缩器（Codex app 自己压的与 Node 压的会不同），e2e 比的是解开后的内容，未压缩的文件比的是原字节。
+- **比 magpie 多做的**：开始改之前先确认 Node 有 `node:sqlite`（有状态库时）和 zstd（有压缩文件时），没有就整段不动、报原因，避免文件挪了库没改。
+- 同一时间只挪一段对话（模块内的队列，相当于 magpie 的 `mu`）。
+- 对话框归 `session-history/view.tsx`：`AdaptiveModalSheet` 会把 jsdom 单元测试解析不了的模块带进 `index.tsx`。
+
+### 一次性核实（2026-10-18，codex-cli 0.163.0）
+
+在 `/tmp` 下新建的临时目录里，`env -i HOME=<临时> CODEX_HOME=<临时>/codex-home PATH=/usr/bin:/bin`，未登录、没有 API key，不碰 `~/.codex`。config.toml 里只有一张 `[model_providers.cc]`（`base_url = "http://127.0.0.1:9/v1"`）。手写一份 rollout（`session_meta.model_provider = "openai"`，一条用户消息），起真的 `codex app-server` 按行发 JSON-RPC；挪动用 Osuna 的 `moveCodexConversation`。用完删掉了临时目录。
+
+| 步骤 | 结果 |
+| --- | --- |
+| 第一次 `thread/list`（`modelProviders: []`） | 列出，`modelProvider: "openai"`；Codex 顺手建了 `state_5.sqlite`（WAL 模式），`threads` 行记 `openai` |
+| `thread/resume`（服务商 openai） | 成功；rollout 末尾多了一条 `event_msg` / `thread_settings_applied`，`thread_settings.model_provider_id = "openai"`。另外它向 `wss://api.openai.com/v1/responses` 预连了一次，没带凭据，收到 401（只记日志） |
+| 挪到 `cc` | `session_meta` 只有服务商变了，`state_5.sqlite` 的行变成 `cc`；设置快照仍是 `openai` |
+| `thread/list` 带 `["cc"]` / `["openai"]` / 不带 | 只在 `cc` 下列出（`modelProvider: "cc"`），另两种为空 |
+| 删掉 `state_5.sqlite*` 让 Codex 重建，再列 | 列表仍在 `cc` 下、`modelProvider: "cc"`（列表看的是 `session_meta`），但重建后的库记的是 `openai`（被设置快照盖回去了） |
+| 这时 `thread/resume` | `thread.modelProvider` 是 `cc`，但续上用的 `modelProvider` 是 **openai**（恢复按状态库取），并又写了一条 `openai` 的快照：**挪动被改回** |
+| 换个顺序：挪到 `cc` 后先 `thread/resume` 一次 | 续上用 `cc`（没有报 not found，配置按 cc 加载成功），写了一条 `model_provider_id = "cc"` 的快照；之后再删库重建，库里记 `cc`：挪动保住了 |
+
+结论：Codex 从对话文件重建状态库时，按最后一条设置快照取服务商，所以**挪完还没续过的对话会被改回**；挪完续一次（新快照写的是新服务商）就不会。对话框里照此写明（`panels.sessionHistory.move.rebuildNote`），留给 30 号工单补进 ADR 0011 的 Consequences。
+
+没核实的：挪完后真的发一轮对话（要模型请求与登录，按禁令不做）；`codex resume` 终端选择器里的表现（TUI 不便脚本化，app-server 的 `thread/list` 与它用同一套过滤，见 `codex-wiring.md` 第 1 题）。
+
+### 测试
+
+- daemon 端到端：`codex-model-provider-move.e2e.test.ts`（POSIX）——挪动只改服务商、修改时间不变、状态库已改、备份与 `move.json` 在；挪回逐字节相同；一分钟内写过的被跳过；第二个文件所在目录不可写时第一个被改回；列目标。去掉改回或状态库那一步时对应用例失败（已验证）。
+- 协议：`messages.codex-session.test.ts`。
+- app 浏览器：`session-history-codex-model-provider.spec.ts` 加挪动成功、一分钟内写过两种；假 Codex 有 `path` 时按对话文件第一行报服务商。
+- 截图：`screenshots/13-session-history_row-menu-open_desktop-1280_{en,zh}.png`、`13-move-dialog_target-chosen_{desktop-1280,compact-390}_{en,zh}.png`，无头 Chromium、假 Codex、临时 CODEX_HOME。

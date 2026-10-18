@@ -100,6 +100,11 @@ export interface SessionHistorySurfaceProps {
   onCopyResumeCommand: (command: string) => void;
   /** The session is now a Paseo agent; the shell navigates the way the import sheet does. */
   onImported: (result: SessionHistoryImportResult) => void;
+  /**
+   * "Move to another Codex model provider" was chosen on a Codex row; the shell owns the dialog.
+   * Null when the host can't move Codex conversations (`server_info.features.apiEndpointCliWiring`).
+   */
+  onMoveCodexConversation: ((row: SessionHistoryRow) => void) | null;
 }
 
 function ProviderIconSlot({
@@ -149,6 +154,7 @@ function SessionHistoryRowItem({
   onPress,
   onCopyResumeCommand,
   onImport,
+  onMoveCodexConversation,
 }: {
   serverId: string;
   row: SessionHistoryRow;
@@ -158,6 +164,8 @@ function SessionHistoryRowItem({
   onPress: (row: SessionHistoryRow) => void;
   onCopyResumeCommand: (row: SessionHistoryRow) => void;
   onImport: (row: SessionHistoryRow) => void;
+  /** Null when this row can't be moved: not a Codex row, or the host can't move it. */
+  onMoveCodexConversation: ((row: SessionHistoryRow) => void) | null;
 }) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -182,6 +190,10 @@ function SessionHistoryRowItem({
     [onCopyResumeCommand, row],
   );
   const handleImport = useCallback(() => onImport(row), [onImport, row]);
+  const handleMoveCodexConversation = useCallback(
+    () => onMoveCodexConversation?.(row),
+    [onMoveCodexConversation, row],
+  );
   const triggerStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.row,
@@ -197,6 +209,7 @@ function SessionHistoryRowItem({
     // Paseo already owns the session: importing it again would make a second agent.
     onImport: row.importedAgentId ? null : handleImport,
     importStatus: status === "importing" ? ("pending" as const) : ("idle" as const),
+    onMoveCodexConversation: onMoveCodexConversation ? handleMoveCodexConversation : null,
   };
 
   let meta: string;
@@ -361,6 +374,7 @@ export function SessionHistorySurface({
   onOpenAgent,
   onCopyResumeCommand,
   onImported,
+  onMoveCodexConversation,
 }: SessionHistorySurfaceProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -611,6 +625,7 @@ export function SessionHistorySurface({
               onPress={handleRowPress}
               onCopyResumeCommand={handleCopyResumeCommand}
               onImport={handleImport}
+              onMoveCodexConversation={row.codexModelProvider ? onMoveCodexConversation : null}
             />
           ))
         )}

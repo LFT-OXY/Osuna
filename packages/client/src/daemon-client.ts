@@ -689,6 +689,19 @@ type ApiEndpointCancelPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.cancel.response" }
 >["payload"];
+type CodexSessionListModelProvidersPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.codex.session.list_model_providers.response" }
+>["payload"];
+type CodexSessionMoveModelProviderPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.codex.session.move_model_provider.response" }
+>["payload"];
+
+export type CodexSessionMoveModelProviderOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.codex.session.move_model_provider.request" }>,
+  "type" | "requestId"
+>;
 
 export type ApiEndpointSaveOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.save.request" }>,
@@ -6402,6 +6415,27 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.cancel.request", targetRequestId },
+    });
+  }
+
+  /** 能把 Codex 对话挪去的 Codex 服务商：config.toml 里的表、内置 openai、Osuna 自己的。 */
+  async codexSessionListModelProviders(
+    requestId?: string,
+  ): Promise<CodexSessionListModelProvidersPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.codex.session.list_model_providers.request" },
+    });
+  }
+
+  /** 把 Codex 对话挪到另一个 Codex 服务商（先备份；一分钟内写过的不挪）。 */
+  async codexSessionMoveModelProvider(
+    options: CodexSessionMoveModelProviderOptions,
+    requestId?: string,
+  ): Promise<CodexSessionMoveModelProviderPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.codex.session.move_model_provider.request", ...options },
     });
   }
 

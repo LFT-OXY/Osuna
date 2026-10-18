@@ -152,6 +152,7 @@ function renderSurface(
         onOpenAgent={onOpenAgent}
         onCopyResumeCommand={onCopyResumeCommand}
         onImported={onImported}
+        onMoveCodexConversation={null}
       />
     </QueryClientProvider>
   );

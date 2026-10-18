@@ -280,6 +280,20 @@ internal/gateway/upstream_transport.go:
   packages/server/src/server/api-endpoints/gateway/request-body.ts
   packages/server/src/server/api-endpoints/gateway/upstream-call.ts
 
+Moving a Codex conversation to another Codex model provider (its files found
+by rolloutName and rolloutTwin, one written in the last minute left alone, each
+file copied with its mode and time and a move.json written first, the provider
+of every session_meta that names one changed and nothing else, the file written
+beside itself, synced, given back its time and renamed over it, compressed ones
+compressed again, the files changed so far put back on a failure, and the
+thread's row in each state_*.sqlite that has a threads table) follows
+MoveCodexProvider, setMetaProvider, rewriteCodexProvider, moveCodexThread,
+keptCopy and codexMetaProvider in magpie's internal/sessions/codex_provider.go,
+rolloutName and rolloutTwin in sessions.go, and ActiveWindow and recent in
+manage.go:
+
+  packages/server/src/server/codex-conversations/move-to-model-provider.ts
+
 Keeping the daemon's own state files' last good generation (a .bak written
 before each write, a file that doesn't parse read from its .bak and copied
 aside as .bad-<time>, an error when the .bak doesn't parse either) follows

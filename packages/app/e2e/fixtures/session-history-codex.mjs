@@ -3,7 +3,8 @@ import readline from "node:readline";
 
 // 假 Codex：会话历史要的 thread/list 读 SESSION_HISTORY_CODEX_THREADS 指向的夹具文件（每次现读，
 // 用例在 daemon 起来后才写入工作区路径），并照 Codex 的规则按服务商过滤：不传 modelProviders 只列
-// 当前服务商 openai，传空数组列全部，传列表只列这些。
+// 当前服务商 openai，传空数组列全部，传列表只列这些。对话带 path 时服务商照 Codex 读对话文件第一行的
+// session_meta（挪对话改的就是它）。
 const model = {
   id: "gpt-6.1-sol",
   model: "gpt-6.1-sol",
@@ -13,12 +14,22 @@ const model = {
   supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Medium" }],
 };
 
+function providerInFile(path) {
+  const first = readFileSync(path, "utf8").split("\n")[0];
+  return JSON.parse(first).payload.model_provider;
+}
+
 function readThreads() {
+  let threads;
   try {
-    return JSON.parse(readFileSync(process.env.SESSION_HISTORY_CODEX_THREADS, "utf8"));
+    threads = JSON.parse(readFileSync(process.env.SESSION_HISTORY_CODEX_THREADS, "utf8"));
   } catch {
     return [];
   }
+  for (const thread of threads) {
+    if (thread.path) thread.modelProvider = providerInFile(thread.path);
+  }
+  return threads;
 }
 
 function respond(method, params) {

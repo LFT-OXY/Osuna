@@ -1,4 +1,5 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useToast } from "@/contexts/toast-context";
@@ -9,7 +10,12 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import { useProjectWorkspaceDirectories, useWorkspaceFields } from "@/stores/session-store-hooks";
 import { copyToClipboard } from "@/utils/copy-to-clipboard";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { SessionHistorySurface, type SessionHistoryImportResult } from "./index";
+import {
+  SessionHistorySurface,
+  type SessionHistoryImportResult,
+  type SessionHistoryRow,
+} from "./index";
+import { MoveCodexConversationSheet } from "./internal/move-codex-conversation-sheet";
 import { useSessionHistoryScopeStore } from "./internal/scope-store";
 
 /*
@@ -37,6 +43,8 @@ export function SessionHistoryView({
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const isSupported = useHostFeature(serverId, "sessionHistory");
+  // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
+  const canMoveCodexConversations = useHostFeature(serverId, "apiEndpointCliWiring");
   const isAppVisible = useAppActivelyVisible();
   const isPanelActive = useRetainedPanelActive();
   const scope = useSessionHistoryScopeStore((state) => state.scope);
@@ -68,6 +76,25 @@ export function SessionHistoryView({
     },
     [t, toast],
   );
+  const queryClient = useQueryClient();
+  const [movingRow, setMovingRow] = useState<SessionHistoryRow | null>(null);
+  const handleCloseMove = useCallback(() => setMovingRow(null), []);
+  const handleMovedCodexConversation = useCallback(
+    (to: string) => {
+      setMovingRow(null);
+      // 这一行换了 Codex 服务商：这台主机的会话历史列表全部重列，行上才显示新的服务商。
+      void queryClient.invalidateQueries({ queryKey: ["session-history", serverId] });
+      toast.show(t("panels.sessionHistory.move.moved", { to }), { variant: "success" });
+    },
+    [queryClient, serverId, t, toast],
+  );
+  const movingConversation = useMemo(
+    () =>
+      movingRow?.codexModelProvider
+        ? { serverId, threadId: movingRow.providerHandleId, from: movingRow.codexModelProvider }
+        : null,
+    [movingRow, serverId],
+  );
   // 与 Import session 面板相同的导入后去向：本 workspace 的 agent 直接开 tab，别的 workspace 先打开其项目。
   const handleImported = useCallback(
     (result: SessionHistoryImportResult) => {
@@ -85,22 +112,34 @@ export function SessionHistoryView({
     [navigateToImportedAgent, serverId],
   );
   return (
-    <SessionHistorySurface
-      serverId={serverId}
-      workspaceId={workspaceId}
-      workspaceDirectory={workspaceDirectory}
-      projectRootPath={project?.projectRootPath ?? null}
-      projectWorkspaceDirectories={projectWorkspaceDirectories}
-      scope={scope}
-      onScopeChange={setScope}
-      client={client}
-      isConnected={isConnected}
-      isSupported={isSupported}
-      isVisible={isAppVisible && isPanelActive}
-      onOpenTerminal={onOpenTerminal}
-      onOpenAgent={handleOpenAgent}
-      onCopyResumeCommand={handleCopyResumeCommand}
-      onImported={handleImported}
-    />
+    <>
+      <SessionHistorySurface
+        serverId={serverId}
+        workspaceId={workspaceId}
+        workspaceDirectory={workspaceDirectory}
+        projectRootPath={project?.projectRootPath ?? null}
+        projectWorkspaceDirectories={projectWorkspaceDirectories}
+        scope={scope}
+        onScopeChange={setScope}
+        client={client}
+        isConnected={isConnected}
+        isSupported={isSupported}
+        isVisible={isAppVisible && isPanelActive}
+        onOpenTerminal={onOpenTerminal}
+        onOpenAgent={handleOpenAgent}
+        onCopyResumeCommand={handleCopyResumeCommand}
+        onImported={handleImported}
+        onMoveCodexConversation={canMoveCodexConversations ? setMovingRow : null}
+      />
+      {movingConversation && client ? (
+        <MoveCodexConversationSheet
+          key={movingConversation.threadId}
+          client={client}
+          conversation={movingConversation}
+          onClose={handleCloseMove}
+          onMoved={handleMovedCodexConversation}
+        />
+      ) : null}
+    </>
   );
 }

@@ -2253,6 +2253,27 @@ export const ar: TranslationResources = {
         importing: "جارٍ الاستيراد...",
         codexModelProvider: "مزوّد نماذج Codex",
       },
+      move: {
+        menuItem: "النقل إلى مزوّد نماذج Codex آخر…",
+        title: "النقل إلى مزوّد نماذج Codex آخر",
+        targetLabel: "النقل إلى",
+        targetPlaceholder: "اختر مزوّد نماذج Codex",
+        targetEmpty: "لا يوجد مزوّد نماذج Codex آخر",
+        sourceBuiltin: "مدمج في Codex",
+        sourceOsuna: "الخاص بـ Osuna",
+        backupNote:
+          "يأخذ Osuna نسخة احتياطية من ملفات المحادثة أولاً. نقلها مرة أخرى إلى {{from}} يلغي النقل.",
+        rebuildNote:
+          "تابع المحادثة مرة واحدة بعد النقل. وحتى ذلك الحين، إذا أعاد Codex بناء قاعدة بيانات الحالة، فسيتابعها Codex مرة أخرى عبر {{from}}.",
+        confirm: "نقل",
+        moving: "جارٍ النقل...",
+        moved: "نُقلت إلى {{to}}",
+        notMoved: "لم تُنقل المحادثة",
+        skippedActive:
+          "كُتب فيها خلال الدقيقة الأخيرة وقد تكون لا تزال قيد التشغيل. حاول مرة أخرى عندما تصبح خاملة.",
+        skippedNotFound: "لا يجد Osuna ملفات هذه المحادثة.",
+        listFailed: "تعذّر عرض مزوّدي نماذج Codex",
+      },
       errors: {
         loadFailed: "تعذّر تحميل الجلسات",
         openFailed: "تعذّر فتح طرفية لهذه الجلسة",

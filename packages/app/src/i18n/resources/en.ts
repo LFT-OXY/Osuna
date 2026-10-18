@@ -2278,6 +2278,27 @@ export const en = {
         importing: "Importing...",
         codexModelProvider: "Codex model provider",
       },
+      move: {
+        menuItem: "Move to another Codex model provider…",
+        title: "Move to another Codex model provider",
+        targetLabel: "Move to",
+        targetPlaceholder: "Choose a Codex model provider",
+        targetEmpty: "No other Codex model provider",
+        sourceBuiltin: "Built into Codex",
+        sourceOsuna: "Osuna's own",
+        backupNote:
+          "Osuna backs up the conversation files first. Moving it back to {{from}} undoes the move.",
+        rebuildNote:
+          "Continue the conversation once after moving. Until then, if Codex rebuilds its state database, Codex continues it under {{from}} again.",
+        confirm: "Move",
+        moving: "Moving...",
+        moved: "Moved to {{to}}",
+        notMoved: "Conversation not moved",
+        skippedActive:
+          "It was written to in the last minute and may still be running. Try again once it is idle.",
+        skippedNotFound: "Osuna can't find this conversation's files.",
+        listFailed: "Could not list Codex model providers",
+      },
       errors: {
         loadFailed: "Could not load sessions",
         openFailed: "Could not open a terminal for this session",

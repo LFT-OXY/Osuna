@@ -2,7 +2,7 @@ import React, { type ComponentProps, type PropsWithChildren, type ReactNode } fr
 import { useTranslation } from "react-i18next";
 import type { PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Copy, Import, MoreVertical } from "lucide-react-native";
+import { ArrowRightLeft, Copy, Import, MoreVertical } from "lucide-react-native";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,10 +24,12 @@ const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.for
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedImport = withUnistyles(Import);
+const ThemedArrowRightLeft = withUnistyles(ArrowRightLeft);
 
 const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapping} />;
 const importLeadingIcon = <ThemedImport size={14} uniProps={foregroundMutedColorMapping} />;
-const MENU_WIDTH = 240;
+const moveLeadingIcon = <ThemedArrowRightLeft size={14} uniProps={foregroundMutedColorMapping} />;
+const MENU_WIDTH = 320;
 
 function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
   return (
@@ -49,6 +51,8 @@ export interface SessionHistoryRowActions {
   /** Absent when Paseo already owns the session: importing it again would make a second agent. */
   onImport: (() => void) | null;
   importStatus: "idle" | "pending";
+  /** Only Codex rows, on a host that can move Codex conversations. */
+  onMoveCodexConversation: (() => void) | null;
 }
 
 type MenuSurface = "context" | "dropdown";
@@ -72,6 +76,7 @@ function SessionHistoryRowMenuItems({
   onCopyResumeCommand,
   onImport,
   importStatus,
+  onMoveCodexConversation,
 }: SessionHistoryRowActions & { surface: MenuSurface }): ReactNode {
   const { t } = useTranslation();
   return (
@@ -94,6 +99,16 @@ function SessionHistoryRowMenuItems({
           testID={`session-history-menu-import-${rowKey}`}
         >
           {t("panels.sessionHistory.row.importAsAgent")}
+        </RowMenuItem>
+      ) : null}
+      {onMoveCodexConversation ? (
+        <RowMenuItem
+          surface={surface}
+          leading={moveLeadingIcon}
+          onSelect={onMoveCodexConversation}
+          testID={`session-history-menu-move-codex-model-provider-${rowKey}`}
+        >
+          {t("panels.sessionHistory.move.menuItem")}
         </RowMenuItem>
       ) : null}
     </>
@@ -143,6 +158,7 @@ export function SessionHistoryRowContextMenu({
   onCopyResumeCommand,
   onImport,
   importStatus,
+  onMoveCodexConversation,
   ...triggerProps
 }: PropsWithChildren<
   SessionHistoryRowActions &
@@ -167,6 +183,7 @@ export function SessionHistoryRowContextMenu({
           onCopyResumeCommand={onCopyResumeCommand}
           onImport={onImport}
           importStatus={importStatus}
+          onMoveCodexConversation={onMoveCodexConversation}
         />
       </ContextMenuContent>
     </ContextMenu>

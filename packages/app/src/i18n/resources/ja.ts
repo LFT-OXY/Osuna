@@ -2274,6 +2274,27 @@ export const ja: TranslationResources = {
         importing: "インポート中...",
         codexModelProvider: "Codex モデルプロバイダー",
       },
+      move: {
+        menuItem: "別の Codex モデルプロバイダーへ移動…",
+        title: "別の Codex モデルプロバイダーへ移動",
+        targetLabel: "移動先",
+        targetPlaceholder: "Codex モデルプロバイダーを選択",
+        targetEmpty: "ほかの Codex モデルプロバイダーはありません",
+        sourceBuiltin: "Codex に内蔵",
+        sourceOsuna: "Osuna 独自",
+        backupNote:
+          "Osuna は先に会話ファイルをバックアップします。{{from}} に戻すと移動を取り消せます。",
+        rebuildNote:
+          "移動後に一度この会話を再開してください。それまでに Codex が状態データベースを再構築すると、Codex は再び {{from}} で再開します。",
+        confirm: "移動",
+        moving: "移動中...",
+        moved: "{{to}} に移動しました",
+        notMoved: "会話は移動されていません",
+        skippedActive:
+          "直近 1 分以内に書き込まれており、まだ実行中の可能性があります。アイドルになってから再試行してください。",
+        skippedNotFound: "Osuna はこの会話のファイルを見つけられません。",
+        listFailed: "Codex モデルプロバイダーを一覧表示できませんでした",
+      },
       errors: {
         loadFailed: "セッションを読み込めませんでした",
         openFailed: "このセッションのターミナルを開けませんでした",

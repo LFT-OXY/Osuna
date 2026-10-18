@@ -110,6 +110,12 @@ import {
   ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
 import {
+  CodexSessionListModelProvidersRequestSchema,
+  CodexSessionListModelProvidersResponseSchema,
+  CodexSessionMoveModelProviderRequestSchema,
+  CodexSessionMoveModelProviderResponseSchema,
+} from "./codex-session/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3553,6 +3559,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointDetectFormatsRequestSchema,
   ApiEndpointCancelRequestSchema,
+  CodexSessionListModelProvidersRequestSchema,
+  CodexSessionMoveModelProviderRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3916,7 +3924,8 @@ export const ServerInfoStatusPayloadSchema = z
         // 第三方接口主机共用：列表带 agents、baseUrls、enabled，支持 set_agent_settings、set_endpoint_state 与 detect_formats。
         apiEndpointGateway: z.boolean().optional(),
         // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
-        // 任务 10-16 的新界面：列表带 agentIssues，支持 set_agent_settings 的 reapply 与 keep_current_settings。
+        // 任务 10-16 的新界面：列表带 agentIssues，支持 set_agent_settings 的 reapply 与 keep_current_settings，
+        // 以及 provider.codex.session.*（把 Codex 对话挪到另一个 Codex 服务商）。
         apiEndpointCliWiring: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7323,6 +7332,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointTestConnectionResponseSchema,
   ApiEndpointDetectFormatsResponseSchema,
   ApiEndpointCancelResponseSchema,
+  CodexSessionListModelProvidersResponseSchema,
+  CodexSessionMoveModelProviderResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;
