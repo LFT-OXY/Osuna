@@ -1,14 +1,17 @@
 // 问登录 shell 要变量的做法移植自 magpie（https://github.com/yetone/magpie，internal/proc/path_other.go 的
-// LoginEnv / shellEnv / askShell / shellProbe / parseShellEnv）。
+// LoginEnv / shellEnv / termShells / FindShell / mergeShellEnv / askShell / shellProbe / parseShellEnv）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { spawn as defaultSpawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 
 /*
- * 终端里现在打开的 shell 有哪些变量：起一个登录 shell（先 -ilc，答不上再 -lc），让它在两个标记之间
- * 用 NUL 隔开打印要问的变量。一分钟内再问用上次的答案；Windows 不问（magpie 同样）。
+ * 终端里现在打开的 shell 有哪些变量：起登录 shell（先 -ilc，答不上再 -lc），让它在两个标记之间
+ * 用 NUL 隔开打印要问的变量。终端也可能开的是 fish 或 nushell：装了、且配置目录在（首次运行时建）的
+ * 一并问，同时问；每个变量取第一个答出它的，登录 shell 在前。一分钟内再问用上次的答案；
+ * Windows 不问（magpie 同样）。
  * shell 起在自己的会话里（detached），不抢 daemon 的终端；带 PASEO_SHELL_PROBE=1，e2e 封条据此拦下。
  */
 
@@ -27,7 +30,14 @@ export interface LoginShellEnvReaderOptions {
   platform?: NodeJS.Platform;
   spawn?: typeof defaultSpawn;
   now?: () => number;
+  // 找 fish、nushell 的配置目录用；缺省取系统的家目录。
+  homeDir?: string;
+  // 找装在这台机器上的 shell（fish、nu）；缺省按 magpie 的 FindShell，测试换成假的。
+  findShell?: FindShell;
 }
+
+/** 装在这台机器上的那个 shell 的路径；没有时为 null。 */
+export type FindShell = (name: string) => string | null;
 
 interface CachedAnswer {
   at: number;
@@ -48,7 +58,16 @@ export function createLoginShellEnvReader(options: LoginShellEnvReaderOptions): 
     const wanted = keys.join("\0");
     const isFresh = cached !== null && cached.keys === wanted && now() - cached.at < CACHE_MS;
     if (cached && isFresh) return cached.vars;
-    pending ??= askLoginShell({ env: options.env, spawn, keys })
+    const shells = [
+      loginShell(options.env),
+      ...terminalShells({
+        loginShell: loginShell(options.env),
+        env: options.env,
+        homeDir: options.homeDir ?? homedir(),
+        findShell: options.findShell ?? findShell,
+      }),
+    ];
+    pending ??= askShells({ env: options.env, spawn, keys, shells })
       .then((vars) => ({ at: now(), keys: wanted, vars }))
       .finally(() => {
         pending = null;
@@ -58,20 +77,124 @@ export function createLoginShellEnvReader(options: LoginShellEnvReaderOptions): 
   };
 }
 
-interface AskLoginShellInput {
+interface ShellQuestion {
   env: NodeJS.ProcessEnv;
   spawn: typeof defaultSpawn;
   keys: readonly string[];
 }
 
-async function askLoginShell(input: AskLoginShellInput): Promise<LoginShellVars> {
-  const shell = loginShell(input.env);
+interface AskShellsInput extends ShellQuestion {
+  // 登录 shell 在前。
+  shells: string[];
+}
+
+/** 同时问每个 shell；每个变量取第一个答出它的（magpie 的 mergeShellEnv）。 */
+async function askShells(input: AskShellsInput): Promise<LoginShellVars> {
+  const answers = await Promise.all(input.shells.map((shell) => askShell({ ...input, shell })));
+  const merged: LoginShellVars = {};
+  for (const answer of answers) {
+    for (const [key, value] of Object.entries(answer)) {
+      merged[key] ??= value;
+    }
+  }
+  return merged;
+}
+
+interface AskShellInput extends ShellQuestion {
+  shell: string;
+}
+
+async function askShell(input: AskShellInput): Promise<LoginShellVars> {
+  const { shell } = input;
   for (const flags of ["-ilc", "-lc"]) {
     const output = await runShell({ ...input, shell, flags });
     const vars = parseShellEnv({ output, keys: input.keys });
     if (vars) return vars;
   }
   return {};
+}
+
+interface TerminalShellsInput {
+  loginShell: string;
+  env: NodeJS.ProcessEnv;
+  homeDir: string;
+  findShell: FindShell;
+}
+
+/** 登录 shell 之外终端可能开的：fish 与 nushell，装了且配置目录在时（magpie 的 termShells）。 */
+export function terminalShells(input: TerminalShellsInput): string[] {
+  const xdg = input.env.XDG_CONFIG_HOME;
+  const configHome = xdg && path.isAbsolute(xdg) ? xdg : path.join(input.homeDir, ".config");
+  const configDirs: Record<string, string[]> = {
+    fish: [path.join(configHome, "fish")],
+    nu: [
+      path.join(configHome, "nushell"),
+      path.join(input.homeDir, "Library", "Application Support", "nushell"),
+    ],
+  };
+  const shells: string[] = [];
+  for (const name of ["fish", "nu"]) {
+    if (path.basename(input.loginShell) === name) continue;
+    const isConfigured = (configDirs[name] ?? []).some(isDirectory);
+    const program = isConfigured ? input.findShell(name) : null;
+    if (program) shells.push(program);
+  }
+  return shells;
+}
+
+/** shell 装在哪：先看常见的安装目录，再看 /etc/shells，最后看 PATH（magpie 的 FindShell）。 */
+export function findShell(name: string): string | null {
+  const home = homedir();
+  const dirs = [
+    "/bin",
+    "/usr/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    "/run/current-system/sw/bin",
+    "/nix/var/nix/profiles/default/bin",
+    path.join(home, ".nix-profile", "bin"),
+    path.join(home, ".local", "bin"),
+    path.join(home, ".cargo", "bin"),
+  ];
+  const inDirs = dirs.map((dir) => path.join(dir, name)).find(isProgram);
+  if (inDirs) return inDirs;
+  const listed = readOptionalText("/etc/shells")
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find((line) => path.isAbsolute(line) && path.basename(line) === name && isProgram(line));
+  if (listed) return listed;
+  const onPath = (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter((dir) => dir !== "")
+    .map((dir) => path.join(dir, name))
+    .find(isProgram);
+  return onPath ?? null;
+}
+
+function isProgram(file: string): boolean {
+  if (!existsSync(file) || statSync(file).isDirectory()) return false;
+  try {
+    accessSync(file, constants.X_OK);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EACCES") return false;
+    throw error;
+  }
+}
+
+function isDirectory(dir: string): boolean {
+  return existsSync(dir) && statSync(dir).isDirectory();
+}
+
+function readOptionalText(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 /** SHELL 不是绝对路径时按 magpie：/bin/zsh，没有就 /bin/sh。 */
@@ -113,7 +236,7 @@ export function parseShellEnv(input: {
   return vars;
 }
 
-interface RunShellInput extends AskLoginShellInput {
+interface RunShellInput extends ShellQuestion {
   shell: string;
   flags: string;
 }

@@ -1,8 +1,13 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createLoginShellEnvReader, parseShellEnv, shellProbeCommand } from "./login-shell-env.js";
+import {
+  createLoginShellEnvReader,
+  parseShellEnv,
+  shellProbeCommand,
+  terminalShells,
+} from "./login-shell-env.js";
 
 const KEYS = ["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"];
 
@@ -47,11 +52,11 @@ describe("createLoginShellEnvReader", () => {
     dir = null;
   });
 
-  /** 假的登录 shell：记下每次被问，带上用例给的变量，不读任何配置文件就跑那条命令。 */
-  function fakeShell(exports: string): { shell: string; calls: () => string[] } {
-    dir = mkdtempSync(path.join(tmpdir(), "osuna-fake-shell-"));
-    const log = path.join(dir, "calls.log");
-    const shell = path.join(dir, "fake-sh");
+  /** 假的 shell：记下每次被问，带上用例给的变量，不读任何配置文件就跑那条命令。 */
+  function fakeShell(exports: string, name = "fake-sh"): { shell: string; calls: () => string[] } {
+    dir ??= mkdtempSync(path.join(tmpdir(), "osuna-fake-shell-"));
+    const log = path.join(dir, `${name}.log`);
+    const shell = path.join(dir, name);
     writeFileSync(
       shell,
       `#!/bin/sh\necho "$1 $PASEO_SHELL_PROBE" >> "${log}"\n${exports}\nexec /bin/sh -c "$2"\n`,
@@ -66,7 +71,11 @@ describe("createLoginShellEnvReader", () => {
   it("asks the login shell, marked as a probe, and keeps the answer for a minute", async () => {
     const { shell, calls } = fakeShell("export CLAUDE_CODE_USE_VERTEX=1");
     let clock = 0;
-    const read = createLoginShellEnvReader({ env: { SHELL: shell }, now: () => clock });
+    const read = createLoginShellEnvReader({
+      env: { SHELL: shell },
+      now: () => clock,
+      findShell: () => null,
+    });
 
     expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
     clock = 59_000;
@@ -91,7 +100,68 @@ describe("createLoginShellEnvReader", () => {
 
   it("answers nothing when the shell can't be started", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "osuna-fake-shell-"));
-    const read = createLoginShellEnvReader({ env: { SHELL: path.join(dir, "missing-sh") } });
+    const read = createLoginShellEnvReader({
+      env: { SHELL: path.join(dir, "missing-sh") },
+      findShell: () => null,
+    });
     expect(await read(KEYS)).toEqual({});
+  });
+
+  it("also asks fish and nushell when they are set up, the login shell's value first", async () => {
+    const login = fakeShell("export CLAUDE_CODE_USE_VERTEX=0", "zsh");
+    const fish = fakeShell(
+      "export CLAUDE_CODE_USE_VERTEX=1\nexport CLAUDE_CODE_USE_BEDROCK=1",
+      "fish",
+    );
+    const home = path.join(dir ?? "", "home");
+    mkdirSync(path.join(home, ".config", "fish"), { recursive: true });
+    const read = createLoginShellEnvReader({
+      env: { SHELL: login.shell },
+      homeDir: home,
+      findShell: (name) => (name === "fish" ? fish.shell : null),
+    });
+
+    expect(await read(KEYS)).toEqual({
+      CLAUDE_CODE_USE_VERTEX: "0",
+      CLAUDE_CODE_USE_BEDROCK: "1",
+    });
+    expect(fish.calls()).toEqual(["-ilc 1"]);
+  });
+});
+
+describe("terminalShells", () => {
+  let home: string | null = null;
+
+  afterEach(() => {
+    if (home) rmSync(home, { recursive: true, force: true });
+    home = null;
+  });
+
+  const installed = (name: string) => `/fake/bin/${name}`;
+
+  it("lists fish and nushell only when installed and their config folder is there", () => {
+    home = mkdtempSync(path.join(tmpdir(), "osuna-terminal-shells-"));
+    const input = { loginShell: "/bin/zsh", env: {}, homeDir: home, findShell: installed };
+    expect(terminalShells(input)).toEqual([]);
+
+    mkdirSync(path.join(home, ".config", "fish"), { recursive: true });
+    mkdirSync(path.join(home, "Library", "Application Support", "nushell"), { recursive: true });
+    expect(terminalShells(input)).toEqual(["/fake/bin/fish", "/fake/bin/nu"]);
+    expect(terminalShells({ ...input, findShell: () => null })).toEqual([]);
+  });
+
+  it("follows XDG_CONFIG_HOME and skips the login shell itself", () => {
+    home = mkdtempSync(path.join(tmpdir(), "osuna-terminal-shells-"));
+    const xdg = path.join(home, "xdg");
+    mkdirSync(path.join(xdg, "nushell"), { recursive: true });
+    mkdirSync(path.join(xdg, "fish"), { recursive: true });
+    expect(
+      terminalShells({
+        loginShell: "/opt/homebrew/bin/fish",
+        env: { XDG_CONFIG_HOME: xdg },
+        homeDir: home,
+        findShell: installed,
+      }),
+    ).toEqual(["/fake/bin/nu"]);
   });
 });

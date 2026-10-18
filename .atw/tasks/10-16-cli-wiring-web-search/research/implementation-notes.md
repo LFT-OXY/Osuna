@@ -441,7 +441,7 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 | 写在哪 | `claudeCloud`：每个开关依次看托管设置、用户 settings.json、`~/.claude.json`（`CLAUDE_CONFIG_DIR` 时是它下面的），最先有这个变量的说了算；都没有才看登录 shell | 一样。几处同时开着时一次只报一条：按名单顺序找到的第一个（magpie 的 `claudeCloud` 也只返回一条），用户去掉它后下一次读状态再报下一个 |
 | 托管设置的文件 | 只读 `managed-settings.json`；Windows 用 `C:\ProgramData\ClaudeCode` | 另读 `managed-settings.d/*.json`（按 Claude Code 文档：先主文件，再按字母序、跳过点开头与非 .json，env 逐键合并、后者盖前者，所以取最后一份有这个变量的）；Windows 用 `C:\Program Files\ClaudeCode`（decisions.md Q4）。MDM plist、注册表、服务器下发的不读，同 magpie |
 | 托管的 `ANTHROPIC_BASE_URL` | `Check`：非空、不是网关、也不 `reachesMagpie` 时报；`reachesMagpie` 用 `proxyBase` 认出可能是代理的地址（另一台机器或域名，或本机回环上带自己路径的），问它的根路径是否答 `{"name":"magpie"}`，答案记 20 秒，没问过时先当作通到 | 非空、去掉末尾 `/` 后不等于中转站地址、也问不到中转站时报 `managed_base_url`（`gateway-reach.ts`）。中转站新增根路径的自我介绍 `GET <中转站>/` → `{"name":"osuna"}`。`proxyBase` 按 Osuna 的中转站带路径改了一处：magpie 从地址末尾切掉网关的路径再问根；Osuna 的中转站在 `/api-endpoint-gateway` 下，代理把自己的地址整个转到中转站，所以直接问这个地址的根，本机回环上路径正是 `/api-endpoint-gateway` 的算换了端口的中转站自己、不当代理。问法用等着问的 `probedNow`（列表本来就是异步的，答案确定、测试不用轮询），不是 Drift 那种后台问、没问过当作通到 |
-| 登录 shell 的环境 | `claudeShellEnv` → `proc.LoginEnv`：起登录 shell（`-ilc`，答不上再 `-lc`）在标记之间打印变量，一分钟缓存；没答出的用 magpie 自己的环境；Windows 不问 | 一样（`login-shell-env.ts`）：只问云平台开关这几个变量，shell 带 `PASEO_SHELL_PROBE=1`、起在自己的会话里，5 秒超时；没答出的看 daemon 自己的环境。少做一处：magpie 另问装了且配置过的 fish、nushell（`termShells`），Osuna 只问 `SHELL`，同桌面端 `login-shell-env.ts` 的口径 |
+| 登录 shell 的环境 | `claudeShellEnv` → `proc.LoginEnv`：起登录 shell（`-ilc`，答不上再 `-lc`）在标记之间打印变量，一分钟缓存；没答出的用 magpie 自己的环境；Windows 不问 | 一样（`login-shell-env.ts`）：只问云平台开关这几个变量，shell 带 `PASEO_SHELL_PROBE=1`、起在自己的会话里，5 秒超时；没答出的看 daemon 自己的环境。fish、nushell 也照 magpie（`termShells` / `FindShell` / `mergeShellEnv`，用户 2026-10-18 决定）：装了（常见安装目录、`/etc/shells`、PATH）且配置目录在（`$XDG_CONFIG_HOME` 或 `~/.config` 下的 fish、nushell，nushell 另看 `~/Library/Application Support/nushell`）的与登录 shell 同时问，每个变量取第一个答出的，登录 shell 在前；登录 shell 本身是它时不重复问 |
 | 读设置文件 | `edit.GetJSON` | 照 Claude Code 的读法：去 BOM 后严格 `JSON.parse`；不存在、读不了、读不懂都按没写 |
 
 ### 线上形状
@@ -465,6 +465,6 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 - 纯逻辑：`claude-settings-patch.test.ts`（拿掉开着的、留下关着的与其他云变量；yes/on/TRUE 算开、空串算关；放回；用户又设了的不覆盖；重新应用时又开的再拿掉、原值都能放回；旧记录没有 `clouds` 时什么都不放）；`claude-cloud-switches.test.ts`（各来源、优先顺序、关着的盖过下层开着的、drop-in 取最后一份、托管地址、drop-in 文件顺序）。
 - daemon 端到端（`api-endpoint-claude.e2e.test.ts`）：工单的端到端验收（BEDROCK=1 拿掉、VERTEX=0 不动、关掉放回、中途用户自己写了的不覆盖）；settings.json 又写回开关时报出、重新应用拿掉；托管 drop-in、`.claude.json`、shell 各一条提示写明来源；托管地址不指向中转站时提示、改成中转站地址后消失。全部用临时目录与假环境。
-- `login-shell-env.test.ts`：假 shell（临时目录里的脚本，不读任何配置）答出变量、一分钟内不再问、Windows 不问、起不来时答空；解析标记、没展开的引用、nushell 的问法。`gateway-reach.test.ts`：哪些地址算可能的代理、答案记 20 秒。daemon 端到端另加：登录 shell 的值先于 daemon 环境；托管地址是转到中转站的假代理时不报，同一代理换成不通到中转站的路径时报。
+- `login-shell-env.test.ts`：假 shell（临时目录里的脚本，不读任何配置）答出变量、一分钟内不再问、Windows 不问、起不来时答空；假 fish 与登录 shell 一起问、登录 shell 的值在前；`terminalShells` 按装没装、配置目录在不在、`XDG_CONFIG_HOME`、登录 shell 本身挑出 fish 与 nushell（找 shell 一律换成假的）；解析标记、没展开的引用、nushell 的问法。`gateway-reach.test.ts`：哪些地址算可能的代理、答案记 20 秒。daemon 端到端另加：登录 shell 的值先于 daemon 环境；托管地址是转到中转站的假代理时不报，同一代理换成不通到中转站的路径时报。
 - 浏览器（`settings-api-endpoints.spec.ts`）：托管设置里的开关在设置页写明来源与改法，没有「重新应用」，「如何修复」展开步骤，管理员删掉后提示消失。
 - 截图：`screenshots/16-claude-code-page_cloud-switch-in-managed-settings-fix-open_desktop-1280_{en,zh}.png`（截图里的托管文件路径是临时目录）。
