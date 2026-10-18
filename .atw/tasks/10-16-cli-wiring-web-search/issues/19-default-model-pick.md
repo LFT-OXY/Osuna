@@ -8,7 +8,7 @@
 
 **Blocked by:** 03, 09
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：kept、again、same、alike、first、joined 各一例，返回的挑法与写进 CLI 配置的模型一致；没有能用的模型时拒绝。
 - [ ] 默认模型选「接口标识/模型名」后，CLI 配置写的是这个名字，中转站先把请求交给那家；那家冷却时换同名的别家。
