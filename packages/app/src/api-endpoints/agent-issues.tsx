@@ -371,7 +371,7 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
       return {
         title: t("settings.apiEndpoints.agent.issues.notThroughGateway", { agent: providerLabel }),
         description: t("settings.apiEndpoints.agent.issues.notThroughGatewayDetail", {
-          file: params.file,
+          file: shortenPath(params.file),
           keys: params.keys,
         }),
       };
@@ -450,7 +450,7 @@ function useIssueCopy(providerLabel: string, issue: AgentIssueView): IssueCopy {
           profile: params.profile,
         }),
         description: t("settings.apiEndpoints.agent.issues.codexProfileOverrideDetail", {
-          file: params.file,
+          file: shortenPath(params.file),
           profile: params.profile,
           keys: params.keys,
         }),

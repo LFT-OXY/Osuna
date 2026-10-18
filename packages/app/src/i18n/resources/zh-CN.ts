@@ -2796,9 +2796,9 @@ export const zhCN: TranslationResources = {
             "在 {{file}} 里，[profiles.{{profile}}] 设了 {{keys}}。Codex 会用这些值，而不是 Osuna 写的值。从这个 profile 里删掉它们，或者不再选中它。",
           modelReplaced: "{{agent}} 的模型被换掉了",
           modelReplacedDetail:
-            "{{file}} 里的模型在 Osuna 之外被换成了 {{model}}，开着的接口都不提供它。\n点「重新应用」改回 {{defaultModel}}；点「保留当前设置」留着 {{model}}，不再提示。",
+            "{{file}} 里的模型在 Osuna 之外被换成了 {{model}}，开着的接口都不提供它。点「重新应用」改回 {{defaultModel}}；点「保留当前设置」留着 {{model}}，不再提示。",
           modelReplacedToDefaultDetail:
-            "{{file}} 里的模型在 Osuna 之外被删掉了，{{agent}} 改用它自己的默认模型，开着的接口都不提供它。\n点「重新应用」改回 {{defaultModel}}；点「保留当前设置」照现在这样，不再提示。",
+            "{{file}} 里的模型在 Osuna 之外被删掉了，{{agent}} 改用它自己的默认模型，开着的接口都不提供它。点「重新应用」改回 {{defaultModel}}；点「保留当前设置」照现在这样，不再提示。",
           bypassed: "{{agent}} 的请求没有经过第三方接口",
           bypassedUsedDetail:
             "{{agent}} 在 {{time}} 用过，但 Osuna 没收到它的请求。可能是 Osuna 上次改设置之前启动的那个还在用旧设置，或者设置文件之外的东西盖过了它。\n点「重新应用」后请重启 {{agent}}。",

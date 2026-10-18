@@ -24,7 +24,7 @@ export interface AlertProps {
 const ICON_COLOR_MAPPINGS: Record<Exclude<AlertVariant, "default">, (theme: Theme) => object> = {
   info: (theme) => ({ color: theme.colors.palette.blue[300] }),
   success: (theme) => ({ color: theme.colors.statusSuccess }),
-  warning: (theme) => ({ color: theme.colors.palette.amber[500] }),
+  warning: (theme) => ({ color: theme.colors.statusWarning }),
   error: (theme) => ({ color: theme.colors.destructive }),
 };
 
@@ -194,8 +194,9 @@ const styles = StyleSheet.create((theme) => {
     titleSuccess: {
       color: theme.colors.statusSuccess,
     },
+    // 状态色只用 statusWarning 一个：amber[500] 在浅色的琥珀底上只有约 2:1。
     titleWarning: {
-      color: theme.colors.palette.amber[500],
+      color: theme.colors.statusWarning,
     },
     titleError: {
       color: theme.colors.destructive,

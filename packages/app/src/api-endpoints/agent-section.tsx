@@ -387,8 +387,6 @@ function DefaultModelRow({
           title={title}
           size="sm"
           disabled={busy}
-          // 这一行在提供方页最下面一张卡片里：列表朝上开，不伸出窗口底边。
-          desktopPlacement="top-start"
           testID="agent-api-endpoints-default-model"
           triggerTestID="agent-api-endpoints-default-model-trigger"
         />
@@ -474,8 +472,6 @@ function DefaultThinkingRow({
           title={title}
           size="sm"
           disabled={busy}
-          // 与默认模型同在最下面一张卡片里：列表朝上开。
-          desktopPlacement="top-start"
           testID="agent-api-endpoints-default-thinking"
           triggerTestID="agent-api-endpoints-default-thinking-trigger"
         />
@@ -692,8 +688,6 @@ function SideModelRow({
           title={pickTitle}
           size="sm"
           disabled={busy}
-          // 与默认模型同在最下面一张卡片里：列表朝上开。
-          desktopPlacement="top-start"
           testID={testID}
           triggerTestID={`${testID}-trigger`}
         />
@@ -767,7 +761,6 @@ function SubagentThinkingRow({
           title={pickTitle}
           size="sm"
           disabled={busy}
-          desktopPlacement="top-start"
           testID="agent-api-endpoints-subagent-thinking"
           triggerTestID="agent-api-endpoints-subagent-thinking-trigger"
         />

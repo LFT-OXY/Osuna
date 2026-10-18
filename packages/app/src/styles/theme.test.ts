@@ -490,6 +490,8 @@ const COLOR_VALUE =
 const PROSE_ALPHA = 0.86;
 // 可辨阈值：设计稿里最轻的一档（黑色侧栏上 4% 白的 hover）约 1.06:1。
 const ROW_STATE_MINIMUM_CONTRAST = 1.05;
+// surfaceWarning 是 amber[500] 的 10%（见 "gives menus and dialogs the designed … warning fills"）。
+const WARNING_BLOCK_ALPHA = 0.1;
 
 function ratio(a: string, b: string): number {
   const result = contrastRatio(a, b);
@@ -545,6 +547,35 @@ describe("Redesign roles across the catalog", () => {
       // 助手正文是前景色的 86%，按它在画布上合成后的实际颜色检查。
       const prose = mixHexColor(colors.surfaceWorkspace, colors.foreground, PROSE_ALPHA);
       expect(ratio(prose, colors.surfaceWorkspace)).toBeGreaterThanOrEqual(minimum);
+    },
+  );
+
+  // 警示块（Alert warning）的标题用 statusWarning，铺在 10% 琥珀色的 surfaceWarning 上。提供方页的提示区
+  // 在页面画布上；对话框里的在卡片色上，只约束内置主题：插件样例 Mocha 的卡片色（#45475a）上为 2.9:1，
+  // 与其余文字落在抬升色阶上的情况一样，不逐套手调。
+  it.each(CATALOG)(
+    "keeps $name warning titles readable on the page's warning block",
+    ({ theme }) => {
+      const { colors } = theme;
+      const block = mixHexColor(
+        colors.surfaceWorkspace,
+        colors.palette.amber[500],
+        WARNING_BLOCK_ALPHA,
+      );
+      expect(ratio(colors.statusWarning, block)).toBeGreaterThanOrEqual(
+        theme.colorScheme === "light" ? 4.5 : 3,
+      );
+    },
+  );
+
+  it.each(BUILT_IN_CATALOG)(
+    "keeps $name warning titles readable on a dialog's warning block",
+    ({ theme }) => {
+      const { colors } = theme;
+      const block = mixHexColor(colors.surfaceCard, colors.palette.amber[500], WARNING_BLOCK_ALPHA);
+      expect(ratio(colors.statusWarning, block)).toBeGreaterThanOrEqual(
+        theme.colorScheme === "light" ? 4.5 : 3,
+      );
     },
   );
 

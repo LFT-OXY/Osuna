@@ -71,10 +71,22 @@ import { buildDesktopFrameStyle } from "./combobox-frame-style";
 import { MENU_ITEM_HEIGHT } from "./menu/menu-geometry";
 import { popoverSurfaceStyle } from "@/styles/floating-surface";
 import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
+import { SPACING } from "@/styles/theme";
 
 export { buildDesktopFrameStyle } from "./combobox-frame-style";
 
 const IS_WEB = isWeb;
+
+/*
+ * 窄窗口抽屉里选项列表的内边距。Web 上 gorhom 的 BottomSheetScrollView 收不到 unistyles 的样式（被丢掉，
+ * 选项文字贴在 12），所以用普通对象；Web 的选项行是菜单行（左右 8，原生是 12），内边距多给 4，
+ * 两端的选项文字都与抽屉标题同在 24 的线上。
+ */
+const WEB_SHEET_OPTIONS_CONTENT_STYLE = {
+  paddingBottom: SPACING[8],
+  paddingHorizontal: SPACING[3],
+  paddingTop: SPACING[1],
+};
 
 export type ComboboxOption = ComboboxOptionModel;
 export type ComboboxDesktopPlacement = "top-start" | "bottom-start";
@@ -530,11 +542,13 @@ interface DesktopKeyHandlerInput {
   orderedVisibleOptions: ComboboxOption[];
   activeIndex: number;
   setActiveIndex: React.Dispatch<React.SetStateAction<number>>;
+  showActiveRow: () => void;
   handleSelect: (id: string) => void;
   handleClose: () => void;
 }
 
 function handleDesktopArrowKey(input: DesktopKeyHandlerInput, key: "ArrowDown" | "ArrowUp") {
+  input.showActiveRow();
   input.setActiveIndex(advanceActiveIndex(input.orderedVisibleOptions.length, key));
 }
 
@@ -588,6 +602,25 @@ function applyMeasuredAnchor(setters: MeasuredAnchorSetters, x: number, y: numbe
   setters.setReferenceAtOrigin(Math.abs(x) <= 1 && Math.abs(y) <= 1);
   setters.setReferenceTop((prev) => (prev === y ? prev : y));
   updateReferenceWidth(setters.setReferenceWidth, width);
+}
+
+/**
+ * 画底色的那一行。打开时 activeIndex 落在选中行上，只为 Enter 准备；用方向键挪过或输入了搜索词才画底色，
+ * 选中行只靠勾（docs/menus.md「Item states」）。
+ */
+function useShownActiveIndex(input: {
+  isOpen: boolean;
+  activeIndex: number;
+  normalizedSearch: string;
+}): { shownActiveIndex: number; showActiveRow: () => void } {
+  const { isOpen, activeIndex, normalizedSearch } = input;
+  const [hasKeyboardMovedActiveRow, setHasKeyboardMovedActiveRow] = useState(false);
+  const showActiveRow = useCallback(() => setHasKeyboardMovedActiveRow(true), []);
+  useEffect(() => {
+    if (isOpen) setHasKeyboardMovedActiveRow(false);
+  }, [isOpen]);
+  const isActiveRowShown = hasKeyboardMovedActiveRow || normalizedSearch !== "";
+  return { shownActiveIndex: isActiveRowShown ? activeIndex : -1, showActiveRow };
 }
 
 function useActiveIndexSync(
@@ -1014,7 +1047,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
           <BottomSheetScrollView
             style={styles.mobileSheetBody}
             contentContainerStyle={[
-              styles.comboboxScrollContent,
+              IS_WEB ? WEB_SHEET_OPTIONS_CONTENT_STYLE : styles.comboboxScrollContent,
               props.mobileChildrenContentContainerStyle,
             ]}
             keyboardShouldPersistTaps="handled"
@@ -1414,6 +1447,11 @@ export function Combobox({
   });
 
   const normalizedSearch = searchable ? searchQuery.trim().toLowerCase() : "";
+  const { shownActiveIndex, showActiveRow } = useShownActiveIndex({
+    isOpen,
+    activeIndex,
+    normalizedSearch,
+  });
   const sanitizedSearchValue = searchQuery.trim();
   const showCustomOption = useMemo(
     () =>
@@ -1512,6 +1550,7 @@ export function Combobox({
           orderedVisibleOptions,
           activeIndex,
           setActiveIndex,
+          showActiveRow,
           handleSelect,
           handleClose,
         },
@@ -1519,7 +1558,15 @@ export function Combobox({
         event,
       );
     },
-    [activeIndex, handleClose, handleSelect, isMobile, isOpen, orderedVisibleOptions],
+    [
+      activeIndex,
+      handleClose,
+      handleSelect,
+      isMobile,
+      isOpen,
+      orderedVisibleOptions,
+      showActiveRow,
+    ],
   );
 
   useDismissKeyboardOnOpen(isOpen, isMobile);
@@ -1585,7 +1632,7 @@ export function Combobox({
         handleSubmitSearch={handleSubmitSearch}
         orderedVisibleOptions={orderedVisibleOptions}
         value={value}
-        activeIndex={activeIndex}
+        activeIndex={shownActiveIndex}
         emptyText={resolvedEmptyText}
         handleSelect={handleSelect}
         renderOption={renderOption}
@@ -1622,7 +1669,7 @@ export function Combobox({
       handleDesktopOptionsContentSizeChange={handleDesktopOptionsContentSizeChange}
       orderedVisibleOptions={orderedVisibleOptions}
       value={value}
-      activeIndex={activeIndex}
+      activeIndex={shownActiveIndex}
       emptyText={resolvedEmptyText}
       handleSelect={handleSelect}
       renderOption={renderOption}

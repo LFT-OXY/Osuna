@@ -24,6 +24,7 @@ import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useFetchQuery } from "@/data/query";
 import type { Theme } from "@/styles/theme";
+import { shortenPath } from "@/utils/shorten-path";
 
 export type MoveCodexConversationClient = Pick<
   DaemonClient,
@@ -349,7 +350,7 @@ function MoveErrorAlert({ error }: { error: Error | null }) {
   const isWarning = notDone?.kind === "skipped" || notDone?.kind === "partly";
   const variant = isWarning ? "warning" : "error";
   const backup = notDone?.backupPath
-    ? `\n${t("panels.sessionHistory.move.backupAt", { path: notDone.backupPath })}`
+    ? `\n${t("panels.sessionHistory.move.backupAt", { path: shortenPath(notDone.backupPath) })}`
     : "";
   return (
     <Alert
@@ -426,7 +427,7 @@ function describeSkippedResult(input: {
       ? t("panels.sessionHistory.move.movedPartly")
       : t("panels.sessionHistory.move.resultNotMoved");
   const backup = notDone.backupPath
-    ? ` ${t("panels.sessionHistory.move.backupAt", { path: notDone.backupPath })}`
+    ? ` ${t("panels.sessionHistory.move.backupAt", { path: shortenPath(notDone.backupPath) })}`
     : "";
   return t("panels.sessionHistory.move.resultWithReason", {
     status: heading,

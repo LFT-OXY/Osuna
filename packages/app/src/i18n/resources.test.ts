@@ -57,6 +57,18 @@ function findInterpolationMismatches(resource: unknown): string[] {
   });
 }
 
+// 手动换行要与英文一致：只有一种语言带 \n 时，提示区里只有它多出一行。
+function findLineBreakMismatches(resource: unknown): string[] {
+  const englishStrings = flattenStrings(en);
+  const localeStrings = flattenStrings(resource);
+  const countBreaks = (value: string) => value.split("\n").length - 1;
+  return Object.entries(englishStrings).flatMap(([key, value]) => {
+    const expected = countBreaks(value);
+    const actual = countBreaks(localeStrings[key] ?? "");
+    return expected === actual ? [] : [`${key}: ${expected} -> ${actual}`];
+  });
+}
+
 // zh-CN 中有意与英文相同的值，只收 docs/i18n.md 列出的保留类别
 const zhCNEnglishAllowlist = {
   coreTerms: ["workspace.tabs.fallback.agent", "workspace.tabs.toasts.agentIdCopiedLabel"],
@@ -446,6 +458,12 @@ describe("translation resources", () => {
     expect(findInterpolationMismatches(zhCN)).toEqual([]);
   });
 
+  it("breaks lines only where English does", () => {
+    for (const resource of [ar, es, fr, ja, ko, ptBR, ru, zhCN]) {
+      expect(findLineBreakMismatches(resource)).toEqual([]);
+    }
+  });
+
   it("keeps only the inherited-endpoint notice from the per-provider API endpoint copy", () => {
     expect(Object.keys(en.settings.providers.apiEndpoints).sort()).toEqual([
       "inheritedDescription",
@@ -466,6 +484,22 @@ describe("translation resources", () => {
       "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
     );
     expect(zhCN.settings.hostSections.apiEndpoints).toBe("第三方接口");
+  });
+
+  // docs/glossary.md 定下的中文界面词：联网搜索、默认思考档位、Codex 服务商、中转站，Subagent 保留英文。
+  it("uses the CLI wiring terms in zh-CN", () => {
+    const agent = zhCN.settings.apiEndpoints.agent;
+    expect(zhCN.settings.apiEndpoints.webSearch.title).toBe("联网搜索");
+    expect(zhCN.settings.apiEndpoints.webSearch.switch).toBe("自己能联网搜索");
+    expect(agent.defaultThinking).toBe("默认思考档位");
+    expect(agent.subagentModel).toBe("Subagent 模型");
+    expect(zhCN.panels.sessionHistory.row.codexModelProvider).toBe("Codex 服务商");
+    expect(zhCN.panels.sessionHistory.move.menuItem).toBe("挪到另一个 Codex 服务商…");
+    expect(agent.gatewayNotReady).toBe("内置中转站还在启动，请稍后再试。");
+    const strings = Object.values(flattenStrings(zhCN.settings.apiEndpoints)).concat(
+      Object.values(flattenStrings(zhCN.panels.sessionHistory)),
+    );
+    expect(strings.filter((value) => /子智能体|中继|供应商/.test(value))).toEqual([]);
   });
 
   it("keeps reported Spanish settings and scripts labels clean", () => {

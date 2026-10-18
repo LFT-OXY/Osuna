@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Text, type TextColor } from "@/components/ui/text";
 import { useFetchQuery } from "@/data/query";
 import { toErrorMessage } from "@/utils/error-messages";
+import { shortenPath } from "@/utils/shorten-path";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import {
   selectSwitchOffPreview,
@@ -292,7 +293,7 @@ function ChangedFile({ file }: { file: SwitchOffFileView }) {
     <View style={styles.file} testID={`switch-off-file-${file.path}`}>
       <View style={styles.fileHeader}>
         <Text variant="caption" weight="medium" style={[styles.mono, styles.wrapAnywhere]}>
-          {file.path}
+          {shortenPath(file.path)}
         </Text>
         {fileTag ? (
           <Text variant="micro" color="foregroundMuted" style={styles.tag}>
