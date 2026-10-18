@@ -2655,7 +2655,7 @@ export const ar: TranslationResources = {
           keepCurrent: "إبقاء الإعدادات الحالية",
           claudeAiLoginTokenSet: "يرسل {{agent}} رمزًا بدلًا من تسجيل دخوله إلى claude.ai",
           claudeAiLoginTokenSetDetail:
-            "خيار الإبقاء على تسجيل الدخول إلى claude.ai مفعّل، لكن ANTHROPIC_AUTH_TOKEN في {{file}} مُلئ من جديد، لذا يخرج {{agent}} من claude.ai أثناء المرور عبر البوابة. «تطبيق مرة أخرى» يفرغه.",
+            "خيار الإبقاء على تسجيل الدخول إلى claude.ai مفعّل، لكن ANTHROPIC_AUTH_TOKEN في {{file}} مُلئ من جديد، لذا يرسل {{agent}} إلى البوابة هذا الرمز بدلًا من تسجيل دخوله إلى claude.ai. تسجيل الدخول نفسه ما زال محفوظًا، فلا حاجة لتسجيل الدخول مجددًا. «تطبيق مرة أخرى» يفرغ الرمز.",
           claudeAiLoginTokenEmpty: "يرسل {{agent}} تسجيل دخوله إلى claude.ai بدلًا من رمز البوابة",
           claudeAiLoginTokenEmptyDetail:
             "ANTHROPIC_AUTH_TOKEN في {{file}} فارغ، لذا يرسل {{agent}} إلى البوابة تسجيل دخوله إلى claude.ai إن وُجد. فعّل الإبقاء على تسجيل الدخول إلى claude.ai لإبقاء ذلك، أو طبّق مرة أخرى لإعادة كتابة الرمز.",

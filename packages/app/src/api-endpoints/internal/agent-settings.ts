@@ -151,6 +151,10 @@ export function selectAgentApiEndpointsView(input: {
     }
   }
 
+  // 只有 Claude Code 有「保留 claude.ai 登录」。
+  let keepsClaudeAiLogin: boolean | null = null;
+  if (provider === "claude") keepsClaudeAiLogin = agent.keepsClaudeAiLogin === true;
+
   return {
     enabled: agent.enabled,
     enableBlockedBy,
@@ -158,6 +162,6 @@ export function selectAgentApiEndpointsView(input: {
     modelOptions,
     summary: { enabledCount: enabledEndpoints.length, cooling },
     issues: (state.agentIssues[provider] ?? []).map(toIssueView),
-    keepsClaudeAiLogin: provider === "claude" ? agent.keepsClaudeAiLogin === true : null,
+    keepsClaudeAiLogin,
   };
 }

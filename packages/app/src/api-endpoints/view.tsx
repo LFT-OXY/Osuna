@@ -138,7 +138,7 @@ function AgentApiEndpoints({
       onToggle={handleToggle}
       onDefaultModelChange={handleDefaultModelChange}
       onManage={handleManage}
-      // COMPAT(apiEndpointCliWiring): 老主机不认这个选项。
+      // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18. 老主机不认这个选项。
       onKeepClaudeAiLoginChange={hasIssues ? handleKeepClaudeAiLoginChange : null}
       issueActions={issueActions}
     />

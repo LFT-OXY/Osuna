@@ -2721,7 +2721,7 @@ export const en = {
           keepCurrent: "Keep current settings",
           claudeAiLoginTokenSet: "{{agent}} sends a token instead of its claude.ai sign-in",
           claudeAiLoginTokenSetDetail:
-            "Keep claude.ai sign-in is on, but ANTHROPIC_AUTH_TOKEN in {{file}} was filled in again, so {{agent}} is signed out of claude.ai while it goes through the gateway. Apply again empties it.",
+            "Keep claude.ai sign-in is on, but ANTHROPIC_AUTH_TOKEN in {{file}} was filled in again, so {{agent}} sends the gateway that token instead of its claude.ai sign-in. The sign-in itself is still saved, so there's no need to log in again. Apply again empties the token.",
           claudeAiLoginTokenEmpty:
             "{{agent}} sends its claude.ai sign-in instead of the gateway token",
           claudeAiLoginTokenEmptyDetail:

@@ -2679,7 +2679,7 @@ export const zhCN: TranslationResources = {
           keepCurrent: "保留当前设置",
           claudeAiLoginTokenSet: "{{agent}} 发的是口令，不是 claude.ai 登录",
           claudeAiLoginTokenSetDetail:
-            "「保留 claude.ai 登录」开着，但 {{file}} 里的 ANTHROPIC_AUTH_TOKEN 又被填了回去，{{agent}} 走中转站时就退出了 claude.ai 登录。点「重新应用」会把它清空。",
+            "「保留 claude.ai 登录」开着，但 {{file}} 里的 ANTHROPIC_AUTH_TOKEN 又被填了回去，{{agent}} 于是把这个口令发给中转站，而不是 claude.ai 登录。登录本身还在，不用重新登录。点「重新应用」会把口令清空。",
           claudeAiLoginTokenEmpty: "{{agent}} 发的是 claude.ai 登录，不是中转站口令",
           claudeAiLoginTokenEmptyDetail:
             "{{file}} 里的 ANTHROPIC_AUTH_TOKEN 是空的，{{agent}} 于是把 claude.ai 登录（如果有）发给中转站。想保持这样就打开「保留 claude.ai 登录」，或点「重新应用」把口令写回去。",

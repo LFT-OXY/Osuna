@@ -2269,13 +2269,14 @@ function claudeTokenFinding(input: {
     };
   }
   if (authToken === "set") return unchanged;
+  const how = authToken === "empty" ? "empty" : "gone";
   return {
     modifiedKeys,
     routingKeys: otherKeys,
     issue: {
       code: "claude_ai_login_token_empty",
       params: { file: filePath, how: authToken },
-      message: `${where} is ${authToken === "empty" ? "empty" : "gone"}, so Claude Code sends the gateway its claude.ai sign-in, if it has one, not the gateway's token. To keep it so, turn on Keep claude.ai sign-in`,
+      message: `${where} is ${how}, so Claude Code sends the gateway its claude.ai sign-in, if it has one, not the gateway's token. To keep it so, turn on Keep claude.ai sign-in`,
     },
   };
 }

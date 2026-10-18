@@ -462,7 +462,8 @@ export function inspectClaudeSettings(input: {
 }
 
 function authTokenState(env: Record<string, unknown> | undefined): ClaudeAuthTokenState {
-  if (env === undefined || !Object.hasOwn(env, "ANTHROPIC_AUTH_TOKEN")) return "missing";
+  const hasToken = env !== undefined && Object.hasOwn(env, "ANTHROPIC_AUTH_TOKEN");
+  if (!hasToken) return "missing";
   // Claude Code 按真值判断口令：空串等于没设。
   return env.ANTHROPIC_AUTH_TOKEN === "" ? "empty" : "set";
 }

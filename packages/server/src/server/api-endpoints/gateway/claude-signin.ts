@@ -2,7 +2,7 @@
 // claudeSignIn、keepsSignIn、signInWriter 与 refusedMessage）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import type { IncomingHttpHeaders, OutgoingHttpHeaders } from "node:http";
+import type { IncomingHttpHeaders } from "node:http";
 import type { Response } from "express";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { ANSWERED_BY_HEADER } from "./upstream-call.js";
@@ -20,6 +20,8 @@ import { ANSWERED_BY_HEADER } from "./upstream-call.js";
 const SIGN_IN_PREFIX = "sk-ant-oat";
 const REVOKED_TEXT = "OAuth token has been revoked";
 const X_API_KEY = /x-api-key/gi;
+// 只用来问有没有：带 g 的正则 test 会记住上次的位置。
+const HAS_X_API_KEY = /x-api-key/i;
 const STREAM_ERROR = "event: error\n";
 // 报错开头「接口名: 」里接口名最长这么多字符（magpie refusedMessage）。
 const NAME_MOST_CHARS = 64;
@@ -31,55 +33,83 @@ export function isClaudeSignIn(headers: IncomingHttpHeaders): boolean {
   return isBearer && authorization.slice(7).trim().startsWith(SIGN_IN_PREFIX);
 }
 
-type Chunk = string | Buffer | Uint8Array;
-type WriteHead = Response["writeHead"];
+type Chunk = string | Uint8Array;
+
+/** 写给 Agent 的一段正文；回调之类的其他参数不是正文。 */
+function chunkOf(value: unknown): Chunk | null {
+  const isChunk = typeof value === "string" || value instanceof Uint8Array;
+  return isChunk ? value : null;
+}
+
+/** 响应头的值能交给 setHeader 的样子；别的不要。 */
+function headerValueOf(value: unknown): string | number | string[] | null {
+  if (typeof value === "string" || typeof value === "number") return value;
+  const isTextList = Array.isArray(value) && value.every((item) => typeof item === "string");
+  return isTextList ? value : null;
+}
+
+/** writeHead 的参数里带的响应头（对象写法；Osuna 不用数组写法）。 */
+function headersIn(args: unknown[]): Record<string, unknown> {
+  return args.find(isRecord) ?? {};
+}
 
 /**
  * 带 Claude 登录的请求（isClaudeSignIn），它的回复换成 magpie signInWriter 的写法：报错的状态码先扣着，
  * 等看到正文再决定怎么说。中转站的报错都是一次写完整份，流里的错误事件也是一次一个。
+ * 换的是这个回复自己的 writeHead / write / end，原来的那几个经 Reflect.apply 照常调用。
  */
 export function keepClaudeSignIn(res: Response): void {
-  const writeHead = res.writeHead.bind(res) as (status: number) => Response;
-  const write = res.write.bind(res) as (chunk: Chunk) => boolean;
-  const end = res.end.bind(res) as (chunk?: Chunk) => Response;
+  const originalWriteHead = res.writeHead;
+  const originalWrite = res.write;
+  const originalEnd = res.end;
+  const sendHead = (status: number): void => {
+    Reflect.apply(originalWriteHead, res, [status]);
+  };
+  const sendChunk = (chunk: Chunk): boolean => Boolean(Reflect.apply(originalWrite, res, [chunk]));
+  const finish = (chunk: Chunk | null): Response => {
+    const args = chunk === null ? [] : [chunk];
+    Reflect.apply(originalEnd, res, args);
+    return res;
+  };
   // 扣着的报错状态码；0 为没有。
   let held = 0;
   // 报错已经改成 502 发出：后面的正文都丢掉。
   let told = false;
 
-  const heldStatus = () => {
+  const heldStatus = (): number => {
     if (held !== 0) return held;
-    return !res.headersSent && res.statusCode >= 400 ? res.statusCode : 0;
+    const isErrorNotSent = !res.headersSent && res.statusCode >= 400;
+    if (isErrorNotSent) return res.statusCode;
+    return 0;
   };
   // 扣着的状态码到底没有正文：401 照样改成 502，其余原样。
-  const release = (status: number) => {
+  const release = (status: number): void => {
     held = 0;
-    writeHead(status === 401 ? 502 : status);
+    sendHead(status === 401 ? 502 : status);
   };
   // 看到报错正文：要改成 502 的交出新正文，其余保持状态码、只换掉 x-api-key。
   const answer = (status: number, chunk: Chunk): Chunk => {
     held = 0;
     const text = Buffer.from(chunk).toString("utf8");
-    const isSignInRefused = status === 401 || (status === 403 && text.includes(REVOKED_TEXT));
+    const isRevoked = status === 403 && text.includes(REVOKED_TEXT);
+    const isSignInRefused = status === 401 || isRevoked;
     if (!isSignInRefused) {
-      if (!text.match(X_API_KEY)) {
-        writeHead(status);
+      if (!HAS_X_API_KEY.test(text)) {
+        sendHead(status);
         return chunk;
       }
       res.removeHeader("content-length");
-      writeHead(status);
+      sendHead(status);
       return text.replace(X_API_KEY, "API key");
     }
     told = true;
     res.removeHeader("content-length");
     res.setHeader("content-type", "application/json");
-    writeHead(502);
+    sendHead(502);
     const answeredBy = res.getHeader(ANSWERED_BY_HEADER);
-    const message = refusedMessage({
-      text,
-      endpoint: typeof answeredBy === "string" ? answeredBy : "",
-      status,
-    });
+    let endpoint = "";
+    if (typeof answeredBy === "string") endpoint = answeredBy;
+    const message = refusedMessage({ text, endpoint, status });
     return JSON.stringify({ type: "error", error: { type: "api_error", message } });
   };
   // 开口 200 之后流里的错误事件：x-api-key 说成 API key。
@@ -88,44 +118,54 @@ export function keepClaudeSignIn(res: Response): void {
     const at = text.indexOf(STREAM_ERROR);
     if (at === -1) return chunk;
     const event = text.slice(at);
-    if (!event.match(X_API_KEY)) return chunk;
+    if (!HAS_X_API_KEY.test(event)) return chunk;
     return text.slice(0, at) + event.replace(X_API_KEY, "API key");
   };
-  const isEmpty = (chunk: Chunk | undefined): chunk is undefined =>
-    chunk === undefined || chunk.length === 0;
+  // 不扣着状态码时照发；响应头已经发出时才可能是流里的错误事件。
+  const passed = (chunk: Chunk): Chunk => {
+    if (!res.headersSent) return chunk;
+    return streamed(chunk);
+  };
 
   // 报错的状态码与响应头先扣着（头放进 res，正文来了再一起发）；其余照常。
-  const originalWriteHead = res.writeHead as unknown as (...args: unknown[]) => Response;
-  res.writeHead = ((status: number, ...rest: unknown[]) => {
+  res.writeHead = (status: number, ...rest: unknown[]): Response => {
     const isHeldError = !res.headersSent && status >= 400 && held === 0;
-    if (!isHeldError) return originalWriteHead.call(res, status, ...rest);
+    if (!isHeldError) {
+      Reflect.apply(originalWriteHead, res, [status, ...rest]);
+      return res;
+    }
     held = status;
-    const headers = rest.find(isRecord) as OutgoingHttpHeaders | undefined;
-    for (const [name, value] of Object.entries(headers ?? {})) {
-      if (value !== undefined) res.setHeader(name, value);
+    for (const [name, raw] of Object.entries(headersIn(rest))) {
+      const value = headerValueOf(raw);
+      if (value !== null) res.setHeader(name, value);
     }
     return res;
-  }) as WriteHead;
+  };
 
-  res.write = ((chunk: Chunk) => {
+  res.write = (data: unknown): boolean => {
     if (told) return true;
+    const chunk = chunkOf(data);
+    if (chunk === null || chunk.length === 0) return true;
     const status = heldStatus();
-    if (status === 0) return write(res.headersSent ? streamed(chunk) : chunk);
-    if (isEmpty(chunk)) return true;
-    return write(answer(status, chunk));
-  }) as Response["write"];
+    if (status === 0) return sendChunk(passed(chunk));
+    return sendChunk(answer(status, chunk));
+  };
 
-  res.end = ((chunk?: Chunk | (() => void)) => {
-    const data = typeof chunk === "function" ? undefined : chunk;
-    if (told) return end();
+  res.end = (data?: unknown): Response => {
+    if (told) return finish(null);
+    const chunk = chunkOf(data);
+    const isEmpty = chunk === null || chunk.length === 0;
     const status = heldStatus();
-    if (status === 0) return end(isEmpty(data) || !res.headersSent ? data : streamed(data));
-    if (isEmpty(data)) {
-      release(status);
-      return end();
+    if (status === 0) {
+      if (isEmpty) return finish(null);
+      return finish(passed(chunk));
     }
-    return end(answer(status, data));
-  }) as Response["end"];
+    if (isEmpty) {
+      release(status);
+      return finish(null);
+    }
+    return finish(answer(status, chunk));
+  };
 }
 
 /**
@@ -134,8 +174,10 @@ export function keepClaudeSignIn(res: Response): void {
  */
 function refusedMessage(input: { text: string; endpoint: string; status: number }): string {
   const parsed = parseJson(input.text);
-  const error = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : null;
-  let reason = typeof error?.message === "string" ? error.message.trim() : "";
+  const error = isRecord(parsed) ? parsed.error : null;
+  const said = isRecord(error) ? error.message : null;
+  let reason = "";
+  if (typeof said === "string") reason = said.trim();
   let name = input.endpoint;
   const cut = reason.indexOf(": ");
   const isNamed = cut > 0 && cut <= NAME_MOST_CHARS && !/[\n{]/.test(reason.slice(0, cut));

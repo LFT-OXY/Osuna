@@ -724,6 +724,30 @@ describe("Claude Code signed in to claude.ai", () => {
     expect(response.status).toBe(401);
   });
 
+  test("count_tokens: an endpoint's 401 never reaches Claude Code as a 401, and the endpoint gets neither the sign-in nor its beta", async () => {
+    const { gateway, upstreamB } = await startAnswering({
+      status: 401,
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "authentication_error", message: "invalid x-api-key" },
+      }),
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages/count_tokens?beta=true`,
+      signedInRequest(glmTurn),
+    );
+
+    // 这家数不了时中转站在本地估算：Claude Code 收到 200，不是 401。
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ input_tokens: expect.any(Number) });
+    const received = upstreamB.requests[0]!;
+    expect(received.url).toBe("/v1/messages/count_tokens?beta=true");
+    expect(JSON.stringify(received.headers)).not.toContain(CLAUDE_AI_TOKEN);
+    expect(received.headers.authorization).toBe(`Bearer ${KEY_B}`);
+    expect(received.headers["anthropic-beta"]).toBe("claude-code-20250219,context-1m-2025-08-07");
+  });
+
   test("a stream's error after its 200 says API key, not x-api-key", async () => {
     const upstreamB = await startUpstream();
     upstreamB.respond = (_request, res) => {

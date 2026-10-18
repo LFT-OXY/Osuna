@@ -64,6 +64,9 @@ export function AgentApiEndpointsSection({
 }: AgentApiEndpointsSectionProps) {
   const { t } = useTranslation();
   const switchHint = useSwitchHint(providerLabel, view.enableBlockedBy);
+  // 只有 Claude Code 有这个选项，主机太旧时没有处理函数。
+  const keepsClaudeAiLogin = view.keepsClaudeAiLogin;
+  const showsKeepClaudeAiLogin = keepsClaudeAiLogin !== null && onKeepClaudeAiLoginChange !== null;
   // 同一区块一次只留一条：打开被拒的原因已在提示区「读不懂」那条里，就只留红色的那条。
   const isRefusalRepeatedByIssue =
     actionErrorCode === "config_unparsable" &&
@@ -119,10 +122,10 @@ export function AgentApiEndpointsSection({
             onChange={onDefaultModelChange}
           />
         ) : null}
-        {view.keepsClaudeAiLogin !== null && onKeepClaudeAiLoginChange ? (
+        {showsKeepClaudeAiLogin ? (
           <KeepClaudeAiLoginRow
             providerLabel={providerLabel}
-            value={view.keepsClaudeAiLogin}
+            value={keepsClaudeAiLogin}
             busy={busy}
             onChange={onKeepClaudeAiLoginChange}
           />

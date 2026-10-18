@@ -2719,7 +2719,7 @@ export const fr: TranslationResources = {
           keepCurrent: "Garder les réglages actuels",
           claudeAiLoginTokenSet: "{{agent}} envoie un jeton au lieu de sa connexion claude.ai",
           claudeAiLoginTokenSetDetail:
-            "Garder la connexion claude.ai est activé, mais ANTHROPIC_AUTH_TOKEN a été rempli à nouveau dans {{file}} : {{agent}} est déconnecté de claude.ai quand il passe par la passerelle. Réappliquer le vide.",
+            "Garder la connexion claude.ai est activé, mais ANTHROPIC_AUTH_TOKEN a été rempli à nouveau dans {{file}} : {{agent}} envoie ce jeton à la passerelle au lieu de sa connexion claude.ai. La connexion elle-même est toujours enregistrée, inutile de vous reconnecter. Réappliquer vide le jeton.",
           claudeAiLoginTokenEmpty:
             "{{agent}} envoie sa connexion claude.ai au lieu du jeton de la passerelle",
           claudeAiLoginTokenEmptyDetail:

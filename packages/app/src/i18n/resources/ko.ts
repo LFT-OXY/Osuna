@@ -2673,7 +2673,7 @@ export const ko: TranslationResources = {
           keepCurrent: "현재 설정 유지",
           claudeAiLoginTokenSet: "{{agent}}가 claude.ai 로그인 대신 토큰을 보내고 있습니다",
           claudeAiLoginTokenSetDetail:
-            "claude.ai 로그인 유지가 켜져 있지만 {{file}}의 ANTHROPIC_AUTH_TOKEN이 다시 채워져, {{agent}}가 게이트웨이를 거치는 동안 claude.ai에서 로그아웃됩니다. 다시 적용하면 비웁니다.",
+            "claude.ai 로그인 유지가 켜져 있지만 {{file}}의 ANTHROPIC_AUTH_TOKEN이 다시 채워져, {{agent}}가 claude.ai 로그인 대신 그 토큰을 게이트웨이에 보냅니다. 로그인 자체는 그대로 남아 있으니 다시 로그인할 필요는 없습니다. 다시 적용하면 토큰을 비웁니다.",
           claudeAiLoginTokenEmpty:
             "{{agent}}가 게이트웨이 토큰 대신 claude.ai 로그인을 보내고 있습니다",
           claudeAiLoginTokenEmptyDetail:

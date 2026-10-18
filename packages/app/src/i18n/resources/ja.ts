@@ -2689,7 +2689,7 @@ export const ja: TranslationResources = {
           claudeAiLoginTokenSet:
             "{{agent}} が claude.ai のサインインではなくトークンを送っています",
           claudeAiLoginTokenSetDetail:
-            "claude.ai のサインインを維持がオンですが、{{file}} の ANTHROPIC_AUTH_TOKEN が再び入力されたため、{{agent}} はゲートウェイ経由の間 claude.ai からサインアウトされています。「再適用」で空に戻します。",
+            "claude.ai のサインインを維持がオンですが、{{file}} の ANTHROPIC_AUTH_TOKEN が再び入力されたため、{{agent}} は claude.ai のサインインではなくそのトークンをゲートウェイに送っています。サインイン自体は残っているので、再ログインは不要です。「再適用」でトークンを空に戻します。",
           claudeAiLoginTokenEmpty:
             "{{agent}} がゲートウェイのトークンではなく claude.ai のサインインを送っています",
           claudeAiLoginTokenEmptyDetail:

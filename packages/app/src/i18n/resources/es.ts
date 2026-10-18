@@ -2717,7 +2717,7 @@ export const es: TranslationResources = {
           keepCurrent: "Mantener la configuración actual",
           claudeAiLoginTokenSet: "{{agent}} envía un token en lugar de su sesión de claude.ai",
           claudeAiLoginTokenSetDetail:
-            "Mantener la sesión de claude.ai está activado, pero ANTHROPIC_AUTH_TOKEN en {{file}} se volvió a rellenar, así que {{agent}} cierra la sesión de claude.ai mientras pasa por el gateway. Aplicar de nuevo lo vacía.",
+            "Mantener la sesión de claude.ai está activado, pero ANTHROPIC_AUTH_TOKEN en {{file}} se volvió a rellenar, así que {{agent}} envía al gateway ese token en lugar de su sesión de claude.ai. La sesión sigue guardada, así que no hace falta volver a iniciarla. Aplicar de nuevo vacía el token.",
           claudeAiLoginTokenEmpty:
             "{{agent}} envía su sesión de claude.ai en lugar del token del gateway",
           claudeAiLoginTokenEmptyDetail:

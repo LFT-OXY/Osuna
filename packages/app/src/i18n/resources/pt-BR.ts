@@ -2699,7 +2699,7 @@ export const ptBR: TranslationResources = {
           keepCurrent: "Manter configurações atuais",
           claudeAiLoginTokenSet: "{{agent}} envia um token em vez do login do claude.ai",
           claudeAiLoginTokenSetDetail:
-            "Manter o login do claude.ai está ativado, mas ANTHROPIC_AUTH_TOKEN em {{file}} foi preenchido de novo, então {{agent}} sai do claude.ai enquanto passa pelo gateway. Aplicar de novo o esvazia.",
+            "Manter o login do claude.ai está ativado, mas ANTHROPIC_AUTH_TOKEN em {{file}} foi preenchido de novo, então {{agent}} envia ao gateway esse token em vez do login do claude.ai. O login continua salvo, então não é preciso entrar de novo. Aplicar de novo esvazia o token.",
           claudeAiLoginTokenEmpty:
             "{{agent}} envia o login do claude.ai em vez do token do gateway",
           claudeAiLoginTokenEmptyDetail:

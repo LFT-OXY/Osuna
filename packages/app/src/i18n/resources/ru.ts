@@ -2697,7 +2697,7 @@ export const ru: TranslationResources = {
           keepCurrent: "Оставить текущие настройки",
           claudeAiLoginTokenSet: "{{agent}} отправляет токен вместо входа в claude.ai",
           claudeAiLoginTokenSetDetail:
-            "«Сохранять вход в claude.ai» включено, но ANTHROPIC_AUTH_TOKEN в {{file}} снова заполнен, поэтому {{agent}} выходит из claude.ai, пока работает через шлюз. «Применить снова» очистит его.",
+            "«Сохранять вход в claude.ai» включено, но ANTHROPIC_AUTH_TOKEN в {{file}} снова заполнен, поэтому {{agent}} отправляет шлюзу этот токен вместо входа в claude.ai. Сам вход сохранён, входить заново не нужно. «Применить снова» очистит токен.",
           claudeAiLoginTokenEmpty: "{{agent}} отправляет вход в claude.ai вместо токена шлюза",
           claudeAiLoginTokenEmptyDetail:
             "ANTHROPIC_AUTH_TOKEN в {{file}} пуст, поэтому {{agent}} отправляет шлюзу свой вход в claude.ai, если он есть. Включите «Сохранять вход в claude.ai», чтобы так и оставить, или примените снова, чтобы вернуть токен.",
