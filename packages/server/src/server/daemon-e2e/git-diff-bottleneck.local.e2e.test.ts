@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { highlightCode, isLanguageSupported } from "@getpaseo/highlight";
 import { createDaemonTestContext } from "../test-utils/index.js";
 import { getCheckoutDiff } from "../../utils/checkout-git.js";
+import { CheckoutDiffFileReuse } from "../../utils/checkout-diff-file-reuse.js";
 import { resolveGitProcessPolicy } from "../../utils/git-process-scheduler.js";
 import { configureGitProcessPolicy } from "../../utils/run-git-command.js";
 import {
@@ -161,9 +162,26 @@ runDescribe("daemon E2E git diff bottleneck profiling", () => {
         unsubscribe();
         await subscription.release();
 
-        // 订阅释放后直接调 daemon 刷新时跑的同一个函数：改一个文件、算一次，量单次刷新耗时；
+        // 订阅释放后直接调 daemon 刷新时跑的同一个函数：改一个文件、算一次，量单次刷新耗时。
+        // 订阅中的刷新带按文件复用（先全量算一次暖好）；不复用的那组是改前的做法，同场对照。
         // 不带结构化结果再量一次，就是只有 git 子进程、没有读全文和高亮的那部分。
-        const refreshMs = await timeSingleFileRefreshes({ cwd, count: 5, includeStructured: true });
+        const fileReuse = new CheckoutDiffFileReuse();
+        await getCheckoutDiff(
+          cwd,
+          { mode: "uncommitted", includeStructured: true },
+          { diffFileReuse: fileReuse },
+        );
+        const refreshMs = await timeSingleFileRefreshes({
+          cwd,
+          count: 5,
+          includeStructured: true,
+          fileReuse,
+        });
+        const refreshWithoutReuseMs = await timeSingleFileRefreshes({
+          cwd,
+          count: 5,
+          includeStructured: true,
+        });
         const gitOnlyMs = await timeSingleFileRefreshes({
           cwd,
           count: 5,
@@ -173,7 +191,8 @@ runDescribe("daemon E2E git diff bottleneck profiling", () => {
           .filter((file) => (file.status ?? "ok") === "ok")
           .map((file) => file.path);
         const highlight = measureFullRefreshHighlight({ cwd, paths: highlightOkPaths });
-        const refreshMedianMs = median(refreshMs);
+        // 高亮占比按不复用的全量刷新算，与改前基线同口径
+        const refreshMedianMs = median(refreshWithoutReuseMs);
 
         const payloadBytes = Buffer.byteLength(JSON.stringify(cold));
         const stringifyStart = performance.now();
@@ -209,6 +228,7 @@ runDescribe("daemon E2E git diff bottleneck profiling", () => {
             },
             singleFileRefresh: {
               refreshMs: summarize(refreshMs),
+              refreshWithoutReuseMs: summarize(refreshWithoutReuseMs),
               gitOnlyMs: summarize(gitOnlyMs),
               highlightTotalMs: Math.round(highlight.totalMs),
               highlightShareOfRefresh: ratio(highlight.totalMs, refreshMedianMs),
@@ -254,16 +274,18 @@ async function timeSingleFileRefreshes(input: {
   cwd: string;
   count: number;
   includeStructured: boolean;
+  fileReuse?: CheckoutDiffFileReuse;
 }): Promise<number[]> {
   const durations: number[] = [];
   for (let index = 0; index < input.count; index += 1) {
     // 接着模拟 Agent 的编号往后改，避免和之前的改动重复。
     editScenarioModule({ cwd: input.cwd, edit: 10_000 + index });
     const startedAt = performance.now();
-    await getCheckoutDiff(input.cwd, {
-      mode: "uncommitted",
-      includeStructured: input.includeStructured,
-    });
+    await getCheckoutDiff(
+      input.cwd,
+      { mode: "uncommitted", includeStructured: input.includeStructured },
+      { diffFileReuse: input.fileReuse },
+    );
     durations.push(performance.now() - startedAt);
   }
   return durations;

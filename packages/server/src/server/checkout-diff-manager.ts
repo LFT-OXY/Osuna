@@ -2,6 +2,7 @@ import type pino from "pino";
 import type { SubscribeCheckoutDiffRequest, SessionOutboundMessage } from "./messages.js";
 import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
 import { expandTilde } from "../utils/path.js";
+import { CheckoutDiffFileReuse } from "../utils/checkout-diff-file-reuse.js";
 import { toCheckoutError } from "./checkout-git-utils.js";
 
 const CHECKOUT_DIFF_WATCH_DEBOUNCE_MS = 150;
@@ -54,6 +55,8 @@ interface CheckoutDiffWatchTarget {
   latestPayload: CheckoutDiffSnapshotPayload | null;
   latestFingerprint: string | null;
   openPromise: Promise<void> | null;
+  // 按文件复用 patch 与高亮，随 target 关闭释放
+  fileReuse: CheckoutDiffFileReuse;
 }
 
 export interface CheckoutDiffSubscriptionRequest {
@@ -122,6 +125,7 @@ export class CheckoutDiffManager {
         target.latestPayload ??
         (await this.computeCheckoutDiffSnapshot(target.cwd, target.compare, {
           diffCwd: target.diffCwd,
+          fileReuse: target.fileReuse,
         }));
       target.latestPayload = initial;
       target.latestFingerprint = JSON.stringify(initial);
@@ -203,6 +207,7 @@ export class CheckoutDiffManager {
     target.workspaceGitUnsubscribe?.();
     target.workspaceGitUnsubscribe = null;
     target.listeners.clear();
+    target.fileReuse.clear();
   }
 
   private rememberWorkspaceSnapshot(
@@ -298,7 +303,12 @@ export class CheckoutDiffManager {
   private async computeCheckoutDiffSnapshot(
     cwd: string,
     compare: CheckoutDiffCompareInput,
-    options?: { diffCwd?: string; force?: boolean; reason?: string },
+    options?: {
+      diffCwd?: string;
+      force?: boolean;
+      reason?: string;
+      fileReuse?: CheckoutDiffFileReuse;
+    },
   ): Promise<CheckoutDiffSnapshotPayload> {
     const diffCwd = options?.diffCwd ?? cwd;
     try {
@@ -313,6 +323,7 @@ export class CheckoutDiffManager {
         options?.force
           ? { force: true, reason: options.reason ?? "checkout-diff-refresh" }
           : undefined,
+        options?.fileReuse,
       );
       if (diffResult.diffTooLarge) {
         return {
@@ -356,6 +367,7 @@ export class CheckoutDiffManager {
         diffCwd: target.diffCwd,
         force,
         ...(force ? { reason: "working-tree-watch" } : {}),
+        fileReuse: target.fileReuse,
       });
       const fingerprint = JSON.stringify(snapshot);
       if (fingerprint === target.latestFingerprint) {
@@ -436,6 +448,7 @@ export class CheckoutDiffManager {
       latestPayload: null,
       latestFingerprint: null,
       openPromise: null,
+      fileReuse: new CheckoutDiffFileReuse(),
     };
     this.targets.set(targetKey, target);
     return target;
@@ -465,7 +478,10 @@ export class CheckoutDiffManager {
 
     const { repoRoot, unsubscribe } = await this.workspaceGitService.requestWorkingTreeWatch(
       target.cwd,
-      () => this.scheduleTargetRefresh(target),
+      (changedPaths) => {
+        target.fileReuse.markChanged(changedPaths ?? []);
+        this.scheduleTargetRefresh(target);
+      },
     );
     target.diffCwd = repoRoot ?? target.cwd;
     if (this.targets.get(target.key) !== target || target.listeners.size === 0) {

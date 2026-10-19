@@ -31,6 +31,7 @@ import {
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { runGitCommand, type RunGitCommand } from "./run-git-command.js";
 import { readGitFileContents } from "./git-file-contents.js";
+import type { CheckoutDiffFileReuse, CheckoutDiffReuseRun } from "./checkout-diff-file-reuse.js";
 import { isPaseoOwnedWorktreeCwd, resolvePaseoWorktreesBaseRoot } from "./worktree.js";
 import {
   branchNameFromRef,
@@ -901,6 +902,8 @@ export interface CheckoutContext {
   logger?: Pick<Logger, "trace" | "warn">;
   facts?: CheckoutSnapshotFacts | null;
   runGitCommand?: RunGitCommand;
+  /** 按文件复用上一次的 patch 与高亮，只在 getCheckoutDiff 里用 */
+  diffFileReuse?: CheckoutDiffFileReuse;
 }
 
 export type CheckoutSnapshotFacts =
@@ -3040,6 +3043,7 @@ interface AppendStructuredTrackedDiffsInput {
     change: CheckoutFileChange,
     status: "binary" | "too_large",
   ) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
 async function buildHighlightedTrackedDiffFile(input: {
@@ -3117,6 +3121,7 @@ async function appendStructuredTrackedDiffs(
     ignoreWhitespace,
     structured,
     appendTrackedPlaceholderComment,
+    reuse,
   } = input;
 
   const parsedTrackedFiles = trackedDiffText.length > 0 ? parseDiff(trackedDiffText) : [];
@@ -3128,7 +3133,9 @@ async function appendStructuredTrackedDiffs(
       cwd,
       changes.filter(
         (change) =>
-          !trackedPlaceholderByPath.has(change.path) && parsedTrackedByPath.has(change.path),
+          !trackedPlaceholderByPath.has(change.path) &&
+          parsedTrackedByPath.has(change.path) &&
+          !reuse?.hasHighlighted(change.path),
       ),
       refsForDiff,
     );
@@ -3149,13 +3156,15 @@ async function appendStructuredTrackedDiffs(
       const stat = trackedNumstatByPath.get(change.path) ?? null;
       const parsedFile = parsedTrackedByPath.get(change.path);
       if (parsedFile) {
-        const file = await buildHighlightedTrackedDiffFile({
-          cwd,
-          change,
-          parsedFile,
-          refsForDiff,
-          contents: contents ?? undefined,
-        });
+        const buildFile = () =>
+          buildHighlightedTrackedDiffFile({
+            cwd,
+            change,
+            parsedFile,
+            refsForDiff,
+            contents: contents ?? undefined,
+          });
+        const file = await (reuse?.highlighted(change.path, buildFile) ?? buildFile());
         if (!appendStructuredFile(structured, file)) {
           return false;
         }
@@ -3200,11 +3209,19 @@ interface ProcessUntrackedChangesInput {
   includeStructured: boolean;
   structured: StructuredDiffAccumulator;
   appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
 async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Promise<boolean> {
-  const { cwd, untrackedChanges, ignoreWhitespace, includeStructured, structured, appendDiff } =
-    input;
+  const {
+    cwd,
+    untrackedChanges,
+    ignoreWhitespace,
+    includeStructured,
+    structured,
+    appendDiff,
+    reuse,
+  } = input;
   let untrackedDiffBytes = 0;
   for (let start = 0; start < untrackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const changes = untrackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
@@ -3212,11 +3229,11 @@ async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Pro
     const budgetExhausted = untrackedDiffBytes >= input.remainingDiffBytes;
     // 并发只靠 git 子进程限流兜底；结果仍按原顺序拼接，输出与串行一致
     const diffTexts: Array<UntrackedDiffText | null> = await Promise.all(
-      changes.map((change) =>
-        budgetExhausted
-          ? getUntrackedBinaryDiffText(cwd, change)
-          : getUntrackedDiffText(cwd, change, ignoreWhitespace),
-      ),
+      changes.map((change) => {
+        if (budgetExhausted) return getUntrackedBinaryDiffText(cwd, change);
+        const loadText = () => getUntrackedDiffText(cwd, change, ignoreWhitespace);
+        return reuse?.untrackedText(change.path, loadText) ?? loadText();
+      }),
     );
     for (const [index, change] of changes.entries()) {
       const diffText = diffTexts[index];
@@ -3232,6 +3249,7 @@ async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Pro
         includeStructured,
         structured,
         appendDiff,
+        reuse,
       });
       if (!didAppend) {
         return false;
@@ -3263,10 +3281,11 @@ interface AppendUntrackedChangeInput {
   includeStructured: boolean;
   structured: StructuredDiffAccumulator;
   appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
 async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise<boolean> {
-  const { cwd, change, diffText, includeStructured, structured, appendDiff } = input;
+  const { cwd, change, diffText, includeStructured, structured, appendDiff, reuse } = input;
   const { text, truncated, stat } = diffText;
 
   if (!includeStructured) {
@@ -3307,7 +3326,8 @@ async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise
   }
 
   appendDiff(text);
-  const parsed = await parseAndHighlightDiff(text, cwd);
+  const parseText = () => parseAndHighlightDiff(text, cwd);
+  const parsed = await (reuse?.untrackedParsed(change.path, parseText) ?? parseText());
   const parsedFile =
     parsed[0] ??
     ({
@@ -3335,6 +3355,7 @@ interface ProcessTrackedChangesInput {
   trackedChanges: CheckoutFileChange[];
   ignoreWhitespace: boolean;
   appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
 interface ProcessTrackedChangesResult {
@@ -3346,7 +3367,7 @@ interface ProcessTrackedChangesResult {
 async function processTrackedChanges(
   input: ProcessTrackedChangesInput,
 ): Promise<ProcessTrackedChangesResult> {
-  const { cwd, refsForDiff, trackedChanges, ignoreWhitespace, appendDiff } = input;
+  const { cwd, refsForDiff, trackedChanges, ignoreWhitespace, appendDiff, reuse } = input;
   const trackedNumstatByPath =
     trackedChanges.length > 0
       ? await getTrackedNumstatByPath(cwd, refsForDiff, ignoreWhitespace)
@@ -3374,16 +3395,14 @@ async function processTrackedChanges(
   for (let start = 0; start < trackedDiffPaths.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const paths = trackedDiffPaths.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
     // Keep rename/copy path filtering identical to the existing per-file command.
-    const ordinary = await getTrackedDiffTexts({
-      cwd,
-      refsForDiff,
-      paths: paths.filter((path) => !renamedPaths.has(path)),
-      ignoreWhitespace,
-    });
-    const renamed = await Promise.all(
-      paths
-        .filter((path) => renamedPaths.has(path))
-        .map((path) =>
+    const loadOrdinary = (ordinaryPaths: string[]) =>
+      getTrackedDiffTexts({ cwd, refsForDiff, paths: ordinaryPaths, ignoreWhitespace });
+    const ordinaryPaths = paths.filter((path) => !renamedPaths.has(path));
+    const ordinary = await (reuse?.trackedPatches(ordinaryPaths, loadOrdinary) ??
+      loadOrdinary(ordinaryPaths));
+    const loadRenamed = (renamedBatch: string[]) =>
+      Promise.all(
+        renamedBatch.map((path) =>
           getTrackedDiffTextForPath({
             cwd,
             refsForDiff,
@@ -3391,7 +3410,10 @@ async function processTrackedChanges(
             ignoreWhitespace,
           }),
         ),
-    );
+      );
+    const renamedBatch = paths.filter((path) => renamedPaths.has(path));
+    const renamed = await (reuse?.trackedPatches(renamedBatch, loadRenamed) ??
+      loadRenamed(renamedBatch));
     const byPath = new Map([...ordinary, ...renamed].map((file) => [file.path, file]));
     const trackedDiffs = paths.map((path) => byPath.get(path)!);
 
@@ -3477,6 +3499,12 @@ export async function getCheckoutDiff(
     if (a.path === b.path) return 0;
     return a.path < b.path ? -1 : 1;
   });
+  const reuse = await context?.diffFileReuse?.begin({
+    cwd,
+    refs: effectiveRefsForDiff,
+    changes,
+    ignoreWhitespace,
+  });
 
   const structured = createStructuredDiffAccumulator();
   let diffText = "";
@@ -3505,6 +3533,7 @@ export async function getCheckoutDiff(
     trackedChanges,
     ignoreWhitespace,
     appendDiff,
+    reuse,
   });
 
   const appendTrackedPlaceholderComment = (
@@ -3529,6 +3558,7 @@ export async function getCheckoutDiff(
       ignoreWhitespace,
       structured,
       appendTrackedPlaceholderComment,
+      reuse,
     });
     if (!didAppendTrackedDiffs) {
       return { diff: "", structured: [], diffTooLarge: true };
@@ -3550,6 +3580,7 @@ export async function getCheckoutDiff(
     includeStructured: compare.includeStructured === true,
     structured,
     appendDiff,
+    reuse,
   });
   if (!didAppendUntrackedDiffs) {
     return { diff: "", structured: [], diffTooLarge: true };
