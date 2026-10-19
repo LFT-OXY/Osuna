@@ -8,7 +8,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假 Bedrock 上游收到的认证头按格式正确；拉模型返回内置清单、不发清单请求。
 - [ ] 端到端：假 Azure 上游收到 `api-key` 头；部署列表成功时用它、失败时退到 `/v1/models`。
