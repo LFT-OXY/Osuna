@@ -178,7 +178,7 @@ export function createApiEndpointGateway(options: {
   // daemon 自己的版本：CLI 没带 User-Agent 时写 Osuna/<版本>。
   daemonVersion: string;
   // 用 ChatGPT 登录的 Codex 的模型清单里接在后面的接口模型、它们的标记与 CODEX_HOME（ADR 0010）。
-  codexChatGptListing: () => ChatGptModelsListing;
+  chatGptListing: () => ChatGptModelsListing;
   // 每个提供方最近一次收到请求的时刻，接口服务据此判断「被绕过」。
   sightings: GatewaySightings;
   overrides?: ApiEndpointGatewayOverrides;
@@ -205,7 +205,7 @@ export function createApiEndpointGateway(options: {
       chatgpt: options.overrides?.gatewayChatGptBaseUrl ?? DEFAULT_CHATGPT_BASE_URL,
       openAiApi: options.overrides?.gatewayOpenAiApiBaseUrl ?? DEFAULT_OPENAI_API_BASE_URL,
     },
-    listing: options.codexChatGptListing,
+    listing: options.chatGptListing,
     modelsWaitMs: options.overrides?.gatewayChatGptModelsWaitMs ?? CHATGPT_MODELS_WAIT_MS,
   };
 

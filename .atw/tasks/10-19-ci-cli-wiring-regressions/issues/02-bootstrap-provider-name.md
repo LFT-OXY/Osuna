@@ -4,8 +4,8 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] `src/terminal/agent-hooks/claude/claude.test.ts` 的「keeps provider names out of the generic server bootstrap」本机通过。
-- [ ] 托管设置目录的测试替换（`test-utils/paseo-daemon.ts` 默认用临时托管目录）照旧生效；`api-endpoint-claude.e2e.test.ts` 里云平台开关与托管设置的用例通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] `src/terminal/agent-hooks/claude/claude.test.ts` 的「keeps provider names out of the generic server bootstrap」本机通过。
+- [x] 托管设置目录的测试替换（`test-utils/paseo-daemon.ts` 默认用临时托管目录）照旧生效；`api-endpoint-claude.e2e.test.ts` 里云平台开关与托管设置的用例通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
