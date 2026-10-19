@@ -4166,6 +4166,7 @@ export const ptBR: TranslationResources = {
       tooltip: "Ver os mapas lógicos que o agente mantém neste espaço de trabalho",
       canvas: "Tela do mapa lógico",
       pickerLabel: "Mapa lógico: {{title}}",
+      untitled: "Mapa lógico sem título",
       nodeCountOne: "{{count}} nó",
       nodeCountMany: "{{count}} nós",
       loading: "Carregando mapa lógico…",

@@ -218,7 +218,7 @@ export function layoutLogicMapLayer(
     const dagrePoints = (label?.points ?? []).slice(1, -1).map(roundPoint);
     const rawRoute =
       branch && goesDown
-        ? branchRoute(branch.exit, entry)
+        ? branchRoute(branch.exit, entry, branchIndex)
         : bottomRoute(source, dagrePoints, entry);
     const obstacles = boxes.filter((box) => box.id !== edge.from && box.id !== edge.to);
     return {
@@ -327,11 +327,22 @@ function assignEntries(
 }
 
 /**
- * 判断分支的线只走横竖两个方向：先向右走出一小段，沿卡片右侧竖着下到两排之间，再横到目标上方，
- * 最后竖着进目标顶边。
+ * 判断分支的线只走横竖两个方向，同一个判断的几条分支互不共用线段：目标在右边时从自己那一行横着出去、
+ * 到目标上方再竖着下来；目标在左边或正下方时先向右走出一小段，沿卡片右侧各走一条竖道（按分支序号错开）
+ * 下到两排之间，再横到目标上方，最后竖着进目标顶边。
  */
-function branchRoute(exit: LogicMapPoint, entry: EdgeEntry): LogicMapPoint[] {
-  const lane = exit.x + LAYOUT_SPACING.stub;
+function branchRoute(exit: LogicMapPoint, entry: EdgeEntry, branchIndex: number): LogicMapPoint[] {
+  const lane = exit.x + LAYOUT_SPACING.stub + branchIndex * LAYOUT_SPACING.laneStep;
+  if (entry.point.x > lane) {
+    // 横段先放在出口那一行；挡到别的卡片时 keepClearOf 会把它整段挪开，竖道随之伸长。
+    return [
+      exit,
+      { x: lane, y: exit.y },
+      { x: lane, y: exit.y },
+      { x: entry.point.x, y: exit.y },
+      entry.point,
+    ];
+  }
   return [
     exit,
     { x: lane, y: exit.y },
@@ -413,6 +424,7 @@ function keepClearOf(points: LogicMapPoint[], obstacles: Box[]): LogicMapPoint[]
     for (let index = 1; index + 2 < route.length; index += 1) {
       const a = route[index];
       const b = route[index + 1];
+      if (a.x === b.x && a.y === b.y) continue;
       const horizontal = a.y === b.y;
       const axis = horizontal ? "y" : "x";
       const along = horizontal ? "x" : "y";

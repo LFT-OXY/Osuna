@@ -4128,6 +4128,7 @@ export const ko: TranslationResources = {
       tooltip: "이 워크스페이스에서 에이전트가 관리하는 로직 맵 보기",
       canvas: "로직 맵 캔버스",
       pickerLabel: "로직 맵: {{title}}",
+      untitled: "제목 없는 로직 맵",
       nodeCountOne: "노드 {{count}}개",
       nodeCountMany: "노드 {{count}}개",
       loading: "로직 맵 불러오는 중…",

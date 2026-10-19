@@ -4234,6 +4234,7 @@ export const en = {
       tooltip: "See the logic maps the agent keeps in this workspace",
       canvas: "Logic map canvas",
       pickerLabel: "Logic map: {{title}}",
+      untitled: "Untitled logic map",
       nodeCountOne: "{{count}} node",
       nodeCountMany: "{{count}} nodes",
       loading: "Loading logic map…",

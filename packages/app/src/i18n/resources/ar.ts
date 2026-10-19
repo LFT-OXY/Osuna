@@ -4103,6 +4103,7 @@ export const ar: TranslationResources = {
       tooltip: "عرض الخرائط المنطقية التي يحتفظ بها الوكيل في مساحة العمل هذه",
       canvas: "لوحة الخريطة المنطقية",
       pickerLabel: "الخريطة المنطقية: {{title}}",
+      untitled: "خريطة منطقية بلا عنوان",
       nodeCountOne: "{{count}} عقدة",
       nodeCountMany: "{{count}} عقد",
       loading: "جارٍ تحميل الخريطة المنطقية…",

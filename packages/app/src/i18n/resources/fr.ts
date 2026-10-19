@@ -4202,6 +4202,7 @@ export const fr: TranslationResources = {
       tooltip: "Voir les cartes logiques que l'agent tient à jour dans cet espace de travail",
       canvas: "Canevas de la carte logique",
       pickerLabel: "Carte logique : {{title}}",
+      untitled: "Carte logique sans titre",
       nodeCountOne: "{{count}} nœud",
       nodeCountMany: "{{count}} nœuds",
       loading: "Chargement de la carte logique…",

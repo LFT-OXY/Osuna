@@ -7,6 +7,13 @@ function overlaps(a: LogicMapNodeBox, b: LogicMapNodeBox): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
+interface Segment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 function findNode(nodes: readonly LogicMapNodeBox[], id: string): LogicMapNodeBox {
   const found = nodes.find((candidate) => candidate.id === id);
   if (!found) throw new Error(`node ${id} missing`);
@@ -283,5 +290,38 @@ describe("logic map layer layout", () => {
     expect(intoStay).toHaveLength(3);
     expect(new Set(intoStay.map((route) => route.points.at(-1)?.x)).size).toBe(3);
     expect(new Set(intoStay.map((route) => route.points.at(-2)?.y)).size).toBe(3);
+  });
+
+  it("never lets two branches of one decision share a stretch of line", () => {
+    const layout = layoutLogicMapLayer(buildLoginLogicMap(), null);
+    const segments = (points: { x: number; y: number }[]): Segment[] =>
+      points.slice(1).map((end, index) => ({
+        x1: points[index].x,
+        y1: points[index].y,
+        x2: end.x,
+        y2: end.y,
+      }));
+    const shareStretch = (a: Segment, b: Segment) => {
+      if (a.x1 === a.x2 && b.x1 === b.x2 && a.x1 === b.x1) {
+        const top = Math.max(Math.min(a.y1, a.y2), Math.min(b.y1, b.y2));
+        const bottom = Math.min(Math.max(a.y1, a.y2), Math.max(b.y1, b.y2));
+        return bottom > top;
+      }
+      if (a.y1 === a.y2 && b.y1 === b.y2 && a.y1 === b.y1) {
+        const left = Math.max(Math.min(a.x1, a.x2), Math.min(b.x1, b.x2));
+        const right = Math.min(Math.max(a.x1, a.x2), Math.max(b.x1, b.x2));
+        return right > left;
+      }
+      return false;
+    };
+
+    for (const decision of ["account", "password", "limit"]) {
+      const [first, second] = layout.edges.filter((route) => route.from === decision);
+      for (const a of segments(first.points)) {
+        for (const b of segments(second.points)) {
+          expect(shareStretch(a, b), `${first.id} / ${second.id}`).toBe(false);
+        }
+      }
+    }
   });
 });

@@ -246,7 +246,7 @@ describe("the logic map panel", () => {
     // "开始"是占位，不算节点。
     expect(byTestId("logic-map-start-placeholder")).toBeTruthy();
     expect(document.querySelectorAll('[data-testid^="logic-map-node-"]')).toHaveLength(0);
-    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["untitled-1a2b", "0 nodes"]);
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["Untitled logic map", "0 nodes"]);
   });
 
   it("names the map, the file and the problem when a map file is broken", async () => {
@@ -262,16 +262,16 @@ describe("the logic map panel", () => {
     const corrupt = await shown("logic-map-corrupt");
     expect(shownTexts(corrupt)).toEqual([
       "Can't read this logic map",
-      "user-login: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
+      "Untitled logic map: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
       "Details",
     ]);
     // 头部和正文用同一个名字指这张图。
-    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["user-login"]);
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["Untitled logic map"]);
 
     await userEvent.click(byTestId("logic-map-state-details-toggle"));
     expect(shownTexts(corrupt)).toEqual([
       "Can't read this logic map",
-      "user-login: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
+      "Untitled logic map: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
       "Hide details",
       "Unexpected token } in JSON at position 120",
     ]);
@@ -381,7 +381,8 @@ describe("the logic map panel", () => {
       const existing = getComputedStyle(byTestId("logic-map-node-home"));
       expect(existing.animationName).toBe("none");
       expect(existing.transitionProperty).toBe("left, top, box-shadow");
-      expect(existing.transitionDuration).toBe("0.2s");
+      // 平移 200ms，选中外圈与悬停投影 150ms。
+      expect(existing.transitionDuration).toBe("0.2s, 0.2s, 0.15s");
       expect(existing.transitionTimingFunction).toBe("ease-out");
     });
 

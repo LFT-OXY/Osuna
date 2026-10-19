@@ -9,6 +9,7 @@ import React, {
 import { Text, View } from "react-native";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { CircleAlert, House, TriangleAlert, Workflow } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -57,9 +58,9 @@ const FIT_WIDTH: ViewportFitOptions = {
   minFitScale: LOGIC_MAP_MIN_FIT_SCALE,
 };
 
-/** 下拉框、画布上的提示都用同一个名字指这张图：有标题用标题，没有就用文件夹名。 */
-function mapLabel(map: WorkspaceLogicMapSummary): string {
-  return map.title ?? map.name;
+/** 下拉框、画布上的提示都用同一个名字指这张图：有标题用标题，没有就是"未命名逻辑图"。 */
+function mapLabel(map: WorkspaceLogicMapSummary, t: TFunction): string {
+  return map.title ?? t("logicMap.panel.untitled");
 }
 
 function logicMapQueryRoot(serverId: string, workspaceId: string) {
@@ -224,7 +225,7 @@ function LogicMapPanelContent({
         onSelect={setPickedMapName}
       />
       <LogicMapBody
-        mapLabel={mapLabel(selectedMap)}
+        mapLabel={mapLabel(selectedMap, t)}
         result={result}
         layout={layout}
         error={readQuery.isError ? readQuery.error : null}
@@ -308,7 +309,7 @@ function LogicMapHeader({
   onSelect: (mapName: string) => void;
 }) {
   const { t } = useTranslation();
-  const selectedTitle = mapLabel(selectedMap);
+  const selectedTitle = mapLabel(selectedMap, t);
   const nodeCountKey =
     nodeCount === 1 ? "logicMap.panel.nodeCountOne" : "logicMap.panel.nodeCountMany";
   return (
@@ -327,7 +328,7 @@ function LogicMapHeader({
               <LogicMapPickerItem
                 key={map.name}
                 mapName={map.name}
-                title={mapLabel(map)}
+                title={mapLabel(map, t)}
                 selected={map.name === selectedMap.name}
                 onSelect={onSelect}
               />

@@ -4096,6 +4096,7 @@ export const zhCN: TranslationResources = {
       tooltip: "查看 Agent 在这个工作区维护的逻辑图",
       canvas: "逻辑图画布",
       pickerLabel: "逻辑图：{{title}}",
+      untitled: "未命名逻辑图",
       nodeCountOne: "{{count}} 个节点",
       nodeCountMany: "{{count}} 个节点",
       loading: "正在加载逻辑图…",

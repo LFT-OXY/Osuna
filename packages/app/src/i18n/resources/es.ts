@@ -4190,6 +4190,7 @@ export const es: TranslationResources = {
       tooltip: "Ver los mapas lógicos que el agente mantiene en este espacio de trabajo",
       canvas: "Lienzo del mapa lógico",
       pickerLabel: "Mapa lógico: {{title}}",
+      untitled: "Mapa lógico sin título",
       nodeCountOne: "{{count}} nodo",
       nodeCountMany: "{{count}} nodos",
       loading: "Cargando mapa lógico…",

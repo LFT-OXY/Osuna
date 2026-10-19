@@ -4172,6 +4172,7 @@ export const ru: TranslationResources = {
       tooltip: "Логические карты, которые агент ведёт в этом рабочем пространстве",
       canvas: "Холст логической карты",
       pickerLabel: "Логическая карта: {{title}}",
+      untitled: "Логическая карта без названия",
       nodeCountOne: "Узлов: {{count}}",
       nodeCountMany: "Узлов: {{count}}",
       loading: "Загрузка логической карты…",

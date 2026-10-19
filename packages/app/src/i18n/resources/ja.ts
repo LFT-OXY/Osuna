@@ -4152,6 +4152,7 @@ export const ja: TranslationResources = {
       tooltip: "このワークスペースでエージェントが管理するロジックマップを表示",
       canvas: "ロジックマップのキャンバス",
       pickerLabel: "ロジックマップ: {{title}}",
+      untitled: "無題のロジックマップ",
       nodeCountOne: "{{count}} 個のノード",
       nodeCountMany: "{{count}} 個のノード",
       loading: "ロジックマップを読み込み中…",

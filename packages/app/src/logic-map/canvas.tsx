@@ -280,8 +280,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   // 只在 Web 上有 CSS 过渡与动画；原生端不加这两个样式（canvas 只有在 isWeb 时才挂上）。
   cardMoving: {
+    // 平移 200ms；选中外圈与悬停投影 150ms（ui-direction.md）。
     transitionProperty: "left, top, box-shadow",
-    transitionDuration: "200ms",
+    transitionDuration: "200ms, 200ms, 150ms",
     transitionTimingFunction: "ease-out",
   },
   cardEntering: {
