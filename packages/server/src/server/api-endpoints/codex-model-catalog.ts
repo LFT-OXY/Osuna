@@ -89,8 +89,8 @@ export function buildCodexModelCatalog(input: {
 
 /**
  * 用 ChatGPT 登录的 Codex 的 /model 里接在 ChatGPT 自带模型后面的接口模型（ADR 0010）：开着的接口的已选模型，
- * 写成「接口标识/模型名」，顺序同聊天模型选择器，能力按这家这个模型的已知资料写。priority 从 1 起，
- * 中转站合并清单时再排到 ChatGPT 自带模型之后。
+ * 写成「接口标识/模型名」，显示成「模型名 (接口名)」（两家选了同一个模型时分得开），顺序同聊天模型选择器，
+ * 能力按这家这个模型的已知资料写。priority 从 1 起，中转站合并清单时再排到 ChatGPT 自带模型之后。
  */
 export function codexEndpointEntries(input: {
   state: ApiEndpointState;
@@ -106,7 +106,7 @@ export function codexEndpointEntries(input: {
   return listed.map(({ id, model, endpoint }, index) =>
     codexModelEntry({
       slug: id,
-      displayName: model.label ?? model.id,
+      displayName: `${model.label ?? model.id} (${endpoint.name})`,
       visibility: "list",
       priority: index + 1,
       facts: input.factsFor(endpoint, model.id),

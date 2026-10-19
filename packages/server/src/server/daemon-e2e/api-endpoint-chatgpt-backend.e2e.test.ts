@@ -1052,7 +1052,7 @@ function versionsOf(reply: Reply): Array<[string, string | undefined]> {
 }
 
 const ownAdded = "- `gpt-5.4-mini`: GPT-5.4 Mini";
-const endpointAdded = "- `relay-a/kimi-k2`: kimi-k2";
+const endpointAdded = "- `relay-a/kimi-k2`: kimi-k2 (RELAY-A)";
 
 const SealedErrorSchema = z.object({ error: z.object({ message: z.string() }) });
 
