@@ -2523,11 +2523,13 @@ export const zhCN: TranslationResources = {
         namePlaceholder: "如：云雾中转",
         apiKey: "API key",
         apiKeySavedPlaceholder: "留空保留已保存的 key",
-        apiKeyOptionalPlaceholder: "选填",
+        apiKeyOptionalLabel: "API key（选填）",
         keyRejected: "上游拒绝了这把 key（401 / 403）",
         address: "地址",
         addressHint:
           "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
+        addressHintKeyOptional:
+          "点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。填了 key 才会带上。",
         detect: "自动检测",
         urlInvalid: "请填写以 http:// 或 https:// 开头的地址",
         formatUrl: {
@@ -2543,6 +2545,8 @@ export const zhCN: TranslationResources = {
         },
         footer:
           "key 只填一次，三种格式共用。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
+        footerKeyOptional:
+          "key 选填：填了三种格式共用，不填就不带 key。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
         saveAndFetch: "保存并拉取模型",
         save: "保存",
       },
@@ -2553,6 +2557,7 @@ export const zhCN: TranslationResources = {
         edit: "编辑",
         formatNotSet: "未填，不用这种格式",
         noKey: "未保存",
+        keyNotSet: "未填（选填）",
         testConnection: "测试连接",
         menu: "「{{name}}」的更多操作",
         delete: "删除",

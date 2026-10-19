@@ -2560,11 +2560,13 @@ export const en = {
         namePlaceholder: "e.g. My relay",
         apiKey: "API key",
         apiKeySavedPlaceholder: "Leave blank to keep the saved key",
-        apiKeyOptionalPlaceholder: "Optional",
+        apiKeyOptionalLabel: "API key (optional)",
         keyRejected: "The upstream rejected this key (401 / 403)",
         address: "Address",
         addressHint:
           "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work.",
+        addressHintKeyOptional:
+          "Press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work. The key goes with each try only if you fill it in.",
         detect: "Auto-detect",
         urlInvalid: "Enter an address that starts with http:// or https://",
         formatUrl: {
@@ -2580,6 +2582,8 @@ export const en = {
         },
         footer:
           "The key is entered once and shared by all three formats. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
+        footerKeyOptional:
+          "The key is optional: one key is shared by all three formats, and without one no key is sent. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
         saveAndFetch: "Save and fetch models",
         save: "Save",
       },
@@ -2590,6 +2594,7 @@ export const en = {
         edit: "Edit",
         formatNotSet: "Not set, this format is not used",
         noKey: "Not saved",
+        keyNotSet: "None (optional)",
         testConnection: "Test connection",
         menu: "More actions for {{name}}",
         delete: "Delete",

@@ -2519,11 +2519,13 @@ export const ja: TranslationResources = {
         namePlaceholder: "例: マイ中継",
         apiKey: "API キー",
         apiKeySavedPlaceholder: "空欄のままにすると保存済みのキーを使います",
-        apiKeyOptionalPlaceholder: "任意",
+        apiKeyOptionalLabel: "API キー（任意）",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
         address: "アドレス",
         addressHint:
           "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。",
+        addressHintKeyOptional:
+          "「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
         detect: "自動検出",
         urlInvalid: "http:// または https:// で始まるアドレスを入力してください",
         formatUrl: {
@@ -2539,6 +2541,8 @@ export const ja: TranslationResources = {
         },
         footer:
           "キーは一度入力すれば 3 つの形式で共有されます。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
+        footerKeyOptional:
+          "キーは任意です。入力すると 3 つの形式で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
         saveAndFetch: "保存してモデルを取得",
         save: "保存",
       },
@@ -2549,6 +2553,7 @@ export const ja: TranslationResources = {
         edit: "編集",
         formatNotSet: "未設定。この形式は使いません",
         noKey: "未保存",
+        keyNotSet: "なし（任意）",
         testConnection: "接続テスト",
         menu: "{{name}} のその他の操作",
         delete: "削除",

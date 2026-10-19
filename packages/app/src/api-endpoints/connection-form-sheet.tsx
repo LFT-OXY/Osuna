@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useSyncExternalStore } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -16,7 +15,6 @@ import type {
   ConnectionFormDeps,
   ConnectionFormModel,
   ConnectionFormSeed,
-  ConnectionFormState,
   ConnectionFormatField,
   ConnectionSaveResult,
 } from "./internal/connection-form-model";
@@ -122,14 +120,20 @@ export function ApiEndpointConnectionSheet({
           />
         </Field>
         <Field
-          label={t("settings.apiEndpoints.form.apiKey")}
+          label={
+            state.isKeyOptional
+              ? t("settings.apiEndpoints.form.apiKeyOptionalLabel")
+              : t("settings.apiEndpoints.form.apiKey")
+          }
           error={state.keyRejected ? t("settings.apiEndpoints.form.keyRejected") : null}
           testID="api-endpoint-connection-api-key-field"
         >
           <FormTextInput
             initialValue=""
             onChangeText={model.setApiKey}
-            placeholder={keyPlaceholder(state, t)}
+            placeholder={
+              state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…"
+            }
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -140,7 +144,11 @@ export function ApiEndpointConnectionSheet({
         </Field>
         <Field
           label={t("settings.apiEndpoints.form.address")}
-          hint={t("settings.apiEndpoints.form.addressHint")}
+          hint={
+            state.isKeyOptional
+              ? t("settings.apiEndpoints.form.addressHintKeyOptional")
+              : t("settings.apiEndpoints.form.addressHint")
+          }
           error={
             state.addressInvalid
               ? t("settings.apiEndpoints.form.urlInvalid")
@@ -191,7 +199,9 @@ export function ApiEndpointConnectionSheet({
           ))}
         </View>
         <Text variant="caption" color="foregroundMuted">
-          {t("settings.apiEndpoints.form.footer")}
+          {state.isKeyOptional
+            ? t("settings.apiEndpoints.form.footerKeyOptional")
+            : t("settings.apiEndpoints.form.footer")}
         </Text>
         {state.submitError ? (
           <Text
@@ -206,16 +216,6 @@ export function ApiEndpointConnectionSheet({
       </View>
     </AdaptiveModalSheet>
   );
-}
-
-/** 存过 key 的说留空保留；主机允许不填时标明选填；否则是 key 的样子。 */
-function keyPlaceholder(
-  state: Pick<ConnectionFormState, "hasSavedKey" | "isKeyOptional">,
-  t: TFunction,
-): string {
-  if (state.hasSavedKey) return t("settings.apiEndpoints.form.apiKeySavedPlaceholder");
-  if (state.isKeyOptional) return t("settings.apiEndpoints.form.apiKeyOptionalPlaceholder");
-  return "sk-…";
 }
 
 function FormatUrlField({

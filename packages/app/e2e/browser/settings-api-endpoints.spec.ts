@@ -244,22 +244,37 @@ test.describe("Settings API endpoints", () => {
     expect(postedPaths(relay)).toEqual([]);
   });
 
-  test("an endpoint saves without a key and sends none; a failed save stays in the form", async ({
+  test("an endpoint detects and saves without a key and sends none; a failed save stays in the form", async ({
     page,
   }) => {
     const host = await failConnectionSave(page);
     await openApiEndpointsPage(page);
     await page.getByTestId("api-endpoints-empty-add").click();
-    await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveAttribute(
-      "placeholder",
-      "Optional",
+    await expect(page.getByTestId("api-endpoint-connection-api-key-field")).toContainText(
+      "API key (optional)",
+    );
+    await expect(page.getByTestId("api-endpoint-connection-address-field-hint")).toHaveText(
+      "Press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work. The key goes with each try only if you fill it in.",
     );
     await page.getByTestId("api-endpoint-connection-name").fill("Local server");
-    await page
-      .getByTestId("api-endpoint-connection-url-openai_chat")
-      .fill(`${relay.origin}/free/v1`);
+    const detect = page.getByTestId("api-endpoint-connection-detect");
+    // 地址没填时不能检测；key 不填不影响。
+    await expect(detect).toBeDisabled();
+    await page.getByTestId("api-endpoint-connection-address").fill(`${relay.origin}/free`);
     const save = page.getByTestId("api-endpoint-connection-save");
-    await expect(save).toBeEnabled();
+
+    await test.step("auto-detect works without a key", async () => {
+      await expect(detect).toBeEnabled();
+      await detect.click();
+      const [anthropic, chat, responses] = detectionTags(page);
+      await expect(anthropic).toHaveText("Detected");
+      await expect(chat).toHaveText("Detected");
+      await expect(responses).toHaveText("Not detected");
+      await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
+        `${relay.origin}/free/v1`,
+      );
+      await expect(save).toBeEnabled();
+    });
 
     await test.step("a failed save keeps the form and says why", async () => {
       await save.click();
@@ -272,14 +287,18 @@ test.describe("Settings API endpoints", () => {
 
     await test.step("trying again saves it with no key, and its models are fetched without one", async () => {
       host.failing = false;
+      relay.requests.length = 0;
       await save.click();
       await expect(connectionForm(page)).toHaveCount(0);
       const list = await client.apiEndpointList("claude");
       expect(list.endpoints).toMatchObject([{ name: "Local server", hasApiKey: false }]);
       await expect(headerTitle(page)).toHaveText("Local server");
+      await expect(
+        page.getByTestId("api-endpoint-connection-section").filter({ visible: true }),
+      ).toContainText("None (optional)");
       await expect.poll(countOf(relay.requests)).toBeGreaterThan(0);
-      expect(authorizationsSeen(relay)).toEqual(new Set([undefined]));
     });
+    expect(authorizationsSeen(relay)).toEqual(new Set([undefined]));
   });
 
   test("the endpoint switch moves the row, and asks first when an agent would go back to official", async ({

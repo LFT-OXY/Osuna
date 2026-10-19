@@ -2510,11 +2510,13 @@ export const ko: TranslationResources = {
         namePlaceholder: "예: 내 중계",
         apiKey: "API 키",
         apiKeySavedPlaceholder: "비워 두면 저장된 키를 유지합니다",
-        apiKeyOptionalPlaceholder: "선택 사항",
+        apiKeyOptionalLabel: "API 키 (선택 사항)",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
         address: "주소",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",
+        addressHintKeyOptional:
+          "자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
         detect: "자동 감지",
         urlInvalid: "http:// 또는 https://로 시작하는 주소를 입력하세요",
         formatUrl: {
@@ -2530,6 +2532,8 @@ export const ko: TranslationResources = {
         },
         footer:
           "키는 한 번만 입력하고 세 형식이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
+        footerKeyOptional:
+          "키는 선택 사항입니다. 입력하면 세 형식이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
         saveAndFetch: "저장하고 모델 가져오기",
         save: "저장",
       },
@@ -2540,6 +2544,7 @@ export const ko: TranslationResources = {
         edit: "편집",
         formatNotSet: "설정 안 됨, 이 형식은 쓰지 않음",
         noKey: "저장 안 됨",
+        keyNotSet: "없음 (선택 사항)",
         testConnection: "연결 테스트",
         menu: "{{name}} 추가 작업",
         delete: "삭제",

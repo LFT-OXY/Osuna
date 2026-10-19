@@ -2548,11 +2548,13 @@ export const fr: TranslationResources = {
         namePlaceholder: "p. ex. Mon relais",
         apiKey: "Clé d'API",
         apiKeySavedPlaceholder: "Laissez vide pour garder la clé enregistrée",
-        apiKeyOptionalPlaceholder: "Facultatif",
+        apiKeyOptionalLabel: "Clé d'API (facultative)",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
         address: "Adresse",
         addressHint:
           "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent.",
+        addressHintKeyOptional:
+          "Appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
         detect: "Détecter",
         urlInvalid: "Saisissez une adresse commençant par http:// ou https://",
         formatUrl: {
@@ -2568,6 +2570,8 @@ export const fr: TranslationResources = {
         },
         footer:
           "La clé se saisit une seule fois et sert aux trois formats. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+        footerKeyOptional:
+          "La clé est facultative : saisie, elle sert aux trois formats ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
         saveAndFetch: "Enregistrer et récupérer les modèles",
         save: "Enregistrer",
       },
@@ -2578,6 +2582,7 @@ export const fr: TranslationResources = {
         edit: "Modifier",
         formatNotSet: "Non renseignée, ce format n'est pas utilisé",
         noKey: "Non enregistrée",
+        keyNotSet: "Aucune (facultative)",
         testConnection: "Tester la connexion",
         menu: "Autres actions pour {{name}}",
         delete: "Supprimer",

@@ -2534,11 +2534,13 @@ export const ptBR: TranslationResources = {
         namePlaceholder: "ex.: Meu relay",
         apiKey: "Chave de API",
         apiKeySavedPlaceholder: "Deixe em branco para manter a chave salva",
-        apiKeyOptionalPlaceholder: "Opcional",
+        apiKeyOptionalLabel: "Chave de API (opcional)",
         keyRejected: "O servidor recusou esta chave (401 / 403)",
         address: "Endereço",
         addressHint:
           "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam.",
+        addressHintKeyOptional:
+          "Toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam. A chave só é enviada se você preenchê-la.",
         detect: "Detectar",
         urlInvalid: "Digite um endereço que comece com http:// ou https://",
         formatUrl: {
@@ -2554,6 +2556,8 @@ export const ptBR: TranslationResources = {
         },
         footer:
           "A chave é digitada uma vez e compartilhada pelos três formatos. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
+        footerKeyOptional:
+          "A chave é opcional: preenchida, é compartilhada pelos três formatos; sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
         saveAndFetch: "Salvar e buscar modelos",
         save: "Salvar",
       },
@@ -2564,6 +2568,7 @@ export const ptBR: TranslationResources = {
         edit: "Editar",
         formatNotSet: "Não definido, este formato não é usado",
         noKey: "Não salva",
+        keyNotSet: "Nenhuma (opcional)",
         testConnection: "Testar conexão",
         menu: "Mais ações de {{name}}",
         delete: "Excluir",

@@ -2497,11 +2497,13 @@ export const ar: TranslationResources = {
         namePlaceholder: "مثلًا: الوسيط الخاص بي",
         apiKey: "مفتاح API",
         apiKeySavedPlaceholder: "اتركه فارغًا للإبقاء على المفتاح المحفوظ",
-        apiKeyOptionalPlaceholder: "اختياري",
+        apiKeyOptionalLabel: "مفتاح API (اختياري)",
         keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
         address: "العنوان",
         addressHint:
           "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل.",
+        addressHintKeyOptional:
+          "اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل. لا يُرسل المفتاح إلا إذا أدخلته.",
         detect: "اكتشاف تلقائي",
         urlInvalid: "أدخل عنوانًا يبدأ بـ http:// أو https://",
         formatUrl: {
@@ -2517,6 +2519,8 @@ export const ar: TranslationResources = {
         },
         footer:
           "يُدخل المفتاح مرة واحدة وتشترك فيه الصيغ الثلاث. بعد الحفظ تُفتح صفحة نقطة النهاية لجلب نماذجها واختيارها حسب Claude / GPT / Gemini.",
+        footerKeyOptional:
+          "المفتاح اختياري: إذا أدخلته تشترك فيه الصيغ الثلاث، ومن دونه لا يُرسل أي مفتاح. بعد الحفظ تُفتح صفحة نقطة النهاية لجلب نماذجها واختيارها حسب Claude / GPT / Gemini.",
         saveAndFetch: "حفظ وجلب النماذج",
         save: "حفظ",
       },
@@ -2527,6 +2531,7 @@ export const ar: TranslationResources = {
         edit: "تعديل",
         formatNotSet: "غير مضبوط، لا تُستخدم هذه الصيغة",
         noKey: "غير محفوظ",
+        keyNotSet: "لا يوجد (اختياري)",
         testConnection: "اختبار الاتصال",
         menu: "إجراءات أخرى لـ {{name}}",
         delete: "حذف",
