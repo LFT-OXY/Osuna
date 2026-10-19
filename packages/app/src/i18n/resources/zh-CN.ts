@@ -2539,6 +2539,7 @@ export const zhCN: TranslationResources = {
         searchPlaceholder: "搜索厂商或中转服务",
         custom: "自定义",
         customHint: "任何兼容 OpenAI 或 Anthropic 的地址",
+        added: "已添加",
         groups: {
           vendor: "厂商",
           relay: "中转服务",

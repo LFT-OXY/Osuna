@@ -1,10 +1,10 @@
 import React, { useId, useMemo } from "react";
-import { Text, type StyleProp, type TextStyle } from "react-native";
 import { withUnistyles } from "react-native-unistyles";
 import { SvgIcon, scopeSvgIds } from "@/components/provider-icons";
+import { Text } from "@/components/ui/text";
 import { ENDPOINT_TEMPLATE_ICON_SVGS } from "@/assets/endpoint-template-icons";
 import { MODEL_FAMILY_ICON_SVGS } from "@/assets/model-family-icons";
-import type { Theme } from "@/styles/theme";
+import type { TextVariant, Theme } from "@/styles/theme";
 
 const ThemedSvgIcon = withUnistyles(SvgIcon);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -28,7 +28,7 @@ const TEMPLATE_ICONS: Readonly<Record<string, string>> = {
   "minimax-cn": FAMILY.minimax,
   stepfun: FAMILY.stepfun,
   "stepfun-cn": FAMILY.stepfun,
-  xiaomi: FAMILY.mimocode,
+  // 小米 MiMo 的图标是文字商标，缩到图标大小认不出，用首字。
   "baidu-qianfan": OWN.baiducloud,
   "tencent-cloud": OWN.tencentcloud,
   huaweicloud: OWN.huaweicloud,
@@ -60,22 +60,22 @@ const TEMPLATE_ICONS: Readonly<Record<string, string>> = {
 };
 
 /**
- * 接口或模板的图标：按模板 id 取品牌图标，取不到（「自定义」、不认识的模板）用名称首字，字样由调用方给。
+ * 接口或模板的图标：按模板 id 取品牌图标，取不到（「自定义」、不认识的模板）用名称首字，字号由调用方给。
  * 彩色的自带颜色，单色的跟前景色。
  */
 export function EndpointIcon({
   templateId,
   name,
   size,
-  initialStyle,
+  initialVariant,
 }: {
   templateId: string | null;
   name: string;
   size: number;
-  initialStyle: StyleProp<TextStyle>;
+  initialVariant: TextVariant;
 }) {
   const svg = templateId === null ? null : (TEMPLATE_ICONS[templateId] ?? null);
-  if (svg === null) return <Text style={initialStyle}>{initialOf(name)}</Text>;
+  if (svg === null) return <Text variant={initialVariant}>{initialOf(name)}</Text>;
   return <BrandIcon svg={svg} size={size} />;
 }
 

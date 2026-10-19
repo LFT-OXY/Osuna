@@ -2565,6 +2565,7 @@ export const fr: TranslationResources = {
         searchPlaceholder: "Rechercher un fournisseur ou un service relais",
         custom: "Personnalisé",
         customHint: "Toute adresse compatible OpenAI ou Anthropic",
+        added: "Ajouté",
         groups: {
           vendor: "Fournisseurs",
           relay: "Services relais",

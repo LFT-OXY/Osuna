@@ -78,6 +78,8 @@ export interface ConnectionTemplateState {
   regionId: string | null;
   sites: TemplateSiteChoice[] | null;
   keysUrl: string | null;
+  // 官网：区域或套餐有自己的文档页时跟着它（照 magpie 编辑窗口顶上的链接）。
+  websiteUrl: string | null;
 }
 
 export interface ConnectionFormState {
@@ -284,6 +286,7 @@ export function createConnectionFormModel(
       // 国际站与中国站只在新建时切换（照 magpie）。
       sites: seed.mode === "create" ? siteChoicesOf(templates, template.id) : null,
       keysUrl: region?.keysUrl ?? template.keysUrl ?? null,
+      websiteUrl: region?.website ?? template.website ?? null,
     };
   }
 

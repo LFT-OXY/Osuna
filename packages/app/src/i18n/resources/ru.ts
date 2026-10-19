@@ -2547,6 +2547,7 @@ export const ru: TranslationResources = {
         searchPlaceholder: "Найти поставщика или сервис-посредник",
         custom: "Свой",
         customHint: "Любой адрес, совместимый с OpenAI или Anthropic",
+        added: "Добавлено",
         groups: {
           vendor: "Поставщики",
           relay: "Сервисы-посредники",

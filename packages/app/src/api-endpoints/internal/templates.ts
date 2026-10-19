@@ -99,3 +99,47 @@ export function siteChoicesOf(
     { templateId: china.id, area: "china" },
   ];
 }
+
+/** 接口记下的模板；「自定义」加的没有。 */
+export interface EndpointWithTemplate {
+  id: string;
+  templateId?: string;
+}
+
+export type TemplatePick =
+  | { kind: "add"; templateId: string }
+  | { kind: "open"; endpointId: string };
+
+function firstEndpointOf(
+  endpoints: readonly EndpointWithTemplate[],
+  templateId: string,
+): EndpointWithTemplate | null {
+  return endpoints.find((endpoint) => endpoint.templateId === templateId) ?? null;
+}
+
+function sitesOf(row: TemplateRow): ApiEndpointTemplate[] {
+  return row.chinaSite ? [row.template, row.chinaSite] : [row.template];
+}
+
+/** 这一行有一边加过就打绿点（照 magpie markAdded）。 */
+export function isTemplateRowAdded(
+  row: TemplateRow,
+  endpoints: readonly EndpointWithTemplate[],
+): boolean {
+  return sitesOf(row).some((site) => firstEndpointOf(endpoints, site.id) !== null);
+}
+
+/**
+ * 点一行做什么（照 magpie tile / pairTile）：还有没加的一边（国际站在前）就加它；都加过就打开最早从它加的那家，
+ * 合成一行的打开国际站那家。
+ */
+export function templatePick(
+  row: TemplateRow,
+  endpoints: readonly EndpointWithTemplate[],
+): TemplatePick {
+  const next = sitesOf(row).find((site) => firstEndpointOf(endpoints, site.id) === null);
+  if (next) return { kind: "add", templateId: next.id };
+  const existing = firstEndpointOf(endpoints, row.template.id);
+  if (!existing) return { kind: "add", templateId: row.template.id };
+  return { kind: "open", endpointId: existing.id };
+}

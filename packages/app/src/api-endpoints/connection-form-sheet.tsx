@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { ScrollView, View, type LayoutChangeEvent } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Check } from "lucide-react-native";
 import type {
@@ -346,45 +346,69 @@ function keyPlaceholderOf(input: {
   return input.keyHint === null ? "sk-…" : templateKeyHint(t, input.keyHint);
 }
 
-/** 模板的图标、名称与说明；右边「去拿 key ↗」跟着所选区域或套餐变（照 magpie）。 */
+/**
+ * 模板的图标、名称与说明；下面「官网 ↗」（主机名）与「去拿 key ↗」都跟着所选区域或套餐变（照 magpie 编辑窗口顶上）。
+ */
 function TemplateHeading({ template }: { template: ConnectionTemplateState }) {
   const { t } = useTranslation();
-  const { keysUrl } = template;
+  const { keysUrl, websiteUrl } = template;
   const handleGetKey = useCallback(() => {
     if (keysUrl) void openExternalUrl(keysUrl);
   }, [keysUrl]);
+  const handleWebsite = useCallback(() => {
+    if (websiteUrl) void openExternalUrl(websiteUrl);
+  }, [websiteUrl]);
   return (
     <View style={styles.templateHeading} testID="api-endpoint-connection-template">
-      <View style={styles.templateIcon}>
-        <EndpointIcon
-          templateId={template.id}
-          name={template.name}
-          size={ICON_SIZE.lg}
-          initialStyle={styles.templateInitial}
-        />
-      </View>
-      <View style={styles.flex}>
-        <Text variant="label" numberOfLines={1}>
-          {template.name}
-        </Text>
-        {template.note ? (
-          <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
-            {templateNote(t, template.note)}
+      <View style={styles.templateIdentity}>
+        <View style={styles.templateIcon}>
+          <EndpointIcon
+            templateId={template.id}
+            name={template.name}
+            size={ICON_SIZE.lg}
+            initialVariant="label"
+          />
+        </View>
+        <View style={styles.flex}>
+          <Text variant="label" numberOfLines={1}>
+            {template.name}
           </Text>
+          {template.note ? (
+            <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+              {templateNote(t, template.note)}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={styles.templateLinks}>
+        {websiteUrl ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleWebsite}
+            testID="api-endpoint-connection-website"
+          >
+            {`${hostOf(websiteUrl)} ↗`}
+          </Button>
+        ) : null}
+        {keysUrl ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleGetKey}
+            testID="api-endpoint-connection-get-key"
+          >
+            {t("settings.apiEndpoints.templates.getKey")}
+          </Button>
         ) : null}
       </View>
-      {keysUrl ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onPress={handleGetKey}
-          testID="api-endpoint-connection-get-key"
-        >
-          {t("settings.apiEndpoints.templates.getKey")}
-        </Button>
-      ) : null}
     </View>
   );
+}
+
+// 地址的主机名（照 magpie hostOf）；原生端的 URL 实现不完整，用字符串截。
+function hostOf(url: string): string {
+  return url.replace(/^[a-z]+:\/\//i, "").split(/[/?#]/)[0] ?? url;
 }
 
 /** 新建时国际站 / 中国站：只保留 key，其余按那一站的模板重来。 */
@@ -420,7 +444,7 @@ function SiteSwitch({
   );
 }
 
-/** 区域或套餐：各格式地址与「去拿 key」跟着换，key 与名称保留。选项多时横向滚动（照 magpie）。 */
+/** 区域或套餐：各格式地址与「去拿 key」跟着换，key 与名称保留。选项多时换行，不截成半个字。 */
 function RegionSwitch({
   template,
   model,
@@ -443,15 +467,16 @@ function RegionSwitch({
       label={templateRegionLabel(t, template.regionLabel)}
       hint={t("settings.apiEndpoints.templates.regionHint", { name: template.name })}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={styles.switchRow}>
         <SegmentedControl
           options={options}
           value={template.regionId ?? ""}
           onValueChange={model.setRegion}
           size="sm"
+          style={styles.wrappingSegments}
           testID="api-endpoint-connection-region"
         />
-      </ScrollView>
+      </View>
     </Field>
   );
 }
@@ -539,25 +564,35 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[4],
   },
   templateHeading: {
+    gap: theme.spacing[2],
+  },
+  templateIdentity: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
+  },
+  templateLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
   },
   templateIcon: {
     width: 36,
     height: 36,
     borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.surface2,
+    // 与模板列表的图标底块同一档：浅色、深色下都看得出。
+    backgroundColor: theme.colors.surface3,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  templateInitial: {
-    color: theme.colors.foreground,
-    ...theme.typeScale.label,
-  },
   switchRow: {
     flexDirection: "row",
+  },
+  // 选项多时整条轨道换行，每段都完整。
+  wrappingSegments: {
+    flexWrap: "wrap",
+    flexShrink: 1,
   },
   flex: {
     flex: 1,

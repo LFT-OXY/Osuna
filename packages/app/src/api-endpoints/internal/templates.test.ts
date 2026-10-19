@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ApiEndpointTemplate } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { siteChoicesOf, templateSections, type TemplateSection } from "./templates";
+import {
+  isTemplateRowAdded,
+  siteChoicesOf,
+  templatePick,
+  templateSections,
+  type TemplateSection,
+} from "./templates";
 
 function template(
   id: string,
@@ -84,5 +90,47 @@ describe("siteChoicesOf", () => {
       { templateId: "moonshot-cn", area: "china" },
     ]);
     expect(siteChoicesOf(TEMPLATES, "openai")).toBeNull();
+  });
+});
+
+describe("templatePick", () => {
+  const sections = templateSections({ templates: TEMPLATES, query: "", noteText: noTranslation });
+  const rowOf = (id: string) => {
+    const found = sections.flatMap((section) => section.rows).find((row) => row.template.id === id);
+    if (!found) throw new Error(`no row ${id}`);
+    return found;
+  };
+  const endpoint = (id: string, templateId?: string) => ({
+    id,
+    ...(templateId ? { templateId } : {}),
+  });
+
+  it("adds a template not added yet, and opens the first endpoint made from one that is (as magpie)", () => {
+    const endpoints = [
+      endpoint("ep_custom"),
+      endpoint("ep_1", "openai"),
+      endpoint("ep_2", "openai"),
+    ];
+
+    expect(isTemplateRowAdded(rowOf("openrouter"), endpoints)).toBe(false);
+    expect(templatePick(rowOf("openrouter"), endpoints)).toEqual({
+      kind: "add",
+      templateId: "openrouter",
+    });
+    expect(isTemplateRowAdded(rowOf("openai"), endpoints)).toBe(true);
+    expect(templatePick(rowOf("openai"), endpoints)).toEqual({ kind: "open", endpointId: "ep_1" });
+  });
+
+  it("a global and China row adds the side not added yet, then opens the global one's endpoint", () => {
+    const row = rowOf("moonshot");
+
+    expect(templatePick(row, [])).toEqual({ kind: "add", templateId: "moonshot" });
+    const globalAdded = [endpoint("ep_g", "moonshot")];
+    expect(isTemplateRowAdded(row, globalAdded)).toBe(true);
+    expect(templatePick(row, globalAdded)).toEqual({ kind: "add", templateId: "moonshot-cn" });
+    const chinaAdded = [endpoint("ep_c", "moonshot-cn")];
+    expect(templatePick(row, chinaAdded)).toEqual({ kind: "add", templateId: "moonshot" });
+    const both = [endpoint("ep_c", "moonshot-cn"), endpoint("ep_g", "moonshot")];
+    expect(templatePick(row, both)).toEqual({ kind: "open", endpointId: "ep_g" });
   });
 });

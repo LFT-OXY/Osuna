@@ -2526,6 +2526,7 @@ export const ko: TranslationResources = {
         searchPlaceholder: "벤더 또는 중계 서비스 검색",
         custom: "사용자 지정",
         customHint: "OpenAI 또는 Anthropic 호환 주소",
+        added: "추가됨",
         groups: {
           vendor: "벤더",
           relay: "중계 서비스",

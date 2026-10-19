@@ -888,3 +888,45 @@ export const API_ENDPOINT_TEMPLATES: readonly ApiEndpointTemplate[] = [...VENDOR
 export function findTemplate(id: string): ApiEndpointTemplate | null {
   return API_ENDPOINT_TEMPLATES.find((candidate) => candidate.id === id) ?? null;
 }
+
+/** 接口记下的模板与区域或套餐（「自定义」加的都没有）。 */
+export interface TemplatePlace {
+  templateId?: string;
+  region?: string;
+}
+
+function templateRegionOf(place: TemplatePlace): {
+  placeTemplate: ApiEndpointTemplate | null;
+  placeRegion: ApiEndpointTemplateRegion | null;
+} {
+  const placeTemplate = place.templateId === undefined ? null : findTemplate(place.templateId);
+  const placeRegion =
+    placeTemplate?.regions?.find((candidate) => candidate.id === place.region) ?? null;
+  return { placeTemplate, placeRegion };
+}
+
+/**
+ * 这家没有清单接口可问（照 magpie models.go 的 NoList）：模板说没有，所在的区域或套餐也没说它有（listsModels，
+ * 如千帆按量付费的 /v2/models）。这时拉模型不向上游发请求，清单就是内置的那份。
+ */
+export function listsNoModels(place: TemplatePlace): boolean {
+  const { placeTemplate, placeRegion } = templateRegionOf(place);
+  return placeTemplate?.noModelList === true && placeRegion?.listsModels !== true;
+}
+
+/**
+ * 套餐自己的模型（照 magpie planModels）：模板有 modelIdPrefix 时只留以它开头的（一把 key 还能买别的，如 ClinePass）；
+ * 没留下的、或上游清单是空的而套餐有内置清单时，给内置清单（区域或套餐自己的优先）。别的接口的清单原样返回。
+ */
+export function planModelsOf<T extends { id: string }>(
+  place: TemplatePlace,
+  listed: T[],
+): (T | { id: string })[] {
+  const { placeTemplate, placeRegion } = templateRegionOf(place);
+  if (!placeTemplate) return listed;
+  const builtIn = placeRegion?.models ?? placeTemplate.models ?? [];
+  const prefix = placeTemplate.modelIdPrefix ?? "";
+  if (prefix === "" && (builtIn.length === 0 || listed.length > 0)) return listed;
+  const kept = listed.filter((model) => model.id.startsWith(prefix));
+  return kept.length > 0 ? kept : builtIn.map((id) => ({ id }));
+}

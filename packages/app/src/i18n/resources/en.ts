@@ -2576,6 +2576,7 @@ export const en = {
         searchPlaceholder: "Find a vendor or relay service",
         custom: "Custom",
         customHint: "Any OpenAI or Anthropic compatible address",
+        added: "Added",
         groups: {
           vendor: "Vendors",
           relay: "Relay services",

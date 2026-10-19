@@ -32,7 +32,7 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { API_ENDPOINT_TEMPLATES, findTemplate } from "./templates.js";
+import { API_ENDPOINT_TEMPLATES, findTemplate, listsNoModels, planModelsOf } from "./templates.js";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -2437,19 +2437,30 @@ export class ApiEndpointService {
     const format = input.format === undefined ? null : requireFormat(input.format);
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
-    const result = await fetchUpstreamModels({
-      provider: format === null ? supported : providerWithListingHeaders(format),
-      baseUrl,
-      apiKey,
-      signal,
-      timeoutMs: this.upstreamTimeoutMs,
-    });
-    if (!result.ok)
-      throw new ApiEndpointRequestError({ code: result.error.code, message: result.error.message });
-    if (format !== null && input.endpointId) {
-      await this.keepCatalog(input.endpointId, result.models);
+    // 从模板加的这家：没有清单接口的用内置清单、不问上游，有前缀的只留套餐自己的（照 magpie）。
+    const place = input.endpointId ? (findEndpoint(this.readState(), input.endpointId) ?? {}) : {};
+    let models: ListedModel[];
+    if (listsNoModels(place)) {
+      models = planModelsOf(place, []);
+    } else {
+      const result = await fetchUpstreamModels({
+        provider: format === null ? supported : providerWithListingHeaders(format),
+        baseUrl,
+        apiKey,
+        signal,
+        timeoutMs: this.upstreamTimeoutMs,
+      });
+      if (!result.ok)
+        throw new ApiEndpointRequestError({
+          code: result.error.code,
+          message: result.error.message,
+        });
+      models = planModelsOf(place, result.models);
     }
-    return result.models.map(toWireModel);
+    if (format !== null && input.endpointId) {
+      await this.keepCatalog(input.endpointId, models);
+    }
+    return models.map(toWireModel);
   }
 
   /**

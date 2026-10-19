@@ -2535,6 +2535,7 @@ export const ja: TranslationResources = {
         searchPlaceholder: "ベンダーや中継サービスを検索",
         custom: "カスタム",
         customHint: "OpenAI または Anthropic 互換の任意のアドレス",
+        added: "追加済み",
         groups: {
           vendor: "ベンダー",
           relay: "中継サービス",

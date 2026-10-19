@@ -102,7 +102,7 @@ export function ApiEndpointDetailHeader({
             templateId={endpoint.templateId ?? null}
             name={endpoint.name}
             size={ICON_SIZE.lg}
-            initialStyle={styles.initial}
+            initialVariant="title-sm"
           />
         </View>
         <View style={styles.text}>
@@ -292,10 +292,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  initial: {
-    color: theme.colors.foreground,
-    ...theme.typeScale["title-sm"],
   },
   avatarOff: {
     opacity: theme.opacity[50],

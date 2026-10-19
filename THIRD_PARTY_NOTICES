@@ -558,10 +558,14 @@ minimax-color, mimocode, stepfun-color), with width, height, style and
 The API endpoint templates (each vendor's and relay service's base URLs,
 regions and plans, key pages, models.dev ids, built-in model lists and header
 hints) are taken from magpie's internal/provider/presets.go, leaving out its
-decision models, Remote magpie and Google Vertex AI. The add dialog's template
+decision models, Remote magpie and Google Vertex AI; a template's own models
+(the built-in list of a plan with no model list, the prefix of a plan behind a
+shared key) follow NoList, listRegion and planModels in magpie's
+internal/provider/models.go. The add dialog's template
 list (its three groups, search by name, id, host and note, and a vendor's
-global and China presets made one row, chinaOf and pairTile in
-internal/gui/assets/app.js) follows magpie's add sheet. The template logos are
+global and China presets made one row, an added preset's dot and what a click
+on it does, chinaOf, pairTile, tile and markAdded in internal/gui/assets/app.js)
+follows magpie's add sheet. The template logos are
 magpie's internal/gui/assets/icons/ (zai, baiducloud-color, tencentcloud-color,
 huaweicloud-color, volcengine-color, bailian-color, groq, ollama, nousresearch,
 openrouter, opencode, cline, kilo, commandcode, together-color,

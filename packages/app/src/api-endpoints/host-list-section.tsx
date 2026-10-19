@@ -458,7 +458,7 @@ function EndpointRow({
                       templateId={endpoint.templateId ?? null}
                       name={endpoint.name}
                       size={ICON_SIZE.md}
-                      initialStyle={styles.initial}
+                      initialVariant="label"
                     />
                   )}
                 </View>,
@@ -881,10 +881,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
-  },
-  initial: {
-    color: theme.colors.foreground,
-    ...theme.typeScale.label,
   },
   disabledIcon: {
     opacity: theme.opacity[50],

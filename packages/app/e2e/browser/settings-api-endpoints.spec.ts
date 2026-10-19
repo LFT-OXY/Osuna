@@ -1250,6 +1250,48 @@ test.describe("Templates", () => {
     ]);
   });
 
+  test("a template already added has a green dot and opens its endpoint; a global and China row adds the side not added yet", async ({
+    page,
+  }) => {
+    const { templates } = await client.apiEndpointListTemplates();
+    const saveFrom = async (id: string) => {
+      const template = templates.find((candidate) => candidate.id === id);
+      if (!template) throw new Error(`no template ${id}`);
+      const saved = await client.apiEndpointSave({
+        provider: "claude",
+        name: template.name,
+        baseUrls: template.baseUrls,
+        apiKey: `sk-${id}`,
+        models: [],
+        templateId: id,
+      });
+      return saved.endpoint?.id ?? "";
+    };
+    const openaiId = await saveFrom("openai");
+    await saveFrom("moonshot");
+    await openApiEndpointsPage(page);
+
+    await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-template-openai-added")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-template-moonshot-added")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-template-deepseek-added")).toHaveCount(0);
+
+    await page.getByTestId("api-endpoint-template-moonshot").click();
+    await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Kimi (China)");
+    await expect(page.getByTestId("api-endpoint-connection-website")).toHaveText(
+      "platform.moonshot.cn ↗",
+    );
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-template-openai").click();
+    await expect(templatePicker(page)).toHaveCount(0);
+    await expect(page).toHaveURL(
+      new RegExp(`${buildApiEndpointSettingsRoute(getServerId(), openaiId)}$`),
+    );
+    await expect(headerTitle(page)).toHaveText("OpenAI");
+  });
+
   test("a host without apiEndpointManagement opens the blank form from + and has no Add another", async ({
     page,
   }) => {

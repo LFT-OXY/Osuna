@@ -2513,6 +2513,7 @@ export const ar: TranslationResources = {
         searchPlaceholder: "ابحث عن مزوّد أو خدمة وسيطة",
         custom: "مخصّص",
         customHint: "أي عنوان متوافق مع OpenAI أو Anthropic",
+        added: "مُضاف",
         groups: {
           vendor: "المزوّدون",
           relay: "الخدمات الوسيطة",

@@ -339,12 +339,15 @@ function ConnectionSheet({
   endpoints,
   setSheet,
   onSaved,
+  onOpenEndpoint,
 }: {
   serverId: string;
   sheet: ConnectionSheetState;
-  endpoints: Pick<UseHostEndpointsResult, "save" | "detect" | "revealKey">;
+  endpoints: Pick<UseHostEndpointsResult, "state" | "save" | "detect" | "revealKey">;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
+  // 模板列表里点了已加过的模板：打开已有那家。
+  onOpenEndpoint: (endpointId: string) => void;
 }) {
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
@@ -360,6 +363,13 @@ function ConnectionSheet({
     () => setSheet((current) => (current?.kind === "picker" ? null : current)),
     [setSheet],
   );
+  const handleOpenEndpoint = useCallback(
+    (endpointId: string) => {
+      setSheet(null);
+      onOpenEndpoint(endpointId);
+    },
+    [onOpenEndpoint, setSheet],
+  );
   const closeForm = useCallback(
     () => setSheet((current) => (current?.kind === "form" ? null : current)),
     [setSheet],
@@ -369,8 +379,10 @@ function ConnectionSheet({
     return (
       <TemplatePickerSheet
         templates={templates}
+        endpoints={endpoints.state.status === "ready" ? endpoints.state.endpoints : []}
         onRetry={templates.retry}
-        onPick={handlePick}
+        onAdd={handlePick}
+        onOpenEndpoint={handleOpenEndpoint}
         onClose={closePicker}
       />
     );
@@ -448,9 +460,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
       ),
     [canArrange],
   );
-  const handleOpen = useCallback(
-    (endpoint: ApiEndpoint) => router.push(buildApiEndpointSettingsRoute(serverId, endpoint.id)),
+  const handleOpenById = useCallback(
+    (openedId: string) => router.push(buildApiEndpointSettingsRoute(serverId, openedId)),
     [router, serverId],
+  );
+  const handleOpen = useCallback(
+    (endpoint: ApiEndpoint) => handleOpenById(endpoint.id),
+    [handleOpenById],
   );
   // 新建的接口保存后直接进它的详情页拉模型。
   const handleSaved = useCallback(
@@ -482,6 +498,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         endpoints={endpoints}
         setSheet={setSheet}
         onSaved={handleSaved}
+        onOpenEndpoint={handleOpenById}
       />
     </>
   );
@@ -546,6 +563,10 @@ function ApiEndpointDetailContent({
     setSheet({ kind: "form", seed: { mode: "create", templateId }, backToPicker: false });
   }, [templateId]);
   // 编辑只关掉弹窗；复制出的、再加的新接口保存后进它的详情页。
+  const handleOpenById = useCallback(
+    (openedId: string) => router.push(buildApiEndpointSettingsRoute(serverId, openedId)),
+    [router, serverId],
+  );
   const handleSaved = useCallback(
     (result: Extract<ConnectionSaveResult, { status: "saved" }>) => {
       const opensCopy = sheet?.kind === "form" && sheet.seed.mode !== "edit";
@@ -583,6 +604,7 @@ function ApiEndpointDetailContent({
         endpoints={endpoints}
         setSheet={setSheet}
         onSaved={handleSaved}
+        onOpenEndpoint={handleOpenById}
       />
     </View>
   );

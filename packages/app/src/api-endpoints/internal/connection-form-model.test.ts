@@ -572,6 +572,7 @@ const ZHIPU: ApiEndpointTemplate = {
     { format: "openai_chat", url: "https://open.bigmodel.cn/api/paas/v4" },
   ],
   keysUrl: "https://open.bigmodel.cn/keys",
+  website: "https://open.bigmodel.cn",
   modelsDevIds: ["zhipuai"],
   regionLabel: "plan",
   regions: [
@@ -592,6 +593,7 @@ const ZHIPU: ApiEndpointTemplate = {
         { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
       ],
       keysUrl: "https://open.bigmodel.cn/coding-keys",
+      website: "https://docs.bigmodel.cn/coding",
     },
   ],
 };
@@ -664,6 +666,7 @@ describe("connection form: from a template", () => {
       regionId: "api",
       sites: null,
       keysUrl: "https://open.bigmodel.cn/keys",
+      websiteUrl: "https://open.bigmodel.cn",
     });
     expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/paas/v4");
     expect(urlOf(model, "openai_responses")).toBe("");
@@ -685,6 +688,7 @@ describe("connection form: from a template", () => {
     const state = model.getState();
     expect(state.template?.regionId).toBe("coding");
     expect(state.template?.keysUrl).toBe("https://open.bigmodel.cn/coding-keys");
+    expect(state.template?.websiteUrl).toBe("https://docs.bigmodel.cn/coding");
     expect(state.apiKey).toBe("sk-zhipu");
     expect(state.name).toBe("My GLM");
     expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/coding/paas/v4");

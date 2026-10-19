@@ -942,7 +942,8 @@ interface RecordingUpstream {
 }
 
 /** 本机假上游，像不要 key 的本机模型服务：谁来都答，列模型给 local-1，对话回一句 ok。记下每个请求的头。 */
-async function startRecordingUpstream(): Promise<RecordingUpstream> {
+/** `listed` 是它 GET 模型清单时给的模型 id。 */
+async function startRecordingUpstream(listed = ["local-1"]): Promise<RecordingUpstream> {
   const upstream: RecordingUpstream = { url: "", requests: [] };
   const server = createServer((request, response) => {
     request.resume();
@@ -954,7 +955,7 @@ async function startRecordingUpstream(): Promise<RecordingUpstream> {
       });
       response.writeHead(200, { "content-type": "application/json" });
       if (request.method === "GET") {
-        response.end(JSON.stringify({ data: [{ id: "local-1" }] }));
+        response.end(JSON.stringify({ data: listed.map((id) => ({ id })) }));
         return;
       }
       response.end(
@@ -1479,6 +1480,97 @@ describe("Templates", () => {
     const listed = (await client.apiEndpointList("claude")).endpoints;
     expect(listed.map((row) => row.templateId)).toEqual(["deepseek", "deepseek"]);
     expect(listed.map((row) => row.region)).toEqual([undefined, undefined]);
+  });
+
+  /** 存一家从模板加的接口，各格式地址换到假上游，返回 id。 */
+  async function saveAtUpstream(input: {
+    client: DaemonClient;
+    upstream: RecordingUpstream;
+    templateId: string;
+    region?: string;
+  }): Promise<string> {
+    const saved = await input.client.apiEndpointSave({
+      provider: "claude",
+      name: input.templateId,
+      baseUrls: [{ format: "openai_chat", url: `${input.upstream.url}/v1` }],
+      apiKey: "sk-plan",
+      models: [],
+      templateId: input.templateId,
+      ...(input.region ? { region: input.region } : {}),
+    });
+    if (!saved.endpoint) throw new Error(saved.error?.message ?? "not saved");
+    return saved.endpoint.id;
+  }
+
+  test("a plan with no model list gives its built-in models without asking; its pay-as-you-go region asks (as magpie NoList)", async () => {
+    const upstream = await startRecordingUpstream(["doubao-seed-2.1-pro", "something-else"]);
+    const { client } = await start();
+    const coding = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "volcengine",
+      region: "coding",
+    });
+    const payAsYouGo = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "volcengine",
+      region: "api",
+    });
+    const fetch = (endpointId: string) =>
+      client.apiEndpointFetchModels({
+        provider: "claude",
+        endpointId,
+        baseUrl: `${upstream.url}/v1`,
+        format: "openai_chat",
+      });
+
+    const planned = await fetch(coding);
+
+    expect(planned.error).toBeNull();
+    expect(planned.models.map((model) => model.id)).toContain("ark-code-latest");
+    expect(planned.models).toHaveLength(15);
+    expect(upstream.requests).toEqual([]);
+    const listed = (await client.apiEndpointList("claude")).endpoints.find(
+      (endpoint) => endpoint.id === coding,
+    );
+    expect(listed?.catalog?.models).toHaveLength(15);
+
+    const asked = await fetch(payAsYouGo);
+    expect(asked.models.map((model) => model.id)).toEqual([
+      "doubao-seed-2.1-pro",
+      "something-else",
+    ]);
+    expect(upstream.requests.map((request) => request.method)).toEqual(["GET"]);
+  });
+
+  test("a plan behind a shared key keeps the models with its prefix, and its built-in ones when the list has none (as magpie Only)", async () => {
+    const shared = await startRecordingUpstream([
+      "anthropic/claude-sonnet-5",
+      "cline-pass/glm-5.3",
+      "cline-pass/kimi-k3",
+    ]);
+    const without = await startRecordingUpstream(["anthropic/claude-sonnet-5"]);
+    const { client } = await start();
+    const fetchFrom = async (upstream: RecordingUpstream) => {
+      const endpointId = await saveAtUpstream({ client, upstream, templateId: "clinepass" });
+      return client.apiEndpointFetchModels({
+        provider: "claude",
+        endpointId,
+        baseUrl: `${upstream.url}/v1`,
+        format: "openai_chat",
+      });
+    };
+
+    const kept = await fetchFrom(shared);
+    const given = await fetchFrom(without);
+
+    expect(kept.models.map((model) => model.id)).toEqual([
+      "cline-pass/glm-5.3",
+      "cline-pass/kimi-k3",
+    ]);
+    expect(given.models.map((model) => model.id)).toContain("cline-pass/qwen3.8-max");
+    expect(given.models.every((model) => model.id.startsWith("cline-pass/"))).toBe(true);
   });
 
   test("a template it does not know, or a region not of that template, is refused and adds nothing", async () => {

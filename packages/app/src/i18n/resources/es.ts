@@ -2565,6 +2565,7 @@ export const es: TranslationResources = {
         searchPlaceholder: "Buscar un proveedor o servicio de retransmisión",
         custom: "Personalizado",
         customHint: "Cualquier dirección compatible con OpenAI o Anthropic",
+        added: "Añadido",
         groups: {
           vendor: "Proveedores",
           relay: "Servicios de retransmisión",

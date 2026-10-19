@@ -2550,6 +2550,7 @@ export const ptBR: TranslationResources = {
         searchPlaceholder: "Buscar um fornecedor ou serviço de retransmissão",
         custom: "Personalizado",
         customHint: "Qualquer endereço compatível com OpenAI ou Anthropic",
+        added: "Adicionado",
         groups: {
           vendor: "Fornecedores",
           relay: "Serviços de retransmissão",
