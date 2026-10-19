@@ -3108,6 +3108,29 @@ async function buildHighlightedTrackedDiffFile(input: {
   };
 }
 
+/** 要高亮的文件才读全文；只要清单时一个也不读。 */
+async function readTrackedContentsToHighlight(input: {
+  cwd: string;
+  changes: CheckoutFileChange[];
+  refsForDiff: CheckoutDiffRefs;
+  trackedPlaceholderByPath: Map<string, unknown>;
+  parsedTrackedByPath: Map<string, ParsedDiffFile>;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}): Promise<Map<string, string | null> | null> {
+  const { cwd, changes, refsForDiff, trackedPlaceholderByPath, parsedTrackedByPath, reuse } = input;
+  if (input.filesOnly) {
+    return null;
+  }
+  const needsContent = (change: CheckoutFileChange) => {
+    const highlightable =
+      !trackedPlaceholderByPath.has(change.path) && parsedTrackedByPath.has(change.path);
+    return highlightable && !reuse?.hasHighlighted(change.path);
+  };
+  const changesToRead = changes.filter(needsContent);
+  return readTrackedDiffContents(cwd, changesToRead, refsForDiff);
+}
+
 async function appendParsedTrackedFile(input: {
   cwd: string;
   change: CheckoutFileChange;
@@ -3187,18 +3210,15 @@ async function appendStructuredTrackedDiffs(
 
   for (let start = 0; start < trackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const changes = trackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
-    const contents = filesOnly
-      ? null
-      : await readTrackedDiffContents(
-          cwd,
-          changes.filter(
-            (change) =>
-              !trackedPlaceholderByPath.has(change.path) &&
-              parsedTrackedByPath.has(change.path) &&
-              !reuse?.hasHighlighted(change.path),
-          ),
-          refsForDiff,
-        );
+    const contents = await readTrackedContentsToHighlight({
+      cwd,
+      changes,
+      refsForDiff,
+      trackedPlaceholderByPath,
+      parsedTrackedByPath,
+      filesOnly,
+      reuse,
+    });
     for (const change of changes) {
       const placeholder = trackedPlaceholderByPath.get(change.path);
       if (placeholder) {
@@ -3390,10 +3410,7 @@ async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise
   }
 
   appendDiff(text);
-  const parseText = () => parseAndHighlightDiff(text, cwd);
-  const parsed = filesOnly
-    ? parseDiff(text)
-    : await (reuse?.untrackedParsed(change.path, parseText) ?? parseText());
+  const parsed = await parseUntrackedDiffText({ cwd, path: change.path, text, filesOnly, reuse });
   const parsedFile =
     parsed[0] ??
     ({
@@ -3414,6 +3431,23 @@ async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise
     status: "ok",
   } satisfies ParsedDiffFile;
   return appendStructuredFile(structured, file);
+}
+
+/** 只要清单时只解析出增删行数，不读全文、不高亮。 */
+function parseUntrackedDiffText(input: {
+  cwd: string;
+  path: string;
+  text: string;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}): Promise<ParsedDiffFile[]> {
+  const { cwd, path, text, reuse } = input;
+  if (input.filesOnly) {
+    return Promise.resolve(parseDiff(text));
+  }
+  const parseText = () => parseAndHighlightDiff(text, cwd);
+  const reused = reuse?.untrackedParsed(path, parseText);
+  return reused ?? parseText();
 }
 
 interface ProcessTrackedChangesInput {

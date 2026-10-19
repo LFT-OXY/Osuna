@@ -389,7 +389,7 @@ describe("server data push router", () => {
       });
   });
 
-  it("keeps a files-only subscription apart and moves to the full one when the diff body appears", () => {
+  it("keeps a files-only subscription apart and switches with the diff body both ways", () => {
     const queryClient = new QueryClient();
     const fake = createFakeClient();
     const serverId = "server-1";
@@ -448,6 +448,18 @@ describe("server data push router", () => {
       expect(queryClient.getQueryData(options(true).queryKey)).toMatchObject({
         files: [listedFile],
       });
+
+      // 正文再次收起：回到清单订阅，完整订阅释放
+      observer.setOptions(options(true));
+
+      const filesOnlyAgain = fake.subscribeCheckoutDiffCalls.at(-1)!;
+      expect(filesOnlyAgain.compare).toEqual({
+        mode: "uncommitted",
+        ignoreWhitespace: false,
+        filesOnly: true,
+      });
+      expect(fake.unsubscribeCheckoutDiffCalls).toContain(fullCall.subscriptionId);
+      expect(fake.unsubscribeCheckoutDiffCalls).not.toContain(filesOnlyAgain.subscriptionId);
     } finally {
       unsubscribeObserver();
       unmount();
