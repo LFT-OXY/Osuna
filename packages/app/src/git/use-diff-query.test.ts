@@ -1,7 +1,11 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
+import type { OwnedSubscription } from "@getpaseo/client";
 import type { ParsedDiffFile } from "@getpaseo/protocol/messages";
+import { replicaQueryOptions } from "@/data/query";
+import { mountServerDataPushRouter } from "@/data/push-router";
 import {
+  checkoutDiffQueryInput,
   deriveCheckoutDiffResult,
   isCheckoutDiffSubscriptionWanted,
   resolveCheckoutDiffSubscription,
@@ -178,5 +182,95 @@ describe("isCheckoutDiffSubscriptionWanted", () => {
   it("does not subscribe while disconnected or without a cwd", () => {
     expect(isCheckoutDiffSubscriptionWanted({ ...shown, isConnected: false })).toBe(false);
     expect(isCheckoutDiffSubscriptionWanted({ ...shown, cwd: "" })).toBe(false);
+  });
+});
+
+type PushRouterClient = Parameters<typeof mountServerDataPushRouter>[0]["client"];
+
+function idleSubscription<T extends { subscriptionId: string }>(
+  snapshot: T,
+  onRelease = () => {},
+): OwnedSubscription<T> {
+  return {
+    subscriptionId: snapshot.subscriptionId,
+    ready: Promise.resolve(snapshot),
+    subscribe: (observer) => {
+      observer.snapshot(snapshot);
+      return () => {};
+    },
+    release: async () => onRelease(),
+  };
+}
+
+function createDiffSubscriptionRecorder() {
+  const events: string[] = [];
+  const client: PushRouterClient = {
+    async getProvidersSnapshot() {
+      throw new Error("Unexpected snapshot pull");
+    },
+    observeEvents: () =>
+      idleSubscription({ subscriptionId: "events", requestId: "events", events: [] }),
+    observeTerminals: () =>
+      idleSubscription({
+        subscriptionId: "terminals",
+        requestId: "terminals",
+        cwd: "",
+        terminals: [],
+      }),
+    observeCheckoutDiff(cwd) {
+      events.push(`subscribe ${cwd}`);
+      return idleSubscription(
+        { subscriptionId: `diff-${events.length}`, requestId: "diff", cwd, files: [], error: null },
+        () => events.push(`release ${cwd}`),
+      );
+    },
+  };
+  return { client, events };
+}
+
+describe("checkoutDiffQueryInput", () => {
+  const subscription = resolveCheckoutDiffSubscription({
+    serverId: "server",
+    cwd: "/repo",
+    mode: "uncommitted",
+    filesOnly: false,
+    filesOnlySupported: true,
+  });
+  const inputs = (appVisible: boolean) => ({
+    serverId: "server",
+    cwd: "/repo",
+    subscription,
+    enabled: true,
+    retainedPanelActive: true,
+    appVisible,
+    isConnected: true,
+  });
+
+  it("releases the diff subscription while the app is hidden and resubscribes once visible", () => {
+    const queryClient = new QueryClient();
+    const recorder = createDiffSubscriptionRecorder();
+    const observer = new QueryObserver(
+      queryClient,
+      replicaQueryOptions(checkoutDiffQueryInput(inputs(true))),
+    );
+    const unsubscribe = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({
+      queryClient,
+      client: recorder.client,
+      serverId: "server",
+    });
+    try {
+      expect(recorder.events).toEqual(["subscribe /repo"]);
+
+      observer.setOptions(replicaQueryOptions(checkoutDiffQueryInput(inputs(false))));
+      expect(recorder.events).toEqual(["subscribe /repo", "release /repo"]);
+
+      observer.setOptions(replicaQueryOptions(checkoutDiffQueryInput(inputs(true))));
+      expect(recorder.events).toEqual(["subscribe /repo", "release /repo", "subscribe /repo"]);
+    } finally {
+      unsubscribe();
+      unmount();
+      queryClient.clear();
+    }
   });
 });

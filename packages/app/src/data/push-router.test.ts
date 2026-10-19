@@ -606,14 +606,14 @@ describe("server data push router", () => {
     }
   });
 
-  it("releases a diff while its page is hidden and shows the latest snapshot on return", () => {
+  it("releases a diff while its route is disabled and shows the latest snapshot once re-enabled", () => {
     vi.useFakeTimers();
     const queryClient = new QueryClient();
     const fake = createFakeClient();
     const serverId = "diff-hidden";
     const cwd = "/repo";
     const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false);
-    // 页面 hidden 时 useCheckoutDiffQuery 把 route 的 enabled 置 false
+    // 页面 hidden、tab 不活跃时 useCheckoutDiffQuery 都把 route 的 enabled 置 false
     const options = (pageVisible: boolean) => ({
       queryKey,
       queryFn: skipToken as typeof skipToken,

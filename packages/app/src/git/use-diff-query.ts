@@ -108,6 +108,32 @@ export function isCheckoutDiffSubscriptionWanted(input: CheckoutDiffSubscription
   );
 }
 
+type CheckoutDiffSubscription = ReturnType<typeof resolveCheckoutDiffSubscription>;
+
+/** useCheckoutDiffQuery 交给 useReplicaQuery 的参数：订阅与否全由 demand 决定。 */
+export function checkoutDiffQueryInput(
+  input: CheckoutDiffSubscriptionDemand & {
+    serverId: string;
+    subscription: CheckoutDiffSubscription;
+  },
+) {
+  const routeEnabled = isCheckoutDiffSubscriptionWanted(input);
+  const { queryKey, subscriptionId, compare } = input.subscription;
+  return {
+    queryKey,
+    structuralSharing: shareCheckoutDiff,
+    enabled: routeEnabled,
+    pushEvent: "checkout_diff_update",
+    meta: checkoutDiffPushRoute({
+      enabled: routeEnabled,
+      serverId: input.serverId,
+      subscriptionId,
+      cwd: input.cwd,
+      compare,
+    }),
+  } satisfies Parameters<typeof useReplicaQuery<CheckoutDiffQueryPayload>>[0];
+}
+
 export function useCheckoutDiffQuery({
   serverId,
   cwd,
@@ -123,7 +149,7 @@ export function useCheckoutDiffQuery({
   const appVisible = useAppVisible();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const filesOnlySupported = useHostFeature(serverId, "checkoutDiffFilesOnly");
-  const { queryKey, subscriptionId, compare } = useMemo(
+  const subscription = useMemo(
     () =>
       resolveCheckoutDiffSubscription({
         serverId,
@@ -137,32 +163,23 @@ export function useCheckoutDiffQuery({
       }),
     [serverId, cwd, mode, baseRef, ignoreWhitespace, queryScope, filesOnly, filesOnlySupported],
   );
-  const routeEnabled = isCheckoutDiffSubscriptionWanted({
-    enabled,
-    retainedPanelActive,
-    appVisible,
-    isConnected,
-    cwd,
-  });
-
-  const query = useReplicaQuery<CheckoutDiffQueryPayload>({
-    queryKey,
-    structuralSharing: shareCheckoutDiff,
-    enabled: routeEnabled,
-    pushEvent: "checkout_diff_update",
-    meta: checkoutDiffPushRoute({
-      enabled: routeEnabled,
+  const query = useReplicaQuery<CheckoutDiffQueryPayload>(
+    checkoutDiffQueryInput({
       serverId,
-      subscriptionId,
       cwd,
-      compare,
+      subscription,
+      enabled,
+      retainedPanelActive,
+      appVisible,
+      isConnected,
     }),
-  });
+  );
 
   const queryClient = useQueryClient();
   const onFilesRef = useRef(onFiles);
   onFilesRef.current = onFiles;
   const listensForFiles = onFiles !== undefined;
+  const { queryKey } = subscription;
   useEffect(() => {
     if (!listensForFiles) return;
     return subscribeCheckoutDiffFiles(queryClient, queryKey, (files) =>
