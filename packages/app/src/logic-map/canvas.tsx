@@ -261,7 +261,7 @@ function NodeCardBody({
 }
 
 const ThemedChevron = withUnistyles(ChevronRight, (theme: Theme) => ({
-  color: theme.colors.logicMap.branchLabel,
+  color: theme.colors.logicMap.muted,
 }));
 
 function BranchRow({ branch, testID }: { branch: LogicMapBranch; testID: string }) {

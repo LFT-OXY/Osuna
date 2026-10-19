@@ -511,6 +511,29 @@ describe("the logic map panel's subgraph layers", () => {
     expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
   });
 
+  it("starts another map at its top layer, even when it has a subgraph with the same id", async () => {
+    const host = nestedMapHost();
+    host.maps = [
+      { name: "user-login", title: "用户登录" },
+      { name: "admin-login", title: "管理员登录" },
+    ];
+    host.reads.set("admin-login", {
+      kind: "ok",
+      map: { ...buildNestedLogicMap(), title: "管理员登录" },
+    });
+    mountSurface(host, { conversationMapName: "user-login" });
+    await userEvent.click(await shown("logic-map-node-password-login"));
+    await shown("logic-map-breadcrumb");
+
+    await userEvent.click(byTestId("logic-map-picker"));
+    await userEvent.click(page.getByRole("menuitem", { name: "管理员登录" }));
+
+    await expect.poll(() => host.getCalls).toEqual(["user-login", "admin-login"]);
+    await expect.poll(() => nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["管理员登录", "3 nodes"]);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+  });
+
   it("goes back to the top layer when the agent removes the layer being shown", async () => {
     const host = nestedMapHost();
     mountSurface(host);

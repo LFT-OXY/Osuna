@@ -187,7 +187,7 @@ function LogicMapPanelContent({
   });
   const result = selectedMapName ? readQuery.data : undefined;
   const skeleton = result?.kind === "ok" ? result.map : null;
-  const { layerId, trail, setLayerId } = useCurrentLayer(skeleton);
+  const { layerId, trail, setLayerId } = useCurrentLayer(selectedMapName, skeleton);
   const layout = useMemo(
     () => (skeleton ? layoutLogicMapLayer(skeleton, layerId) : null),
     [layerId, skeleton],
@@ -249,17 +249,21 @@ function LogicMapPanelContent({
 }
 
 /**
- * 正在看的层（顶层为 null）。换了图或 Agent 改了图之后这一层不在了，就回到顶层，并清掉记下的层，
- * 免得同名的层以后再出现时又跳进去。
+ * 正在看的层（顶层为 null），在渲染时从"在哪张图里点进了哪一层"推出来：换了图，或 Agent 改图后这一层
+ * 不在了，就是顶层。
  */
-function useCurrentLayer(skeleton: LogicMapSkeleton | null) {
-  const [pickedLayerId, setLayerId] = useState<string | null>(null);
-  const pickedTrail = skeleton ? logicMapLayerTrail(skeleton, pickedLayerId) : null;
-  const layerGone = skeleton !== null && pickedTrail === null;
-  useEffect(() => {
-    if (layerGone) setLayerId(null);
-  }, [layerGone]);
-  const layerId = pickedTrail ? pickedLayerId : null;
+function useCurrentLayer(mapName: string | null, skeleton: LogicMapSkeleton | null) {
+  const [picked, setPicked] = useState<{ mapName: string | null; layerId: string | null }>({
+    mapName: null,
+    layerId: null,
+  });
+  const pickedTrail =
+    skeleton && picked.mapName === mapName ? logicMapLayerTrail(skeleton, picked.layerId) : null;
+  const setLayerId = useCallback(
+    (layerId: string | null) => setPicked({ mapName, layerId }),
+    [mapName],
+  );
+  const layerId = pickedTrail ? picked.layerId : null;
   return { layerId, trail: pickedTrail ?? NO_TRAIL, setLayerId };
 }
 
@@ -763,6 +767,8 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     paddingHorizontal: theme.spacing[2],
     ...theme.typeScale.caption,
+    // 当前层是结构标签（design.md §3），比前几级深一档、加 medium。
+    fontWeight: theme.fontWeight.medium,
     color: theme.colors.foreground,
   },
   picker: {

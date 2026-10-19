@@ -358,6 +358,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     DIFF_DELETION_BACKGROUND_ALPHA,
   );
 
+  const borderComposer = hexColorWithAlpha(foreground, COMPOSER_BORDER_ALPHA);
   return {
     surfaceWorkspace,
     surfaceChrome: overrides.surfaceChrome ?? surfaceWorkspace,
@@ -369,6 +370,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     borderSidebarSelected,
     surfaceTabHover,
     surfaceTabActive,
+    ...deriveFloatingControlRoles({ isDark, base, surfaceCard, borderComposer }),
     borderInput: overrides.borderInput ?? base.border,
     borderCardRow: hexColorWithAlpha(base.border, CARD_ROW_BORDER_ALPHA),
     foregroundProse: hexColorWithAlpha(foreground, PROSE_FOREGROUND_ALPHA),
@@ -378,7 +380,7 @@ function deriveThemeRoles(base: ThemeRoleBase, overrides: ThemeRoleOverrides) {
     diffDeletionBackground,
     diffAdditionBar: statusColors.statusSuccess,
     diffDeletionBar: statusColors.statusDanger,
-    borderComposer: hexColorWithAlpha(foreground, COMPOSER_BORDER_ALPHA),
+    borderComposer,
     shadowComposer: overrides.shadowComposer ?? (isDark ? "transparent" : LIGHT_COMPOSER_SHADOW),
     insetHighlight: overrides.insetHighlight ?? (isDark ? DARK_INSET_HIGHLIGHT : "transparent"),
     ...deriveThinkingSliderRoles({ isDark, border: base.border }),
@@ -396,6 +398,27 @@ function deriveThinkingSliderRoles({ isDark, border }: { isDark: boolean; border
     thinkingGradientTo: isDark ? baseColors.purple[500] : baseColors.purple[600],
     thinkingThumbBorder: isDark ? "transparent" : border,
   };
+}
+
+/**
+ * 常驻浮在画布上的控件（逻辑图的缩放条）。暗色下卡片色和 border 都贴着画布：提一级底色，描边用和
+ * Composer 同样的半透明前景色（borderAccent 在默认暗色里与 surface3 同色）。
+ */
+function deriveFloatingControlRoles({
+  isDark,
+  base,
+  surfaceCard,
+  borderComposer,
+}: {
+  isDark: boolean;
+  base: ThemeRoleBase;
+  surfaceCard: string;
+  borderComposer: string;
+}) {
+  if (!isDark) {
+    return { surfaceFloatingControl: surfaceCard, borderFloatingControl: base.border };
+  }
+  return { surfaceFloatingControl: base.surface3, borderFloatingControl: borderComposer };
 }
 
 /** 菜单、对话框等浮层的表面、遮罩与投影，始终派生，主题不单独给值。 */

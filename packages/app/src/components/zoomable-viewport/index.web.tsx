@@ -276,18 +276,15 @@ export function ZoomableViewport({
     [commitTransform, fittedContent, limits, viewport],
   );
 
-  const endPointer = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      pointersRef.current.delete(event.pointerId);
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
+  const releasePointer = useCallback(
+    (pointerId: number) => {
+      if (!pointersRef.current.delete(pointerId)) return;
       const remaining = Array.from(pointersRef.current.entries());
       if (remaining.length === 1) {
-        const [pointerId, point] = remaining[0];
+        const [remainingId, point] = remaining[0];
         gestureRef.current = {
           type: "drag",
-          pointerId,
+          pointerId: remainingId,
           startPoint: point,
           startTransform: transformRef.current,
         };
@@ -299,6 +296,28 @@ export function ZoomableViewport({
     },
     [canPanAt],
   );
+
+  const endPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      releasePointer(event.pointerId);
+    },
+    [releasePointer],
+  );
+
+  // 还没拖动起来（没捕获）就移出视口松开的指针，抬起只落在别处；在 window 上收下来，免得它留在
+  // pointersRef 里：不按键移回来会被当成拖动，下一次按下会被当成双指缩放。
+  useEffect(() => {
+    const releaseAnywhere = (event: PointerEvent) => releasePointer(event.pointerId);
+    window.addEventListener("pointerup", releaseAnywhere);
+    window.addEventListener("pointercancel", releaseAnywhere);
+    return () => {
+      window.removeEventListener("pointerup", releaseAnywhere);
+      window.removeEventListener("pointercancel", releaseAnywhere);
+    };
+  }, [releasePointer]);
 
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -374,14 +393,15 @@ export function ZoomableViewport({
       >
         <div style={renderedContentStyle}>{children}</div>
       </div>
-      <div
-        onBlurCapture={handleBlur}
-        onFocusCapture={handleFocus}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={toolbarDomStyle}
-      >
-        {controls === "hover-icons" ? (
+      {/* 悬停热区只给 hover-icons 用；zoom-bar 模式下不放，否则右上角这块内容点不到也拖不动。 */}
+      {controls === "hover-icons" ? (
+        <div
+          onBlurCapture={handleBlur}
+          onFocusCapture={handleFocus}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={toolbarDomStyle}
+        >
           <ViewportToolbar
             actions={actions}
             maxScale={maxScale}
@@ -393,8 +413,8 @@ export function ZoomableViewport({
             scale={transform.scale}
             visible={controlsVisible}
           />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {controls === "zoom-bar" ? (
         <ViewportZoomBar
           displayScale={transform.scale * fitRatio}

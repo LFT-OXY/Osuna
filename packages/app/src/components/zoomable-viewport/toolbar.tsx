@@ -208,8 +208,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[1],
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceCard,
+    borderColor: theme.colors.borderFloatingControl,
+    backgroundColor: theme.colors.surfaceFloatingControl,
   },
   zoomPercent: {
     minWidth: theme.spacing[8],
