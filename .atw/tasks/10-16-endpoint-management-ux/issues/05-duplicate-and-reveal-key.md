@@ -8,7 +8,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：复制后不改 key 保存，新接口的 key 与原来相同；改了 key 保存，用新 key；不保存则不多出接口。
 - [ ] 端到端：重名时名称与标识按规则避让。
