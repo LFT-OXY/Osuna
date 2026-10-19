@@ -26,7 +26,7 @@ import {
   agentsReturningToOfficial,
   arrangeEndpoint,
   selectHostEndpointsState,
-  type EndpointPlace,
+  type EndpointArrangement,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
 import type { AgentIssueAction } from "./internal/agent-settings";
@@ -94,7 +94,7 @@ export interface UseHostEndpointsResult {
   resume: (endpoint: ApiEndpoint) => void;
   // 挪动接口顺序：列表先按新顺序排，保存失败时回到主机上的顺序，原因在 actionError 里。
   // 搜索时带上显示着的行，上移、下移与拖动只在它们之间挪。
-  arrange: (endpoint: ApiEndpoint, place: EndpointPlace, shown?: ReadonlySet<string>) => void;
+  arrange: (arrangement: EndpointArrangement) => void;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -233,11 +233,16 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   // 免得把后一次先画好的顺序刷回旧样子。
   const arrangeSeqRef = useRef(0);
   const arrange = useCallback(
-    (endpoint: ApiEndpoint, place: EndpointPlace, shown?: ReadonlySet<string>) => {
+    ({ endpoint, place, shown }: EndpointArrangement) => {
       if (!client) return;
       const current = queryClient.getQueryData<ApiEndpointListResponse["payload"]>(queryKey);
       if (!current) return;
-      const order = arrangeEndpoint(current.endpoints, endpoint.id, place, shown);
+      const order = arrangeEndpoint({
+        endpoints: current.endpoints,
+        id: endpoint.id,
+        place,
+        shown,
+      });
       if (!order) return;
       const seq = ++arrangeSeqRef.current;
       // 先按新顺序画出来（照 magpie）；进行中的刷新不能把它盖回去。

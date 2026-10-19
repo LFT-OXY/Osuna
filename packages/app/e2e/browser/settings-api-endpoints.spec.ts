@@ -506,7 +506,7 @@ test.describe("Settings API endpoints", () => {
       models: ["kimi-k2"],
     });
     const zhipu = await seedApiEndpoint(client, {
-      name: "Zhipu",
+      name: "Zhipu GLM",
       baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
       models: ["glm-4.6"],
     });
@@ -526,9 +526,17 @@ test.describe("Settings API endpoints", () => {
     await expect.poll(shown).toEqual([zhipu]);
     await search.fill("moon kimi");
     await expect.poll(shown).toEqual([moonshot]);
+    // 接口标识（默认模型写「接口标识/模型名」的那段）也能搜到。
+    await search.fill("zhipu-glm");
+    await expect.poll(shown).toEqual([zhipu]);
 
     await search.fill("deepseek");
     await expect.poll(shown).toEqual([]);
+    // 没有分组标题，空状态直接在搜索框下面。
+    await expect(group(page, "enabled")).toHaveCount(0);
+    await expect(
+      page.getByTestId("api-endpoints-add-button").filter({ visible: true }),
+    ).toHaveCount(0);
     await expect(page.getByTestId("api-endpoints-no-match").filter({ visible: true })).toHaveText(
       "No endpoint matches “deepseek”Search looks at each endpoint's name, base URLs and model names.",
     );

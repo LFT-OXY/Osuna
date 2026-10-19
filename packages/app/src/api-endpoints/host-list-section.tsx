@@ -32,6 +32,7 @@ import {
   endpointSummary,
   findEndpoints,
   groupHostEndpoints,
+  type EndpointArrangement,
   type EndpointMoves,
   type EndpointPlace,
   type EndpointRowStatus,
@@ -65,8 +66,8 @@ export interface ApiEndpointsListSectionProps {
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
   // 主机支持改接口顺序（apiEndpointManagement）时才有：拖动、行菜单与 Alt+↑/↓。
-  // `shown` 是搜索时显示着的行，挪动只在它们之间进行（照 magpie shownToOn）；没在搜索时为 undefined。
-  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace, shown?: ReadonlySet<string>) => void;
+  // 搜索时挪动只在显示着的行之间进行（照 magpie shownToOn）。
+  onArrange?: (arrangement: EndpointArrangement) => void;
   // 主机声明 apiEndpointManagement 时才有：列表顶上的搜索框与行上的 key 打码、模型数、默认模型落在这家的提供方。
   management?: ListManagement;
 }
@@ -100,7 +101,7 @@ export function ApiEndpointsListSection({
     [allEndpoints, isSearching, query],
   );
   const shownIds = useMemo(
-    () => (isSearching ? new Set(shownEndpoints.map((endpoint) => endpoint.id)) : undefined),
+    () => (isSearching ? new Set(shownEndpoints.map((endpoint) => endpoint.id)) : null),
     [isSearching, shownEndpoints],
   );
   const groups = useMemo(() => groupHostEndpoints(shownEndpoints), [shownEndpoints]);
@@ -111,7 +112,8 @@ export function ApiEndpointsListSection({
   const arrangeShown = useMemo(
     () =>
       onArrange
-        ? (endpoint: ApiEndpoint, place: EndpointPlace) => onArrange(endpoint, place, shownIds)
+        ? (endpoint: ApiEndpoint, place: EndpointPlace) =>
+            onArrange({ endpoint, place, shown: shownIds })
         : undefined,
     [onArrange, shownIds],
   );
@@ -145,8 +147,7 @@ export function ApiEndpointsListSection({
   const hasErrorRow = actionError !== null;
   const hasNoMatch = isSearching && shownEndpoints.length === 0;
   // 搜索时只有已关闭的有命中：已开启组只留标题（和「+」），不画空卡片。
-  const hidesEnabledCard =
-    isSearching && groups.enabled.length === 0 && !hasNoMatch && !hasErrorRow;
+  const hidesEnabledCard = isSearching && groups.enabled.length === 0 && !hasErrorRow;
 
   function renderRows(endpoints: ApiEndpoint[], hasRowAbove: boolean) {
     return (
@@ -167,7 +168,6 @@ export function ApiEndpointsListSection({
   }
 
   function renderEnabledContent() {
-    if (hasNoMatch) return <NoMatch query={query.trim()} hasRowAbove={hasErrorRow} />;
     if (groups.enabled.length > 0) return renderRows(groups.enabled, hasErrorRow);
     if (isSearching) return null;
     return <EmptyEnabledGroup hasAny={hasDisabled} hasRowAbove={hasErrorRow} onAdd={onAdd} />;
@@ -188,29 +188,33 @@ export function ApiEndpointsListSection({
           />
         </View>
       ) : null}
-      <SettingsSection
-        title={t("settings.apiEndpoints.groups.enabled")}
-        count={groups.enabled.length}
-        info={t("settings.apiEndpoints.info")}
-        trailing={addButton}
-        testID="api-endpoints-enabled-group"
-      >
-        {hidesEnabledCard ? null : (
-          <View style={settingsStyles.card}>
-            {actionError ? (
-              <View style={settingsStyles.row} testID="api-endpoints-action-error">
-                <UiText variant="caption" color="statusDanger" selectable style={styles.flex}>
-                  {actionError}
-                </UiText>
-                <Button variant="ghost" size="sm" onPress={onDismissError}>
-                  {t("common.actions.dismiss")}
-                </Button>
-              </View>
-            ) : null}
-            {renderEnabledContent()}
-          </View>
-        )}
-      </SettingsSection>
+      {/* 一个都没搜到：不画分组标题，空状态直接接在搜索框下面。 */}
+      {hasNoMatch ? <NoMatch query={query.trim()} /> : null}
+      {hasNoMatch ? null : (
+        <SettingsSection
+          title={t("settings.apiEndpoints.groups.enabled")}
+          count={groups.enabled.length}
+          info={t("settings.apiEndpoints.info")}
+          trailing={addButton}
+          testID="api-endpoints-enabled-group"
+        >
+          {hidesEnabledCard ? null : (
+            <View style={settingsStyles.card}>
+              {actionError ? (
+                <View style={settingsStyles.row} testID="api-endpoints-action-error">
+                  <UiText variant="caption" color="statusDanger" selectable style={styles.flex}>
+                    {actionError}
+                  </UiText>
+                  <Button variant="ghost" size="sm" onPress={onDismissError}>
+                    {t("common.actions.dismiss")}
+                  </Button>
+                </View>
+              ) : null}
+              {renderEnabledContent()}
+            </View>
+          )}
+        </SettingsSection>
+      )}
       {groups.disabled.length > 0 ? (
         <SettingsSection
           title={t("settings.apiEndpoints.groups.disabled")}
@@ -241,8 +245,8 @@ function EndpointGroupRows({
   endpoints: ApiEndpoint[];
   // 两组合起来的接口顺序，算菜单里哪几项能点。
   allEndpoints: ApiEndpoint[];
-  // 搜索时显示着的行；没在搜索时为 undefined。
-  shownIds: ReadonlySet<string> | undefined;
+  // 搜索时显示着的行；没在搜索时为 null。
+  shownIds: ReadonlySet<string> | null;
   hasRowAbove: boolean;
   now: Date;
   pendingEndpointId: string | null;
@@ -260,7 +264,11 @@ function EndpointGroupRows({
         isPending={pendingEndpointId === info.endpoint.id}
         isFirst={info.index === 0 && !hasRowAbove}
         row={info}
-        moves={onArrange ? endpointMoves(allEndpoints, info.endpoint.id, shownIds) : null}
+        moves={
+          onArrange
+            ? endpointMoves({ endpoints: allEndpoints, id: info.endpoint.id, shown: shownIds })
+            : null
+        }
         management={management}
         onOpen={onOpen}
         onToggle={onToggle}
@@ -330,15 +338,15 @@ function EmptyEnabledGroup({
   );
 }
 
-/** 搜索没有命中（照 magpie「No provider matches」），再说一句搜的是哪几样。 */
-function NoMatch({ query, hasRowAbove }: { query: string; hasRowAbove: boolean }) {
+/**
+ * 搜索没有命中（照 magpie「No provider matches」），再说一句搜的是哪几样。
+ * 屏幕级空状态：居中的灰色短语，不带卡片（docs/design.md §11）。
+ */
+function NoMatch({ query }: { query: string }) {
   const { t } = useTranslation();
   return (
-    <View
-      style={[styles.emptyCard, hasRowAbove && settingsStyles.rowBorder]}
-      testID="api-endpoints-no-match"
-    >
-      <Text style={styles.emptyTitle}>{t("settings.apiEndpoints.search.noMatch", { query })}</Text>
+    <View style={styles.noMatch} testID="api-endpoints-no-match">
+      <Text style={styles.noMatchText}>{t("settings.apiEndpoints.search.noMatch", { query })}</Text>
       <Text style={[styles.emptyText, styles.emptyParagraph]}>
         {t("settings.apiEndpoints.search.noMatchHint")}
       </Text>
@@ -404,7 +412,11 @@ function EndpointRow({
     [],
   );
   // 有行信息时模型数挪到下一行，和 key 打码、默认模型写在一起。
-  const statusLine = useEndpointStatusLine(endpoint, status, management === undefined);
+  const statusLine = useEndpointStatusLine({
+    endpoint,
+    status,
+    includesModelCount: management === undefined,
+  });
 
   return (
     <View
@@ -629,11 +641,15 @@ function RestingStateText({ status }: { status: EndpointRowStatus }) {
 }
 
 /** 状态点加「格式 · 主机 · 已选数」；已关闭的前面加「已关闭」。冷却与需要检查的状态色文字由调用方接在后面。 */
-function useEndpointStatusLine(
-  endpoint: ApiEndpoint,
-  status: EndpointRowStatus,
-  includesModelCount: boolean,
-): ProviderStatusDisplay {
+function useEndpointStatusLine({
+  endpoint,
+  status,
+  includesModelCount,
+}: {
+  endpoint: ApiEndpoint;
+  status: EndpointRowStatus;
+  includesModelCount: boolean;
+}): ProviderStatusDisplay {
   const { t } = useTranslation();
   const summary = endpointSummary(endpoint);
   const parts = [
@@ -703,11 +719,12 @@ function EndpointFacts({
   }
   return (
     <View style={styles.facts} testID="api-endpoint-row-facts">
+      {/* 每条连同它前面的 · 是一块，换行时整块挪到下一行，行尾不挂分隔点。 */}
       {facts.map((fact, index) => (
-        <Fragment key={fact.key}>
+        <View key={fact.key} style={styles.factUnit}>
           {index > 0 ? <Text style={styles.separator}>·</Text> : null}
           {fact.node}
-        </Fragment>
+        </View>
       ))}
     </View>
   );
@@ -852,6 +869,22 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     columnGap: theme.spacing[1.5],
     marginTop: theme.spacing[0.5],
+  },
+  factUnit: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+  },
+  noMatch: {
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[8],
+    paddingHorizontal: theme.spacing[6],
+  },
+  noMatchText: {
+    color: theme.colors.foregroundMuted,
+    textAlign: "center",
+    fontSize: theme.fontSize.base,
   },
   fact: {
     color: theme.colors.foregroundMuted,

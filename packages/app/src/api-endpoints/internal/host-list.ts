@@ -92,7 +92,7 @@ function targetIndex(
   group: string[],
   id: string,
   place: EndpointPlace,
-  shown: ReadonlySet<string> | undefined,
+  shown: ReadonlySet<string> | null,
 ): number {
   if (place === "top") return 0;
   if (place === "bottom") return group.length - 1;
@@ -104,16 +104,24 @@ function targetIndex(
   return target === undefined ? -1 : group.indexOf(target);
 }
 
+/** 一次挪动：挪哪一家、挪到哪；`shown` 是搜索时显示着的行，没在搜索时为 null。 */
+export interface EndpointArrangement {
+  endpoint: ApiEndpoint;
+  place: EndpointPlace;
+  shown: ReadonlySet<string> | null;
+}
+
 /**
  * 挪动之后的完整接口顺序（照 magpie arrangeProvider）：只在这家所在的组（已开启 / 已关闭）里挪，
- * 另一组的接口留在原来的位置上。`shown` 是搜索时显示着的行，没有搜索时省略。什么都不会变时为 null。
+ * 另一组的接口留在原来的位置上。什么都不会变时为 null。
  */
-export function arrangeEndpoint(
-  endpoints: ApiEndpoint[],
-  id: string,
-  place: EndpointPlace,
-  shown?: ReadonlySet<string>,
-): string[] | null {
+export function arrangeEndpoint(input: {
+  endpoints: ApiEndpoint[];
+  id: string;
+  place: EndpointPlace;
+  shown: ReadonlySet<string> | null;
+}): string[] | null {
+  const { endpoints, id, place, shown } = input;
   const group = groupIds(endpoints, id);
   if (!group) return null;
   const from = group.indexOf(id);
@@ -134,17 +142,17 @@ export interface EndpointMoves {
 }
 
 /** 行菜单里四个排序项哪些能用：会让顺序变的才能点。 */
-export function endpointMoves(
-  endpoints: ApiEndpoint[],
-  id: string,
-  shown?: ReadonlySet<string>,
-): EndpointMoves {
-  const can = (place: EndpointPlace) => arrangeEndpoint(endpoints, id, place, shown) !== null;
+export function endpointMoves(input: {
+  endpoints: ApiEndpoint[];
+  id: string;
+  shown: ReadonlySet<string> | null;
+}): EndpointMoves {
+  const can = (place: EndpointPlace) => arrangeEndpoint({ ...input, place }) !== null;
   return { top: can("top"), up: can("up"), down: can("down"), bottom: can("bottom") };
 }
 
 /**
- * 列表顶上的搜索（照 magpie findProviders）：输入按空白分成几个词，每个词都出现在这家的名称、地址、
+ * 列表顶上的搜索（照 magpie findProviders）：输入按空白分成几个词，每个词都出现在这家的名称、接口标识、地址、
  * 已选与清单里的模型名（含显示名）或 key 打码里才留下；不分大小写。框里没字时都留下。
  */
 export function findEndpoints(endpoints: ApiEndpoint[], query: string): ApiEndpoint[] {
@@ -164,6 +172,7 @@ function searchText(endpoint: ApiEndpoint): string {
   ];
   return [
     endpoint.name,
+    endpoint.slug ?? "",
     ...(endpoint.baseUrls ?? []).map((entry) => entry.url),
     ...models.flatMap((model) => [model.id, model.label ?? ""]),
     endpoint.apiKeyMask ?? "",

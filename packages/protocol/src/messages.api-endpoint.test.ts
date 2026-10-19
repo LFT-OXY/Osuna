@@ -914,7 +914,12 @@ describe("API endpoint management (apiEndpointManagement)", () => {
         requestId: "req-m3",
         provider: "claude",
         endpoints: [
-          { ...ENDPOINT, apiKeyMask: "sk-o…a1b2", defaultModelProviders: ["claude", "codex"] },
+          {
+            ...ENDPOINT,
+            slug: "openrouter",
+            apiKeyMask: "sk-o…a1b2",
+            defaultModelProviders: ["claude", "codex"],
+          },
           { ...ENDPOINT, id: "ep_2", hasApiKey: false, defaultModelProviders: [] },
           { ...ENDPOINT, id: "ep_3" },
         ],

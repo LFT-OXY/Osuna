@@ -136,6 +136,8 @@ export const ApiEndpointSchema = z.object({
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
   searchesWeb: z.boolean().optional(),
+  // 接口标识：默认模型写「接口标识/模型名」时用的那段；列表搜索也按它找。老 daemon 不发。
+  slug: z.string().optional(),
   // 列表行上的 key 打码（头尾各 4 个字符）；没有 key 时不发，老 daemon 不发。
   apiKeyMask: z.string().optional(),
   // 默认模型先去这家的 Agent（provider）：默认模型指定了这家，或光秃秃的名字在接口顺序里最先由这家提供；老 daemon 不发。

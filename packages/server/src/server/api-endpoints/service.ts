@@ -3118,7 +3118,7 @@ export class ApiEndpointService {
     return { health, issues, baseUrl: result.baseUrl };
   }
 
-  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。标识不出现。 */
+  /** 主机级字段原样给出；provider、baseUrl、defaultModelId 是给老客户端的投影。 */
   private toWire(
     state: ApiEndpointState,
     endpoint: StoredApiEndpoint,
@@ -3129,6 +3129,7 @@ export class ApiEndpointService {
       id: endpoint.id,
       provider,
       name: endpoint.name,
+      slug: endpoint.slug,
       baseUrl: projectedBaseUrl(endpoint, provider),
       baseUrls: endpoint.baseUrls,
       models: endpoint.models,

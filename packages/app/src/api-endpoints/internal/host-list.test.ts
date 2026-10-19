@@ -133,25 +133,63 @@ describe("arrangeEndpoint", () => {
   ];
 
   it("moves an endpoint among its own group; the other group keeps its places", () => {
-    expect(arrangeEndpoint(list, "e", "up")).toEqual(["a", "b", "e", "d", "c"]);
-    expect(arrangeEndpoint(list, "e", "top")).toEqual(["e", "b", "a", "d", "c"]);
-    expect(arrangeEndpoint(list, "a", "down")).toEqual(["c", "b", "a", "d", "e"]);
-    expect(arrangeEndpoint(list, "a", "bottom")).toEqual(["c", "b", "e", "d", "a"]);
-    expect(arrangeEndpoint(list, "d", "up")).toEqual(["a", "d", "c", "b", "e"]);
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "up", shown: null })).toEqual([
+      "a",
+      "b",
+      "e",
+      "d",
+      "c",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "top", shown: null })).toEqual([
+      "e",
+      "b",
+      "a",
+      "d",
+      "c",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "down", shown: null })).toEqual([
+      "c",
+      "b",
+      "a",
+      "d",
+      "e",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "bottom", shown: null })).toEqual([
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "d", place: "up", shown: null })).toEqual([
+      "a",
+      "d",
+      "c",
+      "b",
+      "e",
+    ]);
   });
 
   it("puts a dragged endpoint where the row it was dropped on was", () => {
-    expect(arrangeEndpoint(list, "a", { index: 2 })).toEqual(["c", "b", "e", "d", "a"]);
-    expect(arrangeEndpoint(list, "e", { index: 1 })).toEqual(["a", "b", "e", "d", "c"]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: { index: 2 }, shown: null })).toEqual(
+      ["c", "b", "e", "d", "a"],
+    );
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: { index: 1 }, shown: null })).toEqual(
+      ["a", "b", "e", "d", "c"],
+    );
   });
 
   it("is null when nothing would move", () => {
-    expect(arrangeEndpoint(list, "a", "up")).toBeNull();
-    expect(arrangeEndpoint(list, "a", "top")).toBeNull();
-    expect(arrangeEndpoint(list, "e", "down")).toBeNull();
-    expect(arrangeEndpoint(list, "d", "bottom")).toBeNull();
-    expect(arrangeEndpoint(list, "c", { index: 1 })).toBeNull();
-    expect(arrangeEndpoint(list, "missing", "up")).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "up", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "top", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "down", shown: null })).toBeNull();
+    expect(arrangeEndpoint({ endpoints: list, id: "d", place: "bottom", shown: null })).toBeNull();
+    expect(
+      arrangeEndpoint({ endpoints: list, id: "c", place: { index: 1 }, shown: null }),
+    ).toBeNull();
+    expect(
+      arrangeEndpoint({ endpoints: list, id: "missing", place: "up", shown: null }),
+    ).toBeNull();
   });
 });
 
@@ -167,29 +205,65 @@ describe("arrangeEndpoint while a search shows some rows", () => {
   const shown = new Set(["a", "b", "e", "g"]);
 
   it("steps past the row shown next to it, and the hidden ones keep their order (as magpie shownToOn)", () => {
-    expect(arrangeEndpoint(list, "e", "up", shown)).toEqual(["e", "b", "a", "c", "g"]);
-    expect(arrangeEndpoint(list, "a", "down", shown)).toEqual(["c", "b", "e", "a", "g"]);
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "up", shown })).toEqual([
+      "e",
+      "b",
+      "a",
+      "c",
+      "g",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "down", shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "a",
+      "g",
+    ]);
   });
 
   it("puts a dragged row where the shown row it was dropped on was", () => {
-    expect(arrangeEndpoint(list, "g", { index: 1 }, shown)).toEqual(["a", "b", "c", "g", "e"]);
-    expect(arrangeEndpoint(list, "a", { index: 2 }, shown)).toEqual(["c", "b", "e", "g", "a"]);
+    expect(arrangeEndpoint({ endpoints: list, id: "g", place: { index: 1 }, shown })).toEqual([
+      "a",
+      "b",
+      "c",
+      "g",
+      "e",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: { index: 2 }, shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "g",
+      "a",
+    ]);
   });
 
   it("moves to the top or the bottom of the whole group", () => {
-    expect(arrangeEndpoint(list, "e", "top", shown)).toEqual(["e", "b", "a", "c", "g"]);
-    expect(arrangeEndpoint(list, "a", "bottom", shown)).toEqual(["c", "b", "e", "g", "a"]);
+    expect(arrangeEndpoint({ endpoints: list, id: "e", place: "top", shown })).toEqual([
+      "e",
+      "b",
+      "a",
+      "c",
+      "g",
+    ]);
+    expect(arrangeEndpoint({ endpoints: list, id: "a", place: "bottom", shown })).toEqual([
+      "c",
+      "b",
+      "e",
+      "g",
+      "a",
+    ]);
   });
 
   it("offers up and down by the rows shown, top and bottom by the whole group", () => {
     const hiddenFirst = new Set(["c", "e"]);
-    expect(endpointMoves(list, "c", hiddenFirst)).toEqual({
+    expect(endpointMoves({ endpoints: list, id: "c", shown: hiddenFirst })).toEqual({
       top: true,
       up: false,
       down: true,
       bottom: true,
     });
-    expect(endpointMoves(list, "e", hiddenFirst)).toEqual({
+    expect(endpointMoves({ endpoints: list, id: "e", shown: hiddenFirst })).toEqual({
       top: true,
       up: true,
       down: false,
@@ -202,6 +276,7 @@ describe("findEndpoints", () => {
   const relay = endpoint({
     id: "relay",
     name: "OpenRouter",
+    slug: "openrouter-cn",
     baseUrls: [
       { format: "anthropic_messages", url: "https://openrouter.ai/api" },
       { format: "openai_chat", url: "https://gateway.example/v1" },
@@ -223,7 +298,7 @@ describe("findEndpoints", () => {
     expect(ids("   ")).toEqual(["relay", "local"]);
   });
 
-  it("finds by name, by address and by model name, whatever the case", () => {
+  it("finds by name, by endpoint slug, by address and by model name, whatever the case", () => {
     expect(ids("openrouter")).toEqual(["relay"]);
     expect(ids("gateway.example")).toEqual(["relay"]);
     expect(ids("11434")).toEqual(["local"]);
@@ -231,6 +306,7 @@ describe("findEndpoints", () => {
     expect(ids("kimi-k2")).toEqual(["relay"]);
     expect(ids("qwen3")).toEqual(["relay"]);
     expect(ids("llama")).toEqual(["local"]);
+    expect(ids("openrouter-cn")).toEqual(["relay"]);
   });
 
   it("keeps the rows that say every word typed", () => {
@@ -246,9 +322,19 @@ describe("endpointMoves", () => {
       endpoint({ id: "b", enabled: false }),
       endpoint({ id: "c" }),
     ];
-    expect(endpointMoves(list, "a")).toEqual({ top: false, up: false, down: true, bottom: true });
-    expect(endpointMoves(list, "c")).toEqual({ top: true, up: true, down: false, bottom: false });
-    expect(endpointMoves(list, "b")).toEqual({
+    expect(endpointMoves({ endpoints: list, id: "a", shown: null })).toEqual({
+      top: false,
+      up: false,
+      down: true,
+      bottom: true,
+    });
+    expect(endpointMoves({ endpoints: list, id: "c", shown: null })).toEqual({
+      top: true,
+      up: true,
+      down: false,
+      bottom: false,
+    });
+    expect(endpointMoves({ endpoints: list, id: "b", shown: null })).toEqual({
       top: false,
       up: false,
       down: false,

@@ -494,6 +494,7 @@ describe("each row in the list", () => {
 
     const listed = await rows();
     expect(listed.get(a)).toMatchObject({
+      slug: "alphabet",
       apiKeyMask: "sk-A…abet",
       defaultModelProviders: ["claude"],
     });
