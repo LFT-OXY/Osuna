@@ -19,14 +19,14 @@ describe("nodeDocLocation", () => {
     ).toEqual({ path: "docs/logic-maps/login/check.md" });
   });
 
-  it("starts an external doc at its heading's line", () => {
+  it("starts an external doc at its heading's line, in the rendered preview", () => {
     expect(
       nodeDocLocation({
         mapName: "login",
         doc: { kind: "external", path: ".atw/spec/login.md", heading: "密码登录" },
         content: SPEC,
       }),
-    ).toEqual({ path: ".atw/spec/login.md", lineStart: 3 });
+    ).toEqual({ path: ".atw/spec/login.md", lineStart: 3, lineView: "preview" });
   });
 
   it("takes the first of duplicated headings", () => {

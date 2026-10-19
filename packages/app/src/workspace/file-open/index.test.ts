@@ -33,6 +33,15 @@ describe("normalizeWorkspaceFileLocation", () => {
     });
   });
 
+  it("keeps the preview marker only on a line target", () => {
+    expect(
+      normalizeWorkspaceFileLocation({ path: "spec.md", lineStart: 7, lineView: "preview" }),
+    ).toEqual({ path: "spec.md", lineStart: 7, lineView: "preview" });
+    expect(normalizeWorkspaceFileLocation({ path: "spec.md", lineView: "preview" })).toEqual({
+      path: "spec.md",
+    });
+  });
+
   it("rejects empty paths", () => {
     expect(normalizeWorkspaceFileLocation({ path: " " })).toBeNull();
   });
@@ -58,6 +67,12 @@ describe("workspace file tab targets", () => {
       workspaceFileLocationsEqual(
         { path: "src/app.ts", lineStart: 12 },
         { path: "src/app.ts", lineStart: 13 },
+      ),
+    ).toBe(false);
+    expect(
+      workspaceFileLocationsEqual(
+        { path: "spec.md", lineStart: 7, lineView: "preview" },
+        { path: "spec.md", lineStart: 7 },
       ),
     ).toBe(false);
   });

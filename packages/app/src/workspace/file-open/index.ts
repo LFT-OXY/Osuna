@@ -6,6 +6,11 @@ export interface WorkspaceFileLocation {
   path: string;
   lineStart?: number;
   lineEnd?: number;
+  /**
+   * 带行号时怎么落到那一行：不填是源码视图里高亮那几行；preview 是 Markdown 渲染预览滚到那一行所在的块
+   * （逻辑图打开节点文档时用，原生端和 HTML 仍是源码视图）。
+   */
+  lineView?: "preview";
 }
 
 export type WorkspaceFileTabTarget = { kind: "file" } & WorkspaceFileLocation;
@@ -29,10 +34,13 @@ export function normalizeWorkspaceFileLocation(
 
   const lineStart = normalizeLineNumber(location.lineStart);
   const lineEnd = normalizeLineNumber(location.lineEnd);
+  const hasLineEnd = lineStart !== undefined && lineEnd !== undefined && lineEnd >= lineStart;
+  const hasPreviewLine = lineStart !== undefined && location.lineView === "preview";
   return {
     path,
     ...(lineStart ? { lineStart } : {}),
-    ...(lineStart && lineEnd && lineEnd >= lineStart ? { lineEnd } : {}),
+    ...(hasLineEnd ? { lineEnd } : {}),
+    ...(hasPreviewLine ? { lineView: "preview" as const } : {}),
   };
 }
 
@@ -41,7 +49,10 @@ export function workspaceFileLocationsEqual(
   right: WorkspaceFileLocation,
 ): boolean {
   return (
-    left.path === right.path && left.lineStart === right.lineStart && left.lineEnd === right.lineEnd
+    left.path === right.path &&
+    left.lineStart === right.lineStart &&
+    left.lineEnd === right.lineEnd &&
+    left.lineView === right.lineView
   );
 }
 

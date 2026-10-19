@@ -15,6 +15,7 @@ import {
   buildLoginLogicMap,
   buildNestedLogicMap,
 } from "@/test/logic-map-fixtures";
+import { FileReadError } from "@getpaseo/client/internal/daemon-client";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapPanelSurface, type LogicMapClient } from "./panel-surface";
 
@@ -63,7 +64,9 @@ function createFakeHost(): FakeHost {
       },
       readFile: (async (cwd: string, path: string) => {
         const content = host.files.get(path);
-        if (cwd !== WORKSPACE_ROOT || content === undefined) throw new Error(`no file ${path}`);
+        if (cwd !== WORKSPACE_ROOT || content === undefined) {
+          throw new FileReadError("File not found", cwd, path);
+        }
         const bytes = new TextEncoder().encode(content);
         return {
           bytes,
@@ -418,7 +421,76 @@ describe("the logic map panel", () => {
 
     await expect
       .poll(() => onOpenNodeDoc.mock.calls)
-      .toEqual([[{ path: "spec/login.md", lineStart: 7 }]]);
+      .toEqual([[{ path: "spec/login.md", lineStart: 7, lineView: "preview" }]]);
+  });
+
+  it("still opens a framework doc the host cannot read, at the top, so its tab shows the error", async () => {
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) =>
+          node.id === "reset-count"
+            ? { ...node, doc: { kind: "external", path: "spec/gone.md", heading: "清零失败次数" } }
+            : node,
+        ),
+      },
+    });
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(host, { onOpenNodeDoc });
+
+    await userEvent.click(await shown("logic-map-node-title-reset-count"));
+
+    await expect.poll(() => onOpenNodeDoc.mock.calls).toEqual([[{ path: "spec/gone.md" }]]);
+  });
+
+  it("keeps showing the map and layer a node doc was opened from once the doc's tab takes focus", async () => {
+    const host = loginMapHost();
+    host.maps = [
+      { name: "checkout", title: "结账" },
+      { name: "user-login", title: "用户登录" },
+    ];
+    host.reads.set("checkout", { kind: "ok", map: buildNestedLogicMap() });
+    const update = mountSurface(host, { conversationMapName: "user-login" });
+
+    await userEvent.click(await shown("logic-map-node-title-second-factor"));
+    await userEvent.click(await shown("logic-map-node-title-sms-check"));
+    // 打开文档后主区域聚焦的是文件标签，不再是维护这张图的对话。
+    update({
+      conversationMapName: null,
+      focusedFilePath: "docs/logic-maps/user-login/sms-check.md",
+    });
+
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["用户登录", "4 nodes"]);
+    expect(byTestId("logic-map-breadcrumb-current").textContent).toBe("二次验证");
+    await expect.poll(() => outlined("logic-map-node-sms-check")).toBe(true);
+  });
+
+  it("pans the canvas to the outlined node when it is out of view, and leaves a visible one alone", async () => {
+    const update = mountSurface(loginMapHost());
+    const viewport = (await shown("logic-map-viewport")).getBoundingClientRect();
+    await shown("logic-map-node-stay");
+    const insideViewport = (testID: string) => {
+      const box = byTestId(testID).getBoundingClientRect();
+      return (
+        box.left >= viewport.left &&
+        box.right <= viewport.right &&
+        box.top >= viewport.top &&
+        box.bottom <= viewport.bottom
+      );
+    };
+    expect(insideViewport("logic-map-node-stay")).toBe(false);
+
+    update({ focusedFilePath: "docs/logic-maps/user-login/stay.md" });
+    await expect.poll(() => insideViewport("logic-map-node-stay")).toBe(true);
+
+    const before = byTestId("logic-map-node-stay").getBoundingClientRect();
+    update({ focusedFilePath: "docs/logic-maps/user-login/lock.md" });
+    await expect.poll(() => outlined("logic-map-node-lock")).toBe(true);
+    expect(insideViewport("logic-map-node-lock")).toBe(true);
+    expect(byTestId("logic-map-node-stay").getBoundingClientRect().top).toBe(before.top);
   });
 
   it("opens the top of a framework doc whose heading is gone", async () => {

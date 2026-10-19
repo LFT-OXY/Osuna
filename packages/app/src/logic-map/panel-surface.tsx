@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ChevronRight, CircleAlert, House, TriangleAlert, Workflow } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { FileReadError, type DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type {
   LogicMapSkeleton,
   WorkspaceLogicMapReadResult,
@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/component
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { PaneContentToolbar } from "@/components/ui/pane-content-toolbar";
 import { ZoomableViewport } from "@/components/zoomable-viewport";
-import type { ViewportFitOptions } from "@/components/zoomable-viewport/geometry";
+import type { ViewportFitOptions, ViewportRect } from "@/components/zoomable-viewport/geometry";
 import { useReplicaQuery } from "@/data/query";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import { explorerFileFromReadResult } from "@/file-explorer/read-result";
@@ -44,7 +44,7 @@ import {
   type LogicMapLayout,
 } from "./layout";
 import { focusedNodeDocId, nodeDocLocation } from "./node-doc";
-import { CONTROL_HEIGHT, ICON_SIZE, type Theme } from "@/styles/theme";
+import { CONTROL_HEIGHT, ICON_SIZE, SPACING, type Theme } from "@/styles/theme";
 
 export type LogicMapClient = Pick<
   DaemonClient,
@@ -221,6 +221,15 @@ function LogicMapPanelContent({
     skeleton,
     onOpenNodeDoc,
   });
+  // 打开文档后主区域聚焦的是文件标签，"当前对话维护的图"就没了；把正在看的这张记成挑过的，
+  // 面板不会跳回列表里的第一张，也停在当前这一层。
+  const handleOpenNodeDoc = useCallback(
+    (nodeId: string) => {
+      setPickedMapName(selectedMapName);
+      openNodeDoc(nodeId);
+    },
+    [openNodeDoc, selectedMapName],
+  );
   const selectedNodeId =
     skeleton && selectedMapName
       ? focusedNodeDocId({
@@ -281,7 +290,7 @@ function LogicMapPanelContent({
         selectedNodeId={selectedNodeId}
         layerId={layerId}
         onEnterSubgraph={setLayerId}
-        onOpenNodeDoc={openNodeDoc}
+        onOpenNodeDoc={handleOpenNodeDoc}
       />
     </View>
   );
@@ -356,7 +365,10 @@ function useOpenNodeDoc({
   return { openedNodeId, openNodeDoc };
 }
 
-/** 文本文件的内容；读失败或不是文本时为 null。 */
+/**
+ * 文本文件的内容；daemon 读不出这个文件（被删、不可读）时为 null，节点文档照样打开，文件标签里会显示读取错误。
+ * 连接断开等其他错误往上抛。
+ */
 async function readTextFile(
   client: LogicMapClient,
   cwd: string,
@@ -364,8 +376,9 @@ async function readTextFile(
 ): Promise<string | null> {
   try {
     return explorerFileFromReadResult(await client.readFile(cwd, path)).content ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof FileReadError) return null;
+    throw error;
   }
 }
 
@@ -655,6 +668,23 @@ function LogicMapBody({
 }
 
 const TOP_LAYER_KEY = "top";
+/** 平移到描边的节点时四周留出的空，描边和投影不贴着视口边。 */
+const REVEAL_MARGIN = SPACING[4];
+
+/** 描边的节点在这一层里的位置（连同四周留白）；不在这一层或没有描边时为 null。 */
+function selectedNodeRevealRect(
+  layout: LogicMapLayout,
+  selectedNodeId: string | null,
+): ViewportRect | null {
+  const node = layout.nodes.find((box) => box.id === selectedNodeId);
+  if (!node) return null;
+  return {
+    x: node.x - REVEAL_MARGIN,
+    y: node.y - REVEAL_MARGIN,
+    width: node.width + REVEAL_MARGIN * 2,
+    height: node.height + REVEAL_MARGIN * 2,
+  };
+}
 
 function LogicMapViewport({
   layout,
@@ -672,6 +702,10 @@ function LogicMapViewport({
     () => ({ width: layout.width, height: layout.height }),
     [layout.height, layout.width],
   );
+  const revealRect = useMemo(
+    () => selectedNodeRevealRect(layout, selectedNodeId),
+    [layout, selectedNodeId],
+  );
   return (
     <LogicMapBackdrop testID="logic-map-canvas">
       <ZoomableViewport
@@ -686,6 +720,7 @@ function LogicMapViewport({
         maxScale={VIEWPORT_MAX_SCALE}
         wheelActivation="modifier"
         wheelPan
+        revealRect={revealRect}
         testID="logic-map-viewport"
       >
         <LogicMapCanvas

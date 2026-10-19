@@ -14,7 +14,7 @@ import { StyleSheet, UnistylesRuntime, withUnistyles } from "react-native-unisty
 import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useSessionStore, type ExplorerFile } from "@/stores/session-store";
-import { filePreviewRenderKind } from "@/components/file-pane-render-mode";
+import { filePreviewRenderKindForLocation } from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
@@ -141,6 +141,8 @@ function FilePreviewBody({
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
+  // A line target means the caller wants to land on that line, so fall back to
+  // the highlighted source view even for renderable files.
   const renderKind =
     preview?.kind === "text" && mode !== "source" ? previewRenderKindForLocation(location) : null;
 
@@ -351,14 +353,13 @@ export function FilePane({
   );
 }
 
-/**
- * 渲染预览还是源码视图。带行号打开时要落到那一行：Web 上的 Markdown 预览能滚到那一行所在的块；
- * HTML 预览和原生端的 Markdown 预览做不到，退回带高亮的源码视图。
- */
+// Only a line target marked lineView: "preview" (logic map node docs) stays in the
+// Markdown preview, and only where that preview can scroll to the line.
 function previewRenderKindForLocation(location: WorkspaceFileLocation) {
-  const renderKind = filePreviewRenderKind(location.path);
-  if (!location.lineStart) return renderKind;
-  return renderKind === "markdown" && MARKDOWN_PREVIEW_SCROLLS_TO_LINE ? renderKind : null;
+  return filePreviewRenderKindForLocation({
+    location,
+    markdownPreviewScrollsToLine: MARKDOWN_PREVIEW_SCROLLS_TO_LINE,
+  });
 }
 
 function isEditableTextFile(input: {

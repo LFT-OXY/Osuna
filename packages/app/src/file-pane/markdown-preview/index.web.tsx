@@ -1,4 +1,4 @@
-import { useInsertionEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { useInsertionEffect, useMemo, useRef, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -18,18 +18,12 @@ export const MARKDOWN_PREVIEW_SCROLLS_TO_LINE = true;
 
 interface MarkdownPreviewSurfaceProps {
   themeVariables: MarkdownPreviewThemeVariables;
-  surfaceRef: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
-function MarkdownPreviewSurface({
-  themeVariables,
-  surfaceRef,
-  children,
-}: MarkdownPreviewSurfaceProps) {
+function MarkdownPreviewSurface({ themeVariables, children }: MarkdownPreviewSurfaceProps) {
   return (
     <div
-      ref={surfaceRef}
       className={MARKDOWN_PREVIEW_CLASS_NAME}
       data-testid="file-markdown-preview"
       style={themeVariables}
@@ -78,9 +72,9 @@ export function FileMarkdownPreview({
 }: FileMarkdownPreviewProps) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
   useInsertionEffect(installMarkdownPreviewStyles, []);
-  const surfaceRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   useScrollToSourceLine({
-    surfaceRef,
+    bodyRef,
     lineStart,
     bodyStartLine: document.bodyStartLine,
     navigationRevision,
@@ -89,11 +83,11 @@ export function FileMarkdownPreview({
   return (
     <View style={styles.outerGutter}>
       <View style={styles.readingFrame} testID="markdown-preview-frame">
-        <ThemedMarkdownPreviewSurface surfaceRef={surfaceRef} uniProps={mapThemeVariables}>
+        <ThemedMarkdownPreviewSurface uniProps={mapThemeVariables}>
           {document.frontMatter.length > 0 ? (
             <FrontMatterTable rows={document.frontMatter} />
           ) : null}
-          <DomMarkdown source={document.body} resources={resources} />
+          <DomMarkdown source={document.body} resources={resources} bodyRef={bodyRef} />
         </ThemedMarkdownPreviewSurface>
       </View>
     </View>

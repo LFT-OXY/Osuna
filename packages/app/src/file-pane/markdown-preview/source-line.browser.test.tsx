@@ -26,21 +26,23 @@ interface PreviewProps {
  */
 function PreviewHarness({ source, lineStart, navigationRevision }: PreviewProps) {
   const document = useMemo(() => parseMarkdownPreviewDocument(source), [source]);
-  const surfaceRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   useScrollToSourceLine({
-    surfaceRef,
+    bodyRef,
     lineStart,
     bodyStartLine: document.bodyStartLine,
     navigationRevision,
   });
   return (
-    <div ref={surfaceRef}>
+    <div>
       {document.frontMatter.map((row) => (
         <p key={row.key}>{`${row.key}: ${row.value}`}</p>
       ))}
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
-        {document.body}
-      </ReactMarkdown>
+      <div ref={bodyRef}>
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+          {document.body}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 }
@@ -119,6 +121,21 @@ describe("the rendered Markdown preview", () => {
     const frontMatter = "---\ntitle: 登录\nowner: auth\n---\n";
     const { scroller } = mountPreview({
       source: `${frontMatter}${SPEC}`,
+      lineStart: LOCK_HEADING_LINE + 4,
+      navigationRevision: 1,
+    });
+
+    await expect.poll(() => scroller.scrollTop).toBeGreaterThan(0);
+    const offset = offsetFromTop(scroller, heading(scroller, "锁定账户"));
+    expect(offset).toBeGreaterThan(-1);
+    expect(offset).toBeLessThan(40);
+  });
+
+  it("ignores line marks the author wrote inside the document", async () => {
+    // 正文里手写的 data-source-line（嵌套在别的块里）不能当成块的行号。
+    const authored = '<div>\n<p data-source-line="999">手写的标记</p>\n</div>\n\n';
+    const { scroller } = mountPreview({
+      source: `${authored}${SPEC}`,
       lineStart: LOCK_HEADING_LINE + 4,
       navigationRevision: 1,
     });

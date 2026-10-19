@@ -24,7 +24,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import { memo, type ComponentProps } from "react";
+import { memo, type ComponentProps, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { TextStyle } from "react-native";
 import {
@@ -186,12 +186,18 @@ const COMPONENTS = {
 interface DomMarkdownProps {
   source: string;
   resources: MarkdownPreviewResources;
+  /** 正文容器，直接子元素是带 data-source-line 的顶层块（滚到指定行时用）。 */
+  bodyRef: RefObject<HTMLDivElement | null>;
 }
 
-export const DomMarkdown = memo(function DomMarkdown({ source, resources }: DomMarkdownProps) {
+export const DomMarkdown = memo(function DomMarkdown({
+  source,
+  resources,
+  bodyRef,
+}: DomMarkdownProps) {
   return (
     <MarkdownPreviewResourcesContext.Provider value={resources}>
-      <div className="md-body">
+      <div className="md-body" ref={bodyRef}>
         <ReactMarkdown
           remarkPlugins={REMARK_PLUGINS}
           rehypePlugins={REHYPE_PLUGINS}

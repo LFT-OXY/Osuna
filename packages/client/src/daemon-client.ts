@@ -1150,6 +1150,18 @@ export class DaemonConnectionError extends Error {
   }
 }
 
+/** daemon 读不出这个文件（不存在、不可读、是目录等）；message 是 daemon 给的原因。 */
+export class FileReadError extends Error {
+  constructor(
+    message: string,
+    readonly cwd: string,
+    readonly path: string,
+  ) {
+    super(message);
+    this.name = "FileReadError";
+  }
+}
+
 /** 导入（续）一段提供方会话失败；`code` 是 daemon 给的可识别原因，没有时为 null。 */
 export class AgentImportError extends Error {
   constructor(
@@ -4961,7 +4973,7 @@ export class DaemonClient {
         maxBytes,
       );
       if (payload.error) {
-        throw new Error(payload.error);
+        throw new FileReadError(payload.error, cwd, path);
       }
       const binaryResult = this.completedBinaryFileReads.get(resolvedRequestId);
       if (binaryResult) {
@@ -4969,7 +4981,7 @@ export class DaemonClient {
         return binaryResult;
       }
       if (!payload.file) {
-        throw new Error("File unavailable.");
+        throw new FileReadError("File unavailable.", cwd, path);
       }
       return legacyExplorerFileToBytes(payload.file);
     } finally {

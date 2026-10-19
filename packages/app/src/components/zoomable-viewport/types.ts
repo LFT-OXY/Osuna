@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import type { ViewportFitOptions, ViewportSize } from "./geometry";
+import type { ViewportFitOptions, ViewportRect, ViewportSize } from "./geometry";
 
 export interface ZoomableViewportAction {
   icon: ComponentType<{ size?: number; color?: string }>;
@@ -31,4 +31,9 @@ export interface ZoomableViewportProps {
   wheelActivation?: "always" | "modifier";
   /** Web：不按修饰键滚动滚轮时平移内容（配合 wheelActivation="modifier"）。 */
   wheelPan?: boolean;
+  /**
+   * Web：内容里要保持可见的一块（按 contentSize 的坐标）。它变了、又不在视口里时平移到刚好看见，
+   * 已经看得见就不动；用户之后拖走也不再拉回来。
+   */
+  revealRect?: ViewportRect | null;
 }

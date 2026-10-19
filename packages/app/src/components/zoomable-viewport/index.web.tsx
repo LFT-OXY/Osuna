@@ -6,9 +6,12 @@ import {
   fitContentSize,
   isPointInsideTransformedContent,
   panContent,
+  revealContentRect,
   topAlignedTransform,
   zoomContentAtPoint,
   type ViewportPoint,
+  type ViewportRect,
+  type ViewportScaleLimits,
   type ViewportSize,
   type ViewportTransform,
 } from "./geometry";
@@ -53,6 +56,62 @@ function capturePointer(event: React.PointerEvent<HTMLDivElement>) {
   }
 }
 
+/** 要看的那块（按 contentSize 坐标）变了、又不在视口里时平移进来；看得见就不动。 */
+function useRevealRect(input: {
+  revealRect: ViewportRect | null;
+  contentWidth: number;
+  fittedContent: ViewportSize | null;
+  viewport: ViewportSize | null;
+  limits: ViewportScaleLimits;
+  transformRef: React.RefObject<ViewportTransform>;
+  commitTransform: (next: ViewportTransform) => void;
+}) {
+  const {
+    revealRect,
+    contentWidth,
+    fittedContent,
+    viewport,
+    limits,
+    transformRef,
+    commitTransform,
+  } = input;
+  const revealX = revealRect?.x ?? null;
+  const revealY = revealRect?.y ?? null;
+  const revealWidth = revealRect?.width ?? null;
+  const revealHeight = revealRect?.height ?? null;
+  useEffect(() => {
+    if (revealX === null || revealY === null || revealWidth === null || revealHeight === null) {
+      return;
+    }
+    if (!fittedContent || !viewport) return;
+    const ratio = fittedContent.width / contentWidth;
+    const next = revealContentRect({
+      transform: transformRef.current,
+      rect: {
+        x: revealX * ratio,
+        y: revealY * ratio,
+        width: revealWidth * ratio,
+        height: revealHeight * ratio,
+      },
+      fittedContent,
+      viewport,
+      limits,
+    });
+    if (next !== transformRef.current) commitTransform(next);
+  }, [
+    commitTransform,
+    contentWidth,
+    fittedContent,
+    limits,
+    revealHeight,
+    revealWidth,
+    revealX,
+    revealY,
+    transformRef,
+    viewport,
+  ]);
+}
+
 export function ZoomableViewport({
   contentSize,
   children,
@@ -70,6 +129,7 @@ export function ZoomableViewport({
   testID,
   wheelActivation = "modifier",
   wheelPan = false,
+  revealRect = null,
 }: ZoomableViewportProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, ViewportPoint>());
@@ -129,6 +189,17 @@ export function ZoomableViewport({
   }, []);
 
   useEffect(() => reset(), [contentSize.height, contentSize.width, reset, viewport]);
+
+  // 排在复位之后：换了内容或视口先回到初始位置，再把要看的那块挪进来。
+  useRevealRect({
+    revealRect,
+    contentWidth: contentSize.width,
+    fittedContent,
+    viewport,
+    limits,
+    transformRef,
+    commitTransform,
+  });
 
   const zoomAt = useCallback(
     (scale: number, focalPoint: ViewportPoint) => {

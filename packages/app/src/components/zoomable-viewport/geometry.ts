@@ -14,6 +14,14 @@ export interface ViewportTransform {
   y: number;
 }
 
+/** 内容里的一块矩形，按适配后的内容坐标（左上为原点）。 */
+export interface ViewportRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ViewportScaleLimits {
   minScale: number;
   maxScale: number;
@@ -186,4 +194,38 @@ export function topAlignedTransform(input: {
     input.viewport,
     input.limits,
   );
+}
+
+/** 一个方向上要挪多少才能让 [start, end] 落进 [0, size]；已经在里面为 0，比视口还长时对齐起点。 */
+function revealDelta(start: number, end: number, size: number): number {
+  if (start < 0 || end - start > size) return -start;
+  if (end > size) return size - end;
+  return 0;
+}
+
+/**
+ * 不改缩放，平移到刚好看见内容里的这块矩形；已经整块可见就原样返回同一个 transform。
+ */
+export function revealContentRect(input: {
+  transform: ViewportTransform;
+  rect: ViewportRect;
+  fittedContent: ViewportSize;
+  viewport: ViewportSize;
+  limits: ViewportScaleLimits;
+}): ViewportTransform {
+  const { transform, rect, fittedContent, viewport } = input;
+  const left =
+    viewport.width / 2 + transform.x + (rect.x - fittedContent.width / 2) * transform.scale;
+  const top =
+    viewport.height / 2 + transform.y + (rect.y - fittedContent.height / 2) * transform.scale;
+  const dx = revealDelta(left, left + rect.width * transform.scale, viewport.width);
+  const dy = revealDelta(top, top + rect.height * transform.scale, viewport.height);
+  if (dx === 0 && dy === 0) return transform;
+  return panContent({
+    transform,
+    delta: { x: dx, y: dy },
+    fittedContent,
+    viewport,
+    limits: input.limits,
+  });
 }

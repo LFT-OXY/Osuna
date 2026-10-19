@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { Pressable, Text, View } from "react-native";
 import { cdp, page, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ViewportRect } from "./geometry";
 import { ZoomableViewport } from "./index";
 
 // App sources compile against the classic JSX runtime, which expects React on the global.
@@ -151,5 +152,70 @@ describe("ZoomableViewport on the web", () => {
     await drag({ x: viewport.left + 100, y: viewport.top + 200 }, { x: 0, y: -50 });
     await expect.poll(() => contentButton().top).toBe(before.top - 50);
     expect(contentButton().width).toBe(before.width);
+  });
+});
+
+const MARKER_STYLE = { position: "absolute", left: 40, top: 1000, width: 160, height: 80 } as const;
+
+/** 同样的视口，内容里 y=1000 处有一个标记；返回的函数换一块要保持可见的区域重新渲染。 */
+function mountWithReveal(): (rect: ViewportRect | null) => void {
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position: absolute; top: 100px; left: 100px; width: 200px; height: 300px; display: flex;";
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const render = (rect: ViewportRect | null) =>
+    act(() =>
+      root.render(
+        <ZoomableViewport
+          contentSize={CONTENT_SIZE}
+          fit={FIT_WIDTH}
+          initialPosition="top"
+          renderAtContentSize
+          panWithinViewport
+          controls="zoom-bar"
+          revealRect={rect}
+          testID="viewport"
+        >
+          <View style={CONTENT_STYLE}>
+            <View style={MARKER_STYLE} testID="marker" />
+          </View>
+        </ZoomableViewport>,
+      ),
+    );
+  render(null);
+  mounted.push({ root, container });
+  return render;
+}
+
+function marker(): DOMRect {
+  const element = document.querySelector('[data-testid="marker"]');
+  if (!(element instanceof HTMLElement)) throw new Error("marker did not render");
+  return element.getBoundingClientRect();
+}
+
+function markerWidth(): number {
+  return marker().width;
+}
+
+function markerInView(): boolean {
+  const box = marker();
+  return box.top >= 100 && box.bottom <= 400 && box.left >= 100 && box.right <= 300;
+}
+
+describe("ZoomableViewport with a part to keep in view", () => {
+  it("pans an out-of-view part into view and leaves it be once it is visible", async () => {
+    const reveal = mountWithReveal();
+    // 按宽度缩到一半：内容 y=1000 的标记在视口下面。
+    await expect.poll(markerWidth).toBe(80);
+    expect(markerInView()).toBe(false);
+
+    reveal({ x: 40, y: 1000, width: 160, height: 80 });
+    await expect.poll(markerInView).toBe(true);
+
+    const shown = marker();
+    reveal({ x: 40, y: 1020, width: 160, height: 40 });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(marker().top).toBe(shown.top);
   });
 });

@@ -20,7 +20,8 @@ export function nodeDocLocation(input: {
   const path = nodeDocPath(input.mapName, input.doc);
   if (input.doc.kind === "own" || input.content === null) return { path };
   const lineStart = findMarkdownHeadingLine(input.content, input.doc.heading);
-  return lineStart === null ? { path } : { path, lineStart };
+  // 节点文档是拿来读的：停在渲染预览里滚到那一节，不像其他带行号的打开那样进源码视图。
+  return lineStart === null ? { path } : { path, lineStart, lineView: "preview" };
 }
 
 /**

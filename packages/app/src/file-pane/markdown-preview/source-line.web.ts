@@ -10,10 +10,13 @@ function scrollParent(element: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** 起始行不超过 bodyLine 的最后一个顶层块，也就是包含这一行的那块。 */
-function blockAtLine(surface: HTMLElement, bodyLine: number): HTMLElement | null {
+/**
+ * 起始行不超过 bodyLine 的最后一个顶层块，也就是包含这一行的那块。只看正文的直接子元素：
+ * 作者在 HTML 里手写的 data-source-line 会留在嵌套元素上（消毒规则放行了这个属性）。
+ */
+function blockAtLine(body: HTMLElement, bodyLine: number): HTMLElement | null {
   let found: HTMLElement | null = null;
-  for (const block of surface.querySelectorAll<HTMLElement>(`[${SOURCE_LINE_ATTRIBUTE}]`)) {
+  for (const block of body.querySelectorAll<HTMLElement>(`:scope > [${SOURCE_LINE_ATTRIBUTE}]`)) {
     const line = Number(block.getAttribute(SOURCE_LINE_ATTRIBUTE));
     if (line > bodyLine) break;
     found = block;
@@ -26,22 +29,23 @@ function blockAtLine(surface: HTMLElement, bodyLine: number): HTMLElement | null
  * 变了）只滚一次，文件内容随后更新时不再把用户拉回去。
  */
 export function useScrollToSourceLine(input: {
-  surfaceRef: RefObject<HTMLElement | null>;
+  /** 渲染出的正文容器：它的直接子元素就是一个个顶层块。 */
+  bodyRef: RefObject<HTMLElement | null>;
   lineStart: number | undefined;
   /** 正文第一行在原文件里的行号；front matter 不在正文里。 */
   bodyStartLine: number;
   navigationRevision: number;
 }) {
-  const { surfaceRef, lineStart, bodyStartLine, navigationRevision } = input;
+  const { bodyRef, lineStart, bodyStartLine, navigationRevision } = input;
   const scrolledRef = useRef<string | null>(null);
   useLayoutEffect(() => {
-    const surface = surfaceRef.current;
-    if (!surface || lineStart === undefined) return;
+    const body = bodyRef.current;
+    if (!body || lineStart === undefined) return;
     const request = `${lineStart}:${navigationRevision}`;
     if (scrolledRef.current === request) return;
     scrolledRef.current = request;
-    const block = blockAtLine(surface, lineStart - bodyStartLine + 1);
-    const scroller = scrollParent(surface);
+    const block = blockAtLine(body, lineStart - bodyStartLine + 1);
+    const scroller = scrollParent(body);
     if (!scroller) return;
     // 目标行在 front matter 里（或在第一块之前）就停在顶部，front matter 表格就在那里。
     const top = block
