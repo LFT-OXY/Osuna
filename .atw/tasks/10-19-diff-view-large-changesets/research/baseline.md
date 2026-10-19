@@ -197,3 +197,28 @@ node --import tsx src/server/daemon-e2e/diff-perf-scenario-cli.ts agent <仓库�
 | Agent 那 1 分钟长任务（桌面版） | 18 次，最长 102ms，无超过 500ms | — | 50 次，最长 184ms，无超过 500ms |
 
 多出的一条 `git check-attr` 没有拉长计算：冷算和单次刷新都在前几次的波动范围内。场景里的 `package-lock.json` 现在带 `generated: true`，打开时默认收起；它本来就是 `too_large` 占位，没有正文，所以打开耗时的变化（7.9 → 7.0 秒）不来自这张工单，按波动和工单 05/06 的累积看，打开仍受冷算 8.6 秒限制，「打开 ≤2 秒」的结论不变。桌面版 Agent 那段长任务从 18 次变成 50 次，是因为工单 05 以后推送从 1 分钟 7 次变成约 42 次、每次都要处理一份约 15.9MB 的消息，单次最长 184ms，没有超过 500ms 的；桌面版这是工单 04 以来第一次复测。
+
+## 工单 09 桌面版实测：最小化时释放订阅（2026-10-19）
+
+代码 `09af62627`（`useCheckoutDiffQuery` 的订阅条件多了 `useAppVisible()`：页面 hidden 时和 tab 不活跃一样释放；只看 hidden，不看失焦）。dev Electron 44.2.0，daemon 跑 `packages/server/dist`（6769），工单 02 的场景，Changes 面板开着文件树并点开一个文件（同时有清单订阅和完整订阅）。最小化和还原用 System Events 设 `AXMinimized`；模拟 Agent 每 0.5 秒改一个文件，持续 110 秒，最小化前 15 秒就开始改。daemon 侧看 `daemon.log` 每 30 秒一条的 `ws_runtime_metrics` 和 `ws_slow_request`。
+
+**Playwright 经 CDP 连着时，最小化不会让页面变 hidden。** 第一次用 CDP 会话全程连着跑，最小化 60 秒里 `document.visibilityState` 一直是 `visible`，完整订阅照常每秒推一次约 16MB 的 `checkout_diff_update`。断开 CDP 后再最小化，页面立刻收到 `visibilitychange` → `hidden`。下面的数字都是断开 CDP 跑的：只在开始前用 CDP 挂一个 `visibilitychange` 记录器，结束后再连上读出来。
+
+| 时间（UTC） | 事件 |
+| --- | --- |
+| 13:51:33.1 | 最小化，页面 `hidden` |
+| 13:52:59.4 | 还原，页面 `visible` |
+| 13:53:00.5 | 文件清单订阅响应（`ws_slow_request` 1117ms），还原后 1.1 秒 |
+| 13:53:06.9 | 完整订阅响应（7497ms），还原后 7.5 秒 |
+
+| `ws_runtime_metrics` 窗口结束于 | 订阅数 / target 数 | checkout diff 出站消息 | git 命令 |
+| --- | --- | --- | --- |
+| 13:51:18（可见，Agent 在改） | 2 / 2 | 订阅响应 1 | 78，`diff` 50 条 |
+| 13:51:48（前 15 秒可见、后 15 秒最小化） | 0 / 0 | 无 | 196，`diff` 96、`check-attr` 24 |
+| 13:52:18（整段最小化） | 0 / 0 | 无 | 16，只有 `show-ref` 8、`status` 8 |
+| 13:52:48（整段最小化） | 0 / 0 | 无 | 19，只有 `show-ref` 9、`status` 9、`config` 1 |
+| 13:53:18（含还原） | 2 / 2 | 订阅响应 2、推送 2 | 211，`diff` 158 |
+
+两个整段最小化的窗口里，Agent 一共改了约 120 次，daemon 没有为这两份订阅开算或推送：没有 `diff`、`check-attr`、`ls-files`，剩下的 `show-ref` / `status` 来自侧栏的工作区 git 监听，和 diff 订阅无关。
+
+**还原后 2 秒内看到最新内容：文件清单达到，diff 正文没达到。** 最后一份订阅退掉时，daemon 关掉 target，按文件复用的缓存（工单 05）也随之清空。所以还原后的重新订阅是一次冷计算：清单 1.1 秒，正文 7.5 秒，和首次打开一样慢（本节开头第一次试跑是 7.2 秒）。这 7.5 秒里面板显示的是最小化前的旧内容，然后整份换成最新的。要让正文也在 2 秒内出来，daemon 得在 target 关掉以后把按文件复用的缓存再留一段时间（例如几分钟），这已经超出本工单「走同一条退订路径」的范围，等用户决定。
