@@ -19,8 +19,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
+import { CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE } from "@getpaseo/protocol/codex-session/rpc-schemas";
 import { createTestLogger } from "../test-utils/test-logger.js";
 import { Session } from "./session.js";
+import { CodexModelProviderMissingError } from "./codex-conversations/model-provider-missing.js";
 import type { SessionOptions } from "./session.js";
 import { OWNER_PERMISSIONS } from "./authorization/index.js";
 import type { AgentUpdatesService } from "./session/agent-updates/agent-updates-service.js";
@@ -5485,6 +5487,63 @@ test("refresh_agent_request leaves workspace archival independent when its direc
   expect(workspaces.get(workspaceId)?.archivedAt).toBe("2026-03-10T00:00:00.000Z");
   expect(projects.get(cwd)?.archivedAt).toBe("2026-03-10T00:00:00.000Z");
 });
+
+test.each([
+  {
+    reason: "any other error, such as a deleted cwd",
+    error: new Error("spawn ENOENT: cwd does not exist"),
+    expectedCode: "agent_refresh_failed",
+    expectedArchiveCalls: [],
+  },
+  {
+    reason: "the Codex model provider is missing",
+    error: new CodexModelProviderMissingError("Model provider `gone` not found", "gone"),
+    expectedCode: CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE,
+    expectedArchiveCalls: [["agent-refresh-fails", "2026-03-10T00:00:00.000Z"]],
+  },
+])(
+  "refresh_agent_request that cannot resume because $reason returns the error and restores the archive only for a missing provider",
+  async ({ error, expectedCode, expectedArchiveCalls }) => {
+    const emitted: SessionOutboundMessage[] = [];
+    const session = createSessionForWorkspaceTests({
+      onMessage: (message) => {
+        if (isSessionOutboundMessage(message)) emitted.push(message);
+      },
+    });
+    const agentId = "agent-refresh-fails";
+    const archivedAt = "2026-03-10T00:00:00.000Z";
+    const storedAgent: StoredAgentRecord = {
+      ...makeStoredAgent({ id: agentId, cwd: "/tmp/refresh-fails", updatedAt: archivedAt }),
+      archivedAt,
+    };
+    session.agentStorage.get = async (id: string) => (id === agentId ? storedAgent : null);
+    session.agentManager.unarchiveSnapshot = async () => true;
+    session.agentManager.notifyAgentState = () => {};
+    const archiveSnapshot = vi.fn(async () => undefined);
+    session.agentManager.archiveSnapshot = archiveSnapshot;
+    session.agentManager.getAgent = () => undefined;
+    session.reloadOrResumeAgentForRefresh = async () => {
+      throw error;
+    };
+
+    await session.handleMessage({
+      type: "refresh_agent_request",
+      agentId,
+      requestId: "req-refresh-fails",
+    });
+
+    expect(emitted).toContainEqual({
+      type: "rpc_error",
+      payload: {
+        requestId: "req-refresh-fails",
+        requestType: "refresh_agent_request",
+        error: error.message,
+        code: expectedCode,
+      },
+    });
+    expect(archiveSnapshot.mock.calls).toEqual(expectedArchiveCalls);
+  },
+);
 
 test("refresh_agent_request does not recreate or unarchive a deleted worktree", async () => {
   const emitted: SessionOutboundMessage[] = [];

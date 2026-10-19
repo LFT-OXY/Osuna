@@ -286,7 +286,7 @@ function resolveWorkspaceSetupRuntime(
   return runtime ?? new WorkspaceSetupRuntime();
 }
 import { WorktreeRequestError, toWorktreeWireError } from "./worktree-errors.js";
-import { toAgentResumeWireError } from "./agent-resume-errors.js";
+import { isCodexModelProviderMissing, toAgentResumeWireError } from "./agent-resume-errors.js";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import {
   createProjectDirectory,
@@ -4727,9 +4727,10 @@ export class Session {
       try {
         snapshot = await this.reloadOrResumeAgentForRefresh(agentId);
       } catch (error) {
-        // 与 resume_agent_request 一样：续不上就放回归档，「取消归档」失败后 Agent 仍是归档的，错误留在原处。
+        // 只有 Codex 服务商不在时放回归档，让「挪动对话…」留在归档提示里；其他原因（例如工作区目录已删）
+        // 照旧算取消归档，工作区恢复依赖这一点。
         const wasArchived = didUnarchive && originalArchivedAt !== null;
-        if (wasArchived) {
+        if (wasArchived && isCodexModelProviderMissing(error)) {
           await this.agentManager.archiveSnapshot(agentId, originalArchivedAt);
         }
         throw error;
