@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { reopenSeenKey, useReopenSeenStore } from "@/stores/reopen-seen-store";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsFocused } from "@react-navigation/native";
@@ -351,6 +352,12 @@ function ConnectionSheet({
   );
 }
 
+/** 「复制」：以原来那家开添加窗口，名称「原名 副本」，重名由 daemon 避让。 */
+function duplicateSeed(endpoint: ApiEndpoint, t: TFunction): ConnectionFormSeed {
+  const name = t("settings.apiEndpoints.form.duplicateName", { name: endpoint.name });
+  return { mode: "duplicate", source: endpoint, name };
+}
+
 function sheetKey(seed: ConnectionFormSeed): string {
   if (seed.mode === "edit") return `edit-${seed.endpoint.id}`;
   if (seed.mode === "duplicate") return `duplicate-${seed.source.id}`;
@@ -367,6 +374,7 @@ export function ApiEndpointsPage({ serverId }: { serverId: string }) {
 }
 
 function ApiEndpointsListPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
@@ -382,9 +390,10 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
               router.push(buildProviderSettingsRoute(serverId, provider)),
+            onDuplicate: (endpoint) => setSheet({ seed: duplicateSeed(endpoint, t) }),
           }
         : undefined,
-    [canArrange, providerEntries, router, serverId],
+    [canArrange, providerEntries, router, serverId, t],
   );
 
   const handleAdd = useCallback(() => setSheet({ seed: { mode: "create" } }), []);
@@ -471,9 +480,7 @@ function ApiEndpointDetailContent({
     if (endpoint) setSheet({ seed: { mode: "edit", endpoint } });
   }, [endpoint]);
   const handleDuplicate = useCallback(() => {
-    if (!endpoint) return;
-    const name = t("settings.apiEndpoints.form.duplicateName", { name: endpoint.name });
-    setSheet({ seed: { mode: "duplicate", source: endpoint, name } });
+    if (endpoint) setSheet({ seed: duplicateSeed(endpoint, t) });
   }, [endpoint, t]);
   const handleClose = useCallback(() => setSheet(null), []);
   // 编辑只关掉弹窗；复制出的新接口保存后进它的详情页。
@@ -505,7 +512,7 @@ function ApiEndpointDetailContent({
         agents={state.agents}
         hostEndpoints={endpoints}
         onEdit={handleEdit}
-        onDuplicate={canDuplicate ? handleDuplicate : undefined}
+        onDuplicate={canDuplicate ? handleDuplicate : null}
       />
       <ConnectionSheet
         serverId={serverId}
@@ -534,7 +541,7 @@ function ApiEndpointDetailSections({
   hostEndpoints: UseHostEndpointsResult;
   onEdit: () => void;
   // 主机声明了 apiEndpointManagement 才有「复制」。
-  onDuplicate: (() => void) | undefined;
+  onDuplicate: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();

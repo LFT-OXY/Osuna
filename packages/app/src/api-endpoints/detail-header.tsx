@@ -48,7 +48,7 @@ interface ApiEndpointDetailHeaderProps {
   onTest: () => void;
   onEdit: () => void;
   // 主机声明了 apiEndpointManagement 才有「复制」。
-  onDuplicate: (() => void) | undefined;
+  onDuplicate: (() => void) | null;
   onDelete: () => void;
 }
 
@@ -170,7 +170,7 @@ function DetailMenu({
   name: string;
   isDeleting: boolean;
   onEdit: () => void;
-  onDuplicate: (() => void) | undefined;
+  onDuplicate: (() => void) | null;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();

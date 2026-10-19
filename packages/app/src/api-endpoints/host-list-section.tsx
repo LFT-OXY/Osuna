@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowUpToLine,
   ChevronRight,
+  Copy,
   GripVertical,
   Plus,
 } from "lucide-react-native";
@@ -16,7 +17,12 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { SearchField } from "@/components/ui/search-field";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -52,6 +58,7 @@ const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedArrowDown = withUnistyles(ArrowDown);
 const ThemedArrowUpToLine = withUnistyles(ArrowUpToLine);
 const ThemedArrowDownToLine = withUnistyles(ArrowDownToLine);
+const ThemedCopy = withUnistyles(Copy);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -75,6 +82,8 @@ export interface ApiEndpointsListSectionProps {
 export interface ListManagement {
   providerLabel: (provider: string) => string;
   onOpenProvider: (provider: string) => void;
+  // 行菜单「复制」：和详情页 ⋯ 菜单里的是同一个入口。
+  onDuplicate: (endpoint: ApiEndpoint) => void;
 }
 
 const noArrange = () => {};
@@ -484,12 +493,13 @@ function EndpointRow({
                 testID={`api-endpoint-switch-${endpoint.id}`}
               />
               {moves && onArrange ? (
-                <EndpointOrderMenu
+                <EndpointRowMenu
                   endpoint={endpoint}
                   moves={moves}
                   isOpen={row.isMenuOpen}
                   onOpenChange={row.onMenuOpenChange}
                   onArrange={onArrange}
+                  onDuplicate={management ? management.onDuplicate : null}
                 />
               ) : null}
               <ThemedChevronRight
@@ -530,13 +540,16 @@ const ORDER_ICONS = {
   bottom: ThemedArrowDownToLine,
 };
 
-/** 行菜单：上移、下移、移到最前、移到最后（照 magpie openProviderMenu）；窄屏是底部弹层。 */
-function EndpointOrderMenu({
+/**
+ * 行菜单：「复制」，然后上移、下移、移到最前、移到最后（照 magpie openProviderMenu）；窄屏是底部弹层。
+ */
+function EndpointRowMenu({
   endpoint,
   moves,
   isOpen,
   onOpenChange,
   onArrange,
+  onDuplicate,
 }: {
   endpoint: ApiEndpoint;
   moves: EndpointMoves;
@@ -544,9 +557,15 @@ function EndpointOrderMenu({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onArrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
+  onDuplicate: ((endpoint: ApiEndpoint) => void) | null;
 }) {
   const { t } = useTranslation();
-  const label = t("settings.apiEndpoints.order.menu", { name: endpoint.name });
+  const label = t("settings.apiEndpoints.detail.menu", { name: endpoint.name });
+  const duplicateLeading = useMemo(
+    () => <ThemedCopy size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />,
+    [],
+  );
+  const handleDuplicate = useCallback(() => onDuplicate?.(endpoint), [endpoint, onDuplicate]);
   return (
     <DropdownMenu compactMode="sheet" open={isOpen} onOpenChange={onOpenChange}>
       <RowActionsMenuTrigger
@@ -554,6 +573,18 @@ function EndpointOrderMenu({
         testID={`api-endpoint-order-menu-${endpoint.id}`}
       />
       <DropdownMenuContent align="end" width={240} sheetTitle={label}>
+        {onDuplicate ? (
+          <>
+            <DropdownMenuItem
+              leading={duplicateLeading}
+              onSelect={handleDuplicate}
+              testID={`api-endpoint-row-duplicate-${endpoint.id}`}
+            >
+              {t("settings.apiEndpoints.detail.duplicate")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {ORDER_ITEMS.map((item) => (
           <OrderMenuItem
             key={item.place}

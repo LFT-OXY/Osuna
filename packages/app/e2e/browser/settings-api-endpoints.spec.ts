@@ -916,7 +916,7 @@ test.describe("Settings API endpoints", () => {
 
     await test.step("the dialog opens as a new endpoint named <name> copy, its key box empty", async () => {
       await duplicateFromMenu(page);
-      await expect(connectionForm(page)).toContainText("Copy of Good relay");
+      await expect(connectionForm(page)).toContainText("Duplicate Good relay");
       await expect(name).toHaveValue("Good relay copy");
       const key = page.getByTestId("api-endpoint-connection-api-key");
       await expect(key).toHaveValue("");
@@ -972,6 +972,29 @@ test.describe("Settings API endpoints", () => {
       expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected"]);
       expect(authorizationsSeen(relay)).toEqual(new Set([`Bearer ${RELAY_KEY}`]));
     });
+  });
+
+  test("Duplicate in a row's menu on the list opens the same dialog and saving opens the copy", async ({
+    page,
+  }) => {
+    const [source = ""] = await seedRelays(["Good relay"]);
+    await openApiEndpointsPage(page);
+    await page.getByTestId(`api-endpoint-order-menu-${source}`).filter({ visible: true }).click();
+    await page.getByTestId(`api-endpoint-row-duplicate-${source}`).click();
+    await expect(connectionForm(page)).toContainText("Duplicate Good relay");
+    await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Good relay copy");
+    await expect(page.getByTestId("api-endpoint-connection-url-anthropic_messages")).toHaveValue(
+      `${relay.origin}/good`,
+    );
+
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(connectionForm(page)).toHaveCount(0);
+    const list = await client.apiEndpointList("claude");
+    expect(list.endpoints).toMatchObject([
+      { id: source, name: "Good relay" },
+      { name: "Good relay copy", hasApiKey: true, models: [{ id: "claude-sonnet-4-5" }] },
+    ]);
+    await expect(headerTitle(page)).toHaveText("Good relay copy");
   });
 
   test("Show reads the saved key back into the edit dialog; a failed read stays on the key field", async ({
@@ -2551,7 +2574,6 @@ async function failSearchesWebSave(page: Page): Promise<{ failing: boolean }> {
   return host;
 }
 
-/** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */
 /** 读回 key 的请求在 failing 为 true 时被拒（像主机读不了 keys.json），之后照常送到 daemon。 */
 async function failRevealKey(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
@@ -2592,6 +2614,7 @@ async function duplicateFromMenu(page: Page): Promise<void> {
   await expect(connectionForm(page)).toBeVisible();
 }
 
+/** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */
 async function failConnectionSave(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {

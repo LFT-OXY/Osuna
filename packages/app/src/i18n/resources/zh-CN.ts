@@ -2489,7 +2489,6 @@ export const zhCN: TranslationResources = {
       endpointDetails: "{{name}} 详情，{{status}}",
       endpointSwitch: "接口开关：{{name}}",
       order: {
-        menu: "调整 {{name}} 的顺序",
         moveUp: "上移",
         moveDown: "下移",
         moveToTop: "移到最前",
@@ -2546,6 +2545,7 @@ export const zhCN: TranslationResources = {
         duplicateTitle: "复制「{{name}}」",
         duplicateName: "{{name}} 副本",
         apiKeyCopiedPlaceholder: "沿用原来的 key {{mask}}，或粘贴另一把",
+        apiKeyCopiedPlaceholderUnmasked: "沿用原来的 key，或粘贴另一把",
         showKey: "显示",
         hideKey: "隐藏",
         apiKeyOptionalLabel: "API key（选填）",

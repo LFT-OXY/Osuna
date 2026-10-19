@@ -2476,7 +2476,6 @@ export const ko: TranslationResources = {
       endpointDetails: "{{name}} 세부 정보, {{status}}",
       endpointSwitch: "{{name}} 사용",
       order: {
-        menu: "{{name}} 순서 변경",
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
         moveToTop: "맨 위로 이동",
@@ -2533,6 +2532,7 @@ export const ko: TranslationResources = {
         duplicateTitle: "{{name}} 복제",
         duplicateName: "{{name}} 사본",
         apiKeyCopiedPlaceholder: "원래 키 {{mask}}를 그대로 사용하거나 다른 키를 붙여 넣으세요",
+        apiKeyCopiedPlaceholderUnmasked: "원래 키를 그대로 사용하거나 다른 키를 붙여 넣으세요",
         showKey: "표시",
         hideKey: "숨기기",
         apiKeyOptionalLabel: "API 키 (선택 사항)",

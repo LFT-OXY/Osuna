@@ -10,7 +10,7 @@ import {
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
  * 只管连接：名称、一把 key、自动检测用的地址、三种格式的地址；模型在详情页挑，编辑时原样带回。
- * key 只写不读：编辑时从空开始，留空提交就不带 apiKey，daemon 保留原 key；自动检测同理带 endpointId。
+ * key 框从空开始：留空提交就不带 apiKey，daemon 保留原 key；自动检测同理带 endpointId。
  * 主机声明了 apiEndpointManagement 时 key 选填：没 key 也能检测、保存，daemon 不带认证头；老主机仍要 key。
  * 同样只在这种主机上：「复制」以原来那家开一个新建表单（key 留空即沿用它的，daemon 拷），key 框旁有「显示」，
  * 编辑时按它读回已存 key 的原文放进框里；读回来的不算新 key，改了才算（照 magpie）。
@@ -297,8 +297,10 @@ export function createConnectionFormModel(
       update({ isRevealingKey: false, revealError: outcome.message });
       return;
     }
-    // 等的时候已经打了新 key：只把它显示出来，不拿原 key 盖掉。
-    if (values.apiKey !== "" || outcome.apiKey === null) {
+    // 等的时候已经打了新 key，或这家其实没存 key：只把框里的显示出来，不拿原 key 盖掉。
+    const hasTypedKey = values.apiKey !== "";
+    const savedKey = outcome.apiKey;
+    if (hasTypedKey || savedKey === null) {
       update({ isRevealingKey: false, isKeyVisible: true });
       return;
     }
@@ -306,7 +308,7 @@ export function createConnectionFormModel(
       isRevealingKey: false,
       isKeyVisible: true,
       isKeyRevealed: true,
-      keyBoxValue: outcome.apiKey,
+      keyBoxValue: savedKey,
       keyBoxGeneration: values.keyBoxGeneration + 1,
     });
   }
@@ -342,7 +344,8 @@ export function createConnectionFormModel(
         });
         return;
       }
-      if (seed.mode === "edit" && hasSavedKey && values.apiKey === "") {
+      const readsSavedKey = seed.mode === "edit" && hasSavedKey && values.apiKey === "";
+      if (readsSavedKey) {
         update({ isRevealingKey: true, revealError: null });
         void runReveal(seed.endpoint.id);
         return;

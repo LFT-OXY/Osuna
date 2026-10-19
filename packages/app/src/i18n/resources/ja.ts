@@ -2485,7 +2485,6 @@ export const ja: TranslationResources = {
       endpointDetails: "{{name}} の詳細、{{status}}",
       endpointSwitch: "{{name}} を使う",
       order: {
-        menu: "{{name}} の順番を変更",
         moveUp: "上へ移動",
         moveDown: "下へ移動",
         moveToTop: "先頭へ移動",
@@ -2539,10 +2538,12 @@ export const ja: TranslationResources = {
         namePlaceholder: "例: マイ中継",
         apiKey: "API キー",
         apiKeySavedPlaceholder: "空欄のままにすると保存済みのキーを使います",
-        duplicateTitle: "{{name}} のコピー",
+        duplicateTitle: "{{name}} を複製",
         duplicateName: "{{name}} コピー",
         apiKeyCopiedPlaceholder:
           "元のキー {{mask}} を引き継ぎます。別のキーを貼り付けることもできます",
+        apiKeyCopiedPlaceholderUnmasked:
+          "元のキーを引き継ぎます。別のキーを貼り付けることもできます",
         showKey: "表示",
         hideKey: "隠す",
         apiKeyOptionalLabel: "API キー（任意）",

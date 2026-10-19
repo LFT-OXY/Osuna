@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useSyncExternalStore } from "react";
+import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Check } from "lucide-react-native";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -65,9 +65,10 @@ export function ApiEndpointConnectionSheet({
   const isCreate = state.mode === "create";
   const keyPlaceholder = useMemo(() => {
     if (seed.mode === "duplicate" && seed.source.hasApiKey) {
-      return t("settings.apiEndpoints.form.apiKeyCopiedPlaceholder", {
-        mask: seed.source.apiKeyMask ?? "••••",
-      });
+      const mask = seed.source.apiKeyMask;
+      return mask
+        ? t("settings.apiEndpoints.form.apiKeyCopiedPlaceholder", { mask })
+        : t("settings.apiEndpoints.form.apiKeyCopiedPlaceholderUnmasked");
     }
     return state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…";
   }, [seed, state.hasSavedKey, t]);
@@ -81,6 +82,13 @@ export function ApiEndpointConnectionSheet({
   const handleDetect = useCallback(() => model.detect(), [model]);
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
   const handleToggleKey = useCallback(() => model.toggleKeyVisible(), [model]);
+  // key 框旁「显示」与地址框旁「自动检测」取两者中较宽的宽度，两个输入框右端对齐。
+  const [trailingWidth, setTrailingWidth] = useState(0);
+  const handleTrailingLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = Math.ceil(event.nativeEvent.layout.width);
+    setTrailingWidth((current) => Math.max(current, width));
+  }, []);
+  const trailingStyle = useMemo(() => ({ minWidth: trailingWidth }), [trailingWidth]);
 
   // 操作按钮放在固定底栏：表单比窗口高时内容区单独滚动，按钮一直看得见。
   const footer = useMemo(
@@ -166,17 +174,19 @@ export function ApiEndpointConnectionSheet({
               />
             </View>
             {state.canShowKey ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onPress={handleToggleKey}
-                loading={state.isRevealingKey}
-                testID="api-endpoint-connection-show-key"
-              >
-                {state.isKeyVisible
-                  ? t("settings.apiEndpoints.form.hideKey")
-                  : t("settings.apiEndpoints.form.showKey")}
-              </Button>
+              <View style={trailingStyle} onLayout={handleTrailingLayout}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={handleToggleKey}
+                  loading={state.isRevealingKey}
+                  testID="api-endpoint-connection-show-key"
+                >
+                  {state.isKeyVisible
+                    ? t("settings.apiEndpoints.form.hideKey")
+                    : t("settings.apiEndpoints.form.showKey")}
+                </Button>
+              </View>
             ) : null}
           </View>
         </Field>
@@ -208,16 +218,18 @@ export function ApiEndpointConnectionSheet({
                 testID="api-endpoint-connection-address"
               />
             </View>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={handleDetect}
-              disabled={!state.canDetect}
-              loading={state.detecting}
-              testID="api-endpoint-connection-detect"
-            >
-              {t("settings.apiEndpoints.form.detect")}
-            </Button>
+            <View style={trailingStyle} onLayout={handleTrailingLayout}>
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={handleDetect}
+                disabled={!state.canDetect}
+                loading={state.detecting}
+                testID="api-endpoint-connection-detect"
+              >
+                {t("settings.apiEndpoints.form.detect")}
+              </Button>
+            </View>
             {state.detecting ? (
               <Button variant="ghost" size="sm" onPress={handleCancelDetect}>
                 {t("common.actions.cancel")}
