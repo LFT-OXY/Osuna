@@ -990,6 +990,7 @@ export const zhCN: TranslationResources = {
         unmodifiedLine: "{{count}} 行未改动",
         unmodifiedLines: "{{count}} 行未改动",
         linesChanged: "改动 {{lines}} 行",
+        generated: "生成",
         tooLarge: "差异过大，无法显示",
         previewTooLargeTitle: "此差异过大，无法预览",
         previewTooLargeDescription: "缩小比较范围即可在此预览",

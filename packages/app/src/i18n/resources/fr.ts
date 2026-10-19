@@ -1024,6 +1024,7 @@ export const fr: TranslationResources = {
         unmodifiedLine: "{{count}} ligne inchangée",
         unmodifiedLines: "{{count}} lignes inchangées",
         linesChanged: "{{lines}} lignes modifiées",
+        generated: "Généré",
         tooLarge: "Diff trop volumineux pour être affiché",
         previewTooLargeTitle: "Ce diff est trop volumineux pour être prévisualisé",
         previewTooLargeDescription: "Réduisez la comparaison pour le prévisualiser ici",

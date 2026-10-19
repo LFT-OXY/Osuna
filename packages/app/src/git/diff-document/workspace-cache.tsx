@@ -124,6 +124,7 @@ function modelVariantKey(input: Omit<BuildDiffDocumentModelInput, "reuseFrom">):
     input.labels.unmodifiedLines(1),
     input.labels.unmodifiedLines(2),
     input.labels.linesChanged(LARGE_DIFF_FILE_CHANGED_LINES + 1),
+    input.labels.generated,
   ]);
 }
 

@@ -41,12 +41,25 @@ describe("Changes default file expansion", () => {
     expect(record.collapsedFilePaths).toEqual(["big.ts"]);
   });
 
-  it("collapses a generated file", () => {
+  it("collapses a generated file even when only three files change", () => {
     const record = recordDefaultFileExpansion(emptyRecord, [
       changedFile("a.ts"),
       changedFile("package-lock.json", 5, true),
+      changedFile("b.ts"),
     ]);
     expect(record.collapsedFilePaths).toEqual(["package-lock.json"]);
+    expect(record.expandedFilePaths).toEqual(["a.ts", "b.ts"]);
+  });
+
+  it("keeps a generated file the user expanded expanded", () => {
+    const files = [changedFile("a.ts"), changedFile("package-lock.json", 5, true)];
+    const expanded = applyCollapsedFilePaths(recordDefaultFileExpansion(emptyRecord, files), []);
+    const record = recordDefaultFileExpansion(expanded, [
+      ...files,
+      changedFile("yarn.lock", 5, true),
+    ]);
+    expect(record.collapsedFilePaths).toEqual(["yarn.lock"]);
+    expect(record.expandedFilePaths).toContain("package-lock.json");
   });
 
   it("keeps a large file the user expanded expanded", () => {

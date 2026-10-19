@@ -78,6 +78,7 @@ function modelInput(
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
       linesChanged: (count) => `${count} lines changed`,
+      generated: "Generated",
     },
     ...overrides,
   };
@@ -184,6 +185,7 @@ describe("diff document workspace cache", () => {
           tooLarge: "Too large",
           unmodifiedLines: (count) => `${count} unmodified lines`,
           linesChanged: (count) => `${count} lines changed`,
+          generated: "Generated",
         },
       }),
     );
@@ -217,6 +219,7 @@ describe("diff document workspace cache", () => {
           tooLarge: "Too large",
           unmodifiedLines: (count) => `${count} lignes inchangées`,
           linesChanged: (count) => `${count} lines changed`,
+          generated: "Generated",
         },
       }),
     );

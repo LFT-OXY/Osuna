@@ -103,6 +103,26 @@ describe("per-file checkout diff reuse", () => {
     }
   });
 
+  it("re-marks generated files when .gitattributes changes while their diffs are reused", async () => {
+    const compare = { mode: "uncommitted", includeStructured: true } as const;
+    const reuse = new CheckoutDiffFileReuse();
+    writeFileSync(join(repoDir, "alpha.ts"), moduleSource("alpha", "one"));
+    writeFileSync(join(repoDir, "beta.ts"), moduleSource("beta", "one"));
+    await expectSameAsFresh(reuse, compare);
+
+    const generatedPaths = async () =>
+      (await getCheckoutDiff(repoDir, compare, { diffFileReuse: reuse })).structured
+        ?.filter((file) => file.generated)
+        .map((file) => file.path);
+    writeFileSync(join(repoDir, ".gitattributes"), "alpha.ts linguist-generated\n");
+    expect(await generatedPaths()).toEqual(["alpha.ts"]);
+    await expectSameAsFresh(reuse, compare);
+
+    writeFileSync(join(repoDir, ".gitattributes"), "beta.ts linguist-generated\n");
+    expect(await generatedPaths()).toEqual(["beta.ts"]);
+    await expectSameAsFresh(reuse, compare);
+  });
+
   it("only diffs the file that changed since the previous run", async () => {
     const compare = { mode: "uncommitted", includeStructured: true } as const;
     const reuse = new CheckoutDiffFileReuse();

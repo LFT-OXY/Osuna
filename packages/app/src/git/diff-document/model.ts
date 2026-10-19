@@ -131,10 +131,7 @@ export function buildDiffDocumentModel(input: BuildDiffDocumentModelInput): Diff
       rowStart,
       rowEnd: rows.length,
       isCollapsed,
-      headerNote:
-        isCollapsed && isLargeDiffFile(file)
-          ? input.labels.linesChanged(diffFileChangedLines(file))
-          : null,
+      headerNote: collapsedHeaderNote(file, isCollapsed, input.labels),
     });
   }
 
@@ -148,6 +145,17 @@ export function buildDiffDocumentModel(input: BuildDiffDocumentModelInput): Diff
     viewportWidth: input.viewportWidth,
     reviewGeometryKey: currentReviewGeometryKey,
   };
+}
+
+function collapsedHeaderNote(
+  file: BuildDiffDocumentModelInput["files"][number],
+  isCollapsed: boolean,
+  labels: BuildDiffDocumentModelInput["labels"],
+): string | null {
+  if (!isCollapsed) return null;
+  if (file.generated === true) return labels.generated;
+  if (isLargeDiffFile(file)) return labels.linesChanged(diffFileChangedLines(file));
+  return null;
 }
 
 function appendReusableFileRows(candidate: {

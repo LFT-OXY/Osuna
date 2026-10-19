@@ -31,6 +31,7 @@ import {
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { runGitCommand, type RunGitCommand } from "./run-git-command.js";
 import { readGitFileContents } from "./git-file-contents.js";
+import { findGeneratedPaths } from "./generated-files.js";
 import type { CheckoutDiffFileReuse, CheckoutDiffReuseRun } from "./checkout-diff-file-reuse.js";
 import { isPaseoOwnedWorktreeCwd, resolvePaseoWorktreesBaseRoot } from "./worktree.js";
 import {
@@ -2131,16 +2132,23 @@ export const CHECKOUT_DIFF_MAX_STRUCTURED_BYTES =
 interface StructuredDiffAccumulator {
   files: ParsedDiffFile[];
   serializedBytes: number;
+  generatedPaths: ReadonlySet<string>;
 }
 
-function createStructuredDiffAccumulator(): StructuredDiffAccumulator {
-  return { files: [], serializedBytes: Buffer.byteLength("[]", "utf8") };
+function createStructuredDiffAccumulator(
+  generatedPaths: ReadonlySet<string>,
+): StructuredDiffAccumulator {
+  return { files: [], serializedBytes: Buffer.byteLength("[]", "utf8"), generatedPaths };
 }
 
 function appendStructuredFile(
   structured: StructuredDiffAccumulator,
-  file: ParsedDiffFile,
+  builtFile: ParsedDiffFile,
 ): boolean {
+  // 每次计算都重新标，复用的缓存对象不带 generated，.gitattributes 改了下一次就生效。
+  const file = structured.generatedPaths.has(builtFile.path)
+    ? { ...builtFile, generated: true }
+    : builtFile;
   const separatorBytes = structured.files.length > 0 ? 1 : 0;
   const fileBytes = Buffer.byteLength(JSON.stringify(file), "utf8");
   const nextBytes = structured.serializedBytes + separatorBytes + fileBytes;
@@ -3506,7 +3514,14 @@ export async function getCheckoutDiff(
     ignoreWhitespace,
   });
 
-  const structured = createStructuredDiffAccumulator();
+  const structured = createStructuredDiffAccumulator(
+    compare.includeStructured
+      ? await findGeneratedPaths(
+          cwd,
+          changes.map((change) => change.path),
+        )
+      : new Set(),
+  );
   let diffText = "";
   let diffBytes = 0;
   const appendDiff = (text: string) => {

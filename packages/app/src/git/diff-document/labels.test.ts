@@ -11,10 +11,12 @@ describe("diff document labels", () => {
     await i18n.changeLanguage("en");
     expect(diffDocumentLabels(i18n.t).linesChanged(1500)).toBe("1,500 lines changed");
     expect(diffDocumentLabels(i18n.t).linesChanged(1234567)).toBe("1,234,567 lines changed");
+    expect(diffDocumentLabels(i18n.t).generated).toBe("Generated");
   });
 
   it("uses the Chinese wording in a Chinese interface", async () => {
     await i18n.changeLanguage("zh-CN");
     expect(diffDocumentLabels(i18n.t).linesChanged(1500)).toBe("改动 1,500 行");
+    expect(diffDocumentLabels(i18n.t).generated).toBe("生成");
   });
 });

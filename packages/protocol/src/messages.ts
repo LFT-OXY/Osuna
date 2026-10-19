@@ -2854,6 +2854,8 @@ const ParsedDiffFileSchema = z.object({
   deletions: z.number(),
   hunks: z.array(DiffHunkSchema),
   status: z.enum(["ok", "too_large", "binary"]).optional(),
+  // 只在为 true 时发送；旧 daemon 不发，客户端按不是 Generated file 处理。
+  generated: z.boolean().optional(),
 });
 
 const FileExplorerEntrySchema = z.object({

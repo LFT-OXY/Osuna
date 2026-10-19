@@ -999,6 +999,7 @@ export const ar: TranslationResources = {
         unmodifiedLine: "أسطر بلا تغيير: {{count}}",
         unmodifiedLines: "أسطر بلا تغيير: {{count}}",
         linesChanged: "أسطر متغيرة: {{lines}}",
+        generated: "مُولَّد",
         tooLarge: "الفرق كبير جدًا بحيث لا يمكن عرضه",
         previewTooLargeTitle: "هذا الفرق كبير جدًا بحيث لا يمكن معاينته",
         previewTooLargeDescription: "ضيّق نطاق المقارنة لمعاينتها هنا",

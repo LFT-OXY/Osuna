@@ -120,6 +120,7 @@ function build(layout: "unified" | "split") {
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
       linesChanged: (count) => `${count} lines changed`,
+      generated: "Generated",
     },
   };
   return buildDiffDocumentModel(input);

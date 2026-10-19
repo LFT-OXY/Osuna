@@ -167,7 +167,7 @@ export interface DiffFileSection {
   rowStart: number;
   rowEnd: number;
   isCollapsed: boolean;
-  /** 收起的大文件在文件头标出的改动行数，其余为 null。 */
+  /** 收起的 Generated file 标「生成」，收起的大文件标改动行数，其余为 null。 */
   headerNote: string | null;
 }
 
@@ -206,6 +206,8 @@ export interface BuildDiffDocumentModelInput {
     unmodifiedLines: (count: number) => string;
     /** 收起的大文件文件头标签。 */
     linesChanged: (count: number) => string;
+    /** 收起的 Generated file 文件头标签。 */
+    generated: string;
   };
   materializationWindow?: { top: number; height: number };
   /** A geometry-compatible model whose unchanged file measurements may be reused. */

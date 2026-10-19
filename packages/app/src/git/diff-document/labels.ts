@@ -16,5 +16,6 @@ export function diffDocumentLabels(t: TFunction): BuildDiffDocumentModelInput["l
     linesChanged(count) {
       return t("workspace.git.diff.linesChanged", { lines: lineCountFormatter.format(count) });
     },
+    generated: t("workspace.git.diff.generated"),
   };
 }

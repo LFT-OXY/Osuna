@@ -1016,6 +1016,7 @@ export const ru: TranslationResources = {
         unmodifiedLine: "Без изменений, строк: {{count}}",
         unmodifiedLines: "Без изменений, строк: {{count}}",
         linesChanged: "Изменено строк: {{lines}}",
+        generated: "Сгенерирован",
         tooLarge: "Дифф слишком велик для отображения",
         previewTooLargeTitle: "Этот дифф слишком велик для предварительного просмотра",
         previewTooLargeDescription: "Сузьте диапазон сравнения, чтобы просмотреть дифф здесь",

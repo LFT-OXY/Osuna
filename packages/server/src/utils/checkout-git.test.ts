@@ -1439,6 +1439,54 @@ const x = 1;
     expect(diff.diff).not.toContain("base-only.txt");
   });
 
+  it("marks lock files, linguist-generated files and minified assets as generated", async () => {
+    writeFileSync(
+      join(repoDir, ".gitattributes"),
+      [
+        "schema/** linguist-generated",
+        "schema/keep.ts linguist-generated=false",
+        "vendor.min.js linguist-generated=false",
+      ].join("\n") + "\n",
+    );
+    execFileSync("git", ["add", ".gitattributes"], { cwd: repoDir });
+    execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "attributes"], {
+      cwd: repoDir,
+    });
+    mkdirSync(join(repoDir, "schema"));
+    mkdirSync(join(repoDir, "web"));
+    for (const path of [
+      "package-lock.json",
+      "yarn.lock",
+      "schema/types.ts",
+      "schema/keep.ts",
+      "web/app.min.js",
+      "web/app.min.css",
+      "web/app.js.map",
+      "vendor.min.js",
+      "src.ts",
+    ]) {
+      writeFileSync(join(repoDir, path), `content of ${path}\n`);
+    }
+    writeFileSync(join(repoDir, "file.txt"), "changed\n");
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      Object.fromEntries((diff.structured ?? []).map((file) => [file.path, file.generated])),
+    ).toEqual({
+      "file.txt": undefined,
+      "package-lock.json": true,
+      "schema/keep.ts": undefined,
+      "schema/types.ts": true,
+      "src.ts": undefined,
+      "vendor.min.js": undefined,
+      "web/app.js.map": true,
+      "web/app.min.css": true,
+      "web/app.min.js": true,
+      "yarn.lock": true,
+    });
+  });
+
   it("does not throw on large diffs (marks file as too_large)", async () => {
     const large = Array.from({ length: 200_000 }, (_, i) => `line ${i}`).join("\n") + "\n";
     writeFileSync(join(repoDir, "file.txt"), large);

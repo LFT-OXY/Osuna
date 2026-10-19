@@ -71,6 +71,7 @@ function input(overrides: Partial<BuildDiffDocumentModelInput> = {}): BuildDiffD
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified line${count === 1 ? "" : "s"}`,
       linesChanged: (count) => `${count} lines changed`,
+      generated: "Generated",
     },
     ...overrides,
   };
@@ -331,6 +332,24 @@ describe("diff document model", () => {
     expect(model.files.map((section) => section.headerNote)).toEqual([
       "1500 lines changed",
       null,
+      null,
+    ]);
+  });
+
+  it("labels a collapsed generated file as generated, even when it is also large", () => {
+    const model = buildDiffDocumentModel(
+      input({
+        files: [
+          { ...file("package-lock.json"), additions: 4000, generated: true },
+          { ...file("yarn.lock"), generated: true },
+          { ...file("open.lock"), generated: true },
+        ],
+        collapsedFilePaths: new Set(["package-lock.json", "yarn.lock"]),
+      }),
+    );
+    expect(model.files.map((section) => section.headerNote)).toEqual([
+      "Generated",
+      "Generated",
       null,
     ]);
   });

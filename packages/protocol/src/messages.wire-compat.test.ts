@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
+  CheckoutDiffUpdateSchema,
   AgentTimelineItemPayloadSchema,
   ServerInfoStatusPayloadSchema,
   SessionOutboundMessageSchema,
@@ -30,6 +31,37 @@ test("terminal listings accept older rows and retain new per-terminal directorie
     },
   };
   expect(SessionOutboundMessageSchema.parse(withDirectory)).toEqual(withDirectory);
+});
+
+test("checkout diff files parse with and without the generated mark", () => {
+  const file = {
+    path: "package-lock.json",
+    isNew: false,
+    isDeleted: false,
+    additions: 1200,
+    deletions: 40,
+    hunks: [],
+    status: "ok",
+  };
+  const update = (files: unknown[]) => ({
+    type: "checkout_diff_update",
+    payload: { subscriptionId: "diff-1", cwd: "/workspace", files, error: null },
+  });
+  // 加 generated 之前的客户端：file 结构里没有这个字段。
+  const payload = CheckoutDiffUpdateSchema.shape.payload;
+  const LegacyCheckoutDiffUpdateSchema = CheckoutDiffUpdateSchema.extend({
+    payload: payload.extend({
+      files: z.array(payload.shape.files.element.omit({ generated: true })),
+    }),
+  });
+
+  const fromNewDaemon = update([{ ...file, generated: true }]);
+  expect(LegacyCheckoutDiffUpdateSchema.parse(fromNewDaemon).payload.files[0]?.path).toBe(
+    "package-lock.json",
+  );
+  expect(SessionOutboundMessageSchema.parse(fromNewDaemon)).toEqual(fromNewDaemon);
+  const fromOldDaemon = update([file]);
+  expect(SessionOutboundMessageSchema.parse(fromOldDaemon)).toEqual(fromOldDaemon);
 });
 
 test("provider session listings accept older rows and retain each Codex row's model provider", () => {

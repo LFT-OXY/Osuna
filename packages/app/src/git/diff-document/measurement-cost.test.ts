@@ -91,6 +91,7 @@ function shapedCharactersFor(options: { lineCount: number; lineLength: number })
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
       linesChanged: (count) => `${count} lines changed`,
+      generated: "Generated",
     },
   };
   buildDiffDocumentModel(input);

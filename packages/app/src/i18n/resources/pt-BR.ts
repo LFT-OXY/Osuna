@@ -1024,6 +1024,7 @@ export const ptBR: TranslationResources = {
         unmodifiedLine: "{{count}} linha sem alterações",
         unmodifiedLines: "{{count}} linhas sem alterações",
         linesChanged: "{{lines}} linhas alteradas",
+        generated: "Gerado",
         tooLarge: "Diff grande demais para exibir",
         previewTooLargeTitle: "Este diff é grande demais para visualizar",
         previewTooLargeDescription: "Reduza a comparação para visualizá-la aqui",

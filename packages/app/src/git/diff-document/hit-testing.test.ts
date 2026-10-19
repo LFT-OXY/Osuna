@@ -221,6 +221,7 @@ function buildModel(changedContent: string, overrides: Partial<BuildDiffDocument
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
       linesChanged: (count) => `${count} lines changed`,
+      generated: "Generated",
     },
     ...overrides,
   });
