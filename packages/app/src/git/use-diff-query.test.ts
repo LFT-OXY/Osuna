@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ParsedDiffFile } from "@getpaseo/protocol/messages";
 import {
   deriveCheckoutDiffResult,
+  isCheckoutDiffSubscriptionWanted,
   resolveCheckoutDiffSubscription,
   subscribeCheckoutDiffFiles,
 } from "./use-diff-query";
@@ -149,5 +150,33 @@ describe("resolveCheckoutDiffSubscription", () => {
     expect(
       resolveCheckoutDiffSubscription({ ...base, filesOnly: true, filesOnlySupported: false }),
     ).toEqual(full);
+  });
+});
+
+describe("isCheckoutDiffSubscriptionWanted", () => {
+  const shown = {
+    enabled: true,
+    retainedPanelActive: true,
+    appVisible: true,
+    isConnected: true,
+    cwd: "/repo",
+  };
+
+  it("subscribes while the panel is active and the page is visible", () => {
+    expect(isCheckoutDiffSubscriptionWanted(shown)).toBe(true);
+  });
+
+  // 最小化窗口、切到别的浏览器标签、原生端进后台：页面 hidden 时释放订阅
+  it("releases the subscription while the page is hidden", () => {
+    expect(isCheckoutDiffSubscriptionWanted({ ...shown, appVisible: false })).toBe(false);
+  });
+
+  it("releases the subscription while the retained panel is inactive", () => {
+    expect(isCheckoutDiffSubscriptionWanted({ ...shown, retainedPanelActive: false })).toBe(false);
+  });
+
+  it("does not subscribe while disconnected or without a cwd", () => {
+    expect(isCheckoutDiffSubscriptionWanted({ ...shown, isConnected: false })).toBe(false);
+    expect(isCheckoutDiffSubscriptionWanted({ ...shown, cwd: "" })).toBe(false);
   });
 });

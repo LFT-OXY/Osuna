@@ -606,6 +606,80 @@ describe("server data push router", () => {
     }
   });
 
+  it("releases a diff while its page is hidden and shows the latest snapshot on return", () => {
+    vi.useFakeTimers();
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "diff-hidden";
+    const cwd = "/repo";
+    const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false);
+    // 页面 hidden 时 useCheckoutDiffQuery 把 route 的 enabled 置 false
+    const options = (pageVisible: boolean) => ({
+      queryKey,
+      queryFn: skipToken as typeof skipToken,
+      gcTime: Infinity,
+      meta: checkoutDiffPushRoute({
+        enabled: pageVisible,
+        serverId,
+        cwd,
+        subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+        compare: { mode: "uncommitted", ignoreWhitespace: false },
+      }),
+    });
+    const observer = new QueryObserver(queryClient, options(true));
+    const unsubscribe = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    const diffFile = (path: string) => ({
+      path,
+      isNew: false,
+      isDeleted: false,
+      additions: 1,
+      deletions: 0,
+      hunks: [],
+    });
+    const push = (subscriptionId: string, path: string) =>
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: { subscriptionId, cwd, files: [diffFile(path)], error: null },
+      });
+    const shownPaths = () =>
+      queryClient
+        .getQueryData<{ files: Array<{ path: string }> }>(queryKey)
+        ?.files.map((file) => file.path);
+    try {
+      const first = fake.subscribeCheckoutDiffCalls[0]!.subscriptionId;
+      push(first, "before-hide.ts");
+      push(first, "throttled.ts");
+      expect(shownPaths()).toEqual(["before-hide.ts"]);
+
+      observer.setOptions(options(false));
+      expect(fake.unsubscribeCheckoutDiffCalls).toEqual([first]);
+      push(first, "while-hidden.ts");
+      vi.advanceTimersByTime(5000);
+      expect(shownPaths()).toEqual(["before-hide.ts"]);
+
+      observer.setOptions(options(true));
+      expect(fake.subscribeCheckoutDiffCalls).toHaveLength(2);
+      const second = fake.subscribeCheckoutDiffCalls[1]!.subscriptionId;
+      fake.emit({
+        type: "subscribe_checkout_diff_response",
+        payload: {
+          subscriptionId: second,
+          cwd,
+          files: [diffFile("while-hidden.ts"), diffFile("latest.ts")],
+          error: null,
+          requestId: "resume",
+        },
+      });
+      expect(shownPaths()).toEqual(["latest.ts", "while-hidden.ts"]);
+    } finally {
+      unsubscribe();
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
+  });
+
   it("does not retry failed subscriptions on unrelated cache events", async () => {
     const queryClient = new QueryClient();
     const fake = createFakeClient({ rejectCheckoutDiffSubscribe: true });

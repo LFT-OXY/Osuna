@@ -2,6 +2,7 @@ import { shareCheckoutDiff } from "./diff-sharing";
 import { hashKey, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useAppVisible } from "@/hooks/use-app-visible";
 import { useReplicaQuery } from "@/data/query";
 import { checkoutDiffPushRoute } from "@/data/push-router";
 import { useHostFeature } from "@/runtime/host-features";
@@ -84,6 +85,29 @@ export function resolveCheckoutDiffSubscription(input: CheckoutDiffSubscriptionI
   };
 }
 
+interface CheckoutDiffSubscriptionDemand {
+  enabled: boolean;
+  retainedPanelActive: boolean;
+  appVisible: boolean;
+  isConnected: boolean;
+  cwd: string;
+}
+
+/**
+ * 只在面板活跃、页面可见时订阅。页面 hidden（桌面最小化、切走浏览器标签、原生进后台）
+ * 与 tab 不活跃同样释放订阅；恢复后重新订阅，订阅响应带回最新快照。
+ * 只看 hidden、不看失焦：窗口仍摆在屏幕上时照常刷新。
+ */
+export function isCheckoutDiffSubscriptionWanted(input: CheckoutDiffSubscriptionDemand): boolean {
+  return Boolean(
+    input.enabled &&
+    input.retainedPanelActive &&
+    input.appVisible &&
+    input.isConnected &&
+    input.cwd,
+  );
+}
+
 export function useCheckoutDiffQuery({
   serverId,
   cwd,
@@ -96,7 +120,7 @@ export function useCheckoutDiffQuery({
   onFiles,
 }: UseCheckoutDiffQueryOptions) {
   const retainedPanelActive = useRetainedPanelActive();
-  const queryEnabled = enabled && retainedPanelActive;
+  const appVisible = useAppVisible();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const filesOnlySupported = useHostFeature(serverId, "checkoutDiffFilesOnly");
   const { queryKey, subscriptionId, compare } = useMemo(
@@ -113,7 +137,13 @@ export function useCheckoutDiffQuery({
       }),
     [serverId, cwd, mode, baseRef, ignoreWhitespace, queryScope, filesOnly, filesOnlySupported],
   );
-  const routeEnabled = Boolean(queryEnabled && isConnected && cwd);
+  const routeEnabled = isCheckoutDiffSubscriptionWanted({
+    enabled,
+    retainedPanelActive,
+    appVisible,
+    isConnected,
+    cwd,
+  });
 
   const query = useReplicaQuery<CheckoutDiffQueryPayload>({
     queryKey,
