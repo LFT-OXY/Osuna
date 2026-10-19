@@ -3,7 +3,7 @@
   "name": "cli-wiring-web-search",
   "title": "Claude Code / Codex 接入细节与联网搜索放行",
   "description": "修 Claude Code、Codex 接内置中转站的细节问题（块 2），定 Codex 的接法，加每家接口的「这家自己会联网搜索」开关",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "server",
