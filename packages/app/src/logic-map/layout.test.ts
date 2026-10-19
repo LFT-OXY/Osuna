@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { LogicMapSkeleton } from "@getpaseo/protocol/messages";
-import { buildEmptyLogicMap, buildLoginLogicMap } from "@/test/logic-map-fixtures";
-import { LOGIC_MAP_EDGE_CLEARANCE, layoutLogicMapLayer, type LogicMapNodeBox } from "./layout";
+import {
+  buildEmptyLogicMap,
+  buildLoginLogicMap,
+  buildNestedLogicMap,
+} from "@/test/logic-map-fixtures";
+import {
+  LOGIC_MAP_EDGE_CLEARANCE,
+  layoutLogicMapLayer,
+  logicMapLayerTrail,
+  type LogicMapNodeBox,
+} from "./layout";
 
 function overlaps(a: LogicMapNodeBox, b: LogicMapNodeBox): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -200,6 +209,66 @@ describe("logic map layer layout", () => {
       "sms-check->sms-ok",
       "sms-check->sms-fail",
     ]);
+  });
+
+  it("lays out each layer of nested subgraphs with only that layer's own nodes and lines", () => {
+    const map = buildNestedLogicMap();
+    const layerContents = (layerId: string | null) => {
+      const layout = layoutLogicMapLayer(map, layerId);
+      return {
+        nodes: layout.nodes.map((box) => box.id),
+        edges: layout.edges.map((route) => `${route.from}->${route.to}`),
+        counts: layout.nodes
+          .filter((box) => box.subgraphNodeCount !== null)
+          .map((box) => `${box.id}:${box.subgraphNodeCount}`),
+      };
+    };
+
+    // 跨层的 open->enter-password 哪一层都不画。
+    expect(layerContents(null)).toEqual({
+      nodes: ["open", "password-login", "signed-in"],
+      edges: ["open->password-login", "password-login->signed-in"],
+      counts: ["password-login:4"],
+    });
+    expect(layerContents("password-login")).toEqual({
+      nodes: ["enter-password", "check-password", "reset", "password-ok"],
+      edges: [
+        "enter-password->check-password",
+        "check-password->password-ok",
+        "check-password->reset",
+      ],
+      counts: ["reset:2"],
+    });
+    expect(layerContents("reset")).toEqual({
+      nodes: ["send-mail", "mail-sent"],
+      edges: ["send-mail->mail-sent"],
+      counts: [],
+    });
+  });
+
+  it("names the path from the top layer down to a subgraph layer", () => {
+    const map = buildNestedLogicMap();
+
+    expect(logicMapLayerTrail(map, null)).toEqual([]);
+    expect(logicMapLayerTrail(map, "password-login")).toEqual([
+      { id: "password-login", title: "密码登录" },
+    ]);
+    expect(logicMapLayerTrail(map, "reset")).toEqual([
+      { id: "password-login", title: "密码登录" },
+      { id: "reset", title: "找回密码" },
+    ]);
+  });
+
+  it("has no path to a layer that is gone or is not a subgraph node", () => {
+    const map = buildNestedLogicMap();
+    const withoutReset = {
+      ...map,
+      nodes: map.nodes.filter((node) => node.id !== "reset" && node.parentId !== "reset"),
+    };
+
+    expect(logicMapLayerTrail(withoutReset, "reset")).toBeNull();
+    expect(logicMapLayerTrail(map, "check-password")).toBeNull();
+    expect(logicMapLayerTrail(map, "missing")).toBeNull();
   });
 
   it("gives an empty map an empty canvas with no start node", () => {

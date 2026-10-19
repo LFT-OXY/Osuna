@@ -4219,6 +4219,8 @@ export const es: TranslationResources = {
       },
       subgraphTagOne: "Subgrafo · {{count}} nodo",
       subgraphTagMany: "Subgrafo · {{count}} nodos",
+      enterSubgraph: "Abrir subgrafo {{title}}",
+      breadcrumb: "Ruta del mapa lógico",
       pendingLink: "Sin documento vinculado",
     },
   },

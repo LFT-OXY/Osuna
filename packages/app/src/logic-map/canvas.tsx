@@ -1,7 +1,15 @@
-import { memo, useCallback, useEffect, useState, type ComponentType } from "react";
-import { Text, View } from "react-native";
+import { memo, useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { Pressable, Text, View } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
-import { Flag, House, Repeat, Split, TextAlignStart, TriangleAlert } from "lucide-react-native";
+import {
+  ChevronRight,
+  Flag,
+  House,
+  Repeat,
+  Split,
+  TextAlignStart,
+  TriangleAlert,
+} from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -68,10 +76,13 @@ function useEnteringNodeIds(layout: LogicMapLayout): ReadonlySet<string> {
 export const LogicMapCanvas = memo(function LogicMapCanvas({
   layout,
   selectedNodeId,
+  onEnterSubgraph,
 }: {
   layout: LogicMapLayout;
   /** 选中的节点画蓝色外圈；没有选中时为 null。 */
   selectedNodeId: string | null;
+  /** 点子图节点：进入它的下一层。 */
+  onEnterSubgraph: (nodeId: string) => void;
 }) {
   const reduceMotion = useReduceMotionEnabled();
   const animate = isWeb && !reduceMotion;
@@ -90,6 +101,7 @@ export const LogicMapCanvas = memo(function LogicMapCanvas({
           animate={animate}
           entering={enteringIds.has(node.id)}
           selected={node.id === selectedNodeId}
+          onEnterSubgraph={onEnterSubgraph}
         />
       ))}
     </View>
@@ -140,17 +152,17 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({
   animate,
   entering,
   selected,
+  onEnterSubgraph,
 }: {
   node: LogicMapNodeBox;
   animate: boolean;
   entering: boolean;
   selected: boolean;
+  onEnterSubgraph: (nodeId: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
   const handlePointerLeave = useCallback(() => setHovered(false), []);
-  const tone = cardTone(node);
-  const Glyph = node.failure ? TriangleAlert : KIND_GLYPHS[node.kind];
   const fadesIn = animate && entering;
   const positionStyle = inlineUnistylesStyle({
     left: node.x,
@@ -174,30 +186,9 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({
           onPointerLeave={handlePointerLeave}
           testID={`logic-map-node-${node.id}`}
         >
-          <View style={styles.header}>
-            <View style={[styles.iconBlock, toneStyles[tone]]}>
-              <Glyph
-                size={LOGIC_MAP_ICON_SIZE}
-                color={LOGIC_MAP_GLYPH_COLOR}
-                strokeWidth={LOGIC_MAP_ICON_STROKE}
-              />
-            </View>
-            <Text style={styles.title} numberOfLines={1} testID={`logic-map-node-title-${node.id}`}>
-              {node.title}
-            </Text>
-          </View>
-          {node.branches.length > 0 ? (
-            <View style={styles.rows}>
-              {node.branches.map((branch, index) => (
-                <BranchRow
-                  key={`${branch.label}-${branch.exit.y}`}
-                  branch={branch}
-                  testID={`logic-map-branch-${node.id}-${index}`}
-                />
-              ))}
-            </View>
-          ) : null}
-          <NodeTags node={node} />
+          <NodeCardBody node={node} onEnterSubgraph={onEnterSubgraph}>
+            <NodeCardContent node={node} />
+          </NodeCardBody>
         </View>
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={6} testID="logic-map-node-tooltip">
@@ -206,6 +197,72 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({
     </Tooltip>
   );
 });
+
+function NodeCardContent({ node }: { node: LogicMapNodeBox }) {
+  const tone = cardTone(node);
+  const Glyph = node.failure ? TriangleAlert : KIND_GLYPHS[node.kind];
+  const isSubgraph = node.kind === "subgraph";
+  return (
+    <>
+      <View style={styles.header}>
+        <View style={[styles.iconBlock, toneStyles[tone]]}>
+          <Glyph
+            size={LOGIC_MAP_ICON_SIZE}
+            color={LOGIC_MAP_GLYPH_COLOR}
+            strokeWidth={LOGIC_MAP_ICON_STROKE}
+          />
+        </View>
+        <Text style={styles.title} numberOfLines={1} testID={`logic-map-node-title-${node.id}`}>
+          {node.title}
+        </Text>
+        {isSubgraph ? <ThemedChevron size={ICON_SIZE.sm} /> : null}
+      </View>
+      {node.branches.length > 0 ? (
+        <View style={styles.rows}>
+          {node.branches.map((branch, index) => (
+            <BranchRow
+              key={`${branch.label}-${branch.exit.y}`}
+              branch={branch}
+              testID={`logic-map-branch-${node.id}-${index}`}
+            />
+          ))}
+        </View>
+      ) : null}
+      <NodeTags node={node} />
+    </>
+  );
+}
+
+/** 卡片里面这一层：子图卡片整张可按（进入下一层），其他卡片只是展示。 */
+function NodeCardBody({
+  node,
+  onEnterSubgraph,
+  children,
+}: {
+  node: LogicMapNodeBox;
+  onEnterSubgraph: (nodeId: string) => void;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => onEnterSubgraph(node.id), [node.id, onEnterSubgraph]);
+  if (node.kind !== "subgraph") {
+    return <View style={styles.body}>{children}</View>;
+  }
+  return (
+    <Pressable
+      style={styles.body}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={t("logicMap.panel.enterSubgraph", { title: node.title })}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+const ThemedChevron = withUnistyles(ChevronRight, (theme: Theme) => ({
+  color: theme.colors.logicMap.branchLabel,
+}));
 
 function BranchRow({ branch, testID }: { branch: LogicMapBranch; testID: string }) {
   const { t } = useTranslation();
@@ -273,7 +330,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   card: {
     position: "absolute",
-    padding: LOGIC_MAP_CARD.padding,
     borderRadius: theme.borderRadius.xl,
     backgroundColor: theme.colors.logicMap.card,
     boxShadow: theme.colors.logicMap.cardShadow,
@@ -296,6 +352,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   cardSelected: {
     boxShadow: theme.colors.logicMap.cardShadowSelected,
+  },
+  // 内边距放在卡片里面这一层：子图卡片这一层可按，点卡片任何位置都算点到。
+  body: {
+    flex: 1,
+    padding: LOGIC_MAP_CARD.padding,
+    borderRadius: theme.borderRadius.xl,
   },
   header: {
     height: LOGIC_MAP_CARD.headerHeight,

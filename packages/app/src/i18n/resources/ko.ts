@@ -4157,6 +4157,8 @@ export const ko: TranslationResources = {
       },
       subgraphTagOne: "하위 그래프 · 노드 {{count}}개",
       subgraphTagMany: "하위 그래프 · 노드 {{count}}개",
+      enterSubgraph: "하위 그래프 {{title}} 열기",
+      breadcrumb: "로직 맵 경로",
       pendingLink: "문서 미연결",
     },
   },

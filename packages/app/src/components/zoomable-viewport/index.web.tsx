@@ -44,6 +44,15 @@ function distance(points: ViewportPoint[]): number {
   return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
 }
 
+/**
+ * 指针真的拖动起来才捕获：按下就捕获的话，抬起和点击都落到画布上，内容里可点的东西（逻辑图的子图卡片）收不到。
+ */
+function capturePointer(event: React.PointerEvent<HTMLDivElement>) {
+  if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+}
+
 export function ZoomableViewport({
   contentSize,
   children,
@@ -189,7 +198,6 @@ export function ZoomableViewport({
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (event.pointerType !== "mouse") setHasTouchInput(true);
       if (pointersRef.current.size === 0) suppressClickRef.current = false;
-      event.currentTarget.setPointerCapture(event.pointerId);
       pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       const points = Array.from(pointersRef.current.values());
       if (points.length >= 2) {
@@ -220,6 +228,7 @@ export function ZoomableViewport({
       const points = Array.from(pointersRef.current.values());
       if (gesture?.type === "pinch" && points.length >= 2) {
         suppressClickRef.current = true;
+        capturePointer(event);
         const nextMidpoint = midpoint(points);
         const nextDistance = distance(points);
         const panned = panContent({
@@ -249,6 +258,7 @@ export function ZoomableViewport({
         Math.hypot(event.clientX - gesture.startPoint.x, event.clientY - gesture.startPoint.y) > 3
       ) {
         suppressClickRef.current = true;
+        capturePointer(event);
       }
       commitTransform(
         panContent({

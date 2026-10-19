@@ -10,10 +10,11 @@ import { Text, View } from "react-native";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { CircleAlert, House, TriangleAlert, Workflow } from "lucide-react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { ChevronRight, CircleAlert, House, TriangleAlert, Workflow } from "lucide-react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type {
+  LogicMapSkeleton,
   WorkspaceLogicMapReadResult,
   WorkspaceLogicMapSummary,
 } from "@getpaseo/protocol/messages";
@@ -36,8 +37,11 @@ import {
   LOGIC_MAP_CARD,
   LOGIC_MAP_CARD_MIN_HEIGHT,
   layoutLogicMapLayer,
+  logicMapLayerTrail,
+  type LogicMapLayerStep,
   type LogicMapLayout,
 } from "./layout";
+import { CONTROL_HEIGHT, ICON_SIZE, type Theme } from "@/styles/theme";
 
 export type LogicMapClient = Pick<
   DaemonClient,
@@ -182,9 +186,11 @@ function LogicMapPanelContent({
       : skipToken,
   });
   const result = selectedMapName ? readQuery.data : undefined;
+  const skeleton = result?.kind === "ok" ? result.map : null;
+  const { layerId, trail, setLayerId } = useCurrentLayer(skeleton);
   const layout = useMemo(
-    () => (result?.kind === "ok" ? layoutLogicMapLayer(result.map, null) : null),
-    [result],
+    () => (skeleton ? layoutLogicMapLayer(skeleton, layerId) : null),
+    [layerId, skeleton],
   );
 
   if (listQuery.isError) {
@@ -216,6 +222,7 @@ function LogicMapPanelContent({
       </StateCanvas>
     );
   }
+  const selectedLabel = mapLabel(selectedMap, t);
   return (
     <View style={styles.panel}>
       <LogicMapHeader
@@ -224,17 +231,39 @@ function LogicMapPanelContent({
         nodeCount={layout?.nodes.length ?? null}
         onSelect={setPickedMapName}
       />
+      {trail.length > 0 ? (
+        <LogicMapBreadcrumb mapLabel={selectedLabel} trail={trail} onSelectLayer={setLayerId} />
+      ) : null}
       <LogicMapBody
-        mapLabel={mapLabel(selectedMap, t)}
+        mapLabel={selectedLabel}
         result={result}
         layout={layout}
         error={readQuery.isError ? readQuery.error : null}
         onRetry={readQuery.refetch}
         selectedNodeId={selectedNodeId}
+        layerId={layerId}
+        onEnterSubgraph={setLayerId}
       />
     </View>
   );
 }
+
+/**
+ * 正在看的层（顶层为 null）。换了图或 Agent 改了图之后这一层不在了，就回到顶层，并清掉记下的层，
+ * 免得同名的层以后再出现时又跳进去。
+ */
+function useCurrentLayer(skeleton: LogicMapSkeleton | null) {
+  const [pickedLayerId, setLayerId] = useState<string | null>(null);
+  const pickedTrail = skeleton ? logicMapLayerTrail(skeleton, pickedLayerId) : null;
+  const layerGone = skeleton !== null && pickedTrail === null;
+  useEffect(() => {
+    if (layerGone) setLayerId(null);
+  }, [layerGone]);
+  const layerId = pickedTrail ? pickedLayerId : null;
+  return { layerId, trail: pickedTrail ?? NO_TRAIL, setLayerId };
+}
+
+const NO_TRAIL: readonly LogicMapLayerStep[] = [];
 
 /**
  * Agent 改了图之后 daemon 推送变更，按图名让列表和那张图重新读取。重新连上时这期间的推送已经丢了，
@@ -345,6 +374,85 @@ function LogicMapHeader({
   );
 }
 
+/** 子图内层才有的一行路径：图名 › 子图 › …，最后一级是当前层，前面每一级点了回到那一层。 */
+function LogicMapBreadcrumb({
+  mapLabel: label,
+  trail,
+  onSelectLayer,
+}: {
+  mapLabel: string;
+  trail: readonly LogicMapLayerStep[];
+  onSelectLayer: (layerId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const current = trail[trail.length - 1];
+  const parents = trail.slice(0, -1);
+  return (
+    <View
+      style={styles.breadcrumb}
+      accessibilityRole="toolbar"
+      accessibilityLabel={t("logicMap.panel.breadcrumb")}
+      testID="logic-map-breadcrumb"
+    >
+      <BreadcrumbParent
+        layerId={null}
+        title={label}
+        onSelectLayer={onSelectLayer}
+        testID="logic-map-breadcrumb-top"
+      />
+      {parents.map((step) => (
+        <BreadcrumbParent
+          key={step.id}
+          layerId={step.id}
+          title={step.title}
+          onSelectLayer={onSelectLayer}
+          testID={`logic-map-breadcrumb-${step.id}`}
+        />
+      ))}
+      <Text
+        style={styles.breadcrumbCurrent}
+        numberOfLines={1}
+        aria-current="page"
+        testID="logic-map-breadcrumb-current"
+      >
+        {current.title}
+      </Text>
+    </View>
+  );
+}
+
+function BreadcrumbParent({
+  layerId,
+  title,
+  onSelectLayer,
+  testID,
+}: {
+  layerId: string | null;
+  title: string;
+  onSelectLayer: (layerId: string | null) => void;
+  testID: string;
+}) {
+  const handlePress = useCallback(() => onSelectLayer(layerId), [layerId, onSelectLayer]);
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="xs"
+        style={styles.breadcrumbParent}
+        onPress={handlePress}
+        testID={testID}
+      >
+        {title}
+      </Button>
+      <BreadcrumbSeparator size={ICON_SIZE.xs} />
+    </>
+  );
+}
+
+const BreadcrumbSeparator = withUnistyles(ChevronRight, (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+
 function LogicMapPickerItem({
   mapName,
   title,
@@ -371,6 +479,8 @@ function LogicMapBody({
   error,
   onRetry,
   selectedNodeId,
+  layerId,
+  onEnterSubgraph,
 }: {
   mapLabel: string;
   result: WorkspaceLogicMapReadResult | undefined;
@@ -378,6 +488,8 @@ function LogicMapBody({
   error: Error | null;
   onRetry: () => unknown;
   selectedNodeId: string | null;
+  layerId: string | null;
+  onEnterSubgraph: (layerId: string) => void;
 }) {
   const { t } = useTranslation();
   if (error) {
@@ -424,15 +536,27 @@ function LogicMapBody({
   if (!layout || layout.nodes.length === 0) {
     return <NewMapCanvas />;
   }
-  return <LogicMapViewport layout={layout} selectedNodeId={selectedNodeId} />;
+  // 换一层就是换一张画，视口按新的一层重新适应宽度、回到左上。
+  return (
+    <LogicMapViewport
+      key={layerId ?? TOP_LAYER_KEY}
+      layout={layout}
+      selectedNodeId={selectedNodeId}
+      onEnterSubgraph={onEnterSubgraph}
+    />
+  );
 }
+
+const TOP_LAYER_KEY = "top";
 
 function LogicMapViewport({
   layout,
   selectedNodeId,
+  onEnterSubgraph,
 }: {
   layout: LogicMapLayout;
   selectedNodeId: string | null;
+  onEnterSubgraph: (layerId: string) => void;
 }) {
   const { t } = useTranslation();
   const contentSize = useMemo(
@@ -455,7 +579,11 @@ function LogicMapViewport({
         wheelPan
         testID="logic-map-viewport"
       >
-        <LogicMapCanvas layout={layout} selectedNodeId={selectedNodeId} />
+        <LogicMapCanvas
+          layout={layout}
+          selectedNodeId={selectedNodeId}
+          onEnterSubgraph={onEnterSubgraph}
+        />
       </ZoomableViewport>
     </LogicMapBackdrop>
   );
@@ -615,6 +743,27 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
+  },
+  breadcrumb: {
+    height: CONTROL_HEIGHT.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[0.5],
+    paddingHorizontal: theme.spacing[2],
+    backgroundColor: theme.colors.surface0,
+    flexShrink: 0,
+    overflow: "hidden",
+  },
+  breadcrumbParent: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  breadcrumbCurrent: {
+    flexShrink: 1,
+    minWidth: 0,
+    paddingHorizontal: theme.spacing[2],
+    ...theme.typeScale.caption,
+    color: theme.colors.foreground,
   },
   picker: {
     flexShrink: 1,

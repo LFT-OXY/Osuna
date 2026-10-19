@@ -75,3 +75,36 @@ export function buildLoginLogicMap(): LogicMapSkeleton {
 export function buildEmptyLogicMap(): LogicMapSkeleton {
   return { title: null, specFramework: null, nodes: [], edges: [] };
 }
+
+/**
+ * 两层子图的"用户登录"：顶层 → 密码登录（子图）→ 找回密码（子图）。另有一条跨层的线（顶层的开始直连
+ * 子图里的节点），daemon 会拒绝这种线，这里用来确认面板也不会把它画进任何一层。
+ */
+export function buildNestedLogicMap(): LogicMapSkeleton {
+  const inPassword = { parentId: "password-login" };
+  const inReset = { parentId: "reset" };
+  return {
+    title: "用户登录",
+    specFramework: { kind: "none" },
+    nodes: [
+      node("open", "start", "打开登录页"),
+      node("password-login", "subgraph", "密码登录"),
+      node("signed-in", "end", "登录成功"),
+      node("enter-password", "start", "输入密码", inPassword),
+      node("check-password", "decision", "密码是否正确", inPassword),
+      node("reset", "subgraph", "找回密码", inPassword),
+      node("password-ok", "end", "密码正确", inPassword),
+      node("send-mail", "start", "发送重置邮件", inReset),
+      node("mail-sent", "end", "邮件已发送", inReset),
+    ],
+    edges: [
+      edge("open", "password-login"),
+      edge("password-login", "signed-in"),
+      edge("enter-password", "check-password"),
+      edge("check-password", "password-ok", "正确"),
+      edge("check-password", "reset", "忘记密码"),
+      edge("send-mail", "mail-sent"),
+      edge("open", "enter-password"),
+    ],
+  };
+}

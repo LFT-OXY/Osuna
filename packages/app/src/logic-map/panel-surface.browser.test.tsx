@@ -4,12 +4,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cdp, page, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  LogicMapSkeleton,
   SessionOutboundMessage,
   WorkspaceLogicMapReadResult,
   WorkspaceLogicMapSummary,
 } from "@getpaseo/protocol/messages";
 import { i18n } from "@/i18n/i18next";
-import { buildEmptyLogicMap, buildLoginLogicMap } from "@/test/logic-map-fixtures";
+import {
+  buildEmptyLogicMap,
+  buildLoginLogicMap,
+  buildNestedLogicMap,
+} from "@/test/logic-map-fixtures";
 import { LogicMapPanelSurface, type LogicMapClient } from "./panel-surface";
 
 // App sources compile against the classic JSX runtime, which expects React on the global.
@@ -398,5 +403,130 @@ describe("the logic map panel", () => {
       expect(getComputedStyle(added).animationName).toBe("none");
       expect(getComputedStyle(byTestId("logic-map-node-home")).transitionDuration).toBe("0s");
     });
+  });
+});
+
+function nestedMapHost(): FakeHost {
+  const host = createFakeHost();
+  host.maps = [{ name: "user-login", title: "用户登录" }];
+  host.reads.set("user-login", { kind: "ok", map: buildNestedLogicMap() });
+  return host;
+}
+
+/** Agent 把"密码登录"改成普通步骤，删掉它里面的两层。 */
+function turnPasswordLoginIntoStep(): LogicMapSkeleton {
+  const map = buildNestedLogicMap();
+  const nodes = map.nodes.filter((node) => node.parentId === null);
+  const index = nodes.findIndex((node) => node.id === "password-login");
+  nodes[index] = { ...nodes[index], kind: "step" };
+  const ids = new Set(nodes.map((node) => node.id));
+  return {
+    ...map,
+    nodes,
+    edges: map.edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to)),
+  };
+}
+
+function breadcrumb(): string[] {
+  return shownTexts(byTestId("logic-map-breadcrumb"));
+}
+
+describe("the logic map panel's subgraph layers", () => {
+  it("opens a subgraph node's layer and shows the path to it, the current layer last", async () => {
+    mountSurface(nestedMapHost());
+    await shown("logic-map-node-password-login");
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+    expect(shownTexts(byTestId("logic-map-node-password-login"))).toEqual([
+      "密码登录",
+      "Subgraph · 4 nodes",
+    ]);
+
+    await userEvent.click(byTestId("logic-map-node-password-login"));
+
+    await shown("logic-map-node-check-password");
+    expect(nodeTitles()).toEqual(["输入密码", "密码是否正确", "找回密码", "密码正确"]);
+    expect(breadcrumb()).toEqual(["用户登录", "密码登录"]);
+    expect(byTestId("logic-map-breadcrumb-current").textContent).toBe("密码登录");
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["用户登录", "4 nodes"]);
+
+    await userEvent.click(byTestId("logic-map-node-reset"));
+
+    await shown("logic-map-node-mail-sent");
+    expect(breadcrumb()).toEqual(["用户登录", "密码登录", "找回密码"]);
+    expect(byTestId("logic-map-breadcrumb-current").textContent).toBe("找回密码");
+  });
+
+  it("drags the canvas without opening the subgraph node the drag started on", async () => {
+    mountSurface(nestedMapHost());
+    const card = await shown("logic-map-node-password-login");
+    const start = card.getBoundingClientRect();
+    const x = Math.round(start.left + start.width / 2);
+    const y = Math.round(start.top + start.height / 2);
+
+    await cdp().send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+    await cdp().send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x,
+      y,
+      button: "left",
+      clickCount: 1,
+    });
+    for (const step of [10, 20, 40]) {
+      await cdp().send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: x + step,
+        y: y + step,
+        button: "left",
+        buttons: 1,
+      });
+    }
+    await cdp().send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: x + 40,
+      y: y + 40,
+      button: "left",
+      clickCount: 1,
+    });
+
+    await expect
+      .poll(() => byTestId("logic-map-node-password-login").getBoundingClientRect().top)
+      .toBeGreaterThan(start.top + 20);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+    expect(nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+  });
+
+  it("goes back to an earlier layer from the breadcrumb", async () => {
+    mountSurface(nestedMapHost());
+    await userEvent.click(await shown("logic-map-node-password-login"));
+    await userEvent.click(await shown("logic-map-node-reset"));
+    await shown("logic-map-node-mail-sent");
+
+    await userEvent.click(byTestId("logic-map-breadcrumb-password-login"));
+    await shown("logic-map-node-check-password");
+    expect(breadcrumb()).toEqual(["用户登录", "密码登录"]);
+
+    await userEvent.click(byTestId("logic-map-breadcrumb-top"));
+    await shown("logic-map-node-signed-in");
+    expect(nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+  });
+
+  it("goes back to the top layer when the agent removes the layer being shown", async () => {
+    const host = nestedMapHost();
+    mountSurface(host);
+    await userEvent.click(await shown("logic-map-node-password-login"));
+    await shown("logic-map-node-check-password");
+
+    host.reads.set("user-login", { kind: "ok", map: turnPasswordLoginIntoStep() });
+    act(() =>
+      host.push({
+        type: "workspace.logic_map.changed",
+        payload: { workspaceId: WORKSPACE_ID, mapName: "user-login" },
+      }),
+    );
+
+    await expect.poll(() => nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["用户登录", "3 nodes"]);
   });
 });

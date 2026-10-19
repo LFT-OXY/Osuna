@@ -4231,6 +4231,8 @@ export const fr: TranslationResources = {
       },
       subgraphTagOne: "Sous-graphe · {{count}} nœud",
       subgraphTagMany: "Sous-graphe · {{count}} nœuds",
+      enterSubgraph: "Ouvrir le sous-graphe {{title}}",
+      breadcrumb: "Chemin de la carte logique",
       pendingLink: "Aucun doc lié",
     },
   },

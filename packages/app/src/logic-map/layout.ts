@@ -437,6 +437,32 @@ function keepClearOf(points: LogicMapPoint[], obstacles: Box[]): LogicMapPoint[]
   return route;
 }
 
+export interface LogicMapLayerStep {
+  id: string;
+  title: string;
+}
+
+/**
+ * 从顶层走到某个子图层经过的子图节点，顶层为空数组。这一层已经不在图里（子图节点被删、不再是子图，
+ * 或父链断了、成环）时返回 null，面板据此回到顶层。
+ */
+export function logicMapLayerTrail(
+  skeleton: LogicMapSkeleton,
+  layerId: string | null,
+): LogicMapLayerStep[] | null {
+  const nodeById = new Map(skeleton.nodes.map((node) => [node.id, node]));
+  const trail: LogicMapLayerStep[] = [];
+  const visited = new Set<string>();
+  for (let id = layerId; id !== null; ) {
+    const node = nodeById.get(id);
+    if (!node || node.kind !== "subgraph" || visited.has(id)) return null;
+    visited.add(id);
+    trail.unshift({ id: node.id, title: node.title });
+    id = node.parentId;
+  }
+  return trail;
+}
+
 function isPendingLink(node: LogicMapNode): boolean {
   return node.doc?.kind === "own" && node.doc.pendingLink;
 }

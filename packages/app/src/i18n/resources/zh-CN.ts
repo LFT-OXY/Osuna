@@ -4124,6 +4124,8 @@ export const zhCN: TranslationResources = {
       },
       subgraphTagOne: "子图 · {{count}} 个节点",
       subgraphTagMany: "子图 · {{count}} 个节点",
+      enterSubgraph: "进入子图 {{title}}",
+      breadcrumb: "逻辑图路径",
       pendingLink: "未指向文档",
     },
   },

@@ -4263,6 +4263,8 @@ export const en = {
       },
       subgraphTagOne: "Subgraph · {{count}} node",
       subgraphTagMany: "Subgraph · {{count}} nodes",
+      enterSubgraph: "Open subgraph {{title}}",
+      breadcrumb: "Logic map path",
       pendingLink: "No doc linked",
     },
   },

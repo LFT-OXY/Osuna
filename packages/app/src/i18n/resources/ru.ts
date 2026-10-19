@@ -4201,6 +4201,8 @@ export const ru: TranslationResources = {
       },
       subgraphTagOne: "Подграф · узлов: {{count}}",
       subgraphTagMany: "Подграф · узлов: {{count}}",
+      enterSubgraph: "Открыть подграф {{title}}",
+      breadcrumb: "Путь по логической карте",
       pendingLink: "Документ не привязан",
     },
   },

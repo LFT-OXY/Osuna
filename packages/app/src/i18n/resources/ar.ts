@@ -4131,6 +4131,8 @@ export const ar: TranslationResources = {
       },
       subgraphTagOne: "مخطط فرعي · {{count}} عقدة",
       subgraphTagMany: "مخطط فرعي · {{count}} عقد",
+      enterSubgraph: "فتح المخطط الفرعي {{title}}",
+      breadcrumb: "مسار الخريطة المنطقية",
       pendingLink: "بلا مستند مرتبط",
     },
   },
