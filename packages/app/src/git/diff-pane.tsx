@@ -1,11 +1,4 @@
-import {
-  useState,
-  useCallback,
-  useEffect,
-  useMemo,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { useState, useCallback, useMemo, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { TreeRail } from "@/components/tree-rail";
@@ -1477,6 +1470,14 @@ export function ChangesSurface({
     (paths: string[]) => updateState({ ...instanceState, collapsedFolderPaths: paths }),
     [instanceState, updateState],
   );
+  // 默认展开只在本 tab 第一次见到文件时决定一次：收到 diff 就把决定写回 tab 状态，文件变多时已显示的不再变。
+  const recordFileExpansionDefaults = useCallback(
+    (receivedFiles: ParsedDiffFile[]) => {
+      const next = recordDefaultFileExpansion(instanceState, receivedFiles);
+      if (next !== instanceState) updateState(next);
+    },
+    [instanceState, updateState],
+  );
 
   const handleToggleWrapLines = useCallback(() => {
     void updatePreferences({ wrapLines: !wrapLines });
@@ -1558,6 +1559,7 @@ export function ChangesSurface({
     cwd,
     ignoreWhitespace: preferences.hideWhitespace,
     enabled: enabled !== false,
+    onFiles: recordFileExpansionDefaults,
   });
   usePublishWorkingDiffAttachment({
     serverId,
@@ -1745,14 +1747,11 @@ export function ChangesSurface({
     () => computeSelectedDiffStat(files, isDiffLoading),
     [files, isDiffLoading],
   );
-  // 默认展开只在本 tab 第一次见到文件时决定一次，决定写回 tab 状态，文件变多时已显示的不再变。
+  // 渲染时先按规则算出新文件的默认值；真正记进 tab 状态在收到 diff 时（recordFileExpansionDefaults）。
   const fileExpansion = useMemo(
     () => recordDefaultFileExpansion(instanceState, files),
     [files, instanceState],
   );
-  useEffect(() => {
-    if (fileExpansion !== instanceState) updateState(fileExpansion);
-  }, [fileExpansion, instanceState, updateState]);
   const collapsedFilePaths = fileExpansion.collapsedFilePaths;
   const updateCollapsedFilePaths = useCallback(
     (paths: string[]) => updateState(applyCollapsedFilePaths(fileExpansion, paths)),

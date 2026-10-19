@@ -1,5 +1,6 @@
 import { shareCheckoutDiff } from "./diff-sharing";
-import { useMemo } from "react";
+import { hashKey, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useReplicaQuery } from "@/data/query";
 import { checkoutDiffPushRoute } from "@/data/push-router";
@@ -15,6 +16,8 @@ interface UseCheckoutDiffQueryOptions {
   ignoreWhitespace?: boolean;
   enabled?: boolean;
   queryScope?: string;
+  /** 每次收到这个 diff 的文件清单（含挂载时缓存里已有的那份）时调用。 */
+  onFiles?: (files: ParsedDiffFile[]) => void;
 }
 
 type CheckoutDiffQueryPayload = Omit<SubscribeCheckoutDiffResponse["payload"], "subscriptionId">;
@@ -48,6 +51,7 @@ export function useCheckoutDiffQuery({
   ignoreWhitespace,
   enabled = true,
   queryScope,
+  onFiles,
 }: UseCheckoutDiffQueryOptions) {
   const retainedPanelActive = useRetainedPanelActive();
   const queryEnabled = enabled && retainedPanelActive;
@@ -91,7 +95,37 @@ export function useCheckoutDiffQuery({
     }),
   });
 
+  const queryClient = useQueryClient();
+  const onFilesRef = useRef(onFiles);
+  onFilesRef.current = onFiles;
+  const listensForFiles = onFiles !== undefined;
+  useEffect(() => {
+    if (!listensForFiles) return;
+    return subscribeCheckoutDiffFiles(queryClient, queryKey, (files) =>
+      onFilesRef.current?.(files),
+    );
+  }, [listensForFiles, queryClient, queryKey]);
+
   return deriveCheckoutDiffResult(query.data ?? null);
+}
+
+/** 订阅查询缓存里这个 diff 的文件清单：先交出已缓存的一份，之后每次更新再交一次。 */
+export function subscribeCheckoutDiffFiles(
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+  onFiles: (files: ParsedDiffFile[]) => void,
+): () => void {
+  const queryHash = hashKey(queryKey);
+  const deliver = () => {
+    const payload = queryClient.getQueryData<CheckoutDiffQueryPayload>(queryKey);
+    if (payload) onFiles(payload.files);
+  };
+  deliver();
+  return queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "success") return;
+    if (event.query.queryHash !== queryHash) return;
+    deliver();
+  });
 }
 
 export interface CheckoutDiffResult {

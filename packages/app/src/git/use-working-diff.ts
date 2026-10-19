@@ -8,7 +8,7 @@ import {
   useInlineReviewController,
   useReviewAttachmentSnapshot,
 } from "@/review";
-import { useCheckoutDiffQuery } from "@/git/use-diff-query";
+import { type ParsedDiffFile, useCheckoutDiffQuery } from "@/git/use-diff-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
 import { useWorkingDiffComparison } from "@/git/working-diff-comparison";
 
@@ -19,6 +19,7 @@ interface UseWorkingDiffOptions {
   ignoreWhitespace: boolean;
   enabled: boolean;
   queryScope?: string;
+  onFiles?: (files: ParsedDiffFile[]) => void;
 }
 
 export function useWorkingDiff({
@@ -28,6 +29,7 @@ export function useWorkingDiff({
   ignoreWhitespace,
   enabled,
   queryScope,
+  onFiles,
 }: UseWorkingDiffOptions) {
   const {
     status,
@@ -68,6 +70,7 @@ export function useWorkingDiff({
     ignoreWhitespace,
     enabled: enabled && isGit,
     queryScope,
+    onFiles,
   });
   const reviewDraftKey = useMemo(
     () =>

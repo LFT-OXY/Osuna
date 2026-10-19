@@ -25,10 +25,10 @@ const EXPANDED_LEADING_FILE_COUNT = 3;
  * 给本 tab 还没决定过的文件按默认规则补上展开或收起，已决定过的（含用户手动选过的）不动。
  * 没有新文件时原样返回同一个 record，调用方据此跳过写回。
  */
-export function recordDefaultFileExpansion<Record extends FileExpansionRecord>(
-  record: Record,
+export function recordDefaultFileExpansion<State extends FileExpansionRecord>(
+  record: State,
   files: readonly ExpansionCandidateFile[],
-): Record & ResolvedFileExpansion {
+): State & ResolvedFileExpansion {
   const collapsed = new Set(record.collapsedFilePaths);
   const expanded = new Set(record.expandedFilePaths ?? []);
   const nextCollapsed = [...record.collapsedFilePaths];
@@ -45,7 +45,7 @@ export function recordDefaultFileExpansion<Record extends FileExpansionRecord>(
       nextCollapsed.push(file.path);
     }
   }
-  if (!changed) return record as Record & ResolvedFileExpansion;
+  if (!changed) return record as State & ResolvedFileExpansion;
   return { ...record, collapsedFilePaths: nextCollapsed, expandedFilePaths: nextExpanded };
 }
 
@@ -61,10 +61,10 @@ function defaultFileExpanded(
 }
 
 /** 用户改了收起列表（点文件头、全部收起）：离开收起列表的文件记为用户展开过。 */
-export function applyCollapsedFilePaths<Record extends FileExpansionRecord>(
-  record: Record,
+export function applyCollapsedFilePaths<State extends FileExpansionRecord>(
+  record: State,
   collapsedFilePaths: readonly string[],
-): Record & ResolvedFileExpansion {
+): State & ResolvedFileExpansion {
   const nextCollapsed = new Set(collapsedFilePaths);
   const expanded = new Set(
     (record.expandedFilePaths ?? []).filter((path) => !nextCollapsed.has(path)),
@@ -80,19 +80,19 @@ export function applyCollapsedFilePaths<Record extends FileExpansionRecord>(
 }
 
 /** 「全部展开」：清空所有收起，Generated file 和大文件一起展开。 */
-export function expandAllFiles<Record extends FileExpansionRecord>(
-  record: Record,
+export function expandAllFiles<State extends FileExpansionRecord>(
+  record: State,
   files: readonly ExpansionCandidateFile[],
-): Record & ResolvedFileExpansion {
+): State & ResolvedFileExpansion {
   const expanded = new Set([...(record.expandedFilePaths ?? []), ...record.collapsedFilePaths]);
   for (const file of files) expanded.add(file.path);
   return { ...record, collapsedFilePaths: [], expandedFilePaths: [...expanded] };
 }
 
-export function collapseAllFiles<Record extends FileExpansionRecord>(
-  record: Record,
+export function collapseAllFiles<State extends FileExpansionRecord>(
+  record: State,
   files: readonly ExpansionCandidateFile[],
-): Record & ResolvedFileExpansion {
+): State & ResolvedFileExpansion {
   const paths = new Set(files.map((file) => file.path));
   const collapsed = new Set([...record.collapsedFilePaths, ...paths]);
   return {

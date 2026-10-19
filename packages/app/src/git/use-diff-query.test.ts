@@ -1,6 +1,7 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import type { ParsedDiffFile } from "@getpaseo/protocol/messages";
-import { deriveCheckoutDiffResult } from "./use-diff-query";
+import { deriveCheckoutDiffResult, subscribeCheckoutDiffFiles } from "./use-diff-query";
 
 function createParsedDiffFile(path: string): ParsedDiffFile {
   return {
@@ -66,5 +67,45 @@ describe("deriveCheckoutDiffResult", () => {
       isError: true,
       error: null,
     });
+  });
+});
+
+function filePaths(files: ParsedDiffFile[]): string[] {
+  return files.map((file) => file.path);
+}
+
+describe("subscribeCheckoutDiffFiles", () => {
+  const key = ["checkoutDiff", "server", "/repo"];
+
+  it("delivers the cached files at once and every later payload for its key only", () => {
+    const queryClient = new QueryClient();
+    const first = [createParsedDiffFile("a.ts")];
+    const second = [createParsedDiffFile("a.ts"), createParsedDiffFile("b.ts")];
+    queryClient.setQueryData(key, createPayload(first));
+    const received: string[][] = [];
+
+    const unsubscribe = subscribeCheckoutDiffFiles(queryClient, key, (files) =>
+      received.push(filePaths(files)),
+    );
+    queryClient.setQueryData(["checkoutDiff", "server", "/other"], createPayload(second));
+    queryClient.setQueryData(key, createPayload(second));
+    unsubscribe();
+    queryClient.setQueryData(key, createPayload(first));
+
+    expect(received).toEqual([["a.ts"], ["a.ts", "b.ts"]]);
+  });
+
+  it("waits for the first payload when nothing is cached yet", () => {
+    const queryClient = new QueryClient();
+    const received: string[][] = [];
+
+    const unsubscribe = subscribeCheckoutDiffFiles(queryClient, key, (files) =>
+      received.push(filePaths(files)),
+    );
+    expect(received).toEqual([]);
+    queryClient.setQueryData(key, createPayload([createParsedDiffFile("a.ts")]));
+    unsubscribe();
+
+    expect(received).toEqual([["a.ts"]]);
   });
 });
