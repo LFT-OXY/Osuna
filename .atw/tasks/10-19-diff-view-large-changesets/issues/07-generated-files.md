@@ -9,7 +9,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] daemon 用例（真实 git 仓库）：`package-lock.json`、`yarn.lock`、`.gitattributes` 标了 `linguist-generated` 的文件、`app.min.js`、`app.js.map` 都带 `generated: true`；普通文件不带；`.gitattributes` 用 `linguist-generated=false` 取消的文件不带。
 - [ ] 协议：旧客户端的 schema 能解析带 `generated` 的消息；新客户端能解析不带它的消息（现有协议兼容测试写法）。

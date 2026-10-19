@@ -13,7 +13,7 @@
 | Q7 | 改变默认展开行为 | 允许：文件少全展开、文件多只展开前几个、生成文件一律默认收起；用户手动展开/收起过的照旧记住。阈值待定 |
 | Q8 | 默认收起阈值 | 改动文件 ≤10 个全部展开；>10 个只展开前 3 个，其余收起 |
 | Q9 | 大文件 | 单文件 >1MB 仍只显示「太大」提示（不变）；改动 >1000 行默认收起，文件名旁标改动行数，点开才显示 |
-| Q10 | 生成文件 | 三类，一律默认收起：lock 文件（参考 orca `src/shared/generated-code-path.ts` 名单）；`.gitattributes` 标 `linguist-generated` 的；`*.min.js`、`*.min.css`、`*.map` |
+| Q10 | 生成文件 | 三类，一律默认收起：lock 文件（参考 orca `src/shared/generated-code-path.ts` 名单）；`.gitattributes` 标 `linguist-generated` 的；`*.min.js`、`*.min.css`、`*.map`；`.gitattributes` 显式写了 `linguist-generated`（true/false）的以它为准，false 也能取消名单与后缀命中（同 GitHub linguist，工单 07 实现时定） |
 | Q11 | 刷新节奏 | 连续变动时最多每 1 秒更新一次；变动停下后 150ms 内补上最后一次；与 1 秒间隔冲突时 1 秒优先，结尾最多晚约 1.15 秒（2026-10-19 工单 04 补充） |
 | Q12 | 上游修复 | 本任务第一步摘取上游 be0acb293（#6745 keep Diff updates alive after the first edit） |
 | Q13 | 合格标准 | 固定假项目：200 个已有文件（各约 2000 行、改约 50 行）+ 50 个新建文件 + 一个改动 3 万行的 lock 文件 + 模拟 agent 每 0.5s 改一个文件持续 1 分钟。改前改后各测一次。合格：打开面板 ≤2s 看到内容；那 1 分钟内桌面版界面无单次 >0.5s 冻住；后台每次刷新耗时降到现在的 1/5 以下；「新文件消失」bug 修复并有测试。改前实测若显示某目标明显不合理，带数据回来找用户改，不自行放宽 |
