@@ -7,7 +7,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 客户端用例：页面变 hidden 后订阅被释放；变回 visible 后重新订阅，并收到最新快照。
 - [ ] 用例：hidden 期间发生的改动，恢复后显示的是最新内容，不是 hidden 之前的旧内容。
