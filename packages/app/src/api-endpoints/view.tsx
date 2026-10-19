@@ -15,11 +15,16 @@ import { Button } from "@/components/ui/button";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
-import { buildApiEndpointSettingsRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { resolveProviderLabel } from "@/utils/provider-definitions";
+import {
+  buildApiEndpointSettingsRoute,
+  buildProviderSettingsRoute,
+  buildSettingsHostSectionRoute,
+} from "@/utils/host-routes";
 import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
 import { ApiEndpointDetailHeader } from "./detail-header";
-import { ApiEndpointsListSection, NoticeCard } from "./host-list-section";
+import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
@@ -360,6 +365,19 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order。
   const canArrange = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
+  const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
+  const management = useMemo<ListManagement | undefined>(
+    () =>
+      canArrange
+        ? {
+            providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
+            onOpenProvider: (provider) =>
+              router.push(buildProviderSettingsRoute(serverId, provider)),
+          }
+        : undefined,
+    [canArrange, providerEntries, router, serverId],
+  );
 
   const handleAdd = useCallback(() => setSheet({ seed: { mode: "create" } }), []);
   const handleClose = useCallback(() => setSheet(null), []);
@@ -389,6 +407,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onToggle={endpoints.setEnabled}
         onResume={endpoints.resume}
         onArrange={canArrange ? endpoints.arrange : undefined}
+        management={management}
       />
       <ConnectionSheet
         serverId={serverId}

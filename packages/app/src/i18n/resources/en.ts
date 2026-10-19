@@ -2534,6 +2534,17 @@ export const en = {
         saved: "Endpoint order saved",
         hint: "Drag to reorder: a model several endpoints serve goes to the higher one first. Alt+↑/↓ to move, right-click to move it to the top or the bottom.",
       },
+      search: {
+        placeholder: "Find by name, address or model",
+        clear: "Clear search",
+        noMatch: "No endpoint matches “{{query}}”",
+        noMatchHint: "Search looks at each endpoint's name, base URLs and model names.",
+      },
+      rowFacts: {
+        apiKey: "API key {{mask}}",
+        defaultModelOf: "Default model of {{providers}}",
+        openProvider: "Open {{provider}} settings",
+      },
       resumeNow: "Resume now",
       resumeNowLabel: "Resume {{name}} now",
       listSeparator: ", ",

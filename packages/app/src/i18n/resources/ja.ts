@@ -2493,6 +2493,17 @@ export const ja: TranslationResources = {
         saved: "エンドポイントの順番を保存しました",
         hint: "ドラッグで並べ替え：複数のエンドポイントにあるモデルは上のものから使われます。Alt+↑/↓ で移動、右クリックで先頭・末尾へ移動。",
       },
+      search: {
+        placeholder: "名前・アドレス・モデル名で検索",
+        clear: "検索をクリア",
+        noMatch: "「{{query}}」に一致する API エンドポイントはありません",
+        noMatchHint: "検索対象は各エンドポイントの名前、ベース URL、モデル名です。",
+      },
+      rowFacts: {
+        apiKey: "API キー {{mask}}",
+        defaultModelOf: "{{providers}} の既定のモデル",
+        openProvider: "{{provider}} の設定を開く",
+      },
       resumeNow: "今すぐ再開",
       resumeNowLabel: "{{name}} を今すぐ再開",
       listSeparator: "、",

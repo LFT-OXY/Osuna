@@ -2471,6 +2471,17 @@ export const ar: TranslationResources = {
         saved: "تم حفظ ترتيب نقاط النهاية",
         hint: "اسحب لإعادة الترتيب: النموذج الذي تقدمه عدة نقاط نهاية يذهب أولًا إلى الأعلى منها. Alt+↑/↓ للنقل، والنقر بزر الفأرة الأيمن للنقل إلى الأعلى أو الأسفل.",
       },
+      search: {
+        placeholder: "ابحث بالاسم أو العنوان أو النموذج",
+        clear: "مسح البحث",
+        noMatch: "لا توجد نقطة نهاية تطابق “{{query}}”",
+        noMatchHint: "يبحث البحث في اسم كل نقطة نهاية وعناوين URL الأساسية وأسماء النماذج.",
+      },
+      rowFacts: {
+        apiKey: "مفتاح API {{mask}}",
+        defaultModelOf: "النموذج الافتراضي لـ {{providers}}",
+        openProvider: "فتح إعدادات {{provider}}",
+      },
       resumeNow: "استئناف الآن",
       resumeNowLabel: "استئناف {{name}} الآن",
       listSeparator: "، ",

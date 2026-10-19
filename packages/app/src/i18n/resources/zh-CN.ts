@@ -2497,6 +2497,17 @@ export const zhCN: TranslationResources = {
         saved: "接口顺序已保存",
         hint: "拖动排序：几家都有的模型先发给排在前面的那家。Alt+↑/↓ 移动，右键可移到最前或最后。",
       },
+      search: {
+        placeholder: "按名称、地址或模型名查找",
+        clear: "清除搜索",
+        noMatch: "没有接口符合「{{query}}」",
+        noMatchHint: "搜索看的是每家接口的名称、地址和模型名。",
+      },
+      rowFacts: {
+        apiKey: "API key：{{mask}}",
+        defaultModelOf: "{{providers}} 的默认模型",
+        openProvider: "打开 {{provider}} 的设置",
+      },
       resumeNow: "立刻恢复",
       resumeNowLabel: "立刻恢复 {{name}}",
       listSeparator: "、",

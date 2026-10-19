@@ -2484,6 +2484,17 @@ export const ko: TranslationResources = {
         saved: "엔드포인트 순서를 저장했습니다",
         hint: "드래그해서 순서 변경: 여러 엔드포인트에 있는 모델은 위에 있는 것부터 사용합니다. Alt+↑/↓로 이동, 오른쪽 클릭으로 맨 위나 맨 아래로 이동.",
       },
+      search: {
+        placeholder: "이름, 주소, 모델 이름으로 찾기",
+        clear: "검색 지우기",
+        noMatch: "“{{query}}”와 일치하는 API 엔드포인트가 없습니다",
+        noMatchHint: "검색은 각 엔드포인트의 이름, 기본 URL, 모델 이름을 봅니다.",
+      },
+      rowFacts: {
+        apiKey: "API 키 {{mask}}",
+        defaultModelOf: "{{providers}} 기본 모델",
+        openProvider: "{{provider}} 설정 열기",
+      },
       resumeNow: "지금 재개",
       resumeNowLabel: "{{name}} 지금 재개",
       listSeparator: ", ",

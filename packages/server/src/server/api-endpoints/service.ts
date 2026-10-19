@@ -166,6 +166,8 @@ import {
 import {
   AGENT_REQUEST_FORMAT,
   agentTargetEndpoint,
+  defaultModelProvidersOf,
+  maskApiKey,
   bareDefaultModel,
   defaultModelChoices,
   findEndpoint,
@@ -3122,6 +3124,7 @@ export class ApiEndpointService {
     endpoint: StoredApiEndpoint,
     provider: ApiEndpointProvider,
   ): ApiEndpoint {
+    const apiKey = this.store.getApiKey(endpoint.id);
     return {
       id: endpoint.id,
       provider,
@@ -3132,7 +3135,9 @@ export class ApiEndpointService {
       defaultModelId: projectedDefaultModelId(state.agents[provider], endpoint),
       ...(endpoint.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
       enabled: endpoint.enabled,
-      hasApiKey: this.store.getApiKey(endpoint.id) !== null,
+      hasApiKey: apiKey !== null,
+      ...(apiKey !== null ? { apiKeyMask: maskApiKey(apiKey) } : {}),
+      defaultModelProviders: defaultModelProvidersOf(state, endpoint.id),
       cooldown: this.cooldownOf(endpoint.id),
       ...(endpoint.catalog
         ? {

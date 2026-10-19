@@ -487,6 +487,140 @@ test.describe("Settings API endpoints", () => {
     await expect(row(page, a)).toBeVisible();
     await expect(page.getByTestId(`api-endpoint-order-menu-${a}`)).toHaveCount(0);
     await expect(page.getByTestId("api-endpoint-drag-handle")).toHaveCount(0);
+    // 搜索框与行上的 key 打码、默认模型也只给声明了它的主机。
+    await expect(page.getByTestId("api-endpoints-search")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-row-facts")).toHaveCount(0);
+  });
+
+  test("the search box finds endpoints by name, address and model name, says when none matches, and Escape clears it", async ({
+    page,
+  }) => {
+    const openRouter = await seedApiEndpoint(client, {
+      name: "OpenRouter",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const moonshot = await seedApiEndpoint(client, {
+      name: "Moonshot",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/kimi-gateway/v1` }],
+      models: ["kimi-k2"],
+    });
+    const zhipu = await seedApiEndpoint(client, {
+      name: "Zhipu",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["glm-4.6"],
+    });
+    await client.apiEndpointSetEndpointState({ endpointId: zhipu, enabled: false });
+    await openApiEndpointsPage(page);
+    const search = page.getByTestId("api-endpoints-search").filter({ visible: true });
+    const shown = async () => [
+      ...(await rowOrder(page, "enabled")),
+      ...(await rowOrder(page, "disabled").catch(() => [])),
+    ];
+
+    await search.fill("openrouter");
+    await expect.poll(shown).toEqual([openRouter]);
+    await search.fill("kimi-gateway");
+    await expect.poll(shown).toEqual([moonshot]);
+    await search.fill("GLM");
+    await expect.poll(shown).toEqual([zhipu]);
+    await search.fill("moon kimi");
+    await expect.poll(shown).toEqual([moonshot]);
+
+    await search.fill("deepseek");
+    await expect.poll(shown).toEqual([]);
+    await expect(page.getByTestId("api-endpoints-no-match").filter({ visible: true })).toHaveText(
+      "No endpoint matches “deepseek”Search looks at each endpoint's name, base URLs and model names.",
+    );
+
+    await search.press("Escape");
+    await expect(search).toHaveValue("");
+    await expect.poll(shown).toEqual([openRouter, moonshot, zhipu]);
+    await expect(page.getByTestId("api-endpoints-no-match")).toHaveCount(0);
+  });
+
+  test("while searching, a move goes among the rows shown and the hidden ones keep their order (as magpie)", async ({
+    page,
+  }) => {
+    const [a, b, c, d] = await seedRelays(["Relay A", "Other B", "Relay C", "Relay D"]);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-search").filter({ visible: true }).fill("relay");
+    await expect.poll(orderReader(page, "enabled")).toEqual([a, c, d]);
+
+    await openOrderMenu(page, c);
+    await orderItem(page, "up").click();
+    await expect.poll(storedOrder).toEqual([c, a, b, d]);
+    await expect.poll(orderReader(page, "enabled")).toEqual([c, a, d]);
+
+    await row(page, c).focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(storedOrder).toEqual([a, c, b, d]);
+
+    await openOrderMenu(page, a);
+    await orderItem(page, "bottom").click();
+    await expect.poll(storedOrder).toEqual([c, b, d, a]);
+
+    await dragRow(page, a, c);
+    await expect.poll(storedOrder).toEqual([a, c, b, d]);
+  });
+
+  test("each row shows its key mask, its model count and whose default model goes there; a provider name opens its page", async ({
+    page,
+  }) => {
+    const first = await seedApiEndpoint(client, {
+      name: "First relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "claude-haiku-4-5"],
+      apiKey: "sk-or-v1-abcdef1234",
+    });
+    const second = await seedApiEndpoint(client, {
+      name: "Second relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const local = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local server",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/local/v1` }],
+      models: [{ id: "qwen3" }],
+    });
+    const localId = local.endpoint?.id ?? "";
+    for (const provider of ["claude", "codex"]) {
+      const on = await client.apiEndpointSetAgentSettings({
+        provider,
+        enabled: true,
+        defaultModelId: "claude-sonnet-4-5",
+      });
+      expect(on.error).toBeNull();
+    }
+    await openApiEndpointsPage(page);
+    const facts = (endpointId: string) =>
+      row(page, endpointId).getByTestId("api-endpoint-row-facts");
+
+    await expect(facts(first)).toHaveText(
+      "sk-o…1234·2 models selected·Default model of Claude, Codex",
+    );
+    await expect(row(page, first).getByTestId("api-endpoint-row-key")).toHaveAccessibleName(
+      "API key sk-o…1234",
+    );
+    await expect(facts(second)).toHaveText("sk-e…elay·1 model selected");
+    await expect(facts(localId)).toHaveText("1 model selected");
+
+    await test.step("with the first endpoint off, the bare name goes to the second", async () => {
+      await client.apiEndpointSetEndpointState({ endpointId: first, enabled: false });
+      await page.reload();
+      await expect(row(page, second).getByTestId("api-endpoint-row-default-model")).toHaveText(
+        "Default model of Claude, Codex",
+      );
+      await expect(row(page, first).getByTestId("api-endpoint-row-default-model")).toHaveCount(0);
+    });
+
+    await test.step("a provider's name opens its settings page", async () => {
+      const listUrl = page.url();
+      await row(page, second).getByTestId("api-endpoint-row-provider-codex").click();
+      await expectProviderDetail(page, getServerId(), "codex");
+      expect(page.url()).not.toBe(listUrl);
+    });
   });
 
   test("a cooling endpoint shows when it is back, and Resume now makes it available", async ({

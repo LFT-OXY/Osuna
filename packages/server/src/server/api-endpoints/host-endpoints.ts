@@ -224,6 +224,26 @@ export function agentTargetEndpoint(
   );
 }
 
+/**
+ * 默认模型先去这家的 Agent（列表行上的「Claude Code、Codex 的默认模型」）：总开关开着，
+ * 默认模型指定了这家，或光秃秃的名字在接口顺序里最先由这家（开着、选了它）提供。
+ */
+export function defaultModelProvidersOf(
+  state: ApiEndpointState,
+  endpointId: string,
+): ApiEndpointProvider[] {
+  return API_ENDPOINT_PROVIDERS.filter(
+    (provider) => agentTargetEndpoint(state, provider)?.id === endpointId,
+  );
+}
+
+/** 列表行上的 key 打码，照 magpie provider.Mask：留头尾各 4 个字符，8 个及以下整串换成圆点。 */
+export function maskApiKey(key: string): string {
+  const chars = Array.from(key);
+  if (chars.length <= 8) return "•".repeat(chars.length);
+  return `${chars.slice(0, 4).join("")}…${chars.slice(-4).join("")}`;
+}
+
 /** 老客户端看到的 baseUrl：该 Agent 自己格式的地址，没有就取第一个。 */
 export function projectedBaseUrl(
   endpoint: StoredApiEndpoint,

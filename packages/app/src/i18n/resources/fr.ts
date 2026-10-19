@@ -2522,6 +2522,18 @@ export const fr: TranslationResources = {
         saved: "Ordre des endpoints enregistré",
         hint: "Faites glisser pour réordonner : un modèle proposé par plusieurs endpoints va d’abord au plus haut. Alt+↑/↓ pour déplacer, clic droit pour le placer en premier ou en dernier.",
       },
+      search: {
+        placeholder: "Rechercher par nom, adresse ou modèle",
+        clear: "Effacer la recherche",
+        noMatch: "Aucun endpoint ne correspond à « {{query}} »",
+        noMatchHint:
+          "La recherche porte sur le nom, les URL de base et les noms de modèle de chaque endpoint.",
+      },
+      rowFacts: {
+        apiKey: "Clé d'API {{mask}}",
+        defaultModelOf: "Modèle par défaut de {{providers}}",
+        openProvider: "Ouvrir les réglages de {{provider}}",
+      },
       resumeNow: "Reprendre maintenant",
       resumeNowLabel: "Reprendre {{name}} maintenant",
       listSeparator: ", ",

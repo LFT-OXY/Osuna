@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -18,6 +18,7 @@ import { isNative } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
+import { SearchField } from "@/components/ui/search-field";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
@@ -29,6 +30,7 @@ import {
   endpointMoves,
   endpointRowStatus,
   endpointSummary,
+  findEndpoints,
   groupHostEndpoints,
   type EndpointMoves,
   type EndpointPlace,
@@ -63,7 +65,15 @@ export interface ApiEndpointsListSectionProps {
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
   // 主机支持改接口顺序（apiEndpointManagement）时才有：拖动、行菜单与 Alt+↑/↓。
-  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
+  // `shown` 是搜索时显示着的行，挪动只在它们之间进行（照 magpie shownToOn）；没在搜索时为 undefined。
+  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace, shown?: ReadonlySet<string>) => void;
+  // 主机声明 apiEndpointManagement 时才有：列表顶上的搜索框与行上的 key 打码、模型数、默认模型落在这家的提供方。
+  management?: ListManagement;
+}
+
+export interface ListManagement {
+  providerLabel: (provider: string) => string;
+  onOpenProvider: (provider: string) => void;
 }
 
 const noArrange = () => {};
@@ -79,11 +89,31 @@ export function ApiEndpointsListSection({
   onToggle,
   onResume,
   onArrange,
+  management,
 }: ApiEndpointsListSectionProps) {
   const { t } = useTranslation();
-  const groups = useMemo(
-    () => groupHostEndpoints(state.status === "ready" ? state.endpoints : []),
-    [state],
+  const [query, setQuery] = useState("");
+  const allEndpoints = useMemo(() => (state.status === "ready" ? state.endpoints : []), [state]);
+  const isSearching = management !== undefined && query.trim() !== "";
+  const shownEndpoints = useMemo(
+    () => (isSearching ? findEndpoints(allEndpoints, query) : allEndpoints),
+    [allEndpoints, isSearching, query],
+  );
+  const shownIds = useMemo(
+    () => (isSearching ? new Set(shownEndpoints.map((endpoint) => endpoint.id)) : undefined),
+    [isSearching, shownEndpoints],
+  );
+  const groups = useMemo(() => groupHostEndpoints(shownEndpoints), [shownEndpoints]);
+  const hasDisabled = useMemo(
+    () => allEndpoints.some((endpoint) => endpoint.enabled === false),
+    [allEndpoints],
+  );
+  const arrangeShown = useMemo(
+    () =>
+      onArrange
+        ? (endpoint: ApiEndpoint, place: EndpointPlace) => onArrange(endpoint, place, shownIds)
+        : undefined,
+    [onArrange, shownIds],
   );
   const addButton = useMemo(
     () => (
@@ -113,25 +143,51 @@ export function ApiEndpointsListSection({
   }
 
   const hasErrorRow = actionError !== null;
+  const hasNoMatch = isSearching && shownEndpoints.length === 0;
+  // 搜索时只有已关闭的有命中：已开启组只留标题（和「+」），不画空卡片。
+  const hidesEnabledCard =
+    isSearching && groups.enabled.length === 0 && !hasNoMatch && !hasErrorRow;
 
   function renderRows(endpoints: ApiEndpoint[], hasRowAbove: boolean) {
     return (
       <EndpointGroupRows
         endpoints={endpoints}
-        allEndpoints={state.status === "ready" ? state.endpoints : endpoints}
+        allEndpoints={allEndpoints}
+        shownIds={shownIds}
         hasRowAbove={hasRowAbove}
         now={now}
         pendingEndpointId={pendingEndpointId}
+        management={management}
         onOpen={onOpen}
         onToggle={onToggle}
         onResume={onResume}
-        onArrange={onArrange}
+        onArrange={arrangeShown}
       />
     );
   }
 
+  function renderEnabledContent() {
+    if (hasNoMatch) return <NoMatch query={query.trim()} hasRowAbove={hasErrorRow} />;
+    if (groups.enabled.length > 0) return renderRows(groups.enabled, hasErrorRow);
+    if (isSearching) return null;
+    return <EmptyEnabledGroup hasAny={hasDisabled} hasRowAbove={hasErrorRow} onAdd={onAdd} />;
+  }
+
   return (
     <View testID="api-endpoints-list">
+      {management && allEndpoints.length > 0 ? (
+        <View style={styles.searchRow}>
+          <SearchField
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t("settings.apiEndpoints.search.placeholder")}
+            clearAccessibilityLabel={t("settings.apiEndpoints.search.clear")}
+            clearsOnEscape
+            testID="api-endpoints-search"
+            clearTestID="api-endpoints-search-clear"
+          />
+        </View>
+      ) : null}
       <SettingsSection
         title={t("settings.apiEndpoints.groups.enabled")}
         count={groups.enabled.length}
@@ -139,27 +195,21 @@ export function ApiEndpointsListSection({
         trailing={addButton}
         testID="api-endpoints-enabled-group"
       >
-        <View style={settingsStyles.card}>
-          {actionError ? (
-            <View style={settingsStyles.row} testID="api-endpoints-action-error">
-              <UiText variant="caption" color="statusDanger" selectable style={styles.flex}>
-                {actionError}
-              </UiText>
-              <Button variant="ghost" size="sm" onPress={onDismissError}>
-                {t("common.actions.dismiss")}
-              </Button>
-            </View>
-          ) : null}
-          {groups.enabled.length === 0 ? (
-            <EmptyEnabledGroup
-              hasAny={groups.disabled.length > 0}
-              hasRowAbove={hasErrorRow}
-              onAdd={onAdd}
-            />
-          ) : (
-            renderRows(groups.enabled, hasErrorRow)
-          )}
-        </View>
+        {hidesEnabledCard ? null : (
+          <View style={settingsStyles.card}>
+            {actionError ? (
+              <View style={settingsStyles.row} testID="api-endpoints-action-error">
+                <UiText variant="caption" color="statusDanger" selectable style={styles.flex}>
+                  {actionError}
+                </UiText>
+                <Button variant="ghost" size="sm" onPress={onDismissError}>
+                  {t("common.actions.dismiss")}
+                </Button>
+              </View>
+            ) : null}
+            {renderEnabledContent()}
+          </View>
+        )}
       </SettingsSection>
       {groups.disabled.length > 0 ? (
         <SettingsSection
@@ -178,9 +228,11 @@ export function ApiEndpointsListSection({
 function EndpointGroupRows({
   endpoints,
   allEndpoints,
+  shownIds,
   hasRowAbove,
   now,
   pendingEndpointId,
+  management,
   onOpen,
   onToggle,
   onResume,
@@ -189,9 +241,12 @@ function EndpointGroupRows({
   endpoints: ApiEndpoint[];
   // 两组合起来的接口顺序，算菜单里哪几项能点。
   allEndpoints: ApiEndpoint[];
+  // 搜索时显示着的行；没在搜索时为 undefined。
+  shownIds: ReadonlySet<string> | undefined;
   hasRowAbove: boolean;
   now: Date;
   pendingEndpointId: string | null;
+  management: ListManagement | undefined;
   onOpen: (endpoint: ApiEndpoint) => void;
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
@@ -205,14 +260,26 @@ function EndpointGroupRows({
         isPending={pendingEndpointId === info.endpoint.id}
         isFirst={info.index === 0 && !hasRowAbove}
         row={info}
-        moves={onArrange ? endpointMoves(allEndpoints, info.endpoint.id) : null}
+        moves={onArrange ? endpointMoves(allEndpoints, info.endpoint.id, shownIds) : null}
+        management={management}
         onOpen={onOpen}
         onToggle={onToggle}
         onResume={onResume}
         onArrange={onArrange}
       />
     ),
-    [allEndpoints, hasRowAbove, now, onArrange, onOpen, onResume, onToggle, pendingEndpointId],
+    [
+      allEndpoints,
+      hasRowAbove,
+      management,
+      now,
+      onArrange,
+      onOpen,
+      onResume,
+      onToggle,
+      pendingEndpointId,
+      shownIds,
+    ],
   );
   return (
     <SortableEndpointRows
@@ -263,6 +330,22 @@ function EmptyEnabledGroup({
   );
 }
 
+/** 搜索没有命中（照 magpie「No provider matches」），再说一句搜的是哪几样。 */
+function NoMatch({ query, hasRowAbove }: { query: string; hasRowAbove: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <View
+      style={[styles.emptyCard, hasRowAbove && settingsStyles.rowBorder]}
+      testID="api-endpoints-no-match"
+    >
+      <Text style={styles.emptyTitle}>{t("settings.apiEndpoints.search.noMatch", { query })}</Text>
+      <Text style={[styles.emptyText, styles.emptyParagraph]}>
+        {t("settings.apiEndpoints.search.noMatchHint")}
+      </Text>
+    </View>
+  );
+}
+
 export function NoticeCard({ text, testID }: { text: string; testID: string }) {
   return (
     <View style={[settingsStyles.card, styles.emptyCard]} testID={testID}>
@@ -279,6 +362,7 @@ interface EndpointRowProps {
   row: SortableEndpointRowInfo;
   // 行菜单里四个排序项能不能点；主机不支持改顺序时为 null，不出菜单。
   moves: EndpointMoves | null;
+  management: ListManagement | undefined;
   onOpen: (endpoint: ApiEndpoint) => void;
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
@@ -292,6 +376,7 @@ function EndpointRow({
   isFirst,
   row,
   moves,
+  management,
   onOpen,
   onToggle,
   onResume,
@@ -318,7 +403,8 @@ function EndpointRow({
     ],
     [],
   );
-  const statusLine = useEndpointStatusLine(endpoint, status);
+  // 有行信息时模型数挪到下一行，和 key 打码、默认模型写在一起。
+  const statusLine = useEndpointStatusLine(endpoint, status, management === undefined);
 
   return (
     <View
@@ -351,10 +437,8 @@ function EndpointRow({
                 </View>,
               )}
               <View style={settingsStyles.rowContent}>
-                <Text
-                  style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}
-                  numberOfLines={1}
-                >
+                {/* 名称不截断，窄屏上换行。 */}
+                <Text style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}>
                   {endpoint.name}
                 </Text>
                 <ProviderStatusLine status={statusLine}>
@@ -374,6 +458,7 @@ function EndpointRow({
                     </Button>
                   ) : null}
                 </ProviderStatusLine>
+                {management ? <EndpointFacts endpoint={endpoint} management={management} /> : null}
               </View>
             </View>
             <View style={styles.trailingControls}>
@@ -547,6 +632,7 @@ function RestingStateText({ status }: { status: EndpointRowStatus }) {
 function useEndpointStatusLine(
   endpoint: ApiEndpoint,
   status: EndpointRowStatus,
+  includesModelCount: boolean,
 ): ProviderStatusDisplay {
   const { t } = useTranslation();
   const summary = endpointSummary(endpoint);
@@ -555,13 +641,123 @@ function useEndpointStatusLine(
       .map((format) => t(`settings.apiEndpoints.formats.${format}`))
       .join(t("settings.apiEndpoints.listSeparator")),
     summary.host,
-    t("settings.apiEndpoints.status.modelCount", { count: summary.modelCount }),
+    includesModelCount
+      ? t("settings.apiEndpoints.status.modelCount", { count: summary.modelCount })
+      : null,
   ].filter((part): part is string => Boolean(part));
   if (status.kind === "disabled") parts.unshift(t("settings.apiEndpoints.status.disabled"));
   return {
     tone: status.tone,
     label: { key: "settings.apiEndpoints.status.summary", params: { summary: parts.join(" · ") } },
   };
+}
+
+// 译文里给提供方名留的位置：先整句翻译，再把这里换成能点的提供方名。
+const PROVIDERS_SLOT = "%%providers%%";
+
+/**
+ * 行上第三行：key 打码（没有 key 时不写）、模型数，以及默认模型先去这家的提供方（照 magpie 行上的 uses）。
+ * 一项一块，窄屏放不下时整块换行。
+ */
+function EndpointFacts({
+  endpoint,
+  management,
+}: {
+  endpoint: ApiEndpoint;
+  management: ListManagement;
+}) {
+  const { t } = useTranslation();
+  const providers = endpoint.defaultModelProviders ?? [];
+  const facts: { key: string; node: React.ReactNode }[] = [];
+  if (endpoint.apiKeyMask) {
+    facts.push({
+      key: "apiKey",
+      node: (
+        <Text
+          style={styles.fact}
+          accessibilityLabel={t("settings.apiEndpoints.rowFacts.apiKey", {
+            mask: endpoint.apiKeyMask,
+          })}
+          testID="api-endpoint-row-key"
+        >
+          {endpoint.apiKeyMask}
+        </Text>
+      ),
+    });
+  }
+  facts.push({
+    key: "models",
+    node: (
+      <Text style={styles.fact} testID="api-endpoint-row-model-count">
+        {t("settings.apiEndpoints.status.modelCount", {
+          count: endpointSummary(endpoint).modelCount,
+        })}
+      </Text>
+    ),
+  });
+  if (providers.length > 0) {
+    facts.push({
+      key: "defaultModel",
+      node: <DefaultModelOf providers={providers} management={management} />,
+    });
+  }
+  return (
+    <View style={styles.facts} testID="api-endpoint-row-facts">
+      {facts.map((fact, index) => (
+        <Fragment key={fact.key}>
+          {index > 0 ? <Text style={styles.separator}>·</Text> : null}
+          {fact.node}
+        </Fragment>
+      ))}
+    </View>
+  );
+}
+
+function DefaultModelOf({
+  providers,
+  management,
+}: {
+  providers: string[];
+  management: ListManagement;
+}) {
+  const { t } = useTranslation();
+  const [before = "", after = ""] = t("settings.apiEndpoints.rowFacts.defaultModelOf", {
+    providers: PROVIDERS_SLOT,
+  }).split(PROVIDERS_SLOT);
+  return (
+    <View style={styles.defaultModelOf} testID="api-endpoint-row-default-model">
+      {before ? <Text style={styles.fact}>{before}</Text> : null}
+      {providers.map((provider, index) => (
+        <Fragment key={provider}>
+          {index > 0 ? (
+            <Text style={styles.fact}>{t("settings.apiEndpoints.listSeparator")}</Text>
+          ) : null}
+          <ProviderLink provider={provider} management={management} />
+        </Fragment>
+      ))}
+      {after ? <Text style={styles.fact}>{after}</Text> : null}
+    </View>
+  );
+}
+
+/** 点了去这个提供方的设置页改默认模型；悬停加下划线（Pressable 只给自己上样式，docs/hover.md）。 */
+function ProviderLink({ provider, management }: { provider: string; management: ListManagement }) {
+  const { t } = useTranslation();
+  const label = management.providerLabel(provider);
+  const { onOpenProvider } = management;
+  const handlePress = useCallback(() => onOpenProvider(provider), [onOpenProvider, provider]);
+  return (
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="link"
+      accessibilityLabel={t("settings.apiEndpoints.rowFacts.openProvider", { provider: label })}
+      testID={`api-endpoint-row-provider-${provider}`}
+    >
+      {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
+        <Text style={[styles.providerLink, hovered && styles.providerLinkHovered]}>{label}</Text>
+      )}
+    </Pressable>
+  );
 }
 
 function initialOf(name: string): string {
@@ -645,6 +841,34 @@ const styles = StyleSheet.create((theme) => ({
   },
   disabledTitle: {
     color: theme.colors.foregroundMuted,
+  },
+  searchRow: {
+    flexDirection: "row",
+    marginBottom: theme.spacing[4],
+  },
+  facts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: theme.spacing[1.5],
+    marginTop: theme.spacing[0.5],
+  },
+  fact: {
+    color: theme.colors.foregroundMuted,
+    ...theme.typeScale.caption,
+  },
+  defaultModelOf: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  providerLink: {
+    color: theme.colors.foreground,
+    ...theme.typeScale.caption,
+    fontWeight: theme.fontWeight.medium,
+  },
+  providerLinkHovered: {
+    textDecorationLine: "underline",
   },
   trailingControls: {
     flexDirection: "row",

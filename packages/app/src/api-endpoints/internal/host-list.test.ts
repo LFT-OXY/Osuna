@@ -6,6 +6,7 @@ import {
   endpointMoves,
   endpointRowStatus,
   endpointSummary,
+  findEndpoints,
   groupHostEndpoints,
   previewAgentSettlements,
   selectHostEndpointsState,
@@ -151,6 +152,90 @@ describe("arrangeEndpoint", () => {
     expect(arrangeEndpoint(list, "d", "bottom")).toBeNull();
     expect(arrangeEndpoint(list, "c", { index: 1 })).toBeNull();
     expect(arrangeEndpoint(list, "missing", "up")).toBeNull();
+  });
+});
+
+describe("arrangeEndpoint while a search shows some rows", () => {
+  // 开着的 a、c、e、g，关着的 b；搜索只显示 a、e、g 与 b。
+  const list = [
+    endpoint({ id: "a" }),
+    endpoint({ id: "b", enabled: false }),
+    endpoint({ id: "c" }),
+    endpoint({ id: "e" }),
+    endpoint({ id: "g" }),
+  ];
+  const shown = new Set(["a", "b", "e", "g"]);
+
+  it("steps past the row shown next to it, and the hidden ones keep their order (as magpie shownToOn)", () => {
+    expect(arrangeEndpoint(list, "e", "up", shown)).toEqual(["e", "b", "a", "c", "g"]);
+    expect(arrangeEndpoint(list, "a", "down", shown)).toEqual(["c", "b", "e", "a", "g"]);
+  });
+
+  it("puts a dragged row where the shown row it was dropped on was", () => {
+    expect(arrangeEndpoint(list, "g", { index: 1 }, shown)).toEqual(["a", "b", "c", "g", "e"]);
+    expect(arrangeEndpoint(list, "a", { index: 2 }, shown)).toEqual(["c", "b", "e", "g", "a"]);
+  });
+
+  it("moves to the top or the bottom of the whole group", () => {
+    expect(arrangeEndpoint(list, "e", "top", shown)).toEqual(["e", "b", "a", "c", "g"]);
+    expect(arrangeEndpoint(list, "a", "bottom", shown)).toEqual(["c", "b", "e", "g", "a"]);
+  });
+
+  it("offers up and down by the rows shown, top and bottom by the whole group", () => {
+    const hiddenFirst = new Set(["c", "e"]);
+    expect(endpointMoves(list, "c", hiddenFirst)).toEqual({
+      top: true,
+      up: false,
+      down: true,
+      bottom: true,
+    });
+    expect(endpointMoves(list, "e", hiddenFirst)).toEqual({
+      top: true,
+      up: true,
+      down: false,
+      bottom: true,
+    });
+  });
+});
+
+describe("findEndpoints", () => {
+  const relay = endpoint({
+    id: "relay",
+    name: "OpenRouter",
+    baseUrls: [
+      { format: "anthropic_messages", url: "https://openrouter.ai/api" },
+      { format: "openai_chat", url: "https://gateway.example/v1" },
+    ],
+    models: [{ id: "z-ai/glm-4.6", label: "GLM 4.6" }],
+    catalog: { fetchedAt: "2026-10-14T00:00:00.000Z", models: [{ id: "moonshot/kimi-k2" }] },
+    manualModels: [{ id: "qwen3-coder" }],
+  });
+  const local = endpoint({
+    id: "local",
+    name: "Ollama",
+    baseUrls: [{ format: "openai_chat", url: "http://127.0.0.1:11434/v1" }],
+    models: [{ id: "llama3" }],
+  });
+  const ids = (query: string) => findEndpoints([relay, local], query).map((entry) => entry.id);
+
+  it("keeps every endpoint while the box is empty", () => {
+    expect(ids("")).toEqual(["relay", "local"]);
+    expect(ids("   ")).toEqual(["relay", "local"]);
+  });
+
+  it("finds by name, by address and by model name, whatever the case", () => {
+    expect(ids("openrouter")).toEqual(["relay"]);
+    expect(ids("gateway.example")).toEqual(["relay"]);
+    expect(ids("11434")).toEqual(["local"]);
+    expect(ids("GLM")).toEqual(["relay"]);
+    expect(ids("kimi-k2")).toEqual(["relay"]);
+    expect(ids("qwen3")).toEqual(["relay"]);
+    expect(ids("llama")).toEqual(["local"]);
+  });
+
+  it("keeps the rows that say every word typed", () => {
+    expect(ids("open glm")).toEqual(["relay"]);
+    expect(ids("ollama glm")).toEqual([]);
   });
 });
 

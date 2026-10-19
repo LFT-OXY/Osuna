@@ -84,27 +84,40 @@ function groupIds(endpoints: ApiEndpoint[], id: string): string[] | null {
     .map((endpoint) => endpoint.id);
 }
 
-function targetIndex(place: EndpointPlace, from: number, size: number): number {
-  if (place === "up") return from - 1;
-  if (place === "down") return from + 1;
+/**
+ * 挪到组里的第几个。搜索只显示一部分行时（`shown`），上移、下移跨过上下相邻的那个显示着的行，
+ * 拖动的序号是显示着的行里的序号，落在那一行原来的位置；移到最前、最后仍到整组的两头（照 magpie stepProvider、shownToOn）。
+ */
+function targetIndex(
+  group: string[],
+  id: string,
+  place: EndpointPlace,
+  shown: ReadonlySet<string> | undefined,
+): number {
   if (place === "top") return 0;
-  if (place === "bottom") return size - 1;
-  return place.index;
+  if (place === "bottom") return group.length - 1;
+  const visible = shown ? group.filter((member) => member === id || shown.has(member)) : group;
+  let target: string | undefined;
+  if (place === "up") target = visible[visible.indexOf(id) - 1];
+  else if (place === "down") target = visible[visible.indexOf(id) + 1];
+  else target = visible[place.index];
+  return target === undefined ? -1 : group.indexOf(target);
 }
 
 /**
  * 挪动之后的完整接口顺序（照 magpie arrangeProvider）：只在这家所在的组（已开启 / 已关闭）里挪，
- * 另一组的接口留在原来的位置上。什么都不会变时为 null。
+ * 另一组的接口留在原来的位置上。`shown` 是搜索时显示着的行，没有搜索时省略。什么都不会变时为 null。
  */
 export function arrangeEndpoint(
   endpoints: ApiEndpoint[],
   id: string,
   place: EndpointPlace,
+  shown?: ReadonlySet<string>,
 ): string[] | null {
   const group = groupIds(endpoints, id);
   if (!group) return null;
   const from = group.indexOf(id);
-  const to = targetIndex(place, from, group.length);
+  const to = targetIndex(group, id, place, shown);
   if (to < 0 || to >= group.length || to === from) return null;
   const moved = group.filter((member) => member !== id);
   moved.splice(to, 0, id);
@@ -121,9 +134,42 @@ export interface EndpointMoves {
 }
 
 /** 行菜单里四个排序项哪些能用：会让顺序变的才能点。 */
-export function endpointMoves(endpoints: ApiEndpoint[], id: string): EndpointMoves {
-  const can = (place: EndpointPlace) => arrangeEndpoint(endpoints, id, place) !== null;
+export function endpointMoves(
+  endpoints: ApiEndpoint[],
+  id: string,
+  shown?: ReadonlySet<string>,
+): EndpointMoves {
+  const can = (place: EndpointPlace) => arrangeEndpoint(endpoints, id, place, shown) !== null;
   return { top: can("top"), up: can("up"), down: can("down"), bottom: can("bottom") };
+}
+
+/**
+ * 列表顶上的搜索（照 magpie findProviders）：输入按空白分成几个词，每个词都出现在这家的名称、地址、
+ * 已选与清单里的模型名（含显示名）或 key 打码里才留下；不分大小写。框里没字时都留下。
+ */
+export function findEndpoints(endpoints: ApiEndpoint[], query: string): ApiEndpoint[] {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return endpoints;
+  return endpoints.filter((endpoint) => {
+    const text = searchText(endpoint);
+    return words.every((word) => text.includes(word));
+  });
+}
+
+function searchText(endpoint: ApiEndpoint): string {
+  const models = [
+    ...endpoint.models,
+    ...(endpoint.catalog?.models ?? []),
+    ...(endpoint.manualModels ?? []),
+  ];
+  return [
+    endpoint.name,
+    ...(endpoint.baseUrls ?? []).map((entry) => entry.url),
+    ...models.flatMap((model) => [model.id, model.label ?? ""]),
+    endpoint.apiKeyMask ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
 export interface CooldownRemaining {

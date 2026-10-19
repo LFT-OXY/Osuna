@@ -907,4 +907,21 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     };
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
+  it("parses a list whose rows carry the key mask and whose default model goes there, and an older host's", () => {
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-m3",
+        provider: "claude",
+        endpoints: [
+          { ...ENDPOINT, apiKeyMask: "sk-o…a1b2", defaultModelProviders: ["claude", "codex"] },
+          { ...ENDPOINT, id: "ep_2", hasApiKey: false, defaultModelProviders: [] },
+          { ...ENDPOINT, id: "ep_3" },
+        ],
+        activeEndpointId: null,
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
 });

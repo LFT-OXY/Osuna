@@ -473,6 +473,39 @@ describe("the endpoint order", () => {
   });
 });
 
+describe("each row in the list", () => {
+  test("carries its key mask, none without a key, and the providers whose default model goes there first", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "Alphabet", ["glm-4.6"]);
+    const b = await saveEndpoint(client, "Betamax", ["glm-4.6"]);
+    const local = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:11434" }],
+      models: [{ id: "qwen3" }],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "glm-4.6",
+    });
+    const rows = async () =>
+      new Map((await client.apiEndpointList("claude")).endpoints.map((row) => [row.id, row]));
+
+    const listed = await rows();
+    expect(listed.get(a)).toMatchObject({
+      apiKeyMask: "sk-A…abet",
+      defaultModelProviders: ["claude"],
+    });
+    expect(listed.get(b)).toMatchObject({ apiKeyMask: "sk-B…amax", defaultModelProviders: [] });
+    expect(listed.get(local.endpoint?.id ?? "")?.apiKeyMask).toBeUndefined();
+
+    // 第一家关掉，光秃秃的名字归第二家。
+    await client.apiEndpointSetEndpointState({ endpointId: a, enabled: false });
+    expect((await rows()).get(b)?.defaultModelProviders).toEqual(["claude"]);
+  });
+});
+
 describe("a default model that goes missing", () => {
   async function enableBothAgents(client: DaemonClient): Promise<{ a: string; b: string }> {
     const a = await saveEndpoint(client, "A", ["shared", "a-only"]);
