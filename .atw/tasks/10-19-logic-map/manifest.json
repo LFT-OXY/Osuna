@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "project": "Osuna 逻辑图",
+  "brief": "右边栏 320 像素宽的逻辑图面板：同一张“用户登录 › 密码登录”图，13 个节点、3 个判断、1 个子图节点、1 个未指向文档的节点；正在读“锁定账户 30 分钟”的节点文档，所以它在图上高亮。",
+  "round": "01",
+  "candidates": [
+    {
+      "id": "a-cards",
+      "name": "卡片画布",
+      "concept": "像 Dify、Coze 那样的方块加箭头，打开就知道怎么看；判断卡片底部一格一个分支，线从格子里引出。",
+      "typography": "系统字体（PingFang SC）；节点标题 14px，按 66% 缩放后约 9px；分支格 12px",
+      "palette": [
+        "#ffffff",
+        "#e4e4e7",
+        "#a1a1aa",
+        "#9d433b",
+        "#1b4ed8",
+        "#7b5d39"
+      ],
+      "traits": [
+        "二维排布，分支左右展开",
+        "点阵画布底",
+        "适应宽度需缩到 66%，长标题被截断",
+        "失败的线和卡片描边用红色"
+      ],
+      "kind": "html",
+      "source": "prototype/direction-a.html"
+    },
+    {
+      "id": "b-rails",
+      "name": "分支轨道",
+      "concept": "像代码提交记录里的分叉线：每一步占一整行，左边的竖线告诉你路怎么走，失败的路是一条红线。",
+      "typography": "系统字体（PingFang SC）；节点标题 14px 原大；条件小标签 11px",
+      "palette": [
+        "#fcfcfc",
+        "#a1a1aa",
+        "#3b3b40",
+        "#9d433b",
+        "#1b4ed8",
+        "#7b5d39"
+      ],
+      "traits": [
+        "一行一个节点，标题总是完整",
+        "节点种类靠线上的记号区分",
+        "条件写成标题前的小标签",
+        "100% 显示即可放下 13 个节点"
+      ],
+      "kind": "html",
+      "source": "prototype/direction-b.html"
+    },
+    {
+      "id": "c-blocks",
+      "name": "分叉块",
+      "concept": "像一张折起来的表格：每遇到判断就分栏，每栏顶上写条件，失败的栏底色淡红。",
+      "typography": "系统字体（PingFang SC）；块内 14px，按 74% 缩放后约 10px；栏头 12px",
+      "palette": [
+        "#ffffff",
+        "#d4d4d8",
+        "#f4f4f5",
+        "#9d433b",
+        "#1b4ed8",
+        "#7b5d39"
+      ],
+      "traits": [
+        "没有曲线，只有块和短竖线",
+        "判断套判断时栏越分越窄",
+        "不能汇合，同一个终点要画多次",
+        "条件写在栏顶而不在线上"
+      ],
+      "kind": "html",
+      "source": "prototype/direction-c.html"
+    },
+    {
+      "id": "d-dify-coze",
+      "name": "贴近 Dify / Coze",
+      "concept": "照搬 Dify 和 Coze 的工作流画布：白卡片、彩色图标块，判断卡片里写“如果 / 否则”，出口圆点在右边，连线是靛紫色。",
+      "typography": "系统字体（PingFang SC）；标题 14px 加粗，按 57% 缩放后约 8px；分支行 12px",
+      "palette": [
+        "#f2f4f7",
+        "#ffffff",
+        "#2970ff",
+        "#06aed4",
+        "#6172f3",
+        "#4d53e8",
+        "#f04438",
+        "#f79009"
+      ],
+      "traits": [
+        "按节点种类上色的圆角图标块",
+        "判断卡片里一行一个分支，右缘彩色出口",
+        "靛紫连线，失败的线用红色",
+        "需缩到 57%；超出项目配色规定"
+      ],
+      "kind": "html",
+      "source": "prototype/direction-d.html"
+    },
+    {
+      "id": "e-archify",
+      "name": "贴近 archify",
+      "concept": "照搬 archify 的架构图：主流程和失败处理各圈在一个虚线框里，节点按类别着色、带光晕，条件写在虚线中段的小标签上。",
+      "typography": "等宽字体 JetBrains Mono（中文回落 PingFang SC）；标题 14px 粗体，按 57% 缩放后约 8px；说明行 10.5px",
+      "palette": [
+        "#eaf6f8",
+        "#1a9e8f",
+        "#2aa0b8",
+        "#d0496b",
+        "#d0803a",
+        "#7b68d8",
+        "#6b7f8f"
+      ],
+      "traits": [
+        "虚线框把主流程和失败处理分开",
+        "节点半透明彩底 + 同色粗描边 + 光晕",
+        "虚线连线，条件写在线上的小标签",
+        "底部有颜色图例；超出项目配色和不用等宽字体的规定"
+      ],
+      "kind": "html",
+      "source": "prototype/direction-e.html"
+    }
+  ]
+}

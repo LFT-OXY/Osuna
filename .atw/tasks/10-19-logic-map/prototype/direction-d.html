@@ -1,0 +1,115 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>D 贴近 Dify / Coze</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:900px;overflow:hidden}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;font-size:14px;color:#27272a;background:#fcfcfc;display:flex;-webkit-font-smoothing:antialiased}
+.ic{flex:none;display:block}
+.muted{color:#71717b}
+/* 左侧栏 */
+.app-side{width:240px;background:#fafafa;border-right:1px solid #e4e4e7;display:flex;flex-direction:column;padding:10px 8px;gap:2px}
+.app-side .top{display:flex;align-items:center;justify-content:space-between;height:28px;padding:0 6px;margin-bottom:10px;color:#71717b}
+.app-side .proj{font-size:12px;font-weight:500;color:#71717b;padding:6px 8px}
+.app-side .row{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:8px;font-size:14px;color:#71717b}
+.app-side .row.sel{background:#ececed;color:#27272a}
+.dot{width:6px;height:6px;border-radius:50%;background:#a1a1aa;flex:none}
+.ring{width:10px;height:10px;border-radius:50%;border:1.5px solid #268ae0;border-right-color:transparent;flex:none}
+/* 主区域 */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tabs{height:38px;display:flex;align-items:stretch;border-bottom:1px solid #e4e4e7;background:#fcfcfc}
+.tab{display:flex;align-items:center;gap:8px;padding:0 14px;font-size:13px;color:#71717b;border-right:1px solid #e4e4e7}
+.tab.on{background:#fff;color:#27272a}
+.brand{width:12px;height:12px;border-radius:3px;background:#d97757;flex:none}
+.doc{flex:1;background:#fff;overflow:hidden;padding:28px 0}
+.doc .inner{max-width:600px;margin:0 auto;padding:0 32px}
+.doc .path{font-size:12px;color:#71717b;margin-bottom:18px}
+.doc h1{font-size:22px;font-weight:600;margin-bottom:12px;line-height:1.35}
+.doc h2{font-size:16px;font-weight:600;margin:22px 0 8px}
+.doc p,.doc li{font-size:15px;line-height:1.7;color:#3b3b40}
+.doc ul{padding-left:20px}
+.doc li{margin:2px 0}
+/* 右边栏 */
+.side{width:320px;border-left:1px solid #e4e4e7;background:#fcfcfc;display:flex;flex-direction:column}
+.side-tabs{height:38px;display:flex;align-items:center;gap:2px;padding:0 6px;border-bottom:1px solid #e4e4e7}
+.stab{display:flex;align-items:center;gap:5px;height:26px;padding:0 7px;border-radius:8px;font-size:13px;color:#71717b;white-space:nowrap}
+.stab.on{background:#ececed;color:#27272a}
+.stab .ic{width:14px;height:14px}
+.side-tabs .grow{flex:1}
+.phead{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 8px 0 10px}
+.picker{display:flex;align-items:center;gap:4px;height:26px;padding:0 6px;border-radius:8px;font-size:13px;font-weight:500;color:#27272a}
+.crumb{display:flex;align-items:center;gap:2px;height:26px;padding:0 16px;font-size:12px;color:#71717b}
+.crumb b{font-weight:400;color:#27272a}
+.canvas{position:relative;flex:1;overflow:hidden}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:2px;height:28px;padding:0 4px;background:#fff;border:1px solid #e4e4e7;border-radius:8px;font-size:12px;color:#71717b}
+.zoom .ic{width:14px;height:14px;margin:0 4px}
+.zoom span{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.flag{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:#7b5d391f;color:#7b5d39;font-size:11px;white-space:nowrap;flex:none}
+.flag:before{content:"";width:5px;height:5px;border-radius:50%;background:#b37824}
+
+.canvas{background-color:#f2f4f7;background-image:radial-gradient(#d0d5dd 1px,transparent 1px);background-size:14px 14px}
+.stage{position:absolute;left:12px;top:14px;width:516px;height:712px;transform:scale(.574);transform-origin:0 0}
+.stage>svg{position:absolute;left:0;top:0;overflow:visible}
+.dc{position:absolute;width:150px;background:#fff;border-radius:12px;box-shadow:0 1px 2px #1018280f,0 1px 3px #1018281a;padding:10px 12px;font-size:14px;color:#101828}
+.dc .h{display:flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap}
+.dc .h .t{overflow:hidden;text-overflow:ellipsis}
+.ico{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff;flex:none}
+.ico svg{width:14px;height:14px}
+.dc.sel{box-shadow:0 0 0 2px #2970ff,0 4px 8px #1018281a}
+.dc .rows{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.dc .rw{position:relative;display:flex;align-items:center;gap:6px;font-size:11px;color:#98a2b3}
+.dc .rw .lb{width:30px;flex:none}
+.dc .rw .pill{flex:1;height:24px;line-height:24px;padding:0 8px;border-radius:6px;background:#f2f4f7;color:#344054;font-size:12px}
+.dc .rw:after{content:"";position:absolute;right:-17px;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:#4d53e8;border:2px solid #fff;box-shadow:0 0 0 1px #4d53e833}
+.dc .rw.bad:after{background:#f04438}
+.dc .rw.bad .pill{color:#d92d20}
+.dc .tag{display:inline-block;margin-top:8px;height:18px;line-height:18px;padding:0 6px;border-radius:5px;font-size:10px;font-weight:600;letter-spacing:.3px}
+.tag.sub{background:#fef0c7;color:#b54708}
+.tag.flagd{background:#fffaeb;color:#b54708;border:1px solid #fedf89}
+.dc .chev{margin-left:auto;color:#98a2b3}
+</style></head><body>
+<aside class="app-side">
+  <div class="top"><span style="font-weight:500;color:#27272a;font-size:14px">Osuna</span><svg class="ic " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+  <div class="proj">My-Osuna</div>
+  <div class="row sel"><span class="ring"></span>用户登录逻辑</div>
+  <div class="row"><span class="dot"></span>修复终端闪烁</div>
+  <div class="row"><span class="dot"></span>main</div>
+  <div class="proj" style="margin-top:12px">paseo-website</div>
+  <div class="row"><span class="dot"></span>main</div>
+</aside>
+<main class="main">
+  <div class="tabs">
+    <div class="tab"><span class="brand"></span>设计登录流程</div>
+    <div class="tab on"><svg class="ic " width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>锁定账户 30 分钟.md <svg class="ic muted" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div>
+  </div>
+  <div class="doc"><div class="inner">
+    <div class="path">docs/logic-maps/user-login/lock-account.md</div>
+    <h1>锁定账户 30 分钟</h1>
+    <p>同一账户连续输错密码满 5 次，账户锁定 30 分钟。锁定期间的登录请求直接返回“账户已锁定”，不再校验密码。</p>
+    <h2>规则</h2>
+    <ul>
+      <li>失败次数按账户计，不按设备或 IP 计。</li>
+      <li>从第 5 次失败那一刻开始计时，到期自动解除，不需要人工操作。</li>
+      <li>解除后失败次数清零。</li>
+    </ul>
+    <h2>之后去哪</h2>
+    <ul><li>回到“留在登录页”，提示还要等多久。</li></ul>
+    <h2>验收</h2>
+    <ul>
+      <li>连续输错 5 次后，第 6 次输入正确密码，仍提示账户已锁定。</li>
+      <li>30 分钟后输入正确密码，可以正常登录。</li>
+    </ul>
+  </div></div>
+</main>
+<aside class="side">
+  <div class="side-tabs">
+    <div class="stab"><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>文件</div>
+    <div class="stab"><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="3"/><path d="M12 6h5a2 2 0 0 1 2 2v7"/><path d="m15 9-3-3 3-3"/><circle cx="19" cy="18" r="3"/><path d="M12 18H7a2 2 0 0 1-2-2V9"/><path d="m9 15 3 3-3 3"/></svg>更改</div>
+    <div class="stab"><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>会话历史</div>
+    <div class="stab on"><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>逻辑图</div>
+  </div>
+  <div class="phead"><div class="picker">用户登录<svg class="ic muted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div><span class="muted" style="font-size:12px">13 个节点</span></div>
+  <div class="crumb">用户登录<svg class="ic " width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><b>密码登录</b></div>
+  <div class="canvas"><div class="stage"><svg width="516" height="712"><defs><marker id="di" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#4d53e8"/></marker><marker id="dr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#f04438"/></marker></defs><path d="M75 44 L75 76" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M164 135 C161 135 161 140 161 150 L161 230 C161 236 158 238 154 238" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M167 165 C300 165 419 180 419 216" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M164 275 C161 275 161 280 161 290 L161 370 C161 376 158 378 154 378" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M167 305 C210 305 247 320 247 356" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M75 400 L75 432" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M75 502 L75 534" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M75 604 L75 636" fill="none" stroke="#4d53e8" stroke-width="2" marker-end="url(#di)"/><path d="M247 400 L247 432" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M336 491 C333 491 333 496 333 506 L333 586 C333 592 330 594 326 594" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M339 521 C390 521 419 536 419 572" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M247 616 C247 640 333 636 333 660" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M419 616 C419 640 333 636 333 660" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/><path d="M494 238 C508 238 510 250 510 262 L510 670 C510 682 500 682 412 682" fill="none" stroke="#f04438" stroke-width="2" marker-end="url(#dr)"/></svg><div class="dc " style="left:0px;top:0px"><div class="h"><span class="ico" style="background:#2970ff"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1Z" fill="currentColor"/></svg></span><span class="t">提交账号和密码</span></div></div><div class="dc" style="left:0px;top:76px"><div class="h"><span class="ico" style="background:#06aed4"><svg viewBox="0 0 24 24"><path d="M6 3v6a4 4 0 0 0 4 4h8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="m15 9 4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9v12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>账户状态</div><div class="rows"><div class="rw "><span class="lb">如果</span><span class="pill">正常</span></div><div class="rw bad"><span class="lb">否则</span><span class="pill">已锁定</span></div></div></div><div class="dc " style="left:344px;top:216px"><div class="h"><span class="ico" style="background:#f04438"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19Z" fill="currentColor"/><path d="M12 10v4M12 17v.5" stroke="#f04438" stroke-width="2.2" stroke-linecap="round"/></svg></span><span class="t">提示账户已锁定</span></div></div><div class="dc" style="left:0px;top:216px"><div class="h"><span class="ico" style="background:#06aed4"><svg viewBox="0 0 24 24"><path d="M6 3v6a4 4 0 0 0 4 4h8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="m15 9 4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9v12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>校验密码</div><div class="rows"><div class="rw "><span class="lb">如果</span><span class="pill">正确</span></div><div class="rw bad"><span class="lb">否则</span><span class="pill">错误</span></div></div></div><div class="dc " style="left:0px;top:356px"><div class="h"><span class="ico" style="background:#6172f3"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span><span class="t">清零失败次数</span></div></div><div class="dc " style="left:0px;top:432px"><div class="h"><span class="ico" style="background:#f79009"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="t">二次验证</span><svg class="ic chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></div><span class="tag sub">子图 · 4 个节点</span></div><div class="dc " style="left:0px;top:534px"><div class="h"><span class="ico" style="background:#6172f3"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span><span class="t">签发登录会话</span></div><span class="tag flagd">未指向文档</span></div><div class="dc " style="left:0px;top:636px"><div class="h"><span class="ico" style="background:#2970ff"><svg viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H5" fill="currentColor"/></svg></span><span class="t">进入首页</span></div></div><div class="dc " style="left:172px;top:356px"><div class="h"><span class="ico" style="background:#f04438"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19Z" fill="currentColor"/><path d="M12 10v4M12 17v.5" stroke="#f04438" stroke-width="2.2" stroke-linecap="round"/></svg></span><span class="t">失败次数 +1</span></div></div><div class="dc" style="left:172px;top:432px"><div class="h"><span class="ico" style="background:#06aed4"><svg viewBox="0 0 24 24"><path d="M6 3v6a4 4 0 0 0 4 4h8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="m15 9 4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9v12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>满 5 次？</div><div class="rows"><div class="rw bad"><span class="lb">如果</span><span class="pill">未满</span></div><div class="rw bad"><span class="lb">否则</span><span class="pill">已满</span></div></div></div><div class="dc " style="left:172px;top:572px"><div class="h"><span class="ico" style="background:#f04438"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19Z" fill="currentColor"/><path d="M12 10v4M12 17v.5" stroke="#f04438" stroke-width="2.2" stroke-linecap="round"/></svg></span><span class="t">提示密码错误</span></div></div><div class="dc sel" style="left:344px;top:572px"><div class="h"><span class="ico" style="background:#f04438"><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19Z" fill="currentColor"/><path d="M12 10v4M12 17v.5" stroke="#f04438" stroke-width="2.2" stroke-linecap="round"/></svg></span><span class="t">锁定账户 30 分钟</span></div></div><div class="dc " style="left:258px;top:660px"><div class="h"><span class="ico" style="background:#2970ff"><svg viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H5" fill="currentColor"/></svg></span><span class="t">留在登录页</span></div></div></div>
+    <div class="zoom"><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg><span>57%</span><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg><svg class="ic " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></div>
+  </div>
+</aside>
+</body></html>
