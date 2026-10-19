@@ -7,7 +7,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：用本机模板保存，改服务地址的端口后各格式地址都换了端口、路径不变。
 - [ ] 端到端：上传的图标能经 RPC 取回；删掉接口后副本一起删。
