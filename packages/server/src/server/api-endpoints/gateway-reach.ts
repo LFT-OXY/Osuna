@@ -17,9 +17,15 @@ const ANSWER_MAX_AGE_MS = 20_000;
 /** 问 base 的根路径是不是中转站；生产发 HTTP，测试可换。 */
 export type ProbeGatewayAt = (base: string) => Promise<boolean>;
 
-export async function probeGatewayAt(base: string): Promise<boolean> {
+/** 生产用的问法；userAgent 是 Osuna 自己的身份（Osuna/<daemon 版本>）：这是 daemon 主动发出的请求。 */
+export function createGatewayProbe(input: { userAgent: string }): ProbeGatewayAt {
+  return (base) => probeGatewayAt({ base, userAgent: input.userAgent });
+}
+
+async function probeGatewayAt(input: { base: string; userAgent: string }): Promise<boolean> {
   try {
-    const response = await fetch(`${base.replace(/\/+$/, "")}/`, {
+    const response = await fetch(`${input.base.replace(/\/+$/, "")}/`, {
+      headers: { "user-agent": input.userAgent },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     if (response.status !== 200) return false;

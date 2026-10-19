@@ -1,5 +1,6 @@
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import { describe, expect, it } from "vitest";
-import { createGatewayReach, proxyBase } from "./gateway-reach.js";
+import { createGatewayProbe, createGatewayReach, proxyBase } from "./gateway-reach.js";
 
 const GATEWAY = "http://127.0.0.1:6767/api-endpoint-gateway";
 
@@ -44,5 +45,29 @@ describe("createGatewayReach", () => {
     clock = 20_001;
     await reaches("https://corp.example");
     expect(asked).toHaveLength(2);
+  });
+});
+
+describe("createGatewayProbe", () => {
+  it("asks the address's root as Osuna and takes the gateway's self-introduction", async () => {
+    const seen: { url?: string; headers?: IncomingHttpHeaders } = {};
+    const server = createServer((request, response) => {
+      seen.url = request.url;
+      seen.headers = request.headers;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ name: "osuna" }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("not on TCP");
+      const { port } = address;
+      const probe = createGatewayProbe({ userAgent: "Osuna/1.2.3" });
+      expect(await probe(`http://127.0.0.1:${port}/claude-code/`)).toBe(true);
+      expect(seen.url).toBe("/claude-code/");
+      expect(seen.headers?.["user-agent"]).toBe("Osuna/1.2.3");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

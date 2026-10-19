@@ -1,7 +1,8 @@
+// 前缀表照 ui-direction.md「接口详情页」与 magpie（MIT，THIRD_PARTY_NOTICES）internal/agent/icons.go。
+
 import { describe, expect, it } from "vitest";
 import { MODEL_FAMILIES, modelFamilyOf } from "./model-families";
 
-// 前缀表照 ui-direction.md「接口详情页」与 magpie（MIT，THIRD_PARTY_NOTICES）internal/agent/icons.go。
 describe("modelFamilyOf", () => {
   it.each([
     ["claude-sonnet-4-5", "claude"],

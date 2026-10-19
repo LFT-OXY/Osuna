@@ -55,7 +55,7 @@ import {
 } from "./claude-cloud-switches.js";
 import {
   createGatewayReach,
-  probeGatewayAt,
+  createGatewayProbe,
   proxyBase,
   type ProbeGatewayAt,
 } from "./gateway-reach.js";
@@ -378,7 +378,7 @@ export interface ApiEndpointServiceOptions {
   // 列本机进程、执行 CLI 自己的命令（reopen-hints.ts）、读系统代理（codex-proxy.ts）；
   // 缺省用真的，测试一律换成假的（真的在测试里一造就抛错）。
   hostProcesses?: HostProcesses;
-  // daemon 的版本：Osuna 自己发出的请求（经代理问中转站）带 Osuna/<版本>。
+  // daemon 的版本：Osuna 自己发出的请求（经代理问中转站、问托管地址是不是中转站）带 Osuna/<版本>。
   daemonVersion: string;
   // 真的适配器找哪个 codex 执行它自己的命令；缺省按默认找，daemon 传用户配的 codex 命令（假的适配器自己答）。
   findCodexCommand?: FindCodexCommand;
@@ -575,7 +575,10 @@ export class ApiEndpointService {
     this.readLoginShellEnv =
       options.readLoginShellEnv ?? createLoginShellEnvReader({ env: this.env });
     this.proxyEnv = options.proxyEnv ?? this.env;
-    this.reachesGateway = createGatewayReach({ probe: options.probeGatewayAt ?? probeGatewayAt });
+    const userAgent = `Osuna/${options.daemonVersion}`;
+    this.reachesGateway = createGatewayReach({
+      probe: options.probeGatewayAt ?? createGatewayProbe({ userAgent }),
+    });
     this.now = options.now ?? (() => new Date());
     this.onActiveEndpointChanged = options.onActiveEndpointChanged ?? (() => undefined);
     this.countLiveSessions = options.countLiveSessions;
@@ -607,7 +610,7 @@ export class ApiEndpointService {
       }),
       probeThroughProxy: options.probeThroughProxy ?? probeThroughProxy,
       reachesGateway: this.reachesGateway,
-      userAgent: `Osuna/${options.daemonVersion}`,
+      userAgent,
       platform: process.platform,
       logger: this.logger,
     });

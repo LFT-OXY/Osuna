@@ -121,17 +121,18 @@ separately.
 
 ## Outbound requests
 
-The daemon makes two network requests on its own initiative, both plain GETs for
-one public file: no authentication, no query string, no request body, nothing
-about you or your machine beyond the IP and user agent any HTTP request carries.
-Everything else the daemon fetches is either something you asked for, such as
-the CLI update check below, or follows from a connection you turned on, such as
-the API endpoint checks below.
+The daemon downloads two public files on its own initiative, both plain GETs:
+no authentication, no query string, no request body, nothing about you or your
+machine beyond the IP and user agent any HTTP request carries. Its other
+requests are something you asked for, such as the CLI update check, or follow
+from a switch you turned on: the API endpoint checks and the gateway's calls to
+endpoints, all below. Traffic the CLIs send through the gateway is theirs, not
+the daemon's.
 
-| File                                           | Fetched when                                      | Used for                                                                                                                                                  |
-| ---------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The price table on `raw.githubusercontent.com` | Always                                            | Pricing usage                                                                                                                                             |
-| `models.dev/api.json`                          | Claude Code or Codex is switched to API endpoints | Telling Claude Code and Codex each endpoint model's context window and effort levels, plus Claude Code its reply length and Codex whether it takes images |
+| File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The price table on `raw.githubusercontent.com` | Always                                            | Pricing usage                                                                                                                                                                                                                                                                                                                   |
+| `models.dev/api.json`                          | Claude Code or Codex is switched to API endpoints | Telling Claude Code and Codex each endpoint model's context window and effort levels, plus Claude Code its reply length and Codex whether it takes images; picking Claude Code's newest model as the default model when the CLI has none; letting the gateway decide whether `temperature` and `top_p` go to a vendor's own API |
 
 Each runs 30 seconds after start and every 24 hours after that, and skips the
 request while the copy it already fetched is younger than a day. A daemon still
@@ -142,7 +143,8 @@ requests are conditional (`If-None-Match`), so an unchanged file costs a 304
 rather than 2.7 or 5.7 MB. They time out after 15 seconds; a failure is logged
 at `info`, retried an hour later, and never replaces the copy you already have.
 The daemon keeps the models.dev answer slimmed to each model's window, reply
-length, effort levels and image input in
+length, effort levels and image input, each vendor's sampling support, and
+Claude Code's own models newest first, in
 `$PASEO_HOME/api-endpoints/models-dev.json`.
 
 Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
@@ -170,10 +172,14 @@ after 3 seconds and its answer is reused for 20 seconds:
 | Request                                | Sent when                                                                                                                                                                                                                                  | Identity                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `GET <gateway>/` through a proxy       | Codex would reach the gateway through an HTTP proxy (from the login shell, the daemon's environment or the system settings) that `NO_PROXY` doesn't exempt, and nothing else is wrong; asks whether the proxy passes the request back here | `User-Agent: Osuna/<version>`, plus the proxy's own credentials if its URL has them |
-| `GET` to the root of a managed address | Claude Code's managed settings set `ANTHROPIC_BASE_URL` to an address that is not the gateway but could be a proxy in front of it (another host, or a loopback address with a path of its own); asks whether it answers as the gateway     | Node's default user agent                                                           |
+| `GET` to the root of a managed address | Claude Code's managed settings set `ANTHROPIC_BASE_URL` to an address that is not the gateway but could be a proxy in front of it (another host, or a loopback address with a path of its own); asks whether it answers as the gateway     | `User-Agent: Osuna/<version>`                                                       |
 
-Three more kinds of traffic pass through or start beside the daemon without
-being its requests:
+The gateway's calls to an endpoint are the connection you turned on: the
+requests it forwards for the CLIs, and its own, such as the summary it asks for
+when Codex compacts a conversation on an endpoint model.
+
+Two more kinds of traffic pass through or start beside the daemon without being
+its requests:
 
 - For Codex signed in with ChatGPT, the gateway forwards Codex's requests for
   ChatGPT's own models, including the model list, to `chatgpt.com` as Codex sent
@@ -185,9 +191,6 @@ being its requests:
 - To learn how Codex is signed in, the daemon starts Codex's own app-server and
   asks it. With a ChatGPT sign-in, Codex then asks `chatgpt.com` for the
   account's workspace, with its own credentials.
-- Requests to an endpoint are the connection you turned on. The gateway's own
-  calls to an endpoint, such as the summary it asks for when Codex compacts a
-  conversation on an endpoint model, go there too.
 
 Reading the login shell's environment, reading the system proxy settings,
 listing processes, and restarting Codex's shared background app-server stay on

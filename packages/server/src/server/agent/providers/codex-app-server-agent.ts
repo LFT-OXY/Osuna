@@ -3418,6 +3418,8 @@ export function buildCodexAppServerEnv(
   );
 }
 
+// 下面 withLoopbackNoProxy 补的三项照 magpie（MIT，THIRD_PARTY_NOTICES）internal/netproxy/netproxy.go 的 withProxy；
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 /**
  * Osuna 起的 Codex 直连本机中转站：NO_PROXY 补上 localhost、127.0.0.1、::1（magpie netproxy.go withProxy 的那三项），
  * 原有的项保留在前。Codex 的 reqwest 先读 NO_PROXY、没有再读 no_proxy，对 IP 只认精确 IP 或网段

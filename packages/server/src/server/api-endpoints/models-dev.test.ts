@@ -1,3 +1,6 @@
+// Claude Code 自己的模型（models.dev 上 Anthropic 的文字模型，新发布的在前）照 magpie（MIT，THIRD_PARTY_NOTICES）internal/catalog/catalog.go 的
+// Provider、textModel 与 internal/agent/claude.go 的 claudeOwn。
+
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";

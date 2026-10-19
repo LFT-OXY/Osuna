@@ -1,3 +1,6 @@
+// Codex 经代理连不上中转站的提示与三种修法照 magpie（MIT，THIRD_PARTY_NOTICES）internal/agent/codex_proxy.go 的
+// codexProxiedDetail 与 internal/gui/assets/app.js、i18n.js 的「proxied」标题。
+
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
