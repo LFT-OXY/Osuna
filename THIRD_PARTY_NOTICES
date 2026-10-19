@@ -252,9 +252,11 @@ the search as the target API's own tool and writing the upstream's search back
 in the client's shape follow anthropicBody, anthropicEncoder, renderAnthropic
 and searchResultBlock in internal/gateway/anthropic.go, and buildResponses,
 responsesDecoder, responsesEncoder, responsesSearchItem and renderResponses in
-internal/gateway/responses.go:
+internal/gateway/responses.go; its tests take what counts as asking for a
+search from searchAsked in internal/gateway/search.go:
 
   packages/server/src/server/api-endpoints/gateway/web-search.ts
+  packages/server/src/server/api-endpoints/gateway/web-search.test.ts
   packages/server/src/server/api-endpoints/gateway/translation/ir.ts
   packages/server/src/server/api-endpoints/gateway/translation/anthropic.ts
   packages/server/src/server/api-endpoints/gateway/translation/responses.ts

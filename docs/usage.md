@@ -125,7 +125,8 @@ The daemon makes two network requests on its own initiative, both plain GETs for
 one public file: no authentication, no query string, no request body, nothing
 about you or your machine beyond the IP and user agent any HTTP request carries.
 Everything else the daemon fetches is either something you asked for, such as
-the CLI update check below, or a connection you turned on.
+the CLI update check below, or follows from a connection you turned on, such as
+the API endpoint checks below.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                  |
 | ---------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -161,6 +162,36 @@ itself. The answers stay in memory for an hour, so reopening the page
 does not ask again; refresh does. Nothing is looked up at startup, on a timer,
 or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
 cover it.
+
+While Claude Code's or Codex's API endpoint switch is on, reading that
+provider's settings page can send two checks of the daemon's own. Each times out
+after 3 seconds and its answer is reused for 20 seconds:
+
+| Request                                | Sent when                                                                                                                                                                                                                                  | Identity                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `GET <gateway>/` through a proxy       | Codex would reach the gateway through an HTTP proxy (from the login shell, the daemon's environment or the system settings) that `NO_PROXY` doesn't exempt, and nothing else is wrong; asks whether the proxy passes the request back here | `User-Agent: Osuna/<version>`, plus the proxy's own credentials if its URL has them |
+| `GET` to the root of a managed address | Claude Code's managed settings set `ANTHROPIC_BASE_URL` to an address that is not the gateway but could be a proxy in front of it (another host, or a loopback address with a path of its own); asks whether it answers as the gateway     | Node's default user agent                                                           |
+
+Three more kinds of traffic pass through or start beside the daemon without
+being its requests:
+
+- For Codex signed in with ChatGPT, the gateway forwards Codex's requests for
+  ChatGPT's own models, including the model list, to `chatgpt.com` as Codex sent
+  them, Codex's own sign-in included. The one change is in a conversation that
+  carries a compaction summary the gateway made for an endpoint model: that item
+  goes as a plain message. A request
+  carrying an OpenAI API key goes to `api.openai.com` the same way. The daemon
+  reads no credential and adds nothing ([ADR 0010](adr/0010-codex-wiring-and-gateway-caller-recognition.md)).
+- To learn how Codex is signed in, the daemon starts Codex's own app-server and
+  asks it. With a ChatGPT sign-in, Codex then asks `chatgpt.com` for the
+  account's workspace, with its own credentials.
+- Requests to an endpoint are the connection you turned on. The gateway's own
+  calls to an endpoint, such as the summary it asks for when Codex compacts a
+  conversation on an endpoint model, go there too.
+
+Reading the login shell's environment, reading the system proxy settings,
+listing processes, and restarting Codex's shared background app-server stay on
+the machine.
 
 ## Your own prices
 

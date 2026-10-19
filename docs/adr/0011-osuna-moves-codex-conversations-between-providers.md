@@ -6,11 +6,12 @@ The facts behind this are in task `10-16-cli-wiring-web-search`, `research/codex
 
 ## Rules
 
-- **Only on the user's request.** The user picks one or more Codex conversations in **Session history**, or presses the button offered when a resume fails because its Codex model provider is gone. Osuna never moves a conversation on its own, including when the switch changes.
+- **Only on the user's request.** The user picks one or more Codex conversations in **Session history**, or presses the button offered when a resume fails because its Codex model provider is gone (importing a conversation from Session history, or unarchiving an Agent). Osuna never moves a conversation on its own, including when the switch changes.
+- **In the Codex home the conversation was listed from.** Session history lists each row from one provider's `CODEX_HOME`; the move, its state databases and the target list all use that one, which can differ from the `config.toml` Use API endpoints rewrites. One move works in one `CODEX_HOME`, so a multi-select stays within one provider.
 - **Leave active conversations alone.** A conversation whose file was written in the last minute is not moved, and the result says which ones were skipped.
 - **Back up first.** Before any change, Osuna copies each conversation file, compressed twins included, into a backup folder of its own, with a record of the conversation id, the old and new provider, the time, and which copy belongs to which file. The backup is for manual recovery only.
 - **Change the provider and nothing else.** In each file, every session-start entry that names a provider gets the new one; every other byte stays. A compressed file is compressed again. Each file is written beside the original, flushed, given back its modification time, and renamed over it. Then the conversation's row in each of Codex's state databases gets the new provider.
-- **Roll back a failed file step.** If changing a conversation file fails, the files already changed are restored from the backup. If a state database then refuses the change, the files stay moved, as in magpie, and the result says so and names the backup.
+- **Roll back a failed file step.** Before changing anything, Osuna checks that its Node can open the state databases and compressed files there are, and moves nothing if it can't. If changing a conversation file fails, the files already changed are restored from the backup. If a state database then refuses the change, the files stay moved, as in magpie, and the result says so and names the backup.
 - **Undo is moving it back.** Moving a conversation back to the provider it had restores it, since entries without a provider were never changed.
 
 ## Considered Options
@@ -21,6 +22,6 @@ The facts behind this are in task `10-16-cli-wiring-web-search`, `research/codex
 
 ## Consequences
 
-- Known limit, from magpie: settings-snapshot events inside the conversation file keep naming the old provider. Codex reads the provider from those events when it rebuilds its state database from the files, so a rebuild may undo a move. This is inferred, not observed; ticket 13 checks it against a real Codex in a scratch `CODEX_HOME`, and ticket 30 records the result here.
+- Known limit, from magpie: settings-snapshot events inside the conversation file keep naming the old provider. When Codex rebuilds its state database from the files, it takes each conversation's provider from the last snapshot, so a conversation that was moved and not yet continued goes back to its old provider: its next resume runs there and writes another old-provider snapshot. Continuing it once after the move writes a snapshot naming the new provider, and a later rebuild keeps the move. Codex's own list keeps showing the conversation under the new provider either way, since the list reads the session-start entry. Checked with codex-cli 0.163.0 in a scratch `CODEX_HOME`, signed out, by deleting the state database and letting Codex rebuild it; a real model turn after the move was not run. The move dialog tells the user to continue each moved conversation once.
 - Osuna depends on the layout of Codex's conversation files and state database, which Codex does not publish. A Codex release that changes either can break moving, and the backup is the recovery path.
 - Backups accumulate in Osuna's folder until the user removes them.
