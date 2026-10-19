@@ -4197,6 +4197,7 @@ export const ptBR: TranslationResources = {
       subgraphTagMany: "Subgrafo · {{count}} nós",
       enterSubgraph: "Abrir subgrafo {{title}}",
       openNodeDoc: "Abrir o documento de {{title}}",
+      openNodeDocFailed: "Não foi possível abrir o documento do nó",
       breadcrumb: "Caminho do mapa lógico",
       pendingLink: "Sem documento vinculado",
     },

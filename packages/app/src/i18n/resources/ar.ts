@@ -4133,6 +4133,7 @@ export const ar: TranslationResources = {
       subgraphTagMany: "مخطط فرعي · {{count}} عقد",
       enterSubgraph: "فتح المخطط الفرعي {{title}}",
       openNodeDoc: "فتح مستند العقدة {{title}}",
+      openNodeDocFailed: "تعذّر فتح مستند العقدة",
       breadcrumb: "مسار الخريطة المنطقية",
       pendingLink: "بلا مستند مرتبط",
     },

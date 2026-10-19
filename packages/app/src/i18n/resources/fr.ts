@@ -4233,6 +4233,7 @@ export const fr: TranslationResources = {
       subgraphTagMany: "Sous-graphe · {{count}} nœuds",
       enterSubgraph: "Ouvrir le sous-graphe {{title}}",
       openNodeDoc: "Ouvrir le document de {{title}}",
+      openNodeDocFailed: "Impossible d’ouvrir le document du nœud",
       breadcrumb: "Chemin de la carte logique",
       pendingLink: "Aucun doc lié",
     },

@@ -4159,6 +4159,7 @@ export const ko: TranslationResources = {
       subgraphTagMany: "하위 그래프 · 노드 {{count}}개",
       enterSubgraph: "하위 그래프 {{title}} 열기",
       openNodeDoc: "{{title}} 노드 문서 열기",
+      openNodeDocFailed: "노드 문서를 열 수 없습니다",
       breadcrumb: "로직 맵 경로",
       pendingLink: "문서 미연결",
     },

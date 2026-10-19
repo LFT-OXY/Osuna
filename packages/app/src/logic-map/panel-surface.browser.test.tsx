@@ -15,7 +15,9 @@ import {
   buildLoginLogicMap,
   buildNestedLogicMap,
 } from "@/test/logic-map-fixtures";
-import { FileReadError } from "@getpaseo/client/internal/daemon-client";
+import { DaemonConnectionError, FileReadError } from "@getpaseo/client/internal/daemon-client";
+import type { ToastApi } from "@/components/toast-host";
+import { ToastApiProvider } from "@/contexts/toast-api-context";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapPanelSurface, type LogicMapClient } from "./panel-surface";
 
@@ -40,6 +42,10 @@ interface FakeHost {
   getCalls: string[];
   /** 工作区里的文件（相对路径 → 内容），供点外部文档节点时读取。 */
   files: Map<string, string>;
+  /** 读这些路径时连接断开（不是 FileReadError）。 */
+  disconnectedPaths: Set<string>;
+  /** 面板弹出的错误提示。 */
+  toastErrors: string[];
   /** 模拟 daemon 推送一条事件给订阅了它的连接。 */
   push: (message: SessionOutboundMessage) => void;
 }
@@ -51,6 +57,8 @@ function createFakeHost(): FakeHost {
     reads: new Map(),
     getCalls: [],
     files: new Map(),
+    disconnectedPaths: new Set(),
+    toastErrors: [],
     push: (message) => {
       for (const listener of listeners) listener(message);
     },
@@ -63,6 +71,9 @@ function createFakeHost(): FakeHost {
         return result;
       },
       readFile: (async (cwd: string, path: string) => {
+        if (host.disconnectedPaths.has(path)) {
+          throw new DaemonConnectionError("Connection lost");
+        }
         const content = host.files.get(path);
         if (cwd !== WORKSPACE_ROOT || content === undefined) {
           throw new FileReadError("File not found", cwd, path);
@@ -108,6 +119,15 @@ interface SurfaceOverrides {
 
 const noopOpenNodeDoc = () => {};
 
+/** 只记下错误提示的 toast。 */
+function fakeToast(host: FakeHost): ToastApi {
+  return {
+    show: () => {},
+    copied: () => {},
+    error: (message) => host.toastErrors.push(message),
+  };
+}
+
 /** 挂上面板；返回的函数用新的参数重新渲染同一个面板（比如主区域换了聚焦的标签）。 */
 function mountSurface(
   host: FakeHost,
@@ -119,22 +139,25 @@ function mountSurface(
   document.body.appendChild(container);
   const root = createRoot(container);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const toast = fakeToast(host);
   const render = (props: Partial<SurfaceOverrides>) =>
     act(() =>
       root.render(
-        <QueryClientProvider client={queryClient}>
-          <LogicMapPanelSurface
-            serverId="server-1"
-            workspaceId={WORKSPACE_ID}
-            workspaceRoot={WORKSPACE_ROOT}
-            client={host.client}
-            isConnected
-            supported={props.supported === undefined ? true : props.supported}
-            conversationMapName={props.conversationMapName ?? null}
-            focusedFilePath={props.focusedFilePath ?? null}
-            onOpenNodeDoc={props.onOpenNodeDoc ?? noopOpenNodeDoc}
-          />
-        </QueryClientProvider>,
+        <ToastApiProvider api={toast}>
+          <QueryClientProvider client={queryClient}>
+            <LogicMapPanelSurface
+              serverId="server-1"
+              workspaceId={WORKSPACE_ID}
+              workspaceRoot={WORKSPACE_ROOT}
+              client={host.client}
+              isConnected
+              supported={props.supported === undefined ? true : props.supported}
+              conversationMapName={props.conversationMapName ?? null}
+              focusedFilePath={props.focusedFilePath ?? null}
+              onOpenNodeDoc={props.onOpenNodeDoc ?? noopOpenNodeDoc}
+            />
+          </QueryClientProvider>
+        </ToastApiProvider>,
       ),
     );
   render(overrides);
@@ -444,6 +467,36 @@ describe("the logic map panel", () => {
     await userEvent.click(await shown("logic-map-node-title-reset-count"));
 
     await expect.poll(() => onOpenNodeDoc.mock.calls).toEqual([[{ path: "spec/gone.md" }]]);
+  });
+
+  it("says the node doc could not be opened when the host drops while reading it", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) =>
+          node.id === "reset-count"
+            ? { ...node, doc: { kind: "external", path: "spec/login.md", heading: "清零失败次数" } }
+            : node,
+        ),
+      },
+    });
+    host.disconnectedPaths.add("spec/login.md");
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(host, { onOpenNodeDoc });
+
+    await userEvent.click(await shown("logic-map-node-title-reset-count"));
+
+    await expect.poll(() => host.toastErrors).toEqual(["Couldn't open the node doc"]);
+    expect(onOpenNodeDoc).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      "[LogicMap] Failed to open node doc",
+      expect.objectContaining({ nodeId: "reset-count", path: "spec/login.md" }),
+    );
+    errorLog.mockRestore();
   });
 
   it("keeps showing the map and layer a node doc was opened from once the doc's tab takes focus", async () => {

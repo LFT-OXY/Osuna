@@ -4221,6 +4221,7 @@ export const es: TranslationResources = {
       subgraphTagMany: "Subgrafo · {{count}} nodos",
       enterSubgraph: "Abrir subgrafo {{title}}",
       openNodeDoc: "Abrir el documento de {{title}}",
+      openNodeDocFailed: "No se pudo abrir el documento del nodo",
       breadcrumb: "Ruta del mapa lógico",
       pendingLink: "Sin documento vinculado",
     },

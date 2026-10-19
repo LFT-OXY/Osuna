@@ -26,6 +26,7 @@ import { ZoomableViewport } from "@/components/zoomable-viewport";
 import type { ViewportFitOptions, ViewportRect } from "@/components/zoomable-viewport/geometry";
 import { useReplicaQuery } from "@/data/query";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
+import { useToast } from "@/contexts/toast-api-context";
 import { explorerFileFromReadResult } from "@/file-explorer/read-result";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapBackdrop } from "./backdrop";
@@ -340,6 +341,8 @@ function useOpenNodeDoc({
   skeleton: LogicMapSkeleton | null;
   onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
 }) {
+  const { t } = useTranslation();
+  const toast = useToast();
   const [openedNodeId, setOpenedNodeId] = useState<string | null>(null);
   const latestRequestRef = useRef(0);
   const openNodeDoc = useCallback(
@@ -353,14 +356,21 @@ function useOpenNodeDoc({
         onOpenNodeDoc(nodeDocLocation({ mapName, doc, content: null }));
         return;
       }
-      void readTextFile(client, workspaceRoot, doc.path).then((content) => {
-        if (latestRequestRef.current === request) {
-          onOpenNodeDoc(nodeDocLocation({ mapName, doc, content }));
+      void (async () => {
+        try {
+          const content = await readTextFile(client, workspaceRoot, doc.path);
+          if (latestRequestRef.current === request) {
+            onOpenNodeDoc(nodeDocLocation({ mapName, doc, content }));
+          }
+        } catch (error) {
+          // 连接断开等读不到文件之外的错误：告诉用户这次没打开，不悄悄什么都不做。
+          console.error("[LogicMap] Failed to open node doc", { nodeId, path: doc.path, error });
+          if (latestRequestRef.current === request)
+            toast.error(t("logicMap.panel.openNodeDocFailed"));
         }
-        return undefined;
-      });
+      })();
     },
-    [client, mapName, onOpenNodeDoc, skeleton, workspaceRoot],
+    [client, mapName, onOpenNodeDoc, skeleton, t, toast, workspaceRoot],
   );
   return { openedNodeId, openNodeDoc };
 }

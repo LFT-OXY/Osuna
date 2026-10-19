@@ -4203,6 +4203,7 @@ export const ru: TranslationResources = {
       subgraphTagMany: "Подграф · узлов: {{count}}",
       enterSubgraph: "Открыть подграф {{title}}",
       openNodeDoc: "Открыть документ узла {{title}}",
+      openNodeDocFailed: "Не удалось открыть документ узла",
       breadcrumb: "Путь по логической карте",
       pendingLink: "Документ не привязан",
     },

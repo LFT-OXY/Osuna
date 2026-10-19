@@ -4126,6 +4126,7 @@ export const zhCN: TranslationResources = {
       subgraphTagMany: "子图 · {{count}} 个节点",
       enterSubgraph: "进入子图 {{title}}",
       openNodeDoc: "打开 {{title}} 的节点文档",
+      openNodeDocFailed: "打不开节点文档",
       breadcrumb: "逻辑图路径",
       pendingLink: "未指向文档",
     },

@@ -4183,6 +4183,7 @@ export const ja: TranslationResources = {
       subgraphTagMany: "サブグラフ · {{count}} 個のノード",
       enterSubgraph: "サブグラフ {{title}} を開く",
       openNodeDoc: "{{title}} のノードドキュメントを開く",
+      openNodeDocFailed: "ノードドキュメントを開けませんでした",
       breadcrumb: "ロジックマップのパス",
       pendingLink: "ドキュメント未リンク",
     },
