@@ -398,6 +398,81 @@ test("turning the switch off is never refused, even with a default model that is
   expect(off).toMatchObject({ agent: { enabled: false, defaultModelId: "m1" }, error: null });
 });
 
+describe("the endpoint order", () => {
+  async function names(client: DaemonClient): Promise<string[]> {
+    return (await client.apiEndpointList("claude")).endpoints.map((endpoint) => endpoint.name);
+  }
+
+  test("is rewritten as a whole, survives a restart, and a new endpoint goes last", async () => {
+    const harness = await start();
+    const a = await saveEndpoint(harness.client, "A", ["a1"]);
+    const b = await saveEndpoint(harness.client, "B", ["b1"]);
+    const c = await saveEndpoint(harness.client, "C", ["c1"]);
+
+    expect(await harness.client.apiEndpointSetOrder({ endpointIds: [c, a, b] })).toMatchObject({
+      error: null,
+    });
+    expect(await names(harness.client)).toEqual(["C", "A", "B"]);
+
+    const restarted = await start({}, harness);
+    expect(await names(restarted.client)).toEqual(["C", "A", "B"]);
+    await saveEndpoint(restarted.client, "D", ["d1"]);
+    expect(await names(restarted.client)).toEqual(["C", "A", "B", "D"]);
+  });
+
+  test("the ids left out follow the ones named, in the order they had (as magpie)", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    await saveEndpoint(client, "B", ["b1"]);
+    const c = await saveEndpoint(client, "C", ["c1"]);
+
+    expect((await client.apiEndpointSetOrder({ endpointIds: [c, a] })).error).toBeNull();
+
+    expect(await names(client)).toEqual(["C", "A", "B"]);
+  });
+
+  test("an id named twice or not an endpoint is refused and the order stays", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+
+    for (const endpointIds of [
+      [b, a, b],
+      [b, "ep_missing", a],
+    ]) {
+      const refused = await client.apiEndpointSetOrder({ endpointIds });
+      expect(refused.error?.code).toBe("invalid_input");
+    }
+    expect(await names(client)).toEqual(["A", "B"]);
+  });
+
+  test("an endpoint switched off and on again comes back to its place", async () => {
+    const { client } = await start();
+    const a = await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+    const c = await saveEndpoint(client, "C", ["c1"]);
+    await client.apiEndpointSetOrder({ endpointIds: [b, c, a] });
+
+    await client.apiEndpointSetEndpointState({ endpointId: c, enabled: false });
+    expect(await names(client)).toEqual(["B", "C", "A"]);
+    await client.apiEndpointSetEndpointState({ endpointId: c, enabled: true });
+
+    expect(await names(client)).toEqual(["B", "C", "A"]);
+  });
+
+  test("turning the switch on without a default model picks the first model of the first endpoint in the order", async () => {
+    const { client, settingsPath } = await start();
+    await saveEndpoint(client, "A", ["a1"]);
+    const b = await saveEndpoint(client, "B", ["b1"]);
+    await client.apiEndpointSetOrder({ endpointIds: [b] });
+
+    const enabled = await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: true });
+
+    expect(enabled.agent).toEqual({ enabled: true, defaultModelId: "b1" });
+    expect(JSON.parse(await readFile(settingsPath, "utf8")).model).toBe("b1");
+  });
+});
+
 describe("a default model that goes missing", () => {
   async function enableBothAgents(client: DaemonClient): Promise<{ a: string; b: string }> {
     const a = await saveEndpoint(client, "A", ["shared", "a-only"]);

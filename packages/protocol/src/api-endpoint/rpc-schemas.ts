@@ -522,6 +522,26 @@ export type ApiEndpointSetEndpointStateResponse = z.infer<
 >;
 
 /**
+ * 接口顺序（Endpoint order）：整体改写，`endpointIds` 是新的顺序。同一个 id 出现两次或不是接口时拒收；
+ * 没列出的接口按现在的先后接在后面（照 magpie SetOrder）。自动切换先后、只写模型名时归哪家都按它。
+ */
+export const ApiEndpointSetOrderRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_order.request"),
+  requestId: z.string(),
+  endpointIds: z.array(z.string()),
+});
+export type ApiEndpointSetOrderRequest = z.infer<typeof ApiEndpointSetOrderRequestSchema>;
+
+export const ApiEndpointSetOrderResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_order.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetOrderResponse = z.infer<typeof ApiEndpointSetOrderResponseSchema>;
+
+/**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、
  * 省略 apiKey（或留空），就用已保存的 key；没有已保存的 key 时不带认证头（老 daemon 拒绝）。可以用 cancel 按 requestId 取消。
  *

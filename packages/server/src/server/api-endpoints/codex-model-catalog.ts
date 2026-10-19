@@ -43,7 +43,7 @@ export type CodexModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: strin
 
 /**
  * `reasoningEffort` 是 config.toml 顶层的 model_reasoning_effort，没设或读不出为 null。
- * `factsFor` 查这家这个模型的已知资料；光秃秃的名字按最早开着、选了它的那家查（中转站也先发给那家）。
+ * `factsFor` 查这家这个模型的已知资料；光秃秃的名字按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）。
  * `marksAgentsV1` 是「Codex Subagent 可用任意模型」：每个条目写 multi_agent_version = "v1"。
  */
 export function buildCodexModelCatalog(input: {

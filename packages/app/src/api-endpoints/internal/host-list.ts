@@ -64,12 +64,83 @@ export interface HostEndpointGroups {
   disabled: ApiEndpoint[];
 }
 
-/** 接口开关开着的在「已开启」，关着的在「已关闭」；组内按创建顺序。 */
+/** 接口开关开着的在「已开启」，关着的在「已关闭」；两组共用一个接口顺序，组内按它排。 */
 export function groupHostEndpoints(endpoints: ApiEndpoint[]): HostEndpointGroups {
   return {
     enabled: endpoints.filter((endpoint) => endpoint.enabled !== false),
     disabled: endpoints.filter((endpoint) => endpoint.enabled === false),
   };
+}
+
+/** 一次挪动：上移、下移、移到最前、移到最后，或拖到组里的第几个（落在那一行原来的位置）。 */
+export type EndpointPlace = "up" | "down" | "top" | "bottom" | { index: number };
+
+function groupIds(endpoints: ApiEndpoint[], id: string): string[] | null {
+  const moving = endpoints.find((endpoint) => endpoint.id === id);
+  if (!moving) return null;
+  const isEnabled = moving.enabled !== false;
+  return endpoints
+    .filter((endpoint) => (endpoint.enabled !== false) === isEnabled)
+    .map((endpoint) => endpoint.id);
+}
+
+function targetIndex(place: EndpointPlace, from: number, size: number): number {
+  if (place === "up") return from - 1;
+  if (place === "down") return from + 1;
+  if (place === "top") return 0;
+  if (place === "bottom") return size - 1;
+  return place.index;
+}
+
+/**
+ * 挪动之后的完整接口顺序（照 magpie arrangeProvider）：只在这家所在的组（已开启 / 已关闭）里挪，
+ * 另一组的接口留在原来的位置上。什么都不会变时为 null。
+ */
+export function arrangeEndpoint(
+  endpoints: ApiEndpoint[],
+  id: string,
+  place: EndpointPlace,
+): string[] | null {
+  const group = groupIds(endpoints, id);
+  if (!group) return null;
+  const from = group.indexOf(id);
+  const to = targetIndex(place, from, group.length);
+  if (to < 0 || to >= group.length || to === from) return null;
+  const moved = group.filter((member) => member !== id);
+  moved.splice(to, 0, id);
+  const members = new Set(group);
+  let next = 0;
+  return endpoints.map((endpoint) => (members.has(endpoint.id) ? moved[next++] : endpoint.id));
+}
+
+/** 拖动结束后组里的新先后：挪动的是哪一行、落到组里第几个。没挪时为 null。 */
+export function draggedEndpoint(
+  before: string[],
+  after: string[],
+): { id: string; index: number } | null {
+  const sameWithout = (id: string) => {
+    const left = before.filter((entry) => entry !== id);
+    const right = after.filter((entry) => entry !== id);
+    return left.length === right.length && left.every((entry, i) => entry === right[i]);
+  };
+  for (const id of after) {
+    const index = after.indexOf(id);
+    if (index !== before.indexOf(id) && sameWithout(id)) return { id, index };
+  }
+  return null;
+}
+
+export interface EndpointMoves {
+  top: boolean;
+  up: boolean;
+  down: boolean;
+  bottom: boolean;
+}
+
+/** 行菜单里四个排序项哪些能用：会让顺序变的才能点。 */
+export function endpointMoves(endpoints: ApiEndpoint[], id: string): EndpointMoves {
+  const can = (place: EndpointPlace) => arrangeEndpoint(endpoints, id, place) !== null;
+  return { top: can("top"), up: can("up"), down: can("down"), bottom: can("bottom") };
 }
 
 export interface CooldownRemaining {
@@ -158,7 +229,7 @@ export type AgentSettlement =
 
 /**
  * 某次改动（删接口、关接口、关模型）之后各个开着总开关的 Agent 会怎样，照 daemon 的默认模型失踪规则：
- * 默认模型还在开着接口的已选模型里就不变，否则改成最早开着接口的第一个已选模型，一个都不剩就回官方。
+ * 默认模型还在开着接口的已选模型里就不变，否则改成接口顺序里最靠前的开着接口的第一个已选模型，一个都不剩就回官方。
  * `endpoints` 是改动之后的列表。
  */
 export function previewAgentSettlements(input: {

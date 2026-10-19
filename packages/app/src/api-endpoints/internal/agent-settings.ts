@@ -275,7 +275,7 @@ export interface AgentApiEndpointsView {
   defaultModelId: string | null;
   // 当前默认模型的显示；对不上任何选项时照原样（endpointName 为 null）。
   defaultModel: DefaultModelOption | null;
-  // 先是开着的接口的已选模型，按创建顺序合并去重的光秃秃名字；再是聊天模型选择器里每家的「接口标识/模型名」。
+  // 先是开着的接口的已选模型，按接口顺序合并去重的光秃秃名字；再是聊天模型选择器里每家的「接口标识/模型名」。
   modelOptions: DefaultModelOption[];
   summary: AgentEndpointsSummary;
   // 提示区，按主机给的顺序。
@@ -466,7 +466,7 @@ function levelsWithoutUltraCode(options: DefaultThinkingOption[]): DefaultThinki
     .map((option) => ({ id: option.id, label: option.label }));
 }
 
-/** 光秃秃的名字在前（按创建顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
+/** 光秃秃的名字在前（按接口顺序去重），再是聊天模型选择器里每家的「接口标识/模型名」。 */
 function defaultModelOptions(input: {
   enabledEndpoints: ApiEndpoint[];
   groups: ApiEndpointModelGroup[];

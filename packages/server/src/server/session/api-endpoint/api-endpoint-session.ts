@@ -27,6 +27,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.keep_current_settings.request"
       | "provider.api_endpoint.preview_switch_off.request"
       | "provider.api_endpoint.set_endpoint_state.request"
+      | "provider.api_endpoint.set_order.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
@@ -81,6 +82,8 @@ export class ApiEndpointSession {
         return this.handlePreviewSwitchOff(request);
       case "provider.api_endpoint.set_endpoint_state.request":
         return this.handleSetEndpointState(request);
+      case "provider.api_endpoint.set_order.request":
+        return this.handleSetOrder(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
@@ -318,6 +321,21 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.set_endpoint_state.response",
       payload: { requestId: request.requestId, endpointId: request.endpointId, error },
+    });
+  }
+
+  private async handleSetOrder(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.set_order.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setOrder(request.endpointIds);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_order.response",
+      payload: { requestId: request.requestId, error },
     });
   }
 

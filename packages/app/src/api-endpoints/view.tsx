@@ -357,6 +357,8 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order。
+  const canArrange = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
 
   const handleAdd = useCallback(() => setSheet({ seed: { mode: "create" } }), []);
@@ -386,6 +388,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onOpen={handleOpen}
         onToggle={endpoints.setEnabled}
         onResume={endpoints.resume}
+        onArrange={canArrange ? endpoints.arrange : undefined}
       />
       <ConnectionSheet
         serverId={serverId}

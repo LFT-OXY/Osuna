@@ -890,4 +890,21 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     });
     expect(older.features?.apiEndpointManagement).toBeUndefined();
   });
+
+  it("parses set_order with the whole endpoint order, and its response", () => {
+    const request = {
+      type: "provider.api_endpoint.set_order.request" as const,
+      requestId: "req-m2",
+      endpointIds: ["ep_2", "ep_1", "ep_3"],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.set_order.response" as const,
+      payload: {
+        requestId: "req-m2",
+        error: { code: "invalid_input", message: "ep_9 is not an API endpoint" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
 });

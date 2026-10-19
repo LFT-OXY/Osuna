@@ -81,7 +81,7 @@ const StoredApiEndpointSchema = z.object({
 export type StoredApiEndpoint = z.infer<typeof StoredApiEndpointSchema>;
 
 const EndpointsFileSchema = z.object({
-  // 数组顺序即创建顺序。
+  // 数组顺序即接口顺序（Endpoint order）：用户可整体改写（set_order），新建的追加在最后。
   endpoints: z.array(StoredApiEndpointSchema),
   agents: z.record(z.string(), ApiEndpointAgentSettingsSchema),
 });

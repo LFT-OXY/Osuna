@@ -24,8 +24,8 @@ import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from ".
  * 5. Claude 档位名（含 opus / sonnet / haiku / fable）：第一家映射了该档位的接口，换成映射到的模型；
  * 6. Claude Code 的开关开着时，档位名（opus 等）与 claude- 开头的 id（对不上档位的，如 claude-mythos-5-1）
  *    都没找到，改按 Claude Code 的默认模型找，不回 404。
- * 都按创建顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
- * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（创建顺序），供失败时自动切换。
+ * 都按接口顺序（数组顺序）找，只看开着的接口；一家要发的名字取它自己列出的写法，写法完全相同的优先。
+ * 用户选的那家排第一，后面跟着其他开着、选了同一个模型的接口（接口顺序），供失败时自动切换。
  * 厂商说已下线的模型（retired-models.ts）只有第 1 步照发，其余各步、后面跟着的接口与相近名字都按 listed 找。
  */
 

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   agentsReturningToOfficial,
+  arrangeEndpoint,
+  draggedEndpoint,
+  endpointMoves,
   endpointRowStatus,
   endpointSummary,
   groupHostEndpoints,
@@ -116,6 +119,68 @@ describe("groupHostEndpoints", () => {
     ]);
     expect(groups.enabled.map((entry) => entry.id)).toEqual(["a", "c"]);
     expect(groups.disabled.map((entry) => entry.id)).toEqual(["b"]);
+  });
+});
+
+describe("arrangeEndpoint", () => {
+  // 开着的 a、c、e，关着的 b、d，交错排着。
+  const list = [
+    endpoint({ id: "a" }),
+    endpoint({ id: "b", enabled: false }),
+    endpoint({ id: "c" }),
+    endpoint({ id: "d", enabled: false }),
+    endpoint({ id: "e" }),
+  ];
+
+  it("moves an endpoint among its own group; the other group keeps its places", () => {
+    expect(arrangeEndpoint(list, "e", "up")).toEqual(["a", "b", "e", "d", "c"]);
+    expect(arrangeEndpoint(list, "e", "top")).toEqual(["e", "b", "a", "d", "c"]);
+    expect(arrangeEndpoint(list, "a", "down")).toEqual(["c", "b", "a", "d", "e"]);
+    expect(arrangeEndpoint(list, "a", "bottom")).toEqual(["c", "b", "e", "d", "a"]);
+    expect(arrangeEndpoint(list, "d", "up")).toEqual(["a", "d", "c", "b", "e"]);
+  });
+
+  it("puts a dragged endpoint where the row it was dropped on was", () => {
+    expect(arrangeEndpoint(list, "a", { index: 2 })).toEqual(["c", "b", "e", "d", "a"]);
+    expect(arrangeEndpoint(list, "e", { index: 1 })).toEqual(["a", "b", "e", "d", "c"]);
+  });
+
+  it("is null when nothing would move", () => {
+    expect(arrangeEndpoint(list, "a", "up")).toBeNull();
+    expect(arrangeEndpoint(list, "a", "top")).toBeNull();
+    expect(arrangeEndpoint(list, "e", "down")).toBeNull();
+    expect(arrangeEndpoint(list, "d", "bottom")).toBeNull();
+    expect(arrangeEndpoint(list, "c", { index: 1 })).toBeNull();
+    expect(arrangeEndpoint(list, "missing", "up")).toBeNull();
+  });
+});
+
+describe("draggedEndpoint", () => {
+  it("finds the row a drag moved and where it went within the group", () => {
+    expect(draggedEndpoint(["a", "c", "e"], ["c", "e", "a"])).toEqual({ id: "a", index: 2 });
+    expect(draggedEndpoint(["a", "c", "e"], ["e", "a", "c"])).toEqual({ id: "e", index: 0 });
+    expect(draggedEndpoint(["a", "c", "e"], ["c", "a", "e"])).toMatchObject({
+      index: expect.any(Number),
+    });
+    expect(draggedEndpoint(["a", "c"], ["a", "c"])).toBeNull();
+  });
+});
+
+describe("endpointMoves", () => {
+  it("offers the moves that would change the order within the endpoint's group", () => {
+    const list = [
+      endpoint({ id: "a" }),
+      endpoint({ id: "b", enabled: false }),
+      endpoint({ id: "c" }),
+    ];
+    expect(endpointMoves(list, "a")).toEqual({ top: false, up: false, down: true, bottom: true });
+    expect(endpointMoves(list, "c")).toEqual({ top: true, up: true, down: false, bottom: false });
+    expect(endpointMoves(list, "b")).toEqual({
+      top: false,
+      up: false,
+      down: false,
+      bottom: false,
+    });
   });
 });
 

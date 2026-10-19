@@ -357,6 +357,103 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("the endpoint order: the row menu's four moves, Alt+↑/↓ and a drag each change it and it survives a reload", async ({
+    page,
+  }) => {
+    const [a, b, c] = await seedRelays(["Relay A", "Relay B", "Relay C"]);
+    const off = await seedApiEndpoint(client, {
+      name: "Relay Off",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    await client.apiEndpointSetEndpointState({ endpointId: off, enabled: false });
+    await openApiEndpointsPage(page);
+    await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+
+    await test.step("the row menu: Move to top, Move down, Move to bottom, Move up", async () => {
+      await openOrderMenu(page, a);
+      await expect(orderItem(page, "top")).toBeDisabled();
+      await expect(orderItem(page, "up")).toBeDisabled();
+      await expect(orderItem(page, "down")).toHaveText(/Move down/);
+      await orderItem(page, "bottom").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, c, a]);
+
+      await openOrderMenu(page, a);
+      await orderItem(page, "top").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+
+      await openOrderMenu(page, a);
+      await orderItem(page, "down").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, a, c]);
+
+      await openOrderMenu(page, c);
+      await orderItem(page, "up").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, c, a]);
+      await expect.poll(storedOrder).toEqual([b, c, a, off]);
+    });
+
+    await test.step("Alt+↑/↓ on the focused row moves it and keeps the focus on it", async () => {
+      await row(page, a).focus();
+      await page.keyboard.press("Alt+ArrowUp");
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, a, c]);
+      await expect(row(page, a)).toBeFocused();
+      await page.keyboard.press("Alt+ArrowUp");
+      await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+      await page.keyboard.press("Alt+Shift+ArrowDown");
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, c, a]);
+      await page.keyboard.press("Alt+ArrowDown");
+      await expect.poll(storedOrder).toEqual([b, c, a, off]);
+    });
+
+    await test.step("dragging a row's handle onto another row puts it there, without opening it", async () => {
+      const listUrl = page.url();
+      await dragRow(page, a, b);
+      await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+      await expect.poll(storedOrder).toEqual([a, b, c, off]);
+      expect(page.url()).toBe(listUrl);
+    });
+
+    await test.step("the order is still there after a reload, and the Off group keeps its own", async () => {
+      await page.reload();
+      await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+      expect(await rowOrder(page, "disabled")).toEqual([off]);
+    });
+  });
+
+  test("a failed order change stays in place and the list goes back; a retry saves it", async ({
+    page,
+  }) => {
+    const [a, b] = await seedRelays(["Relay A", "Relay B"]);
+    const host = await failSetOrder(page);
+    await openApiEndpointsPage(page);
+
+    await openOrderMenu(page, b);
+    await orderItem(page, "top").click();
+    await expect(
+      page.getByTestId("api-endpoints-action-error").filter({ visible: true }),
+    ).toHaveText(/EACCES: permission denied/);
+    await expect.poll(orderReader(page, "enabled")).toEqual([a, b]);
+    expect(await storedOrder()).toEqual([a, b]);
+
+    host.failing = false;
+    await openOrderMenu(page, b);
+    await orderItem(page, "top").click();
+    await expect.poll(orderReader(page, "enabled")).toEqual([b, a]);
+    await expect(page.getByTestId("api-endpoints-action-error")).toHaveCount(0);
+    expect(await storedOrder()).toEqual([b, a]);
+  });
+
+  test("a host without apiEndpointManagement shows no order menu and no drag handle", async ({
+    page,
+  }) => {
+    const [a] = await seedRelays(["Relay A", "Relay B"]);
+    await hideManagementCapability(page);
+    await openApiEndpointsPage(page);
+    await expect(row(page, a)).toBeVisible();
+    await expect(page.getByTestId(`api-endpoint-order-menu-${a}`)).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-drag-handle")).toHaveCount(0);
+  });
+
   test("a cooling endpoint shows when it is back, and Resume now makes it available", async ({
     page,
   }) => {
@@ -2399,4 +2496,114 @@ function selectedAndManualReader(endpointId: string): () => Promise<string[][]> 
     const endpoint = list.endpoints.find((entry) => entry.id === endpointId);
     return [ids(endpoint?.models), ids(endpoint?.manualModels)];
   };
+}
+
+/** 存几家开着、选了同一个模型的接口，返回 id（按存的先后）。 */
+async function seedRelays(names: string[]): Promise<string[]> {
+  const seeded: string[] = [];
+  for (const name of names) {
+    seeded.push(
+      await seedApiEndpoint(client, {
+        name,
+        baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+        models: ["claude-sonnet-4-5"],
+      }),
+    );
+  }
+  return seeded;
+}
+
+function orderReader(page: Page, which: "enabled" | "disabled"): () => Promise<string[]> {
+  return () => rowOrder(page, which);
+}
+
+/** 一组里各行的接口 id，从上到下。 */
+async function rowOrder(page: Page, which: "enabled" | "disabled"): Promise<string[]> {
+  return group(page, which)
+    .locator('[data-testid^="api-endpoint-row-ep_"]')
+    .evaluateAll((rows) =>
+      rows.map((element) => element.getAttribute("data-testid")?.slice("api-endpoint-row-".length)),
+    ) as Promise<string[]>;
+}
+
+/** 主机存下的接口顺序。 */
+async function storedOrder(): Promise<string[]> {
+  return (await client.apiEndpointList("claude")).endpoints.map((endpoint) => endpoint.id);
+}
+
+async function openOrderMenu(page: Page, endpointId: string): Promise<void> {
+  await page.getByTestId(`api-endpoint-order-menu-${endpointId}`).filter({ visible: true }).click();
+  await expect(orderItem(page, "bottom")).toBeVisible();
+}
+
+function orderItem(page: Page, place: "up" | "down" | "top" | "bottom"): Locator {
+  return page.getByTestId(`api-endpoint-order-${place}`).filter({ visible: true });
+}
+
+/** 按住一行的把手，拖到另一行的位置上松开。 */
+async function dragRow(page: Page, fromId: string, ontoId: string): Promise<void> {
+  const handle = row(page, fromId).getByTestId("api-endpoint-drag-handle");
+  const from = await handle.boundingBox();
+  const onto = await row(page, ontoId).boundingBox();
+  if (!from || !onto) throw new Error("Rows to drag are not on screen");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 - 10, { steps: 4 });
+  await expect(page.getByTestId("api-endpoint-row-dragging")).toBeVisible();
+  await page.mouse.move(from.x + from.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  await page.mouse.up();
+}
+
+/** `failing` 为 true 时，set_order 请求不送到 daemon，直接回一个失败响应。 */
+async function failSetOrder(page: Page): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const request =
+        typeof message === "string" && message.includes("provider.api_endpoint.set_order.request")
+          ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+          : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.set_order.response",
+            payload: {
+              requestId: request.requestId,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+/** 从 server_info 去掉 apiEndpointManagement，模拟还不能改接口顺序的主机。 */
+async function hideManagementCapability(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"server_info"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+      };
+      const payload = envelope.message?.payload;
+      if (payload?.status === "server_info" && payload.features) {
+        delete payload.features.apiEndpointManagement;
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
 }

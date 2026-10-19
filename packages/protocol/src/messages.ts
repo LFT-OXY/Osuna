@@ -108,6 +108,8 @@ import {
   ApiEndpointSetAgentSettingsResponseSchema,
   ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointSetEndpointStateResponseSchema,
+  ApiEndpointSetOrderRequestSchema,
+  ApiEndpointSetOrderResponseSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
@@ -3572,6 +3574,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointKeepCurrentSettingsRequestSchema,
   ApiEndpointPreviewSwitchOffRequestSchema,
   ApiEndpointSetEndpointStateRequestSchema,
+  ApiEndpointSetOrderRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointDetectFormatsRequestSchema,
@@ -3945,7 +3948,8 @@ export const ServerInfoStatusPayloadSchema = z
         // provider.codex.session.*（把 Codex 对话挪到另一个 Codex 服务商），以及关开关前的 preview_switch_off。
         apiEndpointCliWiring: z.boolean().optional(),
         // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19.
-        // 任务 10-16-endpoint-management-ux 的新界面：接口的 key 选填（没 key 不带认证头），保存时没给的字段保留原值。
+        // 任务 10-16-endpoint-management-ux 的新界面：接口的 key 选填（没 key 不带认证头），保存时没给的字段保留原值；
+        // set_order 改接口顺序。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7349,6 +7353,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointKeepCurrentSettingsResponseSchema,
   ApiEndpointPreviewSwitchOffResponseSchema,
   ApiEndpointSetEndpointStateResponseSchema,
+  ApiEndpointSetOrderResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,
   ApiEndpointDetectFormatsResponseSchema,

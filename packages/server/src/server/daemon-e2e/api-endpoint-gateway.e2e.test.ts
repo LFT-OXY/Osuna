@@ -3726,6 +3726,24 @@ describe("switching to another endpoint when one fails", () => {
     },
   );
 
+  test("after the endpoint order changes, a bare model name goes to the new first endpoint and fails over to the next", async () => {
+    const { upstreamA, upstreamB, ask, daemon } = await twoRelays();
+    upstreamA.respond = (_request, res) => streamReply(res, { text: "from A" });
+    const client = await connectTo(daemon);
+    expect((await client.apiEndpointSetOrder({ endpointIds: ["ep_b", "ep_a"] })).error).toBeNull();
+
+    const first = await ask();
+    expect(first.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(await first.text()).toContain("from B");
+    expect(upstreamA.requests).toHaveLength(0);
+
+    upstreamB.respond = (_request, res) => failWith(res, { status: 503, message: "upstream busy" });
+    const second = await ask();
+    expect(second.headers.get("x-osuna-api-endpoint")).toBe("relay-a");
+    expect(await second.text()).toContain("from A");
+    expect(upstreamB.requests).toHaveLength(2);
+  });
+
   test("no response headers in time is a server error and goes to the next endpoint", async () => {
     const { upstreamA, upstreamB, ask } = await twoRelays({ headerTimeoutMs: 300 });
     upstreamA.respond = () => {};

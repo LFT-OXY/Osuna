@@ -1079,7 +1079,7 @@ export class ApiEndpointService {
 
   /**
    * 「使用第三方接口」总开关与默认模型。打开要求至少一家接口开着且已选模型；
-   * 省略默认模型时保留当前的（还能用的话），否则取最早开着接口的第一个已选模型。关掉时忽略默认模型。
+   * 省略默认模型时保留当前的（还能用的话），否则取接口顺序里最靠前的开着接口的第一个已选模型。关掉时忽略默认模型。
    */
   setAgentSettings(
     provider: string,
@@ -1842,6 +1842,38 @@ export class ApiEndpointService {
   }
 
   /**
+   * 整体改写接口顺序（照 magpie SetOrder）：同一个 id 出现两次或不是接口就拒收；没列出的按现在的先后接在后面。
+   * 顺序也决定 Codex 模型目录、Claude Code 选单的先后，所以走 commit 让 CLI 配置跟上。
+   */
+  setOrder(endpointIds: string[]): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const byId = new Map(state.endpoints.map((endpoint) => [endpoint.id, endpoint]));
+      const named = new Set<string>();
+      for (const id of endpointIds) {
+        if (named.has(id)) {
+          throw new ApiEndpointRequestError({
+            code: "invalid_input",
+            message: `${id} is in the order twice`,
+          });
+        }
+        if (!byId.has(id)) {
+          throw new ApiEndpointRequestError({
+            code: "invalid_input",
+            message: `${id} is not an API endpoint`,
+          });
+        }
+        named.add(id);
+      }
+      const endpoints = [
+        ...endpointIds.flatMap((id) => byId.get(id) ?? []),
+        ...state.endpoints.filter((endpoint) => !named.has(endpoint.id)),
+      ];
+      await this.commit(state, { ...state, endpoints });
+    });
+  }
+
+  /**
    * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
    * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
    * 开着却没有口令的补一个；口令关掉不作废（nextGatewayTokens）。
@@ -2166,7 +2198,7 @@ export class ApiEndpointService {
     };
   }
 
-  /** 起始模型是不带接口标识的模型名，中转站先发给最早开着、选了它的那家：资料也按那家查。 */
+  /** 起始模型是不带接口标识的模型名，中转站先发给接口顺序里最靠前、开着、选了它的那家：资料也按那家查。 */
   private startModelFacts(state: ApiEndpointState, modelId: string): ModelFacts {
     // 指定了某一家的默认模型按那一家查。
     const named = namedDefaultModel(state, modelId);
@@ -3354,7 +3386,7 @@ function reconnectRecord(defaultModelId: string | null, left: string | null): Re
   return defaultModelId === null ? {} : { reconnect: { model: defaultModelId, left } };
 }
 
-/** 按 id 替换，找不到就追加到末尾（创建顺序）。 */
+/** 按 id 替换，找不到就追加到末尾：新建的接口排在接口顺序的最后。 */
 function withEndpoint(
   endpoints: StoredApiEndpoint[],
   endpoint: StoredApiEndpoint,

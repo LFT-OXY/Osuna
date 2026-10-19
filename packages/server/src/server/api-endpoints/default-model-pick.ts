@@ -23,7 +23,7 @@ import type { ApiEndpointProvider, ApiEndpointState } from "./store.js";
  * - default：CLI 没设模型，它自己列表里的第一个（ownDefaultModel）有接口提供，沿用；
  * - alike：CLI 用的是光秃秃的档位名（opus 等）：第一家为这个档位配了映射的接口与映射到的模型，
  *   没有映射时取名字属于这一族的模型（magpie 的 alike）；
- * - first：都没有时取最早开着接口的第一个已选模型。
+ * - first：都没有时取接口顺序里最靠前的开着接口的第一个已选模型。
  * 用 ChatGPT 登录、用着用户自己服务商的 Codex 只认「接口标识/模型名」（光秃秃的名字指 ChatGPT 自带模型），
  * 挑中的光秃秃名字换成第一家提供它的写法，与写进 config.toml 的一致。
  */

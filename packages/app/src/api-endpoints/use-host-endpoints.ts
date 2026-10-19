@@ -8,6 +8,7 @@ import type {
   ApiEndpointListResponse,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -23,7 +24,9 @@ import type {
 } from "./internal/connection-form-model";
 import {
   agentsReturningToOfficial,
+  arrangeEndpoint,
   selectHostEndpointsState,
+  type EndpointPlace,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
 import type { AgentIssueAction } from "./internal/agent-settings";
@@ -89,6 +92,8 @@ export interface UseHostEndpointsResult {
   dismissActionError: () => void;
   setEnabled: (endpoint: ApiEndpoint, enabled: boolean) => void;
   resume: (endpoint: ApiEndpoint) => void;
+  // 挪动接口顺序：列表先按新顺序排，保存失败时回到主机上的顺序，原因在 actionError 里。
+  arrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -112,6 +117,7 @@ export interface UseHostEndpointsResult {
 export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
@@ -222,6 +228,39 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [runStateChange],
   );
 
+  const arrange = useCallback(
+    (endpoint: ApiEndpoint, place: EndpointPlace) => {
+      if (!client) return;
+      const current = queryClient.getQueryData<ApiEndpointListResponse["payload"]>(queryKey);
+      if (!current) return;
+      const order = arrangeEndpoint(current.endpoints, endpoint.id, place);
+      if (!order) return;
+      void (async () => {
+        setActionFailure(null);
+        // 先按新顺序画出来（照 magpie）；进行中的刷新不能把它盖回去。
+        await queryClient.cancelQueries({ queryKey });
+        const byId = new Map(current.endpoints.map((entry) => [entry.id, entry]));
+        queryClient.setQueryData<ApiEndpointListResponse["payload"]>(queryKey, {
+          ...current,
+          endpoints: order.flatMap((id) => byId.get(id) ?? []),
+        });
+        try {
+          const result = await client.apiEndpointSetOrder({ endpointIds: order });
+          if (result.error) {
+            setActionFailure({ code: result.error.code, message: describeError(result.error) });
+          } else {
+            toast.show(t("settings.apiEndpoints.order.saved"), { variant: "success" });
+          }
+        } catch (error) {
+          setActionFailure({ code: null, message: toErrorMessage(error) });
+        } finally {
+          await refresh();
+        }
+      })();
+    },
+    [client, describeError, queryClient, queryKey, refresh, t, toast],
+  );
+
   const setAgentSettings = useCallback(
     (provider: string, settings: AgentSettingsChange) => {
       if (!client) return;
@@ -322,6 +361,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     dismissActionError,
     setEnabled,
     resume,
+    arrange,
     pendingAgent,
     setAgentSettings,
     lastConnection,

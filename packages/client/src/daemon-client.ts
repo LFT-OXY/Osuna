@@ -676,6 +676,10 @@ type ApiEndpointSetEndpointStatePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_endpoint_state.response" }
 >["payload"];
+type ApiEndpointSetOrderPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_order.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -724,6 +728,11 @@ export type ApiEndpointKeepCurrentSettingsOptions = Omit<
 
 export type ApiEndpointSetEndpointStateOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_endpoint_state.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetOrderOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_order.request" }>,
   "type" | "requestId"
 >;
 
@@ -6406,6 +6415,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_endpoint_state.request", ...options },
+    });
+  }
+
+  /** 整体改写接口顺序（Endpoint order）。 */
+  async apiEndpointSetOrder(
+    options: ApiEndpointSetOrderOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetOrderPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_order.request", ...options },
     });
   }
 

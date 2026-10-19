@@ -2,10 +2,21 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ChevronRight, Plus } from "lucide-react-native";
+import {
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowUpToLine,
+  ChevronRight,
+  GripVertical,
+  Plus,
+} from "lucide-react-native";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
+import { Shortcut } from "@/components/ui/shortcut";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
 import type { ProviderStatusDisplay } from "@/provider-detail/status";
@@ -13,12 +24,17 @@ import { ProviderStatusLine } from "@/screens/settings/provider-status-line";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
+  endpointMoves,
   endpointRowStatus,
   endpointSummary,
   groupHostEndpoints,
+  type EndpointMoves,
+  type EndpointPlace,
   type EndpointRowStatus,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
+import { SortableEndpointRows } from "./sortable-endpoint-rows";
+import type { SortableEndpointRowInfo } from "./sortable-endpoint-rows.types";
 
 /*
  * 「第三方接口」列表：照 Providers 列表页（screens/settings/providers-section.tsx）的分组、行与密度。
@@ -26,6 +42,11 @@ import {
  */
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
+const ThemedGripVertical = withUnistyles(GripVertical);
+const ThemedArrowUp = withUnistyles(ArrowUp);
+const ThemedArrowDown = withUnistyles(ArrowDown);
+const ThemedArrowUpToLine = withUnistyles(ArrowUpToLine);
+const ThemedArrowDownToLine = withUnistyles(ArrowDownToLine);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -39,7 +60,11 @@ export interface ApiEndpointsListSectionProps {
   onOpen: (endpoint: ApiEndpoint) => void;
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
+  // 主机支持改接口顺序（apiEndpointManagement）时才有：拖动、行菜单与 Alt+↑/↓。
+  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
 }
+
+const noArrange = () => {};
 
 export function ApiEndpointsListSection({
   state,
@@ -51,6 +76,7 @@ export function ApiEndpointsListSection({
   onOpen,
   onToggle,
   onResume,
+  onArrange,
 }: ApiEndpointsListSectionProps) {
   const { t } = useTranslation();
   const groups = useMemo(
@@ -87,18 +113,19 @@ export function ApiEndpointsListSection({
   const hasErrorRow = actionError !== null;
 
   function renderRows(endpoints: ApiEndpoint[], hasRowAbove: boolean) {
-    return endpoints.map((endpoint, index) => (
-      <EndpointRow
-        key={endpoint.id}
-        endpoint={endpoint}
-        status={endpointRowStatus(endpoint, now)}
-        isPending={pendingEndpointId === endpoint.id}
-        isFirst={index === 0 && !hasRowAbove}
+    return (
+      <EndpointGroupRows
+        endpoints={endpoints}
+        allEndpoints={state.status === "ready" ? state.endpoints : endpoints}
+        hasRowAbove={hasRowAbove}
+        now={now}
+        pendingEndpointId={pendingEndpointId}
         onOpen={onOpen}
         onToggle={onToggle}
         onResume={onResume}
+        onArrange={onArrange}
       />
-    ));
+    );
   }
 
   return (
@@ -142,6 +169,56 @@ export function ApiEndpointsListSection({
         </SettingsSection>
       ) : null}
     </View>
+  );
+}
+
+/** 一组的行；主机支持改顺序时可拖动、按 Alt+↑/↓，行上有排序菜单。 */
+function EndpointGroupRows({
+  endpoints,
+  allEndpoints,
+  hasRowAbove,
+  now,
+  pendingEndpointId,
+  onOpen,
+  onToggle,
+  onResume,
+  onArrange,
+}: {
+  endpoints: ApiEndpoint[];
+  // 两组合起来的接口顺序，算菜单里哪几项能点。
+  allEndpoints: ApiEndpoint[];
+  hasRowAbove: boolean;
+  now: Date;
+  pendingEndpointId: string | null;
+  onOpen: (endpoint: ApiEndpoint) => void;
+  onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
+  onResume: (endpoint: ApiEndpoint) => void;
+  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
+}) {
+  const renderRow = useCallback(
+    (info: SortableEndpointRowInfo) => (
+      <EndpointRow
+        endpoint={info.endpoint}
+        status={endpointRowStatus(info.endpoint, now)}
+        isPending={pendingEndpointId === info.endpoint.id}
+        isFirst={info.index === 0 && !hasRowAbove}
+        row={info}
+        moves={onArrange ? endpointMoves(allEndpoints, info.endpoint.id) : null}
+        onOpen={onOpen}
+        onToggle={onToggle}
+        onResume={onResume}
+        onArrange={onArrange}
+      />
+    ),
+    [allEndpoints, hasRowAbove, now, onArrange, onOpen, onResume, onToggle, pendingEndpointId],
+  );
+  return (
+    <SortableEndpointRows
+      endpoints={endpoints}
+      isSortable={onArrange !== undefined}
+      onMove={onArrange ?? noArrange}
+      renderRow={renderRow}
+    />
   );
 }
 
@@ -197,9 +274,13 @@ interface EndpointRowProps {
   status: EndpointRowStatus;
   isPending: boolean;
   isFirst: boolean;
+  row: SortableEndpointRowInfo;
+  // 行菜单里四个排序项能不能点；主机不支持改顺序时为 null，不出菜单。
+  moves: EndpointMoves | null;
   onOpen: (endpoint: ApiEndpoint) => void;
   onToggle: (endpoint: ApiEndpoint, enabled: boolean) => void;
   onResume: (endpoint: ApiEndpoint) => void;
+  onArrange?: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
 }
 
 function EndpointRow({
@@ -207,13 +288,20 @@ function EndpointRow({
   status,
   isPending,
   isFirst,
+  row,
+  moves,
   onOpen,
   onToggle,
   onResume,
+  onArrange,
 }: EndpointRowProps) {
   const { t } = useTranslation();
   const enabled = endpoint.enabled !== false;
-  const handlePress = useCallback(() => onOpen(endpoint), [endpoint, onOpen]);
+  const { isPressSuppressed } = row;
+  const handlePress = useCallback(() => {
+    if (isPressSuppressed()) return;
+    onOpen(endpoint);
+  }, [endpoint, isPressSuppressed, onOpen]);
   const handleToggle = useCallback(
     (value: boolean) => onToggle(endpoint, value),
     [endpoint, onToggle],
@@ -230,7 +318,10 @@ function EndpointRow({
   const statusLine = useEndpointStatusLine(endpoint, status);
 
   return (
-    <View style={isFirst ? null : settingsStyles.rowBorder}>
+    <View
+      style={[!isFirst && settingsStyles.rowBorder, row.isDragging && styles.rowDragging]}
+      testID={row.isDragging ? "api-endpoint-row-dragging" : undefined}
+    >
       <Pressable
         style={rowStyle}
         onPress={handlePress}
@@ -245,9 +336,15 @@ function EndpointRow({
           <>
             <View style={styles.rowContent}>
               {/* 已关闭是状态不是禁用：只把头像调淡、名称调灰，开关和整行照常可点。 */}
-              <View style={[settingsStyles.rowIconFrame, !enabled && styles.disabledIcon]}>
-                <Text style={styles.initial}>{initialOf(endpoint.name)}</Text>
-              </View>
+              {row.wrapHandle(
+                <View style={[settingsStyles.rowIconFrame, !enabled && styles.disabledIcon]}>
+                  {row.hasHandle && (hovered || row.isDragging) ? (
+                    <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
+                  ) : (
+                    <Text style={styles.initial}>{initialOf(endpoint.name)}</Text>
+                  )}
+                </View>,
+              )}
               <View style={settingsStyles.rowContent}>
                 <Text
                   style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}
@@ -284,6 +381,9 @@ function EndpointRow({
                 })}
                 testID={`api-endpoint-switch-${endpoint.id}`}
               />
+              {moves && onArrange ? (
+                <EndpointOrderMenu endpoint={endpoint} moves={moves} onArrange={onArrange} />
+              ) : null}
               <ThemedChevronRight
                 size={ICON_SIZE.sm}
                 uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
@@ -293,6 +393,98 @@ function EndpointRow({
         )}
       </Pressable>
     </View>
+  );
+}
+
+const ORDER_ITEMS: {
+  place: Exclude<EndpointPlace, { index: number }>;
+  labelKey: string;
+  keys: string[];
+}[] = [
+  { place: "up", labelKey: "settings.apiEndpoints.order.moveUp", keys: ["alt", "Up"] },
+  { place: "down", labelKey: "settings.apiEndpoints.order.moveDown", keys: ["alt", "Down"] },
+  {
+    place: "top",
+    labelKey: "settings.apiEndpoints.order.moveToTop",
+    keys: ["alt", "shift", "Up"],
+  },
+  {
+    place: "bottom",
+    labelKey: "settings.apiEndpoints.order.moveToBottom",
+    keys: ["alt", "shift", "Down"],
+  },
+];
+
+const ORDER_ICONS = {
+  up: ThemedArrowUp,
+  down: ThemedArrowDown,
+  top: ThemedArrowUpToLine,
+  bottom: ThemedArrowDownToLine,
+};
+
+/** 行菜单：上移、下移、移到最前、移到最后（照 magpie openProviderMenu）；窄屏是底部弹层。 */
+function EndpointOrderMenu({
+  endpoint,
+  moves,
+  onArrange,
+}: {
+  endpoint: ApiEndpoint;
+  moves: EndpointMoves;
+  onArrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
+}) {
+  const { t } = useTranslation();
+  const label = t("settings.apiEndpoints.order.menu", { name: endpoint.name });
+  return (
+    <DropdownMenu compactMode="sheet">
+      <RowActionsMenuTrigger
+        accessibilityLabel={label}
+        testID={`api-endpoint-order-menu-${endpoint.id}`}
+      />
+      <DropdownMenuContent align="end" width={240} sheetTitle={label}>
+        {ORDER_ITEMS.map((item) => (
+          <OrderMenuItem
+            key={item.place}
+            item={item}
+            endpoint={endpoint}
+            isEnabled={moves[item.place]}
+            onArrange={onArrange}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function OrderMenuItem({
+  item,
+  endpoint,
+  isEnabled,
+  onArrange,
+}: {
+  item: (typeof ORDER_ITEMS)[number];
+  endpoint: ApiEndpoint;
+  isEnabled: boolean;
+  onArrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
+}) {
+  const { t } = useTranslation();
+  const { place, labelKey, keys } = item;
+  const Icon = ORDER_ICONS[place];
+  const leading = useMemo(
+    () => <Icon size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />,
+    [Icon],
+  );
+  const trailing = useMemo(() => <Shortcut keys={keys} />, [keys]);
+  const handleSelect = useCallback(() => onArrange(endpoint, place), [endpoint, onArrange, place]);
+  return (
+    <DropdownMenuItem
+      leading={leading}
+      trailing={trailing}
+      disabled={!isEnabled}
+      onSelect={handleSelect}
+      testID={`api-endpoint-order-${place}`}
+    >
+      {t(labelKey)}
+    </DropdownMenuItem>
   );
 }
 
@@ -385,6 +577,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surface3,
+  },
+  // 拖着的行浮在别的行上面：实底、描边与阴影，空出来的位置就是落点。
+  rowDragging: {
+    backgroundColor: theme.colors.surface1,
+    borderColor: theme.colors.borderAccent,
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    ...theme.shadow.md,
   },
   rowContent: {
     flex: 1,
