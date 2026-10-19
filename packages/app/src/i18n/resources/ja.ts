@@ -2649,17 +2649,27 @@ export const ja: TranslationResources = {
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:
-          "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。",
+          "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。",
         addressHintKeyOptional:
-          "「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
+          "「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、結果を 1 行ずつ表示します。「これを使う」で使えるアドレスを下に入力します。キーは入力した場合だけ送ります。",
         detect: "自動検出",
+        detectModelPlaceholder: "試すモデル（任意）",
+        detected: {
+          useThese: "これを使う",
+          taken: "反映済み · 保存すると確定します",
+          noneAnswered:
+            "どれも応答しませんでした。アドレスとキーを確認するか、サービスが提供するモデルを入力してください",
+          noneAnsweredKeyless:
+            "どれも応答せず、API キーも未入力です。キーを貼り付けてもう一度検出してください",
+          model: "モデル {{model}}",
+          okTook: "検出 · {{ms}} ms",
+        },
         urlInvalid: "http:// または https:// で始まるアドレスを入力してください",
         formatUrl: {
           anthropic_messages: "Anthropic 形式のアドレス",
           openai_chat: "OpenAI Chat 形式のアドレス",
           openai_responses: "OpenAI Responses 形式のアドレス",
         },
-        notDetectedPlaceholder: "検出されませんでした。空欄ならこの形式は使いません",
         detection: {
           ok: "検出済み",
           not_detected: "未検出",
@@ -2672,6 +2682,19 @@ export const ja: TranslationResources = {
         models: "モデル",
         modelsHint: "モデル ID をカンマ区切りで。保存すると選択されます。",
         modelsPlaceholder: "例：gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "任意：「モデルを取得」でサービスの一覧から選ぶか、モデル ID をカンマ区切りで入力します。保存すると選択されます。",
+        fetch: {
+          button: "モデルを取得",
+          empty: "サービスの一覧は空です。モデル ID を直接入力してください。",
+          filter: "{{count}} 個のモデルを絞り込む…",
+          picked: "{{total}} 個中 {{picked}} 個を選択",
+          pickAll: "すべて選択",
+          pickShown: "表示中を選択",
+          pickNone: "すべて解除",
+          showRest: "残りの {{count}} 個を表示",
+          noMatch: "「{{query}}」に一致するモデルはありません。",
+        },
         curl: {
           filled: "curl コマンドから入力しました：{{what}}。",
           model: "モデル {{model}}",

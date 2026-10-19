@@ -1135,4 +1135,75 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       SessionInboundMessageSchema.safeParse({ ...atLimit, data: `${atLimit.data}AAAA` }).success,
     ).toBe(false);
   });
+  it("parses the add window's unsaved fetch, test and detection, a save carrying the fetched list, and older ones without", () => {
+    const requests = [
+      {
+        type: "provider.api_endpoint.fetch_models.request" as const,
+        requestId: "req-p1",
+        provider: "claude",
+        endpointId: "ep_1",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+        format: "openai_chat",
+        preview: true,
+        templateId: "bedrock",
+        region: "us-east-1",
+      },
+      {
+        type: "provider.api_endpoint.test_connection.request" as const,
+        requestId: "req-p2",
+        provider: "claude",
+        baseUrl: "https://relay.example",
+        format: "anthropic_messages",
+        templateId: "azure",
+        modelIds: ["claude-opus-5", "gpt-6"],
+      },
+      {
+        type: "provider.api_endpoint.detect_formats.request" as const,
+        requestId: "req-p3",
+        baseUrl: "https://relay.example",
+        modelId: "my-model",
+        modelIds: ["kimi-k2"],
+      },
+      {
+        type: "provider.api_endpoint.save.request" as const,
+        requestId: "req-p4",
+        provider: "claude",
+        name: "Relay",
+        baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+        models: [{ id: "kimi-k2" }],
+        catalog: [{ id: "kimi-k2", label: "Kimi K2" }, { id: "gpt-6" }],
+      },
+    ];
+    for (const request of requests) {
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    }
+
+    const response = {
+      type: "provider.api_endpoint.detect_formats.response" as const,
+      payload: {
+        requestId: "req-p3",
+        results: [
+          {
+            format: "openai_chat",
+            url: "https://relay.example/v1",
+            status: "ok",
+            httpStatus: 200,
+            message: null,
+            durationMs: 412,
+            modelId: "my-model",
+          },
+          // 老 daemon 不发耗时与模型。
+          {
+            format: "openai_responses",
+            url: "https://relay.example/v1",
+            status: "not_detected",
+            httpStatus: 404,
+            message: "HTTP 404",
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
 });

@@ -2676,17 +2676,27 @@ export const fr: TranslationResources = {
         footerResource:
           "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:
-          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent.",
+          "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent.",
         addressHintKeyOptional:
-          "Appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
+          "Appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et affiche la réponse de chacun ; Utiliser celles-ci remplit les adresses qui fonctionnent. La clé n'est envoyée que si vous la saisissez.",
         detect: "Détecter",
+        detectModelPlaceholder: "Modèle à essayer (facultatif)",
+        detected: {
+          useThese: "Utiliser celles-ci",
+          taken: "Reprises · enregistrez pour les garder",
+          noneAnswered:
+            "Aucun n'a répondu : vérifiez l'adresse et la clé, ou saisissez un modèle que le fournisseur propose",
+          noneAnsweredKeyless:
+            "Aucun n'a répondu et aucune clé d'API n'est saisie : collez la clé et relancez la détection",
+          model: "modèle {{model}}",
+          okTook: "Détecté · {{ms}} ms",
+        },
         urlInvalid: "Saisissez une adresse commençant par http:// ou https://",
         formatUrl: {
           anthropic_messages: "URL de base Anthropic",
           openai_chat: "URL de base OpenAI Chat",
           openai_responses: "URL de base OpenAI Responses",
         },
-        notDetectedPlaceholder: "Non détecté. Laissez vide pour ne pas utiliser ce format",
         detection: {
           ok: "Détecté",
           not_detected: "Non détecté",
@@ -2700,6 +2710,19 @@ export const fr: TranslationResources = {
         modelsHint:
           "Identifiants de modèle séparés par des virgules. Ils sont sélectionnés à l'enregistrement.",
         modelsPlaceholder: "ex. gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "Facultatif : Récupérer les modèles pour choisir dans la liste du fournisseur, ou saisissez des identifiants séparés par des virgules. Ils sont sélectionnés à l'enregistrement.",
+        fetch: {
+          button: "Récupérer les modèles",
+          empty: "La liste du fournisseur est vide. Saisissez les identifiants de modèle.",
+          filter: "Filtrer {{count}} modèles…",
+          picked: "{{picked}} sur {{total}} choisis",
+          pickAll: "Tout choisir",
+          pickShown: "Choisir ceux affichés",
+          pickNone: "Ne rien choisir",
+          showRest: "Afficher les {{count}} autres",
+          noMatch: "Aucun modèle ne correspond à « {{query}} ».",
+        },
         curl: {
           filled: "Rempli à partir de la commande curl : {{what}}.",
           model: "modèle {{model}}",

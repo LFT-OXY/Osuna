@@ -143,6 +143,8 @@ describe("API endpoint request format detection over the daemon RPC", () => {
         status: "ok",
         httpStatus: 200,
         message: null,
+        durationMs: expect.any(Number),
+        modelId: "claude-sonnet-4-5",
       },
       {
         format: "openai_chat",
@@ -150,6 +152,8 @@ describe("API endpoint request format detection over the daemon RPC", () => {
         status: "ok",
         httpStatus: 200,
         message: null,
+        durationMs: expect.any(Number),
+        modelId: "deepseek-chat",
       },
       {
         format: "openai_responses",
@@ -157,6 +161,8 @@ describe("API endpoint request format detection over the daemon RPC", () => {
         status: "not_detected",
         httpStatus: 404,
         message: `POST ${upstream.origin}/relay/v1/responses: HTTP 404: Not Found`,
+        durationMs: expect.any(Number),
+        modelId: "gpt-5",
       },
     ]);
 
@@ -230,6 +236,45 @@ describe("API endpoint request format detection over the daemon RPC", () => {
       ),
     );
     expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
+  });
+
+  test("with no model list, a model typed to try is asked on every format", async () => {
+    upstream.modelsStatus = 404;
+
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/relay`,
+      apiKey: TYPED_KEY,
+      modelId: " my-model ",
+    });
+
+    expect(
+      detected.results.map(({ format, status, modelId }) => [format, status, modelId]),
+    ).toEqual([
+      ["anthropic_messages", "ok", "my-model"],
+      ["openai_chat", "ok", "my-model"],
+      ["openai_responses", "not_detected", "my-model"],
+    ]);
+    for (const result of detected.results) expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    // 指定了模型就不列清单。
+    expect(upstream.requests.filter((request) => request.method === "GET")).toEqual([]);
+    expect(
+      upstream.requests.filter((request) => request.method === "POST").map((r) => r.body.model),
+    ).toEqual(["my-model", "my-model", "my-model"]);
+  });
+
+  test("the form's picked models are tried per format before the vendor's list", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/relay`,
+      apiKey: TYPED_KEY,
+      modelIds: ["kimi-k2", "claude-opus-5", "gpt-6"],
+    });
+
+    expect(detected.results.map((result) => result.modelId)).toEqual([
+      "claude-opus-5",
+      "kimi-k2",
+      "gpt-6",
+    ]);
+    expect(upstream.requests.filter((request) => request.method === "GET")).toEqual([]);
   });
 
   test("detects with no key headers when there is no key", async () => {

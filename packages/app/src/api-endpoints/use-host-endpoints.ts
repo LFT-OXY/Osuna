@@ -20,11 +20,15 @@ import { describeUnparsableFile } from "./config-unparsable-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
+  ConnectionFetchRequest,
+  ConnectionFetchResult,
   ConnectionRevealKeyResult,
   ConnectionIconError,
   ConnectionIconResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
+  ConnectionTestRequest,
+  ConnectionTestResult,
 } from "./internal/connection-form-model";
 import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
@@ -123,6 +127,15 @@ export interface UseHostEndpointsResult {
   storeIcon: (bytes: Uint8Array) => Promise<ConnectionIconResult>;
   // 从地址所在网站取图标；同上。
   fetchSiteIcon: (input: { baseUrl: string; name: string }) => Promise<ConnectionIconResult>;
+  // 添加窗口保存前拉模型、测试连接；只在声明了 apiEndpointManagement 的主机上用。
+  fetchModels: (
+    request: ConnectionFetchRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionFetchResult>;
+  testConnection: (
+    request: ConnectionTestRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionTestResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -372,6 +385,56 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const fetchModels = useCallback(
+    async (
+      request: ConnectionFetchRequest,
+      signal: AbortSignal,
+    ): Promise<ConnectionFetchResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointFetchModels(
+          { provider: LIST_PROVIDER, ...request },
+          requestId,
+        );
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        return { status: "done", models: response.models };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
+  const testConnection = useCallback(
+    async (request: ConnectionTestRequest, signal: AbortSignal): Promise<ConnectionTestResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      const requestId = createUpstreamRequestId();
+      const unlink = linkAbortToCancel(signal, () => client.apiEndpointCancel(requestId));
+      try {
+        const response = await client.apiEndpointTestConnection(
+          { provider: LIST_PROVIDER, ...request },
+          requestId,
+        );
+        if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
+        if (response.error) return { status: "failed", message: response.error.message };
+        if (!response.result) throw new Error("The host returned neither a result nor an error");
+        return { status: "done", result: response.result };
+      } catch (error) {
+        if (signal.aborted) return { status: "cancelled" };
+        return { status: "failed", message: toErrorMessage(error) };
+      } finally {
+        unlink();
+      }
+    },
+    [client, t],
+  );
+
   const revealKey = useCallback(
     async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -448,6 +511,8 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     revealKey,
     storeIcon,
     fetchSiteIcon,
+    fetchModels,
+    testConnection,
   };
 }
 

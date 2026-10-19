@@ -163,6 +163,7 @@ export class ApiEndpointSession {
         ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
         ...(request.region !== undefined ? { region: request.region } : {}),
         ...(request.icon !== undefined ? { icon: request.icon } : {}),
+        ...(request.catalog !== undefined ? { catalog: request.catalog } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -456,6 +457,9 @@ export class ApiEndpointSession {
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
           ...(request.format !== undefined ? { format: request.format } : {}),
+          ...(request.preview !== undefined ? { preview: request.preview } : {}),
+          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          ...(request.region !== undefined ? { region: request.region } : {}),
         },
         signal,
       );
@@ -491,6 +495,9 @@ export class ApiEndpointSession {
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
           ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
           ...(request.format !== undefined ? { format: request.format } : {}),
+          ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+          ...(request.region !== undefined ? { region: request.region } : {}),
+          ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
         },
         signal,
       );
@@ -523,6 +530,8 @@ export class ApiEndpointSession {
           ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
+          ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
+          ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
         },
         signal,
       );

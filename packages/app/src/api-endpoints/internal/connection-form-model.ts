@@ -2,12 +2,15 @@ import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,
   type ApiEndpointDetectFormatsRequest,
+  type ApiEndpointFetchModelsRequest,
   type ApiEndpointFormatDetection,
   type ApiEndpointModel,
   type ApiEndpointRequestFormat,
   type ApiEndpointSaveRequest,
   type ApiEndpointTemplate,
   type ApiEndpointTemplateRegion,
+  type ApiEndpointTestConnectionRequest,
+  type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { curlOf, type CurlCommand } from "./curl-command";
 import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
@@ -30,6 +33,10 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * 地址里还有占位符、key 只是占位符；没取到 key 时把焦点移到 key 框。
  * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，本机一张图片（先经 storeIcon
  * 存到主机上），或从地址所在网站取（fetchSiteIcon，主机找到后同样存下）；保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
+ * 自动检测照 magpie Detect：每种格式一行耗时或错误，「采用这些」才把通了的地址填进去，没在那里找到（404 / 405）的清掉。
+ * 保存前检查（同样只在这种主机上）：自动检测可填试用的模型，不填时从表单里的模型挑；「测试连接」按表单里的各格式地址、
+ * 模板与区域逐格式发最小请求；添加时「拉取模型」用表单的值向上游拉清单预览、点选进「模型」，保存时清单随之写入（照 magpie
+ * addFormModels）。三样都只看不存，带的 endpointId 只为借已存的 key。
  */
 
 export type ConnectionFormSeed =
@@ -95,13 +102,76 @@ export type ConnectionDetectResult =
   | { status: "failed"; message: string }
   | { status: "cancelled" };
 
-// 一种格式的检测结论；null 是没检测过，或检测之后改过这一栏。
+// provider 由调用方补上，同 ConnectionSaveRequest。
+export type ConnectionFetchRequest = Omit<
+  ApiEndpointFetchModelsRequest,
+  "type" | "requestId" | "provider"
+>;
+
+export type ConnectionFetchResult =
+  | { status: "done"; models: ApiEndpointModel[] }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+export type ConnectionTestRequest = Omit<
+  ApiEndpointTestConnectionRequest,
+  "type" | "requestId" | "provider"
+>;
+
+// failed：请求本身没成立（断线、主机拒收）；上游的结论（含失败）在 done 的 result 里。
+export type ConnectionTestResult =
+  | { status: "done"; result: ApiEndpointTestConnectionResult }
+  | { status: "failed"; message: string }
+  | { status: "cancelled" };
+
+// 一种格式的检测结论。
 export type FormatDetectionLabel = "ok" | "not_detected" | "auth_failed";
+
+/** 自动检测的一行：这种格式的建议地址、结论、HTTP 状态、原因、耗时与问的模型（老主机不给后两样）。 */
+export interface DetectedFormat {
+  format: ApiEndpointRequestFormat;
+  url: string;
+  label: FormatDetectionLabel;
+  httpStatus: number | null;
+  message: string | null;
+  durationMs: number | null;
+  modelId: string | null;
+}
+
+/**
+ * 最近一次自动检测：每种格式一行；isTaken 是已按它「采用这些」。
+ * noneAnswered：一种都没通时的提示——没有 key（没打、也没存）时 keyless，否则 check（照 magpie noneAnswered）。
+ */
+export interface ConnectionDetection {
+  results: DetectedFormat[];
+  isTaken: boolean;
+  canTake: boolean;
+  noneAnswered: "keyless" | "check" | null;
+}
+
+/** 添加时「拉取模型」：拉到的清单只在表单里，保存时一起写入。 */
+export type ConnectionCatalogFetch =
+  | { status: "idle" }
+  | { status: "fetching" }
+  | { status: "failed"; message: string }
+  | { status: "fetched"; models: ApiEndpointModel[] };
+
+/** 「测试连接」一种格式的结果。failed 的 status 是 HTTP 状态码，没收到响应为 null。 */
+export type FormatTestOutcome =
+  | { kind: "testing" }
+  | { kind: "ok"; durationMs: number }
+  | { kind: "authFailed"; status: number | null; message: string }
+  | { kind: "failed"; status: number | null; message: string };
+
+export interface FormatTestRow {
+  format: ApiEndpointRequestFormat;
+  url: string;
+  outcome: FormatTestOutcome;
+}
 
 export interface ConnectionFormatField {
   format: ApiEndpointRequestFormat;
   url: string;
-  detection: FormatDetectionLabel | null;
   invalid: boolean;
 }
 
@@ -114,6 +184,8 @@ export interface ConnectionFormOptions {
   canPickIcon: boolean;
   // 同上：往地址框或 key 框粘贴 curl 命令能填表。
   canPasteCurl: boolean;
+  // 同上：保存前能测试连接、添加时能拉模型，自动检测能填试用的模型。
+  canCheckBeforeSave: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -189,8 +261,10 @@ export interface ConnectionFormState {
   isKeyOptional: boolean;
   address: string;
   addressInvalid: boolean;
-  // 新建或复制「自定义」时粘贴 curl 加进来的模型（可改）；hasModelField 为真后「模型」框一直显示。
+  // 新建或复制时粘贴 curl 加进来、或从拉到的清单点选的模型（可改）；hasModelField 为真时「模型」框显示。
   modelIds: string[];
+  // 点选清单改了「模型」时加一，输入框据此换成新值。
+  modelIdsGeneration: number;
   hasModelField: boolean;
   curlNote: ConnectionCurlNote | null;
   // 资源地址（template.endpointExample 不为 null 时才用）：就是 Chat 与 Responses 的地址。
@@ -204,13 +278,23 @@ export interface ConnectionFormState {
   iconTask: ConnectionIconTask | null;
   iconError: ConnectionIconError | null;
   formats: ConnectionFormatField[];
-  // 自动检测改写了地址栏时加一，输入框据此换成新值。
+  // 「采用这些」改写了地址栏时加一，输入框据此换成新值。
   urlGeneration: number;
+  canCheckBeforeSave: boolean;
+  // 自动检测的试用模型（只在 canCheckBeforeSave 时有这一框）。
+  detectModel: string;
   detecting: boolean;
   detectError: string | null;
+  detection: ConnectionDetection | null;
   // 上游拒绝了这把 key（401 / 403）；改 key 之前一直标红。
   keyRejected: boolean;
   canDetect: boolean;
+  catalogFetch: ConnectionCatalogFetch;
+  canFetchModels: boolean;
+  // 测过的格式，按 Anthropic → Chat → Responses。
+  tests: FormatTestRow[];
+  isTesting: boolean;
+  canTest: boolean;
   canSubmit: boolean;
   submitting: boolean;
   submitError: string | null;
@@ -225,6 +309,14 @@ export interface ConnectionFormDeps {
   revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
   storeIcon: (bytes: Uint8Array) => Promise<ConnectionIconResult>;
   fetchSiteIcon: (input: { baseUrl: string; name: string }) => Promise<ConnectionIconResult>;
+  fetchModels: (
+    request: ConnectionFetchRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionFetchResult>;
+  testConnection: (
+    request: ConnectionTestRequest,
+    signal: AbortSignal,
+  ) => Promise<ConnectionTestResult>;
 }
 
 export interface ConnectionFormModel {
@@ -245,6 +337,17 @@ export interface ConnectionFormModel {
   subscribeCurlInputs(listener: (inputs: ConnectionCurlInputs) => void): () => void;
   // 「模型」框：逗号或换行分隔的模型 id。
   setModelIds(value: string): void;
+  // 拉到的清单上点一个模型：选上或去掉。
+  toggleModel(modelId: string): void;
+  // 「全选」「选上显示的」与「全不选」。
+  pickModels(modelIds: string[]): void;
+  unpickModels(modelIds: string[]): void;
+  // 添加时「拉取模型」：用表单的值向上游拉，只看不存。
+  fetchModels(): void;
+  cancelFetchModels(): void;
+  // 「测试连接」：表单里每种格式的地址各发一条最小请求。
+  testConnection(): void;
+  cancelTest(): void;
   // 填自己资源地址的模板：Chat 与 Responses 都用它。
   setEndpoint(value: string): void;
   setUrl(format: ApiEndpointRequestFormat, value: string): void;
@@ -256,14 +359,28 @@ export interface ConnectionFormModel {
   pickIconImage(bytes: Uint8Array): void;
   // 「从网站取图标」：按填的地址找它所在网站的图标（照 magpie）。
   fetchSiteIcon(): void;
+  setDetectModel(value: string): void;
   detect(): void;
   cancelDetect(): void;
+  // 「采用这些」：通了的格式填上建议地址，没在那里找到的（404 / 405）清掉。
+  takeDetected(): void;
   submit(): Promise<ConnectionSaveResult | null>;
   close(): void;
 }
 
 type Urls = Record<ApiEndpointRequestFormat, string>;
-type Labels = Partial<Record<ApiEndpointRequestFormat, FormatDetectionLabel>>;
+type FormatTests = Partial<Record<ApiEndpointRequestFormat, FormatTestOutcome>>;
+
+interface DetectionValues {
+  results: DetectedFormat[];
+  isTaken: boolean;
+}
+
+// 表单里一种格式要问的地址。
+interface CheckedUrl {
+  format: ApiEndpointRequestFormat;
+  url: string;
+}
 
 interface Values {
   template: ApiEndpointTemplate | null;
@@ -280,13 +397,17 @@ interface Values {
   revealError: string | null;
   address: string;
   modelIds: string[];
+  modelIdsGeneration: number;
   hasModelField: boolean;
   curlNote: ConnectionCurlNote | null;
   urls: Urls;
   urlGeneration: number;
-  labels: Labels;
+  detectModel: string;
+  detection: DetectionValues | null;
   detecting: boolean;
   detectError: string | null;
+  catalogFetch: ConnectionCatalogFetch;
+  tests: FormatTests;
   serviceAddress: string;
   icon: string | null;
   iconTask: ConnectionIconTask | null;
@@ -308,15 +429,20 @@ export function createConnectionFormModel(
   deps: ConnectionFormDeps,
   options: ConnectionFormOptions,
 ): ConnectionFormModel {
-  const { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, templates } = options;
+  const { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, canCheckBeforeSave, templates } =
+    options;
+  // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
+  const isAdding = seed.mode !== "edit";
   const listeners = new Set<() => void>();
   const curlInputListeners = new Set<(inputs: ConnectionCurlInputs) => void>();
   // 编辑的这家，或复制的原来那家：没打 key 时检测、保存都用它已存的 key。
   const keyOwner = keyOwnerOf(seed);
   const hasSavedKey = keyOwner?.hasApiKey === true;
   let closed = false;
-  // 当前这次自动检测；取消或重新检测后，旧请求晚到的结果不再生效。
+  // 当前这次自动检测、拉模型、测试连接；取消或重来后，旧请求晚到的结果不再生效。
   let pendingDetect: AbortController | null = null;
+  let pendingFetch: AbortController | null = null;
+  let pendingTest: AbortController | null = null;
   const seededTemplate = templateOf(seed, templates);
   const seededRegion = seededTemplate ? initialRegionOf(seed, seededTemplate) : null;
   const seededUrls = initialUrlsOf({
@@ -341,13 +467,17 @@ export function createConnectionFormModel(
     revealError: null,
     address: API_ENDPOINT_REQUEST_FORMATS.map((format) => seededUrls[format]).find(Boolean) ?? "",
     modelIds: [],
+    modelIdsGeneration: 0,
     hasModelField: false,
     curlNote: null,
     urls: seededUrls,
     urlGeneration: 0,
-    labels: {},
+    detectModel: "",
+    detection: null,
     detecting: false,
     detectError: null,
+    catalogFetch: { status: "idle" },
+    tests: {},
     serviceAddress: serviceAddressWas,
     icon: seededIcon,
     iconTask: null,
@@ -365,14 +495,8 @@ export function createConnectionFormModel(
     const addressInvalid = address !== "" && !isHttpUrl(address);
     const formats = API_ENDPOINT_REQUEST_FORMATS.map((format) => {
       const url = next.urls[format];
-      return {
-        format,
-        url,
-        detection: next.labels[format] ?? null,
-        invalid: url.trim() !== "" && !isHttpUrl(url.trim()),
-      };
+      return { format, url, invalid: url.trim() !== "" && !isHttpUrl(url.trim()) };
     });
-    const keyRejected = Object.values(next.labels).includes("auth_failed");
     const endpoint = next.urls.openai_chat;
     const asksEndpoint = next.template?.endpointExample !== undefined;
     const serviceAddressInvalid = serverOrigin(next.serviceAddress) === null;
@@ -382,8 +506,10 @@ export function createConnectionFormModel(
       ? endpoint.trim() !== ""
       : formats.some((field) => field.url.trim() !== "") && !formats.some((field) => field.invalid);
     const hasValidAddress = address !== "" && !addressInvalid;
-    // 检测、保存或存图片进行中时两个按钮都不可点。
-    const busy = next.detecting || next.submitting || next.iconTask !== null;
+    // 检测、拉模型、保存或存图片进行中时检测与保存都不可点。
+    const isFetching = next.catalogFetch.status === "fetching";
+    const busy = next.detecting || next.submitting || next.iconTask !== null || isFetching;
+    const checks = deriveChecks({ next, hasKey, busy, serviceAddressInvalid });
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -401,7 +527,7 @@ export function createConnectionFormModel(
       address: next.address,
       addressInvalid,
       modelIds: next.modelIds,
-      hasModelField: next.hasModelField,
+      modelIdsGeneration: next.modelIdsGeneration,
       curlNote: next.curlNote,
       endpoint,
       serviceAddress: next.serviceAddress,
@@ -412,14 +538,65 @@ export function createConnectionFormModel(
       iconError: next.iconError,
       formats,
       urlGeneration: next.urlGeneration,
+      ...checks,
       detecting: next.detecting,
       detectError: next.detectError,
-      keyRejected,
       canDetect: !busy && hasKey && hasValidAddress,
       canSubmit:
         !busy && next.name.trim() !== "" && hasKey && hasValidUrls && !serviceAddressInvalid,
       submitting: next.submitting,
       submitError: next.submitError,
+    };
+  }
+
+  type CheckState = Pick<
+    ConnectionFormState,
+    | "canCheckBeforeSave"
+    | "hasModelField"
+    | "detectModel"
+    | "detection"
+    | "keyRejected"
+    | "catalogFetch"
+    | "canFetchModels"
+    | "tests"
+    | "isTesting"
+    | "canTest"
+  >;
+
+  /** 保存前检查的那部分：自动检测结论、拉到的清单、测试结果与能不能点。 */
+  function deriveChecks(input: {
+    next: Values;
+    hasKey: boolean;
+    busy: boolean;
+    serviceAddressInvalid: boolean;
+  }): CheckState {
+    const { next, hasKey, busy, serviceAddressInvalid } = input;
+    const isDetectionRejected =
+      next.detection?.results.some((result) => result.label === "auth_failed") === true;
+    const isTestRejected = Object.values(next.tests).some(
+      (outcome) => outcome?.kind === "authFailed",
+    );
+    // 行上写问的那个地址（本机服务换了地址时是挪过去的）。
+    const askedUrls = urlsToSave(next);
+    const tests = API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {
+      const outcome = next.tests[format];
+      return outcome ? [{ format, url: askedUrls[format].trim(), outcome }] : [];
+    });
+    const isTesting = tests.some((row) => row.outcome.kind === "testing");
+    const hasCheckedUrls = checkedUrlsOf(next).length > 0;
+    const canCheck = canCheckBeforeSave && hasKey && !serviceAddressInvalid && hasCheckedUrls;
+    return {
+      canCheckBeforeSave,
+      // 添加窗口能拉模型时「模型」框一直显示。
+      hasModelField: next.hasModelField || (canCheckBeforeSave && isAdding),
+      detectModel: next.detectModel,
+      detection: next.detection ? detectionStateOf(next.detection, next.apiKey) : null,
+      keyRejected: isDetectionRejected || isTestRejected,
+      catalogFetch: next.catalogFetch,
+      canFetchModels: canCheck && isAdding && !busy,
+      tests,
+      isTesting,
+      canTest: canCheck && !isTesting && !next.submitting,
     };
   }
 
@@ -459,6 +636,126 @@ export function createConnectionFormModel(
     pendingDetect = null;
   }
 
+  function abortPendingFetch(): void {
+    pendingFetch?.abort();
+    pendingFetch = null;
+  }
+
+  function abortPendingTest(): void {
+    pendingTest?.abort();
+    pendingTest = null;
+  }
+
+  /** 照 magpie noneAnswered：一种都没通、又没有 key（没打、没存、复制来的那家也没有）时提示先填 key。 */
+  function detectionStateOf(detection: DetectionValues, apiKey: string): ConnectionDetection {
+    const anyAnswered = detection.results.some((result) => result.label === "ok");
+    const isKeyless = apiKey.trim() === "" && !hasSavedKey;
+    let noneAnswered: ConnectionDetection["noneAnswered"] = null;
+    if (!anyAnswered) noneAnswered = isKeyless ? "keyless" : "check";
+    return {
+      results: detection.results,
+      isTaken: detection.isTaken,
+      canTake: anyAnswered && !detection.isTaken,
+      noneAnswered,
+    };
+  }
+
+  // 本机服务换了地址时各格式地址挪过去；别的照填的。
+  function urlsToSave(from: Values): Urls {
+    const origin = serverOrigin(from.serviceAddress);
+    const isMoved = from.template?.group === LOCAL_GROUP && origin && origin !== serviceAddressWas;
+    return isMoved ? atOrigin(from.urls, origin) : from.urls;
+  }
+
+  /** 拉模型、测试连接要问的地址：保存时会存的、像 http(s) 地址的那些，按 Anthropic → Chat → Responses。 */
+  function checkedUrlsOf(from: Values): CheckedUrl[] {
+    const urls = urlsToSave(from);
+    return API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {
+      const url = urls[format].trim();
+      return url !== "" && isHttpUrl(url) ? [{ format, url }] : [];
+    });
+  }
+
+  /** 编辑、复制时没打 key 就借那家已存的 key：带上它的 id。 */
+  function keyOwnerRequest(): { endpointId?: string; apiKey?: string } {
+    const apiKey = typedKey();
+    if (apiKey) return { apiKey };
+    return keyOwner ? { endpointId: keyOwner.id } : {};
+  }
+
+  /** 表单当前的模板与区域或套餐：拉模型、测试连接按它们问（「自定义」不带）。 */
+  function placeRequest(): { templateId?: string; region?: string } {
+    if (!values.template) return {};
+    return {
+      templateId: values.template.id,
+      ...(values.regionId ? { region: values.regionId } : {}),
+    };
+  }
+
+  /** 表单里的模型：编辑、复制时那家已选的，加上「模型」框里的。 */
+  function formModelIds(): string[] {
+    const typedModels = values.modelIds.map((id) => ({ id }));
+    return withModels(keyOwner?.models ?? [], typedModels).map((model) => model.id);
+  }
+
+  /** 测试连接从这些模型里挑：表单里的在前，拉到的清单（没拉过时是那家已存的）在后。 */
+  function testModelIds(): string[] {
+    const listed =
+      values.catalogFetch.status === "fetched"
+        ? values.catalogFetch.models
+        : (keyOwner?.catalog?.models ?? []);
+    return [...new Set([...formModelIds(), ...listed.map((model) => model.id)])];
+  }
+
+  async function runFetch(controller: AbortController): Promise<void> {
+    let failure = "";
+    // 第一个地址列不出模型时依次试其余地址，都失败就显示最后一个的原因（同详情页）。
+    for (const { format, url } of checkedUrlsOf(values)) {
+      const outcome = await deps.fetchModels(
+        {
+          ...keyOwnerRequest(),
+          baseUrl: url,
+          format,
+          preview: true,
+          ...placeRequest(),
+        },
+        controller.signal,
+      );
+      if (pendingFetch !== controller) return;
+      if (outcome.status === "cancelled") {
+        pendingFetch = null;
+        update({ catalogFetch: { status: "idle" } });
+        return;
+      }
+      if (outcome.status === "done") {
+        pendingFetch = null;
+        update({ catalogFetch: { status: "fetched", models: outcome.models } });
+        return;
+      }
+      failure = outcome.message;
+    }
+    pendingFetch = null;
+    update({ catalogFetch: { status: "failed", message: failure } });
+  }
+
+  async function runTest(controller: AbortController, checked: CheckedUrl): Promise<void> {
+    const outcome = await deps.testConnection(
+      {
+        ...keyOwnerRequest(),
+        baseUrl: checked.url,
+        format: checked.format,
+        ...placeRequest(),
+        modelIds: testModelIds(),
+      },
+      controller.signal,
+    );
+    if (pendingTest !== controller) return;
+    const tests = { ...values.tests };
+    if (outcome.status === "cancelled") delete tests[checked.format];
+    else tests[checked.format] = testOutcomeOf(outcome);
+    update({ tests });
+  }
+
   function typedKey(): string | undefined {
     const apiKey = values.apiKey.trim();
     return apiKey === "" ? undefined : apiKey;
@@ -466,11 +763,15 @@ export function createConnectionFormModel(
 
   async function runDetect(controller: AbortController): Promise<void> {
     const apiKey = typedKey();
+    const detectModel = values.detectModel.trim();
+    const picked = canCheckBeforeSave ? formModelIds() : [];
     const outcome = await deps.detect(
       {
         ...(keyOwner && !apiKey ? { endpointId: keyOwner.id } : {}),
         baseUrl: values.address.trim(),
         ...(apiKey ? { apiKey } : {}),
+        ...(canCheckBeforeSave && detectModel !== "" ? { modelId: detectModel } : {}),
+        ...(picked.length > 0 ? { modelIds: picked } : {}),
       },
       controller.signal,
     );
@@ -484,34 +785,27 @@ export function createConnectionFormModel(
       update({ detecting: false });
       return;
     }
-    // 检测通过的填上建议地址；没通过的保留原值，用户手填的不被抹掉。
-    const urls = { ...values.urls };
-    const labels: Labels = {};
-    for (const result of outcome.results) {
-      const format = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === result.format);
-      if (!format) continue;
-      labels[format] = toLabel(result.status);
-      if (result.status === "ok") urls[format] = result.url;
-    }
-    update({
-      detecting: false,
-      urls,
-      labels,
-      urlGeneration: values.urlGeneration + 1,
-    });
+    // 只列出结论，「采用这些」才填进地址栏（照 magpie Detect）。
+    const results = outcome.results.flatMap(detectedFormatOf);
+    update({ detecting: false, detection: { results, isTaken: false } });
   }
 
-  // 本机服务换了地址时各格式地址挪过去；别的照填的。
-  function savedUrls(): Urls {
-    const origin = serverOrigin(values.serviceAddress);
-    const isMoved =
-      values.template?.group === LOCAL_GROUP && origin && origin !== serviceAddressWas;
-    return isMoved ? atOrigin(values.urls, origin) : values.urls;
+  /** 照 magpie useDetected：通了的填上建议地址；没在那里找到的（404、405）清掉，但只清和建议地址一样的那栏。 */
+  function takenUrls(results: DetectedFormat[]): Urls {
+    const urls = { ...values.urls };
+    for (const result of results) {
+      const isMissingThere = result.httpStatus === 404 || result.httpStatus === 405;
+      if (result.label === "ok") urls[result.format] = result.url;
+      else if (isMissingThere && trimSlashes(urls[result.format]) === result.url) {
+        urls[result.format] = "";
+      }
+    }
+    return urls;
   }
 
   function buildRequest(): ConnectionSaveRequest {
     const apiKey = typedKey();
-    const urls = savedUrls();
+    const urls = urlsToSave(values);
     const baseUrls = API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {
       const url = urls[format].trim();
       return url ? [{ format, url }] : [];
@@ -535,6 +829,8 @@ export function createConnectionFormModel(
       ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
       // 复制：上游清单、手动添加的模型、联网搜索开关等其余设置由 daemon 从原来那家拷。
       ...(seed.mode === "duplicate" ? { copyOf: seed.source.id } : {}),
+      // 添加时拉到的清单随保存写入。
+      ...(values.catalogFetch.status === "fetched" ? { catalog: values.catalogFetch.models } : {}),
     };
   }
 
@@ -575,7 +871,10 @@ export function createConnectionFormModel(
     const urlChange = baseUrl ? baseUrlPatch(baseUrl) : {};
     const keyChange = command.apiKey ? apiKeyPatch(command.apiKey) : {};
     const modelChange = modelIds ? { modelIds, hasModelField: true } : {};
-    if (baseUrl || command.apiKey) abortPendingDetect();
+    if (baseUrl || command.apiKey) {
+      abortPendingDetect();
+      abortPendingTest();
+    }
     update({ ...urlChange, ...keyChange, ...modelChange, curlNote });
     const inputs: ConnectionCurlInputs = {
       address: baseUrl?.url ?? null,
@@ -587,14 +886,14 @@ export function createConnectionFormModel(
   }
 
   function baseUrlPatch(baseUrl: CurlBaseUrl): Partial<Values> {
-    const { [baseUrl.format]: _dropped, ...labels } = values.labels;
     return {
       address: baseUrl.url,
       urls: { ...values.urls, [baseUrl.format]: baseUrl.url },
       urlGeneration: values.urlGeneration + 1,
-      labels,
+      detection: null,
       detecting: false,
       detectError: null,
+      tests: {},
     };
   }
 
@@ -606,9 +905,10 @@ export function createConnectionFormModel(
       isKeyRevealed: false,
       isRevealingKey: false,
       revealError: null,
-      labels: {},
+      detection: null,
       detecting: false,
       detectError: null,
+      tests: {},
     };
   }
 
@@ -645,11 +945,15 @@ export function createConnectionFormModel(
     setRegion(regionId) {
       const region = values.template?.regions?.find((candidate) => candidate.id === regionId);
       if (!values.template || !region) return;
+      abortPendingFetch();
+      abortPendingTest();
+      // 拉到的清单属于原来的区域或套餐。
       update({
         regionId,
         urls: urlsOf(region.baseUrls),
-        labels: {},
         urlGeneration: values.urlGeneration + 1,
+        catalogFetch: { status: "idle" },
+        tests: {},
       });
     },
     setSite(templateId) {
@@ -659,26 +963,31 @@ export function createConnectionFormModel(
       );
       if (!template || !isSiteChoice) return;
       const region = template.regions?.[0] ?? null;
+      abortPendingFetch();
+      abortPendingTest();
       update({
         template,
         regionId: region?.id ?? null,
         name: template.name,
         nameGeneration: values.nameGeneration + 1,
         urls: urlsOf(templateBaseUrls(template, region)),
-        labels: {},
         urlGeneration: values.urlGeneration + 1,
+        catalogFetch: { status: "idle" },
+        tests: {},
       });
     },
     setApiKey(apiKey) {
       abortPendingDetect();
+      abortPendingTest();
       update({
         apiKey,
         keyBoxValue: apiKey,
         isRevealingKey: false,
         revealError: null,
-        labels: {},
+        detection: null,
         detecting: false,
         detectError: null,
+        tests: {},
       });
     },
     toggleKeyVisible() {
@@ -703,7 +1012,7 @@ export function createConnectionFormModel(
     },
     setAddress(address) {
       abortPendingDetect();
-      update({ address, labels: {}, detecting: false, detectError: null });
+      update({ address, detection: null, detecting: false, detectError: null });
     },
     pasteCurl: applyCurl,
     subscribeCurlInputs(listener) {
@@ -713,14 +1022,67 @@ export function createConnectionFormModel(
     setModelIds(value) {
       update({ modelIds: typedModelIds(value) });
     },
+    toggleModel(modelId) {
+      const modelIds = values.modelIds.includes(modelId)
+        ? values.modelIds.filter((id) => id !== modelId)
+        : [...values.modelIds, modelId];
+      update({ modelIds, modelIdsGeneration: values.modelIdsGeneration + 1 });
+    },
+    pickModels(modelIds) {
+      const picked = modelIds.reduce(withId, values.modelIds);
+      update({ modelIds: picked, modelIdsGeneration: values.modelIdsGeneration + 1 });
+    },
+    unpickModels(modelIds) {
+      const dropped = new Set(modelIds);
+      update({
+        modelIds: values.modelIds.filter((id) => !dropped.has(id)),
+        modelIdsGeneration: values.modelIdsGeneration + 1,
+      });
+    },
+    fetchModels() {
+      if (!state.canFetchModels) return;
+      abortPendingFetch();
+      const controller = new AbortController();
+      pendingFetch = controller;
+      update({ catalogFetch: { status: "fetching" } });
+      void runFetch(controller);
+    },
+    cancelFetchModels() {
+      if (!pendingFetch) return;
+      abortPendingFetch();
+      update({ catalogFetch: { status: "idle" } });
+    },
+    testConnection() {
+      if (!state.canTest) return;
+      abortPendingTest();
+      const controller = new AbortController();
+      pendingTest = controller;
+      const checked = checkedUrlsOf(values);
+      const tests: FormatTests = {};
+      for (const entry of checked) tests[entry.format] = { kind: "testing" };
+      update({ tests });
+      for (const entry of checked) void runTest(controller, entry);
+    },
+    cancelTest() {
+      if (!pendingTest) return;
+      abortPendingTest();
+      update({ tests: {} });
+    },
     setEndpoint(endpoint) {
-      update({ urls: { ...values.urls, openai_chat: endpoint, openai_responses: endpoint } });
+      abortPendingTest();
+      update({
+        urls: { ...values.urls, openai_chat: endpoint, openai_responses: endpoint },
+        tests: {},
+      });
     },
     setUrl(format, url) {
-      const { [format]: _dropped, ...labels } = values.labels;
-      update({ urls: { ...values.urls, [format]: url }, labels });
+      abortPendingTest();
+      update({ urls: { ...values.urls, [format]: url }, tests: {} });
     },
-    setServiceAddress: (serviceAddress) => update({ serviceAddress }),
+    setServiceAddress(serviceAddress) {
+      abortPendingTest();
+      update({ serviceAddress, tests: {} });
+    },
     setIcon(icon) {
       pendingIcon = null;
       update({ icon, iconTask: null, iconError: null });
@@ -739,13 +1101,25 @@ export function createConnectionFormModel(
       const input = { baseUrl: siteBaseUrl(), name: values.name.trim() };
       void runIconTask("website", () => deps.fetchSiteIcon(input));
     },
+    setDetectModel: (detectModel) => update({ detectModel }),
     detect() {
       if (!state.canDetect) return;
       abortPendingDetect();
       const controller = new AbortController();
       pendingDetect = controller;
-      update({ detecting: true, detectError: null, labels: {} });
+      update({ detecting: true, detectError: null, detection: null });
       void runDetect(controller);
+    },
+    takeDetected() {
+      const detection = values.detection;
+      if (!state.detection?.canTake || !detection) return;
+      abortPendingTest();
+      update({
+        urls: takenUrls(detection.results),
+        urlGeneration: values.urlGeneration + 1,
+        detection: { ...detection, isTaken: true },
+        tests: {},
+      });
     },
     cancelDetect() {
       if (!pendingDetect) return;
@@ -764,6 +1138,8 @@ export function createConnectionFormModel(
     },
     close() {
       abortPendingDetect();
+      abortPendingFetch();
+      abortPendingTest();
       pendingIcon = null;
       closed = true;
       listeners.clear();
@@ -927,6 +1303,42 @@ function atOrigin(urls: Urls, origin: string): Urls {
 function toLabel(status: string): FormatDetectionLabel {
   if (status === "ok" || status === "auth_failed") return status;
   return "not_detected";
+}
+
+/** 主机给的一行检测结论；认不出的格式不列。 */
+function detectedFormatOf(result: ApiEndpointFormatDetection): DetectedFormat[] {
+  const format = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === result.format);
+  if (!format) return [];
+  return [
+    {
+      format,
+      url: result.url,
+      label: toLabel(result.status),
+      httpStatus: result.httpStatus,
+      message: result.message,
+      durationMs: result.durationMs ?? null,
+      modelId: result.modelId ?? null,
+    },
+  ];
+}
+
+function testOutcomeOf(
+  outcome: Exclude<ConnectionTestResult, { status: "cancelled" }>,
+): FormatTestOutcome {
+  if (outcome.status === "failed") {
+    return { kind: "failed", status: null, message: outcome.message };
+  }
+  const { result } = outcome;
+  if (result.ok) return { kind: "ok", durationMs: result.durationMs };
+  const message = result.error?.message ?? "";
+  if (result.error?.code === "auth_failed") {
+    return { kind: "authFailed", status: result.status, message };
+  }
+  return { kind: "failed", status: result.status, message };
+}
+
+function trimSlashes(url: string): string {
+  return url.trim().replace(/\/+$/, "");
 }
 
 // 原生端的 URL 实现不完整，用正则做粗校验；严格校验在 daemon。

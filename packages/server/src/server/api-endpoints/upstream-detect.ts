@@ -21,9 +21,13 @@ import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-re
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
- * 先向上游列一次模型挑人选（列模型不花钱），再每种格式各发一条最小对话请求，回应正常的就算这家支持。
+ * 每种格式各发一条最小对话请求，回应正常的就算这家支持。问哪个模型：用户填的试用模型每种格式都问它；
+ * 没填时按格式从表单里已选的模型挑，也没有才向上游列一次模型挑人选（列模型不花钱）。
  * 列模型就被拒（401 / 403）时三种都算 key 无效，不再发对话请求。
  */
+
+// 一次检测最多从这么多个已选模型里挑（照 magpie DetectMax）。
+export const DETECT_MAX_MODELS = 30;
 
 export type DetectOutcome =
   | { kind: "result"; results: ApiEndpointFormatDetection[] }
@@ -98,12 +102,27 @@ export async function detectUpstreamFormats(input: {
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
+  // 用户填的试用模型：每种格式都问它；没填为 null。
+  modelId: string | null;
+  // 表单里已选、还没保存的模型：没填试用模型时按格式从它们里挑，空的才向上游列。
+  pickedModelIds: string[];
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   modelsTimeoutMs: number;
   probeTimeoutMs: number;
 }): Promise<DetectOutcome> {
   const urls = suggestedBaseUrls(input.baseUrl);
+  const picked = [...new Set(input.pickedModelIds.map((id) => id.trim()).filter(Boolean))].slice(
+    0,
+    DETECT_MAX_MODELS,
+  );
+  if (input.modelId !== null || picked.length > 0) {
+    return probeAll({
+      input,
+      urls,
+      modelFor: (format) => input.modelId ?? pickProbeModel(picked, format),
+    });
+  }
   const listed = await fetchUpstreamModels({
     // claude 的请求头两种认证都带，也认 Anthropic 的分页。
     provider: "claude",
@@ -136,14 +155,25 @@ export async function detectUpstreamFormats(input: {
     };
   }
   const modelIds = listed.models.map((model) => model.id);
+  return probeAll({ input, urls, modelFor: (format) => pickProbeModel(modelIds, format) });
+}
+
+/** 每种格式同时问一次，各用 modelFor 给它挑的模型。 */
+async function probeAll(args: {
+  input: { apiKey: string | null; signal: AbortSignal; probeTimeoutMs: number };
+  urls: Record<ApiEndpointRequestFormat, string>;
+  modelFor: (format: ApiEndpointRequestFormat) => string | null;
+}): Promise<DetectOutcome> {
+  const { input, urls, modelFor } = args;
   const results = await Promise.all(
     API_ENDPOINT_REQUEST_FORMATS.map((format) =>
       probeUpstreamFormat({
         format,
         baseUrl: urls[format],
         apiKey: input.apiKey,
+        // 自动检测只给「自定义」用。
         templateId: undefined,
-        modelId: pickProbeModel(modelIds, format),
+        modelId: modelFor(format),
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
       }),
@@ -166,6 +196,7 @@ export async function probeUpstreamFormat(input: {
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {
   const { format, baseUrl } = input;
+  const startedAt = performance.now();
   const result = (
     status: ApiEndpointFormatDetection["status"],
     httpStatus: number | null,
@@ -176,6 +207,8 @@ export async function probeUpstreamFormat(input: {
     status,
     httpStatus,
     message: message === null ? null : redactKey(message, input.apiKey),
+    durationMs: Math.round(performance.now() - startedAt),
+    ...(input.modelId === null ? {} : { modelId: input.modelId }),
   });
   if (input.modelId === null) {
     return result("not_detected", null, "The upstream listed no models to try");

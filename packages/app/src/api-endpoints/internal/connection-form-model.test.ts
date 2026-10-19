@@ -8,7 +8,11 @@ import {
   createConnectionFormModel,
   type ConnectionDetectRequest,
   type ConnectionDetectResult,
+  type ConnectionFetchRequest,
+  type ConnectionFetchResult,
   type ConnectionFormDeps,
+  type ConnectionTestRequest,
+  type ConnectionTestResult,
   type ConnectionRevealKeyResult,
   type ConnectionSaveRequest,
   type ConnectionSaveResult,
@@ -40,6 +44,10 @@ function fakeDeps() {
   let storeIconAnswer = deferred<ConnectionIconResult>();
   let saveResult: ConnectionSaveResult = { status: "saved", endpointId: "ep_new" };
   let detectAnswer = deferred<ConnectionDetectResult>();
+  const fetches: { request: ConnectionFetchRequest; signal: AbortSignal }[] = [];
+  const fetchAnswers: Deferred<ConnectionFetchResult>[] = [];
+  const tests: { request: ConnectionTestRequest; signal: AbortSignal }[] = [];
+  const testAnswers: Deferred<ConnectionTestResult>[] = [];
   const deps: ConnectionFormDeps = {
     save: async (request) => {
       saves.push(request);
@@ -61,11 +69,32 @@ function fakeDeps() {
       siteIconRequests.push(input);
       return storeIconAnswer.promise;
     },
+    fetchModels: (request, signal) => {
+      fetches.push({ request, signal });
+      const answer = deferred<ConnectionFetchResult>();
+      fetchAnswers.push(answer);
+      return answer.promise;
+    },
+    testConnection: (request, signal) => {
+      tests.push({ request, signal });
+      const answer = deferred<ConnectionTestResult>();
+      testAnswers.push(answer);
+      return answer.promise;
+    },
   };
   return {
     deps,
     saves,
     detects,
+    fetches,
+    tests,
+    // 按发出的先后回答第 index 次拉模型、测试。
+    answerFetch(index: number, result: ConnectionFetchResult) {
+      fetchAnswers[index]?.resolve(result);
+    },
+    answerTest(index: number, result: ConnectionTestResult) {
+      testAnswers[index]?.resolve(result);
+    },
     reveals,
     storedIcons,
     siteIconRequests,
@@ -128,6 +157,7 @@ const KEY_REQUIRED = {
   canRevealKey: false,
   canPickIcon: false,
   canPasteCurl: false,
+  canCheckBeforeSave: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -135,6 +165,7 @@ const KEY_OPTIONAL = {
   canRevealKey: true,
   canPickIcon: true,
   canPasteCurl: true,
+  canCheckBeforeSave: true,
   templates: [],
 };
 
@@ -155,7 +186,7 @@ describe("connection form: create", () => {
     expect(model.getState()).toMatchObject({ canDetect: true, canSubmit: false });
   });
 
-  it("fills the formats that answered, labels each one, and then can save", async () => {
+  it("lists how each format answered, fills them in on Use these, and then can save", async () => {
     const fake = fakeDeps();
     const model = createConnectionFormModel(
       { mode: "create", templateId: null },
@@ -176,19 +207,55 @@ describe("connection form: create", () => {
     fake.answerDetect({ status: "done", results: DETECTED });
     await flush();
 
+    // 先只列结论，地址栏不动（照 magpie Detect）。
+    const listed = model.getState();
+    expect(listed.detecting).toBe(false);
+    expect(listed.detection).toEqual({
+      results: [
+        {
+          format: "anthropic_messages",
+          url: "https://relay.example",
+          label: "ok",
+          httpStatus: 200,
+          message: null,
+          durationMs: null,
+          modelId: null,
+        },
+        {
+          format: "openai_chat",
+          url: "https://relay.example/v1",
+          label: "ok",
+          httpStatus: 200,
+          message: null,
+          durationMs: null,
+          modelId: null,
+        },
+        {
+          format: "openai_responses",
+          url: "https://relay.example/v1",
+          label: "not_detected",
+          httpStatus: 404,
+          message: "nope",
+          durationMs: null,
+          modelId: null,
+        },
+      ],
+      isTaken: false,
+      canTake: true,
+      noneAnswered: null,
+    });
+    expect(listed.formats.map((entry) => entry.url)).toEqual(["", "", ""]);
+    expect(listed.canSubmit).toBe(false);
+
+    model.takeDetected();
     const state = model.getState();
-    expect(state.detecting).toBe(false);
     expect(state.formats).toEqual([
-      {
-        format: "anthropic_messages",
-        url: "https://relay.example",
-        detection: "ok",
-        invalid: false,
-      },
-      { format: "openai_chat", url: "https://relay.example/v1", detection: "ok", invalid: false },
-      { format: "openai_responses", url: "", detection: "not_detected", invalid: false },
+      { format: "anthropic_messages", url: "https://relay.example", invalid: false },
+      { format: "openai_chat", url: "https://relay.example/v1", invalid: false },
+      { format: "openai_responses", url: "", invalid: false },
     ]);
     expect(state.urlGeneration).toBe(1);
+    expect(state.detection).toMatchObject({ isTaken: true, canTake: false });
     expect(state.keyRejected).toBe(false);
     expect(state.canSubmit).toBe(true);
 
@@ -228,18 +295,14 @@ describe("connection form: create", () => {
     await flush();
 
     expect(model.getState()).toMatchObject({ keyRejected: true, canSubmit: false });
-    expect(model.getState().formats.map((entry) => [entry.url, entry.detection])).toEqual([
-      ["", "auth_failed"],
-      ["", "auth_failed"],
-      ["", "auth_failed"],
-    ]);
+    expect(model.getState().detection).toMatchObject({ canTake: false, noneAnswered: "check" });
 
     model.setApiKey("sk-right");
     expect(model.getState().keyRejected).toBe(false);
-    expect(model.getState().formats.map((entry) => entry.detection)).toEqual([null, null, null]);
+    expect(model.getState().detection).toBeNull();
   });
 
-  it("keeps what the user typed for a format that was not detected, and drops that format's label on edit", async () => {
+  it("Use these keeps what the user typed for a format not detected, and clears one not found at the suggested address", async () => {
     const fake = fakeDeps();
     const model = createConnectionFormModel(
       { mode: "create", templateId: null },
@@ -253,19 +316,16 @@ describe("connection form: create", () => {
     model.detect();
     fake.answerDetect({ status: "done", results: DETECTED });
     await flush();
+    model.takeDetected();
+    expect(model.getState().formats[2]?.url).toBe("https://other.example/v1");
 
-    expect(model.getState().formats[2]).toEqual({
-      format: "openai_responses",
-      url: "https://other.example/v1",
-      detection: "not_detected",
-      invalid: false,
-    });
-    model.setUrl("openai_chat", "https://relay.example/v2");
-    expect(model.getState().formats.map((entry) => entry.detection)).toEqual([
-      "ok",
-      null,
-      "not_detected",
-    ]);
+    // 照 magpie useDetected：没在那里找到（404）、而地址栏正是建议地址的那栏清掉。
+    model.setUrl("openai_responses", "https://relay.example/v1/");
+    model.detect();
+    fake.answerDetect({ status: "done", results: DETECTED });
+    await flush();
+    model.takeDetected();
+    expect(model.getState().formats[2]?.url).toBe("");
   });
 
   it("refuses to save with an address that is not http, and shows a failed detection", async () => {
@@ -394,6 +454,7 @@ describe("connection form: the key is optional when the host says so", () => {
       results: [detection("openai_chat", "http://127.0.0.1:11434/v1", "ok")],
     });
     await flush();
+    model.takeDetected();
     expect(model.getState().canSubmit).toBe(true);
 
     await model.submit();
@@ -472,10 +533,11 @@ describe("connection form: duplicate", () => {
       KEY_OPTIONAL,
     );
     model.detect();
-    // 不填 key 时检测用原来那家的 key。
+    // 不填 key 时检测用原来那家的 key；没填试用模型时带上已选的模型挑（照 magpie picked）。
     expect(fake.detects[0]?.request).toEqual({
       endpointId: "ep_1",
       baseUrl: "https://relay.example",
+      modelIds: ["claude-sonnet-4-5", "glm-4.6"],
     });
     fake.answerDetect({ status: "cancelled" });
     await flush();
@@ -1545,7 +1607,6 @@ describe("connection form: a pasted curl command", () => {
     expect(state.apiKey).toBe("sk-zhipu");
     expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/paas/v4");
     expect(state.modelIds).toEqual([]);
-    expect(state.hasModelField).toBe(false);
     expect(state.curlNote).toEqual({
       filled: [{ kind: "apiKey" }],
       isEndpointUnknown: false,
@@ -1616,5 +1677,300 @@ describe("connection form: a pasted curl command", () => {
     );
     expect(oldHost.pasteCurl(MOONSHOT_CURL)).toBe(false);
     expect(oldHost.getState().address).toBe("");
+  });
+});
+
+describe("connection form: checking before saving", () => {
+  function zhipuForm() {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    model.setApiKey("sk-zhipu");
+    model.setRegion("coding");
+    return { fake, model };
+  }
+
+  it("Auto-detect asks with the model typed to try, and shows each format's time and model", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setAddress("https://relay.example");
+    model.setModelIds("kimi-k2, gpt-6");
+    model.setDetectModel(" my-model ");
+    model.detect();
+    expect(fake.detects[0]?.request).toEqual({
+      baseUrl: "https://relay.example",
+      modelId: "my-model",
+      modelIds: ["kimi-k2", "gpt-6"],
+    });
+
+    fake.answerDetect({
+      status: "done",
+      results: [
+        {
+          ...detection("openai_chat", "https://relay.example/v1", "ok"),
+          durationMs: 412,
+          modelId: "my-model",
+        },
+        { ...detection("a_future_format", "https://relay.example/x", "ok") },
+      ],
+    });
+    await flush();
+    expect(model.getState().detection?.results).toEqual([
+      {
+        format: "openai_chat",
+        url: "https://relay.example/v1",
+        label: "ok",
+        httpStatus: 200,
+        message: null,
+        durationMs: 412,
+        modelId: "my-model",
+      },
+    ]);
+  });
+
+  it("when none answered without any key it says to paste one first", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setAddress("https://relay.example");
+    model.detect();
+    fake.answerDetect({
+      status: "done",
+      results: [detection("openai_chat", "https://relay.example/v1", "auth_failed", 401)],
+    });
+    await flush();
+    expect(model.getState().detection).toMatchObject({ canTake: false, noneAnswered: "keyless" });
+  });
+
+  it("an old host gets no model to try, no Fetch models and no Test connection", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
+    model.setName("Relay");
+    model.setApiKey("sk-1");
+    model.setUrl("openai_chat", "https://relay.example/v1");
+    model.setModelIds("kimi-k2");
+    expect(model.getState()).toMatchObject({
+      canCheckBeforeSave: false,
+      canFetchModels: false,
+      canTest: false,
+      hasModelField: false,
+    });
+    model.fetchModels();
+    model.testConnection();
+    expect(fake.fetches).toEqual([]);
+    expect(fake.tests).toEqual([]);
+  });
+
+  it("Fetch models asks with the form's template and plan, one address after another until one lists", async () => {
+    const { fake, model } = zhipuForm();
+    expect(model.getState()).toMatchObject({ hasModelField: true, canFetchModels: true });
+
+    model.fetchModels();
+    expect(model.getState()).toMatchObject({
+      catalogFetch: { status: "fetching" },
+      canSubmit: false,
+    });
+    expect(fake.fetches[0]?.request).toEqual({
+      apiKey: "sk-zhipu",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic",
+      format: "anthropic_messages",
+      preview: true,
+      templateId: "zhipu",
+      region: "coding",
+    });
+    fake.answerFetch(0, { status: "failed", message: "HTTP 404" });
+    await flush();
+    expect(fake.fetches[1]?.request).toMatchObject({
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      format: "openai_chat",
+    });
+    fake.answerFetch(1, {
+      status: "done",
+      models: [{ id: "glm-5.3", label: "GLM 5.3" }, { id: "glm-5" }],
+    });
+    await flush();
+    expect(model.getState().catalogFetch).toEqual({
+      status: "fetched",
+      models: [{ id: "glm-5.3", label: "GLM 5.3" }, { id: "glm-5" }],
+    });
+  });
+
+  it("models picked from the list go into Models, and the save carries the picks and the list", async () => {
+    const { fake, model } = zhipuForm();
+    model.fetchModels();
+    fake.answerFetch(0, {
+      status: "done",
+      models: [{ id: "glm-5.3" }, { id: "glm-5" }, { id: "glm-4.6" }],
+    });
+    await flush();
+
+    model.toggleModel("glm-5");
+    model.pickModels(["glm-5.3", "glm-5"]);
+    expect(model.getState()).toMatchObject({
+      modelIds: ["glm-5", "glm-5.3"],
+      modelIdsGeneration: 2,
+    });
+    model.toggleModel("glm-5");
+    model.setModelIds("glm-5.3, my-own");
+    model.unpickModels(["glm-5.3", "glm-5", "glm-4.6"]);
+    expect(model.getState().modelIds).toEqual(["my-own"]);
+    model.toggleModel("glm-4.6");
+
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({
+      models: [{ id: "my-own" }, { id: "glm-4.6" }],
+      catalog: [{ id: "glm-5.3" }, { id: "glm-5" }, { id: "glm-4.6" }],
+      templateId: "zhipu",
+      region: "coding",
+    });
+  });
+
+  it("a failed fetch says why from the last address; a cancelled one goes back to nothing", async () => {
+    const { fake, model } = zhipuForm();
+    model.fetchModels();
+    for (let index = 0; index < 3; index += 1) {
+      fake.answerFetch(index, { status: "failed", message: `HTTP 40${index}` });
+      await flush();
+    }
+    expect(model.getState().catalogFetch).toEqual({ status: "failed", message: "HTTP 402" });
+
+    model.fetchModels();
+    model.cancelFetchModels();
+    expect(fake.fetches[3]?.signal.aborted).toBe(true);
+    fake.answerFetch(3, { status: "done", models: [{ id: "late" }] });
+    await flush();
+    expect(model.getState().catalogFetch).toEqual({ status: "idle" });
+    await model.submit();
+    expect(fake.saves[0]?.catalog).toBeUndefined();
+  });
+
+  it("Test connection asks every address with the form's template and models, each with its own result", async () => {
+    const { fake, model } = zhipuForm();
+    model.setModelIds("glm-5.3");
+    model.testConnection();
+    expect(model.getState()).toMatchObject({ isTesting: true, canTest: false });
+    expect(fake.tests.map((entry) => entry.request)).toEqual(
+      [
+        ["anthropic_messages", "https://open.bigmodel.cn/api/anthropic"],
+        ["openai_chat", "https://open.bigmodel.cn/api/coding/paas/v4"],
+        ["openai_responses", "https://open.bigmodel.cn/api/v1"],
+      ].map(([format, baseUrl]) => ({
+        apiKey: "sk-zhipu",
+        baseUrl,
+        format,
+        templateId: "zhipu",
+        region: "coding",
+        modelIds: ["glm-5.3"],
+      })),
+    );
+
+    fake.answerTest(0, {
+      status: "done",
+      result: { ok: true, status: 200, durationMs: 830, error: null },
+    });
+    fake.answerTest(1, {
+      status: "done",
+      result: {
+        ok: false,
+        status: 401,
+        durationMs: 120,
+        error: { code: "auth_failed", message: "invalid key" },
+      },
+    });
+    fake.answerTest(2, { status: "failed", message: "The host is offline" });
+    await flush();
+    expect(model.getState().tests).toEqual([
+      {
+        format: "anthropic_messages",
+        url: "https://open.bigmodel.cn/api/anthropic",
+        outcome: { kind: "ok", durationMs: 830 },
+      },
+      {
+        format: "openai_chat",
+        url: "https://open.bigmodel.cn/api/coding/paas/v4",
+        outcome: { kind: "authFailed", status: 401, message: "invalid key" },
+      },
+      {
+        format: "openai_responses",
+        url: "https://open.bigmodel.cn/api/v1",
+        outcome: { kind: "failed", status: null, message: "The host is offline" },
+      },
+    ]);
+    expect(model.getState()).toMatchObject({ isTesting: false, keyRejected: true });
+
+    model.setApiKey("sk-other");
+    expect(model.getState()).toMatchObject({ tests: [], keyRejected: false });
+  });
+
+  it("a cancelled test drops its rows; a duplicate tests with the original's key and its models and list", async () => {
+    const { fake, model } = zhipuForm();
+    model.testConnection();
+    model.cancelTest();
+    expect(fake.tests.every((entry) => entry.signal.aborted)).toBe(true);
+    fake.answerTest(0, {
+      status: "done",
+      result: { ok: true, status: 200, durationMs: 1, error: null },
+    });
+    await flush();
+    expect(model.getState()).toMatchObject({ tests: [], isTesting: false });
+
+    const copy = fakeDeps();
+    const duplicate = createConnectionFormModel(
+      {
+        mode: "duplicate",
+        source: {
+          ...SAVED_ENDPOINT,
+          catalog: {
+            fetchedAt: "2026-10-01T00:00:00Z",
+            models: [{ id: "glm-4.6" }, { id: "gpt-6" }],
+          },
+        },
+        name: "Relay copy",
+      },
+      copy.deps,
+      KEY_OPTIONAL,
+    );
+    duplicate.testConnection();
+    expect(copy.tests[0]?.request).toEqual({
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+      format: "anthropic_messages",
+      modelIds: ["claude-sonnet-4-5", "glm-4.6", "gpt-6"],
+    });
+    duplicate.fetchModels();
+    expect(copy.fetches[0]?.request).toEqual({
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+      format: "anthropic_messages",
+      preview: true,
+    });
+  });
+
+  it("the edit window tests but does not fetch models", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({
+      canTest: true,
+      canFetchModels: false,
+      hasModelField: false,
+    });
   });
 });

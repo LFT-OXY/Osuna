@@ -346,7 +346,14 @@ function ConnectionSheet({
   sheet: ConnectionSheetState;
   endpoints: Pick<
     UseHostEndpointsResult,
-    "state" | "save" | "detect" | "revealKey" | "storeIcon" | "fetchSiteIcon"
+    | "state"
+    | "save"
+    | "detect"
+    | "revealKey"
+    | "storeIcon"
+    | "fetchSiteIcon"
+    | "fetchModels"
+    | "testConnection"
   >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
@@ -400,6 +407,7 @@ function ConnectionSheet({
       canRevealKey={hasManagement}
       canPickIcon={hasManagement}
       canPasteCurl={hasManagement}
+      canCheckBeforeSave={hasManagement}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
@@ -407,6 +415,8 @@ function ConnectionSheet({
       onRevealKey={endpoints.revealKey}
       onStoreIcon={endpoints.storeIcon}
       onFetchSiteIcon={endpoints.fetchSiteIcon}
+      onFetchModels={endpoints.fetchModels}
+      onTestConnection={endpoints.testConnection}
       onSaved={onSaved}
       onClose={closeForm}
     />

@@ -2686,17 +2686,27 @@ export const en = {
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:
-          "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work.",
+          "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work.",
         addressHintKeyOptional:
-          "Press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work. The key goes with each try only if you fill it in.",
+          "Press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
         detect: "Auto-detect",
+        detectModelPlaceholder: "Model to try (optional)",
+        detected: {
+          useThese: "Use these",
+          taken: "Taken · save to keep",
+          noneAnswered:
+            "None answered: check the address and the key, or type a model the vendor serves",
+          noneAnsweredKeyless:
+            "None answered, and no API key is filled in: paste the key and detect again",
+          model: "model {{model}}",
+          okTook: "Detected · {{ms}} ms",
+        },
         urlInvalid: "Enter an address that starts with http:// or https://",
         formatUrl: {
           anthropic_messages: "Anthropic base URL",
           openai_chat: "OpenAI Chat base URL",
           openai_responses: "OpenAI Responses base URL",
         },
-        notDetectedPlaceholder: "Not detected. Leave blank to not use this format",
         detection: {
           ok: "Detected",
           not_detected: "Not detected",
@@ -2709,6 +2719,19 @@ export const en = {
         models: "Models",
         modelsHint: "Model ids, separated by commas. They are picked when you save.",
         modelsPlaceholder: "e.g. gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "Optional: Fetch models to pick from the vendor's list, or type ids separated by commas. They are picked when you save.",
+        fetch: {
+          button: "Fetch models",
+          empty: "The vendor's list is empty. Type the model ids instead.",
+          filter: "Filter {{count}} models…",
+          picked: "{{picked}} of {{total}} picked",
+          pickAll: "Pick all",
+          pickShown: "Pick those shown",
+          pickNone: "Pick none",
+          showRest: "Show the other {{count}}",
+          noMatch: "No model here matches “{{query}}”.",
+        },
         curl: {
           filled: "Filled in from the curl command: {{what}}.",
           model: "model {{model}}",

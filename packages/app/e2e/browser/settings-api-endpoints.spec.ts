@@ -119,6 +119,18 @@ function authorizationsSeen(target: FakeRelay): Set<string | undefined> {
   return new Set(target.requests.map((request) => request.authorization));
 }
 
+function methodsSeen(target: FakeRelay): Set<string> {
+  return new Set(target.requests.map((request) => request.method));
+}
+
+function listingsOf(target: FakeRelay): FakeRelay["requests"] {
+  return target.requests.filter((request) => request.method === "GET");
+}
+
+function modelsAsked(target: FakeRelay): (string | undefined)[] {
+  return target.requests.map((request) => request.model);
+}
+
 function deploymentListings(target: FakeRelay): FakeRelay["requests"] {
   return target.requests.filter((request) => request.url.includes("/deployments"));
 }
@@ -135,11 +147,14 @@ function countOf(items: unknown[]): () => number {
   return () => items.length;
 }
 
+// 自动检测每种格式一行，这里取那一行的结论。
 function detectionTags(page: Page): Locator[] {
   return ["anthropic_messages", "openai_chat", "openai_responses"].map((format) =>
-    page.getByTestId(`api-endpoint-connection-detection-${format}`),
+    page.getByTestId(`api-endpoint-connection-detection-${format}-verdict`),
   );
 }
+
+const DETECTED_IN = /^Detected · \d+ ms$/;
 
 test.describe("Settings API endpoints", () => {
   test("an empty host explains the page and offers to add one", async ({ page }) => {
@@ -158,7 +173,7 @@ test.describe("Settings API endpoints", () => {
     );
   });
 
-  test("auto-detect fills the formats that answered, saving opens the endpoint, and an edit keeps the key", async ({
+  test("auto-detect lists the formats that answered, Use these fills them, saving opens the endpoint, and an edit keeps the key", async ({
     page,
   }) => {
     await openApiEndpointsPage(page);
@@ -171,12 +186,21 @@ test.describe("Settings API endpoints", () => {
     });
     await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
 
-    await test.step("each format is tried once and labelled", async () => {
+    await test.step("each format is tried once and gets a row; Use these fills in those that answered", async () => {
       await page.getByTestId("api-endpoint-connection-detect").click();
       const [anthropic, chat, responses] = detectionTags(page);
-      await expect(anthropic).toHaveText("Detected");
-      await expect(chat).toHaveText("Detected");
+      await expect(anthropic).toHaveText(DETECTED_IN);
+      await expect(chat).toHaveText(DETECTED_IN);
       await expect(responses).toHaveText("Not detected");
+      await expect(
+        page.getByTestId("api-endpoint-connection-detection-openai_responses-reason"),
+      ).toHaveText(`POST ${relay.origin}/good/v1/responses: HTTP 404: Not Found · model gpt-5`);
+      // 检测只列结论，「采用这些」之前地址栏不动。
+      await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue("");
+      await page.getByTestId("api-endpoint-connection-use-detected").click();
+      await expect(page.getByTestId("api-endpoint-connection-taken")).toHaveText(
+        "Taken · save to keep",
+      );
       await expect(page.getByTestId("api-endpoint-connection-url-anthropic_messages")).toHaveValue(
         `${relay.origin}/good`,
       );
@@ -262,7 +286,7 @@ test.describe("Settings API endpoints", () => {
       "API key (optional)",
     );
     await expect(page.getByTestId("api-endpoint-connection-address-field-hint")).toHaveText(
-      "Press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work. The key goes with each try only if you fill it in.",
+      "Press Auto-detect: Osuna tries each of the three request formats once and lists how each answered; Use these fills in the addresses that work. The key goes with each try only if you fill it in.",
     );
     await page.getByTestId("api-endpoint-connection-name").fill("Local server");
     const detect = page.getByTestId("api-endpoint-connection-detect");
@@ -275,9 +299,10 @@ test.describe("Settings API endpoints", () => {
       await expect(detect).toBeEnabled();
       await detect.click();
       const [anthropic, chat, responses] = detectionTags(page);
-      await expect(anthropic).toHaveText("Detected");
-      await expect(chat).toHaveText("Detected");
+      await expect(anthropic).toHaveText(DETECTED_IN);
+      await expect(chat).toHaveText(DETECTED_IN);
       await expect(responses).toHaveText("Not detected");
+      await page.getByTestId("api-endpoint-connection-use-detected").click();
       await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
         `${relay.origin}/free/v1`,
       );
@@ -1618,7 +1643,8 @@ test.describe("Templates", () => {
     await test.step("Moonshot's example into the address: its format, address and model; its key only stands for one", async () => {
       await page.getByTestId("api-endpoints-empty-add").click();
       await page.getByTestId("api-endpoint-template-custom").click();
-      await expect(models).toHaveCount(0);
+      // 添加窗口的「模型」框一直在（能拉模型），粘贴前是空的。
+      await expect(models).toHaveValue("");
       expect(await paste(address, MOONSHOT_CURL)).toBe(true);
       await expect(address).toHaveValue("https://api.moonshot.cn/v1");
       await expect(urlField(page, "openai_chat")).toHaveValue("https://api.moonshot.cn/v1");
@@ -1717,7 +1743,8 @@ test.describe("Templates", () => {
       await expect(urlField(page, "openai_chat")).toHaveValue(
         "https://open.bigmodel.cn/api/paas/v4",
       );
-      await expect(models).toHaveCount(0);
+      // 模板只取 key，不往「模型」框里加。
+      await expect(models).toHaveValue("");
       await expect(note).toHaveText("Filled in from the curl command: API key.");
     });
   });
@@ -1736,11 +1763,193 @@ test.describe("Templates", () => {
       false,
     );
     await expect(page.getByTestId("api-endpoint-connection-curl-note")).toHaveCount(0);
+    // 老主机不认表单里的值：没有试用模型、测试连接与拉取模型。
+    await expect(page.getByTestId("api-endpoint-connection-detect-model")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-connection-test-button")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-connection-fetch-models")).toHaveCount(0);
     await page.getByRole("button", { name: "Cancel" }).click();
     await openEndpointRow(page, endpointId);
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-detail-add-another")).toHaveCount(0);
+  });
+});
+
+test.describe("Checking an API endpoint before saving it", () => {
+  async function openCustomForm(page: Page, input: { apiKey: string }): Promise<void> {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Unsaved relay");
+    await page.getByTestId("api-endpoint-connection-api-key").fill(input.apiKey);
+  }
+
+  async function fillFormatUrls(page: Page, prefix: string): Promise<void> {
+    await page
+      .getByTestId("api-endpoint-connection-url-anthropic_messages")
+      .fill(`${relay.origin}${prefix}`);
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_chat")
+      .fill(`${relay.origin}${prefix}/v1`);
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_responses")
+      .fill(`${relay.origin}${prefix}/v1`);
+  }
+
+  function testVerdict(page: Page, format: string): Locator {
+    return page.getByTestId(`api-endpoint-connection-test-${format}-verdict`);
+  }
+
+  test("Fetch models lists the vendor's models to pick from, and the save keeps the picks and that list", async ({
+    page,
+  }) => {
+    await openCustomForm(page, { apiKey: RELAY_KEY });
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_chat")
+      .fill(`${relay.origin}/good/v1`);
+    const fetchButton = page.getByTestId("api-endpoint-connection-fetch-models");
+
+    await test.step("the list comes back with nothing picked, and nothing is kept on the host", async () => {
+      await fetchButton.click();
+      await expect(page.getByTestId("api-endpoint-connection-catalog-count")).toHaveText(
+        "0 of 2 picked",
+      );
+      // 只列模型（先问 <base>/v1/models，落空再问 <base>/models），带填的 key。
+      expect(methodsSeen(relay)).toEqual(new Set(["GET"]));
+      expect(authorizationsSeen(relay)).toEqual(new Set([`Bearer ${RELAY_KEY}`]));
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("a model picked goes into Models", async () => {
+      await page.getByTestId("api-endpoint-connection-catalog-model-gpt-5").click();
+      await expect(page.getByTestId("api-endpoint-connection-models")).toHaveValue("gpt-5");
+      await expect(page.getByTestId("api-endpoint-connection-catalog-count")).toHaveText(
+        "1 of 2 picked",
+      );
+      // 底栏的保存与清单同时在窗口里。
+      await expect(page.getByTestId("api-endpoint-connection-save")).toBeInViewport();
+    });
+
+    await test.step("saving keeps the picks and the list fetched, without asking the vendor again", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+      expect(endpoint).toMatchObject({
+        name: "Unsaved relay",
+        models: [{ id: "gpt-5" }],
+        catalog: { models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] },
+      });
+      await expect(headerTitle(page)).toHaveText("Unsaved relay");
+      expect(listingsOf(relay)).toHaveLength(2);
+    });
+  });
+
+  test("Fetch models says why it failed, and can be cancelled", async ({ page }) => {
+    await openCustomForm(page, { apiKey: "sk-wrong" });
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_chat")
+      .fill(`${relay.origin}/good/v1`);
+    await page.getByTestId("api-endpoint-connection-fetch-models").click();
+    await expect(page.getByTestId("api-endpoint-connection-models-field-error")).toContainText(
+      "HTTP 401",
+    );
+    await expect(page.getByTestId("api-endpoint-connection-catalog")).toHaveCount(0);
+
+    await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_chat")
+      .fill(`${relay.origin}/slow/v1`);
+    await page.getByTestId("api-endpoint-connection-fetch-models").click();
+    await page.getByTestId("api-endpoint-connection-fetch-cancel").click();
+    await expect(page.getByTestId("api-endpoint-connection-fetch-cancel")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-connection-fetch-models")).toBeEnabled();
+    await expect(page.getByTestId("api-endpoint-connection-models-field-error")).toHaveCount(0);
+  });
+
+  test("Test connection gives each format its time or its error, and can be cancelled", async ({
+    page,
+  }) => {
+    await openCustomForm(page, { apiKey: RELAY_KEY });
+    await fillFormatUrls(page, "/good");
+    const testButton = page.getByTestId("api-endpoint-connection-test-button");
+
+    await test.step("each address answers in its own row", async () => {
+      await testButton.click();
+      await expect(testVerdict(page, "anthropic_messages")).toHaveText(/^Connected · \d+ ms$/);
+      await expect(testVerdict(page, "openai_chat")).toHaveText(/^Connected · \d+ ms$/);
+      await expect(testVerdict(page, "openai_responses")).toHaveText("Couldn't connect");
+      await expect(
+        page.getByTestId("api-endpoint-connection-test-openai_responses-reason"),
+      ).toHaveText(`404 · POST ${relay.origin}/good/v1/responses: HTTP 404: Not Found`);
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("a wrong key is told apart and marks the key", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+      await expect(testVerdict(page, "openai_chat")).toHaveCount(0);
+      await testButton.click();
+      await expect(testVerdict(page, "openai_chat")).toHaveText("Key rejected");
+      await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toHaveText(
+        "The upstream rejected this key (401 / 403)",
+      );
+    });
+
+    await test.step("a test that hangs can be cancelled", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+      await fillFormatUrls(page, "/slow");
+      await testButton.click();
+      await expect(testVerdict(page, "openai_chat")).toHaveText("Testing…");
+      await page.getByTestId("api-endpoint-connection-test-cancel").click();
+      await expect(testVerdict(page, "openai_chat")).toHaveCount(0);
+      await expect(testButton).toBeEnabled();
+    });
+  });
+
+  test("a vendor with no model list is detected with the model typed to try; a detection can be cancelled", async ({
+    page,
+  }) => {
+    await openCustomForm(page, { apiKey: RELAY_KEY });
+    const address = page.getByTestId("api-endpoint-connection-address");
+    await address.fill(`${relay.origin}/nolist`);
+    const detect = page.getByTestId("api-endpoint-connection-detect");
+
+    await test.step("without a model to try nothing can be asked", async () => {
+      await detect.click();
+      for (const tag of detectionTags(page)) await expect(tag).toHaveText("Not detected");
+      await expect(page.getByTestId("api-endpoint-connection-none-answered")).toHaveText(
+        "None answered: check the address and the key, or type a model the vendor serves",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-use-detected")).toHaveCount(0);
+    });
+
+    await test.step("with one typed it is asked on every format, and Use these fills them in", async () => {
+      await page.getByTestId("api-endpoint-connection-detect-model").fill("claude-sonnet-4-5");
+      relay.requests.length = 0;
+      await detect.click();
+      const [anthropic, chat, responses] = detectionTags(page);
+      await expect(anthropic).toHaveText(DETECTED_IN);
+      await expect(chat).toHaveText(DETECTED_IN);
+      await expect(responses).toHaveText("Not detected");
+      expect(modelsAsked(relay)).toEqual([
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-5",
+      ]);
+      await page.getByTestId("api-endpoint-connection-use-detected").click();
+      await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
+        `${relay.origin}/nolist/v1`,
+      );
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("a detection that hangs can be cancelled", async () => {
+      await address.fill(`${relay.origin}/slow`);
+      await detect.click();
+      await page.getByTestId("api-endpoint-connection-detect-cancel").click();
+      await expect(page.getByTestId("api-endpoint-connection-detect-cancel")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-detection")).toHaveCount(0);
+      await expect(detect).toBeEnabled();
+    });
   });
 });
 

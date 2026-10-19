@@ -351,6 +351,99 @@ describe("API endpoint models by base URL and request format", () => {
     expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog).toEqual(kept);
   });
 
+  test("the add window's fetch borrows a saved key without keeping a list, and the save keeps the preview", async () => {
+    const sourceId = await saveHostEndpoint();
+
+    // 复制一家时 key 框留空：借原来那家的 key 拉，只看不记。
+    const preview = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId: sourceId,
+      baseUrl: upstream.baseUrl,
+      format: "anthropic_messages",
+      preview: true,
+    });
+    const typed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: upstream.baseUrl,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+    });
+
+    expect(preview).toMatchObject({
+      error: null,
+      models: [{ id: "relay/opus" }, { id: "relay/sonnet" }],
+    });
+    expect(typed.models.map((model) => model.id)).toEqual(["relay/opus", "relay/sonnet"]);
+    expect(upstream.requests.map((request) => request.headers["x-api-key"])).toEqual([
+      SAVED_KEY,
+      TYPED_KEY,
+    ]);
+    expect(
+      (await client.apiEndpointList("claude")).endpoints.map((entry) => entry.catalog),
+    ).toEqual([undefined]);
+
+    const before = Date.now();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.baseUrl }],
+      apiKey: TYPED_KEY,
+      models: [{ id: "relay/sonnet" }],
+      catalog: preview.models,
+    });
+
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.models).toEqual([{ id: "relay/sonnet" }]);
+    expect(saved.endpoint?.catalog?.models).toEqual(preview.models);
+    expect(Date.parse(saved.endpoint?.catalog?.fetchedAt ?? "")).toBeGreaterThanOrEqual(
+      before - 1000,
+    );
+    // 保存时不再向上游拉。
+    expect(upstream.requests).toHaveLength(2);
+  });
+
+  test("an unsaved form's template decides the list: Bedrock's built-in one, Azure's key header", async () => {
+    const bedrock = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: upstream.baseUrl,
+      apiKey: TYPED_KEY,
+      format: "openai_chat",
+      templateId: "bedrock",
+      region: "us-east-1",
+    });
+
+    expect(bedrock.error).toBeNull();
+    expect(bedrock.models.map((model) => model.id)).toContain("global.anthropic.claude-sonnet-5");
+    expect(upstream.requests).toEqual([]);
+
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.baseUrl}/v1`,
+      apiKey: TYPED_KEY,
+      format: "openai_chat",
+      templateId: "azure",
+    });
+
+    expect(upstream.requests.length).toBeGreaterThan(0);
+    for (const { headers } of upstream.requests) {
+      expect(headers["api-key"]).toBe(TYPED_KEY);
+      expect(headers.authorization).toBeUndefined();
+    }
+  });
+
+  test("an unknown template in the form is refused before calling upstream", async () => {
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: upstream.baseUrl,
+      apiKey: TYPED_KEY,
+      format: "openai_chat",
+      templateId: "no-such-template",
+    });
+
+    expect(fetched).toMatchObject({ models: [], error: { code: "invalid_input" } });
+    expect(upstream.requests).toEqual([]);
+  });
+
   test("models added by hand stay on the endpoint through saves that leave them out", async () => {
     const endpointId = await saveHostEndpoint();
     await client.apiEndpointFetchModels({

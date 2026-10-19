@@ -2676,17 +2676,27 @@ export const es: TranslationResources = {
         footerResource:
           "Al guardar se abre la página del endpoint y lista las implementaciones del recurso como sus modelos.",
         addressHint:
-          "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y rellena las direcciones que funcionan.",
+          "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan.",
         addressHintKeyOptional:
-          "Pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y rellena las direcciones que funcionan. La clave solo se envía si la escribes.",
+          "Pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y muestra cómo respondió cada uno; Usar estas rellena las direcciones que funcionan. La clave solo se envía si la escribes.",
         detect: "Detectar",
+        detectModelPlaceholder: "Modelo a probar (opcional)",
+        detected: {
+          useThese: "Usar estas",
+          taken: "Aplicadas · guarda para conservarlas",
+          noneAnswered:
+            "Ninguno respondió: revisa la dirección y la clave, o escribe un modelo que ofrezca el proveedor",
+          noneAnsweredKeyless:
+            "Ninguno respondió y no hay clave de API: pega la clave y vuelve a detectar",
+          model: "modelo {{model}}",
+          okTook: "Detectado · {{ms}} ms",
+        },
         urlInvalid: "Escribe una dirección que empiece por http:// o https://",
         formatUrl: {
           anthropic_messages: "URL base de Anthropic",
           openai_chat: "URL base de OpenAI Chat",
           openai_responses: "URL base de OpenAI Responses",
         },
-        notDetectedPlaceholder: "No detectado. Déjalo vacío para no usar este formato",
         detection: {
           ok: "Detectado",
           not_detected: "No detectado",
@@ -2699,6 +2709,19 @@ export const es: TranslationResources = {
         models: "Modelos",
         modelsHint: "Ids de modelo separados por comas. Se seleccionan al guardar.",
         modelsPlaceholder: "p. ej. gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "Opcional: Obtener modelos para elegir de la lista del proveedor, o escribe ids separados por comas. Se seleccionan al guardar.",
+        fetch: {
+          button: "Obtener modelos",
+          empty: "La lista del proveedor está vacía. Escribe los ids de modelo.",
+          filter: "Filtrar {{count}} modelos…",
+          picked: "{{picked}} de {{total}} seleccionados",
+          pickAll: "Seleccionar todos",
+          pickShown: "Seleccionar los mostrados",
+          pickNone: "No seleccionar ninguno",
+          showRest: "Mostrar los otros {{count}}",
+          noMatch: "Ningún modelo coincide con “{{query}}”.",
+        },
         curl: {
           filled: "Completado con el comando curl: {{what}}.",
           model: "modelo {{model}}",

@@ -52,7 +52,8 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * 路径前缀决定这家的行为：
  * - /good：列出 goodModels；Anthropic 与 Chat 能对话，Responses 没有（404）。
  * - /many：列出 MANY_MODELS（两百多个、跨家族），给详情页截图用。
- * - /slow：列模型一直不回，详情页停在加载中。
+ * - /slow：什么都不回（列模型、对话），详情页停在加载中，添加窗口里的拉模型、测试、检测停在进行中。
+ * - /nolist：列不出模型（404），其余同 /good。
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
@@ -71,7 +72,8 @@ export async function startFakeRelay(): Promise<FakeRelay> {
     request.on("end", () => {
       const headers: IncomingHttpHeaders = request.headers;
       const isFree = (request.url ?? "").startsWith("/free/");
-      const url = isFree ? (request.url ?? "").replace("/free/", "/good/") : (request.url ?? "");
+      const isNoList = (request.url ?? "").startsWith("/nolist/");
+      const url = (request.url ?? "").replace(/^\/(free|nolist)\//, "/good/");
       relay.requests.push({
         method: request.method ?? "",
         url: request.url ?? "",
@@ -87,6 +89,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 401, { error: { message: "Invalid API key" } });
         return;
       }
+      if (holdsOrLacksList({ url, isNoList, response })) return;
       if (request.method === "GET" && url === "/good/v1/models") {
         send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
         return;
@@ -95,7 +98,6 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 200, { data: MANY_MODELS.map((id) => ({ id })) });
         return;
       }
-      if (url === "/slow/v1/models") return;
       if (url === "/good/v1/messages") {
         send(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
         return;
@@ -125,6 +127,18 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         server.close(() => resolve());
       }),
   });
+}
+
+/** /slow 什么都不回；/nolist 列模型回 404。返回 true 即已处理（或故意不回）。 */
+function holdsOrLacksList(input: {
+  url: string;
+  isNoList: boolean;
+  response: ServerResponse;
+}): boolean {
+  if (input.url.startsWith("/slow/")) return true;
+  if (!input.isNoList || !input.url.endsWith("/models")) return false;
+  input.response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");
+  return true;
 }
 
 export const AZURE_DEPLOYMENTS = ["my-gpt-deployment", "my-kimi-deployment"];

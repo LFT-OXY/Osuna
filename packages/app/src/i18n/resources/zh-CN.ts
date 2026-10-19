@@ -2646,17 +2646,25 @@ export const zhCN: TranslationResources = {
           "保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
         footerResource: "保存后进入这个接口的详情页，把资源的部署列成模型。",
         addressHint:
-          "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
+          "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
         addressHintKeyOptional:
-          "点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。填了 key 才会带上。",
+          "点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。填了 key 才会带上。",
         detect: "自动检测",
+        detectModelPlaceholder: "试用的模型（选填）",
+        detected: {
+          useThese: "采用这些",
+          taken: "已采用 · 保存后生效",
+          noneAnswered: "都没通：检查地址和 key，或填一个服务商提供的模型再试",
+          noneAnsweredKeyless: "都没通，而且没填 API key：把 key 粘到上面再检测",
+          model: "模型 {{model}}",
+          okTook: "检测通过 · {{ms}} 毫秒",
+        },
         urlInvalid: "请填写以 http:// 或 https:// 开头的地址",
         formatUrl: {
           anthropic_messages: "Anthropic 格式地址",
           openai_chat: "OpenAI Chat 格式地址",
           openai_responses: "OpenAI Responses 格式地址",
         },
-        notDetectedPlaceholder: "没检测到，留空就不用这种格式",
         detection: {
           ok: "检测通过",
           not_detected: "未检测到",
@@ -2669,6 +2677,19 @@ export const zhCN: TranslationResources = {
         models: "模型",
         modelsHint: "模型 id，用逗号分隔，保存时选上。",
         modelsPlaceholder: "如：gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "选填：点「拉取模型」从服务商的清单里点选，或直接填模型 id，用逗号分隔，保存时选上。",
+        fetch: {
+          button: "拉取模型",
+          empty: "服务商的清单是空的，请直接填模型 id。",
+          filter: "筛选 {{count}} 个模型…",
+          picked: "已选 {{picked}} / 共 {{total}} 个",
+          pickAll: "全选",
+          pickShown: "选上显示的",
+          pickNone: "全不选",
+          showRest: "显示其余 {{count}} 个",
+          noMatch: "没有模型匹配「{{query}}」。",
+        },
         curl: {
           filled: "已从 curl 命令填入：{{what}}。",
           model: "模型 {{model}}",

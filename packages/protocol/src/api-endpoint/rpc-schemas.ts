@@ -293,6 +293,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * icon：「自定义」加的接口的图标（取值见 ApiEndpointSchema.icon）；null 去掉，省略即保留。`file:` 的要先经 store_icon 存过；
  * 从模板加的接口带图标拒收。老 daemon 忽略它。
+ *
+ * catalog：添加窗口里保存前拉到的上游清单，随保存记作这家的上游清单（拉取时间记为保存时刻）；省略即保留这家原来的
+ * （复制时是原来那家的）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -312,6 +315,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   templateId: z.string().optional(),
   region: z.string().optional(),
   icon: z.string().nullable().optional(),
+  catalog: z.array(ApiEndpointModelSchema).optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -736,8 +740,13 @@ export type ApiEndpointListTemplatesResponse = z.infer<
  * 省略 apiKey（或留空），就用已保存的 key；没有已保存的 key 时不带认证头（老 daemon 拒绝）。可以用 cancel 按 requestId 取消。
  *
  * 新客户端带 `format`：baseUrl 是这种请求格式的地址，认证头按格式给，provider 不再起作用；
- * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`）。
+ * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`），除非带 `preview: true`：
+ * 添加窗口保存前拉的只看不记，endpointId 只为借那家已保存的 key（复制时 key 框留空）。
  * 老客户端不带 format，按 provider 走 CLI 自己的格式，只读不记。
+ *
+ * templateId、region：表单当前的模板与区域或套餐（同 save）。给了就按它们定认证头、Azure 的地址与列法、
+ * 没有清单接口时的内置清单，不看 endpointId 那家记下的；省略时用那家的，没有 endpointId 即「自定义」。
+ * 不认识的模板拒收。老 daemon 忽略这三个字段。
  */
 export const ApiEndpointFetchModelsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.fetch_models.request"),
@@ -747,6 +756,9 @@ export const ApiEndpointFetchModelsRequestSchema = z.object({
   baseUrl: z.string(),
   apiKey: z.string().optional(),
   format: z.string().optional(),
+  preview: z.boolean().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
 });
 export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
 
@@ -761,8 +773,10 @@ export const ApiEndpointFetchModelsResponseSchema = z.object({
 export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
 
 /**
- * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，先向上游列出模型挑一个，
- * 再按每种格式各发一条最小对话请求。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，按每种格式各发一条最小对话请求（照 magpie Detect）。
+ * 问哪个模型：`modelId`（用户填的试用模型）每种格式都问它；没填时按格式从 `modelIds`（表单里已选、还没保存的模型，
+ * 最多取前 30 个）挑，也没有才向上游列出模型挑。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ * 老 daemon 忽略 modelId、modelIds，总是先列模型。
  */
 export const ApiEndpointDetectFormatsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.request"),
@@ -770,12 +784,15 @@ export const ApiEndpointDetectFormatsRequestSchema = z.object({
   endpointId: z.string().optional(),
   baseUrl: z.string(),
   apiKey: z.string().optional(),
+  modelId: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
 });
 export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
 
 /**
  * 一种格式的检测结果。`status` 是字符串：ok（检测通过）、auth_failed（上游回 401 / 403，key 无效）、
  * not_detected（其余失败，原因在 `message`）。`url` 是这种格式的建议地址；`httpStatus` 没收到响应时为 null。
+ * `durationMs` 是这一问的耗时，`modelId` 是问的模型（没有模型可问时没有）；老 daemon 都不发。
  */
 export const ApiEndpointFormatDetectionSchema = z.object({
   format: z.string(),
@@ -783,6 +800,8 @@ export const ApiEndpointFormatDetectionSchema = z.object({
   status: z.string(),
   httpStatus: z.number().nullable(),
   message: z.string().nullable(),
+  durationMs: z.number().optional(),
+  modelId: z.string().optional(),
 });
 export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
 
@@ -826,6 +845,10 @@ export type ApiEndpointCancelResponse = z.infer<typeof ApiEndpointCancelResponse
  * 新客户端带 `format`：按这种请求格式向 baseUrl 发最小请求，provider 不再起作用；
  * 省略 modelId 时 daemon 从这家已选的模型、上游清单里挑一个适合该格式的，都没有就先向上游列一次。
  * 上游回 401 / 403 时结果的 error.code 是 auth_failed（key 无效）。老客户端不带 format，modelId 必填。
+ *
+ * 添加 / 编辑窗口保存前测试时带上表单的值：templateId、region 同 fetch_models；`modelIds` 是表单里的模型（已选的在前、
+ * 拉到的清单在后），给了就从它们里挑，不看 endpointId 那家的；挑不到时照常列一次（没有清单接口的模板用内置清单）。
+ * 老 daemon 忽略这三个字段。
  */
 export const ApiEndpointTestConnectionRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.test_connection.request"),
@@ -836,6 +859,9 @@ export const ApiEndpointTestConnectionRequestSchema = z.object({
   apiKey: z.string().optional(),
   modelId: z.string().optional(),
   format: z.string().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
+  modelIds: z.array(z.string()).optional(),
 });
 export type ApiEndpointTestConnectionRequest = z.infer<
   typeof ApiEndpointTestConnectionRequestSchema

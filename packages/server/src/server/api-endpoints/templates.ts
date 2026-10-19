@@ -1170,12 +1170,22 @@ export function templateBaseUrls<T extends { format: string; url: string }>(inpu
   templateId: string | undefined;
   baseUrls: T[];
 }): T[] {
-  if (input.templateId !== AZURE_TEMPLATE_ID) return input.baseUrls;
-  return input.baseUrls.map((entry) =>
-    entry.format === "anthropic_messages"
-      ? entry
-      : { ...entry, url: azureResourceBaseUrl(entry.url) },
-  );
+  const { templateId } = input;
+  return input.baseUrls.map((entry) => ({
+    ...entry,
+    url: templateBaseUrl({ templateId, ...entry }),
+  }));
+}
+
+/** 一种格式的地址按模板放好（同 templateBaseUrls）：保存前拉模型、测试连接也这样问。 */
+export function templateBaseUrl(input: {
+  templateId: string | undefined;
+  format: string;
+  url: string;
+}): string {
+  const isAzureOpenAi =
+    input.templateId === AZURE_TEMPLATE_ID && input.format !== "anthropic_messages";
+  return isAzureOpenAi ? azureResourceBaseUrl(input.url) : input.url;
 }
 
 /** Azure 的部署名清单（数据面只有这个 api-version 还给 key 列部署）；列不出时再列 v1 API 的模型（照 magpie azureModels）。 */

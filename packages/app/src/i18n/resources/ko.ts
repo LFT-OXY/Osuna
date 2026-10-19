@@ -2636,17 +2636,27 @@ export const ko: TranslationResources = {
           "저장하면 이 엔드포인트 페이지가 열리고, 모델을 가져와 Claude / GPT / Gemini별로 고를 수 있습니다.",
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
-          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",
+          "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
         addressHintKeyOptional:
-          "자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
+          "자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다. 키는 입력한 경우에만 함께 보냅니다.",
         detect: "자동 감지",
+        detectModelPlaceholder: "시도할 모델(선택)",
+        detected: {
+          useThese: "이것 사용",
+          taken: "반영됨 · 저장하면 유지됩니다",
+          noneAnswered:
+            "응답한 형식이 없습니다. 주소와 키를 확인하거나 서비스가 제공하는 모델을 입력하세요",
+          noneAnsweredKeyless:
+            "응답한 형식이 없고 API 키도 비어 있습니다. 키를 붙여 넣고 다시 감지하세요",
+          model: "모델 {{model}}",
+          okTook: "감지됨 · {{ms}}ms",
+        },
         urlInvalid: "http:// 또는 https://로 시작하는 주소를 입력하세요",
         formatUrl: {
           anthropic_messages: "Anthropic 형식 주소",
           openai_chat: "OpenAI Chat 형식 주소",
           openai_responses: "OpenAI Responses 형식 주소",
         },
-        notDetectedPlaceholder: "감지되지 않음. 비워 두면 이 형식을 쓰지 않습니다",
         detection: {
           ok: "감지됨",
           not_detected: "감지되지 않음",
@@ -2659,6 +2669,19 @@ export const ko: TranslationResources = {
         models: "모델",
         modelsHint: "쉼표로 구분한 모델 ID. 저장하면 선택됩니다.",
         modelsPlaceholder: "예: gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "선택 사항: 모델 가져오기로 서비스 목록에서 고르거나, 모델 ID를 쉼표로 구분해 입력하세요. 저장하면 선택됩니다.",
+        fetch: {
+          button: "모델 가져오기",
+          empty: "서비스 목록이 비어 있습니다. 모델 ID를 직접 입력하세요.",
+          filter: "모델 {{count}}개 필터…",
+          picked: "{{total}}개 중 {{picked}}개 선택",
+          pickAll: "모두 선택",
+          pickShown: "표시된 항목 선택",
+          pickNone: "모두 해제",
+          showRest: "나머지 {{count}}개 보기",
+          noMatch: "“{{query}}”와 일치하는 모델이 없습니다.",
+        },
         curl: {
           filled: "curl 명령에서 채웠습니다: {{what}}.",
           model: "모델 {{model}}",

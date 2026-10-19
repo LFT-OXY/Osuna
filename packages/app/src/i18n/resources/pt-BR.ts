@@ -2661,17 +2661,27 @@ export const ptBR: TranslationResources = {
         footerResource:
           "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:
-          "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam.",
+          "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam.",
         addressHintKeyOptional:
-          "Toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam. A chave só é enviada se você preenchê-la.",
+          "Toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e mostra como cada um respondeu; Usar estes preenche os endereços que funcionam. A chave só é enviada se você preenchê-la.",
         detect: "Detectar",
+        detectModelPlaceholder: "Modelo para testar (opcional)",
+        detected: {
+          useThese: "Usar estes",
+          taken: "Aplicados · salve para manter",
+          noneAnswered:
+            "Nenhum respondeu: confira o endereço e a chave, ou digite um modelo que o fornecedor oferece",
+          noneAnsweredKeyless:
+            "Nenhum respondeu e nenhuma chave de API foi preenchida: cole a chave e detecte de novo",
+          model: "modelo {{model}}",
+          okTook: "Detectado · {{ms}} ms",
+        },
         urlInvalid: "Digite um endereço que comece com http:// ou https://",
         formatUrl: {
           anthropic_messages: "URL base de Anthropic",
           openai_chat: "URL base de OpenAI Chat",
           openai_responses: "URL base de OpenAI Responses",
         },
-        notDetectedPlaceholder: "Não detectado. Deixe em branco para não usar este formato",
         detection: {
           ok: "Detectado",
           not_detected: "Não detectado",
@@ -2684,6 +2694,19 @@ export const ptBR: TranslationResources = {
         models: "Modelos",
         modelsHint: "Ids de modelo separados por vírgulas. Eles são selecionados ao salvar.",
         modelsPlaceholder: "ex.: gpt-5.5, claude-sonnet-5",
+        modelsHintFetch:
+          "Opcional: Buscar modelos para escolher da lista do fornecedor, ou digite ids separados por vírgulas. Eles são selecionados ao salvar.",
+        fetch: {
+          button: "Buscar modelos",
+          empty: "A lista do fornecedor está vazia. Digite os ids de modelo.",
+          filter: "Filtrar {{count}} modelos…",
+          picked: "{{picked}} de {{total}} selecionados",
+          pickAll: "Selecionar todos",
+          pickShown: "Selecionar os exibidos",
+          pickNone: "Não selecionar nenhum",
+          showRest: "Mostrar os outros {{count}}",
+          noMatch: "Nenhum modelo corresponde a “{{query}}”.",
+        },
         curl: {
           filled: "Preenchido a partir do comando curl: {{what}}.",
           model: "modelo {{model}}",

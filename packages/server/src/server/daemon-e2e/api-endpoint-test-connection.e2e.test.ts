@@ -390,6 +390,56 @@ describe("API endpoint connection test by base URL and request format", () => {
     expect(chat?.headers["x-api-key"]).toBeUndefined();
   });
 
+  test("an unsaved Bedrock form is asked with a built-in model served there, without listing", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      templateId: "bedrock",
+      region: "us-east-1",
+    });
+
+    // 假上游只认 Bearer：Bedrock 的 Anthropic 地址只带 x-api-key，这里只看发了什么。
+    expect(tested.error).toBeNull();
+    expect(upstream.requests.map((request) => request.url)).toEqual(["/claude/v1/messages"]);
+    expect(upstream.requests[0]?.body.model).toBe("global.anthropic.claude-opus-5-5");
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBe(TYPED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
+  test("an unsaved form's models are tried before the saved endpoint's", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+      modelIds: ["gpt-5", "claude-from-form"],
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => [request.url, request.body.model])).toEqual([
+      ["/claude/v1/messages", "claude-from-form"],
+    ]);
+    expect(upstream.requests[0]?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+  });
+
+  test("an unsaved Azure form is asked with the key in api-key alone", async () => {
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/codex/v1`,
+      apiKey: TYPED_KEY,
+      format: "openai_responses",
+      modelId: "my-gpt-deployment",
+      templateId: "azure",
+    });
+
+    expect(upstream.requests[0]?.headers["api-key"]).toBe(TYPED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
   test("an Azure endpoint is asked with the key in api-key alone", async () => {
     const saved = await client.apiEndpointSave({
       provider: "codex",

@@ -39,6 +39,7 @@ import {
   listsNoModels,
   modelFormatsAt,
   planModelsOf,
+  templateBaseUrl,
   templateBaseUrls,
   type TemplatePlace,
 } from "./templates.js";
@@ -330,6 +331,8 @@ export interface ApiEndpointSaveInput {
   region?: string;
   // 「自定义」加的接口的图标：内置图标名或 store_icon 给的 `file:` 值；null 去掉，undefined 保留。
   icon?: string | null;
+  // 添加窗口里保存前拉到的上游清单：记作这家的上游清单；undefined 保留原来的（复制时是原来那家的）。
+  catalog?: ApiEndpointModel[];
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -373,11 +376,30 @@ export interface ApiEndpointUpstreamInput {
   apiKey?: string;
   // 新客户端按「地址 + 格式」请求；不带时按 provider 走 CLI 自己的格式。
   format?: string;
+  // 表单当前的模板与区域或套餐：给了就按它们，不看 endpointId 那家记下的。
+  templateId?: string;
+  region?: string;
+}
+
+export interface ApiEndpointFetchModelsInput extends ApiEndpointUpstreamInput {
+  // 添加窗口保存前拉的：只看不记，endpointId 只为借它的 key。
+  preview?: boolean;
 }
 
 export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput {
   // 按格式测试时可省，daemon 自己挑。
   modelId?: string;
+  // 表单里的模型（已选的在前、拉到的清单在后）：给了就从它们里挑，不看 endpointId 那家的。
+  modelIds?: string[];
+}
+
+export interface ApiEndpointDetectInput {
+  endpointId?: string;
+  baseUrl: string;
+  apiKey?: string;
+  // 用户填的试用模型；没填时从 modelIds（表单里已选的）挑，也没有才向上游列。
+  modelId?: string;
+  modelIds?: string[];
 }
 
 export interface ApiEndpointServiceOptions {
@@ -1027,6 +1049,7 @@ export class ApiEndpointService {
         template,
         searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
         icon: input.icon,
+        catalog: input.catalog,
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -2532,17 +2555,15 @@ export class ApiEndpointService {
    */
   async fetchModels(
     provider: string,
-    input: ApiEndpointUpstreamInput,
+    input: ApiEndpointFetchModelsInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointModel[]> {
     const supported = requireProvider(provider);
     const format = input.format === undefined ? null : requireFormat(input.format);
-    const baseUrl = normalizeBaseUrl(input.baseUrl);
-    const apiKey = this.resolveRequestKey(input);
     // 从模板加的这家：没有清单接口的用内置清单、不问上游，有前缀的只留套餐自己的（照 magpie）。
-    const place: TemplatePlace = input.endpointId
-      ? (findEndpoint(this.readState(), input.endpointId) ?? {})
-      : {};
+    const place = this.upstreamPlace(input);
+    const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
+    const apiKey = this.resolveRequestKey(input);
     let models: ListedModel[];
     if (listsNoModels(place)) {
       models = planModelsOf(place, []);
@@ -2562,7 +2583,7 @@ export class ApiEndpointService {
         });
       models = planModelsOf(place, result.models);
     }
-    if (format !== null && input.endpointId) {
+    if (format !== null && input.endpointId && input.preview !== true) {
       await this.keepCatalog(input.endpointId, models);
     }
     return models.map(toWireModel);
@@ -2612,13 +2633,14 @@ export class ApiEndpointService {
     }
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
+    const { templateId } = this.upstreamPlace(input);
     const outcome = await testUpstreamConnection({
       provider: supported,
       // Codex 和写进 config.toml 的 base_url 一样补 /v1。
       baseUrl:
         supported === "codex" ? (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl) : baseUrl,
       apiKey,
-      templateId: this.templateIdOf(input.endpointId),
+      templateId,
       modelId,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
@@ -2635,12 +2657,26 @@ export class ApiEndpointService {
     input: ApiEndpointTestConnectionInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointTestConnectionResult> {
-    const baseUrl = normalizeBaseUrl(input.baseUrl);
+    const place = this.upstreamPlace(input);
+    const { templateId } = place;
+    const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
     const apiKey = this.resolveRequestKey(input);
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
-    const templateId = this.templateIdOf(input.endpointId);
-    let modelId = input.modelId?.trim() || this.probeModelFromEndpoint(input.endpointId, format);
+    const servedHere = (ids: string[]) =>
+      ids.filter((model) => modelFormatsAt({ templateId, model })?.includes(format) ?? true);
+    let modelId =
+      input.modelId?.trim() ||
+      (input.modelIds === undefined
+        ? this.probeModelFromEndpoint(input.endpointId, format)
+        : pickProbeModel(servedHere(input.modelIds), format));
+    if (!modelId && listsNoModels(place)) {
+      // 没有清单接口的模板（Bedrock）：从内置清单挑，不问上游。
+      modelId = pickProbeModel(
+        servedHere(planModelsOf(place, []).map((model) => model.id)),
+        format,
+      );
+    }
     if (!modelId) {
       // 这家还没选模型也没拉过清单：先列一次（不花钱）再挑。
       const listed = await fetchUpstreamModels({
@@ -2665,7 +2701,7 @@ export class ApiEndpointService {
         };
       }
       modelId = pickProbeModel(
-        listed.models.map((model) => model.id),
+        servedHere(planModelsOf(place, listed.models).map((model) => model.id)),
         format,
       );
     }
@@ -2683,10 +2719,30 @@ export class ApiEndpointService {
     return testResultOf(detection, elapsed());
   }
 
-  /** 这家（给了 id 且还在时）从哪个模板加的；新表单、「自定义」的为 undefined。 */
-  private templateIdOf(endpointId: string | undefined): string | undefined {
-    if (!endpointId) return undefined;
-    return findEndpoint(this.readState(), endpointId)?.templateId;
+  /**
+   * 拉模型、测试用的模板与区域：表单给了就按表单（保存前的添加 / 编辑窗口），否则按 endpointId 那家记下的；
+   * 都没有即「自定义」。不认识的模板拒收。
+   */
+  private upstreamPlace(input: ApiEndpointUpstreamInput): TemplatePlace {
+    if (input.templateId !== undefined) {
+      if (!findTemplate(input.templateId)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Unknown template: ${input.templateId}`,
+        });
+      }
+      return {
+        templateId: input.templateId,
+        ...(input.region === undefined ? {} : { region: input.region }),
+      };
+    }
+    if (!input.endpointId) return {};
+    const endpoint = findEndpoint(this.readState(), input.endpointId);
+    if (!endpoint) return {};
+    return {
+      ...(endpoint.templateId === undefined ? {} : { templateId: endpoint.templateId }),
+      ...(endpoint.region === undefined ? {} : { region: endpoint.region }),
+    };
   }
 
   /**
@@ -2714,7 +2770,7 @@ export class ApiEndpointService {
    * 每种格式的结论（含失败）放在返回值里；请求本身不成立或被取消才抛 ApiEndpointRequestError。
    */
   async detectFormats(
-    input: ApiEndpointUpstreamInput,
+    input: ApiEndpointDetectInput,
     signal: AbortSignal,
   ): Promise<ApiEndpointFormatDetection[]> {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
@@ -2722,6 +2778,8 @@ export class ApiEndpointService {
     const outcome = await detectUpstreamFormats({
       baseUrl,
       apiKey,
+      modelId: input.modelId?.trim() || null,
+      pickedModelIds: input.modelIds ?? [],
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
       probeTimeoutMs: this.connectionTestTimeoutMs,
@@ -2736,7 +2794,7 @@ export class ApiEndpointService {
    * 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。都没有为 null：不带认证头。
    * key 从不回给客户端。
    */
-  private resolveRequestKey(input: ApiEndpointUpstreamInput): string | null {
+  private resolveRequestKey(input: { endpointId?: string; apiKey?: string }): string | null {
     const typed = input.apiKey?.trim();
     if (typed) return typed;
     if (!input.endpointId) return null;
@@ -3686,6 +3744,8 @@ function buildEndpoint(input: {
   template: SavedTemplate;
   // 请求给的图标：null 去掉，undefined 留下 base 的。
   icon: string | null | undefined;
+  // 添加窗口里保存前拉到的上游清单：拉取时间记为保存时刻；undefined 留下 base 的。
+  catalog: ApiEndpointModel[] | undefined;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -3716,9 +3776,19 @@ function buildEndpoint(input: {
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
     ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
     ...iconFieldOf({ requested: input.icon, kept: keptIcon }),
+    ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
+}
+
+/** 添加窗口里保存前拉到的清单：拉取时间记为保存时刻；没给时不写，留下 base 的。 */
+function catalogFieldOf(input: {
+  requested: ApiEndpointModel[] | undefined;
+  timestamp: string;
+}): Pick<StoredApiEndpoint, "catalog"> {
+  if (input.requested === undefined) return {};
+  return { catalog: { fetchedAt: input.timestamp, models: validateModels(input.requested) } };
 }
 
 type EndpointFields = Pick<
@@ -3907,6 +3977,17 @@ function testResultOf(
   if (detection.status === "auth_failed") code = "auth_failed";
   else if (status === null) code = "upstream_unreachable";
   return { ok: false, status, durationMs, error: { code, message: message ?? "" } };
+}
+
+/** 拉模型、测试时一种格式的地址：Azure 模板的先放到资源的 v1 API 上（同保存时），再去掉末尾斜杠。 */
+function upstreamBaseUrl(input: {
+  place: TemplatePlace;
+  format: ApiEndpointRequestFormat | null;
+  raw: string;
+}): string {
+  const { place, format, raw } = input;
+  if (format === null) return normalizeBaseUrl(raw);
+  return normalizeBaseUrl(templateBaseUrl({ templateId: place.templateId, format, url: raw }));
 }
 
 /** 去掉末尾斜杠，和 CLI 自己拼路径的方式一致。 */

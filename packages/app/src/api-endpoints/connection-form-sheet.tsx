@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Pressable, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { AlertTriangle, Check, Info } from "lucide-react-native";
+import { AlertTriangle, Check, Info, X } from "lucide-react-native";
 import type {
+  ApiEndpointModel,
   ApiEndpointRequestFormat,
   ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -34,6 +35,7 @@ import { useCurlPasteField } from "./use-curl-paste-field";
 import type {
   ConnectionCurlFill,
   ConnectionCurlNote,
+  ConnectionDetection,
   ConnectionFormDeps,
   ConnectionFormModel,
   ConnectionFormSeed,
@@ -42,6 +44,8 @@ import type {
   ConnectionIconError,
   ConnectionSaveResult,
   ConnectionTemplateState,
+  DetectedFormat,
+  FormatTestRow,
 } from "./internal/connection-form-model";
 
 export interface ApiEndpointConnectionSheetProps {
@@ -51,6 +55,8 @@ export interface ApiEndpointConnectionSheetProps {
   canRevealKey: boolean;
   canPickIcon: boolean;
   canPasteCurl: boolean;
+  // 同上：保存前能测试连接、添加时能拉模型，自动检测能填试用的模型。
+  canCheckBeforeSave: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -60,12 +66,15 @@ export interface ApiEndpointConnectionSheetProps {
   onRevealKey: ConnectionFormDeps["revealKey"];
   onStoreIcon: ConnectionFormDeps["storeIcon"];
   onFetchSiteIcon: ConnectionFormDeps["fetchSiteIcon"];
+  onFetchModels: ConnectionFormDeps["fetchModels"];
+  onTestConnection: ConnectionFormDeps["testConnection"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
 }
 
 const ThemedCheck = withUnistyles(Check, (theme: Theme) => ({ color: theme.colors.statusSuccess }));
+const ThemedCross = withUnistyles(X, (theme: Theme) => ({ color: theme.colors.statusDanger }));
 const ThemedWarningIcon = withUnistyles(AlertTriangle, (theme: Theme) => ({
   color: theme.colors.statusWarning,
 }));
@@ -88,6 +97,7 @@ export function ApiEndpointConnectionSheet({
   canRevealKey,
   canPickIcon,
   canPasteCurl,
+  canCheckBeforeSave,
   templates,
   onBack,
   onSave,
@@ -95,6 +105,8 @@ export function ApiEndpointConnectionSheet({
   onRevealKey,
   onStoreIcon,
   onFetchSiteIcon,
+  onFetchModels,
+  onTestConnection,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -109,8 +121,10 @@ export function ApiEndpointConnectionSheet({
       revealKey: onRevealKey,
       storeIcon: onStoreIcon,
       fetchSiteIcon: onFetchSiteIcon,
+      fetchModels: onFetchModels,
+      testConnection: onTestConnection,
     },
-    { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, templates },
+    { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, canCheckBeforeSave, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const keyInputRef = useCurlPasteField({ model, field: "apiKey" });
@@ -254,6 +268,7 @@ export function ApiEndpointConnectionSheet({
         )}
         {state.canPickIcon ? <IconField state={state} model={model} size={fieldSize} /> : null}
         <TemplateAddresses state={state} model={model} size={fieldSize} />
+        <ConnectionTestField state={state} model={model} />
         {state.hasModelField ? (
           <ModelIdsField state={state} model={model} size={fieldSize} />
         ) : null}
@@ -354,12 +369,237 @@ function AddressField({
           </Button>
         </View>
         {state.detecting ? (
-          <Button variant="ghost" size="sm" onPress={handleCancelDetect}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleCancelDetect}
+            testID="api-endpoint-connection-detect-cancel"
+          >
             {t("common.actions.cancel")}
           </Button>
         ) : null}
       </View>
+      {state.canCheckBeforeSave ? (
+        <View style={styles.subField}>
+          <FormTextInput
+            initialValue={state.detectModel}
+            onChangeText={model.setDetectModel}
+            placeholder={t("settings.apiEndpoints.form.detectModelPlaceholder")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            size={size}
+            testID="api-endpoint-connection-detect-model"
+          />
+        </View>
+      ) : null}
+      {state.detection ? <DetectionResults detection={state.detection} model={model} /> : null}
     </Field>
+  );
+}
+
+/** 自动检测的结论：每种格式一行耗时或错误；「采用这些」才填进地址栏（照 magpie Detect）。 */
+function DetectionResults({
+  detection,
+  model,
+}: {
+  detection: ConnectionDetection;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  const handleTake = useCallback(() => model.takeDetected(), [model]);
+  return (
+    <View style={styles.checkList} testID="api-endpoint-connection-detection">
+      {detection.results.map((result) => (
+        <CheckRow
+          key={result.format}
+          format={result.format}
+          url={result.url}
+          {...detectionRowOf({ t, result })}
+          testID={`api-endpoint-connection-detection-${result.format}`}
+        />
+      ))}
+      {detection.canTake ? (
+        <View style={styles.switchRow}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleTake}
+            testID="api-endpoint-connection-use-detected"
+          >
+            {t("settings.apiEndpoints.form.detected.useThese")}
+          </Button>
+        </View>
+      ) : null}
+      {detection.isTaken ? (
+        <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-taken">
+          {t("settings.apiEndpoints.form.detected.taken")}
+        </Text>
+      ) : null}
+      {detection.noneAnswered ? (
+        <Text
+          variant="caption"
+          color="foregroundMuted"
+          testID="api-endpoint-connection-none-answered"
+        >
+          {detection.noneAnswered === "keyless"
+            ? t("settings.apiEndpoints.form.detected.noneAnsweredKeyless")
+            : t("settings.apiEndpoints.form.detected.noneAnswered")}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+// 一行结果的结论：通了没有、结论那句、另起一行的原因（没有为 null）。
+interface CheckRowResult {
+  isOk: boolean | null;
+  verdict: string;
+  reason: string | null;
+}
+
+function detectionRowOf(input: { t: TFunction; result: DetectedFormat }): CheckRowResult {
+  const { t, result } = input;
+  const modelNote =
+    result.modelId === null
+      ? null
+      : t("settings.apiEndpoints.form.detected.model", { model: result.modelId });
+  if (result.label === "ok") {
+    const verdict =
+      result.durationMs === null
+        ? t("settings.apiEndpoints.form.detection.ok")
+        : t("settings.apiEndpoints.form.detected.okTook", { ms: result.durationMs });
+    return { isOk: true, verdict, reason: modelNote };
+  }
+  const reason = [result.message, modelNote].filter((part) => part !== null).join(" · ");
+  return {
+    isOk: false,
+    verdict: t(`settings.apiEndpoints.form.detection.${result.label}`),
+    reason: reason === "" ? null : reason,
+  };
+}
+
+function testRowOf(input: { t: TFunction; row: FormatTestRow }): CheckRowResult {
+  const { t } = input;
+  const { outcome } = input.row;
+  switch (outcome.kind) {
+    case "testing":
+      return { isOk: null, verdict: t("settings.apiEndpoints.detail.test.testing"), reason: null };
+    case "ok":
+      return {
+        isOk: true,
+        verdict: t("settings.apiEndpoints.detail.test.ok", { ms: outcome.durationMs }),
+        reason: null,
+      };
+    case "authFailed":
+    case "failed": {
+      const verdict =
+        outcome.kind === "authFailed"
+          ? t("settings.apiEndpoints.detail.test.authFailed")
+          : t("settings.apiEndpoints.detail.test.failed");
+      const status = outcome.status === null ? null : String(outcome.status);
+      const reason = [status, outcome.message].filter((part) => part).join(" · ");
+      return { isOk: false, verdict, reason: reason === "" ? null : reason };
+    }
+  }
+}
+
+/** 一种格式一行：图标、格式名与结论，下面是地址，失败原因另起一行。 */
+function CheckRow({
+  format,
+  url,
+  isOk,
+  verdict,
+  reason,
+  testID,
+}: CheckRowResult & {
+  format: ApiEndpointRequestFormat;
+  url: string;
+  testID: string;
+}) {
+  const { t } = useTranslation();
+  let verdictColor: "foregroundMuted" | "statusSuccess" | "statusDanger" = "foregroundMuted";
+  if (isOk === true) verdictColor = "statusSuccess";
+  if (isOk === false) verdictColor = "statusDanger";
+  return (
+    <View style={styles.checkRow} testID={testID}>
+      <View style={styles.checkIcon}>
+        {isOk === true ? <ThemedCheck size={12} /> : null}
+        {isOk === false ? <ThemedCross size={12} /> : null}
+      </View>
+      <View style={styles.flex}>
+        <View style={styles.checkHeading}>
+          <Text variant="label">{t(`settings.apiEndpoints.formats.${format}`)}</Text>
+          <Text variant="caption" color={verdictColor} testID={`${testID}-verdict`}>
+            {verdict}
+          </Text>
+        </View>
+        {url ? (
+          <Text variant="caption" color="foregroundMuted" numberOfLines={1} selectable>
+            {url}
+          </Text>
+        ) : null}
+        {reason ? (
+          <Text
+            variant="caption"
+            color="foregroundMuted"
+            numberOfLines={3}
+            selectable
+            testID={`${testID}-reason`}
+          >
+            {reason}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/** 保存前「测试连接」：表单里每种格式的地址各发一条最小请求，逐行显示耗时或错误。 */
+function ConnectionTestField({
+  state,
+  model,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  const handleTest = useCallback(() => model.testConnection(), [model]);
+  const handleCancel = useCallback(() => model.cancelTest(), [model]);
+  if (!state.canCheckBeforeSave) return null;
+  return (
+    <View style={styles.testField} testID="api-endpoint-connection-test">
+      <View style={styles.inlineRow}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleTest}
+          disabled={!state.canTest}
+          loading={state.isTesting}
+          testID="api-endpoint-connection-test-button"
+        >
+          {t("settings.apiEndpoints.detail.testConnection")}
+        </Button>
+        {state.isTesting ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleCancel}
+            testID="api-endpoint-connection-test-cancel"
+          >
+            {t("common.actions.cancel")}
+          </Button>
+        ) : null}
+      </View>
+      {state.tests.map((row) => (
+        <CheckRow
+          key={row.format}
+          format={row.format}
+          url={row.url}
+          {...testRowOf({ t, row })}
+          testID={`api-endpoint-connection-test-${row.format}`}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -375,23 +615,237 @@ function ModelIdsField({
 }) {
   const { t } = useTranslation();
   const modelsInputRef = useCurlPasteField({ model, field: "models" });
+  const handleFetch = useCallback(() => model.fetchModels(), [model]);
+  const handleCancelFetch = useCallback(() => model.cancelFetchModels(), [model]);
+  const canFetch = state.canCheckBeforeSave && state.mode !== "edit";
+  const { catalogFetch } = state;
   return (
     <Field
       label={t("settings.apiEndpoints.form.models")}
-      hint={t("settings.apiEndpoints.form.modelsHint")}
+      hint={
+        canFetch
+          ? t("settings.apiEndpoints.form.modelsHintFetch")
+          : t("settings.apiEndpoints.form.modelsHint")
+      }
+      error={catalogFetch.status === "failed" ? catalogFetch.message : null}
       testID="api-endpoint-connection-models-field"
     >
-      <FormTextInput
-        ref={modelsInputRef}
-        initialValue={state.modelIds.join(", ")}
-        onChangeText={model.setModelIds}
-        placeholder={t("settings.apiEndpoints.form.modelsPlaceholder")}
-        autoCapitalize="none"
-        autoCorrect={false}
-        size={size}
-        testID="api-endpoint-connection-models"
-      />
+      <View style={styles.inlineRow}>
+        <View style={styles.flex}>
+          <FormTextInput
+            ref={modelsInputRef}
+            initialValue={state.modelIds.join(", ")}
+            resetKey={state.modelIdsGeneration}
+            onChangeText={model.setModelIds}
+            placeholder={t("settings.apiEndpoints.form.modelsPlaceholder")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            size={size}
+            testID="api-endpoint-connection-models"
+          />
+        </View>
+        {canFetch ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleFetch}
+            disabled={!state.canFetchModels}
+            loading={catalogFetch.status === "fetching"}
+            testID="api-endpoint-connection-fetch-models"
+          >
+            {t("settings.apiEndpoints.form.fetch.button")}
+          </Button>
+        ) : null}
+        {catalogFetch.status === "fetching" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleCancelFetch}
+            testID="api-endpoint-connection-fetch-cancel"
+          >
+            {t("common.actions.cancel")}
+          </Button>
+        ) : null}
+      </View>
+      {catalogFetch.status === "fetched" ? (
+        <ModelPicker
+          models={catalogFetch.models}
+          picked={state.modelIds}
+          model={model}
+          size={size}
+        />
+      ) : null}
     </Field>
+  );
+}
+
+// 清单超过这么多个时给筛选框（照 magpie）。
+const FILTER_FROM = 24;
+// 没筛选时先画这么多个，选上的总画出来（照 magpie）。
+const FIRST_SHOWN = 120;
+
+/**
+ * 拉到的清单（照 magpie addFormModels）：点一个模型选上或去掉，进「模型」框；已选几个、全选（筛选时是选上显示的）、全不选；
+ * 清单长时先只画前 120 个，「显示其余」再画。
+ */
+function ModelPicker({
+  models,
+  picked,
+  model,
+  size,
+}: {
+  models: ApiEndpointModel[];
+  picked: string[];
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const [isShowingAll, setIsShowingAll] = useState(false);
+  const search = query.trim().toLowerCase();
+  const matching = useMemo(
+    () =>
+      models.filter(
+        (entry) =>
+          search === "" ||
+          entry.id.toLowerCase().includes(search) ||
+          (entry.label ?? "").toLowerCase().includes(search),
+      ),
+    [models, search],
+  );
+  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  const isCapped = search === "" && !isShowingAll;
+  const shown = isCapped
+    ? matching.filter((entry, index) => index < FIRST_SHOWN || pickedSet.has(entry.id))
+    : matching;
+  const hiddenCount = matching.length - shown.length;
+  const pickedCount = models.filter((entry) => pickedSet.has(entry.id)).length;
+  const handlePickShown = useCallback(
+    () => model.pickModels(matching.map((entry) => entry.id)),
+    [matching, model],
+  );
+  const handlePickNone = useCallback(
+    () => model.unpickModels(models.map((entry) => entry.id)),
+    [model, models],
+  );
+  const handleShowAll = useCallback(() => setIsShowingAll(true), []);
+  if (models.length === 0) {
+    return (
+      <Text
+        variant="caption"
+        color="foregroundMuted"
+        testID="api-endpoint-connection-catalog-empty"
+      >
+        {t("settings.apiEndpoints.form.fetch.empty")}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.picker} testID="api-endpoint-connection-catalog">
+      {models.length > FILTER_FROM ? (
+        <FormTextInput
+          initialValue={query}
+          onChangeText={setQuery}
+          placeholder={t("settings.apiEndpoints.form.fetch.filter", { count: models.length })}
+          autoCapitalize="none"
+          autoCorrect={false}
+          size={size}
+          testID="api-endpoint-connection-catalog-filter"
+        />
+      ) : null}
+      <View style={styles.pickerActions}>
+        <Text
+          variant="caption"
+          color="foregroundMuted"
+          style={styles.flex}
+          testID="api-endpoint-connection-catalog-count"
+        >
+          {t("settings.apiEndpoints.form.fetch.picked", {
+            picked: pickedCount,
+            total: models.length,
+          })}
+        </Text>
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={handlePickShown}
+          testID="api-endpoint-connection-catalog-pick-all"
+        >
+          {search === ""
+            ? t("settings.apiEndpoints.form.fetch.pickAll")
+            : t("settings.apiEndpoints.form.fetch.pickShown")}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={handlePickNone}
+          testID="api-endpoint-connection-catalog-pick-none"
+        >
+          {t("settings.apiEndpoints.form.fetch.pickNone")}
+        </Button>
+      </View>
+      <ScrollView style={styles.chipScroll} nestedScrollEnabled>
+        <View style={styles.chips}>
+          {shown.map((entry) => (
+            <ModelChip
+              key={entry.id}
+              entry={entry}
+              selected={pickedSet.has(entry.id)}
+              onToggle={model.toggleModel}
+            />
+          ))}
+          {hiddenCount > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={handleShowAll}
+              testID="api-endpoint-connection-catalog-show-rest"
+            >
+              {t("settings.apiEndpoints.form.fetch.showRest", { count: hiddenCount })}
+            </Button>
+          ) : null}
+        </View>
+        {matching.length === 0 ? (
+          <Text variant="caption" color="foregroundMuted">
+            {t("settings.apiEndpoints.form.fetch.noMatch", { query: query.trim() })}
+          </Text>
+        ) : null}
+      </ScrollView>
+    </View>
+  );
+}
+
+function ModelChip({
+  entry,
+  selected,
+  onToggle,
+}: {
+  entry: ApiEndpointModel;
+  selected: boolean;
+  onToggle: (modelId: string) => void;
+}) {
+  const handlePress = useCallback(() => onToggle(entry.id), [entry.id, onToggle]);
+  const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const chipStyle = useCallback(
+    ({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+      styles.chip,
+      (hovered || pressed) && styles.chipHovered,
+      selected && styles.chipSelected,
+    ],
+    [selected],
+  );
+  return (
+    <Pressable
+      style={chipStyle}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+      testID={`api-endpoint-connection-catalog-model-${entry.id}`}
+    >
+      <Text variant="caption" color={selected ? "foreground" : "foregroundMuted"}>
+        {entry.label ?? entry.id}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -999,14 +1453,9 @@ function FormatUrlField({
   const { t } = useTranslation();
   const { format } = field;
   const handleChange = useCallback((value: string) => model.setUrl(format, value), [format, model]);
-  const tag = useMemo(
-    () => <DetectionTag detection={field.detection} format={format} />,
-    [field.detection, format],
-  );
   return (
     <Field
       label={t(`settings.apiEndpoints.form.formatUrl.${format}`)}
-      trailing={tag}
       error={field.invalid ? t("settings.apiEndpoints.form.urlInvalid") : null}
       testID={`api-endpoint-connection-url-field-${format}`}
     >
@@ -1014,11 +1463,7 @@ function FormatUrlField({
         initialValue={field.url}
         resetKey={generation}
         onChangeText={handleChange}
-        placeholder={
-          field.detection === "not_detected"
-            ? t("settings.apiEndpoints.form.notDetectedPlaceholder")
-            : URL_PLACEHOLDERS[format]
-        }
+        placeholder={URL_PLACEHOLDERS[format]}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
@@ -1027,37 +1472,6 @@ function FormatUrlField({
         testID={`api-endpoint-connection-url-${format}`}
       />
     </Field>
-  );
-}
-
-function DetectionTag({
-  detection,
-  format,
-}: {
-  detection: ConnectionFormatField["detection"];
-  format: ApiEndpointRequestFormat;
-}) {
-  const { t } = useTranslation();
-  if (detection === null) return null;
-  const testID = `api-endpoint-connection-detection-${format}`;
-  if (detection === "ok") {
-    return (
-      <View style={styles.tag} testID={testID}>
-        <ThemedCheck size={12} />
-        <Text variant="caption" color="statusSuccess">
-          {t("settings.apiEndpoints.form.detection.ok")}
-        </Text>
-      </View>
-    );
-  }
-  return (
-    <Text
-      variant="caption"
-      color={detection === "auth_failed" ? "statusDanger" : "foregroundMuted"}
-      testID={testID}
-    >
-      {t(`settings.apiEndpoints.form.detection.${detection}`)}
-    </Text>
   );
 }
 
@@ -1127,10 +1541,65 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface1,
   },
-  tag: {
+  subField: {
+    marginTop: theme.spacing[2],
+  },
+  checkList: {
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  // 表单里自成一项，与上下的间距由表单的 gap 给。
+  testField: {
+    gap: theme.spacing[2],
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
+  },
+  // 图标与第一行文字对齐。
+  checkIcon: {
+    width: 12,
+    height: theme.typeScale.label.lineHeight,
+    justifyContent: "center",
+  },
+  checkHeading: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    columnGap: theme.spacing[2],
+  },
+  picker: {
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  pickerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
+  },
+  chipScroll: {
+    maxHeight: 160,
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  chip: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  chipHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  chipSelected: {
+    borderColor: theme.colors.borderAccent,
+    backgroundColor: theme.colors.interactionHighlight,
   },
   iconControls: {
     flexDirection: "row",
