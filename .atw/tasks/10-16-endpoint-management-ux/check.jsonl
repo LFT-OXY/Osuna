@@ -1,0 +1,24 @@
+{"file": ".atw/tasks/10-16-endpoint-management-ux/research/decisions.md", "reason": "3 轮访谈的全部决定、照 magpie 的细则与 magpie 源码出处，判断实现是否越界、是否照 magpie"}
+{"file": ".atw/tasks/10-16-magpie-osuna-gaps/prd.md", "reason": "总任务的跨子任务规矩：身份如实（第 15 条及本任务的例外）、协议、对外请求、测试约束"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：接口存储、中转站、CLI 配置改写都在 server"}
+{"file": ".atw/spec/server/backend/persistence.md", "reason": "接口与主机的新字段、CLI 请求头样本文件、导入忽略记录要守的持久化规则"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "新 RPC、可选字段与 apiEndpointManagement 能力位的写法"}
+{"file": ".atw/spec/server/backend/error-handling.md", "reason": "拒收（保留字段、模板接口开不校验证书、不安全的导入链接）与失败时给用户的原因"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 端到端测试、假上游与自签证书假上游、临时 HOME 里的假导入来源"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "接口列表页、详情页、添加窗口、模型设置、导入窗口的界面规范"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "表单模型与测试结果只在页面内存的状态写法"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器测试：每个会失败的操作测成功与失败"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议、daemon、client、app、desktop 几层一起改时的检查点"}
+{"file": "docs/adr/0004-api-endpoint-rewrites-cli-config.md", "reason": "写进 Claude Code、Codex 的模型信息要守的自有键规则；导入读接管前原值"}
+{"file": "docs/adr/0007-api-endpoints-route-through-daemon-gateway.md", "reason": "本任务把「按创建顺序」改为接口顺序"}
+{"file": "docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md", "reason": "本任务让用户设的请求头、附加请求体、上游模型名也改请求"}
+{"file": "docs/adr/0002-rename-stops-at-app-identity.md", "reason": "导入链接沿用 paseo 链接类型的依据"}
+{"file": "docs/glossary.md", "reason": "本任务新增的界面名词（模板、复制、接口顺序、服务范围、模型设置等）"}
+{"file": "docs/usage.md", "reason": "Outbound requests：每天刷新清单与厂商状态页两类新请求"}
+{"file": "docs/data-model.md", "reason": "文件持久化、可选字段、不做迁移"}
+{"file": "docs/protocol-compatibility.md", "reason": "旧客户端（官方 Paseo 手机 App）兼容规则与能力位"}
+{"file": "docs/rpc-namespacing.md", "reason": "新 RPC 的带点命名"}
+{"file": "docs/design.md", "reason": "界面设计规范：Switch、模型名字体、次要操作、状态"}
+{"file": "docs/forms.md", "reason": "添加窗口、模型设置、高级区的表单写法"}
+{"file": "docs/menus.md", "reason": "行菜单与模型行菜单"}
+{"file": "docs/i18n.md", "reason": "9 种界面语言，中文真翻译"}
