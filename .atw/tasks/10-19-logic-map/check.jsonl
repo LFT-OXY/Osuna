@@ -9,4 +9,3 @@
 {"file": "docs/i18n.md", "reason": "zh-CN 与 en 文案"}
 {"file": "docs/adr/0013-logic-map-stores-skeleton-and-links-existing-docs.md", "reason": "骨架与外部文档指向的决定"}
 {"file": ".atw/tasks/10-19-logic-map/ui-direction.md", "reason": "选定的视觉方向（贴近 Dify / Coze）、色表、各状态画面与画布配色例外"}
-{"file": ".atw/tasks/10-19-logic-map/issues/04-subgraph-and-breadcrumb.md", "reason": "ATW current ticket"}
