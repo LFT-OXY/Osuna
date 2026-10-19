@@ -2696,6 +2696,17 @@ export const es: TranslationResources = {
           "La clave se escribe una sola vez y la comparten los tres formatos. Al guardar se abre la página del endpoint para obtener sus modelos y elegirlos por Claude / GPT / Gemini.",
         footerKeyOptional:
           "La clave es opcional: si la escribes, la comparten los tres formatos; sin ella no se envía ninguna. Al guardar se abre la página del endpoint para obtener sus modelos y elegirlos por Claude / GPT / Gemini.",
+        models: "Modelos",
+        modelsHint: "Ids de modelo separados por comas. Se seleccionan al guardar.",
+        modelsPlaceholder: "p. ej. gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "Completado con el comando curl: {{what}}.",
+          model: "modelo {{model}}",
+          unknownEndpoint:
+            "Su URL no termina en /chat/completions, /messages ni /responses: escribe la dirección tú mismo.",
+          urlPlaceholder: "Sustituye {{part}} en la dirección.",
+          keyPlaceholder: "Su clave, {{key}}, solo es un marcador: pega tu propia clave de API.",
+        },
         saveAndFetch: "Guardar y obtener modelos",
         save: "Guardar",
       },

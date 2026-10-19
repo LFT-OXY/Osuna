@@ -14,6 +14,7 @@ import {
   type ConnectionSaveResult,
   type ConnectionIconResult,
 } from "./connection-form-model";
+import { curlOf, type CurlCommand } from "./curl-command";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -125,9 +126,16 @@ const KEY_REQUIRED = {
   isKeyOptional: false,
   canRevealKey: false,
   canPickIcon: false,
+  canPasteCurl: false,
   templates: [],
 };
-const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true, canPickIcon: true, templates: [] };
+const KEY_OPTIONAL = {
+  isKeyOptional: true,
+  canRevealKey: true,
+  canPickIcon: true,
+  canPasteCurl: true,
+  templates: [],
+};
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
@@ -1138,5 +1146,435 @@ describe("connection form: the icon of a custom endpoint", () => {
     expect(oldHost.getState().canPickIcon).toBe(false);
     await oldHost.submit();
     expect(fake.saves[2]).not.toHaveProperty("icon");
+  });
+});
+
+// 下面的 curl 例子取自 magpie（https://github.com/yetone/magpie，internal/gui/tests/fixtures/curl 与
+// provider-curl-paste.test.cjs，7597c132），是各厂商文档里原样的写法。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+const ANTHROPIC_CURL = `curl https://api.anthropic.com/v1/messages \\
+  -H "x-api-key: $ANTHROPIC_API_KEY" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "model": "claude-opus-5-5",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "Hello, Claude"}
+    ]
+  }'
+`;
+const MOONSHOT_CURL = `curl https://api.moonshot.cn/v1/chat/completions \\
+    -H "Content-Type: application/json" \\
+    -H "Authorization: Bearer $MOONSHOT_API_KEY" \\
+    -d '{
+        "model": "kimi-k3",
+        "messages": [
+            {"role": "system", "content": "你是 Kimi，由 Moonshot AI 提供的人工智能助手，你更擅长中文和英文的对话。你会为用户提供安全，有帮助，准确的回答。同时，你会拒绝一切涉及恐怖主义，种族歧视，黄色暴力等问题的回答。Moonshot AI 为专有名词，不可翻译成其他语言。"},
+            {"role": "user", "content": "你好，我叫李雷，1+1等于多少？"}
+        ]
+   }'
+`;
+// 用户把自己的 key 填进 Anthropic 的例子
+const OWN_KEY = "sk-ant-api03-Qx7vT2mK9pLw4RzN8bYc";
+const CURL_EXAMPLES: Record<string, { text: string; want: Omit<CurlCommand, "url"> }> = {
+  "openai-chat.sh": {
+    text: `curl https://api.openai.com/v1/chat/completions \\
+  -H "Authorization: Bearer $OPENAI_API_KEY" \\
+  -H "X-Client-Request-Id: 123e4567-e89b-12d3-a456-426614174000"
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://api.openai.com/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "$OPENAI_API_KEY",
+      model: null,
+    },
+  },
+  "openai-responses.sh": {
+    text: `curl https://api.openai.com/v1/responses \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $OPENAI_API_KEY" \\
+  -d '{
+    "model": "gpt-6-astra",
+    "instructions": "You are a personal math tutor. When asked a math question, write and run code to answer the question.",
+    "tools": [
+      {
+        "type": "code_interpreter",
+        "container": { "type": "auto" }
+      }
+    ],
+    "input": "I need to solve the equation 3x + 11 = 14. Can you help me?"
+  }'
+`,
+    want: {
+      format: "openai_responses",
+      baseUrl: "https://api.openai.com/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "$OPENAI_API_KEY",
+      model: "gpt-6-astra",
+    },
+  },
+  "anthropic.sh": {
+    text: ANTHROPIC_CURL,
+    want: {
+      format: "anthropic_messages",
+      baseUrl: "https://api.anthropic.com",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "$ANTHROPIC_API_KEY",
+      model: "claude-opus-5-5",
+    },
+  },
+  "deepseek.sh": {
+    text: `curl https://api.deepseek.com/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer \${DEEPSEEK_API_KEY}" \\
+  -d '{
+        "model": "deepseek-flash",
+        "messages": [
+          {"role": "system", "content": "You are a helpful assistant."},
+          {"role": "user", "content": "Hello!"}
+        ],
+        "thinking": {"type": "enabled"},
+        "reasoning_effort": "high",
+        "stream": false
+      }'
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://api.deepseek.com/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "${DEEPSEEK_API_KEY}",
+      model: "deepseek-flash",
+    },
+  },
+  "zhipu.sh": {
+    text: `curl -X POST "https://open.bigmodel.cn/api/paas/v4/chat/completions" \\
+-H "Content-Type: application/json" \\
+-H "Authorization: Bearer YOUR_API_KEY" \\
+-d '{
+    "model": "glm-5.3",
+    "messages": [
+        {
+            "role": "system",
+            "content": "你是一个有用的AI助手。"
+        },
+        {
+            "role": "user",
+            "content": "你好，请介绍一下自己。"
+        }
+    ],
+    "temperature": 1.0,
+    "stream": true
+}'
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "YOUR_API_KEY",
+      model: "glm-5.3",
+    },
+  },
+  "moonshot.sh": {
+    text: MOONSHOT_CURL,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://api.moonshot.cn/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "$MOONSHOT_API_KEY",
+      model: "kimi-k3",
+    },
+  },
+  "openrouter.sh": {
+    text: `curl https://openrouter.ai/api/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" \\
+  -d '{
+  "model": "~openai/gpt-sol-latest",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is the meaning of life?"
+    }
+  ]
+}'
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://openrouter.ai/api/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "$OPENROUTER_API_KEY",
+      model: "~openai/gpt-sol-latest",
+    },
+  },
+  "bailian-cmd.bat": {
+    text: `curl -X POST "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions" ^
+-H "Authorization: Bearer %DASHSCOPE_API_KEY%" ^
+-H "Content-Type: application/json" ^
+-d "{
+    \\"model\\": \\"qwen3.8-max\\",
+    \\"messages\\": [
+        {
+            \\"role\\": \\"system\\",
+            \\"content\\": \\"You are a helpful assistant.\\"
+        },
+        {
+            \\"role\\": \\"user\\",
+            \\"content\\": \\"你是谁？\\"
+        }
+    ]
+}"
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      urlPlaceholder: "{WorkspaceId}",
+      apiKey: null,
+      keyPlaceholder: "%DASHSCOPE_API_KEY%",
+      model: "qwen3.8-max",
+    },
+  },
+  "sap-ai-core.ps1": {
+    text: `curl.exe --location "<Deployment_url>/chat/completions" --header "AI-Resource-Group: <resource_group>" --header "Content-Type: application/json" --header "Authorization: Bearer <token>" --data '{ \\"model\\": \\"meta--llama3.1-70b-instruct\\", \\"messages\\": [ { \\"role\\": \\"user\\", \\"content\\": \\"What is the difference between Accountability vs Responsibility, answer in 200 words?\\" } ], \\"max_tokens\\": 100 }'
+`,
+    want: {
+      format: null,
+      baseUrl: null,
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "<token>",
+      model: "meta--llama3.1-70b-instruct",
+    },
+  },
+  "unsloth-studio.ps1": {
+    text: `curl.exe http://127.0.0.1:8888/v1/chat/completions \`
+  -H "Authorization: Bearer sk-unsloth-YOUR_KEY" \`
+  -H "Content-Type: application/json" \`
+  -d "@body.json"
+`,
+    want: {
+      format: "openai_chat",
+      baseUrl: "http://127.0.0.1:8888/v1",
+      urlPlaceholder: null,
+      apiKey: null,
+      keyPlaceholder: "sk-unsloth-YOUR_KEY",
+      model: null,
+    },
+  },
+};
+
+describe("curlOf: a curl command from a vendor's docs", () => {
+  it.each(Object.entries(CURL_EXAMPLES))(
+    "reads %s as its docs show it, with LF or CRLF",
+    (_name, example) => {
+      const { url: _url, ...got } = curlOf(example.text) ?? { url: "" };
+      expect(got).toEqual(example.want);
+      const { url: _crlfUrl, ...crlf } = curlOf(example.text.replace(/\n/g, "\r\n")) ?? { url: "" };
+      expect(crlf).toEqual(example.want);
+    },
+  );
+
+  it("takes a key of the user's own", () => {
+    const own = curlOf(ANTHROPIC_CURL.replace("$ANTHROPIC_API_KEY", OWN_KEY));
+    expect(own?.apiKey).toBe(OWN_KEY);
+    expect(own?.keyPlaceholder).toBeNull();
+  });
+
+  it("takes the key from api-key and from a header written -Hvalue; a body read from a file has no model", () => {
+    const got = curlOf(
+      "curl https://relay.example.com/responses -H'api-key: sk-relay-123' --json @body.json",
+    );
+    expect(got).toMatchObject({
+      format: "openai_responses",
+      baseUrl: "https://relay.example.com/v1",
+      apiKey: "sk-relay-123",
+      model: null,
+    });
+  });
+
+  it.each([
+    "https://api.moonshot.cn/v1",
+    "sk-a\nsk-b",
+    "curly braces",
+    "  ",
+    "echo curl https://api.openai.com/v1/chat/completions",
+  ])("%j is no curl command", (text) => {
+    expect(curlOf(text)).toBeNull();
+  });
+});
+
+describe("connection form: a pasted curl command", () => {
+  it("the custom form takes the address, its format, the model, and says the key only stands for one", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName("Kimi");
+    expect(model.pasteCurl(MOONSHOT_CURL)).toBe(true);
+    let state = model.getState();
+    expect(state.address).toBe("https://api.moonshot.cn/v1");
+    expect(state.addressGeneration).toBe(1);
+    expect(urlOf(model, "openai_chat")).toBe("https://api.moonshot.cn/v1");
+    expect(state.apiKey).toBe("");
+    expect(state.keyFocusGeneration).toBe(1);
+    expect(state.modelIds).toEqual(["kimi-k3"]);
+    expect(state.curlNote).toEqual({
+      filled: [
+        { kind: "baseUrl", format: "openai_chat" },
+        { kind: "model", model: "kimi-k3" },
+      ],
+      isEndpointUnknown: false,
+      urlPlaceholder: null,
+      keyPlaceholder: "$MOONSHOT_API_KEY",
+    });
+
+    // 再贴 Anthropic 的、带自己的 key：另一种格式的地址填上，前一种留着，模型累加
+    expect(model.pasteCurl(ANTHROPIC_CURL.replace("$ANTHROPIC_API_KEY", OWN_KEY))).toBe(true);
+    state = model.getState();
+    expect(state.address).toBe("https://api.anthropic.com");
+    expect(urlOf(model, "anthropic_messages")).toBe("https://api.anthropic.com");
+    expect(urlOf(model, "openai_chat")).toBe("https://api.moonshot.cn/v1");
+    expect(state.apiKey).toBe(OWN_KEY);
+    expect(state.keyBoxValue).toBe(OWN_KEY);
+    expect(state.keyBoxGeneration).toBe(1);
+    expect(state.keyFocusGeneration).toBe(1);
+    expect(state.modelIds).toEqual(["kimi-k3", "claude-opus-5-5"]);
+    expect(state.curlNote).toEqual({
+      filled: [
+        { kind: "baseUrl", format: "anthropic_messages" },
+        { kind: "apiKey" },
+        { kind: "model", model: "claude-opus-5-5" },
+      ],
+      isEndpointUnknown: false,
+      urlPlaceholder: null,
+      keyPlaceholder: null,
+    });
+
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({
+      name: "Kimi",
+      apiKey: OWN_KEY,
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://api.anthropic.com" },
+        { format: "openai_chat", url: "https://api.moonshot.cn/v1" },
+      ],
+      models: [{ id: "kimi-k3" }, { id: "claude-opus-5-5" }],
+      manualModels: [{ id: "kimi-k3" }, { id: "claude-opus-5-5" }],
+    });
+  });
+
+  it("the models taken can be edited as ids separated by commas; none left saves none", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName("Kimi");
+    model.pasteCurl(MOONSHOT_CURL);
+    model.setModelIds("kimi-k3, kimi-k3-turbo,\n");
+    expect(model.getState().modelIds).toEqual(["kimi-k3", "kimi-k3-turbo"]);
+    model.setModelIds(" ");
+    expect(model.getState().modelIds).toEqual([]);
+    expect(model.getState().hasModelField).toBe(true);
+    await model.submit();
+    expect(fake.saves[0].models).toEqual([]);
+    expect(fake.saves[0]).not.toHaveProperty("manualModels");
+  });
+
+  it("says when the URL ends in no known endpoint, and which placeholder is left in the address", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.pasteCurl(
+      'curl.exe --location "<Deployment_url>/chat/completion" --header "Authorization: Bearer <token>"',
+    );
+    expect(model.getState().curlNote).toEqual({
+      filled: [],
+      isEndpointUnknown: true,
+      urlPlaceholder: null,
+      keyPlaceholder: "<token>",
+    });
+    expect(model.getState().address).toBe("");
+
+    model.pasteCurl(
+      'curl "https://{WorkspaceId}.maas.aliyuncs.com/compatible-mode/v1/chat/completions" -H "Authorization: Bearer sk-own"',
+    );
+    expect(model.getState().curlNote).toEqual({
+      filled: [{ kind: "baseUrl", format: "openai_chat" }, { kind: "apiKey" }],
+      isEndpointUnknown: false,
+      urlPlaceholder: "{WorkspaceId}",
+      keyPlaceholder: null,
+    });
+  });
+
+  it("a template's form takes only the key, and says nothing of its address", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    expect(
+      model.pasteCurl(
+        'curl https://api.example.com/{x}/chat/completions -H "Authorization: Bearer sk-zhipu" -d \'{"model":"glm-5.3"}\'',
+      ),
+    ).toBe(true);
+    const state = model.getState();
+    expect(state.apiKey).toBe("sk-zhipu");
+    expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(state.modelIds).toEqual([]);
+    expect(state.hasModelField).toBe(false);
+    expect(state.curlNote).toEqual({
+      filled: [{ kind: "apiKey" }],
+      isEndpointUnknown: false,
+      urlPlaceholder: null,
+      keyPlaceholder: null,
+    });
+  });
+
+  it("editing a custom endpoint takes the address and key but leaves its models alone", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.pasteCurl(MOONSHOT_CURL);
+    expect(model.getState().curlNote?.filled).toEqual([{ kind: "baseUrl", format: "openai_chat" }]);
+    expect(model.getState().hasModelField).toBe(false);
+    await model.submit();
+    expect(fake.saves[0].models).toEqual(SAVED_ENDPOINT.models);
+    expect(fake.saves[0]).not.toHaveProperty("manualModels");
+  });
+
+  it("text that isn't curl, or an old host, is pasted as before", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.pasteCurl("https://api.moonshot.cn/v1")).toBe(false);
+    expect(model.getState().curlNote).toBeNull();
+    const oldHost = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
+    expect(oldHost.pasteCurl(MOONSHOT_CURL)).toBe(false);
+    expect(oldHost.getState().address).toBe("");
   });
 });

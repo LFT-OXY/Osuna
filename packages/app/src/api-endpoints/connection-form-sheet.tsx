@@ -1,4 +1,12 @@
-import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
@@ -9,12 +17,15 @@ import type {
   ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
+import type { EditingTextInputHandle } from "@/components/ui/text-input";
+import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useFilePicker, type FilePickFilter } from "@/hooks/use-file-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -30,6 +41,8 @@ import {
 } from "./template-copy";
 import { useConnectionFormModel } from "./use-connection-form-model";
 import type {
+  ConnectionCurlFill,
+  ConnectionCurlNote,
   ConnectionFormDeps,
   ConnectionFormModel,
   ConnectionFormSeed,
@@ -42,10 +55,11 @@ import type {
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
-  // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」，「自定义」接口能选图标。
+  // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」，「自定义」接口能选图标，能粘贴 curl 填表。
   isKeyOptional: boolean;
   canRevealKey: boolean;
   canPickIcon: boolean;
+  canPasteCurl: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -76,6 +90,7 @@ export function ApiEndpointConnectionSheet({
   isKeyOptional,
   canRevealKey,
   canPickIcon,
+  canPasteCurl,
   templates,
   onBack,
   onSave,
@@ -98,9 +113,14 @@ export function ApiEndpointConnectionSheet({
       storeIcon: onStoreIcon,
       fetchSiteIcon: onFetchSiteIcon,
     },
-    { isKeyOptional, canRevealKey, canPickIcon, templates },
+    { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
+  const keyPaste = useCurlPaste(model);
+  // 粘贴的 curl 没给出能用的 key：焦点移到 key 框，等用户贴自己的（照 magpie）。
+  useEffect(() => {
+    if (state.keyFocusGeneration > 0) keyPaste.handle.current?.focus();
+  }, [keyPaste.handle, state.keyFocusGeneration]);
   const isCreate = state.mode === "create";
   const keyHint = state.template?.keyHint ?? null;
   const isTemplateKeyOptional = state.template?.keyOptional === true;
@@ -198,6 +218,7 @@ export function ApiEndpointConnectionSheet({
           <View style={styles.inlineRow}>
             <View style={styles.flex}>
               <FormTextInput
+                ref={keyPaste.ref}
                 initialValue={state.keyBoxValue}
                 resetKey={state.keyBoxGeneration}
                 onChangeText={model.setApiKey}
@@ -227,6 +248,7 @@ export function ApiEndpointConnectionSheet({
             ) : null}
           </View>
         </Field>
+        <CurlNoteAlert note={state.curlNote} />
         {/* 模板已给好各格式地址，不用自动检测。 */}
         {template ? null : (
           <AddressField
@@ -239,6 +261,9 @@ export function ApiEndpointConnectionSheet({
         )}
         {state.canPickIcon ? <IconField state={state} model={model} size={fieldSize} /> : null}
         <TemplateAddresses state={state} model={model} size={fieldSize} />
+        {state.hasModelField ? (
+          <ModelIdsField state={state} model={model} size={fieldSize} />
+        ) : null}
         <Text variant="caption" color="foregroundMuted">
           {footerTextOf({ t, state })}
         </Text>
@@ -292,6 +317,7 @@ function AddressField({
   const { t } = useTranslation();
   const handleDetect = useCallback(() => model.detect(), [model]);
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
+  const addressPaste = useCurlPaste(model);
   return (
     <Field
       label={t("settings.apiEndpoints.form.address")}
@@ -310,7 +336,9 @@ function AddressField({
       <View style={styles.inlineRow}>
         <View style={styles.flex}>
           <FormTextInput
+            ref={addressPaste.ref}
             initialValue={state.address}
+            resetKey={state.addressGeneration}
             onChangeText={model.setAddress}
             placeholder="https://relay.example.com"
             autoCapitalize="none"
@@ -341,6 +369,127 @@ function AddressField({
       </View>
     </Field>
   );
+}
+
+/** 新建「自定义」时粘贴 curl 带来的模型（照 magpie 添加窗口的 Models 框）：逗号分隔，可改，保存时选上。 */
+function ModelIdsField({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  return (
+    <Field
+      label={t("settings.apiEndpoints.form.models")}
+      hint={t("settings.apiEndpoints.form.modelsHint")}
+      testID="api-endpoint-connection-models-field"
+    >
+      <FormTextInput
+        initialValue={state.modelIds.join(", ")}
+        resetKey={state.modelIdsGeneration}
+        onChangeText={model.setModelIds}
+        placeholder={t("settings.apiEndpoints.form.modelsPlaceholder")}
+        autoCapitalize="none"
+        autoCorrect={false}
+        size={size}
+        testID="api-endpoint-connection-models"
+      />
+    </Field>
+  );
+}
+
+interface CurlPasteTarget {
+  // 交给输入框的 ref。
+  ref: (handle: EditingTextInputHandle | null) => void;
+  // 当前的输入框，用来移焦点。
+  handle: RefObject<EditingTextInputHandle | null>;
+}
+
+/**
+ * 网页上往这个输入框粘贴 curl 命令时交给表单模型；它认得就拦下这次粘贴（照 magpie fromCurl）。
+ * 读的是剪贴板原文：输入框会吞掉换行，续行写法就认不出了。原生端的输入框不报粘贴事件，照常粘贴。
+ * 用回调 ref 跟着输入框换监听：窄窗口的底部弹层会重新挂载表单内容，换成新的输入框元素。
+ */
+function useCurlPaste(model: ConnectionFormModel): CurlPasteTarget {
+  const handle = useRef<EditingTextInputHandle | null>(null);
+  const bound = useRef<{ element: HTMLElement; unbind: () => void } | null>(null);
+  const ref = useCallback(
+    (next: EditingTextInputHandle | null) => {
+      handle.current = next;
+      if (!isWeb) return;
+      const native = next?.getNativeRef();
+      const element = native instanceof HTMLElement ? native : null;
+      if (bound.current?.element === element) return;
+      bound.current?.unbind();
+      bound.current = null;
+      if (!element) return;
+      const handlePaste = (event: ClipboardEvent) => {
+        const text = event.clipboardData?.getData("text") ?? "";
+        if (model.pasteCurl(text)) event.preventDefault();
+      };
+      element.addEventListener("paste", handlePaste);
+      bound.current = {
+        element,
+        unbind: () => element.removeEventListener("paste", handlePaste),
+      };
+    },
+    [model],
+  );
+  useEffect(
+    () => () => {
+      bound.current?.unbind();
+      bound.current = null;
+    },
+    [],
+  );
+  return { ref, handle };
+}
+
+/** 粘贴 curl 后的提示条：取了什么、URL 结尾认不出、地址里的占位符、key 只是占位符；有要用户自己改的就用警告色。 */
+function CurlNoteAlert({ note }: { note: ConnectionCurlNote | null }) {
+  const { t } = useTranslation();
+  if (!note) return null;
+  const sentences: string[] = [];
+  if (note.filled.length > 0) {
+    const what = note.filled.map((fill) => curlFillText(t, fill)).join(" · ");
+    sentences.push(t("settings.apiEndpoints.form.curl.filled", { what }));
+  }
+  if (note.isEndpointUnknown) sentences.push(t("settings.apiEndpoints.form.curl.unknownEndpoint"));
+  if (note.urlPlaceholder) {
+    sentences.push(
+      t("settings.apiEndpoints.form.curl.urlPlaceholder", { part: note.urlPlaceholder }),
+    );
+  }
+  if (note.keyPlaceholder) {
+    sentences.push(
+      t("settings.apiEndpoints.form.curl.keyPlaceholder", { key: note.keyPlaceholder }),
+    );
+  }
+  const needsAction =
+    note.isEndpointUnknown || note.urlPlaceholder !== null || note.keyPlaceholder !== null;
+  return (
+    <Alert
+      size="sm"
+      variant={needsAction ? "warning" : "info"}
+      description={sentences.join(" ")}
+      testID="api-endpoint-connection-curl-note"
+    />
+  );
+}
+
+function curlFillText(t: TFunction, fill: ConnectionCurlFill): string {
+  switch (fill.kind) {
+    case "baseUrl":
+      return t(`settings.apiEndpoints.form.formatUrl.${fill.format}`);
+    case "apiKey":
+      return t("settings.apiEndpoints.form.apiKey");
+    case "model":
+      return t("settings.apiEndpoints.form.curl.model", { model: fill.model });
+  }
 }
 
 /** 表单底下的说明：填资源地址的模板说保存后列部署；别的说 key 由三种格式共用。 */

@@ -2696,6 +2696,19 @@ export const fr: TranslationResources = {
           "La clé se saisit une seule fois et sert aux trois formats. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
         footerKeyOptional:
           "La clé est facultative : saisie, elle sert aux trois formats ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+        models: "Modèles",
+        modelsHint:
+          "Identifiants de modèle séparés par des virgules. Ils sont sélectionnés à l'enregistrement.",
+        modelsPlaceholder: "ex. gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "Rempli à partir de la commande curl : {{what}}.",
+          model: "modèle {{model}}",
+          unknownEndpoint:
+            "Son URL ne se termine pas par /chat/completions, /messages ou /responses : saisissez l'adresse vous-même.",
+          urlPlaceholder: "Remplacez {{part}} dans l'adresse.",
+          keyPlaceholder:
+            "Sa clé, {{key}}, n'est qu'un espace réservé : collez votre propre clé d'API.",
+        },
         saveAndFetch: "Enregistrer et récupérer les modèles",
         save: "Enregistrer",
       },

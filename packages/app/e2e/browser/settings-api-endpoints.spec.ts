@@ -1571,7 +1571,138 @@ test.describe("Templates", () => {
     await expect(headerTitle(page)).toHaveText("OpenAI");
   });
 
-  test("a host without apiEndpointManagement opens the blank form from + and has no Add another", async ({
+  /** 照浏览器真实粘贴的样子派发 paste 事件；返回表单是否拦下了它。 */
+  function paste(field: Locator, text: string): Promise<boolean> {
+    return field.evaluate((input, value) => {
+      (input as HTMLInputElement).focus();
+      const clipboardData = new DataTransfer();
+      clipboardData.setData("text/plain", value);
+      const event = new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true });
+      input.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, text);
+  }
+
+  // Moonshot 与 Anthropic 文档里的例子（照 magpie 的 fixtures/curl），一个 key 是占位符，一个换成了自己的 key。
+  const MOONSHOT_CURL = [
+    "curl https://api.moonshot.cn/v1/chat/completions \\",
+    '    -H "Content-Type: application/json" \\',
+    '    -H "Authorization: Bearer $MOONSHOT_API_KEY" \\',
+    "    -d '{",
+    '        "model": "kimi-k3",',
+    '        "messages": [{"role": "user", "content": "你好"}]',
+    "   }'",
+  ].join("\n");
+  const OWN_KEY = "sk-ant-api03-Qx7vT2mK9pLw4RzN8bYc";
+  const ANTHROPIC_CURL = [
+    "curl https://api.anthropic.com/v1/messages \\",
+    `  -H "x-api-key: ${OWN_KEY}" \\`,
+    '  -H "anthropic-version: 2023-06-01" \\',
+    '  -d \'{"model": "claude-opus-5-5", "max_tokens": 1024}\'',
+  ].join("\n");
+
+  test("a curl command pasted into the address or the key fills the custom form; a template takes only the key", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    const address = page.getByTestId("api-endpoint-connection-address");
+    const apiKey = page.getByTestId("api-endpoint-connection-api-key");
+    const models = page.getByTestId("api-endpoint-connection-models");
+    const note = page.getByTestId("api-endpoint-connection-curl-note");
+
+    await test.step("Moonshot's example into the address: its format, address and model; its key only stands for one", async () => {
+      await page.getByTestId("api-endpoints-empty-add").click();
+      await page.getByTestId("api-endpoint-template-custom").click();
+      await expect(models).toHaveCount(0);
+      expect(await paste(address, MOONSHOT_CURL)).toBe(true);
+      await expect(address).toHaveValue("https://api.moonshot.cn/v1");
+      await expect(urlField(page, "openai_chat")).toHaveValue("https://api.moonshot.cn/v1");
+      await expect(apiKey).toHaveValue("");
+      await expect(apiKey).toBeFocused();
+      await expect(models).toHaveValue("kimi-k3");
+      await expect(note).toHaveText(
+        "Filled in from the curl command: OpenAI Chat base URL · model kimi-k3. Its key, $MOONSHOT_API_KEY, only stands for one: paste your own API key.",
+      );
+    });
+
+    await test.step("Anthropic's, with a key of the user's own, into the key: the other format is added", async () => {
+      expect(await paste(apiKey, ANTHROPIC_CURL)).toBe(true);
+      await expect(apiKey).toHaveValue(OWN_KEY);
+      await expect(urlField(page, "anthropic_messages")).toHaveValue("https://api.anthropic.com");
+      await expect(urlField(page, "openai_chat")).toHaveValue("https://api.moonshot.cn/v1");
+      await expect(models).toHaveValue("kimi-k3, claude-opus-5-5");
+      await expect(note).toHaveText(
+        "Filled in from the curl command: Anthropic base URL · API key · model claude-opus-5-5.",
+      );
+    });
+
+    await test.step("a URL with no known endpoint, and a placeholder left in the address, are each told", async () => {
+      expect(
+        await paste(address, 'curl https://relay.example.com/v1/completions -H "x-api-key: sk-a"'),
+      ).toBe(true);
+      await expect(note).toHaveText(
+        "Filled in from the curl command: API key. Its URL doesn't end in /chat/completions, /messages or /responses: type the address yourself.",
+      );
+      expect(
+        await paste(
+          address,
+          'curl "https://{WorkspaceId}.maas.aliyuncs.com/compatible-mode/v1/chat/completions"',
+        ),
+      ).toBe(true);
+      await expect(note).toHaveText(
+        "Filled in from the curl command: OpenAI Chat base URL. Replace {WorkspaceId} in the address.",
+      );
+    });
+
+    await test.step("text that isn't curl pastes as before", async () => {
+      expect(await paste(apiKey, "sk-plain")).toBe(false);
+    });
+
+    await test.step("the relay's own example: a failed save keeps the form, then it saves with the model picked", async () => {
+      await page.getByRole("button", { name: "Cancel" }).click();
+      await page.getByTestId("api-endpoints-empty-add").click();
+      await page.getByTestId("api-endpoint-template-custom").click();
+      await page.getByTestId("api-endpoint-connection-name").fill("Pasted relay");
+      const relayCurl = `curl ${relay.origin}/good/v1/chat/completions -H "Authorization: Bearer ${RELAY_KEY}" -d '{"model":"good-1"}'`;
+      expect(await paste(address, relayCurl)).toBe(true);
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(models).toHaveValue("good-1");
+      await expect(apiKey).toHaveValue(RELAY_KEY);
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved).toMatchObject({
+        name: "Pasted relay",
+        baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+        models: [{ id: "good-1" }],
+        manualModels: [{ id: "good-1" }],
+        hasApiKey: true,
+      });
+    });
+
+    await test.step("a template takes only the key from it, in a narrow window's sheet too", async () => {
+      await page.goBack();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-template-zhipu").click();
+      expect(await paste(apiKey, MOONSHOT_CURL.replace("$MOONSHOT_API_KEY", "sk-zhipu"))).toBe(
+        true,
+      );
+      await expect(apiKey).toHaveValue("sk-zhipu");
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://open.bigmodel.cn/api/paas/v4",
+      );
+      await expect(models).toHaveCount(0);
+      await expect(note).toHaveText("Filled in from the curl command: API key.");
+    });
+  });
+
+  test("a host without apiEndpointManagement opens the blank form from + with no curl filling, and has no Add another", async ({
     page,
   }) => {
     const [endpointId = ""] = await seedRelays(["Relay A"]);
@@ -1580,6 +1711,11 @@ test.describe("Templates", () => {
     await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
     await expect(connectionForm(page)).toBeVisible();
     await expect(templatePicker(page)).toHaveCount(0);
+    // 老主机上粘贴 curl 照常粘进框里，不填表。
+    expect(await paste(page.getByTestId("api-endpoint-connection-address"), MOONSHOT_CURL)).toBe(
+      false,
+    );
+    await expect(page.getByTestId("api-endpoint-connection-curl-note")).toHaveCount(0);
     await page.getByRole("button", { name: "Cancel" }).click();
     await openEndpointRow(page, endpointId);
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();

@@ -2706,6 +2706,17 @@ export const en = {
           "The key is entered once and shared by all three formats. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
         footerKeyOptional:
           "The key is optional: one key is shared by all three formats, and without one no key is sent. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
+        models: "Models",
+        modelsHint: "Model ids, separated by commas. They are picked when you save.",
+        modelsPlaceholder: "e.g. gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "Filled in from the curl command: {{what}}.",
+          model: "model {{model}}",
+          unknownEndpoint:
+            "Its URL doesn't end in /chat/completions, /messages or /responses: type the address yourself.",
+          urlPlaceholder: "Replace {{part}} in the address.",
+          keyPlaceholder: "Its key, {{key}}, only stands for one: paste your own API key.",
+        },
         saveAndFetch: "Save and fetch models",
         save: "Save",
       },

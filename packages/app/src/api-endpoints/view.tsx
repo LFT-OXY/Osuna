@@ -399,6 +399,7 @@ function ConnectionSheet({
       isKeyOptional={hasManagement}
       canRevealKey={hasManagement}
       canPickIcon={hasManagement}
+      canPasteCurl={hasManagement}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}

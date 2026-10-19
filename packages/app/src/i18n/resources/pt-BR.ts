@@ -2681,6 +2681,17 @@ export const ptBR: TranslationResources = {
           "A chave é digitada uma vez e compartilhada pelos três formatos. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
         footerKeyOptional:
           "A chave é opcional: preenchida, é compartilhada pelos três formatos; sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
+        models: "Modelos",
+        modelsHint: "Ids de modelo separados por vírgulas. Eles são selecionados ao salvar.",
+        modelsPlaceholder: "ex.: gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "Preenchido a partir do comando curl: {{what}}.",
+          model: "modelo {{model}}",
+          unknownEndpoint:
+            "A URL não termina em /chat/completions, /messages ou /responses: digite o endereço você mesmo.",
+          urlPlaceholder: "Substitua {{part}} no endereço.",
+          keyPlaceholder: "A chave, {{key}}, é só um marcador: cole sua própria chave de API.",
+        },
         saveAndFetch: "Salvar e buscar modelos",
         save: "Salvar",
       },

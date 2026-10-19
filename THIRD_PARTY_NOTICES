@@ -621,6 +621,20 @@ magpie's copy notes:
   packages/app/src/assets/endpoint-template-icons/*.svg
   packages/app/src/assets/endpoint-template-icons/*.png
 
+A curl command pasted into the add dialog's address or key (the API its
+URL's endpoint names, the base URL respelled for that API, the key from
+Authorization: Bearer, x-api-key or api-key unless it only stands for one, the
+model of its JSON body, lines joined by \, ^ or a backtick, and the notes on
+what was taken) follows curlOf, respellURL and fromCurl in magpie's
+internal/gui/assets/app.js; its tests reuse the vendors' examples of
+internal/gui/tests/fixtures/curl and provider-curl-paste.test.cjs:
+
+  packages/app/src/api-endpoints/internal/curl-command.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.test.ts
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+  packages/app/e2e/browser/settings-api-endpoints.spec.ts
+
 How the gateway recognises its callers (loopback only, the forwarding headers
 that mark a proxied request, DNS rebinding, refusing web pages by Origin,
 Origin: null and localhost subdomains, reading the token from Authorization

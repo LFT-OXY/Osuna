@@ -2641,6 +2641,17 @@ export const ar: TranslationResources = {
           "يُدخل المفتاح مرة واحدة وتشترك فيه الصيغ الثلاث. بعد الحفظ تُفتح صفحة نقطة النهاية لجلب نماذجها واختيارها حسب Claude / GPT / Gemini.",
         footerKeyOptional:
           "المفتاح اختياري: إذا أدخلته تشترك فيه الصيغ الثلاث، ومن دونه لا يُرسل أي مفتاح. بعد الحفظ تُفتح صفحة نقطة النهاية لجلب نماذجها واختيارها حسب Claude / GPT / Gemini.",
+        models: "النماذج",
+        modelsHint: "معرّفات النماذج مفصولة بفواصل. تُحدَّد عند الحفظ.",
+        modelsPlaceholder: "مثلًا gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "تمت التعبئة من أمر curl: {{what}}.",
+          model: "النموذج {{model}}",
+          unknownEndpoint:
+            "لا ينتهي عنوان URL الخاص به بـ /chat/completions أو /messages أو /responses: اكتب العنوان بنفسك.",
+          urlPlaceholder: "استبدل {{part}} في العنوان.",
+          keyPlaceholder: "مفتاحه {{key}} مجرد عنصر نائب: الصق مفتاح API الخاص بك.",
+        },
         saveAndFetch: "حفظ وجلب النماذج",
         save: "حفظ",
       },

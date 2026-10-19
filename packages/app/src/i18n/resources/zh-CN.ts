@@ -2666,6 +2666,17 @@ export const zhCN: TranslationResources = {
           "key 只填一次，三种格式共用。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
         footerKeyOptional:
           "key 选填：填了三种格式共用，不填就不带 key。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
+        models: "模型",
+        modelsHint: "模型 id，用逗号分隔，保存时选上。",
+        modelsPlaceholder: "如：gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "已从 curl 命令填入：{{what}}。",
+          model: "模型 {{model}}",
+          unknownEndpoint:
+            "它的 URL 不以 /chat/completions、/messages 或 /responses 结尾：请自己填写地址。",
+          urlPlaceholder: "请替换地址里的 {{part}}。",
+          keyPlaceholder: "其中的 key {{key}} 只是占位符：请粘贴你自己的 API key。",
+        },
         saveAndFetch: "保存并拉取模型",
         save: "保存",
       },

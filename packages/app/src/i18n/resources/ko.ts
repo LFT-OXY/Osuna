@@ -2656,6 +2656,17 @@ export const ko: TranslationResources = {
           "키는 한 번만 입력하고 세 형식이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
         footerKeyOptional:
           "키는 선택 사항입니다. 입력하면 세 형식이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
+        models: "모델",
+        modelsHint: "쉼표로 구분한 모델 ID. 저장하면 선택됩니다.",
+        modelsPlaceholder: "예: gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "curl 명령에서 채웠습니다: {{what}}.",
+          model: "모델 {{model}}",
+          unknownEndpoint:
+            "URL이 /chat/completions, /messages, /responses로 끝나지 않습니다. 주소를 직접 입력하세요.",
+          urlPlaceholder: "주소의 {{part}}을(를) 바꾸세요.",
+          keyPlaceholder: "키 {{key}}는 자리표시자일 뿐입니다. 본인의 API 키를 붙여 넣으세요.",
+        },
         saveAndFetch: "저장하고 모델 가져오기",
         save: "저장",
       },

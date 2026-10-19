@@ -2669,6 +2669,18 @@ export const ja: TranslationResources = {
           "キーは一度入力すれば 3 つの形式で共有されます。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
         footerKeyOptional:
           "キーは任意です。入力すると 3 つの形式で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
+        models: "モデル",
+        modelsHint: "モデル ID をカンマ区切りで。保存すると選択されます。",
+        modelsPlaceholder: "例：gpt-5.5, claude-sonnet-5",
+        curl: {
+          filled: "curl コマンドから入力しました：{{what}}。",
+          model: "モデル {{model}}",
+          unknownEndpoint:
+            "URL が /chat/completions、/messages、/responses のいずれでも終わっていません。アドレスを自分で入力してください。",
+          urlPlaceholder: "アドレスの {{part}} を置き換えてください。",
+          keyPlaceholder:
+            "キー {{key}} はプレースホルダーです。自分の API キーを貼り付けてください。",
+        },
         saveAndFetch: "保存してモデルを取得",
         save: "保存",
       },
