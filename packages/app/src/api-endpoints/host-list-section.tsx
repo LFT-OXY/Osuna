@@ -13,6 +13,8 @@ import {
 } from "lucide-react-native";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { isNative } from "@/constants/platform";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
@@ -296,6 +298,7 @@ function EndpointRow({
   onArrange,
 }: EndpointRowProps) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
   const enabled = endpoint.enabled !== false;
   const { isPressSuppressed } = row;
   const handlePress = useCallback(() => {
@@ -320,8 +323,9 @@ function EndpointRow({
   return (
     <View
       style={[!isFirst && settingsStyles.rowBorder, row.isDragging && styles.rowDragging]}
-      testID={row.isDragging ? "api-endpoint-row-dragging" : undefined}
+      testID={rowTestId(row)}
     >
+      {row.isPlaceholder ? <View style={styles.dropSlot} pointerEvents="none" /> : null}
       <Pressable
         style={rowStyle}
         onPress={handlePress}
@@ -333,12 +337,13 @@ function EndpointRow({
         testID={`api-endpoint-row-${endpoint.id}`}
       >
         {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
-          <>
+          <View style={[styles.rowInner, row.isPlaceholder && styles.hidden]}>
             <View style={styles.rowContent}>
               {/* 已关闭是状态不是禁用：只把头像调淡、名称调灰，开关和整行照常可点。 */}
               {row.wrapHandle(
                 <View style={[settingsStyles.rowIconFrame, !enabled && styles.disabledIcon]}>
-                  {row.hasHandle && (hovered || row.isDragging) ? (
+                  {/* 握把悬停才画；悬停只在网页有，窄屏与原生端一直画（docs/hover.md）。 */}
+                  {row.hasHandle && (hovered || row.isDragging || isNative || isCompact) ? (
                     <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
                   ) : (
                     <Text style={styles.initial}>{initialOf(endpoint.name)}</Text>
@@ -382,14 +387,20 @@ function EndpointRow({
                 testID={`api-endpoint-switch-${endpoint.id}`}
               />
               {moves && onArrange ? (
-                <EndpointOrderMenu endpoint={endpoint} moves={moves} onArrange={onArrange} />
+                <EndpointOrderMenu
+                  endpoint={endpoint}
+                  moves={moves}
+                  isOpen={row.isMenuOpen}
+                  onOpenChange={row.onMenuOpenChange}
+                  onArrange={onArrange}
+                />
               ) : null}
               <ThemedChevronRight
                 size={ICON_SIZE.sm}
                 uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
               />
             </View>
-          </>
+          </View>
         )}
       </Pressable>
     </View>
@@ -426,16 +437,21 @@ const ORDER_ICONS = {
 function EndpointOrderMenu({
   endpoint,
   moves,
+  isOpen,
+  onOpenChange,
   onArrange,
 }: {
   endpoint: ApiEndpoint;
   moves: EndpointMoves;
+  // 受控：桌面端右键行也打开它（照 magpie 行的 oncontextmenu），锚在 ⋯ 按钮上。
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
   onArrange: (endpoint: ApiEndpoint, place: EndpointPlace) => void;
 }) {
   const { t } = useTranslation();
   const label = t("settings.apiEndpoints.order.menu", { name: endpoint.name });
   return (
-    <DropdownMenu compactMode="sheet">
+    <DropdownMenu compactMode="sheet" open={isOpen} onOpenChange={onOpenChange}>
       <RowActionsMenuTrigger
         accessibilityLabel={label}
         testID={`api-endpoint-order-menu-${endpoint.id}`}
@@ -486,6 +502,12 @@ function OrderMenuItem({
       {t(labelKey)}
     </DropdownMenuItem>
   );
+}
+
+function rowTestId(row: SortableEndpointRowInfo): string | undefined {
+  if (row.isDragging) return "api-endpoint-row-dragging";
+  if (row.isPlaceholder) return "api-endpoint-row-drop-slot";
+  return undefined;
 }
 
 // 整行的无障碍名称里读出的状态词。
@@ -578,10 +600,31 @@ const styles = StyleSheet.create((theme) => ({
   rowPressed: {
     backgroundColor: theme.colors.surface3,
   },
-  // 拖着的行浮在别的行上面：实底、描边与阴影，空出来的位置就是落点。
+  // 拖着走的那一份浮在占位上：实底、强调色描边与阴影。
+  // 被拖的行在列表里留下的等高占位：强调色虚线框，后面的行让开，停在哪儿就落在哪儿。
+  dropSlot: {
+    ...StyleSheet.absoluteFillObject,
+    margin: theme.spacing[1],
+    backgroundColor: theme.colors.surface2,
+    borderColor: theme.colors.accent,
+    borderStyle: "dashed",
+    borderWidth: 2,
+    borderRadius: theme.radius.md,
+  },
+  rowInner: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[4],
+  },
+  hidden: {
+    opacity: 0,
+  },
   rowDragging: {
     backgroundColor: theme.colors.surface1,
-    borderColor: theme.colors.borderAccent,
+    borderColor: theme.colors.accent,
     borderWidth: 1,
     borderRadius: theme.radius.md,
     ...theme.shadow.md,

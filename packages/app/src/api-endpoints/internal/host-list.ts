@@ -113,23 +113,6 @@ export function arrangeEndpoint(
   return endpoints.map((endpoint) => (members.has(endpoint.id) ? moved[next++] : endpoint.id));
 }
 
-/** 拖动结束后组里的新先后：挪动的是哪一行、落到组里第几个。没挪时为 null。 */
-export function draggedEndpoint(
-  before: string[],
-  after: string[],
-): { id: string; index: number } | null {
-  const sameWithout = (id: string) => {
-    const left = before.filter((entry) => entry !== id);
-    const right = after.filter((entry) => entry !== id);
-    return left.length === right.length && left.every((entry, i) => entry === right[i]);
-  };
-  for (const id of after) {
-    const index = after.indexOf(id);
-    if (index !== before.indexOf(id) && sameWithout(id)) return { id, index };
-  }
-  return null;
-}
-
 export interface EndpointMoves {
   top: boolean;
   up: boolean;

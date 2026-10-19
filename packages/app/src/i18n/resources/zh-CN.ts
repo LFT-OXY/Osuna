@@ -2495,7 +2495,7 @@ export const zhCN: TranslationResources = {
         moveToTop: "移到最前",
         moveToBottom: "移到最后",
         saved: "接口顺序已保存",
-        hint: "拖动排序：几家都有的模型先发给排在前面的那家。Alt+↑/↓ 移动。",
+        hint: "拖动排序：几家都有的模型先发给排在前面的那家。Alt+↑/↓ 移动，右键可移到最前或最后。",
       },
       resumeNow: "立刻恢复",
       resumeNowLabel: "立刻恢复 {{name}}",

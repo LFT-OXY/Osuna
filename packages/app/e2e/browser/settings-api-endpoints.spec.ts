@@ -392,6 +392,17 @@ test.describe("Settings API endpoints", () => {
       await expect.poll(storedOrder).toEqual([b, c, a, off]);
     });
 
+    await test.step("right-clicking a row opens the same menu (as magpie)", async () => {
+      await row(page, a).click({ button: "right" });
+      await expect(orderItem(page, "bottom")).toBeDisabled();
+      await orderItem(page, "top").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+      await row(page, a).click({ button: "right" });
+      await orderItem(page, "bottom").click();
+      await expect.poll(orderReader(page, "enabled")).toEqual([b, c, a]);
+      await expect.poll(storedOrder).toEqual([b, c, a, off]);
+    });
+
     await test.step("Alt+↑/↓ on the focused row moves it and keeps the focus on it", async () => {
       await row(page, a).focus();
       await page.keyboard.press("Alt+ArrowUp");
@@ -418,6 +429,30 @@ test.describe("Settings API endpoints", () => {
       await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
       expect(await rowOrder(page, "disabled")).toEqual([off]);
     });
+  });
+
+  test("two quick moves: the later one has the last word and the list never jumps back", async ({
+    page,
+  }) => {
+    const [a, b, c] = await seedRelays(["Relay A", "Relay B", "Relay C"]);
+    await holdSecondSetOrder(page);
+    await openApiEndpointsPage(page);
+    await expect.poll(orderReader(page, "enabled")).toEqual([a, b, c]);
+    await recordEnabledOrders(page);
+
+    await row(page, a).focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await page.keyboard.press("Alt+ArrowDown");
+
+    await expect.poll(storedOrder).toEqual([b, c, a]);
+    await expect.poll(orderReader(page, "enabled")).toEqual([b, c, a]);
+    await expect(row(page, a)).toBeFocused();
+    const seen = await recordedOrders(page);
+    const settled = seen.findIndex((order) => order.join() === [b, c, a].join());
+    expect(settled).toBeGreaterThanOrEqual(0);
+    expect(seen.slice(settled).map((order) => order.join())).toEqual(
+      seen.slice(settled).map(() => [b, c, a].join()),
+    );
   });
 
   test("a failed order change stays in place and the list goes back; a retry saves it", async ({
@@ -2550,7 +2585,12 @@ async function dragRow(page: Page, fromId: string, ontoId: string): Promise<void
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 - 10, { steps: 4 });
   await expect(page.getByTestId("api-endpoint-row-dragging")).toBeVisible();
+  await expect(page.getByTestId("api-endpoint-row-drop-slot")).toBeVisible();
   await page.mouse.move(from.x + from.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  // 占位停到目标行的位置上才松手：落点就是它。
+  await expect
+    .poll(async () => (await page.getByTestId("api-endpoint-row-drop-slot").boundingBox())?.y)
+    .toBeCloseTo(onto.y, -1);
   await page.mouse.up();
 }
 
@@ -2606,4 +2646,65 @@ async function hideManagementCapability(page: Page): Promise<void> {
       ws.send(JSON.stringify(envelope));
     });
   });
+}
+
+/**
+ * 第一个 set_order 照常送到 daemon，但它的响应扣到第二个发出来才给页面；第二个再晚 800 毫秒才送到 daemon。
+ * 这段时间里页面若拿第一个保存后的列表刷新，就会把后一次先排好的顺序画回去。
+ */
+async function holdSecondSetOrder(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    let sent = 0;
+    let answered = 0;
+    let firstAnswer: string | null = null;
+    server.onMessage((message) => {
+      const isAnswer = typeof message === "string" && message.includes("set_order.response");
+      if (isAnswer && ++answered === 1) {
+        firstAnswer = message;
+        return;
+      }
+      ws.send(message);
+    });
+    ws.onMessage((message) => {
+      const isSetOrder = typeof message === "string" && message.includes("set_order.request");
+      if (!isSetOrder || ++sent !== 2) {
+        server.send(message);
+        return;
+      }
+      const deliverFirst = () => {
+        if (firstAnswer === null) {
+          setTimeout(deliverFirst, 20);
+          return;
+        }
+        ws.send(firstAnswer);
+        setTimeout(() => server.send(message), 800);
+      };
+      deliverFirst();
+    });
+  });
+}
+
+/** 在页面里每 20 毫秒记一次「已开启」组的先后，直到读出来为止。 */
+async function recordEnabledOrders(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const samples: string[][] = [];
+    (window as unknown as { __orderSamples: string[][] }).__orderSamples = samples;
+    setInterval(() => {
+      const rows = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-testid="api-endpoints-enabled-group"] [data-testid^="api-endpoint-row-ep_"]',
+        ),
+      ).filter((element) => element.offsetParent !== null);
+      samples.push(
+        rows.map((element) =>
+          (element.getAttribute("data-testid") ?? "").slice("api-endpoint-row-".length),
+        ),
+      );
+    }, 20);
+  });
+}
+
+async function recordedOrders(page: Page): Promise<string[][]> {
+  return page.evaluate(() => (window as unknown as { __orderSamples: string[][] }).__orderSamples);
 }

@@ -2491,7 +2491,7 @@ export const ja: TranslationResources = {
         moveToTop: "先頭へ移動",
         moveToBottom: "末尾へ移動",
         saved: "エンドポイントの順番を保存しました",
-        hint: "ドラッグで並べ替え：複数のエンドポイントにあるモデルは上のものから使われます。Alt+↑/↓ で移動。",
+        hint: "ドラッグで並べ替え：複数のエンドポイントにあるモデルは上のものから使われます。Alt+↑/↓ で移動、右クリックで先頭・末尾へ移動。",
       },
       resumeNow: "今すぐ再開",
       resumeNowLabel: "{{name}} を今すぐ再開",

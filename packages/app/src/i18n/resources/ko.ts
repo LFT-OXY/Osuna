@@ -2482,7 +2482,7 @@ export const ko: TranslationResources = {
         moveToTop: "맨 위로 이동",
         moveToBottom: "맨 아래로 이동",
         saved: "엔드포인트 순서를 저장했습니다",
-        hint: "드래그해서 순서 변경: 여러 엔드포인트에 있는 모델은 위에 있는 것부터 사용합니다. Alt+↑/↓로 이동.",
+        hint: "드래그해서 순서 변경: 여러 엔드포인트에 있는 모델은 위에 있는 것부터 사용합니다. Alt+↑/↓로 이동, 오른쪽 클릭으로 맨 위나 맨 아래로 이동.",
       },
       resumeNow: "지금 재개",
       resumeNowLabel: "{{name}} 지금 재개",

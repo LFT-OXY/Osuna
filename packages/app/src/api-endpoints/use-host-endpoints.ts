@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
@@ -228,6 +228,9 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [runStateChange],
   );
 
+  // 照 magpie providerArrangeSeq：后发的挪动说了算。前一次保存回来时后一次还在路上，就不刷新也不报它的错，
+  // 免得把后一次先画好的顺序刷回旧样子。
+  const arrangeSeqRef = useRef(0);
   const arrange = useCallback(
     (endpoint: ApiEndpoint, place: EndpointPlace) => {
       if (!client) return;
@@ -235,27 +238,29 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!current) return;
       const order = arrangeEndpoint(current.endpoints, endpoint.id, place);
       if (!order) return;
+      const seq = ++arrangeSeqRef.current;
+      // 先按新顺序画出来（照 magpie）；进行中的刷新不能把它盖回去。
+      void queryClient.cancelQueries({ queryKey }, { revert: false });
+      const byId = new Map(current.endpoints.map((entry) => [entry.id, entry]));
+      queryClient.setQueryData<ApiEndpointListResponse["payload"]>(queryKey, {
+        ...current,
+        endpoints: order.flatMap((id) => byId.get(id) ?? []),
+      });
+      setActionFailure(null);
       void (async () => {
-        setActionFailure(null);
-        // 先按新顺序画出来（照 magpie）；进行中的刷新不能把它盖回去。
-        await queryClient.cancelQueries({ queryKey });
-        const byId = new Map(current.endpoints.map((entry) => [entry.id, entry]));
-        queryClient.setQueryData<ApiEndpointListResponse["payload"]>(queryKey, {
-          ...current,
-          endpoints: order.flatMap((id) => byId.get(id) ?? []),
-        });
+        let failure: ActionFailure | null = null;
         try {
           const result = await client.apiEndpointSetOrder({ endpointIds: order });
           if (result.error) {
-            setActionFailure({ code: result.error.code, message: describeError(result.error) });
-          } else {
-            toast.show(t("settings.apiEndpoints.order.saved"), { variant: "success" });
+            failure = { code: result.error.code, message: describeError(result.error) };
           }
         } catch (error) {
-          setActionFailure({ code: null, message: toErrorMessage(error) });
-        } finally {
-          await refresh();
+          failure = { code: null, message: toErrorMessage(error) };
         }
+        if (seq !== arrangeSeqRef.current) return;
+        if (failure) setActionFailure(failure);
+        else toast.show(t("settings.apiEndpoints.order.saved"), { variant: "success" });
+        await refresh();
       })();
     },
     [client, describeError, queryClient, queryKey, refresh, t, toast],

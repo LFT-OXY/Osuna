@@ -2520,7 +2520,7 @@ export const es: TranslationResources = {
         moveToTop: "Mover al principio",
         moveToBottom: "Mover al final",
         saved: "Orden de endpoints guardado",
-        hint: "Arrastra para reordenar: un modelo que ofrecen varios endpoints va primero al que está más arriba. Alt+↑/↓ para mover.",
+        hint: "Arrastra para reordenar: un modelo que ofrecen varios endpoints va primero al que está más arriba. Alt+↑/↓ para mover; clic derecho para llevarlo al principio o al final.",
       },
       resumeNow: "Reanudar ahora",
       resumeNowLabel: "Reanudar {{name}} ahora",

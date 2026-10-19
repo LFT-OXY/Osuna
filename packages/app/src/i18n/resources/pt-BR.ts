@@ -2506,7 +2506,7 @@ export const ptBR: TranslationResources = {
         moveToTop: "Mover para o topo",
         moveToBottom: "Mover para o final",
         saved: "Ordem dos endpoints salva",
-        hint: "Arraste para reordenar: um modelo oferecido por vários endpoints vai primeiro ao que está mais acima. Alt+↑/↓ para mover.",
+        hint: "Arraste para reordenar: um modelo oferecido por vários endpoints vai primeiro ao que está mais acima. Alt+↑/↓ para mover; clique com o botão direito para levar ao topo ou ao final.",
       },
       resumeNow: "Retomar agora",
       resumeNowLabel: "Retomar {{name}} agora",

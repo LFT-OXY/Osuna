@@ -3,7 +3,6 @@ import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   agentsReturningToOfficial,
   arrangeEndpoint,
-  draggedEndpoint,
   endpointMoves,
   endpointRowStatus,
   endpointSummary,
@@ -152,17 +151,6 @@ describe("arrangeEndpoint", () => {
     expect(arrangeEndpoint(list, "d", "bottom")).toBeNull();
     expect(arrangeEndpoint(list, "c", { index: 1 })).toBeNull();
     expect(arrangeEndpoint(list, "missing", "up")).toBeNull();
-  });
-});
-
-describe("draggedEndpoint", () => {
-  it("finds the row a drag moved and where it went within the group", () => {
-    expect(draggedEndpoint(["a", "c", "e"], ["c", "e", "a"])).toEqual({ id: "a", index: 2 });
-    expect(draggedEndpoint(["a", "c", "e"], ["e", "a", "c"])).toEqual({ id: "e", index: 0 });
-    expect(draggedEndpoint(["a", "c", "e"], ["c", "a", "e"])).toMatchObject({
-      index: expect.any(Number),
-    });
-    expect(draggedEndpoint(["a", "c"], ["a", "c"])).toBeNull();
   });
 });
 

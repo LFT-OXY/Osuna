@@ -2520,7 +2520,7 @@ export const fr: TranslationResources = {
         moveToTop: "Placer en premier",
         moveToBottom: "Placer en dernier",
         saved: "Ordre des endpoints enregistré",
-        hint: "Faites glisser pour réordonner : un modèle proposé par plusieurs endpoints va d’abord au plus haut. Alt+↑/↓ pour déplacer.",
+        hint: "Faites glisser pour réordonner : un modèle proposé par plusieurs endpoints va d’abord au plus haut. Alt+↑/↓ pour déplacer, clic droit pour le placer en premier ou en dernier.",
       },
       resumeNow: "Reprendre maintenant",
       resumeNowLabel: "Reprendre {{name}} maintenant",

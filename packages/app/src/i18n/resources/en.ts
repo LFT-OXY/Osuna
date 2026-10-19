@@ -2532,7 +2532,7 @@ export const en = {
         moveToTop: "Move to top",
         moveToBottom: "Move to bottom",
         saved: "Endpoint order saved",
-        hint: "Drag to reorder: a model several endpoints serve goes to the higher one first. Alt+↑/↓ to move.",
+        hint: "Drag to reorder: a model several endpoints serve goes to the higher one first. Alt+↑/↓ to move, right-click to move it to the top or the bottom.",
       },
       resumeNow: "Resume now",
       resumeNowLabel: "Resume {{name}} now",
