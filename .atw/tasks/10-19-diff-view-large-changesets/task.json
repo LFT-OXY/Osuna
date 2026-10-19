@@ -3,7 +3,7 @@
   "name": "diff-view-large-changesets",
   "title": "Diff 面板在改动文件多时卡顿",
   "description": "改动文件多时差异面板卡顿甚至卡死；第一期在现有结构上止血并实测，按文件懒加载留作第二期",
-  "status": "implement",
+  "status": "accept",
   "dev_type": null,
   "scope": null,
   "package": "app",
