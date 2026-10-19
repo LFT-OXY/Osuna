@@ -11,12 +11,12 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：不带口令、带 ChatGPT 形式令牌、带 claude.ai 形式令牌的本机请求都被收下，并认对 Claude Code、Codex。
-- [ ] 带 `Origin` 头、DNS 重绑定形式、带任一转发头的请求被拒，回 Agent 认得的错误格式。
-- [ ] 关掉开关后，带原口令的请求照常被接；再打开开关，CLI 配置里的口令不变。
-- [ ] 关掉 Codex 的开关后，`config.toml` 里 Osuna 的 Codex 服务商表还在，其余负责的键照 ADR 0004 还原；daemon 换端口重启后，即使开关关着，表里的地址指向新端口；用这张表发来的请求照常被接。
-- [ ] 认调用方的规则有纯逻辑用例；User-Agent 规则与拒收规则对照 magpie，结论写进实现记录。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：不带口令、带 ChatGPT 形式令牌、带 claude.ai 形式令牌的本机请求都被收下，并认对 Claude Code、Codex。
+- [x] 带 `Origin` 头、DNS 重绑定形式、带任一转发头的请求被拒，回 Agent 认得的错误格式。
+- [x] 关掉开关后，带原口令的请求照常被接；再打开开关，CLI 配置里的口令不变。
+- [x] 关掉 Codex 的开关后，`config.toml` 里 Osuna 的 Codex 服务商表还在，其余负责的键照 ADR 0004 还原；daemon 换端口重启后，即使开关关着，表里的地址指向新端口；用这张表发来的请求照常被接。
+- [x] 认调用方的规则有纯逻辑用例；User-Agent 规则与拒收规则对照 magpie，结论写进实现记录。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 15、19、37 条；research/codex-wiring.md 第 8、12、13 题；research/claude-code-wiring.md 第 1e 题；decisions.md Q10、Q17、Q24。

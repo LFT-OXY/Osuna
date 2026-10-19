@@ -14,10 +14,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 上面每份文档都改好，遵守 CLAUDE.md「Writing docs」与「Doc voice」。
-- [ ] 词汇表与界面文案、最终行为一致。
-- [ ] `THIRD_PARTY_NOTICES` 覆盖每个带 magpie MIT 声明的新文件（逐个对过）。
-- [ ] ADR 与实现一致，核实结果已补。
-- [ ] 改到的文件用 `npm run format:files` 格式化。
+- [x] 上面每份文档都改好，遵守 CLAUDE.md「Writing docs」与「Doc voice」。
+- [x] 词汇表与界面文案、最终行为一致。
+- [x] `THIRD_PARTY_NOTICES` 覆盖每个带 magpie MIT 声明的新文件（逐个对过）。
+- [x] ADR 与实现一致，核实结果已补。
+- [x] 改到的文件用 `npm run format:files` 格式化。
 
 参考：prd.md 第 3、39 条；prd.md「Acceptance Criteria」的「文档」一项。

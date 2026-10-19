@@ -12,11 +12,11 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：假环境里 `HTTP_PROXY` 指向本机一个不转发的假代理 → 提示「代理不转发」，修复说明是「环境变量」那一种；`NO_PROXY=127.0.0.1` 时不提示；`NO_PROXY=localhost` 时照样提示（Codex 不认这种写法）。
-- [ ] 纯逻辑用例覆盖代理来源的判断：环境变量大小写、系统代理、`NO_PROXY` 的各种写法、`respect_system_proxy`。
-- [ ] Osuna 起的 Codex 进程环境里 `NO_PROXY` 含 `127.0.0.1`，原有的值保留。
-- [ ] UI: Codex 设置页 / 代理不转发 / 桌面 1280 — 提示写明代理地址、来源与「如何修复」。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：假环境里 `HTTP_PROXY` 指向本机一个不转发的假代理 → 提示「代理不转发」，修复说明是「环境变量」那一种；`NO_PROXY=127.0.0.1` 时不提示；`NO_PROXY=localhost` 时照样提示（Codex 不认这种写法）。
+- [x] 纯逻辑用例覆盖代理来源的判断：环境变量大小写、系统代理、`NO_PROXY` 的各种写法、`respect_system_proxy`。
+- [x] Osuna 起的 Codex 进程环境里 `NO_PROXY` 含 `127.0.0.1`，原有的值保留。
+- [x] UI: Codex 设置页 / 代理不转发 / 桌面 1280 — 提示写明代理地址、来源与「如何修复」。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 5、38 条；research/claude-code-wiring.md 第 8 题「Codex 侧：代理不转发本机请求」；decisions.md Q18。

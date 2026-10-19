@@ -14,11 +14,11 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：假 ChatGPT 后端收到的对话请求，路径、查询串、请求头（除逐跳头、`Host`）与请求体都与「Codex」发出的一致；回复（含流式）原样回到「Codex」。
-- [ ] 模型清单、`/responses/compact`、`/alpha/search` 与一条其他路径同样原样转。
-- [ ] WebSocket 握手得到 426。
-- [ ] ChatGPT 回的 401、403 原样回给 Codex。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：假 ChatGPT 后端收到的对话请求，路径、查询串、请求头（除逐跳头、`Host`）与请求体都与「Codex」发出的一致；回复（含流式）原样回到「Codex」。
+- [x] 模型清单、`/responses/compact`、`/alpha/search` 与一条其他路径同样原样转。
+- [x] WebSocket 握手得到 426。
+- [x] ChatGPT 回的 401、403 原样回给 Codex。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 5、14 条；research/codex-wiring.md 第 3、8 题；decisions.md Q9。

@@ -18,14 +18,14 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端（假适配器返回 ChatGPT）：打开开关后 `config.toml` 只多 `openai_base_url`（指向中转站的 ChatGPT 后端地址）、`model` 与 Osuna 的 Codex 服务商表，没有 Osuna 写的 `model_provider`、`model_catalog_json`；关掉后按原样还原，服务商表保留。
-- [ ] 端到端（API key、未登录）：与现在写的一样。
-- [ ] 登录方式由 ChatGPT 变成 API key（或反过来）后，读状态时按新方式重写，旧方式写的键已还原。
-- [ ] 用户自己写了 `openai_base_url` 时的处理有用例，做法写进实现记录。
-- [ ] 外部改掉 `openai_base_url` 后，提示「不再经过中转站」。
-- [ ] 判断登录方式不读 `auth.json`、钥匙串；测试不在本机跑真的 Codex 登录。
-- [ ] 工作区路由那个推断有结论，写进实现记录。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端（假适配器返回 ChatGPT）：打开开关后 `config.toml` 只多 `openai_base_url`（指向中转站的 ChatGPT 后端地址）、`model` 与 Osuna 的 Codex 服务商表，没有 Osuna 写的 `model_provider`、`model_catalog_json`；关掉后按原样还原，服务商表保留。
+- [x] 端到端（API key、未登录）：与现在写的一样。
+- [x] 登录方式由 ChatGPT 变成 API key（或反过来）后，读状态时按新方式重写，旧方式写的键已还原。
+- [x] 用户自己写了 `openai_base_url` 时的处理有用例，做法写进实现记录。
+- [x] 外部改掉 `openai_base_url` 后，提示「不再经过中转站」。
+- [x] 判断登录方式不读 `auth.json`、钥匙串；测试不在本机跑真的 Codex 登录。
+- [x] 工作区路由那个推断有结论，写进实现记录。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 6、12、13、28 条；research/codex-wiring.md 第 3、7、13 题；decisions.md Q9。

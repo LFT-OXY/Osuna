@@ -10,13 +10,13 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：设了强制 Subagent 模型时，带 Subagent 标记的请求到达假上游时模型是它；主对话请求不变。
-- [ ] 带 `spawn_agent` 的请求，工具说明里补上了其余模型（不超过 200 个）；不带的请求不变。
-- [ ] 开关打开后，模型目录里接口模型标成 v1（API key 接法），ChatGPT 接法合并的清单同样；关掉后恢复。
-- [ ] `config.toml` 里 `multi_agent_v2` 开着（表、内联、点号三种写法）时有提示；读不到配置时有另一条提示。
-- [ ] 浏览器测试：保存成功与失败两种。
-- [ ] UI: Codex 设置页 / 「可用任意模型」开着且被 multi_agent_v2 盖过 / 桌面 1280 — 提示与「如何修复」可见，开关是 Switch。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：设了强制 Subagent 模型时，带 Subagent 标记的请求到达假上游时模型是它；主对话请求不变。
+- [x] 带 `spawn_agent` 的请求，工具说明里补上了其余模型（不超过 200 个）；不带的请求不变。
+- [x] 开关打开后，模型目录里接口模型标成 v1（API key 接法），ChatGPT 接法合并的清单同样；关掉后恢复。
+- [x] `config.toml` 里 `multi_agent_v2` 开着（表、内联、点号三种写法）时有提示；读不到配置时有另一条提示。
+- [x] 浏览器测试：保存成功与失败两种。
+- [x] UI: Codex 设置页 / 「可用任意模型」开着且被 multi_agent_v2 盖过 / 桌面 1280 — 提示与「如何修复」可见，开关是 Switch。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 33、34 条；research/claude-code-wiring.md 第 2c 题；decisions.md Q14、Q29。

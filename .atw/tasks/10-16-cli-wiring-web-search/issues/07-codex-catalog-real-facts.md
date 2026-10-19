@@ -10,10 +10,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：接口清单给了上下文、档位、看图的模型，目录里按这些值写；接口没给、models.dev 有的按 models.dev 写；都没有的与现在一样。
-- [ ] 只开 Codex 开关时也会下载 models.dev（价格表自动更新开着时）；两个开关都关时不下载。
-- [ ] 纯逻辑用例覆盖档位映射：接口或 models.dev 的档位名对到 Codex 收的档位名，以及默认档怎么定。
-- [ ] 对照 magpie 的做法，借鉴的代码文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：接口清单给了上下文、档位、看图的模型，目录里按这些值写；接口没给、models.dev 有的按 models.dev 写；都没有的与现在一样。
+- [x] 只开 Codex 开关时也会下载 models.dev（价格表自动更新开着时）；两个开关都关时不下载。
+- [x] 纯逻辑用例覆盖档位映射：接口或 models.dev 的档位名对到 Codex 收的档位名，以及默认档怎么定。
+- [x] 对照 magpie 的做法，借鉴的代码文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 23 条；decisions.md Q7；research/claude-code-wiring.md 第 3 题「Codex」（档位取值）。

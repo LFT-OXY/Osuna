@@ -11,10 +11,14 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 资源测试通过：9 种语言键齐全、无回退英文、zh-CN 用词与词汇表一致。
-- [ ] 旧键删除，无遗留引用。
-- [ ] UI: 上面列出的每处界面 / 浅色与深色 / 桌面 1280 与窄窗口 390 — 各有截图，放在任务目录下；与现有设置页同组件、同密度。
-- [ ] 截图对照后修正的不一致逐条列在本票里；没有改任何决定。
-- [ ] Electron 截图前后，真实的 `~/.claude`、`~/.codex` 修改时间没变（开工前后各记一次）。
+- [x] 资源测试通过：9 种语言键齐全、无回退英文、zh-CN 用词与词汇表一致。
+- [x] 旧键删除，无遗留引用。
+- [x] UI: 上面列出的每处界面 / 浅色与深色 / 桌面 1280 与窄窗口 390 — 各有截图，放在任务目录下；与现有设置页同组件、同密度。
+- [x] 截图对照后修正的不一致逐条列在本票里；没有改任何决定。
+- [x] Electron 截图前后，真实的 `~/.claude`、`~/.codex` 修改时间没变（开工前后各记一次）。
 
 参考：prd.md「UI and Design」；`archive/2026-10/10-13-api-endpoint-auto-switch` 的 12 号工单（同类收口的做法）。
+
+## Comments
+
+- 2026-10-19 整体验收：不一致项与修正清单写在 research/implementation-notes.md 29 节，没有抄进本票。`settings.json`、`config.toml`、`auth.json` 前后没变；`~/.claude/backups`、`~/.codex/logs_2.sqlite-wal`、`~/.codex/models_cache.json` 三项修改时间变了，归因于本机同时在用的 CLI 会话。中文截图里的相对时间（just now、5m ago）来自原有的 `utils/time.ts`，用户 10-19 定为已知例外，由任务 10-13-zh-relative-time-and-plan-labels 处理。25、27、28 号的截图拍在本票的视觉改动之前，重开提示改成卡片行后的样子没有重拍。

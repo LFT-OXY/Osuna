@@ -10,10 +10,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：同一模型 A（开了开关、Responses 地址）、B（没开、Responses 地址）：发给 A 的请求带 `web_search`，发给 B 的不带，点名它的 `tool_choice` 也不在；A 失败换到 B 时，B 收到的请求同样不带。
-- [ ] 用假上游模拟「带 `web_search` 就 400」：发给没开开关的这家时请求不再被拒。
-- [ ] 历史里有 `web_search_call` 项的请求按 magpie 的做法处理，有用例。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：同一模型 A（开了开关、Responses 地址）、B（没开、Responses 地址）：发给 A 的请求带 `web_search`，发给 B 的不带，点名它的 `tool_choice` 也不在；A 失败换到 B 时，B 收到的请求同样不带。
+- [x] 用假上游模拟「带 `web_search` 就 400」：发给没开开关的这家时请求不再被拒。
+- [x] 历史里有 `web_search_call` 项的请求按 magpie 的做法处理，有用例。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 10 条；research/web-search.md 第 6 题、「Codex 自身」、第 10 题；decisions.md Q20。

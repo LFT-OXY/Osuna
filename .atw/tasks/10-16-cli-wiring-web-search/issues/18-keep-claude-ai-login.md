@@ -12,13 +12,13 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：选项打开后 `settings.json` 的 `ANTHROPIC_AUTH_TOKEN` 为空；关掉选项后写回口令；关掉总开关时按接管记录还原。
-- [ ] 带 claude.ai 形式令牌和 `oauth-` beta 的请求：假上游收到的请求里没有这个令牌（用这家接口自己的 key），`anthropic-beta` 里没有 `oauth-` 项。
-- [ ] 上游 401、吊销的 403 让 CLI 收到 502 和接口名；其他 4xx 保持状态码，正文里的 `x-api-key` 换成 `API key`。
-- [ ] 两种不一致各有提示。
-- [ ] 浏览器测试：开关保存成功与失败两种。
-- [ ] UI: Claude Code 设置页 / 「保留 claude.ai 登录」关着、说明可见 / 桌面 1280 — 能用与不能用的功能都写明，开关是 Switch。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：选项打开后 `settings.json` 的 `ANTHROPIC_AUTH_TOKEN` 为空；关掉选项后写回口令；关掉总开关时按接管记录还原。
+- [x] 带 claude.ai 形式令牌和 `oauth-` beta 的请求：假上游收到的请求里没有这个令牌（用这家接口自己的 key），`anthropic-beta` 里没有 `oauth-` 项。
+- [x] 上游 401、吊销的 403 让 CLI 收到 502 和接口名；其他 4xx 保持状态码，正文里的 `x-api-key` 换成 `API key`。
+- [x] 两种不一致各有提示。
+- [x] 浏览器测试：开关保存成功与失败两种。
+- [x] UI: Claude Code 设置页 / 「保留 claude.ai 登录」关着、说明可见 / 桌面 1280 — 能用与不能用的功能都写明，开关是 Switch。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 27 条；research/claude-code-wiring.md 第 1 题；decisions.md Q15、Q24。

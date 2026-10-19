@@ -13,11 +13,11 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：模型清单里 ChatGPT 自带模型在前，接口模型以「接口标识/模型名」在后，带真实上下文与档位；假 ChatGPT 后端不应答时，3 秒内用上次结果；401、403 原样回。
-- [ ] 端到端：选接口模型的对话请求到达那家假上游，请求里没有 ChatGPT 令牌和账号 id，有 Codex 的身份头；那家失败时照常换同名的另一家。
-- [ ] `/responses/compact` 对接口模型按 magpie 拒绝；`/alpha/search` 对接口模型回 200 和说明，对 ChatGPT 自带模型照旧转给 ChatGPT。
-- [ ] 打开开关后 Codex 的模型缓存被标成过期（照 magpie 的写法），有用例。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：模型清单里 ChatGPT 自带模型在前，接口模型以「接口标识/模型名」在后，带真实上下文与档位；假 ChatGPT 后端不应答时，3 秒内用上次结果；401、403 原样回。
+- [x] 端到端：选接口模型的对话请求到达那家假上游，请求里没有 ChatGPT 令牌和账号 id，有 Codex 的身份头；那家失败时照常换同名的另一家。
+- [x] `/responses/compact` 对接口模型按 magpie 拒绝；`/alpha/search` 对接口模型回 200 和说明，对 ChatGPT 自带模型照旧转给 ChatGPT。
+- [x] 打开开关后 Codex 的模型缓存被标成过期（照 magpie 的写法），有用例。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 10、13、14、16 条；research/codex-wiring.md 第 5、8 题；research/web-search.md 第 6 题（`/alpha/search`）；decisions.md Q9、Q25。

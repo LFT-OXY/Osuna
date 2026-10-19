@@ -351,35 +351,41 @@
 
 ## Acceptance Criteria
 
-- [ ] 联网搜索：「自己能联网搜索」只在有 Anthropic 或 Responses 地址的接口上出现，默认关，保存后重启仍在。至少一家开着的接口打开它时，`settings.json` 里没有 Osuna 写的 `WebSearch` 禁止规则，否则有；用户自己写的规则始终不动。
-- [ ] Claude Code 的搜索子请求只到同一模型下打开了开关的接口，在它们之间照常自动切换；只有 Responses 地址的那家收到原生 `web_search`，Claude Code 收到带 title、url 的搜索结果块；一家都没有时收到 400 和说明文字。
-- [ ] Codex 的 `web_search` 只出现在发给打开了开关的接口的请求里；`/alpha/search` 对 ChatGPT 自带模型转给 ChatGPT，对接口模型回 200 和说明。
-- [ ] 用 ChatGPT 登录的 Codex：开关打开后 `config.toml` 只多 `openai_base_url`、`model` 与 Osuna 的 Codex 服务商表，没有 Osuna 写的 `model_provider`、`model_catalog_json`；关掉后按原样还原，Codex 服务商表保留。
-- [ ] ChatGPT 自带模型的请求到达假 ChatGPT 后端时，请求头与 CLI 发出的一致；发给第三方接口的请求里没有 ChatGPT 令牌和账号 id；模型清单里 ChatGPT 自带模型在前、接口模型以「接口标识/模型名」在后；WebSocket 握手得到 426。
-- [ ] API key 登录或未登录的 Codex 照旧用 Osuna 的 Codex 服务商；登录方式变了以后，下次检查按新方式重写。
-- [ ] CC Switch 一类的 OpenAI 镜像服务商：开着时地址指向中转站，关掉时还原。
-- [ ] 中转站收下不带口令、带 ChatGPT 令牌或 claude.ai 令牌的本机请求并认对 Agent；带 `Origin` 或转发头的请求被拒；关掉开关后带旧口令的请求照常被接。
-- [ ] 关掉开关后，记在 Osuna 的 Codex 服务商名下的对话能续上；会话历史列出所有 Codex 服务商的对话并标明。
-- [ ] 挪对话：一条或几条挪到目标 Codex 服务商后，对话文件里只有服务商变了，修改时间不变，状态库已更新，备份与记录在；一分钟内写过的被跳过并说明；挪回后与原文件逐字节相同；中途失败时已改的被改回。续对话因服务商不在而失败时，错误里有「挪到另一个 Codex 服务商」。
-- [ ] Codex 模型清单里有真实档位、上下文、能否看图的模型，按真实值写；查不到的保持原写法。
-- [ ] `settings.json` 带 BOM、带注释、带尾随逗号时，开关能打开，Osuna 只改负责的键，BOM 与注释原样保留；带注释或尾随逗号时设置页有提示；连 JSONC 都读不懂的被拒绝，原因是界面语言。
-- [ ] 云平台开关在接管时被拿掉、关掉时放回；写在托管设置、`~/.claude.json`、登录 shell 里的有提示；托管设置的地址盖过中转站时有提示。
-- [ ] 带点的 Claude 版本写成连字符；`CLAUDE_CODE_AUTO_MODE_SERVER=0` 只在条件成立时写；能到 max 没有 xhigh 的模型报 xhigh；没配映射的档位名用默认模型回答，不再 404。
-- [ ] 保留 claude.ai 登录打开时 `ANTHROPIC_AUTH_TOKEN` 为空；上游收不到 claude.ai 令牌和 `oauth-` beta；上游 401 与吊销的 403 让 CLI 收到 502；两种不一致有提示。
-- [ ] 打开开关时默认模型按第 28 条挑，设置页说明是哪一种；默认模型可以是「接口标识/模型名」，显示成「模型名（接口名）」。
-- [ ] CLI 存下另一个接口提供的模型或思考档位后，默认模型、默认思考档位跟着变，不报被改过，之后的重写不改回；换成接口没有的模型时报「模型被换掉」，「重新应用」「保留当前设置」按第 34 条生效。
-- [ ] 默认思考档位：Claude Code 与 Codex 写的键与第 31 条一致，max 时设置页写明会锁住；Ultra Code 只在支持时出现；关掉时还原；Osuna 的 Claude 对话没选 Ultra Code 时不被默认值盖过。
-- [ ] 后台小任务模型、Subagent 模型与思考档位、Codex 的默认 Subagent 模型与档位、强制 Subagent 模型、模型清单补全、记忆模型、「Codex Subagent 可用任意模型」各按第 32、33 条生效，关掉时还原；`multi_agent_v2` 开着时有提示。
-- [ ] 设置页显示第 34 条表里的各种情况与按钮，「保留当前设置」两种含义都对；「被绕过」在 CLI 用过而中转站没收到请求时出现。
-- [ ] 关开关前的确认框列出的改回、删除、新建项，与确认后文件的实际变化一致；预览不改任何文件。
-- [ ] 改完设置后列出要重开的会话与重开办法；Codex 共享后台进程没人连着时被重启并说明，有人连着时给出命令。
-- [ ] Codex 经代理连不上中转站时，提示按代理来源给出改法；Osuna 起的 Codex 进程环境里 `NO_PROXY` 含 `127.0.0.1`。
-- [ ] 界面：UI and Design 一节的截图验收各条成立；9 种语言的键齐全，中文没有残留英文。
-- [ ] 旧客户端兼容：新协议字段都可选，新功能挂在新的能力位上；官方 Paseo 手机 App 连新 daemon 时，聊天、提供方设置、第三方接口的旧视图照常工作。
-- [ ] 文档：第 3 条的新 ADR 写好，ADR 0004、0007 标出被取代处；`docs/glossary.md` 与最终行为一致；`docs/data-model.md`、`docs/usage.md`、`docs/custom-providers.md`、`THIRD_PARTY_NOTICES` 按第 39 条更新。
-- [ ] Codex 一次性核实的三件事有结果，写进实现记录；挪动会被改回的话，在 ADR 与界面说明里写明。
+- [x] 联网搜索：「自己能联网搜索」只在有 Anthropic 或 Responses 地址的接口上出现，默认关，保存后重启仍在。至少一家开着的接口打开它时，`settings.json` 里没有 Osuna 写的 `WebSearch` 禁止规则，否则有；用户自己写的规则始终不动。
+- [x] Claude Code 的搜索子请求只到同一模型下打开了开关的接口，在它们之间照常自动切换；只有 Responses 地址的那家收到原生 `web_search`，Claude Code 收到带 title、url 的搜索结果块；一家都没有时收到 400 和说明文字。
+- [x] Codex 的 `web_search` 只出现在发给打开了开关的接口的请求里；`/alpha/search` 对 ChatGPT 自带模型转给 ChatGPT，对接口模型回 200 和说明。
+- [x] 用 ChatGPT 登录的 Codex：开关打开后 `config.toml` 只多 `openai_base_url`、`model` 与 Osuna 的 Codex 服务商表，没有 Osuna 写的 `model_provider`、`model_catalog_json`；关掉后按原样还原，Codex 服务商表保留。
+- [x] ChatGPT 自带模型的请求到达假 ChatGPT 后端时，请求头与 CLI 发出的一致；发给第三方接口的请求里没有 ChatGPT 令牌和账号 id；模型清单里 ChatGPT 自带模型在前、接口模型以「接口标识/模型名」在后；WebSocket 握手得到 426。
+- [x] API key 登录或未登录的 Codex 照旧用 Osuna 的 Codex 服务商；登录方式变了以后，下次检查按新方式重写。
+- [x] CC Switch 一类的 OpenAI 镜像服务商：开着时地址指向中转站，关掉时还原。
+- [x] 中转站收下不带口令、带 ChatGPT 令牌或 claude.ai 令牌的本机请求并认对 Agent；带 `Origin` 或转发头的请求被拒；关掉开关后带旧口令的请求照常被接。
+- [x] 关掉开关后，记在 Osuna 的 Codex 服务商名下的对话能续上；会话历史列出所有 Codex 服务商的对话并标明。
+- [x] 挪对话：一条或几条挪到目标 Codex 服务商后，对话文件里只有服务商变了，修改时间不变，状态库已更新，备份与记录在；一分钟内写过的被跳过并说明；挪回后与原文件逐字节相同；中途失败时已改的被改回。续对话因服务商不在而失败时，错误里有「挪到另一个 Codex 服务商」。
+- [x] Codex 模型清单里有真实档位、上下文、能否看图的模型，按真实值写；查不到的保持原写法。
+- [x] `settings.json` 带 BOM、带注释、带尾随逗号时，开关能打开，Osuna 只改负责的键，BOM 与注释原样保留；带注释或尾随逗号时设置页有提示；连 JSONC 都读不懂的被拒绝，原因是界面语言。
+- [x] 云平台开关在接管时被拿掉、关掉时放回；写在托管设置、`~/.claude.json`、登录 shell 里的有提示；托管设置的地址盖过中转站时有提示。
+- [x] 带点的 Claude 版本写成连字符；`CLAUDE_CODE_AUTO_MODE_SERVER=0` 只在条件成立时写；能到 max 没有 xhigh 的模型报 xhigh；没配映射的档位名用默认模型回答，不再 404。
+- [x] 保留 claude.ai 登录打开时 `ANTHROPIC_AUTH_TOKEN` 为空；上游收不到 claude.ai 令牌和 `oauth-` beta；上游 401 与吊销的 403 让 CLI 收到 502；两种不一致有提示。
+- [x] 打开开关时默认模型按第 28 条挑，设置页说明是哪一种；默认模型可以是「接口标识/模型名」，显示成「模型名（接口名）」。
+- [x] CLI 存下另一个接口提供的模型或思考档位后，默认模型、默认思考档位跟着变，不报被改过，之后的重写不改回；换成接口没有的模型时报「模型被换掉」，「重新应用」「保留当前设置」按第 34 条生效。
+- [x] 默认思考档位：Claude Code 与 Codex 写的键与第 31 条一致，max 时设置页写明会锁住；Ultra Code 只在支持时出现；关掉时还原；Osuna 的 Claude 对话没选 Ultra Code 时不被默认值盖过。
+- [x] 后台小任务模型、Subagent 模型与思考档位、Codex 的默认 Subagent 模型与档位、强制 Subagent 模型、模型清单补全、记忆模型、「Codex Subagent 可用任意模型」各按第 32、33 条生效，关掉时还原；`multi_agent_v2` 开着时有提示。
+- [x] 设置页显示第 34 条表里的各种情况与按钮，「保留当前设置」两种含义都对；「被绕过」在 CLI 用过而中转站没收到请求时出现。
+- [x] 关开关前的确认框列出的改回、删除、新建项，与确认后文件的实际变化一致；预览不改任何文件。
+- [x] 改完设置后列出要重开的会话与重开办法；Codex 共享后台进程没人连着时被重启并说明，有人连着时给出命令。
+- [x] Codex 经代理连不上中转站时，提示按代理来源给出改法；Osuna 起的 Codex 进程环境里 `NO_PROXY` 含 `127.0.0.1`。
+- [x] 界面：UI and Design 一节的截图验收各条成立；9 种语言的键齐全，中文没有残留英文。
+- [x] 旧客户端兼容：新协议字段都可选，新功能挂在新的能力位上；官方 Paseo 手机 App 连新 daemon 时，聊天、提供方设置、第三方接口的旧视图照常工作。
+- [x] 文档：第 3 条的新 ADR 写好，ADR 0004、0007 标出被取代处；`docs/glossary.md` 与最终行为一致；`docs/data-model.md`、`docs/usage.md`、`docs/custom-providers.md`、`THIRD_PARTY_NOTICES` 按第 39 条更新。
+- [x] Codex 一次性核实的三件事有结果，写进实现记录；挪动会被改回的话，在 ADR 与界面说明里写明。
 - [ ] `npm run typecheck`、`npm run lint` 通过；改到的测试文件本机通过；合入后 CI 通过（已知常红的 Nix 两项除外）。
-- [ ] 用户验收（用户自己做）：真实的 Claude Code 在打开「自己能联网搜索」的接口上搜得到结果；真实的 Codex 用 ChatGPT 登录时，开关前后的对话是同一组，ChatGPT 自带模型与接口模型都能用；保留 claude.ai 登录时语音与 `/usage` 套餐额度可用。
+- [x] 用户验收（用户自己做）：真实的 Claude Code 在打开「自己能联网搜索」的接口上搜得到结果；真实的 Codex 用 ChatGPT 登录时，开关前后的对话是同一组，ChatGPT 自带模型与接口模型都能用；保留 claude.ai 登录时语音与 `/usage` 套餐额度可用。
+
+验收记录（2026-10-19）：
+- 本机：整仓 `npm run typecheck`、`npm run lint` 通过；本任务改过的 86 个单测与 daemon 端到端测试文件逐个单跑全过（3005 个用例），4 个浏览器测试文件全过（53 个用例）。
+- 未勾的一条只差「合入后 CI 通过」：这时本任务还没推送到 GitHub，CI 没跑过；推送后再看。
+- 用户认可的例外：中文截图里的相对时间（just now、5m ago）来自原有公共代码，由任务 10-13-zh-relative-time-and-plan-labels 处理；Claude Code 换模型后思考档位不改文件（20 号工单）；云平台开关一次只提示一处（16 号工单）。
+- 官方 Paseo 手机 App 的兼容只靠协议兼容测试，没有实机验收（原生端免验收）。
 
 ## Out of Scope
 

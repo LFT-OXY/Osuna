@@ -17,10 +17,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 四篇新 ADR 写好，各自写明取代了 ADR 0004、0007 的哪几句；依据指向 `research/` 下对应的笔记与 decisions.md 的题号。
-- [ ] ADR 0004、0007 里被取代的每一句旁标出被哪篇取代（照 ADR 0008 标 0007 的写法），原文保留不删。
-- [ ] ADR 0007 关于档位名的那句改正或标出。
-- [ ] 遵守 CLAUDE.md「Writing docs」与「Doc voice」；只写决定、理由与取舍，不写文件名、函数名这类实现细节。
-- [ ] 改到的文件用 `npm run format:files` 格式化。
+- [x] 四篇新 ADR 写好，各自写明取代了 ADR 0004、0007 的哪几句；依据指向 `research/` 下对应的笔记与 decisions.md 的题号。
+- [x] ADR 0004、0007 里被取代的每一句旁标出被哪篇取代（照 ADR 0008 标 0007 的写法），原文保留不删。
+- [x] ADR 0007 关于档位名的那句改正或标出。
+- [x] 遵守 CLAUDE.md「Writing docs」与「Doc voice」；只写决定、理由与取舍，不写文件名、函数名这类实现细节。
+- [x] 改到的文件用 `npm run format:files` 格式化。
 
 参考：prd.md「Implementation Decisions」第 3 条；research/decisions.md 全文；ADR 0008 的结构。

@@ -11,12 +11,16 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：`settings.json` 里开着 `CLAUDE_CODE_USE_BEDROCK=1`、关着 `CLAUDE_CODE_USE_VERTEX=0`：打开开关后前者被拿掉、后者不动；关掉后前者放回；中间用户自己又写了前者的，关掉时不覆盖。
-- [ ] 管理员设置、`~/.claude.json`、登录 shell 里有云平台开关时，各有一条提示，写明来源。
-- [ ] 管理员设置的地址不指向中转站时，提示「不再经过中转站」。
-- [ ] 测试不读真实的管理员设置目录与 `~/.claude.json`。
-- [ ] UI: Claude Code 设置页 / 云平台开关写在管理员设置里 / 桌面 1280 — 提示写明来源与改法。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：`settings.json` 里开着 `CLAUDE_CODE_USE_BEDROCK=1`、关着 `CLAUDE_CODE_USE_VERTEX=0`：打开开关后前者被拿掉、后者不动；关掉后前者放回；中间用户自己又写了前者的，关掉时不覆盖。
+- [x] 管理员设置、`~/.claude.json`、登录 shell 里有云平台开关时，各有一条提示，写明来源。
+- [x] 管理员设置的地址不指向中转站时，提示「不再经过中转站」。
+- [x] 测试不读真实的管理员设置目录与 `~/.claude.json`。
+- [x] UI: Claude Code 设置页 / 云平台开关写在管理员设置里 / 桌面 1280 — 提示写明来源与改法。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 25 条；research/claude-code-wiring.md 第 4 题；decisions.md Q4。
+
+## Comments
+
+- 2026-10-19 整体验收：云平台开关同时写在托管设置、`~/.claude.json`、登录 shell 几处时，设置页照 magpie 一次只提示优先级最高的一处，改掉后下次读状态再提示下一处。用户 10-19 认可这个做法。

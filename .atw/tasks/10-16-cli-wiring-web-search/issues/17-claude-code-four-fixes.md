@@ -11,11 +11,11 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：默认模型 `claude-opus-4.6`（某家这样列）写进 `settings.json` 的是连字符写法；别家的 `glm-4.6` 不改；用户自己写的值不改。
-- [ ] 条件成立时有 `CLAUDE_CODE_AUTO_MODE_SERVER=0`；加一家 `api.anthropic.com` 的接口后，重写时被拿掉；用户自己写了这个变量时不动；关掉开关后没有 Osuna 写的这一项。
-- [ ] 能到 max、没有 xhigh 的模型在能力提示里带 xhigh；Claude 模型不变。
-- [ ] 请求 `haiku` 而没有映射时，假上游收到默认模型的名字，CLI 不再收到 404。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：默认模型 `claude-opus-4.6`（某家这样列）写进 `settings.json` 的是连字符写法；别家的 `glm-4.6` 不改；用户自己写的值不改。
+- [x] 条件成立时有 `CLAUDE_CODE_AUTO_MODE_SERVER=0`；加一家 `api.anthropic.com` 的接口后，重写时被拿掉；用户自己写了这个变量时不动；关掉开关后没有 Osuna 写的这一项。
+- [x] 能到 max、没有 xhigh 的模型在能力提示里带 xhigh；Claude 模型不变。
+- [x] 请求 `haiku` 而没有映射时，假上游收到默认模型的名字，CLI 不再收到 404。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 26 条；research/claude-code-wiring.md 第 2b、5、6、7 题；decisions.md Q16。

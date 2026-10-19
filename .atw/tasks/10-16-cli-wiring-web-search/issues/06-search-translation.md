@@ -10,10 +10,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：只有 Responses 地址、开了开关的假上游收到原生 `web_search`；Claude Code 收到的回复里有 `server_tool_use` 与带 title、url 的 `web_search_tool_result`，流式与整份各一例。
-- [ ] 端到端：只有 Anthropic 地址、开了开关的假上游收到 `web_search_20250305`；Codex 收到的回复里有 `web_search_call`，流式与整份各一例。
-- [ ] 翻译的纯逻辑用例覆盖两个方向的请求与回复。
-- [ ] 改写规则对照 magpie，结论写进实现记录；借鉴 magpie 的代码，文件头保留 MIT 声明。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：只有 Responses 地址、开了开关的假上游收到原生 `web_search`；Claude Code 收到的回复里有 `server_tool_use` 与带 title、url 的 `web_search_tool_result`，流式与整份各一例。
+- [x] 端到端：只有 Anthropic 地址、开了开关的假上游收到 `web_search_20250305`；Codex 收到的回复里有 `web_search_call`，流式与整份各一例。
+- [x] 翻译的纯逻辑用例覆盖两个方向的请求与回复。
+- [x] 改写规则对照 magpie，结论写进实现记录；借鉴 magpie 的代码，文件头保留 MIT 声明。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 9、10 条；research/web-search.md 第 5 题（「重建时先找这家会搜的那个协议」）、第 10 题。

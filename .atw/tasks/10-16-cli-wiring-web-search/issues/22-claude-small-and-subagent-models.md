@@ -10,12 +10,12 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：两项设好后，`settings.json` 的 `env` 有对应的值；关掉开关后还原（原来没有就删掉）。
-- [ ] 请求模型是「模型名:high」时，假上游收到的是去掉后缀的模型名，档位按这家的格式设成 high（Anthropic、Responses、Chat 各一例）。
-- [ ] 带点的 Claude 版本写成连字符。
-- [ ] 浏览器测试：保存成功与失败两种。
-- [ ] UI: Claude Code 设置页 / 两项都设了 / 桌面 1280 与窄窗口 390 — 两项可见，模型名不是等宽字体，Subagent 保留英文。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：两项设好后，`settings.json` 的 `env` 有对应的值；关掉开关后还原（原来没有就删掉）。
+- [x] 请求模型是「模型名:high」时，假上游收到的是去掉后缀的模型名，档位按这家的格式设成 high（Anthropic、Responses、Chat 各一例）。
+- [x] 带点的 Claude 版本写成连字符。
+- [x] 浏览器测试：保存成功与失败两种。
+- [x] UI: Claude Code 设置页 / 两项都设了 / 桌面 1280 与窄窗口 390 — 两项可见，模型名不是等宽字体，Subagent 保留英文。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 32 条；research/claude-code-wiring.md 第 2a、2b 题；decisions.md Q14、Q29。

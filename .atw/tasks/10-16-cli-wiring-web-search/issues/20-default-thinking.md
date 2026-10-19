@@ -15,15 +15,19 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端（Claude Code）：选 high 写顶层 `effortLevel`（Claude 模型时另写 `modelSettings`）；选 max 写 `env.CLAUDE_CODE_EFFORT_LEVEL=max`；选 Ultra Code 写 `ultracode: true`；关掉开关后这些都还原。
-- [ ] 端到端（Codex）：写顶层 `model_reasoning_effort`，关掉后还原。
-- [ ] 默认模型不支持 xhigh 时选项里没有 Ultra Code；换成不支持当前档位的模型后，档位改到最近一档。
-- [ ] 浏览器测试：Osuna 新对话没有记住的选择时，思考档位是默认思考档位；保存成功与失败两种。
-- [ ] Osuna 的 Claude 对话没选 Ultra Code 时，交给 Agent SDK 的设置里明确是「不用」（单元测试，不运行 Claude Code）。
-- [ ] max 锁定的核实结论写进实现记录；会锁住时，Osuna 对话的思考档位旁有说明。
-- [ ] UI: Claude Code 设置页 / 默认思考档位选了 max / 桌面 1280 — 写明会锁住所有会话。
-- [ ] UI: Codex 设置页 / 默认思考档位下拉展开 / 窄窗口 390 — 选项完整可见。
-- [ ] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全，用词与 `docs/glossary.md`「默认思考档位」一致；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端（Claude Code）：选 high 写顶层 `effortLevel`（Claude 模型时另写 `modelSettings`）；选 max 写 `env.CLAUDE_CODE_EFFORT_LEVEL=max`；选 Ultra Code 写 `ultracode: true`；关掉开关后这些都还原。
+- [x] 端到端（Codex）：写顶层 `model_reasoning_effort`，关掉后还原。
+- [x] 默认模型不支持 xhigh 时选项里没有 Ultra Code；换成不支持当前档位的模型后，档位改到最近一档。
+- [x] 浏览器测试：Osuna 新对话没有记住的选择时，思考档位是默认思考档位；保存成功与失败两种。
+- [x] Osuna 的 Claude 对话没选 Ultra Code 时，交给 Agent SDK 的设置里明确是「不用」（单元测试，不运行 Claude Code）。
+- [x] max 锁定的核实结论写进实现记录；会锁住时，Osuna 对话的思考档位旁有说明。
+- [x] UI: Claude Code 设置页 / 默认思考档位选了 max / 桌面 1280 — 写明会锁住所有会话。
+- [x] UI: Codex 设置页 / 默认思考档位下拉展开 / 窄窗口 390 — 选项完整可见。
+- [x] 借鉴 magpie 的代码，文件头保留 MIT 声明；新文案 9 种语言齐全，用词与 `docs/glossary.md`「默认思考档位」一致；截图用无头浏览器在临时文件夹里拍（用户 2026-10-18 已同意）。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 31 条；research/claude-code-wiring.md 第 3、7 题；decisions.md Q6、Q27。
+
+## Comments
+
+- 2026-10-19 整体验收：换到不支持当前档位的模型时，Codex 照原文把 `model_reasoning_effort` 改成最近一档；Claude Code 照 magpie 不改 `settings.json`，daemon 读出时按最近一档报，Claude Code 运行时也降到这一档（research/implementation-notes.md 20 节）。用户 10-19 认可这个差别。
