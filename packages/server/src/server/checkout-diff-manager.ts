@@ -47,6 +47,7 @@ interface CheckoutDiffWatchTarget {
   pendingThrottleForce: boolean;
   lastRefreshStartedAt: number | null;
   lastPushAt: number | null;
+  pushGapWait: { timer: NodeJS.Timeout; release: () => void } | null;
   refreshPromise: Promise<void> | null;
   refreshQueued: boolean;
   refreshQueuedForce: boolean;
@@ -64,6 +65,13 @@ export interface CheckoutDiffSubscriptionRequest {
 export interface CheckoutDiffSubscription {
   initial: CheckoutDiffSnapshotPayload;
   unsubscribe: () => void;
+}
+
+function msUntilIntervalElapsed(lastAt: number | null): number {
+  if (lastAt === null) {
+    return 0;
+  }
+  return lastAt + CHECKOUT_DIFF_MIN_PUSH_INTERVAL_MS - Date.now();
 }
 
 export class CheckoutDiffManager {
@@ -185,6 +193,11 @@ export class CheckoutDiffManager {
       clearTimeout(target.throttleTimer);
       target.throttleTimer = null;
     }
+    if (target.pushGapWait) {
+      clearTimeout(target.pushGapWait.timer);
+      target.pushGapWait.release();
+      target.pushGapWait = null;
+    }
     target.workingTreeWatchUnsubscribe?.();
     target.workingTreeWatchUnsubscribe = null;
     target.workspaceGitUnsubscribe?.();
@@ -265,10 +278,7 @@ export class CheckoutDiffManager {
     if (target.throttleTimer) {
       return;
     }
-    const waitMs =
-      target.lastRefreshStartedAt === null
-        ? 0
-        : target.lastRefreshStartedAt + CHECKOUT_DIFF_MIN_PUSH_INTERVAL_MS - Date.now();
+    const waitMs = msUntilIntervalElapsed(target.lastRefreshStartedAt);
     if (waitMs <= 0) {
       this.runThrottledRefresh(target);
       return;
@@ -347,22 +357,25 @@ export class CheckoutDiffManager {
         force,
         ...(force ? { reason: "working-tree-watch" } : {}),
       });
-      target.latestPayload = snapshot;
       const fingerprint = JSON.stringify(snapshot);
-      if (fingerprint !== target.latestFingerprint) {
-        // 两次开算隔了 1 秒，但前一次算得慢、这次算得快时推送仍可能挨得太近，补足间隔再推
-        const pushWaitMs =
-          target.lastPushAt === null
-            ? 0
-            : target.lastPushAt + CHECKOUT_DIFF_MIN_PUSH_INTERVAL_MS - Date.now();
-        if (pushWaitMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, pushWaitMs));
+      if (fingerprint === target.latestFingerprint) {
+        target.latestPayload = snapshot;
+        return;
+      }
+      // 两次开算隔了 1 秒，但前一次算得慢、这次算得快时推送仍可能挨得太近，补足间隔再推。
+      // 等待期间 latestPayload 仍是上一份，新订阅者拿到的首份与随后的推送不会重复
+      const pushWaitMs = msUntilIntervalElapsed(target.lastPushAt);
+      if (pushWaitMs > 0) {
+        await this.waitForPushGap(target, pushWaitMs);
+        if (target.listeners.size === 0) {
+          return;
         }
-        target.latestFingerprint = fingerprint;
-        target.lastPushAt = Date.now();
-        for (const listener of target.listeners) {
-          listener(snapshot);
-        }
+      }
+      target.latestPayload = snapshot;
+      target.latestFingerprint = fingerprint;
+      target.lastPushAt = Date.now();
+      for (const listener of target.listeners) {
+        listener(snapshot);
       }
     })();
 
@@ -378,6 +391,18 @@ export class CheckoutDiffManager {
       target.refreshQueuedForce = false;
       this.scheduleThrottledRefresh(target, queuedForce);
     }
+  }
+
+  private waitForPushGap(target: CheckoutDiffWatchTarget, waitMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      target.pushGapWait = {
+        timer: setTimeout(() => {
+          target.pushGapWait = null;
+          resolve();
+        }, waitMs),
+        release: resolve,
+      };
+    });
   }
 
   private ensureTarget(cwd: string, compare: CheckoutDiffCompareInput): CheckoutDiffWatchTarget {
@@ -404,6 +429,7 @@ export class CheckoutDiffManager {
       pendingThrottleForce: false,
       lastRefreshStartedAt: null,
       lastPushAt: null,
+      pushGapWait: null,
       refreshPromise: null,
       refreshQueued: false,
       refreshQueuedForce: false,

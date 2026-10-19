@@ -377,10 +377,10 @@ function reconcileCheckoutDiffSubscriptions(input: {
       apply(payload);
     };
     const throttleUpdate = (payload: CheckoutDiffPushPayload) => {
-      const waitMs =
-        lastUpdateAppliedAt === null
-          ? 0
-          : lastUpdateAppliedAt + CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS - Date.now();
+      let waitMs = 0;
+      if (lastUpdateAppliedAt !== null) {
+        waitMs = lastUpdateAppliedAt + CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS - Date.now();
+      }
       if (waitMs <= 0 && !pendingUpdateTimer) {
         applyUpdate(payload);
         return;
