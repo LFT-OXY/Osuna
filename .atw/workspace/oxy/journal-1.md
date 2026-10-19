@@ -1096,3 +1096,47 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 37: CLI 接线与联网搜索：真实 CLI 验收、32 号显示名、整体验收与归档
+<!-- atw-session: v=2 fp=8a22b25d5cbbaa97 -->
+
+**Date**: 2026-10-19
+**Task**: CLI 接线与联网搜索：真实 CLI 验收、32 号显示名、整体验收与归档
+**Package**: server
+**Branch**: `main`
+
+### Summary
+
+用户用真实 Claude Code、Codex 做 31 号验收，显示名一项不通过，开 32 号修好后复看通过；整体验收逐条核对 prd.md 与 30 张工单，本机补跑改过的测试全过，任务归档。
+
+### Main Changes
+
+- 31 号工单记下真实 CLI 验收结果；新开 32 号工单修 Codex /model 里接口模型的显示名（32 号的修复 1e0d6bc5e 由另一个会话提交）
+- 31、32 号经用户授权勾完；任务进入验收
+- 整体验收：5 个只读子代理核对约 200 条工单验收项，全部满足；prd.md 勾 28 条，只留「合入后 CI 通过」（还没推送）
+- 用户认可的例外写进 prd.md 验收记录与 14、16、20、26、29 号工单备注：中文相对时间残留英文归 10-13 任务、Claude Code 换模型不改档位、云平台开关一次提示一处
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `763a57758` | chore(task): 10-16-cli-wiring-web-search 工单 31 记真实验收结果，新开工单 32 修 Codex /model 里接口模型的显示名 |
+| `b57a3d8f9` | chore(task): 10-16-cli-wiring-web-search 工单 31、32 完成——真实 CLI 验收四项通过，Codex /model 显示名经 32 号修复后用户复看通过 |
+| `a0b6e0eca` | chore(task): 10-16-cli-wiring-web-search 工单全部完成，进入验收 |
+| `1090f99d2` | chore(task): 10-16-cli-wiring-web-search acceptance check |
+
+### Testing
+
+- [OK] 整仓 npm run typecheck、npm run lint 通过
+- [OK] 本任务改过的 86 个测试文件逐个单跑全过（3005 个用例）；4 个浏览器测试文件全过（53 个用例）
+- [OK] dev 桌面端用真实配置复看 32 号显示名，通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送 main 到 GitHub（本地领先 116 个提交），CI 通过后补勾 prd.md 最后一条
+- 另开工单：daemon 重启后续不上的 Codex Agent 显示「Failed to load agent」页，缺说明与挪动按钮

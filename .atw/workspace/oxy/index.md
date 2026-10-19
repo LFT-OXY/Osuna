@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
-- **Last Active**: 2026-10-17
+- **Total Sessions**: 37
+- **Last Active**: 2026-10-19
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1098 | Active |
+| `journal-1.md` | ~1142 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -30,6 +30,7 @@
 
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-10-19 | CLI 接线与联网搜索：真实 CLI 验收、32 号显示名、整体验收与归档 | `763a57758`, `b57a3d8f9`, `a0b6e0eca`, `1090f99d2` | `main` |
 | 36 | 2026-10-17 | 中转站稳健性：核对工单 01–22、用户验收工单 23、归档 | `a07342a89`, `b93865267` | `compare-magpie-third-party-api-gaps` |
 | 35 | 2026-10-15 | 第三方接口自动切换：真实 CLI 验收、开 PR #17 并归档 | `b260bf904` | `research-multi-provider-gateway-failover` |
 | 34 | 2026-10-13 | 合并上游 v0.11.2：PR #16 并入 main 后的收尾——关闭工单 15 与任务归档 | `1826fde6b`, `f3f3a766e`, `8d42692e9`, `000e8ac2e` | `main` |
