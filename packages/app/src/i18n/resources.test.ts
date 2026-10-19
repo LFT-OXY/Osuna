@@ -486,11 +486,13 @@ describe("translation resources", () => {
     expect(zhCN.settings.hostSections.apiEndpoints).toBe("第三方接口");
   });
 
-  // docs/glossary.md 定下的中文界面词：联网搜索、默认思考档位、Codex 服务商、中转站，Subagent 保留英文。
+  // docs/glossary.md 定下的中文界面词：使用第三方接口、默认模型、联网搜索、默认思考档位、Codex 服务商、中转站，Subagent 保留英文。
   it("uses the CLI wiring terms in zh-CN", () => {
     const agent = zhCN.settings.apiEndpoints.agent;
     expect(zhCN.settings.apiEndpoints.webSearch.title).toBe("联网搜索");
     expect(zhCN.settings.apiEndpoints.webSearch.switch).toBe("自己能联网搜索");
+    expect(agent.useSwitch).toBe("使用第三方接口");
+    expect(agent.defaultModel).toBe("默认模型");
     expect(agent.defaultThinking).toBe("默认思考档位");
     expect(agent.subagentModel).toBe("Subagent 模型");
     expect(zhCN.panels.sessionHistory.row.codexModelProvider).toBe("Codex 服务商");

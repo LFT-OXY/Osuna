@@ -2255,7 +2255,7 @@ export const ru: TranslationResources = {
       label: "История сессий",
       subtitle: "Сессии провайдеров на этом хосте",
       tooltip: "Возобновить сессии провайдеров в терминале",
-      loading: "Загрузка сессий...",
+      loading: "Загрузка сессий…",
       updateHost: "Обновите хост, чтобы показать сессии провайдеров.",
       scope: {
         workspace: "Рабочее пространство",
@@ -2268,7 +2268,7 @@ export const ru: TranslationResources = {
       },
       actions: {
         refresh: "Обновить",
-        refreshing: "Обновление...",
+        refreshing: "Обновление…",
       },
       selection: {
         count_one: "Выбрано: {{count}}",
@@ -2287,12 +2287,12 @@ export const ru: TranslationResources = {
         hide: "Скрыть подробности",
       },
       row: {
-        opening: "Открытие...",
+        opening: "Открытие…",
         paseo: "Osuna",
         menu: "Действия с сессией",
         copyResumeCommand: "Копировать команду возобновления",
         importAsAgent: "Импортировать как агента Osuna",
-        importing: "Импорт...",
+        importing: "Импорт…",
         codexModelProvider: "Провайдер моделей Codex",
       },
       move: {
@@ -2308,7 +2308,7 @@ export const ru: TranslationResources = {
         rebuildNote:
           "После переноса продолжите разговор хотя бы раз. До этого, если Codex пересоберёт базу состояния, Codex снова продолжит его через {{from}}.",
         confirm: "Перенести",
-        moving: "Перенос...",
+        moving: "Перенос…",
         moved: "Перенесено к {{to}}",
         notMoved: "Разговор не перенесён",
         movedPartly: "Перенесено, но база состояния Codex не обновлена",
@@ -2490,7 +2490,7 @@ export const ru: TranslationResources = {
       add: "Добавить API-эндпоинт",
       empty: "API-эндпоинтов пока нет",
       allOff: "Все API-эндпоинты выключены.",
-      loading: "Загрузка API-эндпоинтов...",
+      loading: "Загрузка API-эндпоинтов…",
       unavailable: "Подключитесь к этому хосту, чтобы управлять его API-эндпоинтами.",
       updateHost:
         "Обновите Osuna на этом хосте, чтобы управлять API-эндпоинтами, общими для всех агентов.",

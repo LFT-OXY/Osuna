@@ -2213,7 +2213,7 @@ export const zhCN: TranslationResources = {
       label: "会话历史",
       subtitle: "此主机上的提供方会话",
       tooltip: "在终端中恢复提供方会话",
-      loading: "正在加载会话...",
+      loading: "正在加载会话…",
       updateHost: "请更新主机以列出提供方会话。",
       scope: {
         workspace: "工作区",
@@ -2226,7 +2226,7 @@ export const zhCN: TranslationResources = {
       },
       actions: {
         refresh: "刷新",
-        refreshing: "正在刷新...",
+        refreshing: "正在刷新…",
       },
       selection: {
         count_one: "已选 {{count}} 条",
@@ -2245,12 +2245,12 @@ export const zhCN: TranslationResources = {
         hide: "隐藏详情",
       },
       row: {
-        opening: "正在打开...",
+        opening: "正在打开…",
         paseo: "Osuna",
         menu: "会话操作",
         copyResumeCommand: "复制恢复命令",
         importAsAgent: "导入为 Osuna Agent",
-        importing: "正在导入...",
+        importing: "正在导入…",
         codexModelProvider: "Codex 服务商",
       },
       move: {
@@ -2265,7 +2265,7 @@ export const zhCN: TranslationResources = {
         rebuildNote:
           "挪完后续一次这段对话。在那之前 Codex 若重建状态库，会照旧在 {{from}} 下续它。",
         confirm: "挪动",
-        moving: "正在挪动...",
+        moving: "正在挪动…",
         moved: "已挪到 {{to}}",
         notMoved: "对话没有挪动",
         movedPartly: "已挪动，但 Codex 的状态库没有更新",

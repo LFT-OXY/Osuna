@@ -2,7 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import React, { useCallback, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -308,12 +308,21 @@ function ChangedFile({ file }: { file: SwitchOffFileView }) {
         ? file.foldedLines.map((line) => <ChangedLine key={line.position} line={line} />)
         : null}
       {showsMoreButton ? (
-        <View style={styles.more}>
-          <Button variant="ghost" size="sm" onPress={unfold} testID="switch-off-more-lines">
-            {t("settings.apiEndpoints.agent.switchOffPreview.moreLines", {
-              count: file.foldedLines.length,
-            })}
-          </Button>
+        // 与上面各行的文字同一起点：左边留出 −/↺ 那一栏。
+        <View style={styles.line}>
+          <View style={styles.symbol} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={unfold}
+            style={styles.more}
+            testID="switch-off-more-lines"
+          >
+            <Text variant="caption" color="foregroundMuted">
+              {t("settings.apiEndpoints.agent.switchOffPreview.moreLines", {
+                count: file.foldedLines.length,
+              })}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -341,14 +350,13 @@ function ChangedLine({ line }: { line: SwitchOffLineView }) {
       </Text>
       <View style={styles.lineBody}>
         <View style={styles.lineMain}>
-          <Text
+          <ConfigLineText
+            text={line.text.trim()}
             variant="caption"
             color={textColor}
-            style={[styles.mono, styles.wrapAnywhere, isRemoved && styles.removedText]}
+            isStruck={isRemoved}
             testID="switch-off-line-text"
-          >
-            {line.text.trim()}
-          </Text>
+          />
           {isRemoved ? null : (
             <Text variant="micro" color="foregroundMuted" style={styles.tag}>
               {t("settings.apiEndpoints.agent.switchOffPreview.valueBefore")}
@@ -356,16 +364,57 @@ function ChangedLine({ line }: { line: SwitchOffLineView }) {
           )}
         </View>
         {now === null ? null : (
-          <Text
+          <ConfigLineText
+            text={now}
             variant="micro"
             color="foregroundMuted"
-            style={[styles.mono, styles.wrapAnywhere]}
+            isStruck={false}
             testID="switch-off-line-now"
-          >
-            {now}
-          </Text>
+          />
         )}
       </View>
+    </View>
+  );
+}
+
+interface ConfigLineTextProps {
+  text: string;
+  variant: "caption" | "micro";
+  color: TextColor;
+  isStruck: boolean;
+  testID: string;
+}
+
+/** 值从哪里开始：JSON 的 `"键": ` 或 TOML 的 `键 = ` 之后；没有键（如 `{`、数组项）为 null。 */
+function valueStart(text: string): number | null {
+  const jsonKeyEnd = text.indexOf('": ');
+  if (jsonKeyEnd >= 0) return jsonKeyEnd + 3;
+  const tomlKeyEnd = text.indexOf(" = ");
+  if (tomlKeyEnd >= 0) return tomlKeyEnd + 3;
+  return null;
+}
+
+/**
+ * 一行配置：在键之后分成两段，窄窗口里值整段换到下一行，不在模型名中间断开；值比整行还长时截断。
+ * 键与值之间的空格留在第一段里，整行文字（textContent）与文件里一致。
+ */
+function ConfigLineText({ text, variant, color, isStruck, testID }: ConfigLineTextProps) {
+  const separatorEnd = valueStart(text);
+  const segments =
+    separatorEnd === null ? [text] : [text.slice(0, separatorEnd), text.slice(separatorEnd)];
+  return (
+    <View style={styles.configLine} testID={testID}>
+      {segments.map((segment) => (
+        <Text
+          key={segment}
+          variant={variant}
+          color={color}
+          numberOfLines={1}
+          style={[styles.mono, styles.configSegment, isStruck && styles.removedText]}
+        >
+          {segment}
+        </Text>
+      ))}
     </View>
   );
 }
@@ -405,6 +454,18 @@ const styles = StyleSheet.create((theme) => ({
   tag: {
     flexShrink: 0,
   },
+  // 第一段末尾的空格在行末会被吞掉，键与值之间的空隙由 columnGap 画出来。
+  configLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: theme.spacing[1.5],
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  configSegment: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
   line: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -428,7 +489,7 @@ const styles = StyleSheet.create((theme) => ({
     textDecorationLine: "line-through",
   },
   more: {
-    alignItems: "flex-start",
+    paddingVertical: theme.spacing[1],
   },
   actions: {
     flex: 1,

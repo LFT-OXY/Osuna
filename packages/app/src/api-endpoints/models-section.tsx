@@ -18,6 +18,7 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
 import { formatTimeAgo } from "@/utils/time";
@@ -77,6 +78,8 @@ export function ApiEndpointModelsSection({
   const [query, setQuery] = useState("");
   const [activeFamily, setActiveFamily] = useState<ModelFamilyId | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  // 窄窗口里两栏会把家族名和模型名都截短：家族改成上面一行可横滑的标签，模型在下面占满宽。
+  const isCompact = useIsCompactFormFactor();
   const entries = useMemo(() => buildModelEntries(source), [source]);
   const groups = useMemo(() => groupModelEntries(entries, query), [entries, query]);
   const active = groups.find((group) => group.family === activeFamily) ?? groups[0] ?? null;
@@ -151,13 +154,20 @@ export function ApiEndpointModelsSection({
     );
   } else {
     body = (
-      <View style={styles.columns}>
-        <ScrollView style={styles.familyColumn} testID="api-endpoint-model-families">
+      <View style={isCompact ? styles.columnsCompact : styles.columns}>
+        <ScrollView
+          horizontal={isCompact}
+          showsHorizontalScrollIndicator={false}
+          style={isCompact ? styles.familyRowCompact : styles.familyColumn}
+          contentContainerStyle={isCompact ? styles.familyRowContent : undefined}
+          testID="api-endpoint-model-families"
+        >
           {groups.map((group) => (
             <FamilyItem
               key={group.family}
               group={group}
               isActive={group.family === active.family}
+              isCompact={isCompact}
               onPress={setActiveFamily}
             />
           ))}
@@ -267,10 +277,12 @@ function CenteredMessage({ testID, children }: { testID: string; children: strin
 function FamilyItem({
   group,
   isActive,
+  isCompact,
   onPress,
 }: {
   group: ModelFamilyGroup;
   isActive: boolean;
+  isCompact: boolean;
   onPress: (family: ModelFamilyId) => void;
 }) {
   const familyName = useFamilyName();
@@ -293,7 +305,11 @@ function FamilyItem({
       testID={`api-endpoint-model-family-${group.family}`}
     >
       <ModelFamilyIcon family={group.family} size={FAMILY_ICON_SIZE} />
-      <Text style={styles.flex} numberOfLines={1} weight={isActive ? "medium" : undefined}>
+      <Text
+        style={isCompact ? null : styles.flex}
+        numberOfLines={1}
+        weight={isActive ? "medium" : undefined}
+      >
         {familyName(group.family)}
       </Text>
       <Text variant="caption" color="foregroundMuted">
@@ -535,6 +551,19 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     borderRightWidth: 1,
     borderRightColor: theme.colors.borderCardRow,
+    padding: theme.spacing[2],
+  },
+  columnsCompact: {
+    flex: 1,
+  },
+  familyRowCompact: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderCardRow,
+  },
+  familyRowContent: {
+    gap: theme.spacing[1],
     padding: theme.spacing[2],
   },
   familyItem: {

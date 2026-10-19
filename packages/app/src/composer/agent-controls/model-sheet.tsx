@@ -10,12 +10,12 @@ import { useProviderIcon } from "@/components/provider-icons";
 import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/model-browser";
 import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
+import { AGENT_CONTROLS_SHEET_SNAP_POINTS } from "@/composer/agent-controls/layout";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 
-const SNAP_POINTS = ["80%", "90%"];
 const MODEL_LIST_TOP_INSET = 4;
 const MODEL_ROW_STRIDE = 44;
 const MODEL_VIEWPORT_VISIBLE_ROWS = 4.5;
@@ -298,7 +298,7 @@ export function CompactModelSheet({
         header={rootHeader}
         visible={isOpen}
         onClose={close}
-        snapPoints={SNAP_POINTS}
+        snapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
         scrollable={false}
         sizeContentToCurrentSnapPoint={usesBottomSheet}
         contentStyle={styles.sheetBody}
@@ -347,7 +347,7 @@ export function CompactModelSheet({
           header={modelBrowser.header}
           visible={isModelBrowserOpen}
           onClose={closeModelBrowser}
-          snapPoints={SNAP_POINTS}
+          snapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
           scrollable={false}
           sizeContentToCurrentSnapPoint
           presentation="push"

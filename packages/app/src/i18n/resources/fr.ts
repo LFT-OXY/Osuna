@@ -2272,7 +2272,7 @@ export const fr: TranslationResources = {
       label: "Historique des sessions",
       subtitle: "Sessions des fournisseurs sur cet hôte",
       tooltip: "Reprendre des sessions de fournisseurs dans un terminal",
-      loading: "Chargement des sessions...",
+      loading: "Chargement des sessions…",
       updateHost: "Mettez à jour l’hôte pour lister les sessions des fournisseurs.",
       scope: {
         workspace: "Espace de travail",
@@ -2285,7 +2285,7 @@ export const fr: TranslationResources = {
       },
       actions: {
         refresh: "Actualiser",
-        refreshing: "Actualisation...",
+        refreshing: "Actualisation…",
       },
       selection: {
         count_one: "{{count}} sélectionnée",
@@ -2304,12 +2304,12 @@ export const fr: TranslationResources = {
         hide: "Masquer les détails",
       },
       row: {
-        opening: "Ouverture...",
+        opening: "Ouverture…",
         paseo: "Osuna",
         menu: "Actions de la session",
         copyResumeCommand: "Copier la commande de reprise",
         importAsAgent: "Importer comme agent Osuna",
-        importing: "Importation...",
+        importing: "Importation…",
         codexModelProvider: "Fournisseur de modèles Codex",
       },
       move: {
@@ -2325,7 +2325,7 @@ export const fr: TranslationResources = {
         rebuildNote:
           "Reprenez la conversation une fois après le déplacement. D'ici là, si Codex reconstruit sa base d'état, Codex la reprendra de nouveau avec {{from}}.",
         confirm: "Déplacer",
-        moving: "Déplacement...",
+        moving: "Déplacement…",
         moved: "Déplacée vers {{to}}",
         notMoved: "Conversation non déplacée",
         movedPartly: "Déplacée, mais la base d'état de Codex n'a pas été mise à jour",
@@ -2507,7 +2507,7 @@ export const fr: TranslationResources = {
       add: "Ajouter un endpoint d'API",
       empty: "Aucun endpoint d'API pour l'instant",
       allOff: "Tous les endpoints d'API sont désactivés.",
-      loading: "Chargement des endpoints d'API...",
+      loading: "Chargement des endpoints d'API…",
       unavailable: "Connectez-vous à cet hôte pour gérer ses endpoints d'API.",
       updateHost:
         "Mettez à jour Osuna sur cet hôte pour gérer des endpoints d'API partagés par tous les agents.",

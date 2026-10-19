@@ -2243,7 +2243,7 @@ export const ja: TranslationResources = {
       label: "セッション履歴",
       subtitle: "このホストのプロバイダーセッション",
       tooltip: "プロバイダーセッションをターミナルで再開",
-      loading: "セッションを読み込み中...",
+      loading: "セッションを読み込み中…",
       updateHost: "プロバイダーセッションを一覧表示するにはホストを更新してください。",
       scope: {
         workspace: "ワークスペース",
@@ -2256,7 +2256,7 @@ export const ja: TranslationResources = {
       },
       actions: {
         refresh: "更新",
-        refreshing: "更新中...",
+        refreshing: "更新中…",
       },
       selection: {
         count_one: "{{count}} 件選択中",
@@ -2275,12 +2275,12 @@ export const ja: TranslationResources = {
         hide: "詳細を隠す",
       },
       row: {
-        opening: "開いています...",
+        opening: "開いています…",
         paseo: "Osuna",
         menu: "セッション操作",
         copyResumeCommand: "再開コマンドをコピー",
         importAsAgent: "Osuna エージェントとしてインポート",
-        importing: "インポート中...",
+        importing: "インポート中…",
         codexModelProvider: "Codex モデルプロバイダー",
       },
       move: {
@@ -2296,7 +2296,7 @@ export const ja: TranslationResources = {
         rebuildNote:
           "移動後に一度この会話を再開してください。それまでに Codex が状態データベースを再構築すると、Codex は再び {{from}} で再開します。",
         confirm: "移動",
-        moving: "移動中...",
+        moving: "移動中…",
         moved: "{{to}} に移動しました",
         notMoved: "会話は移動されていません",
         movedPartly: "移動しましたが、Codex の状態データベースは更新されていません",
@@ -2478,7 +2478,7 @@ export const ja: TranslationResources = {
       add: "API エンドポイントを追加",
       empty: "API エンドポイントはまだありません",
       allOff: "すべての API エンドポイントがオフです。",
-      loading: "API エンドポイントを読み込み中...",
+      loading: "API エンドポイントを読み込み中…",
       unavailable: "このホストに接続すると API エンドポイントを管理できます。",
       updateHost:
         "すべてのエージェントで共有する API エンドポイントを管理するには、このホストの Osuna を更新してください。",

@@ -4,6 +4,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Text } from "@/components/ui/text";
+import { AGENT_CONTROLS_SHEET_SNAP_POINTS } from "@/composer/agent-controls/layout";
 import { ThinkingSlider } from "@/composer/agent-controls/thinking-slider";
 
 const SLIDER_POPOVER_WIDTH = 220;
@@ -41,7 +42,12 @@ export function ThinkingPicker({
   const { t } = useTranslation();
   const isSheet = surface === "sheet";
   const presentationProps = isSheet
-    ? { title: t("agentControls.thinking.title"), presentation: "push" as const }
+    ? // 从 Agent controls 抽屉里叠上来：与它同样高，完全盖住它，屏幕上只看到这一张。
+      {
+        title: t("agentControls.thinking.title"),
+        presentation: "push" as const,
+        mobileSnapPoints: AGENT_CONTROLS_SHEET_SNAP_POINTS,
+      }
     : { desktopPlacement: "top-start" as const };
 
   return (

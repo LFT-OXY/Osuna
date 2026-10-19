@@ -68,7 +68,12 @@ import {
   useWebOverlayRegistration,
 } from "@/lib/overlay-root";
 import { buildDesktopFrameStyle } from "./combobox-frame-style";
-import { MENU_ITEM_HEIGHT } from "./menu/menu-geometry";
+import {
+  MENU_ITEM_HEIGHT,
+  MENU_ROW_INSET,
+  MENU_ROW_PADDING,
+  SHEET_CONTENT_INSET,
+} from "./menu/menu-geometry";
 import { popoverSurfaceStyle } from "@/styles/floating-surface";
 import { GLASS_SURFACES_ENABLED } from "@/styles/glass-support";
 import { SPACING } from "@/styles/theme";
@@ -77,16 +82,10 @@ export { buildDesktopFrameStyle } from "./combobox-frame-style";
 
 const IS_WEB = isWeb;
 
-/*
- * 窄窗口抽屉里选项列表的内边距。Web 上 gorhom 的 BottomSheetScrollView 收不到 unistyles 的样式（被丢掉，
- * 选项文字贴在 12），所以用普通对象；Web 的选项行是菜单行（左右 8，原生是 12），内边距多给 4，
- * 两端的选项文字都与抽屉标题同在 24 的线上。
- */
-const WEB_SHEET_OPTIONS_CONTENT_STYLE = {
-  paddingBottom: SPACING[8],
-  paddingHorizontal: SPACING[3],
-  paddingTop: SPACING[1],
-};
+const DEFAULT_MOBILE_SNAP_POINTS = ["60%", "90%"];
+
+/** Web 上选项行是菜单行（左右 8）；原生是触摸行（左右 12）。 */
+const COMBOBOX_ROW_PADDING = IS_WEB ? MENU_ROW_PADDING : SPACING[3];
 
 export type ComboboxOption = ComboboxOptionModel;
 export type ComboboxDesktopPlacement = "top-start" | "bottom-start";
@@ -126,6 +125,8 @@ export interface ComboboxProps {
   /** Overrides the mobile scroll container spacing for custom child content. */
   mobileChildrenContentContainerStyle?: StyleProp<ViewStyle>;
   presentation?: "push" | "replace";
+  /** 窄窗口抽屉的高度档；叠在别的抽屉上时给同样的高度，屏幕上只看到一张。 */
+  mobileSnapPoints?: string[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   desktopPlacement?: ComboboxDesktopPlacement;
@@ -604,23 +605,35 @@ function applyMeasuredAnchor(setters: MeasuredAnchorSetters, x: number, y: numbe
   updateReferenceWidth(setters.setReferenceWidth, width);
 }
 
+interface ShownActiveIndexInput {
+  activeIndex: number;
+  normalizedSearch: string;
+}
+
+interface ShownActiveIndex {
+  /** 画底色的那一行；-1 为不画。 */
+  shownActiveIndex: number;
+  /** 方向键挪过之后调用。 */
+  showActiveRow: () => void;
+  /** 关上时调用，下次打开从不画底色开始。 */
+  hideActiveRow: () => void;
+}
+
 /**
  * 画底色的那一行。打开时 activeIndex 落在选中行上，只为 Enter 准备；用方向键挪过或输入了搜索词才画底色，
  * 选中行只靠勾（docs/menus.md「Item states」）。
  */
-function useShownActiveIndex(input: {
-  isOpen: boolean;
-  activeIndex: number;
-  normalizedSearch: string;
-}): { shownActiveIndex: number; showActiveRow: () => void } {
-  const { isOpen, activeIndex, normalizedSearch } = input;
+function useShownActiveIndex(input: ShownActiveIndexInput): ShownActiveIndex {
+  const { activeIndex, normalizedSearch } = input;
   const [hasKeyboardMovedActiveRow, setHasKeyboardMovedActiveRow] = useState(false);
   const showActiveRow = useCallback(() => setHasKeyboardMovedActiveRow(true), []);
-  useEffect(() => {
-    if (isOpen) setHasKeyboardMovedActiveRow(false);
-  }, [isOpen]);
+  const hideActiveRow = useCallback(() => setHasKeyboardMovedActiveRow(false), []);
   const isActiveRowShown = hasKeyboardMovedActiveRow || normalizedSearch !== "";
-  return { shownActiveIndex: isActiveRowShown ? activeIndex : -1, showActiveRow };
+  return {
+    shownActiveIndex: isActiveRowShown ? activeIndex : -1,
+    showActiveRow,
+    hideActiveRow,
+  };
 }
 
 function useActiveIndexSync(
@@ -948,7 +961,7 @@ type BottomSheetVisibility = ReturnType<typeof useIsolatedBottomSheetVisibility>
 
 interface MobileBodyProps {
   bottomSheetRef: BottomSheetVisibility["sheetRef"];
-  snapPoints: string[];
+  snapPoints: string[] | undefined;
   handleSheetChange: BottomSheetVisibility["handleSheetChange"];
   handleSheetDismiss: BottomSheetVisibility["handleSheetDismiss"];
   handleIndicatorStyle: { backgroundColor: string };
@@ -1005,7 +1018,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
     <IsolatedBottomSheetModal
       ref={props.bottomSheetRef}
       contextBridge={null}
-      snapPoints={props.snapPoints}
+      snapPoints={props.snapPoints ?? DEFAULT_MOBILE_SNAP_POINTS}
       index={0}
       enableDynamicSizing={false}
       onChange={props.handleSheetChange}
@@ -1047,13 +1060,14 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
           <BottomSheetScrollView
             style={styles.mobileSheetBody}
             contentContainerStyle={[
-              IS_WEB ? WEB_SHEET_OPTIONS_CONTENT_STYLE : styles.comboboxScrollContent,
+              props.hasChildren ? styles.comboboxChildrenScrollContent : null,
               props.mobileChildrenContentContainerStyle,
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {body}
+            {/* 第三方滚动区在 Web 上收不到 unistyles 的样式（docs/unistyles.md），内边距放在自己的 View 上。 */}
+            <View style={props.hasChildren ? null : styles.comboboxScrollContent}>{body}</View>
           </BottomSheetScrollView>
         )}
         {props.footer ? <View style={styles.footer}>{props.footer}</View> : null}
@@ -1313,6 +1327,7 @@ export function Combobox({
   desktopChildrenScrollEnabled = true,
   mobileChildrenContentContainerStyle,
   presentation,
+  mobileSnapPoints,
   open,
   onOpenChange,
   desktopPlacement = "bottom-start",
@@ -1338,7 +1353,6 @@ export function Combobox({
   const effectiveOptionsPosition = resolveEffectiveOptionsPosition(isMobile, optionsPosition);
   const isDesktopAboveSearch = resolveIsDesktopAboveSearch(isMobile, effectiveOptionsPosition);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  const snapPoints = useMemo(() => ["60%", "90%"], []);
   const [availableSize, setAvailableSize] = useState<{ width?: number; height?: number } | null>(
     null,
   );
@@ -1365,11 +1379,18 @@ export function Combobox({
     [onSearchQueryChange],
   );
 
+  const normalizedSearch = searchable ? searchQuery.trim().toLowerCase() : "";
+  const { shownActiveIndex, showActiveRow, hideActiveRow } = useShownActiveIndex({
+    activeIndex,
+    normalizedSearch,
+  });
+
   const handleClose = useCallback(() => {
     setOpen(false);
     setSearchQueryWithCallback("");
     bumpSearchResetKey();
-  }, [setOpen, setSearchQueryWithCallback]);
+    hideActiveRow();
+  }, [hideActiveRow, setOpen, setSearchQueryWithCallback]);
 
   useResetSearchOnOpen(isOpen, setSearchQueryWithCallback, bumpSearchResetKey);
 
@@ -1446,12 +1467,6 @@ export function Combobox({
     onClose: handleClose,
   });
 
-  const normalizedSearch = searchable ? searchQuery.trim().toLowerCase() : "";
-  const { shownActiveIndex, showActiveRow } = useShownActiveIndex({
-    isOpen,
-    activeIndex,
-    normalizedSearch,
-  });
   const sanitizedSearchValue = searchQuery.trim();
   const showCustomOption = useMemo(
     () =>
@@ -1610,7 +1625,7 @@ export function Combobox({
     return (
       <MobileComboboxBody
         bottomSheetRef={bottomSheetRef}
-        snapPoints={snapPoints}
+        snapPoints={mobileSnapPoints}
         handleSheetChange={handleSheetChange}
         handleSheetDismiss={handleSheetDismiss}
         handleIndicatorStyle={handleIndicatorStyle}
@@ -1713,11 +1728,10 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: { xs: 36, md: MENU_ITEM_HEIGHT.md },
     gap: theme.spacing[2],
     paddingVertical: { xs: theme.spacing[2], md: theme.spacing[1] },
-    marginHorizontal: theme.spacing[1],
+    marginHorizontal: MENU_ROW_INSET,
     borderRadius: theme.radius.sm,
-    ...(IS_WEB
-      ? { paddingHorizontal: theme.spacing[2] }
-      : { paddingHorizontal: theme.spacing[3], marginBottom: theme.spacing[1] }),
+    paddingHorizontal: COMBOBOX_ROW_PADDING,
+    ...(IS_WEB ? {} : { marginBottom: theme.spacing[1] }),
   },
   // Translucent, so the same fill works on the glass popover and on an opaque sheet.
   comboboxItemHighlighted: {
@@ -1772,7 +1786,7 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
   },
   bottomSheetHeader: {
-    paddingHorizontal: theme.spacing[6],
+    paddingHorizontal: SHEET_CONTENT_INSET,
     paddingBottom: theme.spacing[2],
   },
   comboboxTitle: {
@@ -1780,9 +1794,16 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
     textAlign: "left",
   },
-  comboboxScrollContent: {
+  // 自带内容的抽屉照旧（这份样式在 Web 上会被第三方滚动区丢掉，内容自己定内边距）。
+  comboboxChildrenScrollContent: {
     paddingBottom: theme.spacing[8],
     paddingHorizontal: theme.spacing[2],
+    paddingTop: theme.spacing[1],
+  },
+  // 选项文字落在抽屉标题的 24 线上：减去选项行自己的缩进（Web 是菜单行，原生左右各多 4）。
+  comboboxScrollContent: {
+    paddingBottom: theme.spacing[8],
+    paddingHorizontal: SHEET_CONTENT_INSET - MENU_ROW_INSET - COMBOBOX_ROW_PADDING,
     paddingTop: theme.spacing[1],
   },
   desktopOverlay: {

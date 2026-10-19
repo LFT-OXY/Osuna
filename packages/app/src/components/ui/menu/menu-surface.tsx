@@ -25,6 +25,7 @@ import { useMenuContext, MenuContextProvider } from "./menu-context";
 import { MenuPage } from "./menu-item";
 import { currentPageId, isSubPageOpen } from "./menu-navigation";
 import { AnchoredSurface, MenuOverlay } from "./menu-overlay";
+import { MENU_ROW_INSET, MENU_ROW_PADDING, SHEET_CONTENT_INSET } from "./menu-geometry";
 import { getMenuSheetBottomPadding } from "./menu-sheet-layout";
 import type { Alignment, Placement } from "../anchor";
 import type { KeyboardFocusScope } from "@/keyboard/actions";
@@ -417,14 +418,18 @@ function MenuSheetSurface({
         {openPage ? (
           <>
             <MenuSheetHeader title={openPage.title} onBack={menu.goBack} />
-            <MenuPage depth={depth}>{openPage.content}</MenuPage>
+            <View style={styles.sheetRows}>
+              <MenuPage depth={depth}>{openPage.content}</MenuPage>
+            </View>
           </>
         ) : (
           <>
             {sheetTitle ? (
               <MenuSheetHeader title={sheetTitle} onBack={null} trailing={sheetTrailing} />
             ) : null}
-            <MenuPage depth={0}>{children}</MenuPage>
+            <View style={styles.sheetRows}>
+              <MenuPage depth={0}>{children}</MenuPage>
+            </View>
           </>
         )}
       </BottomSheetScrollView>
@@ -465,13 +470,19 @@ function MenuSheetHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // 抽屉的标题与选项文字都在 24 线上，与其余抽屉（AdaptiveModalSheet、Combobox）一致。
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
+    paddingHorizontal: SHEET_CONTENT_INSET,
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[3],
+  },
+  // 选项行自己缩进 4 + 8 + 1（边框），列表再补足到 24。
+  sheetRows: {
+    paddingHorizontal:
+      SHEET_CONTENT_INSET - MENU_ROW_INSET - MENU_ROW_PADDING - theme.borderWidth[1],
   },
   sheetTrailing: {
     flex: 1,

@@ -157,37 +157,47 @@ function IssueBlock({
   );
 }
 
-/** 要重开谁：一块 info，每类一行；要用户执行的命令另起一行，与安装命令一样等宽、可复制。 */
+/**
+ * 要重开谁：设置卡片里的一行（不是 Alert：提示区同时有问题时，一个区域只放一个 Alert，design.md §11 States），
+ * 每类一句；要用户执行的命令另起一行，与安装命令一样等宽、可复制。
+ */
 function ReopenBlock({ copy, onDismiss }: { copy: ReopenHintsCopy; onDismiss: () => void }) {
   const { t } = useTranslation();
   return (
-    <Alert variant="info" size="sm" title={copy.title} testID="agent-api-endpoints-reopen">
-      <View style={styles.reopenLines}>
-        {copy.lines.map((line) => (
-          <View key={line.text} style={styles.reopenLine} testID="agent-api-endpoints-reopen-line">
-            <Text style={styles.reopenText}>{line.text}</Text>
-            {line.command !== null ? (
-              <CommandLine command={line.command} testID="agent-api-endpoints-reopen-command" />
+    <View style={settingsStyles.card} testID="agent-api-endpoints-reopen">
+      <View style={[settingsStyles.row, styles.reopenRow]}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>{copy.title}</Text>
+          <View style={styles.reopenLines}>
+            {copy.lines.map((line) => (
+              <View
+                key={line.text}
+                style={styles.reopenLine}
+                testID="agent-api-endpoints-reopen-line"
+              >
+                <Text style={styles.reopenText}>{line.text}</Text>
+                {line.command !== null ? (
+                  <CommandLine command={line.command} testID="agent-api-endpoints-reopen-command" />
+                ) : null}
+              </View>
+            ))}
+            {copy.note !== null ? (
+              <Text style={styles.reopenText} testID="agent-api-endpoints-reopen-note">
+                {copy.note}
+              </Text>
             ) : null}
           </View>
-        ))}
-        {copy.note !== null ? (
-          <Text style={styles.reopenText} testID="agent-api-endpoints-reopen-note">
-            {copy.note}
-          </Text>
-        ) : null}
-        <View style={styles.actions}>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={onDismiss}
-            testID="agent-api-endpoints-reopen-dismiss"
-          >
-            {t("settings.apiEndpoints.agent.reopen.gotIt")}
-          </Button>
         </View>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={onDismiss}
+          testID="agent-api-endpoints-reopen-dismiss"
+        >
+          {t("settings.apiEndpoints.agent.reopen.gotIt")}
+        </Button>
       </View>
-    </Alert>
+    </View>
   );
 }
 
@@ -658,18 +668,20 @@ const styles = StyleSheet.create((theme) => ({
     ...createControlGeometry(theme).alert.sm.text,
     color: theme.colors.foregroundMuted,
   },
-  // Alert 的 children 排成一行：占满整行才会折行。
+  // 多行说明时按钮贴着标题，不居中。
+  reopenRow: {
+    alignItems: "flex-start",
+  },
   reopenLines: {
-    flex: 1,
-    minWidth: 0,
+    marginTop: theme.spacing[1],
     gap: theme.spacing[2],
   },
   reopenLine: {
     gap: theme.spacing[1],
   },
-  // 与 Alert 的说明同字号同色。
+  // 与设置行的说明同字号同色。
   reopenText: {
-    ...createControlGeometry(theme).alert.sm.text,
+    ...theme.typeScale.caption,
     color: theme.colors.foregroundMuted,
   },
   reopenCommandLine: {

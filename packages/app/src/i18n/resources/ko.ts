@@ -2234,7 +2234,7 @@ export const ko: TranslationResources = {
       label: "세션 기록",
       subtitle: "이 호스트의 프로바이더 세션",
       tooltip: "터미널에서 프로바이더 세션 재개",
-      loading: "세션을 불러오는 중...",
+      loading: "세션을 불러오는 중…",
       updateHost: "프로바이더 세션을 표시하려면 호스트를 업데이트하세요.",
       scope: {
         workspace: "워크스페이스",
@@ -2247,7 +2247,7 @@ export const ko: TranslationResources = {
       },
       actions: {
         refresh: "새로고침",
-        refreshing: "새로고침 중...",
+        refreshing: "새로고침 중…",
       },
       selection: {
         count_one: "{{count}}개 선택됨",
@@ -2266,12 +2266,12 @@ export const ko: TranslationResources = {
         hide: "세부 정보 숨기기",
       },
       row: {
-        opening: "여는 중...",
+        opening: "여는 중…",
         paseo: "Osuna",
         menu: "세션 작업",
         copyResumeCommand: "재개 명령 복사",
         importAsAgent: "Osuna 에이전트로 가져오기",
-        importing: "가져오는 중...",
+        importing: "가져오는 중…",
         codexModelProvider: "Codex 모델 공급자",
       },
       move: {
@@ -2287,7 +2287,7 @@ export const ko: TranslationResources = {
         rebuildNote:
           "이동한 뒤 이 대화를 한 번 이어서 진행하세요. 그 전에 Codex가 상태 데이터베이스를 다시 만들면 Codex는 다시 {{from}}에서 이어 갑니다.",
         confirm: "이동",
-        moving: "이동 중...",
+        moving: "이동 중…",
         moved: "{{to}}(으)로 이동했습니다",
         notMoved: "대화를 이동하지 않았습니다",
         movedPartly: "이동했지만 Codex 상태 데이터베이스는 업데이트되지 않았습니다",
@@ -2469,7 +2469,7 @@ export const ko: TranslationResources = {
       add: "API 엔드포인트 추가",
       empty: "아직 API 엔드포인트가 없습니다",
       allOff: "모든 API 엔드포인트가 꺼져 있습니다.",
-      loading: "API 엔드포인트를 불러오는 중...",
+      loading: "API 엔드포인트를 불러오는 중…",
       unavailable: "이 호스트에 연결하면 API 엔드포인트를 관리할 수 있습니다.",
       updateHost:
         "모든 에이전트가 함께 쓰는 API 엔드포인트를 관리하려면 이 호스트의 Osuna를 업데이트하세요.",

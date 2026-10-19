@@ -165,3 +165,6 @@ export function resolveComposerSeparators(input: {
 export function resolveComposerToolbarGlyphSize(platform: "web" | "native"): number {
   return platform === "native" ? 20 : 16;
 }
+
+/** Agent controls 抽屉的高度档；从里面再打开的抽屉用同样的高度，叠上去时完全盖住它。 */
+export const AGENT_CONTROLS_SHEET_SNAP_POINTS = ["80%", "90%"];

@@ -20,7 +20,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Theme } from "@/styles/theme";
 import { MenuDepthProvider, useMenuContext } from "./menu-context";
-import { MENU_ITEM_HEIGHT } from "./menu-geometry";
+import { MENU_ITEM_HEIGHT, MENU_ROW_INSET, MENU_ROW_PADDING } from "./menu-geometry";
 
 const ThemedCheck = withUnistyles(Check);
 const ThemedCheckCircle = withUnistyles(CheckCircle);
@@ -438,8 +438,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     minHeight: MENU_ITEM_HEIGHT,
     gap: theme.spacing[2],
-    marginHorizontal: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
+    marginHorizontal: MENU_ROW_INSET,
+    paddingHorizontal: MENU_ROW_PADDING,
     paddingVertical: theme.spacing[1],
     borderWidth: theme.borderWidth[1],
     borderColor: "transparent",
@@ -462,8 +462,8 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     minHeight: MENU_ITEM_HEIGHT,
-    marginHorizontal: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
+    marginHorizontal: MENU_ROW_INSET,
+    paddingHorizontal: MENU_ROW_PADDING,
     paddingVertical: theme.spacing[1],
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderInput,

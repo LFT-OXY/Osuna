@@ -552,7 +552,7 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 指定某一家的默认模型在那家关掉或去掉这个模型、别家还有同名的时，变成光秃秃的名字；都没有就取第一个（`settleAgentSettings`）。
 - 老客户端：`activeModels` 的 isDefault 标去掉标识后的模型名；`projectedDefaultModelId` 只在默认模型指定的是这一家时去掉标识。
 - 「接口标识/模型名」的选项来自快照，开关刚打开、快照还没推到时只有光秃秃的名字；快照里去掉了已下线的模型，所以已下线的那家那个模型不在选项里。
-- 默认模型下拉在桌面端朝上开（`SelectField` 新增的 `desktopPlacement`，透传 Combobox 已有的 top-start）：这一行在提供方页最下面一张卡片里，朝下开会伸出窗口底边。窄窗口底部弹层标题与选项左边距不一样是 Combobox 弹层原有的样式，本张没动。
+- 默认模型下拉起初在桌面端朝上开（`SelectField` 当时加的 `desktopPlacement`）；29 号改回朝下开并删掉这个属性，原因见「29 文案与视觉收口」。窄窗口底部弹层标题与选项左边距不一样，29 号一并对齐。
 
 ### 测试
 
@@ -612,7 +612,9 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 对话思考档位浮层左上角（「Max」左边）有一块很淡的胶囊形残影。
 - 「模型被换掉」提示（工单 21）：只有中文文案带手动换行 `\n`，其余 8 种语言没有；提示正文里的 settings.json 完整路径太长（临时目录时占近两行），提示区各处一起定怎么缩写。
 - 「multi_agent_v2 盖过」提示（工单 24）：config.toml 完整路径在正文与「如何修复」里各出现一次，一起按上条处理。
-- 提示区 warning 标题的橙色字在浅色底上对比度可能不足（工单 25、28 审查），实测，低于 4.5:1 就在 Alert 组件里统一调深。
+- ~~提示区 warning 标题的橙色字在浅色底上对比度可能不足（工单 25、28 审查），实测，低于 4.5:1 就在 Alert 组件里统一调深。~~ 已在 29 号做完：实测约 2:1，改用 statusWarning。
+
+以上各条在 29 号怎么处理的见「29 文案与视觉收口」。
 
 ## 21 跟着 CLI 里存下的模型与思考档位走
 
@@ -866,3 +868,46 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 - 「如何修复」分三步，`export NO_PROXY=127.0.0.1` 单独一行、等宽、带「复制」（与安装命令同一组件）；展开的步骤对所有提示都放在说明下面、按钮上面。截图重拍。
 - 端到端加 `NO_PROXY=127.0.0.1` 原样一项不提示；英文原文整份比对。
 - 浏览器用例「Codex's model list that can't be written leaves the switch off」本机必挂：目录文件被换成文件夹时，27 号的 `cliStartupReads` 读 `codex-models.json` 抛 EISDIR，列表请求失败（15915bb68 引入），不是本工单的改动。
+
+## 29 文案与视觉收口
+
+没有改任何决定：只修页面之间、文案之间的不一致，以及「留给 29 号工单」那几条。
+
+### 修掉的不一致（第一轮）
+
+1. 提示区 warning 的标题与图标原用 `palette.amber[500]`，浅色琥珀底上约 2:1；`Alert` 改用 statusWarning（design.md「一个状态一个 token」），全应用的 warning 一起变。`theme.test.ts` 加警示块上的对比度下限（页面画布全部主题，卡片色只约束内置主题）。
+2. 下拉（Combobox）打开时选中行与悬停行同一种底色：选中行只带勾，方向键挪过或输入搜索词后才画底色（docs/menus.md「Item states」）。
+3. 窄窗口下拉抽屉：Web 上选项列表的内边距被第三方滚动区丢掉，文字贴在 12、标题在 24；内边距放到自己的 View 上，选项与标题同在 24。
+4. 第三方接口区的 4 个下拉不再强制朝上开：理由「这张卡片在提供方页最下面」已不成立（下面还有「模型」「诊断」），行靠上时朝上开的列表被裁成三行；朝下开时 Combobox 会按窗口剩余高度收短、在里面滚。
+5. 提示区「不经过中转站」「Codex profile 盖过」、关开关确认框的文件名、挪对话的备份路径改为与其余提示一样缩成 `~/…`（之前只有部分提示缩写）。
+6. zh-CN「模型被换掉」两条去掉只有中文才有的 `\n`；资源测试加「手动换行与英文一致」守卫。
+
+### 修掉的不一致（审查后第二轮）
+
+7. `useShownActiveIndex` 的入参与返回值有了名字；「方向键挪过」在关上时清掉，不用 effect。
+8. 窄窗口的菜单抽屉（会话历史行菜单等）：标题与选项文字从 12 挪到 24，与其余抽屉同一条线；菜单行的缩进做成 `menu-geometry.ts` 的常量，菜单行、Combobox 选项行与两种抽屉的内边距都从它算。
+9. 窄窗口对话里，思考档位抽屉叠在 Agent controls 抽屉上能看到两个把手与两个标题：思考档位抽屉改用与它同样的高度档（`AGENT_CONTROLS_SHEET_SNAP_POINTS`），完全盖住下面那张。Combobox 加 `mobileSnapPoints`。模式与功能选择的抽屉仍照旧叠放，本票没动。
+10. 关开关确认框：「还有 N 行」与上面各行文字同一起点（不再是带内边距的按钮）；每行在键之后分成两段，窄窗口里值整段换到下一行、不在模型名中间断开，比整行还长时截断；滚到底时最后一行在按钮条上面完整露出（截图 `*_claude-scrolled-to-end_*` 为证）。
+11. 「还有运行中的 … 在用改之前的设置」从 info Alert 改成设置卡片里的一行（标题、说明、「知道了」），提示区里同时有问题时一个区域只放一个 Alert（design.md §11 States）。多个问题同时出现时仍各是一个 Alert：每条都有自己的处理按钮，合并会改交互，本票没动。
+12. 第三方接口、会话历史两段文案里的 ASCII `...` 统一为 `…`（9 种语言，共 73 处）。确认框标题的问号核对过是全角「？」，「挪动对话…」也已是 `…`，截图里看着像半角是字体的样子。
+13. 资源测试的术语守卫补上「使用第三方接口」「默认模型」。
+14. `SelectField.desktopPlacement` 没有调用方了，删掉；`.atw/spec/server/backend/persistence.md` 里相应那句一并删掉。
+15. 接口详情页窄窗口：两栏会把家族名与模型名截短，改为家族在上面一行可横滑的标签、模型在下面占满宽。
+
+### 核对过、没改的
+
+- 对话思考档位浮层左上角的「残影」是毛玻璃浮层透出的后面工作区标签文字，浮层是毛玻璃是设计（design.md §6 Pickers）。
+- 会话历史「续不上」的错误用的是 `Alert` 的 error 变体：1px 着色描边、透明底，正是 design.md 给 error 的样式；只有 warning 是填色块。
+- Electron 的 Codex 页没有「默认思考档位」：不是 bug。Codex 的档位取自模型资料（上游清单，再由 models.dev 补），dev 主机缓存的 models.dev 里 `kimi-k2` 的 `efforts` 为空，没有档位的模型这一行按设计不显示；浏览器测试的 daemon 没有这份缓存，给的是全部档位。
+- 对话 Composer 里的「Auto mode」是 daemon 报来的 Claude Code 权限模式名（`claude/agent.ts`），docs/i18n.md 写明模式名不翻译。
+- Claude 的「Subagent 模型」与 Codex 的「默认 Subagent 模型」叫法不同是两个 CLI 的语义不同（Codex 主对话可另指定）。
+- 浅色主题关着的 Switch 偏淡是全局 Switch 的样子，不在本任务。
+- 会话历史的 Codex 服务商照 Codex 自己的标识显示 `osuna_api_endpoint`。
+- 旧的 i18n 键：按完整键名、模板前缀与相对键在 `packages/app/src` 里逐个查了第三方接口、会话历史、思考档位三段，没有用不到的键，不删。
+- 相对时间的英文（「已更新 just now」「1h ago」）来自共用的 `utils/time.ts`，留给任务 `10-13-zh-relative-time-and-plan-labels`。
+
+### 截图
+
+- 浏览器 Web（无头 Chromium、假 Claude / Codex 命令行、主目录下的临时 CLI 目录，拍完删掉）：`screenshots/29-*`，16 种状态 × 浅 / 深 × 1280 / 390。
+- Electron（dev 桌面端 127.0.0.1:6769，`env -u PASEO_HOME` 并清掉 `CLAUDE_CODE_*` 等会话变量，`CLAUDE_CONFIG_DIR` / `CODEX_HOME` / 托管设置指到 `/tmp/osuna-t29-electron`，`.dev/paseo-home/config.json` 备份后把 claude、codex 换成假命令行，拍完还原；`api-endpoints/` 与 `projects/` 也先备份、拍完放回）：`screenshots/29-electron-*`。System Events 没有辅助功能权限、改不了窗口大小，宽高用 CDP 的设备尺寸覆盖。
+- 真实 `~/.claude`、`~/.codex` 顶层的修改时间前后各记一次：`screenshots/29-electron-mtimes-{before,after}.txt`。`settings.json`、`config.toml`、`auth.json` 不变；有变化的只是本机正在用的 Claude Code 与 Codex 会话自己写的东西（sessions、backups、projects、sqlite 日志与状态库、models_cache.json）。
