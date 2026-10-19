@@ -9,7 +9,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 用真实 git 仓库的用例：改一个已跟踪文件、改一个未跟踪文件、删一个文件、改名一个文件、切换 ignoreWhitespace，每种之后推出的结果都和从零全量计算的结果逐字相同。
 - [ ] 用例：不带路径的「有变化」信号（模拟轮询降级）之后，结果同样正确。
