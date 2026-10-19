@@ -7,8 +7,17 @@
 
 **Blocked by:** None
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
-- [ ] 结论写进本票 Comments：每条是测试问题还是代码问题、依据。
+- [x] 结论写进本票 Comments：每条是测试问题还是代码问题、依据。
 - [ ] 本机（macOS）这两个文件通过；合并请求的 CI 里 windows-latest 这 3 条通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过。
+- [x] `npm run typecheck`、`npm run lint` 通过。
+
+## Comments
+
+三条都是测试问题，代码在 Windows 上的表现符合设计。依据是 CI 运行 39216198336 的 server-tests (windows-latest) 日志。
+
+- `cli-bypass.test.ts`「a file that can't be written…」：Windows 只少了「Couldn't read…」，「Couldn't save…」照常出现。Windows 读「父路径是普通文件」的路径报 ENOENT（macOS / Linux 报 ENOTDIR），`readOptionalFile`（`config-file.ts`）把 ENOENT 当作文件还没建，所以不警告；两种情况都按「从没收到过」处理，用户看到的一样。改法：这条用例构造完先清掉启动时的警告，只断言写失败那条；读不了的警告由紧接着的「a file that can't be read or parsed…」管，那条在 Windows 上本来就过。
+- `login-shell-env.test.ts` 两条：读取器在 Windows 上按设计不问登录 shell（`login-shell-env.ts` 的 `platform === "win32"` 直接返回 `{}`，照 magpie），而且用例里的假 shell 是 `#!/bin/sh` 脚本，Windows 起不来。改法：两条用 `it.skipIf(isPlatform("win32"))` 跳过，原因写在 describe 顶部注释；Windows 分支由「does not ask on Windows」覆盖，各平台都跑。
+- 审查采纳：去掉按平台算预期值的分支（`docs/testing.md` 不许条件断言），平台判断改用 `test-utils/platform.ts` 的 `isPlatform`。没采纳：把两条挪进 `login-shell-env.posix.test.ts`，因为本票指定 `it.skipIf`，仓库里也有同样写法（`terminal.test.ts`）。
+- 第二项验收里「本机通过」已做（两个文件 23 条全过）；「CI windows-latest 通过」要等合并请求的 CI，所以这项先不勾。

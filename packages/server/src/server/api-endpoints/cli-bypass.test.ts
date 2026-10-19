@@ -241,16 +241,15 @@ describe("GatewaySightings", () => {
     writeFileSync(notADirectory, "");
     const filePath = path.join(notADirectory, "gateway-seen.json");
     const sightings = new GatewaySightings({ now: () => at(10), filePath, logger });
+    // 启动时读同样读不了，当作从没收到过；macOS / Linux 报 ENOTDIR 记一条警告，Windows 报 ENOENT
+    // 与文件还没建一样不警告。读不了的警告由下一条用例管，这里只看写。
+    warnings = [];
 
     expect(() => sightings.saw("claude")).not.toThrow();
     await afterWrites();
 
     expect(sightings.lastSeen("claude")).toEqual(at(10));
-    // 启动时读同样读不了（ENOTDIR），当作从没收到过。
-    expect(warnings).toEqual([
-      "Couldn't read when the gateway last received each agent's request",
-      "Couldn't save when the gateway last received each agent's request",
-    ]);
+    expect(warnings).toEqual(["Couldn't save when the gateway last received each agent's request"]);
   });
 
   test("a file that can't be read or parsed counts as never seen, with a warning", () => {
