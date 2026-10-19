@@ -85,6 +85,13 @@ const manifests = {
     singleton: true,
     resourceKey: () => "session_history",
   },
+  logic_map: {
+    kind: "logic_map",
+    supportedHosts: ["explorer"],
+    showCloseButton: false,
+    singleton: true,
+    resourceKey: () => "logic_map",
+  },
   file: {
     kind: "file",
     supportedHosts: ["main", "explorer"],

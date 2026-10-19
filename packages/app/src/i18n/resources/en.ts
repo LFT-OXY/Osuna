@@ -4228,6 +4228,40 @@ export const en = {
       hostOutdatedDetail: "Update Osuna on this host to use the logic map.",
       failed: "Could not change the logic map: {{error}}",
     },
+    panel: {
+      label: "Logic map",
+      subtitle: "The flow of the feature you're discussing",
+      tooltip: "See the logic maps the agent keeps in this workspace",
+      canvas: "Logic map canvas",
+      pickerLabel: "Logic map: {{title}}",
+      untitled: "Untitled logic map",
+      nodeCountOne: "{{count}} node",
+      nodeCountMany: "{{count}} nodes",
+      loading: "Loading logic map…",
+      empty: {
+        title: "No logic map yet",
+        body: "Turn on Logic map in the composer toolbar. The agent then keeps a map of the feature as you discuss it.",
+      },
+      newMap: {
+        start: "Start",
+        body: "The agent hasn't added any nodes yet.",
+      },
+      unreadable: "Can't read this logic map",
+      corruptDetail: "{{map}}: {{file}} is broken ({{problem}}). Fix or restore the file.",
+      listFailed: "Can't list this workspace's logic maps",
+      hostOutdated: {
+        title: "Update Osuna on this host",
+        body: "This host's Osuna is too old to show logic maps.",
+      },
+      branch: {
+        if: "If",
+        elseIf: "Else if",
+        else: "Else",
+      },
+      subgraphTagOne: "Subgraph · {{count}} node",
+      subgraphTagMany: "Subgraph · {{count}} nodes",
+      pendingLink: "No formal doc yet",
+    },
   },
 } as const;
 

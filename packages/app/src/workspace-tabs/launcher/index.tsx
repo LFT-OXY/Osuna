@@ -86,6 +86,7 @@ const BUILT_IN_SELECTIONS = {
   browser: { kind: "browser" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
   sessionHistory: { kind: "target", target: { kind: "session_history" } },
+  logicMap: { kind: "target", target: { kind: "logic_map" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
 
 function getLaunchPresentation(kind: WorkspaceTabTarget["kind"]): PanelPresentation {
@@ -127,6 +128,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
     const filesPresentation = getLaunchPresentation("files");
     const pullRequestPresentation = getLaunchPresentation("pull_request");
     const sessionHistoryPresentation = getLaunchPresentation("session_history");
+    const logicMapPresentation = getLaunchPresentation("logic_map");
     const builtIns: Record<BuiltInLaunchItemId, WorkspaceTabLaunchItem & { hidden?: boolean }> = {
       agent: {
         id: "agent",
@@ -201,6 +203,14 @@ export function useWorkspaceTabLaunchCatalog(input: {
         disabled: false,
         panelKind: "session_history",
         launch: launchSelection(BUILT_IN_SELECTIONS.sessionHistory),
+      },
+      logicMap: {
+        id: "logic-map",
+        label: logicMapPresentation.label(t),
+        Icon: logicMapPresentation.icon,
+        disabled: false,
+        panelKind: "logic_map",
+        launch: launchSelection(BUILT_IN_SELECTIONS.logicMap),
       },
     };
     const tabItems = getBuiltInLaunchOrder(purpose).flatMap((id) => {

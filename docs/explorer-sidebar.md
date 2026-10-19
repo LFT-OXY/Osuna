@@ -21,7 +21,14 @@ each while that pane already contains it. Closing one makes its menu item availa
 history arrived after layouts were already being saved, so a saved layout gets it once on load and
 `explorerSidebarSeededTabKindsByWorkspace` (`packages/app/src/stores/workspace-layout-storage.ts`)
 records the offer; a user who closes it does not find it back. Session history cannot leave
-Explorer. Other compatible tabs, including agents, terminals, files, and diffs, can move between
+Explorer.
+
+Logic map is an Explorer-only singleton but not a default: a workspace that never used logic maps
+has no such tab. The first time a conversation in the workspace turns its logic map switch on,
+`autoOpenLogicMapTab` (`packages/app/src/stores/workspace-layout-store.ts`) shows Explorer and
+selects the tab, and `logicMapTabAutoOpenedByWorkspace` records that, so a closed tab stays closed
+on later switch-ons and comes back only from the + menu. Like the defaults, it hides its close
+button. Other compatible tabs, including agents, terminals, files, and diffs, can move between
 Explorer and main panes.
 Keep panel implementations independent of either shell. `WorkspacePanelHost` owns mounting and
 retention, while each shell owns its tabs, focus, dragging, resizing, and shortcuts.

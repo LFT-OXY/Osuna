@@ -59,6 +59,7 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
     case "files":
     case "pull_request":
     case "session_history":
+    case "logic_map":
       return { kind: value.kind };
     case "setup": {
       const workspaceId = trimNonEmpty(value.workspaceId);
@@ -128,6 +129,14 @@ export function workspaceTabTargetsEqual(
   return secondaryWorkspaceTabTargetsEqual(left, right);
 }
 
+const KIND_ONLY_TARGET_KINDS: ReadonlySet<WorkspaceTabTarget["kind"]> = new Set([
+  "files",
+  "changes_tree",
+  "pull_request",
+  "session_history",
+  "logic_map",
+]);
+
 function secondaryWorkspaceTabTargetsEqual(
   left: WorkspaceTabTarget,
   right: WorkspaceTabTarget,
@@ -141,17 +150,9 @@ function secondaryWorkspaceTabTargetsEqual(
   if (left.kind === "working_diff" && right.kind === "working_diff") {
     return left.focusPath === right.focusPath && left.focusRequestId === right.focusRequestId;
   }
-  if (left.kind === "files" && right.kind === "files") {
-    return true;
-  }
-  if (left.kind === "changes_tree" && right.kind === "changes_tree") {
-    return true;
-  }
-  if (left.kind === "pull_request" && right.kind === "pull_request") {
-    return true;
-  }
-  if (left.kind === "session_history" && right.kind === "session_history") {
-    return true;
+  // 这几种标签每个 workspace 只有一个，种类相同就是同一个。
+  if (KIND_ONLY_TARGET_KINDS.has(left.kind)) {
+    return left.kind === right.kind;
   }
   if (left.kind === "setup" && right.kind === "setup") {
     return left.workspaceId === right.workspaceId;
@@ -227,7 +228,8 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
     target.kind === "changes_tree" ||
     target.kind === "files" ||
     target.kind === "pull_request" ||
-    target.kind === "session_history"
+    target.kind === "session_history" ||
+    target.kind === "logic_map"
   ) {
     return target.kind;
   }

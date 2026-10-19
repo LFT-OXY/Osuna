@@ -4160,5 +4160,40 @@ export const ptBR: TranslationResources = {
       hostOutdatedDetail: "Atualize o Osuna neste host para usar o mapa lógico.",
       failed: "Não foi possível alterar o mapa lógico: {{error}}",
     },
+    panel: {
+      label: "Mapa lógico",
+      subtitle: "O fluxo da funcionalidade em discussão",
+      tooltip: "Ver os mapas lógicos que o agente mantém neste espaço de trabalho",
+      canvas: "Tela do mapa lógico",
+      pickerLabel: "Mapa lógico: {{title}}",
+      untitled: "Mapa lógico sem título",
+      nodeCountOne: "{{count}} nó",
+      nodeCountMany: "{{count}} nós",
+      loading: "Carregando mapa lógico…",
+      empty: {
+        title: "Ainda não há mapa lógico",
+        body: "Ative Mapa lógico na barra do compositor. O agente vai manter um mapa da funcionalidade enquanto vocês conversam.",
+      },
+      newMap: {
+        start: "Início",
+        body: "O agente ainda não adicionou nós.",
+      },
+      unreadable: "Não foi possível ler este mapa lógico",
+      corruptDetail:
+        "{{map}}: {{file}} está corrompido ({{problem}}). Corrija ou restaure o arquivo.",
+      listFailed: "Não foi possível listar os mapas lógicos deste espaço de trabalho",
+      hostOutdated: {
+        title: "Atualize o Osuna neste host",
+        body: "O Osuna deste host é antigo demais para mostrar mapas lógicos.",
+      },
+      branch: {
+        if: "Se",
+        elseIf: "Senão, se",
+        else: "Senão",
+      },
+      subgraphTagOne: "Subgrafo · {{count}} nó",
+      subgraphTagMany: "Subgrafo · {{count}} nós",
+      pendingLink: "Sem documento formal",
+    },
   },
 };

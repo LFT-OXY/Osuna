@@ -17,6 +17,8 @@ interface ViewportToolbarProps {
   onReset: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  /** 已经是打开时的视图，复位没有可做的。 */
+  resetDisabled: boolean;
   scale: number;
   visible: boolean;
 }
@@ -32,6 +34,7 @@ export const ViewportToolbar = React.memo(function ViewportToolbar({
   onReset,
   onZoomIn,
   onZoomOut,
+  resetDisabled,
   scale,
   visible,
 }: ViewportToolbarProps) {
@@ -53,7 +56,7 @@ export const ViewportToolbar = React.memo(function ViewportToolbar({
       icon: Scan,
       label: t("message.diagram.resetZoom"),
       onPress: onReset,
-      disabled: scale === 1,
+      disabled: resetDisabled,
     },
     ...actions.map((action) => ({ ...action, disabled: false })),
   ];

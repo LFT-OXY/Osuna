@@ -17,12 +17,20 @@ export interface ViewportTransform {
 export interface ViewportScaleLimits {
   minScale: number;
   maxScale: number;
+  /** 内容比视口小的方向上也能在视口内移动，不强制居中（内容始终整个留在视口里）。 */
+  panWithinViewport?: boolean;
 }
 
 export interface ViewportFitOptions {
   padding?: number;
   maxWidth?: number;
   maxHeight?: number;
+  /**
+   * contain：整块放进视口（默认）；width：只按宽度铺满，高出的部分靠拖动看；natural：保持内容原大。
+   */
+  mode?: "contain" | "width" | "natural";
+  /** 适配时最多放大到的倍数；不填则可以放大。 */
+  maxFitScale?: number;
 }
 
 export const FIT_TRANSFORM: ViewportTransform = { scale: 1, x: 0, y: 0 };
@@ -65,7 +73,14 @@ export function fitContentSize(
     0,
     Math.min(viewport.height - padding * 2, options.maxHeight ?? Number.POSITIVE_INFINITY),
   );
-  const fitScale = Math.min(availableWidth / content.width, availableHeight / content.height);
+  const mode = options.mode ?? "contain";
+  let fitScale = 1;
+  if (mode === "contain") {
+    fitScale = Math.min(availableWidth / content.width, availableHeight / content.height);
+  } else if (mode === "width") {
+    fitScale = availableWidth / content.width;
+  }
+  fitScale = Math.min(fitScale, options.maxFitScale ?? Number.POSITIVE_INFINITY);
   return {
     width: content.width * fitScale,
     height: content.height * fitScale,
@@ -90,8 +105,12 @@ export function clampTransform(
   limits: ViewportScaleLimits,
 ): ViewportTransform {
   const scale = clampScale(transform.scale, limits);
-  const maxX = Math.max(0, (fittedContent.width * scale - viewport.width) / 2);
-  const maxY = Math.max(0, (fittedContent.height * scale - viewport.height) / 2);
+  const slack = (content: number, available: number) =>
+    limits.panWithinViewport
+      ? Math.abs(content * scale - available) / 2
+      : Math.max(0, (content * scale - available) / 2);
+  const maxX = slack(fittedContent.width, viewport.width);
+  const maxY = slack(fittedContent.height, viewport.height);
   return {
     scale,
     x: clampOffset(transform.x, maxX),
@@ -140,6 +159,30 @@ export function panContent(input: {
       ...input.transform,
       x: input.transform.x + input.delta.x,
       y: input.transform.y + input.delta.y,
+    },
+    input.fittedContent,
+    input.viewport,
+    input.limits,
+  );
+}
+
+/**
+ * 把内容上的一点（按内容原始尺寸计）放到视口顶边正中，返回缩放为 1 的变换，并限制在可拖动范围内。
+ * 打开和复位时用它决定先看到内容的哪一块。
+ */
+export function contentPointAtTopCenter(input: {
+  contentPoint: ViewportPoint;
+  contentSize: ViewportSize;
+  fittedContent: ViewportSize;
+  viewport: ViewportSize;
+  limits: ViewportScaleLimits;
+}): ViewportTransform {
+  const ratio = input.fittedContent.width / input.contentSize.width;
+  return clampTransform(
+    {
+      scale: 1,
+      x: input.fittedContent.width / 2 - input.contentPoint.x * ratio,
+      y: input.fittedContent.height / 2 - input.viewport.height / 2 - input.contentPoint.y * ratio,
     },
     input.fittedContent,
     input.viewport,

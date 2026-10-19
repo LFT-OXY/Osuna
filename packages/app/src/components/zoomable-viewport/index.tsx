@@ -5,6 +5,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-nativ
 import { StyleSheet } from "react-native-unistyles";
 import {
   FIT_TRANSFORM,
+  contentPointAtTopCenter,
   fitContentSize,
   isActivePinchUpdate,
   isPointInsideTransformedContent,
@@ -23,6 +24,8 @@ export function ZoomableViewport({
   actions = [],
   accessibilityLabel,
   fit,
+  initialTopCenter,
+  renderAtContentSize = false,
   maxScale = DEFAULT_MAX_SCALE,
   minScale = DEFAULT_MIN_SCALE,
   onPressOutsideContent,
@@ -46,12 +49,30 @@ export function ZoomableViewport({
     [contentSize, fit, viewport],
   );
 
+  const anchorX = initialTopCenter?.x;
+  const anchorY = initialTopCenter?.y;
+  const initialTransform = useMemo(() => {
+    if (anchorX === undefined || anchorY === undefined || !fittedContent || !viewport) {
+      return FIT_TRANSFORM;
+    }
+    return contentPointAtTopCenter({
+      contentPoint: { x: anchorX, y: anchorY },
+      contentSize,
+      fittedContent,
+      viewport,
+      limits: { minScale, maxScale },
+    });
+  }, [anchorX, anchorY, contentSize, fittedContent, maxScale, minScale, viewport]);
+  // 按原始尺寸排版时，缩放要再乘上适配比例。
+  const fitRatio =
+    renderAtContentSize && fittedContent ? fittedContent.width / contentSize.width : 1;
+
   const reset = useCallback(() => {
-    scale.value = FIT_TRANSFORM.scale;
-    translateX.value = FIT_TRANSFORM.x;
-    translateY.value = FIT_TRANSFORM.y;
-    setToolbarScale(FIT_TRANSFORM.scale);
-  }, [scale, translateX, translateY]);
+    scale.value = initialTransform.scale;
+    translateX.value = initialTransform.x;
+    translateY.value = initialTransform.y;
+    setToolbarScale(initialTransform.scale);
+  }, [initialTransform, scale, translateX, translateY]);
 
   useEffect(() => reset(), [contentSize.height, contentSize.width, reset, viewport]);
 
@@ -199,14 +220,16 @@ export function ZoomableViewport({
   const translationStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
   }));
-  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value * fitRatio }] }));
   const frameStyle = useMemo(
     () => [
       styles.contentFrame,
-      { width: fittedContent?.width ?? 0, height: fittedContent?.height ?? 0 },
+      renderAtContentSize
+        ? { width: contentSize.width, height: contentSize.height }
+        : { width: fittedContent?.width ?? 0, height: fittedContent?.height ?? 0 },
       translationStyle,
     ],
-    [fittedContent, translationStyle],
+    [contentSize, fittedContent, renderAtContentSize, translationStyle],
   );
 
   return (
@@ -232,6 +255,7 @@ export function ZoomableViewport({
         onReset={reset}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
+        resetDisabled={toolbarScale === initialTransform.scale}
         scale={toolbarScale}
         visible
       />

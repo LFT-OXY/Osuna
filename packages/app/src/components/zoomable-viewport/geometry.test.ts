@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FIT_TRANSFORM,
   clampTransform,
+  contentPointAtTopCenter,
   fitContentSize,
   isActivePinchUpdate,
   isPointInsideTransformedContent,
@@ -104,5 +105,79 @@ describe("zoomable viewport geometry", () => {
         maxScale: 8,
       }),
     ).toEqual({ scale: 0.25, x: 0, y: 0 });
+  });
+
+  it("fits only the width when asked, never enlarging past the cap", () => {
+    expect(
+      fitContentSize({ width: 600, height: 1200 }, { width: 300, height: 400 }, { mode: "width" }),
+    ).toEqual({ width: 300, height: 600 });
+    expect(
+      fitContentSize(
+        { width: 200, height: 100 },
+        { width: 300, height: 400 },
+        { mode: "width", maxFitScale: 1 },
+      ),
+    ).toEqual({ width: 200, height: 100 });
+  });
+
+  it("keeps the content at its own size in natural mode", () => {
+    expect(
+      fitContentSize(
+        { width: 600, height: 1200 },
+        { width: 300, height: 400 },
+        { mode: "natural" },
+      ),
+    ).toEqual({ width: 600, height: 1200 });
+  });
+
+  it("shows a content point at the top center of the viewport, inside the pan limits", () => {
+    const limits = { minScale: 0.25, maxScale: 8 };
+    const tall = { width: 300, height: 600 };
+    const tallViewport = { width: 300, height: 400 };
+
+    // 内容宽度正好铺满：横向不动，纵向把内容顶边放到视口顶边。
+    expect(
+      contentPointAtTopCenter({
+        contentPoint: { x: 300, y: 0 },
+        contentSize: { width: 600, height: 1200 },
+        fittedContent: tall,
+        viewport: tallViewport,
+        limits,
+      }),
+    ).toEqual({ scale: 1, x: 0, y: 100 });
+    // 原大的宽图：把 (450, 200) 移到视口顶部正中，但不拖出内容边界。
+    expect(
+      contentPointAtTopCenter({
+        contentPoint: { x: 450, y: 200 },
+        contentSize: { width: 600, height: 1200 },
+        fittedContent: { width: 600, height: 1200 },
+        viewport: tallViewport,
+        limits,
+      }),
+    ).toEqual({ scale: 1, x: -150, y: 200 });
+  });
+
+  it("lets content smaller than the viewport sit anywhere inside it when asked", () => {
+    const limits = { minScale: 0.25, maxScale: 8, panWithinViewport: true };
+
+    // 宽度铺满、高度只有 200 的内容放到视口顶边，而不是被拉回正中。
+    expect(
+      contentPointAtTopCenter({
+        contentPoint: { x: 300, y: 0 },
+        contentSize: { width: 600, height: 400 },
+        fittedContent: { width: 300, height: 200 },
+        viewport: { width: 300, height: 400 },
+        limits,
+      }),
+    ).toEqual({ scale: 1, x: 0, y: -100 });
+    // 但不能拖出视口。
+    expect(
+      clampTransform(
+        { scale: 1, x: 0, y: -500 },
+        { width: 300, height: 200 },
+        { width: 300, height: 400 },
+        limits,
+      ),
+    ).toEqual({ scale: 1, x: 0, y: -100 });
   });
 });

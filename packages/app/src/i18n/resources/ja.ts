@@ -4146,5 +4146,40 @@ export const ja: TranslationResources = {
       hostOutdatedDetail: "ロジックマップを使うには、このホストの Osuna を更新してください。",
       failed: "ロジックマップを切り替えられませんでした: {{error}}",
     },
+    panel: {
+      label: "ロジックマップ",
+      subtitle: "話し合っている機能の流れ",
+      tooltip: "このワークスペースでエージェントが管理するロジックマップを表示",
+      canvas: "ロジックマップのキャンバス",
+      pickerLabel: "ロジックマップ: {{title}}",
+      untitled: "無題のロジックマップ",
+      nodeCountOne: "{{count}} 個のノード",
+      nodeCountMany: "{{count}} 個のノード",
+      loading: "ロジックマップを読み込み中…",
+      empty: {
+        title: "ロジックマップはまだありません",
+        body: "コンポーザーのツールバーで「ロジックマップ」をオンにすると、話し合いに合わせてエージェントが機能のマップを管理します。",
+      },
+      newMap: {
+        start: "開始",
+        body: "エージェントはまだノードを追加していません。",
+      },
+      unreadable: "このロジックマップを読み込めません",
+      corruptDetail:
+        "{{map}}: {{file}} が壊れています（{{problem}}）。ファイルを修正するか元に戻してください。",
+      listFailed: "このワークスペースのロジックマップを一覧できません",
+      hostOutdated: {
+        title: "このホストの Osuna を更新してください",
+        body: "このホストの Osuna は古いため、ロジックマップを表示できません。",
+      },
+      branch: {
+        if: "もし",
+        elseIf: "それ以外でもし",
+        else: "それ以外",
+      },
+      subgraphTagOne: "サブグラフ · {{count}} 個のノード",
+      subgraphTagMany: "サブグラフ · {{count}} 個のノード",
+      pendingLink: "正式なドキュメント未リンク",
+    },
   },
 } as const;

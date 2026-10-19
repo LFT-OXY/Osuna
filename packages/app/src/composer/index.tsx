@@ -327,7 +327,14 @@ function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): Re
       />
     );
   }
-  return <LogicMapComposerToggle serverId={args.serverId} kind="agent" agentId={args.agentId} />;
+  return (
+    <LogicMapComposerToggle
+      serverId={args.serverId}
+      kind="agent"
+      agentId={args.agentId}
+      workspaceId={args.workspaceId}
+    />
+  );
 }
 
 function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {

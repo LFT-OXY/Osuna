@@ -4122,5 +4122,40 @@ export const ko: TranslationResources = {
       hostOutdatedDetail: "로직 맵을 사용하려면 이 호스트의 Osuna를 업데이트하세요.",
       failed: "로직 맵을 전환할 수 없습니다: {{error}}",
     },
+    panel: {
+      label: "로직 맵",
+      subtitle: "논의 중인 기능의 흐름",
+      tooltip: "이 워크스페이스에서 에이전트가 관리하는 로직 맵 보기",
+      canvas: "로직 맵 캔버스",
+      pickerLabel: "로직 맵: {{title}}",
+      untitled: "제목 없는 로직 맵",
+      nodeCountOne: "노드 {{count}}개",
+      nodeCountMany: "노드 {{count}}개",
+      loading: "로직 맵 불러오는 중…",
+      empty: {
+        title: "아직 로직 맵이 없습니다",
+        body: "컴포저 도구 모음에서 로직 맵을 켜면 논의하는 동안 에이전트가 기능의 맵을 관리합니다.",
+      },
+      newMap: {
+        start: "시작",
+        body: "에이전트가 아직 노드를 추가하지 않았습니다.",
+      },
+      unreadable: "이 로직 맵을 읽을 수 없습니다",
+      corruptDetail:
+        "{{map}}: {{file}} 파일이 손상되었습니다({{problem}}). 파일을 고치거나 복원하세요.",
+      listFailed: "이 워크스페이스의 로직 맵 목록을 가져올 수 없습니다",
+      hostOutdated: {
+        title: "이 호스트의 Osuna를 업데이트하세요",
+        body: "이 호스트의 Osuna가 오래되어 로직 맵을 표시할 수 없습니다.",
+      },
+      branch: {
+        if: "만약",
+        elseIf: "아니고 만약",
+        else: "아니면",
+      },
+      subgraphTagOne: "하위 그래프 · 노드 {{count}}개",
+      subgraphTagMany: "하위 그래프 · 노드 {{count}}개",
+      pendingLink: "정식 문서 미연결",
+    },
   },
 };

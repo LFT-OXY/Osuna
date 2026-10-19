@@ -14,7 +14,9 @@ import { useToast } from "@/contexts/toast-context";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import type { Theme } from "@/styles/theme";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { buildDraftLogicMapKey, useDraftLogicMapStore } from "./draft-logic-map-store";
 
 /** 开关在工具栏里的估计宽度：图标、"逻辑图"、Switch 与内边距，算 Agent controls 收缩档位时预留。 */
@@ -22,9 +24,17 @@ export const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
 
 /** 运行中的 Agent 按 agentId 开关；草稿还没有 Agent，按草稿 tab 记住 daemon 建好的图名。 */
 type LogicMapComposerToggleProps = { serverId: string } & (
-  | { kind: "agent"; agentId: string }
+  | { kind: "agent"; agentId: string; workspaceId: string | null }
   | { kind: "draft"; draftTabId: string; workspaceId: string }
 );
+
+/** 这个 workspace 第一次有对话打开逻辑图时，把逻辑图标签加进右边栏并选中；之后不再自动加。 */
+function revealLogicMapTabOnFirstEnable(serverId: string, workspaceId: string | null): void {
+  const workspaceKey = workspaceId
+    ? buildWorkspaceTabPersistenceKey({ serverId, workspaceId })
+    : null;
+  if (workspaceKey) useWorkspaceLayoutStore.getState().autoOpenLogicMapTab(workspaceKey);
+}
 
 const ThemedWorkflowIcon = withUnistyles(Workflow);
 const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -39,7 +49,13 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
   if (supported === null) return null;
   if (!supported) return <LogicMapHostOutdated />;
   if (props.kind === "agent") {
-    return <AgentLogicMapSwitch serverId={props.serverId} agentId={props.agentId} />;
+    return (
+      <AgentLogicMapSwitch
+        serverId={props.serverId}
+        agentId={props.agentId}
+        workspaceId={props.workspaceId}
+      />
+    );
   }
   return (
     <DraftLogicMapSwitch
@@ -73,7 +89,15 @@ function useLogicMapRequest(
   return [pendingValue, change];
 }
 
-function AgentLogicMapSwitch({ serverId, agentId }: { serverId: string; agentId: string }) {
+function AgentLogicMapSwitch({
+  serverId,
+  agentId,
+  workspaceId,
+}: {
+  serverId: string;
+  agentId: string;
+  workspaceId: string | null;
+}) {
   const client = useHostRuntimeClient(serverId);
   const enabled = useSessionStore((state) => {
     const agent = state.sessions[serverId]?.agents?.get(agentId);
@@ -83,8 +107,9 @@ function AgentLogicMapSwitch({ serverId, agentId }: { serverId: string; agentId:
     async (next: boolean) => {
       if (!client) return;
       await client.setAgentLogicMapEnabled({ target: { kind: "agent", agentId }, enabled: next });
+      if (next) revealLogicMapTabOnFirstEnable(serverId, workspaceId);
     },
-    [agentId, client],
+    [agentId, client, serverId, workspaceId],
   );
   const [pendingValue, change] = useLogicMapRequest(run);
   return (
@@ -114,6 +139,7 @@ function DraftLogicMapSwitch({
       // 关掉再打开沿用这个草稿已建好的图；只有第一次打开才让 daemon 新建。
       if (!next || store.draftsByKey[draftKey]) {
         store.setEnabled(draftKey, next);
+        if (next) revealLogicMapTabOnFirstEnable(serverId, workspaceId);
         return;
       }
       if (!client) return;
@@ -121,9 +147,11 @@ function DraftLogicMapSwitch({
         target: { kind: "draft", workspaceId },
         enabled: true,
       });
-      if (mapName) useDraftLogicMapStore.getState().turnOnWithMap(draftKey, mapName);
+      if (!mapName) return;
+      useDraftLogicMapStore.getState().turnOnWithMap(draftKey, mapName);
+      revealLogicMapTabOnFirstEnable(serverId, workspaceId);
     },
-    [client, draftKey, workspaceId],
+    [client, draftKey, serverId, workspaceId],
   );
   const [pendingValue, change] = useLogicMapRequest(run);
   return (

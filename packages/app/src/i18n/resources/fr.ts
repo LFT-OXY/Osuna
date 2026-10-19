@@ -4196,5 +4196,40 @@ export const fr: TranslationResources = {
       hostOutdatedDetail: "Mettez à jour Osuna sur cet hôte pour utiliser la carte logique.",
       failed: "Impossible de modifier la carte logique : {{error}}",
     },
+    panel: {
+      label: "Carte logique",
+      subtitle: "Le déroulement de la fonctionnalité en discussion",
+      tooltip: "Voir les cartes logiques que l'agent tient à jour dans cet espace de travail",
+      canvas: "Canevas de la carte logique",
+      pickerLabel: "Carte logique : {{title}}",
+      untitled: "Carte logique sans titre",
+      nodeCountOne: "{{count}} nœud",
+      nodeCountMany: "{{count}} nœuds",
+      loading: "Chargement de la carte logique…",
+      empty: {
+        title: "Pas encore de carte logique",
+        body: "Activez Carte logique dans la barre du compositeur. L'agent tiendra alors une carte de la fonctionnalité pendant la discussion.",
+      },
+      newMap: {
+        start: "Début",
+        body: "L'agent n'a encore ajouté aucun nœud.",
+      },
+      unreadable: "Impossible de lire cette carte logique",
+      corruptDetail:
+        "{{map}} : {{file}} est endommagé ({{problem}}). Corrigez ou restaurez le fichier.",
+      listFailed: "Impossible de lister les cartes logiques de cet espace de travail",
+      hostOutdated: {
+        title: "Mettez à jour Osuna sur cet hôte",
+        body: "La version d'Osuna de cet hôte est trop ancienne pour afficher les cartes logiques.",
+      },
+      branch: {
+        if: "Si",
+        elseIf: "Sinon si",
+        else: "Sinon",
+      },
+      subgraphTagOne: "Sous-graphe · {{count}} nœud",
+      subgraphTagMany: "Sous-graphe · {{count}} nœuds",
+      pendingLink: "Pas encore de doc formelle",
+    },
   },
 };

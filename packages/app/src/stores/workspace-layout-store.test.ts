@@ -556,6 +556,7 @@ describe("workspace-layout-store version 2 migration", () => {
         "explorerSidebarSeededTabKindsByWorkspace",
         "explorerSidebarWidthByWorkspace",
         "layoutByWorkspace",
+        "logicMapTabAutoOpenedByWorkspace",
         "pinnedAgentIdsByWorkspace",
         "pullRequestTabAutoOpenedByWorkspace",
         "sidePaneIdByWorkspace",
@@ -3292,6 +3293,7 @@ describe("workspace-layout-store actions", () => {
       explorerSidebarWidthByWorkspace: currentState.explorerSidebarWidthByWorkspace,
       explorerPaneIdByWorkspace: {},
       pullRequestTabAutoOpenedByWorkspace: currentState.pullRequestTabAutoOpenedByWorkspace,
+      logicMapTabAutoOpenedByWorkspace: currentState.logicMapTabAutoOpenedByWorkspace,
       sidePaneIdByWorkspace: currentState.sidePaneIdByWorkspace,
       explorerSidebarSeededTabKindsByWorkspace: { [workspaceKey]: ["session_history"] },
     });
@@ -3523,6 +3525,7 @@ describe("workspace-layout-store actions", () => {
     expect(partialize).toBeTypeOf("function");
     expect(partialize?.(state)).toEqual({
       pullRequestTabAutoOpenedByWorkspace: {},
+      logicMapTabAutoOpenedByWorkspace: {},
       layoutByWorkspace: {},
       pinnedAgentIdsByWorkspace: {},
       splitSizesByWorkspace: {},
@@ -4590,4 +4593,47 @@ it("persists the once-only PR add after closing, and clears it when purging the 
   restored.getState().purgeWorkspace(workspaceKey);
   expect(restored.getState().pullRequestTabAutoOpenedByWorkspace[workspaceKey]).toBeUndefined();
   expect(restored.getState().autoOpenPullRequestTab(workspaceKey, placement)).toBe("pull_request");
+});
+
+it("adds and selects the logic map tab in Explorer the first time, never again once closed", async () => {
+  await AsyncStorage.removeItem("workspace-layout-state");
+  const source = createWorkspaceLayoutStore(workspaceLayoutIds);
+  await source.persist.rehydrate();
+  const workspaceKey = "server-1:logic-map-once";
+  source.getState().openTab({
+    workspaceKey,
+    target: { kind: "agent", agentId: "agent-a" },
+    intent: "reveal",
+  });
+  const explorerTabKinds = () => {
+    const layout = source.getState().layoutByWorkspace[workspaceKey];
+    const explorer = findPaneById(layout.root, "explorer");
+    return {
+      hidden: explorer?.hidden === true,
+      kinds: collectAllTabs(layout.root)
+        .filter((tab) => explorer?.tabIds.includes(tab.tabId))
+        .map((tab) => tab.target.kind),
+      focused: explorer?.focusedTabId,
+    };
+  };
+  expect(explorerTabKinds().kinds).not.toContain("logic_map");
+
+  expect(source.getState().autoOpenLogicMapTab(workspaceKey)).toBe("logic_map");
+  expect(explorerTabKinds()).toEqual({
+    hidden: false,
+    kinds: ["files", "changes_tree", "session_history", "logic_map"],
+    focused: "logic_map",
+  });
+
+  source.getState().closeTab(workspaceKey, "logic_map");
+  const restored = createWorkspaceLayoutStore(workspaceLayoutIds);
+  await restored.persist.rehydrate();
+  expect(restored.getState().autoOpenLogicMapTab(workspaceKey)).toBeNull();
+  expect(
+    collectAllTabs(restored.getState().layoutByWorkspace[workspaceKey].root).map(
+      (tab) => tab.target.kind,
+    ),
+  ).not.toContain("logic_map");
+  restored.getState().purgeWorkspace(workspaceKey);
+  expect(restored.getState().logicMapTabAutoOpenedByWorkspace[workspaceKey]).toBeUndefined();
 });

@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
   FIT_TRANSFORM,
+  contentPointAtTopCenter,
   fitContentSize,
   isPointInsideTransformedContent,
   panContent,
@@ -49,12 +50,16 @@ export function ZoomableViewport({
   actions = [],
   accessibilityLabel,
   fit,
+  initialTopCenter,
+  renderAtContentSize = false,
+  panWithinViewport = false,
   maxScale = DEFAULT_MAX_SCALE,
   minScale = DEFAULT_MIN_SCALE,
   onPressOutsideContent,
   style,
   testID,
   wheelActivation = "modifier",
+  wheelPan = false,
 }: ZoomableViewportProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, ViewportPoint>());
@@ -71,13 +76,43 @@ export function ZoomableViewport({
     () => (viewport ? fitContentSize(contentSize, viewport, fit) : null),
     [contentSize, fit, viewport],
   );
-  const limits = useMemo(() => ({ minScale, maxScale }), [maxScale, minScale]);
+  const limits = useMemo(
+    () => ({ minScale, maxScale, panWithinViewport }),
+    [maxScale, minScale, panWithinViewport],
+  );
+  const anchorX = initialTopCenter?.x;
+  const anchorY = initialTopCenter?.y;
+  const initialTransform = useMemo(() => {
+    if (anchorX === undefined || anchorY === undefined || !fittedContent || !viewport) {
+      return FIT_TRANSFORM;
+    }
+    return contentPointAtTopCenter({
+      contentPoint: { x: anchorX, y: anchorY },
+      contentSize,
+      fittedContent,
+      viewport,
+      limits,
+    });
+  }, [anchorX, anchorY, contentSize, fittedContent, limits, viewport]);
 
   const commitTransform = useCallback((next: ViewportTransform) => {
     transformRef.current = next;
     setTransform(next);
   }, []);
-  const reset = useCallback(() => commitTransform(FIT_TRANSFORM), [commitTransform]);
+  const reset = useCallback(
+    () => commitTransform(initialTransform),
+    [commitTransform, initialTransform],
+  );
+  const canPanAt = useCallback(
+    (scale: number) =>
+      Boolean(
+        fittedContent &&
+        viewport &&
+        (fittedContent.width * scale > viewport.width ||
+          fittedContent.height * scale > viewport.height),
+      ),
+    [fittedContent, viewport],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -119,6 +154,15 @@ export function ZoomableViewport({
     [viewport, zoomAt],
   );
   const zoomIn = useCallback(() => zoomFromCenter(1.25), [zoomFromCenter]);
+  const panBy = useCallback(
+    (delta: ViewportPoint) => {
+      if (!fittedContent || !viewport) return;
+      commitTransform(
+        panContent({ transform: transformRef.current, delta, fittedContent, viewport, limits }),
+      );
+    },
+    [commitTransform, fittedContent, limits, viewport],
+  );
   const zoomOut = useCallback(() => zoomFromCenter(0.8), [zoomFromCenter]);
 
   useEffect(() => {
@@ -127,7 +171,13 @@ export function ZoomableViewport({
     const activeCanvas = canvas;
     function zoomWithWheel(event: WheelEvent) {
       const hasModifier = event.ctrlKey || event.metaKey;
-      if (wheelActivation === "modifier" && !hasModifier) return;
+      if (wheelActivation === "modifier" && !hasModifier) {
+        if (wheelPan) {
+          event.preventDefault();
+          panBy({ x: -event.deltaX, y: -event.deltaY });
+        }
+        return;
+      }
       event.preventDefault();
       const bounds = activeCanvas.getBoundingClientRect();
       const factor = Math.min(1.25, Math.max(0.8, Math.exp(-event.deltaY * 0.01)));
@@ -138,32 +188,35 @@ export function ZoomableViewport({
     }
     activeCanvas.addEventListener("wheel", zoomWithWheel, { passive: false });
     return () => activeCanvas.removeEventListener("wheel", zoomWithWheel);
-  }, [wheelActivation, zoomAt]);
+  }, [panBy, wheelActivation, wheelPan, zoomAt]);
 
-  const beginPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (event.pointerType !== "mouse") setHasTouchInput(true);
-    if (pointersRef.current.size === 0) suppressClickRef.current = false;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const points = Array.from(pointersRef.current.values());
-    if (points.length >= 2) {
+  const beginPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.pointerType !== "mouse") setHasTouchInput(true);
+      if (pointersRef.current.size === 0) suppressClickRef.current = false;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const points = Array.from(pointersRef.current.values());
+      if (points.length >= 2) {
+        gestureRef.current = {
+          type: "pinch",
+          distance: distance(points),
+          midpoint: midpoint(points),
+        };
+        setIsDragging(true);
+        return;
+      }
       gestureRef.current = {
-        type: "pinch",
-        distance: distance(points),
-        midpoint: midpoint(points),
+        type: "drag",
+        pointerId: event.pointerId,
+        startPoint: points[0],
+        startTransform: transformRef.current,
       };
-      setIsDragging(true);
-      return;
-    }
-    gestureRef.current = {
-      type: "drag",
-      pointerId: event.pointerId,
-      startPoint: points[0],
-      startTransform: transformRef.current,
-    };
-    setIsDragging(transformRef.current.scale > 1);
-  }, []);
+      setIsDragging(canPanAt(transformRef.current.scale));
+    },
+    [canPanAt],
+  );
 
   const movePointer = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -219,26 +272,29 @@ export function ZoomableViewport({
     [commitTransform, fittedContent, limits, viewport],
   );
 
-  const endPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    pointersRef.current.delete(event.pointerId);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    const remaining = Array.from(pointersRef.current.entries());
-    if (remaining.length === 1) {
-      const [pointerId, point] = remaining[0];
-      gestureRef.current = {
-        type: "drag",
-        pointerId,
-        startPoint: point,
-        startTransform: transformRef.current,
-      };
-      setIsDragging(transformRef.current.scale > 1);
-      return;
-    }
-    gestureRef.current = null;
-    setIsDragging(false);
-  }, []);
+  const endPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      pointersRef.current.delete(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      const remaining = Array.from(pointersRef.current.entries());
+      if (remaining.length === 1) {
+        const [pointerId, point] = remaining[0];
+        gestureRef.current = {
+          type: "drag",
+          pointerId,
+          startPoint: point,
+          startTransform: transformRef.current,
+        };
+        setIsDragging(canPanAt(transformRef.current.scale));
+        return;
+      }
+      gestureRef.current = null;
+      setIsDragging(false);
+    },
+    [canPanAt],
+  );
 
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -261,18 +317,27 @@ export function ZoomableViewport({
 
   const renderedCanvasStyle = useMemo<React.CSSProperties>(() => {
     let cursor: React.CSSProperties["cursor"] = "default";
-    if (transform.scale > 1) cursor = isDragging ? "grabbing" : "grab";
+    if (canPanAt(transform.scale)) cursor = isDragging ? "grabbing" : "grab";
     return { ...canvasDomStyle, cursor };
-  }, [isDragging, transform.scale]);
-  const renderedContentStyle = useMemo<React.CSSProperties>(
-    () => ({
+  }, [canPanAt, isDragging, transform.scale]);
+  const renderedContentStyle = useMemo<React.CSSProperties>(() => {
+    if (renderAtContentSize && fittedContent) {
+      // 子元素按原始尺寸排版，再连同适配比例一起缩放；居中排版下视觉上与按适配尺寸排版一致。
+      const fitRatio = fittedContent.width / contentSize.width;
+      return {
+        ...contentDomStyle,
+        width: contentSize.width,
+        height: contentSize.height,
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale * fitRatio})`,
+      };
+    }
+    return {
       ...contentDomStyle,
       width: fittedContent?.width ?? 0,
       height: fittedContent?.height ?? 0,
       transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
-    }),
-    [fittedContent, transform],
-  );
+    };
+  }, [contentSize, fittedContent, renderAtContentSize, transform]);
   const controlsVisible = isHovered || isFocusWithin || hasTouchInput;
   const handleFocus = useCallback(() => setIsFocusWithin(true), []);
   const handleBlur = useCallback(() => setIsFocusWithin(false), []);
@@ -314,6 +379,11 @@ export function ZoomableViewport({
           onReset={reset}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
+          resetDisabled={
+            transform.scale === initialTransform.scale &&
+            transform.x === initialTransform.x &&
+            transform.y === initialTransform.y
+          }
           scale={transform.scale}
           visible={controlsVisible}
         />
