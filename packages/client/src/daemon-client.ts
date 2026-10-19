@@ -684,6 +684,10 @@ type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
 >["payload"];
+type ApiEndpointListTemplatesPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.list_templates.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -6441,6 +6445,14 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.reveal_key.request", endpointId },
+    });
+  }
+
+  /** 内置模板清单（「+」先出的列表）；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointListTemplates(requestId?: string): Promise<ApiEndpointListTemplatesPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.list_templates.request" },
     });
   }
 

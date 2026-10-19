@@ -142,6 +142,9 @@ export const ApiEndpointSchema = z.object({
   apiKeyMask: z.string().optional(),
   // 默认模型先去这家的 Agent（provider）：默认模型指定了这家，或光秃秃的名字在接口顺序里最先由这家提供；老 daemon 不发。
   defaultModelProviders: z.array(z.string()).optional(),
+  // 从哪个模板（Template）加的、选的哪个区域或套餐；「自定义」加的没有。老 daemon 不发。
+  templateId: z.string().optional(),
+  region: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -281,6 +284,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * copyOf（复制，Duplicate）：新建时从这家起步——请求没给的字段（上游清单、手动添加的模型、联网搜索开关与以后加的设置）
  * 取它的，apiKey 留空就用它的 key；名称、标识重了 daemon 自动避让。与 endpointId 一起给时拒收。老 daemon 忽略它。
+ *
+ * templateId、region：从哪个模板加的、选的哪个区域或套餐（地址由客户端按模板填好放进 baseUrls）。
+ * 不认识的模板、不属于它的区域拒收；省略即保留这家原来的。老 daemon 忽略它们。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -297,6 +303,8 @@ export const ApiEndpointSaveRequestSchema = z.object({
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   searchesWeb: z.boolean().optional(),
   copyOf: z.string().optional(),
+  templateId: z.string().optional(),
+  region: z.string().optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -571,6 +579,71 @@ export const ApiEndpointRevealKeyResponseSchema = z.object({
   }),
 });
 export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyResponseSchema>;
+
+/**
+ * 模板（Template）的一个区域或套餐：自己的一套各格式地址；keysUrl、website、modelsDevIds 只在和模板的不同时给。
+ * models 是这个套餐的内置模型清单；listsModels 是模板整体没有清单接口（noModelList）时这里却有。
+ */
+export const ApiEndpointTemplateRegionSchema = z.object({
+  id: z.string(),
+  // 英文原名；客户端认得的按界面语言显示，认不出的照原文。
+  name: z.string(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  keysUrl: z.string().optional(),
+  website: z.string().optional(),
+  modelsDevIds: z.array(z.string()).optional(),
+  models: z.array(z.string()).optional(),
+  listsModels: z.boolean().optional(),
+});
+export type ApiEndpointTemplateRegion = z.infer<typeof ApiEndpointTemplateRegionSchema>;
+
+/**
+ * 内置模板，随 daemon 版本走、不联网下载（照 magpie presets.go）。`group` 是字符串：vendor（厂商）、relay（中转服务）、
+ * local（本机），以后可能加新的。国际站与中国站各是一个模板，中国站的 id 是国际站的加 `-cn`（照 magpie），客户端合成一行。
+ * regions 的第一个是默认；`regionLabel` 说它们是 region（区域）还是 plan（套餐），没有即 region。
+ * keyOptional：不填 key 也能用（本机服务、免费模型）；keyHint 是 key 框里的英文提示。
+ * modelsDevIds 是 models.dev 里的 id（补模型资料用）；models 是内置模型清单，noModelList 时它就是清单；
+ * modelIdPrefix：这家的清单里只有以它开头的模型属于这个模板（照 magpie Only）。headerHints 是厂商文档里可加的请求头名。
+ */
+export const ApiEndpointTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  shortName: z.string().optional(),
+  group: z.string(),
+  note: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  website: z.string().optional(),
+  keysUrl: z.string().optional(),
+  keyOptional: z.boolean().optional(),
+  keyHint: z.string().optional(),
+  modelsDevIds: z.array(z.string()),
+  regionLabel: z.string().optional(),
+  regions: z.array(ApiEndpointTemplateRegionSchema).optional(),
+  headerHints: z.array(z.string()).optional(),
+  models: z.array(z.string()).optional(),
+  noModelList: z.boolean().optional(),
+  modelIdPrefix: z.string().optional(),
+});
+export type ApiEndpointTemplate = z.infer<typeof ApiEndpointTemplateSchema>;
+
+/** 模板清单（「+」先出的列表）。只有声明了 apiEndpointManagement 的 daemon 认它。 */
+export const ApiEndpointListTemplatesRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.list_templates.request"),
+  requestId: z.string(),
+});
+export type ApiEndpointListTemplatesRequest = z.infer<typeof ApiEndpointListTemplatesRequestSchema>;
+
+export const ApiEndpointListTemplatesResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.list_templates.response"),
+  payload: z.object({
+    requestId: z.string(),
+    templates: z.array(ApiEndpointTemplateSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointListTemplatesResponse = z.infer<
+  typeof ApiEndpointListTemplatesResponseSchema
+>;
 
 /**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、

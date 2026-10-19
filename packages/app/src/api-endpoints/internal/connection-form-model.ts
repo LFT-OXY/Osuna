@@ -5,7 +5,10 @@ import {
   type ApiEndpointFormatDetection,
   type ApiEndpointRequestFormat,
   type ApiEndpointSaveRequest,
+  type ApiEndpointTemplate,
+  type ApiEndpointTemplateRegion,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -14,10 +17,13 @@ import {
  * 主机声明了 apiEndpointManagement 时 key 选填：没 key 也能检测、保存，daemon 不带认证头；老主机仍要 key。
  * 同样只在这种主机上：「复制」以原来那家开一个新建表单（key 留空即沿用它的，daemon 拷），key 框旁有「显示」，
  * 编辑时按它读回已存 key 的原文放进框里；读回来的不算新 key，改了才算（照 magpie）。
+ * 从模板（Template）添加时名称与各格式地址按模板填好，不用自动检测；有区域或套餐的可切换，新建时国际站与中国站也可切换，
+ * 切换只保留 key（照 magpie：切区域保留名称，切站点连名称一起换）。编辑从模板加的接口时同样能切区域或套餐。
  */
 
 export type ConnectionFormSeed =
-  | { mode: "create" }
+  // templateId 为 null 是「自定义」；「再加一家」用那家的模板。认不出的模板按「自定义」开。
+  | { mode: "create"; templateId: string | null }
   | { mode: "edit"; endpoint: ApiEndpoint }
   // name 是调用方按界面语言起好的「原名 副本」；重名由 daemon 避让。
   | { mode: "duplicate"; source: ApiEndpoint; name: string };
@@ -56,11 +62,31 @@ export interface ConnectionFormOptions {
   isKeyOptional: boolean;
   // 同上：key 框旁有「显示」，能读回已存的 key。
   canRevealKey: boolean;
+  // 主机给的模板清单；老主机没有，为空。
+  templates: readonly ApiEndpointTemplate[];
+}
+
+/** 表单用的模板：区域或套餐、站点（国际 / 中国，只在新建时）与当前的「去拿 key」页面。 */
+export interface ConnectionTemplateState {
+  id: string;
+  name: string;
+  note: string | null;
+  keyHint: string | null;
+  // daemon 给的字符串：region（区域）或 plan（套餐）。
+  regionLabel: string;
+  regions: { id: string; name: string }[] | null;
+  regionId: string | null;
+  sites: TemplateSiteChoice[] | null;
+  keysUrl: string | null;
 }
 
 export interface ConnectionFormState {
   mode: ConnectionFormSeed["mode"];
+  // 「自定义」或模板认不出时为 null。
+  template: ConnectionTemplateState | null;
   name: string;
+  // 换站点改写了名称时加一，名称框据此换成新值。
+  nameGeneration: number;
   // 用户打的 key；空即不换（编辑保留原 key，复制沿用原来那家的）。
   apiKey: string;
   // key 框里显示的值与它换值的次数：读回已存的 key 时放进去，再藏起来时清掉；不是用户打的不进 apiKey。
@@ -101,6 +127,10 @@ export interface ConnectionFormModel {
   getState(): ConnectionFormState;
   subscribe(listener: () => void): () => void;
   setName(value: string): void;
+  // 切区域或套餐：各格式地址与「去拿 key」页面跟着换，key 与名称保留。
+  setRegion(regionId: string): void;
+  // 新建时切国际站 / 中国站：只保留 key，其余按那个模板重来。
+  setSite(templateId: string): void;
   setApiKey(value: string): void;
   // 「显示 / 隐藏」：编辑已存了 key、框里没打新的时先读回原文。
   toggleKeyVisible(): void;
@@ -116,7 +146,10 @@ type Urls = Record<ApiEndpointRequestFormat, string>;
 type Labels = Partial<Record<ApiEndpointRequestFormat, FormatDetectionLabel>>;
 
 interface Values {
+  template: ApiEndpointTemplate | null;
+  regionId: string | null;
   name: string;
+  nameGeneration: number;
   apiKey: string;
   keyBoxValue: string;
   keyBoxGeneration: number;
@@ -142,7 +175,7 @@ export function createConnectionFormModel(
   deps: ConnectionFormDeps,
   options: ConnectionFormOptions,
 ): ConnectionFormModel {
-  const { isKeyOptional, canRevealKey } = options;
+  const { isKeyOptional, canRevealKey, templates } = options;
   const listeners = new Set<() => void>();
   // 编辑的这家，或复制的原来那家：没打 key 时检测、保存都用它已存的 key。
   const keyOwner = keyOwnerOf(seed);
@@ -150,9 +183,18 @@ export function createConnectionFormModel(
   let closed = false;
   // 当前这次自动检测；取消或重新检测后，旧请求晚到的结果不再生效。
   let pendingDetect: AbortController | null = null;
-  const seededUrls = keyOwner ? urlsOf(keyOwner) : EMPTY_URLS;
+  const seededTemplate = templateOf(seed, templates);
+  const seededRegion = seededTemplate ? initialRegionOf(seed, seededTemplate) : null;
+  const seededUrls = initialUrlsOf({
+    keyOwner,
+    template: seededTemplate,
+    region: seededRegion,
+  });
   let values: Values = {
-    name: initialNameOf(seed),
+    template: seededTemplate,
+    regionId: seededRegion?.id ?? null,
+    name: seededTemplate && seed.mode === "create" ? seededTemplate.name : initialNameOf(seed),
+    nameGeneration: 0,
     apiKey: "",
     keyBoxValue: "",
     keyBoxGeneration: 0,
@@ -193,7 +235,9 @@ export function createConnectionFormModel(
     const busy = next.detecting || next.submitting;
     return {
       mode: seed.mode,
+      template: next.template ? templateStateOf(next.template, next.regionId) : null,
       name: next.name,
+      nameGeneration: next.nameGeneration,
       apiKey: next.apiKey,
       keyBoxValue: next.keyBoxValue,
       keyBoxGeneration: next.keyBoxGeneration,
@@ -222,6 +266,25 @@ export function createConnectionFormModel(
     values = { ...values, ...patch };
     state = derive(values);
     for (const listener of listeners) listener();
+  }
+
+  function templateStateOf(
+    template: ApiEndpointTemplate,
+    regionId: string | null,
+  ): ConnectionTemplateState {
+    const region = template.regions?.find((candidate) => candidate.id === regionId) ?? null;
+    return {
+      id: template.id,
+      name: template.name,
+      note: template.note ?? null,
+      keyHint: template.keyHint ?? null,
+      regionLabel: template.regionLabel ?? "region",
+      regions: template.regions?.map(({ id, name }) => ({ id, name })) ?? null,
+      regionId,
+      // 国际站与中国站只在新建时切换（照 magpie）。
+      sites: seed.mode === "create" ? siteChoicesOf(templates, template.id) : null,
+      keysUrl: region?.keysUrl ?? template.keysUrl ?? null,
+    };
   }
 
   function abortPendingDetect(): void {
@@ -282,6 +345,8 @@ export function createConnectionFormModel(
       name: values.name.trim(),
       baseUrls,
       ...(apiKey ? { apiKey } : {}),
+      ...(values.template ? { templateId: values.template.id } : {}),
+      ...(values.regionId ? { region: values.regionId } : {}),
       // 连接弹窗不挑模型：新建时一个都没有，编辑、复制时把已选模型与档位映射原样带上。
       models: keyOwner?.models ?? [],
       ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
@@ -320,6 +385,33 @@ export function createConnectionFormModel(
       return () => listeners.delete(listener);
     },
     setName: (name) => update({ name }),
+    setRegion(regionId) {
+      const region = values.template?.regions?.find((candidate) => candidate.id === regionId);
+      if (!values.template || !region) return;
+      update({
+        regionId,
+        urls: urlsOf(region.baseUrls),
+        labels: {},
+        urlGeneration: values.urlGeneration + 1,
+      });
+    },
+    setSite(templateId) {
+      const template = templates.find((candidate) => candidate.id === templateId);
+      const isSiteChoice = state.template?.sites?.some(
+        (choice) => choice.templateId === templateId,
+      );
+      if (!template || !isSiteChoice) return;
+      const region = template.regions?.[0] ?? null;
+      update({
+        template,
+        regionId: region?.id ?? null,
+        name: template.name,
+        nameGeneration: values.nameGeneration + 1,
+        urls: urlsOf(templateBaseUrls(template, region)),
+        labels: {},
+        urlGeneration: values.urlGeneration + 1,
+      });
+    },
     setApiKey(apiKey) {
       abortPendingDetect();
       update({
@@ -403,9 +495,48 @@ function keyOwnerOf(seed: ConnectionFormSeed): ApiEndpoint | null {
   return null;
 }
 
-function urlsOf(endpoint: ApiEndpoint): Urls {
+/** 模板起步的那家：新建是 templateId 指的，编辑、复制是这家记下的；清单里没有就当「自定义」。 */
+function templateOf(
+  seed: ConnectionFormSeed,
+  templates: readonly ApiEndpointTemplate[],
+): ApiEndpointTemplate | null {
+  const templateId =
+    seed.mode === "create" ? seed.templateId : (keyOwnerOf(seed)?.templateId ?? null);
+  if (templateId === null) return null;
+  return templates.find((candidate) => candidate.id === templateId) ?? null;
+}
+
+/** 新建从第一个区域或套餐起步；编辑、复制用这家记下的，没记或已不在模板里时也用第一个（照 magpie）。 */
+function initialRegionOf(
+  seed: ConnectionFormSeed,
+  template: ApiEndpointTemplate,
+): ApiEndpointTemplateRegion | null {
+  const regions = template.regions ?? [];
+  const saved = keyOwnerOf(seed)?.region;
+  return regions.find((candidate) => candidate.id === saved) ?? regions[0] ?? null;
+}
+
+/** 编辑、复制从这家存的地址起步；新建从模板（和它的第一个区域）起步；「自定义」全空。 */
+function initialUrlsOf(input: {
+  keyOwner: ApiEndpoint | null;
+  template: ApiEndpointTemplate | null;
+  region: ApiEndpointTemplateRegion | null;
+}): Urls {
+  if (input.keyOwner) return urlsOf(input.keyOwner.baseUrls ?? []);
+  if (input.template) return urlsOf(templateBaseUrls(input.template, input.region));
+  return EMPTY_URLS;
+}
+
+function templateBaseUrls(
+  template: ApiEndpointTemplate,
+  region: ApiEndpointTemplateRegion | null,
+): ApiEndpointTemplate["baseUrls"] {
+  return region?.baseUrls ?? template.baseUrls;
+}
+
+function urlsOf(baseUrls: ApiEndpointTemplate["baseUrls"]): Urls {
   const urls = { ...EMPTY_URLS };
-  for (const entry of endpoint.baseUrls ?? []) {
+  for (const entry of baseUrls) {
     const format = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === entry.format);
     if (format) urls[format] = entry.url;
   }

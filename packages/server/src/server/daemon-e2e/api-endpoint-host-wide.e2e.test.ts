@@ -1098,6 +1098,8 @@ describe("an API key is optional", () => {
       models: [{ id: "local-1" }],
       manualModels: [{ id: "by-hand" }],
       searchesWeb: true,
+      templateId: "zhipu",
+      region: "coding",
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1131,6 +1133,8 @@ describe("an API key is optional", () => {
       manualModels: [{ id: "by-hand" }],
       searchesWeb: true,
       catalog: { models: [{ id: "local-1" }] },
+      templateId: "zhipu",
+      region: "coding",
     });
   });
 });
@@ -1339,5 +1343,164 @@ describe("reading a saved key back", () => {
       apiKey: null,
       error: { code: "not_found" },
     });
+  });
+});
+
+describe("Templates", () => {
+  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7），
+  // Bedrock 与 Azure（07 号工单）、4 个本机模板（08 号工单）。
+  const LEFT_OUT = new Set([
+    "typesafe",
+    "vercel-jev",
+    "cloudflare-jev",
+    "bailian-decision",
+    "qwen-decision",
+    "remote-magpie",
+    "vertex",
+    "google",
+    "bedrock",
+    "azure",
+    "ollama",
+    "lmstudio",
+    "omlx",
+    "mlx-serve",
+  ]);
+
+  test("the list has magpie's vendors and relay services, and none of what is left out", async () => {
+    const { client } = await start();
+
+    const { templates, error } = await client.apiEndpointListTemplates();
+
+    expect(error).toBeNull();
+    expect(templates.length).toBe(43);
+    const groups = new Map<string, number>();
+    for (const template of templates) {
+      groups.set(template.group, (groups.get(template.group) ?? 0) + 1);
+    }
+    expect(Object.fromEntries(groups)).toEqual({ vendor: 27, relay: 16 });
+    const ids = templates.map((template) => template.id);
+    expect(ids.filter((id) => LEFT_OUT.has(id))).toEqual([]);
+    expect(new Set(ids).size).toBe(ids.length);
+    // 中国站与国际站成对：每个 -cn 都有对应的国际站。
+    const chinaSites = ids.filter((id) => id.endsWith("-cn"));
+    expect(chinaSites.sort()).toEqual([
+      "kimi-code-cn",
+      "minimax-cn",
+      "moonshot-cn",
+      "qwen-cn",
+      "stepfun-cn",
+    ]);
+    for (const id of chinaSites) expect(ids).toContain(id.slice(0, -3));
+    // 每个都能直接用：有地址，有「去拿 key」的页面。
+    for (const template of templates) {
+      expect(template.baseUrls.length, template.id).toBeGreaterThan(0);
+      expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
+    }
+    const zhipu = templates.find((template) => template.id === "zhipu");
+    expect(zhipu).toMatchObject({
+      group: "vendor",
+      regionLabel: "plan",
+      regions: [
+        { id: "api", name: "Pay as you go" },
+        {
+          id: "coding",
+          name: "Coding Plan",
+          baseUrls: [
+            { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+            { format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+            { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("an endpoint saved from a template keeps its address, template and region; switching the region moves the address", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+    const zhipu = templates.find((template) => template.id === "zhipu");
+    const [payAsYouGo, coding] = zhipu?.regions ?? [];
+    if (!payAsYouGo || !coding) throw new Error("zhipu has no plans");
+
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Zhipu GLM",
+      baseUrls: payAsYouGo.baseUrls,
+      apiKey: "sk-zhipu",
+      models: [],
+      templateId: "zhipu",
+      region: "api",
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(saved.endpoint).toMatchObject({
+      templateId: "zhipu",
+      region: "api",
+      baseUrls: payAsYouGo.baseUrls,
+    });
+
+    const switched = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Zhipu GLM",
+      baseUrls: coding.baseUrls,
+      models: [],
+      region: "coding",
+    });
+
+    expect(switched.error).toBeNull();
+    const listed = (await client.apiEndpointList("claude")).endpoints[0];
+    expect(listed).toMatchObject({
+      templateId: "zhipu",
+      region: "coding",
+      baseUrls: coding.baseUrls,
+      hasApiKey: true,
+    });
+  });
+
+  test("Add another from the same template gets a name of its own", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+    const deepseek = templates.find((template) => template.id === "deepseek");
+    if (!deepseek) throw new Error("no DeepSeek template");
+    const names: string[] = [];
+    for (const apiKey of ["sk-one", "sk-two"]) {
+      const saved = await client.apiEndpointSave({
+        provider: "claude",
+        name: deepseek.name,
+        baseUrls: deepseek.baseUrls,
+        apiKey,
+        models: [],
+        templateId: deepseek.id,
+      });
+      names.push(saved.endpoint?.name ?? "");
+    }
+    expect(names).toEqual(["DeepSeek", "DeepSeek 2"]);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.templateId)).toEqual(["deepseek", "deepseek"]);
+    expect(listed.map((row) => row.region)).toEqual([undefined, undefined]);
+  });
+
+  test("a template it does not know, or a region not of that template, is refused and adds nothing", async () => {
+    const { client } = await start();
+    const base = {
+      provider: "claude",
+      name: "Somewhere",
+      baseUrls: [{ format: "openai_chat" as const, url: "https://somewhere.example/v1" }],
+      models: [],
+    };
+
+    const unknown = await client.apiEndpointSave({ ...base, templateId: "no-such-template" });
+    const wrongRegion = await client.apiEndpointSave({
+      ...base,
+      templateId: "zhipu",
+      region: "moon",
+    });
+    const regionAlone = await client.apiEndpointSave({ ...base, region: "coding" });
+
+    expect(unknown.error?.code).toBe("invalid_input");
+    expect(wrongRegion.error?.code).toBe("invalid_input");
+    expect(regionAlone.error?.code).toBe("invalid_input");
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
   });
 });

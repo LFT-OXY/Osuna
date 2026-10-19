@@ -29,8 +29,10 @@ import {
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
   type ApiEndpointSwitchOffPreview,
+  type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { API_ENDPOINT_TEMPLATES, findTemplate } from "./templates.js";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -296,6 +298,9 @@ export interface ApiEndpointSaveInput {
   searchesWeb?: boolean;
   // 复制：新建时从这家起步，没给的字段与留空的 key 都取它的。不能和 endpointId 一起给。
   copyOf?: string;
+  // undefined：保留这家原来的模板与区域或套餐。
+  templateId?: string;
+  region?: string;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -980,6 +985,7 @@ export class ApiEndpointService {
         existing,
         copySource,
         fields,
+        template: validateTemplate(input, existing ?? copySource),
         searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
@@ -1017,6 +1023,11 @@ export class ApiEndpointService {
       }
       return this.toWire(next, endpoint, supported);
     });
+  }
+
+  /** 内置模板清单（templates.ts），随版本走，不联网。 */
+  listTemplates(): ApiEndpointTemplate[] {
+    return [...API_ENDPOINT_TEMPLATES];
   }
 
   /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
@@ -3162,6 +3173,8 @@ export class ApiEndpointService {
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
       searchesWeb: endpoint.searchesWeb === true,
+      ...(endpoint.templateId !== undefined ? { templateId: endpoint.templateId } : {}),
+      ...(endpoint.region !== undefined ? { region: endpoint.region } : {}),
     };
   }
 
@@ -3454,6 +3467,57 @@ function freeEndpointName(state: ApiEndpointState, name: string): string {
   return candidate;
 }
 
+/** 这次保存的模板与区域：templateId undefined 即沿用 base 的；region 给了就用，否则 keepsRegion 时沿用 base 的。 */
+interface SavedTemplate {
+  templateId: string | undefined;
+  region: string | undefined;
+  keepsRegion: boolean;
+}
+
+/** 存下的模板与区域：没给模板就由 kept 带着原来的；换了模板而没给区域时，原来的区域不属于新模板，不留。 */
+function templateFieldsOf(
+  saved: SavedTemplate,
+  keptRegion: string | undefined,
+): Pick<StoredApiEndpoint, "templateId" | "region"> {
+  const region = saved.region ?? (saved.keepsRegion ? keptRegion : undefined);
+  return {
+    ...(saved.templateId !== undefined ? { templateId: saved.templateId } : {}),
+    ...(region !== undefined ? { region } : {}),
+  };
+}
+
+/** 模板要是内置的，区域要是那个模板的；区域单给时按这家原来的模板查。 */
+function validateTemplate(
+  input: ApiEndpointSaveInput,
+  base: StoredApiEndpoint | null,
+): SavedTemplate {
+  const templateId = input.templateId ?? base?.templateId;
+  const keepsRegion = input.templateId === undefined || input.templateId === base?.templateId;
+  if (input.templateId === undefined && input.region === undefined) {
+    return { templateId: undefined, region: undefined, keepsRegion };
+  }
+  const template = templateId === undefined ? null : findTemplate(templateId);
+  if (!template) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message:
+        templateId === undefined
+          ? "A region needs the template it belongs to"
+          : `Unknown template: ${templateId}`,
+    });
+  }
+  const regionIsTemplates =
+    input.region === undefined ||
+    (template.regions ?? []).some((candidate) => candidate.id === input.region);
+  if (!regionIsTemplates) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Template ${template.id} has no region ${input.region}`,
+    });
+  }
+  return { templateId: input.templateId, region: input.region, keepsRegion };
+}
+
 /** 保存请求省略「自己能联网搜索」时沿用这家原来的；新建为关。 */
 function keptSearchesWeb(
   requested: boolean | undefined,
@@ -3475,6 +3539,8 @@ function buildEndpoint(input: {
   fields: EndpointFields;
   // 「自己能联网搜索」：请求省略时调用方已换成这家原来的值。
   searchesWeb: boolean;
+  // 模板与区域：validateTemplate 已换算好，undefined 的那项从 base 原样留下。
+  template: SavedTemplate;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -3486,11 +3552,13 @@ function buildEndpoint(input: {
     modelMapping: _resubmitted,
     manualModels: _manualModels,
     searchesWeb: _searchesWeb,
+    region: keptRegion,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
   return {
     ...kept,
+    ...templateFieldsOf(input.template, keptRegion),
     id: existing?.id ?? `ep_${randomUUID()}`,
     slug:
       existing?.slug ??

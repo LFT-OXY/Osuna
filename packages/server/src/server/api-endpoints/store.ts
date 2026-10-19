@@ -75,6 +75,9 @@ const StoredApiEndpointSchema = z.object({
   manualModels: z.array(StoredModelSchema).optional(),
   // 「自己能联网搜索」：只写 true；没有或手改成 false 都是关（ADR 0009）。
   searchesWeb: z.boolean().optional(),
+  // 从哪个模板加的（templates.ts 的 id）、选的哪个区域或套餐；「自定义」加的都没有。
+  templateId: z.string().optional(),
+  region: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

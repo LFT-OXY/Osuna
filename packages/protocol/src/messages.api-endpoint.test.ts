@@ -963,4 +963,77 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses list_templates with a template that has plans and one that has none, and a rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.list_templates.request" as const,
+      requestId: "req-m6",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const zhipu = {
+      id: "zhipu",
+      name: "Zhipu GLM",
+      group: "vendor",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+        { format: "openai_chat", url: "https://open.bigmodel.cn/api/paas/v4" },
+      ],
+      website: "https://open.bigmodel.cn",
+      keysUrl: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys",
+      modelsDevIds: ["zhipuai"],
+      regionLabel: "plan",
+      regions: [
+        {
+          id: "coding",
+          name: "Coding Plan",
+          baseUrls: [{ format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" }],
+          keysUrl: "https://example.com/keys",
+          models: ["glm-5"],
+        },
+      ],
+      headerHints: ["anthropic-workspace-id"],
+    };
+    const opencodeZen = {
+      id: "opencode-zen",
+      name: "OpenCode Zen",
+      group: "relay",
+      note: "free models with no key",
+      baseUrls: [{ format: "openai_chat", url: "https://opencode.ai/zen/v1" }],
+      modelsDevIds: [],
+      keyOptional: true,
+      keyHint: "optional: free models need no key",
+      models: ["big-pickle"],
+      noModelList: true,
+      modelIdPrefix: "cline-pass/",
+      shortName: "Zen",
+    };
+    for (const payload of [
+      { requestId: "req-m6", templates: [zhipu, opencodeZen], error: null },
+      { requestId: "req-m6", templates: [], error: { code: "internal", message: "boom" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.list_templates.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+  it("parses an endpoint and a save that carry a template and its region, and older ones without", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m7",
+      provider: "claude",
+      name: "Zhipu GLM",
+      baseUrls: [{ format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" }],
+      models: [],
+      templateId: "zhipu",
+      region: "coding",
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const { templateId: _templateId, region: _region, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    for (const endpoint of [{ ...ENDPOINT, templateId: "zhipu", region: "coding" }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-m7", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
 });

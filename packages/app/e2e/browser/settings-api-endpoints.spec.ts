@@ -147,6 +147,7 @@ test.describe("Settings API endpoints", () => {
     );
     await expect(page.getByTestId("api-endpoints-disabled-group")).toHaveCount(0);
     await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
     await expect(connectionForm(page)).toBeVisible();
     await expect(page.getByTestId("api-endpoint-connection-save")).toHaveText(
       "Save and fetch models",
@@ -158,6 +159,7 @@ test.describe("Settings API endpoints", () => {
   }) => {
     await openApiEndpointsPage(page);
     await page.getByTestId("api-endpoints-add-button").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
     await fillConnection(page, {
       name: "Good relay",
       apiKey: RELAY_KEY,
@@ -229,6 +231,7 @@ test.describe("Settings API endpoints", () => {
   }) => {
     await openApiEndpointsPage(page);
     await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
     await fillConnection(page, {
       name: "Wrong key",
       apiKey: "sk-wrong",
@@ -250,6 +253,7 @@ test.describe("Settings API endpoints", () => {
     const host = await failConnectionSave(page);
     await openApiEndpointsPage(page);
     await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
     await expect(page.getByTestId("api-endpoint-connection-api-key-field")).toContainText(
       "API key (optional)",
     );
@@ -1053,6 +1057,213 @@ test.describe("Settings API endpoints", () => {
     await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-connection-api-key")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-connection-show-key")).toHaveCount(0);
+  });
+});
+
+test.describe("Templates", () => {
+  function templatePicker(page: Page): Locator {
+    return page.getByTestId("api-endpoint-template-picker");
+  }
+
+  function urlField(page: Page, format: string): Locator {
+    return page.getByTestId(`api-endpoint-connection-url-${format}`);
+  }
+
+  /** 「去拿 key ↗」在网页上用 window.open 打开；记下打开的地址，不真的开新页。 */
+  async function recordOpenedUrls(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+      const opened: string[] = [];
+      (window as unknown as { __openedUrls: string[] }).__openedUrls = opened;
+      window.open = (url?: string | URL) => {
+        opened.push(String(url));
+        return null;
+      };
+    });
+  }
+
+  async function openedUrls(page: Page): Promise<string[]> {
+    return page.evaluate(() => (window as unknown as { __openedUrls: string[] }).__openedUrls);
+  }
+
+  test("+ opens the template list: Custom first, the groups, search with an empty state, and Custom is the blank form", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    const picker = templatePicker(page);
+    await expect(picker).toBeVisible();
+
+    await test.step("Custom comes first, then vendors and relay services", async () => {
+      const custom = await page.getByTestId("api-endpoint-template-custom").boundingBox();
+      const anthropic = await page.getByTestId("api-endpoint-template-anthropic").boundingBox();
+      expect(custom?.y ?? Infinity).toBeLessThan(anthropic?.y ?? 0);
+      await expect(page.getByTestId("api-endpoint-template-custom")).toContainText("Custom");
+      await expect(picker).toContainText("Vendors");
+      await expect(picker).toContainText("Relay services");
+      // 国际站与中国站合成一行。
+      await expect(page.getByTestId("api-endpoint-template-moonshot")).toHaveText("Kimi");
+      await expect(page.getByTestId("api-endpoint-template-moonshot-cn")).toHaveCount(0);
+    });
+
+    await test.step("search finds by name and host, and says when nothing matches", async () => {
+      await page.getByTestId("api-endpoint-template-search").fill("moonshot.cn");
+      await expect(page.getByTestId("api-endpoint-template-moonshot")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-template-openai")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-template-custom")).toHaveCount(0);
+      await page.getByTestId("api-endpoint-template-search").fill("no such vendor");
+      await expect(page.getByTestId("api-endpoint-templates-no-match")).toContainText(
+        "Nothing called “no such vendor”",
+      );
+    });
+
+    await test.step("Add it as a custom endpoint opens the blank form, with Auto-detect", async () => {
+      await page.getByTestId("api-endpoint-templates-add-custom").click();
+      await expect(connectionForm(page)).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("");
+      await expect(page.getByTestId("api-endpoint-connection-detect")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-connection-template")).toHaveCount(0);
+    });
+  });
+
+  test("a list that fails to load says why and keeps Custom; Try again loads it", async ({
+    page,
+  }) => {
+    await failFirstTemplateList(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await expect(page.getByTestId("api-endpoint-templates-error")).toContainText(
+      "Couldn't load the templates: EACCES: permission denied",
+    );
+    await expect(page.getByTestId("api-endpoint-template-custom")).toBeVisible();
+    await page.getByTestId("api-endpoint-templates-error").getByRole("button").click();
+    await expect(page.getByTestId("api-endpoint-template-zhipu")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-templates-error")).toHaveCount(0);
+  });
+
+  test("a template fills the form; switching the plan or the site keeps the key and moves the addresses and Get a key; it saves with its template and plan", async ({
+    page,
+  }) => {
+    await recordOpenedUrls(page);
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    const { templates } = await client.apiEndpointListTemplates();
+    const zhipu = templates.find((template) => template.id === "zhipu");
+    const coding = zhipu?.regions?.find((region) => region.id === "coding");
+    if (!zhipu || !coding) throw new Error("zhipu has no Coding Plan");
+
+    await test.step("Zhipu GLM starts on pay as you go", async () => {
+      await page.getByTestId("api-endpoints-empty-add").click();
+      await page.getByTestId("api-endpoint-template-zhipu").click();
+      await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Zhipu GLM");
+      await expect(page.getByTestId("api-endpoint-connection-detect")).toHaveCount(0);
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://open.bigmodel.cn/api/paas/v4",
+      );
+      await page.getByTestId("api-endpoint-connection-get-key").click();
+      expect(await openedUrls(page)).toEqual([zhipu.keysUrl]);
+    });
+
+    await test.step("the Coding Plan moves the addresses; the key stays", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-zhipu");
+      await page.getByTestId("api-endpoint-connection-region-coding").click();
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://open.bigmodel.cn/api/coding/paas/v4",
+      );
+      await expect(urlField(page, "openai_responses")).toHaveValue(
+        "https://open.bigmodel.cn/api/v1",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue("sk-zhipu");
+    });
+
+    await test.step("a failed save stays in the form with the plan and the key", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(urlField(page, "openai_responses")).toHaveValue(
+        "https://open.bigmodel.cn/api/v1",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue("sk-zhipu");
+    });
+
+    await test.step("saving keeps the plan's addresses, the template and the plan", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved).toMatchObject({
+        name: "Zhipu GLM",
+        templateId: "zhipu",
+        region: "coding",
+        baseUrls: coding.baseUrls,
+        hasApiKey: true,
+      });
+    });
+
+    await test.step("StepFun's China site: only the key stays, Get a key follows", async () => {
+      await page.goBack();
+      await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-template-stepfun").click();
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-step");
+      await page.getByTestId("api-endpoint-connection-region-api").click();
+      await page.getByTestId("api-endpoint-connection-site-china").click();
+      await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("StepFun (China)");
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://api.stepfun.com/step_plan/v1",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue("sk-step");
+      await page.getByTestId("api-endpoint-connection-get-key").click();
+      expect((await openedUrls(page)).at(-1)).toBe("https://platform.stepfun.com/interface-key");
+    });
+  });
+
+  test("Add another opens the same template as a new endpoint and saving opens it", async ({
+    page,
+  }) => {
+    const { templates } = await client.apiEndpointListTemplates();
+    const deepseek = templates.find((template) => template.id === "deepseek");
+    if (!deepseek) throw new Error("no DeepSeek template");
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: deepseek.name,
+      baseUrls: deepseek.baseUrls,
+      apiKey: "sk-one",
+      models: [],
+      templateId: deepseek.id,
+    });
+    const firstId = saved.endpoint?.id ?? "";
+    await openEndpointDetail(page, firstId);
+
+    await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-detail-add-another").click();
+    await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("DeepSeek");
+    await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue("");
+    await page.getByTestId("api-endpoint-connection-api-key").fill("sk-two");
+    await page.getByTestId("api-endpoint-connection-save").click();
+
+    await expect(connectionForm(page)).toHaveCount(0);
+    await expect(headerTitle(page)).toHaveText("DeepSeek 2");
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((endpoint) => [endpoint.name, endpoint.templateId])).toEqual([
+      ["DeepSeek", "deepseek"],
+      ["DeepSeek 2", "deepseek"],
+    ]);
+  });
+
+  test("a host without apiEndpointManagement opens the blank form from + and has no Add another", async ({
+    page,
+  }) => {
+    const [endpointId = ""] = await seedRelays(["Relay A"]);
+    await hideManagementCapability(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+    await expect(connectionForm(page)).toBeVisible();
+    await expect(templatePicker(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await openEndpointRow(page, endpointId);
+    await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-detail-add-another")).toHaveCount(0);
   });
 });
 
@@ -2612,6 +2823,39 @@ async function duplicateFromMenu(page: Page): Promise<void> {
   await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
   await page.getByTestId("api-endpoint-detail-duplicate").click();
   await expect(connectionForm(page)).toBeVisible();
+}
+
+/** 第一次要模板清单时不送到 daemon，直接回一条失败；之后照常。 */
+async function failFirstTemplateList(page: Page): Promise<void> {
+  let failed = false;
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isList =
+        typeof message === "string" &&
+        message.includes("provider.api_endpoint.list_templates.request");
+      if (!isList || failed) {
+        server.send(message);
+        return;
+      }
+      failed = true;
+      const request = (JSON.parse(message) as { message?: { requestId?: string } }).message;
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.list_templates.response",
+            payload: {
+              requestId: request?.requestId,
+              templates: [],
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
 }
 
 /** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */

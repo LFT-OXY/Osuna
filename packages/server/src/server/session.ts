@@ -3150,6 +3150,7 @@ export class Session {
       case "provider.api_endpoint.set_endpoint_state.request":
       case "provider.api_endpoint.set_order.request":
       case "provider.api_endpoint.reveal_key.request":
+      case "provider.api_endpoint.list_templates.request":
       case "provider.api_endpoint.fetch_models.request":
       case "provider.api_endpoint.test_connection.request":
       case "provider.api_endpoint.detect_formats.request":

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   ApiEndpoint,
   ApiEndpointFormatDetection,
+  ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   createConnectionFormModel,
@@ -102,13 +103,17 @@ const SAVED_ENDPOINT: ApiEndpoint = {
 };
 
 // 主机没声明 apiEndpointManagement：key 必填，和以前一样。
-const KEY_REQUIRED = { isKeyOptional: false, canRevealKey: false };
-const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true };
+const KEY_REQUIRED = { isKeyOptional: false, canRevealKey: false, templates: [] };
+const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true, templates: [] };
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
     const { deps } = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      deps,
+      KEY_REQUIRED,
+    );
     expect(model.getState()).toMatchObject({ canDetect: false, canSubmit: false });
 
     model.setName("Relay");
@@ -120,7 +125,11 @@ describe("connection form: create", () => {
 
   it("fills the formats that answered, labels each one, and then can save", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey(" sk-1 ");
     model.setAddress("https://relay.example/");
@@ -167,7 +176,11 @@ describe("connection form: create", () => {
 
   it("marks the key as rejected when the upstream refused it, until the key changes", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey("sk-wrong");
     model.setAddress("https://relay.example");
@@ -196,7 +209,11 @@ describe("connection form: create", () => {
 
   it("keeps what the user typed for a format that was not detected, and drops that format's label on edit", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setAddress("https://relay.example");
@@ -221,7 +238,11 @@ describe("connection form: create", () => {
 
   it("refuses to save with an address that is not http, and shows a failed detection", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setUrl("openai_chat", "relay.example");
@@ -237,7 +258,11 @@ describe("connection form: create", () => {
 
   it("a cancelled or superseded detection changes nothing", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setAddress("https://relay.example");
@@ -254,7 +279,11 @@ describe("connection form: create", () => {
   it("keeps the form and shows why when saving fails", async () => {
     const fake = fakeDeps();
     fake.failSaveWith("Name is required");
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setUrl("openai_chat", "https://relay.example/v1");
@@ -316,7 +345,11 @@ describe("connection form: edit", () => {
 describe("connection form: the key is optional when the host says so", () => {
   it("detects and saves without a key, and sends none", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_OPTIONAL);
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
     expect(model.getState()).toMatchObject({ isKeyOptional: true, canDetect: false });
 
     model.setName("Ollama");
@@ -508,7 +541,7 @@ describe("connection form: show the saved key", () => {
   });
 
   it.each([
-    { mode: "create" as const },
+    { mode: "create" as const, templateId: null },
     { mode: "duplicate" as const, source: SAVED_ENDPOINT, name: "Relay copy" },
     { mode: "edit" as const, endpoint: { ...SAVED_ENDPOINT, hasApiKey: false } },
   ])("only shows what was typed when this endpoint has no saved key ($mode)", (seed) => {
@@ -527,5 +560,234 @@ describe("connection form: show the saved key", () => {
     model.toggleKeyVisible();
     expect(fake.reveals).toEqual([]);
     expect(model.getState().isKeyVisible).toBe(false);
+  });
+});
+
+const ZHIPU: ApiEndpointTemplate = {
+  id: "zhipu",
+  name: "Zhipu GLM",
+  group: "vendor",
+  baseUrls: [
+    { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+    { format: "openai_chat", url: "https://open.bigmodel.cn/api/paas/v4" },
+  ],
+  keysUrl: "https://open.bigmodel.cn/keys",
+  modelsDevIds: ["zhipuai"],
+  regionLabel: "plan",
+  regions: [
+    {
+      id: "api",
+      name: "Pay as you go",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+        { format: "openai_chat", url: "https://open.bigmodel.cn/api/paas/v4" },
+      ],
+    },
+    {
+      id: "coding",
+      name: "Coding Plan",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+        { format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+        { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
+      ],
+      keysUrl: "https://open.bigmodel.cn/coding-keys",
+    },
+  ],
+};
+
+const STEPFUN: ApiEndpointTemplate = {
+  id: "stepfun",
+  name: "StepFun",
+  group: "vendor",
+  baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.ai/step_plan/v1" }],
+  keysUrl: "https://platform.stepfun.ai/interface-key",
+  modelsDevIds: [],
+  regionLabel: "plan",
+  regions: [
+    {
+      id: "plan",
+      name: "Step Plan",
+      baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.ai/step_plan/v1" }],
+    },
+    {
+      id: "api",
+      name: "Pay as you go",
+      baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.ai/v1" }],
+    },
+  ],
+};
+
+const STEPFUN_CN: ApiEndpointTemplate = {
+  ...STEPFUN,
+  id: "stepfun-cn",
+  name: "StepFun (China)",
+  baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.com/step_plan/v1" }],
+  keysUrl: "https://platform.stepfun.com/interface-key",
+  regions: [
+    {
+      id: "plan",
+      name: "Step Plan",
+      baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.com/step_plan/v1" }],
+    },
+    {
+      id: "api",
+      name: "Pay as you go",
+      baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.com/v1" }],
+    },
+  ],
+};
+
+const WITH_TEMPLATES = { ...KEY_OPTIONAL, templates: [ZHIPU, STEPFUN, STEPFUN_CN] };
+
+function urlOf(model: ReturnType<typeof createConnectionFormModel>, format: string): string {
+  return model.getState().formats.find((field) => field.format === format)?.url ?? "";
+}
+
+describe("connection form: from a template", () => {
+  it("starts with the template's name, its first plan's addresses and that plan's key page", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    const state = model.getState();
+    expect(state.name).toBe("Zhipu GLM");
+    expect(state.template).toMatchObject({
+      id: "zhipu",
+      regionLabel: "plan",
+      regions: [
+        { id: "api", name: "Pay as you go" },
+        { id: "coding", name: "Coding Plan" },
+      ],
+      regionId: "api",
+      sites: null,
+      keysUrl: "https://open.bigmodel.cn/keys",
+    });
+    expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(urlOf(model, "openai_responses")).toBe("");
+    expect(state.canSubmit).toBe(true);
+  });
+
+  it("switching the plan swaps the addresses and the key page, and keeps the key and the name", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    model.setName("My GLM");
+    model.setApiKey("sk-zhipu");
+
+    model.setRegion("coding");
+
+    const state = model.getState();
+    expect(state.template?.regionId).toBe("coding");
+    expect(state.template?.keysUrl).toBe("https://open.bigmodel.cn/coding-keys");
+    expect(state.apiKey).toBe("sk-zhipu");
+    expect(state.name).toBe("My GLM");
+    expect(urlOf(model, "openai_chat")).toBe("https://open.bigmodel.cn/api/coding/paas/v4");
+    expect(urlOf(model, "openai_responses")).toBe("https://open.bigmodel.cn/api/v1");
+    await model.submit();
+    expect(fake.saves).toEqual([
+      {
+        name: "My GLM",
+        apiKey: "sk-zhipu",
+        baseUrls: [
+          { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+          { format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+          { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
+        ],
+        models: [],
+        templateId: "zhipu",
+        region: "coding",
+      },
+    ]);
+  });
+
+  it("switching to the China site keeps only the key; its plans and key page follow", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "stepfun" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    expect(model.getState().template?.sites).toEqual([
+      { templateId: "stepfun", area: "global" },
+      { templateId: "stepfun-cn", area: "china" },
+    ]);
+    model.setName("Renamed");
+    model.setApiKey("sk-step");
+    model.setRegion("api");
+
+    model.setSite("stepfun-cn");
+
+    const state = model.getState();
+    expect(state.name).toBe("StepFun (China)");
+    expect(state.apiKey).toBe("sk-step");
+    expect(state.template).toMatchObject({
+      id: "stepfun-cn",
+      regionId: "plan",
+      keysUrl: "https://platform.stepfun.com/interface-key",
+    });
+    expect(urlOf(model, "openai_chat")).toBe("https://api.stepfun.com/step_plan/v1");
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({ templateId: "stepfun-cn", region: "plan" });
+  });
+
+  it("a template it does not know opens the custom form", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "gone" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    expect(model.getState().template).toBeNull();
+    expect(model.getState().name).toBe("");
+  });
+
+  it("the custom form has no template and saves none", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    model.setName("Relay");
+    model.setUrl("openai_chat", "https://relay.example/v1");
+    await model.submit();
+    expect(model.getState().template).toBeNull();
+    expect(fake.saves[0]).not.toHaveProperty("templateId");
+    expect(fake.saves[0]).not.toHaveProperty("region");
+  });
+
+  it("editing an endpoint from a template starts at its plan, can switch it, and has no China switch", async () => {
+    const fake = fakeDeps();
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      name: "Step",
+      baseUrls: STEPFUN.regions?.[1]?.baseUrls,
+      templateId: "stepfun",
+      region: "api",
+    };
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, WITH_TEMPLATES);
+    expect(model.getState().template).toMatchObject({
+      id: "stepfun",
+      regionId: "api",
+      sites: null,
+    });
+
+    model.setRegion("plan");
+    await model.submit();
+
+    expect(fake.saves[0]).toMatchObject({
+      endpointId: "ep_1",
+      name: "Step",
+      baseUrls: [{ format: "openai_chat", url: "https://api.stepfun.ai/step_plan/v1" }],
+      templateId: "stepfun",
+      region: "plan",
+    });
+    expect(fake.saves[0]).not.toHaveProperty("apiKey");
   });
 });

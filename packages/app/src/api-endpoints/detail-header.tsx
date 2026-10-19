@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Copy, Pencil, Trash2 } from "lucide-react-native";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react-native";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,15 +18,17 @@ import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { EndpointIcon } from "./endpoint-icon";
 import { endpointRowStatus, endpointSummary, type EndpointRowStatus } from "./internal/host-list";
 
 /*
  * 接口详情页头部：照提供方详情页（provider-detail/header.tsx）——头像、名称、状态徽标与「格式 · 已选数」，
- * 右侧接口开关、「测试连接」与 ⋯ 菜单（编辑连接 / 复制 / 删除）；冷却中时徽标旁有「立刻恢复」。
+ * 右侧接口开关、「测试连接」与 ⋯ 菜单（编辑连接 / 复制 / 再加一家 / 删除）；冷却中时徽标旁有「立刻恢复」。
  */
 
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedCopy = withUnistyles(Copy);
+const ThemedPlus = withUnistyles(Plus);
 const ThemedTrash2 = withUnistyles(Trash2);
 const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 
@@ -49,6 +51,8 @@ interface ApiEndpointDetailHeaderProps {
   onEdit: () => void;
   // 主机声明了 apiEndpointManagement 才有「复制」。
   onDuplicate: (() => void) | null;
+  // 从主机认得的模板加的才有「再加一家」。
+  onAddAnother: (() => void) | null;
   onDelete: () => void;
 }
 
@@ -63,6 +67,7 @@ export function ApiEndpointDetailHeader({
   onTest,
   onEdit,
   onDuplicate,
+  onAddAnother,
   onDelete,
 }: ApiEndpointDetailHeaderProps) {
   const { t } = useTranslation();
@@ -93,7 +98,12 @@ export function ApiEndpointDetailHeader({
     >
       <View style={styles.identity}>
         <View style={[styles.avatar, !enabled && styles.avatarOff]}>
-          <Text variant="title-sm">{initialOf(endpoint.name)}</Text>
+          <EndpointIcon
+            templateId={endpoint.templateId ?? null}
+            name={endpoint.name}
+            size={ICON_SIZE.lg}
+            initialStyle={styles.initial}
+          />
         </View>
         <View style={styles.text}>
           <Text variant="title-sm" numberOfLines={textLines}>
@@ -153,6 +163,7 @@ export function ApiEndpointDetailHeader({
           isDeleting={isDeleting}
           onEdit={onEdit}
           onDuplicate={onDuplicate}
+          onAddAnother={onAddAnother}
           onDelete={onDelete}
         />
       </View>
@@ -165,12 +176,14 @@ function DetailMenu({
   isDeleting,
   onEdit,
   onDuplicate,
+  onAddAnother,
   onDelete,
 }: {
   name: string;
   isDeleting: boolean;
   onEdit: () => void;
   onDuplicate: (() => void) | null;
+  onAddAnother: (() => void) | null;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -180,6 +193,10 @@ function DetailMenu({
   );
   const duplicateLeading = useMemo(
     () => <ThemedCopy size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  const addAnotherLeading = useMemo(
+    () => <ThemedPlus size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
     [],
   );
   const deleteLeading = useMemo(
@@ -207,6 +224,15 @@ function DetailMenu({
             testID="api-endpoint-detail-duplicate"
           >
             {t("settings.apiEndpoints.detail.duplicate")}
+          </DropdownMenuItem>
+        ) : null}
+        {onAddAnother ? (
+          <DropdownMenuItem
+            leading={addAnotherLeading}
+            onSelect={onAddAnother}
+            testID="api-endpoint-detail-add-another"
+          >
+            {t("settings.apiEndpoints.detail.addAnother")}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
@@ -239,10 +265,6 @@ function statusLabel(
   return t("settings.apiEndpoints.status.available");
 }
 
-function initialOf(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? "?";
-}
-
 const styles = StyleSheet.create((theme) => ({
   header: {
     flexDirection: "row",
@@ -270,6 +292,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  initial: {
+    color: theme.colors.foreground,
+    ...theme.typeScale["title-sm"],
   },
   avatarOff: {
     opacity: theme.opacity[50],

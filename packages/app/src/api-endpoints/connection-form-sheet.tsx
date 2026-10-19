@@ -1,22 +1,37 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { View, type LayoutChangeEvent } from "react-native";
+import type { TFunction } from "i18next";
+import { ScrollView, View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Check } from "lucide-react-native";
-import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointRequestFormat,
+  ApiEndpointTemplate,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { openExternalUrl } from "@/utils/open-external-url";
+import { EndpointIcon } from "./endpoint-icon";
+import {
+  templateKeyHint,
+  templateNote,
+  templateRegionLabel,
+  templateRegionName,
+} from "./template-copy";
 import { useConnectionFormModel } from "./use-connection-form-model";
 import type {
   ConnectionFormDeps,
   ConnectionFormModel,
   ConnectionFormSeed,
+  ConnectionFormState,
   ConnectionFormatField,
   ConnectionSaveResult,
+  ConnectionTemplateState,
 } from "./internal/connection-form-model";
 
 export interface ApiEndpointConnectionSheetProps {
@@ -24,6 +39,10 @@ export interface ApiEndpointConnectionSheetProps {
   // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」。
   isKeyOptional: boolean;
   canRevealKey: boolean;
+  // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
+  templates: readonly ApiEndpointTemplate[];
+  // 从模板列表进来时回到列表；其余为 null。
+  onBack: (() => void) | null;
   onSave: ConnectionFormDeps["save"];
   onDetect: ConnectionFormDeps["detect"];
   onRevealKey: ConnectionFormDeps["revealKey"];
@@ -47,6 +66,8 @@ export function ApiEndpointConnectionSheet({
   seed,
   isKeyOptional,
   canRevealKey,
+  templates,
+  onBack,
   onSave,
   onDetect,
   onRevealKey,
@@ -59,19 +80,15 @@ export function ApiEndpointConnectionSheet({
   const model = useConnectionFormModel(
     seed,
     { save: onSave, detect: onDetect, revealKey: onRevealKey },
-    { isKeyOptional, canRevealKey },
+    { isKeyOptional, canRevealKey, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const isCreate = state.mode === "create";
-  const keyPlaceholder = useMemo(() => {
-    if (seed.mode === "duplicate" && seed.source.hasApiKey) {
-      const mask = seed.source.apiKeyMask;
-      return mask
-        ? t("settings.apiEndpoints.form.apiKeyCopiedPlaceholder", { mask })
-        : t("settings.apiEndpoints.form.apiKeyCopiedPlaceholderUnmasked");
-    }
-    return state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…";
-  }, [seed, state.hasSavedKey, t]);
+  const keyHint = state.template?.keyHint ?? null;
+  const keyPlaceholder = useMemo(
+    () => keyPlaceholderOf({ t, seed, hasSavedKey: state.hasSavedKey, keyHint }),
+    [keyHint, seed, state.hasSavedKey, t],
+  );
 
   const handleSubmit = useCallback(() => {
     void (async () => {
@@ -79,8 +96,6 @@ export function ApiEndpointConnectionSheet({
       if (result?.status === "saved") onSaved(result);
     })();
   }, [model, onSaved]);
-  const handleDetect = useCallback(() => model.detect(), [model]);
-  const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
   const handleToggleKey = useCallback(() => model.toggleKeyVisible(), [model]);
   // key 框旁「显示」与地址框旁「自动检测」取两者中较宽的宽度，两个输入框右端对齐。
   const [trailingWidth, setTrailingWidth] = useState(0);
@@ -114,16 +129,8 @@ export function ApiEndpointConnectionSheet({
     [handleSubmit, isCreate, onClose, state.canSubmit, state.submitting, t],
   );
 
-  const header = useMemo<SheetHeader>(() => {
-    if (seed.mode === "duplicate") {
-      return { title: t("settings.apiEndpoints.form.duplicateTitle", { name: seed.source.name }) };
-    }
-    return {
-      title: isCreate
-        ? t("settings.apiEndpoints.form.createTitle")
-        : t("settings.apiEndpoints.form.editTitle"),
-    };
-  }, [isCreate, seed, t]);
+  const header = useMemo(() => sheetHeaderOf({ t, seed, onBack }), [onBack, seed, t]);
+  const template = state.template;
 
   return (
     <AdaptiveModalSheet
@@ -136,9 +143,13 @@ export function ApiEndpointConnectionSheet({
       testID="api-endpoint-connection-form"
     >
       <View style={styles.form}>
+        {template ? <TemplateHeading template={template} /> : null}
+        {template?.sites ? <SiteSwitch template={template} model={model} /> : null}
+        {template?.regions ? <RegionSwitch template={template} model={model} /> : null}
         <Field label={t("settings.apiEndpoints.form.name")}>
           <FormTextInput
             initialValue={state.name}
+            resetKey={state.nameGeneration}
             onChangeText={model.setName}
             placeholder={t("settings.apiEndpoints.form.namePlaceholder")}
             autoCorrect={false}
@@ -190,53 +201,16 @@ export function ApiEndpointConnectionSheet({
             ) : null}
           </View>
         </Field>
-        <Field
-          label={t("settings.apiEndpoints.form.address")}
-          hint={
-            state.isKeyOptional
-              ? t("settings.apiEndpoints.form.addressHintKeyOptional")
-              : t("settings.apiEndpoints.form.addressHint")
-          }
-          error={
-            state.addressInvalid
-              ? t("settings.apiEndpoints.form.urlInvalid")
-              : (state.detectError ?? null)
-          }
-          testID="api-endpoint-connection-address-field"
-        >
-          <View style={styles.inlineRow}>
-            <View style={styles.flex}>
-              <FormTextInput
-                initialValue={state.address}
-                onChangeText={model.setAddress}
-                placeholder="https://relay.example.com"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                invalid={state.addressInvalid}
-                size={fieldSize}
-                testID="api-endpoint-connection-address"
-              />
-            </View>
-            <View style={trailingStyle} onLayout={handleTrailingLayout}>
-              <Button
-                variant="outline"
-                size="sm"
-                onPress={handleDetect}
-                disabled={!state.canDetect}
-                loading={state.detecting}
-                testID="api-endpoint-connection-detect"
-              >
-                {t("settings.apiEndpoints.form.detect")}
-              </Button>
-            </View>
-            {state.detecting ? (
-              <Button variant="ghost" size="sm" onPress={handleCancelDetect}>
-                {t("common.actions.cancel")}
-              </Button>
-            ) : null}
-          </View>
-        </Field>
+        {/* 模板已给好各格式地址，不用自动检测。 */}
+        {template ? null : (
+          <AddressField
+            state={state}
+            model={model}
+            size={fieldSize}
+            trailingStyle={trailingStyle}
+            onTrailingLayout={handleTrailingLayout}
+          />
+        )}
         <View style={styles.formatGroup} testID="api-endpoint-connection-formats">
           {state.formats.map((field) => (
             <FormatUrlField
@@ -265,6 +239,220 @@ export function ApiEndpointConnectionSheet({
         ) : null}
       </View>
     </AdaptiveModalSheet>
+  );
+}
+
+function sheetHeaderOf(input: {
+  t: TFunction;
+  seed: ConnectionFormSeed;
+  onBack: (() => void) | null;
+}): SheetHeader {
+  const { t, seed, onBack } = input;
+  if (seed.mode === "duplicate") {
+    return { title: t("settings.apiEndpoints.form.duplicateTitle", { name: seed.source.name }) };
+  }
+  return {
+    title:
+      seed.mode === "create"
+        ? t("settings.apiEndpoints.form.createTitle")
+        : t("settings.apiEndpoints.form.editTitle"),
+    ...(onBack ? { back: { onPress: onBack } } : {}),
+  };
+}
+
+/** 「自定义」的地址框与「自动检测」：检测三种格式各自的地址填到下面。 */
+function AddressField({
+  state,
+  model,
+  size,
+  trailingStyle,
+  onTrailingLayout,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+  trailingStyle: { minWidth: number };
+  onTrailingLayout: (event: LayoutChangeEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const handleDetect = useCallback(() => model.detect(), [model]);
+  const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
+  return (
+    <Field
+      label={t("settings.apiEndpoints.form.address")}
+      hint={
+        state.isKeyOptional
+          ? t("settings.apiEndpoints.form.addressHintKeyOptional")
+          : t("settings.apiEndpoints.form.addressHint")
+      }
+      error={
+        state.addressInvalid
+          ? t("settings.apiEndpoints.form.urlInvalid")
+          : (state.detectError ?? null)
+      }
+      testID="api-endpoint-connection-address-field"
+    >
+      <View style={styles.inlineRow}>
+        <View style={styles.flex}>
+          <FormTextInput
+            initialValue={state.address}
+            onChangeText={model.setAddress}
+            placeholder="https://relay.example.com"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            invalid={state.addressInvalid}
+            size={size}
+            testID="api-endpoint-connection-address"
+          />
+        </View>
+        <View style={trailingStyle} onLayout={onTrailingLayout}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleDetect}
+            disabled={!state.canDetect}
+            loading={state.detecting}
+            testID="api-endpoint-connection-detect"
+          >
+            {t("settings.apiEndpoints.form.detect")}
+          </Button>
+        </View>
+        {state.detecting ? (
+          <Button variant="ghost" size="sm" onPress={handleCancelDetect}>
+            {t("common.actions.cancel")}
+          </Button>
+        ) : null}
+      </View>
+    </Field>
+  );
+}
+
+/** key 框里的提示：复制时说沿用原来的 key，编辑已存 key 时说留空保留，模板有提示时用它的。 */
+function keyPlaceholderOf(input: {
+  t: TFunction;
+  seed: ConnectionFormSeed;
+  hasSavedKey: boolean;
+  keyHint: string | null;
+}): string {
+  const { t, seed } = input;
+  if (seed.mode === "duplicate" && seed.source.hasApiKey) {
+    const mask = seed.source.apiKeyMask;
+    return mask
+      ? t("settings.apiEndpoints.form.apiKeyCopiedPlaceholder", { mask })
+      : t("settings.apiEndpoints.form.apiKeyCopiedPlaceholderUnmasked");
+  }
+  if (input.hasSavedKey) return t("settings.apiEndpoints.form.apiKeySavedPlaceholder");
+  return input.keyHint === null ? "sk-…" : templateKeyHint(t, input.keyHint);
+}
+
+/** 模板的图标、名称与说明；右边「去拿 key ↗」跟着所选区域或套餐变（照 magpie）。 */
+function TemplateHeading({ template }: { template: ConnectionTemplateState }) {
+  const { t } = useTranslation();
+  const { keysUrl } = template;
+  const handleGetKey = useCallback(() => {
+    if (keysUrl) void openExternalUrl(keysUrl);
+  }, [keysUrl]);
+  return (
+    <View style={styles.templateHeading} testID="api-endpoint-connection-template">
+      <View style={styles.templateIcon}>
+        <EndpointIcon
+          templateId={template.id}
+          name={template.name}
+          size={ICON_SIZE.lg}
+          initialStyle={styles.templateInitial}
+        />
+      </View>
+      <View style={styles.flex}>
+        <Text variant="label" numberOfLines={1}>
+          {template.name}
+        </Text>
+        {template.note ? (
+          <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+            {templateNote(t, template.note)}
+          </Text>
+        ) : null}
+      </View>
+      {keysUrl ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleGetKey}
+          testID="api-endpoint-connection-get-key"
+        >
+          {t("settings.apiEndpoints.templates.getKey")}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+/** 新建时国际站 / 中国站：只保留 key，其余按那一站的模板重来。 */
+function SiteSwitch({
+  template,
+  model,
+}: {
+  template: ConnectionTemplateState;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  const options = useMemo(
+    () =>
+      (template.sites ?? []).map((site) => ({
+        value: site.templateId,
+        label: t(`settings.apiEndpoints.templates.area.${site.area}`),
+        testID: `api-endpoint-connection-site-${site.area}`,
+      })),
+    [t, template.sites],
+  );
+  return (
+    <Field label={t("settings.apiEndpoints.templates.region")}>
+      <View style={styles.switchRow}>
+        <SegmentedControl
+          options={options}
+          value={template.id}
+          onValueChange={model.setSite}
+          size="sm"
+          testID="api-endpoint-connection-site"
+        />
+      </View>
+    </Field>
+  );
+}
+
+/** 区域或套餐：各格式地址与「去拿 key」跟着换，key 与名称保留。选项多时横向滚动（照 magpie）。 */
+function RegionSwitch({
+  template,
+  model,
+}: {
+  template: ConnectionTemplateState;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  const options = useMemo(
+    () =>
+      (template.regions ?? []).map((region) => ({
+        value: region.id,
+        label: templateRegionName(t, region.name),
+        testID: `api-endpoint-connection-region-${region.id}`,
+      })),
+    [t, template.regions],
+  );
+  return (
+    <Field
+      label={templateRegionLabel(t, template.regionLabel)}
+      hint={t("settings.apiEndpoints.templates.regionHint", { name: template.name })}
+    >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <SegmentedControl
+          options={options}
+          value={template.regionId ?? ""}
+          onValueChange={model.setRegion}
+          size="sm"
+          testID="api-endpoint-connection-region"
+        />
+      </ScrollView>
+    </Field>
   );
 }
 
@@ -349,6 +537,27 @@ const FORM_SNAP_POINTS = ["85%"];
 const styles = StyleSheet.create((theme) => ({
   form: {
     gap: theme.spacing[4],
+  },
+  templateHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
+  templateIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  templateInitial: {
+    color: theme.colors.foreground,
+    ...theme.typeScale.label,
+  },
+  switchRow: {
+    flexDirection: "row",
   },
   flex: {
     flex: 1,

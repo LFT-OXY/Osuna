@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { reopenSeenKey, useReopenSeenStore } from "@/stores/reopen-seen-store";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -35,6 +42,8 @@ import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
+import { TemplatePickerSheet } from "./template-picker-sheet";
+import { useEndpointTemplates } from "./use-endpoint-templates";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
 
 /*
@@ -318,24 +327,54 @@ function GatewayGate({
   return children;
 }
 
-type ConnectionSheetState = { seed: ConnectionFormSeed } | null;
+// picker：「+」先出的模板列表；form 从列表进来时 backToPicker 为 true，表单的返回键回到列表。
+type ConnectionSheetState =
+  | { kind: "picker" }
+  | { kind: "form"; seed: ConnectionFormSeed; backToPicker: boolean }
+  | null;
 
 function ConnectionSheet({
   serverId,
   sheet,
   endpoints,
+  setSheet,
   onSaved,
-  onClose,
 }: {
   serverId: string;
   sheet: ConnectionSheetState;
   endpoints: Pick<UseHostEndpointsResult, "save" | "detect" | "revealKey">;
+  setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
-  onClose: () => void;
 }) {
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key。
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
+  const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
+  const handlePick = useCallback(
+    (templateId: string | null) =>
+      setSheet({ kind: "form", seed: { mode: "create", templateId }, backToPicker: true }),
+    [setSheet],
+  );
+  const handleBack = useCallback(() => setSheet({ kind: "picker" }), [setSheet]);
+  // 窄屏底部弹层换成另一个时，被换下的那个收起后还会报一次关闭：只关掉仍是它自己的那一层。
+  const closePicker = useCallback(
+    () => setSheet((current) => (current?.kind === "picker" ? null : current)),
+    [setSheet],
+  );
+  const closeForm = useCallback(
+    () => setSheet((current) => (current?.kind === "form" ? null : current)),
+    [setSheet],
+  );
   if (!sheet) return null;
+  if (sheet.kind === "picker") {
+    return (
+      <TemplatePickerSheet
+        templates={templates}
+        onRetry={templates.retry}
+        onPick={handlePick}
+        onClose={closePicker}
+      />
+    );
+  }
   const { seed } = sheet;
   return (
     <ApiEndpointConnectionSheet
@@ -343,11 +382,13 @@ function ConnectionSheet({
       seed={seed}
       isKeyOptional={hasManagement}
       canRevealKey={hasManagement}
+      templates={templates.status === "ready" ? templates.templates : []}
+      onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
       onDetect={endpoints.detect}
       onRevealKey={endpoints.revealKey}
       onSaved={onSaved}
-      onClose={onClose}
+      onClose={closeForm}
     />
   );
 }
@@ -361,7 +402,7 @@ function duplicateSeed(endpoint: ApiEndpoint, t: TFunction): ConnectionFormSeed 
 function sheetKey(seed: ConnectionFormSeed): string {
   if (seed.mode === "edit") return `edit-${seed.endpoint.id}`;
   if (seed.mode === "duplicate") return `duplicate-${seed.source.id}`;
-  return "create";
+  return `create-${seed.templateId ?? "custom"}`;
 }
 
 /** 设置 › 主机 › 第三方接口：整台主机共用的接口列表。 */
@@ -390,14 +431,23 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
               router.push(buildProviderSettingsRoute(serverId, provider)),
-            onDuplicate: (endpoint) => setSheet({ seed: duplicateSeed(endpoint, t) }),
+            onDuplicate: (endpoint) =>
+              setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
           }
         : undefined,
     [canArrange, providerEntries, router, serverId, t],
   );
 
-  const handleAdd = useCallback(() => setSheet({ seed: { mode: "create" } }), []);
-  const handleClose = useCallback(() => setSheet(null), []);
+  // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。
+  const handleAdd = useCallback(
+    () =>
+      setSheet(
+        canArrange
+          ? { kind: "picker" }
+          : { kind: "form", seed: { mode: "create", templateId: null }, backToPicker: false },
+      ),
+    [canArrange],
+  );
   const handleOpen = useCallback(
     (endpoint: ApiEndpoint) => router.push(buildApiEndpointSettingsRoute(serverId, endpoint.id)),
     [router, serverId],
@@ -430,8 +480,8 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
+        setSheet={setSheet}
         onSaved={handleSaved}
-        onClose={handleClose}
       />
     </>
   );
@@ -476,17 +526,29 @@ function ApiEndpointDetailContent({
 
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 copyOf。
   const canDuplicate = useHostFeature(serverId, "apiEndpointManagement");
+  const templates = useEndpointTemplates({ serverId, enabled: canDuplicate });
   const handleEdit = useCallback(() => {
-    if (endpoint) setSheet({ seed: { mode: "edit", endpoint } });
+    if (endpoint) setSheet({ kind: "form", seed: { mode: "edit", endpoint }, backToPicker: false });
   }, [endpoint]);
   const handleDuplicate = useCallback(() => {
-    if (endpoint) setSheet({ seed: duplicateSeed(endpoint, t) });
+    if (endpoint) {
+      setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false });
+    }
   }, [endpoint, t]);
-  const handleClose = useCallback(() => setSheet(null), []);
-  // 编辑只关掉弹窗；复制出的新接口保存后进它的详情页。
+  // 「再加一家」：用这家的模板开新表单；模板清单里没有它（「自定义」加的、主机已不认识的模板）就没有这一项。
+  const templateId = endpoint?.templateId ?? null;
+  const hasKnownTemplate =
+    templateId !== null &&
+    templates.status === "ready" &&
+    templates.templates.some((candidate) => candidate.id === templateId);
+  const handleAddAnother = useCallback(() => {
+    if (templateId === null) return;
+    setSheet({ kind: "form", seed: { mode: "create", templateId }, backToPicker: false });
+  }, [templateId]);
+  // 编辑只关掉弹窗；复制出的、再加的新接口保存后进它的详情页。
   const handleSaved = useCallback(
     (result: Extract<ConnectionSaveResult, { status: "saved" }>) => {
-      const opensCopy = sheet?.seed.mode === "duplicate";
+      const opensCopy = sheet?.kind === "form" && sheet.seed.mode !== "edit";
       setSheet(null);
       if (opensCopy) router.push(buildApiEndpointSettingsRoute(serverId, result.endpointId));
     },
@@ -513,13 +575,14 @@ function ApiEndpointDetailContent({
         hostEndpoints={endpoints}
         onEdit={handleEdit}
         onDuplicate={canDuplicate ? handleDuplicate : null}
+        onAddAnother={hasKnownTemplate ? handleAddAnother : null}
       />
       <ConnectionSheet
         serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
+        setSheet={setSheet}
         onSaved={handleSaved}
-        onClose={handleClose}
       />
     </View>
   );
@@ -533,6 +596,7 @@ function ApiEndpointDetailSections({
   hostEndpoints,
   onEdit,
   onDuplicate,
+  onAddAnother,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -542,6 +606,8 @@ function ApiEndpointDetailSections({
   onEdit: () => void;
   // 主机声明了 apiEndpointManagement 才有「复制」。
   onDuplicate: (() => void) | null;
+  // 从主机认得的模板加的才有「再加一家」。
+  onAddAnother: (() => void) | null;
 }) {
   const { t } = useTranslation();
   const now = useClock();
@@ -579,6 +645,7 @@ function ApiEndpointDetailSections({
         onTest={detail.testConnection}
         onEdit={onEdit}
         onDuplicate={onDuplicate}
+        onAddAnother={onAddAnother}
         onDelete={detail.remove}
       />
       {pageError ? (

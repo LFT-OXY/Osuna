@@ -165,6 +165,8 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.set_order.request": "daemon.manage",
   // 回的是 key 原文，和保存同一级。
   "provider.api_endpoint.reveal_key.request": "daemon.manage",
+  // 内置模板清单，不含任何 key，和列表同一级。
+  "provider.api_endpoint.list_templates.request": "daemon.read",
   // 会用已保存的 key 向上游发请求，和保存同一级。
   "provider.api_endpoint.fetch_models.request": "daemon.manage",
   "provider.api_endpoint.test_connection.request": "daemon.manage",
@@ -417,6 +419,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.set_endpoint_state.response": "daemon.manage",
   "provider.api_endpoint.set_order.response": "daemon.manage",
   "provider.api_endpoint.reveal_key.response": "daemon.manage",
+  "provider.api_endpoint.list_templates.response": "daemon.read",
   "provider.api_endpoint.fetch_models.response": "daemon.manage",
   "provider.api_endpoint.test_connection.response": "daemon.manage",
   "provider.api_endpoint.detect_formats.response": "daemon.manage",

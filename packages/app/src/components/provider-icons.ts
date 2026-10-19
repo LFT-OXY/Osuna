@@ -81,7 +81,7 @@ function createSvgIcon(provider: string, iconSvg: string): ProviderIconComponent
 }
 
 // 渐变 id 全局可见：Web 上同名 id 取文档里第一份，若它在 display:none 子树里渐变就不渲染，所以每个实例各带后缀。
-function scopeSvgIds(svg: string, suffix: string): string {
+export function scopeSvgIds(svg: string, suffix: string): string {
   return svg
     .replace(/\sid="([^"]+)"/g, ` id="$1-${suffix}"`)
     .replace(/url\(#([^)]+)\)/g, `url(#$1-${suffix})`);

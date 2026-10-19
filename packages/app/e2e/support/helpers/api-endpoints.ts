@@ -15,6 +15,7 @@ import type {
   ApiEndpointModel,
   ApiEndpointSaveResponse,
   ApiEndpointSetAgentSettingsResponse,
+  ApiEndpointListTemplatesResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { connectDaemonClient } from "./daemon-client-loader";
 import { getE2EDaemonPort } from "./daemon-port";
@@ -177,7 +178,10 @@ interface ApiEndpointSeedClient {
     baseUrls: ApiEndpointBaseUrl[];
     apiKey?: string;
     models: ApiEndpointModel[];
+    templateId?: string;
+    region?: string;
   }): Promise<ApiEndpointSaveResponse["payload"]>;
+  apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
   apiEndpointDelete(provider: string, endpointId: string): Promise<unknown>;
   apiEndpointSetAgentSettings(options: {
     provider: string;

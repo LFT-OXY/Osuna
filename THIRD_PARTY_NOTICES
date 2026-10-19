@@ -555,6 +555,25 @@ minimax-color, mimocode, stepfun-color), with width, height, style and
   packages/app/src/assets/model-family-icons.ts
   packages/app/src/assets/model-family-icons/*.svg
 
+The API endpoint templates (each vendor's and relay service's base URLs,
+regions and plans, key pages, models.dev ids, built-in model lists and header
+hints) are taken from magpie's internal/provider/presets.go, leaving out its
+decision models, Remote magpie and Google Vertex AI. The add dialog's template
+list (its three groups, search by name, id, host and note, and a vendor's
+global and China presets made one row, chinaOf and pairTile in
+internal/gui/assets/app.js) follows magpie's add sheet. The template logos are
+magpie's internal/gui/assets/icons/ (zai, baiducloud-color, tencentcloud-color,
+huaweicloud-color, volcengine-color, bailian-color, groq, ollama, nousresearch,
+openrouter, opencode, cline, kilo, commandcode, together-color,
+fireworks-color, siliconcloud-color, nvidia-color, modelscope-color,
+aihubmix-color, pipellm-color, ai302-color, cherryin-color, yylx), with width,
+height, style and <title> removed:
+
+  packages/server/src/server/api-endpoints/templates.ts
+  packages/app/src/api-endpoints/internal/templates.ts
+  packages/app/src/assets/endpoint-template-icons.ts
+  packages/app/src/assets/endpoint-template-icons/*.svg
+
 How the gateway recognises its callers (loopback only, the forwarding headers
 that mark a proxied request, DNS rebinding, refusing web pages by Origin,
 Origin: null and localhost subdomains, reading the token from Authorization

@@ -44,6 +44,7 @@ import {
   type EndpointRowStatus,
   type HostEndpointsLoadState,
 } from "./internal/host-list";
+import { EndpointIcon } from "./endpoint-icon";
 import { SortableEndpointRows } from "./sortable-endpoint-rows";
 import type { SortableEndpointRowInfo } from "./sortable-endpoint-rows.types";
 
@@ -453,7 +454,12 @@ function EndpointRow({
                   {row.hasHandle && (hovered || row.isDragging || isNative || isCompact) ? (
                     <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
                   ) : (
-                    <Text style={styles.initial}>{initialOf(endpoint.name)}</Text>
+                    <EndpointIcon
+                      templateId={endpoint.templateId ?? null}
+                      name={endpoint.name}
+                      size={ICON_SIZE.md}
+                      initialStyle={styles.initial}
+                    />
                   )}
                 </View>,
               )}
@@ -806,10 +812,6 @@ function ProviderLink({ provider, management }: { provider: string; management: 
       )}
     </Pressable>
   );
-}
-
-function initialOf(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? "?";
 }
 
 const styles = StyleSheet.create((theme) => ({

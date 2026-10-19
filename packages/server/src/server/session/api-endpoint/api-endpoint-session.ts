@@ -29,6 +29,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.set_order.request"
       | "provider.api_endpoint.reveal_key.request"
+      | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
@@ -87,6 +88,8 @@ export class ApiEndpointSession {
         return this.handleSetOrder(request);
       case "provider.api_endpoint.reveal_key.request":
         return this.handleRevealKey(request);
+      case "provider.api_endpoint.list_templates.request":
+        return this.handleListTemplates(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
@@ -147,6 +150,8 @@ export class ApiEndpointSession {
         ...(request.manualModels !== undefined ? { manualModels: request.manualModels } : {}),
         ...(request.searchesWeb !== undefined ? { searchesWeb: request.searchesWeb } : {}),
         ...(request.copyOf !== undefined ? { copyOf: request.copyOf } : {}),
+        ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+        ...(request.region !== undefined ? { region: request.region } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -356,6 +361,19 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.reveal_key.response",
       payload: { requestId: request.requestId, apiKey, error },
+    });
+  }
+
+  private handleListTemplates(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.list_templates.request" }>,
+  ): void {
+    this.host.emit({
+      type: "provider.api_endpoint.list_templates.response",
+      payload: {
+        requestId: request.requestId,
+        templates: this.service.listTemplates(),
+        error: null,
+      },
     });
   }
 
