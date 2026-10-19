@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Impl:** doing
+**Impl:** done
 
 - [ ] 骨架用 zod schema 校验，按 `docs/data-model.md` 原子写入；骨架字段包括标题、spec 框架判断、节点（稳定 id、标题、种类：开始 / 结束 / 步骤 / 判断 / 子图、所属子图层级、文档来源）、连线（可选条件文字）。
 - [ ] 外部文档指向存的是标题文字，不是行号。

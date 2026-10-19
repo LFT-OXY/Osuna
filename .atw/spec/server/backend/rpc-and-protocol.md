@@ -667,6 +667,7 @@ Reference implementation: the logic map switch (`agent.logic_map.set_enabled.req
 - Off removes the label only; the map on disk stays. On with the label already set reuses that map.
 - Draft target: daemon creates the empty map under the workspace's `cwd` and returns `mapName`; it writes no state. The app keeps `{ mapName, enabled }` per draft, reuses `mapName` when the draft is switched off and on again, and sends it as the label when the first message creates the agent.
 - A label patch on an unloaded agent does not push; the handler calls `agentUpdates.emitStoredRecord(labelWrite.record)` when `labelWrite.live` is false.
+- Reads go through `workspace.logic_map.list` / `.get` (`.get` returns a `result` union so a hand-broken file is a readable `corrupt` case, not a transport error). `workspace.logic_map.changed` is opt-in: it is in `SessionEventSubscriptionSchema` and `legacyWantsEvent` returns `false` for it, so only clients that subscribed after seeing `features.logicMap` get it. Disk format and batch writes: `persistence.md` "a folder of files an agent edits in batches".
 
 ### 4. Validation & Error Matrix
 
