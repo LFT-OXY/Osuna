@@ -15,11 +15,17 @@
 
 ## Acceptance Criteria
 
-- [ ] 4 张工单都完成；改到的测试文件本机通过。
-- [ ] 合并请求的 CI 里上面 4 组都通过（Nix 两项除外）；偶发失败按 `rerun --failed` 重跑确认。
+- [x] 4 张工单都完成；改到的测试文件本机通过。
+- [x] 合并请求的 CI 里上面 4 组都通过（Nix 两项除外）；偶发失败按 `rerun --failed` 重跑确认。
 - [ ] 合回 main 后，补勾 `archive/2026-10/10-16-cli-wiring-web-search/prd.md` 的「合入后 CI 通过」。
 
 ## Out of Scope
 
 - Nix、Nix Update Hash 两项常红。
 - 只重跑就过的偶发失败（例如这次的 `model-search-in-provider.spec.ts:268`）。
+
+## 收尾记录（10-19）
+
+- PR #21 经 merge commit 合入 main（27f65d163）。PR 的 CI 里 4 组都通过；shard 4 新挂的 `session-history-codex-model-provider.spec.ts:362` 按用户决定 `rerun --failed` 后通过。
+- 合并后 main 的 CI（39239955688）里同一 spec 的 332 连挂两遍，所以第三项（补勾 10-16 的「合入后 CI 通过」）没做。用户决定先归档本任务，这个问题另开 `10-19-unarchive-refused-hint-flaky` 查。
+
