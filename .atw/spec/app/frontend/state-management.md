@@ -99,6 +99,10 @@ What a page shows about a list is derived by one pure selector next to the load 
 
 A change that would send an agent back to Official confirms first, and only then: switching an endpoint off (`agentsReturningToOfficial` in `use-host-endpoints.ts`), turning off models or deleting an endpoint (`previewAgentSettlements` in `use-endpoint-detail.ts`). The hook refetches the list before deciding, not the rendered state: a list loaded minutes ago can miss a switch another client just turned on. Turning the agent switch or the default model itself (`setAgentSettings`) does not confirm.
 
+### Optimistic reorder: the latest move has the last word
+
+The API endpoint list reorders optimistically (`arrange` in `use-host-endpoints.ts`, endpoint-management-ux ticket 03, magpie `providerArrangeSeq`): the new order is drawn at once and sent; failure refreshes from the host and keeps the reason above the list. Each move takes a sequence number from a ref, and when a save comes back while a later move is in flight it neither refreshes nor reports, because that refresh would draw the earlier order back over the newer one (Alt+↓ pressed twice in a row jumps back). Focus returns to the moved row. Any other optimistic list write that can be fired twice before the first answers needs the same guard.
+
 ### A remembered model against an authoritative list
 
 `ProviderSnapshotEntry.isModelListAuthoritative` (an API endpoint is active) means the list is every model the CLI accepts; any other id will be rejected. Off that flag the app keeps unknown ids on purpose (a new model may not be in the catalogue yet — `resolve-agent-form.test.ts` "keeps the explicit model when a refreshed catalogue no longer lists it"). The rules, all in `provider-selection/resolve-agent-form.ts` and its callers:
