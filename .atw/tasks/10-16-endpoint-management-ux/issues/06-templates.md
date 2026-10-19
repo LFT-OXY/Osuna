@@ -11,7 +11,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：模板清单 RPC 返回的模板数与分组符合 prd 第 7 条的收录范围（不含 Bedrock、Azure、本机，由 07、08 号补）。
 - [ ] 端到端：用模板保存的接口地址与模板一致，记下 `templateId` 与 `region`；切换区域后保存，地址换成那个区域的。
