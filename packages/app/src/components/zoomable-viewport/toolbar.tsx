@@ -208,8 +208,10 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[1],
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderFloatingControl,
-    backgroundColor: theme.colors.surfaceFloatingControl,
+    // 和 Composer 一样的半透明描边与顶部内高光：暗色下卡片色贴着画布，靠这两样把条托出来。
+    borderColor: theme.colors.borderComposer,
+    backgroundColor: theme.colors.surfaceCard,
+    boxShadow: `inset 0 1px 0 ${theme.colors.insetHighlight}`,
   },
   zoomPercent: {
     minWidth: theme.spacing[8],

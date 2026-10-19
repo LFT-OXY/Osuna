@@ -427,6 +427,13 @@ function turnPasswordLoginIntoStep(): LogicMapSkeleton {
   };
 }
 
+function changedPush(): SessionOutboundMessage {
+  return {
+    type: "workspace.logic_map.changed",
+    payload: { workspaceId: WORKSPACE_ID, mapName: "user-login" },
+  };
+}
+
 function breadcrumb(): string[] {
   return shownTexts(byTestId("logic-map-breadcrumb"));
 }
@@ -534,6 +541,27 @@ describe("the logic map panel's subgraph layers", () => {
     expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
   });
 
+  it("comes back to a map it left at that map's top layer", async () => {
+    const host = nestedMapHost();
+    host.maps = [
+      { name: "user-login", title: "用户登录" },
+      { name: "admin-login", title: "管理员登录" },
+    ];
+    host.reads.set("admin-login", { kind: "ok", map: buildEmptyLogicMap() });
+    mountSurface(host, { conversationMapName: "user-login" });
+    await userEvent.click(await shown("logic-map-node-password-login"));
+    await shown("logic-map-breadcrumb");
+
+    await userEvent.click(byTestId("logic-map-picker"));
+    await userEvent.click(page.getByRole("menuitem", { name: "管理员登录" }));
+    await shown("logic-map-new-map");
+    await userEvent.click(byTestId("logic-map-picker"));
+    await userEvent.click(page.getByRole("menuitem", { name: "用户登录" }));
+
+    await expect.poll(() => nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
+  });
+
   it("goes back to the top layer when the agent removes the layer being shown", async () => {
     const host = nestedMapHost();
     mountSurface(host);
@@ -551,5 +579,24 @@ describe("the logic map panel's subgraph layers", () => {
     await expect.poll(() => nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
     expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
     expect(shownTexts(byTestId("logic-map-header"))).toEqual(["用户登录", "3 nodes"]);
+  });
+
+  it("stays on the top layer when the agent later adds a layer with the removed one's id", async () => {
+    const host = nestedMapHost();
+    mountSurface(host);
+    await userEvent.click(await shown("logic-map-node-password-login"));
+    await shown("logic-map-node-check-password");
+    host.reads.set("user-login", { kind: "ok", map: turnPasswordLoginIntoStep() });
+    act(() => host.push(changedPush()));
+    await expect.poll(() => nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+
+    host.reads.set("user-login", { kind: "ok", map: buildNestedLogicMap() });
+    act(() => host.push(changedPush()));
+
+    await expect
+      .poll(() => shownTexts(byTestId("logic-map-node-password-login")))
+      .toEqual(["密码登录", "Subgraph · 4 nodes"]);
+    expect(nodeTitles()).toEqual(["打开登录页", "密码登录", "登录成功"]);
+    expect(document.querySelector('[data-testid="logic-map-breadcrumb"]')).toBeNull();
   });
 });

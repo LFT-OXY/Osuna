@@ -187,7 +187,14 @@ function LogicMapPanelContent({
   });
   const result = selectedMapName ? readQuery.data : undefined;
   const skeleton = result?.kind === "ok" ? result.map : null;
-  const { layerId, trail, setLayerId } = useCurrentLayer(selectedMapName, skeleton);
+  const { layerId, trail, setLayerId, resetLayer } = useCurrentLayer(selectedMapName, skeleton);
+  const handleSelectMap = useCallback(
+    (mapName: string) => {
+      setPickedMapName(mapName);
+      resetLayer();
+    },
+    [resetLayer],
+  );
   const layout = useMemo(
     () => (skeleton ? layoutLogicMapLayer(skeleton, layerId) : null),
     [layerId, skeleton],
@@ -229,7 +236,7 @@ function LogicMapPanelContent({
         maps={maps}
         selectedMap={selectedMap}
         nodeCount={layout?.nodes.length ?? null}
-        onSelect={setPickedMapName}
+        onSelect={handleSelectMap}
       />
       {trail.length > 0 ? (
         <LogicMapBreadcrumb mapLabel={selectedLabel} trail={trail} onSelectLayer={setLayerId} />
@@ -249,24 +256,30 @@ function LogicMapPanelContent({
 }
 
 /**
- * 正在看的层（顶层为 null），在渲染时从"在哪张图里点进了哪一层"推出来：换了图，或 Agent 改图后这一层
- * 不在了，就是顶层。
+ * 正在看的层（顶层为 null），从"在哪张图里点进了哪一层"推出来：换了图，或 Agent 改图后这一层不在了，
+ * 就是顶层。用户在下拉框里换图时清掉记下的层，回到原来那张图也从顶层看起。
  */
 function useCurrentLayer(mapName: string | null, skeleton: LogicMapSkeleton | null) {
-  const [picked, setPicked] = useState<{ mapName: string | null; layerId: string | null }>({
-    mapName: null,
-    layerId: null,
-  });
+  const [picked, setPicked] = useState<{ mapName: string | null; layerId: string | null }>(
+    NO_PICKED_LAYER,
+  );
   const pickedTrail =
     skeleton && picked.mapName === mapName ? logicMapLayerTrail(skeleton, picked.layerId) : null;
+  // 收到的新图里这一层不在了：清掉记下的层，免得同 id 的层以后再加回来时又跳进去。
+  // 在渲染中按新收到的图调整 state（同 canvas.tsx 的 useEnteringNodeIds），不经 effect。
+  if (picked.layerId !== null && skeleton && picked.mapName === mapName && !pickedTrail) {
+    setPicked(NO_PICKED_LAYER);
+  }
   const setLayerId = useCallback(
     (layerId: string | null) => setPicked({ mapName, layerId }),
     [mapName],
   );
+  const resetLayer = useCallback(() => setPicked(NO_PICKED_LAYER), []);
   const layerId = pickedTrail ? picked.layerId : null;
-  return { layerId, trail: pickedTrail ?? NO_TRAIL, setLayerId };
+  return { layerId, trail: pickedTrail ?? NO_TRAIL, setLayerId, resetLayer };
 }
 
+const NO_PICKED_LAYER = { mapName: null, layerId: null };
 const NO_TRAIL: readonly LogicMapLayerStep[] = [];
 
 /**
