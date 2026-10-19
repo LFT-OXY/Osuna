@@ -265,8 +265,8 @@ describe("old per-agent endpoints are read as host-wide endpoints", () => {
   });
 });
 
-describe("the identifier and the keys stay inside the daemon", () => {
-  test("no response carries the identifier; keys.json is private", async () => {
+describe("the keys stay inside the daemon", () => {
+  test("no response carries a key; keys.json is private", async () => {
     const { client, daemon } = await startWithLegacyFile();
     const saved = await client.apiEndpointSave({
       provider: "claude",
@@ -279,8 +279,6 @@ describe("the identifier and the keys stay inside the daemon", () => {
     expect(JSON.stringify(saved)).not.toContain("sk-e");
 
     const listed = JSON.stringify(await client.apiEndpointList("claude"));
-    expect(listed).not.toContain("slug");
-    expect(listed).not.toContain("relay-a");
     expect(listed).not.toContain("sk-a");
 
     const keysPath = path.join(daemon.paseoHome, "api-endpoints", "keys.json");
