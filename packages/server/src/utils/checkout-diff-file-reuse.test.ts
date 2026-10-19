@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getCheckoutDiff, type CheckoutDiffCompare } from "./checkout-git.js";
-import { CheckoutDiffFileReuse } from "./checkout-diff-file-reuse.js";
+import { CheckoutDiffFileReuse, type CheckoutDiffReuseRun } from "./checkout-diff-file-reuse.js";
 import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
 
 function git(cwd: string, ...args: string[]): string {
@@ -177,5 +177,71 @@ describe("per-file checkout diff reuse", () => {
     git(repoDir, "checkout", "-q", "feature");
     git(repoDir, "merge", "-q", "--no-edit", "main");
     await expectSameAsFresh(reuse, compare);
+  });
+
+  it("keeps full-file highlighting when a change hint lands mid-run", async () => {
+    // 块注释从第 1 行开到最后，被改的那行只有带上全文才会被识别成注释
+    const commented = (edit: string) =>
+      [
+        "/*",
+        ...Array.from({ length: 30 }, (_, index) => (index === 15 ? edit : `line ${index}`)),
+        "*/",
+        "",
+      ].join("\n");
+    writeFileSync(join(repoDir, "commented.ts"), commented("export const kept = 1;"));
+    git(repoDir, "add", "commented.ts");
+    git(repoDir, "commit", "-m", "commented");
+    writeFileSync(join(repoDir, "commented.ts"), commented("export const changed = 2;"));
+    const compare = { mode: "uncommitted", includeStructured: true } as const;
+    const commentedPath = join(repoDir, "commented.ts");
+
+    // 模拟监听回调正好落在「决定复用」和「取高亮」之间
+    class HintMidRun extends CheckoutDiffFileReuse {
+      armed = false;
+
+      async begin(
+        input: Parameters<CheckoutDiffFileReuse["begin"]>[0],
+      ): Promise<CheckoutDiffReuseRun> {
+        const run = await super.begin(input);
+        const hasHighlighted = run.hasHighlighted.bind(run);
+        run.hasHighlighted = (path: string) => {
+          const result = hasHighlighted(path);
+          if (this.armed && path === "commented.ts") this.markChanged([commentedPath]);
+          return result;
+        };
+        return run;
+      }
+    }
+    const reuse = new HintMidRun();
+    await getCheckoutDiff(repoDir, compare, { diffFileReuse: reuse });
+    reuse.armed = true;
+    await expectSameAsFresh(reuse, compare);
+  });
+
+  it("never reuses a submodule entry whose own directory stat does not move", async () => {
+    const subSource = realpathSync(mkdtempSync(join(tmpdir(), "checkout-diff-reuse-sub-")));
+    try {
+      git(subSource, "init", "-b", "main");
+      git(subSource, "config", "user.email", "test@test.com");
+      git(subSource, "config", "user.name", "Test");
+      writeFileSync(join(subSource, "x.ts"), "export const x = 0;\n");
+      git(subSource, "add", ".");
+      git(subSource, "-c", "commit.gpgsign=false", "commit", "-m", "sub init");
+      git(repoDir, "-c", "protocol.file.allow=always", "submodule", "add", "-q", subSource, "sub");
+      git(repoDir, "commit", "-m", "add sub");
+      const subDir = join(repoDir, "sub");
+      git(subDir, "config", "user.email", "test@test.com");
+      git(subDir, "config", "user.name", "Test");
+      const compare = { mode: "uncommitted", includeStructured: true } as const;
+      const reuse = new CheckoutDiffFileReuse();
+
+      for (const value of [1, 2, 3]) {
+        writeFileSync(join(subDir, "x.ts"), `export const x = ${value};\n`);
+        git(subDir, "-c", "commit.gpgsign=false", "commit", "-qam", `sub ${value}`);
+        await expectSameAsFresh(reuse, compare);
+      }
+    } finally {
+      rmSync(subSource, { recursive: true, force: true });
+    }
   });
 });

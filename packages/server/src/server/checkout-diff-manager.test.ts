@@ -13,7 +13,11 @@ vi.mock("./checkout-git-utils.js", () => ({
 import type pino from "pino";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { CheckoutDiffFileReuse } from "../utils/checkout-diff-file-reuse.js";
-import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
+import type {
+  WorkingTreeChangeListener,
+  WorkspaceGitRuntimeSnapshot,
+  WorkspaceGitService,
+} from "./workspace-git-service.js";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -114,10 +118,10 @@ describe("CheckoutDiffManager", () => {
   }) {
     const unsubscribe = vi.fn();
     const workspaceUnsubscribe = vi.fn();
-    let onChange: ((changedPaths?: readonly string[]) => void) | null = null;
+    let onChange: WorkingTreeChangeListener | null = null;
     let onWorkspaceSnapshot: ((snapshot: WorkspaceGitRuntimeSnapshot) => void) | null = null;
     const mockRequestWorkingTreeWatch = vi.fn(
-      async (_cwd: string, listener: (changedPaths?: readonly string[]) => void) => {
+      async (_cwd: string, listener: WorkingTreeChangeListener) => {
         onChange = listener;
         return {
           repoRoot: options?.repoRoot === undefined ? "/tmp/repo" : options.repoRoot,
@@ -261,8 +265,7 @@ describe("CheckoutDiffManager", () => {
     expect(workspaceGitService.getCheckoutDiff).toHaveBeenCalledWith(
       "/tmp/repo",
       expect.objectContaining({ mode: "uncommitted", includeStructured: true }),
-      undefined,
-      expect.any(CheckoutDiffFileReuse),
+      { fileReuse: expect.any(CheckoutDiffFileReuse) },
     );
   });
 
@@ -272,11 +275,13 @@ describe("CheckoutDiffManager", () => {
       { cwd: "/tmp/repo/packages/server", compare: { mode: "uncommitted" } },
       () => {},
     );
-    getOnChange()?.(["/tmp/repo/a.ts"]);
+    getOnChange()?.({ changedPaths: ["/tmp/repo/a.ts"] });
     await vi.advanceTimersByTimeAsync(150);
     await manager.read({ cwd: "/tmp/repo", compare: { mode: "uncommitted" } });
 
-    const reuseArgs = workspaceGitService.getCheckoutDiff.mock.calls.map((call) => call[3]);
+    const reuseArgs = workspaceGitService.getCheckoutDiff.mock.calls.map(
+      (call) => (call[2] as { fileReuse?: unknown } | undefined)?.fileReuse,
+    );
     expect(reuseArgs).toHaveLength(3);
     expect(reuseArgs[0]).toBeInstanceOf(CheckoutDiffFileReuse);
     expect(reuseArgs[1]).toBe(reuseArgs[0]);
@@ -350,8 +355,7 @@ describe("CheckoutDiffManager", () => {
       1,
       "/tmp/repo",
       expect.objectContaining({ mode: "uncommitted" }),
-      undefined,
-      expect.any(CheckoutDiffFileReuse),
+      { fileReuse: expect.any(CheckoutDiffFileReuse) },
     );
 
     const onChange = getOnChange();
@@ -363,6 +367,7 @@ describe("CheckoutDiffManager", () => {
     expect(watchFiredCall[2]).toEqual({
       force: true,
       reason: expect.stringContaining("working-tree"),
+      fileReuse: expect.any(CheckoutDiffFileReuse),
     });
   });
 
@@ -682,7 +687,9 @@ describe("CheckoutDiffManager", () => {
     );
     await vi.advanceTimersByTimeAsync(150);
     expect(getCheckoutDiff).toHaveBeenCalledTimes(2);
-    expect(getCheckoutDiff.mock.calls[1]?.[2]).toBeUndefined();
+    expect(getCheckoutDiff.mock.calls[1]?.[2]).toEqual({
+      fileReuse: expect.any(CheckoutDiffFileReuse),
+    });
 
     getOnWorkspaceSnapshot()?.(createWorkspaceSnapshot({ aheadBehind: { ahead: 2, behind: 0 } }));
     await vi.advanceTimersByTimeAsync(150);
@@ -705,8 +712,7 @@ describe("CheckoutDiffManager", () => {
     expect(workspaceGitService.getCheckoutDiff).toHaveBeenCalledWith(
       "/tmp/plain",
       expect.objectContaining({ mode: "uncommitted", includeStructured: true }),
-      undefined,
-      expect.any(CheckoutDiffFileReuse),
+      { fileReuse: expect.any(CheckoutDiffFileReuse) },
     );
   });
 });

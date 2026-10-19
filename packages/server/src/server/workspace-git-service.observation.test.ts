@@ -381,10 +381,9 @@ describe("WorkspaceGitService checkout observation", () => {
       { path: path.join(REPO_CWD, "b.ts"), type: "delete" },
     ]);
 
-    expect(listener).toHaveBeenCalledWith([
-      path.join(REPO_CWD, "src", "a.ts"),
-      path.join(REPO_CWD, "b.ts"),
-    ]);
+    expect(listener).toHaveBeenCalledWith({
+      changedPaths: [path.join(REPO_CWD, "src", "a.ts"), path.join(REPO_CWD, "b.ts")],
+    });
     subscription.unsubscribe();
     service.dispose();
   });

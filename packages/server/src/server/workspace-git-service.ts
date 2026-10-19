@@ -220,8 +220,7 @@ export interface WorkspaceGitService {
   getCheckoutDiff(
     cwd: string,
     options: CheckoutDiffCompare,
-    readOptions?: WorkspaceGitReadOptions,
-    fileReuse?: CheckoutDiffFileReuse,
+    readOptions?: CheckoutDiffReadOptions,
   ): Promise<CheckoutDiffResult>;
   validateBranchRef(
     cwd: string,
@@ -261,8 +260,17 @@ export interface WorkspaceGitService {
   dispose(): Promise<void>;
 }
 
+/** 订阅中的读取带上按文件复用；一次性读取不带。 */
+export type CheckoutDiffReadOptions = WorkspaceGitReadOptions & {
+  fileReuse?: CheckoutDiffFileReuse;
+};
+
 /** 文件监听给出的变动路径（绝对路径）只是提示；轮询降级等信号不带路径。 */
-export type WorkingTreeChangeListener = (changedPaths?: readonly string[]) => void;
+export interface WorkingTreeChange {
+  changedPaths?: readonly string[];
+}
+
+export type WorkingTreeChangeListener = (change?: WorkingTreeChange) => void;
 
 export interface WorkspaceGitServiceMetrics {
   workspaceTargetCount: number;
@@ -805,8 +813,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   async getCheckoutDiff(
     cwd: string,
     options: CheckoutDiffCompare,
-    readOptions?: WorkspaceGitReadOptions,
-    fileReuse?: CheckoutDiffFileReuse,
+    readOptions?: CheckoutDiffReadOptions,
   ): Promise<CheckoutDiffResult> {
     this.assertNotDisposed();
     const normalizedCwd = resolve(cwd);
@@ -823,7 +830,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         this.deps.getCheckoutDiff(normalizedCwd, normalizedOptions, {
           paseoHome: this.paseoHome,
           worktreesRoot: this.worktreesRoot,
-          diffFileReuse: fileReuse,
+          diffFileReuse: readOptions?.fileReuse,
         }),
     });
   }
@@ -1535,11 +1542,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           if (!this.hasRelevantWorkingTreeEvent(target, events)) {
             return;
           }
-          this.notifyWorkingTreeChanged(
-            target,
-            "working-tree-watch",
-            events.map((event) => event.path),
-          );
+          this.notifyWorkingTreeChanged(target, "working-tree-watch", {
+            changedPaths: events.map((event) => event.path),
+          });
         },
         { ignore },
         markSubscribeSettled,
@@ -2093,24 +2098,24 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   private notifyWorkingTreeChanged(
     target: WorkingTreeWatchTarget,
     reason: string,
-    changedPaths?: readonly string[],
+    change: WorkingTreeChange = {},
   ): void {
     if (target.closed) {
       return;
     }
-    this.notifyWorkingTreeConsumers(target, changedPaths);
+    this.notifyWorkingTreeConsumers(target, change);
     this.scheduleWorkingTreeRefreshes(target, reason);
   }
 
   private notifyWorkingTreeConsumers(
     target: WorkingTreeWatchTarget,
-    changedPaths?: readonly string[],
+    change: WorkingTreeChange = {},
   ): void {
     for (const alias of target.aliases) {
       this.invalidateCheckoutDiffCache(alias, "uncommitted");
     }
     for (const listener of target.listeners) {
-      listener(changedPaths);
+      listener(change);
     }
   }
 

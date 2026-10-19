@@ -1,12 +1,19 @@
-import { realpathSync } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import { lstat, stat } from "node:fs/promises";
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import type { ParsedDiffFile } from "../server/utils/diff-highlighter.js";
+import { getRealpathAwareRelativePath } from "./path.js";
 import { runGitCommand } from "./run-git-command.js";
 
 // 记号超过这个数就整体清空，换一次全量重算，防止长时间订阅时无限增长
 const MAX_CHANGE_MARKS = 4096;
 const ALL_PATHS_MARK = "";
+// 子模块（gitlink）的 patch 取决于子仓库 HEAD 与其内部改动，目录自身的 stat 看不出来
+const GITLINK_MODE = "160000";
+// 路径不存在：签名记为 missing，删除也是一种身份
+const ABSENT_PATH_CODES = new Set(["ENOENT", "ENOTDIR", "ELOOP"]);
+// 无权读取：这个文件不复用，交给原流程照常处理
+const UNREADABLE_PATH_CODES = new Set(["EACCES", "EPERM"]);
 
 export interface CheckoutDiffReuseChange {
   path: string;
@@ -56,7 +63,7 @@ interface BeginInput {
 export class CheckoutDiffFileReuse {
   private readonly entries = new Map<string, FileEntry>();
   private readonly changeMarks = new Map<string, number>();
-  private roots: string[] = [];
+  private root: string | null = null;
   private seq = 0;
 
   markChanged(absolutePaths: readonly string[]): void {
@@ -87,7 +94,7 @@ export class CheckoutDiffFileReuse {
   }
 
   async begin(input: BeginInput): Promise<CheckoutDiffReuseRun> {
-    this.roots = resolveRoots(input.cwd);
+    this.root = input.cwd;
     const startSeq = this.seq;
     const [blobsByPath, signatures] = await Promise.all([
       readBlobIdsByPath(input.cwd, input.refs),
@@ -143,22 +150,20 @@ export class CheckoutDiffFileReuse {
   }
 
   private toRelativePath(absolutePath: string): string | null {
-    for (const root of this.roots) {
-      const relativePath = relative(root, absolutePath);
-      if (relativePath === ".." || relativePath.startsWith(`..${sep}`)) {
-        continue;
-      }
-      if (isAbsolute(relativePath)) {
-        continue;
-      }
-      return relativePath.split(sep).join("/");
+    if (this.root === null) {
+      return null;
     }
-    return null;
+    const relativePath = getRealpathAwareRelativePath(this.root, absolutePath);
+    return relativePath === null ? null : relativePath.split(sep).join("/");
   }
 }
 
 /** 一次 getCheckoutDiff 里用的视图：身份在开算前定好，之后的读写都按这份身份。 */
 export class CheckoutDiffReuseRun {
+  // 每个路径第一次读到的缓存值固定到本次结束：开算后才到的变动提示不会让同一次计算
+  // 前面按「已有高亮」跳过读全文、后面又重做高亮却缺全文
+  private readonly snapshots = new Map<string, Readonly<FileEntry> | null>();
+
   constructor(
     private readonly store: CheckoutDiffFileReuse,
     private readonly identities: ReadonlyMap<string, string>,
@@ -241,9 +246,16 @@ export class CheckoutDiffReuseRun {
     return parsed;
   }
 
-  private read(path: string): FileEntry | null {
+  private read(path: string): Readonly<FileEntry> | null {
+    const frozen = this.snapshots.get(path);
+    if (frozen !== undefined) {
+      return frozen;
+    }
     const identity = this.identities.get(path);
-    return identity === undefined ? null : this.store.readEntry(path, identity);
+    const entry = identity === undefined ? null : this.store.readEntry(path, identity);
+    const snapshot = entry ? { ...entry } : null;
+    this.snapshots.set(path, snapshot);
+    return snapshot;
   }
 
   private write(path: string): FileEntry | null {
@@ -252,20 +264,10 @@ export class CheckoutDiffReuseRun {
   }
 }
 
-function resolveRoots(cwd: string): string[] {
-  const roots = [resolve(cwd)];
-  try {
-    const realRoot = realpathSync(cwd);
-    if (realRoot !== roots[0]) roots.push(realRoot);
-  } catch {
-    // 目录读不到时只按原路径匹配提示
-  }
-  return roots;
-}
-
 interface BlobIds {
   oldBlob: string;
   newBlob: string;
+  isGitlink: boolean;
 }
 
 /** `git diff --raw` 给出每个路径两侧的 blob id；改名按新路径记。 */
@@ -293,12 +295,15 @@ async function readBlobIdsByPath(
     if (!header.startsWith(":")) {
       continue;
     }
-    const [, , oldBlob = "", newBlob = "", status = ""] = header.slice(1).split(" ");
+    const [oldMode = "", newMode = "", oldBlob = "", newBlob = "", status = ""] = header
+      .slice(1)
+      .split(" ");
+    const isGitlink = oldMode === GITLINK_MODE || newMode === GITLINK_MODE;
     const hasTwoPaths = status.startsWith("R") || status.startsWith("C");
     const path = tokens[index + (hasTwoPaths ? 1 : 0)];
     index += hasTwoPaths ? 2 : 1;
     if (path) {
-      blobs.set(path, { oldBlob, newBlob });
+      blobs.set(path, { oldBlob, newBlob, isGitlink });
     }
   }
   return blobs;
@@ -318,21 +323,47 @@ async function readWorktreeSignatures(input: BeginInput): Promise<Map<string, st
   return signatures;
 }
 
-/** 大小 + mtime + inode + mode；符号链接再带上指向文件的签名。读不到返回 null（不复用）。 */
+/**
+ * 大小 + mtime + inode + mode；符号链接再带上指向文件的签名。
+ * 目录（嵌套仓库等）与无权读取的路径返回 null，不复用。
+ */
 async function readStatSignature(absolutePath: string): Promise<string | null> {
-  try {
-    const link = await lstat(absolutePath, { bigint: true });
-    const own = `${link.size}:${link.mtimeNs}:${link.ino}:${link.mode}`;
-    if (!link.isSymbolicLink()) {
-      return own;
-    }
-    const target = await stat(absolutePath, { bigint: true }).catch(() => null);
-    return target ? `${own}>${target.size}:${target.mtimeNs}:${target.ino}` : `${own}>missing`;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return "missing";
-    }
+  const link = await readPathStats(() => lstat(absolutePath, { bigint: true }));
+  if (link === "absent") {
+    return "missing";
+  }
+  if (link === "unreadable" || link.isDirectory()) {
     return null;
+  }
+  const own = formatStats(link);
+  if (!link.isSymbolicLink()) {
+    return own;
+  }
+  const target = await readPathStats(() => stat(absolutePath, { bigint: true }));
+  if (target === "unreadable") {
+    return null;
+  }
+  return target === "absent" ? `${own}>missing` : `${own}>${formatStats(target)}`;
+}
+
+function formatStats(stats: BigIntStats): string {
+  return `${stats.size}:${stats.mtimeNs}:${stats.ino}:${stats.mode}`;
+}
+
+async function readPathStats(
+  load: () => Promise<BigIntStats>,
+): Promise<BigIntStats | "absent" | "unreadable"> {
+  try {
+    return await load();
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+    if (code !== undefined && ABSENT_PATH_CODES.has(code)) {
+      return "absent";
+    }
+    if (code !== undefined && UNREADABLE_PATH_CODES.has(code)) {
+      return "unreadable";
+    }
+    throw error;
   }
 }
 
@@ -347,7 +378,7 @@ function buildIdentity(input: {
   if (change.isUntracked === true) {
     return signature ? JSON.stringify(["untracked", ignoreWhitespace, signature]) : null;
   }
-  if (!blobs) {
+  if (!blobs || blobs.isGitlink) {
     return null;
   }
   const newSide = hasTargetRef ? blobs.newBlob : signature;

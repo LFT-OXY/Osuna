@@ -1,6 +1,10 @@
 import type pino from "pino";
 import type { SubscribeCheckoutDiffRequest, SessionOutboundMessage } from "./messages.js";
-import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
+import type {
+  CheckoutDiffReadOptions,
+  WorkspaceGitRuntimeSnapshot,
+  WorkspaceGitService,
+} from "./workspace-git-service.js";
 import { expandTilde } from "../utils/path.js";
 import { CheckoutDiffFileReuse } from "../utils/checkout-diff-file-reuse.js";
 import { toCheckoutError } from "./checkout-git-utils.js";
@@ -311,6 +315,10 @@ export class CheckoutDiffManager {
     },
   ): Promise<CheckoutDiffSnapshotPayload> {
     const diffCwd = options?.diffCwd ?? cwd;
+    const fileReuse = options?.fileReuse;
+    const readOptions: CheckoutDiffReadOptions | undefined = options?.force
+      ? { force: true, reason: options.reason ?? "checkout-diff-refresh", fileReuse }
+      : fileReuse && { fileReuse };
     try {
       const diffResult = await this.workspaceGitService.getCheckoutDiff(
         diffCwd,
@@ -320,10 +328,7 @@ export class CheckoutDiffManager {
           ignoreWhitespace: compare.ignoreWhitespace,
           includeStructured: true,
         },
-        options?.force
-          ? { force: true, reason: options.reason ?? "checkout-diff-refresh" }
-          : undefined,
-        options?.fileReuse,
+        readOptions,
       );
       if (diffResult.diffTooLarge) {
         return {
@@ -478,8 +483,8 @@ export class CheckoutDiffManager {
 
     const { repoRoot, unsubscribe } = await this.workspaceGitService.requestWorkingTreeWatch(
       target.cwd,
-      (changedPaths) => {
-        target.fileReuse.markChanged(changedPaths ?? []);
+      (change) => {
+        target.fileReuse.markChanged(change?.changedPaths ?? []);
         this.scheduleTargetRefresh(target);
       },
     );
