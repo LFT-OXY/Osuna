@@ -2616,9 +2616,15 @@ export const es: TranslationResources = {
           openCodingModels10: "Modelos abiertos para programar, $10/mes",
           openCodingModels999: "Modelos abiertos para programar, $9,99/mes",
           freeModelsNoKey: "Modelos gratuitos sin clave",
+          bedrockApiKey: "Clave de API de Bedrock",
+          azureResource: "El endpoint y la clave de tu recurso",
         },
         keyHints: {
           freeModelsNeedNoKey: "Opcional: los modelos gratuitos no necesitan clave",
+        },
+        endpointHints: {
+          azure:
+            "El endpoint de tu recurso, en Claves y punto de conexión del portal de Azure. Al añadirlo, Osuna pide al recurso sus implementaciones con esta clave, por su API v1; los nombres de las implementaciones son los ids de modelo.",
         },
       },
       form: {
@@ -2637,6 +2643,7 @@ export const es: TranslationResources = {
         apiKeyOptionalLabel: "Clave de API (opcional)",
         keyRejected: "El servidor rechazó esta clave (401 / 403)",
         address: "Dirección",
+        resourceEndpoint: "Endpoint del recurso",
         addressHint:
           "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y rellena las direcciones que funcionan.",
         addressHintKeyOptional:

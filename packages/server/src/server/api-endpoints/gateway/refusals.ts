@@ -3,6 +3,7 @@
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
+import { templateKeyHeaders } from "../templates.js";
 import { FAILURE_WORDS, wordsOf } from "./failure.js";
 import { refusedDowngrades, type DowngradedShape } from "./refused-downgrades.js";
 import { refusedFields, refusesContent, type DroppedField } from "./refused-fields.js";
@@ -213,15 +214,21 @@ export function refusesBothKeyHeaders(input: { status: number; text: string }): 
   return BOTH_KEY_HEADERS_WORDS.some((words) => text.includes(words));
 }
 
-/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer。 */
-export type KeyHeaders = "both" | "xApiKey" | "bearer";
+/** key 放在哪个请求头：两个都放、只放 x-api-key、只放 Authorization: Bearer、只放 Azure 的 api-key。 */
+export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey";
 
-/** 发给这家时 key 放哪：OpenAI 格式只放 Bearer；Anthropic 地址两个都放，这家说过不能同时带的只放它收的那个。 */
+/**
+ * 发给这家时 key 放哪：Bedrock、Azure 由模板定（templateKeyHeaders）；其余 OpenAI 格式只放 Bearer，
+ * Anthropic 地址两个都放，这家说过不能同时带的只放它收的那个。
+ */
 export function keyHeadersFor(input: {
   format: ApiEndpointRequestFormat;
+  templateId: string | undefined;
   refusals: ShapeRefusals | undefined;
 }): KeyHeaders {
   const { refusals } = input;
+  const fixed = templateKeyHeaders({ templateId: input.templateId, format: input.format });
+  if (fixed !== null) return fixed;
   if (input.format !== "anthropic_messages") return "bearer";
   if (refusals?.has("xApiKeyAlone")) return "bearer";
   return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
@@ -233,8 +240,9 @@ export function keyHeaderValues(input: {
   keys: KeyHeaders;
 }): Record<string, string> {
   const { apiKey, keys } = input;
+  if (apiKey === null) return {};
+  if (keys === "apiKey") return { "api-key": apiKey };
   const headers: Record<string, string> = {};
-  if (apiKey === null) return headers;
   if (keys !== "xApiKey") headers.authorization = `Bearer ${apiKey}`;
   if (keys !== "bearer") headers["x-api-key"] = apiKey;
   return headers;

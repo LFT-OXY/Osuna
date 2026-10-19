@@ -32,7 +32,15 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { API_ENDPOINT_TEMPLATES, findTemplate, listsNoModels, planModelsOf } from "./templates.js";
+import {
+  API_ENDPOINT_TEMPLATES,
+  findTemplate,
+  listsNoModels,
+  modelFormatsAt,
+  planModelsOf,
+  templateBaseUrls,
+  type TemplatePlace,
+} from "./templates.js";
 import { resolveAgentHookConfigPath } from "../../terminal/agent-hooks/agent-hook-installer.js";
 import { claudeAgentHookProvider } from "../../terminal/agent-hooks/claude/claude.js";
 import { codexAgentHookProvider } from "../../terminal/agent-hooks/codex/codex.js";
@@ -977,15 +985,18 @@ export class ApiEndpointService {
       // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key；复制时不填用原来那家的。
       const apiKey = savedKeyOf({ input, copySource, store: this.store });
       const isLegacyForm = input.baseUrls === undefined;
+      const template = validateTemplate(input, existing ?? copySource);
+      // Azure 模板的地址不论怎么粘来（只有资源名也行），都先放到资源的 v1 API 上再校验。
+      const templateId = input.templateId ?? (existing ?? copySource)?.templateId;
       const fields = isLegacyForm
         ? validateLegacyFields(supported, input, existing)
-        : validateFields(input.baseUrls ?? [], input);
+        : validateFields(templateBaseUrls({ templateId, baseUrls: input.baseUrls ?? [] }), input);
       const endpoint = buildEndpoint({
         state,
         existing,
         copySource,
         fields,
-        template: validateTemplate(input, existing ?? copySource),
+        template,
         searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
@@ -2438,7 +2449,9 @@ export class ApiEndpointService {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
     // 从模板加的这家：没有清单接口的用内置清单、不问上游，有前缀的只留套餐自己的（照 magpie）。
-    const place = input.endpointId ? (findEndpoint(this.readState(), input.endpointId) ?? {}) : {};
+    const place: TemplatePlace = input.endpointId
+      ? (findEndpoint(this.readState(), input.endpointId) ?? {})
+      : {};
     let models: ListedModel[];
     if (listsNoModels(place)) {
       models = planModelsOf(place, []);
@@ -2447,6 +2460,7 @@ export class ApiEndpointService {
         provider: format === null ? supported : providerWithListingHeaders(format),
         baseUrl,
         apiKey,
+        templateId: place.templateId,
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
@@ -2513,6 +2527,7 @@ export class ApiEndpointService {
       baseUrl:
         supported === "codex" ? (normalizeOpenAICompatibleBaseUrl(baseUrl) ?? baseUrl) : baseUrl,
       apiKey,
+      templateId: this.templateIdOf(input.endpointId),
       modelId,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
@@ -2533,6 +2548,7 @@ export class ApiEndpointService {
     const apiKey = this.resolveRequestKey(input);
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
+    const templateId = this.templateIdOf(input.endpointId);
     let modelId = input.modelId?.trim() || this.probeModelFromEndpoint(input.endpointId, format);
     if (!modelId) {
       // 这家还没选模型也没拉过清单：先列一次（不花钱）再挑。
@@ -2540,6 +2556,7 @@ export class ApiEndpointService {
         provider: providerWithListingHeaders(format),
         baseUrl,
         apiKey,
+        templateId,
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
@@ -2565,6 +2582,7 @@ export class ApiEndpointService {
       format,
       baseUrl,
       apiKey,
+      templateId,
       modelId: modelId ?? null,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
@@ -2574,7 +2592,16 @@ export class ApiEndpointService {
     return testResultOf(detection, elapsed());
   }
 
-  /** 从这家已选的模型、再从上游清单里挑一个适合该格式的；都没有时为 null。 */
+  /** 这家（给了 id 且还在时）从哪个模板加的；新表单、「自定义」的为 undefined。 */
+  private templateIdOf(endpointId: string | undefined): string | undefined {
+    if (!endpointId) return undefined;
+    return findEndpoint(this.readState(), endpointId)?.templateId;
+  }
+
+  /**
+   * 从这家已选的模型、再从上游清单里挑一个适合该格式的；都没有时为 null。
+   * Bedrock 只从在这种格式上给的模型里挑（modelFormatsAt）。
+   */
   private probeModelFromEndpoint(
     endpointId: string | undefined,
     format: ApiEndpointRequestFormat,
@@ -2582,15 +2609,12 @@ export class ApiEndpointService {
     if (!endpointId) return null;
     const endpoint = findEndpoint(this.readState(), endpointId);
     if (!endpoint) return null;
+    const { templateId } = endpoint;
+    const servedHere = (ids: string[]) =>
+      ids.filter((model) => modelFormatsAt({ templateId, model })?.includes(format) ?? true);
     return (
-      pickProbeModel(
-        endpoint.models.map((model) => model.id),
-        format,
-      ) ??
-      pickProbeModel(
-        (endpoint.catalog?.models ?? []).map((model) => model.id),
-        format,
-      )
+      pickProbeModel(servedHere(endpoint.models.map((model) => model.id)), format) ??
+      pickProbeModel(servedHere((endpoint.catalog?.models ?? []).map((model) => model.id)), format)
     );
   }
 

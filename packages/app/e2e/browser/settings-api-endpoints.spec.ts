@@ -119,6 +119,10 @@ function authorizationsSeen(target: FakeRelay): Set<string | undefined> {
   return new Set(target.requests.map((request) => request.authorization));
 }
 
+function deploymentListings(target: FakeRelay): FakeRelay["requests"] {
+  return target.requests.filter((request) => request.url.includes("/deployments"));
+}
+
 function namesAndSwitches(endpoints: { name: string; enabled?: boolean }[]) {
   return endpoints.map((endpoint) => [endpoint.name, endpoint.enabled]);
 }
@@ -1248,6 +1252,108 @@ test.describe("Templates", () => {
       ["DeepSeek", "deepseek"],
       ["DeepSeek 2", "deepseek"],
     ]);
+  });
+
+  test("Amazon Bedrock: pick a region, a failed save keeps it, and saving gives the built-in models without asking anyone", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-search").fill("bedrock");
+    await page.getByTestId("api-endpoint-template-bedrock").click();
+
+    await test.step("the ten regions are there; eu-west-1 moves every address", async () => {
+      await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Amazon Bedrock");
+      await expect(page.getByTestId("api-endpoint-connection-region-ap-south-1")).toBeVisible();
+      await page.getByTestId("api-endpoint-connection-region-eu-west-1").click();
+      await expect(urlField(page, "anthropic_messages")).toHaveValue(
+        "https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic",
+      );
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      );
+      await page.getByTestId("api-endpoint-connection-api-key").fill("bedrock-api-key");
+    });
+
+    await test.step("a failed save stays in the form with the region and the key", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(urlField(page, "openai_chat")).toHaveValue(
+        "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue(
+        "bedrock-api-key",
+      );
+    });
+
+    await test.step("saving opens it with Bedrock's built-in models", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect(headerTitle(page)).toHaveText("Amazon Bedrock");
+      // 内置清单 18 个；左栏先选中的家族是 DeepSeek（Bedrock 的 Claude id 认不出家族，归「其他」）。
+      await expect(page.getByText("0 selected / 18 total")).toBeVisible();
+      await expect(modelSwitch(page, "deepseek.v3.2")).toBeVisible();
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved).toMatchObject({ templateId: "bedrock", region: "eu-west-1", hasApiKey: true });
+    });
+  });
+
+  test("Azure OpenAI asks for the resource's address; a failed save keeps it, and saving lists its deployments with the key in api-key", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-search").fill("azure");
+    await page.getByTestId("api-endpoint-template-azure").click();
+    // 假资源在本机，不是 Azure 的主机：地址原样保存。
+    const resource = `${relay.origin}/azure/openai/v1`;
+
+    await test.step("one address box says to fill in the resource's own, in place of the format addresses", async () => {
+      const field = page.getByTestId("api-endpoint-connection-endpoint-field");
+      await expect(field).toContainText("Resource endpoint");
+      await expect(field).toContainText("Keys and Endpoint in the Azure portal");
+      await expect(page.getByTestId("api-endpoint-connection-endpoint")).toHaveAttribute(
+        "placeholder",
+        "https://<resource>.openai.azure.com",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-formats")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+      await page.getByTestId("api-endpoint-connection-endpoint").fill(resource);
+      await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    });
+
+    await test.step("a failed save stays in the form with the address and the key", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-endpoint")).toHaveValue(resource);
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveValue(RELAY_KEY);
+    });
+
+    await test.step("saving opens it with the resource's deployments", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect(modelSwitch(page, "my-gpt-deployment")).toBeVisible();
+      await expect(modelSwitch(page, "my-kimi-deployment")).toBeVisible();
+      expect(deploymentListings(relay)).toEqual([
+        expect.objectContaining({ apiKey: RELAY_KEY, authorization: undefined }),
+      ]);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved).toMatchObject({
+        templateId: "azure",
+        baseUrls: [
+          { format: "openai_chat", url: resource },
+          { format: "openai_responses", url: resource },
+        ],
+      });
+    });
   });
 
   test("a template already added has a green dot and opens its endpoint; a global and China row adds the side not added yet", async ({

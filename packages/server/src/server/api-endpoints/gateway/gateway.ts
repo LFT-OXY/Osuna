@@ -19,6 +19,7 @@ import {
   type ApiEndpointState,
   type StoredApiEndpoint,
 } from "../store.js";
+import { modelFormatsAt } from "../templates.js";
 import type { ModelFacts } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
@@ -1023,6 +1024,7 @@ function askableFormat(input: {
   return chooseRequestFormat({
     agentFormat: input.agentFormat,
     model: candidate.upstreamModel,
+    formatOrder: formatOrderOf(candidate),
     formats: formatsToSearchOn({
       endpoint: candidate.endpoint,
       formats: offered,
@@ -1031,8 +1033,16 @@ function askableFormat(input: {
   });
 }
 
+function formatOrderOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] | null {
+  const { templateId } = candidate.endpoint;
+  return modelFormatsAt({ templateId, model: candidate.upstreamModel });
+}
+
+/** 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上，modelFormatsAt）。 */
 function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
-  return candidate.endpoint.baseUrls.map((entry) => entry.format);
+  const served = formatOrderOf(candidate);
+  const formats = candidate.endpoint.baseUrls.map((entry) => entry.format);
+  return served === null ? formats : formats.filter((format) => served.includes(format));
 }
 
 /** 这家还没说过不提供这个模型的格式。 */
@@ -1470,6 +1480,7 @@ function nextFormat(input: EndpointAsk): AskableCandidate | null {
     agentFormat: input.format,
     model: candidate.upstreamModel,
     formats,
+    formatOrder: formatOrderOf(candidate),
   });
   const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
   if (format === null || baseUrl === undefined) return null;

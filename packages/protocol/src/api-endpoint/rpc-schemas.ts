@@ -604,6 +604,8 @@ export type ApiEndpointTemplateRegion = z.infer<typeof ApiEndpointTemplateRegion
  * keyOptional：不填 key 也能用（本机服务、免费模型）；keyHint 是 key 框里的英文提示。
  * modelsDevIds 是 models.dev 里的 id（补模型资料用）；models 是内置模型清单，noModelList 时它就是清单；
  * modelIdPrefix：这家的清单里只有以它开头的模型属于这个模板（照 magpie Only）。headerHints 是厂商文档里可加的请求头名。
+ * endpointExample：要填用户自己资源地址的厂商（Azure OpenAI）没有 baseUrls，表单按这个示例要一个地址，endpointHint 是框下的英文说明
+ * （照 magpie Endpoint、EndpointHint）。
  */
 export const ApiEndpointTemplateSchema = z.object({
   id: z.string(),
@@ -623,6 +625,8 @@ export const ApiEndpointTemplateSchema = z.object({
   models: z.array(z.string()).optional(),
   noModelList: z.boolean().optional(),
   modelIdPrefix: z.string().optional(),
+  endpointExample: z.string().optional(),
+  endpointHint: z.string().optional(),
 });
 export type ApiEndpointTemplate = z.infer<typeof ApiEndpointTemplateSchema>;
 

@@ -39,6 +39,8 @@ const TEMPLATE_ICONS: Readonly<Record<string, string>> = {
   "bailian-token-plan": OWN.bailian,
   mistral: FAMILY.mistral,
   groq: OWN.groq,
+  bedrock: OWN.bedrock,
+  azure: OWN.azure,
   "ollama-cloud": OWN.ollama,
   nous: OWN.nousresearch,
   openrouter: OWN.openrouter,

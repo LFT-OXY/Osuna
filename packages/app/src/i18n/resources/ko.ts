@@ -2577,9 +2577,15 @@ export const ko: TranslationResources = {
           openCodingModels10: "오픈 코딩 모델, 월 $10",
           openCodingModels999: "오픈 코딩 모델, 월 $9.99",
           freeModelsNoKey: "무료 모델은 키 불필요",
+          bedrockApiKey: "Bedrock API 키",
+          azureResource: "내 리소스의 엔드포인트와 키",
         },
         keyHints: {
           freeModelsNeedNoKey: "선택: 무료 모델은 키가 필요 없음",
+        },
+        endpointHints: {
+          azure:
+            "리소스의 엔드포인트로, Azure 포털의 '키 및 엔드포인트'에 있습니다. 추가하면 Osuna가 이 키로 리소스의 v1 API에서 배포 목록을 가져오며, 배포 이름이 모델 ID가 됩니다.",
         },
       },
       form: {
@@ -2598,6 +2604,7 @@ export const ko: TranslationResources = {
         apiKeyOptionalLabel: "API 키 (선택 사항)",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
         address: "주소",
+        resourceEndpoint: "리소스 엔드포인트",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",
         addressHintKeyOptional:

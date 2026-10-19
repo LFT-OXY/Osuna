@@ -2586,9 +2586,15 @@ export const ja: TranslationResources = {
           openCodingModels10: "オープンなコーディングモデル、月額 $10",
           openCodingModels999: "オープンなコーディングモデル、月額 $9.99",
           freeModelsNoKey: "無料モデルはキー不要",
+          bedrockApiKey: "Bedrock API キー",
+          azureResource: "自分のリソースのエンドポイントとキー",
         },
         keyHints: {
           freeModelsNeedNoKey: "任意: 無料モデルにはキー不要",
+        },
+        endpointHints: {
+          azure:
+            "リソースのエンドポイント。Azure ポータルの「キーとエンドポイント」にあります。追加すると、Osuna はこのキーでリソースの v1 API からデプロイを取得し、デプロイ名がモデル ID になります。",
         },
       },
       form: {
@@ -2609,6 +2615,7 @@ export const ja: TranslationResources = {
         apiKeyOptionalLabel: "API キー（任意）",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
         address: "アドレス",
+        resourceEndpoint: "リソースのエンドポイント",
         addressHint:
           "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。",
         addressHintKeyOptional:

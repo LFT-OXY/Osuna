@@ -1349,7 +1349,7 @@ describe("reading a saved key back", () => {
 
 describe("Templates", () => {
   // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7），
-  // Bedrock 与 Azure（07 号工单）、4 个本机模板（08 号工单）。
+  // 4 个本机模板（08 号工单）。
   const LEFT_OUT = new Set([
     "typesafe",
     "vercel-jev",
@@ -1359,8 +1359,6 @@ describe("Templates", () => {
     "remote-magpie",
     "vertex",
     "google",
-    "bedrock",
-    "azure",
     "ollama",
     "lmstudio",
     "omlx",
@@ -1373,12 +1371,12 @@ describe("Templates", () => {
     const { templates, error } = await client.apiEndpointListTemplates();
 
     expect(error).toBeNull();
-    expect(templates.length).toBe(43);
+    expect(templates.length).toBe(45);
     const groups = new Map<string, number>();
     for (const template of templates) {
       groups.set(template.group, (groups.get(template.group) ?? 0) + 1);
     }
-    expect(Object.fromEntries(groups)).toEqual({ vendor: 27, relay: 16 });
+    expect(Object.fromEntries(groups)).toEqual({ vendor: 29, relay: 16 });
     const ids = templates.map((template) => template.id);
     expect(ids.filter((id) => LEFT_OUT.has(id))).toEqual([]);
     expect(new Set(ids).size).toBe(ids.length);
@@ -1392,9 +1390,10 @@ describe("Templates", () => {
       "stepfun-cn",
     ]);
     for (const id of chinaSites) expect(ids).toContain(id.slice(0, -3));
-    // 每个都能直接用：有地址，有「去拿 key」的页面。
+    // 每个都能直接用：有地址（Azure 要填自己资源的地址），有「去拿 key」的页面。
     for (const template of templates) {
-      expect(template.baseUrls.length, template.id).toBeGreaterThan(0);
+      const hasAddress = template.baseUrls.length > 0 || template.endpointExample !== undefined;
+      expect(hasAddress, template.id).toBe(true);
       expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
     }
     const zhipu = templates.find((template) => template.id === "zhipu");
@@ -1594,5 +1593,198 @@ describe("Templates", () => {
     expect(wrongRegion.error?.code).toBe("invalid_input");
     expect(regionAlone.error?.code).toBe("invalid_input");
     expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+
+  test("Amazon Bedrock offers its ten regions, each with the runtime's three addresses there", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const bedrock = templates.find((template) => template.id === "bedrock");
+
+    expect(bedrock).toMatchObject({ group: "vendor", noModelList: true });
+    expect(bedrock?.regions?.map((region) => region.id)).toEqual([
+      "us-east-1",
+      "us-east-2",
+      "us-west-2",
+      "eu-central-1",
+      "eu-west-1",
+      "eu-west-3",
+      "ap-northeast-1",
+      "ap-southeast-1",
+      "ap-southeast-2",
+      "ap-south-1",
+    ]);
+    expect(bedrock?.regions?.find((region) => region.id === "eu-west-1")?.baseUrls).toEqual([
+      {
+        format: "anthropic_messages",
+        url: "https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic",
+      },
+      { format: "openai_chat", url: "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1" },
+      {
+        format: "openai_responses",
+        url: "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      },
+    ]);
+  });
+
+  test("Amazon Bedrock's models are its built-in list, given without asking the runtime", async () => {
+    const upstream = await startRecordingUpstream(["something-listed"]);
+    const { client } = await start();
+    const endpointId = await saveAtUpstream({
+      client,
+      upstream,
+      templateId: "bedrock",
+      region: "us-west-2",
+    });
+
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.url}/v1`,
+      format: "openai_chat",
+    });
+
+    expect(fetched.error).toBeNull();
+    const ids = fetched.models.map((model) => model.id);
+    expect(ids).toContain("global.anthropic.claude-opus-5-5");
+    expect(ids).toContain("global.openai.gpt-6-luna");
+    expect(ids).toContain("deepseek.v3.2");
+    expect(ids).not.toContain("something-listed");
+    expect(upstream.requests).toEqual([]);
+  });
+
+  test("Azure OpenAI has no address of its own: the form asks for the resource's", async () => {
+    const { client } = await start();
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const azure = templates.find((template) => template.id === "azure");
+
+    expect(azure).toMatchObject({
+      group: "vendor",
+      baseUrls: [],
+      endpointExample: "https://<resource>.openai.azure.com",
+    });
+    expect(azure?.endpointHint).toMatch(/Keys and Endpoint/);
+  });
+
+  test("Azure OpenAI's address, however it was pasted, is saved on the resource's v1 API", async () => {
+    const { client } = await start();
+    const save = (url: string) =>
+      client.apiEndpointSave({
+        provider: "codex",
+        name: "Azure OpenAI",
+        baseUrls: [
+          { format: "openai_chat", url },
+          { format: "openai_responses", url },
+        ],
+        apiKey: "azure-key",
+        models: [],
+        templateId: "azure",
+      });
+
+    const bare = await save("https://my-res.openai.azure.com");
+    const classic = await save(
+      "https://other-res.cognitiveservices.azure.com/openai/deployments/gpt-5/chat/completions?api-version=2025-01-01-preview",
+    );
+    // 门户里列的只有资源名。
+    const named = await save("named-res");
+
+    expect(bare.endpoint?.baseUrls).toEqual([
+      { format: "openai_chat", url: "https://my-res.openai.azure.com/openai/v1" },
+      { format: "openai_responses", url: "https://my-res.openai.azure.com/openai/v1" },
+    ]);
+    expect(classic.endpoint?.baseUrls?.map((entry) => entry.url)).toEqual([
+      "https://other-res.cognitiveservices.azure.com/openai/v1",
+      "https://other-res.cognitiveservices.azure.com/openai/v1",
+    ]);
+    expect(named.endpoint?.baseUrls?.[0]?.url).toBe("https://named-res.openai.azure.com/openai/v1");
+  });
+
+  /** 假 Azure 资源：给了 deployments 就答部署名，否则 404；/v1/models 答 v1 模型。记下每个请求。 */
+  async function startAzure(deployments: string[] | null): Promise<RecordingUpstream> {
+    const upstream: RecordingUpstream = { url: "", requests: [] };
+    const listed = deployments?.map((id) => ({ id })) ?? null;
+    const server = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        upstream.requests.push({
+          method: request.method ?? "",
+          url: request.url ?? "",
+          headers: request.headers,
+        });
+        const url = request.url ?? "";
+        if (url.startsWith("/openai/deployments") && listed !== null) {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ object: "list", data: listed }));
+          return;
+        }
+        if (url === "/openai/v1/models") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ object: "list", data: [{ id: "gpt-5.5" }] }));
+          return;
+        }
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { code: "404", message: "Resource not found" } }));
+      });
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return upstream;
+  }
+
+  async function fetchFromAzure(azure: RecordingUpstream) {
+    const { client } = await start();
+    const base = `${azure.url}/openai/v1`;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Azure OpenAI",
+      baseUrls: [
+        { format: "openai_chat", url: base },
+        { format: "openai_responses", url: base },
+      ],
+      apiKey: "azure-key",
+      models: [],
+      templateId: "azure",
+    });
+    return client.apiEndpointFetchModels({
+      provider: "codex",
+      endpointId: saved.endpoint?.id ?? "",
+      baseUrl: base,
+      format: "openai_responses",
+    });
+  }
+
+  test("Azure OpenAI's models are the resource's deployments, asked with the key in api-key alone", async () => {
+    const azure = await startAzure(["my-gpt-deployment", "kimi-deployment"]);
+
+    const fetched = await fetchFromAzure(azure);
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.models.map((model) => model.id)).toEqual([
+      "my-gpt-deployment",
+      "kimi-deployment",
+    ]);
+    expect(azure.requests.map((request) => request.url)).toEqual([
+      "/openai/deployments?api-version=2022-12-01",
+    ]);
+    expect(azure.requests[0]?.headers["api-key"]).toBe("azure-key");
+    expect(azure.requests[0]?.headers.authorization).toBeUndefined();
+  });
+
+  test("Azure OpenAI's models fall back to its v1 list when the deployments can't be listed", async () => {
+    const azure = await startAzure(null);
+
+    const fetched = await fetchFromAzure(azure);
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.models.map((model) => model.id)).toEqual(["gpt-5.5"]);
+    expect(azure.requests.map((request) => request.url)).toEqual([
+      "/openai/deployments?api-version=2022-12-01",
+      "/openai/v1/models",
+    ]);
+    expect(azure.requests.every((request) => request.headers["api-key"] === "azure-key")).toBe(
+      true,
+    );
   });
 });

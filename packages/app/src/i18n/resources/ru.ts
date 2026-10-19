@@ -2598,9 +2598,15 @@ export const ru: TranslationResources = {
           openCodingModels10: "Открытые модели для кода, $10 в месяц",
           openCodingModels999: "Открытые модели для кода, $9,99 в месяц",
           freeModelsNoKey: "Бесплатные модели без ключа",
+          bedrockApiKey: "API-ключ Bedrock",
+          azureResource: "Адрес и ключ вашего ресурса",
         },
         keyHints: {
           freeModelsNeedNoKey: "Необязательно: бесплатным моделям ключ не нужен",
+        },
+        endpointHints: {
+          azure:
+            "Адрес вашего ресурса из раздела «Ключи и конечная точка» на портале Azure. После добавления Osuna запросит у ресурса его развертывания с этим ключом через API v1; имена развертываний и есть id моделей.",
         },
       },
       form: {
@@ -2619,6 +2625,7 @@ export const ru: TranslationResources = {
         apiKeyOptionalLabel: "API-ключ (необязательно)",
         keyRejected: "Сервер отклонил этот ключ (401 / 403)",
         address: "Адрес",
+        resourceEndpoint: "Адрес ресурса",
         addressHint:
           "Введите ключ и нажмите «Определить»: Osuna по разу попробует каждый из трёх форматов запросов и заполнит рабочие адреса ниже.",
         addressHintKeyOptional:

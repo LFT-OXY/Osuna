@@ -963,7 +963,7 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
-  it("parses list_templates with a template that has plans and one that has none, and a rejection", () => {
+  it("parses list_templates with a template that has plans, one that has none, one at the user's own resource, and a rejection", () => {
     const request = {
       type: "provider.api_endpoint.list_templates.request" as const,
       requestId: "req-m6",
@@ -1006,8 +1006,18 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       modelIdPrefix: "cline-pass/",
       shortName: "Zen",
     };
+    // 要填自己资源地址的厂商：没有 baseUrls，给示例地址与说明。
+    const azure = {
+      id: "azure",
+      name: "Azure OpenAI",
+      group: "vendor",
+      baseUrls: [],
+      modelsDevIds: ["azure", "openai"],
+      endpointExample: "https://<resource>.openai.azure.com",
+      endpointHint: "Your resource's endpoint, from Keys and Endpoint in the Azure portal.",
+    };
     for (const payload of [
-      { requestId: "req-m6", templates: [zhipu, opencodeZen], error: null },
+      { requestId: "req-m6", templates: [zhipu, opencodeZen, azure], error: null },
       { requestId: "req-m6", templates: [], error: { code: "internal", message: "boom" } },
     ]) {
       const response = { type: "provider.api_endpoint.list_templates.response" as const, payload };

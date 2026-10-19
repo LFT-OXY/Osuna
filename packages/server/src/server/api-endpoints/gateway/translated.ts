@@ -122,7 +122,8 @@ export async function attemptTranslated(input: {
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
-  const sends = () => keyHeadersFor({ format: to, refusals });
+  const sends = () =>
+    keyHeadersFor({ format: to, templateId: input.endpoint.templateId, refusals });
   const openAt = (ask: { url: URL; body: string; keys: KeyHeaders }) =>
     openUpstream({
       res,

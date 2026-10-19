@@ -19,6 +19,8 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * 编辑时按它读回已存 key 的原文放进框里；读回来的不算新 key，改了才算（照 magpie）。
  * 从模板（Template）添加时名称与各格式地址按模板填好，不用自动检测；有区域或套餐的可切换，新建时国际站与中国站也可切换，
  * 切换只保留 key（照 magpie：切区域保留名称，切站点连名称一起换）。编辑从模板加的接口时同样能切区域或套餐。
+ * 要填用户自己资源地址的模板（Azure OpenAI，endpointExample）没有地址：表单只要一个资源地址，原样当 Chat 与
+ * Responses 的地址保存，daemon 把它放到资源的 v1 API 上（照 magpie 编辑窗口的 Endpoint 框）。
  */
 
 export type ConnectionFormSeed =
@@ -80,6 +82,9 @@ export interface ConnectionTemplateState {
   keysUrl: string | null;
   // 官网：区域或套餐有自己的文档页时跟着它（照 magpie 编辑窗口顶上的链接）。
   websiteUrl: string | null;
+  // 要填自己资源地址的模板：地址框的示例与框下的英文说明；别的模板为 null。
+  endpointExample: string | null;
+  endpointHint: string | null;
 }
 
 export interface ConnectionFormState {
@@ -103,6 +108,8 @@ export interface ConnectionFormState {
   isKeyOptional: boolean;
   address: string;
   addressInvalid: boolean;
+  // 资源地址（template.endpointExample 不为 null 时才用）：就是 Chat 与 Responses 的地址。
+  endpoint: string;
   formats: ConnectionFormatField[];
   // 自动检测改写了地址栏时加一，输入框据此换成新值。
   urlGeneration: number;
@@ -137,6 +144,8 @@ export interface ConnectionFormModel {
   // 「显示 / 隐藏」：编辑已存了 key、框里没打新的时先读回原文。
   toggleKeyVisible(): void;
   setAddress(value: string): void;
+  // 填自己资源地址的模板：Chat 与 Responses 都用它。
+  setEndpoint(value: string): void;
   setUrl(format: ApiEndpointRequestFormat, value: string): void;
   detect(): void;
   cancelDetect(): void;
@@ -229,9 +238,12 @@ export function createConnectionFormModel(
       };
     });
     const keyRejected = Object.values(next.labels).includes("auth_failed");
-    // 至少填了一个地址，且填了的都像 http(s) 地址。
-    const hasValidUrls =
-      formats.some((field) => field.url.trim() !== "") && !formats.some((field) => field.invalid);
+    const endpoint = next.urls.openai_chat;
+    const asksEndpoint = next.template?.endpointExample !== undefined;
+    // 至少填了一个地址，且填了的都像 http(s) 地址；资源地址只有资源名也行，由 daemon 补全并校验。
+    const hasValidUrls = asksEndpoint
+      ? endpoint.trim() !== ""
+      : formats.some((field) => field.url.trim() !== "") && !formats.some((field) => field.invalid);
     const hasValidAddress = address !== "" && !addressInvalid;
     // 检测或保存进行中时两个按钮都不可点。
     const busy = next.detecting || next.submitting;
@@ -251,6 +263,7 @@ export function createConnectionFormModel(
       isKeyOptional,
       address: next.address,
       addressInvalid,
+      endpoint,
       formats,
       urlGeneration: next.urlGeneration,
       detecting: next.detecting,
@@ -287,6 +300,8 @@ export function createConnectionFormModel(
       sites: seed.mode === "create" ? siteChoicesOf(templates, template.id) : null,
       keysUrl: region?.keysUrl ?? template.keysUrl ?? null,
       websiteUrl: region?.website ?? template.website ?? null,
+      endpointExample: template.endpointExample ?? null,
+      endpointHint: template.endpointHint ?? null,
     };
   }
 
@@ -450,6 +465,9 @@ export function createConnectionFormModel(
     setAddress(address) {
       abortPendingDetect();
       update({ address, labels: {}, detecting: false, detectError: null });
+    },
+    setEndpoint(endpoint) {
+      update({ urls: { ...values.urls, openai_chat: endpoint, openai_responses: endpoint } });
     },
     setUrl(format, url) {
       const { [format]: _dropped, ...labels } = values.labels;

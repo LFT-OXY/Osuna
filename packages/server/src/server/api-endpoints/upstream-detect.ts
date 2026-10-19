@@ -14,9 +14,9 @@ import {
   isRecord,
   parseJson,
   redactKey,
-  bearerAuth,
-  bothKeyAuth,
 } from "./upstream-http.js";
+import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
+import { takesCompletionTokens, templateKeyHeaders } from "./templates.js";
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
@@ -31,7 +31,9 @@ export type DetectOutcome =
 interface FormatProbe {
   // 接在这种格式的地址后面。
   path: string;
-  headers(apiKey: string | null): Record<string, string>;
+  // key 放哪（模板另有规定的除外）与这种格式另要的头。
+  keys: KeyHeaders;
+  headers: Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 2xx 的响应体确实是这种格式的结果；否则地址背后是别的东西。
   matches(body: unknown): boolean;
@@ -41,7 +43,8 @@ interface FormatProbe {
 const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   anthropic_messages: {
     path: "/v1/messages",
-    headers: (apiKey) => ({ ...bothKeyAuth(apiKey), "anthropic-version": ANTHROPIC_VERSION }),
+    keys: "both",
+    headers: { "anthropic-version": ANTHROPIC_VERSION },
     body: (modelId) => ({
       model: modelId,
       max_tokens: 16,
@@ -51,7 +54,8 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_chat: {
     path: "/chat/completions",
-    headers: bearerAuth,
+    keys: "bearer",
+    headers: {},
     body: (modelId) => ({
       model: modelId,
       messages: [{ role: "user", content: "hi" }],
@@ -61,7 +65,8 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_responses: {
     path: "/responses",
-    headers: bearerAuth,
+    keys: "bearer",
+    headers: {},
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -103,6 +108,8 @@ export async function detectUpstreamFormats(input: {
     provider: "claude",
     baseUrl: urls.anthropic_messages,
     apiKey: input.apiKey,
+    // 自动检测只给「自定义」用。
+    templateId: undefined,
     signal: input.signal,
     timeoutMs: input.modelsTimeoutMs,
   });
@@ -134,6 +141,7 @@ export async function detectUpstreamFormats(input: {
         format,
         baseUrl: urls[format],
         apiKey: input.apiKey,
+        templateId: undefined,
         modelId: pickProbeModel(modelIds, format),
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
@@ -150,6 +158,8 @@ export async function probeUpstreamFormat(input: {
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
+  // Bedrock、Azure 的认证头与 Chat 的回复上限字段由模板定；「自定义」的没有。
+  templateId: string | undefined;
   modelId: string | null;
   signal: AbortSignal;
   timeoutMs: number;
@@ -171,6 +181,14 @@ export async function probeUpstreamFormat(input: {
   }
   const probe = FORMAT_PROBES[format];
   const url = `${baseUrl}${probe.path}`;
+  const { templateId } = input;
+  const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
+  const body = probe.body(input.modelId);
+  // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
+  if (format === "openai_chat" && takesCompletionTokens(templateId)) {
+    body.max_completion_tokens = body.max_tokens;
+    delete body.max_tokens;
+  }
   const timeout = AbortSignal.timeout(input.timeoutMs);
   let status: number;
   let text: string;
@@ -180,9 +198,10 @@ export async function probeUpstreamFormat(input: {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        ...probe.headers(input.apiKey),
+        ...probe.headers,
+        ...keyHeaderValues({ apiKey: input.apiKey, keys }),
       },
-      body: JSON.stringify(probe.body(input.modelId)),
+      body: JSON.stringify(body),
       signal: AbortSignal.any([input.signal, timeout]),
     });
     status = response.status;

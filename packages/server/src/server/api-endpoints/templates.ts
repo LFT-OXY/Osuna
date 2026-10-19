@@ -1,15 +1,18 @@
-// 模板清单照 magpie（https://github.com/yetone/magpie，internal/provider/presets.go，7597c132）
+// 模板清单照 magpie（https://github.com/yetone/magpie，internal/provider/presets.go，7597c132）；Bedrock 与 Azure 的认证头、
+// 每个模型走哪种格式、Azure 地址与部署名照 authheader.go 的 AuthHeaders、account.go 的 Bedrock 一段、azure.go。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
   ApiEndpointBaseUrl,
+  ApiEndpointRequestFormat,
   ApiEndpointTemplate,
   ApiEndpointTemplateRegion,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { KeyHeaders } from "./gateway/refusals.js";
 
 /*
  * 内置模板（Template）：随 daemon 版本走，不联网下载，经 list_templates 发给客户端。
  * 收录 magpie 的 57 个里去掉 5 个决策模型、Remote magpie、Google Vertex AI 之后的；Google Gemini 等子任务 7，
- * Amazon Bedrock、Azure OpenAI 与 4 个本机模板由后面的工单加。顺序即列表里的顺序。
+ * 4 个本机模板由后面的工单加。顺序即列表里的顺序。
  * 国际站与中国站各是一个模板，中国站的 id 是国际站的加 `-cn`（照 magpie），客户端合成一行。
  */
 
@@ -84,6 +87,32 @@ const VOLCENGINE_PLAN_MODELS = [
   "kimi-k2.8-preview",
   "kimi-k3",
 ];
+
+const BEDROCK_TEMPLATE_ID = "bedrock";
+const AZURE_TEMPLATE_ID = "azure";
+
+// 按 AWS 控制台与 key 所在区域的写法，用区域代码命名。
+const BEDROCK_REGIONS = [
+  "us-east-1",
+  "us-east-2",
+  "us-west-2",
+  "eu-central-1",
+  "eu-west-1",
+  "eu-west-3",
+  "ap-northeast-1",
+  "ap-southeast-1",
+  "ap-southeast-2",
+  "ap-south-1",
+];
+
+function bedrockUrls(regionId: string): FormatUrls {
+  const runtime = `https://bedrock-runtime.${regionId}.amazonaws.com`;
+  return {
+    anthropic: `${runtime}/anthropic`,
+    chat: `${runtime}/openai/v1`,
+    responses: `${runtime}/openai/v1`,
+  };
+}
 
 const VENDORS: ApiEndpointTemplate[] = [
   template({
@@ -643,6 +672,55 @@ const VENDORS: ApiEndpointTemplate[] = [
     website: "https://console.groq.com",
     keysUrl: "https://console.groq.com/keys",
   }),
+  // Amazon Bedrock，用 Bedrock API key（AWS_BEARER_TOKEN_BEDROCK），不做 SigV4：所选区域的 runtime 在 /anthropic 上给 Claude，
+  // 在 /openai/v1 上给其余模型的 Chat，OpenAI 的 GPT（不含 gpt-oss）还有 Responses。没有清单接口，模型是内置的：
+  // Claude 与 GPT-6 用各商业区域都转的 global. 推理配置，其余用区域内 id（不是每个区域都有）；限在某地理区（us.、eu.……）的手填。
+  template({
+    id: "bedrock",
+    name: "Amazon Bedrock",
+    group: "vendor",
+    ...bedrockUrls("us-east-1"),
+    note: "Bedrock API key",
+    website: "https://aws.amazon.com/bedrock/",
+    keysUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys",
+    regions: BEDROCK_REGIONS.map((id) => region({ id, name: id, ...bedrockUrls(id) })),
+    noModelList: true,
+    models: [
+      "global.anthropic.claude-opus-5-5",
+      "global.anthropic.claude-sonnet-5-5",
+      "global.anthropic.claude-sonnet-5",
+      "global.anthropic.claude-opus-5",
+      "global.anthropic.claude-fable-5-1",
+      "global.anthropic.claude-opus-4-8",
+      "global.anthropic.claude-opus-4-7",
+      "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "global.openai.gpt-6-astra",
+      "global.openai.gpt-6-sol",
+      "global.openai.gpt-6-luna",
+      "openai.gpt-oss-120b-1:0",
+      "openai.gpt-oss-20b-1:0",
+      "qwen.qwen3-coder-480b-a35b-v1:0",
+      "deepseek.v3.2",
+      "moonshotai.kimi-k2.5",
+      "zai.glm-5",
+      "minimax.minimax-m2.5",
+    ],
+  }),
+  // Azure OpenAI，在用户自己的资源上：没有自己的地址，表单要资源的地址，保存时放到它的 v1 API（/openai/v1）上；
+  // key 放 api-key，部署名就是模型 id。它也托管别家的模型（Kimi、DeepSeek、Grok……）。
+  template({
+    id: AZURE_TEMPLATE_ID,
+    name: "Azure OpenAI",
+    group: "vendor",
+    modelsDevIds: ["azure", "openai"],
+    note: "your resource's endpoint and key",
+    endpointExample: "https://<resource>.openai.azure.com",
+    endpointHint:
+      "Your resource's endpoint, from Keys and Endpoint in the Azure portal. Once added, Osuna asks the resource for its deployments with this key, over its v1 API; the deployments' names are the model ids.",
+    website: "https://ai.azure.com",
+    keysUrl:
+      "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI",
+  }),
   // Ollama 自己托管的模型：本机服务的 API，在 ollama.com 上用 key。
   template({
     id: "ollama-cloud",
@@ -929,4 +1007,106 @@ export function planModelsOf<T extends { id: string }>(
   if (prefix === "" && (builtIn.length === 0 || listed.length > 0)) return listed;
   const kept = listed.filter((model) => model.id.startsWith(prefix));
   return kept.length > 0 ? kept : builtIn.map((id) => ({ id }));
+}
+
+/** 由模板决定的 key 请求头：只放 x-api-key、只放 Bearer、放 Azure 的 api-key。 */
+export type TemplateKeyHeaders = Extract<KeyHeaders, "xApiKey" | "bearer" | "apiKey">;
+
+/**
+ * key 放哪个头由模板决定的两家（照 magpie AuthHeaders）：Bedrock 的 Anthropic 地址只收 x-api-key（两个都带会被拒），
+ * 其余格式只收 Bearer；Azure 的 key 放 api-key（Bearer 在那里是 Entra ID 令牌），Anthropic 格式例外用 x-api-key。
+ * 别的模板与「自定义」为 null，按通常的规则。中转站转发、测试、拉模型都照这个。
+ */
+export function templateKeyHeaders(input: {
+  templateId: string | undefined;
+  format: ApiEndpointRequestFormat;
+}): TemplateKeyHeaders | null {
+  const anthropic = input.format === "anthropic_messages";
+  if (input.templateId === BEDROCK_TEMPLATE_ID) return anthropic ? "xApiKey" : "bearer";
+  if (input.templateId === AZURE_TEMPLATE_ID) return anthropic ? "xApiKey" : "apiKey";
+  return null;
+}
+
+/** Bedrock 的 Claude id：模型 id（anthropic.claude-opus-4-8）或推理配置的（apac.anthropic.claude-opus-5-5）。 */
+export function isBedrockClaude(model: string): boolean {
+  return model.toLowerCase().includes("anthropic.claude");
+}
+
+/** Bedrock 上 OpenAI 闭源的 GPT（global.openai.gpt-6-luna）：Responses 与 Chat 都有，工具加推理只在 Responses 上；gpt-oss 不算。 */
+function isBedrockGpt(model: string): boolean {
+  const lower = model.toLowerCase();
+  return lower.includes("openai.gpt-") && !lower.includes("gpt-oss");
+}
+
+/**
+ * 这家给这个模型的格式，按先后（照 magpie account.go 的 Bedrock 一段与 ResponsesFirst）：Bedrock 没有清单说这个，
+ * Claude 只在 Anthropic 上，OpenAI 的 GPT 先 Responses 再 Chat，其余（gpt-oss 也是）只在 Chat 上。
+ * 别的接口为 null：每个格式的地址都给每个模型。
+ */
+export function modelFormatsAt(input: {
+  templateId: string | undefined;
+  model: string;
+}): ApiEndpointRequestFormat[] | null {
+  if (input.templateId !== BEDROCK_TEMPLATE_ID) return null;
+  if (isBedrockClaude(input.model)) return ["anthropic_messages"];
+  if (isBedrockGpt(input.model)) return ["openai_responses", "openai_chat"];
+  return ["openai_chat"];
+}
+
+// Azure 资源所在主机的结尾（新资源也给 cognitiveservices.azure.com、services.ai.azure.com）。
+const AZURE_HOST_SUFFIXES = [
+  ".openai.azure.com",
+  ".cognitiveservices.azure.com",
+  ".services.ai.azure.com",
+];
+
+function isAzureHost(host: string): boolean {
+  return AZURE_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix) && host.length > suffix.length);
+}
+
+/**
+ * Azure 模板的地址放到资源的 v1 API 上（照 magpie AzureBase、azureEndpoints）：不论从门户或别的软件怎么粘来
+ * ——资源本身、…/openai、…/openai/v1、带 api-version 的旧部署地址，或只有资源名——都换成 https://<资源主机>/openai/v1。
+ * 不是 Azure 资源主机的（前面挡着 API Management 的网关、本机的假上游）原样不动。
+ */
+export function azureResourceBaseUrl(raw: string): string {
+  const trimmed = raw.trim();
+  const withScheme = trimmed.includes("://") ? trimmed : `https://${trimmed}`;
+  if (!URL.canParse(withScheme)) return raw;
+  let host = new URL(withScheme).host.toLowerCase();
+  // 门户里列的只有资源名。
+  if (host !== "" && !/[.:]/.test(host)) host += ".openai.azure.com";
+  return isAzureHost(host) ? `https://${host}/openai/v1` : raw;
+}
+
+/** 保存从 Azure 模板加的接口时，Chat 与 Responses 地址都放到资源的 v1 API 上；别的模板原样。 */
+export function templateBaseUrls<T extends { format: string; url: string }>(input: {
+  templateId: string | undefined;
+  baseUrls: T[];
+}): T[] {
+  if (input.templateId !== AZURE_TEMPLATE_ID) return input.baseUrls;
+  return input.baseUrls.map((entry) =>
+    entry.format === "anthropic_messages"
+      ? entry
+      : { ...entry, url: azureResourceBaseUrl(entry.url) },
+  );
+}
+
+/** Azure 的部署名清单（数据面只有这个 api-version 还给 key 列部署）；列不出时再列 v1 API 的模型（照 magpie azureModels）。 */
+const AZURE_DEPLOYMENTS_VERSION = "2022-12-01";
+
+/** 列模型时依次问的地址：Azure 先问部署名、再问 v1 的 /models；别的接口为 null，按通常的 /v1/models 与 /models。 */
+export function templateModelListUrls(input: {
+  templateId: string | undefined;
+  baseUrl: string;
+}): string[] | null {
+  if (input.templateId !== AZURE_TEMPLATE_ID) return null;
+  const base = input.baseUrl.trim().replace(/\/+$/, "");
+  const root = base.replace(/\/v1$/, "");
+  return [`${root}/deployments?api-version=${AZURE_DEPLOYMENTS_VERSION}`, `${base}/models`];
+}
+
+/** Bedrock、Azure 的 Chat 收 max_completion_tokens、不收 max_tokens（照 magpie tinyBody 与 asCompletionTokens）。 */
+export function takesCompletionTokens(templateId: string | undefined): boolean {
+  return templateId === BEDROCK_TEMPLATE_ID || templateId === AZURE_TEMPLATE_ID;
 }

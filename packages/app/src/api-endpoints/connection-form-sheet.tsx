@@ -18,6 +18,7 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { EndpointIcon } from "./endpoint-icon";
 import {
+  templateEndpointHint,
   templateKeyHint,
   templateNote,
   templateRegionLabel,
@@ -211,17 +212,27 @@ export function ApiEndpointConnectionSheet({
             onTrailingLayout={handleTrailingLayout}
           />
         )}
-        <View style={styles.formatGroup} testID="api-endpoint-connection-formats">
-          {state.formats.map((field) => (
-            <FormatUrlField
-              key={field.format}
-              field={field}
-              generation={state.urlGeneration}
-              size={fieldSize}
-              model={model}
-            />
-          ))}
-        </View>
+        {template?.endpointExample ? (
+          <ResourceEndpointField
+            example={template.endpointExample}
+            hint={template.endpointHint}
+            endpoint={state.endpoint}
+            model={model}
+            size={fieldSize}
+          />
+        ) : (
+          <View style={styles.formatGroup} testID="api-endpoint-connection-formats">
+            {state.formats.map((field) => (
+              <FormatUrlField
+                key={field.format}
+                field={field}
+                generation={state.urlGeneration}
+                size={fieldSize}
+                model={model}
+              />
+            ))}
+          </View>
+        )}
         <Text variant="caption" color="foregroundMuted">
           {state.isKeyOptional
             ? t("settings.apiEndpoints.form.footerKeyOptional")
@@ -477,6 +488,44 @@ function RegionSwitch({
           testID="api-endpoint-connection-region"
         />
       </View>
+    </Field>
+  );
+}
+
+/**
+ * 要填自己资源地址的模板（Azure OpenAI）：一个地址框代替各格式地址，Chat 与 Responses 都用它；
+ * 只有资源名也行，daemon 保存时放到资源的 v1 API 上（照 magpie 编辑窗口的 Endpoint 框）。
+ */
+function ResourceEndpointField({
+  example,
+  hint,
+  endpoint,
+  model,
+  size,
+}: {
+  example: string;
+  hint: string | null;
+  endpoint: string;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  return (
+    <Field
+      label={t("settings.apiEndpoints.form.resourceEndpoint")}
+      {...(hint === null ? {} : { hint: templateEndpointHint(t, hint) })}
+      testID="api-endpoint-connection-endpoint-field"
+    >
+      <FormTextInput
+        initialValue={endpoint}
+        onChangeText={model.setEndpoint}
+        placeholder={example}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        size={size}
+        testID="api-endpoint-connection-endpoint"
+      />
     </Field>
   );
 }

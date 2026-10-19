@@ -57,6 +57,7 @@ function run(input: {
     provider: input.provider,
     baseUrl: input.baseUrl,
     apiKey: KEY,
+    templateId: undefined,
     signal: input.signal ?? new AbortController().signal,
     timeoutMs: input.timeoutMs ?? 2000,
   });

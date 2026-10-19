@@ -8807,3 +8807,155 @@ describe("a model asked for at an effort of its own, as the Subagent model is wr
     expect(receivedBody(upstreamA.requests[0]).model).toBe("kimi-k2:high");
   });
 });
+
+/*
+ * Bedrock 与 Azure 模板（接口管理好用性工单 07，照 magpie authheader.go 的 AuthHeaders、account.go 的 Bedrock 一段）：
+ * key 放哪个头、每个模型走哪种格式由模板定。A 换成从模板加的，三个格式的地址都在同一个假上游上。
+ */
+describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
+  async function startTemplated(input: { templateId: string; models: string[] }) {
+    const upstream = await startUpstream();
+    upstream.respond = (request, res) => {
+      if (request.url.endsWith("/responses")) return answerResponsesWhole(res);
+      if (request.url.endsWith("/chat/completions")) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            object: "chat.completion",
+            choices: [
+              { index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    };
+    const harness = await start();
+    const endpointsPath = path.join(harness.endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: Record<string, unknown>[];
+    };
+    file.endpoints[0] = {
+      ...file.endpoints[0],
+      templateId: input.templateId,
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_chat", url: `${upstream.url}/v1` },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      models: input.models.map((id) => ({ id })),
+    };
+    await writeFile(endpointsPath, JSON.stringify(file));
+    return { upstream, gateway: harness.gateway };
+  }
+
+  const BEDROCK_MODELS = [
+    "global.anthropic.claude-sonnet-5",
+    "global.openai.gpt-6-luna",
+    "deepseek.v3.2",
+  ];
+
+  test("Bedrock's Claude goes to its Anthropic address with the key in x-api-key alone, from either CLI", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+
+    const fromClaude = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/global.anthropic.claude-sonnet-5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+    const fromCodex = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "global.anthropic.claude-sonnet-5", input: "hi", stream: false }),
+    );
+
+    expect(fromClaude.status).toBe(200);
+    expect(fromCodex.status).toBe(200);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/v1/messages",
+      "/v1/messages",
+    ]);
+    for (const request of upstream.requests) {
+      expect(request.headers["x-api-key"]).toBe(KEY_A);
+      expect(request.headers.authorization).toBeUndefined();
+    }
+  });
+
+  test("Bedrock's other models go to Chat with a Bearer, and OpenAI's GPT to Responses first", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+
+    const deepseek = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "deepseek.v3.2", input: "hi", stream: false }),
+    );
+    const gptFromClaude = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/global.openai.gpt-6-luna",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(deepseek.status).toBe(200);
+    expect(gptFromClaude.status).toBe(200);
+    expect(upstream.requests.map((request) => request.url)).toEqual([
+      "/v1/chat/completions",
+      "/v1/responses",
+    ]);
+    for (const request of upstream.requests) {
+      expect(request.headers.authorization).toBe(`Bearer ${KEY_A}`);
+      expect(request.headers["x-api-key"]).toBeUndefined();
+    }
+  });
+
+  test("Azure gets the key in api-key alone on its OpenAI formats, and in x-api-key on Anthropic's", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["my-gpt-deployment", "claude-sonnet-5"],
+    });
+
+    const responses = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "my-gpt-deployment", input: "hi", stream: false }),
+    );
+    const anthropic = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/claude-sonnet-5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(responses.status).toBe(200);
+    expect(anthropic.status).toBe(200);
+    const [toResponses, toAnthropic] = upstream.requests;
+    expect(toResponses?.url).toBe("/v1/responses");
+    expect(toResponses?.headers["api-key"]).toBe(KEY_A);
+    expect(toResponses?.headers.authorization).toBeUndefined();
+    expect(toAnthropic?.url).toBe("/v1/messages");
+    expect(toAnthropic?.headers["x-api-key"]).toBe(KEY_A);
+    expect(toAnthropic?.headers["api-key"]).toBeUndefined();
+    expect(toAnthropic?.headers.authorization).toBeUndefined();
+  });
+});

@@ -2601,9 +2601,15 @@ export const ptBR: TranslationResources = {
           openCodingModels10: "Modelos abertos de programação, US$ 10/mês",
           openCodingModels999: "Modelos abertos de programação, US$ 9,99/mês",
           freeModelsNoKey: "Modelos gratuitos sem chave",
+          bedrockApiKey: "Chave de API do Bedrock",
+          azureResource: "O endpoint e a chave do seu recurso",
         },
         keyHints: {
           freeModelsNeedNoKey: "Opcional: modelos gratuitos não precisam de chave",
+        },
+        endpointHints: {
+          azure:
+            "O endpoint do seu recurso, em Chaves e Ponto de Extremidade no portal do Azure. Depois de adicionado, o Osuna pede ao recurso suas implantações com esta chave, pela API v1; os nomes das implantações são os ids de modelo.",
         },
       },
       form: {
@@ -2622,6 +2628,7 @@ export const ptBR: TranslationResources = {
         apiKeyOptionalLabel: "Chave de API (opcional)",
         keyRejected: "O servidor recusou esta chave (401 / 403)",
         address: "Endereço",
+        resourceEndpoint: "Endpoint do recurso",
         addressHint:
           "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam.",
         addressHintKeyOptional:

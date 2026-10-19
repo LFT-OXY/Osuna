@@ -144,7 +144,8 @@ export async function attemptEndpoint(input: {
     suffix: input.pathSuffix,
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
-  const sends = () => keyHeadersFor({ format: input.format, refusals });
+  const sends = () =>
+    keyHeadersFor({ format: input.format, templateId: input.endpoint.templateId, refusals });
   const anthropic = input.format === "anthropic_messages";
   const dropsReviewBeta = anthropic && !isAnthropicModel(input.upstreamModel);
   const open = (body: Buffer, keys: KeyHeaders = sends()) =>

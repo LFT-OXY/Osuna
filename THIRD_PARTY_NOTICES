@@ -561,13 +561,20 @@ hints) are taken from magpie's internal/provider/presets.go, leaving out its
 decision models, Remote magpie and Google Vertex AI; a template's own models
 (the built-in list of a plan with no model list, the prefix of a plan behind a
 shared key) follow NoList, listRegion and planModels in magpie's
-internal/provider/models.go. The add dialog's template
+internal/provider/models.go. Amazon Bedrock's and Azure OpenAI's key headers,
+the formats Bedrock serves each model on, and Azure's v1 address and
+deployment list follow AuthHeaders in internal/provider/authheader.go, the
+Bedrock part of internal/provider/account.go with ResponsesFirst and
+claudeModel in internal/provider/provider.go, tinyBody in
+internal/provider/test.go, and AzureBase, azureEndpoints and azureModels in
+internal/provider/azure.go. The add dialog's template
 list (its three groups, search by name, id, host and note, and a vendor's
 global and China presets made one row, an added preset's dot and what a click
 on it does, chinaOf, pairTile, tile and markAdded in internal/gui/assets/app.js)
 follows magpie's add sheet. The template logos are
 magpie's internal/gui/assets/icons/ (zai, baiducloud-color, tencentcloud-color,
-huaweicloud-color, volcengine-color, bailian-color, groq, ollama, nousresearch,
+huaweicloud-color, volcengine-color, bailian-color, groq, bedrock-color,
+azure-color, ollama, nousresearch,
 openrouter, opencode, cline, kilo, commandcode, together-color,
 fireworks-color, siliconcloud-color, nvidia-color, modelscope-color,
 aihubmix-color, pipellm-color, ai302-color, cherryin-color, yylx), with width,

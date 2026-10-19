@@ -2616,9 +2616,15 @@ export const fr: TranslationResources = {
           openCodingModels10: "Modèles ouverts pour coder, 10 $/mois",
           openCodingModels999: "Modèles ouverts pour coder, 9,99 $/mois",
           freeModelsNoKey: "Modèles gratuits sans clé",
+          bedrockApiKey: "Clé API Bedrock",
+          azureResource: "Le point de terminaison et la clé de votre ressource",
         },
         keyHints: {
           freeModelsNeedNoKey: "Facultatif : les modèles gratuits n'ont pas besoin de clé",
+        },
+        endpointHints: {
+          azure:
+            "Le point de terminaison de votre ressource, dans Clés et point de terminaison du portail Azure. Une fois ajoutée, Osuna demande à la ressource ses déploiements avec cette clé, via son API v1 ; les noms des déploiements sont les identifiants de modèle.",
         },
       },
       form: {
@@ -2637,6 +2643,7 @@ export const fr: TranslationResources = {
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
         address: "Adresse",
+        resourceEndpoint: "Point de terminaison de la ressource",
         addressHint:
           "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent.",
         addressHintKeyOptional:

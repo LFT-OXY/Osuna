@@ -1,5 +1,6 @@
 import {
   apiEndpointProtocolName,
+  type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointProvider } from "./store.js";
@@ -11,8 +12,9 @@ import {
   parseJson,
   structuredErrorMessage,
   redactKey,
-  bearerAuth,
 } from "./upstream-http.js";
+import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
+import { templateKeyHeaders } from "./templates.js";
 
 /*
  * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求，只验证接口本身。
@@ -32,7 +34,10 @@ export type UpstreamConnectionOutcome =
 
 interface ProtocolSpec {
   path: string;
-  headers(apiKey: string | null): Record<string, string>;
+  format: ApiEndpointRequestFormat;
+  // key 放哪（Bedrock、Azure 由模板另定）与这个协议另要的头。
+  keys: KeyHeaders;
+  headers: Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 200 的响应体确实是这个协议的结果；否则地址背后是别的协议（比如只有 Chat Completions）。
   matches(body: unknown): boolean;
@@ -42,8 +47,10 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
   claude: {
     // Claude Code 把 ANTHROPIC_BASE_URL 拼上 /v1/messages。
     path: "/v1/messages",
+    format: "anthropic_messages",
     // 和 Claude Code 用 ANTHROPIC_AUTH_TOKEN 时一样只带 Bearer：只认 x-api-key 的网关 CLI 也用不了。
-    headers: (apiKey) => ({ ...bearerAuth(apiKey), "anthropic-version": ANTHROPIC_VERSION }),
+    keys: "bearer",
+    headers: { "anthropic-version": ANTHROPIC_VERSION },
     body: (modelId) => ({
       model: modelId,
       max_tokens: 1,
@@ -54,7 +61,9 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
   codex: {
     // base 已按 Codex 的规则以 /v1 结尾。
     path: "/responses",
-    headers: bearerAuth,
+    format: "openai_responses",
+    keys: "bearer",
+    headers: {},
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -69,12 +78,16 @@ export async function testUpstreamConnection(input: {
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
+  // Bedrock、Azure 的认证头由模板定；「自定义」的没有。
+  templateId: string | undefined;
   modelId: string;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<UpstreamConnectionOutcome> {
   const protocol = PROTOCOLS[input.provider];
+  const keys =
+    templateKeyHeaders({ templateId: input.templateId, format: protocol.format }) ?? protocol.keys;
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const url = `${input.baseUrl.trim().replace(/\/+$/, "")}${protocol.path}`;
@@ -102,7 +115,8 @@ export async function testUpstreamConnection(input: {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        ...protocol.headers(input.apiKey),
+        ...protocol.headers,
+        ...keyHeaderValues({ apiKey: input.apiKey, keys }),
       },
       body: JSON.stringify(protocol.body(input.modelId)),
       signal,

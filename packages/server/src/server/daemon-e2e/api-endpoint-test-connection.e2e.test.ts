@@ -350,4 +350,64 @@ describe("API endpoint connection test by base URL and request format", () => {
       result: { ok: false, status: 404, error: { code: "upstream_error" } },
     });
   });
+
+  test("a Bedrock endpoint is asked per format with a model served there, its key in the header that format takes", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Amazon Bedrock",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${upstream.origin}/claude` },
+        { format: "openai_chat", url: `${upstream.origin}/chat-only/v1` },
+      ],
+      apiKey: SAVED_KEY,
+      models: [{ id: "global.anthropic.claude-sonnet-5" }, { id: "deepseek.v3.2" }],
+      templateId: "bedrock",
+      region: "us-east-1",
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+    await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/chat-only/v1`,
+      format: "openai_chat",
+    });
+
+    const [anthropic, chat] = upstream.requests;
+    expect(anthropic?.body.model).toBe("global.anthropic.claude-sonnet-5");
+    expect(anthropic?.headers["x-api-key"]).toBe(SAVED_KEY);
+    expect(anthropic?.headers.authorization).toBeUndefined();
+    expect(chat?.url).toBe("/chat-only/v1/chat/completions");
+    expect(chat?.body).toMatchObject({ model: "deepseek.v3.2", max_completion_tokens: 16 });
+    expect(chat?.body.max_tokens).toBeUndefined();
+    expect(chat?.headers.authorization).toBe(`Bearer ${SAVED_KEY}`);
+    expect(chat?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("an Azure endpoint is asked with the key in api-key alone", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      name: "Azure OpenAI",
+      baseUrls: [{ format: "openai_responses", url: `${upstream.origin}/codex/v1` }],
+      apiKey: SAVED_KEY,
+      models: [{ id: "my-gpt-deployment" }],
+      templateId: "azure",
+    });
+
+    await client.apiEndpointTestConnection({
+      provider: "codex",
+      endpointId: saved.endpoint?.id ?? "",
+      baseUrl: `${upstream.origin}/codex/v1`,
+      format: "openai_responses",
+    });
+
+    expect(upstream.requests[0]?.headers["api-key"]).toBe(SAVED_KEY);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+  });
 });

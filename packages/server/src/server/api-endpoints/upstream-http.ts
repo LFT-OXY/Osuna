@@ -45,16 +45,6 @@ export function redactKey(text: string, apiKey: string | null): string {
   return text.replaceAll(apiKey, "***");
 }
 
-/** 把 key 放进 Authorization: Bearer；没 key 的接口不带认证头。 */
-export function bearerAuth(apiKey: string | null): Record<string, string> {
-  return apiKey === null ? {} : { authorization: `Bearer ${apiKey}` };
-}
-
-/** 把 key 同时放进 Authorization: Bearer 与 x-api-key（Anthropic 地址）；没 key 的接口不带认证头。 */
-export function bothKeyAuth(apiKey: string | null): Record<string, string> {
-  return apiKey === null ? {} : { ...bearerAuth(apiKey), "x-api-key": apiKey };
-}
-
 /** 响应头里的 Content-Type，小写；没有为空。 */
 export function contentTypeOf(headers: IncomingHttpHeaders): string {
   return String(headers["content-type"] ?? "").toLowerCase();

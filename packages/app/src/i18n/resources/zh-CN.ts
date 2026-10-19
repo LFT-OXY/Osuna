@@ -2590,9 +2590,15 @@ export const zhCN: TranslationResources = {
           openCodingModels10: "开源编程模型，$10/月",
           openCodingModels999: "开源编程模型，$9.99/月",
           freeModelsNoKey: "免费模型无需 key",
+          bedrockApiKey: "用 Bedrock API key",
+          azureResource: "填自己资源的地址与 key",
         },
         keyHints: {
           freeModelsNeedNoKey: "选填：免费模型不用 key",
+        },
+        endpointHints: {
+          azure:
+            "你的资源的地址，在 Azure 门户的「密钥和终结点」里。添加后，Osuna 用这把 key 经资源的 v1 API 列出它的部署，部署名就是模型 id。",
         },
       },
       form: {
@@ -2611,6 +2617,7 @@ export const zhCN: TranslationResources = {
         apiKeyOptionalLabel: "API key（选填）",
         keyRejected: "上游拒绝了这把 key（401 / 403）",
         address: "地址",
+        resourceEndpoint: "资源地址",
         addressHint:
           "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
         addressHintKeyOptional:

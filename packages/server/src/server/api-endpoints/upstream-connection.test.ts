@@ -82,6 +82,7 @@ function run(input: {
     provider: input.provider,
     baseUrl: input.baseUrl,
     apiKey: KEY,
+    templateId: undefined,
     modelId: input.modelId ?? "relay/model",
     signal: input.signal ?? new AbortController().signal,
     timeoutMs: input.timeoutMs ?? 2000,

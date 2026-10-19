@@ -244,7 +244,9 @@ describe("asking again with the key in one header", () => {
     expect(outcome.kind).toBe("opened");
     expect(upstream.asked).toEqual(["xApiKey"]);
     expect(refusals.added).toEqual(["bothKeyHeaders"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals })).toBe("xApiKey");
+    expect(keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals })).toBe(
+      "xApiKey",
+    );
   });
 
   test("goes on to Bearer alone when x-api-key alone is refused too, and remembers that", async () => {
@@ -259,7 +261,9 @@ describe("asking again with the key in one header", () => {
 
     expect(upstream.asked).toEqual(["xApiKey", "bearer"]);
     expect(refusals.added).toEqual(["xApiKeyAlone"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals })).toBe("bearer");
+    expect(keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals })).toBe(
+      "bearer",
+    );
   });
 
   test("hands the failure back as it came for another 401, or when one header was sent already", async () => {
@@ -287,9 +291,15 @@ describe("asking again with the key in one header", () => {
   });
 
   test("only an Anthropic address gets both headers; OpenAI formats send Bearer", () => {
-    expect(keyHeadersFor({ format: "anthropic_messages", refusals: memory() })).toBe("both");
-    expect(keyHeadersFor({ format: "openai_chat", refusals: memory() })).toBe("bearer");
-    expect(keyHeadersFor({ format: "openai_responses", refusals: undefined })).toBe("bearer");
+    expect(
+      keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals: memory() }),
+    ).toBe("both");
+    expect(
+      keyHeadersFor({ format: "openai_chat", templateId: undefined, refusals: memory() }),
+    ).toBe("bearer");
+    expect(
+      keyHeadersFor({ format: "openai_responses", templateId: undefined, refusals: undefined }),
+    ).toBe("bearer");
   });
 });
 

@@ -2627,9 +2627,15 @@ export const en = {
           openCodingModels10: "Open coding models, $10/month",
           openCodingModels999: "Open coding models, $9.99/month",
           freeModelsNoKey: "Free models with no key",
+          bedrockApiKey: "Bedrock API key",
+          azureResource: "Your resource's endpoint and key",
         },
         keyHints: {
           freeModelsNeedNoKey: "Optional: free models need no key",
+        },
+        endpointHints: {
+          azure:
+            "Your resource's endpoint, from Keys and Endpoint in the Azure portal. Once added, Osuna asks the resource for its deployments with this key, over its v1 API; the deployments' names are the model ids.",
         },
       },
       form: {
@@ -2648,6 +2654,7 @@ export const en = {
         apiKeyOptionalLabel: "API key (optional)",
         keyRejected: "The upstream rejected this key (401 / 403)",
         address: "Address",
+        resourceEndpoint: "Resource endpoint",
         addressHint:
           "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work.",
         addressHintKeyOptional:

@@ -11,14 +11,14 @@ import {
   isRecord,
   parseJson,
   redactKey,
-  bearerAuth,
-  bothKeyAuth,
 } from "./upstream-http.js";
+import { keyHeaderValues } from "./gateway/refusals.js";
+import { templateKeyHeaders, templateModelListUrls } from "./templates.js";
 
 /*
  * 从第三方接口列出模型。daemon 在主机上发请求，key 不经过客户端。
  * 先试 <base>/v1/models，失败再试 <base>/models；兼容 OpenAI/Anthropic 的 data[] 和 Codex 的 models[].slug。
- * Codex 的 base 通常已经以 /v1 结尾，第一次会落空，第二次命中。
+ * Codex 的 base 通常已经以 /v1 结尾，第一次会落空，第二次命中。Azure 模板先问部署名、再问 /models（templateModelListUrls）。
  */
 
 export type UpstreamFailureCode =
@@ -58,6 +58,8 @@ export async function fetchUpstreamModels(input: {
   baseUrl: string;
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
+  // 这家从哪个模板加的：Bedrock、Azure 的认证头与 Azure 列模型的地址由它定；「自定义」的没有。
+  templateId: string | undefined;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
@@ -65,11 +67,15 @@ export async function fetchUpstreamModels(input: {
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const base = input.baseUrl.trim().replace(/\/+$/, "");
-  const headers = buildHeaders(input.provider, input.apiKey);
+  const headers = buildHeaders(input);
   const redact = (text: string) => redactKey(text, input.apiKey);
+  const urls = templateModelListUrls({ templateId: input.templateId, baseUrl: base }) ?? [
+    `${base}/v1/models`,
+    `${base}/models`,
+  ];
 
   const attempts: FailedAttempt[] = [];
-  for (const url of [`${base}/v1/models`, `${base}/models`]) {
+  for (const url of urls) {
     try {
       const attempt = await listModels({ url, headers, signal, apiKey: input.apiKey });
       if (attempt.kind === "ok") return { ok: true, models: attempt.models };
@@ -93,19 +99,21 @@ export async function fetchUpstreamModels(input: {
   return { ok: false, error: summarize(attempts, redact) };
 }
 
-function buildHeaders(
-  provider: ApiEndpointProvider,
-  apiKey: string | null,
-): Record<string, string> {
-  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上。
-  if (provider === "claude") {
-    return {
-      accept: "application/json",
-      ...bothKeyAuth(apiKey),
-      "anthropic-version": ANTHROPIC_VERSION,
-    };
-  }
-  return { accept: "application/json", ...bearerAuth(apiKey) };
+function buildHeaders(input: {
+  provider: ApiEndpointProvider;
+  apiKey: string | null;
+  templateId: string | undefined;
+}): Record<string, string> {
+  const anthropic = input.provider === "claude";
+  const format = anthropic ? "anthropic_messages" : "openai_chat";
+  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上。Bedrock、Azure 按模板。
+  const keys =
+    templateKeyHeaders({ templateId: input.templateId, format }) ?? (anthropic ? "both" : "bearer");
+  return {
+    accept: "application/json",
+    ...keyHeaderValues({ apiKey: input.apiKey, keys }),
+    ...(anthropic ? { "anthropic-version": ANTHROPIC_VERSION } : {}),
+  };
 }
 
 async function listModels(input: {

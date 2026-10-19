@@ -35,6 +35,8 @@ export interface FakeRelay {
     method: string;
     url: string;
     authorization: string | undefined;
+    // Azure 的 key 头。
+    apiKey: string | undefined;
     model: string | undefined;
   }[];
   // /good 列出的模型；用例可以改它模拟上游清单变化。
@@ -54,6 +56,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
@@ -73,8 +76,13 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         method: request.method ?? "",
         url: request.url ?? "",
         authorization: headers.authorization,
+        apiKey: typeof headers["api-key"] === "string" ? headers["api-key"] : undefined,
         model: modelOf(Buffer.concat(chunks).toString("utf8")),
       });
+      if (url.startsWith("/azure/")) {
+        answerAzure({ url, apiKey: headers["api-key"], response });
+        return;
+      }
       if (!isFree && headers.authorization !== `Bearer ${RELAY_KEY}`) {
         send(response, 401, { error: { message: "Invalid API key" } });
         return;
@@ -117,6 +125,27 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         server.close(() => resolve());
       }),
   });
+}
+
+export const AZURE_DEPLOYMENTS = ["my-gpt-deployment", "my-kimi-deployment"];
+
+function answerAzure(input: {
+  url: string;
+  apiKey: string | string[] | undefined;
+  response: ServerResponse;
+}): void {
+  if (input.apiKey !== RELAY_KEY) {
+    send(input.response, 401, { error: { code: "401", message: "Access denied: invalid key" } });
+    return;
+  }
+  if (input.url === "/azure/openai/deployments?api-version=2022-12-01") {
+    send(input.response, 200, {
+      object: "list",
+      data: AZURE_DEPLOYMENTS.map((id) => ({ id, model: "gpt-5.5" })),
+    });
+    return;
+  }
+  send(input.response, 404, { error: { code: "404", message: "Resource not found" } });
 }
 
 function modelOf(body: string): string | undefined {

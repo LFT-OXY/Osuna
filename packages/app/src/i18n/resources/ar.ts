@@ -2564,9 +2564,15 @@ export const ar: TranslationResources = {
           openCodingModels10: "نماذج برمجة مفتوحة، 10 دولارات شهريًا",
           openCodingModels999: "نماذج برمجة مفتوحة، 9.99 دولار شهريًا",
           freeModelsNoKey: "نماذج مجانية بلا مفتاح",
+          bedrockApiKey: "مفتاح API لـ Bedrock",
+          azureResource: "عنوان موردك ومفتاحه",
         },
         keyHints: {
           freeModelsNeedNoKey: "اختياري: النماذج المجانية لا تحتاج إلى مفتاح",
+        },
+        endpointHints: {
+          azure:
+            "عنوان موردك، من «المفاتيح ونقطة النهاية» في بوابة Azure. بعد الإضافة يطلب Osuna من المورد عمليات النشر الخاصة به بهذا المفتاح عبر واجهة v1؛ وأسماء عمليات النشر هي معرّفات النماذج.",
         },
       },
       form: {
@@ -2585,6 +2591,7 @@ export const ar: TranslationResources = {
         apiKeyOptionalLabel: "مفتاح API (اختياري)",
         keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
         address: "العنوان",
+        resourceEndpoint: "عنوان المورد",
         addressHint:
           "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل.",
         addressHintKeyOptional:

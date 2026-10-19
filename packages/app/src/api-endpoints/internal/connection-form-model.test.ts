@@ -795,3 +795,64 @@ describe("connection form: from a template", () => {
     expect(fake.saves[0]).not.toHaveProperty("apiKey");
   });
 });
+
+const AZURE: ApiEndpointTemplate = {
+  id: "azure",
+  name: "Azure OpenAI",
+  group: "vendor",
+  baseUrls: [],
+  modelsDevIds: ["azure", "openai"],
+  endpointExample: "https://<resource>.openai.azure.com",
+  endpointHint: "Your resource's endpoint, from Keys and Endpoint in the Azure portal.",
+  keysUrl: "https://portal.azure.com/keys",
+};
+
+describe("connection form: a template at the user's own resource", () => {
+  const options = { ...KEY_OPTIONAL, templates: [AZURE] };
+
+  it("asks for the resource's endpoint and saves it as the Chat and Responses address", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "azure" },
+      fake.deps,
+      options,
+    );
+    expect(model.getState().template).toMatchObject({
+      endpointExample: "https://<resource>.openai.azure.com",
+      endpointHint: "Your resource's endpoint, from Keys and Endpoint in the Azure portal.",
+    });
+    expect(model.getState().endpoint).toBe("");
+    expect(model.getState().canSubmit).toBe(false);
+
+    // 门户里列的只有资源名也算，daemon 保存时放到资源的 v1 API 上。
+    model.setEndpoint("my-resource");
+    model.setApiKey("azure-key");
+
+    expect(model.getState().canSubmit).toBe(true);
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({
+      templateId: "azure",
+      apiKey: "azure-key",
+      baseUrls: [
+        { format: "openai_chat", url: "my-resource" },
+        { format: "openai_responses", url: "my-resource" },
+      ],
+    });
+  });
+
+  it("editing starts from the saved address", () => {
+    const fake = fakeDeps();
+    const url = "https://my-resource.openai.azure.com/openai/v1";
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      name: "Azure OpenAI",
+      baseUrls: [
+        { format: "openai_chat", url },
+        { format: "openai_responses", url },
+      ],
+      templateId: "azure",
+    };
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, options);
+    expect(model.getState().endpoint).toBe(url);
+  });
+});

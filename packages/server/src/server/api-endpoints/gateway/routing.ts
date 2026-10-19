@@ -10,6 +10,7 @@ import {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ONE_MILLION_MARK } from "../claude-model-hints.js";
 import type { ApiEndpointProvider, ApiEndpointState, StoredApiEndpoint } from "../store.js";
+import { isBedrockClaude } from "../templates.js";
 
 /*
  * Claude Code 的开关开着时，Claude Code 内置的档位 id（claude-haiku-4-5-20251001 这类，照 magpie 的 claudeFamily）
@@ -277,28 +278,30 @@ const TRANSLATION_ORDER: ApiEndpointRequestFormat[] = [
   "anthropic_messages",
 ];
 
-/** 斜杠后的名字以 claude 开头（magpie 的 claudeModel）。 */
+/** 斜杠后的名字以 claude 开头，或是 Bedrock 的 Claude id（magpie 的 claudeModel）。 */
 export function isClaudeModel(model: string): boolean {
-  return model
-    .slice(model.lastIndexOf("/") + 1)
-    .toLowerCase()
-    .startsWith("claude");
+  const bare = model.slice(model.lastIndexOf("/") + 1).toLowerCase();
+  return bare.startsWith("claude") || isBedrockClaude(bare);
 }
 
 /**
  * 这次向这家接口用哪种格式请求（照 magpie 的 usable + MessagesFirst）：
  * Claude 模型且有 Anthropic 地址一律走 Anthropic，保住缓存标记与思考；
  * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic 取第一个翻译过去。
+ * `formatOrder` 是这家给这个模型的格式先后（modelFormatsAt，如 Bedrock 的 GPT 先 Responses，照 magpie ResponsesFirst），
+ * 翻译时按它取；null 即按上面的顺序。
  */
 export function chooseRequestFormat(input: {
   agentFormat: ApiEndpointRequestFormat;
   model: string;
   formats: readonly ApiEndpointRequestFormat[];
+  formatOrder: readonly ApiEndpointRequestFormat[] | null;
 }): ApiEndpointRequestFormat | null {
   const { formats } = input;
   if (isClaudeModel(input.model) && formats.includes("anthropic_messages")) {
     return "anthropic_messages";
   }
   if (formats.includes(input.agentFormat)) return input.agentFormat;
-  return TRANSLATION_ORDER.find((format) => formats.includes(format)) ?? null;
+  const order = input.formatOrder ?? TRANSLATION_ORDER;
+  return order.find((format) => formats.includes(format)) ?? null;
 }
