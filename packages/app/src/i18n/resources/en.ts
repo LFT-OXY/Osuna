@@ -4228,6 +4228,13 @@ export const en = {
       hostOutdatedDetail: "Update Osuna on this host to use the logic map.",
       failed: "Could not change the logic map: {{error}}",
     },
+    picker: {
+      title: "Turn on the logic map",
+      newMap: "New logic map",
+      continueSection: "Continue a logic map",
+      loading: "Loading logic maps…",
+      listFailed: "Can't list this workspace's logic maps",
+    },
     panel: {
       label: "Logic map",
       subtitle: "The flow of the feature you're discussing",

@@ -27,6 +27,28 @@ describe("logic map protocol", () => {
     ).toBe(true);
   });
 
+  it("lets a toggle name an existing map to continue, and still parses one that does not", () => {
+    const continuing = {
+      type: "agent.logic_map.set_enabled.request" as const,
+      requestId: "request-4",
+      target: { kind: "agent" as const, agentId: "agent-1" },
+      enabled: true,
+      mapName: "login",
+    };
+    const fromOldClient = {
+      type: "agent.logic_map.set_enabled.request" as const,
+      requestId: "request-5",
+      target: { kind: "draft" as const, workspaceId: "workspace-1" },
+      enabled: true,
+    };
+
+    expect(SessionInboundMessageSchema.parse(continuing)).toEqual(continuing);
+    expect(SessionInboundMessageSchema.parse(fromOldClient)).toEqual(fromOldClient);
+    expect(SessionInboundMessageSchema.safeParse({ ...continuing, mapName: 42 }).success).toBe(
+      false,
+    );
+  });
+
   it("rejects a toggle that names neither an agent nor a draft workspace", () => {
     for (const target of [
       undefined,

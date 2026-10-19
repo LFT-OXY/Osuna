@@ -3158,10 +3158,12 @@ export class DaemonClient {
   /**
    * 开关逻辑图。对象是 Agent 时改这个 Agent；是草稿时打开拿回新图的名字，
    * 新建 Agent 时放进 `LOGIC_MAP_LABEL`。关着时 mapName 为 null。
+   * 打开时给了 mapName 就接着 workspace 里这张已有的图，不新建。
    */
   async setAgentLogicMapEnabled(input: {
     target: AgentLogicMapTarget;
     enabled: boolean;
+    mapName?: string;
   }): Promise<{ mapName: string | null }> {
     const payload =
       await this.sendNamespacedCorrelatedSessionRequest<"agent.logic_map.set_enabled.response">({
@@ -3169,6 +3171,7 @@ export class DaemonClient {
           type: "agent.logic_map.set_enabled.request",
           target: input.target,
           enabled: input.enabled,
+          ...(input.mapName !== undefined ? { mapName: input.mapName } : {}),
         },
       });
     if (payload.error) {

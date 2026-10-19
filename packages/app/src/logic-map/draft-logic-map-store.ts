@@ -8,7 +8,13 @@ import { createValidatedPersistStorage } from "@/storage/validated-persist-stora
 const DRAFT_LOGIC_MAP_STORAGE_KEY = "paseo-draft-logic-maps";
 const DRAFT_LOGIC_MAP_STORE_VERSION = 1;
 
-const DraftLogicMapSchema = z.object({ mapName: z.string().min(1), enabled: z.boolean() });
+const DraftLogicMapSchema = z.object({
+  /** 开着时交给新 Agent 的图。 */
+  mapName: z.string().min(1),
+  enabled: z.boolean(),
+  /** 这个草稿让 daemon 新建的空图；再选"新建"时沿用它。只接着过别的图时为 null。 */
+  createdMapName: z.string().min(1).nullable(),
+});
 const DraftLogicMapPersistedStateSchema = z.object({
   draftsByKey: z.record(z.string(), DraftLogicMapSchema),
 });
@@ -17,11 +23,15 @@ type DraftLogicMap = z.infer<typeof DraftLogicMapSchema>;
 type DraftLogicMapPersistedState = z.infer<typeof DraftLogicMapPersistedStateSchema>;
 
 /**
- * 还没发第一条消息的草稿的逻辑图开关。打开时 daemon 建好的图名记在这里，关掉再打开沿用同一张；
+ * 还没发第一条消息的草稿的逻辑图开关。打开时选的图记在这里：新建时 daemon 建好的空图，或接着的已有图；
+ * 再选"新建"时沿用这个草稿建过的那张空图；
  * 第一条消息新建 Agent 时作为 labels 交给 daemon，之后由 Agent 记录保存。和草稿一样存到本机，重启后读回。
  */
 interface DraftLogicMapState extends DraftLogicMapPersistedState {
-  turnOnWithMap: (draftKey: string, mapName: string) => void;
+  /** 打开并用这个草稿新建（或之前新建过）的空图。 */
+  turnOnWithNewMap: (draftKey: string, mapName: string) => void;
+  /** 打开并接着 workspace 里已有的图。 */
+  turnOnWithExistingMap: (draftKey: string, mapName: string) => void;
   setEnabled: (draftKey: string, enabled: boolean) => void;
   forget: (draftKey: string) => void;
 }
@@ -46,9 +56,21 @@ export function createDraftLogicMapStore(
     persist(
       (set) => ({
         draftsByKey: {},
-        turnOnWithMap: (draftKey, mapName) =>
+        turnOnWithNewMap: (draftKey, mapName) =>
           set((state) => ({
-            draftsByKey: withDraft(state.draftsByKey, draftKey, { mapName, enabled: true }),
+            draftsByKey: withDraft(state.draftsByKey, draftKey, {
+              mapName,
+              enabled: true,
+              createdMapName: mapName,
+            }),
+          })),
+        turnOnWithExistingMap: (draftKey, mapName) =>
+          set((state) => ({
+            draftsByKey: withDraft(state.draftsByKey, draftKey, {
+              mapName,
+              enabled: true,
+              createdMapName: state.draftsByKey[draftKey]?.createdMapName ?? null,
+            }),
           })),
         setEnabled: (draftKey, enabled) =>
           set((state) => {

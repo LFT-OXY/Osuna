@@ -2171,6 +2171,9 @@ export const AgentLogicMapSetEnabledRequestMessageSchema = z.object({
   requestId: z.string(),
   target: AgentLogicMapTargetSchema,
   enabled: z.boolean(),
+  // 打开时接着这个 workspace 里已有的这张图；不给就新建（Agent 已开着时沿用当前那张）。
+  // 与 features.logicMap 同版加入，不另设标记。
+  mapName: z.string().optional(),
 });
 
 export const AgentLogicMapSetEnabledResponseMessageSchema = z.object({

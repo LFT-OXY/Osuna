@@ -3432,7 +3432,7 @@ export class Session {
           agentStorage: this.agentStorage,
           workspaceRegistry: this.workspaceRegistry,
         },
-        { target: msg.target, enabled: msg.enabled },
+        { target: msg.target, enabled: msg.enabled, mapName: msg.mapName },
       );
       // 运行中的 Agent 改 labels 时自己会推送；没加载的要把新记录推给客户端。
       if (result.labelWrite && !result.labelWrite.live && result.labelWrite.record) {
@@ -8331,7 +8331,11 @@ export class Session {
         agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
         providers: this.providerSnapshotManager,
       });
-      const logicMapBlock = resolveLogicMapInstructionBlock({ text, labels: agent.labels });
+      const logicMapBlock = await resolveLogicMapInstructionBlock({
+        text,
+        labels: agent.labels,
+        cwd: agent.cwd,
+      });
       const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
       return blocks.length > 0 ? blocks.join("\n\n") : null;
     };

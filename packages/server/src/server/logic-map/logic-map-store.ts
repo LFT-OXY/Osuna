@@ -131,6 +131,19 @@ export async function readLogicMap(location: LogicMapLocation): Promise<LogicMap
   }
 }
 
+/** 确认图在（有骨架文件）；不在报 LogicMapNotFoundError。不校验内容，坏掉的图由读取时报告。 */
+export async function assertLogicMapExists(location: LogicMapLocation): Promise<void> {
+  const file = path.join(mapDirectory(location), LOGIC_MAP_SKELETON_FILE);
+  try {
+    await fs.access(file);
+  } catch (error) {
+    if (isErrnoException(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+      throw new LogicMapNotFoundError(location.mapName);
+    }
+    throw error;
+  }
+}
+
 /** 列出 workspace 里的逻辑图（有骨架文件的文件夹），按图名排序；读不出来的图标题为 null。 */
 export async function listLogicMaps(cwd: string): Promise<WorkspaceLogicMapSummary[]> {
   const mapsDir = path.join(cwd, LOGIC_MAPS_DIRECTORY);

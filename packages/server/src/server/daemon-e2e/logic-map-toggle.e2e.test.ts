@@ -189,6 +189,82 @@ describe("Logic map toggle", () => {
     expect(await userMessages(scenario, agent.id)).toEqual(["sketch the checkout flow"]);
   });
 
+  test("a new conversation continues a map an earlier one left, without creating another", async () => {
+    const scenario = await startDaemon();
+    const workspaceId = await openWorkspace(scenario);
+    const earlier = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const { mapName } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: earlier.id },
+      enabled: true,
+    });
+    const later = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    const forAgent = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: later.id },
+      enabled: true,
+      mapName: mapName!,
+    });
+    const forDraft = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId },
+      enabled: true,
+      mapName: mapName!,
+    });
+    await sendAndFinish(scenario, later.id, "add the lockout rule");
+
+    expect(forAgent.mapName).toBe(mapName);
+    expect(forDraft.mapName).toBe(mapName);
+    expect(await agentLogicMap(scenario, later.id)).toBe(mapName);
+    expect(await readdir(path.join(scenario.cwd, "docs", "logic-maps"))).toEqual([mapName]);
+    expect(scenario.prompts[0]).toContain(`docs/logic-maps/${mapName}/`);
+  });
+
+  test("an agent already on switches to the map it is told to continue", async () => {
+    const scenario = await startDaemon();
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const other = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const { mapName: otherMap } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: other.id },
+      enabled: true,
+    });
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+    });
+
+    const result = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+      mapName: otherMap!,
+    });
+
+    expect(result.mapName).toBe(otherMap);
+    expect(await agentLogicMap(scenario, agent.id)).toBe(otherMap);
+  });
+
+  test("continuing a map that is not in the workspace is a readable error and changes nothing", async () => {
+    const scenario = await startDaemon();
+    const workspaceId = await openWorkspace(scenario);
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    await expect(
+      scenario.client.setAgentLogicMapEnabled({
+        target: { kind: "agent", agentId: agent.id },
+        enabled: true,
+        mapName: "deleted-map",
+      }),
+    ).rejects.toThrow('Logic map "deleted-map" is not in this workspace any more');
+    await expect(
+      scenario.client.setAgentLogicMapEnabled({
+        target: { kind: "draft", workspaceId },
+        enabled: true,
+        mapName: "../outside",
+      }),
+    ).rejects.toThrow('Logic map "../outside" is not in this workspace any more');
+
+    expect(await agentLogicMap(scenario, agent.id)).toBeNull();
+    await expect(readdir(path.join(scenario.cwd, "docs"))).rejects.toThrow(/ENOENT/);
+  });
+
   test("a draft turned off creates nothing", async () => {
     const scenario = await startDaemon();
 

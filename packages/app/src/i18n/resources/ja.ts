@@ -4146,6 +4146,13 @@ export const ja: TranslationResources = {
       hostOutdatedDetail: "ロジックマップを使うには、このホストの Osuna を更新してください。",
       failed: "ロジックマップを切り替えられませんでした: {{error}}",
     },
+    picker: {
+      title: "ロジックマップをオンにする",
+      newMap: "新しいロジックマップ",
+      continueSection: "既存のロジックマップを続ける",
+      loading: "ロジックマップを読み込み中…",
+      listFailed: "このワークスペースのロジックマップを一覧できません",
+    },
     panel: {
       label: "ロジックマップ",
       subtitle: "話し合っている機能の流れ",

@@ -50,6 +50,14 @@ export class LogicMapNotFoundError extends Error {
   }
 }
 
+/** 开关要接着的那张图不在这个 workspace 里（被删了，或名字不对）。 */
+export class LogicMapToContinueMissingError extends Error {
+  constructor(readonly mapName: string) {
+    super(`Logic map "${mapName}" is not in this workspace any more`);
+    this.name = "LogicMapToContinueMissingError";
+  }
+}
+
 /** 骨架文件被手动改坏：哪张图、哪个文件（相对 workspace）、什么问题。 */
 export class LogicMapCorruptError extends Error {
   constructor(

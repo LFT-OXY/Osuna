@@ -4097,6 +4097,13 @@ export const ar: TranslationResources = {
       hostOutdatedDetail: "حدّث Osuna على هذا المضيف لاستخدام الخريطة المنطقية.",
       failed: "تعذّر تغيير الخريطة المنطقية: {{error}}",
     },
+    picker: {
+      title: "تشغيل الخريطة المنطقية",
+      newMap: "خريطة منطقية جديدة",
+      continueSection: "متابعة خريطة منطقية",
+      loading: "جارٍ تحميل الخرائط المنطقية…",
+      listFailed: "تعذّر عرض الخرائط المنطقية لمساحة العمل هذه",
+    },
     panel: {
       label: "الخريطة المنطقية",
       subtitle: "مسار الميزة التي تناقشها",

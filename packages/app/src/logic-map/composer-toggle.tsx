@@ -18,6 +18,7 @@ import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import type { Theme } from "@/styles/theme";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { buildDraftLogicMapKey, useDraftLogicMapStore } from "./draft-logic-map-store";
+import { LogicMapPicker, type LogicMapChoice, type LogicMapPickerClient } from "./map-picker";
 
 /** 开关在工具栏里的估计宽度：图标、"逻辑图"、Switch 与内边距，算 Agent controls 收缩档位时预留。 */
 const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
@@ -75,16 +76,19 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
   );
 }
 
+/** 用户对开关做的事：关掉，或在选择弹层里选了一张图打开。 */
+type LogicMapSwitchChange = { kind: "off" } | { kind: "on"; choice: LogicMapChoice };
+
 /** 请求在路上时先显示用户点到的状态；失败时提示并回到原状态。 */
 function useLogicMapRequest(
-  run: (next: boolean) => Promise<void>,
-): [pendingValue: boolean | null, change: (next: boolean) => Promise<void>] {
+  run: (change: LogicMapSwitchChange) => Promise<void>,
+): [pendingValue: boolean | null, change: (change: LogicMapSwitchChange) => Promise<void>] {
   const { t } = useTranslation();
   const toast = useToast();
   const [pendingValue, setPendingValue] = useState<boolean | null>(null);
   const change = useCallback(
-    async (next: boolean) => {
-      setPendingValue(next);
+    async (next: LogicMapSwitchChange) => {
+      setPendingValue(next.kind === "on");
       try {
         await run(next);
       } catch (error) {
@@ -96,6 +100,11 @@ function useLogicMapRequest(
     [run, t, toast],
   );
   return [pendingValue, change];
+}
+
+/** 接着已有的图时把图名交给 daemon；新建时不带，由 daemon 建一张空图。 */
+function continuedMapName(choice: LogicMapChoice): string | undefined {
+  return choice.kind === "continue" ? choice.mapName : undefined;
 }
 
 function AgentLogicMapSwitch({
@@ -113,19 +122,27 @@ function AgentLogicMapSwitch({
     return getLogicMapNameFromLabels(agent?.labels) !== null;
   });
   const run = useCallback(
-    async (next: boolean) => {
+    async (change: LogicMapSwitchChange) => {
       if (!client) return;
-      await client.setAgentLogicMapEnabled({ target: { kind: "agent", agentId }, enabled: next });
-      if (next) revealLogicMapTabOnFirstEnable(serverId, workspaceId);
+      await client.setAgentLogicMapEnabled({
+        target: { kind: "agent", agentId },
+        enabled: change.kind === "on",
+        mapName: change.kind === "on" ? continuedMapName(change.choice) : undefined,
+      });
+      if (change.kind === "on") revealLogicMapTabOnFirstEnable(serverId, workspaceId);
     },
     [agentId, client, serverId, workspaceId],
   );
   const [pendingValue, change] = useLogicMapRequest(run);
   return (
     <LogicMapSwitchControl
+      client={client}
+      serverId={serverId}
+      workspaceId={workspaceId}
+      hiddenMapName={null}
       value={pendingValue ?? enabled}
       disabled={!client || pendingValue !== null}
-      onValueChange={change}
+      onChange={change}
     />
   );
 }
@@ -143,65 +160,113 @@ function DraftLogicMapSwitch({
   const draftKey = buildDraftLogicMapKey({ serverId, draftTabId });
   const draft = useDraftLogicMapStore((state) => state.draftsByKey[draftKey] ?? null);
   const run = useCallback(
-    async (next: boolean) => {
+    async (change: LogicMapSwitchChange) => {
       const store = useDraftLogicMapStore.getState();
-      // 关掉再打开沿用这个草稿已建好的图；只有第一次打开才让 daemon 新建。
-      if (!next || store.draftsByKey[draftKey]) {
-        store.setEnabled(draftKey, next);
-        if (next) revealLogicMapTabOnFirstEnable(serverId, workspaceId);
+      if (change.kind === "off") {
+        store.setEnabled(draftKey, false);
+        return;
+      }
+      // 草稿还没发过消息，它建好的图一定是空的；再选"新建"就沿用它，不再多建文件夹。
+      const createdMapName = store.draftsByKey[draftKey]?.createdMapName ?? null;
+      if (change.choice.kind === "new" && createdMapName) {
+        store.turnOnWithNewMap(draftKey, createdMapName);
+        revealLogicMapTabOnFirstEnable(serverId, workspaceId);
         return;
       }
       if (!client) return;
       const { mapName } = await client.setAgentLogicMapEnabled({
         target: { kind: "draft", workspaceId },
         enabled: true,
+        mapName: continuedMapName(change.choice),
       });
       if (!mapName) return;
-      useDraftLogicMapStore.getState().turnOnWithMap(draftKey, mapName);
+      const next = useDraftLogicMapStore.getState();
+      if (change.choice.kind === "new") next.turnOnWithNewMap(draftKey, mapName);
+      else next.turnOnWithExistingMap(draftKey, mapName);
       revealLogicMapTabOnFirstEnable(serverId, workspaceId);
     },
     [client, draftKey, serverId, workspaceId],
   );
   const [pendingValue, change] = useLogicMapRequest(run);
+  // 草稿自己建的空图由"新建"代表，不再列成一张已有的图。
+  const hiddenMapName = draft?.createdMapName ?? null;
   return (
     <LogicMapSwitchControl
+      client={client}
+      serverId={serverId}
+      workspaceId={workspaceId}
+      hiddenMapName={hiddenMapName}
       value={pendingValue ?? draft?.enabled ?? false}
       disabled={!client || pendingValue !== null}
-      onValueChange={change}
+      onChange={change}
     />
   );
 }
 
+/** 开关打开前先弹出选择：新建，或接着已有的图；关掉不用选。 */
 function LogicMapSwitchControl({
+  client,
+  serverId,
+  workspaceId,
+  hiddenMapName,
   value,
   disabled,
-  onValueChange,
+  onChange,
 }: {
+  client: LogicMapPickerClient | null;
+  serverId: string;
+  workspaceId: string | null;
+  hiddenMapName: string | null;
   value: boolean;
   disabled: boolean;
-  onValueChange: (next: boolean) => void;
+  onChange: (change: LogicMapSwitchChange) => void;
 }) {
   const { t } = useTranslation();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const handleValueChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        setPickerOpen(true);
+        return;
+      }
+      onChange({ kind: "off" });
+    },
+    [onChange],
+  );
+  const handleChoose = useCallback(
+    (choice: LogicMapChoice) => onChange({ kind: "on", choice }),
+    [onChange],
+  );
   return (
-    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-      <TooltipTrigger asChild triggerRefProp="ref">
-        <View style={styles.control} testID="composer-logic-map-toggle">
-          <LogicMapLabel />
-          <Switch
-            value={value}
-            onValueChange={onValueChange}
-            disabled={disabled}
-            accessibilityLabel={t("logicMap.toggle.label")}
-            testID="composer-logic-map-switch"
-          />
-        </View>
-      </TooltipTrigger>
-      <TooltipContent side="top" align="center" offset={8}>
-        <Text style={styles.tooltipText}>
-          {t(value ? "logicMap.toggle.hintOn" : "logicMap.toggle.hintOff")}
-        </Text>
-      </TooltipContent>
-    </Tooltip>
+    <LogicMapPicker
+      client={client}
+      serverId={serverId}
+      workspaceId={workspaceId}
+      hiddenMapName={hiddenMapName}
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      onChoose={handleChoose}
+    >
+      <Tooltip delayDuration={0} enabledOnDesktop={!pickerOpen} enabledOnMobile={false}>
+        <TooltipTrigger asChild triggerRefProp="ref">
+          <View style={styles.control} testID="composer-logic-map-toggle">
+            <LogicMapLabel />
+            <Switch
+              value={value}
+              onValueChange={handleValueChange}
+              disabled={disabled}
+              accessibilityLabel={t("logicMap.toggle.label")}
+              testID="composer-logic-map-switch"
+            />
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center" offset={8}>
+          <Text style={styles.tooltipText}>
+            {t(value ? "logicMap.toggle.hintOn" : "logicMap.toggle.hintOff")}
+          </Text>
+        </TooltipContent>
+      </Tooltip>
+    </LogicMapPicker>
   );
 }
 

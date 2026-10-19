@@ -4196,6 +4196,13 @@ export const fr: TranslationResources = {
       hostOutdatedDetail: "Mettez à jour Osuna sur cet hôte pour utiliser la carte logique.",
       failed: "Impossible de modifier la carte logique : {{error}}",
     },
+    picker: {
+      title: "Activer la carte logique",
+      newMap: "Nouvelle carte logique",
+      continueSection: "Continuer une carte logique",
+      loading: "Chargement des cartes logiques…",
+      listFailed: "Impossible de lister les cartes logiques de cet espace de travail",
+    },
     panel: {
       label: "Carte logique",
       subtitle: "Le déroulement de la fonctionnalité en discussion",

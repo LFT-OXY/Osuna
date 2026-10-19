@@ -4090,6 +4090,13 @@ export const zhCN: TranslationResources = {
       hostOutdatedDetail: "需要更新这台主机上的 Osuna 才能使用逻辑图。",
       failed: "无法切换逻辑图：{{error}}",
     },
+    picker: {
+      title: "打开逻辑图",
+      newMap: "新建逻辑图",
+      continueSection: "接着已有的逻辑图",
+      loading: "正在读取已有的逻辑图…",
+      listFailed: "读不出这个工作区的逻辑图",
+    },
     panel: {
       label: "逻辑图",
       subtitle: "正在讨论的功能怎么走",

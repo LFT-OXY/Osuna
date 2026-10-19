@@ -25,7 +25,7 @@ const KEY = buildDraftLogicMapKey({ serverId: "server-1", draftTabId: "draft-tab
 describe("draft logic map", () => {
   it("hands a draft's map to the agent it creates as a label", () => {
     const store = createDraftLogicMapStore(createMemoryStorage());
-    store.getState().turnOnWithMap(KEY, "untitled-1a2b3c4d");
+    store.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
 
     expect(readDraftLogicMapLabels(store, KEY)).toEqual({
       [LOGIC_MAP_LABEL]: "untitled-1a2b3c4d",
@@ -34,7 +34,7 @@ describe("draft logic map", () => {
 
   it("gives no labels once the toggle is off, but remembers the map for turning it back on", () => {
     const store = createDraftLogicMapStore(createMemoryStorage());
-    store.getState().turnOnWithMap(KEY, "untitled-1a2b3c4d");
+    store.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
 
     store.getState().setEnabled(KEY, false);
     expect(readDraftLogicMapLabels(store, KEY)).toBeUndefined();
@@ -45,11 +45,34 @@ describe("draft logic map", () => {
     });
   });
 
+  it("continues an existing map, and still remembers the empty map it created for 'new'", () => {
+    const store = createDraftLogicMapStore(createMemoryStorage());
+    store.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
+    store.getState().setEnabled(KEY, false);
+
+    store.getState().turnOnWithExistingMap(KEY, "login");
+
+    expect(readDraftLogicMapLabels(store, KEY)).toEqual({ [LOGIC_MAP_LABEL]: "login" });
+    expect(store.getState().draftsByKey[KEY]?.createdMapName).toBe("untitled-1a2b3c4d");
+  });
+
+  it("a draft that only ever continued a map has no map of its own to reuse", () => {
+    const store = createDraftLogicMapStore(createMemoryStorage());
+
+    store.getState().turnOnWithExistingMap(KEY, "login");
+
+    expect(store.getState().draftsByKey[KEY]).toEqual({
+      mapName: "login",
+      enabled: true,
+      createdMapName: null,
+    });
+  });
+
   it("keeps drafts on different hosts apart", () => {
     const store = createDraftLogicMapStore(createMemoryStorage());
     store
       .getState()
-      .turnOnWithMap(buildDraftLogicMapKey({ serverId: "a", draftTabId: "t" }), "untitled-1");
+      .turnOnWithNewMap(buildDraftLogicMapKey({ serverId: "a", draftTabId: "t" }), "untitled-1");
 
     expect(
       readDraftLogicMapLabels(store, buildDraftLogicMapKey({ serverId: "b", draftTabId: "t" })),
@@ -59,8 +82,8 @@ describe("draft logic map", () => {
   it("reads the draft's toggle back after the app restarts", async () => {
     const storage = createMemoryStorage();
     const before = createDraftLogicMapStore(storage);
-    before.getState().turnOnWithMap(KEY, "untitled-1a2b3c4d");
-    before.getState().turnOnWithMap("server-1:draft-tab-2", "untitled-5e6f7a8b");
+    before.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
+    before.getState().turnOnWithNewMap("server-1:draft-tab-2", "untitled-5e6f7a8b");
     before.getState().setEnabled("server-1:draft-tab-2", false);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -73,12 +96,13 @@ describe("draft logic map", () => {
     expect(after.getState().draftsByKey["server-1:draft-tab-2"]).toEqual({
       mapName: "untitled-5e6f7a8b",
       enabled: false,
+      createdMapName: "untitled-5e6f7a8b",
     });
   });
 
   it("forgets the draft once its agent is created", () => {
     const store = createDraftLogicMapStore(createMemoryStorage());
-    store.getState().turnOnWithMap(KEY, "untitled-1a2b3c4d");
+    store.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
 
     store.getState().forget(KEY);
 

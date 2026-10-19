@@ -4122,6 +4122,13 @@ export const ko: TranslationResources = {
       hostOutdatedDetail: "로직 맵을 사용하려면 이 호스트의 Osuna를 업데이트하세요.",
       failed: "로직 맵을 전환할 수 없습니다: {{error}}",
     },
+    picker: {
+      title: "로직 맵 켜기",
+      newMap: "새 로직 맵",
+      continueSection: "기존 로직 맵 이어 하기",
+      loading: "로직 맵을 불러오는 중…",
+      listFailed: "이 워크스페이스의 로직 맵을 불러올 수 없습니다",
+    },
     panel: {
       label: "로직 맵",
       subtitle: "논의 중인 기능의 흐름",

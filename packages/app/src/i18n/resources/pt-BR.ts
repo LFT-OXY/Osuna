@@ -4160,6 +4160,13 @@ export const ptBR: TranslationResources = {
       hostOutdatedDetail: "Atualize o Osuna neste host para usar o mapa lógico.",
       failed: "Não foi possível alterar o mapa lógico: {{error}}",
     },
+    picker: {
+      title: "Ativar o mapa lógico",
+      newMap: "Novo mapa lógico",
+      continueSection: "Continuar um mapa lógico",
+      loading: "Carregando mapas lógicos…",
+      listFailed: "Não foi possível listar os mapas lógicos deste workspace",
+    },
     panel: {
       label: "Mapa lógico",
       subtitle: "O fluxo da funcionalidade em discussão",

@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Locator } from "@playwright/test";
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
@@ -35,6 +35,17 @@ async function workspaceLogicMaps(
       expect(mapName).toMatch(/^untitled-[0-9a-f]{8}$/);
       return true;
     });
+}
+
+/** 工作区里每个 Agent 维护的图名；开关关着为 null。 */
+async function workspaceAgentMaps(
+  client: SeedDaemonClient,
+  workspaceId: string,
+): Promise<(string | null)[]> {
+  const { entries } = await client.fetchAgents();
+  return entries
+    .filter((entry) => entry.agent.workspaceId === workspaceId)
+    .map((entry) => getLogicMapNameFromLabels(entry.agent.labels));
 }
 
 /** 从 server_info 去掉 `logicMap`，模拟还不支持逻辑图的老 Host。 */
@@ -92,6 +103,26 @@ function logicMapFolders(cwd: string): Promise<string[]> {
   return readdir(path.join(cwd, "docs", "logic-maps"));
 }
 
+function logicMapPicker(page: Page): Locator {
+  return page.getByTestId("composer-logic-map-picker").filter({ visible: true });
+}
+
+/** 打开开关弹出选择层，选"新建"。 */
+async function turnOnWithNewMap(page: Page): Promise<void> {
+  await logicMapSwitch(page).click();
+  await logicMapPicker(page).getByTestId("composer-logic-map-picker-new").click();
+}
+
+/** 在 workspace 里放一张别的对话留下的图。 */
+async function writeExistingMap(cwd: string, mapName: string, title: string): Promise<void> {
+  const mapDir = path.join(cwd, "docs", "logic-maps", mapName);
+  await mkdir(mapDir, { recursive: true });
+  await writeFile(
+    path.join(mapDir, "map.json"),
+    JSON.stringify({ title, specFramework: null, nodes: [], edges: [] }),
+  );
+}
+
 test.describe("Logic map toggle in the composer toolbar", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize(DESKTOP_VIEWPORT);
@@ -110,7 +141,13 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       const toggle = logicMapSwitch(page);
       await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
 
+      // 这个 workspace 还没有图：选择层里只有"新建"。
       await toggle.click();
+      const picker = logicMapPicker(page);
+      await expect(picker.getByTestId("composer-logic-map-picker-new")).toHaveText("New logic map");
+      await expect(picker.getByText("Continue a logic map")).toHaveCount(0);
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await picker.getByTestId("composer-logic-map-picker-new").click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect
         .poll(() => agentLogicMap(agent.client, agent.agentId))
@@ -139,15 +176,19 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       const toggle = logicMapSwitch(page);
       await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
 
-      await toggle.click();
+      await turnOnWithNewMap(page);
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect.poll(() => logicMapFolders(agent.cwd)).toHaveLength(1);
       const [firstMap] = await logicMapFolders(agent.cwd);
 
-      // 关掉再打开沿用同一张图，不再多建文件夹。
+      // 关掉再选"新建"沿用草稿建好的那张空图，不再多建文件夹，也不把它列成已有的图。
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "false");
       await toggle.click();
+      await expect(
+        logicMapPicker(page).getByTestId(`composer-logic-map-picker-map-${firstMap}`),
+      ).toHaveCount(0);
+      await logicMapPicker(page).getByTestId("composer-logic-map-picker-new").click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
 
       // 重新打开 Osuna 后草稿的开关还开着。
@@ -167,6 +208,70 @@ test.describe("Logic map toggle in the composer toolbar", () => {
         .toEqual([null, true]);
       await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true");
       expect(await logicMapFolders(agent.cwd)).toEqual([firstMap]);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("a new conversation continues a map an earlier one left in the workspace", async ({
+    page,
+  }, testInfo) => {
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `logic-map-continue-${testInfo.workerIndex}-`,
+      title: "Existing agent",
+    });
+    try {
+      await writeExistingMap(agent.cwd, "login", "Login");
+      await gotoWorkspace(page, agent.workspaceId);
+      await clickNewChat(page);
+      const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
+      await expect(composer).toBeEditable({ timeout: 30_000 });
+      const toggle = logicMapSwitch(page);
+      await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
+
+      await toggle.click();
+      const picker = logicMapPicker(page);
+      await expect(picker.getByText("Continue a logic map")).toBeVisible();
+      await picker.getByTestId("composer-logic-map-picker-map-login").click();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+      await composer.fill("add the lockout rule");
+      await composer.press("Enter");
+
+      await expect
+        .poll(async () => (await workspaceAgentMaps(agent.client, agent.workspaceId)).sort())
+        .toEqual(["login", null]);
+      expect(await logicMapFolders(agent.cwd)).toEqual(["login"]);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("continuing a map that was deleted meanwhile tells the user and stays off", async ({
+    page,
+  }, testInfo) => {
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `logic-map-continue-gone-${testInfo.workerIndex}-`,
+      title: "Continue gone agent",
+    });
+    try {
+      await writeExistingMap(agent.cwd, "login", "Login");
+      await openAgentRoute(page, agent);
+      await expectComposerVisible(page);
+      const toggle = logicMapSwitch(page);
+      await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
+
+      await toggle.click();
+      const loginItem = logicMapPicker(page).getByTestId("composer-logic-map-picker-map-login");
+      await expect(loginItem).toBeVisible();
+      await rm(path.join(agent.cwd, "docs", "logic-maps", "login"), { recursive: true });
+      await loginItem.click();
+
+      await expect(page.getByTestId("app-toast-message")).toHaveText(
+        'Could not change the logic map: Logic map "login" is not in this workspace any more',
+      );
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      expect(await agentLogicMap(agent.client, agent.agentId)).toBeNull();
     } finally {
       await agent.cleanup();
     }
@@ -207,7 +312,7 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       const toggle = logicMapSwitch(page);
       await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
 
-      await toggle.click();
+      await turnOnWithNewMap(page);
 
       await expect(page.getByTestId("app-toast-message")).toHaveText(
         "Could not change the logic map: No space left on device",

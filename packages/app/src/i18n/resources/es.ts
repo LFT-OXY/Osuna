@@ -4184,6 +4184,13 @@ export const es: TranslationResources = {
       hostOutdatedDetail: "Actualiza Osuna en este host para usar el mapa lógico.",
       failed: "No se pudo cambiar el mapa lógico: {{error}}",
     },
+    picker: {
+      title: "Activar el mapa lógico",
+      newMap: "Nuevo mapa lógico",
+      continueSection: "Continuar un mapa lógico",
+      loading: "Cargando mapas lógicos…",
+      listFailed: "No se pueden listar los mapas lógicos de este espacio de trabajo",
+    },
     panel: {
       label: "Mapa lógico",
       subtitle: "El flujo de la función que estás discutiendo",

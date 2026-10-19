@@ -13,9 +13,17 @@ function explorerLogicMapTab(page: Page): Locator {
   return page.getByTestId("workspace-explorer-sidebar").getByTestId("workspace-tab-logic_map");
 }
 
+/** 打开时在选择层里选"新建"。 */
 async function setLogicMapSwitch(page: Page, on: boolean): Promise<void> {
   const toggle = logicMapSwitch(page);
   await toggle.click();
+  if (on) {
+    await page
+      .getByTestId("composer-logic-map-picker")
+      .filter({ visible: true })
+      .getByTestId("composer-logic-map-picker-new")
+      .click();
+  }
   await expect(toggle).toHaveAttribute("aria-checked", on ? "true" : "false");
 }
 
