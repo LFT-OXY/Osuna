@@ -49,6 +49,7 @@ import {
 } from "./checkout-git.js";
 import {
   configureGitProcessPolicy,
+  runGitCommand,
   startGitCommandMetrics,
   stopGitCommandMetrics,
 } from "./run-git-command.js";
@@ -1485,6 +1486,54 @@ const x = 1;
       "web/app.min.js": true,
       "yarn.lock": true,
     });
+  });
+
+  it("marks a lock file by its new path after a rename and a deleted lock file", async () => {
+    writeFileSync(join(repoDir, "old.lock"), "lock\n");
+    writeFileSync(join(repoDir, "package-lock.json"), "{}\n");
+    execFileSync("git", ["add", "."], { cwd: repoDir });
+    execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "locks"], {
+      cwd: repoDir,
+    });
+    execFileSync("git", ["mv", "old.lock", "yarn.lock"], { cwd: repoDir });
+    execFileSync("git", ["rm", "-q", "package-lock.json"], { cwd: repoDir });
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      (diff.structured ?? []).map((file) => ({
+        path: file.path,
+        oldPath: file.oldPath,
+        isDeleted: file.isDeleted,
+        generated: file.generated,
+      })),
+    ).toEqual([
+      { path: "package-lock.json", oldPath: undefined, isDeleted: true, generated: true },
+      { path: "yarn.lock", oldPath: "old.lock", isDeleted: false, generated: true },
+    ]);
+  });
+
+  it("falls back to the name rules with a warning when git check-attr fails", async () => {
+    writeFileSync(join(repoDir, ".gitattributes"), "src.ts linguist-generated\n");
+    writeFileSync(join(repoDir, "src.ts"), "export {};\n");
+    writeFileSync(join(repoDir, "yarn.lock"), "lock\n");
+    const warnings: unknown[] = [];
+    const logger = { trace() {}, warn: (context: unknown) => warnings.push(context) };
+    const failingCheckAttr: typeof runGitCommand = async (args, options) => {
+      if (args[0] === "check-attr") throw new Error("check-attr failed");
+      return runGitCommand(args, options);
+    };
+
+    const diff = await getCheckoutDiff(
+      repoDir,
+      { mode: "uncommitted", includeStructured: true },
+      { logger, runGitCommand: failingCheckAttr },
+    );
+
+    expect(
+      Object.fromEntries((diff.structured ?? []).map((file) => [file.path, file.generated])),
+    ).toEqual({ ".gitattributes": undefined, "src.ts": undefined, "yarn.lock": true });
+    expect(warnings).toHaveLength(1);
   });
 
   it("does not throw on large diffs (marks file as too_large)", async () => {

@@ -3516,10 +3516,12 @@ export async function getCheckoutDiff(
 
   const structured = createStructuredDiffAccumulator(
     compare.includeStructured
-      ? await findGeneratedPaths(
+      ? await findGeneratedPaths({
           cwd,
-          changes.map((change) => change.path),
-        )
+          paths: changes.map((change) => change.path),
+          runGitCommand: getRunGitCommand(context),
+          logger: context?.logger,
+        })
       : new Set(),
   );
   let diffText = "";

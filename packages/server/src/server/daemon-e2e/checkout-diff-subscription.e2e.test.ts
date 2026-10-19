@@ -101,6 +101,35 @@ test("pushes file-level checkout diff updates with deterministic path order", as
   }
 }, 60000);
 
+test("marks a changed lock file as generated and leaves an ordinary file unmarked", async () => {
+  const cwd = tmpCwd();
+
+  try {
+    initGitRepo(cwd);
+    commitFile(cwd, "base.txt", "base\n");
+
+    const subscription = ctx.client.observeCheckoutDiff(cwd, { mode: "uncommitted" });
+    const initial = await subscription.ready;
+
+    writeFileSync(path.join(cwd, "package-lock.json"), "{}\n");
+    writeFileSync(path.join(cwd, "index.ts"), "export {};\n");
+
+    const update = await waitForCheckoutDiffUpdate(ctx, initial.subscriptionId, (payload) => {
+      const paths = new Set(payload.files.map((file) => file.path));
+      return paths.has("package-lock.json") && paths.has("index.ts");
+    });
+
+    expect(update.files.map((file) => ({ path: file.path, generated: file.generated }))).toEqual([
+      { path: "index.ts", generated: undefined },
+      { path: "package-lock.json", generated: true },
+    ]);
+
+    await subscription.release();
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}, 60000);
+
 test("pushes updates when subscribed from a subdirectory and files change outside it", async () => {
   const cwd = tmpCwd();
 

@@ -830,6 +830,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         this.deps.getCheckoutDiff(normalizedCwd, normalizedOptions, {
           paseoHome: this.paseoHome,
           worktreesRoot: this.worktreesRoot,
+          logger: this.logger,
           diffFileReuse: readOptions?.fileReuse,
         }),
     });
