@@ -15,13 +15,18 @@ export interface AgentResumeWireError {
 
 export function toAgentResumeWireError(error: unknown): AgentResumeWireError {
   const message = getErrorMessage(error);
+  if (isCodexModelProviderMissing(error)) {
+    return { code: CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE, message };
+  }
+  return { code: "unknown", message };
+}
+
+export function isCodexModelProviderMissing(error: unknown): boolean {
   // 提供方抛的类型化错误可能被上层包了一层，顺着 cause 找。
   let current: unknown = error;
   while (current instanceof Error) {
-    if (current instanceof CodexModelProviderMissingError) {
-      return { code: CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE, message };
-    }
+    if (current instanceof CodexModelProviderMissingError) return true;
     current = current.cause;
   }
-  return { code: "unknown", message };
+  return false;
 }
