@@ -2560,6 +2560,7 @@ export const en = {
         namePlaceholder: "e.g. My relay",
         apiKey: "API key",
         apiKeySavedPlaceholder: "Leave blank to keep the saved key",
+        apiKeyOptionalPlaceholder: "Optional",
         keyRejected: "The upstream rejected this key (401 / 403)",
         address: "Address",
         addressHint:

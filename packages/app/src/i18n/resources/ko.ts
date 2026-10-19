@@ -2510,6 +2510,7 @@ export const ko: TranslationResources = {
         namePlaceholder: "예: 내 중계",
         apiKey: "API 키",
         apiKeySavedPlaceholder: "비워 두면 저장된 키를 유지합니다",
+        apiKeyOptionalPlaceholder: "선택 사항",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
         address: "주소",
         addressHint:

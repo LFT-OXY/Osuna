@@ -12,7 +12,7 @@ export const ANTHROPIC_VERSION = "2023-06-01";
  * 上游错误体常见的几种写法：{error:{message}}、{error:"..."}、{message}、{detail}；否则取原文。
  * 其中出现的 apiKey 换成 ***。
  */
-export function extractErrorDetail(text: string, apiKey: string): string {
+export function extractErrorDetail(text: string, apiKey: string | null): string {
   const detail = redactKey(structuredErrorMessage(text) ?? text, apiKey);
   return truncate(detail.replace(/\s+/g, " ").trim());
 }
@@ -39,10 +39,20 @@ function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }
 
-/** 文字里出现的 key 换成 ***；key 为空时原样（空串会在每两个字之间插入 ***）。 */
-export function redactKey(text: string, apiKey: string): string {
-  if (apiKey === "") return text;
+/** 文字里出现的 key 换成 ***；没 key 或 key 为空时原样（空串会在每两个字之间插入 ***）。 */
+export function redactKey(text: string, apiKey: string | null): string {
+  if (apiKey === null || apiKey === "") return text;
   return text.replaceAll(apiKey, "***");
+}
+
+/** 把 key 放进 Authorization: Bearer；没 key 的接口不带认证头。 */
+export function bearerAuth(apiKey: string | null): Record<string, string> {
+  return apiKey === null ? {} : { authorization: `Bearer ${apiKey}` };
+}
+
+/** 把 key 同时放进 Authorization: Bearer 与 x-api-key（Anthropic 地址）；没 key 的接口不带认证头。 */
+export function bothKeyAuth(apiKey: string | null): Record<string, string> {
+  return apiKey === null ? {} : { ...bearerAuth(apiKey), "x-api-key": apiKey };
 }
 
 /** 响应头里的 Content-Type，小写；没有为空。 */

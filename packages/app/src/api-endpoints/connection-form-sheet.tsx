@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useSyncExternalStore } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -15,12 +16,15 @@ import type {
   ConnectionFormDeps,
   ConnectionFormModel,
   ConnectionFormSeed,
+  ConnectionFormState,
   ConnectionFormatField,
   ConnectionSaveResult,
 } from "./internal/connection-form-model";
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
+  // 主机声明了 apiEndpointManagement：key 可以不填。
+  isKeyOptional: boolean;
   onSave: ConnectionFormDeps["save"];
   onDetect: ConnectionFormDeps["detect"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
@@ -41,6 +45,7 @@ const URL_PLACEHOLDERS: Record<ApiEndpointRequestFormat, string> = {
  */
 export function ApiEndpointConnectionSheet({
   seed,
+  isKeyOptional,
   onSave,
   onDetect,
   onSaved,
@@ -49,7 +54,7 @@ export function ApiEndpointConnectionSheet({
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const fieldSize = isCompact ? "md" : "sm";
-  const model = useConnectionFormModel(seed, { save: onSave, detect: onDetect });
+  const model = useConnectionFormModel(seed, { save: onSave, detect: onDetect }, { isKeyOptional });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const isCreate = state.mode === "create";
 
@@ -124,9 +129,7 @@ export function ApiEndpointConnectionSheet({
           <FormTextInput
             initialValue=""
             onChangeText={model.setApiKey}
-            placeholder={
-              state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…"
-            }
+            placeholder={keyPlaceholder(state, t)}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -203,6 +206,16 @@ export function ApiEndpointConnectionSheet({
       </View>
     </AdaptiveModalSheet>
   );
+}
+
+/** 存过 key 的说留空保留；主机允许不填时标明选填；否则是 key 的样子。 */
+function keyPlaceholder(
+  state: Pick<ConnectionFormState, "hasSavedKey" | "isKeyOptional">,
+  t: TFunction,
+): string {
+  if (state.hasSavedKey) return t("settings.apiEndpoints.form.apiKeySavedPlaceholder");
+  if (state.isKeyOptional) return t("settings.apiEndpoints.form.apiKeyOptionalPlaceholder");
+  return "sk-…";
 }
 
 function FormatUrlField({

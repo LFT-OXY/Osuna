@@ -194,14 +194,21 @@ describe("API endpoint connection test over the daemon RPC", () => {
     });
   });
 
-  test("rejects a request without a key or a model before calling upstream", async () => {
+  test("a request without a key carries no key header", async () => {
     const noKey = await client.apiEndpointTestConnection({
       provider: "claude",
       baseUrl: `${upstream.origin}/claude`,
       modelId: "relay/sonnet",
     });
-    expect(noKey).toMatchObject({ result: null, error: { code: "invalid_input" } });
 
+    // 这个假上游要 key：没 key 的请求被 401 拒，结论照常回给用户。
+    expect(noKey).toMatchObject({ error: null, result: { ok: false, status: 401 } });
+    expect(upstream.requests).toHaveLength(1);
+    expect(upstream.requests[0]?.headers.authorization).toBeUndefined();
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("rejects a request without a model before calling upstream", async () => {
     const noModel = await client.apiEndpointTestConnection({
       provider: "claude",
       baseUrl: `${upstream.origin}/claude`,

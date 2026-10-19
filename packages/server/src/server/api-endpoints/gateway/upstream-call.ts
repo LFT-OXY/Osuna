@@ -150,7 +150,7 @@ export async function openUpstream(input: {
   url: URL;
   headers: Record<string, string | string[]>;
   body: Buffer;
-  apiKey: string;
+  apiKey: string | null;
   headerTimeoutMs: number;
   // 按哪种协议读回复、认开口；null 时第一段字节就算开口（count_tokens 的回复不是对话）。
   reads: ApiEndpointRequestFormat | null;
@@ -237,7 +237,7 @@ function failedByUpstream(input: {
   status: number;
   response: IncomingMessage;
   text: string;
-  apiKey: string;
+  apiKey: string | null;
 }): FailedAttempt {
   const { status, text } = input;
   return {
@@ -533,7 +533,11 @@ function isErrorCode(value: unknown): value is string | number {
 }
 
 /** 上游没理会 stream: true，回的又不是这个协议的整份回复：读不出回复，当作开口前失败换家。 */
-export function notAStream(input: { url: URL; text: string; apiKey: string }): FailedAttempt {
+export function notAStream(input: {
+  url: URL;
+  text: string;
+  apiKey: string | null;
+}): FailedAttempt {
   const detail = extractErrorDetail(input.text, input.apiKey);
   return failedBySelf({
     status: 502,

@@ -2519,6 +2519,7 @@ export const ja: TranslationResources = {
         namePlaceholder: "例: マイ中継",
         apiKey: "API キー",
         apiKeySavedPlaceholder: "空欄のままにすると保存済みのキーを使います",
+        apiKeyOptionalPlaceholder: "任意",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
         address: "アドレス",
         addressHint:

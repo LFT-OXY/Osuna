@@ -232,10 +232,24 @@ describe("API endpoint request format detection over the daemon RPC", () => {
     expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
   });
 
-  test("rejects a missing key or an address that is not http before calling upstream", async () => {
+  test("detects with no key headers when there is no key", async () => {
     const noKey = await client.apiEndpointDetectFormats({ baseUrl: `${upstream.origin}/relay` });
-    expect(noKey).toMatchObject({ results: [], error: { code: "invalid_input" } });
 
+    // 这个假上游要 key：列模型就被 401 拒，三种格式都是 key 的问题。
+    expect(noKey.error).toBeNull();
+    expect(noKey.results.map((result) => result.status)).toEqual([
+      "auth_failed",
+      "auth_failed",
+      "auth_failed",
+    ]);
+    expect(upstream.requests.length).toBeGreaterThan(0);
+    for (const { headers } of upstream.requests) {
+      expect(headers.authorization).toBeUndefined();
+      expect(headers["x-api-key"]).toBeUndefined();
+    }
+  });
+
+  test("rejects an address that is not http before calling upstream", async () => {
     const notHttp = await client.apiEndpointDetectFormats({
       baseUrl: "ftp://relay.example",
       apiKey: TYPED_KEY,

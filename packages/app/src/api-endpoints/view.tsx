@@ -315,22 +315,27 @@ function GatewayGate({
 type ConnectionSheetState = { seed: ConnectionFormSeed } | null;
 
 function ConnectionSheet({
+  serverId,
   sheet,
   endpoints,
   onSaved,
   onClose,
 }: {
+  serverId: string;
   sheet: ConnectionSheetState;
   endpoints: Pick<UseHostEndpointsResult, "save" | "detect">;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
 }) {
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key。
+  const isKeyOptional = useHostFeature(serverId, "apiEndpointManagement");
   if (!sheet) return null;
   const { seed } = sheet;
   return (
     <ApiEndpointConnectionSheet
       key={seed.mode === "edit" ? `edit-${seed.endpoint.id}` : "create"}
       seed={seed}
+      isKeyOptional={isKeyOptional}
       onSave={endpoints.save}
       onDetect={endpoints.detect}
       onSaved={onSaved}
@@ -383,6 +388,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onResume={endpoints.resume}
       />
       <ConnectionSheet
+        serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
         onSaved={handleSaved}
@@ -455,6 +461,7 @@ function ApiEndpointDetailContent({
         onEdit={handleEdit}
       />
       <ConnectionSheet
+        serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
         onSaved={handleClose}

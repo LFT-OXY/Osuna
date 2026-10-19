@@ -52,7 +52,8 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /slow：列模型一直不回，详情页停在加载中。
  * - /broke：Anthropic 对话回 402 欠费（中转站让它冷却 30 分钟）。
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
- * 任何路径上 key 不对都回 401。
+ * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
+ * 除 /free 外，任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
   const relay: Omit<FakeRelay, "close"> = {
@@ -64,15 +65,16 @@ export async function startFakeRelay(): Promise<FakeRelay> {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
-      const url = request.url ?? "";
       const headers: IncomingHttpHeaders = request.headers;
+      const isFree = (request.url ?? "").startsWith("/free/");
+      const url = isFree ? (request.url ?? "").replace("/free/", "/good/") : (request.url ?? "");
       relay.requests.push({
         method: request.method ?? "",
-        url,
+        url: request.url ?? "",
         authorization: headers.authorization,
         model: modelOf(Buffer.concat(chunks).toString("utf8")),
       });
-      if (headers.authorization !== `Bearer ${RELAY_KEY}`) {
+      if (!isFree && headers.authorization !== `Bearer ${RELAY_KEY}`) {
         send(response, 401, { error: { message: "Invalid API key" } });
         return;
       }

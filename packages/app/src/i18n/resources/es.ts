@@ -2548,6 +2548,7 @@ export const es: TranslationResources = {
         namePlaceholder: "p. ej. Mi relay",
         apiKey: "Clave de API",
         apiKeySavedPlaceholder: "Déjalo vacío para conservar la clave guardada",
+        apiKeyOptionalPlaceholder: "Opcional",
         keyRejected: "El servidor rechazó esta clave (401 / 403)",
         address: "Dirección",
         addressHint:

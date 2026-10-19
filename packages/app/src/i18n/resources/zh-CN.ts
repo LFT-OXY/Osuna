@@ -2523,6 +2523,7 @@ export const zhCN: TranslationResources = {
         namePlaceholder: "如：云雾中转",
         apiKey: "API key",
         apiKeySavedPlaceholder: "留空保留已保存的 key",
+        apiKeyOptionalPlaceholder: "选填",
         keyRejected: "上游拒绝了这把 key（401 / 403）",
         address: "地址",
         addressHint:

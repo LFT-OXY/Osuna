@@ -840,3 +840,54 @@ describe("API endpoint settings issues (apiEndpointCliWiring)", () => {
     expect(older.features?.apiEndpointCliWiring).toBeUndefined();
   });
 });
+
+// 接口管理（apiEndpointManagement）：key 选填，新字段都可选，老客户端的消息照常解析。
+describe("API endpoint management (apiEndpointManagement)", () => {
+  it("parses a save that creates an endpoint without a key, and an old-shape save", () => {
+    const keyless = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m1",
+      provider: "claude",
+      name: "Ollama",
+      baseUrls: [{ format: "openai_chat", url: "http://127.0.0.1:11434/v1" }],
+      models: [],
+    };
+    expect(SessionInboundMessageSchema.parse(keyless)).toEqual(keyless);
+
+    const oldShape = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m2",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api",
+      models: [{ id: "z-ai/glm-4.6" }],
+      defaultModelId: "z-ai/glm-4.6",
+    };
+    expect(SessionInboundMessageSchema.parse(oldShape)).toEqual(oldShape);
+
+    const saved = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: {
+        requestId: "req-m1",
+        endpoint: { ...ENDPOINT, hasApiKey: false },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(saved)).toEqual(saved);
+  });
+
+  it("parses a host that advertises apiEndpointManagement, and an older one without it", () => {
+    const base = { status: "server_info" as const, serverId: "srv_1" };
+    const current = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointCliWiring: true, apiEndpointManagement: true },
+    });
+    expect(current.features?.apiEndpointManagement).toBe(true);
+    const older = ServerInfoStatusPayloadSchema.parse({
+      ...base,
+      features: { apiEndpointCliWiring: true },
+    });
+    expect(older.features?.apiEndpointManagement).toBeUndefined();
+  });
+});

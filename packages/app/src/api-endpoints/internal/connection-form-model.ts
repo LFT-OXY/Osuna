@@ -11,6 +11,7 @@ import {
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
  * 只管连接：名称、一把 key、自动检测用的地址、三种格式的地址；模型在详情页挑，编辑时原样带回。
  * key 只写不读：编辑时从空开始，留空提交就不带 apiKey，daemon 保留原 key；自动检测同理带 endpointId。
+ * 主机声明了 apiEndpointManagement 时 key 选填：没 key 也能检测、保存，daemon 不带认证头；老主机仍要 key。
  */
 
 export type ConnectionFormSeed = { mode: "create" } | { mode: "edit"; endpoint: ApiEndpoint };
@@ -40,11 +41,17 @@ export interface ConnectionFormatField {
   invalid: boolean;
 }
 
+export interface ConnectionFormOptions {
+  // 主机声明了 apiEndpointManagement：key 可以不填。
+  isKeyOptional: boolean;
+}
+
 export interface ConnectionFormState {
   mode: "create" | "edit";
   name: string;
   apiKey: string;
   hasSavedKey: boolean;
+  isKeyOptional: boolean;
   address: string;
   addressInvalid: boolean;
   formats: ConnectionFormatField[];
@@ -102,7 +109,9 @@ const EMPTY_URLS: Urls = { anthropic_messages: "", openai_chat: "", openai_respo
 export function createConnectionFormModel(
   seed: ConnectionFormSeed,
   deps: ConnectionFormDeps,
+  options: ConnectionFormOptions,
 ): ConnectionFormModel {
+  const { isKeyOptional } = options;
   const listeners = new Set<() => void>();
   const hasSavedKey = seed.mode === "edit" && seed.endpoint.hasApiKey;
   let closed = false;
@@ -124,7 +133,7 @@ export function createConnectionFormModel(
   let state = derive(values);
 
   function derive(next: Values): ConnectionFormState {
-    const hasKey = next.apiKey.trim() !== "" || hasSavedKey;
+    const hasKey = isKeyOptional || next.apiKey.trim() !== "" || hasSavedKey;
     const address = next.address.trim();
     const addressInvalid = address !== "" && !isHttpUrl(address);
     const formats = API_ENDPOINT_REQUEST_FORMATS.map((format) => {
@@ -148,6 +157,7 @@ export function createConnectionFormModel(
       name: next.name,
       apiKey: next.apiKey,
       hasSavedKey,
+      isKeyOptional,
       address: next.address,
       addressInvalid,
       formats,

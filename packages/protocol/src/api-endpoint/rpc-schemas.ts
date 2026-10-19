@@ -264,8 +264,9 @@ export const ApiEndpointListResponseSchema = z.object({
 export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSchema>;
 
 /**
- * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key；
- * 新建时 apiKey 必填。modelMapping 每次都整份提交，省略即不映射。
+ * 没有 endpointId 是新建，有则更新。更新时省略 apiKey 表示保留原 key。
+ * 新建时省略 apiKey 即这家没有 key，发请求时不带认证头；老 daemon（没有 apiEndpointManagement）新建时要求 apiKey。
+ * modelMapping 每次都整份提交，省略即不映射；其余省略的字段保留这家原来的值。
  *
  * 新客户端带 baseUrls，不带 baseUrl / defaultModelId，models 可以为空；接口开关不在这里改。
  * 老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
@@ -522,7 +523,7 @@ export type ApiEndpointSetEndpointStateResponse = z.infer<
 
 /**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、
- * 省略 apiKey（或留空），就用已保存的 key。可以用 cancel 按 requestId 取消。
+ * 省略 apiKey（或留空），就用已保存的 key；没有已保存的 key 时不带认证头（老 daemon 拒绝）。可以用 cancel 按 requestId 取消。
  *
  * 新客户端带 `format`：baseUrl 是这种请求格式的地址，认证头按格式给，provider 不再起作用；
  * 同时带 endpointId 时，列出的模型记作这家的上游清单（列表里的 `catalog`）。
@@ -575,7 +576,7 @@ export const ApiEndpointFormatDetectionSchema = z.object({
 });
 export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
 
-/** 请求本身被拒（缺 key、地址无效、找不到接口、被取消）时 `results` 为空，原因在 `error`。 */
+/** 请求本身被拒（地址无效、找不到接口、被取消；老 daemon 还有缺 key）时 `results` 为空，原因在 `error`。 */
 export const ApiEndpointDetectFormatsResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.response"),
   payload: z.object({
@@ -642,7 +643,7 @@ export const ApiEndpointTestConnectionResultSchema = z.object({
 });
 export type ApiEndpointTestConnectionResult = z.infer<typeof ApiEndpointTestConnectionResultSchema>;
 
-/** 请求本身被拒（缺 key、找不到接口、被取消）时 `result` 为 null，原因在 `error`。 */
+/** 请求本身被拒（找不到接口、被取消；老 daemon 还有缺 key）时 `result` 为 null，原因在 `error`。 */
 export const ApiEndpointTestConnectionResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.test_connection.response"),
   payload: z.object({

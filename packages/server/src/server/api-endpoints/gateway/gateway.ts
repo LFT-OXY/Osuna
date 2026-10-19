@@ -860,8 +860,9 @@ async function countOnEndpoint(input: {
 }): Promise<boolean> {
   const { endpoint } = input.counter;
   const baseUrl = endpoint.baseUrls.find((entry) => entry.format === "anthropic_messages")?.url;
+  if (baseUrl === undefined) return false;
+  // 没 key 的接口为 null：不带认证头。
   const apiKey = input.store.getApiKey(endpoint.id);
-  if (baseUrl === undefined || apiKey === null) return false;
   const outcome = await attemptEndpoint({
     req: input.req,
     res: input.res,
@@ -886,13 +887,13 @@ async function countOnEndpoint(input: {
 }
 
 /**
- * 能问的候选：这次用哪种格式问它、那个格式的地址与 key。Agent 自己的格式即直通；
+ * 能问的候选：这次用哪种格式问它、那个格式的地址与 key（没 key 为 null）。Agent 自己的格式即直通；
  * 别的格式带上读成中间格式的请求，翻译过去。
  */
 interface AskableCandidate extends GatewayCandidate {
   format: ApiEndpointRequestFormat;
   baseUrl: string;
-  apiKey: string;
+  apiKey: string | null;
   translated: GatewayRequest | null;
 }
 
@@ -1047,7 +1048,7 @@ function formatsLeft(input: {
 }
 
 /**
- * 有地址、有 key、有能用的格式的候选；要翻译时把 Agent 的请求读成中间格式。
+ * 有地址、有能用的格式的候选（没 key 的也算）；要翻译时把 Agent 的请求读成中间格式。
  * 读不懂（或翻不过去，如只给 file_id 的图片）的只跳过要翻译的候选；没有一家能问时抛出那个 RequestShapeError。
  */
 function askableCandidates(input: {
@@ -1062,8 +1063,9 @@ function askableCandidates(input: {
   const reachable = input.candidates.flatMap((candidate) => {
     const format = askableFormat({ candidate, agentFormat: input.format, refusals, asksSearch });
     const baseUrl = candidate.endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+    if (format === null || baseUrl === undefined) return [];
+    // 没 key 的接口照样能问，不带认证头。
     const apiKey = input.store.getApiKey(candidate.endpoint.id);
-    if (format === null || baseUrl === undefined || apiKey === null) return [];
     return [{ ...candidate, format, baseUrl, apiKey }];
   });
   const translating = reachable.some((candidate) => candidate.format !== input.format);

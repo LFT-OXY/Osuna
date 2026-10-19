@@ -171,14 +171,19 @@ describe("API endpoint models over the daemon RPC", () => {
     expect(rejected.error?.message).toContain("HTTP 401");
   });
 
-  test("asks for a key when there is neither a typed nor a saved one", async () => {
+  test("lists with no key headers when there is neither a typed nor a saved key", async () => {
     const fetched = await client.apiEndpointFetchModels({
       provider: "claude",
       baseUrl: upstream.baseUrl,
     });
 
-    expect(fetched).toMatchObject({ models: [], error: { code: "invalid_input" } });
-    expect(upstream.requests).toEqual([]);
+    // 这个假上游要 key：没 key 的列表被 401 拒，原样报给用户。
+    expect(fetched).toMatchObject({ models: [], error: { code: "upstream_error" } });
+    expect(upstream.requests.length).toBeGreaterThan(0);
+    for (const { headers } of upstream.requests) {
+      expect(headers.authorization).toBeUndefined();
+      expect(headers["x-api-key"]).toBeUndefined();
+    }
   });
 
   test("a pending fetch can be cancelled", async () => {

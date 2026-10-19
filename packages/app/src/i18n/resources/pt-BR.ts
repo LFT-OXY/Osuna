@@ -2534,6 +2534,7 @@ export const ptBR: TranslationResources = {
         namePlaceholder: "ex.: Meu relay",
         apiKey: "Chave de API",
         apiKeySavedPlaceholder: "Deixe em branco para manter a chave salva",
+        apiKeyOptionalPlaceholder: "Opcional",
         keyRejected: "O servidor recusou esta chave (401 / 403)",
         address: "Endereço",
         addressHint:

@@ -2497,6 +2497,7 @@ export const ar: TranslationResources = {
         namePlaceholder: "مثلًا: الوسيط الخاص بي",
         apiKey: "مفتاح API",
         apiKeySavedPlaceholder: "اتركه فارغًا للإبقاء على المفتاح المحفوظ",
+        apiKeyOptionalPlaceholder: "اختياري",
         keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
         address: "العنوان",
         addressHint:

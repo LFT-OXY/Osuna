@@ -11,6 +11,7 @@ import {
   parseJson,
   structuredErrorMessage,
   redactKey,
+  bearerAuth,
 } from "./upstream-http.js";
 
 /*
@@ -31,7 +32,7 @@ export type UpstreamConnectionOutcome =
 
 interface ProtocolSpec {
   path: string;
-  headers(apiKey: string): Record<string, string>;
+  headers(apiKey: string | null): Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 200 的响应体确实是这个协议的结果；否则地址背后是别的协议（比如只有 Chat Completions）。
   matches(body: unknown): boolean;
@@ -42,10 +43,7 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
     // Claude Code 把 ANTHROPIC_BASE_URL 拼上 /v1/messages。
     path: "/v1/messages",
     // 和 Claude Code 用 ANTHROPIC_AUTH_TOKEN 时一样只带 Bearer：只认 x-api-key 的网关 CLI 也用不了。
-    headers: (apiKey) => ({
-      authorization: `Bearer ${apiKey}`,
-      "anthropic-version": ANTHROPIC_VERSION,
-    }),
+    headers: (apiKey) => ({ ...bearerAuth(apiKey), "anthropic-version": ANTHROPIC_VERSION }),
     body: (modelId) => ({
       model: modelId,
       max_tokens: 1,
@@ -56,7 +54,7 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
   codex: {
     // base 已按 Codex 的规则以 /v1 结尾。
     path: "/responses",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    headers: bearerAuth,
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -69,7 +67,8 @@ const PROTOCOLS: Record<ApiEndpointProvider, ProtocolSpec> = {
 export async function testUpstreamConnection(input: {
   provider: ApiEndpointProvider;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   modelId: string;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;

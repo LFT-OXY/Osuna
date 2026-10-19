@@ -283,7 +283,7 @@ export interface ApiEndpointSaveInput {
   name: string;
   baseUrl?: string;
   baseUrls?: ApiEndpointBaseUrl[];
-  // undefined 或空白：更新时保留原 key。
+  // undefined 或空白：新建时不存 key，更新时保留原 key。
   apiKey?: string;
   models: ApiEndpointModel[];
   defaultModelId?: string;
@@ -329,7 +329,7 @@ export interface ApiEndpointStateInput {
 
 // 拉取模型和测试连接都要的上游地址与 key。
 export interface ApiEndpointUpstreamInput {
-  // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key。
+  // 编辑已保存的接口时带上；apiKey 留空就用它已保存的 key，这家也没存 key 时不带认证头。
   endpointId?: string;
   baseUrl: string;
   apiKey?: string;
@@ -964,13 +964,8 @@ export class ApiEndpointService {
       if (input.endpointId && !existing) {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
+      // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key。
       const apiKey = input.apiKey?.trim() ? input.apiKey.trim() : undefined;
-      if (!existing && !apiKey) {
-        throw new ApiEndpointRequestError({
-          code: "invalid_input",
-          message: "API key is required",
-        });
-      }
       const isLegacyForm = input.baseUrls === undefined;
       const fields = isLegacyForm
         ? validateLegacyFields(supported, input, existing)
@@ -1057,7 +1052,7 @@ export class ApiEndpointService {
         return { activeEndpointId: null };
       }
       const endpoint = findEndpoint(state, endpointId);
-      if (!endpoint || this.store.getApiKey(endpointId) === null) {
+      if (!endpoint) {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       if (endpoint.models.length === 0) {
@@ -2554,19 +2549,18 @@ export class ApiEndpointService {
     return outcome.results;
   }
 
-  /** 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。key 从不回给客户端。 */
-  private resolveRequestKey(input: ApiEndpointUpstreamInput): string {
+  /**
+   * 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。都没有为 null：不带认证头。
+   * key 从不回给客户端。
+   */
+  private resolveRequestKey(input: ApiEndpointUpstreamInput): string | null {
     const typed = input.apiKey?.trim();
     if (typed) return typed;
-    if (input.endpointId) {
-      const endpointId = input.endpointId;
-      if (!findEndpoint(this.readState(), endpointId)) {
-        throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
-      }
-      const saved = this.store.getApiKey(input.endpointId);
-      if (saved !== null) return saved;
+    if (!input.endpointId) return null;
+    if (!findEndpoint(this.readState(), input.endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
     }
-    throw new ApiEndpointRequestError({ code: "invalid_input", message: "API key is required" });
+    return this.store.getApiKey(input.endpointId);
   }
 
   resolveClaudeSettingsPath(): string {
@@ -3377,7 +3371,11 @@ function keptSearchesWeb(
   return requested ?? existing?.searchesWeb === true;
 }
 
-/** 标识、开关、创建时间与老表单的默认模型沿用已有的；新建时生成标识。 */
+/**
+ * 从已有的这家起步，只换掉这次保存给的字段：没给的保留原值，老客户端（含官方 Paseo 手机 App）
+ * 不认识的字段不会被它的保存清掉（上游清单、开关、别的格式的地址，以及以后加的字段）。
+ * 档位映射每次整份提交、省略即不映射；手动添加的模型与「自己能联网搜索」由下面按请求换算。新建时生成标识。
+ */
 function buildEndpoint(input: {
   state: ApiEndpointState;
   existing: StoredApiEndpoint | null;
@@ -3390,7 +3388,14 @@ function buildEndpoint(input: {
   const { state, existing, fields } = input;
   const legacyDefaultModelId = fields.legacyDefaultModelId ?? existing?.legacyDefaultModelId;
   const manualModels = fields.manualModels ?? existing?.manualModels;
+  const {
+    modelMapping: _resubmitted,
+    manualModels: _manualModels,
+    searchesWeb: _searchesWeb,
+    ...kept
+  } = existing ?? {};
   return {
+    ...kept,
     id: existing?.id ?? `ep_${randomUUID()}`,
     slug:
       existing?.slug ??
@@ -3398,8 +3403,6 @@ function buildEndpoint(input: {
     ...fields,
     enabled: existing?.enabled ?? input.enabledWhenNew,
     ...(legacyDefaultModelId ? { legacyDefaultModelId } : {}),
-    // 上游清单只由拉取模型改，保存时沿用。
-    ...(existing?.catalog ? { catalog: existing.catalog } : {}),
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
     ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
     createdAt: existing?.createdAt ?? input.timestamp,

@@ -244,6 +244,44 @@ test.describe("Settings API endpoints", () => {
     expect(postedPaths(relay)).toEqual([]);
   });
 
+  test("an endpoint saves without a key and sends none; a failed save stays in the form", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveAttribute(
+      "placeholder",
+      "Optional",
+    );
+    await page.getByTestId("api-endpoint-connection-name").fill("Local server");
+    await page
+      .getByTestId("api-endpoint-connection-url-openai_chat")
+      .fill(`${relay.origin}/free/v1`);
+    const save = page.getByTestId("api-endpoint-connection-save");
+    await expect(save).toBeEnabled();
+
+    await test.step("a failed save keeps the form and says why", async () => {
+      await save.click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Local server");
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("trying again saves it with no key, and its models are fetched without one", async () => {
+      host.failing = false;
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const list = await client.apiEndpointList("claude");
+      expect(list.endpoints).toMatchObject([{ name: "Local server", hasApiKey: false }]);
+      await expect(headerTitle(page)).toHaveText("Local server");
+      await expect.poll(countOf(relay.requests)).toBeGreaterThan(0);
+      expect(authorizationsSeen(relay)).toEqual(new Set([undefined]));
+    });
+  });
+
   test("the endpoint switch moves the row, and asks first when an agent would go back to official", async ({
     page,
   }) => {
@@ -2063,6 +2101,40 @@ async function failSearchesWebSave(page: Page): Promise<{ failing: boolean }> {
         message.includes("provider.api_endpoint.save.request") &&
         message.includes('"searchesWeb"');
       const request = isSearchSave
+        ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+        : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.save.response",
+            payload: {
+              requestId: request.requestId,
+              endpoint: null,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+/** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */
+async function failConnectionSave(page: Page): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isSave =
+        typeof message === "string" && message.includes("provider.api_endpoint.save.request");
+      const request = isSave
         ? (JSON.parse(message) as { message?: { requestId?: string } }).message
         : undefined;
       if (!host.failing || !request) {

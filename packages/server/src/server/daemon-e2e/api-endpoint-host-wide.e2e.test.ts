@@ -1,4 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import pino from "pino";
@@ -79,11 +81,16 @@ interface Harness {
 
 const tempRoots: string[] = [];
 const harnesses: Harness[] = [];
+const servers: Server[] = [];
 
 afterEach(async () => {
   for (const harness of harnesses.splice(0)) {
     await harness.client.close();
     await harness.daemon.close();
+  }
+  for (const server of servers.splice(0)) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -819,5 +826,204 @@ describe("Claude Code's WebSearch follows the endpoints that search the web by t
 
     const settings = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(settings.permissions.deny).toEqual(["WebSearch"]);
+  });
+});
+
+interface RecordingUpstream {
+  url: string;
+  requests: { method: string; url: string; headers: IncomingHttpHeaders }[];
+}
+
+/** 本机假上游，像不要 key 的本机模型服务：谁来都答，列模型给 local-1，对话回一句 ok。记下每个请求的头。 */
+async function startRecordingUpstream(): Promise<RecordingUpstream> {
+  const upstream: RecordingUpstream = { url: "", requests: [] };
+  const server = createServer((request, response) => {
+    request.resume();
+    request.on("end", () => {
+      upstream.requests.push({
+        method: request.method ?? "",
+        url: request.url ?? "",
+        headers: request.headers,
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      if (request.method === "GET") {
+        response.end(JSON.stringify({ data: [{ id: "local-1" }] }));
+        return;
+      }
+      response.end(
+        JSON.stringify({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+/** 这家拉一次模型、测一次连接，再扮演 Claude Code 经中转站问一句；返回上游收到的 key 头。 */
+async function askThroughEveryPath(input: {
+  harness: Harness;
+  upstream: RecordingUpstream;
+  endpointId: string;
+}): Promise<{ authorization?: string; "x-api-key"?: string | string[] }[]> {
+  const { harness, upstream, endpointId } = input;
+  const { client, daemon } = harness;
+  const fetched = await client.apiEndpointFetchModels({
+    provider: "claude",
+    endpointId,
+    baseUrl: upstream.url,
+    format: "anthropic_messages",
+  });
+  expect(fetched).toMatchObject({ error: null, models: [{ id: "local-1" }] });
+  const tested = await client.apiEndpointTestConnection({
+    provider: "claude",
+    endpointId,
+    baseUrl: upstream.url,
+    format: "anthropic_messages",
+    modelId: "local-1",
+  });
+  expect(tested).toMatchObject({ error: null, result: { ok: true } });
+
+  // 老客户端的切换也认这家：打开 Claude Code 的总开关，默认模型是它。
+  expect(await client.apiEndpointSetActive("claude", endpointId)).toMatchObject({ error: null });
+  const tokensPath = path.join(daemon.paseoHome, "api-endpoints", "gateway-tokens.json");
+  const token = JSON.parse(await readFile(tokensPath, "utf8")).tokens.claude as string;
+  const answered = await fetch(`http://127.0.0.1:${daemon.port}/api-endpoint-gateway/v1/messages`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "local-1",
+      max_tokens: 1,
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  });
+  expect(answered.status).toBe(200);
+
+  expect(upstream.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+    "GET /v1/models",
+    "POST /v1/messages",
+    "POST /v1/messages",
+  ]);
+  return upstream.requests.map(({ headers }) => ({
+    authorization: headers.authorization,
+    "x-api-key": headers["x-api-key"],
+  }));
+}
+
+describe("an API key is optional", () => {
+  test("an endpoint saved without a key keeps no key and no request to its upstream carries one", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    expect(harness.client.getLastServerInfoMessage()?.features?.apiEndpointManagement).toBe(true);
+    const saved = await harness.client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.hasApiKey).toBe(false);
+    const endpointId = saved.endpoint?.id ?? "";
+
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId });
+
+    expect(sent).toEqual([
+      { authorization: undefined, "x-api-key": undefined },
+      { authorization: undefined, "x-api-key": undefined },
+      { authorization: undefined, "x-api-key": undefined },
+    ]);
+    const keysPath = path.join(harness.daemon.paseoHome, "api-endpoints", "keys.json");
+    const keys = await readFile(keysPath, "utf8").catch(() => "{}");
+    expect(keys).not.toContain(endpointId);
+  });
+
+  test("an endpoint with a key still sends it, and an edit with a blank key keeps it", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const saved = await harness.client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      apiKey: "sk-relay",
+      models: [{ id: "local-1" }],
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    const edited = await harness.client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      apiKey: " ",
+      models: [{ id: "local-1" }],
+    });
+    expect(edited.error).toBeNull();
+    expect(edited.endpoint?.hasApiKey).toBe(true);
+
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId });
+
+    // Anthropic 地址两个头都带（ADR 0008）。
+    const both = { authorization: "Bearer sk-relay", "x-api-key": "sk-relay" };
+    expect(sent).toEqual([both, both, both]);
+  });
+
+  test("a save in the old shape keeps the fields that client does not know", async () => {
+    const upstream = await startRecordingUpstream();
+    const { client } = await start();
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      apiKey: "sk-relay",
+      models: [{ id: "local-1" }],
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.url,
+      format: "anthropic_messages",
+    });
+    await client.apiEndpointSetEndpointState({ endpointId, enabled: false });
+
+    // 官方 Paseo 手机 App 的保存：只有 baseUrl、defaultModelId 与模型。
+    const oldSave = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrl: upstream.url,
+      models: [{ id: "local-1" }],
+      defaultModelId: "local-1",
+    });
+
+    expect(oldSave.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === endpointId)).toMatchObject({
+      name: "Relay renamed",
+      hasApiKey: true,
+      enabled: false,
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      catalog: { models: [{ id: "local-1" }] },
+    });
   });
 });

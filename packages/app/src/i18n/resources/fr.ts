@@ -2548,6 +2548,7 @@ export const fr: TranslationResources = {
         namePlaceholder: "p. ex. Mon relais",
         apiKey: "Clé d'API",
         apiKeySavedPlaceholder: "Laissez vide pour garder la clé enregistrée",
+        apiKeyOptionalPlaceholder: "Facultatif",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
         address: "Adresse",
         addressHint:

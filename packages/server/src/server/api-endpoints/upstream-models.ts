@@ -11,6 +11,8 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  bearerAuth,
+  bothKeyAuth,
 } from "./upstream-http.js";
 
 /*
@@ -54,7 +56,8 @@ const MAX_PAGES = 20;
 export async function fetchUpstreamModels(input: {
   provider: ApiEndpointProvider;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
@@ -90,24 +93,26 @@ export async function fetchUpstreamModels(input: {
   return { ok: false, error: summarize(attempts, redact) };
 }
 
-function buildHeaders(provider: ApiEndpointProvider, apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    authorization: `Bearer ${apiKey}`,
-  };
+function buildHeaders(
+  provider: ApiEndpointProvider,
+  apiKey: string | null,
+): Record<string, string> {
   // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上。
   if (provider === "claude") {
-    headers["x-api-key"] = apiKey;
-    headers["anthropic-version"] = ANTHROPIC_VERSION;
+    return {
+      accept: "application/json",
+      ...bothKeyAuth(apiKey),
+      "anthropic-version": ANTHROPIC_VERSION,
+    };
   }
-  return headers;
+  return { accept: "application/json", ...bearerAuth(apiKey) };
 }
 
 async function listModels(input: {
   url: string;
   headers: Record<string, string>;
   signal: AbortSignal;
-  apiKey: string;
+  apiKey: string | null;
 }): Promise<Attempt> {
   const { url, headers, signal } = input;
   const models: ListedModel[] = [];

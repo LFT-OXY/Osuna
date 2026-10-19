@@ -102,7 +102,7 @@ export async function attemptTranslated(input: {
   wire: AgentWire;
   endpoint: StoredApiEndpoint;
   baseUrl: string;
-  apiKey: string;
+  apiKey: string | null;
   // Agent 说的格式与这次发给上游的格式。
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
@@ -163,7 +163,8 @@ export async function attemptTranslated(input: {
   const body = build();
   const keys = sends();
   let opened = await open(body, keys);
-  if (opened.kind === "failed") {
+  // 没 key 时没带认证头，401 与「两个头不能同时带」无关。
+  if (opened.kind === "failed" && apiKey !== null) {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
@@ -220,7 +221,7 @@ interface TranslatedAnswer {
   res: Response;
   wire: AgentWire;
   endpoint: StoredApiEndpoint;
-  apiKey: string;
+  apiKey: string | null;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
@@ -240,7 +241,7 @@ async function upstreamReplyOf(input: {
   opened: OpenedUpstream;
   to: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string;
+  apiKey: string | null;
 }): Promise<UpstreamReply | FailedAttempt> {
   const { response, held } = input.opened;
   if (isEventStream(response, held)) return { kind: "stream", response, held };
@@ -323,7 +324,7 @@ async function resumedFrom(input: {
   opening: UpstreamOpening;
   sent: string;
   url: URL;
-  apiKey: string;
+  apiKey: string | null;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
 }): Promise<AskedToGoOn> {
@@ -354,7 +355,7 @@ type UpstreamReply =
   | { kind: "whole"; body: unknown };
 
 function translatedHeaders(input: {
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
   to: ApiEndpointRequestFormat;
   userAgent: string;

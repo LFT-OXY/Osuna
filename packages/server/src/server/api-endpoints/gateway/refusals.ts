@@ -227,12 +227,14 @@ export function keyHeadersFor(input: {
   return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
 }
 
+/** 没 key 的接口（apiKey 为 null）一个认证头都不带。 */
 export function keyHeaderValues(input: {
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
 }): Record<string, string> {
   const { apiKey, keys } = input;
   const headers: Record<string, string> = {};
+  if (apiKey === null) return headers;
   if (keys !== "xApiKey") headers.authorization = `Bearer ${apiKey}`;
   if (keys !== "bearer") headers["x-api-key"] = apiKey;
   return headers;

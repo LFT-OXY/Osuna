@@ -121,7 +121,8 @@ export async function attemptEndpoint(input: {
   pathSuffix?: string;
   endpoint: StoredApiEndpoint;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
@@ -166,7 +167,8 @@ export async function attemptEndpoint(input: {
   const body = upstreamBody(input);
   const keys = sends();
   let opened = await open(body, keys);
-  if (opened.kind === "failed" && refusals) {
+  // 没 key 时没带认证头，401 与「两个头不能同时带」无关。
+  if (opened.kind === "failed" && refusals && apiKey !== null) {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
@@ -208,7 +210,7 @@ async function answerOpened(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   endpoint: StoredApiEndpoint;
-  apiKey: string;
+  apiKey: string | null;
   requestedModel: string;
   upstreamModel: string;
   url: URL;
@@ -279,7 +281,7 @@ async function wholeAsStream(input: {
   res: Response;
   format: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string;
+  apiKey: string | null;
   opened: OpenedUpstream;
   tidy: WholeArgsTidy | null;
   keepAlive?: AgentKeepAlive;
@@ -633,7 +635,7 @@ export function fitResponsesBody(text: string, model: string): string {
 
 function upstreamHeaders(input: {
   headers: IncomingHttpHeaders;
-  apiKey: string;
+  apiKey: string | null;
   keys: KeyHeaders;
   // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
   dropsReviewBeta: boolean;

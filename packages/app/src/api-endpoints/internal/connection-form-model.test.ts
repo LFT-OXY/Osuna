@@ -89,10 +89,14 @@ const SAVED_ENDPOINT: ApiEndpoint = {
   enabled: true,
 };
 
+// 主机没声明 apiEndpointManagement：key 必填，和以前一样。
+const KEY_REQUIRED = { isKeyOptional: false };
+const KEY_OPTIONAL = { isKeyOptional: true };
+
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
     const { deps } = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, deps);
+    const model = createConnectionFormModel({ mode: "create" }, deps, KEY_REQUIRED);
     expect(model.getState()).toMatchObject({ canDetect: false, canSubmit: false });
 
     model.setName("Relay");
@@ -104,7 +108,7 @@ describe("connection form: create", () => {
 
   it("fills the formats that answered, labels each one, and then can save", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey(" sk-1 ");
     model.setAddress("https://relay.example/");
@@ -151,7 +155,7 @@ describe("connection form: create", () => {
 
   it("marks the key as rejected when the upstream refused it, until the key changes", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey("sk-wrong");
     model.setAddress("https://relay.example");
@@ -180,7 +184,7 @@ describe("connection form: create", () => {
 
   it("keeps what the user typed for a format that was not detected, and drops that format's label on edit", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setAddress("https://relay.example");
@@ -205,7 +209,7 @@ describe("connection form: create", () => {
 
   it("refuses to save with an address that is not http, and shows a failed detection", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setUrl("openai_chat", "relay.example");
@@ -221,7 +225,7 @@ describe("connection form: create", () => {
 
   it("a cancelled or superseded detection changes nothing", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setAddress("https://relay.example");
@@ -238,7 +242,7 @@ describe("connection form: create", () => {
   it("keeps the form and shows why when saving fails", async () => {
     const fake = fakeDeps();
     fake.failSaveWith("Name is required");
-    const model = createConnectionFormModel({ mode: "create" }, fake.deps);
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_REQUIRED);
     model.setName("Relay");
     model.setApiKey("sk-1");
     model.setUrl("openai_chat", "https://relay.example/v1");
@@ -251,7 +255,11 @@ describe("connection form: create", () => {
 describe("connection form: edit", () => {
   it("starts from the saved connection with an empty key that keeps the saved one", async () => {
     const fake = fakeDeps();
-    const model = createConnectionFormModel({ mode: "edit", endpoint: SAVED_ENDPOINT }, fake.deps);
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_REQUIRED,
+    );
     const state = model.getState();
     expect(state).toMatchObject({
       name: "Relay",
@@ -290,5 +298,61 @@ describe("connection form: edit", () => {
         modelMapping: { opus: "glm-4.6" },
       },
     ]);
+  });
+});
+
+describe("connection form: the key is optional when the host says so", () => {
+  it("detects and saves without a key, and sends none", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel({ mode: "create" }, fake.deps, KEY_OPTIONAL);
+    expect(model.getState()).toMatchObject({ isKeyOptional: true, canDetect: false });
+
+    model.setName("Ollama");
+    model.setAddress("http://127.0.0.1:11434");
+    expect(model.getState()).toMatchObject({ canDetect: true, canSubmit: false });
+    model.detect();
+    expect(fake.detects[0]?.request).toEqual({ baseUrl: "http://127.0.0.1:11434" });
+    fake.answerDetect({
+      status: "done",
+      results: [detection("openai_chat", "http://127.0.0.1:11434/v1", "ok")],
+    });
+    await flush();
+    expect(model.getState().canSubmit).toBe(true);
+
+    await model.submit();
+    expect(fake.saves).toEqual([
+      {
+        name: "Ollama",
+        baseUrls: [{ format: "openai_chat", url: "http://127.0.0.1:11434/v1" }],
+        models: [],
+      },
+    ]);
+  });
+
+  it("an endpoint saved without a key can be edited and saved without one", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, hasApiKey: false } },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({ hasSavedKey: false, canSubmit: true });
+
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("apiKey");
+  });
+
+  it("an old host still needs a key", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, hasApiKey: false } },
+      deps,
+      KEY_REQUIRED,
+    );
+    expect(model.getState()).toMatchObject({
+      isKeyOptional: false,
+      canDetect: false,
+      canSubmit: false,
+    });
   });
 });

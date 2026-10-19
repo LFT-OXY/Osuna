@@ -2531,6 +2531,7 @@ export const ru: TranslationResources = {
         namePlaceholder: "например, Мой ретранслятор",
         apiKey: "API-ключ",
         apiKeySavedPlaceholder: "Оставьте пустым, чтобы сохранить прежний ключ",
+        apiKeyOptionalPlaceholder: "Необязательно",
         keyRejected: "Сервер отклонил этот ключ (401 / 403)",
         address: "Адрес",
         addressHint:

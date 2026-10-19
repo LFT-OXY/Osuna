@@ -14,6 +14,8 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  bearerAuth,
+  bothKeyAuth,
 } from "./upstream-http.js";
 
 /*
@@ -29,7 +31,7 @@ export type DetectOutcome =
 interface FormatProbe {
   // 接在这种格式的地址后面。
   path: string;
-  headers(apiKey: string): Record<string, string>;
+  headers(apiKey: string | null): Record<string, string>;
   body(modelId: string): Record<string, unknown>;
   // 2xx 的响应体确实是这种格式的结果；否则地址背后是别的东西。
   matches(body: unknown): boolean;
@@ -39,11 +41,7 @@ interface FormatProbe {
 const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   anthropic_messages: {
     path: "/v1/messages",
-    headers: (apiKey) => ({
-      authorization: `Bearer ${apiKey}`,
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-    }),
+    headers: (apiKey) => ({ ...bothKeyAuth(apiKey), "anthropic-version": ANTHROPIC_VERSION }),
     body: (modelId) => ({
       model: modelId,
       max_tokens: 16,
@@ -53,7 +51,7 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_chat: {
     path: "/chat/completions",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    headers: bearerAuth,
     body: (modelId) => ({
       model: modelId,
       messages: [{ role: "user", content: "hi" }],
@@ -63,7 +61,7 @@ const FORMAT_PROBES: Record<ApiEndpointRequestFormat, FormatProbe> = {
   },
   openai_responses: {
     path: "/responses",
-    headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+    headers: bearerAuth,
     // 不带 max_output_tokens：Codex 自己不发它，有的中转站会拒绝这个参数。
     body: (modelId) => ({
       model: modelId,
@@ -92,7 +90,8 @@ export function suggestedBaseUrls(baseUrl: string): Record<ApiEndpointRequestFor
 
 export async function detectUpstreamFormats(input: {
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   modelsTimeoutMs: number;
@@ -149,7 +148,8 @@ export async function detectUpstreamFormats(input: {
 export async function probeUpstreamFormat(input: {
   format: ApiEndpointRequestFormat;
   baseUrl: string;
-  apiKey: string;
+  // 没 key 的接口为 null，不带认证头。
+  apiKey: string | null;
   modelId: string | null;
   signal: AbortSignal;
   timeoutMs: number;
