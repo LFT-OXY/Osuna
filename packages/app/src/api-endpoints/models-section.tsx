@@ -108,9 +108,9 @@ export function ApiEndpointModelsSection({
 
   const trailing = useMemo(
     () => (
-      <View style={styles.trailing}>
+      <View style={isCompact ? styles.trailingCompact : styles.trailing}>
         {fetchedAt ? (
-          <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+          <Text variant="caption" color="foregroundMuted" numberOfLines={isCompact ? undefined : 1}>
             {t("settings.apiEndpoints.models.fetchedAt", {
               time: formatTimeAgo(new Date(fetchedAt), now),
             })}
@@ -140,7 +140,7 @@ export function ApiEndpointModelsSection({
         </Button>
       </View>
     ),
-    [fetchedAt, isFetching, now, onFetch, openAdd, t],
+    [fetchedAt, isCompact, isFetching, now, onFetch, openAdd, t],
   );
 
   let body: React.ReactNode;
@@ -503,6 +503,15 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+    flexShrink: 1,
+  },
+  // 窄窗口：放不下就换行，不截断「拉取于 …」。
+  trailingCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    columnGap: theme.spacing[2],
     flexShrink: 1,
   },
   searchRow: {

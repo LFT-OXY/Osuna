@@ -2,7 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -308,22 +308,17 @@ function ChangedFile({ file }: { file: SwitchOffFileView }) {
         ? file.foldedLines.map((line) => <ChangedLine key={line.position} line={line} />)
         : null}
       {showsMoreButton ? (
-        // 与上面各行的文字同一起点：左边留出 −/↺ 那一栏。
-        <View style={styles.line}>
-          <View style={styles.symbol} />
-          <Pressable
-            accessibilityRole="button"
-            onPress={unfold}
-            style={styles.more}
-            testID="switch-off-more-lines"
-          >
-            <Text variant="caption" color="foregroundMuted">
-              {t("settings.apiEndpoints.agent.switchOffPreview.moreLines", {
-                count: file.foldedLines.length,
-              })}
-            </Text>
-          </Pressable>
-        </View>
+        <Button
+          variant="ghost"
+          size="xs"
+          onPress={unfold}
+          style={styles.more}
+          testID="switch-off-more-lines"
+        >
+          {t("settings.apiEndpoints.agent.switchOffPreview.moreLines", {
+            count: file.foldedLines.length,
+          })}
+        </Button>
       ) : null}
     </View>
   );
@@ -488,8 +483,10 @@ const styles = StyleSheet.create((theme) => ({
   removedText: {
     textDecorationLine: "line-through",
   },
+  // 按钮文字与上面各行的文字同一起点：−/↺ 那一栏加间距，减去按钮自己的内边距与边框。
   more: {
-    paddingVertical: theme.spacing[1],
+    alignSelf: "flex-start",
+    marginLeft: theme.spacing[3] + theme.spacing[2] - theme.spacing[3] - theme.borderWidth[1],
   },
   actions: {
     flex: 1,

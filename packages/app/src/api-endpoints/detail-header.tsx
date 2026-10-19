@@ -16,6 +16,7 @@ import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger"
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { endpointRowStatus, endpointSummary, type EndpointRowStatus } from "./internal/host-list";
 
@@ -77,32 +78,45 @@ export function ApiEndpointDetailHeader({
     [endpoint, onToggle],
   );
   const handleResume = useCallback(() => onResume(endpoint), [endpoint, onResume]);
+  // 窄窗口里名称、状态与右侧的开关和按钮放不进一行：开关与按钮换到下一行，名称和说明不截断。
+  const isCompact = useIsCompactFormFactor();
+  const textLines = isCompact ? undefined : 1;
 
   return (
-    <View style={styles.header} testID="api-endpoint-detail-header">
-      <View style={[styles.avatar, !enabled && styles.avatarOff]}>
-        <Text variant="title-sm">{initialOf(endpoint.name)}</Text>
-      </View>
-      <View style={styles.text}>
-        <Text variant="title-sm" numberOfLines={1}>
-          {endpoint.name}
-        </Text>
-        <View style={styles.meta}>
-          <StatusBadge label={statusLabel(status, t)} variant={BADGE_VARIANTS[status.tone]} />
-          {status.kind === "cooling" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={handleResume}
-              loading={isPending}
-              testID="api-endpoint-detail-resume"
-            >
-              {t("settings.apiEndpoints.resumeNow")}
-            </Button>
-          ) : null}
-          <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
-            {meta}
+    <View
+      style={isCompact ? styles.headerCompact : styles.header}
+      testID="api-endpoint-detail-header"
+    >
+      <View style={styles.identity}>
+        <View style={[styles.avatar, !enabled && styles.avatarOff]}>
+          <Text variant="title-sm">{initialOf(endpoint.name)}</Text>
+        </View>
+        <View style={styles.text}>
+          <Text variant="title-sm" numberOfLines={textLines}>
+            {endpoint.name}
           </Text>
+          <View style={styles.meta}>
+            <StatusBadge label={statusLabel(status, t)} variant={BADGE_VARIANTS[status.tone]} />
+            {status.kind === "cooling" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={handleResume}
+                loading={isPending}
+                testID="api-endpoint-detail-resume"
+              >
+                {t("settings.apiEndpoints.resumeNow")}
+              </Button>
+            ) : null}
+            <Text
+              variant="caption"
+              color="foregroundMuted"
+              numberOfLines={textLines}
+              style={styles.metaText}
+            >
+              {meta}
+            </Text>
+          </View>
         </View>
       </View>
       <View style={styles.actions}>
@@ -217,6 +231,17 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 40,
     marginBottom: theme.spacing[6],
   },
+  headerCompact: {
+    gap: theme.spacing[3],
+    marginBottom: theme.spacing[6],
+  },
+  identity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
   avatar: {
     width: 40,
     height: 40,
@@ -236,8 +261,13 @@ const styles = StyleSheet.create((theme) => ({
   meta: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: theme.spacing[2],
     marginTop: theme.spacing[0.5],
+  },
+  metaText: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   actions: {
     flexDirection: "row",

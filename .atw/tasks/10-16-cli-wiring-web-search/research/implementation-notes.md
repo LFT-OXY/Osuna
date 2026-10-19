@@ -884,15 +884,15 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 修掉的不一致（审查后第二轮）
 
-7. `useShownActiveIndex` 的入参与返回值有了名字；「方向键挪过」在关上时清掉，不用 effect。
+7. `useShownActiveIndex` 的入参与返回值有了名字；「方向键挪过」在关上时清掉，不用 effect（第三轮起在渲染时比对上一次的 `isOpen`，外面经受控的 `open` 关上也清掉）。
 8. 窄窗口的菜单抽屉（会话历史行菜单等）：标题与选项文字从 12 挪到 24，与其余抽屉同一条线；菜单行的缩进做成 `menu-geometry.ts` 的常量，菜单行、Combobox 选项行与两种抽屉的内边距都从它算。
-9. 窄窗口对话里，思考档位抽屉叠在 Agent controls 抽屉上能看到两个把手与两个标题：思考档位抽屉改用与它同样的高度档（`AGENT_CONTROLS_SHEET_SNAP_POINTS`），完全盖住下面那张。Combobox 加 `mobileSnapPoints`。模式与功能选择的抽屉仍照旧叠放，本票没动。
-10. 关开关确认框：「还有 N 行」与上面各行文字同一起点（不再是带内边距的按钮）；每行在键之后分成两段，窄窗口里值整段换到下一行、不在模型名中间断开，比整行还长时截断；滚到底时最后一行在按钮条上面完整露出（截图 `*_claude-scrolled-to-end_*` 为证）。
-11. 「还有运行中的 … 在用改之前的设置」从 info Alert 改成设置卡片里的一行（标题、说明、「知道了」），提示区里同时有问题时一个区域只放一个 Alert（design.md §11 States）。多个问题同时出现时仍各是一个 Alert：每条都有自己的处理按钮，合并会改交互，本票没动。
+9. 窄窗口对话里，思考档位抽屉叠在 Agent controls 抽屉上能看到两个把手与两个标题：思考档位抽屉改用与它同样的高度档（`AGENT_CONTROLS_SHEET_SNAP_POINTS`），完全盖住下面那张。Combobox 加 `mobileSnapPoints`。第三轮起模式与功能选择的抽屉也用同一个高度档。
+10. 关开关确认框：「还有 N 行」与上面各行文字同一起点（第三轮起是 `<Button variant="ghost" size="xs">`，用外边距抵掉按钮自己的内边距，不用 Pressable 包 Text，design.md §4、§14）；每行在键之后分成两段，窄窗口里值整段换到下一行、不在模型名中间断开，比整行还长时截断；滚到底时最后一行在按钮条上面完整露出（截图 `*_claude-scrolled-to-end_*` 为证）。
+11. 「还有运行中的 … 在用改之前的设置」从 info Alert 改成设置卡片里的一行（标题、说明、「知道了」），提示区里同时有问题时一个区域只放一个 Alert（design.md §11 States）。第三轮（用户决定）：同一个提供方的所有问题与处理失败合成一个 Alert，每条是其中一节（标题用这一节的状态色、说明、自己的按钮与「如何修复」），Alert 取最重的一条（有处理失败就是 error，否则 warning）；文案、按钮与各节的 testID 不变。`Alert` 没有标题、说明是一整块内容时，图标对齐第一行。
 12. 第三方接口、会话历史两段文案里的 ASCII `...` 统一为 `…`（9 种语言，共 73 处）。确认框标题的问号核对过是全角「？」，「挪动对话…」也已是 `…`，截图里看着像半角是字体的样子。
 13. 资源测试的术语守卫补上「使用第三方接口」「默认模型」。
 14. `SelectField.desktopPlacement` 没有调用方了，删掉；`.atw/spec/server/backend/persistence.md` 里相应那句一并删掉。
-15. 接口详情页窄窗口：两栏会把家族名与模型名截短，改为家族在上面一行可横滑的标签、模型在下面占满宽。
+15. 接口详情页窄窗口：两栏会把家族名与模型名截短，改为家族在上面一行可横滑的标签、模型在下面占满宽。第三轮：头部的开关与按钮换到名称下面一行，名称与「格式 · 已选数」不再截断；「模型」小节头的「拉取于 …」放不下时换行。
 
 ### 核对过、没改的
 
@@ -908,6 +908,6 @@ Osuna 照 magpie 的 ChatGPT 接法把它换成中转站地址（不换，Codex 
 
 ### 截图
 
-- 浏览器 Web（无头 Chromium、假 Claude / Codex 命令行、主目录下的临时 CLI 目录，拍完删掉）：`screenshots/29-*`，16 种状态 × 浅 / 深 × 1280 / 390。
+- 浏览器 Web（无头 Chromium、假 Claude / Codex 命令行、主目录下的临时 CLI 目录，拍完删掉）：`screenshots/29-*`，16 种状态 × 浅 / 深 × 1280 / 390，外加窄窗口的模式抽屉（`29-chat-mode-sheet_open_*`）；Claude 页那张同时有「发的是 claude.ai 登录」与「模型被换掉」两节，看合起来的 Alert。
 - Electron（dev 桌面端 127.0.0.1:6769，`env -u PASEO_HOME` 并清掉 `CLAUDE_CODE_*` 等会话变量，`CLAUDE_CONFIG_DIR` / `CODEX_HOME` / 托管设置指到 `/tmp/osuna-t29-electron`，`.dev/paseo-home/config.json` 备份后把 claude、codex 换成假命令行，拍完还原；`api-endpoints/` 与 `projects/` 也先备份、拍完放回）：`screenshots/29-electron-*`。System Events 没有辅助功能权限、改不了窗口大小，宽高用 CDP 的设备尺寸覆盖。
 - 真实 `~/.claude`、`~/.codex` 顶层的修改时间前后各记一次：`screenshots/29-electron-mtimes-{before,after}.txt`。`settings.json`、`config.toml`、`auth.json` 不变；有变化的只是本机正在用的 Claude Code 与 Codex 会话自己写的东西（sessions、backups、projects、sqlite 日志与状态库、models_cache.json）。

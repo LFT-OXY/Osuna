@@ -606,6 +606,7 @@ function applyMeasuredAnchor(setters: MeasuredAnchorSetters, x: number, y: numbe
 }
 
 interface ShownActiveIndexInput {
+  isOpen: boolean;
   activeIndex: number;
   normalizedSearch: string;
 }
@@ -615,8 +616,6 @@ interface ShownActiveIndex {
   shownActiveIndex: number;
   /** 方向键挪过之后调用。 */
   showActiveRow: () => void;
-  /** 关上时调用，下次打开从不画底色开始。 */
-  hideActiveRow: () => void;
 }
 
 /**
@@ -624,15 +623,20 @@ interface ShownActiveIndex {
  * 选中行只靠勾（docs/menus.md「Item states」）。
  */
 function useShownActiveIndex(input: ShownActiveIndexInput): ShownActiveIndex {
-  const { activeIndex, normalizedSearch } = input;
+  const { isOpen, activeIndex, normalizedSearch } = input;
   const [hasKeyboardMovedActiveRow, setHasKeyboardMovedActiveRow] = useState(false);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  // 不论是自己关上（选中、Escape、点外面）还是外面经受控的 open 关上，下次打开都从不画底色开始。
+  // 在渲染时比对上一次的 isOpen（React「根据上一次渲染调整 state」的写法），不用 effect。
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (!isOpen) setHasKeyboardMovedActiveRow(false);
+  }
   const showActiveRow = useCallback(() => setHasKeyboardMovedActiveRow(true), []);
-  const hideActiveRow = useCallback(() => setHasKeyboardMovedActiveRow(false), []);
   const isActiveRowShown = hasKeyboardMovedActiveRow || normalizedSearch !== "";
   return {
     shownActiveIndex: isActiveRowShown ? activeIndex : -1,
     showActiveRow,
-    hideActiveRow,
   };
 }
 
@@ -1380,7 +1384,8 @@ export function Combobox({
   );
 
   const normalizedSearch = searchable ? searchQuery.trim().toLowerCase() : "";
-  const { shownActiveIndex, showActiveRow, hideActiveRow } = useShownActiveIndex({
+  const { shownActiveIndex, showActiveRow } = useShownActiveIndex({
+    isOpen,
     activeIndex,
     normalizedSearch,
   });
@@ -1389,8 +1394,7 @@ export function Combobox({
     setOpen(false);
     setSearchQueryWithCallback("");
     bumpSearchResetKey();
-    hideActiveRow();
-  }, [hideActiveRow, setOpen, setSearchQueryWithCallback]);
+  }, [setOpen, setSearchQueryWithCallback]);
 
   useResetSearchOnOpen(isOpen, setSearchQueryWithCallback, bumpSearchResetKey);
 

@@ -68,6 +68,7 @@ import {
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { isNative } from "@/constants/platform";
 import {
+  AGENT_CONTROLS_SHEET_SNAP_POINTS,
   resolveComposerControlDensity,
   resolveComposerControlPresentation,
   resolveComposerSeparators,
@@ -1459,6 +1460,7 @@ function SheetFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           presentation="push"
+          mobileSnapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
           searchable={false}
           header={sheetHeader}
         />
@@ -1492,6 +1494,7 @@ function SheetFeatureItem({
           onOpenChange={handleFeatureOpenChange}
           anchorRef={featureAnchorRef}
           presentation="push"
+          mobileSnapPoints={AGENT_CONTROLS_SHEET_SNAP_POINTS}
           searchable={comboboxOptions.length > 6}
           header={sheetHeader}
         />

@@ -27,6 +27,7 @@ import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import type { AgentMode } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import { getAgentModeIcon, getAgentModeOptionIcon } from "@/agent-controls/icons";
+import { AGENT_CONTROLS_SHEET_SNAP_POINTS } from "@/composer/agent-controls/layout";
 interface ModeComboboxOptionProps {
   option: ComboboxOption;
   selected: boolean;
@@ -209,6 +210,8 @@ export function AgentModeControl({
         searchable={false}
         header={sheetHeader}
         renderOption={renderOption}
+        // 从 Agent controls 抽屉里叠上来时与它同高，完全盖住它。
+        mobileSnapPoints={surface === "sheet" ? AGENT_CONTROLS_SHEET_SNAP_POINTS : undefined}
       />
     </>
   );

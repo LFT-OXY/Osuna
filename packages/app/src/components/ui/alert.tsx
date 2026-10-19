@@ -59,8 +59,20 @@ export function Alert({
     () => [styles.description, resolveSizeStyles(size).text],
     [size],
   );
-  const leadStyle = useMemo(() => [styles.lead, resolveSizeStyles(size).lead], [size]);
-  const iconSlotStyle = useMemo(() => [styles.iconSlot, resolveSizeStyles(size).iconSlot], [size]);
+  // 没有标题、说明是一整块内容时（几节合在一起），图标对齐第一行，不在整块中间。
+  const isBlockLead = !title && description != null && typeof description !== "string";
+  const leadStyle = useMemo(
+    () => [styles.lead, resolveSizeStyles(size).lead, isBlockLead && styles.leadTop],
+    [isBlockLead, size],
+  );
+  const iconSlotStyle = useMemo(
+    () => [
+      styles.iconSlot,
+      resolveSizeStyles(size).iconSlot,
+      isBlockLead && styles.iconSlotFirstLine,
+    ],
+    [isBlockLead, size],
+  );
 
   const resolvedIcon = useMemo(() => {
     if (variant === "default") return null;
@@ -163,6 +175,14 @@ const styles = StyleSheet.create((theme) => {
     },
     iconSlot: {
       alignItems: "center",
+    },
+    leadTop: {
+      alignItems: "flex-start",
+    },
+    // 一行正文的高度：图标落在第一行的正中。
+    iconSlotFirstLine: {
+      height: theme.typeScale.body.lineHeight,
+      justifyContent: "center",
     },
     leadText: {
       flex: 1,

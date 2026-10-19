@@ -73,28 +73,67 @@ export function AgentIssuesArea({
   );
   const isReopenSeen = seenReopen === reopenSignatureNow;
   const shownReopen = isReopenSeen ? null : reopenCopy;
-  const isEmpty = issues.length === 0 && actionError === null && shownReopen === null;
+  const hasAlert = issues.length > 0 || actionError !== null;
+  const sections = useMemo(
+    () => (
+      <View style={styles.sections}>
+        {issues.map((issue) => (
+          <IssueSection
+            // 每个 Agent 同一种情况至多一条；认不出的按原文区分。
+            key={issue.kind === "unknown" ? issue.message : issue.kind}
+            providerLabel={providerLabel}
+            issue={issue}
+            pendingAction={pendingAction}
+            onAction={onAction}
+          />
+        ))}
+        {actionError ? (
+          <ActionErrorSection
+            providerLabel={providerLabel}
+            error={actionError}
+            onDismiss={onDismissError}
+          />
+        ) : null}
+      </View>
+    ),
+    [actionError, issues, onAction, onDismissError, pendingAction, providerLabel],
+  );
+  const isEmpty = !hasAlert && shownReopen === null;
   if (isEmpty) return null;
+  // 一个区域只放一个 Alert（design.md §11 States）：所有问题与处理失败合成一块，每条是其中一节；
+  // 颜色取最重的一条：有处理失败就是 error，否则是 warning。
+  const variant = actionError === null ? "warning" : "error";
   return (
     <View style={styles.area} testID="agent-api-endpoints-issues">
-      {issues.map((issue) => (
-        <IssueBlock
-          // 每个 Agent 同一种情况至多一条；认不出的按原文区分。
-          key={issue.kind === "unknown" ? issue.message : issue.kind}
-          providerLabel={providerLabel}
-          issue={issue}
-          pendingAction={pendingAction}
-          onAction={onAction}
-        />
-      ))}
+      {hasAlert ? <Alert variant={variant} size="sm" description={sections} /> : null}
       {shownReopen ? <ReopenBlock copy={shownReopen} onDismiss={dismissReopen} /> : null}
-      {actionError ? (
-        <ActionErrorBlock
-          providerLabel={providerLabel}
-          error={actionError}
-          onDismiss={onDismissError}
-        />
-      ) : null}
+    </View>
+  );
+}
+
+type SectionTone = "warning" | "error";
+
+/** 合起来的 Alert 里的一节：标题用这一节自己的状态色，说明与 Alert 的说明同字号同色。 */
+function IssueSectionFrame({
+  tone,
+  title,
+  description,
+  children,
+  testID,
+}: {
+  tone: SectionTone;
+  title: string;
+  description?: string;
+  children?: React.ReactNode;
+  testID: string;
+}) {
+  return (
+    <View style={styles.section} testID={testID}>
+      <Text style={tone === "error" ? styles.sectionTitleError : styles.sectionTitleWarning}>
+        {title}
+      </Text>
+      {description ? <Text style={styles.sectionText}>{description}</Text> : null}
+      {children}
     </View>
   );
 }
@@ -109,7 +148,7 @@ export function AgentIssuesUpdateHost({ providerLabel }: { providerLabel: string
   );
 }
 
-function IssueBlock({
+function IssueSection({
   providerLabel,
   issue,
   pendingAction,
@@ -127,9 +166,8 @@ function IssueBlock({
   const hasButtons = steps !== undefined || issue.actions.length > 0;
   const isStepsShown = steps !== undefined && isFixOpen;
   return (
-    <Alert
-      variant="warning"
-      size="sm"
+    <IssueSectionFrame
+      tone="warning"
       title={title}
       description={description}
       testID={`agent-api-endpoints-issue-${issue.kind}`}
@@ -153,7 +191,7 @@ function IssueBlock({
           </View>
         </View>
       ) : null}
-    </Alert>
+    </IssueSectionFrame>
   );
 }
 
@@ -329,7 +367,7 @@ function IssueActionButton({
   );
 }
 
-function ActionErrorBlock({
+function ActionErrorSection({
   providerLabel,
   error,
   onDismiss,
@@ -340,9 +378,8 @@ function ActionErrorBlock({
 }) {
   const { t } = useTranslation();
   return (
-    <Alert
-      variant="error"
-      size="sm"
+    <IssueSectionFrame
+      tone="error"
       title={t("settings.apiEndpoints.agent.issues.actionFailed", {
         action: t(ACTION_LABEL_KEYS[error.action]),
         agent: providerLabel,
@@ -350,10 +387,12 @@ function ActionErrorBlock({
       description={error.message}
       testID="agent-api-endpoints-issue-error"
     >
-      <Button variant="outline" size="sm" onPress={onDismiss}>
-        {t("common.actions.dismiss")}
-      </Button>
-    </Alert>
+      <View style={styles.fix}>
+        <Button variant="outline" size="sm" onPress={onDismiss}>
+          {t("common.actions.dismiss")}
+        </Button>
+      </View>
+    </IssueSectionFrame>
   );
 }
 
@@ -634,6 +673,27 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     marginBottom: theme.spacing[3],
   },
+  sections: {
+    gap: theme.spacing[4],
+  },
+  section: {
+    gap: theme.spacing[1],
+  },
+  // 与 Alert 标题同字号（sm 是 14）、同字重；颜色是这一节的状态色。
+  sectionTitleWarning: {
+    ...theme.typeScale.body,
+    color: theme.colors.statusWarning,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sectionTitleError: {
+    ...theme.typeScale.body,
+    color: theme.colors.destructive,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sectionText: {
+    ...theme.typeScale.body,
+    color: theme.colors.foregroundMuted,
+  },
   actions: {
     flex: 1,
     flexDirection: "row",
@@ -648,8 +708,8 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   fix: {
-    flex: 1,
     gap: theme.spacing[3],
+    marginTop: theme.spacing[2],
   },
   fixList: {
     gap: theme.spacing[2],
