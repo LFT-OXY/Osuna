@@ -21,6 +21,10 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * 切换只保留 key（照 magpie：切区域保留名称，切站点连名称一起换）。编辑从模板加的接口时同样能切区域或套餐。
  * 要填用户自己资源地址的模板（Azure OpenAI，endpointExample）没有地址：表单只要一个资源地址，原样当 Chat 与
  * Responses 的地址保存，daemon 把它放到资源的 v1 API 上（照 magpie 编辑窗口的 Endpoint 框）。
+ * 本机服务的模板（分组 local）只要一个服务地址：改它只换各格式地址的协议、主机、端口，路径不变；留空或没改就用原来的地址
+ * （照 magpie local_address.go 与编辑窗口的 Address 框）。
+ * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，或本机一张图片——先经 storeIcon
+ * 存到主机上，保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
  */
 
 export type ConnectionFormSeed =
@@ -36,6 +40,19 @@ export type ConnectionSaveRequest = Omit<ApiEndpointSaveRequest, "type" | "reque
 export type ConnectionSaveResult =
   | { status: "saved"; endpointId: string }
   | { status: "failed"; message: string };
+
+export type ConnectionStoreIconResult =
+  | { status: "stored"; icon: string }
+  | { status: "failed"; code: string; message: string };
+
+// 选图片失败：code 是 daemon 的错误码（icon_too_large 与 icon_not_image 由界面按语言说明），别的照 message 显示。
+export interface ConnectionIconError {
+  code: string;
+  message: string;
+}
+
+/** 主机最多存这么大的图片（daemon endpoint-icons.ts 的 MAX_ICON_BYTES）；更大的不发过去。 */
+export const MAX_ICON_BYTES = 1 << 20;
 
 export type ConnectionRevealKeyResult =
   | { status: "revealed"; apiKey: string | null }
@@ -64,6 +81,8 @@ export interface ConnectionFormOptions {
   isKeyOptional: boolean;
   // 同上：key 框旁有「显示」，能读回已存的 key。
   canRevealKey: boolean;
+  // 同上：「自定义」加的接口能选图标。
+  canPickIcon: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -74,6 +93,10 @@ export interface ConnectionTemplateState {
   name: string;
   note: string | null;
   keyHint: string | null;
+  // 不填 key 也能用（本机服务、免费模型）。
+  keyOptional: boolean;
+  // 本机服务：表单只要一个服务地址，不列各格式地址。
+  asksServiceAddress: boolean;
   // daemon 给的字符串：region（区域）或 plan（套餐）。
   regionLabel: string;
   regions: { id: string; name: string }[] | null;
@@ -110,6 +133,14 @@ export interface ConnectionFormState {
   addressInvalid: boolean;
   // 资源地址（template.endpointExample 不为 null 时才用）：就是 Chat 与 Responses 的地址。
   endpoint: string;
+  // 服务地址（template.asksServiceAddress 时才用）与它是不是一个地址。
+  serviceAddress: string;
+  serviceAddressInvalid: boolean;
+  // 「自定义」加的接口才能选图标；icon 是选的内置图标名或存下的图片（`file:`），没选为 null。
+  canPickIcon: boolean;
+  icon: string | null;
+  isStoringIcon: boolean;
+  iconError: ConnectionIconError | null;
   formats: ConnectionFormatField[];
   // 自动检测改写了地址栏时加一，输入框据此换成新值。
   urlGeneration: number;
@@ -130,6 +161,7 @@ export interface ConnectionFormDeps {
     signal: AbortSignal,
   ) => Promise<ConnectionDetectResult>;
   revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
+  storeIcon: (bytes: Uint8Array) => Promise<ConnectionStoreIconResult>;
 }
 
 export interface ConnectionFormModel {
@@ -147,6 +179,12 @@ export interface ConnectionFormModel {
   // 填自己资源地址的模板：Chat 与 Responses 都用它。
   setEndpoint(value: string): void;
   setUrl(format: ApiEndpointRequestFormat, value: string): void;
+  // 本机服务的地址：不写协议按 http，带上的路径不算。
+  setServiceAddress(value: string): void;
+  // 选内置图标；null 是「默认」（按名称首字）。
+  setIcon(icon: string | null): void;
+  // 选本机一张图片：先存到主机上，成了才换图标。
+  pickIconImage(bytes: Uint8Array): void;
   detect(): void;
   cancelDetect(): void;
   submit(): Promise<ConnectionSaveResult | null>;
@@ -175,6 +213,10 @@ interface Values {
   labels: Labels;
   detecting: boolean;
   detectError: string | null;
+  serviceAddress: string;
+  icon: string | null;
+  isStoringIcon: boolean;
+  iconError: ConnectionIconError | null;
   submitting: boolean;
   submitError: string | null;
 }
@@ -186,7 +228,7 @@ export function createConnectionFormModel(
   deps: ConnectionFormDeps,
   options: ConnectionFormOptions,
 ): ConnectionFormModel {
-  const { isKeyOptional, canRevealKey, templates } = options;
+  const { isKeyOptional, canRevealKey, canPickIcon, templates } = options;
   const listeners = new Set<() => void>();
   // 编辑的这家，或复制的原来那家：没打 key 时检测、保存都用它已存的 key。
   const keyOwner = keyOwnerOf(seed);
@@ -201,6 +243,9 @@ export function createConnectionFormModel(
     template: seededTemplate,
     region: seededRegion,
   });
+  // 服务地址从开表单时的地址起步，改了才挪这些地址（照 magpie addressFrom / addressWas）。
+  const serviceAddressWas = originOf(seededUrls);
+  const seededIcon = keyOwner?.icon ?? null;
   let values: Values = {
     template: seededTemplate,
     regionId: seededRegion?.id ?? null,
@@ -219,10 +264,16 @@ export function createConnectionFormModel(
     labels: {},
     detecting: false,
     detectError: null,
+    serviceAddress: serviceAddressWas,
+    icon: seededIcon,
+    isStoringIcon: false,
+    iconError: null,
     submitting: false,
     submitError: null,
   };
   let state = derive(values);
+  // 当前这次存图片；再选一次或关掉表单后，旧请求晚到的结果不再生效。
+  let pendingIconImage: Uint8Array | null = null;
 
   function derive(next: Values): ConnectionFormState {
     const hasKey = isKeyOptional || next.apiKey.trim() !== "" || hasSavedKey;
@@ -240,13 +291,15 @@ export function createConnectionFormModel(
     const keyRejected = Object.values(next.labels).includes("auth_failed");
     const endpoint = next.urls.openai_chat;
     const asksEndpoint = next.template?.endpointExample !== undefined;
+    const serviceAddressInvalid = serverOrigin(next.serviceAddress) === null;
+    const isIconPickable = canPickIcon && next.template === null;
     // 至少填了一个地址，且填了的都像 http(s) 地址；资源地址只有资源名也行，由 daemon 补全并校验。
     const hasValidUrls = asksEndpoint
       ? endpoint.trim() !== ""
       : formats.some((field) => field.url.trim() !== "") && !formats.some((field) => field.invalid);
     const hasValidAddress = address !== "" && !addressInvalid;
-    // 检测或保存进行中时两个按钮都不可点。
-    const busy = next.detecting || next.submitting;
+    // 检测、保存或存图片进行中时两个按钮都不可点。
+    const busy = next.detecting || next.submitting || next.isStoringIcon;
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -264,13 +317,20 @@ export function createConnectionFormModel(
       address: next.address,
       addressInvalid,
       endpoint,
+      serviceAddress: next.serviceAddress,
+      serviceAddressInvalid,
+      canPickIcon: isIconPickable,
+      icon: next.icon,
+      isStoringIcon: next.isStoringIcon,
+      iconError: next.iconError,
       formats,
       urlGeneration: next.urlGeneration,
       detecting: next.detecting,
       detectError: next.detectError,
       keyRejected,
       canDetect: !busy && hasKey && hasValidAddress,
-      canSubmit: !busy && next.name.trim() !== "" && hasKey && hasValidUrls,
+      canSubmit:
+        !busy && next.name.trim() !== "" && hasKey && hasValidUrls && !serviceAddressInvalid,
       submitting: next.submitting,
       submitError: next.submitError,
     };
@@ -293,6 +353,8 @@ export function createConnectionFormModel(
       name: template.name,
       note: template.note ?? null,
       keyHint: template.keyHint ?? null,
+      keyOptional: template.keyOptional === true,
+      asksServiceAddress: template.group === LOCAL_GROUP,
       regionLabel: template.regionLabel ?? "region",
       regions: template.regions?.map(({ id, name }) => ({ id, name })) ?? null,
       regionId,
@@ -352,12 +414,22 @@ export function createConnectionFormModel(
     });
   }
 
+  // 本机服务换了地址时各格式地址挪过去；别的照填的。
+  function savedUrls(): Urls {
+    const origin = serverOrigin(values.serviceAddress);
+    const isMoved =
+      values.template?.group === LOCAL_GROUP && origin && origin !== serviceAddressWas;
+    return isMoved ? atOrigin(values.urls, origin) : values.urls;
+  }
+
   function buildRequest(): ConnectionSaveRequest {
     const apiKey = typedKey();
+    const urls = savedUrls();
     const baseUrls = API_ENDPOINT_REQUEST_FORMATS.flatMap((format) => {
-      const url = values.urls[format].trim();
+      const url = urls[format].trim();
       return url ? [{ format, url }] : [];
     });
+    const isIconChanged = state.canPickIcon && values.icon !== seededIcon;
     return {
       ...(seed.mode === "edit" ? { endpointId: seed.endpoint.id } : {}),
       name: values.name.trim(),
@@ -365,12 +437,27 @@ export function createConnectionFormModel(
       ...(apiKey ? { apiKey } : {}),
       ...(values.template ? { templateId: values.template.id } : {}),
       ...(values.regionId ? { region: values.regionId } : {}),
+      ...(isIconChanged ? { icon: values.icon } : {}),
       // 连接弹窗不挑模型：新建时一个都没有，编辑、复制时把已选模型与档位映射原样带上。
       models: keyOwner?.models ?? [],
       ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
       // 复制：上游清单、手动添加的模型、联网搜索开关等其余设置由 daemon 从原来那家拷。
       ...(seed.mode === "duplicate" ? { copyOf: seed.source.id } : {}),
     };
+  }
+
+  async function runStoreIcon(bytes: Uint8Array): Promise<void> {
+    const outcome = await deps.storeIcon(bytes);
+    if (pendingIconImage !== bytes) return;
+    pendingIconImage = null;
+    if (outcome.status === "failed") {
+      update({
+        isStoringIcon: false,
+        iconError: { code: outcome.code, message: outcome.message },
+      });
+      return;
+    }
+    update({ isStoringIcon: false, icon: outcome.icon, iconError: null });
   }
 
   async function runReveal(endpointId: string): Promise<void> {
@@ -473,6 +560,25 @@ export function createConnectionFormModel(
       const { [format]: _dropped, ...labels } = values.labels;
       update({ urls: { ...values.urls, [format]: url }, labels });
     },
+    setServiceAddress: (serviceAddress) => update({ serviceAddress }),
+    setIcon(icon) {
+      pendingIconImage = null;
+      update({ icon, isStoringIcon: false, iconError: null });
+    },
+    pickIconImage(bytes) {
+      if (!state.canPickIcon) return;
+      if (bytes.length > MAX_ICON_BYTES) {
+        pendingIconImage = null;
+        update({
+          isStoringIcon: false,
+          iconError: { code: "icon_too_large", message: "The picture is over 1 MB" },
+        });
+        return;
+      }
+      pendingIconImage = bytes;
+      update({ isStoringIcon: true, iconError: null });
+      void runStoreIcon(bytes);
+    },
     detect() {
       if (!state.canDetect) return;
       abortPendingDetect();
@@ -498,6 +604,7 @@ export function createConnectionFormModel(
     },
     close() {
       abortPendingDetect();
+      pendingIconImage = null;
       closed = true;
       listeners.clear();
     },
@@ -562,6 +669,48 @@ function urlsOf(baseUrls: ApiEndpointTemplate["baseUrls"]): Urls {
     if (format) urls[format] = entry.url;
   }
   return urls;
+}
+
+const LOCAL_GROUP = "local";
+
+/**
+ * 本机服务的地址照 magpie localAddress：去掉首尾空白，不写协议按 http，只取协议、主机与端口（带上的路径不算）。
+ * 空串是没填（不挪地址），为 ""；不是 http(s) 地址、带空白、端口不在 1–65535 为 null。原生端的 URL 实现不完整，用正则。
+ */
+function serverOrigin(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === "") return "";
+  if (/\s/.test(trimmed)) return null;
+  const withScheme = trimmed.includes("://") ? trimmed : `http://${trimmed}`;
+  const match = /^(https?):\/\/(\[[0-9a-f:.]+\]|[^/?#:@[\]]+)(?::(\d*))?(?:[/?#].*)?$/i.exec(
+    withScheme,
+  );
+  if (!match) return null;
+  const [, scheme, host, port] = match;
+  if (port !== undefined && port !== "") {
+    const number = Number(port);
+    if (number < 1 || number > 65535) return null;
+  }
+  const portPart = port === undefined || port === "" ? "" : `:${port}`;
+  return `${scheme.toLowerCase()}://${host.toLowerCase()}${portPart}`;
+}
+
+/** 开表单时地址所在的协议、主机与端口：照 magpie originOf 先看 Chat，再 Responses，最后 Anthropic；都没有为 ""。 */
+function originOf(urls: Urls): string {
+  for (const format of ["openai_chat", "openai_responses", "anthropic_messages"] as const) {
+    const origin = urls[format] === "" ? null : serverOrigin(urls[format]);
+    if (origin) return origin;
+  }
+  return "";
+}
+
+/** 每个地址换到 origin 上，路径不变（照 magpie atAddress）。 */
+function atOrigin(urls: Urls, origin: string): Urls {
+  const moved = { ...urls };
+  for (const format of API_ENDPOINT_REQUEST_FORMATS) {
+    moved[format] = urls[format].replace(/^[a-z][\w+.-]*:\/\/[^/?#]*/i, origin);
+  }
+  return moved;
 }
 
 // 线上 status 是字符串；认不出的新结论按「未检测到」显示。

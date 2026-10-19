@@ -2603,6 +2603,10 @@ export const ptBR: TranslationResources = {
           freeModelsNoKey: "Modelos gratuitos sem chave",
           bedrockApiKey: "Chave de API do Bedrock",
           azureResource: "O endpoint e a chave do seu recurso",
+          localModels: "Seus modelos locais",
+          localServer1234: "Servidor local, porta 1234 por padrão",
+          localServer8000: "Servidor local, porta 8000 por padrão",
+          localServer11234: "Servidor local, porta 11234 por padrão",
         },
         keyHints: {
           freeModelsNeedNoKey: "Opcional: modelos gratuitos não precisam de chave",
@@ -2627,9 +2631,25 @@ export const ptBR: TranslationResources = {
         showKey: "Mostrar",
         hideKey: "Ocultar",
         apiKeyOptionalLabel: "Chave de API (opcional)",
+        apiKeyLocalPlaceholder: "Opcional para servidores locais",
         keyRejected: "O servidor recusou esta chave (401 / 403)",
         address: "Endereço",
         resourceEndpoint: "Endpoint do recurso",
+        serviceAddress: "Endereço do servidor",
+        serviceAddressHint:
+          "Onde o servidor escuta. Troque a porta ou informe o endereço de outro computador; o endereço de cada formato vai para lá e mantém o caminho.",
+        serviceAddressInvalid: "{{address}} não é um endereço como http://localhost:11434",
+        icon: {
+          label: "Ícone",
+          choosePicture: "Escolher uma imagem…",
+          builtIn: "Ícones integrados",
+          default: "Padrão",
+          find: "Buscar um ícone…",
+          noMatch: "Nenhum ícone chamado “{{query}}”",
+          tooLarge: "A imagem passa de 1 MB. Escolha uma menor.",
+          notImage:
+            "Não é uma imagem que o Osuna consiga mostrar. Use PNG, JPEG, GIF, WebP, ICO ou SVG.",
+        },
         footerResource:
           "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:

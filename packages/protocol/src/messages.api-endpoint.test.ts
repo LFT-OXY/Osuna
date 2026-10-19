@@ -1046,4 +1046,63 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses an endpoint and a save that carry an icon, a save that takes it off, and older ones without", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m8",
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "openai_chat", url: "https://home.example/v1" }],
+      models: [],
+      icon: "file:0123456789abcdef.png",
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const cleared = { ...save, icon: null };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const { icon: _icon, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    for (const endpoint of [{ ...ENDPOINT, icon: "deepseek-color" }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-m8", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+  it("parses store_icon and read_icon with a picture, and their rejections", () => {
+    const store = {
+      type: "provider.api_endpoint.store_icon.request" as const,
+      requestId: "req-m9",
+      data: "iVBORw0KGgo=",
+    };
+    expect(SessionInboundMessageSchema.parse(store)).toEqual(store);
+    for (const payload of [
+      { requestId: "req-m9", icon: "file:0123456789abcdef.png", error: null },
+      {
+        requestId: "req-m9",
+        icon: null,
+        error: { code: "icon_too_large", message: "The picture is over 1 MB" },
+      },
+    ]) {
+      const response = { type: "provider.api_endpoint.store_icon.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    const read = {
+      type: "provider.api_endpoint.read_icon.request" as const,
+      requestId: "req-m10",
+      icon: "file:0123456789abcdef.png",
+    };
+    expect(SessionInboundMessageSchema.parse(read)).toEqual(read);
+    for (const payload of [
+      {
+        requestId: "req-m10",
+        icon: { data: "iVBORw0KGgo=", mimeType: "image/png" },
+        error: null,
+      },
+      { requestId: "req-m10", icon: null, error: { code: "not_found", message: "Icon not found" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.read_icon.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
 });

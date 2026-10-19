@@ -99,6 +99,7 @@ export function ApiEndpointDetailHeader({
       <View style={styles.identity}>
         <View style={[styles.avatar, !enabled && styles.avatarOff]}>
           <EndpointIcon
+            icon={endpoint.icon ?? null}
             templateId={endpoint.templateId ?? null}
             name={endpoint.name}
             size={ICON_SIZE.lg}

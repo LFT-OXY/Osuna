@@ -1050,6 +1050,68 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("a custom endpoint's icon: a built-in one, or a picture kept by the host; a picture too large or not a picture says why", async ({
+    page,
+  }) => {
+    // 最小的 1×1 PNG。
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    async function pickPicture(file: { name: string; mimeType: string; buffer: Buffer }) {
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByTestId("api-endpoint-connection-icon-picture").click();
+      await (await chooser).setFiles(file);
+    }
+    const iconField = page.getByTestId("api-endpoint-connection-icon-field");
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Home relay");
+    await page.getByTestId("api-endpoint-connection-url-openai_chat").fill(`${relay.origin}/v1`);
+
+    await test.step("Built-in icons opens a grid that search narrows; picking one closes it and offers Default", async () => {
+      await expect(page.getByTestId("api-endpoint-connection-icon-default")).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-icon-built-in").click();
+      await expect(page.getByTestId("api-endpoint-connection-icon-grid")).toBeVisible();
+      await page.getByTestId("api-endpoint-connection-icon-search").fill("deepsee");
+      await expect(page.getByTestId("api-endpoint-connection-icon-openai")).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-icon-deepseek-color").click();
+      await expect(page.getByTestId("api-endpoint-connection-icon-grid")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-icon-default")).toBeVisible();
+    });
+
+    await test.step("a picture over 1 MB, or a file that is no picture, says why and keeps the icon", async () => {
+      await pickPicture({
+        name: "huge.png",
+        mimeType: "image/png",
+        buffer: Buffer.concat([png, Buffer.alloc(1 << 20)]),
+      });
+      await expect(iconField).toContainText("The picture is over 1 MB. Pick a smaller one.");
+      await pickPicture({ name: "notes.png", mimeType: "image/png", buffer: Buffer.from("text") });
+      await expect(iconField).toContainText("Not a picture Osuna can show.");
+      await expect(page.getByTestId("api-endpoint-connection-icon-default")).toBeVisible();
+    });
+
+    await test.step("a picture is kept by the host and saved with the endpoint; the row shows it", async () => {
+      await pickPicture({ name: "home.png", mimeType: "image/png", buffer: png });
+      await expect(iconField).not.toContainText("Not a picture");
+      await expect(
+        page.getByTestId("api-endpoint-connection-icon-preview").locator("img"),
+      ).toHaveCount(1);
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.icon).toMatch(/^file:[0-9a-f]{16}\.png$/);
+      expect((await client.apiEndpointReadIcon({ icon: saved?.icon ?? "" })).icon).toEqual({
+        data: png.toString("base64"),
+        mimeType: "image/png",
+      });
+      await openApiEndpointsPage(page);
+      await expect(row(page, saved?.id ?? "").locator("img")).toHaveCount(1);
+    });
+  });
+
   test("a host without apiEndpointManagement has no Duplicate and no Show", async ({ page }) => {
     const [endpointId = ""] = await seedRelays(["Relay A"]);
     await hideManagementCapability(page);
@@ -1360,6 +1422,65 @@ test.describe("Templates", () => {
         baseUrls: [
           { format: "openai_chat", url: resource },
           { format: "openai_responses", url: resource },
+        ],
+      });
+    });
+  });
+
+  test("a server on this machine asks only for its address and no key; a failed save keeps it, and a new port moves every address", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await expect(templatePicker(page)).toContainText("On this machine");
+    await page.getByTestId("api-endpoint-template-search").fill("ollama");
+    await page.getByTestId("api-endpoint-template-ollama").click();
+    const address = page.getByTestId("api-endpoint-connection-service-address");
+
+    await test.step("one Server address box, starting at Ollama's port; the key is optional", async () => {
+      await expect(address).toHaveValue("http://localhost:11434");
+      await expect(page.getByTestId("api-endpoint-connection-formats")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-address")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-api-key-field")).toContainText(
+        "API key (optional)",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveAttribute(
+        "placeholder",
+        "Optional for local servers",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-save")).toBeEnabled();
+    });
+
+    await test.step("an address that is none says so and can't be saved", async () => {
+      await address.fill("http://localhost:99999");
+      await expect(page.getByTestId("api-endpoint-connection-service-address-field")).toContainText(
+        "http://localhost:99999 isn't an address like http://localhost:11434",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
+      await address.fill("127.0.0.1:11500");
+    });
+
+    await test.step("a failed save stays in the form with the address", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(address).toHaveValue("127.0.0.1:11500");
+    });
+
+    await test.step("saving moves both addresses to the new port, each keeping its path, with no key", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect(headerTitle(page)).toHaveText("Ollama");
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved).toMatchObject({
+        templateId: "ollama",
+        hasApiKey: false,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://127.0.0.1:11500" },
+          { format: "openai_chat", url: "http://127.0.0.1:11500/v1" },
         ],
       });
     });

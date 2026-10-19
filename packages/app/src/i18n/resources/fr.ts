@@ -2618,6 +2618,10 @@ export const fr: TranslationResources = {
           freeModelsNoKey: "Modèles gratuits sans clé",
           bedrockApiKey: "Clé API Bedrock",
           azureResource: "Le point de terminaison et la clé de votre ressource",
+          localModels: "Vos modèles locaux",
+          localServer1234: "Serveur local, port 1234 par défaut",
+          localServer8000: "Serveur local, port 8000 par défaut",
+          localServer11234: "Serveur local, port 11234 par défaut",
         },
         keyHints: {
           freeModelsNeedNoKey: "Facultatif : les modèles gratuits n'ont pas besoin de clé",
@@ -2642,9 +2646,25 @@ export const fr: TranslationResources = {
         showKey: "Afficher",
         hideKey: "Masquer",
         apiKeyOptionalLabel: "Clé d'API (facultative)",
+        apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
         address: "Adresse",
         resourceEndpoint: "Point de terminaison de la ressource",
+        serviceAddress: "Adresse du serveur",
+        serviceAddressHint:
+          "Là où le serveur écoute. Changez le port ou indiquez l'adresse d'un autre ordinateur ; l'adresse de chaque format y est déplacée en gardant son chemin.",
+        serviceAddressInvalid: "{{address}} n'est pas une adresse comme http://localhost:11434",
+        icon: {
+          label: "Icône",
+          choosePicture: "Choisir une image…",
+          builtIn: "Icônes intégrées",
+          default: "Par défaut",
+          find: "Chercher une icône…",
+          noMatch: "Aucune icône nommée « {{query}} »",
+          tooLarge: "L'image dépasse 1 Mo. Choisissez-en une plus petite.",
+          notImage:
+            "Ce n'est pas une image qu'Osuna peut afficher. Utilisez PNG, JPEG, GIF, WebP, ICO ou SVG.",
+        },
         footerResource:
           "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:

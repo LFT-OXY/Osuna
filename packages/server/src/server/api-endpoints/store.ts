@@ -34,6 +34,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
+ * - icons/：「自定义」加的接口自选的图片，按内容起名，没有接口用就删（endpoint-icons.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
  * 接管记录不这样做：拿旧记录去恢复 CLI 配置可能恢复错值，读不懂照旧报错。
@@ -78,6 +79,8 @@ const StoredApiEndpointSchema = z.object({
   // 从哪个模板加的（templates.ts 的 id）、选的哪个区域或套餐；「自定义」加的都没有。
   templateId: z.string().optional(),
   region: z.string().optional(),
+  // 「自定义」加的接口自选的图标：内置图标名，或 `file:<名字>` 指 icons/ 里的图片副本（endpoint-icons.ts）。
+  icon: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -239,6 +242,11 @@ export class ApiEndpointStore {
       filePath: path.join(this.root, "gateway-tokens.json"),
       parse: (raw) => GatewayTokensFileSchema.parse(raw),
     });
+  }
+
+  /** $PASEO_HOME/api-endpoints/。 */
+  get endpointsDir(): string {
+    return this.root;
   }
 
   /** 把首次改写前的字节原样存一份，返回副本路径；文件不存在时返回 null。 */

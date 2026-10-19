@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { View, type LayoutChangeEvent } from "react-native";
+import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Check } from "lucide-react-native";
 import type {
@@ -16,9 +16,15 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { useFilePicker } from "@/hooks/use-file-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
-import { EndpointIcon } from "./endpoint-icon";
+import {
+  BuiltInEndpointIcon,
+  EndpointIcon,
+  iconTitle,
+  PICKABLE_ENDPOINT_ICONS,
+} from "./endpoint-icon";
 import {
   templateEndpointHint,
   templateKeyHint,
@@ -33,15 +39,17 @@ import type {
   ConnectionFormSeed,
   ConnectionFormState,
   ConnectionFormatField,
+  ConnectionIconError,
   ConnectionSaveResult,
   ConnectionTemplateState,
 } from "./internal/connection-form-model";
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
-  // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」。
+  // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」，「自定义」接口能选图标。
   isKeyOptional: boolean;
   canRevealKey: boolean;
+  canPickIcon: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -49,6 +57,7 @@ export interface ApiEndpointConnectionSheetProps {
   onSave: ConnectionFormDeps["save"];
   onDetect: ConnectionFormDeps["detect"];
   onRevealKey: ConnectionFormDeps["revealKey"];
+  onStoreIcon: ConnectionFormDeps["storeIcon"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -69,11 +78,13 @@ export function ApiEndpointConnectionSheet({
   seed,
   isKeyOptional,
   canRevealKey,
+  canPickIcon,
   templates,
   onBack,
   onSave,
   onDetect,
   onRevealKey,
+  onStoreIcon,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -82,15 +93,23 @@ export function ApiEndpointConnectionSheet({
   const fieldSize = isCompact ? "md" : "sm";
   const model = useConnectionFormModel(
     seed,
-    { save: onSave, detect: onDetect, revealKey: onRevealKey },
-    { isKeyOptional, canRevealKey, templates },
+    { save: onSave, detect: onDetect, revealKey: onRevealKey, storeIcon: onStoreIcon },
+    { isKeyOptional, canRevealKey, canPickIcon, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const isCreate = state.mode === "create";
   const keyHint = state.template?.keyHint ?? null;
+  const isTemplateKeyOptional = state.template?.keyOptional === true;
   const keyPlaceholder = useMemo(
-    () => keyPlaceholderOf({ t, seed, hasSavedKey: state.hasSavedKey, keyHint }),
-    [keyHint, seed, state.hasSavedKey, t],
+    () =>
+      keyPlaceholderOf({
+        t,
+        seed,
+        hasSavedKey: state.hasSavedKey,
+        keyHint,
+        isTemplateKeyOptional,
+      }),
+    [isTemplateKeyOptional, keyHint, seed, state.hasSavedKey, t],
   );
 
   const handleSubmit = useCallback(() => {
@@ -214,28 +233,8 @@ export function ApiEndpointConnectionSheet({
             onTrailingLayout={handleTrailingLayout}
           />
         )}
-        {template?.endpointExample ? (
-          <ResourceEndpointField
-            templateId={template.id}
-            example={template.endpointExample}
-            hint={template.endpointHint}
-            endpoint={state.endpoint}
-            model={model}
-            size={fieldSize}
-          />
-        ) : (
-          <View style={styles.formatGroup} testID="api-endpoint-connection-formats">
-            {state.formats.map((field) => (
-              <FormatUrlField
-                key={field.format}
-                field={field}
-                generation={state.urlGeneration}
-                size={fieldSize}
-                model={model}
-              />
-            ))}
-          </View>
-        )}
+        {state.canPickIcon ? <IconField state={state} model={model} size={fieldSize} /> : null}
+        <TemplateAddresses state={state} model={model} size={fieldSize} />
         <Text variant="caption" color="foregroundMuted">
           {footerTextOf({ t, state })}
         </Text>
@@ -349,12 +348,16 @@ function footerTextOf(input: { t: TFunction; state: ConnectionFormState }): stri
     : t("settings.apiEndpoints.form.footer");
 }
 
-/** key 框里的提示：复制时说沿用原来的 key，编辑已存 key 时说留空保留，模板有提示时用它的。 */
+/**
+ * key 框里的提示：复制时说沿用原来的 key，编辑已存 key 时说留空保留，模板有提示时用它的，
+ * 不要 key 的模板（本机服务）说可以不填（照 magpie）。
+ */
 function keyPlaceholderOf(input: {
   t: TFunction;
   seed: ConnectionFormSeed;
   hasSavedKey: boolean;
   keyHint: string | null;
+  isTemplateKeyOptional: boolean;
 }): string {
   const { t, seed } = input;
   if (seed.mode === "duplicate" && seed.source.hasApiKey) {
@@ -364,7 +367,10 @@ function keyPlaceholderOf(input: {
       : t("settings.apiEndpoints.form.apiKeyCopiedPlaceholderUnmasked");
   }
   if (input.hasSavedKey) return t("settings.apiEndpoints.form.apiKeySavedPlaceholder");
-  return input.keyHint === null ? "sk-…" : templateKeyHint(t, input.keyHint);
+  if (input.keyHint !== null) return templateKeyHint(t, input.keyHint);
+  return input.isTemplateKeyOptional
+    ? t("settings.apiEndpoints.form.apiKeyLocalPlaceholder")
+    : "sk-…";
 }
 
 /**
@@ -384,6 +390,7 @@ function TemplateHeading({ template }: { template: ConnectionTemplateState }) {
       <View style={styles.templateIdentity}>
         <View style={styles.templateIcon}>
           <EndpointIcon
+            icon={null}
             templateId={template.id}
             name={template.name}
             size={ICON_SIZE.lg}
@@ -587,6 +594,246 @@ function ResourceEndpointField({
   );
 }
 
+/** 各格式的地址：本机服务只要服务地址，填自己资源地址的模板只要资源地址，别的列出三种格式各自的地址。 */
+function TemplateAddresses({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { template } = state;
+  if (template?.asksServiceAddress) {
+    return <ServiceAddressField state={state} model={model} size={size} />;
+  }
+  if (template?.endpointExample) {
+    return (
+      <ResourceEndpointField
+        templateId={template.id}
+        example={template.endpointExample}
+        hint={template.endpointHint}
+        endpoint={state.endpoint}
+        model={model}
+        size={size}
+      />
+    );
+  }
+  return (
+    <View style={styles.formatGroup} testID="api-endpoint-connection-formats">
+      {state.formats.map((field) => (
+        <FormatUrlField
+          key={field.format}
+          field={field}
+          generation={state.urlGeneration}
+          size={size}
+          model={model}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * 本机服务的地址（照 magpie 编辑窗口的 Address）：服务换了端口或在别的电脑上时只改这一处，各格式地址的协议、主机、端口跟着换，
+ * 路径不变；不写协议按 http。
+ */
+function ServiceAddressField({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  return (
+    <Field
+      label={t("settings.apiEndpoints.form.serviceAddress")}
+      hint={t("settings.apiEndpoints.form.serviceAddressHint")}
+      error={
+        state.serviceAddressInvalid
+          ? t("settings.apiEndpoints.form.serviceAddressInvalid", {
+              address: state.serviceAddress.trim(),
+            })
+          : null
+      }
+      testID="api-endpoint-connection-service-address-field"
+    >
+      <FormTextInput
+        initialValue={state.serviceAddress}
+        onChangeText={model.setServiceAddress}
+        placeholder="http://localhost:11434"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        invalid={state.serviceAddressInvalid}
+        size={size}
+        testID="api-endpoint-connection-service-address"
+      />
+    </Field>
+  );
+}
+
+const ICON_PREVIEW_SIZE = 20;
+const ICON_TILE_SIZE = 18;
+
+/**
+ * 「自定义」接口的图标（照 magpie iconPicker）：现在的图标，「选一张图片…」（本机图片，存到主机上），「内置图标」展开可搜索的格子，
+ * 选过图标时有「默认」（回到名称首字）。
+ */
+function IconField({
+  state,
+  model,
+  size,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  const { pickFiles } = useFilePicker();
+  const [isGridOpen, setIsGridOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const handlePickPicture = useCallback(() => {
+    void (async () => {
+      const file = (await pickFiles())?.[0];
+      if (!file) return;
+      model.pickIconImage(await file.readBytes());
+    })();
+  }, [model, pickFiles]);
+  const handleToggleGrid = useCallback(() => setIsGridOpen((open) => !open), []);
+  const handleDefault = useCallback(() => model.setIcon(null), [model]);
+  const handlePick = useCallback(
+    (name: string) => {
+      model.setIcon(name);
+      setIsGridOpen(false);
+    },
+    [model],
+  );
+  const search = query.trim().toLowerCase();
+  const names = useMemo(
+    () => PICKABLE_ENDPOINT_ICONS.filter((name) => iconTitle(name).includes(search)),
+    [search],
+  );
+  return (
+    <Field
+      label={t("settings.apiEndpoints.form.icon.label")}
+      error={state.iconError ? iconErrorText(t, state.iconError) : null}
+      testID="api-endpoint-connection-icon-field"
+    >
+      <View style={styles.iconControls}>
+        <View style={styles.iconPreview} testID="api-endpoint-connection-icon-preview">
+          <EndpointIcon
+            icon={state.icon}
+            templateId={null}
+            name={state.name}
+            size={ICON_PREVIEW_SIZE}
+            initialVariant="label"
+          />
+        </View>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handlePickPicture}
+          loading={state.isStoringIcon}
+          testID="api-endpoint-connection-icon-picture"
+        >
+          {t("settings.apiEndpoints.form.icon.choosePicture")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleToggleGrid}
+          testID="api-endpoint-connection-icon-built-in"
+        >
+          {t("settings.apiEndpoints.form.icon.builtIn")}
+        </Button>
+        {state.icon === null ? null : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleDefault}
+            testID="api-endpoint-connection-icon-default"
+          >
+            {t("settings.apiEndpoints.form.icon.default")}
+          </Button>
+        )}
+      </View>
+      {isGridOpen ? (
+        <View style={styles.iconPicker}>
+          <FormTextInput
+            initialValue={query}
+            onChangeText={setQuery}
+            placeholder={t("settings.apiEndpoints.form.icon.find")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            size={size}
+            testID="api-endpoint-connection-icon-search"
+          />
+          {names.length === 0 ? (
+            <Text variant="caption" color="foregroundMuted">
+              {t("settings.apiEndpoints.form.icon.noMatch", { query: query.trim() })}
+            </Text>
+          ) : (
+            <View style={styles.iconGrid} testID="api-endpoint-connection-icon-grid">
+              {names.map((name) => (
+                <IconTile
+                  key={name}
+                  name={name}
+                  selected={name === state.icon}
+                  onPick={handlePick}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
+    </Field>
+  );
+}
+
+function iconErrorText(t: TFunction, error: ConnectionIconError): string {
+  if (error.code === "icon_too_large") return t("settings.apiEndpoints.form.icon.tooLarge");
+  if (error.code === "icon_not_image") return t("settings.apiEndpoints.form.icon.notImage");
+  return error.message;
+}
+
+function IconTile({
+  name,
+  selected,
+  onPick,
+}: {
+  name: string;
+  selected: boolean;
+  onPick: (name: string) => void;
+}) {
+  const handlePress = useCallback(() => onPick(name), [name, onPick]);
+  const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const tileStyle = useCallback(
+    ({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+      styles.iconTile,
+      (hovered || pressed) && styles.iconTileHovered,
+      selected && styles.iconTileSelected,
+    ],
+    [selected],
+  );
+  return (
+    <Pressable
+      style={tileStyle}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={iconTitle(name)}
+      accessibilityState={accessibilityState}
+      testID={`api-endpoint-connection-icon-${name}`}
+    >
+      <BuiltInEndpointIcon name={name} size={ICON_TILE_SIZE} />
+    </Pressable>
+  );
+}
+
 function FormatUrlField({
   field,
   generation,
@@ -716,6 +963,45 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
+  },
+  iconControls: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  iconPreview: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconPicker: {
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  iconGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
+  },
+  iconTile: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconTileHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  iconTileSelected: {
+    borderColor: theme.colors.borderAccent,
+    backgroundColor: theme.colors.surface2,
   },
   actions: {
     flex: 1,

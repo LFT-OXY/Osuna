@@ -688,6 +688,14 @@ type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
 >["payload"];
+type ApiEndpointStoreIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.store_icon.response" }
+>["payload"];
+type ApiEndpointReadIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.read_icon.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -6453,6 +6461,28 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.list_templates.request" },
+    });
+  }
+
+  /** 存一张图片给接口当图标（data 是 base64），返回保存时要带的 icon 值；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointStoreIcon(
+    options: { data: string },
+    requestId?: string,
+  ): Promise<ApiEndpointStoreIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.store_icon.request", data: options.data },
+    });
+  }
+
+  /** 取回接口存下的图标图片（icon 是 `file:` 值）。 */
+  async apiEndpointReadIcon(
+    options: { icon: string },
+    requestId?: string,
+  ): Promise<ApiEndpointReadIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.read_icon.request", icon: options.icon },
     });
   }
 

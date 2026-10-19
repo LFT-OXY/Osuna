@@ -12,6 +12,7 @@ import {
   type ConnectionRevealKeyResult,
   type ConnectionSaveRequest,
   type ConnectionSaveResult,
+  type ConnectionStoreIconResult,
 } from "./connection-form-model";
 
 interface Deferred<T> {
@@ -31,7 +32,9 @@ function fakeDeps() {
   const saves: ConnectionSaveRequest[] = [];
   const detects: { request: ConnectionDetectRequest; signal: AbortSignal }[] = [];
   const reveals: string[] = [];
+  const storedIcons: Uint8Array[] = [];
   let revealAnswer = deferred<ConnectionRevealKeyResult>();
+  let storeIconAnswer = deferred<ConnectionStoreIconResult>();
   let saveResult: ConnectionSaveResult = { status: "saved", endpointId: "ep_new" };
   let detectAnswer = deferred<ConnectionDetectResult>();
   const deps: ConnectionFormDeps = {
@@ -47,12 +50,21 @@ function fakeDeps() {
       reveals.push(endpointId);
       return revealAnswer.promise;
     },
+    storeIcon: (bytes) => {
+      storedIcons.push(bytes);
+      return storeIconAnswer.promise;
+    },
   };
   return {
     deps,
     saves,
     detects,
     reveals,
+    storedIcons,
+    answerStoreIcon(result: ConnectionStoreIconResult) {
+      storeIconAnswer.resolve(result);
+      storeIconAnswer = deferred<ConnectionStoreIconResult>();
+    },
     answerReveal(result: ConnectionRevealKeyResult) {
       revealAnswer.resolve(result);
       revealAnswer = deferred<ConnectionRevealKeyResult>();
@@ -103,8 +115,13 @@ const SAVED_ENDPOINT: ApiEndpoint = {
 };
 
 // 主机没声明 apiEndpointManagement：key 必填，和以前一样。
-const KEY_REQUIRED = { isKeyOptional: false, canRevealKey: false, templates: [] };
-const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true, templates: [] };
+const KEY_REQUIRED = {
+  isKeyOptional: false,
+  canRevealKey: false,
+  canPickIcon: false,
+  templates: [],
+};
+const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true, canPickIcon: true, templates: [] };
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
@@ -854,5 +871,231 @@ describe("connection form: a template at the user's own resource", () => {
     };
     const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, options);
     expect(model.getState().endpoint).toBe(url);
+  });
+});
+
+const OLLAMA: ApiEndpointTemplate = {
+  id: "ollama",
+  name: "Ollama",
+  group: "local",
+  keyOptional: true,
+  baseUrls: [
+    { format: "anthropic_messages", url: "http://localhost:11434" },
+    { format: "openai_chat", url: "http://localhost:11434/v1" },
+  ],
+  modelsDevIds: [],
+};
+
+describe("connection form: a server on this machine", () => {
+  const options = { ...KEY_OPTIONAL, templates: [OLLAMA] };
+
+  it("asks only for the server's address, starting at the template's, and saves the template's addresses", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "ollama" },
+      fake.deps,
+      options,
+    );
+    expect(model.getState()).toMatchObject({
+      serviceAddress: "http://localhost:11434",
+      serviceAddressInvalid: false,
+      template: { asksServiceAddress: true, keyOptional: true },
+      canSubmit: true,
+    });
+
+    await model.submit();
+
+    expect(fake.saves[0]).toMatchObject({
+      templateId: "ollama",
+      baseUrls: [
+        { format: "anthropic_messages", url: "http://localhost:11434" },
+        { format: "openai_chat", url: "http://localhost:11434/v1" },
+      ],
+    });
+    expect(fake.saves[0]?.apiKey).toBeUndefined();
+  });
+
+  it("a new address moves every format's address there, each keeping its path (as magpie AtAddress)", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "ollama" },
+      fake.deps,
+      options,
+    );
+
+    // 不写协议按 http，带上的路径不算。
+    model.setServiceAddress("192.168.1.20:11500/v1");
+    await model.submit();
+
+    expect(fake.saves[0]?.baseUrls).toEqual([
+      { format: "anthropic_messages", url: "http://192.168.1.20:11500" },
+      { format: "openai_chat", url: "http://192.168.1.20:11500/v1" },
+    ]);
+  });
+
+  it("an address that is none can't be saved until it is fixed; an empty one keeps the addresses", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "ollama" },
+      fake.deps,
+      options,
+    );
+
+    for (const address of ["http://localhost:99999", "local host", "ftp://localhost:21"]) {
+      model.setServiceAddress(address);
+      expect(model.getState(), address).toMatchObject({
+        serviceAddressInvalid: true,
+        canSubmit: false,
+      });
+    }
+    model.setServiceAddress("");
+    expect(model.getState()).toMatchObject({ serviceAddressInvalid: false, canSubmit: true });
+    await model.submit();
+    expect(fake.saves[0]?.baseUrls).toEqual(OLLAMA.baseUrls);
+  });
+
+  it("editing starts at the saved address and moves the saved addresses", async () => {
+    const fake = fakeDeps();
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      name: "Ollama",
+      hasApiKey: false,
+      baseUrls: [
+        { format: "anthropic_messages", url: "http://box.local:11500" },
+        { format: "openai_chat", url: "http://box.local:11500/v1" },
+      ],
+      templateId: "ollama",
+    };
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, options);
+    expect(model.getState().serviceAddress).toBe("http://box.local:11500");
+
+    model.setServiceAddress("https://box.local:8443");
+    await model.submit();
+
+    expect(fake.saves[0]?.baseUrls).toEqual([
+      { format: "anthropic_messages", url: "https://box.local:8443" },
+      { format: "openai_chat", url: "https://box.local:8443/v1" },
+    ]);
+  });
+});
+
+describe("connection form: the icon of a custom endpoint", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+  it("saves the built-in icon picked; Default takes it off", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({ canPickIcon: true, icon: null });
+    model.setName("Home relay");
+    model.setUrl("openai_chat", "https://home.example/v1");
+
+    model.setIcon("deepseek-color");
+    expect(model.getState().icon).toBe("deepseek-color");
+    await model.submit();
+    const edit = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, icon: "deepseek-color" } },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    edit.setIcon(null);
+    await edit.submit();
+
+    expect(fake.saves.map((save) => save.icon)).toEqual(["deepseek-color", null]);
+  });
+
+  it("a picture is stored on the host first, then saved by the value the host gave", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName("Home relay");
+    model.setUrl("openai_chat", "https://home.example/v1");
+
+    model.pickIconImage(PNG);
+    expect(model.getState()).toMatchObject({ isStoringIcon: true, canSubmit: false });
+    fake.answerStoreIcon({ status: "stored", icon: "file:0123456789abcdef.png" });
+    await flush();
+
+    expect(fake.storedIcons).toEqual([PNG]);
+    expect(model.getState()).toMatchObject({
+      isStoringIcon: false,
+      icon: "file:0123456789abcdef.png",
+      iconError: null,
+      canSubmit: true,
+    });
+    await model.submit();
+    expect(fake.saves[0]?.icon).toBe("file:0123456789abcdef.png");
+  });
+
+  it("a picture over 1 MB is refused without sending it; one the host refuses shows why and keeps the icon", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setIcon("deepseek-color");
+
+    model.pickIconImage(new Uint8Array((1 << 20) + 1));
+    expect(fake.storedIcons).toEqual([]);
+    expect(model.getState()).toMatchObject({
+      icon: "deepseek-color",
+      iconError: { code: "icon_too_large" },
+    });
+
+    model.pickIconImage(new TextEncoder().encode("just text"));
+    fake.answerStoreIcon({
+      status: "failed",
+      code: "icon_not_image",
+      message: "Not a picture: use PNG, JPEG, GIF, WebP, ICO or SVG",
+    });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      isStoringIcon: false,
+      icon: "deepseek-color",
+      iconError: { code: "icon_not_image" },
+    });
+
+    // 再选一次就清掉上次的失败。
+    model.setIcon("openai");
+    expect(model.getState().iconError).toBeNull();
+  });
+
+  it("editing starts at the icon it had and leaves it to the host unless changed; a template's endpoint and an old host pick none", async () => {
+    const fake = fakeDeps();
+    const edit = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, icon: "file:0123456789abcdef.png" } },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(edit.getState().icon).toBe("file:0123456789abcdef.png");
+    await edit.submit();
+    expect(fake.saves[0]).not.toHaveProperty("icon");
+
+    const fromTemplate = createConnectionFormModel(
+      { mode: "create", templateId: "ollama" },
+      fake.deps,
+      { ...KEY_OPTIONAL, templates: [OLLAMA] },
+    );
+    expect(fromTemplate.getState().canPickIcon).toBe(false);
+    await fromTemplate.submit();
+    expect(fake.saves[1]).not.toHaveProperty("icon");
+
+    const oldHost = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      {
+        ...KEY_REQUIRED,
+      },
+    );
+    expect(oldHost.getState().canPickIcon).toBe(false);
+    await oldHost.submit();
+    expect(fake.saves[2]).not.toHaveProperty("icon");
   });
 });

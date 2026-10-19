@@ -209,8 +209,16 @@ interface ApiEndpointSeedClient {
     models: ApiEndpointModel[];
     templateId?: string;
     region?: string;
+    icon?: string | null;
   }): Promise<ApiEndpointSaveResponse["payload"]>;
   apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
+  apiEndpointStoreIcon(options: {
+    data: string;
+  }): Promise<{ icon: string | null; error: { code: string; message: string } | null }>;
+  apiEndpointReadIcon(options: { icon: string }): Promise<{
+    icon: { data: string; mimeType: string } | null;
+    error: { code: string; message: string } | null;
+  }>;
   apiEndpointDelete(provider: string, endpointId: string): Promise<unknown>;
   apiEndpointSetAgentSettings(options: {
     provider: string;

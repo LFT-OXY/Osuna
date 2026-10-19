@@ -2566,6 +2566,10 @@ export const ar: TranslationResources = {
           freeModelsNoKey: "نماذج مجانية بلا مفتاح",
           bedrockApiKey: "مفتاح API لـ Bedrock",
           azureResource: "عنوان موردك ومفتاحه",
+          localModels: "نماذجك المحلية",
+          localServer1234: "خادم محلي، المنفذ 1234 افتراضيًا",
+          localServer8000: "خادم محلي، المنفذ 8000 افتراضيًا",
+          localServer11234: "خادم محلي، المنفذ 11234 افتراضيًا",
         },
         keyHints: {
           freeModelsNeedNoKey: "اختياري: النماذج المجانية لا تحتاج إلى مفتاح",
@@ -2590,9 +2594,25 @@ export const ar: TranslationResources = {
         showKey: "إظهار",
         hideKey: "إخفاء",
         apiKeyOptionalLabel: "مفتاح API (اختياري)",
+        apiKeyLocalPlaceholder: "اختياري للخوادم المحلية",
         keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
         address: "العنوان",
         resourceEndpoint: "عنوان المورد",
+        serviceAddress: "عنوان الخادم",
+        serviceAddressHint:
+          "المكان الذي يستمع فيه الخادم. غيّر المنفذ أو أدخل عنوان حاسوب آخر؛ ينتقل عنوان كل تنسيق إليه ويحتفظ بمساره.",
+        serviceAddressInvalid: "{{address}} ليس عنوانًا مثل http://localhost:11434",
+        icon: {
+          label: "الأيقونة",
+          choosePicture: "اختر صورة…",
+          builtIn: "الأيقونات المضمنة",
+          default: "الافتراضية",
+          find: "ابحث عن أيقونة…",
+          noMatch: "لا توجد أيقونة باسم “{{query}}”",
+          tooLarge: "الصورة أكبر من 1 ميغابايت. اختر صورة أصغر.",
+          notImage:
+            "ليست صورة يستطيع Osuna عرضها. استخدم PNG أو JPEG أو GIF أو WebP أو ICO أو SVG.",
+        },
         footerResource: "بعد الحفظ تُفتح صفحة نقطة الاتصال وتعرض عمليات نشر المورد كنماذج لها.",
         addressHint:
           "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل.",

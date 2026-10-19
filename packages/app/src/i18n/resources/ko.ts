@@ -2579,6 +2579,10 @@ export const ko: TranslationResources = {
           freeModelsNoKey: "무료 모델은 키 불필요",
           bedrockApiKey: "Bedrock API 키",
           azureResource: "내 리소스의 엔드포인트와 키",
+          localModels: "로컬 모델",
+          localServer1234: "로컬 서버, 기본 포트 1234",
+          localServer8000: "로컬 서버, 기본 포트 8000",
+          localServer11234: "로컬 서버, 기본 포트 11234",
         },
         keyHints: {
           freeModelsNeedNoKey: "선택: 무료 모델은 키가 필요 없음",
@@ -2603,9 +2607,25 @@ export const ko: TranslationResources = {
         showKey: "표시",
         hideKey: "숨기기",
         apiKeyOptionalLabel: "API 키 (선택 사항)",
+        apiKeyLocalPlaceholder: "로컬 서버는 선택 사항",
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
         address: "주소",
         resourceEndpoint: "리소스 엔드포인트",
+        serviceAddress: "서버 주소",
+        serviceAddressHint:
+          "서버가 수신하는 위치입니다. 포트를 바꾸거나 다른 컴퓨터의 주소를 입력하세요. 각 형식의 주소가 경로는 그대로 둔 채 그곳으로 옮겨집니다.",
+        serviceAddressInvalid: "{{address}}은(는) http://localhost:11434 같은 주소가 아닙니다",
+        icon: {
+          label: "아이콘",
+          choosePicture: "이미지 선택…",
+          builtIn: "기본 제공 아이콘",
+          default: "기본값",
+          find: "아이콘 찾기…",
+          noMatch: "“{{query}}” 아이콘이 없습니다",
+          tooLarge: "이미지가 1MB를 넘습니다. 더 작은 이미지를 고르세요.",
+          notImage:
+            "Osuna가 표시할 수 있는 이미지가 아닙니다. PNG, JPEG, GIF, WebP, ICO 또는 SVG를 사용하세요.",
+        },
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",

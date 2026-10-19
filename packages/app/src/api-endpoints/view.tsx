@@ -42,6 +42,7 @@ import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
+import { EndpointIconHostProvider } from "./endpoint-icon";
 import { TemplatePickerSheet } from "./template-picker-sheet";
 import { useEndpointTemplates } from "./use-endpoint-templates";
 import { useHostEndpoints, type UseHostEndpointsResult } from "./use-host-endpoints";
@@ -343,7 +344,7 @@ function ConnectionSheet({
 }: {
   serverId: string;
   sheet: ConnectionSheetState;
-  endpoints: Pick<UseHostEndpointsResult, "state" | "save" | "detect" | "revealKey">;
+  endpoints: Pick<UseHostEndpointsResult, "state" | "save" | "detect" | "revealKey" | "storeIcon">;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   // 模板列表里点了已加过的模板：打开已有那家。
@@ -394,11 +395,13 @@ function ConnectionSheet({
       seed={seed}
       isKeyOptional={hasManagement}
       canRevealKey={hasManagement}
+      canPickIcon={hasManagement}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
       onDetect={endpoints.detect}
       onRevealKey={endpoints.revealKey}
+      onStoreIcon={endpoints.storeIcon}
       onSaved={onSaved}
       onClose={closeForm}
     />
@@ -421,7 +424,9 @@ function sheetKey(seed: ConnectionFormSeed): string {
 export function ApiEndpointsPage({ serverId }: { serverId: string }) {
   return (
     <GatewayGate serverId={serverId}>
-      <ApiEndpointsListPage serverId={serverId} />
+      <EndpointIconHostProvider serverId={serverId}>
+        <ApiEndpointsListPage serverId={serverId} />
+      </EndpointIconHostProvider>
     </GatewayGate>
   );
 }
@@ -514,7 +519,9 @@ export function ApiEndpointDetailPage({
 }) {
   return (
     <GatewayGate serverId={serverId}>
-      <ApiEndpointDetailContent serverId={serverId} endpointId={endpointId} />
+      <EndpointIconHostProvider serverId={serverId}>
+        <ApiEndpointDetailContent serverId={serverId} endpointId={endpointId} />
+      </EndpointIconHostProvider>
     </GatewayGate>
   );
 }

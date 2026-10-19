@@ -2,6 +2,7 @@ import type pino from "pino";
 import type {
   ApiEndpointAgentSettings,
   ApiEndpointError,
+  ApiEndpointIconImage,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
@@ -30,6 +31,8 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_order.request"
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.list_templates.request"
+      | "provider.api_endpoint.store_icon.request"
+      | "provider.api_endpoint.read_icon.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
@@ -90,6 +93,10 @@ export class ApiEndpointSession {
         return this.handleRevealKey(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
+      case "provider.api_endpoint.store_icon.request":
+        return this.handleStoreIcon(request);
+      case "provider.api_endpoint.read_icon.request":
+        return this.handleReadIcon(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
@@ -152,6 +159,7 @@ export class ApiEndpointSession {
         ...(request.copyOf !== undefined ? { copyOf: request.copyOf } : {}),
         ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
         ...(request.region !== undefined ? { region: request.region } : {}),
+        ...(request.icon !== undefined ? { icon: request.icon } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -374,6 +382,38 @@ export class ApiEndpointSession {
         templates: this.service.listTemplates(),
         error: null,
       },
+    });
+  }
+
+  private handleStoreIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.store_icon.request" }>,
+  ): void {
+    let icon: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = this.service.storeIcon(Buffer.from(request.data, "base64"));
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.store_icon.response",
+      payload: { requestId: request.requestId, icon, error },
+    });
+  }
+
+  private handleReadIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.read_icon.request" }>,
+  ): void {
+    let icon: ApiEndpointIconImage | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = this.service.readIcon(request.icon);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.read_icon.response",
+      payload: { requestId: request.requestId, icon, error },
     });
   }
 

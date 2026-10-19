@@ -455,6 +455,7 @@ function EndpointRow({
                     <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
                   ) : (
                     <EndpointIcon
+                      icon={endpoint.icon ?? null}
                       templateId={endpoint.templateId ?? null}
                       name={endpoint.name}
                       size={ICON_SIZE.md}

@@ -592,6 +592,28 @@ height, style and <title> removed:
   packages/app/src/assets/endpoint-template-icons.ts
   packages/app/src/assets/endpoint-template-icons/*.svg
 
+The local server templates (Ollama, LM Studio, oMLX, MLX-Serve) are magpie's
+KindLocal presets in internal/provider/presets.go; moving their addresses to
+the server address typed in the add dialog follows AtAddress, AddressOf and
+parseAddress in internal/provider/local_address.go and localAddress, originOf,
+movedURLs and atAddress in internal/gui/assets/app.js. A custom endpoint's own
+icon follows magpie's internal/provider/icon.go (StoreIcon, IconFile, iconExt,
+MaxIcon, pruneIcons) and the iconPicker in internal/gui/assets/app.js; the
+built-in icons offered there are the rest of magpie's
+internal/gui/assets/icons/ that its presets and MORE_ICONS use (all but
+magpie's own logo), with width, height, style and <title> removed, and the two
+that are PNG files (mlx-serve, typesafe) kept as they are. omlx.svg is oMLX's
+menu bar glyph, https://github.com/jundot/omlx, Apache License 2.0, as
+magpie's copy notes:
+
+  packages/server/src/server/api-endpoints/endpoint-icons.ts
+  packages/app/src/api-endpoints/endpoint-icon.tsx
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/assets/endpoint-template-icons.ts
+  packages/app/src/assets/endpoint-template-icons/*.svg
+  packages/app/src/assets/endpoint-template-icons/*.png
+
 How the gateway recognises its callers (loopback only, the forwarding headers
 that mark a proxied request, DNS rebinding, refusing web pages by Origin,
 Origin: null and localhost subdomains, reading the token from Authorization

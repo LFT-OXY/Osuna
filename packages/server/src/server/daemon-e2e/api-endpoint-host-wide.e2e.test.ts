@@ -1348,8 +1348,7 @@ describe("reading a saved key back", () => {
 });
 
 describe("Templates", () => {
-  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7），
-  // 4 个本机模板（08 号工单）。
+  // magpie 的 57 个去掉 5 个决策模型、Remote magpie、Google Vertex AI、Google Gemini（子任务 7）。
   const LEFT_OUT = new Set([
     "typesafe",
     "vercel-jev",
@@ -1359,24 +1358,20 @@ describe("Templates", () => {
     "remote-magpie",
     "vertex",
     "google",
-    "ollama",
-    "lmstudio",
-    "omlx",
-    "mlx-serve",
   ]);
 
-  test("the list has magpie's vendors and relay services, and none of what is left out", async () => {
+  test("the list has magpie's vendors, relay services and local servers, and none of what is left out", async () => {
     const { client } = await start();
 
     const { templates, error } = await client.apiEndpointListTemplates();
 
     expect(error).toBeNull();
-    expect(templates.length).toBe(45);
+    expect(templates.length).toBe(49);
     const groups = new Map<string, number>();
     for (const template of templates) {
       groups.set(template.group, (groups.get(template.group) ?? 0) + 1);
     }
-    expect(Object.fromEntries(groups)).toEqual({ vendor: 29, relay: 16 });
+    expect(Object.fromEntries(groups)).toEqual({ vendor: 29, relay: 16, local: 4 });
     const ids = templates.map((template) => template.id);
     expect(ids.filter((id) => LEFT_OUT.has(id))).toEqual([]);
     expect(new Set(ids).size).toBe(ids.length);
@@ -1390,11 +1385,11 @@ describe("Templates", () => {
       "stepfun-cn",
     ]);
     for (const id of chinaSites) expect(ids).toContain(id.slice(0, -3));
-    // 每个都能直接用：有地址（Azure 要填自己资源的地址），有「去拿 key」的页面。
+    // 每个都能直接用：有地址（Azure 要填自己资源的地址），要 key 的有「去拿 key」的页面。
     for (const template of templates) {
       const hasAddress = template.baseUrls.length > 0 || template.endpointExample !== undefined;
       expect(hasAddress, template.id).toBe(true);
-      expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
+      if (template.group !== "local") expect(template.keysUrl, template.id).toMatch(/^https:\/\//);
     }
     const zhipu = templates.find((template) => template.id === "zhipu");
     expect(zhipu).toMatchObject({
@@ -1413,6 +1408,53 @@ describe("Templates", () => {
         },
       ],
     });
+  });
+
+  test("the local servers need no key and are reached on this machine at their default ports (as magpie)", async () => {
+    const { client } = await start();
+
+    const { templates } = await client.apiEndpointListTemplates();
+
+    const locals = templates.filter((template) => template.group === "local");
+    expect(
+      locals.map(({ id, name, keyOptional, baseUrls }) => ({ id, name, keyOptional, baseUrls })),
+    ).toEqual([
+      {
+        id: "ollama",
+        name: "Ollama",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:11434" },
+          { format: "openai_chat", url: "http://localhost:11434/v1" },
+        ],
+      },
+      {
+        id: "lmstudio",
+        name: "LM Studio",
+        keyOptional: true,
+        baseUrls: [{ format: "openai_chat", url: "http://localhost:1234/v1" }],
+      },
+      {
+        id: "omlx",
+        name: "oMLX",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:8000" },
+          { format: "openai_chat", url: "http://localhost:8000/v1" },
+          { format: "openai_responses", url: "http://localhost:8000/v1" },
+        ],
+      },
+      {
+        id: "mlx-serve",
+        name: "MLX-Serve",
+        keyOptional: true,
+        baseUrls: [
+          { format: "anthropic_messages", url: "http://localhost:11234" },
+          { format: "openai_chat", url: "http://localhost:11234/v1" },
+          { format: "openai_responses", url: "http://localhost:11234/v1" },
+        ],
+      },
+    ]);
   });
 
   test("an endpoint saved from a template keeps its address, template and region; switching the region moves the address", async () => {
@@ -1786,5 +1828,173 @@ describe("Templates", () => {
     expect(azure.requests.every((request) => request.headers["api-key"] === "azure-key")).toBe(
       true,
     );
+  });
+});
+
+describe("an endpoint's own icon", () => {
+  // 最小的 1×1 PNG。
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const MAX_ICON_BYTES = 1 << 20;
+
+  function iconsDir(harness: Harness): string {
+    return path.join(path.dirname(harness.endpointsPath), "icons");
+  }
+
+  async function exists(filePath: string): Promise<boolean> {
+    return stat(filePath).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  test("a picture is kept by its content and read back; one too large or not a picture is refused", async () => {
+    const harness = await start();
+    const { client } = harness;
+
+    const stored = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+
+    expect(stored.error).toBeNull();
+    expect(stored.icon).toMatch(/^file:[0-9a-f]{16}\.png$/);
+    const again = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    expect(again.icon).toBe(stored.icon);
+    expect(await client.apiEndpointReadIcon({ icon: stored.icon ?? "" })).toMatchObject({
+      icon: { data: PNG.toString("base64"), mimeType: "image/png" },
+      error: null,
+    });
+    const svg = await client.apiEndpointStoreIcon({
+      data: Buffer.from('<svg viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>').toString("base64"),
+    });
+    expect(svg.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+
+    const tooLarge = Buffer.concat([PNG, Buffer.alloc(MAX_ICON_BYTES)]);
+    expect(await client.apiEndpointStoreIcon({ data: tooLarge.toString("base64") })).toMatchObject({
+      icon: null,
+      error: { code: "icon_too_large" },
+    });
+    expect(
+      await client.apiEndpointStoreIcon({ data: Buffer.from("just text").toString("base64") }),
+    ).toMatchObject({ icon: null, error: { code: "icon_not_image" } });
+    // 只读 icons 目录里按内容起名的文件，别的路径一概不认。
+    expect(await client.apiEndpointReadIcon({ icon: "file:../endpoints.json" })).toMatchObject({
+      icon: null,
+      error: { code: "not_found" },
+    });
+  });
+
+  test("an endpoint keeps the picture it was saved with; deleting the last endpoint with it deletes the copy", async () => {
+    const harness = await start();
+    const { client } = harness;
+    const { icon } = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon,
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(saved.endpoint?.icon).toBe(icon);
+    const copy = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      copyOf: endpointId,
+    });
+    expect(copy.endpoint?.icon).toBe(icon);
+    const file = path.join(iconsDir(harness), (icon ?? "").slice("file:".length));
+    expect(await exists(file)).toBe(true);
+
+    // 副本还用着它：删掉原来那家不删图片。
+    await client.apiEndpointDelete("claude", endpointId);
+    expect(await exists(file)).toBe(true);
+    await client.apiEndpointDelete("claude", copy.endpoint?.id ?? "");
+
+    expect(await exists(file)).toBe(false);
+    expect(await client.apiEndpointReadIcon({ icon: icon ?? "" })).toMatchObject({
+      icon: null,
+      error: { code: "not_found" },
+    });
+  });
+
+  test("changing or taking off the picture deletes the copy; a built-in icon is kept by name", async () => {
+    const harness = await start();
+    const { client } = harness;
+    const { icon } = await client.apiEndpointStoreIcon({ data: PNG.toString("base64") });
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon,
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    const file = path.join(iconsDir(harness), (icon ?? "").slice("file:".length));
+
+    const builtIn = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon: "deepseek-color",
+    });
+    expect(builtIn.endpoint?.icon).toBe("deepseek-color");
+    expect(await exists(file)).toBe(false);
+
+    // 老客户端的保存不带 icon，不把它清掉。
+    await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrl: "https://home.example",
+      models: [{ id: "m1" }],
+      defaultModelId: "m1",
+    });
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((endpoint) => endpoint.id === endpointId)?.icon).toBe(
+      "deepseek-color",
+    );
+
+    const cleared = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+      icon: null,
+    });
+    expect(cleared.endpoint?.icon).toBeUndefined();
+  });
+
+  test("a picture that was never stored, a name that is no icon's, or an icon on a template's endpoint is refused", async () => {
+    const { client } = await start();
+    const base = {
+      provider: "claude",
+      name: "Home relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://home.example" }],
+      models: [],
+    };
+
+    expect(
+      await client.apiEndpointSave({ ...base, icon: "file:0123456789abcdef.png" }),
+    ).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect(await client.apiEndpointSave({ ...base, icon: "../keys" })).toMatchObject({
+      endpoint: null,
+      error: { code: "invalid_input" },
+    });
+    // 图标只给「自定义」加的接口选（照 magpie）。
+    expect(
+      await client.apiEndpointSave({
+        ...base,
+        templateId: "ollama",
+        icon: "deepseek-color",
+      }),
+    ).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
   });
 });

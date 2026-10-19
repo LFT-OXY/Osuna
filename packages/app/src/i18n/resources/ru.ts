@@ -2600,6 +2600,10 @@ export const ru: TranslationResources = {
           freeModelsNoKey: "Бесплатные модели без ключа",
           bedrockApiKey: "API-ключ Bedrock",
           azureResource: "Адрес и ключ вашего ресурса",
+          localModels: "Ваши локальные модели",
+          localServer1234: "Локальный сервер, по умолчанию порт 1234",
+          localServer8000: "Локальный сервер, по умолчанию порт 8000",
+          localServer11234: "Локальный сервер, по умолчанию порт 11234",
         },
         keyHints: {
           freeModelsNeedNoKey: "Необязательно: бесплатным моделям ключ не нужен",
@@ -2624,9 +2628,25 @@ export const ru: TranslationResources = {
         showKey: "Показать",
         hideKey: "Скрыть",
         apiKeyOptionalLabel: "API-ключ (необязательно)",
+        apiKeyLocalPlaceholder: "Для локальных серверов необязателен",
         keyRejected: "Сервер отклонил этот ключ (401 / 403)",
         address: "Адрес",
         resourceEndpoint: "Адрес ресурса",
+        serviceAddress: "Адрес сервера",
+        serviceAddressHint:
+          "Где слушает сервер. Смените порт или укажите адрес другого компьютера; адрес каждого формата переедет туда, сохранив путь.",
+        serviceAddressInvalid: "{{address}} — это не адрес вида http://localhost:11434",
+        icon: {
+          label: "Значок",
+          choosePicture: "Выбрать изображение…",
+          builtIn: "Встроенные значки",
+          default: "По умолчанию",
+          find: "Найти значок…",
+          noMatch: "Нет значка «{{query}}»",
+          tooLarge: "Изображение больше 1 МБ. Выберите поменьше.",
+          notImage:
+            "Osuna не может показать это изображение. Используйте PNG, JPEG, GIF, WebP, ICO или SVG.",
+        },
         footerResource:
           "После сохранения откроется страница этого подключения со списком развертываний ресурса в качестве моделей.",
         addressHint:

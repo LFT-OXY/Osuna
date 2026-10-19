@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
   ConnectionRevealKeyResult,
+  ConnectionStoreIconResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
 } from "./internal/connection-form-model";
@@ -115,6 +117,8 @@ export interface UseHostEndpointsResult {
   ) => Promise<ConnectionDetectResult>;
   // 读回已存 key 的原文；只有声明了 apiEndpointManagement 的主机认。
   revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
+  // 存一张图片给「自定义」接口当图标；只有声明了 apiEndpointManagement 的主机认。
+  storeIcon: (bytes: Uint8Array) => Promise<ConnectionStoreIconResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -378,6 +382,30 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const storeIcon = useCallback(
+    async (bytes: Uint8Array): Promise<ConnectionStoreIconResult> => {
+      if (!client) {
+        const message = t("workspace.terminal.hostDisconnected");
+        return { status: "failed", code: "disconnected", message };
+      }
+      try {
+        const result = await client.apiEndpointStoreIcon({
+          data: Buffer.from(bytes).toString("base64"),
+        });
+        if (result.error) {
+          return { status: "failed", code: result.error.code, message: result.error.message };
+        }
+        if (result.icon === null) {
+          return { status: "failed", code: "unknown", message: t("common.errors.unableToSave") };
+        }
+        return { status: "stored", icon: result.icon };
+      } catch (error) {
+        return { status: "failed", code: "unknown", message: toErrorMessage(error) };
+      }
+    },
+    [client, t],
+  );
+
   const dismissActionError = useCallback(() => setActionFailure(null), []);
   const dismissIssueActionError = useCallback(() => setIssueActionError(null), []);
 
@@ -400,6 +428,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     save,
     detect,
     revealKey,
+    storeIcon,
   };
 }
 

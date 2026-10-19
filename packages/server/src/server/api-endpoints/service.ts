@@ -29,6 +29,7 @@ import {
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
   type ApiEndpointSwitchOffPreview,
+  type ApiEndpointIconImage,
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -238,6 +239,13 @@ type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
+import {
+  EndpointIcons,
+  isBuiltInIconName,
+  StoreIconError,
+  storedIconName,
+  type StoreIconFailure,
+} from "./endpoint-icons.js";
 import { isErrnoException } from "../../utils/errno.js";
 import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
 import {
@@ -259,6 +267,8 @@ export type ApiEndpointErrorCode =
   | "endpoints_unparsable"
   // 没有开着且已选模型的接口，总开关打不开。
   | "no_usable_model"
+  // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
+  | StoreIconFailure
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
@@ -309,6 +319,8 @@ export interface ApiEndpointSaveInput {
   // undefined：保留这家原来的模板与区域或套餐。
   templateId?: string;
   region?: string;
+  // 「自定义」加的接口的图标：内置图标名或 store_icon 给的 `file:` 值；null 去掉，undefined 保留。
+  icon?: string | null;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -573,6 +585,7 @@ export class ApiEndpointService {
   // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   private readonly startedAt: Date;
   private readonly modelsDev: ModelsDevCatalog;
+  private readonly icons: EndpointIcons;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -640,6 +653,11 @@ export class ApiEndpointService {
     this.sightings = options.sightings;
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
+    this.icons = new EndpointIcons({
+      endpointsDir: this.store.endpointsDir,
+      logger: this.logger,
+      now: this.now,
+    });
     this.readCodexSignIn =
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
@@ -991,6 +1009,7 @@ export class ApiEndpointService {
       const fields = isLegacyForm
         ? validateLegacyFields(supported, input, existing)
         : validateFields(templateBaseUrls({ templateId, baseUrls: input.baseUrls ?? [] }), input);
+      this.validateIcon({ icon: input.icon, templateId });
       const endpoint = buildEndpoint({
         state,
         existing,
@@ -998,6 +1017,7 @@ export class ApiEndpointService {
         fields,
         template,
         searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
+        icon: input.icon,
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -1039,6 +1059,47 @@ export class ApiEndpointService {
   /** 内置模板清单（templates.ts），随版本走，不联网。 */
   listTemplates(): ApiEndpointTemplate[] {
     return [...API_ENDPOINT_TEMPLATES];
+  }
+
+  /** 存一张图片给接口当图标，返回保存时要带的 icon 值（照 magpie StoreIcon）。 */
+  storeIcon(bytes: Buffer): string {
+    try {
+      return this.icons.store(bytes);
+    } catch (error) {
+      if (error instanceof StoreIconError) {
+        throw new ApiEndpointRequestError({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  }
+
+  /** 取回存下的图标图片（base64）；不是存下的、或已经删了为 not_found。 */
+  readIcon(icon: string): ApiEndpointIconImage {
+    const image = this.icons.read(icon);
+    if (!image) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "Icon not found" });
+    }
+    return { data: image.data.toString("base64"), mimeType: image.mimeType };
+  }
+
+  /** 图标只给「自定义」加的接口选（照 magpie）；`file:` 的要是存下的，别的要像内置图标的名字。 */
+  private validateIcon(input: { icon: string | null | undefined; templateId: string | undefined }) {
+    const { icon } = input;
+    if (icon === undefined || icon === null) return;
+    if (input.templateId !== undefined) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "An endpoint added from a template uses the template's icon",
+      });
+    }
+    const isKnown =
+      storedIconName(icon) !== null ? this.icons.isStored(icon) : isBuiltInIconName(icon);
+    if (!isKnown) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Unknown icon: ${icon}`,
+      });
+    }
   }
 
   /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
@@ -1989,6 +2050,7 @@ export class ApiEndpointService {
       this.store.setApiKey(id, apiKey);
     }
     this.store.writeState(next);
+    this.icons.prune({ usedBefore: endpointIcons(previous), usedNow: endpointIcons(next) });
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
     this.recordCliRewrites(synced);
     this.staleCodexModels(next);
@@ -3210,6 +3272,7 @@ export class ApiEndpointService {
       searchesWeb: endpoint.searchesWeb === true,
       ...(endpoint.templateId !== undefined ? { templateId: endpoint.templateId } : {}),
       ...(endpoint.region !== undefined ? { region: endpoint.region } : {}),
+      ...(endpoint.icon !== undefined ? { icon: endpoint.icon } : {}),
     };
   }
 
@@ -3461,6 +3524,22 @@ function withEndpoint(
   return index === -1 ? [...endpoints, endpoint] : endpoints.with(index, endpoint);
 }
 
+/** 存下的图标：请求给了就用它（null 是去掉），没给留下原来的。 */
+function iconFieldOf(input: {
+  requested: string | null | undefined;
+  kept: string | undefined;
+}): Pick<StoredApiEndpoint, "icon"> {
+  const icon = input.requested === undefined ? input.kept : input.requested;
+  return icon === undefined || icon === null ? {} : { icon };
+}
+
+/** 接口用着的图标值（存下的图片与内置图标都算；prune 只看 `file:` 的）。 */
+function endpointIcons(state: ApiEndpointState): string[] {
+  return state.endpoints.flatMap((endpoint) =>
+    endpoint.icon === undefined ? [] : [endpoint.icon],
+  );
+}
+
 /** 复制（copyOf）的原来那家；不复制时为 null。和 endpointId 一起给、或那家不在了都拒收。 */
 function copySourceOf(
   state: ApiEndpointState,
@@ -3576,6 +3655,8 @@ function buildEndpoint(input: {
   searchesWeb: boolean;
   // 模板与区域：validateTemplate 已换算好，undefined 的那项从 base 原样留下。
   template: SavedTemplate;
+  // 请求给的图标：null 去掉，undefined 留下 base 的。
+  icon: string | null | undefined;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -3588,6 +3669,7 @@ function buildEndpoint(input: {
     manualModels: _manualModels,
     searchesWeb: _searchesWeb,
     region: keptRegion,
+    icon: keptIcon,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -3604,6 +3686,7 @@ function buildEndpoint(input: {
     ...(legacyDefaultModelId ? { legacyDefaultModelId } : {}),
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),
     ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
+    ...iconFieldOf({ requested: input.icon, kept: keptIcon }),
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };

@@ -11,8 +11,8 @@ import type { KeyHeaders } from "./gateway/refusals.js";
 
 /*
  * 内置模板（Template）：随 daemon 版本走，不联网下载，经 list_templates 发给客户端。
- * 收录 magpie 的 57 个里去掉 5 个决策模型、Remote magpie、Google Vertex AI 之后的；Google Gemini 等子任务 7，
- * 4 个本机模板由后面的工单加。顺序即列表里的顺序。
+ * 收录 magpie 的 57 个里去掉 5 个决策模型、Remote magpie、Google Vertex AI 之后的；Google Gemini 等子任务 7。
+ * 顺序即列表里的顺序。
  * 国际站与中国站各是一个模板，中国站的 id 是国际站的加 `-cn`（照 magpie），客户端合成一行。
  */
 
@@ -963,7 +963,59 @@ const RELAYS: ApiEndpointTemplate[] = [
   }),
 ];
 
-export const API_ENDPOINT_TEMPLATES: readonly ApiEndpointTemplate[] = [...VENDORS, ...RELAYS];
+/*
+ * 本机服务（照 magpie KindLocal）：不要 key，地址是这台电脑上的默认端口。服务可能换了端口或在别的电脑上，表单只要一个服务地址，
+ * 改它只换各格式地址的协议、主机、端口，路径不变（magpie local_address.go，客户端做）。oMLX、MLX-Serve 的决策模型地址不收。
+ */
+const LOCALS: ApiEndpointTemplate[] = [
+  template({
+    id: "ollama",
+    name: "Ollama",
+    group: "local",
+    keyOptional: true,
+    chat: "http://localhost:11434/v1",
+    anthropic: "http://localhost:11434",
+    note: "your local models",
+    website: "https://ollama.com",
+  }),
+  template({
+    id: "lmstudio",
+    name: "LM Studio",
+    group: "local",
+    keyOptional: true,
+    chat: "http://localhost:1234/v1",
+    note: "local server, port 1234 by default",
+    website: "https://lmstudio.ai",
+  }),
+  template({
+    id: "omlx",
+    name: "oMLX",
+    group: "local",
+    keyOptional: true,
+    chat: "http://localhost:8000/v1",
+    responses: "http://localhost:8000/v1",
+    anthropic: "http://localhost:8000",
+    note: "local server, port 8000 by default",
+    website: "https://omlx.ai",
+  }),
+  template({
+    id: "mlx-serve",
+    name: "MLX-Serve",
+    group: "local",
+    keyOptional: true,
+    chat: "http://localhost:11234/v1",
+    responses: "http://localhost:11234/v1",
+    anthropic: "http://localhost:11234",
+    note: "local server, port 11234 by default",
+    website: "https://github.com/ddalcu/mlx-serve",
+  }),
+];
+
+export const API_ENDPOINT_TEMPLATES: readonly ApiEndpointTemplate[] = [
+  ...VENDORS,
+  ...RELAYS,
+  ...LOCALS,
+];
 
 export function findTemplate(id: string): ApiEndpointTemplate | null {
   return API_ENDPOINT_TEMPLATES.find((candidate) => candidate.id === id) ?? null;

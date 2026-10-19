@@ -145,6 +145,9 @@ export const ApiEndpointSchema = z.object({
   // 从哪个模板（Template）加的、选的哪个区域或套餐；「自定义」加的没有。老 daemon 不发。
   templateId: z.string().optional(),
   region: z.string().optional(),
+  // 「自定义」加的接口自己选的图标：内置图标的名字（如 deepseek-color），或 `file:<名字>`——daemon 存的图片副本，
+  // 经 read_icon 取回（照 magpie）。没有就按模板或名称首字画。老 daemon 不发。
+  icon: z.string().optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -287,6 +290,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * templateId、region：从哪个模板加的、选的哪个区域或套餐（地址由客户端按模板填好放进 baseUrls）。
  * 不认识的模板、不属于它的区域拒收；省略即保留这家原来的。老 daemon 忽略它们。
+ *
+ * icon：「自定义」加的接口的图标（取值见 ApiEndpointSchema.icon）；null 去掉，省略即保留。`file:` 的要先经 store_icon 存过；
+ * 从模板加的接口带图标拒收。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -305,6 +311,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   copyOf: z.string().optional(),
   templateId: z.string().optional(),
   region: z.string().optional(),
+  icon: z.string().nullable().optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -579,6 +586,52 @@ export const ApiEndpointRevealKeyResponseSchema = z.object({
   }),
 });
 export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyResponseSchema>;
+
+/**
+ * 存一张图片给接口当图标（照 magpie 的 `file:` 图标）：data 是 base64 的原始字节，PNG、JPEG、GIF、WebP、ICO 或 SVG，
+ * 不超过 1 MB。按内容起名，同一张只存一份；返回保存时要带的 icon 值。没有接口再用它时 daemon 删掉副本。
+ * 失败的 code：icon_too_large、icon_not_image。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointStoreIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.store_icon.request"),
+  requestId: z.string(),
+  data: z.string(),
+});
+export type ApiEndpointStoreIconRequest = z.infer<typeof ApiEndpointStoreIconRequestSchema>;
+
+export const ApiEndpointStoreIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.store_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointStoreIconResponse = z.infer<typeof ApiEndpointStoreIconResponseSchema>;
+
+/** 取回 store_icon 存下的图片（icon 是 `file:<名字>`）：base64 与 MIME 类型；不在了为 not_found。 */
+export const ApiEndpointReadIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_icon.request"),
+  requestId: z.string(),
+  icon: z.string(),
+});
+export type ApiEndpointReadIconRequest = z.infer<typeof ApiEndpointReadIconRequestSchema>;
+
+export const ApiEndpointIconImageSchema = z.object({
+  data: z.string(),
+  mimeType: z.string(),
+});
+export type ApiEndpointIconImage = z.infer<typeof ApiEndpointIconImageSchema>;
+
+export const ApiEndpointReadIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.read_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: ApiEndpointIconImageSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointReadIconResponse = z.infer<typeof ApiEndpointReadIconResponseSchema>;
 
 /**
  * 模板（Template）的一个区域或套餐：自己的一套各格式地址；keysUrl、website、modelsDevIds 只在和模板的不同时给。

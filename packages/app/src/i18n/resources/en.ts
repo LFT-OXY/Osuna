@@ -2629,6 +2629,10 @@ export const en = {
           freeModelsNoKey: "Free models with no key",
           bedrockApiKey: "Bedrock API key",
           azureResource: "Your resource's endpoint and key",
+          localModels: "Your local models",
+          localServer1234: "Local server, port 1234 by default",
+          localServer8000: "Local server, port 8000 by default",
+          localServer11234: "Local server, port 11234 by default",
         },
         keyHints: {
           freeModelsNeedNoKey: "Optional: free models need no key",
@@ -2653,9 +2657,24 @@ export const en = {
         showKey: "Show",
         hideKey: "Hide",
         apiKeyOptionalLabel: "API key (optional)",
+        apiKeyLocalPlaceholder: "Optional for local servers",
         keyRejected: "The upstream rejected this key (401 / 403)",
         address: "Address",
         resourceEndpoint: "Resource endpoint",
+        serviceAddress: "Server address",
+        serviceAddressHint:
+          "Where the server listens. Change the port, or give another computer's address; each format's address moves there and keeps its path.",
+        serviceAddressInvalid: "{{address}} isn't an address like http://localhost:11434",
+        icon: {
+          label: "Icon",
+          choosePicture: "Choose a picture…",
+          builtIn: "Built-in icons",
+          default: "Default",
+          find: "Find an icon…",
+          noMatch: "No icon called “{{query}}”",
+          tooLarge: "The picture is over 1 MB. Pick a smaller one.",
+          notImage: "Not a picture Osuna can show. Use PNG, JPEG, GIF, WebP, ICO or SVG.",
+        },
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:

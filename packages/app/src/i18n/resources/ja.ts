@@ -2588,6 +2588,10 @@ export const ja: TranslationResources = {
           freeModelsNoKey: "無料モデルはキー不要",
           bedrockApiKey: "Bedrock API キー",
           azureResource: "自分のリソースのエンドポイントとキー",
+          localModels: "ローカルのモデル",
+          localServer1234: "ローカルサーバー、既定のポートは 1234",
+          localServer8000: "ローカルサーバー、既定のポートは 8000",
+          localServer11234: "ローカルサーバー、既定のポートは 11234",
         },
         keyHints: {
           freeModelsNeedNoKey: "任意: 無料モデルにはキー不要",
@@ -2614,9 +2618,26 @@ export const ja: TranslationResources = {
         showKey: "表示",
         hideKey: "隠す",
         apiKeyOptionalLabel: "API キー（任意）",
+        apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
         address: "アドレス",
         resourceEndpoint: "リソースのエンドポイント",
+        serviceAddress: "サーバーのアドレス",
+        serviceAddressHint:
+          "サーバーが待ち受けている場所です。ポートを変えるか、別のコンピューターのアドレスを入力します。各形式のアドレスはパスを保ったままそこへ移ります。",
+        serviceAddressInvalid:
+          "{{address}} は http://localhost:11434 のようなアドレスではありません",
+        icon: {
+          label: "アイコン",
+          choosePicture: "画像を選ぶ…",
+          builtIn: "内蔵アイコン",
+          default: "デフォルト",
+          find: "アイコンを検索…",
+          noMatch: "「{{query}}」というアイコンはありません",
+          tooLarge: "画像が 1 MB を超えています。小さい画像を選んでください。",
+          notImage:
+            "Osuna で表示できる画像ではありません。PNG、JPEG、GIF、WebP、ICO、SVG を使ってください。",
+        },
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:

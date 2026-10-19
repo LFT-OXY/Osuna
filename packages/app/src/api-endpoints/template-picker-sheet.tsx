@@ -195,6 +195,7 @@ function TemplateTile({
     () => (
       <View style={styles.iconFrame}>
         <EndpointIcon
+          icon={null}
           templateId={template.id}
           name={name}
           size={ICON_SIZE.md}

@@ -36,6 +36,10 @@ const NOTE_KEYS: Readonly<Record<string, string>> = {
   "free models with no key": "freeModelsNoKey",
   "Bedrock API key": "bedrockApiKey",
   "your resource's endpoint and key": "azureResource",
+  "your local models": "localModels",
+  "local server, port 1234 by default": "localServer1234",
+  "local server, port 8000 by default": "localServer8000",
+  "local server, port 11234 by default": "localServer11234",
 };
 
 const KEY_HINT_KEYS: Readonly<Record<string, string>> = {
