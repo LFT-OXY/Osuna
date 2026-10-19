@@ -128,6 +128,8 @@ import type {
   AgentSkillSelection,
   AgentSkillsStatus,
   AgentLogicMapTarget,
+  WorkspaceLogicMapReadResult,
+  WorkspaceLogicMapSummary,
   AgentSkillsSaveResult,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -3161,6 +3163,34 @@ export class DaemonClient {
       throw new Error(payload.error);
     }
     return { mapName: payload.mapName };
+  }
+
+  /** 列出 workspace 里的逻辑图（图名与标题）。 */
+  async listWorkspaceLogicMaps(workspaceId: string): Promise<WorkspaceLogicMapSummary[]> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.logic_map.list.response">({
+        message: { type: "workspace.logic_map.list.request", workspaceId },
+      });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return payload.maps;
+  }
+
+  /** 读一张逻辑图；文件被改坏时返回 corrupt（哪个文件、什么问题），读不到时返回 error。 */
+  async getWorkspaceLogicMap(input: {
+    workspaceId: string;
+    mapName: string;
+  }): Promise<WorkspaceLogicMapReadResult> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.logic_map.get.response">({
+        message: {
+          type: "workspace.logic_map.get.request",
+          workspaceId: input.workspaceId,
+          mapName: input.mapName,
+        },
+      });
+    return payload.result;
   }
 
   async updateAgent(

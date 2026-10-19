@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  LogicMapSkeletonSchema,
   ServerInfoStatusPayloadSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
@@ -81,5 +82,132 @@ describe("logic map protocol", () => {
     expect(getLogicMapNameFromLabels({ [LOGIC_MAP_LABEL]: "  " })).toBeNull();
     expect(getLogicMapNameFromLabels({})).toBeNull();
     expect(getLogicMapNameFromLabels(undefined)).toBeNull();
+  });
+
+  it("lists and reads a workspace's maps", () => {
+    for (const message of [
+      { type: "workspace.logic_map.list.request", requestId: "r1", workspaceId: "w1" },
+      {
+        type: "workspace.logic_map.get.request",
+        requestId: "r2",
+        workspaceId: "w1",
+        mapName: "login",
+      },
+    ]) {
+      expect(SessionInboundMessageSchema.safeParse(message).success).toBe(true);
+    }
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "workspace.logic_map.get.request",
+        requestId: "r3",
+        workspaceId: "w1",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("parses a list response and each kind of read result", () => {
+    const map = {
+      title: "Login",
+      specFramework: { kind: "none" },
+      nodes: [
+        {
+          id: "start",
+          title: "Open the page",
+          kind: "start",
+          parentId: null,
+          failure: false,
+          doc: { kind: "own", file: "start.md", pendingLink: false },
+        },
+        {
+          id: "check",
+          title: "Check password",
+          kind: "decision",
+          parentId: null,
+          failure: false,
+          doc: { kind: "external", path: "docs/prd.md", heading: "Password" },
+        },
+      ],
+      edges: [{ from: "start", to: "check", condition: null }],
+    };
+    const messages = [
+      {
+        type: "workspace.logic_map.list.response",
+        payload: {
+          requestId: "r1",
+          workspaceId: "w1",
+          maps: [
+            { name: "login", title: "Login" },
+            { name: "untitled-1a2b3c4d", title: null },
+          ],
+          error: null,
+        },
+      },
+      {
+        type: "workspace.logic_map.get.response",
+        payload: {
+          requestId: "r2",
+          workspaceId: "w1",
+          mapName: "login",
+          result: { kind: "ok", map },
+        },
+      },
+      {
+        type: "workspace.logic_map.get.response",
+        payload: {
+          requestId: "r3",
+          workspaceId: "w1",
+          mapName: "login",
+          result: {
+            kind: "corrupt",
+            file: "docs/logic-maps/login/map.json",
+            problem: "Not valid JSON",
+          },
+        },
+      },
+      {
+        type: "workspace.logic_map.get.response",
+        payload: {
+          requestId: "r4",
+          workspaceId: "w1",
+          mapName: "gone",
+          result: { kind: "error", message: "Logic map not found: gone" },
+        },
+      },
+      { type: "workspace.logic_map.changed", payload: { workspaceId: "w1", mapName: "login" } },
+    ];
+    for (const message of messages) {
+      expect(SessionOutboundMessageSchema.parse(message)).toEqual(message);
+    }
+  });
+
+  it("lets an old client read a map that carries fields it does not know yet", () => {
+    const parsed = LogicMapSkeletonSchema.parse({
+      title: null,
+      specFramework: null,
+      nodes: [
+        {
+          id: "a",
+          title: "A",
+          kind: "step",
+          parentId: null,
+          failure: false,
+          doc: null,
+          addedLater: 1,
+        },
+      ],
+      edges: [],
+      addedLater: true,
+    });
+
+    expect(parsed.nodes[0]?.id).toBe("a");
+  });
+
+  it("subscribes to map changes by name", () => {
+    const message = {
+      type: "session.events.set_subscription.request" as const,
+      requestId: "r5",
+      events: ["workspace.logic_map.changed" as const],
+    };
+    expect(SessionInboundMessageSchema.parse(message)).toEqual(message);
   });
 });

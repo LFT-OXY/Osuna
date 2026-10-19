@@ -29,3 +29,48 @@ export class LogicMapWorkspaceNotFoundError extends Error {
     this.name = "LogicMapWorkspaceNotFoundError";
   }
 }
+
+/** 调用方 Agent 没开逻辑图（或不是 Agent 发起的调用），不知道该读写哪张图。 */
+export class LogicMapOffError extends Error {
+  constructor(readonly agentId: string | null) {
+    super(
+      agentId
+        ? "The logic map is off for this conversation. The user turns it on with the Logic map switch in the composer."
+        : "The logic map tools are only available to an agent.",
+    );
+    this.name = "LogicMapOffError";
+  }
+}
+
+/** workspace 里没有这张图。 */
+export class LogicMapNotFoundError extends Error {
+  constructor(readonly mapName: string) {
+    super(`Logic map not found: ${mapName}`);
+    this.name = "LogicMapNotFoundError";
+  }
+}
+
+/** 骨架文件被手动改坏：哪张图、哪个文件（相对 workspace）、什么问题。 */
+export class LogicMapCorruptError extends Error {
+  constructor(
+    readonly mapName: string,
+    readonly file: string,
+    readonly problem: string,
+  ) {
+    super(`Logic map "${mapName}" is broken: ${file}: ${problem}`);
+    this.name = "LogicMapCorruptError";
+  }
+}
+
+/** 一组更新操作里有不合格的地方，整组都没写入。 */
+export class LogicMapUpdateRejectedError extends Error {
+  constructor(readonly problems: readonly string[]) {
+    super(
+      [
+        "The logic map update was rejected and nothing was written. Fix these and send the whole batch again:",
+        ...problems.map((problem) => `- ${problem}`),
+      ].join("\n"),
+    );
+    this.name = "LogicMapUpdateRejectedError";
+  }
+}

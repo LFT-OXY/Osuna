@@ -67,6 +67,10 @@ import { resolveRoutingBlock } from "./agent/routing-block.js";
 import { resolveLogicMapInstructionBlock } from "./logic-map/logic-map-instruction-block.js";
 import { setLogicMapEnabled } from "./logic-map/logic-map-toggle.js";
 import {
+  listWorkspaceLogicMaps,
+  readWorkspaceLogicMap,
+} from "./logic-map/logic-map-workspace-reads.js";
+import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
 } from "./agent/create-agent-title.js";
@@ -2677,6 +2681,10 @@ export class Session {
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
       case "agent.logic_map.set_enabled.request":
         return this.handleSetLogicMapEnabledRequest(msg);
+      case "workspace.logic_map.list.request":
+        return this.handleListWorkspaceLogicMapsRequest(msg);
+      case "workspace.logic_map.get.request":
+        return this.handleGetWorkspaceLogicMapRequest(msg);
       default:
         return undefined;
     }
@@ -3446,6 +3454,63 @@ export class Session {
           agentId,
           mapName: null,
           error: getErrorMessageOr(error, "Failed to set logic map toggle"),
+        },
+      });
+    }
+  }
+
+  private async handleListWorkspaceLogicMapsRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.logic_map.list.request" }>,
+  ): Promise<void> {
+    const { requestId, workspaceId } = msg;
+    try {
+      const maps = await listWorkspaceLogicMaps(
+        { workspaceRegistry: this.workspaceRegistry },
+        workspaceId,
+      );
+      this.emit({
+        type: "workspace.logic_map.list.response",
+        payload: { requestId, workspaceId, maps, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, workspaceId, requestId }, "Failed to list logic maps");
+      this.emit({
+        type: "workspace.logic_map.list.response",
+        payload: {
+          requestId,
+          workspaceId,
+          maps: [],
+          error: getErrorMessageOr(error, "Failed to list logic maps"),
+        },
+      });
+    }
+  }
+
+  private async handleGetWorkspaceLogicMapRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.logic_map.get.request" }>,
+  ): Promise<void> {
+    const { requestId, workspaceId, mapName } = msg;
+    try {
+      const result = await readWorkspaceLogicMap(
+        { workspaceRegistry: this.workspaceRegistry },
+        { workspaceId, mapName },
+      );
+      this.emit({
+        type: "workspace.logic_map.get.response",
+        payload: { requestId, workspaceId, mapName, result },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, workspaceId, mapName, requestId },
+        "Failed to read logic map",
+      );
+      this.emit({
+        type: "workspace.logic_map.get.response",
+        payload: {
+          requestId,
+          workspaceId,
+          mapName,
+          result: { kind: "error", message: getErrorMessageOr(error, "Failed to read logic map") },
         },
       });
     }
@@ -8761,6 +8826,7 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
+    case "workspace.logic_map.changed":
       return message.type;
     case "status":
       return statusEventCategory(message.payload.status);
@@ -8811,6 +8877,8 @@ function legacyWantsEvent(
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
+    // 逻辑图事件同样晚于订阅机制出现，只发给订阅了它的连接。
+    case "workspace.logic_map.changed":
       return false;
     default:
       return true;

@@ -90,6 +90,8 @@ import {
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
+import { registerLogicMapTools } from "../../logic-map/logic-map-tools.js";
+import type { LogicMapChangedEvent } from "../../logic-map/logic-map-store.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -151,6 +153,8 @@ export interface PaseoToolHostDependencies {
   resolveCallerContext?: (callerAgentId: string) => VoiceCallerContext | null;
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
+  /** update_logic_map 写入成功后调用，用来推送"图已变更"。 */
+  onLogicMapChanged?: (event: LogicMapChangedEvent) => void;
   logger: Logger;
 }
 
@@ -1232,6 +1236,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       resolveCallerAgent,
     });
   }
+
+  registerLogicMapTools({
+    registerTool,
+    agentManager,
+    callerAgentId,
+    onLogicMapChanged: options.onLogicMapChanged,
+  });
 
   registerTool(
     "create_workspace",

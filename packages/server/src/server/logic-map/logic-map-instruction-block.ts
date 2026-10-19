@@ -2,6 +2,7 @@ import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 
 import { formatSystemNotificationPrompt } from "../agent/agent-prompt.js";
 import { LOGIC_MAPS_DIRECTORY } from "./logic-map-store.js";
+import { READ_LOGIC_MAP_TOOL, UPDATE_LOGIC_MAP_TOOL } from "./logic-map-tools.js";
 
 export interface ResolveLogicMapInstructionBlockInput {
   /** 用户这条消息的文字。 */
@@ -14,6 +15,7 @@ function formatLogicMapInstructionBlock(mapName: string): string {
   return formatSystemNotificationPrompt(
     [
       `The logic map is on for this conversation. You maintain the logic map "${mapName}", stored in this workspace at ${LOGIC_MAPS_DIRECTORY}/${mapName}/.`,
+      `Read it with the \`${READ_LOGIC_MAP_TOOL}\` tool and change it only with the \`${UPDATE_LOGIC_MAP_TOOL}\` tool; do not edit its files directly.`,
       [
         "Rules:",
         '- A logic map is a flowchart of one feature. Each line means "what happens next". Each decision shows every branch, including the failure branch.',

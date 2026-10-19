@@ -2,10 +2,26 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import type { LogicMapSkeleton, WorkspaceLogicMapSummary } from "@getpaseo/protocol/messages";
+import { z } from "zod";
+
 import { isErrnoException } from "../../utils/errno.js";
-import { writeJsonFileAtomic } from "../atomic-file.js";
-import { LogicMapDirectoryMissingError, LogicMapNameUnavailableError } from "./logic-map-errors.js";
-import { EMPTY_LOGIC_MAP_SKELETON } from "./logic-map-skeleton.js";
+import { writeFileAtomic, writeJsonFileAtomic } from "../atomic-file.js";
+import { isSameOrDescendantPath } from "../path-utils.js";
+import {
+  LogicMapCorruptError,
+  LogicMapDirectoryMissingError,
+  LogicMapNameUnavailableError,
+  LogicMapNotFoundError,
+  LogicMapUpdateRejectedError,
+} from "./logic-map-errors.js";
+import {
+  applyLogicMapOperations,
+  normalizeHeading,
+  type ExternalDocLink,
+  type LogicMapOperation,
+} from "./logic-map-operations.js";
+import { EMPTY_LOGIC_MAP_SKELETON, parseLogicMapSkeleton } from "./logic-map-skeleton.js";
 
 /** 逻辑图跟着 workspace 的 cwd 走，随代码进版本记录。 */
 export const LOGIC_MAPS_DIRECTORY = "docs/logic-maps";
@@ -45,4 +61,170 @@ export async function createEmptyLogicMap(cwd: string): Promise<string> {
     return mapName;
   }
   throw new LogicMapNameUnavailableError(mapsDir);
+}
+
+/** 某张图被改过；推送给客户端，让它重新读取。 */
+export interface LogicMapChangedEvent {
+  workspaceId: string;
+  mapName: string;
+}
+
+export interface LogicMapLocation {
+  /** workspace 目录。 */
+  cwd: string;
+  mapName: string;
+}
+
+export interface LogicMapUpdateResult {
+  skeleton: LogicMapSkeleton;
+  /** 照常写入了，但提醒 Agent 的事（某层节点太多）。 */
+  warnings: string[];
+}
+
+function mapDirectory(location: LogicMapLocation): string {
+  // 图名来自客户端或 Agent 标签，只认 docs/logic-maps 下的一级文件夹。
+  const { mapName } = location;
+  if (mapName === "." || mapName === ".." || /[/\\]/.test(mapName) || mapName.length === 0) {
+    throw new LogicMapNotFoundError(mapName);
+  }
+  return path.join(location.cwd, LOGIC_MAPS_DIRECTORY, mapName);
+}
+
+function skeletonFileForDisplay(mapName: string): string {
+  return `${LOGIC_MAPS_DIRECTORY}/${mapName}/${LOGIC_MAP_SKELETON_FILE}`;
+}
+
+function describeSchemaProblem(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`)
+    .join("; ");
+}
+
+/** 读一张图的骨架；文件不在报 LogicMapNotFoundError，被改坏报 LogicMapCorruptError。 */
+export async function readLogicMap(location: LogicMapLocation): Promise<LogicMapSkeleton> {
+  const file = path.join(mapDirectory(location), LOGIC_MAP_SKELETON_FILE);
+  let text: string;
+  try {
+    text = await fs.readFile(file, "utf8");
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      throw new LogicMapNotFoundError(location.mapName);
+    }
+    throw error;
+  }
+  const displayFile = skeletonFileForDisplay(location.mapName);
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    throw new LogicMapCorruptError(
+      location.mapName,
+      displayFile,
+      `not valid JSON (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+  try {
+    return parseLogicMapSkeleton(json);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new LogicMapCorruptError(location.mapName, displayFile, describeSchemaProblem(error));
+    }
+    throw error;
+  }
+}
+
+/** 列出 workspace 里的逻辑图（有骨架文件的文件夹），按图名排序；读不出来的图标题为 null。 */
+export async function listLogicMaps(cwd: string): Promise<WorkspaceLogicMapSummary[]> {
+  const mapsDir = path.join(cwd, LOGIC_MAPS_DIRECTORY);
+  const entries = await fs.readdir(mapsDir, { withFileTypes: true }).catch((error: unknown) => {
+    if (isErrnoException(error) && error.code === "ENOENT") return [];
+    throw error;
+  });
+  const summaries = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry): Promise<WorkspaceLogicMapSummary | null> => {
+        try {
+          const skeleton = await readLogicMap({ cwd, mapName: entry.name });
+          return { name: entry.name, title: skeleton.title };
+        } catch (error) {
+          if (error instanceof LogicMapNotFoundError) return null;
+          if (error instanceof LogicMapCorruptError) return { name: entry.name, title: null };
+          throw error;
+        }
+      }),
+  );
+  return summaries
+    .filter((summary): summary is WorkspaceLogicMapSummary => summary !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function markdownHeadings(markdown: string): string[] {
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => /^ {0,3}#{1,6}\s+(.*)$/.exec(line)?.[1])
+    .filter((heading): heading is string => heading !== undefined)
+    .map(normalizeHeading);
+}
+
+async function checkExternalDoc(cwd: string, link: ExternalDocLink): Promise<string | null> {
+  const where = `node "${link.nodeId}"`;
+  const resolved = path.resolve(cwd, link.path);
+  if (path.isAbsolute(link.path) || !isSameOrDescendantPath(path.resolve(cwd), resolved)) {
+    return `${where}: ${link.path} is outside the workspace; use a path relative to the workspace root`;
+  }
+  const text = await fs.readFile(resolved, "utf8").catch(() => null);
+  if (text === null) return `${where}: ${link.path} does not exist`;
+  if (!markdownHeadings(text).includes(link.heading)) {
+    return `${where}: ${link.path} has no heading "${link.heading}"`;
+  }
+  return null;
+}
+
+// 同一张图的更新排队执行：每次都在锁里读最新骨架再套增量，两个对话的改动都保留。
+const mapUpdateQueues = new Map<string, Promise<unknown>>();
+
+async function runExclusive<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = mapUpdateQueues.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  const settled = run.catch(() => undefined);
+  mapUpdateQueues.set(key, settled);
+  try {
+    return await run;
+  } finally {
+    if (mapUpdateQueues.get(key) === settled) mapUpdateQueues.delete(key);
+  }
+}
+
+/**
+ * 把一组增量操作套到图上：全部合格才写入，任何一条不合格整组拒绝（LogicMapUpdateRejectedError），磁盘不动。
+ * 先写节点文档，再原子写骨架，最后删掉不再被引用的自有文档。
+ */
+export async function updateLogicMap(
+  location: LogicMapLocation,
+  operations: readonly LogicMapOperation[],
+): Promise<LogicMapUpdateResult> {
+  const directory = mapDirectory(location);
+  return runExclusive(path.resolve(directory), async () => {
+    const current = await readLogicMap(location);
+    const applied = applyLogicMapOperations(current, operations);
+    const linkProblems = await Promise.all(
+      applied.externalLinks.map((link) => checkExternalDoc(location.cwd, link)),
+    );
+    const problems = [
+      ...applied.problems,
+      ...linkProblems.filter((problem): problem is string => problem !== null),
+    ];
+    if (problems.length > 0) {
+      throw new LogicMapUpdateRejectedError(problems);
+    }
+    for (const [file, content] of applied.docWrites) {
+      await writeFileAtomic(path.join(directory, file), content);
+    }
+    await writeJsonFileAtomic(path.join(directory, LOGIC_MAP_SKELETON_FILE), applied.skeleton);
+    await Promise.all(
+      applied.docDeletes.map((file) => fs.rm(path.join(directory, file), { force: true })),
+    );
+    return { skeleton: applied.skeleton, warnings: applied.warnings };
+  });
 }
