@@ -15,6 +15,7 @@ import {
   type ConnectionIconResult,
 } from "./connection-form-model";
 import { curlOf, type CurlCommand } from "./curl-command";
+import type { ConnectionCurlInputs } from "./connection-form-model";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -1411,7 +1412,7 @@ describe("curlOf: a curl command from a vendor's docs", () => {
 });
 
 describe("connection form: a pasted curl command", () => {
-  it("the custom form takes the address, its format, the model, and says the key only stands for one", async () => {
+  it("the custom form takes the address, its format, the model, and says the key is only a placeholder", async () => {
     const fake = fakeDeps();
     const model = createConnectionFormModel(
       { mode: "create", templateId: null },
@@ -1419,13 +1420,17 @@ describe("connection form: a pasted curl command", () => {
       KEY_OPTIONAL,
     );
     model.setName("Kimi");
+    const inputs: ConnectionCurlInputs[] = [];
+    model.subscribeCurlInputs((next) => inputs.push(next));
     expect(model.pasteCurl(MOONSHOT_CURL)).toBe(true);
     let state = model.getState();
     expect(state.address).toBe("https://api.moonshot.cn/v1");
-    expect(state.addressGeneration).toBe(1);
     expect(urlOf(model, "openai_chat")).toBe("https://api.moonshot.cn/v1");
     expect(state.apiKey).toBe("");
-    expect(state.keyFocusGeneration).toBe(1);
+    // 地址框与「模型」框按通知改写自己；没取到 key，key 框获得焦点
+    expect(inputs).toEqual([
+      { address: "https://api.moonshot.cn/v1", modelIds: ["kimi-k3"], focusesKey: true },
+    ]);
     expect(state.modelIds).toEqual(["kimi-k3"]);
     expect(state.curlNote).toEqual({
       filled: [
@@ -1446,7 +1451,11 @@ describe("connection form: a pasted curl command", () => {
     expect(state.apiKey).toBe(OWN_KEY);
     expect(state.keyBoxValue).toBe(OWN_KEY);
     expect(state.keyBoxGeneration).toBe(1);
-    expect(state.keyFocusGeneration).toBe(1);
+    expect(inputs[1]).toEqual({
+      address: "https://api.anthropic.com",
+      modelIds: ["kimi-k3", "claude-opus-5-5"],
+      focusesKey: false,
+    });
     expect(state.modelIds).toEqual(["kimi-k3", "claude-opus-5-5"]);
     expect(state.curlNote).toEqual({
       filled: [
@@ -1558,6 +1567,37 @@ describe("connection form: a pasted curl command", () => {
     await model.submit();
     expect(fake.saves[0].models).toEqual(SAVED_ENDPOINT.models);
     expect(fake.saves[0]).not.toHaveProperty("manualModels");
+  });
+
+  it("a duplicate of a custom endpoint adds the model to the original's, in its models and its manual ones", async () => {
+    const fake = fakeDeps();
+    const source: ApiEndpoint = { ...SAVED_ENDPOINT, manualModels: [{ id: "glm-4.6" }] };
+    const model = createConnectionFormModel(
+      { mode: "duplicate", source, name: "Relay copy" },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.pasteCurl(MOONSHOT_CURL);
+    expect(model.getState().modelIds).toEqual(["kimi-k3"]);
+    expect(model.getState().hasModelField).toBe(true);
+    await model.submit();
+    expect(fake.saves[0]).toMatchObject({
+      copyOf: "ep_1",
+      models: [{ id: "claude-sonnet-4-5" }, { id: "glm-4.6" }, { id: "kimi-k3" }],
+      manualModels: [{ id: "glm-4.6" }, { id: "kimi-k3" }],
+      modelMapping: { opus: "glm-4.6" },
+    });
+  });
+
+  it("a curl command with nothing to take or tell shows no note", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    expect(model.pasteCurl("curl https://example.com/v1/chat/completions")).toBe(true);
+    expect(model.getState().curlNote).toBeNull();
   });
 
   it("text that isn't curl, or an old host, is pasted as before", () => {

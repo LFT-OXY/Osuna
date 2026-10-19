@@ -2715,7 +2715,7 @@ export const en = {
           unknownEndpoint:
             "Its URL doesn't end in /chat/completions, /messages or /responses: type the address yourself.",
           urlPlaceholder: "Replace {{part}} in the address.",
-          keyPlaceholder: "Its key, {{key}}, only stands for one: paste your own API key.",
+          keyPlaceholder: "Its key, {{key}}, is only a placeholder: paste your own API key.",
         },
         saveAndFetch: "Save and fetch models",
         save: "Save",

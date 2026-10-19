@@ -3,17 +3,18 @@ import {
   type ApiEndpoint,
   type ApiEndpointDetectFormatsRequest,
   type ApiEndpointFormatDetection,
+  type ApiEndpointModel,
   type ApiEndpointRequestFormat,
   type ApiEndpointSaveRequest,
   type ApiEndpointTemplate,
   type ApiEndpointTemplateRegion,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { curlOf } from "./curl-command";
+import { curlOf, type CurlCommand } from "./curl-command";
 import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
- * 只管连接：名称、一把 key、自动检测用的地址、三种格式的地址；模型在详情页挑（新建「自定义」时粘贴 curl 带来的除外），编辑时原样带回。
+ * 只管连接：名称、一把 key、自动检测用的地址、三种格式的地址；模型在详情页挑（新建或复制「自定义」时粘贴 curl 带来的除外），编辑时原样带回。
  * key 框从空开始：留空提交就不带 apiKey，daemon 保留原 key；自动检测同理带 endpointId。
  * 主机声明了 apiEndpointManagement 时 key 选填：没 key 也能检测、保存，daemon 不带认证头；老主机仍要 key。
  * 同样只在这种主机上：「复制」以原来那家开一个新建表单（key 留空即沿用它的，daemon 拷），key 框旁有「显示」，
@@ -25,7 +26,7 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * 本机服务的模板（分组 local）只要一个服务地址：改它只换各格式地址的协议、主机、端口，路径不变；留空或没改就用原来的地址
  * （照 magpie local_address.go 与编辑窗口的 Address 框）。
  * 往地址框或 key 框粘贴服务商文档里的 curl 命令（同样只在这种主机上）照 magpie fromCurl 填表：「自定义」填地址（按 URL
- * 结尾认出的那种格式）和 key，新建时再把正文里的模型加进「模型」；模板只取 key。粘贴后的提示条说取了什么、URL 结尾认不出、
+ * 结尾认出的那种格式）和 key，新建或复制时再把正文里的模型加进「模型」；模板只取 key。粘贴后的提示条说取了什么、URL 结尾认不出、
  * 地址里还有占位符、key 只是占位符；没取到 key 时把焦点移到 key 框。
  * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，本机一张图片（先经 storeIcon
  * 存到主机上），或从地址所在网站取（fetchSiteIcon，主机找到后同样存下）；保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
@@ -157,6 +158,16 @@ export interface ConnectionCurlNote {
   keyPlaceholder: string | null;
 }
 
+/**
+ * 一次粘贴 curl 要输入框自己改写的值（输入框不随状态重绘，照 docs/forms.md 用 replaceText）：地址框、「模型」框的新值，
+ * 没取到能用的 key 时 key 框要获得焦点。null 是这一框不动。
+ */
+export interface ConnectionCurlInputs {
+  address: string | null;
+  modelIds: string[] | null;
+  focusesKey: boolean;
+}
+
 export interface ConnectionFormState {
   mode: ConnectionFormSeed["mode"];
   // 「自定义」或模板认不出时为 null。
@@ -177,14 +188,9 @@ export interface ConnectionFormState {
   revealError: string | null;
   isKeyOptional: boolean;
   address: string;
-  // 粘贴 curl 改写了地址框时加一，输入框据此换成新值。
-  addressGeneration: number;
   addressInvalid: boolean;
-  // 粘贴的 curl 没给出能用的 key 时加一，key 框据此获得焦点。
-  keyFocusGeneration: number;
-  // 新建「自定义」时粘贴 curl 加进来的模型（可改）；hasModelField 为真后「模型」框一直显示。
+  // 新建或复制「自定义」时粘贴 curl 加进来的模型（可改）；hasModelField 为真后「模型」框一直显示。
   modelIds: string[];
-  modelIdsGeneration: number;
   hasModelField: boolean;
   curlNote: ConnectionCurlNote | null;
   // 资源地址（template.endpointExample 不为 null 时才用）：就是 Chat 与 Responses 的地址。
@@ -235,6 +241,8 @@ export interface ConnectionFormModel {
   setAddress(value: string): void;
   // 粘贴到地址框或 key 框的文字：是 curl 命令就按它填表并返回 true（调用方据此拦下这次粘贴），否则 false。
   pasteCurl(text: string): boolean;
+  // 每次粘贴 curl 填了表之后，告诉各输入框要改写什么。
+  subscribeCurlInputs(listener: (inputs: ConnectionCurlInputs) => void): () => void;
   // 「模型」框：逗号或换行分隔的模型 id。
   setModelIds(value: string): void;
   // 填自己资源地址的模板：Chat 与 Responses 都用它。
@@ -271,10 +279,7 @@ interface Values {
   isRevealingKey: boolean;
   revealError: string | null;
   address: string;
-  addressGeneration: number;
-  keyFocusGeneration: number;
   modelIds: string[];
-  modelIdsGeneration: number;
   hasModelField: boolean;
   curlNote: ConnectionCurlNote | null;
   urls: Urls;
@@ -290,6 +295,12 @@ interface Values {
   submitError: string | null;
 }
 
+// 粘贴的 curl 给「自定义」填的地址与它的格式。
+interface CurlBaseUrl {
+  format: ApiEndpointRequestFormat;
+  url: string;
+}
+
 const EMPTY_URLS: Urls = { anthropic_messages: "", openai_chat: "", openai_responses: "" };
 
 export function createConnectionFormModel(
@@ -299,6 +310,7 @@ export function createConnectionFormModel(
 ): ConnectionFormModel {
   const { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, templates } = options;
   const listeners = new Set<() => void>();
+  const curlInputListeners = new Set<(inputs: ConnectionCurlInputs) => void>();
   // 编辑的这家，或复制的原来那家：没打 key 时检测、保存都用它已存的 key。
   const keyOwner = keyOwnerOf(seed);
   const hasSavedKey = keyOwner?.hasApiKey === true;
@@ -328,10 +340,7 @@ export function createConnectionFormModel(
     isRevealingKey: false,
     revealError: null,
     address: API_ENDPOINT_REQUEST_FORMATS.map((format) => seededUrls[format]).find(Boolean) ?? "",
-    addressGeneration: 0,
-    keyFocusGeneration: 0,
     modelIds: [],
-    modelIdsGeneration: 0,
     hasModelField: false,
     curlNote: null,
     urls: seededUrls,
@@ -390,11 +399,8 @@ export function createConnectionFormModel(
       revealError: next.revealError,
       isKeyOptional,
       address: next.address,
-      addressGeneration: next.addressGeneration,
       addressInvalid,
-      keyFocusGeneration: next.keyFocusGeneration,
       modelIds: next.modelIds,
-      modelIdsGeneration: next.modelIdsGeneration,
       hasModelField: next.hasModelField,
       curlNote: next.curlNote,
       endpoint,
@@ -511,8 +517,10 @@ export function createConnectionFormModel(
       return url ? [{ format, url }] : [];
     });
     const isIconChanged = state.canPickIcon && values.icon !== seededIcon;
-    // 粘贴 curl 加进来的模型：选上，并记作手动添加（同详情页「添加模型」）。
+    // 粘贴 curl 加进来的模型：选上，并记作手动添加（同详情页「添加模型」）；复制时并进原来那家的。
     const typedModels = values.modelIds.map((id) => ({ id }));
+    const models = withModels(keyOwner?.models ?? [], typedModels);
+    const manualModels = withModels(keyOwner?.manualModels ?? [], typedModels);
     return {
       ...(seed.mode === "edit" ? { endpointId: seed.endpoint.id } : {}),
       name: values.name.trim(),
@@ -521,9 +529,9 @@ export function createConnectionFormModel(
       ...(values.template ? { templateId: values.template.id } : {}),
       ...(values.regionId ? { region: values.regionId } : {}),
       ...(isIconChanged ? { icon: values.icon } : {}),
-      // 连接弹窗不挑模型：新建时只有粘贴 curl 带来的，编辑、复制时把已选模型与档位映射原样带上。
-      models: keyOwner?.models ?? typedModels,
-      ...(typedModels.length > 0 ? { manualModels: typedModels } : {}),
+      // 连接弹窗不挑模型：只加粘贴 curl 带来的；编辑、复制时把已选模型与档位映射原样带上。
+      models,
+      ...(typedModels.length > 0 ? { manualModels } : {}),
       ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
       // 复制：上游清单、手动添加的模型、联网搜索开关等其余设置由 daemon 从原来那家拷。
       ...(seed.mode === "duplicate" ? { copyOf: seed.source.id } : {}),
@@ -552,64 +560,56 @@ export function createConnectionFormModel(
     return filled ?? values.address.trim();
   }
 
-  /** 照 magpie fromCurl：「自定义」填地址与格式，新建时加模型；key 都取；占位符不算 key。 */
+  /** 照 magpie fromCurl：「自定义」填地址与格式，新建或复制时加模型；key 都取；占位符不算 key。 */
   function applyCurl(text: string): boolean {
     if (!canPasteCurl) return false;
     const command = curlOf(text);
     if (!command) return false;
     const isCustom = values.template === null;
-    const takesModels = isCustom && seed.mode === "create";
-    const filled: ConnectionCurlFill[] = [];
-    const patch: Partial<Values> = {};
-    if (isCustom && command.format && command.baseUrl) {
-      abortPendingDetect();
-      const { [command.format]: _dropped, ...labels } = values.labels;
-      Object.assign(patch, {
-        address: command.baseUrl,
-        addressGeneration: values.addressGeneration + 1,
-        urls: { ...values.urls, [command.format]: command.baseUrl },
-        urlGeneration: values.urlGeneration + 1,
-        labels,
-        detecting: false,
-        detectError: null,
-      });
-      filled.push({ kind: "baseUrl", format: command.format });
-    }
-    if (command.apiKey) {
-      abortPendingDetect();
-      Object.assign(patch, {
-        apiKey: command.apiKey,
-        keyBoxValue: command.apiKey,
-        keyBoxGeneration: values.keyBoxGeneration + 1,
-        isKeyRevealed: false,
-        isRevealingKey: false,
-        revealError: null,
-        labels: {},
-        detecting: false,
-        detectError: null,
-      });
-      filled.push({ kind: "apiKey" });
-    }
-    if (takesModels && command.model) {
-      const model = command.model;
-      Object.assign(patch, {
-        modelIds: values.modelIds.includes(model) ? values.modelIds : [...values.modelIds, model],
-        modelIdsGeneration: values.modelIdsGeneration + 1,
-        hasModelField: true,
-      });
-      filled.push({ kind: "model", model });
-    }
-    update({
-      ...patch,
-      ...(command.apiKey ? {} : { keyFocusGeneration: values.keyFocusGeneration + 1 }),
-      curlNote: {
-        filled,
-        isEndpointUnknown: isCustom && command.format === null,
-        urlPlaceholder: isCustom ? command.urlPlaceholder : null,
-        keyPlaceholder: command.keyPlaceholder,
-      },
-    });
+    // 照 magpie：复制一家「自定义」也是新建，模型同样加上；编辑时已选的模型不动。
+    const takesModels = isCustom && seed.mode !== "edit";
+    const baseUrl = isCustom ? curlBaseUrlOf(command) : null;
+    const model = takesModels ? command.model : null;
+    const modelIds = model === null ? null : withId(values.modelIds, model);
+    const curlNote = curlNoteOf({ command, isCustom, baseUrl, model });
+    const urlChange = baseUrl ? baseUrlPatch(baseUrl) : {};
+    const keyChange = command.apiKey ? apiKeyPatch(command.apiKey) : {};
+    const modelChange = modelIds ? { modelIds, hasModelField: true } : {};
+    if (baseUrl || command.apiKey) abortPendingDetect();
+    update({ ...urlChange, ...keyChange, ...modelChange, curlNote });
+    const inputs: ConnectionCurlInputs = {
+      address: baseUrl?.url ?? null,
+      modelIds,
+      focusesKey: command.apiKey === null,
+    };
+    for (const listener of curlInputListeners) listener(inputs);
     return true;
+  }
+
+  function baseUrlPatch(baseUrl: CurlBaseUrl): Partial<Values> {
+    const { [baseUrl.format]: _dropped, ...labels } = values.labels;
+    return {
+      address: baseUrl.url,
+      urls: { ...values.urls, [baseUrl.format]: baseUrl.url },
+      urlGeneration: values.urlGeneration + 1,
+      labels,
+      detecting: false,
+      detectError: null,
+    };
+  }
+
+  function apiKeyPatch(apiKey: string): Partial<Values> {
+    return {
+      apiKey,
+      keyBoxValue: apiKey,
+      keyBoxGeneration: values.keyBoxGeneration + 1,
+      isKeyRevealed: false,
+      isRevealingKey: false,
+      revealError: null,
+      labels: {},
+      detecting: false,
+      detectError: null,
+    };
   }
 
   async function runReveal(endpointId: string): Promise<void> {
@@ -706,6 +706,10 @@ export function createConnectionFormModel(
       update({ address, labels: {}, detecting: false, detectError: null });
     },
     pasteCurl: applyCurl,
+    subscribeCurlInputs(listener) {
+      curlInputListeners.add(listener);
+      return () => curlInputListeners.delete(listener);
+    },
     setModelIds(value) {
       update({ modelIds: typedModelIds(value) });
     },
@@ -763,8 +767,49 @@ export function createConnectionFormModel(
       pendingIcon = null;
       closed = true;
       listeners.clear();
+      curlInputListeners.clear();
     },
   };
+}
+
+interface CurlNoteInput {
+  command: CurlCommand;
+  isCustom: boolean;
+  // 这次填上的地址与模型；没填为 null。
+  baseUrl: CurlBaseUrl | null;
+  model: string | null;
+}
+
+/** 粘贴 curl 后的提示条：填了什么与三条要用户自己改的；没有一句可说时为 null（照 magpie editorError("")）。 */
+function curlNoteOf(input: CurlNoteInput): ConnectionCurlNote | null {
+  const { command, isCustom, baseUrl, model } = input;
+  const filled: ConnectionCurlFill[] = [];
+  if (baseUrl) filled.push({ kind: "baseUrl", format: baseUrl.format });
+  if (command.apiKey) filled.push({ kind: "apiKey" });
+  if (model !== null) filled.push({ kind: "model", model });
+  const isEndpointUnknown = isCustom && command.format === null;
+  const urlPlaceholder = isCustom ? command.urlPlaceholder : null;
+  const { keyPlaceholder } = command;
+  const hasNote =
+    filled.length > 0 || isEndpointUnknown || urlPlaceholder !== null || keyPlaceholder !== null;
+  return hasNote ? { filled, isEndpointUnknown, urlPlaceholder, keyPlaceholder } : null;
+}
+
+/** curl 的 URL 认出了格式时，它给的地址与格式；认不出为 null。 */
+function curlBaseUrlOf(command: CurlCommand): CurlBaseUrl | null {
+  if (command.format === null || command.baseUrl === null) return null;
+  return { format: command.format, url: command.baseUrl };
+}
+
+/** 加上一个模型 id，已有就不重复。 */
+function withId(ids: string[], id: string): string[] {
+  return ids.includes(id) ? ids : [...ids, id];
+}
+
+/** 在已有的模型后面接上新加的，已有的 id 不重复。 */
+function withModels(kept: ApiEndpointModel[], added: ApiEndpointModel[]): ApiEndpointModel[] {
+  const keptIds = new Set(kept.map((model) => model.id));
+  return [...kept, ...added.filter((model) => !keptIds.has(model.id))];
 }
 
 /** 「模型」框里的 id：逗号或换行分隔，去掉空白与重复（照 magpie typedIds）。 */

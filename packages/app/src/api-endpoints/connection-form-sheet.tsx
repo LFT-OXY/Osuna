@@ -1,31 +1,21 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type RefObject,
-} from "react";
+import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Check } from "lucide-react-native";
+import { AlertTriangle, Check, Info } from "lucide-react-native";
 import type {
   ApiEndpointRequestFormat,
   ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { Alert } from "@/components/ui/alert";
+import { buttonIconSize, createControlGeometry } from "@/components/ui/control-geometry";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
-import type { EditingTextInputHandle } from "@/components/ui/text-input";
-import { isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useFilePicker, type FilePickFilter } from "@/hooks/use-file-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -40,6 +30,7 @@ import {
   templateRegionName,
 } from "./template-copy";
 import { useConnectionFormModel } from "./use-connection-form-model";
+import { useCurlPasteField } from "./use-curl-paste-field";
 import type {
   ConnectionCurlFill,
   ConnectionCurlNote,
@@ -75,6 +66,12 @@ export interface ApiEndpointConnectionSheetProps {
 }
 
 const ThemedCheck = withUnistyles(Check, (theme: Theme) => ({ color: theme.colors.statusSuccess }));
+const ThemedWarningIcon = withUnistyles(AlertTriangle, (theme: Theme) => ({
+  color: theme.colors.statusWarning,
+}));
+const ThemedInfoIcon = withUnistyles(Info, (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
 
 const URL_PLACEHOLDERS: Record<ApiEndpointRequestFormat, string> = {
   anthropic_messages: "https://relay.example.com",
@@ -116,11 +113,7 @@ export function ApiEndpointConnectionSheet({
     { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
-  const keyPaste = useCurlPaste(model);
-  // 粘贴的 curl 没给出能用的 key：焦点移到 key 框，等用户贴自己的（照 magpie）。
-  useEffect(() => {
-    if (state.keyFocusGeneration > 0) keyPaste.handle.current?.focus();
-  }, [keyPaste.handle, state.keyFocusGeneration]);
+  const keyInputRef = useCurlPasteField({ model, field: "apiKey" });
   const isCreate = state.mode === "create";
   const keyHint = state.template?.keyHint ?? null;
   const isTemplateKeyOptional = state.template?.keyOptional === true;
@@ -218,7 +211,7 @@ export function ApiEndpointConnectionSheet({
           <View style={styles.inlineRow}>
             <View style={styles.flex}>
               <FormTextInput
-                ref={keyPaste.ref}
+                ref={keyInputRef}
                 initialValue={state.keyBoxValue}
                 resetKey={state.keyBoxGeneration}
                 onChangeText={model.setApiKey}
@@ -317,7 +310,7 @@ function AddressField({
   const { t } = useTranslation();
   const handleDetect = useCallback(() => model.detect(), [model]);
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
-  const addressPaste = useCurlPaste(model);
+  const addressInputRef = useCurlPasteField({ model, field: "address" });
   return (
     <Field
       label={t("settings.apiEndpoints.form.address")}
@@ -336,9 +329,8 @@ function AddressField({
       <View style={styles.inlineRow}>
         <View style={styles.flex}>
           <FormTextInput
-            ref={addressPaste.ref}
+            ref={addressInputRef}
             initialValue={state.address}
-            resetKey={state.addressGeneration}
             onChangeText={model.setAddress}
             placeholder="https://relay.example.com"
             autoCapitalize="none"
@@ -371,7 +363,7 @@ function AddressField({
   );
 }
 
-/** 新建「自定义」时粘贴 curl 带来的模型（照 magpie 添加窗口的 Models 框）：逗号分隔，可改，保存时选上。 */
+/** 新建或复制「自定义」时粘贴 curl 带来的模型（照 magpie 添加窗口的 Models 框）：逗号分隔，可改，保存时选上。 */
 function ModelIdsField({
   state,
   model,
@@ -382,6 +374,7 @@ function ModelIdsField({
   size: "sm" | "md";
 }) {
   const { t } = useTranslation();
+  const modelsInputRef = useCurlPasteField({ model, field: "models" });
   return (
     <Field
       label={t("settings.apiEndpoints.form.models")}
@@ -389,8 +382,8 @@ function ModelIdsField({
       testID="api-endpoint-connection-models-field"
     >
       <FormTextInput
+        ref={modelsInputRef}
         initialValue={state.modelIds.join(", ")}
-        resetKey={state.modelIdsGeneration}
         onChangeText={model.setModelIds}
         placeholder={t("settings.apiEndpoints.form.modelsPlaceholder")}
         autoCapitalize="none"
@@ -400,53 +393,6 @@ function ModelIdsField({
       />
     </Field>
   );
-}
-
-interface CurlPasteTarget {
-  // 交给输入框的 ref。
-  ref: (handle: EditingTextInputHandle | null) => void;
-  // 当前的输入框，用来移焦点。
-  handle: RefObject<EditingTextInputHandle | null>;
-}
-
-/**
- * 网页上往这个输入框粘贴 curl 命令时交给表单模型；它认得就拦下这次粘贴（照 magpie fromCurl）。
- * 读的是剪贴板原文：输入框会吞掉换行，续行写法就认不出了。原生端的输入框不报粘贴事件，照常粘贴。
- * 用回调 ref 跟着输入框换监听：窄窗口的底部弹层会重新挂载表单内容，换成新的输入框元素。
- */
-function useCurlPaste(model: ConnectionFormModel): CurlPasteTarget {
-  const handle = useRef<EditingTextInputHandle | null>(null);
-  const bound = useRef<{ element: HTMLElement; unbind: () => void } | null>(null);
-  const ref = useCallback(
-    (next: EditingTextInputHandle | null) => {
-      handle.current = next;
-      if (!isWeb) return;
-      const native = next?.getNativeRef();
-      const element = native instanceof HTMLElement ? native : null;
-      if (bound.current?.element === element) return;
-      bound.current?.unbind();
-      bound.current = null;
-      if (!element) return;
-      const handlePaste = (event: ClipboardEvent) => {
-        const text = event.clipboardData?.getData("text") ?? "";
-        if (model.pasteCurl(text)) event.preventDefault();
-      };
-      element.addEventListener("paste", handlePaste);
-      bound.current = {
-        element,
-        unbind: () => element.removeEventListener("paste", handlePaste),
-      };
-    },
-    [model],
-  );
-  useEffect(
-    () => () => {
-      bound.current?.unbind();
-      bound.current = null;
-    },
-    [],
-  );
-  return { ref, handle };
 }
 
 /** 粘贴 curl 后的提示条：取了什么、URL 结尾认不出、地址里的占位符、key 只是占位符；有要用户自己改的就用警告色。 */
@@ -471,13 +417,24 @@ function CurlNoteAlert({ note }: { note: ConnectionCurlNote | null }) {
   }
   const needsAction =
     note.isEndpointUnknown || note.urlPlaceholder !== null || note.keyPlaceholder !== null;
+  // 两种提示条同一结构：浅底、无边框，只换底色与图标（与 <Alert variant="warning"> 的警示块同源）。
+  const toneStyle = needsAction ? styles.curlNoteWarning : styles.curlNoteInfo;
+  const icon = needsAction ? (
+    <ThemedWarningIcon size={buttonIconSize.sm} />
+  ) : (
+    <ThemedInfoIcon size={buttonIconSize.sm} />
+  );
   return (
-    <Alert
-      size="sm"
-      variant={needsAction ? "warning" : "info"}
-      description={sentences.join(" ")}
+    <View
+      style={[styles.curlNote, toneStyle]}
+      accessibilityRole="alert"
       testID="api-endpoint-connection-curl-note"
-    />
+    >
+      <View style={styles.curlNoteIcon}>{icon}</View>
+      <Text color="foreground" style={styles.flex}>
+        {sentences.join(" ")}
+      </Text>
+    </View>
   );
 }
 
@@ -1107,6 +1064,23 @@ function DetectionTag({
 const FORM_SNAP_POINTS = ["85%"];
 
 const styles = StyleSheet.create((theme) => ({
+  curlNote: {
+    ...createControlGeometry(theme).alert.sm.container,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[3],
+  },
+  curlNoteWarning: {
+    backgroundColor: theme.colors.surfaceWarning,
+  },
+  curlNoteInfo: {
+    backgroundColor: theme.colors.surface2,
+  },
+  // 图标与第一行文字对齐。
+  curlNoteIcon: {
+    height: theme.typeScale.body.lineHeight,
+    justifyContent: "center",
+  },
   form: {
     gap: theme.spacing[4],
   },

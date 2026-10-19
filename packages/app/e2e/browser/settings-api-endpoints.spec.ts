@@ -1601,6 +1601,10 @@ test.describe("Templates", () => {
     '  -d \'{"model": "claude-opus-5-5", "max_tokens": 1024}\'',
   ].join("\n");
 
+  function isPastedRelayCopy(endpoint: { name: string }): boolean {
+    return endpoint.name === "Pasted relay copy";
+  }
+
   test("a curl command pasted into the address or the key fills the custom form; a template takes only the key", async ({
     page,
   }) => {
@@ -1622,7 +1626,7 @@ test.describe("Templates", () => {
       await expect(apiKey).toBeFocused();
       await expect(models).toHaveValue("kimi-k3");
       await expect(note).toHaveText(
-        "Filled in from the curl command: OpenAI Chat base URL · model kimi-k3. Its key, $MOONSHOT_API_KEY, only stands for one: paste your own API key.",
+        "Filled in from the curl command: OpenAI Chat base URL · model kimi-k3. Its key, $MOONSHOT_API_KEY, is only a placeholder: paste your own API key.",
       );
     });
 
@@ -1685,8 +1689,24 @@ test.describe("Templates", () => {
       });
     });
 
+    await test.step("a duplicate of it adds the pasted model to the original's", async () => {
+      await duplicateFromMenu(page);
+      const relayCurl = `curl ${relay.origin}/good/v1/chat/completions -d '{"model":"good-2"}'`;
+      expect(await paste(address, relayCurl)).toBe(true);
+      await expect(models).toHaveValue("good-2");
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const { endpoints } = await client.apiEndpointList("claude");
+      const copy = endpoints.find(isPastedRelayCopy);
+      expect(copy).toMatchObject({
+        models: [{ id: "good-1" }, { id: "good-2" }],
+        manualModels: [{ id: "good-1" }, { id: "good-2" }],
+        hasApiKey: true,
+      });
+    });
+
     await test.step("a template takes only the key from it, in a narrow window's sheet too", async () => {
-      await page.goBack();
+      await openApiEndpointsPage(page);
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
       await page.getByTestId("api-endpoint-template-zhipu").click();

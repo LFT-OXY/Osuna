@@ -24,6 +24,12 @@ const ENDPOINT_FORMATS: Record<string, ApiEndpointRequestFormat> = {
   "/responses": "openai_responses",
 };
 
+// 以上面某个结尾收尾的 http(s) 地址：第 1 组是它前面的地址，第 2 组是结尾。
+const ENDPOINT_URL = new RegExp(
+  `^(https?:\\/\\/[^?#]*?)\\/*(${Object.keys(ENDPOINT_FORMATS).join("|")})\\/*(?:[?#].*)?$`,
+  "i",
+);
+
 // curl 会在其后读一个值的选项；其余选项单独成词。
 const VALUED_OPTION =
   /^(-[HdXuoAeFbcmT]|--(header|data|data-raw|data-binary|data-ascii|data-urlencode|json|request|url|user|output|user-agent|referer|form|cookie|max-time|connect-timeout|proxy|upload-file|retry|cert|key|cacert))$/;
@@ -37,7 +43,10 @@ const KEY_PLACEHOLDER =
 export function respellUrl(input: { url: string; format: ApiEndpointRequestFormat }): string {
   const url = input.url.trim().replace(/\/+$/, "");
   if (input.format === "anthropic_messages") return url.replace(/\/v1$/, "");
-  return /\/v\d+[a-z]*$/.test(url) || !/^https?:\/\/[^/]+$/.test(url) ? url : `${url}/v1`;
+  const hasVersion = /\/v\d+[a-z]*$/.test(url);
+  const isBareHost = /^https?:\/\/[^/]+$/.test(url);
+  const needsVersion = isBareHost && !hasVersion;
+  return needsVersion ? `${url}/v1` : url;
 }
 
 /**
@@ -62,10 +71,7 @@ export function curlOf(text: string): CurlCommand | null {
     keyPlaceholder: null,
     model: modelOf(body),
   };
-  const endpoint =
-    /^(https?:\/\/[^?#]*?)\/*(\/chat\/completions|\/messages|\/responses)\/*(?:[?#].*)?$/i.exec(
-      url,
-    );
+  const endpoint = ENDPOINT_URL.exec(url);
   if (endpoint) {
     const format = ENDPOINT_FORMATS[endpoint[2].toLowerCase()];
     const baseUrl = respellUrl({ url: endpoint[1], format });
@@ -80,7 +86,13 @@ export function curlOf(text: string): CurlCommand | null {
 }
 
 /** 从拆好的词里取 URL（第一个不是选项的词，或 --url）、请求头与正文（从文件读的 `@…` 不算）。 */
-function requestOf(words: string[]): { url: string; body: string; headers: string[] } {
+interface CurlRequestParts {
+  url: string;
+  body: string;
+  headers: string[];
+}
+
+function requestOf(words: string[]): CurlRequestParts {
   let url = "";
   let body = "";
   const headers: string[] = [];
@@ -139,15 +151,19 @@ function shellWords(input: WordsInput): string[] {
       index++;
       continue;
     }
-    const read =
-      char === "'" || char === '"'
-        ? readQuoted({ input, at: index })
-        : readBare({ input, at: index });
+    const isQuote = char === "'" || char === '"';
+    const read = isQuote ? readQuoted({ input, at: index }) : readBare({ input, at: index });
     word = (word ?? "") + read.text;
     index = read.next;
   }
   if (word !== null) words.push(word);
   return words;
+}
+
+// 从 source 的第 at 个字符读起。
+interface WordReadInput {
+  input: WordsInput;
+  at: number;
 }
 
 interface WordPiece {
@@ -156,7 +172,7 @@ interface WordPiece {
 }
 
 /** 引号里的一段。单引号里原样，PowerShell 用两个单引号表示一个；双引号里认 `\` 转义，PowerShell 还认反引号。 */
-function readQuoted(read: { input: WordsInput; at: number }): WordPiece {
+function readQuoted(read: WordReadInput): WordPiece {
   const { source, isPowerShell } = read.input;
   let text = "";
   if (source[read.at] === "'") {
@@ -174,21 +190,21 @@ function readQuoted(read: { input: WordsInput; at: number }): WordPiece {
   }
   let index = read.at + 1;
   for (; index < source.length && source[index] !== '"'; index++) {
-    const isEscape =
-      (source[index] === "\\" && /["\\$`]/.test(source[index + 1] ?? "")) ||
-      (isPowerShell && source[index] === "`");
-    if (isEscape) index++;
+    const isBackslashEscape = source[index] === "\\" && /["\\$`]/.test(source[index + 1] ?? "");
+    const isBacktickEscape = isPowerShell && source[index] === "`";
+    if (isBackslashEscape || isBacktickEscape) index++;
     text += source[index] ?? "";
   }
   return { text, next: index + 1 };
 }
 
 /** 引号外的一个字符：sh 的 `\` 与 cmd 的 `^` 转义下一个字符。 */
-function readBare(read: { input: WordsInput; at: number }): WordPiece {
+function readBare(read: WordReadInput): WordPiece {
   const { source, isCmd, isPowerShell } = read.input;
   const char = source[read.at];
-  const isEscape = (char === "\\" && !isCmd && !isPowerShell) || (char === "^" && isCmd);
-  if (isEscape) return { text: source[read.at + 1] ?? "", next: read.at + 2 };
+  const isShellEscape = char === "\\" && !isCmd && !isPowerShell;
+  const isCmdEscape = char === "^" && isCmd;
+  if (isShellEscape || isCmdEscape) return { text: source[read.at + 1] ?? "", next: read.at + 2 };
   return { text: char, next: read.at + 1 };
 }
 
