@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { page, userEvent } from "@vitest/browser/context";
+import { cdp, page, userEvent } from "@vitest/browser/context";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   SessionOutboundMessage,
@@ -75,7 +75,11 @@ const mounted: Mounted[] = [];
 
 function mountSurface(
   host: FakeHost,
-  overrides: Partial<{ supported: boolean | null; conversationMapName: string | null }> = {},
+  overrides: Partial<{
+    supported: boolean | null;
+    conversationMapName: string | null;
+    selectedNodeId: string | null;
+  }> = {},
 ): void {
   const container = document.createElement("div");
   container.style.cssText =
@@ -93,6 +97,7 @@ function mountSurface(
           isConnected
           supported={overrides.supported === undefined ? true : overrides.supported}
           conversationMapName={overrides.conversationMapName ?? null}
+          selectedNodeId={overrides.selectedNodeId ?? null}
         />
       </QueryClientProvider>,
     ),
@@ -205,7 +210,7 @@ describe("the logic map panel", () => {
     ]);
     expect(shownTexts(byTestId("logic-map-node-session"))).toEqual([
       "签发登录会话",
-      "No formal doc yet",
+      "No doc linked",
     ]);
     expect(host.getCalls).toEqual(["user-login"]);
   });
@@ -238,7 +243,10 @@ describe("the logic map panel", () => {
       "Start",
       "The agent hasn't added any nodes yet.",
     ]);
-    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["Untitled logic map", "0 nodes"]);
+    // "开始"是占位，不算节点。
+    expect(byTestId("logic-map-start-placeholder")).toBeTruthy();
+    expect(document.querySelectorAll('[data-testid^="logic-map-node-"]')).toHaveLength(0);
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["untitled-1a2b", "0 nodes"]);
   });
 
   it("names the map, the file and the problem when a map file is broken", async () => {
@@ -251,9 +259,21 @@ describe("the logic map panel", () => {
     });
     mountSurface(host);
 
-    expect(shownTexts(await shown("logic-map-corrupt"))).toEqual([
+    const corrupt = await shown("logic-map-corrupt");
+    expect(shownTexts(corrupt)).toEqual([
       "Can't read this logic map",
-      "user-login: docs/logic-maps/user-login/map.json is broken (Unexpected token } in JSON at position 120). Fix or restore the file.",
+      "user-login: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
+      "Details",
+    ]);
+    // 头部和正文用同一个名字指这张图。
+    expect(shownTexts(byTestId("logic-map-header"))).toEqual(["user-login"]);
+
+    await userEvent.click(byTestId("logic-map-state-details-toggle"));
+    expect(shownTexts(corrupt)).toEqual([
+      "Can't read this logic map",
+      "user-login: docs/logic-maps/user-login/map.json is not in a format Osuna can read. Fix or restore the file.",
+      "Hide details",
+      "Unexpected token } in JSON at position 120",
     ]);
   });
 
@@ -295,5 +315,87 @@ describe("the logic map panel", () => {
     await shown("logic-map-node-audit");
     expect(shownTexts(byTestId("logic-map-header"))).toEqual(["用户登录", "14 nodes"]);
     expect(host.getCalls).toEqual(["user-login", "user-login"]);
+  });
+
+  it("outlines the selected node in blue and leaves the others alone", async () => {
+    mountSurface(loginMapHost(), { selectedNodeId: "lock" });
+
+    const selected = await shown("logic-map-node-lock");
+    expect(getComputedStyle(selected).boxShadow).toContain("rgb(41, 112, 255) 0px 0px 0px 2px");
+    expect(getComputedStyle(byTestId("logic-map-node-stay")).boxShadow).not.toContain(
+      "rgb(41, 112, 255)",
+    );
+  });
+
+  it("opens at a readable size, from the top-left, with the zoom bar at the bottom-right", async () => {
+    mountSurface(loginMapHost());
+    await shown("logic-map-node-home");
+
+    // 320 宽的边栏装不下整张图：停在 70%，左边的主路径在视口里，右边的靠拖动。
+    expect(byTestId("zoomable-viewport-zoom-percent").textContent).toBe("70%");
+    const viewport = byTestId("logic-map-viewport").getBoundingClientRect();
+    const start = byTestId("logic-map-node-submit").getBoundingClientRect();
+    expect(start.left).toBeGreaterThanOrEqual(viewport.left);
+    expect(start.top - viewport.top).toBeLessThan(40);
+    const bar = byTestId("zoomable-viewport-zoom-bar").getBoundingClientRect();
+    expect(viewport.right - bar.right).toBeLessThan(16);
+    expect(viewport.bottom - bar.bottom).toBeLessThan(16);
+  });
+
+  describe("when the agent changes the map", () => {
+    afterEach(async () => {
+      await cdp().send("Emulation.setEmulatedMedia", { features: [] });
+    });
+
+    async function changeMap(host: FakeHost) {
+      const map = buildLoginLogicMap();
+      host.reads.set("user-login", {
+        kind: "ok",
+        map: {
+          ...map,
+          nodes: [
+            ...map.nodes,
+            { id: "audit", kind: "step", title: "记录登录日志", parentId: null, doc: null },
+          ],
+          edges: [...map.edges, { from: "home", to: "audit", condition: null }],
+        },
+      });
+      act(() =>
+        host.push({
+          type: "workspace.logic_map.changed",
+          payload: { workspaceId: WORKSPACE_ID, mapName: "user-login" },
+        }),
+      );
+      return shown("logic-map-node-audit");
+    }
+
+    it("fades the new node in and glides the existing ones", async () => {
+      const host = loginMapHost();
+      mountSurface(host);
+      await shown("logic-map-node-home");
+
+      const added = await changeMap(host);
+      const addedStyle = getComputedStyle(added);
+      expect(addedStyle.animationName).toBe("paseo-logic-map-node-enter");
+      expect(addedStyle.animationDuration).toBe("0.15s");
+      const existing = getComputedStyle(byTestId("logic-map-node-home"));
+      expect(existing.animationName).toBe("none");
+      expect(existing.transitionProperty).toBe("left, top, box-shadow");
+      expect(existing.transitionDuration).toBe("0.2s");
+      expect(existing.transitionTimingFunction).toBe("ease-out");
+    });
+
+    it("puts everything in place at once when the system asks for reduced motion", async () => {
+      await cdp().send("Emulation.setEmulatedMedia", {
+        features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+      });
+      const host = loginMapHost();
+      mountSurface(host);
+      await shown("logic-map-node-home");
+
+      const added = await changeMap(host);
+      expect(getComputedStyle(added).animationName).toBe("none");
+      expect(getComputedStyle(byTestId("logic-map-node-home")).transitionDuration).toBe("0s");
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LogicMapSkeleton } from "@getpaseo/protocol/messages";
 import { buildEmptyLogicMap, buildLoginLogicMap } from "@/test/logic-map-fixtures";
-import { layoutLogicMapLayer, type LogicMapNodeBox } from "./layout";
+import { LOGIC_MAP_EDGE_CLEARANCE, layoutLogicMapLayer, type LogicMapNodeBox } from "./layout";
 
 function overlaps(a: LogicMapNodeBox, b: LogicMapNodeBox): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -165,21 +165,18 @@ describe("logic map layer layout", () => {
     }
   });
 
-  it("marks the paths into and out of failure steps, and counts a subgraph node's direct children", () => {
+  it("marks only the lines leading into failure steps, and counts a subgraph node's direct children", () => {
     const layout = layoutLogicMapLayer(buildLoginLogicMap(), null);
     const failureEdges = layout.edges
       .filter((route) => route.failure)
       .map((route) => `${route.from}->${route.to}`);
 
+    // 离开失败步骤、回到主流程或结束的线（count-failure->limit、lock->stay……）是普通颜色。
     expect(failureEdges).toEqual([
       "account->locked-notice",
       "password->count-failure",
-      "count-failure->limit",
       "limit->wrong-password",
       "limit->lock",
-      "wrong-password->stay",
-      "lock->stay",
-      "locked-notice->stay",
     ]);
     expect(findNode(layout.nodes, "second-factor").subgraphNodeCount).toBe(4);
     expect(findNode(layout.nodes, "submit").subgraphNodeCount).toBeNull();
@@ -204,5 +201,87 @@ describe("logic map layer layout", () => {
     expect(layout.nodes).toEqual([]);
     expect(layout.edges).toEqual([]);
     expect(layout.startNodeId).toBeNull();
+  });
+
+  it("keeps the main path on the left when the agent writes the failure branch first", () => {
+    const map = buildLoginLogicMap();
+    const failureFirst = (from: string) => {
+      const branches = map.edges.filter((edge) => edge.from === from);
+      return branches.toReversed();
+    };
+    const edges = [
+      ...map.edges.filter((edge) => !["account", "password"].includes(edge.from)),
+      ...failureFirst("account"),
+      ...failureFirst("password"),
+    ];
+    const layout = layoutLogicMapLayer({ ...map, edges }, null);
+    const column = findNode(layout.nodes, "submit").x;
+
+    for (const id of ["account", "password", "reset-count", "second-factor", "session", "home"]) {
+      expect(findNode(layout.nodes, id).x, id).toBe(column);
+    }
+    expect(findNode(layout.nodes, "locked-notice").x).toBeGreaterThan(column);
+    expect(findNode(layout.nodes, "count-failure").x).toBeGreaterThan(column);
+    // 行仍按 Agent 写的顺序：第一行是失败的那条。
+    expect(findNode(layout.nodes, "account").branches.map((branch) => branch.targetId)).toEqual([
+      "locked-notice",
+      "password",
+    ]);
+  });
+
+  it("leaves from each row's own exit when two branches point at the same step", () => {
+    const skeleton: LogicMapSkeleton = {
+      title: "Retry",
+      specFramework: null,
+      nodes: [
+        { id: "check", kind: "decision", title: "Check", parentId: null, doc: null },
+        { id: "notice", kind: "step", title: "Notice", parentId: null, failure: true, doc: null },
+      ],
+      edges: [
+        { from: "check", to: "notice", condition: "Timeout" },
+        { from: "check", to: "notice", condition: "Refused" },
+      ],
+    };
+
+    const layout = layoutLogicMapLayer(skeleton, null);
+    const [first, second] = findNode(layout.nodes, "check").branches;
+
+    expect(layout.edges.map((route) => route.points[0])).toEqual([first.exit, second.exit]);
+    expect(first.exit.y).not.toBe(second.exit.y);
+  });
+
+  it("keeps every line clear of the cards it does not connect", () => {
+    const layout = layoutLogicMapLayer(buildLoginLogicMap(), null);
+
+    for (const route of layout.edges) {
+      for (const card of layout.nodes) {
+        if (card.id === route.from || card.id === route.to) continue;
+        for (const [index, end] of route.points.slice(1).entries()) {
+          const start = route.points[index];
+          const gapX = Math.max(
+            card.x - Math.max(start.x, end.x),
+            Math.min(start.x, end.x) - (card.x + card.width),
+            0,
+          );
+          const gapY = Math.max(
+            card.y - Math.max(start.y, end.y),
+            Math.min(start.y, end.y) - (card.y + card.height),
+            0,
+          );
+          expect(Math.max(gapX, gapY), `${route.id} near ${card.id}`).toBeGreaterThanOrEqual(
+            LOGIC_MAP_EDGE_CLEARANCE,
+          );
+        }
+      }
+    }
+  });
+
+  it("gives every line into the same step its own entry and its own last horizontal", () => {
+    const layout = layoutLogicMapLayer(buildLoginLogicMap(), null);
+    const intoStay = layout.edges.filter((route) => route.to === "stay");
+
+    expect(intoStay).toHaveLength(3);
+    expect(new Set(intoStay.map((route) => route.points.at(-1)?.x)).size).toBe(3);
+    expect(new Set(intoStay.map((route) => route.points.at(-2)?.y)).size).toBe(3);
   });
 });

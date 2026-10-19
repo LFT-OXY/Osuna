@@ -4096,7 +4096,6 @@ export const zhCN: TranslationResources = {
       tooltip: "查看 Agent 在这个工作区维护的逻辑图",
       canvas: "逻辑图画布",
       pickerLabel: "逻辑图：{{title}}",
-      untitled: "未命名逻辑图",
       nodeCountOne: "{{count}} 个节点",
       nodeCountMany: "{{count}} 个节点",
       loading: "正在加载逻辑图…",
@@ -4109,7 +4108,9 @@ export const zhCN: TranslationResources = {
         body: "Agent 还没有写入节点。",
       },
       unreadable: "读不出这张逻辑图",
-      corruptDetail: "{{map}}：{{file}} 已损坏（{{problem}}），请修复或恢复这个文件。",
+      corruptDetail: "「{{map}}」的 {{file}} 格式不对，读不出来。请修复或恢复这个文件。",
+      details: "详情",
+      hideDetails: "收起详情",
       listFailed: "读不出这个工作区的逻辑图",
       hostOutdated: {
         title: "需要更新这台主机上的 Osuna",
@@ -4122,7 +4123,7 @@ export const zhCN: TranslationResources = {
       },
       subgraphTagOne: "子图 · {{count}} 个节点",
       subgraphTagMany: "子图 · {{count}} 个节点",
-      pendingLink: "未指向正式文档",
+      pendingLink: "未指向文档",
     },
   },
 };

@@ -4103,7 +4103,6 @@ export const ar: TranslationResources = {
       tooltip: "عرض الخرائط المنطقية التي يحتفظ بها الوكيل في مساحة العمل هذه",
       canvas: "لوحة الخريطة المنطقية",
       pickerLabel: "الخريطة المنطقية: {{title}}",
-      untitled: "خريطة منطقية بلا عنوان",
       nodeCountOne: "{{count}} عقدة",
       nodeCountMany: "{{count}} عقد",
       loading: "جارٍ تحميل الخريطة المنطقية…",
@@ -4116,7 +4115,9 @@ export const ar: TranslationResources = {
         body: "لم يُضف الوكيل أي عقد بعد.",
       },
       unreadable: "تعذّرت قراءة هذه الخريطة المنطقية",
-      corruptDetail: "{{map}}: الملف {{file}} تالف ({{problem}}). أصلحه أو استعده.",
+      corruptDetail: "{{map}}: الملف {{file}} بتنسيق لا يستطيع Osuna قراءته. أصلحه أو استعده.",
+      details: "التفاصيل",
+      hideDetails: "إخفاء التفاصيل",
       listFailed: "تعذّر سرد الخرائط المنطقية لمساحة العمل هذه",
       hostOutdated: {
         title: "حدّث Osuna على هذا المضيف",
@@ -4129,7 +4130,7 @@ export const ar: TranslationResources = {
       },
       subgraphTagOne: "مخطط فرعي · {{count}} عقدة",
       subgraphTagMany: "مخطط فرعي · {{count}} عقد",
-      pendingLink: "بلا مستند رسمي بعد",
+      pendingLink: "بلا مستند مرتبط",
     },
   },
 };

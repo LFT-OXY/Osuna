@@ -129,13 +129,21 @@ export function workspaceTabTargetsEqual(
   return secondaryWorkspaceTabTargetsEqual(left, right);
 }
 
-const KIND_ONLY_TARGET_KINDS: ReadonlySet<WorkspaceTabTarget["kind"]> = new Set([
+// 这几种标签每个 workspace 只有一个，种类本身就是身份：比较、确定 tab id、关闭按钮的 testID 都按它走。
+const KIND_ONLY_TARGET_KINDS = [
   "files",
   "changes_tree",
   "pull_request",
   "session_history",
   "logic_map",
-]);
+] as const satisfies readonly WorkspaceTabTarget["kind"][];
+type KindOnlyTabKind = (typeof KIND_ONLY_TARGET_KINDS)[number];
+
+export function isKindOnlyTabTarget(
+  target: WorkspaceTabTarget,
+): target is Extract<WorkspaceTabTarget, { kind: KindOnlyTabKind }> {
+  return (KIND_ONLY_TARGET_KINDS as readonly string[]).includes(target.kind);
+}
 
 function secondaryWorkspaceTabTargetsEqual(
   left: WorkspaceTabTarget,
@@ -150,8 +158,7 @@ function secondaryWorkspaceTabTargetsEqual(
   if (left.kind === "working_diff" && right.kind === "working_diff") {
     return left.focusPath === right.focusPath && left.focusRequestId === right.focusRequestId;
   }
-  // 这几种标签每个 workspace 只有一个，种类相同就是同一个。
-  if (KIND_ONLY_TARGET_KINDS.has(left.kind)) {
+  if (isKindOnlyTabTarget(left)) {
     return left.kind === right.kind;
   }
   if (left.kind === "setup" && right.kind === "setup") {
@@ -224,13 +231,7 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   if (target.kind === "working_diff") {
     return "working_diff";
   }
-  if (
-    target.kind === "changes_tree" ||
-    target.kind === "files" ||
-    target.kind === "pull_request" ||
-    target.kind === "session_history" ||
-    target.kind === "logic_map"
-  ) {
+  if (isKindOnlyTabTarget(target)) {
     return target.kind;
   }
   if (target.kind === "plugin") {

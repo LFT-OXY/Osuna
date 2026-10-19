@@ -4172,7 +4172,6 @@ export const ru: TranslationResources = {
       tooltip: "Логические карты, которые агент ведёт в этом рабочем пространстве",
       canvas: "Холст логической карты",
       pickerLabel: "Логическая карта: {{title}}",
-      untitled: "Логическая карта без названия",
       nodeCountOne: "Узлов: {{count}}",
       nodeCountMany: "Узлов: {{count}}",
       loading: "Загрузка логической карты…",
@@ -4186,7 +4185,9 @@ export const ru: TranslationResources = {
       },
       unreadable: "Не удалось прочитать эту логическую карту",
       corruptDetail:
-        "{{map}}: файл {{file}} повреждён ({{problem}}). Исправьте или восстановите его.",
+        "{{map}}: файл {{file}} в формате, который Osuna не может прочитать. Исправьте или восстановите его.",
+      details: "Подробности",
+      hideDetails: "Скрыть подробности",
       listFailed: "Не удалось получить логические карты этого рабочего пространства",
       hostOutdated: {
         title: "Обновите Osuna на этом хосте",
@@ -4199,7 +4200,7 @@ export const ru: TranslationResources = {
       },
       subgraphTagOne: "Подграф · узлов: {{count}}",
       subgraphTagMany: "Подграф · узлов: {{count}}",
-      pendingLink: "Нет официального документа",
+      pendingLink: "Документ не привязан",
     },
   },
 };

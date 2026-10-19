@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   FIT_TRANSFORM,
   clampTransform,
-  contentPointAtTopCenter,
   fitContentSize,
   isActivePinchUpdate,
   isPointInsideTransformedContent,
   panContent,
+  topAlignedTransform,
   zoomContentAtPoint,
 } from "./geometry";
 
@@ -120,64 +120,39 @@ describe("zoomable viewport geometry", () => {
     ).toEqual({ width: 200, height: 100 });
   });
 
-  it("keeps the content at its own size in natural mode", () => {
+  it("stops shrinking at the floor and lets the wider content overflow", () => {
     expect(
       fitContentSize(
-        { width: 600, height: 1200 },
+        { width: 600, height: 800 },
         { width: 300, height: 400 },
-        { mode: "natural" },
+        { mode: "width", minFitScale: 0.7, maxFitScale: 1 },
       ),
-    ).toEqual({ width: 600, height: 1200 });
+    ).toEqual({ width: 420, height: 560 });
   });
 
-  it("shows a content point at the top center of the viewport, inside the pan limits", () => {
+  it("opens wide content at its top-left corner and narrow content centred at the top", () => {
     const limits = { minScale: 0.25, maxScale: 8 };
-    const tall = { width: 300, height: 600 };
-    const tallViewport = { width: 300, height: 400 };
+    const panel = { width: 300, height: 400 };
 
-    // 内容宽度正好铺满：横向不动，纵向把内容顶边放到视口顶边。
     expect(
-      contentPointAtTopCenter({
-        contentPoint: { x: 300, y: 0 },
-        contentSize: { width: 600, height: 1200 },
-        fittedContent: tall,
-        viewport: tallViewport,
-        limits,
-      }),
-    ).toEqual({ scale: 1, x: 0, y: 100 });
-    // 原大的宽图：把 (450, 200) 移到视口顶部正中，但不拖出内容边界。
+      topAlignedTransform({ fittedContent: { width: 420, height: 560 }, viewport: panel, limits }),
+    ).toEqual({ scale: 1, x: 60, y: 80 });
     expect(
-      contentPointAtTopCenter({
-        contentPoint: { x: 450, y: 200 },
-        contentSize: { width: 600, height: 1200 },
-        fittedContent: { width: 600, height: 1200 },
-        viewport: tallViewport,
-        limits,
-      }),
-    ).toEqual({ scale: 1, x: -150, y: 200 });
+      topAlignedTransform({ fittedContent: { width: 200, height: 560 }, viewport: panel, limits }),
+    ).toEqual({ scale: 1, x: 0, y: 80 });
   });
 
   it("lets content smaller than the viewport sit anywhere inside it when asked", () => {
     const limits = { minScale: 0.25, maxScale: 8, panWithinViewport: true };
+    const panel = { width: 300, height: 400 };
 
-    // 宽度铺满、高度只有 200 的内容放到视口顶边，而不是被拉回正中。
+    // 高度只有 200 的内容贴到视口顶边，而不是被拉回正中。
     expect(
-      contentPointAtTopCenter({
-        contentPoint: { x: 300, y: 0 },
-        contentSize: { width: 600, height: 400 },
-        fittedContent: { width: 300, height: 200 },
-        viewport: { width: 300, height: 400 },
-        limits,
-      }),
+      topAlignedTransform({ fittedContent: { width: 300, height: 200 }, viewport: panel, limits }),
     ).toEqual({ scale: 1, x: 0, y: -100 });
     // 但不能拖出视口。
     expect(
-      clampTransform(
-        { scale: 1, x: 0, y: -500 },
-        { width: 300, height: 200 },
-        { width: 300, height: 400 },
-        limits,
-      ),
+      clampTransform({ scale: 1, x: 0, y: -500 }, { width: 300, height: 200 }, panel, limits),
     ).toEqual({ scale: 1, x: 0, y: -100 });
   });
 });

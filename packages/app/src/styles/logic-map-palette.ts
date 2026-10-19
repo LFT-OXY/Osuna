@@ -8,8 +8,11 @@ export interface LogicMapCanvasPalette {
   canvas: string;
   dot: string;
   card: string;
+  /** 卡片投影；深色主题在最前面多一圈 1px 半透明亮边，卡片才和画布分得开。 */
   cardShadow: string;
   cardShadowHover: string;
+  /** 选中：2px 蓝色外圈，不加粗、不放大。 */
+  cardShadowSelected: string;
   title: string;
   /** 白色图形放在彩色图标块上，两种主题都是白色。 */
   glyph: string;
@@ -40,6 +43,7 @@ export const LOGIC_MAP_LIGHT_PALETTE: LogicMapCanvasPalette = {
   card: "#ffffff",
   cardShadow: "0 1px 2px #1018280f, 0 1px 3px #1018281a",
   cardShadowHover: "0 4px 8px -2px #1018281a, 0 2px 4px -2px #1018280f",
+  cardShadowSelected: "0 0 0 2px #2970ff, 0 4px 8px -2px #1018281a",
   title: "#101828",
   glyph: "#ffffff",
   startEnd: "#2970ff",
@@ -66,8 +70,9 @@ export const LOGIC_MAP_DARK_PALETTE: LogicMapCanvasPalette = {
   canvas: "#16171b",
   dot: "#34363d",
   card: "#24262c",
-  cardShadow: "0 1px 2px #0000004d, 0 1px 3px #00000066",
-  cardShadowHover: "0 4px 8px -2px #00000080, 0 2px 4px -2px #00000066",
+  cardShadow: "0 0 0 1px #ffffff14, 0 1px 2px #0000004d, 0 1px 3px #00000066",
+  cardShadowHover: "0 0 0 1px #ffffff1f, 0 4px 8px -2px #00000080, 0 2px 4px -2px #00000066",
+  cardShadowSelected: "0 0 0 2px #528bff, 0 4px 8px -2px #00000080",
   title: "#f2f4f7",
   glyph: "#ffffff",
   startEnd: "#528bff",

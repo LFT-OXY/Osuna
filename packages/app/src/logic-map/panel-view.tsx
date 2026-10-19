@@ -69,6 +69,8 @@ export function LogicMapPanelView({
       isConnected={isConnected}
       supported={supported}
       conversationMapName={conversationMapName}
+      // 选中哪个节点跟着主区域打开的节点文档走，在打开节点文档那一步接上；现在没有选中。
+      selectedNodeId={null}
     />
   );
 }

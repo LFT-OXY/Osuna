@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/component
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { PaneContentToolbar } from "@/components/ui/pane-content-toolbar";
 import { ZoomableViewport } from "@/components/zoomable-viewport";
-import type { ViewportFitOptions, ViewportPoint } from "@/components/zoomable-viewport/geometry";
+import type { ViewportFitOptions } from "@/components/zoomable-viewport/geometry";
 import { useReplicaQuery } from "@/data/query";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import { LogicMapBackdrop } from "./backdrop";
@@ -31,23 +31,36 @@ import {
   LOGIC_MAP_ICON_STROKE,
   LogicMapCanvas,
 } from "./canvas";
-import { layoutLogicMapLayer, type LogicMapLayout } from "./layout";
+import {
+  LOGIC_MAP_CARD,
+  LOGIC_MAP_CARD_MIN_HEIGHT,
+  layoutLogicMapLayer,
+  type LogicMapLayout,
+} from "./layout";
 
 export type LogicMapClient = Pick<
   DaemonClient,
   "listWorkspaceLogicMaps" | "getWorkspaceLogicMap" | "observeEvents"
 >;
 
-/** fitWidth：按面板宽度缩放、从顶部看起；startAtActualSize：原大、把起点放在顶部正中。 */
-export type LogicMapInitialView = "fitWidth" | "startAtActualSize";
-
-/** 打开面板时先看到的视图。 */
-export const LOGIC_MAP_INITIAL_VIEW: LogicMapInitialView = "fitWidth";
-
 const CHANGED_EVENT = "workspace.logic_map.changed";
 const VIEWPORT_MIN_SCALE = 0.25;
 const VIEWPORT_MAX_SCALE = 4;
-const START_TOP_OFFSET = 16;
+/**
+ * 打开时按面板宽度缩放，但最多缩到 70%：320 宽的右边栏里卡片标题约 10px，还认得出；
+ * 图更宽时超出的部分左右拖动看。
+ */
+const LOGIC_MAP_MIN_FIT_SCALE = 0.7;
+const FIT_WIDTH: ViewportFitOptions = {
+  mode: "width",
+  maxFitScale: 1,
+  minFitScale: LOGIC_MAP_MIN_FIT_SCALE,
+};
+
+/** 下拉框、画布上的提示都用同一个名字指这张图：有标题用标题，没有就用文件夹名。 */
+function mapLabel(map: WorkspaceLogicMapSummary): string {
+  return map.title ?? map.name;
+}
 
 function logicMapQueryRoot(serverId: string, workspaceId: string) {
   return ["logicMap", serverId, workspaceId] as const;
@@ -82,6 +95,8 @@ export interface LogicMapPanelSurfaceProps {
   supported: boolean | null;
   /** 当前对话（主区域聚焦的 Agent 或草稿）维护的图。 */
   conversationMapName: string | null;
+  /** 选中（正在读它的文档）的节点，画蓝色外圈。 */
+  selectedNodeId: string | null;
 }
 
 export function LogicMapPanelSurface({
@@ -91,6 +106,7 @@ export function LogicMapPanelSurface({
   isConnected,
   supported,
   conversationMapName,
+  selectedNodeId,
 }: LogicMapPanelSurfaceProps) {
   const { t } = useTranslation();
   if (!client || !isConnected) {
@@ -126,6 +142,7 @@ export function LogicMapPanelSurface({
       workspaceId={workspaceId}
       client={client}
       conversationMapName={conversationMapName}
+      selectedNodeId={selectedNodeId}
     />
   );
 }
@@ -135,11 +152,13 @@ function LogicMapPanelContent({
   workspaceId,
   client,
   conversationMapName,
+  selectedNodeId,
 }: {
   serverId: string;
   workspaceId: string;
   client: LogicMapClient;
   conversationMapName: string | null;
+  selectedNodeId: string | null;
 }) {
   const { t } = useTranslation();
   useLogicMapChangeEvents({ client, serverId, workspaceId });
@@ -183,7 +202,8 @@ function LogicMapPanelContent({
   if (!maps) {
     return <LoadingCanvas />;
   }
-  if (maps.length === 0 || !selectedMapName) {
+  const selectedMap = maps.find((map) => map.name === selectedMapName);
+  if (!selectedMap) {
     return (
       <StateCanvas testID="logic-map-empty">
         <StateCard
@@ -199,16 +219,17 @@ function LogicMapPanelContent({
     <View style={styles.panel}>
       <LogicMapHeader
         maps={maps}
-        selectedMapName={selectedMapName}
+        selectedMap={selectedMap}
         nodeCount={layout?.nodes.length ?? null}
         onSelect={setPickedMapName}
       />
       <LogicMapBody
-        mapName={selectedMapName}
+        mapLabel={mapLabel(selectedMap)}
         result={result}
         layout={layout}
         error={readQuery.isError ? readQuery.error : null}
         onRetry={readQuery.refetch}
+        selectedNodeId={selectedNodeId}
       />
     </View>
   );
@@ -277,21 +298,19 @@ function useRefreshListForNewConversationMap({
 
 function LogicMapHeader({
   maps,
-  selectedMapName,
+  selectedMap,
   nodeCount,
   onSelect,
 }: {
   maps: readonly WorkspaceLogicMapSummary[];
-  selectedMapName: string;
+  selectedMap: WorkspaceLogicMapSummary;
   nodeCount: number | null;
   onSelect: (mapName: string) => void;
 }) {
   const { t } = useTranslation();
-  const titleOf = useCallback(
-    (map: WorkspaceLogicMapSummary | undefined) => map?.title ?? t("logicMap.panel.untitled"),
-    [t],
-  );
-  const selectedTitle = titleOf(maps.find((map) => map.name === selectedMapName));
+  const selectedTitle = mapLabel(selectedMap);
+  const nodeCountKey =
+    nodeCount === 1 ? "logicMap.panel.nodeCountOne" : "logicMap.panel.nodeCountMany";
   return (
     <PaneContentToolbar style={styles.header} testID="logic-map-header">
       <View style={styles.picker}>
@@ -308,8 +327,8 @@ function LogicMapHeader({
               <LogicMapPickerItem
                 key={map.name}
                 mapName={map.name}
-                title={titleOf(map)}
-                selected={map.name === selectedMapName}
+                title={mapLabel(map)}
+                selected={map.name === selectedMap.name}
                 onSelect={onSelect}
               />
             ))}
@@ -318,9 +337,7 @@ function LogicMapHeader({
       </View>
       {nodeCount !== null ? (
         <Text style={styles.nodeCount} numberOfLines={1}>
-          {t(nodeCount === 1 ? "logicMap.panel.nodeCountOne" : "logicMap.panel.nodeCountMany", {
-            count: nodeCount,
-          })}
+          {t(nodeCountKey, { count: nodeCount })}
         </Text>
       ) : null}
     </PaneContentToolbar>
@@ -347,17 +364,19 @@ function LogicMapPickerItem({
 }
 
 function LogicMapBody({
-  mapName,
+  mapLabel: label,
   result,
   layout,
   error,
   onRetry,
+  selectedNodeId,
 }: {
-  mapName: string;
+  mapLabel: string;
   result: WorkspaceLogicMapReadResult | undefined;
   layout: LogicMapLayout | null;
   error: Error | null;
   onRetry: () => unknown;
+  selectedNodeId: string | null;
 }) {
   const { t } = useTranslation();
   if (error) {
@@ -383,11 +402,8 @@ function LogicMapBody({
           tone="failure"
           Glyph={TriangleAlert}
           title={t("logicMap.panel.unreadable")}
-          body={t("logicMap.panel.corruptDetail", {
-            map: mapName,
-            file: result.file,
-            problem: result.problem,
-          })}
+          body={t("logicMap.panel.corruptDetail", { map: label, file: result.file })}
+          details={result.problem}
         />
       </StateCanvas>
     );
@@ -407,38 +423,29 @@ function LogicMapBody({
   if (!layout || layout.nodes.length === 0) {
     return <NewMapCanvas />;
   }
-  return <LogicMapViewport layout={layout} initialView={LOGIC_MAP_INITIAL_VIEW} />;
+  return <LogicMapViewport layout={layout} selectedNodeId={selectedNodeId} />;
 }
-
-const FIT_WIDTH: ViewportFitOptions = { mode: "width", maxFitScale: 1 };
-const ACTUAL_SIZE: ViewportFitOptions = { mode: "natural" };
 
 function LogicMapViewport({
   layout,
-  initialView,
+  selectedNodeId,
 }: {
   layout: LogicMapLayout;
-  initialView: LogicMapInitialView;
+  selectedNodeId: string | null;
 }) {
   const { t } = useTranslation();
   const contentSize = useMemo(
     () => ({ width: layout.width, height: layout.height }),
     [layout.height, layout.width],
   );
-  const initialTopCenter = useMemo<ViewportPoint>(() => {
-    const start = layout.nodes.find((node) => node.id === layout.startNodeId);
-    if (initialView === "startAtActualSize" && start) {
-      return { x: start.x + start.width / 2, y: Math.max(0, start.y - START_TOP_OFFSET) };
-    }
-    return { x: layout.width / 2, y: 0 };
-  }, [initialView, layout]);
   return (
     <LogicMapBackdrop testID="logic-map-canvas">
       <ZoomableViewport
         accessibilityLabel={t("logicMap.panel.canvas")}
         contentSize={contentSize}
-        fit={initialView === "fitWidth" ? FIT_WIDTH : ACTUAL_SIZE}
-        initialTopCenter={initialTopCenter}
+        fit={FIT_WIDTH}
+        initialPosition="top"
+        controls="zoom-bar"
         renderAtContentSize
         panWithinViewport
         minScale={VIEWPORT_MIN_SCALE}
@@ -447,7 +454,7 @@ function LogicMapViewport({
         wheelPan
         testID="logic-map-viewport"
       >
-        <LogicMapCanvas layout={layout} />
+        <LogicMapCanvas layout={layout} selectedNodeId={selectedNodeId} />
       </ZoomableViewport>
     </LogicMapBackdrop>
   );
@@ -476,18 +483,24 @@ function StateCard({
   Glyph,
   title,
   body,
+  details,
   onRetry,
 }: {
   tone: StateTone;
   Glyph: ComponentType<StateGlyphProps>;
   title: string;
   body?: string;
+  /** 原始错误文字（daemon 给的，不翻译），默认收起，点"详情"展开。 */
+  details?: string;
   onRetry?: () => unknown;
 }) {
   const { t } = useTranslation();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const handleRetry = useCallback(() => {
     void onRetry?.();
   }, [onRetry]);
+  const toggleDetails = useCallback(() => setDetailsOpen((open) => !open), []);
+  const detailsLabel = detailsOpen ? t("logicMap.panel.hideDetails") : t("logicMap.panel.details");
   return (
     <View style={styles.stateCard}>
       <View style={styles.stateHeader}>
@@ -501,6 +514,23 @@ function StateCard({
         <Text style={styles.stateTitle}>{title}</Text>
       </View>
       {body ? <Text style={styles.stateBody}>{body}</Text> : null}
+      {details ? (
+        <View style={styles.stateActions}>
+          <Button
+            variant="ghost"
+            size="xs"
+            onPress={toggleDetails}
+            testID="logic-map-state-details-toggle"
+          >
+            {detailsLabel}
+          </Button>
+        </View>
+      ) : null}
+      {details && detailsOpen ? (
+        <Text style={styles.stateDetails} selectable testID="logic-map-state-details">
+          {details}
+        </Text>
+      ) : null}
       {onRetry ? (
         <View style={styles.stateActions}>
           <Button variant="outline" size="xs" onPress={handleRetry}>
@@ -542,12 +572,12 @@ function LoadingCanvas() {
   );
 }
 
-/** daemon 刚建好、Agent 还没写入的空图：只有一张"开始"卡片。 */
+/** daemon 刚建好、Agent 还没写入的空图：一张"开始"占位（不算节点，所以头部是 0 个节点）。 */
 function NewMapCanvas() {
   const { t } = useTranslation();
   return (
     <StateCanvas testID="logic-map-new-map">
-      <View style={styles.startCard}>
+      <View style={styles.startPlaceholder} testID="logic-map-start-placeholder">
         <View style={[styles.iconBlock, stateToneStyles.startEnd]}>
           <House
             size={LOGIC_MAP_ICON_SIZE}
@@ -571,7 +601,8 @@ const stateToneStyles = StyleSheet.create((theme) => ({
   startEnd: { backgroundColor: theme.colors.logicMap.startEnd },
 }));
 
-// 面板头部用应用主题；画布区域（状态卡片、骨架、开始卡片）是 docs/design.md §14 的颜色例外。
+// 面板头部用应用主题；画布区域（状态卡片、骨架、开始卡片）是 docs/design.md §14 的颜色例外，
+// 尺寸与节点卡片共用 LOGIC_MAP_CARD 和设计 token。
 const styles = StyleSheet.create((theme) => ({
   panel: {
     flex: 1,
@@ -603,10 +634,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   stateCard: {
     width: "100%",
-    maxWidth: 264,
+    maxWidth: theme.spacing[32] * 2,
     gap: theme.spacing[2],
     padding: theme.spacing[4],
-    borderRadius: 12,
+    borderRadius: theme.borderRadius.xl,
     backgroundColor: theme.colors.logicMap.card,
     boxShadow: theme.colors.logicMap.cardShadow,
   },
@@ -616,9 +647,9 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   iconBlock: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
+    width: LOGIC_MAP_CARD.headerHeight,
+    height: LOGIC_MAP_CARD.headerHeight,
+    borderRadius: theme.radius.sm,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -634,9 +665,14 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.typeScale.caption,
     color: theme.colors.logicMap.muted,
   },
+  stateDetails: {
+    ...theme.typeScale.caption,
+    fontFamily: theme.fontFamily.mono,
+    color: theme.colors.logicMap.muted,
+  },
   stateActions: {
     flexDirection: "row",
-    marginTop: theme.spacing[1],
+    gap: theme.spacing[2],
   },
   skeletonColumn: {
     paddingTop: theme.spacing[6],
@@ -644,51 +680,54 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[8],
   },
   skeletonCard: {
-    width: 152,
-    height: 48,
+    width: LOGIC_MAP_CARD.width,
+    height: LOGIC_MAP_CARD_MIN_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: 12,
+    paddingHorizontal: LOGIC_MAP_CARD.padding,
+    borderRadius: theme.borderRadius.xl,
     backgroundColor: theme.colors.logicMap.card,
     boxShadow: theme.colors.logicMap.cardShadow,
   },
   skeletonCardTall: {
-    height: 80,
+    height: theme.spacing[20],
     alignItems: "flex-start",
-    paddingTop: theme.spacing[3],
+    paddingTop: LOGIC_MAP_CARD.padding,
   },
   skeletonIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
+    width: LOGIC_MAP_CARD.headerHeight,
+    height: LOGIC_MAP_CARD.headerHeight,
+    borderRadius: theme.radius.sm,
     backgroundColor: theme.colors.logicMap.skeleton,
   },
   skeletonLine: {
     flex: 1,
-    height: 10,
-    marginTop: theme.spacing[1],
-    borderRadius: 5,
+    height: theme.spacing[2],
+    marginTop: theme.spacing[2],
+    borderRadius: theme.borderRadius.base,
     backgroundColor: theme.colors.logicMap.skeleton,
   },
-  startCard: {
-    width: 152,
-    height: 48,
+  // 新建的空图里那张"开始"是占位，不是节点：虚线框、不带投影，和节点卡片区分开。
+  startPlaceholder: {
+    width: LOGIC_MAP_CARD.width,
+    height: LOGIC_MAP_CARD_MIN_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: 12,
+    paddingHorizontal: LOGIC_MAP_CARD.padding,
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: theme.borderWidth[1],
+    borderStyle: "dashed",
+    borderColor: theme.colors.logicMap.branchLabel,
     backgroundColor: theme.colors.logicMap.card,
-    boxShadow: theme.colors.logicMap.cardShadow,
   },
   startTitle: {
     flex: 1,
     minWidth: 0,
     ...theme.typeScale.body,
     fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.logicMap.title,
+    color: theme.colors.logicMap.muted,
   },
   newMapHint: {
     ...theme.typeScale.caption,

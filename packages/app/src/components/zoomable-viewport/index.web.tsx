@@ -3,16 +3,16 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
   FIT_TRANSFORM,
-  contentPointAtTopCenter,
   fitContentSize,
   isPointInsideTransformedContent,
   panContent,
+  topAlignedTransform,
   zoomContentAtPoint,
   type ViewportPoint,
   type ViewportSize,
   type ViewportTransform,
 } from "./geometry";
-import { ViewportToolbar } from "./toolbar";
+import { ViewportToolbar, ViewportZoomBar } from "./toolbar";
 import type { ZoomableViewportProps } from "./types";
 
 const DEFAULT_MAX_SCALE = 8;
@@ -50,7 +50,8 @@ export function ZoomableViewport({
   actions = [],
   accessibilityLabel,
   fit,
-  initialTopCenter,
+  initialPosition = "center",
+  controls = "hover-icons",
   renderAtContentSize = false,
   panWithinViewport = false,
   maxScale = DEFAULT_MAX_SCALE,
@@ -80,20 +81,13 @@ export function ZoomableViewport({
     () => ({ minScale, maxScale, panWithinViewport }),
     [maxScale, minScale, panWithinViewport],
   );
-  const anchorX = initialTopCenter?.x;
-  const anchorY = initialTopCenter?.y;
-  const initialTransform = useMemo(() => {
-    if (anchorX === undefined || anchorY === undefined || !fittedContent || !viewport) {
-      return FIT_TRANSFORM;
-    }
-    return contentPointAtTopCenter({
-      contentPoint: { x: anchorX, y: anchorY },
-      contentSize,
-      fittedContent,
-      viewport,
-      limits,
-    });
-  }, [anchorX, anchorY, contentSize, fittedContent, limits, viewport]);
+  const initialTransform = useMemo(
+    () =>
+      initialPosition === "top" && fittedContent && viewport
+        ? topAlignedTransform({ fittedContent, viewport, limits })
+        : FIT_TRANSFORM,
+    [fittedContent, initialPosition, limits, viewport],
+  );
 
   const commitTransform = useCallback((next: ViewportTransform) => {
     transformRef.current = next;
@@ -320,10 +314,11 @@ export function ZoomableViewport({
     if (canPanAt(transform.scale)) cursor = isDragging ? "grabbing" : "grab";
     return { ...canvasDomStyle, cursor };
   }, [canPanAt, isDragging, transform.scale]);
+  // 适配比例：内容原始尺寸到适配尺寸；百分比与按原始尺寸排版都要乘上它。
+  const fitRatio = fittedContent ? fittedContent.width / contentSize.width : 1;
   const renderedContentStyle = useMemo<React.CSSProperties>(() => {
     if (renderAtContentSize && fittedContent) {
       // 子元素按原始尺寸排版，再连同适配比例一起缩放；居中排版下视觉上与按适配尺寸排版一致。
-      const fitRatio = fittedContent.width / contentSize.width;
       return {
         ...contentDomStyle,
         width: contentSize.width,
@@ -337,8 +332,12 @@ export function ZoomableViewport({
       height: fittedContent?.height ?? 0,
       transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
     };
-  }, [contentSize, fittedContent, renderAtContentSize, transform]);
+  }, [contentSize, fitRatio, fittedContent, renderAtContentSize, transform]);
   const controlsVisible = isHovered || isFocusWithin || hasTouchInput;
+  const isAtInitialView =
+    transform.scale === initialTransform.scale &&
+    transform.x === initialTransform.x &&
+    transform.y === initialTransform.y;
   const handleFocus = useCallback(() => setIsFocusWithin(true), []);
   const handleBlur = useCallback(() => setIsFocusWithin(false), []);
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
@@ -372,22 +371,32 @@ export function ZoomableViewport({
         onMouseLeave={handleMouseLeave}
         style={toolbarDomStyle}
       >
-        <ViewportToolbar
-          actions={actions}
+        {controls === "hover-icons" ? (
+          <ViewportToolbar
+            actions={actions}
+            maxScale={maxScale}
+            minScale={minScale}
+            onReset={reset}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            resetDisabled={isAtInitialView}
+            scale={transform.scale}
+            visible={controlsVisible}
+          />
+        ) : null}
+      </div>
+      {controls === "zoom-bar" ? (
+        <ViewportZoomBar
+          displayScale={transform.scale * fitRatio}
           maxScale={maxScale}
           minScale={minScale}
           onReset={reset}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
-          resetDisabled={
-            transform.scale === initialTransform.scale &&
-            transform.x === initialTransform.x &&
-            transform.y === initialTransform.y
-          }
+          resetDisabled={isAtInitialView}
           scale={transform.scale}
-          visible={controlsVisible}
         />
-      </div>
+      ) : null}
     </View>
   );
 }

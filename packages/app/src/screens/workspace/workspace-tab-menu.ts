@@ -1,7 +1,7 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
-import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
+import { buildDeterministicWorkspaceTabId, isKindOnlyTabTarget } from "@/workspace-tabs/identity";
 
 export type WorkspaceTabMenuSurface = "desktop" | "mobile";
 
@@ -151,12 +151,7 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {
     return `workspace-working-diff-close-${encodeFilePathForPathSegment(buildDeterministicWorkspaceTabId(tab.target))}`;
   }
-  if (
-    tab.target.kind === "files" ||
-    tab.target.kind === "pull_request" ||
-    tab.target.kind === "session_history" ||
-    tab.target.kind === "logic_map"
-  ) {
+  if (isKindOnlyTabTarget(tab.target)) {
     return `workspace-${tab.target.kind}-close`;
   }
   if (tab.target.kind === "plugin") {

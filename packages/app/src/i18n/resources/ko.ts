@@ -4128,7 +4128,6 @@ export const ko: TranslationResources = {
       tooltip: "이 워크스페이스에서 에이전트가 관리하는 로직 맵 보기",
       canvas: "로직 맵 캔버스",
       pickerLabel: "로직 맵: {{title}}",
-      untitled: "제목 없는 로직 맵",
       nodeCountOne: "노드 {{count}}개",
       nodeCountMany: "노드 {{count}}개",
       loading: "로직 맵 불러오는 중…",
@@ -4142,7 +4141,9 @@ export const ko: TranslationResources = {
       },
       unreadable: "이 로직 맵을 읽을 수 없습니다",
       corruptDetail:
-        "{{map}}: {{file}} 파일이 손상되었습니다({{problem}}). 파일을 고치거나 복원하세요.",
+        "{{map}}: {{file}} 파일 형식이 올바르지 않아 읽을 수 없습니다. 파일을 고치거나 복원하세요.",
+      details: "자세히",
+      hideDetails: "자세히 숨기기",
       listFailed: "이 워크스페이스의 로직 맵 목록을 가져올 수 없습니다",
       hostOutdated: {
         title: "이 호스트의 Osuna를 업데이트하세요",
@@ -4155,7 +4156,7 @@ export const ko: TranslationResources = {
       },
       subgraphTagOne: "하위 그래프 · 노드 {{count}}개",
       subgraphTagMany: "하위 그래프 · 노드 {{count}}개",
-      pendingLink: "정식 문서 미연결",
+      pendingLink: "문서 미연결",
     },
   },
 };

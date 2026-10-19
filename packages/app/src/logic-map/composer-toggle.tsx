@@ -20,7 +20,16 @@ import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { buildDraftLogicMapKey, useDraftLogicMapStore } from "./draft-logic-map-store";
 
 /** 开关在工具栏里的估计宽度：图标、"逻辑图"、Switch 与内边距，算 Agent controls 收缩档位时预留。 */
-export const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
+const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
+/** 老主机时那一行是图标、"逻辑图"加整句"需要更新这台主机上的 Osuna"，要预留整句的宽度。 */
+const LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH = 300;
+
+/** Agent controls 收缩时给逻辑图控件预留的宽度；主机太旧时提示比开关长得多。 */
+export function logicMapToggleReservedWidth(supported: boolean | null): number {
+  return supported === false
+    ? LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH
+    : LOGIC_MAP_TOGGLE_RESERVED_WIDTH;
+}
 
 /** 运行中的 Agent 按 agentId 开关；草稿还没有 Agent，按草稿 tab 记住 daemon 建好的图名。 */
 type LogicMapComposerToggleProps = { serverId: string } & (

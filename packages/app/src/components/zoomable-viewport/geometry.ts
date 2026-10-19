@@ -25,12 +25,12 @@ export interface ViewportFitOptions {
   padding?: number;
   maxWidth?: number;
   maxHeight?: number;
-  /**
-   * contain：整块放进视口（默认）；width：只按宽度铺满，高出的部分靠拖动看；natural：保持内容原大。
-   */
-  mode?: "contain" | "width" | "natural";
+  /** contain：整块放进视口（默认）；width：只按宽度铺满，高出的部分靠拖动看。 */
+  mode?: "contain" | "width";
   /** 适配时最多放大到的倍数；不填则可以放大。 */
   maxFitScale?: number;
+  /** 适配时最少缩到的倍数；内容更宽时不再缩小，超出的部分靠拖动看。 */
+  minFitScale?: number;
 }
 
 export const FIT_TRANSFORM: ViewportTransform = { scale: 1, x: 0, y: 0 };
@@ -73,14 +73,15 @@ export function fitContentSize(
     0,
     Math.min(viewport.height - padding * 2, options.maxHeight ?? Number.POSITIVE_INFINITY),
   );
-  const mode = options.mode ?? "contain";
-  let fitScale = 1;
-  if (mode === "contain") {
-    fitScale = Math.min(availableWidth / content.width, availableHeight / content.height);
-  } else if (mode === "width") {
-    fitScale = availableWidth / content.width;
-  }
-  fitScale = Math.min(fitScale, options.maxFitScale ?? Number.POSITIVE_INFINITY);
+  const widthScale = availableWidth / content.width;
+  const containScale = Math.min(widthScale, availableHeight / content.height);
+  const fitScale = Math.max(
+    options.minFitScale ?? 0,
+    Math.min(
+      options.mode === "width" ? widthScale : containScale,
+      options.maxFitScale ?? Number.POSITIVE_INFINITY,
+    ),
+  );
   return {
     width: content.width * fitScale,
     height: content.height * fitScale,
@@ -167,22 +168,19 @@ export function panContent(input: {
 }
 
 /**
- * 把内容上的一点（按内容原始尺寸计）放到视口顶边正中，返回缩放为 1 的变换，并限制在可拖动范围内。
- * 打开和复位时用它决定先看到内容的哪一块。
+ * 打开和复位时的"从顶部看起"：内容顶边贴着视口顶边；比视口宽时左边缘贴着视口左边，否则水平居中。
+ * 内容比视口矮时，只有允许在视口内移动（panWithinViewport）才能贴顶，否则仍居中。
  */
-export function contentPointAtTopCenter(input: {
-  contentPoint: ViewportPoint;
-  contentSize: ViewportSize;
+export function topAlignedTransform(input: {
   fittedContent: ViewportSize;
   viewport: ViewportSize;
   limits: ViewportScaleLimits;
 }): ViewportTransform {
-  const ratio = input.fittedContent.width / input.contentSize.width;
   return clampTransform(
     {
       scale: 1,
-      x: input.fittedContent.width / 2 - input.contentPoint.x * ratio,
-      y: input.fittedContent.height / 2 - input.viewport.height / 2 - input.contentPoint.y * ratio,
+      x: Math.max(0, (input.fittedContent.width - input.viewport.width) / 2),
+      y: (input.fittedContent.height - input.viewport.height) / 2,
     },
     input.fittedContent,
     input.viewport,

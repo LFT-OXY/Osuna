@@ -4202,7 +4202,6 @@ export const fr: TranslationResources = {
       tooltip: "Voir les cartes logiques que l'agent tient à jour dans cet espace de travail",
       canvas: "Canevas de la carte logique",
       pickerLabel: "Carte logique : {{title}}",
-      untitled: "Carte logique sans titre",
       nodeCountOne: "{{count}} nœud",
       nodeCountMany: "{{count}} nœuds",
       loading: "Chargement de la carte logique…",
@@ -4216,7 +4215,9 @@ export const fr: TranslationResources = {
       },
       unreadable: "Impossible de lire cette carte logique",
       corruptDetail:
-        "{{map}} : {{file}} est endommagé ({{problem}}). Corrigez ou restaurez le fichier.",
+        "{{map}} : {{file}} n'est pas dans un format lisible par Osuna. Corrigez ou restaurez le fichier.",
+      details: "Détails",
+      hideDetails: "Masquer les détails",
       listFailed: "Impossible de lister les cartes logiques de cet espace de travail",
       hostOutdated: {
         title: "Mettez à jour Osuna sur cet hôte",
@@ -4229,7 +4230,7 @@ export const fr: TranslationResources = {
       },
       subgraphTagOne: "Sous-graphe · {{count}} nœud",
       subgraphTagMany: "Sous-graphe · {{count}} nœuds",
-      pendingLink: "Pas encore de doc formelle",
+      pendingLink: "Aucun doc lié",
     },
   },
 };

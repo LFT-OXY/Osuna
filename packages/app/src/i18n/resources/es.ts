@@ -4190,7 +4190,6 @@ export const es: TranslationResources = {
       tooltip: "Ver los mapas lógicos que el agente mantiene en este espacio de trabajo",
       canvas: "Lienzo del mapa lógico",
       pickerLabel: "Mapa lógico: {{title}}",
-      untitled: "Mapa lógico sin título",
       nodeCountOne: "{{count}} nodo",
       nodeCountMany: "{{count}} nodos",
       loading: "Cargando mapa lógico…",
@@ -4203,7 +4202,10 @@ export const es: TranslationResources = {
         body: "El agente aún no ha añadido nodos.",
       },
       unreadable: "No se puede leer este mapa lógico",
-      corruptDetail: "{{map}}: {{file}} está dañado ({{problem}}). Corrige o restaura el archivo.",
+      corruptDetail:
+        "{{map}}: {{file}} no tiene un formato que Osuna pueda leer. Corrige o restaura el archivo.",
+      details: "Detalles",
+      hideDetails: "Ocultar detalles",
       listFailed: "No se pueden listar los mapas lógicos de este espacio de trabajo",
       hostOutdated: {
         title: "Actualiza Osuna en este host",
@@ -4216,7 +4218,7 @@ export const es: TranslationResources = {
       },
       subgraphTagOne: "Subgrafo · {{count}} nodo",
       subgraphTagMany: "Subgrafo · {{count}} nodos",
-      pendingLink: "Sin documento formal",
+      pendingLink: "Sin documento vinculado",
     },
   },
 };

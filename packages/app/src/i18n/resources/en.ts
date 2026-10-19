@@ -4234,7 +4234,6 @@ export const en = {
       tooltip: "See the logic maps the agent keeps in this workspace",
       canvas: "Logic map canvas",
       pickerLabel: "Logic map: {{title}}",
-      untitled: "Untitled logic map",
       nodeCountOne: "{{count}} node",
       nodeCountMany: "{{count}} nodes",
       loading: "Loading logic map…",
@@ -4247,7 +4246,10 @@ export const en = {
         body: "The agent hasn't added any nodes yet.",
       },
       unreadable: "Can't read this logic map",
-      corruptDetail: "{{map}}: {{file}} is broken ({{problem}}). Fix or restore the file.",
+      corruptDetail:
+        "{{map}}: {{file}} is not in a format Osuna can read. Fix or restore the file.",
+      details: "Details",
+      hideDetails: "Hide details",
       listFailed: "Can't list this workspace's logic maps",
       hostOutdated: {
         title: "Update Osuna on this host",
@@ -4260,7 +4262,7 @@ export const en = {
       },
       subgraphTagOne: "Subgraph · {{count}} node",
       subgraphTagMany: "Subgraph · {{count}} nodes",
-      pendingLink: "No formal doc yet",
+      pendingLink: "No doc linked",
     },
   },
 } as const;

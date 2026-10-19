@@ -88,10 +88,7 @@ import {
 } from "@/composer/actions";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
-import {
-  LOGIC_MAP_TOGGLE_RESERVED_WIDTH,
-  LogicMapComposerToggle,
-} from "@/logic-map/composer-toggle";
+import { logicMapToggleReservedWidth, LogicMapComposerToggle } from "@/logic-map/composer-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -311,6 +308,8 @@ interface RenderLeftContentArgs {
   isCompactLayout: boolean;
   showAgentControls: boolean;
   showLogicMapToggle: boolean;
+  /** 主机是否支持逻辑图；决定给开关还是给更长的更新提示预留宽度。 */
+  logicMapSupported: boolean | null;
 }
 
 function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): ReactElement | null {
@@ -343,7 +342,9 @@ function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
   const isDraft = resolveAgentControlsMode(agentControls) === "draft";
   // 开关放进 Agent controls 那一行的末尾，控件收缩时给它预留宽度。
   const logicMapToggle = renderLogicMapToggle(args, isDraft);
-  const trailingControlWidth = logicMapToggle ? LOGIC_MAP_TOGGLE_RESERVED_WIDTH : 0;
+  const trailingControlWidth = logicMapToggle
+    ? logicMapToggleReservedWidth(args.logicMapSupported)
+    : 0;
   if (isDraft && agentControls) {
     return (
       <DraftAgentControls
@@ -2430,6 +2431,8 @@ function ComposerContentImpl({
     [attachments, setSelectedAttachments, setGithubSearchQuery, setIsGithubPickerOpen],
   );
 
+  // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
+  const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
   const leftContent = useMemo(
     () =>
       renderLeftContent({
@@ -2441,8 +2444,10 @@ function ComposerContentImpl({
         isCompactLayout,
         showAgentControls: mode.showAgentControls,
         showLogicMapToggle,
+        logicMapSupported,
       }),
     [
+      logicMapSupported,
       agentControls,
       agentId,
       workspaceId,

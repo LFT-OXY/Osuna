@@ -4166,7 +4166,6 @@ export const ptBR: TranslationResources = {
       tooltip: "Ver os mapas lógicos que o agente mantém neste espaço de trabalho",
       canvas: "Tela do mapa lógico",
       pickerLabel: "Mapa lógico: {{title}}",
-      untitled: "Mapa lógico sem título",
       nodeCountOne: "{{count}} nó",
       nodeCountMany: "{{count}} nós",
       loading: "Carregando mapa lógico…",
@@ -4180,7 +4179,9 @@ export const ptBR: TranslationResources = {
       },
       unreadable: "Não foi possível ler este mapa lógico",
       corruptDetail:
-        "{{map}}: {{file}} está corrompido ({{problem}}). Corrija ou restaure o arquivo.",
+        "{{map}}: {{file}} não está em um formato que o Osuna consiga ler. Corrija ou restaure o arquivo.",
+      details: "Detalhes",
+      hideDetails: "Ocultar detalhes",
       listFailed: "Não foi possível listar os mapas lógicos deste espaço de trabalho",
       hostOutdated: {
         title: "Atualize o Osuna neste host",
@@ -4193,7 +4194,7 @@ export const ptBR: TranslationResources = {
       },
       subgraphTagOne: "Subgrafo · {{count}} nó",
       subgraphTagMany: "Subgrafo · {{count}} nós",
-      pendingLink: "Sem documento formal",
+      pendingLink: "Sem documento vinculado",
     },
   },
 };

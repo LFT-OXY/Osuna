@@ -4152,7 +4152,6 @@ export const ja: TranslationResources = {
       tooltip: "このワークスペースでエージェントが管理するロジックマップを表示",
       canvas: "ロジックマップのキャンバス",
       pickerLabel: "ロジックマップ: {{title}}",
-      untitled: "無題のロジックマップ",
       nodeCountOne: "{{count}} 個のノード",
       nodeCountMany: "{{count}} 個のノード",
       loading: "ロジックマップを読み込み中…",
@@ -4166,7 +4165,9 @@ export const ja: TranslationResources = {
       },
       unreadable: "このロジックマップを読み込めません",
       corruptDetail:
-        "{{map}}: {{file}} が壊れています（{{problem}}）。ファイルを修正するか元に戻してください。",
+        "{{map}}: {{file}} の形式が正しくないため読み込めません。ファイルを修正するか元に戻してください。",
+      details: "詳細",
+      hideDetails: "詳細を隠す",
       listFailed: "このワークスペースのロジックマップを一覧できません",
       hostOutdated: {
         title: "このホストの Osuna を更新してください",
@@ -4179,7 +4180,7 @@ export const ja: TranslationResources = {
       },
       subgraphTagOne: "サブグラフ · {{count}} 個のノード",
       subgraphTagMany: "サブグラフ · {{count}} 個のノード",
-      pendingLink: "正式なドキュメント未リンク",
+      pendingLink: "ドキュメント未リンク",
     },
   },
 } as const;

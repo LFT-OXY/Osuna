@@ -1,12 +1,14 @@
-import { memo, useCallback, useState, type ComponentType } from "react";
+import { memo, useCallback, useEffect, useState, type ComponentType } from "react";
 import { Text, View } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { Flag, House, Repeat, Split, TextAlignStart, TriangleAlert } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isWeb } from "@/constants/platform";
+import { useReduceMotionEnabled } from "@/hooks/use-reduce-motion-enabled";
 import { LOGIC_MAP_LIGHT_PALETTE } from "@/styles/logic-map-palette";
-import type { Theme } from "@/styles/theme";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { arrowHeadPath, roundedEdgePath } from "./edge-path";
 import {
@@ -16,8 +18,9 @@ import {
   type LogicMapLayout,
   type LogicMapNodeBox,
 } from "./layout";
+import { ensureLogicMapKeyframes, LOGIC_MAP_NODE_ENTER_ANIMATION } from "./motion-keyframes";
 
-export const LOGIC_MAP_ICON_SIZE = 14;
+export const LOGIC_MAP_ICON_SIZE = ICON_SIZE.sm;
 export const LOGIC_MAP_ICON_STROKE = 2.4;
 // 图标块上的图形两种主题都是白色，静态取值即可。
 export const LOGIC_MAP_GLYPH_COLOR = LOGIC_MAP_LIGHT_PALETTE.glyph;
@@ -38,22 +41,56 @@ const KIND_GLYPHS: Record<LogicMapNodeBox["kind"], ComponentType<GlyphProps>> = 
   subgraph: Repeat,
 };
 
+const NO_NODE_IDS: ReadonlySet<string> = new Set();
+
 function cardTone(node: LogicMapNodeBox): CardTone {
   if (node.failure) return "failure";
   if (node.kind === "start" || node.kind === "end") return "startEnd";
   return node.kind;
 }
 
+/** 这次排版里新出现的节点（上一次排版没有的）；第一次排版没有"新"节点。 */
+function useEnteringNodeIds(layout: LogicMapLayout): ReadonlySet<string> {
+  const [tracked, setTracked] = useState({ layout, entering: NO_NODE_IDS });
+  if (tracked.layout === layout) return tracked.entering;
+  const previous = new Set(tracked.layout.nodes.map((node) => node.id));
+  const entering = new Set(
+    layout.nodes.filter((node) => !previous.has(node.id)).map((node) => node.id),
+  );
+  setTracked({ layout, entering });
+  return entering;
+}
+
 /**
  * 一层逻辑图按排版结果原大画出：底下一层 SVG 画连线，上面按坐标摆卡片。外层的可缩放视图负责缩放和拖动。
+ * 图更新时新节点淡入、已有节点平移到新位置（Web）；系统开了减少动态效果就直接到位。
  */
-export const LogicMapCanvas = memo(function LogicMapCanvas({ layout }: { layout: LogicMapLayout }) {
+export const LogicMapCanvas = memo(function LogicMapCanvas({
+  layout,
+  selectedNodeId,
+}: {
+  layout: LogicMapLayout;
+  /** 选中的节点画蓝色外圈；没有选中时为 null。 */
+  selectedNodeId: string | null;
+}) {
+  const reduceMotion = useReduceMotionEnabled();
+  const animate = isWeb && !reduceMotion;
+  const enteringIds = useEnteringNodeIds(layout);
+  useEffect(() => {
+    if (animate) ensureLogicMapKeyframes();
+  }, [animate]);
   const sizeStyle = inlineUnistylesStyle({ width: layout.width, height: layout.height });
   return (
     <View style={[styles.stage, sizeStyle]} testID="logic-map-stage">
       <ThemedEdges layout={layout} />
       {layout.nodes.map((node) => (
-        <LogicMapNodeCard key={node.id} node={node} />
+        <LogicMapNodeCard
+          key={node.id}
+          node={node}
+          animate={animate}
+          entering={enteringIds.has(node.id)}
+          selected={node.id === selectedNodeId}
+        />
       ))}
     </View>
   );
@@ -98,12 +135,23 @@ function EdgeShape({ route, color }: { route: LogicMapEdgeRoute; color?: string 
   );
 }
 
-const LogicMapNodeCard = memo(function LogicMapNodeCard({ node }: { node: LogicMapNodeBox }) {
+const LogicMapNodeCard = memo(function LogicMapNodeCard({
+  node,
+  animate,
+  entering,
+  selected,
+}: {
+  node: LogicMapNodeBox;
+  animate: boolean;
+  entering: boolean;
+  selected: boolean;
+}) {
   const [hovered, setHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
   const handlePointerLeave = useCallback(() => setHovered(false), []);
   const tone = cardTone(node);
   const Glyph = node.failure ? TriangleAlert : KIND_GLYPHS[node.kind];
+  const fadesIn = animate && entering;
   const positionStyle = inlineUnistylesStyle({
     left: node.x,
     top: node.y,
@@ -114,7 +162,14 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({ node }: { node: LogicM
     <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
       <TooltipTrigger asChild triggerRefProp="ref">
         <View
-          style={[styles.card, hovered && styles.cardHovered, positionStyle]}
+          style={[
+            styles.card,
+            animate && styles.cardMoving,
+            fadesIn && styles.cardEntering,
+            hovered && styles.cardHovered,
+            selected && styles.cardSelected,
+            positionStyle,
+          ]}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
           testID={`logic-map-node-${node.id}`}
@@ -135,7 +190,7 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({ node }: { node: LogicM
             <View style={styles.rows}>
               {node.branches.map((branch, index) => (
                 <BranchRow
-                  key={`${branch.targetId}-${branch.label}`}
+                  key={`${branch.label}-${branch.exit.y}`}
                   branch={branch}
                   testID={`logic-map-branch-${node.id}-${index}`}
                 />
@@ -174,18 +229,16 @@ function BranchRow({ branch, testID }: { branch: LogicMapBranch; testID: string 
 
 function NodeTags({ node }: { node: LogicMapNodeBox }) {
   const { t } = useTranslation();
-  if (node.subgraphNodeCount === null && !node.pendingLink) return null;
+  const count = node.subgraphNodeCount;
+  if (count === null && !node.pendingLink) return null;
+  const subgraphTagKey =
+    count === 1 ? "logicMap.panel.subgraphTagOne" : "logicMap.panel.subgraphTagMany";
   return (
     <View style={styles.tags}>
-      {node.subgraphNodeCount !== null ? (
+      {count !== null ? (
         <View style={styles.subgraphTag}>
           <Text style={styles.subgraphTagText} numberOfLines={1}>
-            {t(
-              node.subgraphNodeCount === 1
-                ? "logicMap.panel.subgraphTagOne"
-                : "logicMap.panel.subgraphTagMany",
-              { count: node.subgraphNodeCount },
-            )}
+            {t(subgraphTagKey, { count })}
           </Text>
         </View>
       ) : null}
@@ -221,12 +274,27 @@ const styles = StyleSheet.create((theme) => ({
   card: {
     position: "absolute",
     padding: LOGIC_MAP_CARD.padding,
-    borderRadius: LOGIC_MAP_CARD.radius,
+    borderRadius: theme.borderRadius.xl,
     backgroundColor: theme.colors.logicMap.card,
     boxShadow: theme.colors.logicMap.cardShadow,
   },
+  // 只在 Web 上有 CSS 过渡与动画；原生端不加这两个样式（canvas 只有在 isWeb 时才挂上）。
+  cardMoving: {
+    transitionProperty: "left, top, box-shadow",
+    transitionDuration: "200ms",
+    transitionTimingFunction: "ease-out",
+  },
+  cardEntering: {
+    animationName: LOGIC_MAP_NODE_ENTER_ANIMATION,
+    animationDuration: "150ms",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "backwards",
+  },
   cardHovered: {
     boxShadow: theme.colors.logicMap.cardShadowHover,
+  },
+  cardSelected: {
+    boxShadow: theme.colors.logicMap.cardShadowSelected,
   },
   header: {
     height: LOGIC_MAP_CARD.headerHeight,
@@ -237,7 +305,7 @@ const styles = StyleSheet.create((theme) => ({
   iconBlock: {
     width: LOGIC_MAP_CARD.headerHeight,
     height: LOGIC_MAP_CARD.headerHeight,
-    borderRadius: 7,
+    borderRadius: theme.radius.sm,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -284,11 +352,11 @@ const styles = StyleSheet.create((theme) => ({
   // 出口圆点压在卡片右缘上：行的右边离卡片右缘一个内边距，圆点再往外半个自身宽度。
   exitDot: {
     position: "absolute",
-    right: -(LOGIC_MAP_CARD.padding + 5),
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
+    right: -(LOGIC_MAP_CARD.padding + LOGIC_MAP_CARD.exitDotSize / 2),
+    width: LOGIC_MAP_CARD.exitDotSize,
+    height: LOGIC_MAP_CARD.exitDotSize,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[2],
     borderColor: theme.colors.logicMap.card,
     backgroundColor: theme.colors.logicMap.edge,
   },
@@ -305,7 +373,7 @@ const styles = StyleSheet.create((theme) => ({
     height: LOGIC_MAP_CARD.tagHeight,
     justifyContent: "center",
     paddingHorizontal: theme.spacing[1.5],
-    borderRadius: 5,
+    borderRadius: theme.borderRadius.base,
     backgroundColor: theme.colors.logicMap.subgraphTagBackground,
   },
   subgraphTagText: {
@@ -317,8 +385,8 @@ const styles = StyleSheet.create((theme) => ({
     height: LOGIC_MAP_CARD.tagHeight,
     justifyContent: "center",
     paddingHorizontal: theme.spacing[1.5],
-    borderRadius: 5,
-    borderWidth: 1,
+    borderRadius: theme.borderRadius.base,
+    borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.logicMap.pendingTagBorder,
     backgroundColor: theme.colors.logicMap.pendingTagBackground,
   },
