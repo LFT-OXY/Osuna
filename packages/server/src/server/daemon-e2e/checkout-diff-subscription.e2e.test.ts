@@ -192,3 +192,131 @@ test("keeps the socket usable after rejecting an oversized structured diff", asy
     rmSync(cwd, { recursive: true, force: true });
   }
 }, 120000);
+
+type CheckoutDiffFile = CheckoutDiffUpdatePayload["files"][number];
+
+function fileListFields(file: CheckoutDiffFile) {
+  return {
+    path: file.path,
+    oldPath: file.oldPath,
+    isNew: file.isNew,
+    isDeleted: file.isDeleted,
+    additions: file.additions,
+    deletions: file.deletions,
+    status: file.status,
+    generated: file.generated,
+  };
+}
+
+test("serves a files-only subscription beside a full one with the same file list and no hunks", async () => {
+  const cwd = tmpCwd();
+
+  try {
+    initGitRepo(cwd);
+    commitFile(cwd, "base.txt", "one\ntwo\nthree\n");
+    commitFile(cwd, "gone.txt", "bye\n");
+    commitFile(cwd, "old-name.ts", "export const name = 1;\n");
+    commitFile(cwd, "image.bin", "\u0000\u0001\u0002binary\n");
+
+    writeFileSync(path.join(cwd, "base.txt"), "one\n2\nthree\nfour\n");
+    rmSync(path.join(cwd, "gone.txt"));
+    execSync("git mv old-name.ts new-name.ts", { cwd, stdio: "pipe" });
+    writeFileSync(path.join(cwd, "image.bin"), "\u0000\u0003\u0004binary\n");
+    writeFileSync(path.join(cwd, "package-lock.json"), "{\n}\n");
+    writeFileSync(path.join(cwd, "added.ts"), "a\nb\nc\n");
+
+    const full = ctx.client.observeCheckoutDiff(cwd, { mode: "uncommitted" });
+    const filesOnly = ctx.client.observeCheckoutDiff(cwd, {
+      mode: "uncommitted",
+      filesOnly: true,
+    });
+    const [fullInitial, filesOnlyInitial] = await Promise.all([full.ready, filesOnly.ready]);
+
+    expect(filesOnlyInitial.error).toBeNull();
+    expect(filesOnlyInitial.files.map(fileListFields)).toEqual([
+      {
+        path: "added.ts",
+        oldPath: undefined,
+        isNew: true,
+        isDeleted: false,
+        additions: 3,
+        deletions: 0,
+        status: "ok",
+        generated: undefined,
+      },
+      {
+        path: "base.txt",
+        oldPath: undefined,
+        isNew: false,
+        isDeleted: false,
+        additions: 2,
+        deletions: 1,
+        status: "ok",
+        generated: undefined,
+      },
+      {
+        path: "gone.txt",
+        oldPath: undefined,
+        isNew: false,
+        isDeleted: true,
+        additions: 0,
+        deletions: 1,
+        status: "ok",
+        generated: undefined,
+      },
+      {
+        path: "image.bin",
+        oldPath: undefined,
+        isNew: false,
+        isDeleted: false,
+        additions: 0,
+        deletions: 0,
+        status: "binary",
+        generated: undefined,
+      },
+      {
+        path: "new-name.ts",
+        oldPath: "old-name.ts",
+        isNew: false,
+        isDeleted: false,
+        additions: 1,
+        deletions: 0,
+        status: "ok",
+        generated: undefined,
+      },
+      {
+        path: "package-lock.json",
+        oldPath: undefined,
+        isNew: true,
+        isDeleted: false,
+        additions: 2,
+        deletions: 0,
+        status: "ok",
+        generated: true,
+      },
+    ]);
+    expect(filesOnlyInitial.files.every((file) => file.hunks.length === 0)).toBe(true);
+    expect(fullInitial.files.map(fileListFields)).toEqual(
+      filesOnlyInitial.files.map(fileListFields),
+    );
+    expect(fullInitial.files.find((file) => file.path === "base.txt")?.hunks.length).toBe(1);
+
+    writeFileSync(path.join(cwd, "later.ts"), "x\ny\n");
+    const [fullUpdate, filesOnlyUpdate] = await Promise.all([
+      waitForCheckoutDiffUpdate(ctx, fullInitial.subscriptionId, (payload) =>
+        payload.files.some((file) => file.path === "later.ts"),
+      ),
+      waitForCheckoutDiffUpdate(ctx, filesOnlyInitial.subscriptionId, (payload) =>
+        payload.files.some((file) => file.path === "later.ts"),
+      ),
+    ]);
+
+    expect(filesOnlyUpdate.files.every((file) => file.hunks.length === 0)).toBe(true);
+    expect(fullUpdate.files.find((file) => file.path === "later.ts")?.hunks.length).toBe(1);
+    expect(fullUpdate.files.map(fileListFields)).toEqual(filesOnlyUpdate.files.map(fileListFields));
+
+    await Promise.all([full.release(), filesOnly.release()]);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}, 60000);

@@ -19,6 +19,7 @@ interface UseWorkingDiffOptions {
   ignoreWhitespace: boolean;
   enabled: boolean;
   queryScope?: string;
+  filesOnly?: boolean;
   onFiles?: (files: ParsedDiffFile[]) => void;
 }
 
@@ -29,6 +30,7 @@ export function useWorkingDiff({
   ignoreWhitespace,
   enabled,
   queryScope,
+  filesOnly,
   onFiles,
 }: UseWorkingDiffOptions) {
   const {
@@ -70,6 +72,7 @@ export function useWorkingDiff({
     ignoreWhitespace,
     enabled: enabled && isGit,
     queryScope,
+    filesOnly,
     onFiles,
   });
   const reviewDraftKey = useMemo(

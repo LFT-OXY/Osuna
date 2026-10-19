@@ -51,7 +51,12 @@ function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}
   emit: <K extends RouterMessageType>(message: Extract<RouterMessage, { type: K }>) => void;
   subscribeCheckoutDiffCalls: Array<{
     cwd: string;
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean };
+    compare: {
+      mode: "uncommitted" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+      filesOnly?: boolean;
+    };
     subscriptionId: string;
   }>;
   unsubscribeCheckoutDiffCalls: string[];
@@ -67,7 +72,12 @@ function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}
   };
   const subscribeCheckoutDiffCalls: Array<{
     cwd: string;
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean };
+    compare: {
+      mode: "uncommitted" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+      filesOnly?: boolean;
+    };
     subscriptionId: string;
   }> = [];
   const unsubscribeCheckoutDiffCalls: string[] = [];
@@ -377,6 +387,72 @@ describe("server data push router", () => {
         generatedAt: "2026-01-01T00:00:00.000Z",
         requestId: "providers_snapshot_update",
       });
+  });
+
+  it("keeps a files-only subscription apart and moves to the full one when the diff body appears", () => {
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "server-1";
+    const cwd = "/repo";
+    const options = (filesOnly: boolean) => {
+      const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false, {
+        filesOnly,
+      });
+      return {
+        queryKey,
+        queryFn: skipToken as typeof skipToken,
+        gcTime: Infinity,
+        meta: checkoutDiffPushRoute({
+          enabled: true,
+          serverId,
+          cwd,
+          subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+          compare: {
+            mode: "uncommitted",
+            ignoreWhitespace: false,
+            ...(filesOnly ? { filesOnly } : {}),
+          },
+        }),
+      };
+    };
+    const observer = new QueryObserver(queryClient, options(true));
+    const unsubscribeObserver = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    try {
+      expect(fake.subscribeCheckoutDiffCalls.map((call) => call.compare)).toEqual([
+        { mode: "uncommitted", ignoreWhitespace: false, filesOnly: true },
+      ]);
+      const filesOnlyId = fake.subscribeCheckoutDiffCalls[0]!.subscriptionId;
+      const listedFile = {
+        path: "README.md",
+        isNew: false,
+        isDeleted: false,
+        additions: 1,
+        deletions: 0,
+        hunks: [],
+      };
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: { subscriptionId: filesOnlyId, cwd, files: [listedFile], error: null },
+      });
+
+      observer.setOptions(options(false));
+
+      // 切换途中可能先订阅再释放一次，只看最终留下的那份
+      const fullCall = fake.subscribeCheckoutDiffCalls.at(-1)!;
+      expect(fullCall.compare).toEqual({ mode: "uncommitted", ignoreWhitespace: false });
+      expect(fake.unsubscribeCheckoutDiffCalls).toContain(filesOnlyId);
+      expect(fake.unsubscribeCheckoutDiffCalls).not.toContain(fullCall.subscriptionId);
+      // 完整订阅的缓存不会拿到清单订阅那份没有 hunks 的数据
+      expect(queryClient.getQueryData(options(false).queryKey)).toMatchObject({ files: [] });
+      expect(queryClient.getQueryData(options(true).queryKey)).toMatchObject({
+        files: [listedFile],
+      });
+    } finally {
+      unsubscribeObserver();
+      unmount();
+      queryClient.clear();
+    }
   });
 
   it("subscribes active checkout diff queries and writes matching diff events", () => {

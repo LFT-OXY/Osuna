@@ -1,7 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import type { ParsedDiffFile } from "@getpaseo/protocol/messages";
-import { deriveCheckoutDiffResult, subscribeCheckoutDiffFiles } from "./use-diff-query";
+import {
+  deriveCheckoutDiffResult,
+  resolveCheckoutDiffSubscription,
+  subscribeCheckoutDiffFiles,
+} from "./use-diff-query";
 
 function createParsedDiffFile(path: string): ParsedDiffFile {
   return {
@@ -107,5 +111,43 @@ describe("subscribeCheckoutDiffFiles", () => {
     unsubscribe();
 
     expect(received).toEqual([["a.ts"]]);
+  });
+});
+
+describe("resolveCheckoutDiffSubscription", () => {
+  const base = {
+    serverId: "server",
+    cwd: "/repo",
+    mode: "base" as const,
+    baseRef: " main ",
+    ignoreWhitespace: true,
+  };
+  const full = {
+    queryKey: ["checkoutDiff", "server", "/repo", "base", "main", true],
+    subscriptionId: 'checkoutDiff:["checkoutDiff","server","/repo","base","main",true]',
+    compare: { mode: "base", baseRef: "main", ignoreWhitespace: true },
+  };
+
+  it("asks for the file list alone when only the tree shows and the host supports it", () => {
+    expect(
+      resolveCheckoutDiffSubscription({ ...base, filesOnly: true, filesOnlySupported: true }),
+    ).toEqual({
+      queryKey: ["checkoutDiff", "server", "/repo", "base", "main", true, "filesOnly"],
+      subscriptionId:
+        'checkoutDiff:["checkoutDiff","server","/repo","base","main",true,"filesOnly"]',
+      compare: { mode: "base", baseRef: "main", ignoreWhitespace: true, filesOnly: true },
+    });
+  });
+
+  it("asks for the full diff once the diff body shows", () => {
+    expect(
+      resolveCheckoutDiffSubscription({ ...base, filesOnly: false, filesOnlySupported: true }),
+    ).toEqual(full);
+  });
+
+  it("always asks for the full diff from a host without the feature", () => {
+    expect(
+      resolveCheckoutDiffSubscription({ ...base, filesOnly: true, filesOnlySupported: false }),
+    ).toEqual(full);
   });
 });

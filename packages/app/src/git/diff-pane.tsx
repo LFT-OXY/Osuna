@@ -1536,6 +1536,8 @@ export function ChangesSurface({
     });
   }, [cwd, isRefreshing, runRefresh, serverId, t, toast]);
 
+  // 只开文件树时正文不可见，只要文件清单
+  const diffBodyHidden = presentation === "tree";
   const {
     status,
     isStatusLoading,
@@ -1559,14 +1561,16 @@ export function ChangesSurface({
     cwd,
     ignoreWhitespace: preferences.hideWhitespace,
     enabled: enabled !== false,
+    filesOnly: diffBodyHidden,
     onFiles: recordFileExpansionDefaults,
   });
+  // 清单里没有 hunks，拼不出评审上下文；交给显示正文的面板发布，免得把它的附件清掉
   usePublishWorkingDiffAttachment({
     serverId,
     workspaceId: workspaceId ?? undefined,
     cwd,
     attachment: reviewAttachment,
-    enabled: true,
+    enabled: !diffBodyHidden,
   });
   const {
     status: pullRequestStatus,

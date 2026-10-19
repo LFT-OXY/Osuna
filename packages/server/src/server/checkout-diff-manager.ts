@@ -174,13 +174,15 @@ export class CheckoutDiffManager {
 
   private normalizeCompare(compare: CheckoutDiffCompareInput): CheckoutDiffCompareInput {
     const ignoreWhitespace = compare.ignoreWhitespace === true;
+    // 清单订阅与完整订阅各算各的：filesOnly 进 target key，各自缓存、各自推送
+    const filesOnly = compare.filesOnly === true ? { filesOnly: true } : {};
     if (compare.mode === "uncommitted") {
-      return { mode: "uncommitted", ignoreWhitespace };
+      return { mode: "uncommitted", ignoreWhitespace, ...filesOnly };
     }
     const trimmedBaseRef = compare.baseRef?.trim();
     return trimmedBaseRef
-      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace }
-      : { mode: "base", ignoreWhitespace };
+      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace, ...filesOnly }
+      : { mode: "base", ignoreWhitespace, ...filesOnly };
   }
 
   private buildTargetKey(cwd: string, compare: CheckoutDiffCompareInput): string {
@@ -189,6 +191,7 @@ export class CheckoutDiffManager {
       compare.mode,
       compare.mode === "base" ? (compare.baseRef ?? "") : "",
       compare.ignoreWhitespace === true,
+      compare.filesOnly === true,
     ]);
   }
 
@@ -327,6 +330,7 @@ export class CheckoutDiffManager {
           baseRef: compare.baseRef,
           ignoreWhitespace: compare.ignoreWhitespace,
           includeStructured: true,
+          ...(compare.filesOnly === true ? { filesOnly: true } : {}),
         },
         readOptions,
       );

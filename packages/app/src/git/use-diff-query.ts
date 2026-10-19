@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useReplicaQuery } from "@/data/query";
 import { checkoutDiffPushRoute } from "@/data/push-router";
+import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { ParsedDiffFile, SubscribeCheckoutDiffResponse } from "@getpaseo/protocol/messages";
 import { checkoutDiffQueryKey } from "@/git/query-keys";
@@ -16,6 +17,8 @@ interface UseCheckoutDiffQueryOptions {
   ignoreWhitespace?: boolean;
   enabled?: boolean;
   queryScope?: string;
+  /** 只开文件树、diff 正文不可见：host 支持时只要文件清单。 */
+  filesOnly?: boolean;
   /** 每次收到这个 diff 的文件清单（含挂载时缓存里已有的那份）时调用。 */
   onFiles?: (files: ParsedDiffFile[]) => void;
 }
@@ -43,6 +46,44 @@ function normalizeCheckoutDiffCompare(compare: {
     : { mode: "base", ignoreWhitespace };
 }
 
+interface CheckoutDiffSubscriptionInput {
+  serverId: string;
+  cwd: string;
+  mode: "uncommitted" | "base";
+  baseRef?: string;
+  ignoreWhitespace?: boolean;
+  queryScope?: string;
+  filesOnly: boolean;
+  filesOnlySupported: boolean;
+}
+
+/** 订阅哪份 diff：查询缓存的 key、push 订阅 id 与发给 daemon 的 compare。 */
+export function resolveCheckoutDiffSubscription(input: CheckoutDiffSubscriptionInput) {
+  const compare = normalizeCheckoutDiffCompare(input);
+  // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
+  const filesOnly = input.filesOnly && input.filesOnlySupported;
+  const comparisonKey = checkoutDiffQueryKey(
+    input.serverId,
+    input.cwd,
+    compare.mode,
+    compare.baseRef,
+    compare.ignoreWhitespace,
+    { filesOnly },
+  );
+  const normalizedScope = input.queryScope?.trim();
+  const queryKey = normalizedScope ? [...comparisonKey, "scope", normalizedScope] : comparisonKey;
+  return {
+    queryKey,
+    subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+    compare: {
+      mode: compare.mode,
+      ...(compare.baseRef ? { baseRef: compare.baseRef } : {}),
+      ignoreWhitespace: compare.ignoreWhitespace,
+      ...(filesOnly ? { filesOnly: true } : {}),
+    },
+  };
+}
+
 export function useCheckoutDiffQuery({
   serverId,
   cwd,
@@ -51,30 +92,27 @@ export function useCheckoutDiffQuery({
   ignoreWhitespace,
   enabled = true,
   queryScope,
+  filesOnly = false,
   onFiles,
 }: UseCheckoutDiffQueryOptions) {
   const retainedPanelActive = useRetainedPanelActive();
   const queryEnabled = enabled && retainedPanelActive;
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const normalizedCompare = useMemo(
-    () => normalizeCheckoutDiffCompare({ mode, baseRef, ignoreWhitespace }),
-    [mode, baseRef, ignoreWhitespace],
+  const filesOnlySupported = useHostFeature(serverId, "checkoutDiffFilesOnly");
+  const { queryKey, subscriptionId, compare } = useMemo(
+    () =>
+      resolveCheckoutDiffSubscription({
+        serverId,
+        cwd,
+        mode,
+        baseRef,
+        ignoreWhitespace,
+        queryScope,
+        filesOnly,
+        filesOnlySupported,
+      }),
+    [serverId, cwd, mode, baseRef, ignoreWhitespace, queryScope, filesOnly, filesOnlySupported],
   );
-  const compareMode = normalizedCompare.mode;
-  const compareBaseRef = normalizedCompare.baseRef;
-  const compareIgnoreWhitespace = normalizedCompare.ignoreWhitespace;
-  const queryKey = useMemo(() => {
-    const comparisonKey = checkoutDiffQueryKey(
-      serverId,
-      cwd,
-      compareMode,
-      compareBaseRef,
-      compareIgnoreWhitespace,
-    );
-    const normalizedScope = queryScope?.trim();
-    return normalizedScope ? [...comparisonKey, "scope", normalizedScope] : comparisonKey;
-  }, [serverId, cwd, compareMode, compareBaseRef, compareIgnoreWhitespace, queryScope]);
-  const subscriptionId = useMemo(() => `checkoutDiff:${JSON.stringify(queryKey)}`, [queryKey]);
   const routeEnabled = Boolean(queryEnabled && isConnected && cwd);
 
   const query = useReplicaQuery<CheckoutDiffQueryPayload>({
@@ -87,11 +125,7 @@ export function useCheckoutDiffQuery({
       serverId,
       subscriptionId,
       cwd,
-      compare: {
-        mode: compareMode,
-        ...(compareBaseRef ? { baseRef: compareBaseRef } : {}),
-        ignoreWhitespace: compareIgnoreWhitespace,
-      },
+      compare,
     }),
   });
 
