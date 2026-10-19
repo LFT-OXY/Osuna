@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 设置开关的 RPC 按 `docs/rpc-namespacing.md` 用带点的命名空间与成对的 `.request` / `.response`；协议新增字段全部可选，旧客户端能解析新消息、新 daemon 能解析旧消息，有协议兼容测试。
 - [ ] 开关状态随 Agent 记录持久保存（zod schema、原子写入、不做迁移），daemon 重启后读回；草稿对话设置的状态在第一条消息发出后归到新建的 Agent 上。
