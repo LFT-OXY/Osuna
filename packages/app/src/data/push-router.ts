@@ -30,6 +30,9 @@ type StatusMessage = Extract<SessionOutboundMessage, { type: "status" }>;
 type TerminalsChangedMessage = Extract<SessionOutboundMessage, { type: "terminals_changed" }>;
 type CheckoutDiffResponsePayload = SubscribeCheckoutDiffResponseMessage["payload"];
 type CheckoutDiffCachePayload = Omit<CheckoutDiffResponsePayload, "subscriptionId">;
+type CheckoutDiffPushPayload = Omit<CheckoutDiffResponsePayload, "requestId"> & {
+  requestId?: string;
+};
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
 
 interface CheckoutDiffCompare {
@@ -49,6 +52,7 @@ interface CheckoutDiffRoute {
 
 interface CheckoutDiffRegistration extends CheckoutDiffRoute {
   subscription: OwnedSubscription<CheckoutDiffResponsePayload>;
+  cancelPendingUpdate(): void;
 }
 
 interface WorkspaceTerminalsRoute {
@@ -64,6 +68,8 @@ interface WorkspaceTerminalsRegistration extends WorkspaceTerminalsRoute {
 }
 
 type ServerDataRoute = CheckoutDiffRoute | WorkspaceTerminalsRoute;
+
+const CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS = 1000;
 
 export interface ServerDataQueryMeta extends Record<string, unknown> {
   serverData: ServerDataRoute;
@@ -312,6 +318,7 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
     unsubscribeQueryCache();
     void events.release().catch(console.error);
     for (const current of activeCheckoutDiffSubscriptions.values()) {
+      current.cancelPendingUpdate();
       void current.subscription.release().catch(console.error);
     }
     activeCheckoutDiffSubscriptions.clear();
@@ -333,16 +340,24 @@ function reconcileCheckoutDiffSubscriptions(input: {
     const desired = input.desired.get(key);
     if (desired && areCheckoutDiffRoutesEqual(current, desired)) continue;
     input.active.delete(key);
+    current.cancelPendingUpdate();
     void current.subscription.release().catch(console.error);
   }
   for (const [key, desired] of input.desired) {
     if (input.active.has(key)) continue;
     const subscription = input.client.observeCheckoutDiff(desired.cwd, desired.compare);
-    const registration = { ...desired, subscription };
+    // 推送每秒最多处理一次：窗口内只留最后一份，窗口结束时补上，连旧 daemon 也生效
+    let lastUpdateAppliedAt: number | null = null;
+    let pendingUpdate: CheckoutDiffPushPayload | null = null;
+    let pendingUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelPendingUpdate = () => {
+      if (pendingUpdateTimer) clearTimeout(pendingUpdateTimer);
+      pendingUpdateTimer = null;
+      pendingUpdate = null;
+    };
+    const registration = { ...desired, subscription, cancelPendingUpdate };
     input.active.set(key, registration);
-    const apply = (
-      payload: Omit<CheckoutDiffResponsePayload, "requestId"> & { requestId?: string },
-    ) => {
+    const apply = (payload: CheckoutDiffPushPayload) => {
       if (input.active.get(key) !== registration) return;
       const { subscriptionId, ...snapshot } = payload;
       setCheckoutDiffPayload({
@@ -357,12 +372,40 @@ function reconcileCheckoutDiffSubscriptions(input: {
         },
       });
     };
+    const applyUpdate = (payload: CheckoutDiffPushPayload) => {
+      lastUpdateAppliedAt = Date.now();
+      apply(payload);
+    };
+    const throttleUpdate = (payload: CheckoutDiffPushPayload) => {
+      const waitMs =
+        lastUpdateAppliedAt === null
+          ? 0
+          : lastUpdateAppliedAt + CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS - Date.now();
+      if (waitMs <= 0 && !pendingUpdateTimer) {
+        applyUpdate(payload);
+        return;
+      }
+      pendingUpdate = payload;
+      pendingUpdateTimer ??= setTimeout(
+        () => {
+          pendingUpdateTimer = null;
+          const latest = pendingUpdate;
+          pendingUpdate = null;
+          if (latest) applyUpdate(latest);
+        },
+        Math.max(waitMs, 0),
+      );
+    };
     subscription.subscribe({
-      snapshot: apply,
+      snapshot: (payload) => {
+        cancelPendingUpdate();
+        apply(payload);
+      },
       update: (message) => {
-        if (message.type === "checkout_diff_update") apply(message.payload);
+        if (message.type === "checkout_diff_update") throttleUpdate(message.payload);
       },
       error: (error) => {
+        cancelPendingUpdate();
         if (input.active.get(key) === registration) input.active.delete(key);
         console.error("[server-data] observeCheckoutDiff failed", {
           serverId: input.serverId,

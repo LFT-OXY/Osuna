@@ -1,6 +1,6 @@
 import type { OwnedSubscription, SubscriptionObserver } from "@getpaseo/client";
 import { QueryClient, QueryObserver, skipToken } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MutableDaemonConfig, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { checkoutDiffQueryKey } from "@/git/query-keys";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
@@ -456,6 +456,66 @@ describe("server data push router", () => {
     expect(fake.unsubscribeCheckoutDiffCalls).toEqual([serverSubscriptionId]);
 
     unmount();
+  });
+
+  it("applies at most one diff push per second, keeping the latest and the trailing one", () => {
+    vi.useFakeTimers();
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "diff-throttle";
+    const cwd = "/repo";
+    const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false);
+    const observer = new QueryObserver(queryClient, {
+      queryKey,
+      queryFn: skipToken,
+      meta: checkoutDiffPushRoute({
+        enabled: true,
+        serverId,
+        cwd,
+        subscriptionId: "diff-throttle",
+        compare: { mode: "uncommitted" },
+      }),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    const push = (path: string) =>
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: {
+          subscriptionId: fake.subscribeCheckoutDiffCalls[0]!.subscriptionId,
+          cwd,
+          files: [{ path, isNew: false, isDeleted: false, additions: 1, deletions: 0, hunks: [] }],
+          error: null,
+        },
+      });
+    const appliedPath = () =>
+      queryClient.getQueryData<{ files: Array<{ path: string }> }>(queryKey)?.files[0]?.path;
+    try {
+      push("first.ts");
+      expect(appliedPath()).toBe("first.ts");
+
+      push("second.ts");
+      vi.advanceTimersByTime(300);
+      push("third.ts");
+      vi.advanceTimersByTime(300);
+      push("fourth.ts");
+      vi.advanceTimersByTime(399);
+      expect(appliedPath()).toBe("first.ts");
+
+      vi.advanceTimersByTime(1);
+      expect(appliedPath()).toBe("fourth.ts");
+
+      push("trailing.ts");
+      vi.advanceTimersByTime(999);
+      expect(appliedPath()).toBe("fourth.ts");
+      vi.advanceTimersByTime(1);
+      expect(appliedPath()).toBe("trailing.ts");
+    } finally {
+      unsubscribe();
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
   });
 
   it("does not retry failed subscriptions on unrelated cache events", async () => {

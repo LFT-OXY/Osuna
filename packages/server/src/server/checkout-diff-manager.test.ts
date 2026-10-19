@@ -385,14 +385,125 @@ describe("CheckoutDiffManager", () => {
       diff: "",
       structured: [{ path: "tracked.ts", additions: 2, deletions: 1, status: "modified" }],
     });
-    await vi.waitFor(() => {
-      expect(getCheckoutDiff).toHaveBeenCalledTimes(3);
-      expect(listener).toHaveBeenLastCalledWith({
-        cwd: "/tmp/repo",
-        files: [{ path: "tracked.ts", additions: 100, deletions: 25, status: "modified" }],
-        error: null,
-      });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(getCheckoutDiff).toHaveBeenCalledTimes(3);
+    expect(listener).toHaveBeenLastCalledWith({
+      cwd: "/tmp/repo",
+      files: [{ path: "tracked.ts", additions: 100, deletions: 25, status: "modified" }],
+      error: null,
     });
+  });
+
+  function createChangingDiff() {
+    let version = 0;
+    return vi.fn(async () => {
+      version += 1;
+      return {
+        diff: "",
+        structured: [{ path: "a.ts", additions: version, deletions: 0, status: "modified" }],
+      };
+    });
+  }
+
+  test("continuous edits push at most once per second and still push the trailing result", async () => {
+    const getCheckoutDiff = createChangingDiff();
+    const { manager, getOnChange } = createManager({
+      getCheckoutDiffImplementation: getCheckoutDiff,
+    });
+    const pushTimes: number[] = [];
+    const listener = vi.fn(() => {
+      pushTimes.push(Date.now());
+    });
+    await manager.subscribe({ cwd: "/tmp/repo", compare: { mode: "uncommitted" } }, listener);
+
+    let lastChangeAt = 0;
+    for (let elapsed = 0; elapsed < 5000; elapsed += 300) {
+      lastChangeAt = Date.now();
+      getOnChange()?.();
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(pushTimes.length).toBeGreaterThanOrEqual(4);
+    for (let index = 1; index < pushTimes.length; index += 1) {
+      expect(pushTimes[index] - pushTimes[index - 1]).toBeGreaterThanOrEqual(1000);
+    }
+    const computedCount = getCheckoutDiff.mock.calls.length;
+    expect(listener).toHaveBeenLastCalledWith({
+      cwd: "/tmp/repo",
+      files: [{ path: "a.ts", additions: computedCount, deletions: 0, status: "modified" }],
+      error: null,
+    });
+    expect(pushTimes[pushTimes.length - 1]).toBeGreaterThanOrEqual(lastChangeAt + 150);
+  });
+
+  test("the trailing push after a burst lands 150ms after the last edit once a second has passed", async () => {
+    const getCheckoutDiff = createChangingDiff();
+    const { manager, getOnChange } = createManager({
+      getCheckoutDiffImplementation: getCheckoutDiff,
+    });
+    const listener = vi.fn();
+    await manager.subscribe({ cwd: "/tmp/repo", compare: { mode: "uncommitted" } }, listener);
+
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(900);
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(149);
+    expect(listener).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  test("a second edit within a second of the last push waits for the gap", async () => {
+    const getCheckoutDiff = createChangingDiff();
+    const { manager, getOnChange } = createManager({
+      getCheckoutDiffImplementation: getCheckoutDiff,
+    });
+    const listener = vi.fn();
+    await manager.subscribe({ cwd: "/tmp/repo", compare: { mode: "uncommitted" } }, listener);
+
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(200);
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(799);
+    expect(listener).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  test("a fast refresh after a slow one still waits a full second since the last push", async () => {
+    let version = 0;
+    const getCheckoutDiff = vi.fn(async () => {
+      version += 1;
+      if (version === 2) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+      return {
+        diff: "",
+        structured: [{ path: "a.ts", additions: version, deletions: 0, status: "modified" }],
+      };
+    });
+    const { manager, getOnChange } = createManager({
+      getCheckoutDiffImplementation: getCheckoutDiff,
+    });
+    const pushTimes: number[] = [];
+    await manager.subscribe({ cwd: "/tmp/repo", compare: { mode: "uncommitted" } }, () => {
+      pushTimes.push(Date.now());
+    });
+
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    getOnChange()?.();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(pushTimes).toHaveLength(2);
+    expect(pushTimes[1] - pushTimes[0]).toBeGreaterThanOrEqual(1000);
   });
 
   test("base diff subscriptions ignore ordinary working tree edits", async () => {
@@ -462,6 +573,8 @@ describe("CheckoutDiffManager", () => {
 
     getOnWorkspaceSnapshot()?.(createWorkspaceSnapshot({ aheadBehind: { ahead: 2, behind: 0 } }));
     await vi.advanceTimersByTimeAsync(150);
+    expect(getCheckoutDiff).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(850);
     expect(getCheckoutDiff).toHaveBeenCalledTimes(3);
   });
 
