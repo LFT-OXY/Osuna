@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Pencil, Trash2 } from "lucide-react-native";
+import { Copy, Pencil, Trash2 } from "lucide-react-native";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,10 +22,11 @@ import { endpointRowStatus, endpointSummary, type EndpointRowStatus } from "./in
 
 /*
  * 接口详情页头部：照提供方详情页（provider-detail/header.tsx）——头像、名称、状态徽标与「格式 · 已选数」，
- * 右侧接口开关、「测试连接」与 ⋯ 菜单（编辑连接 / 删除）；冷却中时徽标旁有「立刻恢复」。
+ * 右侧接口开关、「测试连接」与 ⋯ 菜单（编辑连接 / 复制 / 删除）；冷却中时徽标旁有「立刻恢复」。
  */
 
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedCopy = withUnistyles(Copy);
 const ThemedTrash2 = withUnistyles(Trash2);
 const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 
@@ -46,6 +47,8 @@ interface ApiEndpointDetailHeaderProps {
   onResume: (endpoint: ApiEndpoint) => void;
   onTest: () => void;
   onEdit: () => void;
+  // 主机声明了 apiEndpointManagement 才有「复制」。
+  onDuplicate: (() => void) | undefined;
   onDelete: () => void;
 }
 
@@ -59,6 +62,7 @@ export function ApiEndpointDetailHeader({
   onResume,
   onTest,
   onEdit,
+  onDuplicate,
   onDelete,
 }: ApiEndpointDetailHeaderProps) {
   const { t } = useTranslation();
@@ -148,6 +152,7 @@ export function ApiEndpointDetailHeader({
           name={endpoint.name}
           isDeleting={isDeleting}
           onEdit={onEdit}
+          onDuplicate={onDuplicate}
           onDelete={onDelete}
         />
       </View>
@@ -159,16 +164,22 @@ function DetailMenu({
   name,
   isDeleting,
   onEdit,
+  onDuplicate,
   onDelete,
 }: {
   name: string;
   isDeleting: boolean;
   onEdit: () => void;
+  onDuplicate: (() => void) | undefined;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
   const editLeading = useMemo(
     () => <ThemedPencil size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  const duplicateLeading = useMemo(
+    () => <ThemedCopy size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
     [],
   );
   const deleteLeading = useMemo(
@@ -189,6 +200,15 @@ function DetailMenu({
         >
           {t("settings.apiEndpoints.form.editTitle")}
         </DropdownMenuItem>
+        {onDuplicate ? (
+          <DropdownMenuItem
+            leading={duplicateLeading}
+            onSelect={onDuplicate}
+            testID="api-endpoint-detail-duplicate"
+          >
+            {t("settings.apiEndpoints.detail.duplicate")}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           destructive

@@ -278,6 +278,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * 老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
  * manualModels 省略即保留这家已有的手动添加模型；拉回来的上游清单只由 fetch_models 改。
  * searchesWeb 省略即保留这家原来的「自己能联网搜索」，老客户端保存时不会把它关掉。
+ *
+ * copyOf（复制，Duplicate）：新建时从这家起步——请求没给的字段（上游清单、手动添加的模型、联网搜索开关与以后加的设置）
+ * 取它的，apiKey 留空就用它的 key；名称、标识重了 daemon 自动避让。与 endpointId 一起给时拒收。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -293,6 +296,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   modelMapping: ApiEndpointModelMappingSchema.optional(),
   manualModels: z.array(ApiEndpointModelSchema).optional(),
   searchesWeb: z.boolean().optional(),
+  copyOf: z.string().optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -546,6 +550,27 @@ export const ApiEndpointSetOrderResponseSchema = z.object({
   }),
 });
 export type ApiEndpointSetOrderResponse = z.infer<typeof ApiEndpointSetOrderResponseSchema>;
+
+/**
+ * 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 时 apiKey 为 null。照 magpie 不确认、不限次数。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointRevealKeyRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_key.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointRevealKeyRequest = z.infer<typeof ApiEndpointRevealKeyRequestSchema>;
+
+export const ApiEndpointRevealKeyResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.reveal_key.response"),
+  payload: z.object({
+    requestId: z.string(),
+    apiKey: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyResponseSchema>;
 
 /**
  * daemon 在主机上向上游列出模型，key 不经过客户端。编辑已保存的接口时带 endpointId、

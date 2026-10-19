@@ -898,6 +898,139 @@ test.describe("Settings API endpoints", () => {
       expect(list.agents?.claude?.enabled).toBe(false);
     });
   });
+
+  test("Duplicate opens the add dialog filled from the endpoint: Cancel adds nothing, a failed save stays in the form, and a blank key keeps the original's", async ({
+    page,
+  }) => {
+    const host = await failConnectionSave(page);
+    const source = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["claude-sonnet-4-5", "gpt-5"],
+    });
+    await openEndpointDetail(page, source);
+    const name = page.getByTestId("api-endpoint-connection-name");
+
+    await test.step("the dialog opens as a new endpoint named <name> copy, its key box empty", async () => {
+      await duplicateFromMenu(page);
+      await expect(connectionForm(page)).toContainText("Copy of Good relay");
+      await expect(name).toHaveValue("Good relay copy");
+      const key = page.getByTestId("api-endpoint-connection-api-key");
+      await expect(key).toHaveValue("");
+      await expect(key).toHaveAttribute(
+        "placeholder",
+        "Keeps the original key sk-e…elay, or paste another",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue(
+        `${relay.origin}/good/v1`,
+      );
+    });
+
+    await test.step("Cancel adds nothing", async () => {
+      await connectionForm(page).getByRole("button", { name: "Cancel" }).click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(1);
+    });
+
+    await test.step("a failed save keeps the form and says why", async () => {
+      await duplicateFromMenu(page);
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(name).toHaveValue("Good relay copy");
+      expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(1);
+    });
+
+    await test.step("saving adds the copy with the original's key and models, and opens it", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const list = await client.apiEndpointList("claude");
+      expect(list.endpoints).toMatchObject([
+        { id: source, name: "Good relay" },
+        {
+          name: "Good relay copy",
+          hasApiKey: true,
+          models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }],
+        },
+      ]);
+      const copyId = list.endpoints[1]?.id ?? "";
+      await expect(page).toHaveURL(
+        new RegExp(`${buildApiEndpointSettingsRoute(getServerId(), copyId)}$`),
+      );
+      await expect(headerTitle(page)).toHaveText("Good relay copy");
+
+      relay.requests.length = 0;
+      const detected = await client.apiEndpointDetectFormats({
+        endpointId: copyId,
+        baseUrl: `${relay.origin}/good`,
+      });
+      expect(statusesOf(detected.results)).toEqual(["ok", "ok", "not_detected"]);
+      expect(authorizationsSeen(relay)).toEqual(new Set([`Bearer ${RELAY_KEY}`]));
+    });
+  });
+
+  test("Show reads the saved key back into the edit dialog; a failed read stays on the key field", async ({
+    page,
+  }) => {
+    const host = await failRevealKey(page);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const key = page.getByTestId("api-endpoint-connection-api-key");
+    const show = page.getByTestId("api-endpoint-connection-show-key");
+
+    await test.step("a failed read says why on the key and the key stays hidden", async () => {
+      await show.click();
+      await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toHaveText(
+        "EACCES: permission denied",
+      );
+      await expect(key).toHaveValue("");
+      await expect(key).toHaveAttribute("type", "password");
+      await expect(show).toHaveText("Show");
+    });
+
+    await test.step("Show puts the saved key in the box; Hide empties it again", async () => {
+      host.failing = false;
+      await show.click();
+      await expect(key).toHaveValue(RELAY_KEY);
+      await expect(key).not.toHaveAttribute("type", "password");
+      await expect(show).toHaveText("Hide");
+      await expect(page.getByTestId("api-endpoint-connection-api-key-field-error")).toHaveCount(0);
+      await show.click();
+      await expect(key).toHaveValue("");
+      await expect(key).toHaveAttribute("type", "password");
+    });
+
+    await test.step("saving after only reading it keeps the key", async () => {
+      await show.click();
+      await expect(key).toHaveValue(RELAY_KEY);
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      expect((await client.apiEndpointList("claude")).endpoints[0]?.hasApiKey).toBe(true);
+    });
+  });
+
+  test("a host without apiEndpointManagement has no Duplicate and no Show", async ({ page }) => {
+    const [endpointId = ""] = await seedRelays(["Relay A"]);
+    await hideManagementCapability(page);
+    await openEndpointDetail(page, endpointId);
+    await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-detail-duplicate")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await expect(page.getByTestId("api-endpoint-connection-api-key")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-show-key")).toHaveCount(0);
+  });
 });
 
 test.describe("API endpoints on the Claude Code page and in the model selector", () => {
@@ -2419,6 +2552,46 @@ async function failSearchesWebSave(page: Page): Promise<{ failing: boolean }> {
 }
 
 /** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */
+/** 读回 key 的请求在 failing 为 true 时被拒（像主机读不了 keys.json），之后照常送到 daemon。 */
+async function failRevealKey(page: Page): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isReveal =
+        typeof message === "string" && message.includes("provider.api_endpoint.reveal_key.request");
+      const request = isReveal
+        ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+        : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.reveal_key.response",
+            payload: {
+              requestId: request.requestId,
+              apiKey: null,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+async function duplicateFromMenu(page: Page): Promise<void> {
+  await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
+  await page.getByTestId("api-endpoint-detail-duplicate").click();
+  await expect(connectionForm(page)).toBeVisible();
+}
+
 async function failConnectionSave(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {

@@ -294,6 +294,8 @@ export interface ApiEndpointSaveInput {
   manualModels?: ApiEndpointModel[];
   // undefined：保留这家原来的「自己能联网搜索」。
   searchesWeb?: boolean;
+  // 复制：新建时从这家起步，没给的字段与留空的 key 都取它的。不能和 endpointId 一起给。
+  copyOf?: string;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -966,8 +968,9 @@ export class ApiEndpointService {
       if (input.endpointId && !existing) {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
-      // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key。
-      const apiKey = input.apiKey?.trim() ? input.apiKey.trim() : undefined;
+      const copySource = copySourceOf(state, input);
+      // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key；复制时不填用原来那家的。
+      const apiKey = savedKeyOf({ input, copySource, store: this.store });
       const isLegacyForm = input.baseUrls === undefined;
       const fields = isLegacyForm
         ? validateLegacyFields(supported, input, existing)
@@ -975,8 +978,9 @@ export class ApiEndpointService {
       const endpoint = buildEndpoint({
         state,
         existing,
+        copySource,
         fields,
-        searchesWeb: keptSearchesWeb(input.searchesWeb, existing),
+        searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -1013,6 +1017,14 @@ export class ApiEndpointService {
       }
       return this.toWire(next, endpoint, supported);
     });
+  }
+
+  /** 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 为 null。照 magpie 不确认、不限次数。 */
+  revealKey(endpointId: string): string | null {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    return this.store.getApiKey(endpointId);
   }
 
   /** 接口是主机共用的，删除对所有 Agent 生效；返回值按 provider 投影。 */
@@ -3401,6 +3413,47 @@ function withEndpoint(
   return index === -1 ? [...endpoints, endpoint] : endpoints.with(index, endpoint);
 }
 
+/** 复制（copyOf）的原来那家；不复制时为 null。和 endpointId 一起给、或那家不在了都拒收。 */
+function copySourceOf(
+  state: ApiEndpointState,
+  input: ApiEndpointSaveInput,
+): StoredApiEndpoint | null {
+  if (input.copyOf === undefined) return null;
+  if (input.endpointId !== undefined) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "A save that duplicates an endpoint cannot also edit one",
+    });
+  }
+  const source = findEndpoint(state, input.copyOf);
+  if (!source) {
+    throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+  }
+  return source;
+}
+
+/** 这次保存要存的 key：打了就用打的；没打时复制用原来那家的，其余为 undefined（新建不存、编辑保留）。 */
+function savedKeyOf(input: {
+  input: ApiEndpointSaveInput;
+  copySource: StoredApiEndpoint | null;
+  store: ApiEndpointStore;
+}): string | undefined {
+  const typed = input.input.apiKey?.trim();
+  if (typed) return typed;
+  if (!input.copySource) return undefined;
+  return input.store.getApiKey(input.copySource.id) ?? undefined;
+}
+
+/**
+ * 新建的接口名称重了（不分大小写）就加「 2」「 3」……（照 magpie freeName）；编辑时不改用户起的名字。
+ */
+function freeEndpointName(state: ApiEndpointState, name: string): string {
+  const taken = new Set(state.endpoints.map((entry) => entry.name.toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n += 1) candidate = `${name} ${n}`;
+  return candidate;
+}
+
 /** 保存请求省略「自己能联网搜索」时沿用这家原来的；新建为关。 */
 function keptSearchesWeb(
   requested: boolean | undefined,
@@ -3417,6 +3470,8 @@ function keptSearchesWeb(
 function buildEndpoint(input: {
   state: ApiEndpointState;
   existing: StoredApiEndpoint | null;
+  // 复制时原来那家：没给的字段取它的，id、标识、开关、时间仍按新建。
+  copySource: StoredApiEndpoint | null;
   fields: EndpointFields;
   // 「自己能联网搜索」：请求省略时调用方已换成这家原来的值。
   searchesWeb: boolean;
@@ -3424,21 +3479,24 @@ function buildEndpoint(input: {
   timestamp: string;
 }): StoredApiEndpoint {
   const { state, existing, fields } = input;
-  const legacyDefaultModelId = fields.legacyDefaultModelId ?? existing?.legacyDefaultModelId;
-  const manualModels = fields.manualModels ?? existing?.manualModels;
+  const base = existing ?? input.copySource;
+  const legacyDefaultModelId = fields.legacyDefaultModelId ?? base?.legacyDefaultModelId;
+  const manualModels = fields.manualModels ?? base?.manualModels;
   const {
     modelMapping: _resubmitted,
     manualModels: _manualModels,
     searchesWeb: _searchesWeb,
     ...kept
-  } = existing ?? {};
+  } = base ?? {};
+  const name = existing ? fields.name : freeEndpointName(state, fields.name);
   return {
     ...kept,
     id: existing?.id ?? `ep_${randomUUID()}`,
     slug:
       existing?.slug ??
-      generateEndpointSlug(fields.name, new Set(state.endpoints.map((entry) => entry.slug))),
+      generateEndpointSlug(name, new Set(state.endpoints.map((entry) => entry.slug))),
     ...fields,
+    name,
     enabled: existing?.enabled ?? input.enabledWhenNew,
     ...(legacyDefaultModelId ? { legacyDefaultModelId } : {}),
     ...(manualModels && manualModels.length > 0 ? { manualModels } : {}),

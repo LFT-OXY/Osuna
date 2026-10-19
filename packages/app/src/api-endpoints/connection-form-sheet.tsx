@@ -21,10 +21,12 @@ import type {
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
-  // 主机声明了 apiEndpointManagement：key 可以不填。
+  // 主机声明了 apiEndpointManagement：key 可以不填，key 框旁有「显示」。
   isKeyOptional: boolean;
+  canRevealKey: boolean;
   onSave: ConnectionFormDeps["save"];
   onDetect: ConnectionFormDeps["detect"];
+  onRevealKey: ConnectionFormDeps["revealKey"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -39,22 +41,36 @@ const URL_PLACEHOLDERS: Record<ApiEndpointRequestFormat, string> = {
 };
 
 /**
- * 添加第三方接口 / 编辑连接。调用方按「模式 + 接口 id」给 key，每次打开都是新挂载（docs/forms.md）。
+ * 添加第三方接口 / 编辑连接 / 复制一家（以添加窗口打开）。调用方按「模式 + 接口 id」给 key，每次打开都是新挂载（docs/forms.md）。
  */
 export function ApiEndpointConnectionSheet({
   seed,
   isKeyOptional,
+  canRevealKey,
   onSave,
   onDetect,
+  onRevealKey,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const fieldSize = isCompact ? "md" : "sm";
-  const model = useConnectionFormModel(seed, { save: onSave, detect: onDetect }, { isKeyOptional });
+  const model = useConnectionFormModel(
+    seed,
+    { save: onSave, detect: onDetect, revealKey: onRevealKey },
+    { isKeyOptional, canRevealKey },
+  );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const isCreate = state.mode === "create";
+  const keyPlaceholder = useMemo(() => {
+    if (seed.mode === "duplicate" && seed.source.hasApiKey) {
+      return t("settings.apiEndpoints.form.apiKeyCopiedPlaceholder", {
+        mask: seed.source.apiKeyMask ?? "••••",
+      });
+    }
+    return state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…";
+  }, [seed, state.hasSavedKey, t]);
 
   const handleSubmit = useCallback(() => {
     void (async () => {
@@ -64,6 +80,7 @@ export function ApiEndpointConnectionSheet({
   }, [model, onSaved]);
   const handleDetect = useCallback(() => model.detect(), [model]);
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
+  const handleToggleKey = useCallback(() => model.toggleKeyVisible(), [model]);
 
   // 操作按钮放在固定底栏：表单比窗口高时内容区单独滚动，按钮一直看得见。
   const footer = useMemo(
@@ -89,14 +106,16 @@ export function ApiEndpointConnectionSheet({
     [handleSubmit, isCreate, onClose, state.canSubmit, state.submitting, t],
   );
 
-  const header = useMemo<SheetHeader>(
-    () => ({
+  const header = useMemo<SheetHeader>(() => {
+    if (seed.mode === "duplicate") {
+      return { title: t("settings.apiEndpoints.form.duplicateTitle", { name: seed.source.name }) };
+    }
+    return {
       title: isCreate
         ? t("settings.apiEndpoints.form.createTitle")
         : t("settings.apiEndpoints.form.editTitle"),
-    }),
-    [isCreate, t],
-  );
+    };
+  }, [isCreate, seed, t]);
 
   return (
     <AdaptiveModalSheet
@@ -125,22 +144,41 @@ export function ApiEndpointConnectionSheet({
               ? t("settings.apiEndpoints.form.apiKeyOptionalLabel")
               : t("settings.apiEndpoints.form.apiKey")
           }
-          error={state.keyRejected ? t("settings.apiEndpoints.form.keyRejected") : null}
+          error={
+            state.revealError ??
+            (state.keyRejected ? t("settings.apiEndpoints.form.keyRejected") : null)
+          }
           testID="api-endpoint-connection-api-key-field"
         >
-          <FormTextInput
-            initialValue=""
-            onChangeText={model.setApiKey}
-            placeholder={
-              state.hasSavedKey ? t("settings.apiEndpoints.form.apiKeySavedPlaceholder") : "sk-…"
-            }
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            invalid={state.keyRejected}
-            size={fieldSize}
-            testID="api-endpoint-connection-api-key"
-          />
+          <View style={styles.inlineRow}>
+            <View style={styles.flex}>
+              <FormTextInput
+                initialValue={state.keyBoxValue}
+                resetKey={state.keyBoxGeneration}
+                onChangeText={model.setApiKey}
+                placeholder={keyPlaceholder}
+                secureTextEntry={!state.isKeyVisible}
+                autoCapitalize="none"
+                autoCorrect={false}
+                invalid={state.keyRejected || state.revealError !== null}
+                size={fieldSize}
+                testID="api-endpoint-connection-api-key"
+              />
+            </View>
+            {state.canShowKey ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={handleToggleKey}
+                loading={state.isRevealingKey}
+                testID="api-endpoint-connection-show-key"
+              >
+                {state.isKeyVisible
+                  ? t("settings.apiEndpoints.form.hideKey")
+                  : t("settings.apiEndpoints.form.showKey")}
+              </Button>
+            ) : null}
+          </View>
         </Field>
         <Field
           label={t("settings.apiEndpoints.form.address")}

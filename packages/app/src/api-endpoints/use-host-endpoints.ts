@@ -19,6 +19,7 @@ import { describeUnparsableFile } from "./config-unparsable-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
+  ConnectionRevealKeyResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
 } from "./internal/connection-form-model";
@@ -112,6 +113,8 @@ export interface UseHostEndpointsResult {
     request: ConnectionDetectRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionDetectResult>;
+  // 读回已存 key 的原文；只有声明了 apiEndpointManagement 的主机认。
+  revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -361,6 +364,20 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
+  const revealKey = useCallback(
+    async (endpointId: string): Promise<ConnectionRevealKeyResult> => {
+      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      try {
+        const result = await client.apiEndpointRevealKey(endpointId);
+        if (result.error) return { status: "failed", message: result.error.message };
+        return { status: "revealed", apiKey: result.apiKey };
+      } catch (error) {
+        return { status: "failed", message: toErrorMessage(error) };
+      }
+    },
+    [client, t],
+  );
+
   const dismissActionError = useCallback(() => setActionFailure(null), []);
   const dismissIssueActionError = useCallback(() => setIssueActionError(null), []);
 
@@ -382,6 +399,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     dismissIssueActionError,
     save,
     detect,
+    revealKey,
   };
 }
 

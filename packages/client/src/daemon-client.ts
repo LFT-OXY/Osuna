@@ -680,6 +680,10 @@ type ApiEndpointSetOrderPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_order.response" }
 >["payload"];
+type ApiEndpointRevealKeyPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.reveal_key.response" }
+>["payload"];
 
 type ApiEndpointFetchModelsPayload = Extract<
   SessionOutboundMessage,
@@ -6426,6 +6430,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_order.request", ...options },
+    });
+  }
+
+  /** 读回一家接口已保存的 key 原文；没有 key 时 apiKey 为 null。 */
+  async apiEndpointRevealKey(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointRevealKeyPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.reveal_key.request", endpointId },
     });
   }
 

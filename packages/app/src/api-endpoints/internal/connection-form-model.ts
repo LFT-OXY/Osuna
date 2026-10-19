@@ -12,15 +12,25 @@ import {
  * 只管连接：名称、一把 key、自动检测用的地址、三种格式的地址；模型在详情页挑，编辑时原样带回。
  * key 只写不读：编辑时从空开始，留空提交就不带 apiKey，daemon 保留原 key；自动检测同理带 endpointId。
  * 主机声明了 apiEndpointManagement 时 key 选填：没 key 也能检测、保存，daemon 不带认证头；老主机仍要 key。
+ * 同样只在这种主机上：「复制」以原来那家开一个新建表单（key 留空即沿用它的，daemon 拷），key 框旁有「显示」，
+ * 编辑时按它读回已存 key 的原文放进框里；读回来的不算新 key，改了才算（照 magpie）。
  */
 
-export type ConnectionFormSeed = { mode: "create" } | { mode: "edit"; endpoint: ApiEndpoint };
+export type ConnectionFormSeed =
+  | { mode: "create" }
+  | { mode: "edit"; endpoint: ApiEndpoint }
+  // name 是调用方按界面语言起好的「原名 副本」；重名由 daemon 避让。
+  | { mode: "duplicate"; source: ApiEndpoint; name: string };
 
 // provider 由调用方补上：接口是主机共用的，按哪个 provider 存都一样。
 export type ConnectionSaveRequest = Omit<ApiEndpointSaveRequest, "type" | "requestId" | "provider">;
 
 export type ConnectionSaveResult =
   | { status: "saved"; endpointId: string }
+  | { status: "failed"; message: string };
+
+export type ConnectionRevealKeyResult =
+  | { status: "revealed"; apiKey: string | null }
   | { status: "failed"; message: string };
 
 export type ConnectionDetectRequest = Omit<ApiEndpointDetectFormatsRequest, "type" | "requestId">;
@@ -44,13 +54,24 @@ export interface ConnectionFormatField {
 export interface ConnectionFormOptions {
   // 主机声明了 apiEndpointManagement：key 可以不填。
   isKeyOptional: boolean;
+  // 同上：key 框旁有「显示」，能读回已存的 key。
+  canRevealKey: boolean;
 }
 
 export interface ConnectionFormState {
-  mode: "create" | "edit";
+  mode: ConnectionFormSeed["mode"];
   name: string;
+  // 用户打的 key；空即不换（编辑保留原 key，复制沿用原来那家的）。
   apiKey: string;
+  // key 框里显示的值与它换值的次数：读回已存的 key 时放进去，再藏起来时清掉；不是用户打的不进 apiKey。
+  keyBoxValue: string;
+  keyBoxGeneration: number;
+  // 编辑时这家已存了 key；复制时原来那家有 key。
   hasSavedKey: boolean;
+  canShowKey: boolean;
+  isKeyVisible: boolean;
+  isRevealingKey: boolean;
+  revealError: string | null;
   isKeyOptional: boolean;
   address: string;
   addressInvalid: boolean;
@@ -73,6 +94,7 @@ export interface ConnectionFormDeps {
     request: ConnectionDetectRequest,
     signal: AbortSignal,
   ) => Promise<ConnectionDetectResult>;
+  revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
 }
 
 export interface ConnectionFormModel {
@@ -80,6 +102,8 @@ export interface ConnectionFormModel {
   subscribe(listener: () => void): () => void;
   setName(value: string): void;
   setApiKey(value: string): void;
+  // 「显示 / 隐藏」：编辑已存了 key、框里没打新的时先读回原文。
+  toggleKeyVisible(): void;
   setAddress(value: string): void;
   setUrl(format: ApiEndpointRequestFormat, value: string): void;
   detect(): void;
@@ -94,6 +118,13 @@ type Labels = Partial<Record<ApiEndpointRequestFormat, FormatDetectionLabel>>;
 interface Values {
   name: string;
   apiKey: string;
+  keyBoxValue: string;
+  keyBoxGeneration: number;
+  isKeyVisible: boolean;
+  // 框里是读回来的原 key，不是用户打的。
+  isKeyRevealed: boolean;
+  isRevealingKey: boolean;
+  revealError: string | null;
   address: string;
   urls: Urls;
   urlGeneration: number;
@@ -111,16 +142,24 @@ export function createConnectionFormModel(
   deps: ConnectionFormDeps,
   options: ConnectionFormOptions,
 ): ConnectionFormModel {
-  const { isKeyOptional } = options;
+  const { isKeyOptional, canRevealKey } = options;
   const listeners = new Set<() => void>();
-  const hasSavedKey = seed.mode === "edit" && seed.endpoint.hasApiKey;
+  // 编辑的这家，或复制的原来那家：没打 key 时检测、保存都用它已存的 key。
+  const keyOwner = keyOwnerOf(seed);
+  const hasSavedKey = keyOwner?.hasApiKey === true;
   let closed = false;
   // 当前这次自动检测；取消或重新检测后，旧请求晚到的结果不再生效。
   let pendingDetect: AbortController | null = null;
-  const seededUrls = seed.mode === "edit" ? urlsOf(seed.endpoint) : EMPTY_URLS;
+  const seededUrls = keyOwner ? urlsOf(keyOwner) : EMPTY_URLS;
   let values: Values = {
-    name: seed.mode === "edit" ? seed.endpoint.name : "",
+    name: initialNameOf(seed),
     apiKey: "",
+    keyBoxValue: "",
+    keyBoxGeneration: 0,
+    isKeyVisible: false,
+    isKeyRevealed: false,
+    isRevealingKey: false,
+    revealError: null,
     address: API_ENDPOINT_REQUEST_FORMATS.map((format) => seededUrls[format]).find(Boolean) ?? "",
     urls: seededUrls,
     urlGeneration: 0,
@@ -156,7 +195,13 @@ export function createConnectionFormModel(
       mode: seed.mode,
       name: next.name,
       apiKey: next.apiKey,
+      keyBoxValue: next.keyBoxValue,
+      keyBoxGeneration: next.keyBoxGeneration,
       hasSavedKey,
+      canShowKey: canRevealKey,
+      isKeyVisible: next.isKeyVisible,
+      isRevealingKey: next.isRevealingKey,
+      revealError: next.revealError,
       isKeyOptional,
       address: next.address,
       addressInvalid,
@@ -193,7 +238,7 @@ export function createConnectionFormModel(
     const apiKey = typedKey();
     const outcome = await deps.detect(
       {
-        ...(seed.mode === "edit" && !apiKey ? { endpointId: seed.endpoint.id } : {}),
+        ...(keyOwner && !apiKey ? { endpointId: keyOwner.id } : {}),
         baseUrl: values.address.trim(),
         ...(apiKey ? { apiKey } : {}),
       },
@@ -232,16 +277,38 @@ export function createConnectionFormModel(
       const url = values.urls[format].trim();
       return url ? [{ format, url }] : [];
     });
-    const endpoint = seed.mode === "edit" ? seed.endpoint : null;
     return {
-      ...(endpoint ? { endpointId: endpoint.id } : {}),
+      ...(seed.mode === "edit" ? { endpointId: seed.endpoint.id } : {}),
       name: values.name.trim(),
       baseUrls,
       ...(apiKey ? { apiKey } : {}),
-      // 连接弹窗不挑模型：新建时一个都没有，编辑时把已选模型与档位映射原样带回。
-      models: endpoint?.models ?? [],
-      ...(endpoint?.modelMapping ? { modelMapping: endpoint.modelMapping } : {}),
+      // 连接弹窗不挑模型：新建时一个都没有，编辑、复制时把已选模型与档位映射原样带上。
+      models: keyOwner?.models ?? [],
+      ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
+      // 复制：上游清单、手动添加的模型、联网搜索开关等其余设置由 daemon 从原来那家拷。
+      ...(seed.mode === "duplicate" ? { copyOf: seed.source.id } : {}),
     };
+  }
+
+  async function runReveal(endpointId: string): Promise<void> {
+    const outcome = await deps.revealKey(endpointId);
+    if (!values.isRevealingKey) return;
+    if (outcome.status === "failed") {
+      update({ isRevealingKey: false, revealError: outcome.message });
+      return;
+    }
+    // 等的时候已经打了新 key：只把它显示出来，不拿原 key 盖掉。
+    if (values.apiKey !== "" || outcome.apiKey === null) {
+      update({ isRevealingKey: false, isKeyVisible: true });
+      return;
+    }
+    update({
+      isRevealingKey: false,
+      isKeyVisible: true,
+      isKeyRevealed: true,
+      keyBoxValue: outcome.apiKey,
+      keyBoxGeneration: values.keyBoxGeneration + 1,
+    });
   }
 
   return {
@@ -253,7 +320,34 @@ export function createConnectionFormModel(
     setName: (name) => update({ name }),
     setApiKey(apiKey) {
       abortPendingDetect();
-      update({ apiKey, labels: {}, detecting: false, detectError: null });
+      update({
+        apiKey,
+        keyBoxValue: apiKey,
+        isRevealingKey: false,
+        revealError: null,
+        labels: {},
+        detecting: false,
+        detectError: null,
+      });
+    },
+    toggleKeyVisible() {
+      if (!canRevealKey || values.isRevealingKey) return;
+      if (values.isKeyVisible) {
+        // 读回来又没改的原 key 不留在框里（照 magpie）。
+        const clearsBox = values.isKeyRevealed && values.apiKey === "";
+        update({
+          isKeyVisible: false,
+          isKeyRevealed: false,
+          ...(clearsBox ? { keyBoxValue: "", keyBoxGeneration: values.keyBoxGeneration + 1 } : {}),
+        });
+        return;
+      }
+      if (seed.mode === "edit" && hasSavedKey && values.apiKey === "") {
+        update({ isRevealingKey: true, revealError: null });
+        void runReveal(seed.endpoint.id);
+        return;
+      }
+      update({ isKeyVisible: true, revealError: null });
     },
     setAddress(address) {
       abortPendingDetect();
@@ -292,6 +386,18 @@ export function createConnectionFormModel(
       listeners.clear();
     },
   };
+}
+
+function initialNameOf(seed: ConnectionFormSeed): string {
+  if (seed.mode === "edit") return seed.endpoint.name;
+  if (seed.mode === "duplicate") return seed.name;
+  return "";
+}
+
+function keyOwnerOf(seed: ConnectionFormSeed): ApiEndpoint | null {
+  if (seed.mode === "edit") return seed.endpoint;
+  if (seed.mode === "duplicate") return seed.source;
+  return null;
 }
 
 function urlsOf(endpoint: ApiEndpoint): Urls {

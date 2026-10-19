@@ -28,6 +28,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.preview_switch_off.request"
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.set_order.request"
+      | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
@@ -84,6 +85,8 @@ export class ApiEndpointSession {
         return this.handleSetEndpointState(request);
       case "provider.api_endpoint.set_order.request":
         return this.handleSetOrder(request);
+      case "provider.api_endpoint.reveal_key.request":
+        return this.handleRevealKey(request);
       case "provider.api_endpoint.fetch_models.request":
         return this.handleFetchModels(request, connectionSignal);
       case "provider.api_endpoint.test_connection.request":
@@ -143,6 +146,7 @@ export class ApiEndpointSession {
         ...(request.modelMapping !== undefined ? { modelMapping: request.modelMapping } : {}),
         ...(request.manualModels !== undefined ? { manualModels: request.manualModels } : {}),
         ...(request.searchesWeb !== undefined ? { searchesWeb: request.searchesWeb } : {}),
+        ...(request.copyOf !== undefined ? { copyOf: request.copyOf } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -336,6 +340,22 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.set_order.response",
       payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleRevealKey(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.reveal_key.request" }>,
+  ): Promise<void> {
+    let apiKey: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      apiKey = this.service.revealKey(request.endpointId);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.reveal_key.response",
+      payload: { requestId: request.requestId, apiKey, error },
     });
   }
 

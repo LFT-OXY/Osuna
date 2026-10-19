@@ -8,6 +8,7 @@ import {
   type ConnectionDetectRequest,
   type ConnectionDetectResult,
   type ConnectionFormDeps,
+  type ConnectionRevealKeyResult,
   type ConnectionSaveRequest,
   type ConnectionSaveResult,
 } from "./connection-form-model";
@@ -28,6 +29,8 @@ function deferred<T>(): Deferred<T> {
 function fakeDeps() {
   const saves: ConnectionSaveRequest[] = [];
   const detects: { request: ConnectionDetectRequest; signal: AbortSignal }[] = [];
+  const reveals: string[] = [];
+  let revealAnswer = deferred<ConnectionRevealKeyResult>();
   let saveResult: ConnectionSaveResult = { status: "saved", endpointId: "ep_new" };
   let detectAnswer = deferred<ConnectionDetectResult>();
   const deps: ConnectionFormDeps = {
@@ -39,11 +42,20 @@ function fakeDeps() {
       detects.push({ request, signal });
       return detectAnswer.promise;
     },
+    revealKey: (endpointId) => {
+      reveals.push(endpointId);
+      return revealAnswer.promise;
+    },
   };
   return {
     deps,
     saves,
     detects,
+    reveals,
+    answerReveal(result: ConnectionRevealKeyResult) {
+      revealAnswer.resolve(result);
+      revealAnswer = deferred<ConnectionRevealKeyResult>();
+    },
     answerDetect(result: ConnectionDetectResult) {
       detectAnswer.resolve(result);
       detectAnswer = deferred<ConnectionDetectResult>();
@@ -90,8 +102,8 @@ const SAVED_ENDPOINT: ApiEndpoint = {
 };
 
 // 主机没声明 apiEndpointManagement：key 必填，和以前一样。
-const KEY_REQUIRED = { isKeyOptional: false };
-const KEY_OPTIONAL = { isKeyOptional: true };
+const KEY_REQUIRED = { isKeyOptional: false, canRevealKey: false };
+const KEY_OPTIONAL = { isKeyOptional: true, canRevealKey: true };
 
 describe("connection form: create", () => {
   it("cannot save or detect until a name, a key and an address are there", () => {
@@ -354,5 +366,166 @@ describe("connection form: the key is optional when the host says so", () => {
       canDetect: false,
       canSubmit: false,
     });
+  });
+});
+
+describe("connection form: duplicate", () => {
+  const SOURCE: ApiEndpoint = {
+    ...SAVED_ENDPOINT,
+    apiKeyMask: "sk-r…a1b2",
+    manualModels: [{ id: "by-hand" }],
+    searchesWeb: true,
+  };
+
+  it("opens as a new endpoint filled with the original's connection, its name given, the key box empty", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "duplicate", source: SOURCE, name: "Relay copy" },
+      deps,
+      KEY_OPTIONAL,
+    );
+    const state = model.getState();
+    expect(state).toMatchObject({
+      mode: "duplicate",
+      name: "Relay copy",
+      apiKey: "",
+      address: "https://relay.example",
+      canSubmit: true,
+    });
+    expect(state.formats.map((entry) => entry.url)).toEqual([
+      "https://relay.example",
+      "https://relay.example/v1",
+      "",
+    ]);
+  });
+
+  it("saves as a copy of the original: its models and mapping, no key unless one is typed", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "duplicate", source: SOURCE, name: "Relay copy" },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.detect();
+    // 不填 key 时检测用原来那家的 key。
+    expect(fake.detects[0]?.request).toEqual({
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+    });
+    fake.answerDetect({ status: "cancelled" });
+    await flush();
+
+    await model.submit();
+    model.setApiKey("sk-second");
+    await model.submit();
+
+    const copy = {
+      name: "Relay copy",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://relay.example" },
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ],
+      models: [{ id: "claude-sonnet-4-5" }, { id: "glm-4.6" }],
+      modelMapping: { opus: "glm-4.6" },
+      copyOf: "ep_1",
+    };
+    expect(fake.saves).toEqual([copy, { ...copy, apiKey: "sk-second" }]);
+  });
+});
+
+describe("connection form: show the saved key", () => {
+  function editing(options = KEY_OPTIONAL) {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      options,
+    );
+    return { fake, model };
+  }
+
+  it("reads the key back into the box and shows it; hiding it empties the box again", async () => {
+    const { fake, model } = editing();
+    expect(model.getState()).toMatchObject({ canShowKey: true, isKeyVisible: false });
+
+    model.toggleKeyVisible();
+    expect(fake.reveals).toEqual(["ep_1"]);
+    expect(model.getState().isRevealingKey).toBe(true);
+    fake.answerReveal({ status: "revealed", apiKey: "sk-relay-a1b2" });
+    await flush();
+
+    const shown = model.getState();
+    expect(shown).toMatchObject({
+      isKeyVisible: true,
+      isRevealingKey: false,
+      keyBoxValue: "sk-relay-a1b2",
+      // 读回来的不算新 key：直接保存仍保留原 key。
+      apiKey: "",
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("apiKey");
+
+    model.toggleKeyVisible();
+    expect(model.getState()).toMatchObject({ isKeyVisible: false, keyBoxValue: "" });
+    expect(model.getState().keyBoxGeneration).toBeGreaterThan(shown.keyBoxGeneration);
+
+    // 不限次数。
+    model.toggleKeyVisible();
+    expect(fake.reveals).toEqual(["ep_1", "ep_1"]);
+  });
+
+  it("a key typed over the shown one is saved, and hiding keeps it", async () => {
+    const { fake, model } = editing();
+    model.toggleKeyVisible();
+    fake.answerReveal({ status: "revealed", apiKey: "sk-relay-a1b2" });
+    await flush();
+
+    model.setApiKey("sk-new");
+    model.toggleKeyVisible();
+    expect(model.getState()).toMatchObject({ isKeyVisible: false, apiKey: "sk-new" });
+    await model.submit();
+    expect(fake.saves[0]?.apiKey).toBe("sk-new");
+  });
+
+  it("shows why it failed on the key and stays hidden, until the next try or a typed key", async () => {
+    const { fake, model } = editing();
+    model.toggleKeyVisible();
+    fake.answerReveal({ status: "failed", message: "Host disconnected" });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      isKeyVisible: false,
+      isRevealingKey: false,
+      revealError: "Host disconnected",
+      keyBoxValue: "",
+    });
+
+    model.toggleKeyVisible();
+    expect(model.getState().revealError).toBeNull();
+    fake.answerReveal({ status: "failed", message: "Host disconnected" });
+    await flush();
+    model.setApiKey("sk-typed");
+    expect(model.getState().revealError).toBeNull();
+  });
+
+  it.each([
+    { mode: "create" as const },
+    { mode: "duplicate" as const, source: SAVED_ENDPOINT, name: "Relay copy" },
+    { mode: "edit" as const, endpoint: { ...SAVED_ENDPOINT, hasApiKey: false } },
+  ])("only shows what was typed when this endpoint has no saved key ($mode)", (seed) => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(seed, fake.deps, KEY_OPTIONAL);
+    expect(model.getState().canShowKey).toBe(true);
+    model.setApiKey("sk-typed");
+    model.toggleKeyVisible();
+    expect(fake.reveals).toEqual([]);
+    expect(model.getState().isKeyVisible).toBe(true);
+  });
+
+  it("an old host has no Show", () => {
+    const { fake, model } = editing(KEY_REQUIRED);
+    expect(model.getState().canShowKey).toBe(false);
+    model.toggleKeyVisible();
+    expect(fake.reveals).toEqual([]);
+    expect(model.getState().isKeyVisible).toBe(false);
   });
 });

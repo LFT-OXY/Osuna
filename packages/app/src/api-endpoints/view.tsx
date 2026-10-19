@@ -328,25 +328,33 @@ function ConnectionSheet({
 }: {
   serverId: string;
   sheet: ConnectionSheetState;
-  endpoints: Pick<UseHostEndpointsResult, "save" | "detect">;
+  endpoints: Pick<UseHostEndpointsResult, "save" | "detect" | "revealKey">;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
 }) {
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key。
-  const isKeyOptional = useHostFeature(serverId, "apiEndpointManagement");
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key。
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   if (!sheet) return null;
   const { seed } = sheet;
   return (
     <ApiEndpointConnectionSheet
-      key={seed.mode === "edit" ? `edit-${seed.endpoint.id}` : "create"}
+      key={sheetKey(seed)}
       seed={seed}
-      isKeyOptional={isKeyOptional}
+      isKeyOptional={hasManagement}
+      canRevealKey={hasManagement}
       onSave={endpoints.save}
       onDetect={endpoints.detect}
+      onRevealKey={endpoints.revealKey}
       onSaved={onSaved}
       onClose={onClose}
     />
   );
+}
+
+function sheetKey(seed: ConnectionFormSeed): string {
+  if (seed.mode === "edit") return `edit-${seed.endpoint.id}`;
+  if (seed.mode === "duplicate") return `duplicate-${seed.source.id}`;
+  return "create";
 }
 
 /** 设置 › 主机 › 第三方接口：整台主机共用的接口列表。 */
@@ -457,10 +465,26 @@ function ApiEndpointDetailContent({
     router.replace(buildSettingsHostSectionRoute(serverId, "api-endpoints"));
   }, [isFocused, isMissing, router, serverId]);
 
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 copyOf。
+  const canDuplicate = useHostFeature(serverId, "apiEndpointManagement");
   const handleEdit = useCallback(() => {
     if (endpoint) setSheet({ seed: { mode: "edit", endpoint } });
   }, [endpoint]);
+  const handleDuplicate = useCallback(() => {
+    if (!endpoint) return;
+    const name = t("settings.apiEndpoints.form.duplicateName", { name: endpoint.name });
+    setSheet({ seed: { mode: "duplicate", source: endpoint, name } });
+  }, [endpoint, t]);
   const handleClose = useCallback(() => setSheet(null), []);
+  // 编辑只关掉弹窗；复制出的新接口保存后进它的详情页。
+  const handleSaved = useCallback(
+    (result: Extract<ConnectionSaveResult, { status: "saved" }>) => {
+      const opensCopy = sheet?.seed.mode === "duplicate";
+      setSheet(null);
+      if (opensCopy) router.push(buildApiEndpointSettingsRoute(serverId, result.endpointId));
+    },
+    [router, serverId, sheet],
+  );
 
   if (state.status === "error") {
     return <NoticeCard text={state.message} testID="api-endpoint-detail-error" />;
@@ -481,12 +505,13 @@ function ApiEndpointDetailContent({
         agents={state.agents}
         hostEndpoints={endpoints}
         onEdit={handleEdit}
+        onDuplicate={canDuplicate ? handleDuplicate : undefined}
       />
       <ConnectionSheet
         serverId={serverId}
         sheet={sheet}
         endpoints={endpoints}
-        onSaved={handleClose}
+        onSaved={handleSaved}
         onClose={handleClose}
       />
     </View>
@@ -500,6 +525,7 @@ function ApiEndpointDetailSections({
   agents,
   hostEndpoints,
   onEdit,
+  onDuplicate,
 }: {
   serverId: string;
   endpoint: ApiEndpoint;
@@ -507,6 +533,8 @@ function ApiEndpointDetailSections({
   agents: Record<string, ApiEndpointAgentSettings>;
   hostEndpoints: UseHostEndpointsResult;
   onEdit: () => void;
+  // 主机声明了 apiEndpointManagement 才有「复制」。
+  onDuplicate: (() => void) | undefined;
 }) {
   const { t } = useTranslation();
   const now = useClock();
@@ -543,6 +571,7 @@ function ApiEndpointDetailSections({
         onResume={hostEndpoints.resume}
         onTest={detail.testConnection}
         onEdit={onEdit}
+        onDuplicate={onDuplicate}
         onDelete={detail.remove}
       />
       {pageError ? (

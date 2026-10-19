@@ -1136,3 +1136,210 @@ describe("an API key is optional", () => {
     });
   });
 });
+
+describe("Duplicate", () => {
+  /** 一家什么都带着的接口：两种格式的地址、key、已选模型、档位映射、手动添加的模型、联网搜索、拉回的清单。 */
+  async function saveFullEndpoint(harness: Harness, upstream: RecordingUpstream): Promise<string> {
+    const { client } = harness;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: upstream.url },
+        { format: "openai_responses", url: `${upstream.url}/v1` },
+      ],
+      apiKey: "sk-relay-original",
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: upstream.url,
+      format: "anthropic_messages",
+    });
+    return endpointId;
+  }
+
+  function copyRequest(sourceId: string, upstream: RecordingUpstream) {
+    return {
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [
+        { format: "anthropic_messages" as const, url: upstream.url },
+        { format: "openai_responses" as const, url: `${upstream.url}/v1` },
+      ],
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      copyOf: sourceId,
+    };
+  }
+
+  test("a copy saved with a blank key takes the original's key and everything the request leaves out", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+    const before = (await client.apiEndpointList("claude")).endpoints;
+
+    const copied = await client.apiEndpointSave(copyRequest(sourceId, upstream));
+
+    expect(copied.error).toBeNull();
+    const copyId = copied.endpoint?.id ?? "";
+    expect(copyId).not.toBe(sourceId);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.id)).toEqual([sourceId, copyId]);
+    expect(listed[1]).toMatchObject({
+      name: "Relay copy",
+      slug: "relay-copy",
+      enabled: true,
+      hasApiKey: true,
+      apiKeyMask: listed[0]?.apiKeyMask,
+      baseUrls: listed[0]?.baseUrls,
+      models: [{ id: "local-1" }, { id: "by-hand" }],
+      modelMapping: { opus: "local-1" },
+      manualModels: [{ id: "by-hand" }],
+      searchesWeb: true,
+      catalog: { models: [{ id: "local-1" }] },
+    });
+    // 原来那家不变。
+    expect(listed[0]).toEqual(before[0]);
+    expect(await client.apiEndpointRevealKey(copyId)).toMatchObject({
+      apiKey: "sk-relay-original",
+      error: null,
+    });
+
+    // 新接口用的就是这把 key。
+    upstream.requests.length = 0;
+    const sent = await askThroughEveryPath({ harness, upstream, endpointId: copyId });
+    const both = { authorization: "Bearer sk-relay-original", "x-api-key": "sk-relay-original" };
+    expect(sent).toEqual([both, both, both]);
+  });
+
+  test("a copy saved with a key of its own uses that key and leaves the original's alone", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const copied = await client.apiEndpointSave({
+      ...copyRequest(sourceId, upstream),
+      apiKey: "sk-second-key",
+    });
+
+    const copyId = copied.endpoint?.id ?? "";
+    expect(copied.error).toBeNull();
+    expect((await client.apiEndpointRevealKey(copyId)).apiKey).toBe("sk-second-key");
+    expect((await client.apiEndpointRevealKey(sourceId)).apiKey).toBe("sk-relay-original");
+  });
+
+  test("a copy of an endpoint without a key has none either", async () => {
+    const upstream = await startRecordingUpstream();
+    const { client } = await start();
+    const source = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+
+    const copied = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local copy",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+      copyOf: source.endpoint?.id ?? "",
+    });
+
+    expect(copied.endpoint?.hasApiKey).toBe(false);
+  });
+
+  test("a name already taken gets 2, 3… (whatever its case) and the identifier -2, -3…", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const names: string[] = [];
+    for (const name of ["Relay copy", "relay COPY", "Relay copy"]) {
+      const copied = await client.apiEndpointSave({ ...copyRequest(sourceId, upstream), name });
+      expect(copied.error).toBeNull();
+      names.push(copied.endpoint?.name ?? "");
+    }
+
+    expect(names).toEqual(["Relay copy", "relay COPY 2", "Relay copy 3"]);
+    const listed = (await client.apiEndpointList("claude")).endpoints;
+    expect(listed.map((row) => row.slug)).toEqual([
+      "relay",
+      "relay-copy",
+      "relay-copy-2",
+      "relay-copy-3",
+    ]);
+    // 新建一家（不是复制）也避让；编辑时用自己原来的名字不算重名。
+    const added = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [],
+    });
+    expect(added.endpoint).toMatchObject({ name: "Relay 2", slug: "relay-2" });
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: sourceId,
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: upstream.url }],
+      models: [{ id: "local-1" }],
+    });
+    expect(edited.endpoint?.name).toBe("Relay");
+  });
+
+  test("copying an endpoint that is gone, or together with endpointId, is refused and adds nothing", async () => {
+    const upstream = await startRecordingUpstream();
+    const harness = await start();
+    const { client } = harness;
+    const sourceId = await saveFullEndpoint(harness, upstream);
+
+    const gone = await client.apiEndpointSave({ ...copyRequest("ep_gone", upstream) });
+    expect(gone.error?.code).toBe("not_found");
+    const both = await client.apiEndpointSave({
+      ...copyRequest(sourceId, upstream),
+      endpointId: sourceId,
+    });
+    expect(both.error?.code).toBe("invalid_input");
+
+    expect((await client.apiEndpointList("claude")).endpoints.map((row) => row.id)).toEqual([
+      sourceId,
+    ]);
+  });
+});
+
+describe("reading a saved key back", () => {
+  test("gives the key as saved, null for an endpoint without one, and not_found for one that is gone", async () => {
+    const { client } = await start();
+    const withKey = await saveEndpoint(client, "Relay", ["glm-4.6"]);
+    const local = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Local",
+      baseUrls: [{ format: "anthropic_messages", url: "http://127.0.0.1:11434" }],
+      models: [],
+    });
+
+    expect(await client.apiEndpointRevealKey(withKey)).toMatchObject({
+      apiKey: "sk-Relay",
+      error: null,
+    });
+    // 不限次数。
+    expect((await client.apiEndpointRevealKey(withKey)).apiKey).toBe("sk-Relay");
+    expect(await client.apiEndpointRevealKey(local.endpoint?.id ?? "")).toMatchObject({
+      apiKey: null,
+      error: null,
+    });
+    expect(await client.apiEndpointRevealKey("ep_gone")).toMatchObject({
+      apiKey: null,
+      error: { code: "not_found" },
+    });
+  });
+});

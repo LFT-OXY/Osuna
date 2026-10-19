@@ -110,6 +110,8 @@ import {
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointSetOrderRequestSchema,
   ApiEndpointSetOrderResponseSchema,
+  ApiEndpointRevealKeyRequestSchema,
+  ApiEndpointRevealKeyResponseSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointTestConnectionResponseSchema,
 } from "./api-endpoint/rpc-schemas.js";
@@ -3575,6 +3577,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointPreviewSwitchOffRequestSchema,
   ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointSetOrderRequestSchema,
+  ApiEndpointRevealKeyRequestSchema,
   ApiEndpointFetchModelsRequestSchema,
   ApiEndpointTestConnectionRequestSchema,
   ApiEndpointDetectFormatsRequestSchema,
@@ -3949,7 +3952,7 @@ export const ServerInfoStatusPayloadSchema = z
         apiEndpointCliWiring: z.boolean().optional(),
         // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19.
         // 任务 10-16-endpoint-management-ux 的新界面：接口的 key 选填（没 key 不带认证头），保存时没给的字段保留原值；
-        // set_order 改接口顺序。
+        // set_order 改接口顺序；保存时 copyOf 复制一家、reveal_key 读回 key 原文。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7354,6 +7357,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointPreviewSwitchOffResponseSchema,
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointSetOrderResponseSchema,
+  ApiEndpointRevealKeyResponseSchema,
   ApiEndpointFetchModelsResponseSchema,
   ApiEndpointTestConnectionResponseSchema,
   ApiEndpointDetectFormatsResponseSchema,

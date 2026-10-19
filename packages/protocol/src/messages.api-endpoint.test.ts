@@ -929,4 +929,38 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     };
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
+  it("parses a save that duplicates another endpoint, and an older client's save without copyOf", () => {
+    const duplicate = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m4",
+      provider: "claude",
+      name: "Relay copy",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [{ id: "glm-4.6" }],
+      copyOf: "ep_1",
+    };
+    expect(SessionInboundMessageSchema.parse(duplicate)).toEqual(duplicate);
+    const { copyOf: _copyOf, ...older } = duplicate;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+  });
+  it("parses reveal_key with the key, with none, and a rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.reveal_key.request" as const,
+      requestId: "req-m5",
+      endpointId: "ep_1",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    for (const payload of [
+      { requestId: "req-m5", apiKey: "sk-relay-a1b2", error: null },
+      { requestId: "req-m5", apiKey: null, error: null },
+      {
+        requestId: "req-m5",
+        apiKey: null,
+        error: { code: "not_found", message: "API endpoint not found" },
+      },
+    ]) {
+      const response = { type: "provider.api_endpoint.reveal_key.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
 });
