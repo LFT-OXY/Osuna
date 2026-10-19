@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Impl:** ready
+**Impl:** doing
 
 - [ ] 排版纯函数的单元测试：节点互不重叠、分支顺序稳定、判断节点各分支出口对应正确的下游。测试照可缩放视图的 `geometry.test.ts` 写法。
 - [ ] 面板的浏览器测试（Playwright，喂假数据）：空状态、正常图、文件损坏提示、主机太旧提示、收到"图已变更"后重画。测试照 `*.browser.test.tsx`（如 `turn-usage-panel.browser.test.tsx`）的写法。
