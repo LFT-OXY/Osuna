@@ -90,6 +90,7 @@ function shapedCharactersFor(options: { lineCount: number; lineLength: number })
       binary: "Binary",
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
+      linesChanged: (count) => `${count} lines changed`,
     },
   };
   buildDiffDocumentModel(input);

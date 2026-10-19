@@ -77,6 +77,7 @@ function modelInput(
       binary: "Binary",
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified lines`,
+      linesChanged: (count) => `${count} lines changed`,
     },
     ...overrides,
   };
@@ -182,6 +183,7 @@ describe("diff document workspace cache", () => {
           binary: "Binary blob",
           tooLarge: "Too large",
           unmodifiedLines: (count) => `${count} unmodified lines`,
+          linesChanged: (count) => `${count} lines changed`,
         },
       }),
     );
@@ -214,6 +216,7 @@ describe("diff document workspace cache", () => {
           binary: "Binary",
           tooLarge: "Too large",
           unmodifiedLines: (count) => `${count} lignes inchangées`,
+          linesChanged: (count) => `${count} lines changed`,
         },
       }),
     );

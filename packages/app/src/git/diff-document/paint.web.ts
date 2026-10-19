@@ -164,6 +164,14 @@ export function paintWebFileHeader(input: {
   context.fillText(statLabels[0]!, statX, statBaseline);
   context.fillStyle = palette.statusDanger;
   context.fillText(statLabels[1]!, statX + statWidths[0]! + 4, statBaseline);
+  // 收起的大文件：增删行数左侧一枚同字号的灰色行数标签。
+  let textEnd = statX;
+  if (file.headerNote) {
+    const noteX = statX - 8 - context.measureText(file.headerNote).width;
+    context.fillStyle = palette.foregroundMuted;
+    context.fillText(file.headerNote, noteX, statBaseline);
+    textEnd = noteX - 8;
+  }
   paintChangeLetter({
     context,
     change: diffFileChangeKind(file.file),
@@ -175,7 +183,7 @@ export function paintWebFileHeader(input: {
 
   context.font = `${typography.size}px ${typography.family}`;
   const textBaseline = centeredTextBaseline(context, y + DIFF_FILE_HEADER_CONTENT_HEIGHT / 2);
-  const available = Math.max(0, statX - DIFF_FILE_HEADER_LEFT);
+  const available = Math.max(0, textEnd - DIFF_FILE_HEADER_LEFT);
   const name = fileNameForPath(file.path);
   // React Native Web collapses the leading separator space at the start of the
   // directory Text node. Canvas does not, so paint only the visible glyphs.

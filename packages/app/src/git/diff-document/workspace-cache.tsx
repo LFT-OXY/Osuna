@@ -122,6 +122,7 @@ function modelVariantKey(input: Omit<BuildDiffDocumentModelInput, "reuseFrom">):
     // 标签是按数量取文案的函数，用两个数量的输出代表它（单复数各一）。
     input.labels.unmodifiedLines(1),
     input.labels.unmodifiedLines(2),
+    input.labels.linesChanged(1001),
   ]);
 }
 

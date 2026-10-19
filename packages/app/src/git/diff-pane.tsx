@@ -1,4 +1,11 @@
-import { useState, useCallback, useMemo, type ReactElement, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { TreeRail } from "@/components/tree-rail";
@@ -31,6 +38,12 @@ import {
 import { type ParsedDiffFile } from "@/git/use-diff-query";
 import type { ChangesState } from "@/panels/changes/state";
 import { defaultChangesState } from "@/panels/changes/state";
+import {
+  applyCollapsedFilePaths,
+  collapseAllFiles,
+  expandAllFiles,
+  recordDefaultFileExpansion,
+} from "@/panels/changes/file-expansion";
 import { DiffDocument, type WorkingDiffMode } from "@/git/diff-document";
 import { ChangedFilesTree } from "@/git/changed-files-tree";
 import { JUMP_TO_FILE_CLEARANCE, JumpToFile } from "@/git/jump-to-file";
@@ -1460,18 +1473,9 @@ export function ChangesSurface({
   const wrapLines = preferences.wrapLines;
   const desktopTreeVisible = instanceState.treeVisible;
   const effectiveLayout = resolveDiffLayout(preferences.layout, canUseSplitLayout);
-  const collapsedFilePaths = instanceState.collapsedFilePaths;
-  const updateCollapsedFilePaths = useCallback(
-    (paths: string[]) => updateState({ ...instanceState, collapsedFilePaths: paths }),
-    [instanceState, updateState],
-  );
   const updateCollapsedFolderPaths = useCallback(
     (paths: string[]) => updateState({ ...instanceState, collapsedFolderPaths: paths }),
     [instanceState, updateState],
-  );
-  const collapseState = useMemo(
-    () => ({ paths: collapsedFilePaths, onChange: updateCollapsedFilePaths }),
-    [collapsedFilePaths, updateCollapsedFilePaths],
   );
 
   const handleToggleWrapLines = useCallback(() => {
@@ -1741,15 +1745,32 @@ export function ChangesSurface({
     () => computeSelectedDiffStat(files, isDiffLoading),
     [files, isDiffLoading],
   );
+  // 默认展开只在本 tab 第一次见到文件时决定一次，决定写回 tab 状态，文件变多时已显示的不再变。
+  const fileExpansion = useMemo(
+    () => recordDefaultFileExpansion(instanceState, files),
+    [files, instanceState],
+  );
+  useEffect(() => {
+    if (fileExpansion !== instanceState) updateState(fileExpansion);
+  }, [fileExpansion, instanceState, updateState]);
+  const collapsedFilePaths = fileExpansion.collapsedFilePaths;
+  const updateCollapsedFilePaths = useCallback(
+    (paths: string[]) => updateState(applyCollapsedFilePaths(fileExpansion, paths)),
+    [fileExpansion, updateState],
+  );
+  const collapseState = useMemo(
+    () => ({ paths: collapsedFilePaths, onChange: updateCollapsedFilePaths }),
+    [collapsedFilePaths, updateCollapsedFilePaths],
+  );
   const allFilesCollapsed =
     hasChanges && files.every((file) => collapsedFilePaths.includes(file.path));
   const handleCollapseAllFiles = useCallback(
-    () => updateCollapsedFilePaths(files.map((file) => file.path)),
-    [files, updateCollapsedFilePaths],
+    () => updateState(collapseAllFiles(fileExpansion, files)),
+    [fileExpansion, files, updateState],
   );
   const handleExpandAllFiles = useCallback(
-    () => updateCollapsedFilePaths([]),
-    [updateCollapsedFilePaths],
+    () => updateState(expandAllFiles(fileExpansion, files)),
+    [fileExpansion, files, updateState],
   );
   const diffErrorMessage = diffPayloadError?.message ?? null;
   const prErrorMessage = computePrErrorMessage(githubFeaturesEnabled, prPayloadError);

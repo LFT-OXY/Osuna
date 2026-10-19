@@ -7,6 +7,7 @@ import {
   type SplitDiffDisplayLine,
 } from "@/utils/diff-layout";
 import { compactHighlightTokens } from "@/utils/diff-rendering";
+import { diffFileChangedLines, isLargeDiffFile } from "@/git/file-header-presentation";
 import { getInlineReviewThreadState, getSplitInlineReviewThreadState } from "@/review/geometry";
 import { advancesFor, requiresShaping } from "./text-measurement";
 import type {
@@ -130,6 +131,10 @@ export function buildDiffDocumentModel(input: BuildDiffDocumentModelInput): Diff
       rowStart,
       rowEnd: rows.length,
       isCollapsed,
+      headerNote:
+        isCollapsed && isLargeDiffFile(file)
+          ? input.labels.linesChanged(diffFileChangedLines(file))
+          : null,
     });
   }
 

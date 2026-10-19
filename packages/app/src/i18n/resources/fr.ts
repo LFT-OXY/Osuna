@@ -1023,6 +1023,7 @@ export const fr: TranslationResources = {
         binaryFile: "Fichier binaire",
         unmodifiedLine: "{{count}} ligne inchangée",
         unmodifiedLines: "{{count}} lignes inchangées",
+        linesChanged: "{{lines}} lignes modifiées",
         tooLarge: "Diff trop volumineux pour être affiché",
         previewTooLargeTitle: "Ce diff est trop volumineux pour être prévisualisé",
         previewTooLargeDescription: "Réduisez la comparaison pour le prévisualiser ici",

@@ -70,6 +70,7 @@ function input(overrides: Partial<BuildDiffDocumentModelInput> = {}): BuildDiffD
       binary: "Binary",
       tooLarge: "Too large",
       unmodifiedLines: (count) => `${count} unmodified line${count === 1 ? "" : "s"}`,
+      linesChanged: (count) => `${count} lines changed`,
     },
     ...overrides,
   };
@@ -317,6 +318,21 @@ describe("diff document model", () => {
     expect(collapsed.files[0]?.bodyHeight).toBe(0);
     expect(collapsed.files[1]?.bodyHeight).toBeGreaterThan(0);
     expect(collapsed.height).toBeLessThan(expanded.height);
+  });
+
+  it("notes the changed line count on a collapsed large file only", () => {
+    const large = { ...file("large.ts"), additions: 1200, deletions: 300 };
+    const model = buildDiffDocumentModel(
+      input({
+        files: [large, file("small.ts"), { ...file("open.ts"), additions: 2000 }],
+        collapsedFilePaths: new Set(["large.ts", "small.ts"]),
+      }),
+    );
+    expect(model.files.map((section) => section.headerNote)).toEqual([
+      "1500 lines changed",
+      null,
+      null,
+    ]);
   });
 
   it("reuses unchanged file measurements when collapse state changes", () => {
