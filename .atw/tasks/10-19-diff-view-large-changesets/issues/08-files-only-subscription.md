@@ -8,7 +8,7 @@
 
 **Blocked by:** 02, 07
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] daemon 用例（真实 git 仓库）：只要清单时，每个 file 的清单字段齐全、和完整订阅里的同名字段一致，`hunks` 为空。
 - [ ] 用例：同一个 cwd 同时有清单订阅和完整订阅，两边各自收到正确内容。
