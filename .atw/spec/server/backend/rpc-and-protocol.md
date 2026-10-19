@@ -569,7 +569,7 @@ metadata: { providerSubagentID: childSessionId },
 
 ## Scenario: a provider-bound prompt that differs from what the user sent
 
-Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
+Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider. The logic map instruction block (`logic-map/logic-map-instruction-block.ts`, logic-map ticket 01) is the second user of the same resolver.
 
 ### 1. Scope / Trigger
 
@@ -582,6 +582,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - `resolveRoutingBlock({ text, cwd, canCreateAgents, mentionDefaults, agentProfiles, providers })` (`agent/routing-block.ts`); `mentionDefaults: (providerId) => ProviderMentionDefaults | undefined` reads `daemonConfigStore.get().providers[id]?.mentionDefaults` and `agentProfiles` is `daemonConfigStore.get().agentProfiles ?? []`, both taken when the message is sent, so a `set_daemon_config` applies to the next message. `RoutingBlockSettings` is `{ modeId?, thinkingOptionId?, features? }`. Model and thinking fallbacks use `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
 - Config: `ProviderMentionDefaultsSchema = { model?, thinkingOptionId?, modeId? }` (each `z.string().min(1)`) in `packages/protocol/src/provider-config.ts`, on both `ProviderOverrideSchema` (persisted `agents.providers.<id>`) and `MutableDaemonProviderConfigSchema` (wire). Documented in `docs/data-model.md` "Mention defaults".
 - `stripTrailingRoutingBlock(text)` (`agent/trailing-routing-block.ts`, a leaf module so providers can import it).
+- A second trailing block joins inside `Session.routingBlockResolver`: `[routingBlock, logicMapBlock].filter(Boolean).join("\n\n")`, Routing block first. `resolveLogicMapInstructionBlock({ text, labels })` reads the agent's labels at send time and returns `null` for empty text, like the Routing block. Do not add a second resolver parameter.
 
 ### 3. Contracts
 
@@ -591,7 +592,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - A profile mention (`paseo://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
 - Layers resolve per field against a `ready` snapshot, first valid layer wins: model → first layer model in the selectable catalog, else the default model; thinking option → first layer value the chosen model offers, skipping any layer whose own model is stale (a retired model takes its thinking option with it), else that model's default (an unset model means the current default model); mode → first layer mode in `entry.modes`, else `defaultModeId` if in `entry.modes`, else `modes[0]`; no modes at all → no `modeId`. A stale profile value therefore falls back to Mention defaults before runtime defaults (decided with the user in ticket 09). A valid lower-layer thinking option applies to a profile's model when that model offers it. Only catalog modes are written because `create_agent` rejects a mode outside `availableModes` and, given none, inherits the parent's mode (same provider) or throws (cross provider).
 - `DaemonConfigStore.applySupportedPatch` replaces a provider's `mentionDefaults` wholesale instead of deep-merging, so the card resets a field by omitting it. The persisted side already replaces it through the shallow spread in `applyMutableProviderConfigToOverrides`. `removeProviders` drops it with the entry. Changing it does not rebuild provider catalogs: `mentionDefaults` is not part of a provider definition's `configuration`.
-- `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
+- `stripTrailingRoutingBlock` strips every trailing `<paseo-system>` block in a loop, so Routing + logic map blocks both go; a message that is nothing but blocks is an envelope and comes back unchanged. It needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
 
 ### 4. Validation & Error Matrix
 
@@ -643,6 +644,67 @@ const modeIds = (entry.modes ?? []).map((mode) => mode.id);
 const modeId = [configuredModeId, entry.defaultModeId ?? undefined].find(
   (id) => id !== undefined && modeIds.includes(id),
 ) ?? modeIds[0];
+```
+
+## Scenario: a per-agent switch stored as a label, settable before the agent exists
+
+Reference implementation: the logic map switch (`agent.logic_map.set_enabled.request`, logic-map ticket 01). Reuse this shape for a per-conversation on/off the user flips in the composer, on a running agent or on a draft that has no agent yet.
+
+### 1. Scope / Trigger
+
+- New RPC, new `server_info.features.logicMap` (`// COMPAT(logicMap)`), state that must survive a daemon restart and reach the client with the agent.
+
+### 2. Signatures
+
+- `AgentLogicMapTargetSchema = z.discriminatedUnion("kind", [{ kind: "agent", agentId }, { kind: "draft", workspaceId }])` (`packages/protocol/src/messages.ts`); request `{ type, requestId, target, enabled }`; response payload `{ requestId, agentId: string | null, mapName: string | null, error: string | null }`.
+- `setLogicMapEnabled(deps, { target, enabled })` (`server/logic-map/logic-map-toggle.ts`), deps `Pick`ed from `AgentManager` / `AgentStorage` / `WorkspaceRegistry`; typed errors in `logic-map-errors.ts`.
+- Label `LOGIC_MAP_LABEL = "paseo.logic-map"`, value = map name; read with `getLogicMapNameFromLabels` (`@getpaseo/protocol/agent-labels`).
+- App: `useDraftLogicMapStore` (`app/src/logic-map/draft-logic-map-store.ts`, persisted, keyed `buildDraftLogicMapKey({ serverId, draftTabId })`); `readDraftLogicMapLabels(store, key)` goes into the create-agent `labels`; `forget(key)` after the agent is created.
+
+### 3. Contracts
+
+- The state is an agent label, not a new `StoredAgentRecord` field: labels already persist atomically, ship in the agent snapshot, and survive restart, so no schema or snapshot change. Cost: anything that can write labels (`update_agent`, `create_agent` labels) can also set it — fine for a user preference, not for a fact the model must not forge (that needs the tool-path stripping in "a daemon-owned agent label fed from the provider's tool call").
+- Off removes the label only; the map on disk stays. On with the label already set reuses that map.
+- Draft target: daemon creates the empty map under the workspace's `cwd` and returns `mapName`; it writes no state. The app keeps `{ mapName, enabled }` per draft, reuses `mapName` when the draft is switched off and on again, and sends it as the label when the first message creates the agent.
+- A label patch on an unloaded agent does not push; the handler calls `agentUpdates.emitStoredRecord(labelWrite.record)` when `labelWrite.live` is false.
+
+### 4. Validation & Error Matrix
+
+- `target` missing or wrong `kind` → wire parse rejects (no runtime "agentId or cwd" fallback).
+- Agent neither loaded nor stored → `LogicMapAgentNotFoundError`.
+- `workspaceId` unknown or `archivedAt` set → `LogicMapWorkspaceNotFoundError` (never trust a client-sent `cwd`: the daemon would create folders anywhere).
+- Workspace directory gone → `LogicMapDirectoryMissingError`; no free random name → `LogicMapNameUnavailableError`.
+- Every error → response with `error` string; the app toasts and puts the switch back.
+
+### 5. Good/Base/Bad Cases
+
+- Good: draft on → off → on → send: one `untitled-*` folder, agent created with the label.
+- Base: running agent on twice → second call returns the same `mapName`, no new folder.
+- Bad: draft state in a non-persisted store — the draft tab survives restart but the switch comes back off and the folder is orphaned.
+
+### 6. Tests Required
+
+- `messages.logic-map.test.ts`: both target kinds parse, bad target rejected, `features.logicMap` optional.
+- `logic-map-store.test.ts`, `logic-map-instruction-block.test.ts`, `trailing-routing-block.test.ts` (both blocks stripped, envelope kept).
+- Daemon E2E `daemon-e2e/logic-map-toggle.e2e.test.ts`: label after on/off, restart read-back, unknown workspace rejected, block present only when on.
+- App `draft-logic-map-store.test.ts` (rehydrate, reuse); browser `composer-logic-map-toggle.spec.ts` (on/off, reload keeps draft state, host rejects → toast + switch off, old host hint).
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Bag of optionals: both or neither is a valid payload, and cwd is client-chosen.
+z.object({ agentId: z.string().optional(), cwd: z.string().optional(), enabled: z.boolean() });
+```
+
+#### Correct
+
+```ts
+target: z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("agent"), agentId: z.string() }),
+  z.object({ kind: z.literal("draft"), workspaceId: z.string() }),
+]),
 ```
 
 ## Scenario: the daemon calls an upstream with a secret the client never sees
