@@ -3140,6 +3140,30 @@ export class DaemonClient {
     }
   }
 
+  /**
+   * 开关逻辑图。带 agentId 改这个 Agent；草稿只带 cwd，打开时拿回新图的名字，
+   * 新建 Agent 时放进 `LOGIC_MAP_LABEL`。关着时 mapName 为 null。
+   */
+  async setAgentLogicMapEnabled(input: {
+    agentId?: string;
+    cwd?: string;
+    enabled: boolean;
+  }): Promise<{ mapName: string | null }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.logic_map.set_enabled.response">({
+        message: {
+          type: "agent.logic_map.set_enabled.request",
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(input.cwd ? { cwd: input.cwd } : {}),
+          enabled: input.enabled,
+        },
+      });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { mapName: payload.mapName };
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string> },

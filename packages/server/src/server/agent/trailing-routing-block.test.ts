@@ -14,8 +14,17 @@ test("drops a Routing block that trails the user's text", () => {
   );
 });
 
+test("drops a Routing block and a logic map block that both trail the user's text", () => {
+  const logicMapBlock = '<paseo-system>\nLogic map is on: "untitled-1a2b3c4d".\n</paseo-system>';
+  expect(stripTrailingRoutingBlock(`write tests\n\n${BLOCK}\n\n${logicMapBlock}`)).toBe(
+    "write tests",
+  );
+  expect(stripTrailingRoutingBlock(`write tests\n\n${logicMapBlock}`)).toBe("write tests");
+});
+
 test("leaves envelopes, blocks followed by more text, and plain mentions of the tag alone", () => {
   expect(stripTrailingRoutingBlock(BLOCK)).toBe(BLOCK);
+  expect(stripTrailingRoutingBlock(`${BLOCK}\n\n${BLOCK}`)).toBe(`${BLOCK}\n\n${BLOCK}`);
   expect(stripTrailingRoutingBlock(`${BLOCK}\n\nthen the user wrote more`)).toBe(
     `${BLOCK}\n\nthen the user wrote more`,
   );

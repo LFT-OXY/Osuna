@@ -4219,6 +4219,16 @@ export const en = {
       month: "Month",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "Logic map",
+      hintOff: "Turn on to have the agent keep a logic map of this feature as you discuss it.",
+      hintOn: "The agent keeps the logic map current as you discuss the feature.",
+      hostOutdated: "Update host",
+      hostOutdatedDetail: "Update Osuna on this host to use the logic map.",
+      failed: "Could not change the logic map: {{error}}",
+    },
+  },
 } as const;
 
 type WidenStringLeaves<T> = {

@@ -88,6 +88,7 @@ import {
 } from "@/composer/actions";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
+import { LogicMapComposerToggle } from "@/logic-map/composer-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -302,24 +303,44 @@ interface RenderLeftContentArgs {
   agentControls: DraftAgentControlsProps | undefined;
   agentId: string;
   serverId: string;
+  cwd: string;
   focusInput: () => void;
   isCompactLayout: boolean;
   showAgentControls: boolean;
+  showLogicMapToggle: boolean;
 }
 
 function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
   const { agentControls, agentId, serverId, focusInput, isCompactLayout } = args;
   if (!args.showAgentControls) return null;
-  if (resolveAgentControlsMode(agentControls) === "draft" && agentControls) {
-    return <DraftAgentControls {...agentControls} isCompactLayout={isCompactLayout} />;
+  const isDraft = resolveAgentControlsMode(agentControls) === "draft";
+  const logicMapToggle =
+    args.showLogicMapToggle && !isCompactLayout ? (
+      <LogicMapComposerToggle
+        serverId={serverId}
+        agentId={agentId}
+        cwd={args.cwd}
+        isDraft={isDraft}
+      />
+    ) : null;
+  if (isDraft && agentControls) {
+    return (
+      <>
+        <DraftAgentControls {...agentControls} isCompactLayout={isCompactLayout} />
+        {logicMapToggle}
+      </>
+    );
   }
   return (
-    <AgentControls
-      agentId={agentId}
-      serverId={serverId}
-      onDropdownClose={focusInput}
-      isCompactLayout={isCompactLayout}
-    />
+    <>
+      <AgentControls
+        agentId={agentId}
+        serverId={serverId}
+        onDropdownClose={focusInput}
+        isCompactLayout={isCompactLayout}
+      />
+      {logicMapToggle}
+    </>
   );
 }
 
@@ -1035,6 +1056,8 @@ interface ComposerProps {
   inputWrapperStyle?: import("react-native").ViewStyle;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
   isCompactLayout?: boolean;
+  /** 工具栏上显示"逻辑图"开关（对话 pane 与 workspace 草稿用；紧凑布局不显示）。 */
+  showLogicMapToggle?: boolean;
   /** 在 Composer 底部挂上工作区类型 / 分支 / host 的窄条，分支可点开切换（工作区 pane 用，手机上不显示）。 */
   showContextStrip?: boolean;
   /**
@@ -1367,6 +1390,7 @@ function ComposerContentImpl({
   agentControls,
   inputWrapperStyle,
   isCompactLayout: isCompactLayoutOverride,
+  showLogicMapToggle = false,
   showContextStrip = false,
   inputMode = "chat",
   readOnly = false,
@@ -2390,11 +2414,22 @@ function ComposerContentImpl({
         agentControls,
         agentId,
         serverId,
+        cwd,
         focusInput,
         isCompactLayout,
         showAgentControls: mode.showAgentControls,
+        showLogicMapToggle,
       }),
-    [agentControls, agentId, focusInput, isCompactLayout, mode.showAgentControls, serverId],
+    [
+      agentControls,
+      agentId,
+      cwd,
+      focusInput,
+      isCompactLayout,
+      mode.showAgentControls,
+      serverId,
+      showLogicMapToggle,
+    ],
   );
 
   const handleAttachButtonRef = useCallback((node: View | null) => {

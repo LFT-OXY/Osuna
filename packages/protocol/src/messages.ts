@@ -2158,6 +2158,26 @@ export const AgentDetachResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+// 给一个 Agent（带 agentId）或一个还没发消息的草稿（只带 cwd）开关逻辑图。
+// 打开时 daemon 在 cwd 下新建一张空图；草稿拿回图名，新建 Agent 时放进 labels。
+export const AgentLogicMapSetEnabledRequestMessageSchema = z.object({
+  type: z.literal("agent.logic_map.set_enabled.request"),
+  requestId: z.string(),
+  agentId: z.string().optional(),
+  cwd: z.string().optional(),
+  enabled: z.boolean(),
+});
+
+export const AgentLogicMapSetEnabledResponseMessageSchema = z.object({
+  type: z.literal("agent.logic_map.set_enabled.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string().nullable(),
+    mapName: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
 
 export const AgentRewindRequestMessageSchema = z.object({
@@ -3454,6 +3474,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentLogicMapSetEnabledRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -3947,6 +3968,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
+        // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
+        // daemon 支持 agent.logic_map.set_enabled，并给开着逻辑图的 Agent 的消息附逻辑图说明块。
+        logicMap: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7220,6 +7244,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentLogicMapSetEnabledResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -7446,6 +7471,9 @@ export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingRes
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentLogicMapSetEnabledResponseMessage = z.infer<
+  typeof AgentLogicMapSetEnabledResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -7615,6 +7643,9 @@ export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequ
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentLogicMapSetEnabledRequestMessage = z.infer<
+  typeof AgentLogicMapSetEnabledRequestMessageSchema
+>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;

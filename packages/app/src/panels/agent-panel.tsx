@@ -1646,6 +1646,7 @@ function ActiveAgentComposer({
         onClientSlashCommand={handleClientSlashCommand}
         isCompactLayout={isCompactComposerLayout}
         showContextStrip
+        showLogicMapToggle
       />
     </View>
   );

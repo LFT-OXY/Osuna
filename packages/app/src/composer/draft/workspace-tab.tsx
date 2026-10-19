@@ -48,6 +48,11 @@ import {
 } from "@/workspace-tabs/model";
 import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
 import { useSettings } from "@/hooks/use-settings";
+import {
+  buildDraftLogicMapKey,
+  readDraftLogicMapLabels,
+  useDraftLogicMapStore,
+} from "@/logic-map/draft-logic-map-store";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
@@ -132,6 +137,7 @@ function resolveDraftModeId(input: {
 
 async function submitDraftCreateRequest(input: {
   draftId: string;
+  logicMapDraftKey: string;
   attempt: { clientMessageId: string };
   text: string;
   images?: UserMessageImageAttachment[];
@@ -192,12 +198,14 @@ async function submitDraftCreateRequest(input: {
 
   const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
   const imagesData = await encodeImages(images);
+  const logicMapLabels = readDraftLogicMapLabels(input.logicMapDraftKey);
   const options = {
     idempotencyKey: input.draftId,
     config,
     workspaceId,
     initialPrompt: text,
     clientMessageId: attempt.clientMessageId,
+    ...(logicMapLabels ? { labels: logicMapLabels } : {}),
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
     ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
   };
@@ -324,6 +332,8 @@ export function WorkspaceDraftAgentTab({
 }: WorkspaceDraftAgentTabProps) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(serverId);
+  // 与 Composer 里逻辑图开关用的键一致：草稿 Composer 的 agentId 就是 tabId。
+  const logicMapDraftKey = buildDraftLogicMapKey({ serverId, draftTabId: tabId });
   const workspaceFields = useWorkspaceFields(serverId, workspaceId, (w) => ({
     workspaceDirectory: w.workspaceDirectory,
     id: w.id,
@@ -489,6 +499,7 @@ export function WorkspaceDraftAgentTab({
       }
       return submitDraftCreateRequest({
         draftId,
+        logicMapDraftKey,
         attempt,
         text,
         images,
@@ -507,6 +518,8 @@ export function WorkspaceDraftAgentTab({
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
+      // 图名已随 labels 交给新 Agent，之后以 Agent 记录为准。
+      useDraftLogicMapStore.getState().setDraftMapName(logicMapDraftKey, null);
       onCreated(result);
     },
   });
@@ -682,6 +695,7 @@ export function WorkspaceDraftAgentTab({
             agentControls={composerAgentControls}
             isCompactLayout={isCompactComposerLayout}
             showContextStrip
+            showLogicMapToggle
           />
         </View>
       </ComposerDock>

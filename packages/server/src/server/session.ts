@@ -64,6 +64,8 @@ import {
   type RoutingBlockResolver,
 } from "./agent/agent-prompt.js";
 import { resolveRoutingBlock } from "./agent/routing-block.js";
+import { resolveLogicMapInstructionBlock } from "./logic-map/logic-map-instruction-block.js";
+import { setLogicMapEnabled } from "./logic-map/logic-map-toggle.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -2673,6 +2675,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.logic_map.set_enabled.request":
+        return this.handleSetLogicMapEnabledRequest(msg);
       default:
         return undefined;
     }
@@ -3407,6 +3411,40 @@ export class Session {
     }
 
     return { agentId, archivedAt };
+  }
+
+  private async handleSetLogicMapEnabledRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.logic_map.set_enabled.request" }>,
+  ): Promise<void> {
+    const agentId = msg.agentId ?? null;
+    try {
+      const result = await setLogicMapEnabled(
+        { agentManager: this.agentManager, agentStorage: this.agentStorage },
+        { agentId: msg.agentId, cwd: msg.cwd, enabled: msg.enabled },
+      );
+      // 运行中的 Agent 改 labels 时自己会推送；没加载的要把新记录推给客户端。
+      if (result.labelWrite && !result.labelWrite.live && result.labelWrite.record) {
+        await this.agentUpdates.emitStoredRecord(result.labelWrite.record);
+      }
+      this.emit({
+        type: "agent.logic_map.set_enabled.response",
+        payload: { requestId: msg.requestId, agentId, mapName: result.mapName, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, agentId, requestId: msg.requestId },
+        "Failed to set logic map toggle",
+      );
+      this.emit({
+        type: "agent.logic_map.set_enabled.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mapName: null,
+          error: getErrorMessageOr(error, "Failed to set logic map toggle"),
+        },
+      });
+    }
   }
 
   private async handleDetachAgentRequest(agentId: string, requestId: string): Promise<void> {
@@ -8209,10 +8247,13 @@ export class Session {
     }
   }
 
-  /** 客户端发来的用户消息按发出时的会话判定生成 Routing block；配置在发送时现读。 */
+  /**
+   * 客户端发来的用户消息按发出时的会话判定生成 Routing block，再接上逻辑图说明块（开关开着时）；
+   * 配置和开关都在发送时现读。
+   */
   private routingBlockResolver(text: string): RoutingBlockResolver {
-    return (agent) =>
-      resolveRoutingBlock({
+    return async (agent) => {
+      const routingBlock = await resolveRoutingBlock({
         text,
         cwd: agent.cwd,
         canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
@@ -8221,6 +8262,10 @@ export class Session {
         agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
         providers: this.providerSnapshotManager,
       });
+      const logicMapBlock = resolveLogicMapInstructionBlock({ text, labels: agent.labels });
+      const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
+      return blocks.length > 0 ? blocks.join("\n\n") : null;
+    };
   }
 
   private async prepareAgentMessage(agentId: string, text: string): Promise<void> {

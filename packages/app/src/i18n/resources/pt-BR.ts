@@ -4150,4 +4150,15 @@ export const ptBR: TranslationResources = {
       month: "Mês",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "Mapa lógico",
+      hintOff:
+        "Ative para que o agente mantenha um mapa lógico deste recurso enquanto vocês conversam.",
+      hintOn: "O agente mantém o mapa lógico atualizado durante a conversa.",
+      hostOutdated: "Atualize o host",
+      hostOutdatedDetail: "Atualize o Osuna neste host para usar o mapa lógico.",
+      failed: "Não foi possível alterar o mapa lógico: {{error}}",
+    },
+  },
 };
