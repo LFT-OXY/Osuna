@@ -1,7 +1,7 @@
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
+import { LOGIC_MAPS_DIRECTORY } from "@getpaseo/protocol/logic-map-docs";
 
 import { formatSystemNotificationPrompt } from "../agent/agent-prompt.js";
-import { LOGIC_MAPS_DIRECTORY } from "./logic-map-store.js";
 import { READ_LOGIC_MAP_TOOL, UPDATE_LOGIC_MAP_TOOL } from "./logic-map-tools.js";
 
 export interface ResolveLogicMapInstructionBlockInput {

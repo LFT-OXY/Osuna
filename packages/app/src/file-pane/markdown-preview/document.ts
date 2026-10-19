@@ -8,6 +8,8 @@ export interface MarkdownFrontMatterRow {
 export interface MarkdownPreviewDocument {
   frontMatter: MarkdownFrontMatterRow[];
   body: string;
+  /** 正文第一行在原文件里的行号（从 1 起）：去掉的 front matter 有几行，就往后推几行。 */
+  bodyStartLine: number;
 }
 
 const FRONT_MATTER_PATTERN = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -15,25 +17,25 @@ const FRONT_MATTER_PATTERN = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\
 export function parseMarkdownPreviewDocument(source: string): MarkdownPreviewDocument {
   const match = FRONT_MATTER_PATTERN.exec(source);
   if (!match) {
-    return { frontMatter: [], body: source };
+    return wholeDocument(source);
   }
 
   try {
     return parseFrontMatter(match, source);
   } catch {
-    return { frontMatter: [], body: source };
+    return wholeDocument(source);
   }
 }
 
 function parseFrontMatter(match: RegExpExecArray, source: string): MarkdownPreviewDocument {
   const document = parseDocument(match[1], { schema: "core" });
   if (document.errors.length > 0) {
-    return { frontMatter: [], body: source };
+    return wholeDocument(source);
   }
 
   const metadata = document.toJS({ maxAliasCount: 100 });
   if (!isMetadataRecord(metadata)) {
-    return { frontMatter: [], body: source };
+    return wholeDocument(source);
   }
 
   const frontMatter = Object.entries(metadata).map(([key, value]) => ({
@@ -44,7 +46,12 @@ function parseFrontMatter(match: RegExpExecArray, source: string): MarkdownPrevi
   return {
     frontMatter,
     body: source.slice(match[0].length),
+    bodyStartLine: 1 + (match[0].match(/\n/g)?.length ?? 0),
   };
+}
+
+function wholeDocument(source: string): MarkdownPreviewDocument {
+  return { frontMatter: [], body: source, bodyStartLine: 1 };
 }
 
 function isMetadataRecord(value: unknown): value is Record<string, unknown> {

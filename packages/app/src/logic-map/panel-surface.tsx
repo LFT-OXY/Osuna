@@ -26,6 +26,8 @@ import { ZoomableViewport } from "@/components/zoomable-viewport";
 import type { ViewportFitOptions } from "@/components/zoomable-viewport/geometry";
 import { useReplicaQuery } from "@/data/query";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
+import { explorerFileFromReadResult } from "@/file-explorer/read-result";
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapBackdrop } from "./backdrop";
 import {
   LOGIC_MAP_GLYPH_COLOR,
@@ -41,11 +43,12 @@ import {
   type LogicMapLayerStep,
   type LogicMapLayout,
 } from "./layout";
+import { focusedNodeDocId, nodeDocLocation } from "./node-doc";
 import { CONTROL_HEIGHT, ICON_SIZE, type Theme } from "@/styles/theme";
 
 export type LogicMapClient = Pick<
   DaemonClient,
-  "listWorkspaceLogicMaps" | "getWorkspaceLogicMap" | "observeEvents"
+  "listWorkspaceLogicMaps" | "getWorkspaceLogicMap" | "observeEvents" | "readFile"
 >;
 
 const CHANGED_EVENT = "workspace.logic_map.changed";
@@ -94,24 +97,30 @@ function resolveSelectedMapName(
 export interface LogicMapPanelSurfaceProps {
   serverId: string;
   workspaceId: string;
+  /** workspace 目录，读外部文档换算行号用；还不知道时为 null（打开文件开头）。 */
+  workspaceRoot: string | null;
   client: LogicMapClient | null;
   isConnected: boolean;
   /** 主机是否支持逻辑图；还没收到 server_info 时为 null。 */
   supported: boolean | null;
   /** 当前对话（主区域聚焦的 Agent 或草稿）维护的图。 */
   conversationMapName: string | null;
-  /** 选中（正在读它的文档）的节点，画蓝色外圈。 */
-  selectedNodeId: string | null;
+  /** 主区域聚焦的文件标签相对 workspace 的路径；它是某个节点的文档时，这个节点画蓝色外圈。 */
+  focusedFilePath: string | null;
+  /** 点节点：在主区域打开它的节点文档。 */
+  onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
 }
 
 export function LogicMapPanelSurface({
   serverId,
   workspaceId,
+  workspaceRoot,
   client,
   isConnected,
   supported,
   conversationMapName,
-  selectedNodeId,
+  focusedFilePath,
+  onOpenNodeDoc,
 }: LogicMapPanelSurfaceProps) {
   const { t } = useTranslation();
   if (!client || !isConnected) {
@@ -145,9 +154,11 @@ export function LogicMapPanelSurface({
     <LogicMapPanelContent
       serverId={serverId}
       workspaceId={workspaceId}
+      workspaceRoot={workspaceRoot}
       client={client}
       conversationMapName={conversationMapName}
-      selectedNodeId={selectedNodeId}
+      focusedFilePath={focusedFilePath}
+      onOpenNodeDoc={onOpenNodeDoc}
     />
   );
 }
@@ -155,15 +166,19 @@ export function LogicMapPanelSurface({
 function LogicMapPanelContent({
   serverId,
   workspaceId,
+  workspaceRoot,
   client,
   conversationMapName,
-  selectedNodeId,
+  focusedFilePath,
+  onOpenNodeDoc,
 }: {
   serverId: string;
   workspaceId: string;
+  workspaceRoot: string | null;
   client: LogicMapClient;
   conversationMapName: string | null;
-  selectedNodeId: string | null;
+  focusedFilePath: string | null;
+  onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
 }) {
   const { t } = useTranslation();
   useLogicMapChangeEvents({ client, serverId, workspaceId });
@@ -199,6 +214,22 @@ function LogicMapPanelContent({
     () => (skeleton ? layoutLogicMapLayer(skeleton, layerId) : null),
     [layerId, skeleton],
   );
+  const { openedNodeId, openNodeDoc } = useOpenNodeDoc({
+    client,
+    workspaceRoot,
+    mapName: selectedMapName,
+    skeleton,
+    onOpenNodeDoc,
+  });
+  const selectedNodeId =
+    skeleton && selectedMapName
+      ? focusedNodeDocId({
+          skeleton,
+          mapName: selectedMapName,
+          focusedPath: focusedFilePath,
+          openedNodeId,
+        })
+      : null;
 
   if (listQuery.isError) {
     return (
@@ -250,6 +281,7 @@ function LogicMapPanelContent({
         selectedNodeId={selectedNodeId}
         layerId={layerId}
         onEnterSubgraph={setLayerId}
+        onOpenNodeDoc={openNodeDoc}
       />
     </View>
   );
@@ -281,6 +313,61 @@ function useCurrentLayer(mapName: string | null, skeleton: LogicMapSkeleton | nu
 
 const NO_PICKED_LAYER = { mapName: null, layerId: null };
 const NO_TRAIL: readonly LogicMapLayerStep[] = [];
+
+/**
+ * 点节点打开它的节点文档。外部文档先读一遍文件，用存下的标题换算起始行号；读不到就打开文件开头。
+ * 连着点了几个节点时只打开最后点的那个，先发出的读取晚回来也不再打开。
+ */
+function useOpenNodeDoc({
+  client,
+  workspaceRoot,
+  mapName,
+  skeleton,
+  onOpenNodeDoc,
+}: {
+  client: LogicMapClient;
+  workspaceRoot: string | null;
+  mapName: string | null;
+  skeleton: LogicMapSkeleton | null;
+  onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
+}) {
+  const [openedNodeId, setOpenedNodeId] = useState<string | null>(null);
+  const latestRequestRef = useRef(0);
+  const openNodeDoc = useCallback(
+    (nodeId: string) => {
+      const doc = skeleton?.nodes.find((node) => node.id === nodeId)?.doc;
+      if (!mapName || !doc) return;
+      const request = latestRequestRef.current + 1;
+      latestRequestRef.current = request;
+      setOpenedNodeId(nodeId);
+      if (doc.kind === "own" || !workspaceRoot) {
+        onOpenNodeDoc(nodeDocLocation({ mapName, doc, content: null }));
+        return;
+      }
+      void readTextFile(client, workspaceRoot, doc.path).then((content) => {
+        if (latestRequestRef.current === request) {
+          onOpenNodeDoc(nodeDocLocation({ mapName, doc, content }));
+        }
+        return undefined;
+      });
+    },
+    [client, mapName, onOpenNodeDoc, skeleton, workspaceRoot],
+  );
+  return { openedNodeId, openNodeDoc };
+}
+
+/** 文本文件的内容；读失败或不是文本时为 null。 */
+async function readTextFile(
+  client: LogicMapClient,
+  cwd: string,
+  path: string,
+): Promise<string | null> {
+  try {
+    return explorerFileFromReadResult(await client.readFile(cwd, path)).content ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Agent 改了图之后 daemon 推送变更，按图名让列表和那张图重新读取。重新连上时这期间的推送已经丢了，
@@ -498,6 +585,7 @@ function LogicMapBody({
   selectedNodeId,
   layerId,
   onEnterSubgraph,
+  onOpenNodeDoc,
 }: {
   mapLabel: string;
   result: WorkspaceLogicMapReadResult | undefined;
@@ -507,6 +595,7 @@ function LogicMapBody({
   selectedNodeId: string | null;
   layerId: string | null;
   onEnterSubgraph: (layerId: string) => void;
+  onOpenNodeDoc: (nodeId: string) => void;
 }) {
   const { t } = useTranslation();
   if (error) {
@@ -560,6 +649,7 @@ function LogicMapBody({
       layout={layout}
       selectedNodeId={selectedNodeId}
       onEnterSubgraph={onEnterSubgraph}
+      onOpenNodeDoc={onOpenNodeDoc}
     />
   );
 }
@@ -570,10 +660,12 @@ function LogicMapViewport({
   layout,
   selectedNodeId,
   onEnterSubgraph,
+  onOpenNodeDoc,
 }: {
   layout: LogicMapLayout;
   selectedNodeId: string | null;
   onEnterSubgraph: (layerId: string) => void;
+  onOpenNodeDoc: (nodeId: string) => void;
 }) {
   const { t } = useTranslation();
   const contentSize = useMemo(
@@ -600,6 +692,7 @@ function LogicMapViewport({
           layout={layout}
           selectedNodeId={selectedNodeId}
           onEnterSubgraph={onEnterSubgraph}
+          onOpenNodeDoc={onOpenNodeDoc}
         />
       </ZoomableViewport>
     </LogicMapBackdrop>

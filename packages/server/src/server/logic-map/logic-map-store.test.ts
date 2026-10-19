@@ -1,10 +1,11 @@
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { LOGIC_MAPS_DIRECTORY } from "@getpaseo/protocol/logic-map-docs";
 import { afterEach, expect, test } from "vitest";
 
 import { LogicMapDirectoryMissingError } from "./logic-map-errors.js";
-import { createEmptyLogicMap, LOGIC_MAPS_DIRECTORY } from "./logic-map-store.js";
+import { createEmptyLogicMap } from "./logic-map-store.js";
 import { parseLogicMapSkeleton } from "./logic-map-skeleton.js";
 
 const tempDirs: string[] = [];

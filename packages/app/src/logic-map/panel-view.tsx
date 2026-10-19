@@ -2,6 +2,7 @@ import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
+import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
 import {
   collectAllTabs,
   findPaneById,
@@ -9,6 +10,7 @@ import {
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
 import { buildWorkspaceTabPersistenceKey, type WorkspaceTab } from "@/workspace-tabs/model";
+import { resolveWorkspaceFilePaths, type WorkspaceFileLocation } from "@/workspace/file-open";
 import { buildDraftLogicMapKey, useDraftLogicMapStore } from "./draft-logic-map-store";
 import { LogicMapPanelSurface } from "./panel-surface";
 
@@ -49,28 +51,52 @@ function useConversationLogicMapName(serverId: string, workspaceId: string): str
   return agentMapName ?? draftMapName;
 }
 
+/**
+ * 主区域聚焦的文件标签相对 workspace 的路径：节点文档按相对路径存，从对话里点开的文件标签可能是绝对路径。
+ */
+function useFocusedFilePath(
+  serverId: string,
+  workspaceId: string,
+  workspaceRoot: string | null,
+): string | null {
+  const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+  const path = useWorkspaceLayoutStore((state) => {
+    const tab = workspaceKey ? focusedTab(state.layoutByWorkspace[workspaceKey]) : null;
+    return tab?.target.kind === "file" ? tab.target.path : null;
+  });
+  if (path === null) return null;
+  if (!workspaceRoot) return path;
+  return resolveWorkspaceFilePaths({ path, workspaceRoot })?.relativePath ?? null;
+}
+
 export function LogicMapPanelView({
   serverId,
   workspaceId,
+  onOpenNodeDoc,
 }: {
   serverId: string;
   workspaceId: string;
+  /** 在主区域打开节点文档（走"打开文件"入口）。 */
+  onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
 }) {
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
   const supported = useHostFeatureAvailability(serverId, "logicMap");
   const conversationMapName = useConversationLogicMapName(serverId, workspaceId);
+  const workspaceRoot = useWorkspaceDirectory(serverId, workspaceId);
+  const focusedFilePath = useFocusedFilePath(serverId, workspaceId, workspaceRoot);
   return (
     <LogicMapPanelSurface
       serverId={serverId}
       workspaceId={workspaceId}
+      workspaceRoot={workspaceRoot}
       client={client}
       isConnected={isConnected}
       supported={supported}
       conversationMapName={conversationMapName}
-      // 选中哪个节点跟着主区域打开的节点文档走，在打开节点文档那一步接上；现在没有选中。
-      selectedNodeId={null}
+      focusedFilePath={focusedFilePath}
+      onOpenNodeDoc={onOpenNodeDoc}
     />
   );
 }

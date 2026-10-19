@@ -29,7 +29,7 @@ import { useFilePreview } from "./preview-lifecycle/hook";
 import { resolveFilePreviewLifecycle } from "./preview-lifecycle/model";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
-import { FileMarkdownPreview } from "./markdown-preview";
+import { FileMarkdownPreview, MARKDOWN_PREVIEW_SCROLLS_TO_LINE } from "./markdown-preview";
 import type { MarkdownPreviewResources } from "./markdown-preview/resource";
 import { FileEditorModel, getFileConflictCallout, type FileConflictCallout } from "./editor/model";
 import { createFileObservationSource } from "./editor/observation-source";
@@ -141,12 +141,8 @@ function FilePreviewBody({
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
-  // A line target means the caller wants to land on that line, so fall back to
-  // the highlighted source view even for renderable files.
   const renderKind =
-    preview?.kind === "text" && !location.lineStart && mode !== "source"
-      ? filePreviewRenderKind(filePath)
-      : null;
+    preview?.kind === "text" && mode !== "source" ? previewRenderKindForLocation(location) : null;
 
   const previewScrollRef = useRef<RNScrollView>(null);
 
@@ -185,7 +181,12 @@ function FilePreviewBody({
             style={styles.previewContent}
             showsVerticalScrollIndicator
           >
-            <FileMarkdownPreview source={preview.content ?? ""} resources={markdownResources} />
+            <FileMarkdownPreview
+              source={preview.content ?? ""}
+              resources={markdownResources}
+              lineStart={location.lineStart}
+              navigationRevision={navigationRevision}
+            />
           </RNScrollView>
         </View>
       );
@@ -309,12 +310,12 @@ export function FilePane({
 
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
   const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
-  const isRenderable = isRenderablePreview(preview, location.path);
+  const isRenderable = preview?.kind === "text" && previewRenderKindForLocation(location) !== null;
   const editable = isEditableTextFile({
     preview,
     supportsEditing,
   });
-  const canTogglePreviewMode = isRenderable && !location.lineStart;
+  const canTogglePreviewMode = isRenderable;
   const lineCount =
     preview?.kind === "text" ? (preview.content ?? "").split("\n").length : undefined;
   const errorMessage = previewLifecycle.status === "error" ? previewLifecycle.message : null;
@@ -350,8 +351,14 @@ export function FilePane({
   );
 }
 
-function isRenderablePreview(preview: ExplorerFile | null, path: string): boolean {
-  return preview?.kind === "text" && filePreviewRenderKind(path) !== null;
+/**
+ * 渲染预览还是源码视图。带行号打开时要落到那一行：Web 上的 Markdown 预览能滚到那一行所在的块；
+ * HTML 预览和原生端的 Markdown 预览做不到，退回带高亮的源码视图。
+ */
+function previewRenderKindForLocation(location: WorkspaceFileLocation) {
+  const renderKind = filePreviewRenderKind(location.path);
+  if (!location.lineStart) return renderKind;
+  return renderKind === "markdown" && MARKDOWN_PREVIEW_SCROLLS_TO_LINE ? renderKind : null;
 }
 
 function isEditableTextFile(input: {

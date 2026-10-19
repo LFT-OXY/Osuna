@@ -5,10 +5,15 @@ import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { parseMarkdownPreviewDocument } from "./document";
 import type { MarkdownPreviewResources } from "./resource";
 
+/** 原生版的 RN 渲染器没有块的行号，带行号打开 Markdown 时文件标签退回源码视图定位。 */
+export const MARKDOWN_PREVIEW_SCROLLS_TO_LINE = false;
+
 interface FileMarkdownPreviewProps {
   source: string;
-  // 相对资源只在 Web 版解析；原生版沿用 RN 渲染器，签名与 Web 版保持一致。
+  // 相对资源和滚到指定行只在 Web 版支持；原生版沿用 RN 渲染器，签名与 Web 版保持一致。
   resources: MarkdownPreviewResources;
+  lineStart?: number;
+  navigationRevision: number;
 }
 
 export function FileMarkdownPreview({ source }: FileMarkdownPreviewProps) {

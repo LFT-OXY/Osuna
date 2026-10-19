@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { LOGIC_MAPS_DIRECTORY, markdownHeadings } from "@getpaseo/protocol/logic-map-docs";
 import type { LogicMapSkeleton, WorkspaceLogicMapSummary } from "@getpaseo/protocol/messages";
 import { z } from "zod";
 
@@ -15,7 +16,6 @@ import {
   LogicMapNotFoundError,
   LogicMapUpdateRejectedError,
 } from "./logic-map-errors.js";
-import { markdownHeadings } from "./logic-map-markdown-headings.js";
 import {
   applyLogicMapOperations,
   type ExternalDocLink,
@@ -23,8 +23,6 @@ import {
 } from "./logic-map-operations.js";
 import { EMPTY_LOGIC_MAP_SKELETON, parseLogicMapSkeleton } from "./logic-map-skeleton.js";
 
-/** 逻辑图跟着 workspace 的 cwd 走，随代码进版本记录。 */
-export const LOGIC_MAPS_DIRECTORY = "docs/logic-maps";
 export const LOGIC_MAP_SKELETON_FILE = "map.json";
 
 const MAX_NAME_ATTEMPTS = 5;

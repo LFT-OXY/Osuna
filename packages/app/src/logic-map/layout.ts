@@ -64,6 +64,8 @@ export interface LogicMapNodeBox {
   failure: boolean;
   /** 装了 spec 框架时还停留在临时要点、没指向正式文档。 */
   pendingLink: boolean;
+  /** 有节点文档，点卡片在主区域打开它。 */
+  hasDoc: boolean;
   /** 子图节点里直接包含的节点数；其他种类为 null。 */
   subgraphNodeCount: number | null;
   x: number;
@@ -198,6 +200,7 @@ export function layoutLogicMapLayer(
       kind: node.kind,
       failure: node.failure === true,
       pendingLink: isPendingLink(node),
+      hasDoc: node.doc !== null,
       subgraphNodeCount,
       ...box,
       branches,

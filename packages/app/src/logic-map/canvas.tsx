@@ -77,12 +77,15 @@ export const LogicMapCanvas = memo(function LogicMapCanvas({
   layout,
   selectedNodeId,
   onEnterSubgraph,
+  onOpenNodeDoc,
 }: {
   layout: LogicMapLayout;
   /** 选中的节点画蓝色外圈；没有选中时为 null。 */
   selectedNodeId: string | null;
   /** 点子图节点：进入它的下一层。 */
   onEnterSubgraph: (nodeId: string) => void;
+  /** 点其他带文档的节点：在主区域打开它的节点文档。 */
+  onOpenNodeDoc: (nodeId: string) => void;
 }) {
   const reduceMotion = useReduceMotionEnabled();
   const animate = isWeb && !reduceMotion;
@@ -102,6 +105,7 @@ export const LogicMapCanvas = memo(function LogicMapCanvas({
           entering={enteringIds.has(node.id)}
           selected={node.id === selectedNodeId}
           onEnterSubgraph={onEnterSubgraph}
+          onOpenNodeDoc={onOpenNodeDoc}
         />
       ))}
     </View>
@@ -153,12 +157,14 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({
   entering,
   selected,
   onEnterSubgraph,
+  onOpenNodeDoc,
 }: {
   node: LogicMapNodeBox;
   animate: boolean;
   entering: boolean;
   selected: boolean;
   onEnterSubgraph: (nodeId: string) => void;
+  onOpenNodeDoc: (nodeId: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
@@ -186,7 +192,7 @@ const LogicMapNodeCard = memo(function LogicMapNodeCard({
           onPointerLeave={handlePointerLeave}
           testID={`logic-map-node-${node.id}`}
         >
-          <NodeCardBody node={node} onEnterSubgraph={onEnterSubgraph}>
+          <NodeCardBody node={node} onEnterSubgraph={onEnterSubgraph} onOpenNodeDoc={onOpenNodeDoc}>
             <NodeCardContent node={node} />
           </NodeCardBody>
         </View>
@@ -233,27 +239,36 @@ function NodeCardContent({ node }: { node: LogicMapNodeBox }) {
   );
 }
 
-/** 卡片里面这一层：子图卡片整张可按（进入下一层），其他卡片只是展示。 */
+/** 卡片里面这一层：子图卡片整张可按（进入下一层），其他带文档的卡片可按（打开节点文档），没有文档的只是展示。 */
 function NodeCardBody({
   node,
   onEnterSubgraph,
+  onOpenNodeDoc,
   children,
 }: {
   node: LogicMapNodeBox;
   onEnterSubgraph: (nodeId: string) => void;
+  onOpenNodeDoc: (nodeId: string) => void;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const handlePress = useCallback(() => onEnterSubgraph(node.id), [node.id, onEnterSubgraph]);
-  if (node.kind !== "subgraph") {
+  const isSubgraph = node.kind === "subgraph";
+  const handlePress = useCallback(
+    () => (isSubgraph ? onEnterSubgraph(node.id) : onOpenNodeDoc(node.id)),
+    [isSubgraph, node.id, onEnterSubgraph, onOpenNodeDoc],
+  );
+  if (!isSubgraph && !node.hasDoc) {
     return <View style={styles.body}>{children}</View>;
   }
+  const accessibilityLabel = isSubgraph
+    ? t("logicMap.panel.enterSubgraph", { title: node.title })
+    : t("logicMap.panel.openNodeDoc", { title: node.title });
   return (
     <Pressable
       style={styles.body}
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={t("logicMap.panel.enterSubgraph", { title: node.title })}
+      accessibilityLabel={accessibilityLabel}
     >
       {children}
     </Pressable>

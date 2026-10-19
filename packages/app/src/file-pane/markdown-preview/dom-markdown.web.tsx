@@ -40,49 +40,21 @@ import ReactMarkdown, {
   type Components,
   type ExtraProps,
 } from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "rehype-sanitize";
-import rehypeSlug from "rehype-slug";
-import remarkGfm from "remark-gfm";
 import { withUnistyles } from "react-native-unistyles";
 import { getMarkdownFenceLanguage } from "@/components/markdown/fence/language";
 import { MermaidFence } from "@/components/markdown/fence/mermaid";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { MarkdownCodeBlock } from "./code-block.web";
-import { isGithubAlertKind, remarkGithubAlerts, type GithubAlertKind } from "./github-alerts";
+import { isGithubAlertKind, type GithubAlertKind } from "./github-alerts";
 import { MarkdownImage } from "./image.web";
 import { MarkdownLink } from "./link.web";
+import { REHYPE_PLUGINS, REMARK_PLUGINS } from "./pipeline";
 import { isDataImageUrl, type MarkdownPreviewResources } from "./resource";
 import { MarkdownPreviewResourcesContext } from "./resources-context.web";
 
 type HastNode = NonNullable<ExtraProps["node"]>;
 type HastChild = HastNode["children"][number];
-
-// 默认 schema 即 GitHub 的白名单：保留 align 等排版属性，剥掉 script、style、iframe 与事件属性。
-// 链接协议在此基础上收窄到 http(s) / mailto；相对路径与页内锚点不带协议，本就放行。
-// 图片另放行 data:（<img> 里的 data 地址不会执行脚本）；只有 data:image/ 能通过 previewUrlTransform。
-const PREVIEW_SANITIZE_SCHEMA = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataAlert"],
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    href: ["http", "https", "mailto"],
-    src: ["http", "https", "data"],
-  },
-} satisfies SanitizeSchema;
-
-const REMARK_PLUGINS = [remarkGfm, remarkGithubAlerts];
-// 标题的 GitHub 风格 slug id 在消毒前生成，消毒时与原始 HTML 的 id 一样加上 user-content- 前缀，
-// 页内锚点点击时再去掉前缀匹配（见 link.web.tsx）。
-const REHYPE_PLUGINS = [
-  rehypeRaw,
-  rehypeSlug,
-  [rehypeSanitize, PREVIEW_SANITIZE_SCHEMA],
-] satisfies NonNullable<ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>;
 
 // react-markdown 默认会把 data: 地址清空；图片的 data:image/ 放行，其余照默认处理。
 function previewUrlTransform(url: string, key: string, node: Readonly<HastNode>): string {

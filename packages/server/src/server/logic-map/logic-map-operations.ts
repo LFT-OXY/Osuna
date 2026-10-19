@@ -5,8 +5,7 @@ import {
   type LogicMapNode,
   type LogicMapSkeleton,
 } from "@getpaseo/protocol/messages";
-
-import { normalizeHeading } from "./logic-map-markdown-headings.js";
+import { normalizeHeading } from "@getpaseo/protocol/logic-map-docs";
 
 const MAX_NODES_PER_LAYER = 20;
 const NODE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;

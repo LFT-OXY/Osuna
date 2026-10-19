@@ -15,6 +15,7 @@ import {
   buildLoginLogicMap,
   buildNestedLogicMap,
 } from "@/test/logic-map-fixtures";
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { LogicMapPanelSurface, type LogicMapClient } from "./panel-surface";
 
 // App sources compile against the classic JSX runtime, which expects React on the global.
@@ -29,12 +30,15 @@ beforeAll(async () => {
 });
 
 const WORKSPACE_ID = "workspace-1";
+const WORKSPACE_ROOT = "/repo";
 
 interface FakeHost {
   client: LogicMapClient;
   maps: WorkspaceLogicMapSummary[];
   reads: Map<string, WorkspaceLogicMapReadResult | Promise<WorkspaceLogicMapReadResult>>;
   getCalls: string[];
+  /** 工作区里的文件（相对路径 → 内容），供点外部文档节点时读取。 */
+  files: Map<string, string>;
   /** 模拟 daemon 推送一条事件给订阅了它的连接。 */
   push: (message: SessionOutboundMessage) => void;
 }
@@ -45,6 +49,7 @@ function createFakeHost(): FakeHost {
     maps: [],
     reads: new Map(),
     getCalls: [],
+    files: new Map(),
     push: (message) => {
       for (const listener of listeners) listener(message);
     },
@@ -56,6 +61,19 @@ function createFakeHost(): FakeHost {
         if (!result) throw new Error(`unexpected read of ${mapName}`);
         return result;
       },
+      readFile: (async (cwd: string, path: string) => {
+        const content = host.files.get(path);
+        if (cwd !== WORKSPACE_ROOT || content === undefined) throw new Error(`no file ${path}`);
+        const bytes = new TextEncoder().encode(content);
+        return {
+          bytes,
+          mime: "text/markdown",
+          size: bytes.length,
+          path,
+          kind: "text",
+          modifiedAt: "2026-10-19T00:00:00.000Z",
+        };
+      }) as LogicMapClient["readFile"],
       observeEvents: (() => ({
         subscribe: (observer: {
           snapshot: () => void;
@@ -78,36 +96,47 @@ interface Mounted {
 
 const mounted: Mounted[] = [];
 
+interface SurfaceOverrides {
+  supported: boolean | null;
+  conversationMapName: string | null;
+  focusedFilePath: string | null;
+  onOpenNodeDoc: (location: WorkspaceFileLocation) => void;
+}
+
+const noopOpenNodeDoc = () => {};
+
+/** 挂上面板；返回的函数用新的参数重新渲染同一个面板（比如主区域换了聚焦的标签）。 */
 function mountSurface(
   host: FakeHost,
-  overrides: Partial<{
-    supported: boolean | null;
-    conversationMapName: string | null;
-    selectedNodeId: string | null;
-  }> = {},
-): void {
+  overrides: Partial<SurfaceOverrides> = {},
+): (next: Partial<SurfaceOverrides>) => void {
   const container = document.createElement("div");
   container.style.cssText =
     "position: absolute; top: 0; left: 0; width: 320px; height: 760px; display: flex; flex-direction: column;";
   document.body.appendChild(container);
   const root = createRoot(container);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  act(() =>
-    root.render(
-      <QueryClientProvider client={queryClient}>
-        <LogicMapPanelSurface
-          serverId="server-1"
-          workspaceId={WORKSPACE_ID}
-          client={host.client}
-          isConnected
-          supported={overrides.supported === undefined ? true : overrides.supported}
-          conversationMapName={overrides.conversationMapName ?? null}
-          selectedNodeId={overrides.selectedNodeId ?? null}
-        />
-      </QueryClientProvider>,
-    ),
-  );
+  const render = (props: Partial<SurfaceOverrides>) =>
+    act(() =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <LogicMapPanelSurface
+            serverId="server-1"
+            workspaceId={WORKSPACE_ID}
+            workspaceRoot={WORKSPACE_ROOT}
+            client={host.client}
+            isConnected
+            supported={props.supported === undefined ? true : props.supported}
+            conversationMapName={props.conversationMapName ?? null}
+            focusedFilePath={props.focusedFilePath ?? null}
+            onOpenNodeDoc={props.onOpenNodeDoc ?? noopOpenNodeDoc}
+          />
+        </QueryClientProvider>,
+      ),
+    );
+  render(overrides);
   mounted.push({ root, container });
+  return (next) => render({ ...overrides, ...next });
 }
 
 afterEach(() => {
@@ -128,6 +157,13 @@ function byTestId(testID: string): HTMLElement {
 async function shown(testID: string): Promise<HTMLElement> {
   await expect.poll(() => document.querySelector(`[data-testid="${testID}"]`)).not.toBeNull();
   return byTestId(testID);
+}
+
+/** 卡片有没有蓝色选中外圈（等 150ms 的过渡走完再看）。 */
+async function outlined(testID: string): Promise<boolean> {
+  const card = await shown(testID);
+  await Promise.all(card.getAnimations().map((animation) => animation.finished));
+  return getComputedStyle(card).boxShadow.includes("rgb(41, 112, 255) 0px 0px 0px 2px");
 }
 
 /** 一块区域里用户看到的文字，按出现顺序。 */
@@ -322,14 +358,90 @@ describe("the logic map panel", () => {
     expect(host.getCalls).toEqual(["user-login", "user-login"]);
   });
 
-  it("outlines the selected node in blue and leaves the others alone", async () => {
-    mountSurface(loginMapHost(), { selectedNodeId: "lock" });
+  it("outlines the node whose doc is the focused file tab in blue and leaves the others alone", async () => {
+    mountSurface(loginMapHost(), { focusedFilePath: "docs/logic-maps/user-login/lock.md" });
 
-    const selected = await shown("logic-map-node-lock");
-    expect(getComputedStyle(selected).boxShadow).toContain("rgb(41, 112, 255) 0px 0px 0px 2px");
-    expect(getComputedStyle(byTestId("logic-map-node-stay")).boxShadow).not.toContain(
-      "rgb(41, 112, 255)",
-    );
+    expect(await outlined("logic-map-node-lock")).toBe(true);
+    expect(await outlined("logic-map-node-stay")).toBe(false);
+  });
+
+  it("moves the outline with the focused file tab and drops it on a tab that is no node doc", async () => {
+    const update = mountSurface(loginMapHost(), {
+      focusedFilePath: "docs/logic-maps/user-login/lock.md",
+    });
+    await shown("logic-map-node-lock");
+
+    update({ focusedFilePath: "docs/logic-maps/user-login/stay.md" });
+    await expect.poll(() => outlined("logic-map-node-stay")).toBe(true);
+    expect(await outlined("logic-map-node-lock")).toBe(false);
+
+    update({ focusedFilePath: "README.md" });
+    await expect.poll(() => outlined("logic-map-node-stay")).toBe(false);
+
+    update({ focusedFilePath: "docs/logic-maps/user-login/lock.md" });
+    await expect.poll(() => outlined("logic-map-node-lock")).toBe(true);
+    update({ focusedFilePath: null });
+    await expect.poll(() => outlined("logic-map-node-lock")).toBe(false);
+  });
+
+  it("opens a node's own doc from the map folder when the node is clicked", async () => {
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(loginMapHost(), { onOpenNodeDoc });
+
+    await userEvent.click(await shown("logic-map-node-title-reset-count"));
+
+    expect(onOpenNodeDoc).toHaveBeenCalledTimes(1);
+    expect(onOpenNodeDoc).toHaveBeenCalledWith({
+      path: "docs/logic-maps/user-login/reset-count.md",
+    });
+  });
+
+  it("opens a node that points at a framework doc at the line of its heading", async () => {
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) =>
+          node.id === "reset-count"
+            ? { ...node, doc: { kind: "external", path: "spec/login.md", heading: "清零失败次数" } }
+            : node,
+        ),
+      },
+    });
+    host.files.set("spec/login.md", "# 登录\n\n## 校验密码\n\n正文\n\n## 清零失败次数\n");
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(host, { onOpenNodeDoc });
+
+    await userEvent.click(await shown("logic-map-node-title-reset-count"));
+
+    await expect
+      .poll(() => onOpenNodeDoc.mock.calls)
+      .toEqual([[{ path: "spec/login.md", lineStart: 7 }]]);
+  });
+
+  it("opens the top of a framework doc whose heading is gone", async () => {
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) =>
+          node.id === "reset-count"
+            ? { ...node, doc: { kind: "external", path: "spec/login.md", heading: "清零失败次数" } }
+            : node,
+        ),
+      },
+    });
+    host.files.set("spec/login.md", "# 登录\n\n## 校验密码\n");
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(host, { onOpenNodeDoc });
+
+    await userEvent.click(await shown("logic-map-node-title-reset-count"));
+
+    await expect.poll(() => onOpenNodeDoc.mock.calls).toEqual([[{ path: "spec/login.md" }]]);
   });
 
   it("opens at a readable size, from the top-left, with the zoom bar at the bottom-right", async () => {
