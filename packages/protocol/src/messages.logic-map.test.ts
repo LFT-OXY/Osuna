@@ -7,12 +7,12 @@ import {
 import { getLogicMapNameFromLabels, LOGIC_MAP_LABEL } from "./agent-labels";
 
 describe("logic map protocol", () => {
-  it("accepts a toggle for a running agent and for a draft that only knows its cwd", () => {
+  it("accepts a toggle for a running agent and for a draft in a workspace", () => {
     expect(
       SessionInboundMessageSchema.safeParse({
         type: "agent.logic_map.set_enabled.request",
         requestId: "request-1",
-        agentId: "agent-1",
+        target: { kind: "agent", agentId: "agent-1" },
         enabled: true,
       }).success,
     ).toBe(true);
@@ -20,10 +20,28 @@ describe("logic map protocol", () => {
       SessionInboundMessageSchema.safeParse({
         type: "agent.logic_map.set_enabled.request",
         requestId: "request-2",
-        cwd: "/repo",
+        target: { kind: "draft", workspaceId: "workspace-1" },
         enabled: false,
       }).success,
     ).toBe(true);
+  });
+
+  it("rejects a toggle that names neither an agent nor a draft workspace", () => {
+    for (const target of [
+      undefined,
+      { kind: "agent" },
+      { kind: "draft", cwd: "/repo" },
+      { kind: "other", agentId: "agent-1" },
+    ]) {
+      expect(
+        SessionInboundMessageSchema.safeParse({
+          type: "agent.logic_map.set_enabled.request",
+          requestId: "request-3",
+          target,
+          enabled: true,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it("parses the response with and without a map", () => {

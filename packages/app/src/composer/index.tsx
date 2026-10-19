@@ -88,7 +88,10 @@ import {
 } from "@/composer/actions";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
-import { LogicMapComposerToggle } from "@/logic-map/composer-toggle";
+import {
+  LOGIC_MAP_TOGGLE_RESERVED_WIDTH,
+  LogicMapComposerToggle,
+} from "@/logic-map/composer-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -303,44 +306,56 @@ interface RenderLeftContentArgs {
   agentControls: DraftAgentControlsProps | undefined;
   agentId: string;
   serverId: string;
-  cwd: string;
+  workspaceId: string | null;
   focusInput: () => void;
   isCompactLayout: boolean;
   showAgentControls: boolean;
   showLogicMapToggle: boolean;
 }
 
+function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): ReactElement | null {
+  if (!args.showLogicMapToggle || args.isCompactLayout) return null;
+  if (isDraft) {
+    // 草稿的图建在它所在 workspace 的目录下；没有 workspace 的草稿（新建工作区页）不给开关。
+    if (!args.workspaceId) return null;
+    return (
+      <LogicMapComposerToggle
+        serverId={args.serverId}
+        kind="draft"
+        draftTabId={args.agentId}
+        workspaceId={args.workspaceId}
+      />
+    );
+  }
+  return <LogicMapComposerToggle serverId={args.serverId} kind="agent" agentId={args.agentId} />;
+}
+
 function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
   const { agentControls, agentId, serverId, focusInput, isCompactLayout } = args;
   if (!args.showAgentControls) return null;
   const isDraft = resolveAgentControlsMode(agentControls) === "draft";
-  const logicMapToggle =
-    args.showLogicMapToggle && !isCompactLayout ? (
-      <LogicMapComposerToggle
-        serverId={serverId}
-        agentId={agentId}
-        cwd={args.cwd}
-        isDraft={isDraft}
-      />
-    ) : null;
+  // 开关放进 Agent controls 那一行的末尾，控件收缩时给它预留宽度。
+  const logicMapToggle = renderLogicMapToggle(args, isDraft);
+  const trailingControlWidth = logicMapToggle ? LOGIC_MAP_TOGGLE_RESERVED_WIDTH : 0;
   if (isDraft && agentControls) {
     return (
-      <>
-        <DraftAgentControls {...agentControls} isCompactLayout={isCompactLayout} />
-        {logicMapToggle}
-      </>
+      <DraftAgentControls
+        {...agentControls}
+        isCompactLayout={isCompactLayout}
+        trailingControl={logicMapToggle}
+        trailingControlWidth={trailingControlWidth}
+      />
     );
   }
   return (
-    <>
-      <AgentControls
-        agentId={agentId}
-        serverId={serverId}
-        onDropdownClose={focusInput}
-        isCompactLayout={isCompactLayout}
-      />
-      {logicMapToggle}
-    </>
+    <AgentControls
+      agentId={agentId}
+      serverId={serverId}
+      onDropdownClose={focusInput}
+      isCompactLayout={isCompactLayout}
+      trailingControl={logicMapToggle}
+      trailingControlWidth={trailingControlWidth}
+    />
   );
 }
 
@@ -2414,7 +2429,7 @@ function ComposerContentImpl({
         agentControls,
         agentId,
         serverId,
-        cwd,
+        workspaceId: workspaceId ?? null,
         focusInput,
         isCompactLayout,
         showAgentControls: mode.showAgentControls,
@@ -2423,7 +2438,7 @@ function ComposerContentImpl({
     [
       agentControls,
       agentId,
-      cwd,
+      workspaceId,
       focusInput,
       isCompactLayout,
       mode.showAgentControls,

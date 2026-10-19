@@ -4093,7 +4093,7 @@ export const ar: TranslationResources = {
       label: "الخريطة المنطقية",
       hintOff: "فعّلها ليحدّث الوكيل خريطة منطقية لهذه الميزة أثناء النقاش.",
       hintOn: "يحدّث الوكيل الخريطة المنطقية أثناء النقاش.",
-      hostOutdated: "حدّث المضيف",
+      hostOutdated: "حدّث Osuna على هذا المضيف",
       hostOutdatedDetail: "حدّث Osuna على هذا المضيف لاستخدام الخريطة المنطقية.",
       failed: "تعذّر تغيير الخريطة المنطقية: {{error}}",
     },

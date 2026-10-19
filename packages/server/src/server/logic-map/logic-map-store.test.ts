@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 
+import { LogicMapDirectoryMissingError } from "./logic-map-errors.js";
 import { createEmptyLogicMap, LOGIC_MAPS_DIRECTORY } from "./logic-map-store.js";
 import { parseLogicMapSkeleton } from "./logic-map-skeleton.js";
 
@@ -48,5 +49,6 @@ test("each new logic map gets its own folder and leaves existing maps alone", as
 test("a workspace directory that does not exist is an error, not a new folder tree", async () => {
   const cwd = path.join(await makeWorkspace(), "missing");
 
-  await expect(createEmptyLogicMap(cwd)).rejects.toThrow(/does not exist/);
+  await expect(createEmptyLogicMap(cwd)).rejects.toBeInstanceOf(LogicMapDirectoryMissingError);
+  await expect(readdir(path.dirname(cwd))).resolves.toEqual([]);
 });

@@ -4180,7 +4180,7 @@ export const es: TranslationResources = {
       hintOff:
         "Actívalo para que el agente mantenga un mapa lógico de esta función mientras la comentáis.",
       hintOn: "El agente mantiene el mapa lógico al día mientras comentáis la función.",
-      hostOutdated: "Actualiza el host",
+      hostOutdated: "Actualiza Osuna en este host",
       hostOutdatedDetail: "Actualiza Osuna en este host para usar el mapa lógico.",
       failed: "No se pudo cambiar el mapa lógico: {{error}}",
     },

@@ -127,6 +127,7 @@ import type {
   PluginUpdateResult,
   AgentSkillSelection,
   AgentSkillsStatus,
+  AgentLogicMapTarget,
   AgentSkillsSaveResult,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -3141,20 +3142,18 @@ export class DaemonClient {
   }
 
   /**
-   * 开关逻辑图。带 agentId 改这个 Agent；草稿只带 cwd，打开时拿回新图的名字，
+   * 开关逻辑图。对象是 Agent 时改这个 Agent；是草稿时打开拿回新图的名字，
    * 新建 Agent 时放进 `LOGIC_MAP_LABEL`。关着时 mapName 为 null。
    */
   async setAgentLogicMapEnabled(input: {
-    agentId?: string;
-    cwd?: string;
+    target: AgentLogicMapTarget;
     enabled: boolean;
   }): Promise<{ mapName: string | null }> {
     const payload =
       await this.sendNamespacedCorrelatedSessionRequest<"agent.logic_map.set_enabled.response">({
         message: {
           type: "agent.logic_map.set_enabled.request",
-          ...(input.agentId ? { agentId: input.agentId } : {}),
-          ...(input.cwd ? { cwd: input.cwd } : {}),
+          target: input.target,
           enabled: input.enabled,
         },
       });

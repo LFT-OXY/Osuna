@@ -8,6 +8,8 @@ export interface ComposerControlPresence {
   hasMode: boolean;
   features: readonly ComposerFeatureControlPresence[];
   fontScale: number;
+  /** 排在 Agent controls 之后、同一行里的控件（逻辑图开关）的宽度；没有时为 0。 */
+  trailingWidth?: number;
 }
 
 export type ComposerFeatureControlPresence = { type: "toggle" } | { type: "select"; label: string };
@@ -71,6 +73,7 @@ function resolveCondensedFloor(controls: ComposerControlPresence): number {
   if (controls.hasThinking) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
   if (controls.hasMode) widths.push(36 + 96 * fontScale);
   if (controls.features.length > 0) widths.push(COMPOSER_TOOLBAR_GEOMETRY.controlSize);
+  if (controls.trailingWidth) widths.push(controls.trailingWidth);
   return sumControlWidths(widths);
 }
 
@@ -93,6 +96,7 @@ function resolveFullFloor(controls: ComposerControlPresence): number {
   for (const feature of controls.features) {
     widths.push(resolveFeatureControlWidth(feature, fontScale));
   }
+  if (controls.trailingWidth) widths.push(controls.trailingWidth);
   return sumControlWidths(widths);
 }
 

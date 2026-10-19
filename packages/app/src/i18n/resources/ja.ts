@@ -4142,7 +4142,7 @@ export const ja: TranslationResources = {
       label: "ロジックマップ",
       hintOff: "オンにすると、機能について話し合う間 Agent がロジックマップを更新し続けます。",
       hintOn: "Agent は話し合いに合わせてロジックマップを更新します。",
-      hostOutdated: "ホストの更新が必要",
+      hostOutdated: "このホストの Osuna を更新してください",
       hostOutdatedDetail: "ロジックマップを使うには、このホストの Osuna を更新してください。",
       failed: "ロジックマップを切り替えられませんでした: {{error}}",
     },

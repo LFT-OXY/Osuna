@@ -2158,13 +2158,18 @@ export const AgentDetachResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
-// 给一个 Agent（带 agentId）或一个还没发消息的草稿（只带 cwd）开关逻辑图。
-// 打开时 daemon 在 cwd 下新建一张空图；草稿拿回图名，新建 Agent 时放进 labels。
+// 逻辑图开关的对象：一个 Agent，或某个 workspace 里还没发消息的草稿。
+// 打开时 daemon 在该 workspace 的目录下新建一张空图；草稿拿回图名，新建 Agent 时放进 labels。
+export const AgentLogicMapTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("agent"), agentId: z.string() }),
+  z.object({ kind: z.literal("draft"), workspaceId: z.string() }),
+]);
+export type AgentLogicMapTarget = z.infer<typeof AgentLogicMapTargetSchema>;
+
 export const AgentLogicMapSetEnabledRequestMessageSchema = z.object({
   type: z.literal("agent.logic_map.set_enabled.request"),
   requestId: z.string(),
-  agentId: z.string().optional(),
-  cwd: z.string().optional(),
+  target: AgentLogicMapTargetSchema,
   enabled: z.boolean(),
 });
 

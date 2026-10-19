@@ -3416,11 +3416,15 @@ export class Session {
   private async handleSetLogicMapEnabledRequest(
     msg: Extract<SessionInboundMessage, { type: "agent.logic_map.set_enabled.request" }>,
   ): Promise<void> {
-    const agentId = msg.agentId ?? null;
+    const agentId = msg.target.kind === "agent" ? msg.target.agentId : null;
     try {
       const result = await setLogicMapEnabled(
-        { agentManager: this.agentManager, agentStorage: this.agentStorage },
-        { agentId: msg.agentId, cwd: msg.cwd, enabled: msg.enabled },
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          workspaceRegistry: this.workspaceRegistry,
+        },
+        { target: msg.target, enabled: msg.enabled },
       );
       // 运行中的 Agent 改 labels 时自己会推送；没加载的要把新记录推给客户端。
       if (result.labelWrite && !result.labelWrite.live && result.labelWrite.record) {

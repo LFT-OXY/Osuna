@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+import path from "node:path";
 import type { Locator } from "@playwright/test";
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 import { expect, test, type Page } from "../support/fixtures";
@@ -57,6 +59,39 @@ async function installHostWithoutLogicMap(page: Page): Promise<void> {
   });
 }
 
+/** daemon 回绝每一次开关请求，模拟主机上写不了图（磁盘满、目录没权限等）。 */
+async function installHostRejectingLogicMapToggle(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes("agent.logic_map.set_enabled.request")) {
+        server.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as { message: { requestId: string } };
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "agent.logic_map.set_enabled.response",
+            payload: {
+              requestId: envelope.message.requestId,
+              agentId: null,
+              mapName: null,
+              error: "No space left on device",
+            },
+          },
+        }),
+      );
+    });
+  });
+}
+
+function logicMapFolders(cwd: string): Promise<string[]> {
+  return readdir(path.join(cwd, "docs", "logic-maps"));
+}
+
 test.describe("Logic map toggle in the composer toolbar", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize(DESKTOP_VIEWPORT);
@@ -106,6 +141,23 @@ test.describe("Logic map toggle in the composer toolbar", () => {
 
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await expect.poll(() => logicMapFolders(agent.cwd)).toHaveLength(1);
+      const [firstMap] = await logicMapFolders(agent.cwd);
+
+      // 关掉再打开沿用同一张图，不再多建文件夹。
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+      // 重新打开 Osuna 后草稿的开关还开着。
+      await page.reload();
+      await expect(composer).toBeEditable({ timeout: 30_000 });
+      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true", {
+        timeout: 30_000,
+      });
+      expect(await logicMapFolders(agent.cwd)).toEqual([firstMap]);
+
       await composer.fill("sketch the checkout flow");
       await composer.press("Enter");
 
@@ -114,6 +166,7 @@ test.describe("Logic map toggle in the composer toolbar", () => {
         .poll(async () => (await workspaceLogicMaps(agent.client, agent.workspaceId)).sort())
         .toEqual([null, true]);
       await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true");
+      expect(await logicMapFolders(agent.cwd)).toEqual([firstMap]);
     } finally {
       await agent.cleanup();
     }
@@ -135,6 +188,33 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       await expect(hint).toBeVisible({ timeout: 30_000 });
       await expect(hint).toHaveAccessibleName("Update Osuna on this host to use the logic map.");
       await expect(page.getByTestId("composer-logic-map-switch")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("a toggle the host rejects tells the user and goes back to off", async ({
+    page,
+  }, testInfo) => {
+    await installHostRejectingLogicMapToggle(page);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `logic-map-rejected-${testInfo.workerIndex}-`,
+      title: "Rejected toggle agent",
+    });
+    try {
+      await openAgentRoute(page, agent);
+      await expectComposerVisible(page);
+      const toggle = logicMapSwitch(page);
+      await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
+
+      await toggle.click();
+
+      await expect(page.getByTestId("app-toast-message")).toHaveText(
+        "Could not change the logic map: No space left on device",
+      );
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await expect(toggle).toBeEnabled();
+      expect(await agentLogicMap(agent.client, agent.agentId)).toBeNull();
     } finally {
       await agent.cleanup();
     }

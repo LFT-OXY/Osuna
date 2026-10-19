@@ -198,7 +198,7 @@ async function submitDraftCreateRequest(input: {
 
   const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
   const imagesData = await encodeImages(images);
-  const logicMapLabels = readDraftLogicMapLabels(input.logicMapDraftKey);
+  const logicMapLabels = readDraftLogicMapLabels(useDraftLogicMapStore, input.logicMapDraftKey);
   const options = {
     idempotencyKey: input.draftId,
     config,
@@ -519,7 +519,7 @@ export function WorkspaceDraftAgentTab({
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
       // 图名已随 labels 交给新 Agent，之后以 Agent 记录为准。
-      useDraftLogicMapStore.getState().setDraftMapName(logicMapDraftKey, null);
+      useDraftLogicMapStore.getState().forget(logicMapDraftKey);
       onCreated(result);
     },
   });

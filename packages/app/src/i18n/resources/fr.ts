@@ -4192,7 +4192,7 @@ export const fr: TranslationResources = {
       hintOff:
         "Activez-la pour que l’agent tienne à jour une carte logique de cette fonctionnalité pendant la discussion.",
       hintOn: "L’agent tient la carte logique à jour au fil de la discussion.",
-      hostOutdated: "Mettre à jour l’hôte",
+      hostOutdated: "Mettez à jour Osuna sur cet hôte",
       hostOutdatedDetail: "Mettez à jour Osuna sur cet hôte pour utiliser la carte logique.",
       failed: "Impossible de modifier la carte logique : {{error}}",
     },

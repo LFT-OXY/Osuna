@@ -4086,7 +4086,7 @@ export const zhCN: TranslationResources = {
       label: "逻辑图",
       hintOff: "打开后，Agent 会在讨论这个功能时同步维护一张逻辑图。",
       hintOn: "Agent 会随讨论自动更新逻辑图。",
-      hostOutdated: "需要更新主机",
+      hostOutdated: "需要更新这台主机上的 Osuna",
       hostOutdatedDetail: "需要更新这台主机上的 Osuna 才能使用逻辑图。",
       failed: "无法切换逻辑图：{{error}}",
     },

@@ -4118,7 +4118,7 @@ export const ko: TranslationResources = {
       label: "로직 맵",
       hintOff: "켜면 기능을 논의하는 동안 Agent가 로직 맵을 계속 업데이트합니다.",
       hintOn: "Agent가 논의에 맞춰 로직 맵을 업데이트합니다.",
-      hostOutdated: "호스트 업데이트 필요",
+      hostOutdated: "이 호스트의 Osuna를 업데이트하세요",
       hostOutdatedDetail: "로직 맵을 사용하려면 이 호스트의 Osuna를 업데이트하세요.",
       failed: "로직 맵을 전환할 수 없습니다: {{error}}",
     },

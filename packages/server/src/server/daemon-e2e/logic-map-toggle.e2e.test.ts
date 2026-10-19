@@ -54,6 +54,12 @@ async function startDaemon(
   return { daemon, client, cwd, prompts };
 }
 
+async function openWorkspace(scenario: Scenario): Promise<string> {
+  const response = await scenario.client.openProject(scenario.cwd);
+  if (!response.workspace) throw new Error(response.error ?? "Expected a workspace");
+  return response.workspace.id;
+}
+
 async function sendAndFinish(scenario: Scenario, agentId: string, text: string): Promise<void> {
   await scenario.client.sendAgentMessage(agentId, text);
   await scenario.client.waitForFinish(agentId, WAIT_MS);
@@ -100,7 +106,7 @@ describe("Logic map toggle", () => {
     const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
 
     const { mapName } = await scenario.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: true,
     });
     await sendAndFinish(scenario, agent.id, "add a login page");
@@ -125,12 +131,12 @@ describe("Logic map toggle", () => {
     const scenario = await startDaemon();
     const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
     const { mapName } = await scenario.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: true,
     });
 
     const off = await scenario.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: false,
     });
     await sendAndFinish(scenario, agent.id, "fix the typo");
@@ -146,11 +152,11 @@ describe("Logic map toggle", () => {
     const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
 
     const first = await scenario.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: true,
     });
     const second = await scenario.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: true,
     });
 
@@ -161,8 +167,9 @@ describe("Logic map toggle", () => {
   test("a draft gets a new map first, and the agent created from it carries the map into its first message", async () => {
     const scenario = await startDaemon();
 
+    const workspaceId = await openWorkspace(scenario);
     const { mapName } = await scenario.client.setAgentLogicMapEnabled({
-      cwd: scenario.cwd,
+      target: { kind: "draft", workspaceId },
       enabled: true,
     });
     const agent = await scenario.client.createAgent({
@@ -185,8 +192,9 @@ describe("Logic map toggle", () => {
   test("a draft turned off creates nothing", async () => {
     const scenario = await startDaemon();
 
+    const workspaceId = await openWorkspace(scenario);
     const result = await scenario.client.setAgentLogicMapEnabled({
-      cwd: scenario.cwd,
+      target: { kind: "draft", workspaceId },
       enabled: false,
     });
 
@@ -199,10 +207,22 @@ describe("Logic map toggle", () => {
 
     await expect(
       scenario.client.setAgentLogicMapEnabled({
-        agentId: "00000000-0000-4000-8000-000000000000",
+        target: { kind: "agent", agentId: "00000000-0000-4000-8000-000000000000" },
         enabled: true,
       }),
     ).rejects.toThrow(/not found/i);
+  });
+
+  test("a draft in a workspace the daemon does not know is a readable error and creates nothing", async () => {
+    const scenario = await startDaemon();
+
+    await expect(
+      scenario.client.setAgentLogicMapEnabled({
+        target: { kind: "draft", workspaceId: "workspace-that-does-not-exist" },
+        enabled: true,
+      }),
+    ).rejects.toThrow(/Workspace not found: workspace-that-does-not-exist/);
+    await expect(readdir(path.join(scenario.cwd, "docs"))).rejects.toThrow(/ENOENT/);
   });
 
   test("the toggle survives a daemon restart", async () => {
@@ -210,7 +230,7 @@ describe("Logic map toggle", () => {
     const first = await startDaemon({ paseoHomeRoot });
     const agent = await first.client.createAgent({ provider: "codex", cwd: first.cwd });
     const { mapName } = await first.client.setAgentLogicMapEnabled({
-      agentId: agent.id,
+      target: { kind: "agent", agentId: agent.id },
       enabled: true,
     });
     await first.client.close();

@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { isErrnoException } from "../../utils/errno.js";
 import { writeJsonFileAtomic } from "../atomic-file.js";
+import { LogicMapDirectoryMissingError, LogicMapNameUnavailableError } from "./logic-map-errors.js";
 import { EMPTY_LOGIC_MAP_SKELETON } from "./logic-map-skeleton.js";
 
 /** 逻辑图跟着 workspace 的 cwd 走，随代码进版本记录。 */
@@ -18,7 +20,7 @@ function temporaryMapName(): string {
 async function assertDirectory(cwd: string): Promise<void> {
   const stat = await fs.stat(cwd).catch(() => null);
   if (!stat?.isDirectory()) {
-    throw new Error(`Workspace directory does not exist: ${cwd}`);
+    throw new LogicMapDirectoryMissingError(cwd);
   }
 }
 
@@ -36,11 +38,11 @@ export async function createEmptyLogicMap(cwd: string): Promise<string> {
       // 不带 recursive：同名文件夹已存在时失败，换一个名字。
       await fs.mkdir(mapDir);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      if (isErrnoException(error) && error.code === "EEXIST") continue;
       throw error;
     }
     await writeJsonFileAtomic(path.join(mapDir, LOGIC_MAP_SKELETON_FILE), EMPTY_LOGIC_MAP_SKELETON);
     return mapName;
   }
-  throw new Error(`Could not pick a free logic map name under ${mapsDir}`);
+  throw new LogicMapNameUnavailableError(mapsDir);
 }
