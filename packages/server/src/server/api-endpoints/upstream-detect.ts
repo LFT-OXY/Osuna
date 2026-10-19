@@ -16,7 +16,8 @@ import {
   redactKey,
 } from "./upstream-http.js";
 import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
-import { takesCompletionTokens, templateKeyHeaders } from "./templates.js";
+import { templateKeyHeaders } from "./templates.js";
+import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
@@ -183,12 +184,10 @@ export async function probeUpstreamFormat(input: {
   const url = `${baseUrl}${probe.path}`;
   const { templateId } = input;
   const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
-  const body = probe.body(input.modelId);
   // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
-  if (format === "openai_chat" && takesCompletionTokens(templateId)) {
-    body.max_completion_tokens = body.max_tokens;
-    delete body.max_tokens;
-  }
+  const asked = probe.body(input.modelId);
+  const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
+  const body = completionTokens ? asCompletionTokens(asked) : asked;
   const timeout = AbortSignal.timeout(input.timeoutMs);
   let status: number;
   let text: string;

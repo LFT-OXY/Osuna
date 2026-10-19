@@ -40,16 +40,20 @@ const NOTE_KEYS: Readonly<Record<string, string>> = {
 
 const KEY_HINT_KEYS: Readonly<Record<string, string>> = {
   "optional: free models need no key": "freeModelsNeedNoKey",
+  "Paste the key": "pasteKey",
 };
 
+// 资源地址框下的说明按模板 id 认：一大段英文按原文匹配，daemon 改一个字就会悄悄落回英文。
 const ENDPOINT_HINT_KEYS: Readonly<Record<string, string>> = {
-  "Your resource's endpoint, from Keys and Endpoint in the Azure portal. Once added, Osuna asks the resource for its deployments with this key, over its v1 API; the deployments' names are the model ids.":
-    "azure",
+  azure: "azure",
 };
 
-export function templateEndpointHint(t: TFunction, hint: string): string {
-  const key = ENDPOINT_HINT_KEYS[hint];
-  return key ? t(`settings.apiEndpoints.templates.endpointHints.${key}`) : hint;
+export function templateEndpointHint(
+  t: TFunction,
+  input: { templateId: string; hint: string },
+): string {
+  const key = ENDPOINT_HINT_KEYS[input.templateId];
+  return key ? t(`settings.apiEndpoints.templates.endpointHints.${key}`) : input.hint;
 }
 
 export function templateRegionName(t: TFunction, name: string): string {

@@ -53,6 +53,7 @@ import {
   openAIEffort,
   passingFilter,
   requestForModel,
+  reasoningOff,
   thinkingBackOn,
   type EmitEvent,
   type GatewayRequest,
@@ -65,6 +66,8 @@ import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { withTemplateTranslatedRewrites } from "./template-rewrites.js";
+import { servedFormats } from "../templates.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { isWholeReply } from "./whole-stream.js";
 import {
@@ -144,6 +147,8 @@ export async function attemptTranslated(input: {
     translatedBody({
       ...ask,
       baseUrl: input.baseUrl,
+      templateId: input.endpoint.templateId,
+      chatOnly: servesOnChatAlone({ endpoint: input.endpoint, model: input.upstreamModel }),
       from: input.from,
       to,
       model: input.upstreamModel,
@@ -377,6 +382,10 @@ function translatedHeaders(input: {
 export interface TranslatedBodyInput {
   request: GatewayRequest;
   baseUrl: string;
+  // 这家从哪个模板加的：Bedrock、Azure 按模板改（template-rewrites.ts）；「自定义」的没有。
+  templateId: string | undefined;
+  // 这家只在 Chat 上给这个模型：Chat 带工具不收推理力度时，没有别的格式可去，关掉推理重问（magpie servesElsewhere）。
+  chatOnly: boolean;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
@@ -392,7 +401,12 @@ export interface TranslatedBodyInput {
  */
 export function translatedBody(input: TranslatedBodyInput): string {
   const { to, refusals, baseUrl, continuation } = input;
-  let request = allowedReasoning({ request: input.request, to, refusals });
+  let request = allowedReasoning({
+    request: input.request,
+    to,
+    refusals,
+    chatOnly: input.chatOnly,
+  });
   if (refusals.has("imageTool")) request = withoutImageToolRequest(request);
   request = downgradedRequest({
     request,
@@ -416,7 +430,10 @@ export function translatedBody(input: TranslatedBodyInput): string {
   if (to === "openai_responses") {
     body = withSearchSourcesFor({ baseUrl, body, asked: request.include });
   }
-  return JSON.stringify(withVendorRewrites({ format: to, baseUrl, model: input.model, body }));
+  body = withVendorRewrites({ format: to, baseUrl, model: input.model, body });
+  return JSON.stringify(
+    withTemplateTranslatedRewrites({ templateId: input.templateId, format: to, body }),
+  );
 }
 
 /** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */
@@ -429,17 +446,39 @@ function sendsCacheKey(input: {
   return carried && !input.refusals.has("cacheKey");
 }
 
-/** 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。 */
+/**
+ * 关推理的请求：这家说过不收这种写法（Anthropic 关思考、OpenAI 的 none）的，打开推理、用最低档问。
+ * 只在 Chat 上给这个模型的、说过带工具不收推理力度的，关掉推理问（magpie #176）；它也说过不收 none 的不关。
+ */
 function allowedReasoning(input: {
   request: GatewayRequest;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
+  chatOnly: boolean;
 }): GatewayRequest {
   const { request, to, refusals } = input;
   const anthropic = to === "anthropic_messages";
   const off = anthropic ? request.thinkOff : openAIEffort(request) === "none";
   const shape: RefusedShape = anthropic ? "thinkingOff" : "none";
-  return off && refusals.has(shape) ? thinkingBackOn(request) : request;
+  if (off && refusals.has(shape)) return thinkingBackOn(request);
+  const turnsOff =
+    to === "openai_chat" &&
+    input.chatOnly &&
+    !off &&
+    refusals.has("toolsEffort") &&
+    !refusals.has("none");
+  return turnsOff ? reasoningOff(request) : request;
+}
+
+/** 这家有地址给这个模型的格式只有 Chat。 */
+function servesOnChatAlone(input: { endpoint: StoredApiEndpoint; model: string }): boolean {
+  const { endpoint, model } = input;
+  const formats = servedFormats({
+    templateId: endpoint.templateId,
+    baseUrls: endpoint.baseUrls,
+    model,
+  });
+  return formats.every((format) => format === "openai_chat");
 }
 
 /**

@@ -10,6 +10,8 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
@@ -214,6 +216,7 @@ export function ApiEndpointConnectionSheet({
         )}
         {template?.endpointExample ? (
           <ResourceEndpointField
+            templateId={template.id}
             example={template.endpointExample}
             hint={template.endpointHint}
             endpoint={state.endpoint}
@@ -234,9 +237,7 @@ export function ApiEndpointConnectionSheet({
           </View>
         )}
         <Text variant="caption" color="foregroundMuted">
-          {state.isKeyOptional
-            ? t("settings.apiEndpoints.form.footerKeyOptional")
-            : t("settings.apiEndpoints.form.footer")}
+          {footerTextOf({ t, state })}
         </Text>
         {state.submitError ? (
           <Text
@@ -337,6 +338,15 @@ function AddressField({
       </View>
     </Field>
   );
+}
+
+/** 表单底下的说明：填资源地址的模板说保存后列部署；别的说 key 由三种格式共用。 */
+function footerTextOf(input: { t: TFunction; state: ConnectionFormState }): string {
+  const { t, state } = input;
+  if (state.template?.endpointExample) return t("settings.apiEndpoints.form.footerResource");
+  return state.isKeyOptional
+    ? t("settings.apiEndpoints.form.footerKeyOptional")
+    : t("settings.apiEndpoints.form.footer");
 }
 
 /** key 框里的提示：复制时说沿用原来的 key，编辑已存 key 时说留空保留，模板有提示时用它的。 */
@@ -455,7 +465,10 @@ function SiteSwitch({
   );
 }
 
-/** 区域或套餐：各格式地址与「去拿 key」跟着换，key 与名称保留。选项多时换行，不截成半个字。 */
+// 区域或套餐多于这么多个时用下拉菜单：分段切换放不下，折行后读不出哪一段被选中（docs/design.md §6）。
+const MAX_REGION_SEGMENTS = 4;
+
+/** 区域或套餐：各格式地址与「去拿 key」跟着换，key 与名称保留。少的用分段切换，多的用下拉菜单。 */
 function RegionSwitch({
   template,
   model,
@@ -473,22 +486,64 @@ function RegionSwitch({
       })),
     [t, template.regions],
   );
+  const label = templateRegionLabel(t, template.regionLabel);
+  const selected = options.find((option) => option.value === template.regionId) ?? null;
   return (
     <Field
-      label={templateRegionLabel(t, template.regionLabel)}
+      label={label}
       hint={t("settings.apiEndpoints.templates.regionHint", { name: template.name })}
     >
-      <View style={styles.switchRow}>
-        <SegmentedControl
-          options={options}
-          value={template.regionId ?? ""}
-          onValueChange={model.setRegion}
-          size="sm"
-          style={styles.wrappingSegments}
-          testID="api-endpoint-connection-region"
-        />
-      </View>
+      {options.length > MAX_REGION_SEGMENTS ? (
+        <View style={styles.switchRow}>
+          <DropdownMenu>
+            <DropdownTrigger
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              testID="api-endpoint-connection-region"
+            >
+              {selected?.label ?? ""}
+            </DropdownTrigger>
+            <DropdownMenuContent side="bottom" align="start" width={240}>
+              {options.map((option) => (
+                <RegionMenuItem
+                  key={option.value}
+                  option={option}
+                  selected={option.value === template.regionId}
+                  onSelect={model.setRegion}
+                />
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </View>
+      ) : (
+        <View style={styles.switchRow}>
+          <SegmentedControl
+            options={options}
+            value={template.regionId ?? ""}
+            onValueChange={model.setRegion}
+            size="sm"
+            testID="api-endpoint-connection-region"
+          />
+        </View>
+      )}
     </Field>
+  );
+}
+
+function RegionMenuItem({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: { value: string; label: string; testID: string };
+  selected: boolean;
+  onSelect: (regionId: string) => void;
+}) {
+  const handleSelect = useCallback(() => onSelect(option.value), [onSelect, option.value]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={handleSelect} testID={option.testID}>
+      {option.label}
+    </DropdownMenuItem>
   );
 }
 
@@ -497,12 +552,14 @@ function RegionSwitch({
  * 只有资源名也行，daemon 保存时放到资源的 v1 API 上（照 magpie 编辑窗口的 Endpoint 框）。
  */
 function ResourceEndpointField({
+  templateId,
   example,
   hint,
   endpoint,
   model,
   size,
 }: {
+  templateId: string;
   example: string;
   hint: string | null;
   endpoint: string;
@@ -513,7 +570,7 @@ function ResourceEndpointField({
   return (
     <Field
       label={t("settings.apiEndpoints.form.resourceEndpoint")}
-      {...(hint === null ? {} : { hint: templateEndpointHint(t, hint) })}
+      {...(hint === null ? {} : { hint: templateEndpointHint(t, { templateId, hint }) })}
       testID="api-endpoint-connection-endpoint-field"
     >
       <FormTextInput
@@ -637,11 +694,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   switchRow: {
     flexDirection: "row",
-  },
-  // 选项多时整条轨道换行，每段都完整。
-  wrappingSegments: {
-    flexWrap: "wrap",
-    flexShrink: 1,
   },
   flex: {
     flex: 1,

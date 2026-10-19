@@ -55,6 +55,8 @@ import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
+import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
+import { BEDROCK_TEMPLATE_ID } from "../templates.js";
 import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
 import { wholeEvents } from "./whole-stream.js";
 import {
@@ -157,6 +159,7 @@ export async function attemptEndpoint(input: {
         apiKey,
         keys,
         dropsReviewBeta,
+        forBedrock: input.endpoint.templateId === BEDROCK_TEMPLATE_ID,
         userAgent: input.userAgent,
       }),
       body,
@@ -409,7 +412,7 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls">;
+  endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId">;
   refusals?: ShapeRefusals;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
   fixedEffort?: FixedEffort;
@@ -423,6 +426,7 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const conversation = input.pathSuffix === undefined;
   const anthropic = input.format === "anthropic_messages";
   const fits = (anthropic || input.format === "openai_responses") && conversation;
+  const replays = replaysThinking(input.upstreamModel);
   let text = input.body.toString("utf8");
   if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
   if (anthropic) {
@@ -439,7 +443,7 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
       leftOn: input.refusals?.has("thinkingOff") ?? false,
     });
   } else if (fits) {
-    if (replaysThinking(input.upstreamModel)) text = fitResponsesBody(text, input.upstreamModel);
+    if (replays) text = fitResponsesBody(text, input.upstreamModel);
     else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
     if (!searchesWebItself(input.endpoint, "openai_responses")) text = withoutWebSearchText(text);
@@ -448,7 +452,28 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
   text = withVendorText({ ...input, text });
+  text = withTemplateText({ ...input, text, replaysReasoning: replays });
   return Buffer.from(text);
+}
+
+/** 按模板的改写（template-rewrites.ts，Bedrock 与 Azure）：只改变了的顶层字段，其余字节原样。 */
+function withTemplateText(input: {
+  text: string;
+  format: ApiEndpointRequestFormat;
+  endpoint: Pick<StoredApiEndpoint, "templateId">;
+  replaysReasoning: boolean;
+}): string {
+  const { templateId } = input.endpoint;
+  if (templateId === undefined) return input.text;
+  const body = parseJson(input.text);
+  if (!isRecord(body)) return input.text;
+  const fitted = withTemplatePassthroughRewrites({
+    templateId,
+    format: input.format,
+    body,
+    replaysReasoning: input.replaysReasoning,
+  });
+  return withChangedKeys({ text: input.text, body, fitted });
 }
 
 /** 不会搜的那家收不到 Codex 的 web_search（ADR 0009）：只改变了的顶层字段，其余字节原样。 */
@@ -640,6 +665,8 @@ function upstreamHeaders(input: {
   keys: KeyHeaders;
   // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
   dropsReviewBeta: boolean;
+  // 发给从 Bedrock 模板加的接口：anthropic-beta 照 Bedrock 的叫法改。
+  forBedrock: boolean;
   userAgent: string;
 }): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
@@ -648,7 +675,11 @@ function upstreamHeaders(input: {
   }
   const betas = out["anthropic-beta"];
   if (betas !== undefined) {
-    const kept = fittedBetas({ value: betas, dropsReviewBeta: input.dropsReviewBeta });
+    const kept = fittedBetas({
+      value: betas,
+      dropsReviewBeta: input.dropsReviewBeta,
+      forBedrock: input.forBedrock,
+    });
     if (kept === null) delete out["anthropic-beta"];
     else out["anthropic-beta"] = kept;
   }

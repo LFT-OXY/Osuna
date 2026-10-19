@@ -2606,6 +2606,7 @@ export const ptBR: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "Opcional: modelos gratuitos não precisam de chave",
+          pasteKey: "Cole a chave",
         },
         endpointHints: {
           azure:
@@ -2629,6 +2630,8 @@ export const ptBR: TranslationResources = {
         keyRejected: "O servidor recusou esta chave (401 / 403)",
         address: "Endereço",
         resourceEndpoint: "Endpoint do recurso",
+        footerResource:
+          "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:
           "Preencha a chave e toque em Detectar: o Osuna tenta uma vez cada um dos três formatos de solicitação e preenche os endereços que funcionam.",
         addressHintKeyOptional:

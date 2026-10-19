@@ -2595,6 +2595,7 @@ export const zhCN: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "选填：免费模型不用 key",
+          pasteKey: "粘贴 key",
         },
         endpointHints: {
           azure:
@@ -2618,6 +2619,7 @@ export const zhCN: TranslationResources = {
         keyRejected: "上游拒绝了这把 key（401 / 403）",
         address: "地址",
         resourceEndpoint: "资源地址",
+        footerResource: "保存后进入这个接口的详情页，把资源的部署列成模型。",
         addressHint:
           "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",
         addressHintKeyOptional:

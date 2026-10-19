@@ -2603,6 +2603,7 @@ export const ru: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "Необязательно: бесплатным моделям ключ не нужен",
+          pasteKey: "Вставьте ключ",
         },
         endpointHints: {
           azure:
@@ -2626,6 +2627,8 @@ export const ru: TranslationResources = {
         keyRejected: "Сервер отклонил этот ключ (401 / 403)",
         address: "Адрес",
         resourceEndpoint: "Адрес ресурса",
+        footerResource:
+          "После сохранения откроется страница этого подключения со списком развертываний ресурса в качестве моделей.",
         addressHint:
           "Введите ключ и нажмите «Определить»: Osuna по разу попробует каждый из трёх форматов запросов и заполнит рабочие адреса ниже.",
         addressHintKeyOptional:

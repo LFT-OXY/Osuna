@@ -2621,6 +2621,7 @@ export const es: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "Opcional: los modelos gratuitos no necesitan clave",
+          pasteKey: "Pega la clave",
         },
         endpointHints: {
           azure:
@@ -2644,6 +2645,8 @@ export const es: TranslationResources = {
         keyRejected: "El servidor rechazó esta clave (401 / 403)",
         address: "Dirección",
         resourceEndpoint: "Endpoint del recurso",
+        footerResource:
+          "Al guardar se abre la página del endpoint y lista las implementaciones del recurso como sus modelos.",
         addressHint:
           "Escribe la clave y pulsa Detectar: Osuna prueba una vez cada uno de los tres formatos de solicitud y rellena las direcciones que funcionan.",
         addressHintKeyOptional:

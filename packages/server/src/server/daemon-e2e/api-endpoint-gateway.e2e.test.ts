@@ -8813,7 +8813,12 @@ describe("a model asked for at an effort of its own, as the Subagent model is wr
  * key 放哪个头、每个模型走哪种格式由模板定。A 换成从模板加的，三个格式的地址都在同一个假上游上。
  */
 describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
-  async function startTemplated(input: { templateId: string; models: string[] }) {
+  // openai：只有 Chat 与 Responses 地址（Azure 资源常见的样子），Claude Code 的请求要翻译过去。
+  async function startTemplated(input: {
+    templateId: string;
+    models: string[];
+    formats?: "all" | "openai";
+  }) {
     const upstream = await startUpstream();
     upstream.respond = (request, res) => {
       if (request.url.endsWith("/responses")) return answerResponsesWhole(res);
@@ -8850,7 +8855,9 @@ describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
       ...file.endpoints[0],
       templateId: input.templateId,
       baseUrls: [
-        { format: "anthropic_messages", url: upstream.url },
+        ...(input.formats === "openai"
+          ? []
+          : [{ format: "anthropic_messages", url: upstream.url }]),
         { format: "openai_chat", url: `${upstream.url}/v1` },
         { format: "openai_responses", url: `${upstream.url}/v1` },
       ],
@@ -8957,5 +8964,164 @@ describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
     expect(toAnthropic?.headers["x-api-key"]).toBe(KEY_A);
     expect(toAnthropic?.headers["api-key"]).toBeUndefined();
     expect(toAnthropic?.headers.authorization).toBeUndefined();
+  });
+
+  /*
+   * 按模板改请求体（ADR 0008，2026-10-19 用户定，照 magpie gateway.go 的 passthrough 与翻译后 build、betas.go、codex_backend.go）。
+   */
+  test("to Bedrock's Anthropic address Claude Code's metadata goes, and its betas are named as Bedrock names them", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+    const asked = claudeRequest({
+      model: "relay-a/global.anthropic.claude-sonnet-5",
+      max_tokens: 32,
+      metadata: { user_id: '{"device_id":"d","session_id":"s"}' },
+      messages: [{ role: "user", content: "hi" }],
+    });
+    asked.headers = {
+      ...(asked.headers as Record<string, string>),
+      "anthropic-beta":
+        "claude-code-20250219,advanced-tool-use-2025-11-20,prompt-caching-scope-2026-01-05,redact-thinking-2026-02-12",
+    };
+
+    const response = await fetch(`${gateway}/v1/messages`, asked);
+
+    expect(response.status).toBe(200);
+    const [received] = upstream.requests;
+    expect(receivedBody(received)).not.toHaveProperty("metadata");
+    expect(received?.headers["anthropic-beta"]).toBe(
+      "claude-code-20250219,tool-search-tool-2025-10-19",
+    );
+  });
+
+  test("Bedrock's and Azure's Chat get max_completion_tokens in place of max_tokens", async () => {
+    const bedrock = await startTemplated({ templateId: "bedrock", models: BEDROCK_MODELS });
+    const azure = await startTemplated({
+      templateId: "azure",
+      models: ["my-kimi"],
+      formats: "openai",
+    });
+
+    await fetch(
+      `${bedrock.gateway}/v1/responses`,
+      codexRequest({ model: "deepseek.v3.2", input: "hi", max_output_tokens: 64, stream: false }),
+    );
+    await fetch(
+      `${azure.gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/my-kimi",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    for (const { upstream } of [bedrock, azure]) {
+      const [received] = upstream.requests;
+      expect(received?.url).toBe("/v1/chat/completions");
+      expect(receivedBody(received)).toMatchObject({ max_completion_tokens: 64 });
+      expect(receivedBody(received)).not.toHaveProperty("max_tokens");
+    }
+  });
+
+  test("on Azure a deployment named for an OpenAI model is translated to Responses first", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["gpt-5.5", "my-kimi"],
+      formats: "openai",
+    });
+
+    await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/gpt-5.5",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(upstream.requests[0]?.url).toBe("/v1/responses");
+  });
+
+  test("to Azure's Responses, reasoning it can't take goes and item ids keep only the characters it takes", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "azure",
+      models: ["my-gpt-deployment"],
+    });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+      // 中转站翻译回复时造的、没有封存内容的推理。
+      { type: "reasoning", id: "rs_bare", summary: [] },
+      // 别家模型写的、带文字的推理。
+      {
+        type: "reasoning",
+        id: "rs_text",
+        summary: [],
+        content: [{ type: "reasoning_text", text: "thinking" }],
+        encrypted_content: "sealed",
+      },
+      // Muse Spark 的推理 id 是两个用冒号连起来的。
+      { type: "reasoning", id: "rs_a:rs_b", summary: [], encrypted_content: "sealed" },
+      {
+        type: "message",
+        id: "msg_a:b",
+        role: "assistant",
+        content: [{ type: "output_text", text: "ok" }],
+      },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "again" }] },
+    ];
+
+    await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({ model: "my-gpt-deployment", input, store: false, stream: false }),
+    );
+
+    const sent = receivedBody(upstream.requests[0]).input as Record<string, unknown>[];
+    expect(sent.map((item) => [item.type, item.id])).toEqual([
+      ["message", undefined],
+      ["message", "msg_a_b"],
+      ["message", undefined],
+    ]);
+  });
+
+  test("a Chat-only model refusing tools with a reasoning effort is asked again with effort none", async () => {
+    const { upstream, gateway } = await startTemplated({
+      templateId: "bedrock",
+      models: BEDROCK_MODELS,
+    });
+    const answer = upstream.respond;
+    upstream.respond = (request, res) => {
+      if (upstream.requests.length === 1) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              message:
+                "Function tools with reasoning_effort are not supported for deepseek.v3.2 in /v1/chat/completions. Please set reasoning_effort to none.",
+            },
+          }),
+        );
+        return;
+      }
+      answer(request, res);
+    };
+
+    const response = await fetch(
+      `${gateway}/v1/responses`,
+      codexRequest({
+        model: "deepseek.v3.2",
+        input: "hi",
+        reasoning: { effort: "high" },
+        tools: [{ type: "function", name: "lookup", parameters: { type: "object" } }],
+        stream: false,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream.requests.map((request) => receivedBody(request).reasoning_effort)).toEqual([
+      "high",
+      "none",
+    ]);
   });
 });

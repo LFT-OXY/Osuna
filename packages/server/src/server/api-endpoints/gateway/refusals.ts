@@ -16,13 +16,15 @@ import type { FailedAttempt, UpstreamOpening } from "./upstream-call.js";
  */
 
 /**
- * none：不收 effort none；thinkingOff：不让关思考；`format:<格式>`：这个格式的地址不提供这个模型；
+ * none：不收 effort none；thinkingOff：不让关思考；toolsEffort：Chat 上带工具时不收推理力度（要 none）；
+ * `format:<格式>`：这个格式的地址不提供这个模型；
  * bothKeyHeaders：x-api-key 与 Authorization 不能同时带（只带 x-api-key）；xApiKeyAlone：只带 x-api-key 也不收（只带 Bearer）；
  * 其余是不收、要去掉的字段（DroppedField）与要降级的写法（DowngradedShape）。
  */
 export type RefusedShape =
   | "none"
   | "thinkingOff"
+  | "toolsEffort"
   | `format:${ApiEndpointRequestFormat}`
   | "bothKeyHeaders"
   | "xApiKeyAlone"
@@ -39,6 +41,8 @@ const REFUSAL_WORDS = {
     /always engages in thinking|thinking (?:can ?not|can't) be (?:disabled|turned off)|enable_thinking[^"]{0,60}restricted to true|始终(?:支持|开启|启用)?思考|思考[^"]{0,20}(?:不可|无法|不能)关闭|requires adaptive thinking\W+thinking\.type\W+disabled\W+\(including reasoning\.effort=none\) is not allowed|thinking\.type `disabled` is not supported by this model/i,
   // OpenRouter 要求必须推理。
   mandatoryReasoning: /reasoning is mandatory for this endpoint and cannot be disabled/i,
+  // Chat 上带工具时不收推理力度，要求设成 none（Bedrock 的 GPT，magpie #176 的 toolsWithoutEffort）。
+  toolsWithoutEffort: /tools with reasoning_effort are not supported.*reasoning_effort to .?none/is,
   // 任何档位都不收 disabled 的 Claude（Opus 5.5）。
   thinkingOffRefused: /thinking\.type\.disabled\W+is not supported/i,
 } as const;
@@ -73,7 +77,10 @@ export function refusedShape(input: {
     const off = type === "disabled" || type === "between_tools";
     return off && refusesThinkingOff(text) ? "thinkingOff" : null;
   }
-  return openAIEffortOf(input.format, body) === "none" && refusesNone(text) ? "none" : null;
+  const effort = openAIEffortOf(input.format, body);
+  if (effort === "none") return refusesNone(text) ? "none" : null;
+  const chat = input.format === "openai_chat";
+  return chat && W.toolsWithoutEffort.test(text) ? "toolsEffort" : null;
 }
 
 function openAIEffortOf(format: ApiEndpointRequestFormat, body: Record<string, unknown>): unknown {

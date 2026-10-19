@@ -19,7 +19,7 @@ import {
   type ApiEndpointState,
   type StoredApiEndpoint,
 } from "../store.js";
-import { modelFormatsAt } from "../templates.js";
+import { servedFormats, translationOrderAt } from "../templates.js";
 import type { ModelFacts } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
@@ -1035,14 +1035,17 @@ function askableFormat(input: {
 
 function formatOrderOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] | null {
   const { templateId } = candidate.endpoint;
-  return modelFormatsAt({ templateId, model: candidate.upstreamModel });
+  return translationOrderAt({ templateId, model: candidate.upstreamModel });
 }
 
-/** 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上，modelFormatsAt）。 */
+/** 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上）。 */
 function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
-  const served = formatOrderOf(candidate);
-  const formats = candidate.endpoint.baseUrls.map((entry) => entry.format);
-  return served === null ? formats : formats.filter((format) => served.includes(format));
+  const { endpoint, upstreamModel } = candidate;
+  return servedFormats({
+    templateId: endpoint.templateId,
+    baseUrls: endpoint.baseUrls,
+    model: upstreamModel,
+  });
 }
 
 /** 这家还没说过不提供这个模型的格式。 */

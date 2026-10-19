@@ -2569,6 +2569,7 @@ export const ar: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "اختياري: النماذج المجانية لا تحتاج إلى مفتاح",
+          pasteKey: "الصق المفتاح",
         },
         endpointHints: {
           azure:
@@ -2592,6 +2593,7 @@ export const ar: TranslationResources = {
         keyRejected: "رفض الخادم هذا المفتاح (401 / 403)",
         address: "العنوان",
         resourceEndpoint: "عنوان المورد",
+        footerResource: "بعد الحفظ تُفتح صفحة نقطة الاتصال وتعرض عمليات نشر المورد كنماذج لها.",
         addressHint:
           "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل.",
         addressHintKeyOptional:

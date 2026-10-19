@@ -2582,6 +2582,7 @@ export const ko: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "선택: 무료 모델은 키가 필요 없음",
+          pasteKey: "키 붙여넣기",
         },
         endpointHints: {
           azure:
@@ -2605,6 +2606,7 @@ export const ko: TranslationResources = {
         keyRejected: "업스트림이 이 키를 거부했습니다 (401 / 403)",
         address: "주소",
         resourceEndpoint: "리소스 엔드포인트",
+        footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",
         addressHintKeyOptional:

@@ -88,8 +88,8 @@ const VOLCENGINE_PLAN_MODELS = [
   "kimi-k3",
 ];
 
-const BEDROCK_TEMPLATE_ID = "bedrock";
-const AZURE_TEMPLATE_ID = "azure";
+export const BEDROCK_TEMPLATE_ID = "bedrock";
+export const AZURE_TEMPLATE_ID = "azure";
 
 // 按 AWS 控制台与 key 所在区域的写法，用区域代码命名。
 const BEDROCK_REGIONS = [
@@ -676,11 +676,12 @@ const VENDORS: ApiEndpointTemplate[] = [
   // 在 /openai/v1 上给其余模型的 Chat，OpenAI 的 GPT（不含 gpt-oss）还有 Responses。没有清单接口，模型是内置的：
   // Claude 与 GPT-6 用各商业区域都转的 global. 推理配置，其余用区域内 id（不是每个区域都有）；限在某地理区（us.、eu.……）的手填。
   template({
-    id: "bedrock",
+    id: BEDROCK_TEMPLATE_ID,
     name: "Amazon Bedrock",
     group: "vendor",
     ...bedrockUrls("us-east-1"),
     note: "Bedrock API key",
+    keyHint: "Paste the key",
     website: "https://aws.amazon.com/bedrock/",
     keysUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys",
     regions: BEDROCK_REGIONS.map((id) => region({ id, name: id, ...bedrockUrls(id) })),
@@ -714,6 +715,7 @@ const VENDORS: ApiEndpointTemplate[] = [
     group: "vendor",
     modelsDevIds: ["azure", "openai"],
     note: "your resource's endpoint and key",
+    keyHint: "Paste the key",
     endpointExample: "https://<resource>.openai.azure.com",
     endpointHint:
       "Your resource's endpoint, from Keys and Endpoint in the Azure portal. Once added, Osuna asks the resource for its deployments with this key, over its v1 API; the deployments' names are the model ids.",
@@ -1053,6 +1055,38 @@ export function modelFormatsAt(input: {
   return ["openai_chat"];
 }
 
+/** 这家有地址、又给这个模型的格式（Bedrock 按 modelFormatsAt 只留几种），按这家地址的顺序。 */
+export function servedFormats(input: {
+  templateId: string | undefined;
+  baseUrls: readonly { format: ApiEndpointRequestFormat }[];
+  model: string;
+}): ApiEndpointRequestFormat[] {
+  const served = modelFormatsAt(input);
+  const formats = input.baseUrls.map((entry) => entry.format);
+  return served === null ? formats : formats.filter((format) => served.includes(format));
+}
+
+/** OpenAI 自己的模型名（magpie openAIModel）：gpt-、codex 或 o 加数字开头，取最后一个斜杠之后的部分。 */
+function isOpenAIModel(model: string): boolean {
+  const bare = model.slice(model.lastIndexOf("/") + 1).toLowerCase();
+  return bare.startsWith("gpt-") || bare.startsWith("codex") || /^o\d/.test(bare);
+}
+
+/**
+ * 要翻译时先试哪种格式（照 magpie ResponsesFirst）：Bedrock 按它给这个模型的先后；Azure 上按 OpenAI 模型命名的部署
+ * 先 Responses 再 Chat（部署名随用户起，按模型起名的才当作那个模型）。别的为 null，按中转站通常的翻译顺序。
+ */
+export function translationOrderAt(input: {
+  templateId: string | undefined;
+  model: string;
+}): ApiEndpointRequestFormat[] | null {
+  if (input.templateId === BEDROCK_TEMPLATE_ID) return modelFormatsAt(input);
+  if (input.templateId === AZURE_TEMPLATE_ID && isOpenAIModel(input.model)) {
+    return ["openai_responses", "openai_chat", "anthropic_messages"];
+  }
+  return null;
+}
+
 // Azure 资源所在主机的结尾（新资源也给 cognitiveservices.azure.com、services.ai.azure.com）。
 const AZURE_HOST_SUFFIXES = [
   ".openai.azure.com",
@@ -1104,9 +1138,4 @@ export function templateModelListUrls(input: {
   const base = input.baseUrl.trim().replace(/\/+$/, "");
   const root = base.replace(/\/v1$/, "");
   return [`${root}/deployments?api-version=${AZURE_DEPLOYMENTS_VERSION}`, `${base}/models`];
-}
-
-/** Bedrock、Azure 的 Chat 收 max_completion_tokens、不收 max_tokens（照 magpie tinyBody 与 asCompletionTokens）。 */
-export function takesCompletionTokens(templateId: string | undefined): boolean {
-  return templateId === BEDROCK_TEMPLATE_ID || templateId === AZURE_TEMPLATE_ID;
 }

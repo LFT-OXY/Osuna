@@ -1263,10 +1263,17 @@ test.describe("Templates", () => {
     await page.getByTestId("api-endpoint-template-search").fill("bedrock");
     await page.getByTestId("api-endpoint-template-bedrock").click();
 
-    await test.step("the ten regions are there; eu-west-1 moves every address", async () => {
+    await test.step("the ten regions are in a menu; eu-west-1 moves every address", async () => {
       await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("Amazon Bedrock");
+      await expect(page.getByTestId("api-endpoint-connection-api-key")).toHaveAttribute(
+        "placeholder",
+        "Paste the key",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-region")).toHaveText("us-east-1");
+      await page.getByTestId("api-endpoint-connection-region").click();
       await expect(page.getByTestId("api-endpoint-connection-region-ap-south-1")).toBeVisible();
       await page.getByTestId("api-endpoint-connection-region-eu-west-1").click();
+      await expect(page.getByTestId("api-endpoint-connection-region")).toHaveText("eu-west-1");
       await expect(urlField(page, "anthropic_messages")).toHaveValue(
         "https://bedrock-runtime.eu-west-1.amazonaws.com/anthropic",
       );
@@ -1322,6 +1329,8 @@ test.describe("Templates", () => {
         "https://<resource>.openai.azure.com",
       );
       await expect(page.getByTestId("api-endpoint-connection-formats")).toHaveCount(0);
+      await expect(connectionForm(page)).toContainText("lists the resource's deployments");
+      await expect(connectionForm(page)).not.toContainText("shared by all three formats");
       await expect(page.getByTestId("api-endpoint-connection-save")).toBeDisabled();
       await page.getByTestId("api-endpoint-connection-endpoint").fill(resource);
       await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);

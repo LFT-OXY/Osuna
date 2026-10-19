@@ -288,7 +288,7 @@ export function isClaudeModel(model: string): boolean {
  * 这次向这家接口用哪种格式请求（照 magpie 的 usable + MessagesFirst）：
  * Claude 模型且有 Anthropic 地址一律走 Anthropic，保住缓存标记与思考；
  * 否则有 Agent 自己格式的地址就直通；再否则按 Chat → Responses → Anthropic 取第一个翻译过去。
- * `formatOrder` 是这家给这个模型的格式先后（modelFormatsAt，如 Bedrock 的 GPT 先 Responses，照 magpie ResponsesFirst），
+ * `formatOrder` 是这家这个模型翻译时先试的格式（translationOrderAt，如 Bedrock 与 Azure 上的 GPT 先 Responses，照 magpie ResponsesFirst），
  * 翻译时按它取；null 即按上面的顺序。
  */
 export function chooseRequestFormat(input: {

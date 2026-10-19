@@ -580,6 +580,11 @@ function publishedOutput(facts: ModelFacts): number {
   return pastWindow ? context : output;
 }
 
+/** 关掉推理：OpenAI 格式发 effort none（openAIEffort），照 magpie 的 withBodyEffort(…, "none")。 */
+export function reasoningOff(request: GatewayRequest): GatewayRequest {
+  return { ...request, thinkOff: true, effort: request.effort === "" ? "low" : request.effort };
+}
+
 /** 上游不让关推理：打开推理、用最低档重问（magpie thinkingBackOn）。 */
 export function thinkingBackOn(request: GatewayRequest): GatewayRequest {
   return { ...request, thinkOff: false, effort: request.effort === "" ? "low" : request.effort };

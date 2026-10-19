@@ -2591,6 +2591,7 @@ export const ja: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "任意: 無料モデルにはキー不要",
+          pasteKey: "キーを貼り付け",
         },
         endpointHints: {
           azure:
@@ -2616,6 +2617,8 @@ export const ja: TranslationResources = {
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
         address: "アドレス",
         resourceEndpoint: "リソースのエンドポイント",
+        footerResource:
+          "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:
           "キーを入力して「自動検出」を押すと、Osuna が 3 つのリクエスト形式をそれぞれ 1 回試し、使えるアドレスを下に入力します。",
         addressHintKeyOptional:

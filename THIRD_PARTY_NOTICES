@@ -567,7 +567,14 @@ deployment list follow AuthHeaders in internal/provider/authheader.go, the
 Bedrock part of internal/provider/account.go with ResponsesFirst and
 claudeModel in internal/provider/provider.go, tinyBody in
 internal/provider/test.go, and AzureBase, azureEndpoints and azureModels in
-internal/provider/azure.go. The add dialog's template
+internal/provider/azure.go. The request rewrites for those two templates
+(packages/server/src/server/api-endpoints/gateway/template-rewrites.ts) follow
+the Bedrock and Azure branches of passthrough and the translated build,
+asCompletionTokens and withoutFields in internal/gateway/gateway.go,
+bedrockBetas and bedrockRefuses in internal/gateway/betas.go, and
+withoutReasoningText, validatesItemIDs and plainItemIDs in
+internal/gateway/codex_backend.go; asking again with effort none follows
+toolsWithoutEffort in internal/gateway/gateway.go. The add dialog's template
 list (its three groups, search by name, id, host and note, and a vendor's
 global and China presets made one row, an added preset's dot and what a click
 on it does, chinaOf, pairTile, tile and markAdded in internal/gui/assets/app.js)

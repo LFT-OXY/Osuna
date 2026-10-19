@@ -69,11 +69,13 @@ export function withoutBillingLine(body: Body): Body {
 /**
  * 转给上游的 anthropic-beta：claude.ai 登录的 beta 一律去掉，接口收到的就像带 Osuna 口令的 Claude Code 发的那样
  * （magpie askedBetas）；发给非 Claude 模型时再去掉自动模式审查的 beta：只有 Claude 会审查，别家看到不认识的 beta
- * 可能整个请求都拒（magpie serverReview）。没有要去掉的原样交回；什么都不剩时为 null（这个请求头不发）。
+ * 可能整个请求都拒（magpie serverReview）。发给 Bedrock 时照它的叫法改名、去掉它拒过的（magpie betas），重复的只留一个。
+ * 没有要改的原样交回；什么都不剩时为 null（这个请求头不发）。
  */
 export function fittedBetas(input: {
   value: string | string[];
   dropsReviewBeta: boolean;
+  forBedrock: boolean;
 }): string | string[] | null {
   const named = [input.value]
     .flat()
@@ -81,12 +83,27 @@ export function fittedBetas(input: {
     .map((beta) => beta.trim())
     .filter((beta) => beta !== "");
   const isDropped = (beta: string) =>
-    beta.startsWith(SIGN_IN_BETA) || (input.dropsReviewBeta && beta.startsWith(REVIEW_BETA));
-  const kept = named.filter((beta) => !isDropped(beta));
-  if (kept.length === named.length) return input.value;
+    beta.startsWith(SIGN_IN_BETA) ||
+    (input.dropsReviewBeta && beta.startsWith(REVIEW_BETA)) ||
+    (input.forBedrock && BEDROCK_REFUSED_BETAS.has(beta));
+  const renamed = input.forBedrock ? named.map((beta) => BEDROCK_BETAS[beta] ?? beta) : named;
+  const kept = [...new Set(renamed.filter((beta) => !isDropped(beta)))];
+  const unchanged = kept.length === named.length && kept.every((beta, i) => beta === named[i]);
+  if (unchanged) return input.value;
   if (kept.length === 0) return null;
   return kept.join(",");
 }
+
+// Bedrock 换了叫法的 beta：Claude Code 按 Anthropic 的叫法要工具搜索，Bedrock 与 Vertex 叫 tool-search-tool-2025-10-19。
+const BEDROCK_BETAS: Readonly<Record<string, string>> = {
+  "advanced-tool-use-2025-11-20": "tool-search-tool-2025-10-19",
+};
+
+// Bedrock 拒过的 beta（magpie #176）：一开始就不发，不等它拒。
+const BEDROCK_REFUSED_BETAS: ReadonlySet<string> = new Set([
+  "prompt-caching-scope-2026-01-05",
+  "redact-thinking-2026-02-12",
+]);
 
 /**
  * Claude Code 的 advisor 服务端工具（{"type":"advisor_20260301","name":"advisor","model":…}）按它给自己的模型起名的写法

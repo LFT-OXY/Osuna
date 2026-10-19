@@ -2621,6 +2621,7 @@ export const fr: TranslationResources = {
         },
         keyHints: {
           freeModelsNeedNoKey: "Facultatif : les modèles gratuits n'ont pas besoin de clé",
+          pasteKey: "Collez la clé",
         },
         endpointHints: {
           azure:
@@ -2644,6 +2645,8 @@ export const fr: TranslationResources = {
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
         address: "Adresse",
         resourceEndpoint: "Point de terminaison de la ressource",
+        footerResource:
+          "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:
           "Saisissez la clé puis appuyez sur Détecter : Osuna essaie une fois chacun des trois formats de requête et remplit les adresses qui fonctionnent.",
         addressHintKeyOptional:

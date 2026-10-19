@@ -2632,6 +2632,7 @@ export const en = {
         },
         keyHints: {
           freeModelsNeedNoKey: "Optional: free models need no key",
+          pasteKey: "Paste the key",
         },
         endpointHints: {
           azure:
@@ -2655,6 +2656,8 @@ export const en = {
         keyRejected: "The upstream rejected this key (401 / 403)",
         address: "Address",
         resourceEndpoint: "Resource endpoint",
+        footerResource:
+          "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:
           "Fill in the key, then press Auto-detect: Osuna tries each of the three request formats once and fills in the addresses that work.",
         addressHintKeyOptional:
