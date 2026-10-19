@@ -1575,6 +1575,48 @@ const x = 1;
     expect(diff.diff).toContain("# new-budget-4.txt: diff too large omitted");
   });
 
+  it("keeps binary status for untracked files after the total diff budget is used up", async () => {
+    function untrackedDiffBytes(path: string): number {
+      const result = spawnSync("git", ["diff", "--no-index", "/dev/null", "--", path], {
+        cwd: repoDir,
+        env: { ...process.env, LC_ALL: "C" },
+      });
+      return result.stdout.length;
+    }
+    // 第一批 64 个新文件正好用满 2MB，第二批不再读 diff
+    for (let i = 3; i < 64; i += 1) {
+      writeFileSync(join(repoDir, `fill-${String(i).padStart(2, "0")}.txt`), `filler ${i}\n`);
+    }
+    let fillerBytes = 0;
+    for (let i = 3; i < 64; i += 1) {
+      fillerBytes += untrackedDiffBytes(`fill-${String(i).padStart(2, "0")}.txt`);
+    }
+    writeFileSync(join(repoDir, "fill-00.txt"), `${"a".repeat(700_000)}\n`);
+    writeFileSync(join(repoDir, "fill-01.txt"), `${"b".repeat(700_000)}\n`);
+    writeFileSync(join(repoDir, "fill-02.txt"), "c\n");
+    const lastFillerOverhead = untrackedDiffBytes("fill-02.txt") - 2;
+    const usedBytes =
+      untrackedDiffBytes("fill-00.txt") + untrackedDiffBytes("fill-01.txt") + fillerBytes;
+    const lastFillerLength = 2 * 1024 * 1024 - usedBytes - lastFillerOverhead - 1;
+    writeFileSync(join(repoDir, "fill-02.txt"), `${"c".repeat(lastFillerLength)}\n`);
+    expect(
+      untrackedDiffBytes("fill-00.txt") +
+        untrackedDiffBytes("fill-01.txt") +
+        untrackedDiffBytes("fill-02.txt") +
+        fillerBytes,
+    ).toBe(2 * 1024 * 1024);
+    writeFileSync(join(repoDir, "z-blob.bin"), Buffer.from([0x00, 0xff, 0x10, 0x00]));
+    writeFileSync(join(repoDir, "z-text.txt"), "late\n");
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    const statusByPath = new Map(diff.structured?.map((file) => [file.path, file.status]));
+    expect(statusByPath.get("fill-02.txt")).toBe("ok");
+    expect(statusByPath.get("fill-63.txt")).toBe("ok");
+    expect(statusByPath.get("z-blob.bin")).toBe("binary");
+    expect(statusByPath.get("z-text.txt")).toBe("too_large");
+  });
+
   it("processes untracked files concurrently with the same result as serial processing", async () => {
     for (let i = 0; i < 24; i += 1) {
       const name = `new-${String(i).padStart(2, "0")}.ts`;

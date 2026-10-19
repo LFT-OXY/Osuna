@@ -3208,14 +3208,16 @@ async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Pro
   let untrackedDiffBytes = 0;
   for (let start = 0; start < untrackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const changes = untrackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
-    // 预算已满时不再读取，剩余文件直接给占位
+    // 预算已满时不再跑 git diff，只嗅探是否二进制，其余直接给 too_large 占位
     const budgetExhausted = untrackedDiffBytes >= input.remainingDiffBytes;
     // 并发只靠 git 子进程限流兜底；结果仍按原顺序拼接，输出与串行一致
-    const diffTexts: Array<UntrackedDiffText | null> = budgetExhausted
-      ? changes.map(() => null)
-      : await Promise.all(
-          changes.map((change) => getUntrackedDiffText(cwd, change, ignoreWhitespace)),
-        );
+    const diffTexts: Array<UntrackedDiffText | null> = await Promise.all(
+      changes.map((change) =>
+        budgetExhausted
+          ? getUntrackedBinaryDiffText(cwd, change)
+          : getUntrackedDiffText(cwd, change, ignoreWhitespace),
+      ),
+    );
     for (const [index, change] of changes.entries()) {
       const diffText = diffTexts[index];
       const diffBytes = diffText ? Buffer.byteLength(diffText.text, "utf8") : 0;
@@ -3240,6 +3242,18 @@ async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Pro
     }
   }
   return true;
+}
+
+async function getUntrackedBinaryDiffText(
+  cwd: string,
+  change: CheckoutFileChange,
+): Promise<UntrackedDiffText | null> {
+  try {
+    const { stat } = await inspectUntrackedFile(cwd, change.path);
+    return stat?.isBinary ? { text: "", truncated: false, stat } : null;
+  } catch {
+    return null;
+  }
 }
 
 interface AppendUntrackedChangeInput {
