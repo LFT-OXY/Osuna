@@ -77,6 +77,10 @@ Test it in Node with `QueryObserver` and a fake client (`version-check.test.ts`)
 
 Test the list functions in Node (`pricing.test.ts`) and read the list back from the daemon in e2e (`usage-price-table.spec.ts` `readCustomPrices`), not from the page that wrote it.
 
+### Checkout diff pushes are applied at most once a second
+
+`reconcileCheckoutDiffSubscriptions` in `data/push-router.ts` applies `checkout_diff_update` per subscription at most once per `CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS` (1s): inside the window only the latest payload is kept and applied when the window ends, so the trailing update is never lost. The first full snapshot after subscribing is applied at once and does not start the window. Every path that ends a subscription (full snapshot, error, reconcile release, unmount) calls `cancelPendingUpdate`. The client throttles even though the daemon does too (`CheckoutDiffManager`, server quality-guidelines), because an older daemon does not. Test: `push-router.test.ts` (latest payload only within 1s, trailing payload kept).
+
 ## Hook shape
 
 A hook that does real work has a pure module beside it and a test for that module:
