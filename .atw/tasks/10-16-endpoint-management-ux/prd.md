@@ -245,7 +245,7 @@
 27. 每个模型发一条「hi」，回复上限 16，按格式用各自的上限字段；带上这家的请求头和附加请求体（`${sessionId}` 换成 `osuna-test-` 加随机串）。被禁用的模型不发，直接标成「已禁用」。
 28. 普通测法按这家的地址依次试格式，「只用这种格式」的模型只试那种。
 29. 结果只在客户端页面内存里，离开页面就清掉（照 magpie）。「只看能用」用这家最近一次的结果，没测过的不算失败。「免费」= 模型 id 或显示名里有独立单词 `free`。
-30. **按 Claude Code / Codex 的样子测**（总任务第 15 条的例外，用户选定，写进新 ADR）：用第 5 条记下的该 CLI 最新请求头样本发出。按 Claude Code 只走 Anthropic 格式，只对中转服务开放：模板分组是「中转服务」的，或用「自定义」添加的。按 Codex 走 Responses，没有就走 Chat，不限地址；还没有 Codex 样本时，用 Osuna 已有的 ChatGPT 后端那套 Codex 请求头。没有 Claude Code 样本时拒绝，并说明要先用 Claude Code 经过一次中转站。
+30. **按 Claude Code / Codex 的样子测**（总任务第 15 条的例外，用户选定，写进新 ADR）：用第 5 条记下的该 CLI 最新请求头样本发出。按 Claude Code 只走 Anthropic 格式，只对中转服务开放：模板分组是「中转服务」的，或用「自定义」添加的。按 Codex 走 Responses，没有就走 Chat，不限地址；还没有 Codex 样本时，照 magpie `codexSign` 生成 Codex 请求头（2026-10-19 用户定：Osuna 原本没有自己生成 Codex 请求头的代码，见 ADR 0013）。没有 Claude Code 样本时拒绝，并说明要先用 Claude Code 经过一次中转站。
 
 ### 已禁用的模型
 
