@@ -6,6 +6,7 @@ import {
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
 } from "./messages";
+import { API_ENDPOINT_ICON_MAX_BASE64_LENGTH } from "./api-endpoint/rpc-schemas";
 
 // 第三方接口 RPC。老客户端不认识 features.apiEndpoints 与这组消息，解析必须照常通过。
 const ENDPOINT = {
@@ -1104,5 +1105,34 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       const response = { type: "provider.api_endpoint.read_icon.response" as const, payload };
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
+  });
+  it("parses fetch_site_icon and its answers; a store_icon over 1 MB of base64 is refused before decoding", () => {
+    const request = {
+      type: "provider.api_endpoint.fetch_site_icon.request" as const,
+      requestId: "req-m11",
+      baseUrl: "https://api.relay.example/v1",
+      name: "Relay",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    for (const payload of [
+      { requestId: "req-m11", icon: "file:0123456789abcdef.svg", error: null },
+      {
+        requestId: "req-m11",
+        icon: null,
+        error: { code: "site_icon_local", message: "The base URL is on this computer" },
+      },
+    ]) {
+      const response = { type: "provider.api_endpoint.fetch_site_icon.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    const atLimit = {
+      type: "provider.api_endpoint.store_icon.request" as const,
+      requestId: "req-m12",
+      data: "A".repeat(API_ENDPOINT_ICON_MAX_BASE64_LENGTH),
+    };
+    expect(SessionInboundMessageSchema.safeParse(atLimit).success).toBe(true);
+    expect(
+      SessionInboundMessageSchema.safeParse({ ...atLimit, data: `${atLimit.data}AAAA` }).success,
+    ).toBe(false);
   });
 });

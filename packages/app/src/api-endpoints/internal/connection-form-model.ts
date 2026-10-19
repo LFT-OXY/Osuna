@@ -23,8 +23,8 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * Responses 的地址保存，daemon 把它放到资源的 v1 API 上（照 magpie 编辑窗口的 Endpoint 框）。
  * 本机服务的模板（分组 local）只要一个服务地址：改它只换各格式地址的协议、主机、端口，路径不变；留空或没改就用原来的地址
  * （照 magpie local_address.go 与编辑窗口的 Address 框）。
- * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，或本机一张图片——先经 storeIcon
- * 存到主机上，保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
+ * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，本机一张图片（先经 storeIcon
+ * 存到主机上），或从地址所在网站取（fetchSiteIcon，主机找到后同样存下）；保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
  */
 
 export type ConnectionFormSeed =
@@ -41,15 +41,39 @@ export type ConnectionSaveResult =
   | { status: "saved"; endpointId: string }
   | { status: "failed"; message: string };
 
-export type ConnectionStoreIconResult =
-  | { status: "stored"; icon: string }
-  | { status: "failed"; code: string; message: string };
+/**
+ * 换图标失败的原因：前五种是 daemon 的错误码（太大的图片在发出前就由表单拦下），界面按语言说明；
+ * failed 是别的（断线、主机的其他错误），照 message 显示。
+ */
+export type ConnectionIconErrorCode =
+  | "icon_too_large"
+  | "icon_not_image"
+  | "site_icon_no_address"
+  | "site_icon_local"
+  | "site_icon_not_found"
+  | "failed";
 
-// 选图片失败：code 是 daemon 的错误码（icon_too_large 与 icon_not_image 由界面按语言说明），别的照 message 显示。
+export const CONNECTION_ICON_ERROR_CODES: readonly ConnectionIconErrorCode[] = [
+  "icon_too_large",
+  "icon_not_image",
+  "site_icon_no_address",
+  "site_icon_local",
+  "site_icon_not_found",
+];
+
 export interface ConnectionIconError {
-  code: string;
+  code: ConnectionIconErrorCode;
+  // daemon 的原文（英文）：failed 时显示，site_icon_not_found 时附在后面说明问过哪里。
   message: string;
 }
+
+// 存图片或从网站取图标的结果。
+export type ConnectionIconResult =
+  | { status: "stored"; icon: string }
+  | { status: "failed"; error: ConnectionIconError };
+
+// 正在换图标：存本机的图片，或从网站取。
+export type ConnectionIconTask = "picture" | "website";
 
 /** 主机最多存这么大的图片（daemon endpoint-icons.ts 的 MAX_ICON_BYTES）；更大的不发过去。 */
 export const MAX_ICON_BYTES = 1 << 20;
@@ -139,7 +163,7 @@ export interface ConnectionFormState {
   // 「自定义」加的接口才能选图标；icon 是选的内置图标名或存下的图片（`file:`），没选为 null。
   canPickIcon: boolean;
   icon: string | null;
-  isStoringIcon: boolean;
+  iconTask: ConnectionIconTask | null;
   iconError: ConnectionIconError | null;
   formats: ConnectionFormatField[];
   // 自动检测改写了地址栏时加一，输入框据此换成新值。
@@ -161,7 +185,8 @@ export interface ConnectionFormDeps {
     signal: AbortSignal,
   ) => Promise<ConnectionDetectResult>;
   revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
-  storeIcon: (bytes: Uint8Array) => Promise<ConnectionStoreIconResult>;
+  storeIcon: (bytes: Uint8Array) => Promise<ConnectionIconResult>;
+  fetchSiteIcon: (input: { baseUrl: string; name: string }) => Promise<ConnectionIconResult>;
 }
 
 export interface ConnectionFormModel {
@@ -185,6 +210,8 @@ export interface ConnectionFormModel {
   setIcon(icon: string | null): void;
   // 选本机一张图片：先存到主机上，成了才换图标。
   pickIconImage(bytes: Uint8Array): void;
+  // 「从网站取图标」：按填的地址找它所在网站的图标（照 magpie）。
+  fetchSiteIcon(): void;
   detect(): void;
   cancelDetect(): void;
   submit(): Promise<ConnectionSaveResult | null>;
@@ -215,7 +242,7 @@ interface Values {
   detectError: string | null;
   serviceAddress: string;
   icon: string | null;
-  isStoringIcon: boolean;
+  iconTask: ConnectionIconTask | null;
   iconError: ConnectionIconError | null;
   submitting: boolean;
   submitError: string | null;
@@ -266,14 +293,14 @@ export function createConnectionFormModel(
     detectError: null,
     serviceAddress: serviceAddressWas,
     icon: seededIcon,
-    isStoringIcon: false,
+    iconTask: null,
     iconError: null,
     submitting: false,
     submitError: null,
   };
   let state = derive(values);
-  // 当前这次存图片；再选一次或关掉表单后，旧请求晚到的结果不再生效。
-  let pendingIconImage: Uint8Array | null = null;
+  // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
+  let pendingIcon: object | null = null;
 
   function derive(next: Values): ConnectionFormState {
     const hasKey = isKeyOptional || next.apiKey.trim() !== "" || hasSavedKey;
@@ -299,7 +326,7 @@ export function createConnectionFormModel(
       : formats.some((field) => field.url.trim() !== "") && !formats.some((field) => field.invalid);
     const hasValidAddress = address !== "" && !addressInvalid;
     // 检测、保存或存图片进行中时两个按钮都不可点。
-    const busy = next.detecting || next.submitting || next.isStoringIcon;
+    const busy = next.detecting || next.submitting || next.iconTask !== null;
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -321,7 +348,7 @@ export function createConnectionFormModel(
       serviceAddressInvalid,
       canPickIcon: isIconPickable,
       icon: next.icon,
-      isStoringIcon: next.isStoringIcon,
+      iconTask: next.iconTask,
       iconError: next.iconError,
       formats,
       urlGeneration: next.urlGeneration,
@@ -446,18 +473,26 @@ export function createConnectionFormModel(
     };
   }
 
-  async function runStoreIcon(bytes: Uint8Array): Promise<void> {
-    const outcome = await deps.storeIcon(bytes);
-    if (pendingIconImage !== bytes) return;
-    pendingIconImage = null;
+  async function runIconTask(task: ConnectionIconTask, run: () => Promise<ConnectionIconResult>) {
+    const token = {};
+    pendingIcon = token;
+    update({ iconTask: task, iconError: null });
+    const outcome = await run();
+    if (pendingIcon !== token) return;
+    pendingIcon = null;
     if (outcome.status === "failed") {
-      update({
-        isStoringIcon: false,
-        iconError: { code: outcome.code, message: outcome.message },
-      });
+      update({ iconTask: null, iconError: outcome.error });
       return;
     }
-    update({ isStoringIcon: false, icon: outcome.icon, iconError: null });
+    update({ iconTask: null, icon: outcome.icon, iconError: null });
+  }
+
+  /** 找网站图标用的地址：照 magpie 先 Chat、再 Responses、再 Anthropic，都没填时用自动检测的地址框。 */
+  function siteBaseUrl(): string {
+    const filled = (["openai_chat", "openai_responses", "anthropic_messages"] as const)
+      .map((format) => values.urls[format].trim())
+      .find((url) => url !== "");
+    return filled ?? values.address.trim();
   }
 
   async function runReveal(endpointId: string): Promise<void> {
@@ -562,22 +597,22 @@ export function createConnectionFormModel(
     },
     setServiceAddress: (serviceAddress) => update({ serviceAddress }),
     setIcon(icon) {
-      pendingIconImage = null;
-      update({ icon, isStoringIcon: false, iconError: null });
+      pendingIcon = null;
+      update({ icon, iconTask: null, iconError: null });
     },
     pickIconImage(bytes) {
       if (!state.canPickIcon) return;
       if (bytes.length > MAX_ICON_BYTES) {
-        pendingIconImage = null;
-        update({
-          isStoringIcon: false,
-          iconError: { code: "icon_too_large", message: "The picture is over 1 MB" },
-        });
+        pendingIcon = null;
+        update({ iconTask: null, iconError: { code: "icon_too_large", message: "" } });
         return;
       }
-      pendingIconImage = bytes;
-      update({ isStoringIcon: true, iconError: null });
-      void runStoreIcon(bytes);
+      void runIconTask("picture", () => deps.storeIcon(bytes));
+    },
+    fetchSiteIcon() {
+      if (!state.canPickIcon) return;
+      const input = { baseUrl: siteBaseUrl(), name: values.name.trim() };
+      void runIconTask("website", () => deps.fetchSiteIcon(input));
     },
     detect() {
       if (!state.canDetect) return;
@@ -604,7 +639,7 @@ export function createConnectionFormModel(
     },
     close() {
       abortPendingDetect();
-      pendingIconImage = null;
+      pendingIcon = null;
       closed = true;
       listeners.clear();
     },

@@ -21,10 +21,12 @@ import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
   ConnectionRevealKeyResult,
-  ConnectionStoreIconResult,
+  ConnectionIconError,
+  ConnectionIconResult,
   ConnectionSaveRequest,
   ConnectionSaveResult,
 } from "./internal/connection-form-model";
+import { CONNECTION_ICON_ERROR_CODES } from "./internal/connection-form-model";
 import {
   agentsReturningToOfficial,
   arrangeEndpoint,
@@ -118,7 +120,9 @@ export interface UseHostEndpointsResult {
   // 读回已存 key 的原文；只有声明了 apiEndpointManagement 的主机认。
   revealKey: (endpointId: string) => Promise<ConnectionRevealKeyResult>;
   // 存一张图片给「自定义」接口当图标；只有声明了 apiEndpointManagement 的主机认。
-  storeIcon: (bytes: Uint8Array) => Promise<ConnectionStoreIconResult>;
+  storeIcon: (bytes: Uint8Array) => Promise<ConnectionIconResult>;
+  // 从地址所在网站取图标；同上。
+  fetchSiteIcon: (input: { baseUrl: string; name: string }) => Promise<ConnectionIconResult>;
 }
 
 /** 调用方已经确认主机声明了 apiEndpointGateway 能力。 */
@@ -382,28 +386,42 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     [client, t],
   );
 
-  const storeIcon = useCallback(
-    async (bytes: Uint8Array): Promise<ConnectionStoreIconResult> => {
+  // 存图片与从网站取图标的回复一样：主机给的图标值，或失败原因。
+  const iconRequest = useCallback(
+    async (
+      send: (
+        hostClient: HostClient,
+      ) => Promise<{ icon: string | null; error: ApiEndpointError | null }>,
+    ): Promise<ConnectionIconResult> => {
       if (!client) {
         const message = t("workspace.terminal.hostDisconnected");
-        return { status: "failed", code: "disconnected", message };
+        return { status: "failed", error: { code: "failed", message } };
       }
       try {
-        const result = await client.apiEndpointStoreIcon({
-          data: Buffer.from(bytes).toString("base64"),
-        });
-        if (result.error) {
-          return { status: "failed", code: result.error.code, message: result.error.message };
-        }
+        const result = await send(client);
+        if (result.error) return { status: "failed", error: iconErrorOf(result.error) };
         if (result.icon === null) {
-          return { status: "failed", code: "unknown", message: t("common.errors.unableToSave") };
+          const message = t("common.errors.unableToSave");
+          return { status: "failed", error: { code: "failed", message } };
         }
         return { status: "stored", icon: result.icon };
       } catch (error) {
-        return { status: "failed", code: "unknown", message: toErrorMessage(error) };
+        return { status: "failed", error: { code: "failed", message: toErrorMessage(error) } };
       }
     },
     [client, t],
+  );
+  const storeIcon = useCallback(
+    (bytes: Uint8Array) =>
+      iconRequest((hostClient) =>
+        hostClient.apiEndpointStoreIcon({ data: Buffer.from(bytes).toString("base64") }),
+      ),
+    [iconRequest],
+  );
+  const fetchSiteIcon = useCallback(
+    (input: { baseUrl: string; name: string }) =>
+      iconRequest((hostClient) => hostClient.apiEndpointFetchSiteIcon(input)),
+    [iconRequest],
   );
 
   const dismissActionError = useCallback(() => setActionFailure(null), []);
@@ -429,10 +447,17 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     detect,
     revealKey,
     storeIcon,
+    fetchSiteIcon,
   };
 }
 
 type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
+
+/** daemon 的错误码认得的按界面语言说明，别的照原文显示。 */
+function iconErrorOf(error: ApiEndpointError): ConnectionIconError {
+  const known = CONNECTION_ICON_ERROR_CODES.find((code) => code === error.code);
+  return { code: known ?? "failed", message: error.message };
+}
 
 /**
  * 重新应用 = 开着、按当前设置重写；保留当前设置是单独的 RPC（「模型被换掉」时带上它的 code）；

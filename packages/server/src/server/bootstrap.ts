@@ -515,6 +515,7 @@ export interface PaseoDaemonConfig {
     | "isModelsDevAutoUpdate"
     | "modelsDevFetch"
     | "modelsDevTimers"
+    | "fetchSite"
     | "readCodexSignIn"
     // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
     | "now"

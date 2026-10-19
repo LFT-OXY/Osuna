@@ -2618,6 +2618,7 @@ export const ko: TranslationResources = {
         icon: {
           label: "아이콘",
           choosePicture: "이미지 선택…",
+          fromWebsite: "웹사이트에서 가져오기",
           builtIn: "기본 제공 아이콘",
           default: "기본값",
           find: "아이콘 찾기…",
@@ -2625,7 +2626,14 @@ export const ko: TranslationResources = {
           tooLarge: "이미지가 1MB를 넘습니다. 더 작은 이미지를 고르세요.",
           notImage:
             "Osuna가 표시할 수 있는 이미지가 아닙니다. PNG, JPEG, GIF, WebP, ICO 또는 SVG를 사용하세요.",
+          siteNoAddress:
+            "먼저 엔드포인트 주소를 입력하세요. 그 주소의 웹사이트에서 아이콘을 찾습니다.",
+          siteLocal:
+            "주소가 이 컴퓨터나 로컬 네트워크에 있어 웹사이트 아이콘을 가져올 수 없습니다.",
+          siteNotFound: "웹사이트 아이콘을 찾지 못했습니다. {{detail}}",
         },
+        footerLocal:
+          "저장하면 이 엔드포인트 페이지가 열리고, 모델을 가져와 Claude / GPT / Gemini별로 고를 수 있습니다.",
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 작동하는 주소를 아래에 채웁니다.",

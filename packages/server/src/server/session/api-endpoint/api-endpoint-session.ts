@@ -32,6 +32,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
+      | "provider.api_endpoint.fetch_site_icon.request"
       | "provider.api_endpoint.read_icon.request"
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
@@ -95,6 +96,8 @@ export class ApiEndpointSession {
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
         return this.handleStoreIcon(request);
+      case "provider.api_endpoint.fetch_site_icon.request":
+        return this.handleFetchSiteIcon(request, connectionSignal);
       case "provider.api_endpoint.read_icon.request":
         return this.handleReadIcon(request);
       case "provider.api_endpoint.fetch_models.request":
@@ -397,6 +400,29 @@ export class ApiEndpointSession {
     }
     this.host.emit({
       type: "provider.api_endpoint.store_icon.response",
+      payload: { requestId: request.requestId, icon, error },
+    });
+  }
+
+  private async handleFetchSiteIcon(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.fetch_site_icon.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
+    let icon: string | null = null;
+    let error: ApiEndpointError | null = null;
+    try {
+      icon = await this.service.fetchSiteIcon(
+        { baseUrl: request.baseUrl, name: request.name },
+        signal,
+      );
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    } finally {
+      release();
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.fetch_site_icon.response",
       payload: { requestId: request.requestId, icon, error },
     });
   }

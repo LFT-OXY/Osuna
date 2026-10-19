@@ -165,6 +165,19 @@ does not ask again; refresh does. Nothing is looked up at startup, on a timer,
 or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
 cover it.
 
+"From the website" in the add or edit dialog of a custom API endpoint also runs
+only when you press it. The daemon looks for the icon of the site the endpoint's
+base URL is on: for each of the API's host and the domains above it
+(`api.relay.com`, then `relay.com`), a GET of `/api/status` (where a new-api or
+one-api panel names its logo), of the home page, and of the pictures the page
+names or `/favicon.ico`, stopping at the first picture it can keep. Requests carry
+`User-Agent: Osuna/<version>` and nothing else of yours; the endpoint's key is
+never sent. Every site and picture asked for is an `https` address, and only
+hosts whose every address is public are reached, redirects included: a base URL
+on this computer or the local network is refused before any request. The
+whole search stops after 30 seconds, each picture after 15, and the picture is
+kept like one you picked yourself. The price table switch does not cover it.
+
 While Claude Code's or Codex's API endpoint switch is on, reading that
 provider's settings page can send two checks of the daemon's own. Each times out
 after 3 seconds and its answer is reused for 20 seconds:

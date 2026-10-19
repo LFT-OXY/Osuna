@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { AgentModelDefinition } from "@getpaseo/protocol/agent-types";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import type { FetchSite } from "../api-endpoints/site-icon.js";
 
 // 升级前的 endpoints.json：接口按 Agent 各存一份，每个 Agent 有一家「当前启用」。
 const LEGACY_ENDPOINTS = {
@@ -99,7 +100,11 @@ afterEach(async () => {
  * 起一个隔离 daemon；`files` 是启动前就放进 $PASEO_HOME/api-endpoints/ 的文件。
  * 给了 `reuse` 就沿用那次的 home（先关掉它的 daemon），模拟重启。
  */
-async function start(files: Record<string, string> = {}, reuse?: Harness): Promise<Harness> {
+async function start(
+  files: Record<string, string> = {},
+  reuse?: Harness,
+  services: { fetchSite?: FetchSite } = {},
+): Promise<Harness> {
   let root: string;
   if (reuse) {
     await reuse.client.close();
@@ -129,7 +134,7 @@ async function start(files: Record<string, string> = {}, reuse?: Harness): Promi
     // home 在 tempRoots 里统一删；重启要沿用它。
     cleanup: false,
     logger,
-    apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root },
+    apiEndpoints: { env: { CLAUDE_CONFIG_DIR: claudeConfigDir }, homeDir: root, ...services },
   });
   const client = new DaemonClient({
     url: `ws://127.0.0.1:${daemon.port}/ws`,
@@ -1869,11 +1874,11 @@ describe("an endpoint's own icon", () => {
     });
     expect(svg.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
 
+    // 比 1 MB 的 base64 还长的在协议上就不收，不解码。
     const tooLarge = Buffer.concat([PNG, Buffer.alloc(MAX_ICON_BYTES)]);
-    expect(await client.apiEndpointStoreIcon({ data: tooLarge.toString("base64") })).toMatchObject({
-      icon: null,
-      error: { code: "icon_too_large" },
-    });
+    await expect(
+      client.apiEndpointStoreIcon({ data: tooLarge.toString("base64") }),
+    ).rejects.toThrow(/Too big/);
     expect(
       await client.apiEndpointStoreIcon({ data: Buffer.from("just text").toString("base64") }),
     ).toMatchObject({ icon: null, error: { code: "icon_not_image" } });
@@ -1996,5 +2001,118 @@ describe("an endpoint's own icon", () => {
       }),
     ).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
     expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+});
+
+describe("an icon from the endpoint's website", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>';
+
+  /** 假的外网：网址到回复，别的都是 404；记下问过的网址。绝不真的上网。 */
+  function fakeSites(pages: Record<string, string>): { fetchSite: FetchSite; asked: string[] } {
+    const asked: string[] = [];
+    const fetchSite: FetchSite = async ({ url }) => {
+      asked.push(url);
+      const body = pages[url];
+      return body === undefined
+        ? { status: 404, url, body: Buffer.from("not found") }
+        : { status: 200, url, body: Buffer.from(body) };
+    };
+    return { fetchSite, asked };
+  }
+
+  test("asks the API's host, then the domains above it; the page's icon comes before /favicon.ico", async () => {
+    const sites = fakeSites({
+      "https://relay.example/": '<html><head><link rel="icon" href="/brand.svg"></head></html>',
+      "https://relay.example/brand.svg": SVG,
+    });
+    const { client } = await start({}, undefined, { fetchSite: sites.fetchSite });
+
+    const fetched = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://api.relay.example:8443/v1",
+      name: "Relay",
+    });
+
+    expect(fetched.error).toBeNull();
+    expect(fetched.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+    expect((await client.apiEndpointReadIcon({ icon: fetched.icon ?? "" })).icon).toEqual({
+      data: Buffer.from(SVG).toString("base64"),
+      mimeType: "image/svg+xml",
+    });
+    expect(sites.asked).toEqual([
+      "https://api.relay.example:8443/api/status",
+      "https://api.relay.example:8443/",
+      "https://api.relay.example:8443/favicon.ico",
+      "https://api.relay.example/api/status",
+      "https://api.relay.example/",
+      "https://api.relay.example/favicon.ico",
+      "https://relay.example/api/status",
+      "https://relay.example/",
+      "https://relay.example/brand.svg",
+    ]);
+  });
+
+  test("a new-api panel's logo comes from /api/status; one with none gets the name's first letters", async () => {
+    const sites = fakeSites({
+      "https://withlogo.example/api/status": JSON.stringify({
+        success: true,
+        data: { system_name: "New API", logo: "/brand.svg" },
+      }),
+      "https://withlogo.example/brand.svg": SVG,
+      // 面板自己的 favicon 每家都一样，不要。
+      "https://nologo.example/api/status": JSON.stringify({
+        success: true,
+        data: { system_name: "New API", logo: "" },
+      }),
+      "https://nologo.example/favicon.ico": SVG,
+    });
+    const harness = await start({}, undefined, { fetchSite: sites.fetchSite });
+    const { client } = harness;
+
+    const withLogo = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://withlogo.example/v1",
+      name: "",
+    });
+    const noLogo = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://nologo.example/v1",
+      name: "Home lab",
+    });
+
+    expect((await client.apiEndpointReadIcon({ icon: withLogo.icon ?? "" })).icon?.data).toBe(
+      Buffer.from(SVG).toString("base64"),
+    );
+    const letters = await client.apiEndpointReadIcon({ icon: noLogo.icon ?? "" });
+    expect(letters.icon?.mimeType).toBe("image/svg+xml");
+    expect(Buffer.from(letters.icon?.data ?? "", "base64").toString("utf8")).toContain(
+      ">HL</text>",
+    );
+    expect(sites.asked).not.toContain("https://nologo.example/favicon.ico");
+  });
+
+  test("an address on this machine, one that is no address, a page icon that is not public https, and a site with no icon say why", async () => {
+    const sites = fakeSites({
+      "https://plain.example/": '<link rel="icon" href="http://plain.example/icon.png">',
+    });
+    const { client } = await start({}, undefined, { fetchSite: sites.fetchSite });
+
+    expect(
+      await client.apiEndpointFetchSiteIcon({ baseUrl: "http://127.0.0.1:11434/v1", name: "" }),
+    ).toMatchObject({ icon: null, error: { code: "site_icon_local" } });
+    expect(
+      await client.apiEndpointFetchSiteIcon({ baseUrl: "http://box.local:8080", name: "" }),
+    ).toMatchObject({ icon: null, error: { code: "site_icon_local" } });
+    expect(await client.apiEndpointFetchSiteIcon({ baseUrl: "relay", name: "" })).toMatchObject({
+      icon: null,
+      error: { code: "site_icon_no_address" },
+    });
+    expect(sites.asked).toEqual([]);
+
+    const notFound = await client.apiEndpointFetchSiteIcon({
+      baseUrl: "https://plain.example/v1",
+      name: "",
+    });
+    expect(notFound).toMatchObject({ icon: null, error: { code: "site_icon_not_found" } });
+    expect(notFound.error?.message).toContain("https://plain.example");
+    expect(sites.asked).not.toContain("http://plain.example/icon.png");
   });
 });

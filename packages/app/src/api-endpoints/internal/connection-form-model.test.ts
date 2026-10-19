@@ -12,7 +12,7 @@ import {
   type ConnectionRevealKeyResult,
   type ConnectionSaveRequest,
   type ConnectionSaveResult,
-  type ConnectionStoreIconResult,
+  type ConnectionIconResult,
 } from "./connection-form-model";
 
 interface Deferred<T> {
@@ -33,8 +33,9 @@ function fakeDeps() {
   const detects: { request: ConnectionDetectRequest; signal: AbortSignal }[] = [];
   const reveals: string[] = [];
   const storedIcons: Uint8Array[] = [];
+  const siteIconRequests: { baseUrl: string; name: string }[] = [];
   let revealAnswer = deferred<ConnectionRevealKeyResult>();
-  let storeIconAnswer = deferred<ConnectionStoreIconResult>();
+  let storeIconAnswer = deferred<ConnectionIconResult>();
   let saveResult: ConnectionSaveResult = { status: "saved", endpointId: "ep_new" };
   let detectAnswer = deferred<ConnectionDetectResult>();
   const deps: ConnectionFormDeps = {
@@ -54,6 +55,10 @@ function fakeDeps() {
       storedIcons.push(bytes);
       return storeIconAnswer.promise;
     },
+    fetchSiteIcon: (input) => {
+      siteIconRequests.push(input);
+      return storeIconAnswer.promise;
+    },
   };
   return {
     deps,
@@ -61,9 +66,10 @@ function fakeDeps() {
     detects,
     reveals,
     storedIcons,
-    answerStoreIcon(result: ConnectionStoreIconResult) {
+    siteIconRequests,
+    answerStoreIcon(result: ConnectionIconResult) {
       storeIconAnswer.resolve(result);
-      storeIconAnswer = deferred<ConnectionStoreIconResult>();
+      storeIconAnswer = deferred<ConnectionIconResult>();
     },
     answerReveal(result: ConnectionRevealKeyResult) {
       revealAnswer.resolve(result);
@@ -1018,13 +1024,13 @@ describe("connection form: the icon of a custom endpoint", () => {
     model.setUrl("openai_chat", "https://home.example/v1");
 
     model.pickIconImage(PNG);
-    expect(model.getState()).toMatchObject({ isStoringIcon: true, canSubmit: false });
+    expect(model.getState()).toMatchObject({ iconTask: "picture", canSubmit: false });
     fake.answerStoreIcon({ status: "stored", icon: "file:0123456789abcdef.png" });
     await flush();
 
     expect(fake.storedIcons).toEqual([PNG]);
     expect(model.getState()).toMatchObject({
-      isStoringIcon: false,
+      iconTask: null,
       icon: "file:0123456789abcdef.png",
       iconError: null,
       canSubmit: true,
@@ -1052,12 +1058,14 @@ describe("connection form: the icon of a custom endpoint", () => {
     model.pickIconImage(new TextEncoder().encode("just text"));
     fake.answerStoreIcon({
       status: "failed",
-      code: "icon_not_image",
-      message: "Not a picture: use PNG, JPEG, GIF, WebP, ICO or SVG",
+      error: {
+        code: "icon_not_image",
+        message: "Not a picture: use PNG, JPEG, GIF, WebP, ICO or SVG",
+      },
     });
     await flush();
     expect(model.getState()).toMatchObject({
-      isStoringIcon: false,
+      iconTask: null,
       icon: "deepseek-color",
       iconError: { code: "icon_not_image" },
     });
@@ -1065,6 +1073,39 @@ describe("connection form: the icon of a custom endpoint", () => {
     // 再选一次就清掉上次的失败。
     model.setIcon("openai");
     expect(model.getState().iconError).toBeNull();
+  });
+
+  it("From the website asks the host with the first address filled in and the name; a failure says why and keeps the icon", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName(" Home relay ");
+    model.setUrl("anthropic_messages", "https://home.example");
+    model.setUrl("openai_responses", "https://api.home.example/v1");
+
+    model.fetchSiteIcon();
+    expect(model.getState()).toMatchObject({ iconTask: "website", canSubmit: false });
+    expect(fake.siteIconRequests).toEqual([
+      { baseUrl: "https://api.home.example/v1", name: "Home relay" },
+    ]);
+    fake.answerStoreIcon({
+      status: "failed",
+      error: { code: "site_icon_not_found", message: "Couldn't find the site's icon" },
+    });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      iconTask: null,
+      icon: null,
+      iconError: { code: "site_icon_not_found" },
+    });
+
+    model.fetchSiteIcon();
+    fake.answerStoreIcon({ status: "stored", icon: "file:fedcba9876543210.svg" });
+    await flush();
+    expect(model.getState()).toMatchObject({ icon: "file:fedcba9876543210.svg", iconError: null });
   });
 
   it("editing starts at the icon it had and leaves it to the host unless changed; a template's endpoint and an old host pick none", async () => {

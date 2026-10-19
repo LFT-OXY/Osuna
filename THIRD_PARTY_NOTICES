@@ -598,7 +598,12 @@ the server address typed in the add dialog follows AtAddress, AddressOf and
 parseAddress in internal/provider/local_address.go and localAddress, originOf,
 movedURLs and atAddress in internal/gui/assets/app.js. A custom endpoint's own
 icon follows magpie's internal/provider/icon.go (StoreIcon, IconFile, iconExt,
-MaxIcon, pruneIcons) and the iconPicker in internal/gui/assets/app.js; the
+MaxIcon, pruneIcons) and the iconPicker in internal/gui/assets/app.js; its
+"From the website" follows FaviconFor, faviconSites, favicon, statusLogo,
+pageIcons, dataURI, panelName, siteLabel and letterIcon in
+internal/provider/favicon.go, guardClient, publicDial, publicIP and iconIPs in
+internal/provider/icon.go, and local and iconURL in
+internal/provider/importurl.go; the
 built-in icons offered there are the rest of magpie's
 internal/gui/assets/icons/ that its presets and MORE_ICONS use (all but
 magpie's own logo), with width, height, style and <title> removed, and the two
@@ -607,6 +612,8 @@ menu bar glyph, https://github.com/jundot/omlx, Apache License 2.0, as
 magpie's copy notes:
 
   packages/server/src/server/api-endpoints/endpoint-icons.ts
+  packages/server/src/server/api-endpoints/site-icon.ts
+  packages/app/src/api-endpoints/internal/endpoint-icon-names.ts
   packages/app/src/api-endpoints/endpoint-icon.tsx
   packages/app/src/api-endpoints/connection-form-sheet.tsx
   packages/app/src/api-endpoints/internal/connection-form-model.ts

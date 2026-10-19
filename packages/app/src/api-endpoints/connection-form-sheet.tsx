@@ -16,15 +16,11 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { useFilePicker } from "@/hooks/use-file-picker";
+import { useFilePicker, type FilePickFilter } from "@/hooks/use-file-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
-import {
-  BuiltInEndpointIcon,
-  EndpointIcon,
-  iconTitle,
-  PICKABLE_ENDPOINT_ICONS,
-} from "./endpoint-icon";
+import { BuiltInEndpointIcon, EndpointIcon } from "./endpoint-icon";
+import { iconTitle, PICKABLE_ENDPOINT_ICONS } from "./internal/endpoint-icon-names";
 import {
   templateEndpointHint,
   templateKeyHint,
@@ -58,6 +54,7 @@ export interface ApiEndpointConnectionSheetProps {
   onDetect: ConnectionFormDeps["detect"];
   onRevealKey: ConnectionFormDeps["revealKey"];
   onStoreIcon: ConnectionFormDeps["storeIcon"];
+  onFetchSiteIcon: ConnectionFormDeps["fetchSiteIcon"];
   // 保存成功：新建时调用方进入详情页，编辑时只关掉弹窗。
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   onClose: () => void;
@@ -85,6 +82,7 @@ export function ApiEndpointConnectionSheet({
   onDetect,
   onRevealKey,
   onStoreIcon,
+  onFetchSiteIcon,
   onSaved,
   onClose,
 }: ApiEndpointConnectionSheetProps) {
@@ -93,7 +91,13 @@ export function ApiEndpointConnectionSheet({
   const fieldSize = isCompact ? "md" : "sm";
   const model = useConnectionFormModel(
     seed,
-    { save: onSave, detect: onDetect, revealKey: onRevealKey, storeIcon: onStoreIcon },
+    {
+      save: onSave,
+      detect: onDetect,
+      revealKey: onRevealKey,
+      storeIcon: onStoreIcon,
+      fetchSiteIcon: onFetchSiteIcon,
+    },
     { isKeyOptional, canRevealKey, canPickIcon, templates },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
@@ -343,6 +347,8 @@ function AddressField({
 function footerTextOf(input: { t: TFunction; state: ConnectionFormState }): string {
   const { t, state } = input;
   if (state.template?.endpointExample) return t("settings.apiEndpoints.form.footerResource");
+  // 本机服务的 key 框已写明可以不填，这里不再说一遍。
+  if (state.template?.asksServiceAddress) return t("settings.apiEndpoints.form.footerLocal");
   return state.isKeyOptional
     ? t("settings.apiEndpoints.form.footerKeyOptional")
     : t("settings.apiEndpoints.form.footer");
@@ -677,12 +683,23 @@ function ServiceAddressField({
   );
 }
 
-const ICON_PREVIEW_SIZE = 20;
-const ICON_TILE_SIZE = 18;
+// 只给选认得的图片（照 magpie iconPicker 的 accept）；别的格式 daemon 也会拒收。
+const ICON_PICTURE_FILTER: FilePickFilter = {
+  name: "Images",
+  mimeTypes: [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/x-icon",
+    "image/svg+xml",
+  ],
+  extensions: ["png", "jpg", "jpeg", "gif", "webp", "ico", "svg"],
+};
 
 /**
- * 「自定义」接口的图标（照 magpie iconPicker）：现在的图标，「选一张图片…」（本机图片，存到主机上），「内置图标」展开可搜索的格子，
- * 选过图标时有「默认」（回到名称首字）。
+ * 「自定义」接口的图标（照 magpie iconPicker）：现在的图标，「选一张图片…」（本机图片，存到主机上），「从网站取图标」
+ * （按填的地址），「内置图标」展开可搜索的格子，选过图标时有「默认」（回到名称首字）。按钮在图标右边自成一栏，窄窗口折行也对齐。
  */
 function IconField({
   state,
@@ -699,11 +716,12 @@ function IconField({
   const [query, setQuery] = useState("");
   const handlePickPicture = useCallback(() => {
     void (async () => {
-      const file = (await pickFiles())?.[0];
+      const file = (await pickFiles({ filter: ICON_PICTURE_FILTER }))?.[0];
       if (!file) return;
       model.pickIconImage(await file.readBytes());
     })();
   }, [model, pickFiles]);
+  const handleFetchSiteIcon = useCallback(() => model.fetchSiteIcon(), [model]);
   const handleToggleGrid = useCallback(() => setIsGridOpen((open) => !open), []);
   const handleDefault = useCallback(() => model.setIcon(null), [model]);
   const handlePick = useCallback(
@@ -730,37 +748,50 @@ function IconField({
             icon={state.icon}
             templateId={null}
             name={state.name}
-            size={ICON_PREVIEW_SIZE}
+            size={ICON_SIZE.lg}
             initialVariant="label"
           />
         </View>
-        <Button
-          variant="outline"
-          size="sm"
-          onPress={handlePickPicture}
-          loading={state.isStoringIcon}
-          testID="api-endpoint-connection-icon-picture"
-        >
-          {t("settings.apiEndpoints.form.icon.choosePicture")}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onPress={handleToggleGrid}
-          testID="api-endpoint-connection-icon-built-in"
-        >
-          {t("settings.apiEndpoints.form.icon.builtIn")}
-        </Button>
-        {state.icon === null ? null : (
+        <View style={styles.iconActions}>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onPress={handleDefault}
-            testID="api-endpoint-connection-icon-default"
+            onPress={handlePickPicture}
+            loading={state.iconTask === "picture"}
+            testID="api-endpoint-connection-icon-picture"
           >
-            {t("settings.apiEndpoints.form.icon.default")}
+            {t("settings.apiEndpoints.form.icon.choosePicture")}
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleFetchSiteIcon}
+            loading={state.iconTask === "website"}
+            testID="api-endpoint-connection-icon-website"
+          >
+            {t("settings.apiEndpoints.form.icon.fromWebsite")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleToggleGrid}
+            style={isGridOpen ? styles.iconGridToggleOpen : undefined}
+            accessibilityState={isGridOpen ? EXPANDED : COLLAPSED}
+            testID="api-endpoint-connection-icon-built-in"
+          >
+            {t("settings.apiEndpoints.form.icon.builtIn")}
+          </Button>
+          {state.icon === null ? null : (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleDefault}
+              testID="api-endpoint-connection-icon-default"
+            >
+              {t("settings.apiEndpoints.form.icon.default")}
+            </Button>
+          )}
+        </View>
       </View>
       {isGridOpen ? (
         <View style={styles.iconPicker}>
@@ -795,10 +826,24 @@ function IconField({
   );
 }
 
+const EXPANDED = { expanded: true };
+const COLLAPSED = { expanded: false };
+
 function iconErrorText(t: TFunction, error: ConnectionIconError): string {
-  if (error.code === "icon_too_large") return t("settings.apiEndpoints.form.icon.tooLarge");
-  if (error.code === "icon_not_image") return t("settings.apiEndpoints.form.icon.notImage");
-  return error.message;
+  switch (error.code) {
+    case "icon_too_large":
+      return t("settings.apiEndpoints.form.icon.tooLarge");
+    case "icon_not_image":
+      return t("settings.apiEndpoints.form.icon.notImage");
+    case "site_icon_no_address":
+      return t("settings.apiEndpoints.form.icon.siteNoAddress");
+    case "site_icon_local":
+      return t("settings.apiEndpoints.form.icon.siteLocal");
+    case "site_icon_not_found":
+      return t("settings.apiEndpoints.form.icon.siteNotFound", { detail: error.message });
+    case "failed":
+      return error.message;
+  }
 }
 
 function IconTile({
@@ -829,7 +874,7 @@ function IconTile({
       accessibilityState={accessibilityState}
       testID={`api-endpoint-connection-icon-${name}`}
     >
-      <BuiltInEndpointIcon name={name} size={ICON_TILE_SIZE} />
+      <BuiltInEndpointIcon name={name} size={ICON_SIZE.md} />
     </Pressable>
   );
 }
@@ -966,13 +1011,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   iconControls: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
+  },
+  iconActions: {
+    flex: 1,
+    flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[2],
   },
+  iconGridToggleOpen: {
+    backgroundColor: theme.colors.interactionHighlight,
+  },
   iconPreview: {
-    width: 32,
-    height: 32,
+    width: theme.controlHeight.lg,
+    height: theme.controlHeight.lg,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface3,
     alignItems: "center",
@@ -987,21 +1041,22 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     gap: theme.spacing[1],
   },
+  // 每格都有和模板图标同一档的底块：深色字形在深色主题、淡色字形在浅色主题下都看得出。
   iconTile: {
-    width: 32,
-    height: 32,
+    width: theme.controlHeight.lg,
+    height: theme.controlHeight.lg,
     borderRadius: theme.radius.md,
-    borderWidth: 1,
+    borderWidth: theme.borderWidth[1],
     borderColor: "transparent",
+    backgroundColor: theme.colors.surface3,
     alignItems: "center",
     justifyContent: "center",
   },
   iconTileHovered: {
-    backgroundColor: theme.colors.surface2,
+    borderColor: theme.colors.border,
   },
   iconTileSelected: {
     borderColor: theme.colors.borderAccent,
-    backgroundColor: theme.colors.surface2,
   },
   actions: {
     flex: 1,

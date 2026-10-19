@@ -692,6 +692,10 @@ type ApiEndpointStoreIconPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.store_icon.response" }
 >["payload"];
+type ApiEndpointFetchSiteIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.fetch_site_icon.response" }
+>["payload"];
 type ApiEndpointReadIconPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.read_icon.response" }
@@ -6472,6 +6476,21 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.store_icon.request", data: options.data },
+    });
+  }
+
+  /** 从 baseUrl 所在的网站取图标并存下，返回保存时要带的 icon 值。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  async apiEndpointFetchSiteIcon(
+    options: { baseUrl: string; name: string },
+    requestId?: string,
+  ): Promise<ApiEndpointFetchSiteIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "provider.api_endpoint.fetch_site_icon.request",
+        baseUrl: options.baseUrl,
+        name: options.name,
+      },
     });
   }
 

@@ -2631,13 +2631,19 @@ export const zhCN: TranslationResources = {
         icon: {
           label: "图标",
           choosePicture: "选一张图片…",
+          fromWebsite: "从网站取图标",
           builtIn: "内置图标",
           default: "默认",
           find: "查找图标…",
           noMatch: "没有叫“{{query}}”的图标",
           tooLarge: "图片超过 1 MB，请换一张小一点的。",
           notImage: "不是 Osuna 能显示的图片，请用 PNG、JPEG、GIF、WebP、ICO 或 SVG。",
+          siteNoAddress: "先填接口地址：图标从它所在的网站找。",
+          siteLocal: "地址在本机或局域网上，取不到网站图标。",
+          siteNotFound: "没找到网站图标。{{detail}}",
         },
+        footerLocal:
+          "保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
         footerResource: "保存后进入这个接口的详情页，把资源的部署列成模型。",
         addressHint:
           "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，把能用的地址填到下面。",

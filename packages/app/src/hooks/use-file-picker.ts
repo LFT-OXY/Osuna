@@ -6,7 +6,22 @@ import { isWeb } from "@/constants/platform";
 import { getMimeTypeFromPath } from "@/attachments/file-types";
 import { readDesktopFileBytes, type SelectedFile } from "@/attachments/selected-file";
 
-async function pickFilesWithDesktopDialog(): Promise<SelectedFile[] | null> {
+/** 只给选这几种文件：网页的 accept、桌面对话框的 filters、原生文档选择器的 type 都按它。 */
+export interface FilePickFilter {
+  // 桌面对话框里这一类的名字。
+  name: string;
+  mimeTypes: string[];
+  // 不带点。
+  extensions: string[];
+}
+
+export interface FilePickOptions {
+  filter: FilePickFilter;
+}
+
+async function pickFilesWithDesktopDialog(
+  filter: FilePickFilter | null,
+): Promise<SelectedFile[] | null> {
   const dialog = getDesktopHost()?.dialog;
   const dialogOpen = dialog?.open;
   if (typeof dialogOpen !== "function") {
@@ -16,6 +31,7 @@ async function pickFilesWithDesktopDialog(): Promise<SelectedFile[] | null> {
   const selection = await dialogOpen({
     directory: false,
     multiple: true,
+    ...(filter ? { filters: [{ name: filter.name, extensions: filter.extensions }] } : {}),
   });
 
   if (!selection) {
@@ -38,11 +54,14 @@ async function pickFilesWithDesktopDialog(): Promise<SelectedFile[] | null> {
   return result;
 }
 
-function pickFilesWithWebInput(): Promise<SelectedFile[] | null> {
+function pickFilesWithWebInput(filter: FilePickFilter | null): Promise<SelectedFile[] | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
+    if (filter) {
+      input.accept = [...filter.mimeTypes, ...filter.extensions.map((ext) => `.${ext}`)].join(",");
+    }
     input.style.display = "none";
 
     input.addEventListener("change", async () => {
@@ -77,10 +96,13 @@ function pickFilesWithWebInput(): Promise<SelectedFile[] | null> {
   });
 }
 
-async function pickFilesWithDocumentPicker(): Promise<SelectedFile[] | null> {
+async function pickFilesWithDocumentPicker(
+  filter: FilePickFilter | null,
+): Promise<SelectedFile[] | null> {
   const result = await DocumentPicker.getDocumentAsync({
     multiple: true,
     copyToCacheDirectory: true,
+    ...(filter ? { type: filter.mimeTypes } : {}),
   });
 
   if (result.canceled || result.assets.length === 0) {
@@ -97,29 +119,33 @@ async function pickFilesWithDocumentPicker(): Promise<SelectedFile[] | null> {
 export function useFilePicker() {
   const isPickingRef = useRef(false);
 
-  const pickFiles = useCallback(async (): Promise<SelectedFile[] | null> => {
-    if (isPickingRef.current) {
-      return null;
-    }
-    isPickingRef.current = true;
-
-    try {
-      if (isWeb && isElectronRuntime()) {
-        return await pickFilesWithDesktopDialog();
+  const pickFiles = useCallback(
+    async (options?: FilePickOptions): Promise<SelectedFile[] | null> => {
+      const filter = options?.filter ?? null;
+      if (isPickingRef.current) {
+        return null;
       }
+      isPickingRef.current = true;
 
-      if (isWeb) {
-        return await pickFilesWithWebInput();
+      try {
+        if (isWeb && isElectronRuntime()) {
+          return await pickFilesWithDesktopDialog(filter);
+        }
+
+        if (isWeb) {
+          return await pickFilesWithWebInput(filter);
+        }
+
+        return await pickFilesWithDocumentPicker(filter);
+      } catch (error) {
+        console.error("[FilePicker] Failed to pick files:", error);
+        throw error;
+      } finally {
+        isPickingRef.current = false;
       }
-
-      return await pickFilesWithDocumentPicker();
-    } catch (error) {
-      console.error("[FilePicker] Failed to pick files:", error);
-      throw error;
-    } finally {
-      isPickingRef.current = false;
-    }
-  }, []);
+    },
+    [],
+  );
 
   return { pickFiles };
 }

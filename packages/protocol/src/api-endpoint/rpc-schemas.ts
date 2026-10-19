@@ -587,6 +587,9 @@ export const ApiEndpointRevealKeyResponseSchema = z.object({
 });
 export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyResponseSchema>;
 
+/** 图标图片最多 1 MB：base64 写出来最长这么多字，更长的在解码前就拒收。 */
+export const API_ENDPOINT_ICON_MAX_BASE64_LENGTH = 4 * Math.ceil((1 << 20) / 3);
+
 /**
  * 存一张图片给接口当图标（照 magpie 的 `file:` 图标）：data 是 base64 的原始字节，PNG、JPEG、GIF、WebP、ICO 或 SVG，
  * 不超过 1 MB。按内容起名，同一张只存一份；返回保存时要带的 icon 值。没有接口再用它时 daemon 删掉副本。
@@ -595,7 +598,7 @@ export type ApiEndpointRevealKeyResponse = z.infer<typeof ApiEndpointRevealKeyRe
 export const ApiEndpointStoreIconRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.store_icon.request"),
   requestId: z.string(),
-  data: z.string(),
+  data: z.string().max(API_ENDPOINT_ICON_MAX_BASE64_LENGTH),
 });
 export type ApiEndpointStoreIconRequest = z.infer<typeof ApiEndpointStoreIconRequestSchema>;
 
@@ -608,6 +611,32 @@ export const ApiEndpointStoreIconResponseSchema = z.object({
   }),
 });
 export type ApiEndpointStoreIconResponse = z.infer<typeof ApiEndpointStoreIconResponseSchema>;
+
+/**
+ * 从网站取图标（照 magpie FaviconFor）：daemon 按 baseUrl 找它所在网站的图标，像 store_icon 一样存下，返回 icon 值；
+ * new-api / one-api 面板没有自己的 logo 时用 name 的首字画一块。只连公网 https 主机，只在用户点按钮时发。
+ * 可以用 cancel 按 requestId 取消。失败的 code：site_icon_no_address（地址不是网址）、site_icon_local（地址在本机或局域网）、
+ * site_icon_not_found（message 写明问过哪些站点与最后的原因）。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointFetchSiteIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_site_icon.request"),
+  requestId: z.string(),
+  baseUrl: z.string(),
+  name: z.string(),
+});
+export type ApiEndpointFetchSiteIconRequest = z.infer<typeof ApiEndpointFetchSiteIconRequestSchema>;
+
+export const ApiEndpointFetchSiteIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.fetch_site_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    icon: z.string().nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointFetchSiteIconResponse = z.infer<
+  typeof ApiEndpointFetchSiteIconResponseSchema
+>;
 
 /** 取回 store_icon 存下的图片（icon 是 `file:<名字>`）：base64 与 MIME 类型；不在了为 not_found。 */
 export const ApiEndpointReadIconRequestSchema = z.object({

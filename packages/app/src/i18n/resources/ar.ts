@@ -2605,6 +2605,7 @@ export const ar: TranslationResources = {
         icon: {
           label: "الأيقونة",
           choosePicture: "اختر صورة…",
+          fromWebsite: "من الموقع",
           builtIn: "الأيقونات المضمنة",
           default: "الافتراضية",
           find: "ابحث عن أيقونة…",
@@ -2612,7 +2613,12 @@ export const ar: TranslationResources = {
           tooLarge: "الصورة أكبر من 1 ميغابايت. اختر صورة أصغر.",
           notImage:
             "ليست صورة يستطيع Osuna عرضها. استخدم PNG أو JPEG أو GIF أو WebP أو ICO أو SVG.",
+          siteNoAddress: "أدخل عنوان نقطة النهاية أولًا: يُبحث عن الأيقونة في موقعه.",
+          siteLocal: "العنوان على هذا الحاسوب أو الشبكة المحلية، لذا لا يمكن جلب أيقونة موقعه.",
+          siteNotFound: "تعذّر العثور على أيقونة الموقع. {{detail}}",
         },
+        footerLocal:
+          "بعد الحفظ تُفتح صفحة نقطة النهاية لجلب نماذجها واختيارها حسب Claude / GPT / Gemini.",
         footerResource: "بعد الحفظ تُفتح صفحة نقطة الاتصال وتعرض عمليات نشر المورد كنماذج لها.",
         addressHint:
           "أدخل المفتاح ثم اضغط اكتشاف تلقائي: يجرّب Osuna كل صيغة من صيغ الطلب الثلاث مرة واحدة ويملأ العناوين التي تعمل.",

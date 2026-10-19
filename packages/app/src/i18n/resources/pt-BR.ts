@@ -2642,6 +2642,7 @@ export const ptBR: TranslationResources = {
         icon: {
           label: "Ícone",
           choosePicture: "Escolher uma imagem…",
+          fromWebsite: "Do site",
           builtIn: "Ícones integrados",
           default: "Padrão",
           find: "Buscar um ícone…",
@@ -2649,7 +2650,14 @@ export const ptBR: TranslationResources = {
           tooLarge: "A imagem passa de 1 MB. Escolha uma menor.",
           notImage:
             "Não é uma imagem que o Osuna consiga mostrar. Use PNG, JPEG, GIF, WebP, ICO ou SVG.",
+          siteNoAddress:
+            "Informe primeiro o endereço do endpoint: o ícone é procurado no site dele.",
+          siteLocal:
+            "O endereço está neste computador ou na rede local, então não dá para buscar o ícone do site.",
+          siteNotFound: "Não foi possível encontrar o ícone do site. {{detail}}",
         },
+        footerLocal:
+          "Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
         footerResource:
           "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:

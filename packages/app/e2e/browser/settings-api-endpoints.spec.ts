@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Locator } from "@playwright/test";
+import type { Locator, WebSocketRoute } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import {
   connectApiEndpointClient,
@@ -1109,6 +1109,49 @@ test.describe("Settings API endpoints", () => {
       });
       await openApiEndpointsPage(page);
       await expect(row(page, saved?.id ?? "").locator("img")).toHaveCount(1);
+    });
+  });
+
+  test("From the website: an address on this machine says why; an icon the host found becomes the endpoint's", async ({
+    page,
+  }) => {
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    // 外网站点的结果由测试答，用一张先存好的图片。
+    const { icon: found } = await client.apiEndpointStoreIcon({ data: png.toString("base64") });
+    const askedFor: string[] = [];
+    await answerSiteIcons(page, { icon: found, askedFor });
+    const iconField = page.getByTestId("api-endpoint-connection-icon-field");
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Home relay");
+
+    await test.step("an address on this machine is refused by the host, which says why", async () => {
+      await page.getByTestId("api-endpoint-connection-url-openai_chat").fill(`${relay.origin}/v1`);
+      await page.getByTestId("api-endpoint-connection-icon-website").click();
+      await expect(iconField).toContainText(
+        "The address is on this computer or the local network, so its website's icon can't be fetched.",
+      );
+      await expect(page.getByTestId("api-endpoint-connection-icon-default")).toHaveCount(0);
+    });
+
+    await test.step("a public address gets the icon the host found, and saving keeps it", async () => {
+      await page
+        .getByTestId("api-endpoint-connection-url-openai_chat")
+        .fill("https://api.relay.example/v1");
+      await page.getByTestId("api-endpoint-connection-icon-website").click();
+      await expect(
+        page.getByTestId("api-endpoint-connection-icon-preview").locator("img"),
+      ).toHaveCount(1);
+      await expect(iconField).not.toContainText("can't be fetched");
+      expect(askedFor).toEqual(["https://api.relay.example/v1"]);
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.icon).toBe(found);
     });
   });
 
@@ -3137,6 +3180,48 @@ async function failFirstTemplateList(page: Page): Promise<void> {
 }
 
 /** 保存接口连接的请求在 `failing` 时不送到 daemon，直接回一条写入失败。 */
+/**
+ * 浏览器测试绝不让 daemon 上网：从网站取图标的请求（本机地址的除外，daemon 自己就拒收）由这里答 icon，并记下问的地址。
+ */
+async function answerSiteIcons(
+  page: Page,
+  input: { icon: string | null; askedFor: string[] },
+): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => answerSiteIcon({ message, ws, server, ...input }));
+  });
+}
+
+function answerSiteIcon(input: {
+  message: string | Buffer;
+  ws: WebSocketRoute;
+  server: WebSocketRoute;
+  icon: string | null;
+  askedFor: string[];
+}): void {
+  const { message, ws, server } = input;
+  const request =
+    typeof message === "string" && message.includes("provider.api_endpoint.fetch_site_icon")
+      ? (JSON.parse(message) as { message?: { requestId?: string; baseUrl?: string } }).message
+      : undefined;
+  if (!request || request.baseUrl?.includes("127.0.0.1")) {
+    server.send(message);
+    return;
+  }
+  input.askedFor.push(request.baseUrl ?? "");
+  ws.send(
+    JSON.stringify({
+      type: "session",
+      message: {
+        type: "provider.api_endpoint.fetch_site_icon.response",
+        payload: { requestId: request.requestId, icon: input.icon, error: null },
+      },
+    }),
+  );
+}
+
 async function failConnectionSave(page: Page): Promise<{ failing: boolean }> {
   const host = { failing: true };
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {

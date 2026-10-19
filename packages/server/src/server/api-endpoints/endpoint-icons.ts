@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
-import type pino from "pino";
+import { isErrnoException } from "../../utils/errno.js";
 import { writePrivateFileAtomicSync } from "../private-files.js";
 
 /*
@@ -80,12 +80,10 @@ export function isBuiltInIconName(icon: string): boolean {
 
 export class EndpointIcons {
   private readonly dir: string;
-  private readonly logger: pino.Logger;
   private readonly now: () => Date;
 
-  constructor(options: { endpointsDir: string; logger: pino.Logger; now: () => Date }) {
+  constructor(options: { endpointsDir: string; now: () => Date }) {
     this.dir = path.join(options.endpointsDir, "icons");
-    this.logger = options.logger;
     this.now = options.now;
   }
 
@@ -111,8 +109,9 @@ export class EndpointIcons {
     if (name === null) return false;
     try {
       return statSync(path.join(this.dir, name)).isFile();
-    } catch {
-      return false;
+    } catch (error) {
+      if (isNotFound(error)) return false;
+      throw error;
     }
   }
 
@@ -123,8 +122,9 @@ export class EndpointIcons {
     const extension = name.slice(name.lastIndexOf(".") + 1);
     try {
       return { data: readFileSync(path.join(this.dir, name)), mimeType: MIME_TYPES[extension] };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
     }
   }
 
@@ -142,22 +142,21 @@ export class EndpointIcons {
     let names: string[];
     try {
       names = readdirSync(this.dir);
-    } catch {
-      return;
+    } catch (error) {
+      // 还没存过图片就没有这个目录。
+      if (isNotFound(error)) return;
+      throw error;
     }
     const cutoff = this.now().getTime() - UNUSED_ICON_GRACE_MS;
     for (const name of names) {
       if (!ICON_FILE_NAME.test(name) || usedNow.has(name)) continue;
       const filePath = path.join(this.dir, name);
-      try {
-        if (dropped.has(name) || statSync(filePath).mtimeMs < cutoff)
-          rmSync(filePath, { force: true });
-      } catch (error) {
-        this.logger.warn(
-          { err: error, file: filePath },
-          "Failed to remove an unused endpoint icon",
-        );
-      }
+      if (dropped.has(name) || statSync(filePath).mtimeMs < cutoff)
+        rmSync(filePath, { force: true });
     }
   }
+}
+
+function isNotFound(error: unknown): boolean {
+  return isErrnoException(error) && error.code === "ENOENT";
 }

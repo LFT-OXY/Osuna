@@ -248,6 +248,10 @@ async function prepareTestDaemonConfig(
       probeThroughProxy: async () => {
         throw new Error("The test daemon never probes a proxy: pass probeThroughProxy");
       },
+      // 绝不上网取网站图标：关心「从网站取图标」的用例自己传本机假站点。
+      fetchSite: async ({ url }) => {
+        throw new Error(`The test daemon never fetches ${url}: pass fetchSite`);
+      },
       // 绝不读真实的进程表、不跑真的 codex：缺省一个什么都没在跑的假适配器，关心它的用例自己传。
       hostProcesses: new FakeHostProcesses(),
       ...(options.apiEndpoints ?? {

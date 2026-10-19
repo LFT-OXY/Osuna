@@ -169,6 +169,8 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.list_templates.request": "daemon.read",
   // 往 daemon 目录里写图片，和保存同一级；取回只读，和列表同一级。
   "provider.api_endpoint.store_icon.request": "daemon.manage",
+  // 让 daemon 向外网站点发请求再存图片，和保存同一级。
+  "provider.api_endpoint.fetch_site_icon.request": "daemon.manage",
   "provider.api_endpoint.read_icon.request": "daemon.read",
   // 会用已保存的 key 向上游发请求，和保存同一级。
   "provider.api_endpoint.fetch_models.request": "daemon.manage",
@@ -424,6 +426,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.reveal_key.response": "daemon.manage",
   "provider.api_endpoint.list_templates.response": "daemon.read",
   "provider.api_endpoint.store_icon.response": "daemon.manage",
+  "provider.api_endpoint.fetch_site_icon.response": "daemon.manage",
   "provider.api_endpoint.read_icon.response": "daemon.read",
   "provider.api_endpoint.fetch_models.response": "daemon.manage",
   "provider.api_endpoint.test_connection.response": "daemon.manage",

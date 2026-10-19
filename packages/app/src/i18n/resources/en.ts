@@ -2668,13 +2668,21 @@ export const en = {
         icon: {
           label: "Icon",
           choosePicture: "Choose a picture…",
+          fromWebsite: "From the website",
           builtIn: "Built-in icons",
           default: "Default",
           find: "Find an icon…",
           noMatch: "No icon called “{{query}}”",
           tooLarge: "The picture is over 1 MB. Pick a smaller one.",
           notImage: "Not a picture Osuna can show. Use PNG, JPEG, GIF, WebP, ICO or SVG.",
+          siteNoAddress:
+            "Type the endpoint's address first: its website's icon is looked for there.",
+          siteLocal:
+            "The address is on this computer or the local network, so its website's icon can't be fetched.",
+          siteNotFound: "Couldn't find the website's icon. {{detail}}",
         },
+        footerLocal:
+          "After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:

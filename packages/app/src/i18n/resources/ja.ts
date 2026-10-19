@@ -2630,6 +2630,7 @@ export const ja: TranslationResources = {
         icon: {
           label: "アイコン",
           choosePicture: "画像を選ぶ…",
+          fromWebsite: "Web サイトから取得",
           builtIn: "内蔵アイコン",
           default: "デフォルト",
           find: "アイコンを検索…",
@@ -2637,7 +2638,14 @@ export const ja: TranslationResources = {
           tooLarge: "画像が 1 MB を超えています。小さい画像を選んでください。",
           notImage:
             "Osuna で表示できる画像ではありません。PNG、JPEG、GIF、WebP、ICO、SVG を使ってください。",
+          siteNoAddress:
+            "先にエンドポイントのアドレスを入力してください。アイコンはそのサイトから探します。",
+          siteLocal:
+            "アドレスがこのコンピューターかローカルネットワーク上にあるため、サイトのアイコンを取得できません。",
+          siteNotFound: "サイトのアイコンが見つかりませんでした。{{detail}}",
         },
+        footerLocal:
+          "保存するとこのエンドポイントのページが開き、モデルを取得して Claude / GPT / Gemini ごとに選べます。",
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:

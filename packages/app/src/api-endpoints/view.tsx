@@ -344,7 +344,10 @@ function ConnectionSheet({
 }: {
   serverId: string;
   sheet: ConnectionSheetState;
-  endpoints: Pick<UseHostEndpointsResult, "state" | "save" | "detect" | "revealKey" | "storeIcon">;
+  endpoints: Pick<
+    UseHostEndpointsResult,
+    "state" | "save" | "detect" | "revealKey" | "storeIcon" | "fetchSiteIcon"
+  >;
   setSheet: Dispatch<SetStateAction<ConnectionSheetState>>;
   onSaved: (result: Extract<ConnectionSaveResult, { status: "saved" }>) => void;
   // 模板列表里点了已加过的模板：打开已有那家。
@@ -402,6 +405,7 @@ function ConnectionSheet({
       onDetect={endpoints.detect}
       onRevealKey={endpoints.revealKey}
       onStoreIcon={endpoints.storeIcon}
+      onFetchSiteIcon={endpoints.fetchSiteIcon}
       onSaved={onSaved}
       onClose={closeForm}
     />

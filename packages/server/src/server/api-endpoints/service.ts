@@ -240,6 +240,13 @@ import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./up
 import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
 import {
+  createPublicFetchSite,
+  findSiteIcon,
+  SiteIconError,
+  type FetchSite,
+  type SiteIconFailure,
+} from "./site-icon.js";
+import {
   EndpointIcons,
   isBuiltInIconName,
   StoreIconError,
@@ -269,6 +276,8 @@ export type ApiEndpointErrorCode =
   | "no_usable_model"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
+  // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
+  | SiteIconFailure
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
@@ -418,6 +427,8 @@ export interface ApiEndpointServiceOptions {
   // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
   modelsDevFetch?: typeof globalThis.fetch;
   modelsDevTimers?: UsagePricingTimers;
+  // 「从网站取图标」取网址用的；缺省真的连公网 https 站点，测试 daemon 一律换成假的，关心它的用例换成本机假站点。
+  fetchSite?: FetchSite;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
@@ -586,6 +597,7 @@ export class ApiEndpointService {
   private readonly startedAt: Date;
   private readonly modelsDev: ModelsDevCatalog;
   private readonly icons: EndpointIcons;
+  private readonly fetchSite: FetchSite;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -653,11 +665,8 @@ export class ApiEndpointService {
     this.sightings = options.sightings;
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
-    this.icons = new EndpointIcons({
-      endpointsDir: this.store.endpointsDir,
-      logger: this.logger,
-      now: this.now,
-    });
+    this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
+    this.fetchSite = options.fetchSite ?? createPublicFetchSite({ userAgent });
     this.readCodexSignIn =
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
@@ -1067,6 +1076,26 @@ export class ApiEndpointService {
       return this.icons.store(bytes);
     } catch (error) {
       if (error instanceof StoreIconError) {
+        throw new ApiEndpointRequestError({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  }
+
+  /** 从地址所在的网站找图标并存下，返回图标值（照 magpie FaviconFor）；只在用户点「从网站取图标」时调用。 */
+  async fetchSiteIcon(
+    input: { baseUrl: string; name: string },
+    signal: AbortSignal,
+  ): Promise<string> {
+    try {
+      return await findSiteIcon({
+        ...input,
+        fetchSite: this.fetchSite,
+        store: (bytes) => this.icons.store(bytes),
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof SiteIconError) {
         throw new ApiEndpointRequestError({ code: error.code, message: error.message });
       }
       throw error;
