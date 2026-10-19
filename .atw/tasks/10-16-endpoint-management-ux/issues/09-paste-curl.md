@@ -8,7 +8,7 @@
 
 **Blocked by:** 06
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 单元测试：magpie 的各类 curl 写法（含 PowerShell 的 `\"`、`^` 与反引号续行、各种占位符）解析结果一致。
 - [ ] 浏览器测试：在地址框、key 框各粘贴一次；模板模式只填 key；四条提示各出现一次。
