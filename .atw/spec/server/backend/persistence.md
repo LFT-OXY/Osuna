@@ -45,6 +45,10 @@ only the last handle. Three rules make it safe without a migration.
 Add the field to `docs/data-model.md` in the same change, including the sentence
 that says what readers do when it is missing.
 
+### Adding a field to a stored API endpoint
+
+A save from an old client (the official Paseo app) omits every field it doesn't know, and it must not clear them (endpoint-management-ux ticket 02, prd 47). `buildEndpoint` in `server/api-endpoints/service.ts` starts from the stored endpoint and replaces only the fields the request carried, so a new field survives an old save with no extra code — **if** it is declared in `StoredApiEndpointSchema` (`store.ts`). That schema is a plain `z.object`: an undeclared key is stripped on read, so it is gone before `buildEndpoint` ever sees it. Each new field: optional in the store schema and in the wire schema, then add it to "a save in the old shape keeps the fields that client does not know" in `api-endpoint-host-wide.e2e.test.ts`: written, saved without it, still there. A field the request may resend with a different meaning (like `modelMapping`) goes in the destructure that drops it from `kept`.
+
 ### Removing a field from the agent record
 
 `STORED_AGENT_SCHEMA` (`agent-storage.ts`) is a plain `z.object`, so a key it no longer declares is stripped on read and disappears on the next write. Removing a field needs no migration: drop it from the schema, from `ManagedAgentBase`, from `toStoredAgentRecord`, and from every `registerSession` caller. The daemon E2E for the removal writes the old key into a record file and checks the agent still resumes (`apiEndpointId`, removed in api-endpoint-auto-switch ticket 11; see [RPC and Protocol](./rpc-and-protocol.md#scenario-retiring-a-timeline-notice-the-daemon-used-to-add)).

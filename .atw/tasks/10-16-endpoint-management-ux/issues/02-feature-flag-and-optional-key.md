@@ -8,7 +8,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：不填 key 保存接口；中转站转发、测试连接、拉模型发往假上游的请求都没有 `Authorization`、`x-api-key`。
 - [ ] 端到端：已有 key 的接口不受影响；编辑时 key 留空仍表示保留原 key。
