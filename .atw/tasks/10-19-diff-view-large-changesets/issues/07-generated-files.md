@@ -11,9 +11,9 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] daemon 用例（真实 git 仓库）：`package-lock.json`、`yarn.lock`、`.gitattributes` 标了 `linguist-generated` 的文件、`app.min.js`、`app.js.map` 都带 `generated: true`；普通文件不带；`.gitattributes` 用 `linguist-generated=false` 取消的文件不带。
-- [ ] 协议：旧客户端的 schema 能解析带 `generated` 的消息；新客户端能解析不带它的消息（现有协议兼容测试写法）。
-- [ ] 规则单测：Generated file 在只有 3 个文件时也收起；手动展开后保持展开。
-- [ ] UI：桌面版，改动里有 `package-lock.json`，它的文件头带「生成」标签，下面没有正文；英文界面下是 "Generated"（截图）。
-- [ ] 用 02 的场景复测打开耗时，数字追加进 `research/baseline.md`。
-- [ ] typecheck、lint 通过；i18n 守卫测试通过。
+- [x] daemon 用例（真实 git 仓库）：`package-lock.json`、`yarn.lock`、`.gitattributes` 标了 `linguist-generated` 的文件、`app.min.js`、`app.js.map` 都带 `generated: true`；普通文件不带；`.gitattributes` 用 `linguist-generated=false` 取消的文件不带。
+- [x] 协议：旧客户端的 schema 能解析带 `generated` 的消息；新客户端能解析不带它的消息（现有协议兼容测试写法）。
+- [x] 规则单测：Generated file 在只有 3 个文件时也收起；手动展开后保持展开。
+- [x] UI：桌面版，改动里有 `package-lock.json`，它的文件头带「生成」标签，下面没有正文；英文界面下是 "Generated"（截图）。
+- [x] 用 02 的场景复测打开耗时，数字追加进 `research/baseline.md`。
+- [x] typecheck、lint 通过；i18n 守卫测试通过。

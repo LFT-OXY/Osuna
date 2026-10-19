@@ -9,7 +9,7 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] daemon 用例（fake timers，现有 `checkout-diff-manager.test.ts` 写法）：连续变动 5 秒，推送间隔都 ≥1 秒；变动停下后，结尾那次在约 150ms 后推出；只变一次时，延迟和改前一样。
-- [ ] 客户端用例（现有 `push-router.test.ts` 或订阅层测试）：1 秒内的多次推送只处理最后一份；结尾那份不丢。
-- [ ] 用 02 的场景复测模拟 Agent 那 1 分钟的长任务次数与最长一次，数字追加进 `research/baseline.md`。
-- [ ] typecheck、lint 通过。
+- [x] daemon 用例（fake timers，现有 `checkout-diff-manager.test.ts` 写法）：连续变动 5 秒，推送间隔都 ≥1 秒；变动停下后，结尾那次在约 150ms 后推出；只变一次时，延迟和改前一样。
+- [x] 客户端用例（现有 `push-router.test.ts` 或订阅层测试）：1 秒内的多次推送只处理最后一份；结尾那份不丢。
+- [x] 用 02 的场景复测模拟 Agent 那 1 分钟的长任务次数与最长一次，数字追加进 `research/baseline.md`。
+- [x] typecheck、lint 通过。

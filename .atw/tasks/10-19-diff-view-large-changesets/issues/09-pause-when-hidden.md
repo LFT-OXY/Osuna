@@ -9,7 +9,7 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 客户端用例：页面变 hidden 后订阅被释放；变回 visible 后重新订阅，并收到最新快照。
-- [ ] 用例：hidden 期间发生的改动，恢复后显示的是最新内容，不是 hidden 之前的旧内容。
-- [ ] 桌面版实测：最小化期间模拟 Agent 持续改文件，daemon 日志里没有为这个订阅做的刷新；恢复后面板 2 秒内显示最新内容。
-- [ ] typecheck、lint 通过。
+- [x] 客户端用例：页面变 hidden 后订阅被释放；变回 visible 后重新订阅，并收到最新快照。
+- [x] 用例：hidden 期间发生的改动，恢复后显示的是最新内容，不是 hidden 之前的旧内容。
+- [x] 桌面版实测：最小化期间模拟 Agent 持续改文件，daemon 日志里没有为这个订阅做的刷新；恢复后面板 2 秒内显示最新内容。
+- [x] typecheck、lint 通过。
