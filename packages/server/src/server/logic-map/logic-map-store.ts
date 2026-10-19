@@ -15,9 +15,9 @@ import {
   LogicMapNotFoundError,
   LogicMapUpdateRejectedError,
 } from "./logic-map-errors.js";
+import { markdownHeadings } from "./logic-map-markdown-headings.js";
 import {
   applyLogicMapOperations,
-  normalizeHeading,
   type ExternalDocLink,
   type LogicMapOperation,
 } from "./logic-map-operations.js";
@@ -159,22 +159,24 @@ export async function listLogicMaps(cwd: string): Promise<WorkspaceLogicMapSumma
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function markdownHeadings(markdown: string): string[] {
-  return markdown
-    .split(/\r?\n/)
-    .map((line) => /^ {0,3}#{1,6}\s+(.*)$/.exec(line)?.[1])
-    .filter((heading): heading is string => heading !== undefined)
-    .map(normalizeHeading);
-}
-
 async function checkExternalDoc(cwd: string, link: ExternalDocLink): Promise<string | null> {
   const where = `node "${link.nodeId}"`;
   const resolved = path.resolve(cwd, link.path);
   if (path.isAbsolute(link.path) || !isSameOrDescendantPath(path.resolve(cwd), resolved)) {
     return `${where}: ${link.path} is outside the workspace; use a path relative to the workspace root`;
   }
-  const text = await fs.readFile(resolved, "utf8").catch(() => null);
-  if (text === null) return `${where}: ${link.path} does not exist`;
+  let text: string;
+  try {
+    text = await fs.readFile(resolved, "utf8");
+  } catch (error) {
+    if (isErrnoException(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+      return `${where}: ${link.path} does not exist`;
+    }
+    if (isErrnoException(error) && error.code === "EISDIR") {
+      return `${where}: ${link.path} is a folder, not a file`;
+    }
+    throw error;
+  }
   if (!markdownHeadings(text).includes(link.heading)) {
     return `${where}: ${link.path} has no heading "${link.heading}"`;
   }
@@ -196,9 +198,35 @@ async function runExclusive<T>(key: string, task: () => Promise<T>): Promise<T> 
   }
 }
 
+/** 文件写入前的样子：原内容，或 null 表示原来没有这个文件。 */
+type FileSnapshot = Map<string, string | null>;
+
+async function snapshotFiles(files: Iterable<string>): Promise<FileSnapshot> {
+  const snapshot: FileSnapshot = new Map();
+  for (const file of new Set(files)) {
+    try {
+      snapshot.set(file, await fs.readFile(file, "utf8"));
+    } catch (error) {
+      if (!(isErrnoException(error) && error.code === "ENOENT")) throw error;
+      snapshot.set(file, null);
+    }
+  }
+  return snapshot;
+}
+
+async function restoreFiles(snapshot: FileSnapshot): Promise<void> {
+  for (const [file, content] of snapshot) {
+    if (content === null) {
+      await fs.rm(file, { force: true });
+    } else {
+      await writeFileAtomic(file, content);
+    }
+  }
+}
+
 /**
  * 把一组增量操作套到图上：全部合格才写入，任何一条不合格整组拒绝（LogicMapUpdateRejectedError），磁盘不动。
- * 先写节点文档，再原子写骨架，最后删掉不再被引用的自有文档。
+ * 先写节点文档，再原子写骨架，最后删掉不再被引用的自有文档；中途写盘失败时把涉及的文件恢复原样再抛出。
  */
 export async function updateLogicMap(
   location: LogicMapLocation,
@@ -218,13 +246,28 @@ export async function updateLogicMap(
     if (problems.length > 0) {
       throw new LogicMapUpdateRejectedError(problems);
     }
-    for (const [file, content] of applied.docWrites) {
-      await writeFileAtomic(path.join(directory, file), content);
-    }
-    await writeJsonFileAtomic(path.join(directory, LOGIC_MAP_SKELETON_FILE), applied.skeleton);
-    await Promise.all(
-      applied.docDeletes.map((file) => fs.rm(path.join(directory, file), { force: true })),
+    const skeletonFile = path.join(directory, LOGIC_MAP_SKELETON_FILE);
+    const docWrites = [...applied.docWrites].map(
+      ([file, content]) => [path.join(directory, file), content] as const,
     );
+    const docDeletes = applied.docDeletes.map((file) => path.join(directory, file));
+    const snapshot = await snapshotFiles([
+      ...docWrites.map(([file]) => file),
+      skeletonFile,
+      ...docDeletes,
+    ]);
+    try {
+      for (const [file, content] of docWrites) {
+        await writeFileAtomic(file, content);
+      }
+      await writeJsonFileAtomic(skeletonFile, applied.skeleton);
+      for (const file of docDeletes) {
+        await fs.rm(file, { force: true });
+      }
+    } catch (error) {
+      await restoreFiles(snapshot);
+      throw error;
+    }
     return { skeleton: applied.skeleton, warnings: applied.warnings };
   });
 }

@@ -6,6 +6,8 @@ import {
   type LogicMapSkeleton,
 } from "@getpaseo/protocol/messages";
 
+import { normalizeHeading } from "./logic-map-markdown-headings.js";
+
 const MAX_NODES_PER_LAYER = 20;
 const NODE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
@@ -96,15 +98,6 @@ export interface AppliedLogicMapOperations {
 
 export function ownDocFileName(id: string): string {
   return `${id}.md`;
-}
-
-/** 去掉 Markdown 标题前后的 `#` 和空白，只留标题文字。 */
-export function normalizeHeading(heading: string): string {
-  return heading
-    .trim()
-    .replace(/^#+\s*/, "")
-    .replace(/\s+#+$/, "")
-    .trim();
 }
 
 function edgeLabel(edge: Pick<LogicMapEdge, "from" | "to">): string {
@@ -324,12 +317,12 @@ export function applyLogicMapOperations(
   });
   problems.push(...validateStructure(draft));
 
-  // 装了 spec 框架时，本组新写的自有文档是临时要点，带"还没指向正式文档"标记。
+  // "还没指向正式文档"标记跟着状态走：记了有 spec 框架时，每个自有文档都是临时要点；
+  // 判断为没有框架（或还没判断），或节点已指向外部文档时不带标记。
   const pendingLink = draft.specFramework?.kind === "present";
-  for (const id of draft.docWrites.keys()) {
-    const node = draft.nodes.get(id);
-    if (node?.doc?.kind === "own") {
-      draft.nodes.set(id, { ...node, doc: { ...node.doc, pendingLink } });
+  for (const node of draft.nodes.values()) {
+    if (node.doc?.kind === "own" && node.doc.pendingLink !== pendingLink) {
+      draft.nodes.set(node.id, { ...node, doc: { ...node.doc, pendingLink } });
     }
   }
 

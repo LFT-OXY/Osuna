@@ -221,6 +221,24 @@ describe("update_logic_map", () => {
       operations: LOGIN_FLOW.slice(1),
       message: /set_title/,
     },
+    {
+      rule: "a line joins nodes in different layers",
+      operations: [
+        ...LOGIN_FLOW,
+        { op: "add_node", id: "sms", title: "SMS login", kind: "subgraph" },
+        { op: "add_node", id: "send", title: "Send the code", kind: "step", parentId: "sms" },
+        { op: "add_edge", from: "home", to: "send" },
+      ],
+      message: /line home → send: both ends must be in the same layer/,
+    },
+    {
+      rule: "a node sits inside a node that is not a subgraph",
+      operations: [
+        ...LOGIN_FLOW,
+        { op: "add_node", id: "send", title: "Send the code", kind: "step", parentId: "home" },
+      ],
+      message: /node "send": parent "home" is not a subgraph node/,
+    },
   ])("rejects the whole batch when $rule", async ({ operations, message }) => {
     const harness = await setUp();
     const client = await connectAgent(harness);
@@ -316,6 +334,135 @@ describe("update_logic_map", () => {
     expect(await readdir(mapDir(harness))).toEqual(["map.json"]);
   });
 
+  test("the not-yet-linked mark follows the spec framework judgement and the doc source", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(path.join(harness.cwd, "prd.md"), "# Password check\n");
+    async function marks(): Promise<Record<string, unknown>> {
+      const skeleton = z
+        .object({ nodes: z.array(z.object({ id: z.string(), doc: z.unknown() })) })
+        .parse(await readSkeleton(harness));
+      return Object.fromEntries(skeleton.nodes.map((entry) => [entry.id, entry.doc]));
+    }
+    const own = (file: string, pendingLink: boolean) => ({ kind: "own", file, pendingLink });
+
+    await update(client, [
+      ...LOGIN_FLOW,
+      { op: "write_node_doc", id: "start", content: "Start." },
+      { op: "write_node_doc", id: "check", content: "Check." },
+    ]);
+    expect(await marks()).toMatchObject({
+      start: own("start.md", false),
+      check: own("check.md", false),
+    });
+
+    await update(client, [
+      { op: "set_spec_framework", framework: { kind: "present", docsPath: "docs" } },
+    ]);
+    expect(await marks()).toMatchObject({
+      start: own("start.md", true),
+      check: own("check.md", true),
+    });
+
+    await update(client, [
+      { op: "link_node_doc", id: "check", path: "prd.md", heading: "Password check" },
+    ]);
+    expect(await marks()).toMatchObject({
+      start: own("start.md", true),
+      check: { kind: "external", path: "prd.md", heading: "Password check" },
+    });
+
+    await update(client, [{ op: "set_spec_framework", framework: { kind: "none" } }]);
+    expect(await marks()).toMatchObject({ start: own("start.md", false) });
+  });
+
+  test("a write that fails halfway rolls back the docs it already wrote", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await update(client, LOGIN_FLOW);
+    const before = await snapshotMapFolder(harness);
+    // 文件名本身合法，但写入时的临时文件名超过系统上限，第二份文档在真实磁盘上写失败。
+    const longId = "n".repeat(240);
+
+    const result = await update(client, [
+      { op: "write_node_doc", id: "home", content: "Home." },
+      { op: "add_node", id: longId, title: "Long", kind: "step" },
+      { op: "write_node_doc", id: longId, content: "Long." },
+    ]);
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/ENAMETOOLONG/);
+    expect(await snapshotMapFolder(harness)).toEqual(before);
+    expect(harness.changes).toHaveLength(1);
+  });
+
+  test.each([
+    {
+      name: "a setext heading",
+      markdown: "Intro\n\nPassword check\n---\n",
+      heading: "Password check",
+    },
+    {
+      name: "a level-one setext heading",
+      markdown: "Password check\n===\n",
+      heading: "Password check",
+    },
+    {
+      name: "a heading with inline code",
+      markdown: "## Check the `password` field\n",
+      heading: "Check the password field",
+    },
+    {
+      name: "a heading with a link",
+      markdown: "## Check against [the spec](spec.md)\n",
+      heading: "Check against the spec",
+    },
+    {
+      name: "a heading quoted with its markup",
+      markdown: "## Check against [the spec](spec.md)\n",
+      heading: "## Check against [the spec](spec.md)",
+    },
+  ])("links to $name", async ({ markdown, heading }) => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(path.join(harness.cwd, "prd.md"), markdown);
+
+    const result = await update(client, [
+      ...LOGIN_FLOW,
+      { op: "link_node_doc", id: "check", path: "prd.md", heading },
+    ]);
+
+    expect(result.text).not.toMatch(/rejected/);
+    expect(result.isError).toBe(false);
+  });
+
+  test("a heading-looking line inside a code block is not a heading", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(path.join(harness.cwd, "prd.md"), "# Login\n\n```\n# Password check\n```\n");
+
+    const result = await update(client, [
+      ...LOGIN_FLOW,
+      { op: "link_node_doc", id: "check", path: "prd.md", heading: "Password check" },
+    ]);
+
+    expect(result.text).toMatch(/prd\.md has no heading "Password check"/);
+  });
+
+  test("a linked path that is a folder is rejected as not a file", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await mkdir(path.join(harness.cwd, "specs"));
+
+    const result = await update(client, [
+      ...LOGIN_FLOW,
+      { op: "link_node_doc", id: "check", path: "specs", heading: "Password check" },
+    ]);
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/node "check": specs is a folder, not a file/);
+  });
+
   test("a heading the linked file does not have is rejected", async () => {
     const harness = await setUp();
     const client = await connectAgent(harness);
@@ -369,6 +516,51 @@ describe("update_logic_map", () => {
 });
 
 describe("read_logic_map", () => {
+  test.each([
+    { problem: "an empty node id", node: { id: "", title: "A" }, message: /nodes\.0\.id: / },
+    { problem: "an empty node title", node: { id: "a", title: "" }, message: /nodes\.0\.title: / },
+    {
+      problem: "a field the map format does not have",
+      node: { id: "a", title: "A", colour: "red" },
+      message: /nodes\.0: .*colour/,
+    },
+  ])("a map file with $problem is reported as broken", async ({ node: written, message }) => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(
+      path.join(mapDir(harness), "map.json"),
+      JSON.stringify({
+        title: "x",
+        specFramework: null,
+        nodes: [{ kind: "step", parentId: null, doc: null, ...written }],
+        edges: [],
+      }),
+    );
+
+    const result = await callTool(client, "read_logic_map", {});
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(message);
+  });
+
+  test("a node written without the failure flag reads back as not failing", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(
+      path.join(mapDir(harness), "map.json"),
+      JSON.stringify({
+        title: "x",
+        specFramework: null,
+        nodes: [{ id: "a", title: "A", kind: "step", parentId: null, doc: null }],
+        edges: [],
+      }),
+    );
+
+    const result = await callTool(client, "read_logic_map", {});
+
+    expect(result.structured).toMatchObject({ map: { nodes: [{ id: "a", failure: false }] } });
+  });
+
   test("a map file broken by hand is a readable error naming the map, the file and the problem", async () => {
     const harness = await setUp();
     const client = await connectAgent(harness);

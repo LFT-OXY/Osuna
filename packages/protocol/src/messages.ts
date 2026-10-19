@@ -2211,8 +2211,8 @@ export const LogicMapNodeSchema = z.object({
   kind: LogicMapNodeKindSchema,
   /** 所在子图节点的 id；顶层为 null。 */
   parentId: z.string().nullable(),
-  /** 失败的那条路上的节点，图上画成红色。 */
-  failure: z.boolean(),
+  /** 失败的那条路上的节点，图上画成红色；没有时按 false。 */
+  failure: z.boolean().optional(),
   doc: LogicMapNodeDocSchema.nullable(),
 });
 export type LogicMapNode = z.infer<typeof LogicMapNodeSchema>;
