@@ -7,7 +7,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 用真实 git 仓库的用例：总量超过 2MB 后，剩余的未跟踪文件都出现在结果里，`status` 为 `too_large`（先写这个用例，确认它在改前失败）。
 - [ ] 用例：多个未跟踪文件并发处理后，结果的文件顺序和内容与串行处理时一致。
