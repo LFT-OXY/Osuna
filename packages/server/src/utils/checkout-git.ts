@@ -3190,18 +3190,70 @@ async function appendStructuredTrackedDiffs(
   return true;
 }
 
-interface ProcessUntrackedChangeInput {
+type UntrackedDiffText = Awaited<ReturnType<typeof getUntrackedDiffText>>;
+
+interface ProcessUntrackedChangesInput {
   cwd: string;
-  change: CheckoutFileChange;
+  untrackedChanges: CheckoutFileChange[];
+  remainingDiffBytes: number;
   ignoreWhitespace: boolean;
   includeStructured: boolean;
   structured: StructuredDiffAccumulator;
   appendDiff: (text: string) => void;
 }
 
-async function processUntrackedChange(input: ProcessUntrackedChangeInput): Promise<boolean> {
-  const { cwd, change, ignoreWhitespace, includeStructured, structured, appendDiff } = input;
-  const { text, truncated, stat } = await getUntrackedDiffText(cwd, change, ignoreWhitespace);
+async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Promise<boolean> {
+  const { cwd, untrackedChanges, ignoreWhitespace, includeStructured, structured, appendDiff } =
+    input;
+  let untrackedDiffBytes = 0;
+  for (let start = 0; start < untrackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
+    const changes = untrackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
+    // 预算已满时不再读取，剩余文件直接给占位
+    const budgetExhausted = untrackedDiffBytes >= input.remainingDiffBytes;
+    // 并发只靠 git 子进程限流兜底；结果仍按原顺序拼接，输出与串行一致
+    const diffTexts: Array<UntrackedDiffText | null> = budgetExhausted
+      ? changes.map(() => null)
+      : await Promise.all(
+          changes.map((change) => getUntrackedDiffText(cwd, change, ignoreWhitespace)),
+        );
+    for (const [index, change] of changes.entries()) {
+      const diffText = diffTexts[index];
+      const diffBytes = diffText ? Buffer.byteLength(diffText.text, "utf8") : 0;
+      const fitsBudget =
+        diffText !== null && untrackedDiffBytes + diffBytes <= input.remainingDiffBytes;
+      const didAppend = await appendUntrackedChange({
+        cwd,
+        change,
+        diffText: fitsBudget
+          ? diffText
+          : { text: "", truncated: true, stat: diffText?.stat ?? null },
+        includeStructured,
+        structured,
+        appendDiff,
+      });
+      if (!didAppend) {
+        return false;
+      }
+      if (fitsBudget) {
+        untrackedDiffBytes += diffBytes;
+      }
+    }
+  }
+  return true;
+}
+
+interface AppendUntrackedChangeInput {
+  cwd: string;
+  change: CheckoutFileChange;
+  diffText: UntrackedDiffText;
+  includeStructured: boolean;
+  structured: StructuredDiffAccumulator;
+  appendDiff: (text: string) => void;
+}
+
+async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise<boolean> {
+  const { cwd, change, diffText, includeStructured, structured, appendDiff } = input;
+  const { text, truncated, stat } = diffText;
 
   if (!includeStructured) {
     if (stat?.isBinary) {
@@ -3476,21 +3528,17 @@ export async function getCheckoutDiff(
     }
   }
 
-  for (const change of untrackedChanges) {
-    if (diffBytes >= TOTAL_DIFF_MAX_BYTES) {
-      break;
-    }
-    const didAppendUntrackedDiff = await processUntrackedChange({
-      cwd,
-      change,
-      ignoreWhitespace,
-      includeStructured: compare.includeStructured === true,
-      structured,
-      appendDiff,
-    });
-    if (!didAppendUntrackedDiff) {
-      return { diff: "", structured: [], diffTooLarge: true };
-    }
+  const didAppendUntrackedDiffs = await processUntrackedChanges({
+    cwd,
+    untrackedChanges,
+    remainingDiffBytes: TOTAL_DIFF_MAX_BYTES - diffBytes,
+    ignoreWhitespace,
+    includeStructured: compare.includeStructured === true,
+    structured,
+    appendDiff,
+  });
+  if (!didAppendUntrackedDiffs) {
+    return { diff: "", structured: [], diffTooLarge: true };
   }
 
   if (compare.includeStructured) {

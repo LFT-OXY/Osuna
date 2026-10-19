@@ -47,7 +47,12 @@ import {
   isDescendantPath,
   warmCheckoutShortstatInBackground,
 } from "./checkout-git.js";
-import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
+import {
+  configureGitProcessPolicy,
+  startGitCommandMetrics,
+  stopGitCommandMetrics,
+} from "./run-git-command.js";
+import { resolveGitProcessPolicy } from "./git-process-scheduler.js";
 import { createForgeResolver } from "../services/forge-resolver.js";
 import { GitHubCommandError, GitHubCliMissingError } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
@@ -1544,6 +1549,84 @@ const x = 1;
     expect(diff.diff).toContain("budget-2.txt");
     expect(diff.diff).toContain("# budget-3.txt: diff too large omitted");
     expect(diff.diff).toContain("# budget-4.txt: diff too large omitted");
+  });
+
+  it("marks untracked files omitted by the total diff budget as too_large", async () => {
+    const largeLine = "x".repeat(700_000);
+    for (let i = 1; i <= 4; i += 1) {
+      writeFileSync(join(repoDir, `new-budget-${i}.txt`), `${largeLine}-${i}\n`);
+    }
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      diff.structured?.map((file) => ({
+        path: file.path,
+        status: file.status,
+        hunks: file.hunks.length,
+      })),
+    ).toEqual([
+      { path: "new-budget-1.txt", status: "ok", hunks: 1 },
+      { path: "new-budget-2.txt", status: "ok", hunks: 1 },
+      { path: "new-budget-3.txt", status: "too_large", hunks: 0 },
+      { path: "new-budget-4.txt", status: "too_large", hunks: 0 },
+    ]);
+    expect(diff.diff).toContain("# new-budget-3.txt: diff too large omitted");
+    expect(diff.diff).toContain("# new-budget-4.txt: diff too large omitted");
+  });
+
+  it("processes untracked files concurrently with the same result as serial processing", async () => {
+    for (let i = 0; i < 24; i += 1) {
+      const name = `new-${String(i).padStart(2, "0")}.ts`;
+      writeFileSync(join(repoDir, name), `export const value${i} = ${i};\n`);
+    }
+    writeFileSync(join(repoDir, "new-blob.bin"), Buffer.from([0x00, 0xff, 0x10, 0x00]));
+
+    configureGitProcessPolicy({ maxProcessesPerSecond: 10_000, maxProcessConcurrency: 1 });
+    let serial: Awaited<ReturnType<typeof getCheckoutDiff>>;
+    try {
+      serial = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+    } finally {
+      configureGitProcessPolicy(resolveGitProcessPolicy({ env: process.env }));
+    }
+
+    startGitCommandMetrics();
+    const concurrent = await getCheckoutDiff(repoDir, {
+      mode: "uncommitted",
+      includeStructured: true,
+    });
+    const metrics = stopGitCommandMetrics();
+
+    expect(metrics.maxConcurrent).toBeGreaterThan(1);
+    expect(concurrent).toEqual(serial);
+    expect(concurrent.structured?.map((file) => file.path)).toEqual([
+      "new-00.ts",
+      "new-01.ts",
+      "new-02.ts",
+      "new-03.ts",
+      "new-04.ts",
+      "new-05.ts",
+      "new-06.ts",
+      "new-07.ts",
+      "new-08.ts",
+      "new-09.ts",
+      "new-10.ts",
+      "new-11.ts",
+      "new-12.ts",
+      "new-13.ts",
+      "new-14.ts",
+      "new-15.ts",
+      "new-16.ts",
+      "new-17.ts",
+      "new-18.ts",
+      "new-19.ts",
+      "new-20.ts",
+      "new-21.ts",
+      "new-22.ts",
+      "new-23.ts",
+      "new-blob.bin",
+    ]);
+    expect(concurrent.structured?.at(-1)?.status).toBe("binary");
   });
 
   it("short-circuits tracked binary files", async () => {
