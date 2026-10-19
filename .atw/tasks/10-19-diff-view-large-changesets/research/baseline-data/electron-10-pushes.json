@@ -1,0 +1,23 @@
+{
+  "note": "dev Electron 渲染进程经 CDP Network 记录的 ≥1MB WebSocket 帧（完整订阅的 subscribe 响应与 checkout_diff_update），覆盖打开到 Agent 结束后收尾；run1 对应 electron-10.json，run2 对应 electron-10-run2.json",
+  "run1": {
+    "fullDiffMessages": 30,
+    "bytesMedian": 15958534,
+    "gapsMs": {
+      "count": 29,
+      "median": 1203,
+      "p95": 7083,
+      "max": 7380
+    }
+  },
+  "run2": {
+    "fullDiffMessages": 18,
+    "bytesMedian": 15961963,
+    "gapsMs": {
+      "count": 17,
+      "median": 3131,
+      "p95": 11373,
+      "max": 11373
+    }
+  }
+}
