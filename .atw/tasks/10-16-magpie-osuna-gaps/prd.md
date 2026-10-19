@@ -207,8 +207,7 @@
     - 风险提示：为 Codex、Claude Code 各自第一次打开时各提示一次，写明条款原文链接和可能的后果；不逐号确认，账号列表上不常驻风险标记。
 15. **身份如实（全部子任务）**：Osuna 自己发出的请求（查余额、查额度、取汇率等）用 Osuna 自己的身份；不冒充别的产品（伪造 client ID、User-Agent、originator 等），不为躲避厂商识别改写请求。CLI 自己发出、经过内置中转站的请求保持 CLI 自己的样子，只换模型名与认证。登录续期如果必须由 Osuna 代办，在子任务 9 单独决定，写进它的 ADR。
     - 2026-10-17 注：经过中转站的请求怎么改，措辞已按 [ADR 0008](../../../docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md) 调整。
-    - 2026-10-19 注：读别的软件的配置、接收导入链接、按 Claude Code / Codex 的样子测模型是本条的例外，见 [ADR 0013](../../../docs/adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md)；用户在接口上设的请求头、附加请求体、上游模型名、只用这种格式也改经过中转站的请求，见 ADR 0008「What the user sets on an endpoint」。
-    - 2026-10-19 注：子任务 3 的「按 Claude Code / Codex 的样子测模型」照 magpie 用 CLI 的请求头发出，是本条的例外，由用户选定，写进子任务 3 的新 ADR。
+    - 2026-10-19 注：子任务 3 的读别的软件的配置、接收导入链接、「按 Claude Code / Codex 的样子测模型」（照 magpie 用 CLI 的请求头发出）是本条的例外，由用户选定，见 [ADR 0013](../../../docs/adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md)；用户在接口上设的请求头、附加请求体、上游模型名、只用这种格式也改经过中转站的请求，见 [ADR 0008](../../../docs/adr/0008-gateway-reshapes-rejected-requests-and-fails-over-refusals.md)「What the user sets on an endpoint」。
 16. **协议（全部子任务）**：遵守 `docs/protocol-compatibility.md`。新字段可选；新 RPC 用带点命名空间加 `.request` / `.response`；新功能挂在 `server_info.features.*` 上。旧客户端（含官方 Paseo 手机 App）看不到新功能，但照常工作；ADR 0007 给旧客户端的「单个启用接口」投影保持不变。
 17. **术语（全部子任务）**：新的界面名词定名后写进 `docs/glossary.md`（界面文字为准，每个概念一个中文名）。被改到的旧词条随子任务更新，例如 Request format（多了 Gemini）、Failover（不再只写日志）、Endpoint status（记录重启不丢）、Usage（不再只读会话记录）、Estimated cost（加倍率与人民币）、Plan usage（与接口余额区分）。
 
