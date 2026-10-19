@@ -144,6 +144,49 @@ export async function assertLogicMapExists(location: LogicMapLocation): Promise<
   }
 }
 
+/** 删一张从没写过的图的结果；写过（或被手动改过）、已经不在、还有 Agent 在用时留着不动。 */
+export type DiscardUnwrittenLogicMapResult =
+  | { kind: "deleted" }
+  | { kind: "kept"; reason: "written" | "missing" | "in_use" };
+
+function isUnwrittenSkeleton(skeleton: LogicMapSkeleton): boolean {
+  return (
+    skeleton.title === null &&
+    skeleton.specFramework === null &&
+    skeleton.nodes.length === 0 &&
+    skeleton.edges.length === 0
+  );
+}
+
+/**
+ * 删掉一张从没写过的图：骨架还是新建时的空骨架，文件夹里只有骨架文件。
+ * 和更新排在同一个队列里，删之前不会有写入插进来。
+ */
+export async function discardUnwrittenLogicMap(
+  location: LogicMapLocation,
+): Promise<DiscardUnwrittenLogicMapResult> {
+  const directory = mapDirectory(location);
+  return runExclusive(path.resolve(directory), async () => {
+    let skeleton: LogicMapSkeleton;
+    try {
+      skeleton = await readLogicMap(location);
+    } catch (error) {
+      if (error instanceof LogicMapNotFoundError) return { kind: "kept", reason: "missing" };
+      if (error instanceof LogicMapCorruptError) return { kind: "kept", reason: "written" };
+      throw error;
+    }
+    const entries = await fs.readdir(directory);
+    if (
+      !isUnwrittenSkeleton(skeleton) ||
+      entries.some((entry) => entry !== LOGIC_MAP_SKELETON_FILE)
+    ) {
+      return { kind: "kept", reason: "written" };
+    }
+    await fs.rm(directory, { recursive: true });
+    return { kind: "deleted" };
+  });
+}
+
 /** 列出 workspace 里的逻辑图（有骨架文件的文件夹），按图名排序；读不出来的图标题为 null。 */
 export async function listLogicMaps(cwd: string): Promise<WorkspaceLogicMapSummary[]> {
   const mapsDir = path.join(cwd, LOGIC_MAPS_DIRECTORY);

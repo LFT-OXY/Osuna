@@ -1,7 +1,11 @@
-import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
+import {
+  getLogicMapNameFromLabels,
+  LOGIC_MAP_BRIEFED_LABEL,
+} from "@getpaseo/protocol/agent-labels";
 import { LOGIC_MAPS_DIRECTORY } from "@getpaseo/protocol/logic-map-docs";
 import type { LogicMapSkeleton } from "@getpaseo/protocol/messages";
 
+import type { AgentManager } from "../agent/agent-manager.js";
 import { formatSystemNotificationPrompt } from "../agent/agent-prompt.js";
 import { LogicMapCorruptError, LogicMapNotFoundError } from "./logic-map-errors.js";
 import { readLogicMap } from "./logic-map-store.js";
@@ -24,7 +28,10 @@ type LogicMapOnDisk =
 const CORRECTION_RULE =
   "- If the user corrects the judgment, record the corrected one with `set_spec_framework` and tell them what changed.";
 
-function specFrameworkLines(map: LogicMapOnDisk): string[] {
+/** 这条消息是不是打开开关（或换图）后的第一条：只有这时才要求先给带标记的节点补指向。 */
+type LogicMapTurn = "first-since-switch-on" | "later";
+
+function specFrameworkLines(map: LogicMapOnDisk, turn: LogicMapTurn): string[] {
   if (map.kind === "unreadable") {
     return [
       `The logic map files cannot be read: ${map.problem}. Do not try to update the map; tell the user which file is broken and what is wrong.`,
@@ -61,7 +68,7 @@ function specFrameworkLines(map: LogicMapOnDisk): string[] {
       CORRECTION_RULE,
     ].join("\n"),
   ];
-  if (pendingIds.length > 0) {
+  if (turn === "first-since-switch-on" && pendingIds.length > 0) {
     lines.push(
       `Before you continue the conversation, check the framework docs for these nodes, which are not linked to the final doc yet: ${pendingIds.join(", ")}. Link every node whose section now exists with \`link_node_doc\`, then carry on.`,
     );
@@ -69,7 +76,11 @@ function specFrameworkLines(map: LogicMapOnDisk): string[] {
   return lines;
 }
 
-function formatLogicMapInstructionBlock(mapName: string, map: LogicMapOnDisk): string {
+function formatLogicMapInstructionBlock(
+  mapName: string,
+  map: LogicMapOnDisk,
+  turn: LogicMapTurn,
+): string {
   return formatSystemNotificationPrompt(
     [
       `The logic map is on for this conversation. You maintain the logic map "${mapName}", stored in this workspace at ${LOGIC_MAPS_DIRECTORY}/${mapName}/.`,
@@ -83,7 +94,7 @@ function formatLogicMapInstructionBlock(mapName: string, map: LogicMapOnDisk): s
         "- Whenever this turn reaches a new conclusion about the feature, update the logic map before you finish the turn.",
         "- After each update, tell the user in one or two sentences which nodes you added, changed, and removed.",
       ].join("\n"),
-      ...specFrameworkLines(map),
+      ...specFrameworkLines(map, turn),
     ].join("\n\n"),
   );
 }
@@ -107,7 +118,8 @@ async function readLogicMapOnDisk(cwd: string, mapName: string): Promise<LogicMa
 
 /**
  * 逻辑图说明块；Agent 没开逻辑图，或这条消息没有文字时为 null。
- * 发送时现读这张图：没判断过 spec 框架就先要求判断，还有没指向正式文档的节点就要求先补指向。
+ * 发送时现读这张图：没判断过 spec 框架就先要求判断；打开开关后的第一条消息里，
+ * 还有没指向正式文档的节点就要求先补指向（之后由 `markLogicMapBriefed` 记下已经说过）。
  * 和 Routing block 一样只附在发给 provider 的那份里，由 `stripTrailingRoutingBlock` 剥掉。
  */
 export async function resolveLogicMapInstructionBlock(
@@ -116,5 +128,21 @@ export async function resolveLogicMapInstructionBlock(
   if (input.text.trim().length === 0) return null;
   const mapName = getLogicMapNameFromLabels(input.labels);
   if (!mapName) return null;
-  return formatLogicMapInstructionBlock(mapName, await readLogicMapOnDisk(input.cwd, mapName));
+  const turn: LogicMapTurn =
+    input.labels[LOGIC_MAP_BRIEFED_LABEL] === mapName ? "later" : "first-since-switch-on";
+  return formatLogicMapInstructionBlock(
+    mapName,
+    await readLogicMapOnDisk(input.cwd, mapName),
+    turn,
+  );
+}
+
+/** 附过说明块之后调用：记下这张图已经说过，后面的消息不再要求先补指向。已经记过时不写。 */
+export async function markLogicMapBriefed(
+  agentManager: Pick<AgentManager, "patchLabels">,
+  agent: { id: string; labels: Readonly<Record<string, string>> },
+): Promise<void> {
+  const mapName = getLogicMapNameFromLabels(agent.labels);
+  if (!mapName || agent.labels[LOGIC_MAP_BRIEFED_LABEL] === mapName) return;
+  await agentManager.patchLabels(agent.id, { [LOGIC_MAP_BRIEFED_LABEL]: mapName });
 }

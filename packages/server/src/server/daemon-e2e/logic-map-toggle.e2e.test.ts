@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -10,6 +10,7 @@ import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo
 
 const WAIT_MS = 15_000;
 const BLOCK_INTRO = "The logic map is on for this conversation.";
+const LINK_FIRST = "Before you continue the conversation";
 
 const tempDirs: string[] = [];
 const daemons: TestPaseoDaemon[] = [];
@@ -79,6 +80,31 @@ async function userMessages(scenario: Scenario, agentId: string): Promise<string
 async function readSkeleton(cwd: string, mapName: string): Promise<unknown> {
   return JSON.parse(
     await readFile(path.join(cwd, "docs", "logic-maps", mapName, "map.json"), "utf8"),
+  );
+}
+
+/** 写一张装了 spec 框架、有一个节点还停在临时要点（带标记）的图。 */
+async function writeMarkedMap(cwd: string, mapName: string): Promise<void> {
+  const mapDir = path.join(cwd, "docs", "logic-maps", mapName);
+  await mkdir(mapDir, { recursive: true });
+  await writeFile(path.join(mapDir, "start.md"), "Interim summary.");
+  await writeFile(
+    path.join(mapDir, "map.json"),
+    JSON.stringify({
+      title: "Login",
+      specFramework: { kind: "present", docsPath: ".atw/tasks" },
+      nodes: [
+        {
+          id: "start",
+          title: "Open the page",
+          kind: "start",
+          parentId: null,
+          failure: false,
+          doc: { kind: "own", file: "start.md", pendingLink: true },
+        },
+      ],
+      edges: [],
+    }),
   );
 }
 
@@ -216,6 +242,126 @@ describe("Logic map toggle", () => {
     expect(await agentLogicMap(scenario, later.id)).toBe(mapName);
     expect(await readdir(path.join(scenario.cwd, "docs", "logic-maps"))).toEqual([mapName]);
     expect(scenario.prompts[0]).toContain(`docs/logic-maps/${mapName}/`);
+  });
+
+  test("a draft that leaves the empty map it created for an existing one deletes the empty map", async () => {
+    const scenario = await startDaemon();
+    const workspaceId = await openWorkspace(scenario);
+    const { mapName: existing } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId },
+      enabled: true,
+    });
+    const { mapName: created } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId },
+      enabled: true,
+    });
+
+    const result = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId, createdMapName: created! },
+      enabled: true,
+      mapName: existing!,
+    });
+
+    expect(result.mapName).toBe(existing);
+    expect(await readdir(path.join(scenario.cwd, "docs", "logic-maps"))).toEqual([existing]);
+  });
+
+  test.each([
+    {
+      reason: "it has a title",
+      touch: async (scenario: Scenario, mapName: string) => {
+        await writeFile(
+          path.join(scenario.cwd, "docs", "logic-maps", mapName, "map.json"),
+          JSON.stringify({ title: "Login", specFramework: null, nodes: [], edges: [] }),
+        );
+      },
+    },
+    {
+      reason: "it has a node doc",
+      touch: async (scenario: Scenario, mapName: string) => {
+        await writeFile(path.join(scenario.cwd, "docs", "logic-maps", mapName, "start.md"), "x");
+      },
+    },
+    {
+      reason: "an agent maintains it",
+      touch: async (scenario: Scenario, mapName: string) => {
+        await scenario.client.createAgent({
+          provider: "codex",
+          cwd: scenario.cwd,
+          labels: { [LOGIC_MAP_LABEL]: mapName },
+        });
+      },
+    },
+  ])("a draft keeps its earlier map when $reason", async ({ touch }) => {
+    const scenario = await startDaemon();
+    const workspaceId = await openWorkspace(scenario);
+    const { mapName: existing } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId },
+      enabled: true,
+    });
+    const { mapName: created } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId },
+      enabled: true,
+    });
+    await touch(scenario, created!);
+
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "draft", workspaceId, createdMapName: created! },
+      enabled: true,
+      mapName: existing!,
+    });
+
+    expect((await readdir(path.join(scenario.cwd, "docs", "logic-maps"))).sort()).toEqual(
+      [existing, created].sort(),
+    );
+  });
+
+  test("continuing a map with marked nodes asks to link them first on the first message only", async () => {
+    const scenario = await startDaemon();
+    await writeMarkedMap(scenario.cwd, "login");
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+      mapName: "login",
+    });
+    await sendAndFinish(scenario, agent.id, "first");
+    await sendAndFinish(scenario, agent.id, "second");
+    // 关掉再接着同一张图：又是打开后的第一条。
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: false,
+    });
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+      mapName: "login",
+    });
+    await sendAndFinish(scenario, agent.id, "third");
+
+    expect(scenario.prompts.map((prompt) => prompt.includes(LINK_FIRST))).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  test("a new map that gets marked nodes during the conversation never asks to link them first", async () => {
+    const scenario = await startDaemon();
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+    const { mapName } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+    });
+    await sendAndFinish(scenario, agent.id, "first");
+
+    await writeMarkedMap(scenario.cwd, mapName!);
+    await sendAndFinish(scenario, agent.id, "second");
+
+    expect(scenario.prompts).toHaveLength(2);
+    expect(scenario.prompts[1]).toContain("3 to 6 sentences");
+    expect(scenario.prompts.some((prompt) => prompt.includes(LINK_FIRST))).toBe(false);
   });
 
   test("an agent already on switches to the map it is told to continue", async () => {

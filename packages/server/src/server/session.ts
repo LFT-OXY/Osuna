@@ -64,7 +64,10 @@ import {
   type RoutingBlockResolver,
 } from "./agent/agent-prompt.js";
 import { resolveRoutingBlock } from "./agent/routing-block.js";
-import { resolveLogicMapInstructionBlock } from "./logic-map/logic-map-instruction-block.js";
+import {
+  markLogicMapBriefed,
+  resolveLogicMapInstructionBlock,
+} from "./logic-map/logic-map-instruction-block.js";
 import { setLogicMapEnabled } from "./logic-map/logic-map-toggle.js";
 import {
   listWorkspaceLogicMaps,
@@ -8336,6 +8339,7 @@ export class Session {
         labels: agent.labels,
         cwd: agent.cwd,
       });
+      if (logicMapBlock) await markLogicMapBriefed(this.agentManager, agent);
       const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
       return blocks.length > 0 ? blocks.join("\n\n") : null;
     };

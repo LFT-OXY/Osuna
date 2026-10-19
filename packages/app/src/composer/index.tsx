@@ -310,6 +310,8 @@ interface RenderLeftContentArgs {
   showLogicMapToggle: boolean;
   /** 主机是否支持逻辑图；决定给开关还是给更长的更新提示预留宽度。 */
   logicMapSupported: boolean | null;
+  /** 输入框外框；逻辑图的选择弹层开在它上方。 */
+  messageInputContainerRef: React.RefObject<View | null>;
 }
 
 function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): ReactElement | null {
@@ -320,6 +322,7 @@ function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): Re
     return (
       <LogicMapComposerToggle
         serverId={args.serverId}
+        popoverEdgeRef={args.messageInputContainerRef}
         kind="draft"
         draftTabId={args.agentId}
         workspaceId={args.workspaceId}
@@ -329,6 +332,7 @@ function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): Re
   return (
     <LogicMapComposerToggle
       serverId={args.serverId}
+      popoverEdgeRef={args.messageInputContainerRef}
       kind="agent"
       agentId={args.agentId}
       workspaceId={args.workspaceId}
@@ -2433,6 +2437,7 @@ function ComposerContentImpl({
 
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
   const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
+  const messageInputContainerRef = useRef<View>(null);
   const leftContent = useMemo(
     () =>
       renderLeftContent({
@@ -2445,6 +2450,7 @@ function ComposerContentImpl({
         showAgentControls: mode.showAgentControls,
         showLogicMapToggle,
         logicMapSupported,
+        messageInputContainerRef,
       }),
     [
       logicMapSupported,
@@ -2601,7 +2607,6 @@ function ComposerContentImpl({
       pluginClientSlashCommands,
     ],
   );
-  const messageInputContainerRef = useRef<View>(null);
 
   const isSubmitLoadingVisible =
     isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;

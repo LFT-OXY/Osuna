@@ -4,6 +4,9 @@ export const PARENT_TOOL_CALL_ID_LABEL = "paseo.parent-tool-call-id";
 const OPEN_AGENT_TAB_LABEL_PREFIX = "paseo.open-agent-tab.";
 // daemon 自有：这个 Agent 维护的逻辑图（docs/logic-maps/<名字>/）；没有这个标签就是开关关着。
 export const LOGIC_MAP_LABEL = "paseo.logic-map";
+// daemon 自有：这个 Agent 打开开关后已经收到过说明块的那张图。和 LOGIC_MAP_LABEL 不同时，
+// 下一条消息是打开开关后的第一条，说明块要求先给带标记的节点补指向。
+export const LOGIC_MAP_BRIEFED_LABEL = "paseo.logic-map.briefed";
 
 export function getOpenAgentTabLabel(clientId: string): string {
   return `${OPEN_AGENT_TAB_LABEL_PREFIX}${clientId}`;

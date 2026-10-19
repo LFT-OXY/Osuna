@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { LOGIC_MAP_LABEL } from "@getpaseo/protocol/agent-labels";
+import { LOGIC_MAP_BRIEFED_LABEL, LOGIC_MAP_LABEL } from "@getpaseo/protocol/agent-labels";
 
 import { stripTrailingRoutingBlock } from "../agent/trailing-routing-block.js";
 import { resolveLogicMapInstructionBlock } from "./logic-map-instruction-block.js";
@@ -74,7 +74,7 @@ test("a map nobody has judged yet asks the agent to judge the spec framework fir
   expect(block).not.toContain(LINK_PENDING_FIRST);
 });
 
-test("a project with a spec framework gets interim summaries, and nodes still carrying the marker are linked first", async () => {
+test("the first message after switching on to a spec framework map gets interim summaries and links marked nodes first", async () => {
   const { cwd, mapName } = await workspaceWithMap();
   await updateLogicMap({ cwd, mapName }, [
     ...LOGIN_NODES,
@@ -96,6 +96,24 @@ test("a project with a spec framework gets interim summaries, and nodes still ca
   expect(block).toContain("If the user corrects the judgment");
   expect(block).toContain(LINK_PENDING_FIRST);
   expect(block).toContain('"start", "check"');
+});
+
+test("later messages on a map with marked nodes do not ask to link them first again", async () => {
+  const { cwd, mapName } = await workspaceWithMap();
+  await updateLogicMap({ cwd, mapName }, [
+    ...LOGIN_NODES,
+    { op: "set_spec_framework", framework: { kind: "present", docsPath: ".atw/tasks" } },
+    { op: "write_node_doc", id: "start", content: "Interim summary." },
+  ]);
+
+  const block = await resolveLogicMapInstructionBlock({
+    text: "continue",
+    labels: { ...labelsFor(mapName), [LOGIC_MAP_BRIEFED_LABEL]: mapName },
+    cwd,
+  });
+
+  expect(block).toContain("3 to 6 sentences");
+  expect(block).not.toContain(LINK_PENDING_FIRST);
 });
 
 test("a spec framework map whose nodes all point at the final docs has no link-first instruction", async () => {

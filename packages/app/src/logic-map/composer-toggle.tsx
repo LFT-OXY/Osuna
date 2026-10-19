@@ -1,7 +1,7 @@
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import { Workflow } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -33,7 +33,11 @@ export function logicMapToggleReservedWidth(supported: boolean | null): number {
 }
 
 /** 运行中的 Agent 按 agentId 开关；草稿还没有 Agent，按草稿 tab 记住 daemon 建好的图名。 */
-type LogicMapComposerToggleProps = { serverId: string } & (
+type LogicMapComposerToggleProps = {
+  serverId: string;
+  /** 输入框外框，选择弹层开在它上方，不盖住输入框里的文字。 */
+  popoverEdgeRef: RefObject<View | null> | null;
+} & (
   | { kind: "agent"; agentId: string; workspaceId: string | null }
   | { kind: "draft"; draftTabId: string; workspaceId: string }
 );
@@ -62,6 +66,7 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
     return (
       <AgentLogicMapSwitch
         serverId={props.serverId}
+        popoverEdgeRef={props.popoverEdgeRef}
         agentId={props.agentId}
         workspaceId={props.workspaceId}
       />
@@ -70,6 +75,7 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
   return (
     <DraftLogicMapSwitch
       serverId={props.serverId}
+      popoverEdgeRef={props.popoverEdgeRef}
       draftTabId={props.draftTabId}
       workspaceId={props.workspaceId}
     />
@@ -109,10 +115,12 @@ function continuedMapName(choice: LogicMapChoice): string | undefined {
 
 function AgentLogicMapSwitch({
   serverId,
+  popoverEdgeRef,
   agentId,
   workspaceId,
 }: {
   serverId: string;
+  popoverEdgeRef: RefObject<View | null> | null;
   agentId: string;
   workspaceId: string | null;
 }) {
@@ -140,6 +148,7 @@ function AgentLogicMapSwitch({
       serverId={serverId}
       workspaceId={workspaceId}
       hiddenMapName={null}
+      popoverEdgeRef={popoverEdgeRef}
       value={pendingValue ?? enabled}
       disabled={!client || pendingValue !== null}
       onChange={change}
@@ -149,10 +158,12 @@ function AgentLogicMapSwitch({
 
 function DraftLogicMapSwitch({
   serverId,
+  popoverEdgeRef,
   draftTabId,
   workspaceId,
 }: {
   serverId: string;
+  popoverEdgeRef: RefObject<View | null> | null;
   draftTabId: string;
   workspaceId: string;
 }) {
@@ -174,8 +185,13 @@ function DraftLogicMapSwitch({
         return;
       }
       if (!client) return;
+      // 改为接着别的图时带上之前建的空图，daemon 在它没用过时删掉。
       const { mapName } = await client.setAgentLogicMapEnabled({
-        target: { kind: "draft", workspaceId },
+        target: {
+          kind: "draft",
+          workspaceId,
+          ...(createdMapName ? { createdMapName } : {}),
+        },
         enabled: true,
         mapName: continuedMapName(change.choice),
       });
@@ -196,6 +212,7 @@ function DraftLogicMapSwitch({
       serverId={serverId}
       workspaceId={workspaceId}
       hiddenMapName={hiddenMapName}
+      popoverEdgeRef={popoverEdgeRef}
       value={pendingValue ?? draft?.enabled ?? false}
       disabled={!client || pendingValue !== null}
       onChange={change}
@@ -203,12 +220,13 @@ function DraftLogicMapSwitch({
   );
 }
 
-/** 开关打开前先弹出选择：新建，或接着已有的图；关掉不用选。 */
+/** 开关打开前先弹出选择：新建，或接着已有的图；关掉不用选。弹层开着时开关显示为开，没选就关掉弹层则回到关。 */
 function LogicMapSwitchControl({
   client,
   serverId,
   workspaceId,
   hiddenMapName,
+  popoverEdgeRef,
   value,
   disabled,
   onChange,
@@ -217,56 +235,80 @@ function LogicMapSwitchControl({
   serverId: string;
   workspaceId: string | null;
   hiddenMapName: string | null;
+  popoverEdgeRef: RefObject<View | null> | null;
   value: boolean;
   disabled: boolean;
   onChange: (change: LogicMapSwitchChange) => void;
 }) {
-  const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const handleValueChange = useCallback(
-    (next: boolean) => {
-      if (next) {
-        setPickerOpen(true);
-        return;
-      }
-      onChange({ kind: "off" });
-    },
-    [onChange],
-  );
   const handleChoose = useCallback(
     (choice: LogicMapChoice) => onChange({ kind: "on", choice }),
     [onChange],
   );
+  const handleTurnOff = useCallback(() => onChange({ kind: "off" }), [onChange]);
+  const shownValue = pickerOpen || value;
   return (
     <LogicMapPicker
       client={client}
       serverId={serverId}
       workspaceId={workspaceId}
       hiddenMapName={hiddenMapName}
+      edgeRef={popoverEdgeRef}
       open={pickerOpen}
       onOpenChange={setPickerOpen}
       onChoose={handleChoose}
     >
-      <Tooltip delayDuration={0} enabledOnDesktop={!pickerOpen} enabledOnMobile={false}>
-        <TooltipTrigger asChild triggerRefProp="ref">
-          <View style={styles.control} testID="composer-logic-map-toggle">
-            <LogicMapLabel />
-            <Switch
-              value={value}
-              onValueChange={handleValueChange}
-              disabled={disabled}
-              accessibilityLabel={t("logicMap.toggle.label")}
-              testID="composer-logic-map-switch"
-            />
-          </View>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center" offset={8}>
-          <Text style={styles.tooltipText}>
-            {t(value ? "logicMap.toggle.hintOn" : "logicMap.toggle.hintOff")}
-          </Text>
-        </TooltipContent>
-      </Tooltip>
+      {(openPicker) => (
+        <LogicMapSwitchRow
+          value={shownValue}
+          disabled={disabled}
+          tooltipEnabled={!pickerOpen}
+          onTurnOn={openPicker}
+          onTurnOff={handleTurnOff}
+        />
+      )}
     </LogicMapPicker>
+  );
+}
+
+function LogicMapSwitchRow({
+  value,
+  disabled,
+  tooltipEnabled,
+  onTurnOn,
+  onTurnOff,
+}: {
+  value: boolean;
+  disabled: boolean;
+  tooltipEnabled: boolean;
+  onTurnOn: () => void;
+  onTurnOff: () => void;
+}) {
+  const { t } = useTranslation();
+  const handleValueChange = useCallback(
+    (next: boolean) => (next ? onTurnOn() : onTurnOff()),
+    [onTurnOff, onTurnOn],
+  );
+  return (
+    <Tooltip delayDuration={0} enabledOnDesktop={tooltipEnabled} enabledOnMobile={false}>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <View style={styles.control} testID="composer-logic-map-toggle">
+          <LogicMapLabel />
+          <Switch
+            value={value}
+            onValueChange={handleValueChange}
+            disabled={disabled}
+            accessibilityLabel={t("logicMap.toggle.label")}
+            testID="composer-logic-map-switch"
+          />
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>
+          {t(value ? "logicMap.toggle.hintOn" : "logicMap.toggle.hintOff")}
+        </Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

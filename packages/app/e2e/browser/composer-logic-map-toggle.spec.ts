@@ -146,7 +146,15 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       const picker = logicMapPicker(page);
       await expect(picker.getByTestId("composer-logic-map-picker-new")).toHaveText("New logic map");
       await expect(picker.getByText("Continue a logic map")).toHaveCount(0);
+      // 弹层开着时开关显示为开；没选就关掉弹层，开关回到关，也不建图。
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await page.keyboard.press("Escape");
+      await expect(picker).toHaveCount(0);
       await expect(toggle).toHaveAttribute("aria-checked", "false");
+      expect(await agentLogicMap(agent.client, agent.agentId)).toBeNull();
+      await expect(logicMapFolders(agent.cwd)).rejects.toThrow(/ENOENT/);
+
+      await toggle.click();
       await picker.getByTestId("composer-logic-map-picker-new").click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect
@@ -229,11 +237,17 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       const toggle = logicMapSwitch(page);
       await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
 
+      // 先新建一张，又改主意接着已有的图：草稿建的那张空图被删掉。
+      await turnOnWithNewMap(page);
+      await expect.poll(() => logicMapFolders(agent.cwd)).toHaveLength(2);
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
       await toggle.click();
       const picker = logicMapPicker(page);
       await expect(picker.getByText("Continue a logic map")).toBeVisible();
       await picker.getByTestId("composer-logic-map-picker-map-login").click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await expect.poll(() => logicMapFolders(agent.cwd)).toEqual(["login"]);
 
       await composer.fill("add the lockout rule");
       await composer.press("Enter");

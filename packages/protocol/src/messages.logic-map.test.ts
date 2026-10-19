@@ -42,7 +42,15 @@ describe("logic map protocol", () => {
       enabled: true,
     };
 
+    const draftLeavingItsMap = {
+      ...fromOldClient,
+      requestId: "request-6",
+      target: { ...fromOldClient.target, createdMapName: "untitled-1a2b3c4d" },
+      mapName: "login",
+    };
+
     expect(SessionInboundMessageSchema.parse(continuing)).toEqual(continuing);
+    expect(SessionInboundMessageSchema.parse(draftLeavingItsMap)).toEqual(draftLeavingItsMap);
     expect(SessionInboundMessageSchema.parse(fromOldClient)).toEqual(fromOldClient);
     expect(SessionInboundMessageSchema.safeParse({ ...continuing, mapName: 42 }).success).toBe(
       false,

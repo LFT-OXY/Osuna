@@ -45,7 +45,7 @@ describe("draft logic map", () => {
     });
   });
 
-  it("continues an existing map, and still remembers the empty map it created for 'new'", () => {
+  it("continues an existing map and stops treating its earlier empty map as its own", () => {
     const store = createDraftLogicMapStore(createMemoryStorage());
     store.getState().turnOnWithNewMap(KEY, "untitled-1a2b3c4d");
     store.getState().setEnabled(KEY, false);
@@ -53,7 +53,8 @@ describe("draft logic map", () => {
     store.getState().turnOnWithExistingMap(KEY, "login");
 
     expect(readDraftLogicMapLabels(store, KEY)).toEqual({ [LOGIC_MAP_LABEL]: "login" });
-    expect(store.getState().draftsByKey[KEY]?.createdMapName).toBe("untitled-1a2b3c4d");
+    // 那张空图已交给 daemon 处理（没用过就删掉），再选"新建"时要重新建。
+    expect(store.getState().draftsByKey[KEY]?.createdMapName).toBeNull();
   });
 
   it("a draft that only ever continued a map has no map of its own to reuse", () => {
@@ -98,6 +99,25 @@ describe("draft logic map", () => {
       enabled: false,
       createdMapName: "untitled-5e6f7a8b",
     });
+  });
+
+  it("reads back a draft saved before it remembered its own map, with the switch state intact", async () => {
+    const storage = createMemoryStorage();
+    await storage.setItem(
+      "paseo-draft-logic-maps",
+      JSON.stringify({
+        state: { draftsByKey: { [KEY]: { mapName: "untitled-1a2b3c4d", enabled: true } } },
+        version: 1,
+      }),
+    );
+
+    const store = createDraftLogicMapStore(storage);
+    await store.persist.rehydrate();
+
+    expect(readDraftLogicMapLabels(store, KEY)).toEqual({
+      [LOGIC_MAP_LABEL]: "untitled-1a2b3c4d",
+    });
+    expect(store.getState().draftsByKey[KEY]?.createdMapName).toBeUndefined();
   });
 
   it("forgets the draft once its agent is created", () => {

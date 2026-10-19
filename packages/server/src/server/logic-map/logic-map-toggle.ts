@@ -1,4 +1,8 @@
-import { getLogicMapNameFromLabels, LOGIC_MAP_LABEL } from "@getpaseo/protocol/agent-labels";
+import {
+  getLogicMapNameFromLabels,
+  LOGIC_MAP_BRIEFED_LABEL,
+  LOGIC_MAP_LABEL,
+} from "@getpaseo/protocol/agent-labels";
 import type { AgentLogicMapTarget } from "@getpaseo/protocol/messages";
 
 import type { AgentManager, WriteLabelsResult } from "../agent/agent-manager.js";
@@ -10,11 +14,16 @@ import {
   LogicMapToContinueMissingError,
   LogicMapWorkspaceNotFoundError,
 } from "./logic-map-errors.js";
-import { assertLogicMapExists, createEmptyLogicMap } from "./logic-map-store.js";
+import {
+  assertLogicMapExists,
+  createEmptyLogicMap,
+  discardUnwrittenLogicMap,
+  type DiscardUnwrittenLogicMapResult,
+} from "./logic-map-store.js";
 
 export interface LogicMapToggleDependencies {
-  agentManager: Pick<AgentManager, "getAgent" | "patchLabels">;
-  agentStorage: Pick<AgentStorage, "get">;
+  agentManager: Pick<AgentManager, "getAgent" | "patchLabels" | "listAgents">;
+  agentStorage: Pick<AgentStorage, "get" | "list">;
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
 }
 
@@ -56,7 +65,10 @@ async function setForAgent(
   if (!input.enabled) {
     if (!current) return { mapName: null, labelWrite: null };
     // 只摘标签，已有的图原样留在磁盘上。
-    const labelWrite = await deps.agentManager.patchLabels(agentId, { [LOGIC_MAP_LABEL]: null });
+    const labelWrite = await deps.agentManager.patchLabels(agentId, {
+      [LOGIC_MAP_LABEL]: null,
+      [LOGIC_MAP_BRIEFED_LABEL]: null,
+    });
     return { mapName: null, labelWrite };
   }
   const mapName =
@@ -64,8 +76,33 @@ async function setForAgent(
       ? await confirmMapToContinue(agent.cwd, input.mapName)
       : (current ?? (await createEmptyLogicMap(agent.cwd)));
   if (mapName === current) return { mapName, labelWrite: null };
-  const labelWrite = await deps.agentManager.patchLabels(agentId, { [LOGIC_MAP_LABEL]: mapName });
+  // 换了图或重新打开：下一条消息是打开后的第一条。
+  const labelWrite = await deps.agentManager.patchLabels(agentId, {
+    [LOGIC_MAP_LABEL]: mapName,
+    [LOGIC_MAP_BRIEFED_LABEL]: null,
+  });
   return { mapName, labelWrite };
+}
+
+/** 这个目录下有没有 Agent（运行中或存着的）把这张图记在标签里。 */
+async function isLogicMapInUse(
+  deps: LogicMapToggleDependencies,
+  location: { cwd: string; mapName: string },
+): Promise<boolean> {
+  const agents = [...deps.agentManager.listAgents(), ...(await deps.agentStorage.list())];
+  return agents.some(
+    (agent) =>
+      agent.cwd === location.cwd && getLogicMapNameFromLabels(agent.labels) === location.mapName,
+  );
+}
+
+/** 草稿改为接着别的图：它之前新建的那张还空着、也没有 Agent 在用时删掉，不留空文件夹。 */
+async function discardDraftCreatedMap(
+  deps: LogicMapToggleDependencies,
+  location: { cwd: string; mapName: string },
+): Promise<DiscardUnwrittenLogicMapResult> {
+  if (await isLogicMapInUse(deps, location)) return { kind: "kept", reason: "in_use" };
+  return discardUnwrittenLogicMap(location);
 }
 
 async function setForDraft(
@@ -78,10 +115,14 @@ async function setForDraft(
     throw new LogicMapWorkspaceNotFoundError(workspaceId);
   }
   if (!input.enabled) return { mapName: null, labelWrite: null };
-  const mapName =
-    input.mapName !== undefined
-      ? await confirmMapToContinue(workspace.cwd, input.mapName)
-      : await createEmptyLogicMap(workspace.cwd);
+  if (input.mapName === undefined) {
+    return { mapName: await createEmptyLogicMap(workspace.cwd), labelWrite: null };
+  }
+  const mapName = await confirmMapToContinue(workspace.cwd, input.mapName);
+  const createdMapName = input.target.kind === "draft" ? input.target.createdMapName : undefined;
+  if (createdMapName !== undefined && createdMapName !== mapName) {
+    await discardDraftCreatedMap(deps, { cwd: workspace.cwd, mapName: createdMapName });
+  }
   return { mapName, labelWrite: null };
 }
 

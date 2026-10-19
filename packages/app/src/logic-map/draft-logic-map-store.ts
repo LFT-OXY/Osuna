@@ -12,8 +12,11 @@ const DraftLogicMapSchema = z.object({
   /** 开着时交给新 Agent 的图。 */
   mapName: z.string().min(1),
   enabled: z.boolean(),
-  /** 这个草稿让 daemon 新建的空图；再选"新建"时沿用它。只接着过别的图时为 null。 */
-  createdMapName: z.string().min(1).nullable(),
+  /**
+   * 这个草稿让 daemon 新建、还空着的图；再选"新建"时沿用它。没有时为 null，
+   * 早于这个字段存下的草稿读出来是 undefined，同样当作没有。
+   */
+  createdMapName: z.string().min(1).nullable().optional(),
 });
 const DraftLogicMapPersistedStateSchema = z.object({
   draftsByKey: z.record(z.string(), DraftLogicMapSchema),
@@ -30,7 +33,7 @@ type DraftLogicMapPersistedState = z.infer<typeof DraftLogicMapPersistedStateSch
 interface DraftLogicMapState extends DraftLogicMapPersistedState {
   /** 打开并用这个草稿新建（或之前新建过）的空图。 */
   turnOnWithNewMap: (draftKey: string, mapName: string) => void;
-  /** 打开并接着 workspace 里已有的图。 */
+  /** 打开并接着 workspace 里已有的图；之前建的空图交给 daemon 处理，不再算这个草稿的。 */
   turnOnWithExistingMap: (draftKey: string, mapName: string) => void;
   setEnabled: (draftKey: string, enabled: boolean) => void;
   forget: (draftKey: string) => void;
@@ -69,7 +72,7 @@ export function createDraftLogicMapStore(
             draftsByKey: withDraft(state.draftsByKey, draftKey, {
               mapName,
               enabled: true,
-              createdMapName: state.draftsByKey[draftKey]?.createdMapName ?? null,
+              createdMapName: null,
             }),
           })),
         setEnabled: (draftKey, enabled) =>

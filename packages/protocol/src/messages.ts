@@ -2162,7 +2162,12 @@ export const AgentDetachResponseMessageSchema = z.object({
 // 打开时 daemon 在该 workspace 的目录下新建一张空图；草稿拿回图名，新建 Agent 时放进 labels。
 export const AgentLogicMapTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("agent"), agentId: z.string() }),
-  z.object({ kind: z.literal("draft"), workspaceId: z.string() }),
+  z.object({
+    kind: z.literal("draft"),
+    workspaceId: z.string(),
+    // 草稿之前新建的空图。草稿改为接着别的图时，daemon 在它还空着、也没有 Agent 用它时删掉。
+    createdMapName: z.string().optional(),
+  }),
 ]);
 export type AgentLogicMapTarget = z.infer<typeof AgentLogicMapTargetSchema>;
 
