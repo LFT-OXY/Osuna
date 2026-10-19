@@ -16,7 +16,7 @@
 - [x] Codex 存下的模型仍是「接口标识/模型名」，现有的跟随 CLI 选择、默认模型写入不受影响。
 - [x] Subagent 可选模型的名字跟着变，读起来没有重复或错位。
 - [x] `codex-model-catalog.test.ts` 补上对应用例并通过；`npm run typecheck`、`npm run lint` 通过。
-- [ ] 用户在 dev 桌面端用真实 Codex 复看 `/model`（用户自己做），通过后回到 31 号工单勾「Codex」那一项。
+- [x] 用户在 dev 桌面端用真实 Codex 复看 `/model`（用户自己做），通过后回到 31 号工单勾「Codex」那一项。
 
 参考：prd.md「Acceptance Criteria」中「模型清单里 ChatGPT 自带模型在前、接口模型以『接口标识/模型名』在后」；31 号工单 Comments。
 
@@ -29,3 +29,8 @@
 - 两家接口起了同一个名字时仍分不开；设置页不拦重名，不在本票处理。
 - 清单内容变了，升级后 Codex 会重新拉一次模型清单。
 - ADR 0010 补了显示名规则。
+
+**2026-10-19 用户复看**
+
+- 用户在 dev 桌面端（重新 `build:server` 后启动，端口 6769，真实 `~/.codex`）打开 Codex 的「使用第三方接口」，`/model` 里接口模型显示成「模型名 (接口名)」，两家接口的同名模型分得开，选接口模型能正常回复；关开关后 `~/.codex/config.toml`、`~/.claude/settings.json` 与开测前的备份逐字节一致。用户原话：「没问题」。
+

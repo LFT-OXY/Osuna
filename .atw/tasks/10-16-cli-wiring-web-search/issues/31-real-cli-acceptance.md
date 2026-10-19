@@ -4,12 +4,12 @@
 
 **Blocked by:** 29, 30, 32
 **Status:** ready-for-human
-**Impl:** ready
+**Impl:** done
 
-- [ ] 真实的 Claude Code：在打开「自己能联网搜索」的接口上，WebSearch 搜得到带链接的结果；同一模型没有这样的接口时，Claude Code 收到「不能联网搜索」的说明。
-- [ ] 真实的 Codex（ChatGPT 登录）：开关前后开的对话在 `codex resume` 列表里是同一组；`/model` 里 ChatGPT 自带模型与接口模型都在，两种都能回复。
-- [ ] 保留 claude.ai 登录打开时，Claude Code 的语音与 `/usage` 套餐额度可用。
-- [ ] 结论（通过，或不通过以及看到的现象）记在本票的 Comments 里。
+- [x] 真实的 Claude Code：在打开「自己能联网搜索」的接口上，WebSearch 搜得到带链接的结果；同一模型没有这样的接口时，Claude Code 收到「不能联网搜索」的说明。
+- [x] 真实的 Codex（ChatGPT 登录）：开关前后开的对话在 `codex resume` 列表里是同一组；`/model` 里 ChatGPT 自带模型与接口模型都在，两种都能回复。
+- [x] 保留 claude.ai 登录打开时，Claude Code 的语音与 `/usage` 套餐额度可用。
+- [x] 结论（通过，或不通过以及看到的现象）记在本票的 Comments 里。
 
 参考：prd.md「Acceptance Criteria」最后一项。
 
@@ -28,4 +28,8 @@
 - dev 数据里留着上次用临时 `CODEX_HOME` 验收时「使用第三方接口」开着的记录，dev 一启动就照它接管了真实 `config.toml`，并删掉用户自己的 `model = "gpt-6-luna"`；关开关按旧记录还原，这一行回不来，手动补回。是测试环境残留，不是本任务功能的问题。
 - 用户在 Codex 里用 `/model` 选了接口模型后（14:23），`config.toml` 里 Osuna 的 Codex 服务商表不见了；daemon 日志里 Osuna 没有删它。推测是 Codex 保存模型时去掉的，未核实。下次打开开关时 Osuna 会重写这张表。
 - 关开关后 Codex 顶层 `model` 仍是用户在开关期间选的 `test01/gpt-6-luna`（ChatGPT 接法下 `model` 归 Codex，按设计不还原）；回到官方后这个名字不存在，用户得自己再选一次。验收时手动改回了 `gpt-6-luna`。
+
+**2026-10-19 复看（32 号工单修复后）**
+
+- Codex `/model` 显示名 —— 通过。32 号工单改成「模型名 (接口名)」后，用户在 dev 桌面端用真实 Codex 复看通过（见 32 号工单 Comments）。本票四项全部通过。
 
