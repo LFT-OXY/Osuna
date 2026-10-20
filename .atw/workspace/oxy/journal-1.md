@@ -1140,3 +1140,29 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 
 - 推送 main 到 GitHub（本地领先 116 个提交），CI 通过后补勾 prd.md 最后一条
 - 另开工单：daemon 重启后续不上的 Codex Agent 显示「Failed to load agent」页，缺说明与挪动按钮
+
+
+## Session 39: 逻辑图工单 08–10 收尾与任务归档
+<!-- atw-session: v=2 fp=73e61a8fc2130166 -->
+
+**Date**: 2026-10-20
+**Task**: 逻辑图工单 08–10 收尾与任务归档
+**Package**: app
+**Branch**: `feat-requirement-logic-graph-docs`
+
+### Summary
+
+/atw-implement-all 跑完 08（Osuna 工具不可用时开关旁提示、daemon 不发说明块）和 09（update_logic_map 列出缺文档节点，子图节点按用户决定豁免，图上没有文档标签）；各自三维审查、修一轮、复查后写回规范。10 由用户在 dev 桌面端复测通过（Codex 14 节点全有文档），79 个验收项勾选，任务已归档。副作用：dev daemon 曾改写真实 ~/.codex/config.toml 的 osuna_api_endpoint，之后已恢复为用户原设置。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `14b4e251d` | feat(logic-map): 08 Osuna 工具不可用时开关旁说明原因并给去开启入口，daemon 不再发逻辑图说明块 |
+| `638f84614` | fix(logic-map): 08 评审修正——提示收成警告图标加去开启，不挤压左侧控件；复用草稿判定，命名参数类型 |
+| `c269075f9` | feat(logic-map): 09 update_logic_map 逐个列出缺文档的节点，说明块要求每个节点都有文档；图上缺文档的节点带"没有文档"标签，点它提示还没有文档 |
+| `2912407c2` | fix(logic-map): 09 评审修正——子图节点不要求文档；补有框架时补齐后不再列出的测试；缺文档卡片读屏标签与蓝圈撤除；提高"没有文档"标签对比度 |
+
+### Status
+
+[OK] **Completed**
