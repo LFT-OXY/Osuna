@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { showsEndpointNames } from "./endpoint-names";
+import { apiEndpointNameDisplayOf, showsEndpointNames } from "./endpoint-names";
 
 // 撞名照 magpie provider.Labels 的 same（7597c132）：同一个选单里不分大小写读起来一样的才算。
 describe("endpoint name in model lists", () => {
@@ -17,8 +17,9 @@ describe("endpoint name in model lists", () => {
     expect(showsEndpointNames({ display: "never", names })).toEqual([false, false, false]);
   });
 
-  it("an older host's missing setting, or one this client does not know, reads as always", () => {
-    expect(showsEndpointNames({ display: undefined, names })).toEqual([true, true, true]);
-    expect(showsEndpointNames({ display: "sometimes", names })).toEqual([true, true, true]);
+  it("an older host's missing setting, or one this side does not know, reads as always", () => {
+    expect(apiEndpointNameDisplayOf(undefined)).toBe("always");
+    expect(apiEndpointNameDisplayOf("sometimes")).toBe("always");
+    expect(apiEndpointNameDisplayOf("clash")).toBe("clash");
   });
 });

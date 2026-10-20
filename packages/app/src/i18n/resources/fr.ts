@@ -2889,7 +2889,10 @@ export const fr: TranslationResources = {
         title: "Nom de l'endpoint dans les listes de modèles",
         info: "Indique si un modèle proposé par un endpoint affiche ensuite le nom de l'endpoint, comme « Kimi K2 (Relay A) ». Avec Jamais, les modèles de même nom de deux endpoints restent distincts dans le /model de Codex par endpoint/modèle.",
         label: "Après chaque modèle",
-        hint: "Dans le sélecteur de modèle, les choix de Modèle par défaut et le /model de Codex.",
+        hint: "Dans le sélecteur de modèle, les choix de Modèle par défaut et le /model de Claude Code et de Codex.",
+        preview: "Les listes affichent « {{label}} »",
+        unreached:
+          "Ne change rien dans {{agents}} : sa liste de modèles n'affiche jamais le nom des endpoints",
         choices: {
           always: "Toujours",
           clash: "Seulement si les noms se recoupent",

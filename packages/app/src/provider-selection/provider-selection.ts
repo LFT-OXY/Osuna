@@ -5,7 +5,11 @@ import type {
   ApiEndpointModelGroup,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
-import { showsEndpointNames } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
+  apiEndpointNameDisplayOf,
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { i18n } from "@/i18n/i18next";
@@ -128,14 +132,13 @@ function buildApiEndpointGroupRows(input: {
   provider: string;
   providerLabel: string;
   groups: ApiEndpointModelGroup[];
-  // 主机的接口名显示方式；老主机不发为 undefined（一直显示）。
-  nameDisplay: string | undefined;
+  nameDisplay: ApiEndpointNameDisplay;
 }): ProviderSelectionModelRow[] {
   const { provider, providerLabel } = input;
   const listed = input.groups.flatMap((group, index) =>
     (filterSelectableModels(group.models) ?? []).map((model) => ({ group, index, model })),
   );
-  const isHeading = input.nameDisplay !== "clash" && input.nameDisplay !== "never";
+  const isHeading = input.nameDisplay === "always";
   const shows = showsEndpointNames({
     display: input.nameDisplay,
     names: listed.map(({ model }) => model.label),
@@ -169,7 +172,8 @@ function buildEntryModelSelection(
         provider: entry.provider,
         providerLabel: label,
         groups,
-        nameDisplay: entry.apiEndpointNameDisplay,
+        // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
+        nameDisplay: apiEndpointNameDisplayOf(entry.apiEndpointNameDisplay),
       }),
     };
   }

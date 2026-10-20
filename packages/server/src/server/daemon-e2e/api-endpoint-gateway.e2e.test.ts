@@ -5464,7 +5464,7 @@ experimental_bearer_token = "${token}"
     // 工单 17 以前的样子：settings.json 与接管记录里都没有 modelPicker。
     const settings = JSON.parse(settingsBefore);
     expect(settings.modelPicker).toEqual({
-      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+      options: [{ model: "relay-a/kimi-k2", label: "kimi-k2 (Relay A)", description: "via Osuna" }],
     });
     delete settings.modelPicker;
     await writeFile(home.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
@@ -5518,7 +5518,9 @@ experimental_bearer_token = "${token}"
       permissions: { deny: ["WebSearch"] },
       model: "kimi-k2",
       modelPicker: {
-        options: [{ model: "relay-a/kimi-k2", label: "kimi-k2", description: "Relay A" }],
+        options: [
+          { model: "relay-a/kimi-k2", label: "kimi-k2 (Relay A)", description: "via Osuna" },
+        ],
       },
     });
     const config = await readFile(home.configPath, "utf8");

@@ -2855,7 +2855,10 @@ export const ja: TranslationResources = {
         title: "モデル一覧のエンドポイント名",
         info: "エンドポイントのモデルの後ろにエンドポイント名を付けるかどうか（例：「Kimi K2 (Relay A)」）。「表示しない」でも、同じ名前の 2 つのエンドポイントのモデルは Codex の /model で「エンドポイント/モデル」によって区別されます。",
         label: "各モデルの後ろ",
-        hint: "モデル選択、既定のモデルの選択肢、Codex の /model。",
+        hint: "モデル選択、既定のモデルの選択肢、Claude Code と Codex の /model。",
+        preview: "一覧での表示：「{{label}}」",
+        unreached:
+          "{{agents}} では変わりません：そのモデル一覧にはもともとエンドポイント名が出ません",
         choices: {
           always: "常に表示",
           clash: "名前が重なるときだけ",

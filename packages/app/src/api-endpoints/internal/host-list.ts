@@ -1,4 +1,8 @@
 import {
+  apiEndpointNameDisplayOf,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,
   type ApiEndpointAgentIssue,
@@ -34,8 +38,10 @@ export type HostEndpointsLoadState =
       longConversations: ApiEndpointLongConversations;
       // 整台主机的已禁用的模型；没设或老主机不发时为空。
       disabledModels: string[];
-      // 整台主机的接口名显示方式（always、clash、never）；老主机不发时为 always。
-      endpointNameDisplay: string;
+      // 整台主机的接口名显示方式。
+      endpointNameDisplay: ApiEndpointNameDisplay;
+      // 接口名显示方式管不到的 Agent（provider）：如用 API key 接的 Codex，模型列表里本来就没有接口名。
+      endpointNamesUnreached: string[];
     };
 
 export function selectHostEndpointsState(input: {
@@ -53,7 +59,9 @@ export function selectHostEndpointsState(input: {
       reopenHints: input.data.reopenHints ?? {},
       longConversations: input.data.longConversations ?? {},
       disabledModels: input.data.disabledModels ?? [],
-      endpointNameDisplay: input.data.endpointNameDisplay ?? "always",
+      // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
+      endpointNameDisplay: apiEndpointNameDisplayOf(input.data.endpointNameDisplay),
+      endpointNamesUnreached: input.data.endpointNamesUnreached ?? [],
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

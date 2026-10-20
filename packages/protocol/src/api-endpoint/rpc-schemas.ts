@@ -346,6 +346,9 @@ export const ApiEndpointListResponseSchema = z.object({
     disabledModels: z.array(z.string()).optional(),
     // 接口名显示方式（endpoint-names.ts 的 API_ENDPOINT_NAME_DISPLAYS），整台主机共用；没设为 always，老 daemon 不发。
     endpointNameDisplay: z.string().optional(),
+    // 接口名显示方式管不到的 Agent（provider）：它的模型列表里本来就没有 Osuna 给的接口名
+    // （用 API key 接的 Codex 只列光秃秃的名字）。老 daemon 不发。
+    endpointNamesUnreached: z.array(z.string()).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

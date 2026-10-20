@@ -645,6 +645,39 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     await client.close();
   });
 
+  test("only when names clash counts ChatGPT's own models too: an endpoint's gpt-5.5 beside ChatGPT's GPT-5.5 keeps its endpoint name", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [{ ...RELAY_A, models: [{ id: "gpt-5.5" }, { id: "glm-5" }] }],
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
+
+    const reply = await send({
+      url: `${codexBase}/models?client_version=0.163.0`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+
+    const list = DisplayNamesSchema.parse(JSON.parse(reply.body.toString("utf8")));
+    expect(list.models.map((model) => [model.slug, model.display_name])).toEqual([
+      ["gpt-5.5", "GPT-5.5"],
+      ["codex-auto-review", undefined],
+      ["relay-a/gpt-5.5", "gpt-5.5 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5"],
+    ]);
+    await client.close();
+  });
+
   test("a default model naming one endpoint is in the merged list, so Codex knows it", async () => {
     const chatgpt = await startBackend();
     chatgpt.respond = (_request, res) => {

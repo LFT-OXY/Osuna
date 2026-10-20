@@ -298,6 +298,16 @@ experimental_bearer_token = "${token}"
     await expect.poll(codexModels, { timeout: 10_000 }).toEqual(["gpt-5.4-mini *"]);
   });
 
+  test("Codex on an API key is named as out of reach of Endpoint name in model lists: its /model lists bare names", async () => {
+    const unreached = async () => (await client.apiEndpointList("codex")).endpointNamesUnreached;
+    expect(await unreached()).toEqual([]);
+    const endpointId = await createEndpoint();
+    await client.apiEndpointSetActive("codex", endpointId);
+    expect(await unreached()).toEqual(["codex"]);
+    await client.apiEndpointSetActive("codex", null);
+    expect(await unreached()).toEqual([]);
+  });
+
   test("deleting the last endpoint switches back to Official and puts the owned keys back", async () => {
     const endpointId = await createEndpoint();
     await client.apiEndpointSetActive("codex", endpointId);

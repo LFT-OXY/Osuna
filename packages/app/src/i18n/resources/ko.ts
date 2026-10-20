@@ -2841,7 +2841,10 @@ export const ko: TranslationResources = {
         title: "모델 목록의 엔드포인트 이름",
         info: "엔드포인트가 제공하는 모델 뒤에 엔드포인트 이름을 붙일지 정합니다(예: “Kimi K2 (Relay A)”). ‘표시 안 함’이어도 이름이 같은 두 엔드포인트의 모델은 Codex의 /model에서 엔드포인트/모델로 구분됩니다.",
         label: "각 모델 뒤",
-        hint: "모델 선택기, 기본 모델 선택지, Codex의 /model.",
+        hint: "모델 선택기, 기본 모델 선택지, Claude Code와 Codex의 /model.",
+        preview: "목록 표시: “{{label}}”",
+        unreached:
+          "{{agents}}에서는 바뀌지 않습니다: 그 모델 목록에는 원래 엔드포인트 이름이 나오지 않습니다",
         choices: {
           always: "항상",
           clash: "이름이 겹칠 때만",

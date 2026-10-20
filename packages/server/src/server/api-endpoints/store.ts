@@ -3,6 +3,10 @@ import path from "node:path";
 import type pino from "pino";
 import { z } from "zod";
 import {
+  apiEndpointNameDisplayOf,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
   ApiEndpointLongConversationsSchema,
@@ -149,7 +153,14 @@ export interface ApiEndpointState {
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
   longConversations?: ApiEndpointLongConversations;
   disabledModels?: string[];
-  endpointNameDisplay?: string;
+  // 接口名显示方式；always 不存。
+  endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
+}
+
+/** 文件里的接口名显示方式：认不出的当 always，always 不放进状态。 */
+function storedNameDisplay(raw: string | undefined): Pick<ApiEndpointState, "endpointNameDisplay"> {
+  const display = apiEndpointNameDisplayOf(raw);
+  return display === "always" ? {} : { endpointNameDisplay: display };
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
@@ -312,7 +323,7 @@ export class ApiEndpointStore {
       },
       ...(longConversations === undefined ? {} : { longConversations }),
       ...(disabledModels === undefined ? {} : { disabledModels }),
-      ...(endpointNameDisplay === undefined ? {} : { endpointNameDisplay }),
+      ...storedNameDisplay(endpointNameDisplay),
     };
   }
 

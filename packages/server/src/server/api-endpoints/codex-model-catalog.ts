@@ -8,7 +8,10 @@ import {
   compactThreshold,
   distinctModelLabels,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
-import { showsEndpointNames } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   bareModelFacts,
@@ -113,9 +116,16 @@ export function buildCodexModelCatalog(input: {
 
 /**
  * 用 ChatGPT 登录的 Codex 的 /model 里接在 ChatGPT 自带模型后面的接口模型（ADR 0010）：开着的接口的已选模型，
- * 写成「接口标识/模型名」，按接口名显示方式显示成「模型名 (接口名)」或只有模型名（同名的仍靠 slug 分开），顺序同聊天模型选择器，
- * 能力按这家这个模型的已知资料写。priority 从 1 起，中转站合并清单时再排到 ChatGPT 自带模型之后。
+ * 写成「接口标识/模型名」，顺序同聊天模型选择器，能力按这家这个模型的已知资料写。priority 从 1 起，
+ * 中转站合并清单时再排到 ChatGPT 自带模型之后。display_name 先只有模型名：带不带「 (接口名)」要和 ChatGPT 自带的
+ * 模型一起算，见 namedCodexEndpointEntries。
  */
+export interface CodexEndpointListing {
+  entries: CodexModelEntry[];
+  // 与 entries 一一对应的接口名。
+  endpointNames: string[];
+}
+
 export function codexEndpointEntries(input: {
   state: ApiEndpointState;
   // config.toml 顶层的 model_reasoning_effort，没设为 null。
@@ -123,7 +133,7 @@ export function codexEndpointEntries(input: {
   factsFor: ModelFactsLookup;
   // 「Codex Subagent 可用任意模型」开着。
   marksAgentsV1: boolean;
-}): CodexModelEntry[] {
+}): CodexEndpointListing {
   const listed = endpointModelGroups(input.state).flatMap((group) => {
     const own = group.models.map(({ id, model }) => {
       const facts = input.factsFor(group.endpoint, model.id);
@@ -138,14 +148,10 @@ export function codexEndpointEntries(input: {
       endpointName: group.endpoint.name,
     }));
   });
-  const shows = showsEndpointNames({
-    display: input.state.endpointNameDisplay,
-    names: listed.map(({ name }) => name),
-  });
-  return listed.map(({ id, name, endpointName, facts }, index) =>
+  const entries = listed.map(({ id, name, facts }, index) =>
     codexModelEntry({
       slug: id,
-      displayName: shows[index] ? `${name} (${endpointName})` : name,
+      displayName: name,
       visibility: "list",
       priority: index + 1,
       facts,
@@ -154,6 +160,32 @@ export function codexEndpointEntries(input: {
       longConversations: input.state.longConversations,
     }),
   );
+  return { entries, endpointNames: listed.map(({ endpointName }) => endpointName) };
+}
+
+/**
+ * 按接口名显示方式定接口模型的显示名：带接口名时是「模型名 (接口名)」。同名在 Codex 的 /model 里整份算，
+ * ChatGPT 自带模型的名字（ownNames）也算进去（magpie codexListed 的 named among all shown）。
+ */
+export function namedCodexEndpointEntries(input: {
+  listing: CodexEndpointListing;
+  display: ApiEndpointNameDisplay;
+  ownNames: readonly string[];
+}): CodexModelEntry[] {
+  const { entries, endpointNames } = input.listing;
+  const shows = showsEndpointNames({
+    display: input.display,
+    names: [...input.ownNames, ...entries.map((entry) => entry.display_name)],
+  }).slice(input.ownNames.length);
+  const named: CodexModelEntry[] = [];
+  for (const [index, entry] of entries.entries()) {
+    if (!shows[index]) {
+      named.push(entry);
+      continue;
+    }
+    named.push({ ...entry, display_name: `${entry.display_name} (${endpointNames[index]})` });
+  }
+  return named;
 }
 
 export type CodexModelEntry = ReturnType<typeof codexModelEntry>;

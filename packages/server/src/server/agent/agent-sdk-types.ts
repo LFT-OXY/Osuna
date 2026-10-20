@@ -12,6 +12,7 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { ApiEndpointRef } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderCliLaunch } from "./provider-cli-version.js";
 
@@ -799,7 +800,9 @@ export type LockedThinkingLookup = (provider: AgentProvider) => string | null;
 export type SubagentThinkingLookup = (provider: AgentProvider) => AgentSelectOption[] | null;
 
 /** 接口名显示方式；官方模式或不支持的提供方为 null。 */
-export type ApiEndpointNameDisplayLookup = (provider: AgentProvider) => string | null;
+export type ApiEndpointNameDisplayLookup = (
+  provider: AgentProvider,
+) => ApiEndpointNameDisplay | null;
 
 /** Codex 的默认 Subagent 模型与记忆模型的选项；没有为 null。 */
 export type SideModelOptionsLookup = (

@@ -988,11 +988,16 @@ describe("API endpoint management (apiEndpointManagement)", () => {
         endpoints: [],
         activeEndpointId: null,
         endpointNameDisplay: "never",
+        endpointNamesUnreached: ["codex"],
         error: null,
       },
     };
     expect(SessionOutboundMessageSchema.parse(list)).toEqual(list);
-    const { endpointNameDisplay: _omitted, ...olderPayload } = list.payload;
+    const {
+      endpointNameDisplay: _omitted,
+      endpointNamesUnreached: _unreached,
+      ...olderPayload
+    } = list.payload;
     const older = { ...list, payload: olderPayload };
     expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
     const entry = { provider: "codex", status: "ready" as const, enabled: true };

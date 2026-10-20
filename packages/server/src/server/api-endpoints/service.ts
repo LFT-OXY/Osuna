@@ -117,7 +117,7 @@ import {
   buildCodexModelCatalog,
   codexDefaultLevel,
   codexEndpointEntries,
-  type CodexModelEntry,
+  type CodexEndpointListing,
 } from "./codex-model-catalog.js";
 import {
   claudeClamp,
@@ -286,7 +286,12 @@ import {
   withoutDisabledModels,
 } from "./disabled-models.js";
 import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
-import { isApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
+  apiEndpointNameDisplayOf,
+  isApiEndpointNameDisplay,
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
   WORKING_WINDOW,
@@ -325,6 +330,8 @@ export type ApiEndpointErrorCode =
   | UpstreamFailureCode;
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
+// Claude Code /model 里已带接口名的行的说明（magpie 的 "via magpie"）。
+const VIA_OSUNA = "via Osuna";
 // Codex 的自定义 provider 地址要带上它，Claude Code 的不带。
 const CODEX_GATEWAY_SUFFIX = "/v1";
 // 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
@@ -623,6 +630,7 @@ export type ApiEndpointListResult = Required<
     | "longConversations"
     | "disabledModels"
     | "endpointNameDisplay"
+    | "endpointNamesUnreached"
   >
 >;
 
@@ -846,7 +854,8 @@ export class ApiEndpointService {
       reopenHints,
       longConversations: state.longConversations ?? {},
       disabledModels: state.disabledModels ?? [],
-      endpointNameDisplay: state.endpointNameDisplay ?? "always",
+      endpointNameDisplay: apiEndpointNameDisplayOf(state.endpointNameDisplay),
+      endpointNamesUnreached: this.endpointNamesUnreached(state),
     };
   }
 
@@ -2282,12 +2291,21 @@ export class ApiEndpointService {
     });
   }
 
+  /**
+   * 接口名显示方式管不到的 Agent（magpie noNamesSaid / agent.NoNames）：开着、用 API key 接的 Codex，
+   * 它的 /model 只列光秃秃的名字（模型目录），本来就不带接口名。
+   */
+  private endpointNamesUnreached(state: ApiEndpointState): ApiEndpointProvider[] {
+    if (!state.agents.codex.enabled) return [];
+    return this.isCodexChatGptWired() ? [] : ["codex"];
+  }
+
   /** 选择器里接口名的显示方式；官方模式、不支持的提供方或文件读不懂时返回 null。 */
-  endpointNameDisplay(provider: string): string | null {
+  endpointNameDisplay(provider: string): ApiEndpointNameDisplay | null {
     const state = this.readStateForSnapshot();
     const supported = findProvider(provider);
     if (!state || !supported || !state.agents[supported].enabled) return null;
-    return state.endpointNameDisplay ?? "always";
+    return apiEndpointNameDisplayOf(state.endpointNameDisplay);
   }
 
   /** 在服务的模型：去掉一周内下线的与已禁用的。选单、默认模型、写给 CLI 的模型都按它。 */
@@ -2598,14 +2616,25 @@ export class ApiEndpointService {
       return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
     }
     const listed = this.served(state);
-    const rows = endpointModelGroups(listed).flatMap((group) => {
+    const named = endpointModelGroups(listed).flatMap((group) => {
       const labels = this.groupModelLabels(group);
       return group.models.map(({ id, model }, index) => ({
         hint: { id, facts: this.modelFacts(group.endpoint, model.id) },
-        label: labels[index] ?? model.id,
-        description: group.endpoint.name,
+        name: labels[index] ?? model.id,
+        endpointName: group.endpoint.name,
       }));
     });
+    // 接口名显示方式也管终端 /model（magpie listLabels）：带接口名的行写「模型名 (接口名)」，说明换成 via Osuna，
+    // 不重复说接口名；不带的照旧在说明里写接口名（magpie 的 note 同样留着提供方）。
+    const shows = showsEndpointNames({
+      display: apiEndpointNameDisplayOf(state.endpointNameDisplay),
+      names: named.map(({ name }) => name),
+    });
+    const rows = named.map(({ hint, name, endpointName }, index) =>
+      shows[index]
+        ? { hint, label: `${name} (${endpointName})`, description: VIA_OSUNA }
+        : { hint, label: name, description: endpointName },
+    );
     // 带点的 Claude 版本写成连字符（只在能唯一对回时），中转站再认回这家自己的写法。
     const served = [
       ...usableModels(listed).map((model) => model.id),
@@ -2785,26 +2814,31 @@ export class ApiEndpointService {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();
     const marksAgentsV1 = state?.agents.codex.allowsAnySubagentModel === true;
-    let entries: CodexModelEntry[] = [];
+    let endpoints: CodexEndpointListing = { entries: [], endpointNames: [] };
     if (state) {
-      entries = codexEndpointEntries({
+      endpoints = codexEndpointEntries({
         state: this.served(state),
         reasoningEffort: this.codexStartEffort(state),
         factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
         marksAgentsV1,
       });
     }
+    const nameDisplay = apiEndpointNameDisplayOf(state?.endpointNameDisplay);
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
     const disabledModels = state?.disabledModels ?? [];
-    // 被禁的 Codex 自己的模型也从清单里拿掉（magpie 把名单算进标记），名单一变 Codex 就重拉。
-    let tag = codexListTag(
-      disabledModels.length === 0
-        ? { entries, defaultModelId }
-        : { entries, defaultModelId, disabledModels },
-    );
+    // 被禁的 Codex 自己的模型也从清单里拿掉（magpie 把名单算进标记），名单一变 Codex 就重拉；
+    // 接口名与显示方式变了显示名就变，也算进标记。
+    let tag = codexListTag({
+      entries: endpoints.entries,
+      endpointNames: endpoints.endpointNames,
+      nameDisplay,
+      defaultModelId,
+      ...(disabledModels.length === 0 ? {} : { disabledModels }),
+    });
     if (marksAgentsV1) tag = agentsV1Tag(tag);
     return {
-      entries,
+      endpoints,
+      nameDisplay,
       tag,
       codexHome,
       marksAgentsV1,

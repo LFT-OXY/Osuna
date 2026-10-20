@@ -6,7 +6,10 @@ import type {
   ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
-import { showsEndpointNames } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import {
+  showsEndpointNames,
+  type ApiEndpointNameDisplay,
+} from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
 import {
   endpointRowStatus,
@@ -503,19 +506,20 @@ function defaultModelOptions(input: {
   return options;
 }
 
-/** 按接口名显示方式去掉不显示的接口名；撞名只在带接口名的选项之间算（光秃秃的名字本来就不带）。 */
+/**
+ * 按接口名显示方式去掉不显示的接口名。同名在整个下拉里按每项显示的名字算（magpie Labels 的 same）：
+ * 光秃秃的 glm-5 和 relay-a/glm-5 都叫 glm-5，算撞名。
+ */
 function withEndpointNamesShown(input: {
   options: DefaultModelOption[];
-  display: string;
+  display: ApiEndpointNameDisplay;
 }): DefaultModelOption[] {
-  const named = input.options.filter((option) => option.endpointName !== null);
   const shows = showsEndpointNames({
     display: input.display,
-    names: named.map((option) => option.model),
+    names: input.options.map((option) => option.model),
   });
-  const hidden = new Set(named.filter((_option, index) => !shows[index]));
-  return input.options.map((option) =>
-    hidden.has(option) ? { ...option, endpointName: null } : option,
+  return input.options.map((option, index) =>
+    shows[index] || option.endpointName === null ? option : { ...option, endpointName: null },
   );
 }
 

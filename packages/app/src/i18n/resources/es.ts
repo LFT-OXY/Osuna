@@ -2883,7 +2883,10 @@ export const es: TranslationResources = {
         title: "Nombre del endpoint en las listas de modelos",
         info: "Si un modelo que ofrece un endpoint muestra después el nombre del endpoint, como en «Kimi K2 (Relay A)». Con Nunca, los modelos de dos endpoints con el mismo nombre siguen separados en /model de Codex por endpoint/modelo.",
         label: "Después de cada modelo",
-        hint: "En el selector de modelos, las opciones de Modelo predeterminado y /model de Codex.",
+        hint: "En el selector de modelos, las opciones de Modelo predeterminado y /model de Claude Code y Codex.",
+        preview: "Las listas muestran «{{label}}»",
+        unreached:
+          "No cambia nada en {{agents}}: su lista de modelos nunca muestra nombres de endpoint",
         choices: {
           always: "Siempre",
           clash: "Solo si los nombres coinciden",

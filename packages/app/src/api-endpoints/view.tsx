@@ -1,3 +1,4 @@
+import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import React, {
   useCallback,
   useEffect,
@@ -39,6 +40,7 @@ import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connec
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
 import { ApiEndpointNameDisplaySection } from "./endpoint-name-display-section";
+import { endpointNamePreview } from "./internal/endpoint-name-display-form";
 import { ApiEndpointLongConversationsSection } from "./long-conversations-section";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
@@ -460,13 +462,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order、长对话设置、已禁用的模型与接口名显示方式。
-  const canArrange = useHostFeature(serverId, "apiEndpointManagement");
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
   const management = useMemo<ListManagement | undefined>(
     () =>
-      canArrange
+      hasManagement
         ? {
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
@@ -475,18 +477,18 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
               setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
           }
         : undefined,
-    [canArrange, providerEntries, router, serverId, t],
+    [hasManagement, providerEntries, router, serverId, t],
   );
 
   // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。
   const handleAdd = useCallback(
     () =>
       setSheet(
-        canArrange
+        hasManagement
           ? { kind: "picker" }
           : { kind: "form", seed: { mode: "create", templateId: null }, backToPicker: false },
       ),
-    [canArrange],
+    [hasManagement],
   );
   const handleOpenById = useCallback(
     (openedId: string) => router.push(buildApiEndpointSettingsRoute(serverId, openedId)),
@@ -517,26 +519,31 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onOpen={handleOpen}
         onToggle={endpoints.setEnabled}
         onResume={endpoints.resume}
-        onArrange={canArrange ? endpoints.arrange : undefined}
+        onArrange={hasManagement ? endpoints.arrange : undefined}
         management={management}
       />
-      {canArrange && endpoints.state.status === "ready" ? (
+      {hasManagement && endpoints.state.status === "ready" ? (
         <ApiEndpointLongConversationsSection
           initial={endpoints.state.longConversations}
           onSave={endpoints.setLongConversations}
         />
       ) : null}
-      {canArrange && endpoints.state.status === "ready" ? (
+      {hasManagement && endpoints.state.status === "ready" ? (
         <ApiEndpointDisabledModelsSection
           initial={endpoints.state.disabledModels}
           endpoints={endpoints.state.endpoints}
           onSave={endpoints.setDisabledModels}
         />
       ) : null}
-      {canArrange && endpoints.state.status === "ready" ? (
+      {hasManagement && endpoints.state.status === "ready" ? (
         <ApiEndpointNameDisplaySection
-          initial={endpoints.state.endpointNameDisplay}
+          value={endpoints.state.endpointNameDisplay}
           onSave={endpoints.setEndpointNameDisplay}
+          unreachedAgents={endpoints.state.endpointNamesUnreached.map((provider) =>
+            resolveProviderLabel(provider, providerEntries),
+          )}
+          preview={null}
+          testID="api-endpoints-endpoint-names"
         />
       ) : null}
       <ConnectionSheet
@@ -692,6 +699,13 @@ function ApiEndpointDetailSections({
     agents,
     hasManagement,
   });
+  const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
+  const namePreview = useCallback(
+    (display: ApiEndpointNameDisplay) =>
+      endpointNamePreview({ endpoint, endpoints: allEndpoints, display }),
+    [allEndpoints, endpoint],
+  );
   // 开着「模型设置」窗口的模型；关着为 null。
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
   const closeModelSettings = useCallback(() => setSettingsModelId(null), []);
@@ -790,6 +804,17 @@ function ApiEndpointDetailSections({
           key={endpoint.id}
           endpoint={endpoint}
           onSave={detail.saveModelSettings}
+        />
+      ) : null}
+      {hasManagement && hostEndpoints.state.status === "ready" ? (
+        <ApiEndpointNameDisplaySection
+          value={hostEndpoints.state.endpointNameDisplay}
+          onSave={hostEndpoints.setEndpointNameDisplay}
+          unreachedAgents={hostEndpoints.state.endpointNamesUnreached.map((provider) =>
+            resolveProviderLabel(provider, providerEntries),
+          )}
+          preview={namePreview}
+          testID="api-endpoint-endpoint-names"
         />
       ) : null}
       {settingsModelId !== null ? (

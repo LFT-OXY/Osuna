@@ -2844,7 +2844,9 @@ export const zhCN: TranslationResources = {
         title: "接口名显示方式",
         info: "接口的模型后面带不带接口名，比如「GLM-5（智谱）」。选「不显示」时，两家同名的模型在 Codex 的模型列表里仍按「接口标识/模型名」分开。",
         label: "模型名后面",
-        hint: "聊天模型选择器、默认模型选项和 Codex 的模型列表里。",
+        hint: "聊天模型选择器、默认模型选项和 Claude Code、Codex 的模型列表里。",
+        preview: "选单里显示为「{{label}}」",
+        unreached: "对 {{agents}} 不起作用：它的模型列表里本来就不显示接口名",
         choices: {
           always: "一直显示",
           clash: "同名时显示",

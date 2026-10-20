@@ -166,8 +166,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
       // 终端 /model 列出这家的已选模型：`标识/模型名`、模型名、接口名。
       modelPicker: {
         options: [
-          { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
-          { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
+          { model: "relay/relay/sonnet", label: "relay/sonnet (Relay)", description: "via Osuna" },
+          { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
         ],
       },
     });
@@ -343,9 +343,9 @@ describe("Claude API endpoint over the daemon RPC", () => {
 
     expect(await picker()).toEqual({
       options: [
-        { model: "relay/relay/sonnet", label: "relay/sonnet", description: "Relay" },
-        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
-        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+        { model: "relay/relay/sonnet", label: "relay/sonnet (Relay)", description: "via Osuna" },
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+        { model: "backup/gpt-6", label: "gpt-6 (Backup)", description: "via Osuna" },
       ],
     });
 
@@ -359,15 +359,65 @@ describe("Claude API endpoint over the daemon RPC", () => {
     });
     expect(await picker()).toEqual({
       options: [
-        { model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" },
-        { model: "backup/gpt-6", label: "gpt-6", description: "Backup" },
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+        { model: "backup/gpt-6", label: "gpt-6 (Backup)", description: "via Osuna" },
       ],
     });
 
     await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: false });
     expect(await picker()).toEqual({
-      options: [{ model: "relay/relay/haiku", label: "relay/haiku", description: "Relay" }],
+      options: [
+        { model: "relay/relay/haiku", label: "relay/haiku (Relay)", description: "via Osuna" },
+      ],
     });
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("Endpoint name in model lists governs /model: always every row, only when names clash the shared ones, never none", async () => {
+    const relayId = await createEndpoint();
+    const backup = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Backup",
+      baseUrl: "https://backup.example/v1",
+      apiKey: "sk-backup",
+      models: [{ id: "relay/sonnet" }, { id: "gpt-6" }],
+      defaultModelId: "gpt-6",
+    });
+    const backupId = backup.endpoint?.id;
+    if (!backupId) throw new Error("Expected a saved endpoint");
+    await client.apiEndpointSetActive("claude", relayId);
+    await client.apiEndpointSetEndpointState({ endpointId: backupId, enabled: true });
+    const rows = async () =>
+      (
+        JSON.parse(await readFile(settingsPath, "utf8")).modelPicker.options as {
+          label: string;
+          description: string;
+        }[]
+      ).map((row) => [row.label, row.description]);
+
+    expect(await rows()).toEqual([
+      ["relay/sonnet (Relay)", "via Osuna"],
+      ["relay/haiku (Relay)", "via Osuna"],
+      ["relay/sonnet (Backup)", "via Osuna"],
+      ["gpt-6 (Backup)", "via Osuna"],
+    ]);
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
+    // 不带接口名的行照 magpie 在说明里留着接口名。
+    expect(await rows()).toEqual([
+      ["relay/sonnet (Relay)", "via Osuna"],
+      ["relay/haiku", "Relay"],
+      ["relay/sonnet (Backup)", "via Osuna"],
+      ["gpt-6", "Backup"],
+    ]);
+    await client.apiEndpointSetEndpointNameDisplay({ display: "never" });
+    expect(await rows()).toEqual([
+      ["relay/sonnet", "Relay"],
+      ["relay/haiku", "Relay"],
+      ["relay/sonnet", "Backup"],
+      ["gpt-6", "Backup"],
+    ]);
 
     await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);

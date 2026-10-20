@@ -57,6 +57,7 @@ describe("selectHostEndpointsState", () => {
       disabledModels: [],
       // 老主机不发接口名显示方式：一直显示。
       endpointNameDisplay: "always",
+      endpointNamesUnreached: [],
     });
   });
 

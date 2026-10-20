@@ -2891,7 +2891,9 @@ export const en = {
         title: "Endpoint name in model lists",
         info: "Whether a model an endpoint offers shows the endpoint's name after it, as in “Kimi K2 (Relay A)”. Under Never, two endpoints' models of one name stay apart in Codex's /model by endpoint/model.",
         label: "After each model",
-        hint: "In the model picker, the Default model choices and Codex's /model.",
+        hint: "In the model picker, the Default model choices and the /model of Claude Code and Codex.",
+        preview: "Lists show “{{label}}”",
+        unreached: "Changes nothing in {{agents}}: its model list never shows endpoint names",
         choices: {
           always: "Always",
           clash: "Only when names clash",

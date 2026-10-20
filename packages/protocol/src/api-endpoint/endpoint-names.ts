@@ -10,17 +10,22 @@ export function isApiEndpointNameDisplay(value: string): value is ApiEndpointNam
   return (API_ENDPOINT_NAME_DISPLAYS as readonly string[]).includes(value);
 }
 
+/** 线上或文件里读到的值：没有（老主机、没设）或认不出的都当 always。只在边界上用这一处。 */
+export function apiEndpointNameDisplayOf(value: string | undefined): ApiEndpointNameDisplay {
+  return value !== undefined && isApiEndpointNameDisplay(value) ? value : "always";
+}
+
 /**
  * 一个选单里各家接口的模型（names 是选单里显示的名字，同一家里已不撞名）后面带不带接口名；
  * clash 时名字不分大小写和别的一条一样的才带（magpie provider.Labels 的 same）。
  */
 export function showsEndpointNames(input: {
-  display: string | undefined;
+  display: ApiEndpointNameDisplay;
   names: ReadonlyArray<string>;
 }): boolean[] {
   const { display, names } = input;
   if (display === "never") return names.map(() => false);
-  if (display !== "clash") return names.map(() => true);
+  if (display === "always") return names.map(() => true);
   const counts = new Map<string, number>();
   for (const name of names) {
     const key = name.toLowerCase();

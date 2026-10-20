@@ -5,6 +5,8 @@ import {
   codexEndpointEntries,
   codexModelEntry,
   codexReasoningLevels,
+  namedCodexEndpointEntries,
+  type CodexEndpointListing,
 } from "./codex-model-catalog.js";
 import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
 import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -317,16 +319,23 @@ describe("codexDefaultLevel", () => {
 });
 
 describe("codexEndpointEntries", () => {
+  // 一直显示、旁边没有 ChatGPT 自带模型时的显示名。
+  function named(listing: CodexEndpointListing) {
+    return namedCodexEndpointEntries({ listing, display: "always", ownNames: [] });
+  }
+
   it("lists every on endpoint's picked models as <slug>/<model> named <model> (<endpoint name>), in the chat model picker's order, with what is known of them", () => {
-    const listed = codexEndpointEntries({
-      state: STATE,
-      reasoningEffort: "high",
-      marksAgentsV1: false,
-      factsFor: (owner, modelId) =>
-        owner.slug === "relay-b" && modelId === "glm-4.6"
-          ? { context: 200_000, efforts: ["low", "high"], images: false }
-          : labelled(owner, modelId),
-    });
+    const listed = named(
+      codexEndpointEntries({
+        state: STATE,
+        reasoningEffort: "high",
+        marksAgentsV1: false,
+        factsFor: (owner, modelId) =>
+          owner.slug === "relay-b" && modelId === "glm-4.6"
+            ? { context: 200_000, efforts: ["low", "high"], images: false }
+            : labelled(owner, modelId),
+      }),
+    );
     expect(
       listed.map((entry) => [entry.slug, entry.display_name, entry.visibility, entry.priority]),
     ).toEqual([
@@ -343,18 +352,20 @@ describe("codexEndpointEntries", () => {
   });
 
   it("tells apart the same model picked on two endpoints", () => {
-    const listed = codexEndpointEntries({
-      state: {
-        ...STATE,
-        endpoints: [
-          endpoint({ slug: "relay-a", models: [{ id: "gpt-6-sol" }] }),
-          endpoint({ slug: "relay-b", models: [{ id: "gpt-6-sol" }] }),
-        ],
-      },
-      reasoningEffort: null,
-      marksAgentsV1: false,
-      factsFor: () => ({}),
-    });
+    const listed = named(
+      codexEndpointEntries({
+        state: {
+          ...STATE,
+          endpoints: [
+            endpoint({ slug: "relay-a", models: [{ id: "gpt-6-sol" }] }),
+            endpoint({ slug: "relay-b", models: [{ id: "gpt-6-sol" }] }),
+          ],
+        },
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        factsFor: () => ({}),
+      }),
+    );
     expect(listed.map((entry) => entry.display_name)).toEqual([
       "gpt-6-sol (RELAY-A)",
       "gpt-6-sol (RELAY-B)",
@@ -362,23 +373,25 @@ describe("codexEndpointEntries", () => {
   });
 
   it("shows the model id for two models of one endpoint that would be called the same (ticket 13)", () => {
-    const listed = codexEndpointEntries({
-      state: {
-        ...STATE,
-        endpoints: [
-          endpoint({
-            slug: "relay-a",
-            models: [
-              { id: "glm-5", label: "GLM" },
-              { id: "glm-5-air", label: "glm" },
-            ],
-          }),
-        ],
-      },
-      reasoningEffort: null,
-      marksAgentsV1: false,
-      factsFor: labelled,
-    });
+    const listed = named(
+      codexEndpointEntries({
+        state: {
+          ...STATE,
+          endpoints: [
+            endpoint({
+              slug: "relay-a",
+              models: [
+                { id: "glm-5", label: "GLM" },
+                { id: "glm-5-air", label: "glm" },
+              ],
+            }),
+          ],
+        },
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        factsFor: labelled,
+      }),
+    );
     expect(listed.map((entry) => entry.display_name)).toEqual([
       "glm-5 (RELAY-A)",
       "glm-5-air (RELAY-A)",

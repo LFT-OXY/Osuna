@@ -3371,6 +3371,45 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
+  test("Endpoint name in model lists on an endpoint's page: the same host setting, with a preview of its first model and a refusal kept in place", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const relayA = await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "kimi-k2"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.set_endpoint_name_display");
+    await openEndpointDetail(page, relayA);
+    const section = page.getByTestId("api-endpoint-endpoint-names").filter({ visible: true });
+    const trigger = section.getByTestId("api-endpoint-endpoint-names-trigger");
+    const preview = section.getByTestId("api-endpoint-endpoint-names-preview");
+
+    await expect(preview).toHaveText("Lists show “claude-sonnet-4-5 (Relay A)”");
+    await trigger.click();
+    await page.getByTestId("api-endpoint-endpoint-names-never").click();
+    await expect(section).toContainText("Couldn't save: EACCES: permission denied");
+    await expect(preview).toHaveText("Lists show “claude-sonnet-4-5 (Relay A)”");
+
+    host.failing = false;
+    await trigger.click();
+    await page.getByTestId("api-endpoint-endpoint-names-clash").click();
+    await expect
+      .poll(async () => (await client.apiEndpointList("claude")).endpointNameDisplay)
+      .toBe("clash");
+    // 没有别家叫 claude-sonnet-4-5：同名时显示就不带接口名。
+    await expect(preview).toHaveText("Lists show “claude-sonnet-4-5”");
+    // 别的客户端改了，列表下一次刷新（每 30 秒）时这里跟着变。
+    await client.apiEndpointSetEndpointNameDisplay({ display: "always" });
+    await expect(trigger).toHaveText("Always", { timeout: 45_000 });
+  });
+
   test("Codex gets the same section, and its model selector is grouped the same way", async ({
     page,
   }) => {
