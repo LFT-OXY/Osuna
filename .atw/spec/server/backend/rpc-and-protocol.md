@@ -1457,3 +1457,68 @@ if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId
 ```
 
 - Default thinking wire fields (cli-wiring-web-search ticket 20), all optional, old daemons neither send nor read them: agent settings and `set_agent_settings` carry `defaultThinkingOptionId: z.string().nullable().optional()` (null = unset, omitted = unchanged) and `usesUltraCode: z.boolean().optional()` (Claude Code only); `ProviderSnapshotEntry.lockedThinkingOptionId?: string` is present only when every session of that provider runs at one level (Claude Code default thinking max). Responses report the clamped Claude level, not the stored one. The app hides the default-thinking row when the model groups carry no `thinkingOptions` (old daemon) — tagged `COMPAT(apiEndpointCliWiring)`.
+
+## Scenario: test models — a user-pressed batch of real upstream requests with progress
+
+### 1. Scope / Trigger
+
+- endpoint-management-ux ticket 19 (`api-endpoints/model-tests.ts`, magpie `internal/provider/test.go` `TestModels` / `testOne`, MIT). Every request carries the user's key, so it runs only when the user presses "Test models" or a row's "Test this" — no timer, no automatic run.
+
+### 2. Signatures
+
+- `provider.api_endpoint.test_models.request { requestId, endpointId, modelId?, method? }` → pushes `test_models.started { requestId, modelIds }`, then one `test_models.progress { requestId, result, done, total }` per finished model, then `test_models.response { requestId, results, error }`. Cancel with the existing `provider.api_endpoint.cancel` by `requestId`.
+- `method` is a loose string; `API_ENDPOINT_MODEL_TEST_METHODS = ["plain"]` today (ticket 20 adds the CLI-style methods). A daemon rejects a method it doesn't know with `invalid_input`.
+- `MODEL_TEST_DEFAULTS = { concurrency: 4, modelTimeoutMs: 20_000, batchTimeoutMs: 180_000 }`; `ModelTestClock { now, timers }` is injected (tests use manual timers).
+
+### 3. Contracts
+
+- Result: `{ modelId, ok, format | null, status | null, durationMs, error | null }`. `format` null = no request sent; `status` null = no response. `error.message` is the upstream reason only — no request URL, no status prefix (stripped daemon-side).
+- `error.code`: `model_disabled` (params model, pattern), `auth_failed`, `upstream_error`, `upstream_unreachable`, `upstream_timeout` (params seconds — the UI interpolates it, never hardcodes 20), `batch_timeout`, `no_format`.
+- Each model: "hi", reply cap 16 in that format's own field (Responses `max_output_tokens`). Formats tried one after another: formats the catalog lists for the model first, else Anthropic first for a Claude model, then the endpoint's addresses in order (magpie's pick, accepted as "依次试"); "Use only this format" tries only that one. First answer wins; all fail → the **first** format's reason, even if a later one timed out.
+- `started.modelIds` is the daemon's real plan (after `retiredModels.listed`; disabled ones included and recorded as disabled without a request). The client marks only those "Testing…".
+- Results live in page memory only; leaving the page drops them and cancels a running batch (unmount → cancel; a cancel failure there goes to `console.error`, nowhere else to show it).
+- Gated on `apiEndpointManagement`; the view's gate carries `COMPAT(apiEndpointManagement)`.
+
+### 4. Validation & Error Matrix
+
+- Unknown endpoint / unknown method → response `results: []`, `error` set, no upstream request.
+- Disabled model → `model_disabled`, no request, no duration shown.
+- No address can serve the model → `no_format`, no duration.
+- Per-model total over 20 s → `upstream_timeout`, stop trying other formats.
+- Batch over 3 min → every unfinished model `batch_timeout`.
+- Cancel → no new requests; response carries finished results and a cancelled error.
+- Client cancel: only `DaemonConnectionError` with `code === "DAEMON_CONNECTION_LOST"` is ignored (the daemon cancelled with the connection); a request timeout or anything else is shown as the batch's failed state.
+
+### 5. Good/Base/Bad Cases
+
+- Good: 5 models, 4 in flight at most, rows fill in one by one, summary "4 tested · 1 failed" (only the failed count in error tone).
+- Base: "Test this" on one model → one started/progress/response with that model.
+- Bad: marking every catalog model "Testing…" from the client's list — a model retired this week then sits at "Testing…" and the total jumps.
+
+### 6. Tests Required
+
+- Daemon e2e `daemon-e2e/api-endpoint-test-models.e2e.test.ts` (loopback fake upstream, manual timers): concurrency ≤ 4, per-model progress, failures, single and batch timeout, a later format's timeout keeps the first reason, cancel sends nothing more, disabled sends nothing, only-this-format.
+- Browser `settings-api-endpoints.spec.ts`: batch, single, cancel, both filters, leaving clears results, leaving mid-run aborts the in-flight upstream requests and sends no more.
+- App unit `internal/model-tests.test.ts`: summary, duration only when a request was made, reason line text.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// 复制出来的不是上游原文
+reason.replaceAll("-", "‑");
+// 吞掉所有取消错误
+void client.apiEndpointCancel(id).catch(() => undefined);
+```
+
+#### Correct
+
+```tsx
+// 文字照原样，Web 上用样式不让模型名折行
+<Text selectable>{reason}</Text>
+// 只放过连接已断
+const isConnectionGone =
+  error instanceof DaemonConnectionError && error.code === "DAEMON_CONNECTION_LOST";
+if (!isConnectionGone) throw error;
+```
