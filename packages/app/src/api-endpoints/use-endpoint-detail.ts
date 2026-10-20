@@ -142,7 +142,7 @@ export function useEndpointDetail(input: {
    * quiet：打开页面时自己拉的，已有清单时失败不报（daemon 已记日志、清单不动）。
    */
   const runFetch = useCallback(
-    (quiet: boolean) => {
+    ({ quiet }: { quiet: boolean }) => {
       if (!client) return;
       setFetchState({ status: "fetching" });
       void (async () => {
@@ -184,14 +184,14 @@ export function useEndpointDetail(input: {
     [client, endpoint, hasManagement, refresh],
   );
 
-  const fetchModels = useCallback(() => runFetch(false), [runFetch]);
+  const fetchModels = useCallback(() => runFetch({ quiet: false }), [runFetch]);
 
   // 打开接口页就拉一次（主机认合并时每次都拉，照 prd 第 15 条）；老主机只在还没拉过清单时拉。
   useEffect(() => {
     if (autoFetchedFor.current === endpoint.id) return;
     if (!hasManagement && endpoint.catalog) return;
     autoFetchedFor.current = endpoint.id;
-    runFetch(true);
+    runFetch({ quiet: true });
   }, [endpoint.catalog, endpoint.id, hasManagement, runFetch]);
 
   const forgetCatalog = useCallback(() => {

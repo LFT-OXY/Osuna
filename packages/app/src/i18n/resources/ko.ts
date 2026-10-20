@@ -2732,6 +2732,7 @@ export const ko: TranslationResources = {
         forget: "가져온 목록 버리기",
         forgetting: "버리는 중…",
         forgetFailed: "가져온 목록을 버리지 못했습니다",
+        menu: "모델 작업 더 보기",
         fetching: "가져오는 중…",
         add: "직접 추가",
         addPlaceholder: "모델 이름(여러 개는 쉼표로 구분, 예: claude-opus-4-1, glm-5)",

@@ -657,13 +657,13 @@ function ApiEndpointDetailSections({
   const now = useClock();
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机上没 key 是缺失，
   // 也不认合并拉取与丢掉清单。
-  const isKeyOptional = useHostFeature(serverId, "apiEndpointManagement");
+  const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const detail = useEndpointDetail({
     serverId,
     endpoint,
     endpoints: allEndpoints,
     agents,
-    hasManagement: isKeyOptional,
+    hasManagement,
   });
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
@@ -712,7 +712,7 @@ function ApiEndpointDetailSections({
       ) : null}
       <ApiEndpointConnectionSection
         endpoint={endpoint}
-        isKeyOptional={isKeyOptional}
+        isKeyOptional={hasManagement}
         testResults={detail.testResults}
         onEdit={onEdit}
       />

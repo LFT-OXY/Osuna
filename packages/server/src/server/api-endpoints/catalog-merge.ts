@@ -42,7 +42,8 @@ export function mergeFormatLists(lists: FormatList[]): CatalogModel[] {
 
 /**
  * 这次没答上的格式上次列过的模型，接在合并结果后面（照 magpie keepDeadSides）。
- * 上次的清单没记 formats（这个版本以前拉的）时无从判断，什么都不留。
+ * 上次的清单整份都没记 formats（这个版本以前拉的）时说不出哪种格式列过什么：答上的格式都没列的模型
+ * 这一次全留下，不记 formats；下次各格式都答上时就见分晓。
  */
 export function keepFailedFormats(input: {
   merged: CatalogModel[];
@@ -51,9 +52,15 @@ export function keepFailedFormats(input: {
 }): CatalogModel[] {
   if (input.failed.length === 0) return input.merged;
   const listed = new Set(input.merged.map((model) => model.id));
+  const isUnsplit = input.previous.every((model) => model.formats === undefined);
   const kept: CatalogModel[] = [];
   for (const model of input.previous) {
     if (listed.has(model.id)) continue;
+    if (isUnsplit) {
+      const { formats: _formats, ...unsplit } = model;
+      kept.push(unsplit);
+      continue;
+    }
     const formats = (model.formats ?? []).filter((format) => input.failed.includes(format));
     if (formats.length > 0) kept.push({ ...model, formats });
   }

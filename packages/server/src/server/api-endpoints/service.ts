@@ -268,7 +268,7 @@ import {
   type CatalogModel,
   type FormatList,
 } from "./catalog-merge.js";
-import { CatalogRefreshSchedule } from "./catalog-refresh.js";
+import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
@@ -1094,11 +1094,14 @@ export class ApiEndpointService {
    * daemon 自己发起的拉清单（保存后当场、每天刷新）：按这家已存的地址与 key 各格式拉一次、合并后记下；
    * 只问 reachesUnasked 放行的地址。都没答上只记日志，清单不动。
    */
-  private async refreshCatalog(input: { endpointId: string; signal: AbortSignal }): Promise<void> {
+  private async refreshCatalog(input: {
+    endpointId: string;
+    signal: AbortSignal;
+  }): Promise<CatalogRefreshOutcome> {
     const endpoint = findEndpoint(this.readState(), input.endpointId);
-    if (!endpoint) return;
+    if (!endpoint) return "failed";
     const addresses = endpoint.baseUrls.filter(({ url }) => this.reachesUnasked(url));
-    if (addresses.length === 0) return;
+    if (addresses.length === 0) return "failed";
     try {
       await this.fetchMergedModels({
         input: { endpointId: endpoint.id, baseUrl: addresses[0]?.url ?? "" },
@@ -1106,12 +1109,14 @@ export class ApiEndpointService {
         keeps: true,
         signal: input.signal,
       });
+      return "listed";
     } catch (error) {
       if (!(error instanceof ApiEndpointRequestError)) throw error;
       this.logger.info(
         { endpointId: endpoint.id, code: error.code },
         "Could not fetch the model list",
       );
+      return "failed";
     }
   }
 

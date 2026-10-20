@@ -2740,6 +2740,7 @@ export const zhCN: TranslationResources = {
         forget: "丢掉拉回的清单",
         forgetting: "正在丢掉…",
         forgetFailed: "丢掉拉回的清单失败",
+        menu: "更多模型操作",
         fetching: "拉取中…",
         add: "手动添加",
         addPlaceholder: "模型名，多个用逗号隔开，如 claude-opus-4-1, glm-5",

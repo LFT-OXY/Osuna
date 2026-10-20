@@ -2715,6 +2715,7 @@ export const ar: TranslationResources = {
         forget: "مسح القائمة المجلوبة",
         forgetting: "جارٍ المسح…",
         forgetFailed: "تعذّر مسح القائمة المجلوبة",
+        menu: "مزيد من إجراءات النماذج",
         fetching: "جارٍ الجلب…",
         add: "إضافة يدويًا",
         addPlaceholder: "أسماء النماذج مفصولة بفواصل، مثل claude-opus-4-1, glm-5",

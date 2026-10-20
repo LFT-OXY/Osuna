@@ -686,6 +686,52 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(await catalogOf(endpointId)).toEqual(kept);
   });
 
+  test("a list kept before formats were recorded keeps, this once, what no format that answered lists", async () => {
+    // 保存当场拉的那次两边都挂：留下的是添加窗口带来的那份，没记哪种格式列过什么。
+    upstream.lists["/multi/anthropic/v1/models"] = "fail";
+    upstream.lists["/multi/v1/models"] = "fail";
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Multi",
+      baseUrls: multiBaseUrls(),
+      apiKey: SAVED_KEY,
+      models: [],
+      catalog: [{ id: "shared" }, { id: "old-a" }, { id: "old-b" }],
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    expect((await catalogOf(endpointId))?.models.map((model) => model.id)).toEqual([
+      "shared",
+      "old-a",
+      "old-b",
+    ]);
+    const fetchAll = () =>
+      client.apiEndpointFetchModels({
+        provider: "claude",
+        endpointId,
+        baseUrl: `${upstream.origin}/multi/anthropic`,
+        format: "anthropic_messages",
+        baseUrls: multiBaseUrls(),
+      });
+
+    upstream.lists["/multi/anthropic/v1/models"] = [{ id: "shared" }, { id: "new-a" }];
+    expect((await fetchAll()).error).toBeNull();
+    expect((await catalogOf(endpointId))?.models.map((model) => model.id)).toEqual([
+      "shared",
+      "new-a",
+      "old-a",
+      "old-b",
+    ]);
+
+    // 下次两边都答上：没人列的就走了。
+    upstream.lists["/multi/v1/models"] = [{ id: "old-b" }];
+    expect((await fetchAll()).error).toBeNull();
+    expect((await catalogOf(endpointId))?.models.map((model) => model.id)).toEqual([
+      "shared",
+      "new-a",
+      "old-b",
+    ]);
+  });
+
   test("once a day the daemon fetches again for endpoints that are on, keeps the list when that fails, and stops with auto-update off", async () => {
     upstream.lists["/on/v1/models"] = [{ id: "day-one" }];
     upstream.lists["/off/v1/models"] = [{ id: "day-one" }];
@@ -729,6 +775,19 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(upstream.requests.length).toBeGreaterThan(0);
     expect(await catalogOf(onId)).toEqual(refreshed);
 
+    // 失败后过 15 分钟再试（照 magpie listRetry），不等一天。
+    upstream.requests.length = 0;
+    clock = new Date(clock.getTime() + 10 * 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.requests).toEqual([]);
+    upstream.lists["/on/v1/models"] = [{ id: "day-one" }, { id: "day-two" }, { id: "retried" }];
+    clock = new Date(clock.getTime() + 6 * 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.requests).toEqual(["/on/v1/models"]);
+    const retried = await catalogOf(onId);
+    expect(retried?.models.map((model) => model.id)).toEqual(["day-one", "day-two", "retried"]);
+    upstream.lists["/on/v1/models"] = "fail";
+
     // 「价格表自动更新」关掉：再过几天也不拉。
     upstream.requests.length = 0;
     upstream.lists["/on/v1/models"] = [{ id: "day-three" }];
@@ -736,7 +795,7 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     clock = new Date(clock.getTime() + 3 * DAY_MS);
     await runDailyCheck();
     expect(upstream.requests).toEqual([]);
-    expect(await catalogOf(onId)).toEqual(refreshed);
+    expect(await catalogOf(onId)).toEqual(retried);
   });
 
   test("forgetting the fetched list empties it and its time, keeping the selected and hand-added models", async () => {

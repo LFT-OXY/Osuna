@@ -2746,6 +2746,7 @@ export const ja: TranslationResources = {
         forget: "取得したリストを破棄",
         forgetting: "破棄中…",
         forgetFailed: "取得したリストを破棄できませんでした",
+        menu: "モデルのその他の操作",
         fetching: "取得中…",
         add: "手動で追加",
         addPlaceholder: "モデル名（複数はカンマ区切り。例: claude-opus-4-1, glm-5）",

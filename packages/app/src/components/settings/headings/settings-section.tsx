@@ -13,6 +13,8 @@ interface SettingsSectionProps {
   info?: ReactNode;
   /** A count after the title, dimmer than it, e.g. how many rows the card lists, or "3 / 12". */
   count?: number | string;
+  /** A muted line under the title and count, e.g. when the card's contents were last fetched. */
+  caption?: ReactNode;
   trailing?: ReactNode;
   testID?: string;
   style?: StyleProp<ViewStyle>;
@@ -33,6 +35,7 @@ export function SettingsSection({
   title,
   info,
   count,
+  caption,
   trailing,
   testID,
   style,
@@ -46,18 +49,21 @@ export function SettingsSection({
   return (
     <View style={sectionStyle} testID={testID}>
       <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={settingsStyles.sectionHeaderTitle}>{title}</Text>
-          {count === undefined ? null : (
-            <Text style={[settingsStyles.sectionHeaderTitle, styles.count]}>{count}</Text>
-          )}
-          {info ? (
-            <SettingsInfoTip
-              title={title}
-              info={info}
-              testID={testID ? `${testID}-info` : undefined}
-            />
-          ) : null}
+        <View style={styles.heading}>
+          <View style={styles.titleRow}>
+            <Text style={settingsStyles.sectionHeaderTitle}>{title}</Text>
+            {count === undefined ? null : (
+              <Text style={[settingsStyles.sectionHeaderTitle, styles.count]}>{count}</Text>
+            )}
+            {info ? (
+              <SettingsInfoTip
+                title={title}
+                info={info}
+                testID={testID ? `${testID}-info` : undefined}
+              />
+            ) : null}
+          </View>
+          {caption}
         </View>
         {trailing}
       </View>
@@ -74,6 +80,11 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     marginBottom: theme.spacing[2],
     marginLeft: theme.spacing[0.5],
+  },
+  heading: {
+    flexShrink: 1,
+    minWidth: 0,
+    gap: theme.spacing[0.5],
   },
   titleRow: {
     flexDirection: "row",

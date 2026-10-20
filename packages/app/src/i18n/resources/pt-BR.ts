@@ -2759,6 +2759,7 @@ export const ptBR: TranslationResources = {
         forget: "Descartar lista obtida",
         forgetting: "Descartando…",
         forgetFailed: "Não foi possível descartar a lista obtida",
+        menu: "Mais ações de modelos",
         fetching: "Obtendo…",
         add: "Adicionar manualmente",
         addPlaceholder: "Nomes de modelo separados por vírgula, ex.: claude-opus-4-1, glm-5",

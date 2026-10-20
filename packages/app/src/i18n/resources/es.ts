@@ -2774,6 +2774,7 @@ export const es: TranslationResources = {
         forget: "Descartar la lista obtenida",
         forgetting: "Descartando…",
         forgetFailed: "No se pudo descartar la lista obtenida",
+        menu: "Más acciones de modelos",
         fetching: "Obteniendo…",
         add: "Añadir a mano",
         addPlaceholder: "Nombres de modelo separados por comas, p. ej. claude-opus-4-1, glm-5",

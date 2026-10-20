@@ -2753,6 +2753,7 @@ export const ru: TranslationResources = {
         forget: "Сбросить полученный список",
         forgetting: "Сброс…",
         forgetFailed: "Не удалось сбросить полученный список",
+        menu: "Другие действия с моделями",
         fetching: "Получение…",
         add: "Добавить вручную",
         addPlaceholder: "Имена моделей через запятую, например claude-opus-4-1, glm-5",

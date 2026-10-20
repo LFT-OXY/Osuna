@@ -788,10 +788,12 @@ test.describe("Settings API endpoints", () => {
     const host = await failRequests(page, "provider.api_endpoint.forget_catalog");
     await openEndpointDetail(page, endpointId);
     const models = page.getByTestId("api-endpoint-models-section").filter({ visible: true });
-    await expect(models).toContainText(/Fetched/);
-    const forget = models.getByTestId("api-endpoint-models-forget");
+    await expect(models.getByTestId("api-endpoint-models-fetched-at")).toContainText(/Fetched/);
+    const menu = models.getByTestId("api-endpoint-models-menu");
+    const forget = page.getByTestId("api-endpoint-models-forget");
 
     await test.step("a failed forget says why and keeps the list", async () => {
+      await menu.click();
       await forget.click();
       await expect(models.getByTestId("api-endpoint-models-forget-error")).toContainText(
         "EACCES: permission denied",
@@ -802,11 +804,12 @@ test.describe("Settings API endpoints", () => {
 
     await test.step("forgetting empties the list and its time; the selected model stays", async () => {
       host.failing = false;
+      await menu.click();
       await forget.click();
       await expect(models.getByTestId("api-endpoint-models-forget-error")).toHaveCount(0);
       await expect.poll(catalogReader(endpointId)).toBeUndefined();
-      await expect(models).not.toContainText(/Fetched/);
-      await expect(forget).toHaveCount(0);
+      await expect(models.getByTestId("api-endpoint-models-fetched-at")).toHaveCount(0);
+      await expect(menu).toHaveCount(0);
       await expect(models.getByTestId("api-endpoint-model-family-claude")).toHaveCount(0);
       await expect(modelSwitch(page, "gpt-5")).toBeChecked();
       expect(await selectedModelsOf(endpointId)).toEqual(["gpt-5"]);
@@ -3989,35 +3992,8 @@ async function dragRow(page: Page, fromId: string, ontoId: string): Promise<void
 }
 
 /** `failing` 为 true 时，set_order 请求不送到 daemon，直接回一个失败响应。 */
-async function failSetOrder(page: Page): Promise<{ failing: boolean }> {
-  const host = { failing: true };
-  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
-    const server = ws.connectToServer();
-    server.onMessage((message) => ws.send(message));
-    ws.onMessage((message) => {
-      const request =
-        typeof message === "string" && message.includes("provider.api_endpoint.set_order.request")
-          ? (JSON.parse(message) as { message?: { requestId?: string } }).message
-          : undefined;
-      if (!host.failing || !request) {
-        server.send(message);
-        return;
-      }
-      ws.send(
-        JSON.stringify({
-          type: "session",
-          message: {
-            type: "provider.api_endpoint.set_order.response",
-            payload: {
-              requestId: request.requestId,
-              error: { code: "unknown", message: "EACCES: permission denied" },
-            },
-          },
-        }),
-      );
-    });
-  });
-  return host;
+function failSetOrder(page: Page): Promise<{ failing: boolean }> {
+  return failRequests(page, "provider.api_endpoint.set_order");
 }
 
 /** `failing` 为 true 时，这一种请求不送到 daemon，直接回一个失败响应（响应里除 error 外的字段取空值）。 */

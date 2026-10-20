@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Eraser, Plus, RotateCw, Search } from "lucide-react-native";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { Alert } from "@/components/ui/alert";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -21,7 +23,6 @@ import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
-import { formatTimeAgo } from "@/utils/time";
 import {
   buildModelEntries,
   familySelectAllState,
@@ -35,6 +36,7 @@ import {
 } from "./internal/endpoint-models";
 import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
+import { agoOf } from "./reopen-hints-copy";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 
 /*
@@ -113,56 +115,22 @@ export function ApiEndpointModelsSection({
     [onChange, source],
   );
 
+  const caption = useMemo(
+    () => <ModelsCaption isForgetting={isForgetting} fetchedAt={fetchedAt} now={now} />,
+    [fetchedAt, isForgetting, now],
+  );
   const trailing = useMemo(
     () => (
-      <View style={isCompact ? styles.trailingCompact : styles.trailing}>
-        {fetchedAt ? (
-          <Text variant="caption" color="foregroundMuted" numberOfLines={isCompact ? undefined : 1}>
-            {t("settings.apiEndpoints.models.fetchedAt", {
-              time: formatTimeAgo(new Date(fetchedAt), now),
-            })}
-          </Text>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={RotateCw}
-          loading={isFetching}
-          disabled={isFetching}
-          onPress={onFetch}
-          testID="api-endpoint-models-refetch"
-        >
-          {isFetching
-            ? t("settings.apiEndpoints.models.fetching")
-            : t("settings.apiEndpoints.models.refetch")}
-        </Button>
-        {fetchedAt && onForget ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={Eraser}
-            loading={isForgetting}
-            disabled={isForgetting || isFetching}
-            onPress={onForget}
-            testID="api-endpoint-models-forget"
-          >
-            {isForgetting
-              ? t("settings.apiEndpoints.models.forgetting")
-              : t("settings.apiEndpoints.models.forget")}
-          </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={Plus}
-          onPress={openAdd}
-          testID="api-endpoint-models-add"
-        >
-          {t("settings.apiEndpoints.models.add")}
-        </Button>
-      </View>
+      <ModelsActions
+        isCompact={isCompact}
+        isFetching={isFetching}
+        isForgetting={isForgetting}
+        onFetch={onFetch}
+        onAdd={openAdd}
+        onForget={fetchedAt && onForget ? onForget : null}
+      />
     ),
-    [fetchedAt, isCompact, isFetching, isForgetting, now, onFetch, onForget, openAdd, t],
+    [fetchedAt, isCompact, isFetching, isForgetting, onFetch, onForget, openAdd],
   );
 
   let body: React.ReactNode;
@@ -214,6 +182,7 @@ export function ApiEndpointModelsSection({
             })
           : undefined
       }
+      caption={caption}
       trailing={trailing}
       testID="api-endpoint-models-section"
     >
@@ -262,6 +231,116 @@ export function ApiEndpointModelsSection({
         <View style={styles.body}>{body}</View>
       </View>
     </SettingsSection>
+  );
+}
+
+/** 「Models」标题下面一行：拉取时间；丢掉清单进行中写在这里（菜单选了就收起）。 */
+function ModelsCaption({
+  isForgetting,
+  fetchedAt,
+  now,
+}: {
+  isForgetting: boolean;
+  fetchedAt: string | undefined;
+  now: Date;
+}) {
+  const { t, i18n } = useTranslation();
+  if (isForgetting) {
+    return (
+      <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+        {t("settings.apiEndpoints.models.forgetting")}
+      </Text>
+    );
+  }
+  if (!fetchedAt) return null;
+  return (
+    <Text
+      variant="caption"
+      color="foregroundMuted"
+      numberOfLines={1}
+      testID="api-endpoint-models-fetched-at"
+    >
+      {t("settings.apiEndpoints.models.fetchedAt", {
+        time: agoOf({ t, since: new Date(fetchedAt), now, locale: i18n.language }),
+      })}
+    </Text>
+  );
+}
+
+/** 一行：重新拉取、手动添加，次要的「丢掉拉回的清单」在 ⋯ 菜单里；窄窗口两个按钮只留图标。 */
+function ModelsActions({
+  isCompact,
+  isFetching,
+  isForgetting,
+  onFetch,
+  onAdd,
+  onForget,
+}: {
+  isCompact: boolean;
+  isFetching: boolean;
+  isForgetting: boolean;
+  onFetch: () => void;
+  onAdd: () => void;
+  onForget: (() => void) | null;
+}) {
+  const { t } = useTranslation();
+  const fetchLabel = isFetching
+    ? t("settings.apiEndpoints.models.fetching")
+    : t("settings.apiEndpoints.models.refetch");
+  return (
+    <View style={styles.trailing}>
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={RotateCw}
+        loading={isFetching}
+        disabled={isFetching}
+        onPress={onFetch}
+        accessibilityLabel={fetchLabel}
+        testID="api-endpoint-models-refetch"
+      >
+        {isCompact ? null : fetchLabel}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={Plus}
+        onPress={onAdd}
+        accessibilityLabel={t("settings.apiEndpoints.models.add")}
+        testID="api-endpoint-models-add"
+      >
+        {isCompact ? null : t("settings.apiEndpoints.models.add")}
+      </Button>
+      {onForget ? <ModelsMenu isBusy={isForgetting || isFetching} onForget={onForget} /> : null}
+    </View>
+  );
+}
+
+const ThemedEraser = withUnistyles(Eraser);
+
+function ModelsMenu({ isBusy, onForget }: { isBusy: boolean; onForget: () => void }) {
+  const { t } = useTranslation();
+  const forgetLeading = useMemo(
+    () => <ThemedEraser size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  return (
+    <DropdownMenu>
+      <RowActionsMenuTrigger
+        accessibilityLabel={t("settings.apiEndpoints.models.menu")}
+        testID="api-endpoint-models-menu"
+      />
+      <DropdownMenuContent align="end" width={220}>
+        <DropdownMenuItem
+          leading={forgetLeading}
+          onSelect={onForget}
+          disabled={isBusy}
+          testID="api-endpoint-models-forget"
+        >
+          {t("settings.apiEndpoints.models.forget")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -537,15 +616,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    flexShrink: 1,
-  },
-  // 窄窗口：放不下就换行，不截断「拉取于 …」。
-  trailingCompact: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    columnGap: theme.spacing[2],
     flexShrink: 1,
   },
   searchRow: {

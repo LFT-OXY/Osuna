@@ -2783,6 +2783,7 @@ export const en = {
         forget: "Forget fetched list",
         forgetting: "Forgetting…",
         forgetFailed: "Couldn't forget the fetched list",
+        menu: "More model actions",
         fetching: "Fetching…",
         add: "Add by hand",
         addPlaceholder: "Model names, comma separated, e.g. claude-opus-4-1, glm-5",

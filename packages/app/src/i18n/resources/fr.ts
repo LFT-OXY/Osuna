@@ -2777,6 +2777,7 @@ export const fr: TranslationResources = {
         forget: "Oublier la liste récupérée",
         forgetting: "Oubli en cours…",
         forgetFailed: "Impossible d'oublier la liste récupérée",
+        menu: "Autres actions sur les modèles",
         fetching: "Récupération…",
         add: "Ajouter à la main",
         addPlaceholder: "Noms de modèles séparés par des virgules, p. ex. claude-opus-4-1, glm-5",
