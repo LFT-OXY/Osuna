@@ -39,6 +39,7 @@
 - Adding auth checks or env gates to tests.
 - Hand-written types that duplicate a Zod schema or a protocol type.
 - `-utils` / `-helpers` / `-manager` suffixes on new files.
+- `new RegExp(...)` on a pattern the user wrote, including a glob turned into a regex. JS regex backtracks, so a rule like `*a*a*a*b` or `re:([a]+)+` can hang the daemon event loop on an upstream model id, and a scanner that rejects "dangerous" patterns always misses some (ticket 12's scanner missed four). Compile it with `re2js` (linear time, the same RE2 that magpie's Go `regexp` uses) the way `packages/protocol/src/api-endpoint/auto-pick-rules.ts` does. Report `RE2JSSyntaxException` as an invalid rule and rethrow anything else.
 
 ## Verification after every change
 
