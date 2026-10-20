@@ -5182,6 +5182,80 @@ describe("model list and warm-up", () => {
       },
     ]);
   });
+
+  // 照 magpie gateway.go 的 model：按 `标识/模型名` 或光秃秃的名字给一条，和列表里的那条一样。
+  test("/v1/models/{id} answers a model by its endpoint's slug or by its bare name, as the list gives it", async () => {
+    const { gateway } = await start({
+      modelsDev: {
+        "kimi-k2": { name: "Kimi K2", context: 262_144, output: 32_768, images: false },
+      },
+      catalogB: { "kimi-k2": { name: "Kimi on B", efforts: ["low", "high"] } },
+    });
+    const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
+    const listed = await fetch(`${gateway}/v1/models`, { headers });
+    const list = (await listed.json()) as { data: { id: string }[] };
+
+    const bare = await fetch(`${gateway}/v1/models/kimi-k2`, { headers });
+    const onB = await fetch(`${gateway}/v1/models/relay-b/kimi-k2`, { headers });
+
+    expect(bare.status).toBe(200);
+    expect(await bare.json()).toEqual(list.data.find((model) => model.id === "kimi-k2"));
+    expect(onB.status).toBe(200);
+    const {
+      created_at: _at,
+      owned_by: _by,
+      ...model
+    } = (await onB.json()) as Record<string, unknown>;
+    expect(model).toEqual({
+      id: "relay-b/kimi-k2",
+      object: "model",
+      type: "model",
+      created: 0,
+      display_name: "Kimi on B",
+      reasoning: true,
+      supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
+      context_window: 262_144,
+      context_length: 262_144,
+      max_input_tokens: 262_144,
+      max_output_tokens: 32_768,
+      modalities: { input: ["text"] },
+    });
+  });
+
+  test("/v1/models/{id} answers 404 unknown model for a model it doesn't serve or one disabled", async () => {
+    const { gateway, endpointsDir } = await start({
+      modelsA: ["kimi-k2", "gpt-5.5", "qwen3-coder"],
+    });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      disabledModels?: string[];
+    };
+    file.disabledModels = ["qwen3-*"];
+    await writeFile(endpointsPath, JSON.stringify(file));
+    const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
+
+    const asked = ["nothing-here", "qwen3-coder", "relay-a/qwen3-coder"];
+    const answers = await Promise.all(
+      asked.map(async (id) => {
+        const answer = await fetch(`${gateway}/v1/models/${id}`, { headers });
+        return { status: answer.status, body: await answer.json() };
+      }),
+    );
+
+    expect(answers).toEqual(
+      asked.map((id) => ({
+        status: 404,
+        body: {
+          error: {
+            message: `unknown model ${id}`,
+            type: "not_found_error",
+            code: null,
+            param: null,
+          },
+        },
+      })),
+    );
+  });
 });
 
 describe("the CLI configs follow the gateway across daemon starts", () => {

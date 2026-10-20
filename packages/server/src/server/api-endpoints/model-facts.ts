@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { ApiEndpointModelFactsSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ResolvedModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
+import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 import { isRecord } from "./upstream-http.js";
 
 /*
@@ -27,6 +28,30 @@ export type ModelFacts = z.infer<typeof ModelFactsSchema>;
 export interface EndpointModelFacts
   extends ModelFacts, Partial<Pick<ResolvedModelFacts, "compact" | "contextSet" | "noThinking">> {
   vendorEfforts?: string[];
+}
+
+/** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
+export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => EndpointModelFacts;
+
+/** 光秃秃的模型名的资料：按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）；没有一家选了为空。 */
+export function bareModelFacts(input: {
+  state: ApiEndpointState;
+  modelId: string;
+  factsFor: ModelFactsLookup;
+}): EndpointModelFacts {
+  const { modelId } = input;
+  const endpoint = input.state.endpoints.find(
+    (entry) => entry.enabled && entry.models.some((own) => own.id === modelId),
+  );
+  return endpoint ? input.factsFor(endpoint, modelId) : {};
+}
+
+/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie PublishedOutput、OutputWithin）。 */
+export function publishedOutput(facts: ModelFacts): number {
+  const output = facts.output ?? 0;
+  const context = facts.context ?? 0;
+  const pastWindow = context > 0 && output > context;
+  return pastWindow ? context : output;
 }
 
 /** 按去掉前缀的小写模型名索引的 models.dev 数据。 */

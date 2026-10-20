@@ -881,6 +881,16 @@ internal/codexcat/codexcat.go:
   packages/server/src/server/api-endpoints/gateway/no-thinking.ts
   packages/server/src/server/api-endpoints/codex-model-catalog.ts
 
+What the gateway's model list and single-model answer (GET /v1/models and
+GET /v1/models/{id}) give for each model (display name, thinking levels,
+context window, reply limit kept within it, input modalities) follows
+modelObject and model in magpie's internal/gateway/gateway.go and Thinks,
+PublishedOutput, OutputWithin and Modalities in internal/provider:
+
+  packages/server/src/server/api-endpoints/gateway/model-list.ts
+  packages/server/src/server/api-endpoints/model-facts.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

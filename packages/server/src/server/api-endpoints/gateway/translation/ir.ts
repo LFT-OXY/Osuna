@@ -5,7 +5,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { EndpointModelFacts, ModelFacts } from "../../model-facts.js";
+import { publishedOutput, type EndpointModelFacts } from "../../model-facts.js";
 import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
@@ -571,14 +571,6 @@ export function requestForModel(input: {
   const temperature = dropsSampling ? null : request.temperature;
   const topP = dropsSampling ? null : request.topP;
   return { ...request, effort, maxTokens, temperature, topP };
-}
-
-/** 模型公布的回复上限，不超过它的窗口；不知道是 0（magpie OutputWithin）。 */
-function publishedOutput(facts: ModelFacts): number {
-  const output = facts.output ?? 0;
-  const context = facts.context ?? 0;
-  const pastWindow = context > 0 && output > context;
-  return pastWindow ? context : output;
 }
 
 /** 关掉推理：OpenAI 格式发 effort none（openAIEffort），照 magpie 的 withBodyEffort(…, "none")。 */

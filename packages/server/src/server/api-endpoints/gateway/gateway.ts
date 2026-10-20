@@ -18,10 +18,9 @@ import {
   ApiEndpointsFileUnparsableError,
   type ApiEndpointProvider,
   type ApiEndpointState,
-  type StoredApiEndpoint,
 } from "../store.js";
 import { servedFormats, translationOrderAt } from "../templates.js";
-import type { EndpointModelFacts } from "../model-facts.js";
+import type { ModelFactsLookup } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
 import {
   askedDisabledBy,
@@ -54,7 +53,7 @@ import {
 } from "./chatgpt-models.js";
 import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
 import { CompactionFailures } from "./codex-compaction-fallback.js";
-import { modelList } from "./model-list.js";
+import { modelIdOf, modelList, singleModel } from "./model-list.js";
 import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
 import {
   chatgptTurnDestination,
@@ -170,9 +169,6 @@ export interface ApiEndpointGatewayOverrides {
   gatewayChatGptModelsWaitMs?: number;
 }
 
-/** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
-export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => EndpointModelFacts;
-
 /** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */
 const AGENT_PATHS = {
   "/v1/messages": { wire: "anthropic", format: "anthropic_messages", agent: "claude" },
@@ -272,14 +268,7 @@ export function createApiEndpointGateway(options: {
       res.status(200).json({ name: GATEWAY_INFO_NAME });
       return;
     }
-    if (req.path === "/v1/models" && req.method === "GET") {
-      const state = readState({ res, wire, store, logger });
-      if (state)
-        res
-          .status(200)
-          .json(modelList({ state: servedOf({ failover, state }), factsOf: failover.modelFacts }));
-      return;
-    }
+    if (serveModels({ req, res, wire, store, logger, failover })) return;
     const target = req.method === "POST" ? agentPath(req.path) : null;
     const counting = req.method === "POST" && req.path === COUNT_TOKENS_PATH;
     if (!target && !counting) {
@@ -809,6 +798,40 @@ function noWebSearchMessage(model: string): string {
     `Web search is not available for ${model}: no API endpoint that is on and serves this model ` +
     `has "Searches the web by itself" turned on in Osuna.`
   );
+}
+
+/** 中转站的模型清单 GET /v1/models 与单个模型 GET /v1/models/{id}；不是这两条路径为 false。 */
+function serveModels(input: {
+  req: Request;
+  res: Response;
+  wire: AgentWire;
+  store: ApiEndpointStore;
+  logger: pino.Logger;
+  failover: Failover;
+}): boolean {
+  const { req, res, failover } = input;
+  if (req.method !== "GET") return false;
+  const isList = req.path === "/v1/models";
+  const askedId = isList ? null : modelIdOf(req.path);
+  if (!isList && askedId === null) return false;
+  const state = readState(input);
+  if (!state) return true;
+  const served = servedOf({ failover, state });
+  const factsFor = failover.modelFacts;
+  if (askedId === null) {
+    res.status(200).json(modelList({ state: served, factsFor }));
+    return true;
+  }
+  const found = singleModel({ state: served, id: askedId, factsFor });
+  // 找不到（含已禁用的）照 magpie 按 OpenAI 的写法回 404。
+  if (found) res.status(200).json(found);
+  else
+    sendAgentError({
+      res,
+      wire: "openai",
+      error: { status: 404, message: `unknown model ${askedId}` },
+    });
+  return true;
 }
 
 /** 在服务的模型：去掉一周内下线的与已禁用的。选路、模型清单都按它。 */

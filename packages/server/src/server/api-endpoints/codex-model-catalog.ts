@@ -9,8 +9,13 @@ import {
   distinctModelLabels,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
-import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
+import {
+  bareModelFacts,
+  type EndpointModelFacts,
+  type ModelFacts,
+  type ModelFactsLookup,
+} from "./model-facts.js";
+import type { ApiEndpointState } from "./store.js";
 
 /*
  * Codex 的 model_catalog_json 文件（ADR 0007）：给了它，Codex 的模型列表就完全以它为准，
@@ -45,11 +50,6 @@ const LEVEL_DESCRIPTIONS: Record<string, string> = {
 // 由弱到强（magpie EffortRank）。
 const EFFORT_RANK = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
-export type CodexModelFactsLookup = (
-  endpoint: StoredApiEndpoint,
-  modelId: string,
-) => EndpointModelFacts;
-
 /**
  * `reasoningEffort` 是 config.toml 顶层的 model_reasoning_effort，没设或读不出为 null。
  * `factsFor` 查这家这个模型的已知资料；光秃秃的名字按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）。
@@ -58,7 +58,7 @@ export type CodexModelFactsLookup = (
 export function buildCodexModelCatalog(input: {
   state: ApiEndpointState;
   reasoningEffort: string | null;
-  factsFor: CodexModelFactsLookup;
+  factsFor: ModelFactsLookup;
   marksAgentsV1: boolean;
 }): string {
   const { state, reasoningEffort, factsFor, marksAgentsV1 } = input;
@@ -66,10 +66,7 @@ export function buildCodexModelCatalog(input: {
     Omit<CodexModelEntryInput, "priority" | "reasoningEffort" | "marksAgentsV1">
   > = [];
   const listed = usableModels(state).map((model) => {
-    const endpoint = state.endpoints.find(
-      (entry) => entry.enabled && entry.models.some((own) => own.id === model.id),
-    );
-    const facts = endpoint ? factsFor(endpoint, model.id) : {};
+    const facts = bareModelFacts({ state, modelId: model.id, factsFor });
     return { id: model.id, label: facts.name ?? model.id, facts };
   });
   // 同一个选单里显示名撞了的显示模型 id（照 magpie）。
@@ -122,7 +119,7 @@ export function codexEndpointEntries(input: {
   state: ApiEndpointState;
   // config.toml 顶层的 model_reasoning_effort，没设为 null。
   reasoningEffort: string | null;
-  factsFor: CodexModelFactsLookup;
+  factsFor: ModelFactsLookup;
   // 「Codex Subagent 可用任意模型」开着。
   marksAgentsV1: boolean;
 }): CodexModelEntry[] {
