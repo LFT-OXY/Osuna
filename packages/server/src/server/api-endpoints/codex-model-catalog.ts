@@ -4,7 +4,8 @@
 
 import { CODEX_BASE_INSTRUCTIONS } from "./codex-base-instructions.js";
 import { endpointModelGroups, usableModels } from "./host-endpoints.js";
-import type { ModelFacts } from "./model-facts.js";
+import { distinctModelLabels } from "@getpaseo/protocol/api-endpoint/model-settings";
+import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 /*
@@ -39,7 +40,10 @@ const LEVEL_DESCRIPTIONS: Record<string, string> = {
 // 由弱到强（magpie EffortRank）。
 const EFFORT_RANK = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
-export type CodexModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
+export type CodexModelFactsLookup = (
+  endpoint: StoredApiEndpoint,
+  modelId: string,
+) => EndpointModelFacts;
 
 /**
  * `reasoningEffort` 是 config.toml 顶层的 model_reasoning_effort，没设或读不出为 null。
@@ -56,30 +60,41 @@ export function buildCodexModelCatalog(input: {
   const models: Array<
     Omit<CodexModelEntryInput, "priority" | "reasoningEffort" | "marksAgentsV1">
   > = [];
-  for (const model of usableModels(state)) {
+  const listed = usableModels(state).map((model) => {
     const endpoint = state.endpoints.find(
       (entry) => entry.enabled && entry.models.some((own) => own.id === model.id),
     );
+    const facts = endpoint ? factsFor(endpoint, model.id) : {};
+    return { id: model.id, label: facts.name ?? model.id, facts };
+  });
+  // 同一个选单里显示名撞了的显示模型 id（照 magpie）。
+  const listedLabels = distinctModelLabels(listed);
+  listed.forEach((model, index) => {
     models.push({
       slug: model.id,
-      displayName: model.label ?? model.id,
+      displayName: listedLabels[index] ?? model.id,
       visibility: "list",
-      facts: endpoint ? factsFor(endpoint, model.id) : {},
+      facts: model.facts,
     });
-  }
+  });
   for (const endpoint of state.endpoints) {
     if (!endpoint.enabled) continue;
-    for (const model of endpoint.models) {
+    const own = endpoint.models.map((model) => {
+      const facts = factsFor(endpoint, model.id);
+      return { id: model.id, label: facts.name ?? model.id, facts };
+    });
+    const labels = distinctModelLabels(own);
+    own.forEach((model, index) => {
       const slug = `${endpoint.slug}/${model.id}`;
       // 模型名本身带斜杠时可能和某家的 `标识/模型名` 撞上；Codex 按 slug 找条目，同名只留一条。
-      if (models.some((existing) => existing.slug === slug)) continue;
+      if (models.some((existing) => existing.slug === slug)) return;
       models.push({
         slug,
-        displayName: model.label ?? model.id,
+        displayName: labels[index] ?? model.id,
         visibility: "hide",
-        facts: factsFor(endpoint, model.id),
+        facts: model.facts,
       });
-    }
+    });
   }
   const entries = models.map((model, index) =>
     codexModelEntry({ ...model, priority: index + 1, reasoningEffort, marksAgentsV1 }),
@@ -100,16 +115,26 @@ export function codexEndpointEntries(input: {
   // 「Codex Subagent 可用任意模型」开着。
   marksAgentsV1: boolean;
 }): CodexModelEntry[] {
-  const listed = endpointModelGroups(input.state).flatMap((group) =>
-    group.models.map(({ id, model }) => ({ id, model, endpoint: group.endpoint })),
-  );
-  return listed.map(({ id, model, endpoint }, index) =>
+  const listed = endpointModelGroups(input.state).flatMap((group) => {
+    const own = group.models.map(({ id, model }) => {
+      const facts = input.factsFor(group.endpoint, model.id);
+      return { id, modelId: model.id, label: facts.name ?? model.id, facts };
+    });
+    // 同一家里显示名撞了的显示模型 id；不同家的靠后面的接口名分开。
+    const labels = distinctModelLabels(own.map(({ modelId, label }) => ({ id: modelId, label })));
+    return own.map((model, index) => ({
+      id: model.id,
+      facts: model.facts,
+      displayName: `${labels[index] ?? model.modelId} (${group.endpoint.name})`,
+    }));
+  });
+  return listed.map(({ id, displayName, facts }, index) =>
     codexModelEntry({
       slug: id,
-      displayName: `${model.label ?? model.id} (${endpoint.name})`,
+      displayName,
       visibility: "list",
       priority: index + 1,
-      facts: input.factsFor(endpoint, model.id),
+      facts,
       reasoningEffort: input.reasoningEffort,
       marksAgentsV1: input.marksAgentsV1,
     }),
@@ -123,7 +148,7 @@ export interface CodexModelEntryInput {
   displayName: string;
   visibility: "list" | "hide";
   priority: number;
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
   // config.toml 顶层的 model_reasoning_effort，没设为 null。
   reasoningEffort: string | null;
   // 「Codex Subagent 可用任意模型」：写 multi_agent_version = "v1"，Codex 给这个模型的 Subagent 发明文任务（magpie Stamp）。
@@ -143,7 +168,9 @@ export function codexModelEntry(input: CodexModelEntryInput) {
   const { facts } = input;
   const agentsVersion = input.marksAgentsV1 ? AGENTS_V1 : UNMARKED;
   const levels = codexModelLevels(facts);
-  const context = facts.context ?? FALLBACK_CONTEXT;
+  const window = facts.context ?? FALLBACK_CONTEXT;
+  // 有压缩阈值时告诉 Codex 的窗口取二者较小，整个窗口写进 max_context_window（magpie entriesAt 的 Compact）。
+  const context = facts.compact === undefined ? window : Math.min(window, facts.compact);
   return {
     slug: input.slug,
     display_name: input.displayName,
@@ -167,8 +194,8 @@ export function codexModelEntry(input: CodexModelEntryInput) {
     apply_patch_tool_type: null,
     truncation_policy: { mode: "bytes", limit: 10_000 },
     context_window: context,
-    // 查不到时照 Codex 回退元数据两项都写；查到的就是整个窗口，照 magpie 不另写可放大到的上限。
-    ...(facts.context === undefined ? { max_context_window: FALLBACK_CONTEXT } : {}),
+    // 查不到时照 Codex 回退元数据两项都写；查到的就是整个窗口，照 magpie 只在压缩阈值更小时另写整个窗口。
+    ...(facts.context === undefined || context < window ? { max_context_window: window } : {}),
     effective_context_window_percent: 95,
     experimental_supported_tools: [],
     ...(facts.images === undefined

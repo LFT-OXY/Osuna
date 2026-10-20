@@ -1268,3 +1268,48 @@ describe("API endpoint model scope and auto-pick rules (apiEndpointManagement)",
     }
   });
 });
+
+describe("API endpoint model settings (apiEndpointManagement)", () => {
+  it("parses an endpoint and a save with model settings and the automatic facts, and one without them", () => {
+    const modelSettings = {
+      defaults: { context: 200_000, output: 32_000, compact: 150_000 },
+      models: {
+        "glm-5": { name: "GLM", context: 128_000, efforts: [], images: true, compact: 90_000 },
+        "kimi-k2": { output: 8_000, efforts: ["low", "high"] },
+      },
+    };
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-m1",
+      provider: "codex",
+      endpointId: "ep_1",
+      name: "Relay",
+      baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
+      models: [{ id: "glm-5" }],
+      modelSettings,
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+
+    const modelFacts = {
+      "glm-5": {
+        name: "GLM-5",
+        context: 200_000,
+        output: 128_000,
+        efforts: ["high"],
+        images: false,
+      },
+      mystery: {},
+    };
+    for (const endpoint of [
+      { ...ENDPOINT, modelSettings, modelFacts },
+      { ...ENDPOINT, modelSettings: {} },
+      ENDPOINT,
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-m1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+});

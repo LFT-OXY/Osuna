@@ -2543,6 +2543,94 @@ describe("reasoning turned off, sent the way each model takes it", () => {
   });
 });
 
+// 接口管理好用性工单 13：模型设置里一档思考都不留，中转站不发任何思考参数（magpie Reasonless 的 withoutAnyReasoning）。
+describe("a model with no thinking level kept", () => {
+  async function keepNoLevels(endpointsDir: string, models: Record<string, string[]>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+    };
+    for (const endpoint of file.endpoints) {
+      const ids = models[endpoint.id];
+      if (!ids) continue;
+      endpoint.modelSettings = {
+        models: Object.fromEntries(ids.map((id) => [id, { efforts: [] }])),
+      };
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  test("is sent no thinking field, passed through or translated; another model still is", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => answerResponsesWhole(res);
+    const anthropic = await startUpstream();
+    anthropic.respond = (_request, res) => anthropicStream(res);
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({
+      upstreamA: responses,
+      upstreamB: anthropic,
+      chatUpstream: chat,
+    });
+    await keepNoLevels(endpointsDir, {
+      ep_a: ["gpt-5.5"],
+      ep_b: ["glm-4.6"],
+      ep_c: ["deepseek-v3"],
+    });
+    const codexAsk = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({
+          model,
+          input: "hi",
+          stream: false,
+          reasoning: { effort: "high", summary: "auto" },
+          include: ["reasoning.encrypted_content"],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+    const claudeAsk = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/messages`,
+        claudeRequest({
+          model,
+          max_tokens: 64,
+          thinking: { type: "enabled", budget_tokens: 2048 },
+          output_config: { effort: "high" },
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+    };
+
+    // 直通 Responses：reasoning 与要封存推理的 include 都去掉。
+    await codexAsk("gpt-5.5");
+    const passed = receivedBody(responses.requests.splice(0)[0]);
+    expect(passed.reasoning).toBeUndefined();
+    expect(passed.include).toEqual([]);
+    // 直通 Anthropic：thinking 与 output_config.effort 都去掉。
+    await claudeAsk("relay-b/glm-4.6");
+    const claudePassed = receivedBody(anthropic.requests.splice(0)[0]);
+    expect(claudePassed.thinking).toBeUndefined();
+    expect(claudePassed.output_config).toBeUndefined();
+    // 翻成 Chat：不带 reasoning_effort。
+    await codexAsk("deepseek-v3");
+    await claudeAsk("relay-c/deepseek-v3");
+    const translated = chat.requests.splice(0).map(receivedBody);
+    expect(translated.map((body) => body.reasoning_effort)).toEqual([undefined, undefined]);
+    // 别的模型照常带。
+    await codexAsk("qwen3-coder");
+    expect(receivedBody(chat.requests.splice(0)[0]).reasoning_effort).toBe("high");
+    await claudeAsk("relay-b/kimi-k2");
+    expect(receivedBody(anthropic.requests.splice(0)[0]).thinking).toMatchObject({
+      type: "enabled",
+    });
+  });
+});
+
 async function setBaseUrls(
   endpointsDir: string,
   baseUrls: Record<string, { format: string; url: string }[]>,

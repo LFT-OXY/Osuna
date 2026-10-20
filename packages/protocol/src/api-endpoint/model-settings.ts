@@ -1,0 +1,119 @@
+// 取值顺序、整家上下文不超过模型自己的窗口、留下的档位与撞名的显示移植自 magpie（https://github.com/yetone/magpie，
+// internal/provider/models.go 的 WindowOf、ReplyLimit，compact.go 的 compactOf，modelprefs.go 的 Levels、effortsKept、Labels）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
+import type { ApiEndpointModelFacts, ApiEndpointModelSettings } from "./rpc-schemas.js";
+
+/*
+ * 模型设置（Model settings）的读法，daemon 写进 CLI 与中转站、app 的模型设置窗口共用一份：
+ * 单个模型的设置 → 整家默认 → Osuna 自动取到的（上游清单在前，models.dev 补上）；内置默认由用的地方自己补。
+ */
+
+/** 档位不知道的模型可以给的档位，由弱到强（magpie Levels）。 */
+export const MODEL_THINKING_LEVELS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+/** 模型显示名最长多少个字符（magpie setModelName）。 */
+export const MODEL_NAME_MAX_LENGTH = 80;
+
+export interface ResolvedModelFacts {
+  name?: string;
+  context?: number;
+  output?: number;
+  // 给 Agent 的档位：用户留下的，没留按自动取到的。
+  efforts?: string[];
+  images?: boolean;
+  compact?: number;
+  // 用户一档都没留：中转站不发任何思考参数（magpie Reasonless）。
+  noThinking: boolean;
+}
+
+export function resolveModelFacts(input: {
+  settings: ApiEndpointModelSettings | undefined;
+  modelId: string;
+  auto: ApiEndpointModelFacts;
+}): ResolvedModelFacts {
+  const { auto } = input;
+  const own = input.settings?.models?.[input.modelId] ?? {};
+  const defaults = input.settings?.defaults ?? {};
+  const name = own.name ?? auto.name;
+  const context = own.context ?? defaultContext(defaults.context, auto.context);
+  const output = own.output ?? defaults.output ?? auto.output;
+  const noThinking = own.efforts !== undefined && own.efforts.length === 0;
+  const efforts = noThinking ? [] : offeredEfforts(auto.efforts, own.efforts);
+  const images = own.images ?? auto.images;
+  const compact = own.compact ?? defaults.compact;
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(context === undefined ? {} : { context }),
+    ...(output === undefined ? {} : { output }),
+    ...(efforts === undefined ? {} : { efforts }),
+    ...(images === undefined ? {} : { images }),
+    ...(compact === undefined ? {} : { compact }),
+    noThinking,
+  };
+}
+
+/** 整家的上下文不超过模型自己已知的窗口（magpie WindowOf 的 "*"：设成 512K 省钱，不该把只有 262K 的模型说成 512K）。 */
+function defaultContext(set: number | undefined, known: number | undefined): number | undefined {
+  if (set === undefined) return known;
+  return known !== undefined && known < set ? known : set;
+}
+
+/**
+ * 留下的档位按模型自己的顺序（magpie effortsKept）：没留就是全部；档位不知道的模型按 MODEL_THINKING_LEVELS 的顺序；
+ * 清单换了、留的一个都不在了也给全部。
+ */
+function offeredEfforts(
+  known: string[] | undefined,
+  kept: string[] | undefined,
+): string[] | undefined {
+  if (kept === undefined) return known;
+  const all = known !== undefined && known.length > 0 ? known : [...MODEL_THINKING_LEVELS];
+  const offered = all.filter((level) => kept.includes(level));
+  return offered.length === 0 ? known : offered;
+}
+
+/** 这个模型可以留哪些档位：知道的就是它自己的，不知道就是 MODEL_THINKING_LEVELS。 */
+export function choosableEfforts(known: string[] | undefined): string[] {
+  return known !== undefined && known.length > 0 ? known : [...MODEL_THINKING_LEVELS];
+}
+
+/**
+ * 要存的档位：去空白、转小写、去重、按 choosableEfforts 的顺序；留了全部（不是一档不留）就是没设，为 undefined。
+ * 有不在 choosableEfforts 里的返回 { invalid }。
+ */
+export function keptEfforts(input: {
+  picked: string[];
+  known: string[] | undefined;
+}): { kind: "kept"; efforts: string[] | undefined } | { kind: "invalid"; level: string } {
+  const all = choosableEfforts(input.known);
+  const picked = input.picked.map((level) => level.trim().toLowerCase()).filter(Boolean);
+  const invalid = picked.find((level) => !all.includes(level));
+  if (invalid !== undefined) return { kind: "invalid", level: invalid };
+  const efforts = all.filter((level) => picked.includes(level));
+  const isKnown = input.known !== undefined && input.known.length > 0;
+  const keepsAll = isKnown && efforts.length === all.length;
+  return { kind: "kept", efforts: keepsAll ? undefined : efforts };
+}
+
+/** 同一个选单里显示名撞了（不分大小写）的改显示模型 id，其余照名字（magpie Labels 的 same）。 */
+export function distinctModelLabels(
+  entries: ReadonlyArray<{ id: string; label: string }>,
+): string[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    const key = entry.label.toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return entries.map((entry) =>
+    (counts.get(entry.label.toLowerCase()) ?? 0) > 1 ? entry.id : entry.label,
+  );
+}

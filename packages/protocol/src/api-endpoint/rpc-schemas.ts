@@ -115,6 +115,45 @@ export type ApiEndpointCooldown = z.infer<typeof ApiEndpointCooldownSchema>;
 export const API_ENDPOINT_MODEL_SCOPES = ["vendor", "picked"] as const;
 export type ApiEndpointModelScope = (typeof API_ENDPOINT_MODEL_SCOPES)[number];
 
+/**
+ * 模型设置（Model settings）：用户给这家某个模型手改的资料，按模型 id 记，外加一份整家默认（Defaults for all models）。
+ * 取值顺序：单个模型 → 整家默认 → 上游清单 → models.dev → 内置默认（model-settings.ts 的 resolveModelFacts）。
+ * name：显示名；context、output、compact：上下文、回复上限、压缩阈值，都按 token 数；images：能不能看图；
+ * efforts：留下的思考档位，空数组是一档不留——中转站不发任何思考参数。没有的项用自动取到的值。老 daemon 不发也不认。
+ */
+export const ApiEndpointModelSettingSchema = z.object({
+  name: z.string().optional(),
+  context: z.number().optional(),
+  output: z.number().optional(),
+  efforts: z.array(z.string()).optional(),
+  images: z.boolean().optional(),
+  compact: z.number().optional(),
+});
+export type ApiEndpointModelSetting = z.infer<typeof ApiEndpointModelSettingSchema>;
+
+export const ApiEndpointModelDefaultsSchema = z.object({
+  context: z.number().optional(),
+  output: z.number().optional(),
+  compact: z.number().optional(),
+});
+export type ApiEndpointModelDefaults = z.infer<typeof ApiEndpointModelDefaultsSchema>;
+
+export const ApiEndpointModelSettingsSchema = z.object({
+  defaults: ApiEndpointModelDefaultsSchema.optional(),
+  models: z.record(z.string(), ApiEndpointModelSettingSchema).optional(),
+});
+export type ApiEndpointModelSettings = z.infer<typeof ApiEndpointModelSettingsSchema>;
+
+/** Osuna 自动取到的模型资料（上游清单在前，models.dev 补上）：不含用户的模型设置，模型设置窗口拿它当「默认」。 */
+export const ApiEndpointModelFactsSchema = z.object({
+  name: z.string().optional(),
+  context: z.number().optional(),
+  output: z.number().optional(),
+  efforts: z.array(z.string()).optional(),
+  images: z.boolean().optional(),
+});
+export type ApiEndpointModelFacts = z.infer<typeof ApiEndpointModelFactsSchema>;
+
 /** daemon 上次向上游列出的模型（详情页按格式拉取后记下）；只用来挑选，不等于已选。 */
 export const ApiEndpointModelCatalogSchema = z.object({
   fetchedAt: z.string(),
@@ -159,6 +198,10 @@ export const ApiEndpointSchema = z.object({
   // 「自定义」加的接口自己选的图标：内置图标的名字（如 deepseek-color），或 `file:<名字>`——daemon 存的图片副本，
   // 经 read_icon 取回（照 magpie）。没有就按模板或名称首字画。老 daemon 不发。
   icon: z.string().optional(),
+  // 模型设置；没有即都用自动取到的值。老 daemon 不发。
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
+  // 在服务的、上游清单里的与手动添加的模型各自自动取到的资料，按模型 id；老 daemon 不发。
+  modelFacts: z.record(z.string(), ApiEndpointModelFactsSchema).optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -309,6 +352,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * 不认识的范围拒收。autoPick：自动勾选规则，整份替换，空数组清掉；改了规则时当前清单里匹配的也勾上（照 magpie）。
  * 不是规则的（没有 *、不以 re: 开头）或读不懂的拒收。老 daemon 忽略这两项。
  *
+ * modelSettings：模型设置，整份替换（ApiEndpointModelSettingsSchema）；省略即保留这家原来的。数不是正整数、档位不是这个模型的、
+ * 显示名超过 80 个字符的拒收。老 daemon 忽略它。
+ *
  * catalog：添加窗口里保存前拉到的上游清单，随保存记作这家的上游清单（拉取时间记为保存时刻）；省略即保留这家原来的
  * （复制时是原来那家的）。老 daemon 忽略它。
  */
@@ -333,6 +379,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   catalog: z.array(ApiEndpointModelSchema).optional(),
   modelScope: z.string().optional(),
   autoPick: z.array(z.string()).optional(),
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 

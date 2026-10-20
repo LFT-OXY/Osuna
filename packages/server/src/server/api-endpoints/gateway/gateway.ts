@@ -20,7 +20,7 @@ import {
   type StoredApiEndpoint,
 } from "../store.js";
 import { servedFormats, translationOrderAt } from "../templates.js";
-import type { ModelFacts } from "../model-facts.js";
+import type { EndpointModelFacts } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
@@ -161,7 +161,7 @@ export interface ApiEndpointGatewayOverrides {
 }
 
 /** 一家接口的一个模型（按这家的写法）的资料：这家上游清单给的在前，models.dev 补上没给的。 */
-export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => ModelFacts;
+export type ModelFactsLookup = (endpoint: StoredApiEndpoint, modelId: string) => EndpointModelFacts;
 
 /** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */
 const AGENT_PATHS = {
@@ -1556,12 +1556,17 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
   });
 }
 
-/** 直通时固定的档位按这家这个模型自己的档位落定（magpie fitLevel）；没固定时不带。 */
-function passedEffort(input: EndpointAsk): { fixedEffort?: FixedEffort } {
-  if (input.fixedEffort === null) return {};
+/**
+ * 直通时固定的档位按这家这个模型自己的档位落定（magpie fitLevel）；没固定时不带。
+ * 模型设置里一档思考都不留的模型什么思考参数都不带，固定了也一样（magpie Reasonless）。
+ */
+function passedEffort(input: EndpointAsk): { fixedEffort?: FixedEffort; noThinking?: boolean } {
   const { candidate } = input;
   const facts = input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel);
-  return { fixedEffort: fitFixedEffort({ effort: input.fixedEffort, levels: facts.efforts }) };
+  if (facts.noThinking === true) return { noThinking: true };
+  if (input.fixedEffort === null) return {};
+  const levels = facts.vendorEfforts ?? facts.efforts;
+  return { fixedEffort: fitFixedEffort({ effort: input.fixedEffort, levels }) };
 }
 
 /** 发给上游的 User-Agent：直通与翻译都用 CLI 自己的，CLI 没带时用 Osuna/<版本>。 */

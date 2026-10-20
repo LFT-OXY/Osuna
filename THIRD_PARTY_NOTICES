@@ -865,6 +865,22 @@ TestDiffLines and TestMask in preview_test.go:
   packages/app/src/api-endpoints/internal/switch-off-preview.ts
   packages/app/src/api-endpoints/switch-off-sheet.tsx
 
+An API endpoint's model settings (the order a value is taken in, a context set
+for all models kept within a model's own window, the thinking levels kept in
+the vendor's order, names two models share shown by their ids, and what a save
+accepts) follow WindowOf, ReplyLimit and outputOf in magpie's
+internal/provider/models.go, compactOf and SetModelCompacts in compact.go, and
+Levels, effortsKept, Labels, setModelName, setModelEfforts and setModelImage in
+modelprefs.go; a model with no level kept is sent no thinking field, as
+withoutAnyReasoning in internal/gateway/quiet.go, and Codex's model list takes
+the smaller of a model's window and its compaction threshold as entriesAt in
+internal/codexcat/codexcat.go:
+
+  packages/protocol/src/api-endpoint/model-settings.ts
+  packages/server/src/server/api-endpoints/model-settings.ts
+  packages/server/src/server/api-endpoints/gateway/no-thinking.ts
+  packages/server/src/server/api-endpoints/codex-model-catalog.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

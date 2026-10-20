@@ -199,6 +199,7 @@ export class ApiEndpointSession {
           ? { modelScope: validateModelScope(request.modelScope) }
           : {}),
         ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
+        ...(request.modelSettings !== undefined ? { modelSettings: request.modelSettings } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",

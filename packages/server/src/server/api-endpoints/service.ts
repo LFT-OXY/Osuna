@@ -27,6 +27,8 @@ import {
   type ApiEndpointListResponse,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
+  type ApiEndpointModelFacts,
+  type ApiEndpointModelSettings,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -240,7 +242,12 @@ const CLAUDE_START_THINKING = "high";
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
-import { hostOf, mergeModelFacts, type ModelFacts } from "./model-facts.js";
+import {
+  hostOf,
+  mergeModelFacts,
+  type EndpointModelFacts,
+  type ModelFacts,
+} from "./model-facts.js";
 import { ModelsDevCatalog } from "./models-dev.js";
 import {
   createPublicFetchSite,
@@ -273,6 +280,11 @@ import {
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
+  distinctModelLabels,
+  resolveModelFacts,
+} from "@getpaseo/protocol/api-endpoint/model-settings";
+import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
+import {
   cleanAutoPickRules,
   followsList,
   keepValidMapping,
@@ -293,6 +305,8 @@ export type ApiEndpointErrorCode =
   | "endpoints_unparsable"
   // 没有开着且已选模型的接口，总开关打不开。
   | "no_usable_model"
+  // 模型设置里的数不是正整数、档位不是这个模型的、显示名太长，或设的模型这家没有。
+  | "invalid_model_settings"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -359,6 +373,8 @@ export interface ApiEndpointSaveInput {
   modelScope?: ApiEndpointModelScope;
   // 自动勾选规则，整份替换、空数组清掉；undefined 保留原来的。
   autoPick?: string[];
+  // 模型设置，整份替换；undefined 保留原来的。
+  modelSettings?: ApiEndpointModelSettings;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -992,12 +1008,14 @@ export class ApiEndpointService {
     // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
     const defaultModel = bareDefaultModel(state, agent.defaultModelId);
     const thinkingOf = this.chatThinking(state, supported);
-    return usableModels(this.retiredModels.listed(state)).map((model) =>
+    const models = usableModels(this.retiredModels.listed(state));
+    const labels = this.bareModelLabels(state, models);
+    return models.map((model, index) =>
       Object.assign(
         {
           provider: supported,
           id: model.id,
-          label: model.label ?? model.id,
+          label: labels[index] ?? model.id,
           isDefault: model.id === defaultModel,
         },
         thinkingOf(model.id),
@@ -1065,15 +1083,17 @@ export class ApiEndpointService {
       return model.id === agent.defaultModelId;
     }
     const thinkingOf = this.chatThinking(state, supported);
-    function toDefinition(entry: EndpointGroupModel): AgentModelDefinition {
-      const { id, model } = entry;
+    function toDefinition(entry: EndpointGroupModel, label: string): AgentModelDefinition {
+      const { id } = entry;
       const isDefault = !defaultMarked && isDefaultEntry(entry);
       if (isDefault) defaultMarked = true;
-      const label = model.label ?? model.id;
       return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
     }
     return endpointModelGroups(this.retiredModels.listed(state)).map((group) => {
-      const models = group.models.map(toDefinition);
+      const labels = this.groupModelLabels(group);
+      const models = group.models.map((entry, index) =>
+        toDefinition(entry, labels[index] ?? entry.model.id),
+      );
       return { name: group.endpoint.name, models };
     });
   }
@@ -1173,13 +1193,14 @@ export class ApiEndpointService {
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
       });
-      const endpoint = settleSavedScope({
+      const scoped = settleSavedScope({
         endpoint: built,
         base: existing ?? copySource,
         input,
         modelScope,
         isLegacyForm,
       });
+      const endpoint = this.withModelSettings(scoped, input.modelSettings);
       const endpoints = withEndpoint(state.endpoints, endpoint);
       const fetchesList = fetchesListOnSave({ existing, apiKey, store: this.store });
       let agents = state.agents;
@@ -1213,6 +1234,31 @@ export class ApiEndpointService {
       }
       return { endpoint: this.toWire(next, endpoint, supported), fetchesList };
     });
+  }
+
+  /**
+   * 请求带了模型设置就整份换上（照 magpie SetModelPrefs 等的校验与收拢），没带保留原来的。
+   * 新改的那几个模型要是这家的（已选、清单里或手动添加的）；和自动取到的一样的看图答案不记（magpie setModelImage）。
+   */
+  private withModelSettings(
+    endpoint: StoredApiEndpoint,
+    requested: ApiEndpointModelSettings | undefined,
+  ): StoredApiEndpoint {
+    if (requested === undefined) return endpoint;
+    const { modelSettings: stored, ...rest } = endpoint;
+    const settled = settleModelSettings({
+      requested,
+      stored,
+      isOwnModel: (modelId) => endpointKnowsModel(endpoint, modelId),
+      autoFacts: (modelId) => this.autoModelFacts(endpoint, modelId),
+    });
+    if (settled.kind === "invalid") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_model_settings",
+        message: settled.message,
+      });
+    }
+    return settled.settings === undefined ? rest : { ...rest, modelSettings: settled.settings };
   }
 
   /** 内置模板清单（templates.ts），随版本走，不联网。 */
@@ -2451,13 +2497,14 @@ export class ApiEndpointService {
       id: defaultModelId,
       facts: this.startModelFacts(listed, defaultModelId),
     };
-    const rows = endpointModelGroups(listed).flatMap((group) =>
-      group.models.map(({ id, model }) => ({
+    const rows = endpointModelGroups(listed).flatMap((group) => {
+      const labels = this.groupModelLabels(group);
+      return group.models.map(({ id, model }, index) => ({
         hint: { id, facts: this.modelFacts(group.endpoint, model.id) },
-        label: model.label ?? model.id,
+        label: labels[index] ?? model.id,
         description: group.endpoint.name,
-      })),
-    );
+      }));
+    });
     // 带点的 Claude 版本写成连字符（只在能唯一对回时），中转站再认回这家自己的写法。
     const served = [
       ...usableModels(listed).map((model) => model.id),
@@ -2490,14 +2537,68 @@ export class ApiEndpointService {
    * 这家这个模型的资料：这家上游清单给的在前，models.dev 补上没给的。
    * Codex 模型目录、Claude Code 的模型提示与中转站（翻译时的档位、回复上限、采样参数，选路时的窗口）都按它查。
    */
-  modelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
-    const listed = endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
-    const facts = mergeModelFacts(listed, this.modelsDev.facts(modelId));
+  modelFacts(endpoint: StoredApiEndpoint, modelId: string): EndpointModelFacts {
+    const auto = this.autoModelFacts(endpoint, modelId);
+    const resolved = resolveModelFacts({ settings: endpoint.modelSettings, modelId, auto });
+    const { noThinking, ...facts } = resolved;
+    // 档位不知道的模型（或知道它没有可挑的）由用户给的几档当它自己的（magpie Efforts）。
+    const vendorEfforts = auto.efforts?.length ? auto.efforts : resolved.efforts;
     // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
     const hosts = endpoint.baseUrls.map((base) => hostOf(base.url));
     const takesSampling = this.modelsDev.takesSampling({ hosts, modelId });
-    if (takesSampling === undefined) return facts;
-    return { ...facts, takesSampling };
+    return {
+      ...facts,
+      ...(vendorEfforts === undefined ? {} : { vendorEfforts }),
+      ...(noThinking ? { noThinking } : {}),
+      ...(takesSampling === undefined ? {} : { takesSampling }),
+    };
+  }
+
+  /**
+   * 不看模型设置、Osuna 自动取到的资料：这家上游清单给的在前，models.dev 补上没给的；显示名先取这家清单（或已选、
+   * 手动添加时记下）的，再取 models.dev 的。
+   */
+  private autoModelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
+    const listed = endpoint.catalog?.models.find((model) => model.id === modelId);
+    const facts = mergeModelFacts(listed?.facts, this.modelsDev.facts(modelId));
+    const label =
+      listed?.label ??
+      endpoint.models.find((model) => model.id === modelId)?.label ??
+      endpoint.manualModels?.find((model) => model.id === modelId)?.label;
+    return label === undefined ? facts : { ...facts, name: label };
+  }
+
+  /** 这家这个模型的名字：用户起的，再是清单或 models.dev 的，都没有就是模型 id。 */
+  private modelName(endpoint: StoredApiEndpoint, modelId: string): string {
+    return this.modelFacts(endpoint, modelId).name ?? modelId;
+  }
+
+  /** 一家的模型在选单里的名字；同一家里撞名的显示模型 id（照 magpie）。不同家的由分组或接口名分开。 */
+  private groupModelLabels(group: {
+    endpoint: StoredApiEndpoint;
+    models: EndpointGroupModel[];
+  }): string[] {
+    return distinctModelLabels(
+      group.models.map(({ model }) => ({
+        id: model.id,
+        label: this.modelName(group.endpoint, model.id),
+      })),
+    );
+  }
+
+  /** 光秃秃的模型名在选单里的名字：按接口顺序里最靠前、开着、选了它的那家查（中转站也先发给那家）；撞名的显示模型 id。 */
+  private bareModelLabels(
+    state: ApiEndpointState,
+    models: ReadonlyArray<{ id: string }>,
+  ): string[] {
+    return distinctModelLabels(
+      models.map(({ id }) => {
+        const endpoint = state.endpoints.find(
+          (entry) => entry.enabled && entry.models.some((model) => model.id === id),
+        );
+        return { id, label: endpoint ? this.modelName(endpoint, id) : id };
+      }),
+    );
   }
 
   /**
@@ -3588,7 +3689,21 @@ export class ApiEndpointService {
       ...(endpoint.templateId !== undefined ? { templateId: endpoint.templateId } : {}),
       ...(endpoint.region !== undefined ? { region: endpoint.region } : {}),
       ...(endpoint.icon !== undefined ? { icon: endpoint.icon } : {}),
+      ...(endpoint.modelSettings !== undefined ? { modelSettings: endpoint.modelSettings } : {}),
+      modelFacts: this.wireModelFacts(endpoint),
     };
+  }
+
+  /** 这家每个模型（在服务的、清单里的、手动添加的）自动取到的资料，模型设置窗口拿它当默认。 */
+  private wireModelFacts(endpoint: StoredApiEndpoint): Record<string, ApiEndpointModelFacts> {
+    const ids = new Set(
+      [
+        ...endpoint.models,
+        ...(endpoint.catalog?.models ?? []),
+        ...(endpoint.manualModels ?? []),
+      ].map((model) => model.id),
+    );
+    return Object.fromEntries([...ids].map((id) => [id, this.autoModelFacts(endpoint, id)]));
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -3670,6 +3785,8 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     endpointModelGroups(state).map((group) => [
       group.endpoint.name,
       group.models.map((entry) => [entry.id, entry.model.label]),
+      // 模型设置改了显示名与思考档位。
+      group.endpoint.modelSettings ?? null,
     ]),
   ]);
 }

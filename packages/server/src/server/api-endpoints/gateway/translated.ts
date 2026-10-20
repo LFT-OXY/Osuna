@@ -5,7 +5,7 @@ import type { IncomingMessage } from "node:http";
 import { StringDecoder } from "node:string_decoder";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { ModelFacts } from "../model-facts.js";
+import type { EndpointModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
@@ -66,6 +66,7 @@ import { protocolOf, type StreamDecoder } from "./translation/protocols.js";
 import { SseReader } from "./translation/sse.js";
 import { textCallFilter } from "./translation/text-calls.js";
 import { withSearchSourcesFor, withThinkingInline, withVendorRewrites } from "./vendor-rewrites.js";
+import { withoutThinkingAsk } from "./no-thinking.js";
 import { withTemplateTranslatedRewrites } from "./template-rewrites.js";
 import { servedFormats } from "../templates.js";
 import { refusedAfterOpening } from "./safety-filter.js";
@@ -113,7 +114,7 @@ export async function attemptTranslated(input: {
   requestedModel: string;
   upstreamModel: string;
   // 这家这个模型的资料（ModelFactsLookup）。
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
   headerTimeoutMs: number;
   // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
   userAgent: string;
@@ -389,7 +390,7 @@ export interface TranslatedBodyInput {
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
   refusals: ShapeRefusals;
   // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
   continuation: PrefillMode | null;
@@ -417,6 +418,8 @@ export function translatedBody(input: TranslatedBodyInput): string {
     lastIsTurn: input.from !== "anthropic_messages" && continuation === null,
   });
   request = requestForModel({ request, to, facts: input.facts });
+  // 模型设置里一档思考都不留：编出的请求不带任何思考参数（no-thinking.ts）。
+  if (input.facts.noThinking === true) request = withoutThinkingAsk(request);
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
   const built = protocolOf(to).build({ ...request, stream: true }, input.model);
   let body = withoutRefusedFields({

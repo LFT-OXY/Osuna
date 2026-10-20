@@ -5,7 +5,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { ModelFacts } from "../../model-facts.js";
+import type { EndpointModelFacts, ModelFacts } from "../../model-facts.js";
 import { isRecord, parseJson } from "../../upstream-http.js";
 
 /*
@@ -554,11 +554,12 @@ export function nearestEffort(want: Effort, levels: string[]): Effort {
 export function requestForModel(input: {
   request: GatewayRequest;
   to: ApiEndpointRequestFormat;
-  facts: ModelFacts;
+  facts: EndpointModelFacts;
 }): GatewayRequest {
   const { request, facts } = input;
   const messages = input.to === "anthropic_messages";
-  const levels = facts.efforts;
+  // 用户在模型设置里只列几档不妨碍 Agent 要别的：挑档位按模型自己的（magpie Efforts）。
+  const levels = facts.vendorEfforts ?? facts.efforts;
   const nearest = nearestEffort(request.effort, levels ?? []);
   const levelless = levels !== undefined && levels.length === 0;
   const aboveHigh = EFFORT_RANK.indexOf(nearest) > EFFORT_RANK.indexOf("high");

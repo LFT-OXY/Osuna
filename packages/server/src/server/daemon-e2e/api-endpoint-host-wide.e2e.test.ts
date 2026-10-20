@@ -1112,6 +1112,10 @@ describe("an API key is optional", () => {
       region: "coding",
       modelScope: "vendor",
       autoPick: ["glm-*"],
+      modelSettings: {
+        defaults: { compact: 100_000 },
+        models: { "by-hand": { name: "By Hand", efforts: [] } },
+      },
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1149,6 +1153,10 @@ describe("an API key is optional", () => {
       region: "coding",
       modelScope: "vendor",
       autoPick: ["glm-*"],
+      modelSettings: {
+        defaults: { compact: 100_000 },
+        models: { "by-hand": { name: "By Hand", efforts: [] } },
+      },
     });
   });
 });
@@ -1169,6 +1177,7 @@ describe("Duplicate", () => {
       modelMapping: { opus: "local-1" },
       manualModels: [{ id: "by-hand" }],
       searchesWeb: true,
+      modelSettings: { models: { "local-1": { context: 64_000 } } },
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1220,6 +1229,7 @@ describe("Duplicate", () => {
       manualModels: [{ id: "by-hand" }],
       searchesWeb: true,
       catalog: { models: [{ id: "local-1" }] },
+      modelSettings: { models: { "local-1": { context: 64_000 } } },
     });
     // 原来那家不变。
     expect(listed[0]).toEqual(before[0]);

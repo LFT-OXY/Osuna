@@ -6,6 +6,7 @@ import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
   ApiEndpointModelMappingSchema,
+  ApiEndpointModelSettingsSchema,
   type ApiEndpointAgentSettings,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -83,6 +84,8 @@ const StoredApiEndpointSchema = z.object({
   modelScope: z.string().optional(),
   // 自动勾选规则（model-scope.ts），只在 picked 时起作用；没有即没有规则。
   autoPick: z.array(z.string()).optional(),
+  // 模型设置（Model settings）：按模型 id 与整家默认手改的资料，取值顺序见 protocol 的 model-settings.ts；没有即都用自动取到的。
+  modelSettings: ApiEndpointModelSettingsSchema.optional(),
   // 「自己能联网搜索」：只写 true；没有或手改成 false 都是关（ADR 0009）。
   searchesWeb: z.boolean().optional(),
   // 从哪个模板加的（templates.ts 的 id）、选的哪个区域或套餐；「自定义」加的都没有。

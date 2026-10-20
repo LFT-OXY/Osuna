@@ -53,6 +53,7 @@ import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
 import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
+import { withoutAnyReasoning } from "./no-thinking.js";
 import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
@@ -116,6 +117,8 @@ const DROPPED_REQUEST_HEADERS = new Set([
 export async function attemptEndpoint(input: {
   // 「模型名:档位」固定的档位，已按这家这个模型落定。
   fixedEffort?: FixedEffort;
+  // 模型设置里一档思考都不留：不带任何思考参数（no-thinking.ts）。
+  noThinking?: boolean;
   req: Request;
   res: Response;
   format: ApiEndpointRequestFormat;
@@ -416,6 +419,8 @@ export interface PassthroughBodyInput {
   refusals?: ShapeRefusals;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
   fixedEffort?: FixedEffort;
+  // 模型设置里一档思考都不留：对话请求不带任何思考参数，固定的档位也不发（magpie Reasonless）。
+  noThinking?: boolean;
 }
 
 /**
@@ -432,7 +437,7 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   if (anthropic) {
     text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
   }
-  const { fixedEffort } = input;
+  const fixedEffort = fixedEffortOf(input);
   const isEffortFixed = fixedEffort !== undefined && conversation;
   if (isEffortFixed) text = withFixedEffort({ format: input.format, text, effort: fixedEffort });
   if (fits && anthropic) {
@@ -453,7 +458,26 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
   text = withVendorText({ ...input, text });
   text = withTemplateText({ ...input, text, replaysReasoning: replays });
-  return Buffer.from(text);
+  return Buffer.from(withoutReasoningText({ text, input, conversation }));
+}
+
+/** 模型设置里一档思考都不留的模型，固定的档位也不发（magpie Reasonless）。 */
+function fixedEffortOf(input: PassthroughBodyInput): FixedEffort | undefined {
+  return input.noThinking === true ? undefined : input.fixedEffort;
+}
+
+/** 一档思考都不留的模型的对话请求不带任何思考参数（no-thinking.ts）：只改变了的顶层字段，其余字节原样。 */
+function withoutReasoningText(input: {
+  text: string;
+  input: PassthroughBodyInput;
+  conversation: boolean;
+}): string {
+  const { text, conversation } = input;
+  const { noThinking, format } = input.input;
+  if (noThinking !== true || !conversation) return text;
+  const body = parseJson(text);
+  if (!isRecord(body)) return text;
+  return withChangedKeys({ text, body, fitted: withoutAnyReasoning(format, body) });
 }
 
 /** 按模板的改写（template-rewrites.ts，Bedrock 与 Azure）：只改变了的顶层字段，其余字节原样。 */

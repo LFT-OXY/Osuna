@@ -38,6 +38,12 @@ const STATE: ApiEndpointState = {
   },
 };
 
+/** 服务按模型设置、清单与 models.dev 定下的显示名在 facts.name；这里拿已选模型记下的 label 当它。 */
+function labelled(owner: StoredApiEndpoint, modelId: string): ModelFacts {
+  const label = owner.models.find((model) => model.id === modelId)?.label;
+  return label === undefined ? {} : { name: label };
+}
+
 interface CatalogEntry {
   slug: string;
   display_name: string;
@@ -56,7 +62,7 @@ function entries(
   const catalog = buildCodexModelCatalog({
     state,
     reasoningEffort: options.reasoningEffort ?? null,
-    factsFor: options.facts ?? (() => ({})),
+    factsFor: options.facts ?? labelled,
     marksAgentsV1: options.marksAgentsV1 ?? false,
   });
   return (JSON.parse(catalog) as { models: CatalogEntry[] }).models;
@@ -277,7 +283,7 @@ describe("codexEndpointEntries", () => {
       factsFor: (owner, modelId) =>
         owner.slug === "relay-b" && modelId === "glm-4.6"
           ? { context: 200_000, efforts: ["low", "high"], images: false }
-          : {},
+          : labelled(owner, modelId),
     });
     expect(
       listed.map((entry) => [entry.slug, entry.display_name, entry.visibility, entry.priority]),
@@ -310,6 +316,30 @@ describe("codexEndpointEntries", () => {
     expect(listed.map((entry) => entry.display_name)).toEqual([
       "gpt-6-sol (RELAY-A)",
       "gpt-6-sol (RELAY-B)",
+    ]);
+  });
+
+  it("shows the model id for two models of one endpoint that would be called the same (ticket 13)", () => {
+    const listed = codexEndpointEntries({
+      state: {
+        ...STATE,
+        endpoints: [
+          endpoint({
+            slug: "relay-a",
+            models: [
+              { id: "glm-5", label: "GLM" },
+              { id: "glm-5-air", label: "glm" },
+            ],
+          }),
+        ],
+      },
+      reasoningEffort: null,
+      marksAgentsV1: false,
+      factsFor: labelled,
+    });
+    expect(listed.map((entry) => entry.display_name)).toEqual([
+      "glm-5 (RELAY-A)",
+      "glm-5-air (RELAY-A)",
     ]);
   });
 });

@@ -11,6 +11,8 @@ import { isRecord } from "./upstream-http.js";
  */
 
 export const ModelFactsSchema = z.object({
+  // models.dev 给的显示名；接口自己清单的显示名记在清单条目的 label 上。
+  name: z.string().optional(),
   context: z.number().optional(),
   output: z.number().optional(),
   efforts: z.array(z.string()).optional(),
@@ -19,6 +21,19 @@ export const ModelFactsSchema = z.object({
   takesSampling: z.boolean().optional(),
 });
 export type ModelFacts = z.infer<typeof ModelFactsSchema>;
+
+/**
+ * 这家这个模型用起来的资料：自动取到的（上游清单在前，models.dev 补上）按用户的模型设置改过（model-settings.ts）。
+ * efforts 是告诉 Agent 的档位（用户只留了几档时只有那几档）；中转站挑档位按 vendorEfforts：
+ * 模型自己的档位，用户少列几档不妨碍 Agent 要别的（照 magpie Efforts），档位不知道时才是用户给的那几档。
+ */
+export interface EndpointModelFacts extends ModelFacts {
+  vendorEfforts?: string[];
+  // 压缩阈值（token 数）：Codex 的上下文取它与窗口中较小的。
+  compact?: number;
+  // 用户一档思考都没留：中转站不发任何思考参数（magpie Reasonless）。
+  noThinking?: boolean;
+}
 
 /** 按去掉前缀的小写模型名索引的 models.dev 数据。 */
 export type ModelsDevIndex = Record<string, ModelFacts>;
@@ -30,6 +45,7 @@ export type SamplingByHost = Record<string, Record<string, boolean>>;
 const LEAST_WINDOW = 2048;
 
 interface Votes {
+  names: Map<string, number>;
   context: Map<number, number>;
   output: Map<number, number>;
   efforts: Map<string, number>;
@@ -51,12 +67,16 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
       if (!isRecord(model)) continue;
       const key = bareModelId(id);
       const entry = votes.get(key) ?? {
+        names: new Map(),
         context: new Map(),
         output: new Map(),
         efforts: new Map(),
         images: 0,
       };
       votes.set(key, entry);
+      if (typeof model.name === "string" && model.name.trim() !== "") {
+        count(entry.names, model.name.trim());
+      }
       const limit = isRecord(model.limit) ? model.limit : {};
       const context = windowOf(limit);
       if (context !== undefined) count(entry.context, context);
@@ -70,6 +90,8 @@ export function indexModelsDev(raw: unknown): ModelsDevIndex {
   const index: ModelsDevIndex = {};
   for (const [id, entry] of votes) {
     const facts: ModelFacts = {};
+    const name = mostNamed(entry.names);
+    if (name !== undefined) facts.name = name;
     const context = mostGiven(entry.context);
     if (context !== undefined) facts.context = context;
     const output = mostGiven(entry.output);
@@ -138,11 +160,13 @@ function lookupBare<T>(index: Record<string, T>, id: string): T | undefined {
 
 /** 逐项取先知道的：接口自己列表里给的在前，models.dev 补上没给的。 */
 export function mergeModelFacts(listed: ModelFacts | undefined, known: ModelFacts): ModelFacts {
+  const name = listed?.name ?? known.name;
   const context = listed?.context ?? known.context;
   const output = listed?.output ?? known.output;
   const efforts = listed?.efforts ?? known.efforts;
   const images = listed?.images ?? known.images;
   return {
+    ...(name === undefined ? {} : { name }),
     ...(context === undefined ? {} : { context }),
     ...(output === undefined ? {} : { output }),
     ...(efforts === undefined ? {} : { efforts }),
@@ -197,6 +221,19 @@ function mostGiven(tally: Map<number, number>): number | undefined {
   for (const [value, n] of tally) {
     const isTieWin = n === bestCount && best !== undefined && value < best;
     if (n > bestCount || isTieWin) {
+      best = value;
+      bestCount = n;
+    }
+  }
+  return best;
+}
+
+/** 叫得最多的名字；打平取先列的。 */
+function mostNamed(tally: Map<string, number>): string | undefined {
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [value, n] of tally) {
+    if (n > bestCount) {
       best = value;
       bestCount = n;
     }
