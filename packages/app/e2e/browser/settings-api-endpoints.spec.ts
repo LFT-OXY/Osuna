@@ -1205,7 +1205,7 @@ test.describe("Settings API endpoints", () => {
       // 别处改的这家：重新打开详情页读到新的。
       await openEndpointDetail(page, endpointId);
       await openModelSettings();
-      await expect(sheet.getByTestId("api-endpoint-model-settings-format-field-error")).toHaveText(
+      await expect(sheet.getByTestId("api-endpoint-model-settings-format-void")).toHaveText(
         "This endpoint no longer has a base URL for OpenAI Chat, so this setting doesn't apply.",
       );
       await sheet.getByTestId("api-endpoint-model-settings-format-automatic").click();

@@ -42,6 +42,7 @@ const SNAP_POINTS = ["85%"];
 const AUTOMATIC_FORMAT = "";
 // 分段切换最多这么多段，多了折行读不出选中哪段（docs/design.md §6）。
 const MAX_FORMAT_SEGMENTS = 4;
+const MAX_COMPACT_FORMAT_SEGMENTS = 3;
 
 export interface ApiEndpointModelSettingsSheetProps {
   endpoint: ApiEndpoint;
@@ -380,16 +381,29 @@ function FormatField({
   );
   const selected = value ?? AUTOMATIC_FORMAT;
   const label = t(`${KEY}.format`);
+  // 窄窗口放不下四段（OpenAI Responses 被截掉）：多于三段就改用下拉。
+  const isCompact = useIsCompactFormFactor();
+  const maxSegments = isCompact ? MAX_COMPACT_FORMAT_SEGMENTS : MAX_FORMAT_SEGMENTS;
+  const usesDropdown = choices.length > maxSegments;
   const voidCopy =
     voidFormat === null ? null : t(`${KEY}.formatVoid`, { format: formatLabel(t, voidFormat) });
   return (
     <Field
       label={label}
       hint={t(`${KEY}.formatHint`)}
-      error={voidCopy}
       testID="api-endpoint-model-settings-format-field"
     >
-      {choices.length > MAX_FORMAT_SEGMENTS ? (
+      {voidCopy !== null ? (
+        <Text
+          variant="caption"
+          color="statusDanger"
+          accessibilityRole="alert"
+          testID="api-endpoint-model-settings-format-void"
+        >
+          {voidCopy}
+        </Text>
+      ) : null}
+      {usesDropdown ? (
         <FormatDropdown
           label={label}
           choices={choices}
