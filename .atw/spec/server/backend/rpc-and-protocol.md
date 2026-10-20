@@ -1273,6 +1273,15 @@ this.providerVersionCheckService = new ProviderVersionCheckService({
 });
 ```
 
+### Background refresh on a timer: record the attempt before the request
+
+The daily model-list refresh (`api-endpoints/catalog-refresh.ts`, ticket 11) is the exception to "no timer": it sends the user's key upstream on its own, so a loop bug costs requests. It follows magpie `autolist.go`:
+
+- It checks every minute. An endpoint is due when its last fetch is over a day old. After a failed attempt it waits `min(15 min, refresh interval)` before trying again.
+- Record the attempt time **before** calling the fetch, and clear it only on success. If you write it after the fetch returns, an unexpected throw (a catalog write hitting `EACCES`) records nothing, and the endpoint is asked again every minute with its key.
+- Each endpoint is its own boundary (`refreshOne`): an unexpected error is logged at `error` and counted as a failure, so the endpoints after it in the same pass still refresh. Upstream failures come back as the `"failed"` outcome, not a throw.
+- Clock and timers are injected, and the test daemon reaches only loopback (`reachesUnasked`). Test: a refresh that throws is not retried inside the retry interval, and the next endpoint in the same pass still refreshes.
+
 ## Scenario: a request that runs a command on the host
 
 Example: `provider.upgrade.request`, which runs a built-in CLI's own upgrade subcommand (`claude update`, `opencode upgrade`, …), or, for Codex and a Homebrew-cask Claude Code, the official upgrade for the way it was installed.
