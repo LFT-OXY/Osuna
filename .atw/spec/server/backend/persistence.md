@@ -393,11 +393,12 @@ Reference implementation: logic maps (`server/logic-map/`, logic-map ticket 02).
 - Writes are serialized per resolved folder (`runExclusive`), so concurrent batches both land instead of last-write-wins.
 - Write order: docs → skeleton (atomic) → deletes. Before writing, `snapshotFiles` captures every file the batch touches; any failure runs `restoreFiles(snapshot)` and rethrows.
 - Derived flags (`pendingLink`) are recomputed over all nodes on every batch, not only the nodes written in it, so a later framework change updates old nodes.
+- Missing node docs are a warning, not a rejection (logic-map ticket 09): after every batch `missingDocWarnings` lists each non-subgraph node that should have a doc and has none — framework `none`: `doc === null`; framework present: no notes and no external link — as `id (title)` in the same `warnings` array as the 20-node reminder, and the instruction block tells the agent the tool lists them. Before the framework is judged nothing is listed. Subgraph nodes are exempt because clicking one enters its layer, so a doc on it has no way to be opened; the app's "没有文档" tag (`isMissingDoc`, `app/src/logic-map/layout.ts`) uses the same rule, change both together. Without the warning, Codex and Pi wrote docs for 3 of 43 and 7 of 20 nodes in real runs.
 - External-file checks branch on the error code: `ENOENT`/`ENOTDIR` → "does not exist", `EISDIR` → "is a folder", anything else rethrows.
 
 ### 4. Validation & Error Matrix
 
-- Caller has no label → `LogicMapOffError`. Bad batch → `LogicMapUpdateRejectedError` with every problem listed for the agent. Over 20 nodes in a layer → written, plus a warning. Hand-broken `map.json` on read → readable "which map, which file, what problem" error to clients.
+- Caller has no label → `LogicMapOffError`. Bad batch → `LogicMapUpdateRejectedError` with every problem listed for the agent. Over 20 nodes in a layer → written, plus a warning. Non-subgraph node missing its doc (framework judged) → written, plus a warning naming it. Hand-broken `map.json` on read → readable "which map, which file, what problem" error to clients.
 
 ### 5. Good/Base/Bad Cases
 
@@ -407,7 +408,7 @@ Reference implementation: logic maps (`server/logic-map/`, logic-map ticket 02).
 
 ### 6. Tests Required
 
-- `logic-map-tools.test.ts`: one rejection case per rule (`test.each`), concurrency, rollback on a real write failure (a 240-char id makes the temp filename hit `ENAMETOOLONG`), `pendingLink` across framework changes, external heading matching (setext, inline code, links, fenced code ignored).
+- `logic-map-tools.test.ts`: one rejection case per rule (`test.each`), concurrency, rollback on a real write failure (a 240-char id makes the temp filename hit `ENAMETOOLONG`), `pendingLink` across framework changes, missing-doc warnings in both framework modes (listed, cleared once filled, subgraph nodes never listed), external heading matching (setext, inline code, links, fenced code ignored).
 - `logic-map-store.test.ts`: disk schema rejects empty id/title and unknown fields; missing `failure` reads as `false`.
 
 ### 7. Wrong vs Correct
