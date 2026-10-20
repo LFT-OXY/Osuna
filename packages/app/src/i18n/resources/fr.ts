@@ -2805,9 +2805,10 @@ export const fr: TranslationResources = {
           test: "Tester les modèles",
           testOne: "Tester celui-ci",
           progress: "Test des modèles… {{done}} / {{total}}",
+          starting: "Test des modèles…",
+          summaryTested: "{{total}} testés",
+          summaryFailed: "{{failed}} en échec",
           cancelling: "Annulation…",
-          allAnswered: "Les {{total}} modèles testés ont répondu",
-          someFailed: "{{failed}} des {{total}} modèles testés n'ont pas répondu",
           cancelled: "Test annulé",
           failed: "Impossible de tester les modèles",
           testing: "Test en cours…",
@@ -2818,8 +2819,9 @@ export const fr: TranslationResources = {
           disabled: "Désactivé",
           disabledReason:
             "Correspond à « {{pattern}} » dans Modèles désactivés : aucun test ne lui est envoyé",
-          timeout: "Pas de réponse en 20 secondes",
+          timeout: "Pas de réponse en {{seconds}} s",
           batchTimeout: "Le test a manqué de temps avant que ce modèle réponde",
+          unreachable: "Impossible de joindre cette adresse",
           noFormat: "Ce point d'accès n'a pas d'URL dans un format qui sert ce modèle",
           noAnswer: "Pas de réponse",
           took: {

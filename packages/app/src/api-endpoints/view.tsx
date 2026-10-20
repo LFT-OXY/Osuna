@@ -742,25 +742,22 @@ function ApiEndpointDetailSections({
     save: detail.saveModelSettings,
   });
   const modelTestsState = useModelTests({ serverId, endpointId: endpoint.id });
-  const servedIds = useMemo(() => detail.source.models.map((model) => model.id), [detail.source]);
   const modelTests = useMemo<ModelTestsControl | null>(() => {
+    // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 test_models。
     if (!hasManagement) return null;
     return {
       tests: modelTestsState.tests,
       run: modelTestsState.run,
-      onTestAll: () => modelTestsState.testAll(servedIds),
+      onTestAll: modelTestsState.testAll,
       onTestOne: modelTestsState.testOne,
       onCancel: modelTestsState.cancel,
       factsOf: (modelId) => {
-        const facts = resolveModelFacts({
-          settings: endpoint.modelSettings,
-          modelId,
-          auto: endpoint.modelFacts?.[modelId] ?? {},
-        });
+        const auto = endpoint.modelFacts?.[modelId] ?? {};
+        const facts = resolveModelFacts({ settings: endpoint.modelSettings, modelId, auto });
         return { name: facts.name, context: facts.context };
       },
     };
-  }, [endpoint, hasManagement, modelTestsState, servedIds]);
+  }, [endpoint, hasManagement, modelTestsState]);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。

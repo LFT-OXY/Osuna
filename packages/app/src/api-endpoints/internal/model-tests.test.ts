@@ -4,6 +4,7 @@ import {
   afterProgress,
   afterResponse,
   contextTag,
+  keepIdWhole,
   filterModelIds,
   isNamedFree,
   offersFreeOnly,
@@ -124,5 +125,14 @@ describe("filterModelIds", () => {
     expect(offersFreeOnly({ ids, nameOf })).toBe(true);
     expect(offersFreeOnly({ ids: ["gpt-5"], nameOf })).toBe(false);
     expect(offersFreeOnly({ ids: ["qwen3:free"], nameOf })).toBe(false);
+  });
+});
+
+describe("keepIdWhole", () => {
+  it("keeps a model id from breaking at its hyphens and leaves the rest alone", () => {
+    expect(keepIdWhole({ text: "The model bad-model does not exist", id: "bad-model" })).toBe(
+      "The model bad\u2011model does not exist",
+    );
+    expect(keepIdWhole({ text: "rate-limited", id: "gpt5" })).toBe("rate-limited");
   });
 });

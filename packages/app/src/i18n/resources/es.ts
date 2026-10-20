@@ -2801,9 +2801,10 @@ export const es: TranslationResources = {
           test: "Probar modelos",
           testOne: "Probar este",
           progress: "Probando modelos… {{done}} / {{total}}",
+          starting: "Probando modelos…",
+          summaryTested: "{{total}} probados",
+          summaryFailed: "{{failed}} fallaron",
           cancelling: "Cancelando…",
-          allAnswered: "Respondieron los {{total}} modelos probados",
-          someFailed: "{{failed}} de {{total}} modelos probados no respondieron",
           cancelled: "Prueba cancelada",
           failed: "No se pudieron probar los modelos",
           testing: "Probando…",
@@ -2814,8 +2815,9 @@ export const es: TranslationResources = {
           disabled: "Desactivado",
           disabledReason:
             'Coincide con "{{pattern}}" en Modelos desactivados, así que no se le envía prueba',
-          timeout: "Sin respuesta en 20 segundos",
+          timeout: "Sin respuesta en {{seconds}} s",
           batchTimeout: "La prueba se quedó sin tiempo antes de que respondiera este modelo",
+          unreachable: "No se pudo llegar a esta dirección",
           noFormat: "Este endpoint no tiene una URL en un formato que sirva este modelo",
           noAnswer: "No respondió",
           took: {

@@ -1427,7 +1427,7 @@ describe("provider.api_endpoint.test_models", () => {
     expect(SessionInboundMessageSchema.parse(one)).toEqual(one);
   });
 
-  it("parses progress and the response, with error codes and formats the client has never seen", () => {
+  it("parses started, progress and the response, with error codes and formats the client has never seen", () => {
     const passed = {
       modelId: "glm-5",
       ok: true,
@@ -1456,6 +1456,11 @@ describe("provider.api_endpoint.test_models", () => {
         message: "disabled",
       },
     };
+    const started = {
+      type: "provider.api_endpoint.test_models.started" as const,
+      payload: { requestId: "req-t1", modelIds: ["glm-5", "kimi-k2", "gpt-5-preview"] },
+    };
+    expect(SessionOutboundMessageSchema.parse(started)).toEqual(started);
     const progress = {
       type: "provider.api_endpoint.test_models.progress" as const,
       payload: { requestId: "req-t1", result: failed, done: 2, total: 3 },

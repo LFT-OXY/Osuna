@@ -42,6 +42,8 @@ export interface FakeRelay {
   }[];
   // /good 列出的模型；用例可以改它模拟上游清单变化。
   goodModels: string[];
+  // 问 slow-* 挂着的请求里被对方断开的个数（测试模型被取消时 daemon 断开它们）。
+  abandoned: number;
   close(): Promise<void>;
 }
 
@@ -67,6 +69,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
     origin: "",
     requests: [],
     goodModels: ["claude-sonnet-4-5", "gpt-5"],
+    abandoned: 0,
   };
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -92,7 +95,10 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         return;
       }
       const model = relay.requests.at(-1)?.model;
-      if (holdsOrLacksList({ url, isNoList, model, response })) return;
+      const onAbandoned = () => {
+        relay.abandoned += 1;
+      };
+      if (holdsOrLacksList({ url, isNoList, model, response, onAbandoned })) return;
       if (request.method === "GET" && url === "/good/v1/models") {
         send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
         return;
@@ -137,10 +143,15 @@ function answersByModel(input: {
   url: string;
   model: string | undefined;
   response: ServerResponse;
+  onAbandoned: () => void;
 }): boolean {
   const { url, model } = input;
-  if (!url.startsWith("/good/") || url.endsWith("/models") || model === undefined) return false;
-  if (model.startsWith("slow-")) return true;
+  const isChatRequest = url.startsWith("/good/") && !url.endsWith("/models");
+  if (!isChatRequest || model === undefined) return false;
+  if (model.startsWith("slow-")) {
+    input.response.on("close", input.onAbandoned);
+    return true;
+  }
   if (!model.startsWith("bad-")) return false;
   send(input.response, 404, { error: { message: `The model ${model} does not exist` } });
   return true;
@@ -152,6 +163,7 @@ function holdsOrLacksList(input: {
   isNoList: boolean;
   model: string | undefined;
   response: ServerResponse;
+  onAbandoned: () => void;
 }): boolean {
   if (answersByModel(input)) return true;
   if (input.url.startsWith("/slow/")) return true;

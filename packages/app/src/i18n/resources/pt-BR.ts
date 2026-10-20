@@ -2786,9 +2786,10 @@ export const ptBR: TranslationResources = {
           test: "Testar modelos",
           testOne: "Testar este",
           progress: "Testando modelos… {{done}} / {{total}}",
+          starting: "Testando modelos…",
+          summaryTested: "{{total}} testados",
+          summaryFailed: "{{failed}} falharam",
           cancelling: "Cancelando…",
-          allAnswered: "Os {{total}} modelos testados responderam",
-          someFailed: "{{failed}} de {{total}} modelos testados não responderam",
           cancelled: "Teste cancelado",
           failed: "Não foi possível testar os modelos",
           testing: "Testando…",
@@ -2799,8 +2800,9 @@ export const ptBR: TranslationResources = {
           disabled: "Desativado",
           disabledReason:
             'Corresponde a "{{pattern}}" em Modelos desativados, então não recebe teste',
-          timeout: "Sem resposta em 20 segundos",
+          timeout: "Sem resposta em {{seconds}} s",
           batchTimeout: "O teste ficou sem tempo antes de este modelo responder",
+          unreachable: "Não foi possível acessar este endereço",
           noFormat: "Este endpoint não tem URL em um formato que sirva este modelo",
           noAnswer: "Não respondeu",
           took: {

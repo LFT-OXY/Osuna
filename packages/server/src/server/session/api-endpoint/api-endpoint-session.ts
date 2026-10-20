@@ -715,22 +715,22 @@ export class ApiEndpointSession {
           ...(request.method !== undefined ? { method: request.method } : {}),
         },
         signal,
+        onStarted: (modelIds) =>
+          this.host.emit({
+            type: "provider.api_endpoint.test_models.started",
+            payload: { requestId, modelIds },
+          }),
         onResult: ({ result, done, total }) =>
           this.host.emit({
             type: "provider.api_endpoint.test_models.progress",
             payload: { requestId, result, done, total },
           }),
       });
+      const cancelled: ApiEndpointError = { code: "cancelled", message: "Request cancelled" };
+      const error = outcome.kind === "cancelled" ? cancelled : null;
       this.host.emit({
         type: "provider.api_endpoint.test_models.response",
-        payload: {
-          requestId,
-          results: outcome.results,
-          error:
-            outcome.kind === "cancelled"
-              ? { code: "cancelled", message: "Request cancelled" }
-              : null,
-        },
+        payload: { requestId, results: outcome.results, error },
       });
     } catch (error) {
       this.host.emit({

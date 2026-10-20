@@ -440,6 +440,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.fetch_models.response": "daemon.manage",
   "provider.api_endpoint.test_connection.response": "daemon.manage",
   "provider.api_endpoint.detect_formats.response": "daemon.manage",
+  "provider.api_endpoint.test_models.started": "daemon.manage",
   "provider.api_endpoint.test_models.progress": "daemon.manage",
   "provider.api_endpoint.test_models.response": "daemon.manage",
   "provider.api_endpoint.cancel.response": "daemon.manage",

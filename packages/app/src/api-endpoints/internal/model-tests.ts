@@ -103,3 +103,9 @@ export function filterModelIds(input: {
     return true;
   });
 }
+
+/** 把文字里的模型名的连字符换成不折行的连字符，免得行尾把 bad-model 折成 bad- 与 model。 */
+export function keepIdWhole(input: { text: string; id: string }): string {
+  if (!input.id.includes("-")) return input.text;
+  return input.text.replaceAll(input.id, input.id.replaceAll("-", "\u2011"));
+}

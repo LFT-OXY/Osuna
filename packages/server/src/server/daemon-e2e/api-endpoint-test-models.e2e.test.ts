@@ -8,13 +8,39 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import type { ApiEndpointModelTestResult } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 
 /*
  * 测试模型（工单 19，prd 第 26–28 条）：真实 daemon + 本机假上游，绝不连真实中转站。
- * 假上游按模型名答：slow-* 一直不答，bad-* 回 404，anthropic-refused-* 在 Anthropic 上回 400、Chat 上答，其余都答。
+ * 假上游按模型名答：slow-* 一直不答，bad-* 回 404（bad-then-slow-* 在 Chat 上不答），anthropic-refused-* 在 Anthropic 上回 400、
+ * Chat 上答，其余都答。单个与整批的时限用手动计时器，用例自己决定何时到点。
  */
+
+const MODEL_TIMEOUT_MS = 60_000;
+const BATCH_TIMEOUT_MS = 600_000;
+
+/** 只在用例说到点时才到点的计时器；按设定的毫秒数区分单个与整批。 */
+class ManualTimers implements UsagePricingTimers {
+  private readonly pending: { ms: number; handler: () => void; isLive: boolean }[] = [];
+
+  schedule(handler: () => void, ms: number): () => void {
+    const entry = { ms, handler, isLive: true };
+    this.pending.push(entry);
+    return () => {
+      entry.isLive = false;
+    };
+  }
+
+  fire(ms: number): void {
+    for (const entry of this.pending) {
+      if (!entry.isLive || entry.ms !== ms) continue;
+      entry.isLive = false;
+      entry.handler();
+    }
+  }
+}
 
 const servers: Server[] = [];
 const tempRoots: string[] = [];
@@ -71,7 +97,9 @@ async function startUpstream(): Promise<FakeUpstream> {
       response.on("close", () => {
         upstream.inFlight -= 1;
       });
-      if (model.startsWith("slow-")) return;
+      const isChat = (request.url ?? "").endsWith("/chat/completions");
+      const hangsHere = model.startsWith("slow-") || (model.startsWith("bad-then-slow-") && isChat);
+      if (hangsHere) return;
       // 稍等再答，好让并发的请求叠在一起。
       setTimeout(() => answer({ path: request.url ?? "", model, response }), 30);
     });
@@ -116,8 +144,8 @@ interface EndpointInput {
 async function start(input: {
   endpoint: (upstreamUrl: string) => EndpointInput;
   disabledModels?: string[];
-  modelTests: { concurrency?: number; modelTimeoutMs?: number; batchTimeoutMs?: number };
 }) {
+  const timers = new ManualTimers();
   const upstream = await startUpstream();
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-test-models-"));
   tempRoots.push(root);
@@ -156,7 +184,12 @@ async function start(input: {
     apiEndpoints: {
       env: { CLAUDE_CONFIG_DIR: path.join(root, "claude"), CODEX_HOME: path.join(root, "codex") },
       homeDir: root,
-      modelTests: input.modelTests,
+      modelTests: {
+        concurrency: 4,
+        modelTimeoutMs: MODEL_TIMEOUT_MS,
+        batchTimeoutMs: BATCH_TIMEOUT_MS,
+      },
+      modelTestTimers: timers,
     },
   });
   daemons.push(daemon);
@@ -167,7 +200,7 @@ async function start(input: {
   clients.push(client);
   await client.connect();
   await client.fetchAgents({ subscribe: {} });
-  return { client, upstream };
+  return { client, upstream, timers };
 }
 
 /** Anthropic 与 Chat 两个地址，Anthropic 在前。 */
@@ -208,20 +241,24 @@ describe("test models", () => {
       "slow-model",
       "anthropic-refused-model",
     ];
-    const { client, upstream } = await start({
-      endpoint: twoFormats(models),
-      modelTests: { concurrency: 4, modelTimeoutMs: 300, batchTimeoutMs: 10_000 },
-    });
+    const { client, upstream, timers } = await start({ endpoint: twoFormats(models) });
+    const started: string[][] = [];
     const progress: { modelId: string; done: number; total: number }[] = [];
-    const response = await client.apiEndpointTestModels(
+    const pending = client.apiEndpointTestModels(
       { endpointId: "ep_a" },
       {
+        onStarted: ({ modelIds }) => started.push(modelIds),
         onProgress: ({ result, done, total }) =>
           progress.push({ modelId: result.modelId, done, total }),
       },
     );
+    // 别的都答完了，只剩 slow-model 挂在上游：这时它到点。
+    await waitFor(() => progress.length === 8);
+    timers.fire(MODEL_TIMEOUT_MS);
+    const response = await pending;
 
     expect(response.error).toBeNull();
+    expect(started).toEqual([models]);
     expect(response.results.map((result) => result.modelId).sort()).toEqual([...models].sort());
     expect(progress.map((entry) => entry.done)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(progress.every((entry) => entry.total === 9)).toBe(true);
@@ -241,11 +278,13 @@ describe("test models", () => {
       status: 404,
       error: { code: "upstream_error" },
     });
-    expect(results["bad-model"]?.error?.message).toContain("does not exist");
+    // 原因只是上游的原文：不带请求地址与状态码（状态码另有字段）。
+    expect(results["bad-model"]?.error?.message).toBe("The model bad-model does not exist");
     expect(results["slow-model"]).toMatchObject({
       ok: false,
+      format: "anthropic_messages",
       status: null,
-      error: { code: "upstream_timeout" },
+      error: { code: "upstream_timeout", params: { seconds: "60" } },
     });
     // 按地址依次试：Anthropic 拒了再问 Chat。
     expect(results["anthropic-refused-model"]).toMatchObject({
@@ -286,7 +325,6 @@ describe("test models", () => {
         },
       }),
       disabledModels: ["*-PREVIEW"],
-      modelTests: { concurrency: 4, modelTimeoutMs: 2_000, batchTimeoutMs: 10_000 },
     });
     const response = await client.apiEndpointTestModels({ endpointId: "ep_a" });
 
@@ -319,7 +357,6 @@ describe("test models", () => {
   test("testing one model asks only that one, even one the endpoint does not serve", async () => {
     const { client, upstream } = await start({
       endpoint: twoFormats(["ok-1", "ok-2"]),
-      modelTests: { concurrency: 4, modelTimeoutMs: 2_000, batchTimeoutMs: 10_000 },
     });
     const response = await client.apiEndpointTestModels({
       endpointId: "ep_a",
@@ -334,7 +371,6 @@ describe("test models", () => {
   test("cancelling stops sending, and the response carries what finished", async () => {
     const { client, upstream } = await start({
       endpoint: twoFormats(["ok-1", "slow-1", "slow-2", "slow-3", "slow-4", "slow-5", "slow-6"]),
-      modelTests: { concurrency: 4, modelTimeoutMs: 60_000, batchTimeoutMs: 120_000 },
     });
     const requestId = "test-models-cancel";
     const pending = client.apiEndpointTestModels({ endpointId: "ep_a" }, { requestId });
@@ -352,15 +388,15 @@ describe("test models", () => {
 
   test("a batch over its time limit ends every model left with batch_timeout", async () => {
     const models = ["slow-1", "slow-2", "slow-3", "slow-4", "slow-5", "slow-6"];
-    const { client, upstream } = await start({
-      endpoint: twoFormats(models),
-      modelTests: { concurrency: 4, modelTimeoutMs: 60_000, batchTimeoutMs: 300 },
-    });
+    const { client, upstream, timers } = await start({ endpoint: twoFormats(models) });
     const progress: string[] = [];
-    const response = await client.apiEndpointTestModels(
+    const pending = client.apiEndpointTestModels(
       { endpointId: "ep_a" },
       { onProgress: ({ result }) => progress.push(result.modelId) },
     );
+    await waitFor(() => upstream.inFlight === 4);
+    timers.fire(BATCH_TIMEOUT_MS);
+    const response = await pending;
 
     expect(response.error).toBeNull();
     expect(response.results).toHaveLength(6);
@@ -369,10 +405,31 @@ describe("test models", () => {
     expect(upstream.requests).toHaveLength(4);
   });
 
+  test("a later format that times out keeps the first format's reason", async () => {
+    const { client, upstream, timers } = await start({
+      endpoint: twoFormats(["bad-then-slow-model"]),
+    });
+    const pending = client.apiEndpointTestModels({ endpointId: "ep_a" });
+    // Anthropic 回了 404，再问 Chat 时挂住，这时到点。
+    await waitFor(() => upstream.requests.length === 2 && upstream.inFlight === 1);
+    timers.fire(MODEL_TIMEOUT_MS);
+    const response = await pending;
+
+    expect(response.results).toEqual([
+      {
+        modelId: "bad-then-slow-model",
+        ok: false,
+        format: "anthropic_messages",
+        status: 404,
+        durationMs: expect.any(Number),
+        error: { code: "upstream_error", message: "The model bad-then-slow-model does not exist" },
+      },
+    ]);
+  });
+
   test("an unknown endpoint and an unknown method are refused before any request", async () => {
     const { client, upstream } = await start({
       endpoint: twoFormats(["ok-1"]),
-      modelTests: {},
     });
     const missing = await client.apiEndpointTestModels({ endpointId: "ep_missing" });
     expect(missing).toMatchObject({ results: [], error: { code: "not_found" } });

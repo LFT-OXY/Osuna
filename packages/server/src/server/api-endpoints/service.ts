@@ -31,7 +31,6 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointModelFacts,
   type ApiEndpointModelSettings,
-  type ApiEndpointModelTestResult,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -253,6 +252,7 @@ import {
   type ModelTestAttempt,
   type ModelTestLimits,
   type ModelTestPlan,
+  type ModelTestProgress,
   type ModelTestsOutcome,
 } from "./model-tests.js";
 import { isClaudeModel } from "./gateway/routing.js";
@@ -529,6 +529,8 @@ export interface ApiEndpointServiceOptions {
   connectionTestTimeoutMs?: number;
   // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
   modelTests?: Partial<ModelTestLimits>;
+  // 测试模型的单个与整批计时器；测试换成手动到点的。
+  modelTestTimers?: UsagePricingTimers;
   // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着），
   // 也才每天给开着的接口重新拉清单；缺省都不做。
   isModelsDevAutoUpdate?: () => boolean;
@@ -706,6 +708,7 @@ export class ApiEndpointService {
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly modelTestLimits: ModelTestLimits;
+  private readonly modelTestTimers: UsagePricingTimers;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
@@ -779,7 +782,7 @@ export class ApiEndpointService {
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
-    this.modelTestLimits = { ...MODEL_TEST_DEFAULTS, ...options.modelTests };
+    ({ limits: this.modelTestLimits, timers: this.modelTestTimers } = modelTestSetup(options));
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
@@ -3328,11 +3331,9 @@ export class ApiEndpointService {
   async testModels(input: {
     request: ApiEndpointTestModelsInput;
     signal: AbortSignal;
-    onResult: (progress: {
-      result: ApiEndpointModelTestResult;
-      done: number;
-      total: number;
-    }) => void;
+    // 开测前：要测的模型，按测试顺序。
+    onStarted: (modelIds: string[]) => void;
+    onResult: (progress: ModelTestProgress) => void;
   }): Promise<ModelTestsOutcome> {
     const { request } = input;
     const method = request.method ?? "plain";
@@ -3350,19 +3351,21 @@ export class ApiEndpointService {
     const listed = findEndpoint(this.retiredModels.listed(state), endpoint.id) ?? endpoint;
     const typed = request.modelId?.trim();
     const modelIds = typed ? [typed] : listed.models.map((model) => model.id);
-    const plans = modelIds.map(
-      (modelId): ModelTestPlan => ({
-        modelId,
-        sentModel: upstreamModelName({ settings: endpoint.modelSettings, modelId }),
-        disabledBy: endpointDisabledBy({ state, endpoint, model: modelId }),
-        attempts: testAttempts({ endpoint, modelId }),
-      }),
-    );
+    const plans = modelIds.map((modelId): ModelTestPlan => {
+      const sentModel = upstreamModelName({ settings: endpoint.modelSettings, modelId });
+      const disabledBy = endpointDisabledBy({ state, endpoint, model: modelId });
+      const attempts = testAttempts({ endpoint, modelId });
+      return { modelId, sentModel, disabledBy, attempts };
+    });
+    input.onStarted(modelIds);
+    const apiKey = this.store.getApiKey(endpoint.id);
+    const clock = { now: this.now, timers: this.modelTestTimers };
     return runModelTests({
       plans,
-      apiKey: this.store.getApiKey(endpoint.id),
+      apiKey,
       templateId: endpoint.templateId,
       limits: this.modelTestLimits,
+      clock,
       signal: input.signal,
       onResult: input.onResult,
     });
@@ -4718,6 +4721,16 @@ function requireFormat(format: string): ApiEndpointRequestFormat {
  */
 function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpointProvider {
   return format === "anthropic_messages" ? "claude" : "codex";
+}
+
+/** 测试模型的限值与计时器：没给的用缺省（并发 4、单个 20 秒、整批 3 分钟，真的计时器）。 */
+function modelTestSetup(options: ApiEndpointServiceOptions): {
+  limits: ModelTestLimits;
+  timers: UsagePricingTimers;
+} {
+  const limits = { ...MODEL_TEST_DEFAULTS, ...options.modelTests };
+  const timers = options.modelTestTimers ?? REAL_PRICING_TIMERS;
+  return { limits, timers };
 }
 
 /**

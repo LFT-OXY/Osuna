@@ -49,6 +49,7 @@ import {
   filterModelIds,
   hasFinishedTests,
   isNamedFree,
+  keepIdWhole,
   offersFreeOnly,
   testTook,
   type ModelTestState,
@@ -348,7 +349,8 @@ function useModelFilters({
   const isFreeFilterOn = isFreeOnly && offered.showsFreeOnly;
   const isWorkingFilterOn = isWorkingOnly && offered.showsWorkingOnly;
   const shownEntries = useMemo(() => {
-    if (modelTests === null || (!isFreeFilterOn && !isWorkingFilterOn)) return entries;
+    const isAnyFilterOn = isFreeFilterOn || isWorkingFilterOn;
+    if (modelTests === null || !isAnyFilterOn) return entries;
     const kept = new Set(
       filterModelIds({
         ids: entries.map((entry) => entry.id),
@@ -439,6 +441,7 @@ function ModelsActions({
   const { t } = useTranslation();
   const testLabel = t("settings.apiEndpoints.models.tests.test");
   const isTesting = modelTests?.run.status === "running";
+  const isTestBlocked = !canTest || isTesting;
   const fetchLabel = isFetching
     ? t("settings.apiEndpoints.models.fetching")
     : t("settings.apiEndpoints.models.refetch");
@@ -450,7 +453,7 @@ function ModelsActions({
           size="sm"
           leftIcon={Gauge}
           loading={isTesting}
-          disabled={!canTest || isTesting}
+          disabled={isTestBlocked}
           onPress={modelTests.onTestAll}
           accessibilityLabel={testLabel}
           testID="api-endpoint-models-test"
@@ -576,25 +579,24 @@ function TestRunRow({ run, onCancel }: { run: ModelTestRun; onCancel: () => void
       </View>
     );
   }
-  let text: string;
-  let color: "foregroundMuted" | "statusSuccess" | "statusDanger" = "foregroundMuted";
+  const key = "settings.apiEndpoints.models.tests";
+  let statusText: ReactNode;
   if (run.status === "running") {
-    text = run.isCancelling
-      ? t("settings.apiEndpoints.models.tests.cancelling")
-      : t("settings.apiEndpoints.models.tests.progress", { done: run.done, total: run.total });
+    statusText = runningText({ t, run });
   } else if (run.status === "finished") {
-    const isAllOk = run.failed === 0;
-    text = isAllOk
-      ? t("settings.apiEndpoints.models.tests.allAnswered", { total: run.total })
-      : t("settings.apiEndpoints.models.tests.someFailed", {
-          failed: run.failed,
-          total: run.total,
-        });
-    color = isAllOk ? "statusSuccess" : "statusDanger";
-  } else if (run.status === "cancelled") {
-    text = t("settings.apiEndpoints.models.tests.cancelled");
+    // 只有失败的个数用错误色（上游回了 404 也算失败，不是「没回应」）。
+    const failedColor = run.failed > 0 ? "statusDanger" : "foregroundMuted";
+    statusText = (
+      <>
+        {t(`${key}.summaryTested`, { total: run.total })}
+        {" · "}
+        <Text variant="caption" color={failedColor} testID="api-endpoint-models-test-failed-count">
+          {t(`${key}.summaryFailed`, { failed: run.failed })}
+        </Text>
+      </>
+    );
   } else {
-    return null;
+    statusText = t(`${key}.cancelled`);
   }
   return (
     <View
@@ -603,12 +605,12 @@ function TestRunRow({ run, onCancel }: { run: ModelTestRun; onCancel: () => void
     >
       <Text
         variant="caption"
-        color={color}
+        color="foregroundMuted"
         style={styles.flex}
         numberOfLines={1}
         testID="api-endpoint-models-test-status"
       >
-        {text}
+        {statusText}
       </Text>
       {run.status === "running" ? (
         <Button
@@ -623,6 +625,18 @@ function TestRunRow({ run, onCancel }: { run: ModelTestRun; onCancel: () => void
       ) : null}
     </View>
   );
+}
+
+/** 进行中的一句：取消中；daemon 还没报要测哪些时不写个数。 */
+function runningText(input: {
+  t: TFunction;
+  run: Extract<ModelTestRun, { status: "running" }>;
+}): string {
+  const { t, run } = input;
+  const key = "settings.apiEndpoints.models.tests";
+  if (run.isCancelling) return t(`${key}.cancelling`);
+  if (run.total === null) return t(`${key}.starting`);
+  return t(`${key}.progress`, { done: run.done, total: run.total });
 }
 
 function ModelsEmptyState({ fetchState }: { fetchState: ModelFetchState }) {
@@ -801,12 +815,13 @@ function ModelRow({
   const handleChange = useCallback((value: boolean) => onToggle(entry, value), [entry, onToggle]);
   const pinned = formatPins?.pinOf(entry.id) ?? null;
   const test = modelTests?.tests[entry.id] ?? null;
+  const showsMarkInline = test !== null && !isCompact;
   return (
     <View style={styles.modelItem} testID={`api-endpoint-model-${entry.id}`}>
       <View style={styles.modelRow}>
         <ModelNameGroup entry={entry} name={name} modelTests={modelTests} />
         {/* 窄窗口里结果挪到名字下面一行，名字不被挤短。 */}
-        {test !== null && !isCompact ? <ModelTestMark modelId={entry.id} state={test} /> : null}
+        {showsMarkInline ? <ModelTestMark modelId={entry.id} state={test} /> : null}
         {entry.goneUpstream ? (
           <Text
             variant="caption"
@@ -868,10 +883,11 @@ function ModelNameGroup({
 }) {
   const { t } = useTranslation();
   const isFree = modelTests !== null && isNamedFree([entry.id, name]);
-  const context =
-    modelTests === null
-      ? null
-      : contextTag({ context: modelTests.factsOf(entry.id).context, name });
+  let context: string | null = null;
+  if (modelTests !== null) {
+    const facts = modelTests.factsOf(entry.id);
+    context = contextTag({ context: facts.context, name });
+  }
   return (
     <View style={styles.modelNameGroup}>
       <Text
@@ -911,8 +927,9 @@ function ModelTestBelow({
   isCompact: boolean;
 }) {
   const { t } = useTranslation();
-  const reason =
-    state.status === "done" && !state.result.ok ? failureReason(t, state.result) : null;
+  const result = state.status === "done" ? state.result : null;
+  let reason: string | null = null;
+  if (result !== null && !result.ok) reason = failureReason({ t, result });
   if (!isCompact && reason === null) return null;
   return (
     <View style={styles.modelBelow}>
@@ -937,24 +954,21 @@ const ThemedGauge = withUnistyles(Gauge);
 /** 红绿点，后面是走的格式与耗时；还在测时是灰点。 */
 function ModelTestMark({ modelId, state }: { modelId: string; state: ModelTestState }) {
   const { t } = useTranslation();
-  let text: string;
+  const key = "settings.apiEndpoints.models.tests";
+  let text = t(`${key}.testing`);
   let dotStyle = styles.dotWaiting;
   let dotKind = "testing";
-  if (state.status === "testing") {
-    text = t("settings.apiEndpoints.models.tests.testing");
-  } else {
+  if (state.status === "done") {
     const { result } = state;
+    const isDisabled = result.error?.code === "model_disabled";
+    const took = testTook(result.durationMs);
+    const tookText = t(`${key}.took.${took.unit}`, { value: took.value });
     dotStyle = result.ok ? styles.dotOk : styles.dotFailed;
     dotKind = result.ok ? "ok" : "failed";
-    const parts: string[] = [];
-    if (result.format !== null) parts.push(formatLabel(t, result.format));
-    if (result.error?.code === "model_disabled") {
-      parts.push(t("settings.apiEndpoints.models.tests.disabled"));
-    } else if (result.durationMs > 0 || result.ok) {
-      const took = testTook(result.durationMs);
-      parts.push(t(`settings.apiEndpoints.models.tests.took.${took.unit}`, { value: took.value }));
-    }
-    text = parts.join(" · ");
+    // 答上的写走的格式与耗时；失败的格式与状态码在原因那一行（照 magpie），这里只写耗时。
+    const formatText = result.ok && result.format !== null ? formatLabel(t, result.format) : null;
+    const parts = isDisabled ? [t(`${key}.disabled`)] : [formatText, tookText];
+    text = parts.filter((part) => part !== null).join(" · ");
   }
   return (
     <View style={styles.testMark} testID={`api-endpoint-model-test-${modelId}`}>
@@ -969,15 +983,17 @@ function ModelTestMark({ modelId, state }: { modelId: string; state: ModelTestSt
   );
 }
 
-/** 失败的原因：已禁用、超时、没有地址用界面语言说；上游的原文照登。 */
-function failureReason(t: TFunction, result: ApiEndpointModelTestResult): string {
+/** 原因本身：已禁用、超时、连不上、没有地址用界面语言说；上游的原文照登。 */
+function failureCause(t: TFunction, result: ApiEndpointModelTestResult): string {
   const { error } = result;
   const key = "settings.apiEndpoints.models.tests";
   switch (error?.code) {
     case "model_disabled":
       return t(`${key}.disabledReason`, { pattern: error.params?.pattern ?? "" });
     case "upstream_timeout":
-      return t(`${key}.timeout`);
+      return t(`${key}.timeout`, { seconds: error.params?.seconds ?? "" });
+    case "upstream_unreachable":
+      return t(`${key}.unreachable`);
     case "batch_timeout":
       return t(`${key}.batchTimeout`);
     case "no_format":
@@ -985,6 +1001,15 @@ function failureReason(t: TFunction, result: ApiEndpointModelTestResult): string
     default:
       return error?.message || t(`${key}.noAnswer`);
   }
+}
+
+/** 失败行的原因（照 magpie）：「格式 · 状态码 · 原因」，没发请求的只写原因；模型名不在连字符处折行。 */
+function failureReason(input: { t: TFunction; result: ApiEndpointModelTestResult }): string {
+  const { t, result } = input;
+  const formatText = result.format === null ? null : formatLabel(t, result.format);
+  const statusText = result.status === null ? null : String(result.status);
+  const cause = keepIdWhole({ text: failureCause(t, result), id: result.modelId });
+  return [formatText, statusText, cause].filter((part) => part !== null).join(" · ");
 }
 
 const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);

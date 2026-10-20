@@ -5,13 +5,15 @@ import type {
   ApiEndpointModelTestResult,
   ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { disabledMessage } from "./disabled-models.js";
 import { probeUpstreamFormat } from "./upstream-detect.js";
 
 /*
  * 测试模型（prd 第 26–28 条，照 magpie TestModels）：每个模型发一条「hi」、回复上限 16，几个一起问。
- * 一个模型按给它的格式依次试，答上一个就算能用；都没答上报第一个格式的原因（magpie 只问那一种）。
- * 单个模型有总时限，超了不再试别的格式；整批也有总时限，到点还没测完的都记成整批超时。
+ * 一个模型按给它的格式依次试，答上一个就算能用；都没答上报第一个格式的原因（magpie 只问那一种），
+ * 后面的格式超时也不盖掉它。单个模型有总时限，超了不再试别的格式；整批也有总时限，到点还没测完的都记成整批超时。
+ * 时钟与计时器由调用方给（测试换成手动的）。
  */
 
 export const MODEL_TEST_DEFAULTS = {
@@ -24,6 +26,11 @@ export interface ModelTestLimits {
   concurrency: number;
   modelTimeoutMs: number;
   batchTimeoutMs: number;
+}
+
+export interface ModelTestClock {
+  now: () => Date;
+  timers: UsagePricingTimers;
 }
 
 export interface ModelTestAttempt {
@@ -46,19 +53,59 @@ export type ModelTestsOutcome =
   // 被取消：只带取消前已测完的。
   | { kind: "cancelled"; results: ApiEndpointModelTestResult[] };
 
+export interface ModelTestProgress {
+  result: ApiEndpointModelTestResult;
+  done: number;
+  total: number;
+}
+
+/** 到点就 abort 的信号；用完要 clear，免得计时器留着。 */
+function deadlineSignal(input: { timers: UsagePricingTimers; ms: number }): {
+  signal: AbortSignal;
+  clear: () => void;
+} {
+  const controller = new AbortController();
+  const clear = input.timers.schedule(() => controller.abort(), input.ms);
+  return { signal: controller.signal, clear };
+}
+
+/** 没答上（或没发）的一个模型的结果。 */
+function failedResult(input: {
+  modelId: string;
+  format: string | null;
+  status: number | null;
+  durationMs: number;
+  code: string;
+  message: string;
+  params?: Record<string, string>;
+}): ApiEndpointModelTestResult {
+  const error = input.params
+    ? { code: input.code, params: input.params, message: input.message }
+    : { code: input.code, message: input.message };
+  return {
+    modelId: input.modelId,
+    ok: false,
+    format: input.format,
+    status: input.status,
+    durationMs: input.durationMs,
+    error,
+  };
+}
+
 export async function runModelTests(input: {
   plans: ModelTestPlan[];
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
   templateId: string | undefined;
   limits: ModelTestLimits;
+  clock: ModelTestClock;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
-  onResult: (progress: { result: ApiEndpointModelTestResult; done: number; total: number }) => void;
+  onResult: (progress: ModelTestProgress) => void;
 }): Promise<ModelTestsOutcome> {
-  const { plans, limits } = input;
-  const batch = AbortSignal.timeout(limits.batchTimeoutMs);
-  const signal = AbortSignal.any([input.signal, batch]);
+  const { plans, limits, clock } = input;
+  const batch = deadlineSignal({ timers: clock.timers, ms: limits.batchTimeoutMs });
+  const signal = AbortSignal.any([input.signal, batch.signal]);
   const results: (ApiEndpointModelTestResult | null)[] = plans.map(() => null);
   let done = 0;
   const finish = (index: number, result: ApiEndpointModelTestResult) => {
@@ -73,13 +120,7 @@ export async function runModelTests(input: {
       next += 1;
       const plan = plans[index];
       if (!plan) return;
-      const result = await testOne({
-        plan,
-        apiKey: input.apiKey,
-        templateId: input.templateId,
-        modelTimeoutMs: limits.modelTimeoutMs,
-        signal,
-      });
+      const result = await testOne({ ...input, plan, signal });
       // 取消或整批到点时被打断的不算测完。
       if (signal.aborted) return;
       finish(index, result);
@@ -87,123 +128,127 @@ export async function runModelTests(input: {
   };
   const workers = Math.max(1, Math.min(limits.concurrency, plans.length));
   await Promise.all(Array.from({ length: workers }, worker));
-  if (input.signal.aborted) {
-    return { kind: "cancelled", results: results.filter((result) => result !== null) };
-  }
-  const minutes = Math.round(limits.batchTimeoutMs / 60_000);
+  batch.clear();
+  const finished = () => results.filter((result) => result !== null);
+  if (input.signal.aborted) return { kind: "cancelled", results: finished() };
   plans.forEach((plan, index) => {
     if (results[index] !== null) return;
-    finish(index, {
-      modelId: plan.modelId,
-      ok: false,
-      format: null,
-      status: null,
-      durationMs: 0,
-      error: {
+    finish(
+      index,
+      failedResult({
+        modelId: plan.modelId,
+        format: null,
+        status: null,
+        durationMs: 0,
         code: "batch_timeout",
-        message:
-          minutes >= 1
-            ? `The test ran out of its ${minutes} min before this model answered`
-            : `The test ran out of its ${limits.batchTimeoutMs} ms before this model answered`,
-      },
-    });
+        message: "The test ran out of time before this model answered",
+      }),
+    );
   });
-  return { kind: "done", results: results.filter((result) => result !== null) };
+  return { kind: "done", results: finished() };
 }
 
 async function testOne(input: {
   plan: ModelTestPlan;
   apiKey: string | null;
   templateId: string | undefined;
-  modelTimeoutMs: number;
+  limits: ModelTestLimits;
+  clock: ModelTestClock;
   signal: AbortSignal;
 }): Promise<ApiEndpointModelTestResult> {
-  const { plan, modelTimeoutMs } = input;
+  const { plan, clock } = input;
+  const { modelTimeoutMs } = input.limits;
   const { modelId } = plan;
   if (plan.disabledBy !== null) {
     // 用户禁用了它：连测试都不发（magpie testOne）。
-    return {
+    return failedResult({
       modelId,
-      ok: false,
       format: null,
       status: null,
       durationMs: 0,
-      error: {
-        code: "model_disabled",
-        params: { model: modelId, pattern: plan.disabledBy },
-        message: disabledMessage({ model: modelId, pattern: plan.disabledBy }),
-      },
-    };
-  }
-  const startedAt = performance.now();
-  const elapsed = () => Math.round(performance.now() - startedAt);
-  const deadline = AbortSignal.timeout(modelTimeoutMs);
-  const signal = AbortSignal.any([input.signal, deadline]);
-  let firstFailure: ApiEndpointModelTestResult | null = null;
-  for (const attempt of plan.attempts) {
-    const detection = await probeUpstreamFormat({
-      format: attempt.format,
-      baseUrl: attempt.baseUrl,
-      apiKey: input.apiKey,
-      templateId: input.templateId,
-      modelId,
-      sentModel: plan.sentModel,
-      capsReply: true,
-      signal,
-      // 单个模型的总时限由 deadline 管，这里只要不早于它。
-      timeoutMs: modelTimeoutMs + 1_000,
+      code: "model_disabled",
+      message: disabledMessage({ model: modelId, pattern: plan.disabledBy }),
+      params: { model: modelId, pattern: plan.disabledBy },
     });
-    if (deadline.aborted && !input.signal.aborted) {
-      return {
-        modelId,
-        ok: false,
+  }
+  const startedAt = clock.now().getTime();
+  const elapsed = () => clock.now().getTime() - startedAt;
+  const deadline = deadlineSignal({ timers: clock.timers, ms: modelTimeoutMs });
+  const signal = AbortSignal.any([input.signal, deadline.signal]);
+  let firstFailure: ApiEndpointModelTestResult | null = null;
+  try {
+    for (const attempt of plan.attempts) {
+      const detection = await probeUpstreamFormat({
         format: attempt.format,
-        status: null,
-        durationMs: elapsed(),
-        error: {
+        baseUrl: attempt.baseUrl,
+        apiKey: input.apiKey,
+        templateId: input.templateId,
+        modelId,
+        sentModel: plan.sentModel,
+        capsReply: true,
+        signal,
+        // 单个模型的总时限由 deadline 管，这里只要不早于它。
+        timeoutMs: modelTimeoutMs + 1_000,
+      });
+      const timedOut = deadline.signal.aborted && !input.signal.aborted;
+      if (timedOut && firstFailure !== null) break;
+      if (timedOut) {
+        const seconds = String(Math.round(modelTimeoutMs / 1000));
+        return failedResult({
+          modelId,
+          format: attempt.format,
+          status: null,
+          durationMs: elapsed(),
           code: "upstream_timeout",
-          message: `No response within ${Math.round(modelTimeoutMs / 1000)}s`,
-        },
-      };
+          message: `No response within ${seconds}s`,
+          params: { seconds },
+        });
+      }
+      if (detection.status === "ok") {
+        return {
+          modelId,
+          ok: true,
+          format: attempt.format,
+          status: detection.httpStatus,
+          durationMs: elapsed(),
+          error: null,
+        };
+      }
+      firstFailure ??= failureOf({ modelId, detection });
     }
-    if (detection.status === "ok") {
-      return {
-        modelId,
-        ok: true,
-        format: attempt.format,
-        status: detection.httpStatus,
-        durationMs: elapsed(),
-        error: null,
-      };
-    }
-    firstFailure ??= failureOf({ modelId, detection, durationMs: elapsed() });
+  } finally {
+    deadline.clear();
   }
   if (firstFailure !== null) return { ...firstFailure, durationMs: elapsed() };
-  return {
+  return failedResult({
     modelId,
-    ok: false,
     format: null,
     status: null,
     durationMs: 0,
-    error: { code: "no_format", message: "This endpoint has no URL in a format that serves it" },
-  };
+    code: "no_format",
+    message: "This endpoint has no URL in a format that serves it",
+  });
 }
+
+// 检测结论的原因前面带着「POST <地址>: HTTP <状态码>:」；状态码另有字段，地址不给界面看（magpie 的行上只写原因）。
+const REQUEST_PREFIX = /^POST \S+: /;
+const STATUS_PREFIX = /^HTTP \d+(: )?/;
 
 function failureOf(input: {
   modelId: string;
   detection: ApiEndpointFormatDetection;
-  durationMs: number;
 }): ApiEndpointModelTestResult {
   const { detection } = input;
   let code = "upstream_error";
   if (detection.status === "auth_failed") code = "auth_failed";
   else if (detection.httpStatus === null) code = "upstream_unreachable";
-  return {
+  const reason = (detection.message ?? "").replace(REQUEST_PREFIX, "").replace(STATUS_PREFIX, "");
+  return failedResult({
     modelId: input.modelId,
-    ok: false,
     format: detection.format,
     status: detection.httpStatus,
-    durationMs: input.durationMs,
-    error: { code, message: detection.message ?? "" },
-  };
+    durationMs: 0,
+    code,
+    message: reason,
+  });
 }

@@ -2781,9 +2781,10 @@ export const ru: TranslationResources = {
           test: "Проверить модели",
           testOne: "Проверить эту",
           progress: "Проверка моделей… {{done}} / {{total}}",
+          starting: "Проверка моделей…",
+          summaryTested: "Проверено: {{total}}",
+          summaryFailed: "С ошибкой: {{failed}}",
           cancelling: "Отмена…",
-          allAnswered: "Ответили все проверенные модели: {{total}}",
-          someFailed: "Не ответили {{failed}} из {{total}} проверенных моделей",
           cancelled: "Проверка отменена",
           failed: "Не удалось проверить модели",
           testing: "Проверка…",
@@ -2794,8 +2795,9 @@ export const ru: TranslationResources = {
           disabled: "Отключена",
           disabledReason:
             "Совпадает с «{{pattern}}» в отключённых моделях, поэтому проверка не отправляется",
-          timeout: "Нет ответа за 20 секунд",
+          timeout: "Нет ответа за {{seconds}} с",
           batchTimeout: "Время проверки кончилось раньше, чем ответила эта модель",
+          unreachable: "Не удалось подключиться к этому адресу",
           noFormat: "У этого эндпоинта нет URL в формате, который обслуживает эту модель",
           noAnswer: "Не ответила",
           took: {

@@ -1819,8 +1819,10 @@ test.describe("Settings API endpoints", () => {
     page,
   }) => {
     // 都在「其他」家族里，一屏看得到；保存后 daemon 当场拉的清单也是这些。
-    relay.goodModels = ["relay-ok", "bad-model", "lite:free", "slow-one", "slow-two"];
+    const slowModels = ["slow-1", "slow-2", "slow-3", "slow-4", "slow-5", "slow-6"];
+    relay.goodModels = ["relay-ok", "bad-model", "lite:free", ...slowModels];
     const asked = () => modelsAsked(relay).filter((model) => model !== undefined);
+    const abandoned = () => relay.abandoned;
     const slowAsked = () => asked().filter((model) => model.startsWith("slow-")).length;
     const endpointId = await seedApiEndpoint(client, {
       name: "Good relay",
@@ -1833,7 +1835,7 @@ test.describe("Settings API endpoints", () => {
     const slowId = await seedApiEndpoint(client, {
       name: "Slow relay",
       baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
-      models: ["slow-one", "slow-two"],
+      models: slowModels,
     });
     const host = await refuseTestModels(page);
     await openEndpointDetail(page, endpointId);
@@ -1856,14 +1858,15 @@ test.describe("Settings API endpoints", () => {
     await test.step("the whole list: a green dot, the format and the time; the failure keeps its reason", async () => {
       host.refusing = false;
       await testButton.click();
-      await expect(status).toHaveText("Tested 3: 1 didn't answer");
+      await expect(status).toHaveText("3 tested · 1 failed");
       await expect(dot("relay-ok", "ok")).toBeVisible();
       await expect(page.getByTestId("api-endpoint-model-test-relay-ok")).toHaveText(
         /^Anthropic · \d+ ms$/,
       );
       await expect(dot("bad-model", "failed")).toBeVisible();
-      await expect(page.getByTestId("api-endpoint-model-test-reason-bad-model")).toContainText(
-        "The model bad-model does not exist",
+      // 照 magpie：「格式 · 状态码 · 原因」，不露地址；模型名不在连字符处折行。
+      await expect(page.getByTestId("api-endpoint-model-test-reason-bad-model")).toHaveText(
+        "Anthropic · 404 · The model bad\u2011model does not exist",
       );
       expect([...new Set(asked())].sort()).toEqual(["bad-model", "lite:free", "relay-ok"]);
       await expect(page.getByTestId("api-endpoint-model-free-lite:free")).toHaveText("Free");
@@ -1886,7 +1889,7 @@ test.describe("Settings API endpoints", () => {
       relay.requests.length = 0;
       await page.getByTestId("api-endpoint-model-menu-relay-ok").filter({ visible: true }).click();
       await page.getByTestId("api-endpoint-model-test-one-relay-ok").click();
-      await expect(status).toHaveText("Tested 1: all answered");
+      await expect(status).toHaveText("1 tested · 0 failed");
       expect(asked()).toEqual(["relay-ok"]);
       await expect(dot("bad-model", "failed")).toBeVisible();
     });
@@ -1901,12 +1904,25 @@ test.describe("Settings API endpoints", () => {
     await test.step("a test in progress shows its progress and can be cancelled", async () => {
       await openEndpointDetail(page, slowId);
       await testButton.click();
-      await expect(status).toHaveText("Testing models… 0 / 2");
-      await expect(dot("slow-one", "testing")).toBeVisible();
-      await expect.poll(slowAsked).toBe(2);
+      await expect(status).toHaveText("Testing models… 0 / 6");
+      await expect(dot("slow-1", "testing")).toBeVisible();
+      await expect.poll(slowAsked).toBe(4);
       await page.getByTestId("api-endpoint-models-test-cancel").filter({ visible: true }).click();
       await expect(status).toHaveText("Test cancelled");
-      await expect(page.getByTestId("api-endpoint-model-test-slow-one")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-model-test-slow-1")).toHaveCount(0);
+      await expect.poll(abandoned).toBe(4);
+      expect(slowAsked()).toBe(4);
+    });
+
+    await test.step("leaving the page while a test runs cancels it: nothing more goes upstream", async () => {
+      relay.requests.length = 0;
+      relay.abandoned = 0;
+      await testButton.click();
+      await expect.poll(slowAsked).toBe(4);
+      await openEndpointDetail(page, endpointId);
+      // daemon 断开了挂着的四个，剩下两个再没发出去。
+      await expect.poll(abandoned).toBe(4);
+      expect(slowAsked()).toBe(4);
     });
   });
 
@@ -4854,7 +4870,6 @@ async function catalogOf(endpointId: string) {
   return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.catalog;
 }
 
-/** 从 server_info 去掉 apiEndpointManagement，模拟还不能改接口顺序的主机。 */
 /** 测试模型的请求在 refusing 时由页面这头直接回一条被拒的响应，不到 daemon。 */
 async function refuseTestModels(page: Page): Promise<{ refusing: boolean }> {
   const host = { refusing: true };
@@ -4889,6 +4904,7 @@ async function refuseTestModels(page: Page): Promise<{ refusing: boolean }> {
   return host;
 }
 
+/** 从 server_info 去掉 apiEndpointManagement，模拟还不能改接口顺序的主机。 */
 async function hideManagementCapability(page: Page): Promise<void> {
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();

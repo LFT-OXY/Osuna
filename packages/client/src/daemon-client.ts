@@ -733,6 +733,10 @@ type ApiEndpointTestModelsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.test_models.response" }
 >["payload"];
+type ApiEndpointTestModelsStartedPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.started" }
+>["payload"];
 type ApiEndpointTestModelsProgressPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.test_models.progress" }
@@ -6634,23 +6638,25 @@ export class DaemonClient {
   }
 
   /**
-   * 测试这家的模型（或只测 modelId 一个）。每测完一个调一次 onProgress；整批最长 3 分钟，所以等得比一般请求久。
-   * 传入 requestId 才能用 apiEndpointCancel 取消。
+   * 测试这家的模型（或只测 modelId 一个）。开测前调一次 onStarted（daemon 要测的模型），每测完一个调一次 onProgress；
+   * 整批最长 3 分钟，所以等得比一般请求久。传入 requestId 才能用 apiEndpointCancel 取消。
    */
   async apiEndpointTestModels(
     options: ApiEndpointTestModelsOptions,
     input: {
       requestId?: string;
+      onStarted?: (started: ApiEndpointTestModelsStartedPayload) => void;
       onProgress?: (progress: ApiEndpointTestModelsProgressPayload) => void;
     } = {},
   ): Promise<ApiEndpointTestModelsPayload> {
     const requestId = this.createRequestId(input.requestId);
-    const { onProgress } = input;
-    const unsubscribe = onProgress
-      ? this.on("provider.api_endpoint.test_models.progress", (message) => {
-          if (message.payload.requestId === requestId) onProgress(message.payload);
-        })
-      : null;
+    const { onStarted, onProgress } = input;
+    const stopStarted = this.on("provider.api_endpoint.test_models.started", (message) => {
+      if (message.payload.requestId === requestId) onStarted?.(message.payload);
+    });
+    const stopProgress = this.on("provider.api_endpoint.test_models.progress", (message) => {
+      if (message.payload.requestId === requestId) onProgress?.(message.payload);
+    });
     try {
       return await this.sendNamespacedCorrelatedSessionRequest({
         requestId,
@@ -6658,7 +6664,8 @@ export class DaemonClient {
         timeout: API_ENDPOINT_TEST_MODELS_TIMEOUT_MS,
       });
     } finally {
-      unsubscribe?.();
+      stopStarted();
+      stopProgress();
     }
   }
 
