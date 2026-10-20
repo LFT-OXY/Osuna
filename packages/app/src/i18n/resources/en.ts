@@ -2692,6 +2692,19 @@ export const en = {
           keyHeaderInfo:
             "Which header the API key goes in on the Anthropic address. Most services take both; pick one for a service that refuses the two together. Osuna also switches to one by itself when a service says so.",
           keyHeaderBoth: "Both",
+          cooldown: {
+            quotaRest: "Rest after quota runs out",
+            quotaRestInfo:
+              "How long Osuna stops picking this endpoint once it says its quota is used up without saying when it comes back. Empty is {{minutes}} minutes. A time the vendor gives still comes first.",
+            restCap: "Longest rest",
+            restCapInfo:
+              "The most this endpoint rests while it keeps failing or keeps being rate limited; each rest doubles from one minute up to this. Empty is {{failure}} minutes after failures and {{rate}} after rate limits. A wait the vendor asks for still comes first.",
+            noFailRest: "Don't rest after unknown failures",
+            noFailRestInfo:
+              "A failure that doesn't say why, such as a server error or a dropped connection, doesn't rest this endpoint: the next request asks it again. Running out of quota or credit, a rejected key or a model it doesn't serve still rest it, and rate limits rest it up to {{rate}} minutes. Replaces the longest rest.",
+            minutes: "minutes",
+            problem: "Enter whole minutes from 0 to {{max}} ({{days}} days)",
+          },
         },
         insecureTls: {
           label: "Certificate",

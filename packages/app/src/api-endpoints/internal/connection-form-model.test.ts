@@ -2672,3 +2672,101 @@ describe("connection form: skip certificate check", () => {
     expect(older.getState().showsInsecureTls).toBe(false);
   });
 });
+
+// 接口管理好用性工单 24：「高级」里的冷却设置（照 magpie QuotaRest、RestCap、RestCapOff）。
+describe("connection form: cooldown settings", () => {
+  it("opens with nothing set folded and empty, and a save that leaves them alone leaves them out", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: false,
+      quotaRestText: "",
+      restCapText: "",
+      noFailRest: false,
+      cooldownProblem: null,
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("cooldownSettings");
+  });
+
+  it("opens an endpoint with them set unfolded, and saves what was typed whole; emptied fields clear", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      {
+        mode: "edit",
+        endpoint: { ...SAVED_ENDPOINT, cooldownSettings: { quotaRestMinutes: 60 } },
+      },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({ isAdvancedOpen: true, quotaRestText: "60" });
+    model.setRestCap(" 5 ");
+    await model.submit();
+    expect(fake.saves[0]?.cooldownSettings).toEqual({ quotaRestMinutes: 60, restCapMinutes: 5 });
+    model.setQuotaRest("");
+    model.setRestCap("");
+    await model.submit();
+    expect(fake.saves[1]?.cooldownSettings).toEqual({});
+  });
+
+  it("no rest after an unknown failure takes the place of the longest rest", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setRestCap("45");
+    model.setNoFailRest(true);
+    expect(model.getState()).toMatchObject({ noFailRest: true, showsRestCap: false });
+    await model.submit();
+    expect(fake.saves[0]?.cooldownSettings).toEqual({ noFailRest: true });
+  });
+
+  it("says on the spot which field is not whole minutes from 0 to eight days, and holds the save", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      deps,
+      KEY_OPTIONAL,
+    );
+    model.setQuotaRest("11521");
+    expect(model.getState()).toMatchObject({
+      cooldownProblem: { field: "quotaRestMinutes" },
+      canSubmit: false,
+    });
+    model.setQuotaRest("11520");
+    model.setRestCap("1.5");
+    expect(model.getState().cooldownProblem).toEqual({ field: "restCapMinutes" });
+    model.setRestCap("abc");
+    expect(model.getState().cooldownProblem).toEqual({ field: "restCapMinutes" });
+    model.setRestCap("0");
+    expect(model.getState()).toMatchObject({ cooldownProblem: null, canSubmit: true });
+  });
+
+  it("a copy carries the original's settings without sending them, and an older host gets none", async () => {
+    const fake = fakeDeps();
+    const source = { ...SAVED_ENDPOINT, cooldownSettings: { noFailRest: true } };
+    const copy = createConnectionFormModel(
+      { mode: "duplicate", source, name: "Relay 2" },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(copy.getState().noFailRest).toBe(true);
+    await copy.submit();
+    expect(fake.saves[0]).not.toHaveProperty("cooldownSettings");
+
+    const older = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_REQUIRED,
+    );
+    older.setQuotaRest("60");
+    await older.submit();
+    expect(fake.saves[1]).not.toHaveProperty("cooldownSettings");
+  });
+});

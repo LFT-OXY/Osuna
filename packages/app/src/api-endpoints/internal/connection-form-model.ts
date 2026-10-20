@@ -37,6 +37,13 @@ import {
   type ExtraBodyTextProblem,
   type HeaderRow,
 } from "./request-extras-form";
+import {
+  cooldownFieldsOf,
+  cooldownFieldsRead,
+  hasCooldownSettings,
+  type CooldownFieldsRead,
+} from "./cooldown-settings-form";
+import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -394,6 +401,14 @@ export interface ConnectionFormState {
   insecureTls: boolean;
   // 打开前的确认框开着。
   isConfirmingInsecureTls: boolean;
+  // 「高级」里的冷却设置（同 canSetRequestExtras）：两个分钟框（空即用中转站自己的）与「原因不明的失败不冷却」。
+  quotaRestText: string;
+  restCapText: string;
+  noFailRest: boolean;
+  // 「原因不明不冷却」开着时冷却上限不起作用，不显示（照 magpie 两者是同一项）。
+  showsRestCap: boolean;
+  // 哪一项不是 0 到八天的整数分钟；挡住保存。
+  cooldownProblem: CooldownSettingsProblem | null;
 }
 
 export interface ConnectionFormDeps {
@@ -471,6 +486,9 @@ export interface ConnectionFormModel {
   setInsecureTls(value: boolean): void;
   confirmInsecureTls(): void;
   cancelInsecureTls(): void;
+  setQuotaRest(value: string): void;
+  setRestCap(value: string): void;
+  setNoFailRest(value: boolean): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -545,6 +563,9 @@ interface Values {
   keyHeader: ApiEndpointKeyHeader;
   insecureTls: boolean;
   isConfirmingInsecureTls: boolean;
+  quotaRestText: string;
+  restCapText: string;
+  noFailRest: boolean;
 }
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
@@ -595,7 +616,12 @@ export function createConnectionFormModel(
   // 服务地址从开表单时的地址起步，改了才挪这些地址（照 magpie addressFrom / addressWas）。
   const serviceAddressWas = originOf(seededUrls);
   const seededIcon = keyOwner?.icon ?? null;
-  const seededExtras = seededRequestExtras({ keyOwner, isCustom: seededTemplate === null });
+  const seededCooldown = cooldownFieldsOf(keyOwner?.cooldownSettings);
+  const seededExtras = seededRequestExtras({
+    keyOwner,
+    isCustom: seededTemplate === null,
+    hasCooldownSettings: hasCooldownSettings(seededCooldown),
+  });
   let values: Values = {
     template: seededTemplate,
     regionId: seededRegion?.id ?? null,
@@ -633,9 +659,11 @@ export function createConnectionFormModel(
     // 复制时随原来那家（照 magpie 复制的草稿带 insecureTLS）。
     insecureTls: keyOwner?.insecureTls === true,
     isConfirmingInsecureTls: false,
+    ...seededCooldown,
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
+  const cooldownAtOpen = cooldownFieldsRead(seededCooldown);
   const hasSeededExtras = !equal(extrasAtOpen, EMPTY_EXTRAS);
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
   let pendingIcon: object | null = null;
@@ -718,9 +746,10 @@ export function createConnectionFormModel(
     extras: ExtrasState;
   }): boolean {
     // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
-    const hasExtraBodyProblem = input.extras.extraBodyProblem !== null;
+    const hasExtrasProblem =
+      input.extras.extraBodyProblem !== null || input.extras.cooldownProblem !== null;
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
-    return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtraBodyProblem;
+    return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
   }
 
   type ExtrasState = Pick<
@@ -737,6 +766,11 @@ export function createConnectionFormModel(
     | "showsInsecureTls"
     | "insecureTls"
     | "isConfirmingInsecureTls"
+    | "quotaRestText"
+    | "restCapText"
+    | "noFailRest"
+    | "showsRestCap"
+    | "cooldownProblem"
   >;
 
   /** 「高级」那部分：请求头、附加请求体、key 放哪个头与哪里不对。主机不认它们时都不算。 */
@@ -748,10 +782,13 @@ export function createConnectionFormModel(
     let headerProblem: HeaderProblem | null = null;
     let extraBodyProblem: ExtraBodyTextProblem | null = null;
     let showsKeyHeader = false;
+    let cooldownProblem: CooldownSettingsProblem | null = null;
     if (canSetRequestExtras) {
       headerProblem = headerRowsProblem(headerRows);
       if (extraBody.kind === "invalid") extraBodyProblem = extraBody.problem;
       showsKeyHeader = isThirdPartyAnthropicUrl(anthropicUrl);
+      const cooldown = cooldownFieldsRead(next);
+      if (cooldown.kind === "invalid") cooldownProblem = cooldown.problem;
     }
     const isAdvancedOpen = next.isAdvancedOpen;
     const showsInsecureTls = canSetRequestExtras && takesInsecureTlsAt(next);
@@ -768,6 +805,11 @@ export function createConnectionFormModel(
       showsInsecureTls,
       insecureTls: next.insecureTls,
       isConfirmingInsecureTls: next.isConfirmingInsecureTls,
+      quotaRestText: next.quotaRestText,
+      restCapText: next.restCapText,
+      noFailRest: next.noFailRest,
+      showsRestCap: !next.noFailRest,
+      cooldownProblem,
     };
   }
 
@@ -1109,6 +1151,15 @@ export function createConnectionFormModel(
     return isUnchanged ? {} : now;
   }
 
+  /** 冷却设置只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。老主机不带。 */
+  function savedCooldownRequest(): Pick<ConnectionSaveRequest, "cooldownSettings"> {
+    if (!canSetRequestExtras) return {};
+    const now: CooldownFieldsRead = cooldownFieldsRead(values);
+    const isUnchanged = equal(now, cooldownAtOpen);
+    if (now.kind === "invalid" || isUnchanged) return {};
+    return { cooldownSettings: now.value };
+  }
+
   /** 改一行请求头。 */
   function updateHeaderRow(id: number, change: (row: HeaderRow) => HeaderRow): void {
     const headerRows = values.headerRows.map((row) => {
@@ -1263,6 +1314,7 @@ export function createConnectionFormModel(
       ...stagedModelSettings(),
       ...savedExtrasRequest(),
       ...insecureTlsRequest(),
+      ...savedCooldownRequest(),
     };
   }
 
@@ -1608,6 +1660,15 @@ export function createConnectionFormModel(
     cancelInsecureTls() {
       update({ isConfirmingInsecureTls: false });
     },
+    setQuotaRest(value) {
+      update({ quotaRestText: value });
+    },
+    setRestCap(value) {
+      update({ restCapText: value });
+    },
+    setNoFailRest(value) {
+      update({ noFailRest: value });
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -1636,17 +1697,19 @@ export function createConnectionFormModel(
 }
 
 /**
- * 表单起步时的「高级」：编辑、复制时那家存的；「自定义」没有请求头时先放一行空的（照 magpie）。设了任一项就展开。
+ * 表单起步时的「高级」：编辑、复制时那家存的；「自定义」没有请求头时先放一行空的（照 magpie）。设了任一项（含冷却设置）就展开。
  */
 function seededRequestExtras(input: {
   keyOwner: ApiEndpoint | null;
   isCustom: boolean;
+  hasCooldownSettings: boolean;
 }): Pick<Values, "isAdvancedOpen" | "headerRows" | "nextHeaderId" | "extraBodyText" | "keyHeader"> {
   const { keyOwner } = input;
   const saved = headerRowsOf(keyOwner?.headers);
   const extraBodyText = extraBodyTextOf(keyOwner?.extraBody);
   const keyHeader = keyHeaderOf(keyOwner?.keyHeader);
-  const isSet = saved.length > 0 || extraBodyText !== "" || keyHeader !== "both";
+  const isSet =
+    saved.length > 0 || extraBodyText !== "" || keyHeader !== "both" || input.hasCooldownSettings;
   const startsEmpty = input.isCustom && saved.length === 0;
   const headerRows = startsEmpty ? [{ id: 0, name: "", value: "", isJson: false }] : saved;
   return {

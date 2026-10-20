@@ -2681,6 +2681,19 @@ export const es: TranslationResources = {
           keyHeaderInfo:
             "En qué cabecera va la clave de API en la dirección de Anthropic. La mayoría de servicios aceptan las dos; elige una si el servicio rechaza ambas juntas. Osuna también cambia a una sola por su cuenta cuando el servicio lo indica.",
           keyHeaderBoth: "Las dos",
+          cooldown: {
+            quotaRest: "Descanso al agotar la cuota",
+            quotaRestInfo:
+              "Cuánto tiempo deja Osuna de elegir este endpoint cuando dice que agotó su cuota sin decir cuándo vuelve. Vacío son {{minutes}} minutos. Una hora que dé el proveedor sigue teniendo prioridad.",
+            restCap: "Descanso máximo",
+            restCapInfo:
+              "Lo máximo que descansa este endpoint mientras sigue fallando o recibiendo límites de frecuencia; cada descanso se duplica desde un minuto hasta este valor. Vacío son {{failure}} minutos tras fallos y {{rate}} tras límites de frecuencia. Una espera que pida el proveedor sigue teniendo prioridad.",
+            noFailRest: "No descansar tras fallos desconocidos",
+            noFailRestInfo:
+              "Un fallo que no dice por qué, como un error del servidor o una conexión cortada, no hace descansar a este endpoint: la siguiente solicitud lo vuelve a usar. Agotar la cuota o el crédito, una clave rechazada o un modelo que no ofrece siguen haciéndolo descansar, y los límites de frecuencia hasta {{rate}} minutos. Sustituye al descanso máximo.",
+            minutes: "minutos",
+            problem: "Escribe minutos enteros de 0 a {{max}} ({{days}} días)",
+          },
         },
         insecureTls: {
           label: "Certificado",

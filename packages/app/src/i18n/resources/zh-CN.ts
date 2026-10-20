@@ -2655,6 +2655,19 @@ export const zhCN: TranslationResources = {
           keyHeaderInfo:
             "Anthropic 地址上 API key 放在哪个请求头。多数服务两个都收；有的服务不许同时带两个，就选一个。服务这样说时 Osuna 也会自己改成只放一个。",
           keyHeaderBoth: "两个都放",
+          cooldown: {
+            quotaRest: "额度用完后冷却多久",
+            quotaRestInfo:
+              "这家说额度用完、又没说何时恢复时，Osuna 多久不选它。空着是 {{minutes}} 分钟。厂商给了恢复时间时以厂商为准。",
+            restCap: "冷却最长多久",
+            restCapInfo:
+              "这家接连失败或接连被限流时最长冷却多久；每次冷却从一分钟起翻倍，到这里为止。空着是失败 {{failure}} 分钟、限流 {{rate}} 分钟。厂商要求等更久时以厂商为准。",
+            noFailRest: "原因不明的失败不冷却",
+            noFailRestInfo:
+              "没说原因的失败（如服务器出错、连接断开）不让这家冷却，下一个请求照常问它。额度或余额用完、key 被拒、不提供这个模型时照样冷却，限流最长冷却 {{rate}} 分钟。打开后代替「冷却最长多久」。",
+            minutes: "分钟",
+            problem: "请填 0 到 {{max}} 的整数分钟（{{days}} 天）",
+          },
         },
         insecureTls: {
           label: "证书",

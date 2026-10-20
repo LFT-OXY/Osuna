@@ -4,6 +4,7 @@ import type {
   ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { HeaderProblem } from "@getpaseo/protocol/api-endpoint/request-extras";
+import { API_ENDPOINT_COOLDOWN_MAX_MINUTES } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import type { ExtraBodyTextProblem } from "./internal/request-extras-form";
 
 /** 请求头、附加请求体哪里不对，按界面语言说（表单当场提示与 daemon 拒收保存都用）。 */
@@ -33,12 +34,29 @@ export function extraBodyProblemText(t: TFunction, problem: ExtraBodyTextProblem
   }
 }
 
-/** daemon 拒收保存的 invalid_header、invalid_extra_body、insecure_tls_template 按界面语言说；别的错误为 null。 */
+const MINUTES_A_DAY = 24 * 60;
+
+/** 冷却设置的分钟数不在范围里：整数分钟，0 到 max（几天由 max 算）。 */
+export function cooldownProblemText(t: TFunction, input: { max: number }): string {
+  return t("settings.apiEndpoints.form.extras.cooldown.problem", {
+    max: input.max,
+    days: input.max / MINUTES_A_DAY,
+  });
+}
+
+/**
+ * daemon 拒收保存的 invalid_header、invalid_extra_body、insecure_tls_template、invalid_cooldown_settings 按界面语言说；
+ * 别的错误为 null。
+ */
 export function requestExtrasErrorText(t: TFunction, error: ApiEndpointError): string | null {
   if (error.code === "insecure_tls_template") {
     return t("settings.apiEndpoints.form.insecureTls.templateRefused");
   }
   const params = error.params ?? {};
+  if (error.code === "invalid_cooldown_settings") {
+    const max = Number(params.max ?? API_ENDPOINT_COOLDOWN_MAX_MINUTES);
+    return cooldownProblemText(t, { max });
+  }
   const name = params.name ?? "";
   const field = params.field ?? "";
   if (error.code === "invalid_header") {

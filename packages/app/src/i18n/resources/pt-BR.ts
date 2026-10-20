@@ -2666,6 +2666,19 @@ export const ptBR: TranslationResources = {
           keyHeaderInfo:
             "Em qual cabeçalho vai a chave de API no endereço Anthropic. A maioria dos serviços aceita os dois; escolha um para um serviço que recusa os dois juntos. O Osuna também passa para um só sozinho quando o serviço avisa.",
           keyHeaderBoth: "Os dois",
+          cooldown: {
+            quotaRest: "Pausa após esgotar a cota",
+            quotaRestInfo:
+              "Por quanto tempo o Osuna deixa de escolher este endpoint quando ele diz que esgotou a cota sem dizer quando volta. Vazio são {{minutes}} minutos. Um horário informado pelo fornecedor continua tendo prioridade.",
+            restCap: "Pausa máxima",
+            restCapInfo:
+              "O máximo que este endpoint pausa enquanto continua falhando ou sendo limitado por taxa; cada pausa dobra a partir de um minuto até este valor. Vazio são {{failure}} minutos após falhas e {{rate}} após limites de taxa. Uma espera pedida pelo fornecedor continua tendo prioridade.",
+            noFailRest: "Não pausar após falhas desconhecidas",
+            noFailRestInfo:
+              "Uma falha que não diz o motivo, como um erro do servidor ou uma conexão perdida, não pausa este endpoint: a próxima solicitação o usa de novo. Cota ou crédito esgotados, chave recusada ou um modelo que ele não oferece continuam pausando, e limites de taxa pausam até {{rate}} minutos. Substitui a pausa máxima.",
+            minutes: "minutos",
+            problem: "Digite minutos inteiros de 0 a {{max}} ({{days}} dias)",
+          },
         },
         insecureTls: {
           label: "Certificado",

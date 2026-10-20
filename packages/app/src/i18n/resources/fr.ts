@@ -2681,6 +2681,19 @@ export const fr: TranslationResources = {
           keyHeaderInfo:
             "L'en-tête qui porte la clé API sur l'adresse Anthropic. La plupart des services acceptent les deux ; choisissez-en un pour un service qui refuse les deux ensemble. Osuna passe aussi à un seul de lui-même quand le service le dit.",
           keyHeaderBoth: "Les deux",
+          cooldown: {
+            quotaRest: "Pause après épuisement du quota",
+            quotaRestInfo:
+              "Combien de temps Osuna cesse de choisir ce point de terminaison quand il indique avoir épuisé son quota sans dire quand il revient. Vide : {{minutes}} minutes. Une heure donnée par le fournisseur reste prioritaire.",
+            restCap: "Pause maximale",
+            restCapInfo:
+              "La pause la plus longue de ce point de terminaison tant qu'il échoue ou reste limité en débit ; chaque pause double à partir d'une minute jusqu'à cette valeur. Vide : {{failure}} minutes après un échec et {{rate}} après une limite de débit. Une attente demandée par le fournisseur reste prioritaire.",
+            noFailRest: "Pas de pause après un échec inconnu",
+            noFailRestInfo:
+              "Un échec qui ne dit pas pourquoi, comme une erreur serveur ou une connexion coupée, ne met pas ce point de terminaison en pause : la requête suivante l'interroge à nouveau. Un quota ou un crédit épuisé, une clé refusée ou un modèle non proposé le mettent toujours en pause, et une limite de débit jusqu'à {{rate}} minutes. Remplace la pause maximale.",
+            minutes: "minutes",
+            problem: "Saisissez un nombre entier de minutes de 0 à {{max}} ({{days}} jours)",
+          },
         },
         insecureTls: {
           label: "Certificat",

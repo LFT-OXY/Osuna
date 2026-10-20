@@ -3124,6 +3124,102 @@ test.describe("Don't check its certificate", () => {
   });
 });
 
+// 接口管理好用性工单 24：「高级」里的冷却设置（magpie QuotaRest、RestCap、RestCapOff；magpie 只在命令行设）。
+test.describe("An endpoint's cooldown settings", () => {
+  test("out-of-range minutes are refused on the spot; a refused save says why and keeps the form; a save keeps both settings", async ({
+    page,
+  }) => {
+    await refuseFirstSaveWithCooldown(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Quota relay");
+    await page
+      .getByTestId("api-endpoint-connection-url-anthropic_messages")
+      .fill(`${relay.origin}/good`);
+    const save = page.getByTestId("api-endpoint-connection-save");
+    const quotaRest = page.getByTestId("api-endpoint-connection-quota-rest-input");
+    const restCap = page.getByTestId("api-endpoint-connection-rest-cap-input");
+    const problem = "Enter whole minutes from 0 to 11520 (8 days)";
+
+    await test.step("folded until Advanced is opened; empty fields show the gateway's own minutes", async () => {
+      await expect(quotaRest).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+      await expect(quotaRest).toHaveValue("");
+      await expect(quotaRest).toHaveAttribute("placeholder", "15");
+      await expect(restCap).toHaveAttribute("placeholder", "10 / 30");
+    });
+
+    await test.step("more than eight days, or not whole minutes, is said on the spot and holds the save", async () => {
+      await quotaRest.fill("11521");
+      await expect(page.getByTestId("api-endpoint-connection-quota-rest-problem")).toHaveText(
+        problem,
+      );
+      await expect(save).toBeDisabled();
+      await quotaRest.fill("60");
+      await expect(page.getByTestId("api-endpoint-connection-quota-rest-problem")).toHaveCount(0);
+      await restCap.fill("1.5");
+      await expect(page.getByTestId("api-endpoint-connection-rest-cap-problem")).toHaveText(
+        problem,
+      );
+      await expect(save).toBeDisabled();
+      await restCap.fill("5");
+      await expect(page.getByTestId("api-endpoint-connection-rest-cap-problem")).toHaveCount(0);
+      await expect(save).toBeEnabled();
+    });
+
+    await test.step("a save the host refuses says why in the window and keeps the typed minutes", async () => {
+      await save.click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(problem);
+      await expect(quotaRest).toHaveValue("60");
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("saving again keeps both, and the edit window opens with them unfolded", async () => {
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.cooldownSettings).toEqual({ quotaRestMinutes: 60, restCapMinutes: 5 });
+      // 添加后停在这家的详情页。
+      await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await expect(quotaRest).toHaveValue("60");
+      await expect(restCap).toHaveValue("5");
+    });
+
+    await test.step("no rest after unknown failures takes the longest rest's place, and emptying a field clears it", async () => {
+      await page.getByTestId("api-endpoint-connection-no-fail-rest-switch").click();
+      await expect(restCap).toHaveCount(0);
+      await quotaRest.fill("");
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.cooldownSettings).toEqual({ noFailRest: true });
+    });
+  });
+});
+
+/** 第一次保存把额度冷却改成九天：daemon 按越界拒收，看拒收怎么显示；之后的保存照常。 */
+async function refuseFirstSaveWithCooldown(page: Page): Promise<void> {
+  const host = { isRefusing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isSave =
+        typeof message === "string" && message.includes("provider.api_endpoint.save.request");
+      if (!isSave || !host.isRefusing) {
+        server.send(message);
+        return;
+      }
+      host.isRefusing = false;
+      const envelope = JSON.parse(message) as { message: Record<string, unknown> };
+      envelope.message.cooldownSettings = { quotaRestMinutes: 9 * 24 * 60 };
+      server.send(JSON.stringify(envelope));
+    });
+  });
+}
+
 async function firstEndpointId(): Promise<string> {
   const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
   if (!endpoint) throw new Error("Expected a saved endpoint");
