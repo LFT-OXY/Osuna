@@ -1544,7 +1544,7 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(own);
   });
 
-  test("numbers the endpoint's own model list gives win over models.dev and rewrite the file", async () => {
+  test("numbers the endpoint's own model list, fetched when it is saved, win over models.dev", async () => {
     await start(USER_SETTINGS);
     upstream = createServer((request, response) => {
       if (request.url !== "/api/v1/models") {
@@ -1560,8 +1560,12 @@ describe("Claude Code is told what the endpoint models can do", () => {
     });
     await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
     const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    // 照 magpie：新建一家时保存当场拉一次清单，打开开关写进 settings.json 时就用上清单给的数。
     const endpointId = await switchOn(baseUrl);
-    expect((await settings()).env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
+    // 这些数只留在 daemon 里，不发给客户端。
+    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog?.models).toEqual([
+      { id: "gpt-6-sol" },
+    ]);
 
     const fetched = await client.apiEndpointFetchModels({
       provider: "claude",
@@ -1569,13 +1573,9 @@ describe("Claude Code is told what the endpoint models can do", () => {
       baseUrl,
       format: "anthropic_messages",
     });
-    // 这些数只留在 daemon 里，不发给客户端。
     expect(fetched.models).toEqual([{ id: "gpt-6-sol" }]);
-    expect((await client.apiEndpointList("claude")).endpoints[0]?.catalog?.models).toEqual([
-      { id: "gpt-6-sol" },
-    ]);
 
-    // 起始模型现在已知 105 万：带 [1m]，上下文那一项就不写了。
+    // 起始模型已知 105 万：带 [1m]，上下文那一项就不写了（models.dev 说的 92.2 万不用）。
     const refreshed = await settings();
     expect(refreshed.model).toBe("gpt-6-sol[1m]");
     expect(refreshed.modelPicker.options[0].model).toBe("relay/gpt-6-sol[1m]");

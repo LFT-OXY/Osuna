@@ -2682,7 +2682,7 @@ export const en = {
           siteNotFound: "Couldn't find the website's icon. {{detail}}",
         },
         footerLocal:
-          "After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
+          "After saving, the endpoint's page opens with its models fetched, to pick from.",
         footerResource:
           "After saving, the endpoint's page opens and lists the resource's deployments as its models.",
         addressHint:
@@ -2700,6 +2700,7 @@ export const en = {
             "None answered, and no API key is filled in: paste the key and detect again",
           model: "model {{model}}",
           okTook: "Detected · {{ms}} ms",
+          takeToSave: "Press Use these to fill in the addresses before saving.",
         },
         urlInvalid: "Enter an address that starts with http:// or https://",
         formatUrl: {
@@ -2713,9 +2714,11 @@ export const en = {
           auth_failed: "Key rejected",
         },
         footer:
-          "The key is entered once and shared by all three formats. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
+          "The key is entered once and shared by all three formats (Anthropic, OpenAI Chat, OpenAI Responses). After saving, the endpoint's page opens with its models fetched, to pick from.",
         footerKeyOptional:
-          "The key is optional: one key is shared by all three formats, and without one no key is sent. After saving, the endpoint's page opens to fetch its models and pick them by Claude / GPT / Gemini.",
+          "The key is optional: one key is shared by all three formats (Anthropic, OpenAI Chat, OpenAI Responses), and without one no key is sent. After saving, the endpoint's page opens with its models fetched, to pick from.",
+        footerFetched:
+          "Saving keeps the list fetched and the models picked in Models; one key is shared by Anthropic, OpenAI Chat and OpenAI Responses.",
         models: "Models",
         modelsHint: "Model ids, separated by commas. They are picked when you save.",
         modelsPlaceholder: "e.g. gpt-5.5, claude-sonnet-5",

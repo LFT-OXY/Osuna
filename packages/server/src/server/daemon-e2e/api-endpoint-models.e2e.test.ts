@@ -288,6 +288,8 @@ describe("API endpoint models by base URL and request format", () => {
     });
     expect(saved.error).toBeNull();
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    // 新建时保存当场拉过一次清单（照 magpie）；用例只看之后的请求。
+    upstream.requests.length = 0;
     return saved.endpoint.id;
   }
 
@@ -353,6 +355,9 @@ describe("API endpoint models by base URL and request format", () => {
 
   test("the add window's fetch borrows a saved key without keeping a list, and the save keeps the preview", async () => {
     const sourceId = await saveHostEndpoint();
+    // 保存时已拉过一次；预览不能改动这份。
+    const kept = (await client.apiEndpointList("claude")).endpoints[0]?.catalog;
+    expect(kept).toBeDefined();
 
     // 复制一家时 key 框留空：借原来那家的 key 拉，只看不记。
     const preview = await client.apiEndpointFetchModels({
@@ -380,7 +385,7 @@ describe("API endpoint models by base URL and request format", () => {
     ]);
     expect(
       (await client.apiEndpointList("claude")).endpoints.map((entry) => entry.catalog),
-    ).toEqual([undefined]);
+    ).toEqual([kept]);
 
     const before = Date.now();
     const saved = await client.apiEndpointSave({
@@ -398,8 +403,12 @@ describe("API endpoint models by base URL and request format", () => {
     expect(Date.parse(saved.endpoint?.catalog?.fetchedAt ?? "")).toBeGreaterThanOrEqual(
       before - 1000,
     );
-    // 保存时不再向上游拉。
-    expect(upstream.requests).toHaveLength(2);
+    // 新建一家保存时当场再拉一次（照 magpie），清单与预览的是同一份。
+    expect(upstream.requests.map((request) => request.headers["x-api-key"])).toEqual([
+      SAVED_KEY,
+      TYPED_KEY,
+      TYPED_KEY,
+    ]);
   });
 
   test("an unsaved form's template decides the list: Bedrock's built-in one, Azure's key header", async () => {

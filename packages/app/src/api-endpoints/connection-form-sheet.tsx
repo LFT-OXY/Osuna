@@ -11,6 +11,7 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { buttonIconSize, createControlGeometry } from "@/components/ui/control-geometry";
+import { AutocompleteFadeFrame } from "@/components/ui/autocomplete-fade";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
@@ -128,7 +129,7 @@ export function ApiEndpointConnectionSheet({
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const keyInputRef = useCurlPasteField({ model, field: "apiKey" });
-  const isCreate = state.mode === "create";
+  const saveLabel = saveLabelOf({ t, state });
   const keyHint = state.template?.keyHint ?? null;
   const isTemplateKeyOptional = state.template?.keyOptional === true;
   const keyPlaceholder = useMemo(
@@ -173,13 +174,11 @@ export function ApiEndpointConnectionSheet({
           loading={state.submitting}
           testID="api-endpoint-connection-save"
         >
-          {isCreate
-            ? t("settings.apiEndpoints.form.saveAndFetch")
-            : t("settings.apiEndpoints.form.save")}
+          {saveLabel}
         </Button>
       </View>
     ),
-    [handleSubmit, isCreate, onClose, state.canSubmit, state.submitting, t],
+    [handleSubmit, onClose, saveLabel, state.canSubmit, state.submitting, t],
   );
 
   const header = useMemo(() => sheetHeaderOf({ t, seed, onBack }), [onBack, seed, t]);
@@ -288,6 +287,15 @@ export function ApiEndpointConnectionSheet({
       </View>
     </AdaptiveModalSheet>
   );
+}
+
+/** 新建时保存后会去拉清单；添加窗口里已经拉过就只是「保存」。 */
+function saveLabelOf(input: { t: TFunction; state: ConnectionFormState }): string {
+  const { t, state } = input;
+  const isSaveAndFetch = state.mode === "create" && state.catalogFetch.status !== "fetched";
+  return isSaveAndFetch
+    ? t("settings.apiEndpoints.form.saveAndFetch")
+    : t("settings.apiEndpoints.form.save");
 }
 
 function sheetHeaderOf(input: {
@@ -419,7 +427,7 @@ function DetectionResults({
         />
       ))}
       {detection.canTake ? (
-        <View style={styles.switchRow}>
+        <View style={styles.inlineRow}>
           <Button
             variant="outline"
             size="sm"
@@ -428,6 +436,16 @@ function DetectionResults({
           >
             {t("settings.apiEndpoints.form.detected.useThese")}
           </Button>
+          {detection.waitsForTake ? (
+            <Text
+              variant="caption"
+              color="foregroundMuted"
+              style={styles.flex}
+              testID="api-endpoint-connection-take-to-save"
+            >
+              {t("settings.apiEndpoints.form.detected.takeToSave")}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       {detection.isTaken ? (
@@ -496,7 +514,10 @@ function testRowOf(input: { t: TFunction; row: FormatTestRow }): CheckRowResult 
         outcome.kind === "authFailed"
           ? t("settings.apiEndpoints.detail.test.authFailed")
           : t("settings.apiEndpoints.detail.test.failed");
-      const status = outcome.status === null ? null : String(outcome.status);
+      // 原因里已经写着 HTTP 状态码时不再重复。
+      const isStatusTold =
+        outcome.status === null || outcome.message.includes(`HTTP ${outcome.status}`);
+      const status = isStatusTold ? null : `HTTP ${outcome.status}`;
       const reason = [status, outcome.message].filter((part) => part).join(" · ");
       return { isOk: false, verdict, reason: reason === "" ? null : reason };
     }
@@ -784,33 +805,36 @@ function ModelPicker({
           {t("settings.apiEndpoints.form.fetch.pickNone")}
         </Button>
       </View>
-      <ScrollView style={styles.chipScroll} nestedScrollEnabled>
-        <View style={styles.chips}>
-          {shown.map((entry) => (
-            <ModelChip
-              key={entry.id}
-              entry={entry}
-              selected={pickedSet.has(entry.id)}
-              onToggle={model.toggleModel}
-            />
-          ))}
-          {hiddenCount > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onPress={handleShowAll}
-              testID="api-endpoint-connection-catalog-show-rest"
-            >
-              {t("settings.apiEndpoints.form.fetch.showRest", { count: hiddenCount })}
-            </Button>
+      {/* 底部渐隐：看得出清单还能往下滚。 */}
+      <AutocompleteFadeFrame>
+        <ScrollView style={styles.chipScroll} nestedScrollEnabled>
+          <View style={styles.chips}>
+            {shown.map((entry) => (
+              <ModelChip
+                key={entry.id}
+                entry={entry}
+                selected={pickedSet.has(entry.id)}
+                onToggle={model.toggleModel}
+              />
+            ))}
+            {hiddenCount > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={handleShowAll}
+                testID="api-endpoint-connection-catalog-show-rest"
+              >
+                {t("settings.apiEndpoints.form.fetch.showRest", { count: hiddenCount })}
+              </Button>
+            ) : null}
+          </View>
+          {matching.length === 0 ? (
+            <Text variant="caption" color="foregroundMuted">
+              {t("settings.apiEndpoints.form.fetch.noMatch", { query: query.trim() })}
+            </Text>
           ) : null}
-        </View>
-        {matching.length === 0 ? (
-          <Text variant="caption" color="foregroundMuted">
-            {t("settings.apiEndpoints.form.fetch.noMatch", { query: query.trim() })}
-          </Text>
-        ) : null}
-      </ScrollView>
+        </ScrollView>
+      </AutocompleteFadeFrame>
     </View>
   );
 }
@@ -906,6 +930,8 @@ function curlFillText(t: TFunction, fill: ConnectionCurlFill): string {
 /** 表单底下的说明：填资源地址的模板说保存后列部署；别的说 key 由三种格式共用。 */
 function footerTextOf(input: { t: TFunction; state: ConnectionFormState }): string {
   const { t, state } = input;
+  // 添加窗口里已经拉过清单：保存就把它和点选的模型一起存下。
+  if (state.catalogFetch.status === "fetched") return t("settings.apiEndpoints.form.footerFetched");
   if (state.template?.endpointExample) return t("settings.apiEndpoints.form.footerResource");
   // 本机服务的 key 框已写明可以不填，这里不再说一遍。
   if (state.template?.asksServiceAddress) return t("settings.apiEndpoints.form.footerLocal");

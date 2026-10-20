@@ -194,9 +194,12 @@ test.describe("Settings API endpoints", () => {
       await expect(responses).toHaveText("Not detected");
       await expect(
         page.getByTestId("api-endpoint-connection-detection-openai_responses-reason"),
-      ).toHaveText(`POST ${relay.origin}/good/v1/responses: HTTP 404: Not Found · model gpt-5`);
-      // 检测只列结论，「采用这些」之前地址栏不动。
+      ).toHaveText("HTTP 404: Not Found · /responses · model gpt-5");
+      // 检测只列结论，「采用这些」之前地址栏不动，保存按钮旁说明为什么还不能保存。
       await expect(page.getByTestId("api-endpoint-connection-url-openai_chat")).toHaveValue("");
+      await expect(page.getByTestId("api-endpoint-connection-take-to-save")).toHaveText(
+        "Press Use these to fill in the addresses before saving.",
+      );
       await page.getByTestId("api-endpoint-connection-use-detected").click();
       await expect(page.getByTestId("api-endpoint-connection-taken")).toHaveText(
         "Taken · save to keep",
@@ -1826,11 +1829,12 @@ test.describe("Checking an API endpoint before saving it", () => {
       await expect(page.getByTestId("api-endpoint-connection-catalog-count")).toHaveText(
         "1 of 2 picked",
       );
-      // 底栏的保存与清单同时在窗口里。
+      // 底栏的保存与清单同时在窗口里；已经拉过清单，按钮就只是「保存」。
       await expect(page.getByTestId("api-endpoint-connection-save")).toBeInViewport();
+      await expect(page.getByTestId("api-endpoint-connection-save")).toHaveText("Save");
     });
 
-    await test.step("saving keeps the picks and the list fetched, without asking the vendor again", async () => {
+    await test.step("saving keeps the picks and the list, fetched once more as magpie does", async () => {
       await page.getByTestId("api-endpoint-connection-save").click();
       await expect(connectionForm(page)).toHaveCount(0);
       const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
@@ -1840,7 +1844,8 @@ test.describe("Checking an API endpoint before saving it", () => {
         catalog: { models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] },
       });
       await expect(headerTitle(page)).toHaveText("Unsaved relay");
-      expect(listingsOf(relay)).toHaveLength(2);
+      // 新建一家保存时当场再拉一次（照 magpie），清单还是那两个。
+      expect(listingsOf(relay)).toHaveLength(4);
     });
   });
 
@@ -1880,7 +1885,7 @@ test.describe("Checking an API endpoint before saving it", () => {
       await expect(testVerdict(page, "openai_responses")).toHaveText("Couldn't connect");
       await expect(
         page.getByTestId("api-endpoint-connection-test-openai_responses-reason"),
-      ).toHaveText(`404 · POST ${relay.origin}/good/v1/responses: HTTP 404: Not Found`);
+      ).toHaveText("HTTP 404: Not Found · /responses");
       expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
     });
 

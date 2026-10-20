@@ -2642,8 +2642,7 @@ export const zhCN: TranslationResources = {
           siteLocal: "地址在本机或局域网上，取不到网站图标。",
           siteNotFound: "没找到网站图标。{{detail}}",
         },
-        footerLocal:
-          "保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
+        footerLocal: "保存后进入这个接口的详情页，已拉好上游模型供挑选。",
         footerResource: "保存后进入这个接口的详情页，把资源的部署列成模型。",
         addressHint:
           "填好 key 后点「自动检测」，Osuna 会用三种请求格式各试一次，逐行列出结果；点「采用这些」把能用的地址填到下面。",
@@ -2658,6 +2657,7 @@ export const zhCN: TranslationResources = {
           noneAnsweredKeyless: "都没通，而且没填 API key：把 key 粘到上面再检测",
           model: "模型 {{model}}",
           okTook: "检测通过 · {{ms}} 毫秒",
+          takeToSave: "先点「采用这些」把地址填进去，才能保存。",
         },
         urlInvalid: "请填写以 http:// 或 https:// 开头的地址",
         formatUrl: {
@@ -2671,9 +2671,11 @@ export const zhCN: TranslationResources = {
           auth_failed: "key 无效",
         },
         footer:
-          "key 只填一次，三种格式共用。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
+          "key 只填一次，三种格式（Anthropic、OpenAI Chat、OpenAI Responses）共用。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
         footerKeyOptional:
-          "key 选填：填了三种格式共用，不填就不带 key。保存后进入这个接口的详情页，拉取上游模型、按 Claude / GPT / Gemini 分组挑选。",
+          "key 选填：填了三种格式（Anthropic、OpenAI Chat、OpenAI Responses）共用，不填就不带 key。保存后进入这个接口的详情页，已拉好上游模型供挑选。",
+        footerFetched:
+          "保存时一起存下拉到的清单和「模型」里选的模型；key 由 Anthropic、OpenAI Chat、OpenAI Responses 三种格式共用。",
         models: "模型",
         modelsHint: "模型 id，用逗号分隔，保存时选上。",
         modelsPlaceholder: "如：gpt-5.5, claude-sonnet-5",

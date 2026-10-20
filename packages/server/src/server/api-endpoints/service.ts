@@ -284,6 +284,8 @@ export type ApiEndpointErrorCode =
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
 // Codex 的自定义 provider 地址要带上它，Claude Code 的不带。
 const CODEX_GATEWAY_SUFFIX = "/v1";
+// 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
+const SAVE_LIST_TIMEOUT_MS = 8_000;
 // 测试连接要等模型真正回一句话，比列出模型慢。
 const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
@@ -1022,7 +1024,53 @@ export class ApiEndpointService {
     });
   }
 
-  save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
+  /**
+   * 新建一家或换了 key 时，保存后当场向上游拉一次清单（照 magpie providers.go 的 save：限时 8 秒，失败不挡保存），
+   * 保存完这家就有带模型资料的上游清单；拉不到时留着请求带来的那份（添加窗口里预览的）。
+   */
+  async save(provider: string, input: ApiEndpointSaveInput): Promise<ApiEndpoint> {
+    const saved = await this.saveQueued(provider, input);
+    if (!saved.fetchesList) return saved.endpoint;
+    const supported = requireProvider(provider);
+    await this.fetchListAfterSave({ provider: supported, endpointId: saved.endpoint.id });
+    const state = this.readState();
+    const stored = findEndpoint(state, saved.endpoint.id);
+    // 拉的这几秒里被删了：回刚保存的样子。
+    if (!stored) return saved.endpoint;
+    return this.toWire(state, stored, supported);
+  }
+
+  /** 按这家的各格式地址依次拉，第一个列得出的记作上游清单；都不成只记日志。 */
+  private async fetchListAfterSave(input: {
+    provider: ApiEndpointProvider;
+    endpointId: string;
+  }): Promise<void> {
+    const endpoint = findEndpoint(this.readState(), input.endpointId);
+    if (!endpoint) return;
+    const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
+    for (const { format, url } of endpoint.baseUrls) {
+      if (signal.aborted) break;
+      try {
+        await this.fetchModels(
+          input.provider,
+          { endpointId: endpoint.id, baseUrl: url, format },
+          signal,
+        );
+        return;
+      } catch (error) {
+        if (!(error instanceof ApiEndpointRequestError)) throw error;
+        this.logger.info(
+          { endpointId: endpoint.id, format, code: error.code },
+          "Could not fetch the model list after saving",
+        );
+      }
+    }
+  }
+
+  private saveQueued(
+    provider: string,
+    input: ApiEndpointSaveInput,
+  ): Promise<{ endpoint: ApiEndpoint; fetchesList: boolean }> {
     return this.exclusiveFollowing(async () => {
       const supported = requireProvider(provider);
       const state = this.readState();
@@ -1055,6 +1103,7 @@ export class ApiEndpointService {
         timestamp: this.now().toISOString(),
       });
       const endpoints = withEndpoint(state.endpoints, endpoint);
+      const fetchesList = fetchesListOnSave({ existing, apiKey, store: this.store });
       let agents = state.agents;
       // 老客户端编辑它眼里启用中的接口：表单里的默认模型就是该 Agent 的默认模型。
       const editsActiveEndpoint =
@@ -1084,7 +1133,7 @@ export class ApiEndpointService {
         if (connectionEdited) this.cooldowns.clear(existing.id);
         else this.cooldowns.clearNeedsCheck(existing.id);
       }
-      return this.toWire(next, endpoint, supported);
+      return { endpoint: this.toWire(next, endpoint, supported), fetchesList };
     });
   }
 
@@ -3656,6 +3705,17 @@ function savedKeyOf(input: {
   if (typed) return typed;
   if (!input.copySource) return undefined;
   return input.store.getApiKey(input.copySource.id) ?? undefined;
+}
+
+/** 照 magpie：新建一家，或换成了另一把 key，保存后当场拉一次清单。要在写入新 key 之前问。 */
+function fetchesListOnSave(input: {
+  existing: StoredApiEndpoint | null;
+  apiKey: string | undefined;
+  store: ApiEndpointStore;
+}): boolean {
+  const { existing, apiKey } = input;
+  if (existing === null) return true;
+  return apiKey !== undefined && apiKey !== input.store.getApiKey(existing.id);
 }
 
 /**

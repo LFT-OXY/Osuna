@@ -2672,7 +2672,7 @@ export const fr: TranslationResources = {
           siteNotFound: "Icône du site introuvable. {{detail}}",
         },
         footerLocal:
-          "Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+          "Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
         footerResource:
           "Après l'enregistrement, la page du point de terminaison s'ouvre et liste les déploiements de la ressource comme ses modèles.",
         addressHint:
@@ -2690,6 +2690,8 @@ export const fr: TranslationResources = {
             "Aucun n'a répondu et aucune clé d'API n'est saisie : collez la clé et relancez la détection",
           model: "modèle {{model}}",
           okTook: "Détecté · {{ms}} ms",
+          takeToSave:
+            "Appuyez sur Utiliser celles-ci pour remplir les adresses avant d'enregistrer.",
         },
         urlInvalid: "Saisissez une adresse commençant par http:// ou https://",
         formatUrl: {
@@ -2703,9 +2705,11 @@ export const fr: TranslationResources = {
           auth_failed: "Clé refusée",
         },
         footer:
-          "La clé se saisit une seule fois et sert aux trois formats. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+          "La clé se saisit une seule fois et sert aux trois formats (Anthropic, OpenAI Chat, OpenAI Responses). Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
         footerKeyOptional:
-          "La clé est facultative : saisie, elle sert aux trois formats ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre pour récupérer ses modèles et les choisir par Claude / GPT / Gemini.",
+          "La clé est facultative : saisie, elle sert aux trois formats (Anthropic, OpenAI Chat, OpenAI Responses) ; sans elle, aucune clé n'est envoyée. Après l'enregistrement, la page de l'endpoint s'ouvre avec ses modèles déjà récupérés, à choisir.",
+        footerFetched:
+          "L'enregistrement garde aussi la liste récupérée et les modèles choisis dans Modèles ; la clé sert à Anthropic, OpenAI Chat et OpenAI Responses.",
         models: "Modèles",
         modelsHint:
           "Identifiants de modèle séparés par des virgules. Ils sont sélectionnés à l'enregistrement.",

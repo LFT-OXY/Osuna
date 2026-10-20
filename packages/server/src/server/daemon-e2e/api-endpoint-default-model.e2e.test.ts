@@ -124,7 +124,8 @@ async function startUpstream(text: string): Promise<FakeUpstream> {
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
       const body = JSON.parse(Buffer.concat(chunks).toString() || "{}") as { model?: string };
-      upstream.models.push(body.model ?? "");
+      // 只记对话请求：新建时保存当场列的清单（照 magpie）不算。
+      if (req.method === "POST") upstream.models.push(body.model ?? "");
       upstream.respond(res);
     });
   });

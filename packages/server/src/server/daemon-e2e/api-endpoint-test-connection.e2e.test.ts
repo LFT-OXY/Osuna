@@ -130,6 +130,8 @@ describe("API endpoint connection test over the daemon RPC", () => {
       defaultModelId: "relay/sonnet",
     });
     if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    // 新建时保存当场拉过一次清单（照 magpie）；只看测试发的。
+    upstream.requests.length = 0;
 
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
@@ -275,6 +277,8 @@ describe("API endpoint connection test by base URL and request format", () => {
       models: models.map((id) => ({ id })),
     });
     if (!saved.endpoint) throw new Error(`Expected a saved endpoint: ${saved.error?.message}`);
+    // 新建时保存当场拉过一次清单（照 magpie）；只看测试发的。
+    upstream.requests.length = 0;
     return saved.endpoint.id;
   }
 
@@ -318,13 +322,26 @@ describe("API endpoint connection test by base URL and request format", () => {
     expect(JSON.stringify(tested)).not.toContain("sk-wrong");
   });
 
-  test("with no model selected it lists the upstream models first and asks with one of them", async () => {
+  test("with no model selected it asks with one from the list fetched when it was saved", async () => {
     const endpointId = await saveHostEndpoint([]);
 
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",
       endpointId,
       baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested.result?.ok).toBe(true);
+    expect(upstream.requests.map((request) => request.url)).toEqual(["/claude/v1/messages"]);
+    expect(upstream.requests[0]?.body.model).toBe("claude-opus-4");
+  });
+
+  test("with no model selected and no list kept it lists the upstream models first", async () => {
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
       format: "anthropic_messages",
     });
 

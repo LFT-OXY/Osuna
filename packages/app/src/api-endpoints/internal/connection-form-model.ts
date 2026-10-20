@@ -141,11 +141,13 @@ export interface DetectedFormat {
 /**
  * 最近一次自动检测：每种格式一行；isTaken 是已按它「采用这些」。
  * noneAnswered：一种都没通时的提示——没有 key（没打、也没存）时 keyless，否则 check（照 magpie noneAnswered）。
+ * waitsForTake：还一个地址都没有、要先「采用这些」才能保存（magpie 的地址框就是检测的那个，不会卡在这里，Osuna 要说一句）。
  */
 export interface ConnectionDetection {
   results: DetectedFormat[];
   isTaken: boolean;
   canTake: boolean;
+  waitsForTake: boolean;
   noneAnswered: "keyless" | "check" | null;
 }
 
@@ -509,7 +511,7 @@ export function createConnectionFormModel(
     // 检测、拉模型、保存或存图片进行中时检测与保存都不可点。
     const isFetching = next.catalogFetch.status === "fetching";
     const busy = next.detecting || next.submitting || next.iconTask !== null || isFetching;
-    const checks = deriveChecks({ next, hasKey, busy, serviceAddressInvalid });
+    const checks = deriveChecks({ next, hasKey, busy, serviceAddressInvalid, hasValidUrls });
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -569,8 +571,9 @@ export function createConnectionFormModel(
     hasKey: boolean;
     busy: boolean;
     serviceAddressInvalid: boolean;
+    hasValidUrls: boolean;
   }): CheckState {
-    const { next, hasKey, busy, serviceAddressInvalid } = input;
+    const { next, hasKey, busy, serviceAddressInvalid, hasValidUrls } = input;
     const isDetectionRejected =
       next.detection?.results.some((result) => result.label === "auth_failed") === true;
     const isTestRejected = Object.values(next.tests).some(
@@ -590,7 +593,9 @@ export function createConnectionFormModel(
       // 添加窗口能拉模型时「模型」框一直显示。
       hasModelField: next.hasModelField || (canCheckBeforeSave && isAdding),
       detectModel: next.detectModel,
-      detection: next.detection ? detectionStateOf(next.detection, next.apiKey) : null,
+      detection: next.detection
+        ? detectionStateOf({ detection: next.detection, apiKey: next.apiKey, hasValidUrls })
+        : null,
       keyRejected: isDetectionRejected || isTestRejected,
       catalogFetch: next.catalogFetch,
       canFetchModels: canCheck && isAdding && !busy,
@@ -646,16 +651,30 @@ export function createConnectionFormModel(
     pendingTest = null;
   }
 
+  /** 地址、key、区域或模板变了：拉到的清单与测试结果都作废，进行中的一并中止。返回要并进去的改动。 */
+  function invalidateChecks(): Pick<Values, "catalogFetch" | "tests"> {
+    abortPendingFetch();
+    abortPendingTest();
+    return { catalogFetch: { status: "idle" }, tests: {} };
+  }
+
   /** 照 magpie noneAnswered：一种都没通、又没有 key（没打、没存、复制来的那家也没有）时提示先填 key。 */
-  function detectionStateOf(detection: DetectionValues, apiKey: string): ConnectionDetection {
+  function detectionStateOf(input: {
+    detection: DetectionValues;
+    apiKey: string;
+    hasValidUrls: boolean;
+  }): ConnectionDetection {
+    const { detection } = input;
     const anyAnswered = detection.results.some((result) => result.label === "ok");
-    const isKeyless = apiKey.trim() === "" && !hasSavedKey;
+    const isKeyless = input.apiKey.trim() === "" && !hasSavedKey;
     let noneAnswered: ConnectionDetection["noneAnswered"] = null;
     if (!anyAnswered) noneAnswered = isKeyless ? "keyless" : "check";
+    const canTake = anyAnswered && !detection.isTaken;
     return {
       results: detection.results,
       isTaken: detection.isTaken,
-      canTake: anyAnswered && !detection.isTaken,
+      canTake,
+      waitsForTake: canTake && !input.hasValidUrls,
       noneAnswered,
     };
   }
@@ -752,7 +771,7 @@ export function createConnectionFormModel(
     if (pendingTest !== controller) return;
     const tests = { ...values.tests };
     if (outcome.status === "cancelled") delete tests[checked.format];
-    else tests[checked.format] = testOutcomeOf(outcome);
+    else tests[checked.format] = testOutcomeOf({ outcome, url: checked.url });
     update({ tests });
   }
 
@@ -871,11 +890,10 @@ export function createConnectionFormModel(
     const urlChange = baseUrl ? baseUrlPatch(baseUrl) : {};
     const keyChange = command.apiKey ? apiKeyPatch(command.apiKey) : {};
     const modelChange = modelIds ? { modelIds, hasModelField: true } : {};
-    if (baseUrl || command.apiKey) {
-      abortPendingDetect();
-      abortPendingTest();
-    }
-    update({ ...urlChange, ...keyChange, ...modelChange, curlNote });
+    const isConnectionChanged = baseUrl !== null || command.apiKey !== null;
+    if (isConnectionChanged) abortPendingDetect();
+    const checkChange = isConnectionChanged ? invalidateChecks() : {};
+    update({ ...urlChange, ...keyChange, ...modelChange, ...checkChange, curlNote });
     const inputs: ConnectionCurlInputs = {
       address: baseUrl?.url ?? null,
       modelIds,
@@ -893,7 +911,6 @@ export function createConnectionFormModel(
       detection: null,
       detecting: false,
       detectError: null,
-      tests: {},
     };
   }
 
@@ -908,7 +925,6 @@ export function createConnectionFormModel(
       detection: null,
       detecting: false,
       detectError: null,
-      tests: {},
     };
   }
 
@@ -945,15 +961,12 @@ export function createConnectionFormModel(
     setRegion(regionId) {
       const region = values.template?.regions?.find((candidate) => candidate.id === regionId);
       if (!values.template || !region) return;
-      abortPendingFetch();
-      abortPendingTest();
       // 拉到的清单属于原来的区域或套餐。
       update({
         regionId,
         urls: urlsOf(region.baseUrls),
         urlGeneration: values.urlGeneration + 1,
-        catalogFetch: { status: "idle" },
-        tests: {},
+        ...invalidateChecks(),
       });
     },
     setSite(templateId) {
@@ -963,8 +976,6 @@ export function createConnectionFormModel(
       );
       if (!template || !isSiteChoice) return;
       const region = template.regions?.[0] ?? null;
-      abortPendingFetch();
-      abortPendingTest();
       update({
         template,
         regionId: region?.id ?? null,
@@ -972,13 +983,11 @@ export function createConnectionFormModel(
         nameGeneration: values.nameGeneration + 1,
         urls: urlsOf(templateBaseUrls(template, region)),
         urlGeneration: values.urlGeneration + 1,
-        catalogFetch: { status: "idle" },
-        tests: {},
+        ...invalidateChecks(),
       });
     },
     setApiKey(apiKey) {
       abortPendingDetect();
-      abortPendingTest();
       update({
         apiKey,
         keyBoxValue: apiKey,
@@ -987,7 +996,7 @@ export function createConnectionFormModel(
         detection: null,
         detecting: false,
         detectError: null,
-        tests: {},
+        ...invalidateChecks(),
       });
     },
     toggleKeyVisible() {
@@ -1069,19 +1078,16 @@ export function createConnectionFormModel(
       update({ tests: {} });
     },
     setEndpoint(endpoint) {
-      abortPendingTest();
       update({
         urls: { ...values.urls, openai_chat: endpoint, openai_responses: endpoint },
-        tests: {},
+        ...invalidateChecks(),
       });
     },
     setUrl(format, url) {
-      abortPendingTest();
-      update({ urls: { ...values.urls, [format]: url }, tests: {} });
+      update({ urls: { ...values.urls, [format]: url }, ...invalidateChecks() });
     },
     setServiceAddress(serviceAddress) {
-      abortPendingTest();
-      update({ serviceAddress, tests: {} });
+      update({ serviceAddress, ...invalidateChecks() });
     },
     setIcon(icon) {
       pendingIcon = null;
@@ -1113,12 +1119,11 @@ export function createConnectionFormModel(
     takeDetected() {
       const detection = values.detection;
       if (!state.detection?.canTake || !detection) return;
-      abortPendingTest();
       update({
         urls: takenUrls(detection.results),
         urlGeneration: values.urlGeneration + 1,
         detection: { ...detection, isTaken: true },
-        tests: {},
+        ...invalidateChecks(),
       });
     },
     cancelDetect() {
@@ -1315,22 +1320,40 @@ function detectedFormatOf(result: ApiEndpointFormatDetection): DetectedFormat[] 
       url: result.url,
       label: toLabel(result.status),
       httpStatus: result.httpStatus,
-      message: result.message,
+      message:
+        result.message === null
+          ? null
+          : conciseUpstreamMessage({ message: result.message, url: result.url }),
       durationMs: result.durationMs ?? null,
       modelId: result.modelId ?? null,
     },
   ];
 }
 
-function testOutcomeOf(
-  outcome: Exclude<ConnectionTestResult, { status: "cancelled" }>,
-): FormatTestOutcome {
+/**
+ * 上游失败原因的简写：去掉开头的「POST <地址>」（行上已写着地址），只把多出来的路径接在后面，
+ * 如「HTTP 404: Not Found · /responses」。不是这种开头的原样。
+ */
+export function conciseUpstreamMessage(input: { message: string; url: string }): string {
+  const match = /^(?:GET|POST) (\S+?): ([\s\S]*)$/.exec(input.message);
+  if (!match) return input.message;
+  const [, target, rest] = match;
+  const base = trimSlashes(input.url);
+  const path = target.startsWith(base) ? target.slice(base.length) : target;
+  return path === "" ? rest : `${rest} · ${path}`;
+}
+
+function testOutcomeOf(input: {
+  outcome: Exclude<ConnectionTestResult, { status: "cancelled" }>;
+  url: string;
+}): FormatTestOutcome {
+  const { outcome, url } = input;
   if (outcome.status === "failed") {
     return { kind: "failed", status: null, message: outcome.message };
   }
   const { result } = outcome;
   if (result.ok) return { kind: "ok", durationMs: result.durationMs };
-  const message = result.error?.message ?? "";
+  const message = conciseUpstreamMessage({ message: result.error?.message ?? "", url });
   if (result.error?.code === "auth_failed") {
     return { kind: "authFailed", status: result.status, message };
   }

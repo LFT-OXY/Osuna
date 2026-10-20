@@ -2632,8 +2632,7 @@ export const ko: TranslationResources = {
             "주소가 이 컴퓨터나 로컬 네트워크에 있어 웹사이트 아이콘을 가져올 수 없습니다.",
           siteNotFound: "웹사이트 아이콘을 찾지 못했습니다. {{detail}}",
         },
-        footerLocal:
-          "저장하면 이 엔드포인트 페이지가 열리고, 모델을 가져와 Claude / GPT / Gemini별로 고를 수 있습니다.",
+        footerLocal: "저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerResource: "저장하면 이 엔드포인트 페이지가 열리고 리소스의 배포가 모델로 나열됩니다.",
         addressHint:
           "키를 입력한 뒤 자동 감지를 누르면 Osuna가 세 가지 요청 형식을 한 번씩 시도하고 결과를 한 줄씩 보여 줍니다. '이것 사용'을 누르면 작동하는 주소를 아래에 채웁니다.",
@@ -2650,6 +2649,7 @@ export const ko: TranslationResources = {
             "응답한 형식이 없고 API 키도 비어 있습니다. 키를 붙여 넣고 다시 감지하세요",
           model: "모델 {{model}}",
           okTook: "감지됨 · {{ms}}ms",
+          takeToSave: "저장하기 전에 '이것 사용'을 눌러 주소를 채우세요.",
         },
         urlInvalid: "http:// 또는 https://로 시작하는 주소를 입력하세요",
         formatUrl: {
@@ -2663,9 +2663,11 @@ export const ko: TranslationResources = {
           auth_failed: "키가 거부됨",
         },
         footer:
-          "키는 한 번만 입력하고 세 형식이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
+          "키는 한 번만 입력하고 세 형식(Anthropic, OpenAI Chat, OpenAI Responses)이 함께 씁니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
         footerKeyOptional:
-          "키는 선택 사항입니다. 입력하면 세 형식이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열려 업스트림 모델을 가져오고 Claude / GPT / Gemini별로 고를 수 있습니다.",
+          "키는 선택 사항입니다. 입력하면 세 형식(Anthropic, OpenAI Chat, OpenAI Responses)이 함께 쓰고, 없으면 키를 보내지 않습니다. 저장하면 이 엔드포인트 페이지가 열리고, 가져온 모델 중에서 고를 수 있습니다.",
+        footerFetched:
+          "저장하면 가져온 목록과 '모델'에서 고른 모델도 함께 저장됩니다. 키는 Anthropic, OpenAI Chat, OpenAI Responses가 함께 씁니다.",
         models: "모델",
         modelsHint: "쉼표로 구분한 모델 ID. 저장하면 선택됩니다.",
         modelsPlaceholder: "예: gpt-5.5, claude-sonnet-5",

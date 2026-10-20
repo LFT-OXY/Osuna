@@ -980,7 +980,7 @@ async function startRecordingUpstream(listed = ["local-1"]): Promise<RecordingUp
   return upstream;
 }
 
-/** 这家拉一次模型、测一次连接，再扮演 Claude Code 经中转站问一句；返回上游收到的 key 头。 */
+/** 这家拉一次模型、测一次连接，再扮演 Claude Code 经中转站问一句；返回上游收到的 key 头（之前收到的不算）。 */
 async function askThroughEveryPath(input: {
   harness: Harness;
   upstream: RecordingUpstream;
@@ -988,6 +988,7 @@ async function askThroughEveryPath(input: {
 }): Promise<{ authorization?: string; "x-api-key"?: string | string[] }[]> {
   const { harness, upstream, endpointId } = input;
   const { client, daemon } = harness;
+  upstream.requests.length = 0;
   const fetched = await client.apiEndpointFetchModels({
     provider: "claude",
     endpointId,
@@ -1048,6 +1049,9 @@ describe("an API key is optional", () => {
     expect(saved.error).toBeNull();
     expect(saved.endpoint?.hasApiKey).toBe(false);
     const endpointId = saved.endpoint?.id ?? "";
+    // 新建时保存当场拉的清单（照 magpie）同样不带 key。
+    expect(upstream.requests.map((request) => request.headers.authorization)).toEqual([undefined]);
+    expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
 
     const sent = await askThroughEveryPath({ harness, upstream, endpointId });
 
@@ -1545,6 +1549,8 @@ describe("Templates", () => {
       ...(input.region ? { region: input.region } : {}),
     });
     if (!saved.endpoint) throw new Error(saved.error?.message ?? "not saved");
+    // 新建时保存当场拉过一次清单（照 magpie）；用例只看之后的请求。
+    input.upstream.requests.length = 0;
     return saved.endpoint.id;
   }
 
@@ -1794,6 +1800,8 @@ describe("Templates", () => {
       models: [],
       templateId: "azure",
     });
+    // 新建时保存当场拉过一次清单（照 magpie）；用例只看之后的请求。
+    azure.requests.length = 0;
     return client.apiEndpointFetchModels({
       provider: "codex",
       endpointId: saved.endpoint?.id ?? "",

@@ -5,6 +5,7 @@ import type {
   ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
+  conciseUpstreamMessage,
   createConnectionFormModel,
   type ConnectionDetectRequest,
   type ConnectionDetectResult,
@@ -242,6 +243,8 @@ describe("connection form: create", () => {
       ],
       isTaken: false,
       canTake: true,
+      // 还没有地址：先「采用这些」才能保存，表单要说一句。
+      waitsForTake: true,
       noneAnswered: null,
     });
     expect(listed.formats.map((entry) => entry.url)).toEqual(["", "", ""]);
@@ -1972,5 +1975,66 @@ describe("connection form: checking before saving", () => {
       canFetchModels: false,
       hasModelField: false,
     });
+  });
+
+  it("a changed address or key drops the list fetched and the test results, and stops those still running", async () => {
+    const { fake, model } = zhipuForm();
+    model.fetchModels();
+    fake.answerFetch(0, { status: "done", models: [{ id: "glm-5" }] });
+    await flush();
+    model.testConnection();
+    expect(model.getState().catalogFetch.status).toBe("fetched");
+
+    model.setUrl("openai_chat", "https://open.bigmodel.cn/api/paas/v5");
+    expect(model.getState()).toMatchObject({ catalogFetch: { status: "idle" }, tests: [] });
+    expect(fake.tests.every((entry) => entry.signal.aborted)).toBe(true);
+
+    model.fetchModels();
+    model.setApiKey("sk-other");
+    expect(fake.fetches[1]?.signal.aborted).toBe(true);
+    expect(model.getState().catalogFetch).toEqual({ status: "idle" });
+  });
+
+  it("a test's failure names the status once and only the path past the address", async () => {
+    const { fake, model } = zhipuForm();
+    model.testConnection();
+    fake.answerTest(2, {
+      status: "done",
+      result: {
+        ok: false,
+        status: 404,
+        durationMs: 3,
+        error: {
+          code: "upstream_error",
+          message: "POST https://open.bigmodel.cn/api/v1/responses: HTTP 404: Not Found",
+        },
+      },
+    });
+    await flush();
+    expect(model.getState().tests.at(-1)?.outcome).toEqual({
+      kind: "failed",
+      status: 404,
+      message: "HTTP 404: Not Found · /responses",
+    });
+  });
+});
+
+describe("conciseUpstreamMessage", () => {
+  it("drops the address the row already shows and keeps other text as sent", () => {
+    expect(
+      conciseUpstreamMessage({
+        message: "POST https://relay.example/v1/chat/completions: HTTP 500: busy",
+        url: "https://relay.example/v1/",
+      }),
+    ).toBe("HTTP 500: busy · /chat/completions");
+    expect(
+      conciseUpstreamMessage({
+        message: "POST https://other.example/x: connection refused",
+        url: "https://relay.example/v1",
+      }),
+    ).toBe("connection refused · https://other.example/x");
+    expect(
+      conciseUpstreamMessage({ message: "No response within 30s", url: "https://relay.example" }),
+    ).toBe("No response within 30s");
   });
 });

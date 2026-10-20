@@ -812,7 +812,7 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     input: undefined,
   };
 
-  test("the endpoint's own list first, models.dev next, and today's entry for a model neither knows", async () => {
+  test("saving a new endpoint fetches its list at once: its own facts first, models.dev next, today's entry for a model neither knows", async () => {
     await start({ modelsDevCache: MODELS_DEV_CACHE });
     upstream = createServer((request, response) => {
       if (request.url !== "/api/v1/models") {
@@ -837,27 +837,11 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     });
     await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
     const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    // 照 magpie：新建一家时保存当场拉一次清单，保存完 Codex 的模型目录就用上清单给的资料，不用再点「拉取」。
     const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2", "mystery"]);
+    const [saved] = (await client.apiEndpointList("codex")).endpoints;
+    expect(saved?.catalog?.models.map((model) => model.id)).toEqual(["glm-5", "kimi-k2"]);
 
-    const before = await entries();
-    expect(facts(before["glm-5"])).toEqual(UNKNOWN);
-    expect(facts(before["kimi-k2"])).toEqual({
-      context: 262_144,
-      max: undefined,
-      levels: ["low", "high", "max"],
-      start: "high",
-      input: ["text", "image"],
-    });
-
-    const fetched = await client.apiEndpointFetchModels({
-      provider: "codex",
-      endpointId,
-      baseUrl,
-      format: "openai_responses",
-    });
-    expect(fetched.error).toBeNull();
-
-    const after = await entries();
     const glm = {
       context: 200_000,
       max: undefined,
@@ -865,16 +849,32 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
       start: "high",
       input: ["text"],
     };
-    expect(facts(after["glm-5"])).toEqual(glm);
-    expect(facts(after["relay/glm-5"])).toEqual(glm);
-    expect(facts(after["kimi-k2"])).toEqual({
+    // 清单说的看图在 models.dev 的前面，没说的上下文与档位由 models.dev 补上。
+    const kimi = {
       context: 262_144,
       max: undefined,
       levels: ["low", "high", "max"],
       start: "high",
       input: ["text"],
+    };
+    const checkAfterSave = async () => {
+      const after = await entries();
+      expect(facts(after["glm-5"])).toEqual(glm);
+      expect(facts(after["relay/glm-5"])).toEqual(glm);
+      expect(facts(after["kimi-k2"])).toEqual(kimi);
+      expect(facts(after.mystery)).toEqual(UNKNOWN);
+    };
+    await checkAfterSave();
+
+    // 再拉一次资料不变。
+    const fetched = await client.apiEndpointFetchModels({
+      provider: "codex",
+      endpointId,
+      baseUrl,
+      format: "openai_responses",
     });
-    expect(facts(after.mystery)).toEqual(UNKNOWN);
+    expect(fetched.error).toBeNull();
+    await checkAfterSave();
   });
 
   test("models.dev is not downloaded with both switches off; Codex alone allows it and the catalog follows", async () => {

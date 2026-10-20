@@ -2672,7 +2672,7 @@ export const es: TranslationResources = {
           siteNotFound: "No se encontró el icono del sitio web. {{detail}}",
         },
         footerLocal:
-          "Al guardar se abre la página del endpoint para obtener sus modelos y elegirlos por Claude / GPT / Gemini.",
+          "Al guardar se abre la página del endpoint con sus modelos ya obtenidos para elegir.",
         footerResource:
           "Al guardar se abre la página del endpoint y lista las implementaciones del recurso como sus modelos.",
         addressHint:
@@ -2690,6 +2690,7 @@ export const es: TranslationResources = {
             "Ninguno respondió y no hay clave de API: pega la clave y vuelve a detectar",
           model: "modelo {{model}}",
           okTook: "Detectado · {{ms}} ms",
+          takeToSave: "Pulsa Usar estas para rellenar las direcciones antes de guardar.",
         },
         urlInvalid: "Escribe una dirección que empiece por http:// o https://",
         formatUrl: {
@@ -2703,9 +2704,11 @@ export const es: TranslationResources = {
           auth_failed: "Clave rechazada",
         },
         footer:
-          "La clave se escribe una sola vez y la comparten los tres formatos. Al guardar se abre la página del endpoint para obtener sus modelos y elegirlos por Claude / GPT / Gemini.",
+          "La clave se escribe una sola vez y la comparten los tres formatos (Anthropic, OpenAI Chat, OpenAI Responses). Al guardar se abre la página del endpoint con sus modelos ya obtenidos para elegir.",
         footerKeyOptional:
-          "La clave es opcional: si la escribes, la comparten los tres formatos; sin ella no se envía ninguna. Al guardar se abre la página del endpoint para obtener sus modelos y elegirlos por Claude / GPT / Gemini.",
+          "La clave es opcional: si la escribes, la comparten los tres formatos (Anthropic, OpenAI Chat, OpenAI Responses); sin ella no se envía ninguna. Al guardar se abre la página del endpoint con sus modelos ya obtenidos para elegir.",
+        footerFetched:
+          "Al guardar se guardan también la lista obtenida y los modelos elegidos en Modelos; la clave la comparten Anthropic, OpenAI Chat y OpenAI Responses.",
         models: "Modelos",
         modelsHint: "Ids de modelo separados por comas. Se seleccionan al guardar.",
         modelsPlaceholder: "p. ej. gpt-5.5, claude-sonnet-5",

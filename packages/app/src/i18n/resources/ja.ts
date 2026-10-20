@@ -2644,8 +2644,7 @@ export const ja: TranslationResources = {
             "アドレスがこのコンピューターかローカルネットワーク上にあるため、サイトのアイコンを取得できません。",
           siteNotFound: "サイトのアイコンが見つかりませんでした。{{detail}}",
         },
-        footerLocal:
-          "保存するとこのエンドポイントのページが開き、モデルを取得して Claude / GPT / Gemini ごとに選べます。",
+        footerLocal: "保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
         footerResource:
           "保存すると、このエンドポイントのページが開き、リソースのデプロイがモデルとして一覧されます。",
         addressHint:
@@ -2663,6 +2662,7 @@ export const ja: TranslationResources = {
             "どれも応答せず、API キーも未入力です。キーを貼り付けてもう一度検出してください",
           model: "モデル {{model}}",
           okTook: "検出 · {{ms}} ms",
+          takeToSave: "保存する前に「これを使う」でアドレスを入力してください。",
         },
         urlInvalid: "http:// または https:// で始まるアドレスを入力してください",
         formatUrl: {
@@ -2676,9 +2676,11 @@ export const ja: TranslationResources = {
           auth_failed: "キーが無効",
         },
         footer:
-          "キーは一度入力すれば 3 つの形式で共有されます。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
+          "キーは一度入力すれば 3 つの形式（Anthropic、OpenAI Chat、OpenAI Responses）で共有されます。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
         footerKeyOptional:
-          "キーは任意です。入力すると 3 つの形式で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、上流のモデルを取得して Claude / GPT / Gemini ごとに選べます。",
+          "キーは任意です。入力すると 3 つの形式（Anthropic、OpenAI Chat、OpenAI Responses）で共有され、なければキーを送りません。保存するとこのエンドポイントのページが開き、取得済みのモデルから選べます。",
+        footerFetched:
+          "保存すると、取得した一覧と「モデル」で選んだモデルも一緒に保存されます。キーは Anthropic、OpenAI Chat、OpenAI Responses で共有されます。",
         models: "モデル",
         modelsHint: "モデル ID をカンマ区切りで。保存すると選択されます。",
         modelsPlaceholder: "例：gpt-5.5, claude-sonnet-5",

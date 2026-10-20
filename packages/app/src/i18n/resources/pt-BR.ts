@@ -2657,7 +2657,7 @@ export const ptBR: TranslationResources = {
           siteNotFound: "Não foi possível encontrar o ícone do site. {{detail}}",
         },
         footerLocal:
-          "Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
+          "Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
         footerResource:
           "Depois de salvar, a página do endpoint abre e lista as implantações do recurso como seus modelos.",
         addressHint:
@@ -2675,6 +2675,7 @@ export const ptBR: TranslationResources = {
             "Nenhum respondeu e nenhuma chave de API foi preenchida: cole a chave e detecte de novo",
           model: "modelo {{model}}",
           okTook: "Detectado · {{ms}} ms",
+          takeToSave: "Toque em Usar estes para preencher os endereços antes de salvar.",
         },
         urlInvalid: "Digite um endereço que comece com http:// ou https://",
         formatUrl: {
@@ -2688,9 +2689,11 @@ export const ptBR: TranslationResources = {
           auth_failed: "Chave recusada",
         },
         footer:
-          "A chave é digitada uma vez e compartilhada pelos três formatos. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
+          "A chave é digitada uma vez e compartilhada pelos três formatos (Anthropic, OpenAI Chat, OpenAI Responses). Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
         footerKeyOptional:
-          "A chave é opcional: preenchida, é compartilhada pelos três formatos; sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre para buscar os modelos e escolhê-los por Claude / GPT / Gemini.",
+          "A chave é opcional: preenchida, é compartilhada pelos três formatos (Anthropic, OpenAI Chat, OpenAI Responses); sem ela, nenhuma chave é enviada. Ao salvar, a página do endpoint abre com os modelos já buscados para escolher.",
+        footerFetched:
+          "Ao salvar, a lista buscada e os modelos escolhidos em Modelos também são guardados; a chave é compartilhada por Anthropic, OpenAI Chat e OpenAI Responses.",
         models: "Modelos",
         modelsHint: "Ids de modelo separados por vírgulas. Eles são selecionados ao salvar.",
         modelsPlaceholder: "ex.: gpt-5.5, claude-sonnet-5",
