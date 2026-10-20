@@ -113,6 +113,8 @@ export async function attemptTranslated(input: {
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
+  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
+  sentModel?: string;
   // 这家这个模型的资料（ModelFactsLookup）。
   facts: EndpointModelFacts;
   headerTimeoutMs: number;
@@ -153,6 +155,7 @@ export async function attemptTranslated(input: {
       from: input.from,
       to,
       model: input.upstreamModel,
+      sentModel: input.sentModel,
       facts: input.facts,
     });
   const build = (asked: ShapeRefusals = refusals) =>
@@ -390,6 +393,8 @@ export interface TranslatedBodyInput {
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
+  // 请求体里的模型名（上游模型名）；缺省即 model。
+  sentModel?: string;
   facts: EndpointModelFacts;
   refusals: ShapeRefusals;
   // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
@@ -421,7 +426,7 @@ export function translatedBody(input: TranslatedBodyInput): string {
   // 模型设置里一档思考都不留：编出的请求不带任何思考参数（no-thinking.ts）。
   if (input.facts.noThinking === true) request = withoutThinkingAsk(request);
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
-  const built = protocolOf(to).build({ ...request, stream: true }, input.model);
+  const built = protocolOf(to).build({ ...request, stream: true }, input.sentModel ?? input.model);
   let body = withoutRefusedFields({
     format: to,
     body: built,

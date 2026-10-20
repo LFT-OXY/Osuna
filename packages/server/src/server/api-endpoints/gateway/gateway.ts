@@ -11,6 +11,7 @@ import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { pinnedFormat, upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { AGENT_REQUEST_FORMAT, isDefaultModelChoice, usableModels } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
@@ -875,6 +876,7 @@ async function countOnEndpoint(input: {
     body: input.body,
     requestedModel: input.model,
     upstreamModel: input.counter.upstreamModel,
+    sentModel: sentModelOf(input.counter),
     headerTimeoutMs: input.failover.headerTimeoutMs,
     userAgent: userAgentFor({ req: input.req, failover: input.failover }),
   });
@@ -1038,13 +1040,30 @@ function formatOrderOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] 
   return translationOrderAt({ templateId, model: candidate.upstreamModel });
 }
 
-/** 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上）。 */
+/**
+ * 这家有地址、又给这个模型的格式（Bedrock 每个模型只在某几种格式上）；模型设置了「只用这种格式」且这家还有那种地址时只有它
+ * （magpie ModelAPI、APIs）。
+ */
 function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
   const { endpoint, upstreamModel } = candidate;
-  return servedFormats({
+  const served = servedFormats({
     templateId: endpoint.templateId,
     baseUrls: endpoint.baseUrls,
     model: upstreamModel,
+  });
+  const pin = pinnedFormat({
+    settings: endpoint.modelSettings,
+    modelId: upstreamModel,
+    baseUrls: endpoint.baseUrls,
+  });
+  return pin.kind === "pinned" ? [pin.format] : served;
+}
+
+/** 发给这家时请求体里的模型名：上游模型名（magpie UpstreamNameIn），没设就是这家列出的写法。 */
+function sentModelOf(candidate: GatewayCandidate): string {
+  return upstreamModelName({
+    settings: candidate.endpoint.modelSettings,
+    modelId: candidate.upstreamModel,
   });
 }
 
@@ -1528,6 +1547,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     apiKey: candidate.apiKey,
     requestedModel: input.model,
     upstreamModel: candidate.upstreamModel,
+    sentModel: sentModelOf(candidate),
     headerTimeoutMs: input.failover.headerTimeoutMs,
     userAgent: userAgentFor(input),
     refusals: refused,

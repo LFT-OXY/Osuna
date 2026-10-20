@@ -1113,8 +1113,15 @@ describe("an API key is optional", () => {
       modelScope: "vendor",
       autoPick: ["glm-*"],
       modelSettings: {
-        defaults: { compact: 100_000 },
-        models: { "by-hand": { name: "By Hand", efforts: [] } },
+        defaults: { compact: 100_000, upstreamName: "zhipu/*" },
+        models: {
+          "by-hand": {
+            name: "By Hand",
+            efforts: [],
+            upstreamName: "vendor/by-hand",
+            format: "openai_responses",
+          },
+        },
       },
     });
     const endpointId = saved.endpoint?.id ?? "";
@@ -1154,8 +1161,15 @@ describe("an API key is optional", () => {
       modelScope: "vendor",
       autoPick: ["glm-*"],
       modelSettings: {
-        defaults: { compact: 100_000 },
-        models: { "by-hand": { name: "By Hand", efforts: [] } },
+        defaults: { compact: 100_000, upstreamName: "zhipu/*" },
+        models: {
+          "by-hand": {
+            name: "By Hand",
+            efforts: [],
+            upstreamName: "vendor/by-hand",
+            format: "openai_responses",
+          },
+        },
       },
     });
   });

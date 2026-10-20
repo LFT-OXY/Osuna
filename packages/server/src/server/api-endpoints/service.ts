@@ -284,6 +284,7 @@ import {
   WORKING_WINDOW,
   distinctModelLabels,
   resolveModelFacts,
+  upstreamModelName,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
@@ -1254,6 +1255,7 @@ export class ApiEndpointService {
       requested,
       stored,
       isOwnModel: (modelId) => endpointKnowsModel(endpoint, modelId),
+      hasUrlFor: (format) => endpoint.baseUrls.some((entry) => entry.format === format),
       basisOf: (modelId) => ({
         knownEfforts: this.autoModelFacts(endpoint, modelId).efforts,
         listedImages: listedFactsOf(endpoint, modelId)?.images,
@@ -3026,6 +3028,7 @@ export class ApiEndpointService {
       apiKey,
       templateId,
       modelId,
+      sentModel: this.sentNameOf(input.endpointId)(modelId),
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -3095,6 +3098,7 @@ export class ApiEndpointService {
       apiKey,
       templateId,
       modelId: modelId ?? null,
+      ...(modelId ? { sentModel: this.sentNameOf(input.endpointId)(modelId) } : {}),
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -3164,6 +3168,7 @@ export class ApiEndpointService {
       apiKey,
       modelId: input.modelId?.trim() || null,
       pickedModelIds: input.modelIds ?? [],
+      sentNameOf: this.sentNameOf(input.endpointId),
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
       probeTimeoutMs: this.connectionTestTimeoutMs,
@@ -3172,6 +3177,13 @@ export class ApiEndpointService {
       throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
     return outcome.results;
+  }
+
+  /** 测试与自动检测发给上游的模型名：已保存那家的上游模型名（magpie test.go、detect.go 的 UpstreamName）；新加的按模型 id。 */
+  private sentNameOf(endpointId: string | undefined): (modelId: string) => string {
+    const endpoint = endpointId ? findEndpoint(this.readState(), endpointId) : null;
+    const settings = endpoint?.modelSettings;
+    return (modelId) => upstreamModelName({ settings, modelId });
   }
 
   /**

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   distinctModelLabels,
   keptEfforts,
+  pinnedFormat,
   resolveModelFacts,
+  settleModelDefaults,
   settleModelSetting,
   setsOnlyEfforts,
+  upstreamModelName,
 } from "./model-settings";
 
 const AUTO = {
@@ -163,5 +166,86 @@ describe("a model's setting as it is stored", () => {
   it("knows a setting of levels alone", () => {
     expect(setsOnlyEfforts({ efforts: ["low"] })).toBe(true);
     expect(setsOnlyEfforts({ efforts: [], name: "x" })).toBe(false);
+  });
+});
+
+describe("the name a model is sent to its endpoint under", () => {
+  it("is the model's own upstream name, a * in it standing for the model id", () => {
+    const settings = { models: { "glm-4.6": { upstreamName: "vendor/*/pro" } } };
+    expect(upstreamModelName({ settings, modelId: "glm-4.6" })).toBe("vendor/glm-4.6/pro");
+  });
+
+  it("is the endpoint's name for every model, a * being each model, and a model's own comes first", () => {
+    const settings = {
+      defaults: { upstreamName: "zhipu/*" },
+      models: { "glm-5": { upstreamName: "glm-5-turbo" } },
+    };
+    expect(upstreamModelName({ settings, modelId: "glm-4.6" })).toBe("zhipu/glm-4.6");
+    expect(upstreamModelName({ settings, modelId: "kimi-k2" })).toBe("zhipu/kimi-k2");
+    expect(upstreamModelName({ settings, modelId: "glm-5" })).toBe("glm-5-turbo");
+  });
+
+  it("is one name for all models when the endpoint's has no *", () => {
+    const settings = { defaults: { upstreamName: "router-model" } };
+    expect(upstreamModelName({ settings, modelId: "a" })).toBe("router-model");
+    expect(upstreamModelName({ settings, modelId: "b" })).toBe("router-model");
+  });
+
+  it("is the model id when no name is set, or only blanks are", () => {
+    expect(upstreamModelName({ settings: undefined, modelId: "glm-4.6" })).toBe("glm-4.6");
+    const blank = { defaults: { upstreamName: "  " }, models: { x: { upstreamName: " " } } };
+    expect(upstreamModelName({ settings: blank, modelId: "x" })).toBe("x");
+  });
+});
+
+describe("the one format a model is asked in", () => {
+  const baseUrls = [
+    { format: "anthropic_messages", url: "https://relay.test/anthropic" },
+    { format: "openai_chat", url: "https://relay.test/v1" },
+  ];
+  const settings = { models: { "glm-4.6": { format: "openai_chat" } } };
+
+  it("is the pinned format while the endpoint has a URL for it", () => {
+    expect(pinnedFormat({ settings, modelId: "glm-4.6", baseUrls })).toEqual({
+      kind: "pinned",
+      format: "openai_chat",
+    });
+  });
+
+  it("no longer applies once that URL is gone, and is none when nothing is pinned", () => {
+    const left = baseUrls.slice(0, 1);
+    expect(pinnedFormat({ settings, modelId: "glm-4.6", baseUrls: left })).toEqual({
+      kind: "void",
+      format: "openai_chat",
+    });
+    expect(pinnedFormat({ settings, modelId: "kimi-k2", baseUrls })).toEqual({ kind: "none" });
+  });
+});
+
+describe("upstream name and format as stored", () => {
+  it("trims the upstream name and drops a blank one, for a model and for the endpoint", () => {
+    const base = { knownEfforts: undefined, listedImages: undefined };
+    expect(
+      settleModelSetting({
+        ...base,
+        setting: { upstreamName: " zhipu/* ", format: "openai_chat" },
+      }),
+    ).toEqual({ kind: "settled", setting: { upstreamName: "zhipu/*", format: "openai_chat" } });
+    expect(settleModelSetting({ ...base, setting: { upstreamName: "  " } })).toEqual({
+      kind: "settled",
+      setting: {},
+    });
+    expect(settleModelDefaults({ upstreamName: " zhipu/* ", context: 1000 })).toEqual({
+      kind: "settled",
+      setting: { context: 1000, upstreamName: "zhipu/*" },
+    });
+  });
+
+  it("refuses a format that is not a request format", () => {
+    const base = { knownEfforts: undefined, listedImages: undefined };
+    expect(settleModelSetting({ ...base, setting: { format: "gemini" } })).toEqual({
+      kind: "invalid",
+      problem: { kind: "format", format: "gemini" },
+    });
   });
 });

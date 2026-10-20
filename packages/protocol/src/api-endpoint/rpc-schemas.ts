@@ -119,7 +119,9 @@ export type ApiEndpointModelScope = (typeof API_ENDPOINT_MODEL_SCOPES)[number];
  * 模型设置（Model settings）：用户给这家某个模型手改的资料，按模型 id 记，外加一份整家默认（Defaults for all models）。
  * 取值顺序：单个模型 → 整家默认 → 上游清单 → models.dev → 内置默认（model-settings.ts 的 resolveModelFacts）。
  * name：显示名；context、output、compact：上下文、回复上限、压缩阈值，都按 token 数；images：能不能看图；
- * efforts：留下的思考档位，空数组是一档不留——中转站不发任何思考参数。没有的项用自动取到的值。老 daemon 不发也不认。
+ * efforts：留下的思考档位，空数组是一档不留——中转站不发任何思考参数。没有的项用自动取到的值。
+ * upstreamName：上游模型名，中转站发往这家时换成它，`*` 换成模型 id（model-settings.ts 的 upstreamModelName）；
+ * format：只用这种格式（请求格式），这家没有这种格式的地址时作废（pinnedFormat）。老 daemon 不发也不认。
  */
 export const ApiEndpointModelSettingSchema = z.object({
   name: z.string().optional(),
@@ -128,6 +130,8 @@ export const ApiEndpointModelSettingSchema = z.object({
   efforts: z.array(z.string()).optional(),
   images: z.boolean().optional(),
   compact: z.number().optional(),
+  upstreamName: z.string().optional(),
+  format: z.string().optional(),
 });
 export type ApiEndpointModelSetting = z.infer<typeof ApiEndpointModelSettingSchema>;
 
@@ -135,6 +139,7 @@ export const ApiEndpointModelDefaultsSchema = ApiEndpointModelSettingSchema.pick
   context: true,
   output: true,
   compact: true,
+  upstreamName: true,
 });
 export type ApiEndpointModelDefaults = z.infer<typeof ApiEndpointModelDefaultsSchema>;
 

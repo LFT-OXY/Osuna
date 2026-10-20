@@ -1,13 +1,17 @@
 // 取值顺序、整家上下文不超过模型自己的窗口、留下的档位与撞名的显示移植自 magpie（https://github.com/yetone/magpie，
 // internal/provider/models.go 的 WindowOf、ReplyLimit，compact.go 的 compactOf，modelprefs.go 的 Levels、effortsKept、Labels）
+// 上游模型名移植自 magpie modelprefs.go 的 UpstreamNameIn，只用这种格式移植自 setModelAPI、ModelAPI。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import type {
-  ApiEndpointLongConversations,
-  ApiEndpointModelDefaults,
-  ApiEndpointModelFacts,
-  ApiEndpointModelSetting,
-  ApiEndpointModelSettings,
+import {
+  API_ENDPOINT_REQUEST_FORMATS,
+  type ApiEndpointBaseUrl,
+  type ApiEndpointLongConversations,
+  type ApiEndpointModelDefaults,
+  type ApiEndpointModelFacts,
+  type ApiEndpointModelSetting,
+  type ApiEndpointModelSettings,
+  type ApiEndpointRequestFormat,
 } from "./rpc-schemas.js";
 
 /*
@@ -169,13 +173,14 @@ export function distinctModelLabels(
 export type ModelSettingProblem =
   | { kind: "tokens"; field: ModelTokenField; value: number }
   | { kind: "name_too_long" }
-  | { kind: "effort"; level: string };
+  | { kind: "effort"; level: string }
+  | { kind: "format"; format: string };
 
 export type ModelSettingSettled<T> =
   | { kind: "settled"; setting: T }
   | { kind: "invalid"; problem: ModelSettingProblem };
 
-/** token 数只留大于零的整数（magpie SetModelOutput、SetModelCompacts）。 */
+/** token 数只留大于零的整数（magpie SetModelOutput、SetModelCompacts）；上游模型名去掉首尾空白，空的不记（magpie SetUpstreamName）。 */
 export function settleModelDefaults(
   setting: ApiEndpointModelDefaults,
 ): ModelSettingSettled<ApiEndpointModelDefaults> {
@@ -187,6 +192,8 @@ export function settleModelDefaults(
     if (!isTokenCount) return { kind: "invalid", problem: { kind: "tokens", field, value } };
     out[field] = value;
   }
+  const upstreamName = (setting.upstreamName ?? "").trim();
+  if (upstreamName !== "") out.upstreamName = upstreamName;
   return { kind: "settled", setting: out };
 }
 
@@ -218,10 +225,54 @@ export function settleModelSetting(input: {
   }
   const isListedAnswer = setting.images === input.listedImages;
   if (setting.images !== undefined && !isListedAnswer) out.images = setting.images;
+  if (setting.format !== undefined) {
+    if (!isRequestFormat(setting.format)) {
+      return { kind: "invalid", problem: { kind: "format", format: setting.format } };
+    }
+    out.format = setting.format;
+  }
   return { kind: "settled", setting: out };
 }
 
 /** 只设了档位：照 magpie setModelEfforts，不要求这家列着这个模型（只对着已知的档位查）。 */
 export function setsOnlyEfforts(setting: ApiEndpointModelSetting): boolean {
   return Object.keys(setting).every((field) => field === "efforts");
+}
+
+/**
+ * 发给这家的模型名（magpie UpstreamNameIn）：这个模型的上游模型名，没有用整家默认的，都没有（或只有空白）就是模型 id。
+ * 名字里每个 `*` 都换成模型 id；不含 `*` 的整家默认让这家的每个模型都用这一个名字。选单、默认模型、自动切换的同名判断都不用它。
+ */
+export function upstreamModelName(input: {
+  settings: ApiEndpointModelSettings | undefined;
+  modelId: string;
+}): string {
+  const { settings, modelId } = input;
+  const own = settings?.models?.[modelId]?.upstreamName?.trim() ?? "";
+  const name = own !== "" ? own : (settings?.defaults?.upstreamName?.trim() ?? "");
+  if (name === "") return modelId;
+  return name.replaceAll("*", modelId);
+}
+
+export type PinnedFormat =
+  | { kind: "none" }
+  | { kind: "pinned"; format: ApiEndpointRequestFormat }
+  // 设了，但这家已经没有这种格式的地址：设置作废，模型设置里提示。
+  | { kind: "void"; format: string };
+
+/** 这个模型在这家「只用这种格式」（magpie ModelAPI）：这家还有那种格式的地址才算数。 */
+export function pinnedFormat(input: {
+  settings: ApiEndpointModelSettings | undefined;
+  modelId: string;
+  baseUrls: ReadonlyArray<Pick<ApiEndpointBaseUrl, "format">>;
+}): PinnedFormat {
+  const format = input.settings?.models?.[input.modelId]?.format;
+  if (format === undefined) return { kind: "none" };
+  const hasUrl = input.baseUrls.some((entry) => entry.format === format);
+  if (!hasUrl || !isRequestFormat(format)) return { kind: "void", format };
+  return { kind: "pinned", format };
+}
+
+function isRequestFormat(format: string): format is ApiEndpointRequestFormat {
+  return (API_ENDPOINT_REQUEST_FORMATS as readonly string[]).includes(format);
 }

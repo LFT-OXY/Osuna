@@ -306,6 +306,34 @@ describe("API endpoint connection test by base URL and request format", () => {
     ]);
   });
 
+  // 接口管理好用性工单 15：测试发的是这家的上游模型名（magpie test.go 的 UpstreamName），结果仍按模型 id 说。
+  test("a saved endpoint is asked for a model under its upstream name", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const resaved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }],
+      modelSettings: { defaults: { upstreamName: "anthropic/*" } },
+    });
+    expect(resaved.error).toBeNull();
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(upstream.requests.map((request) => request.body.model)).toEqual([
+      "anthropic/claude-sonnet-4-5",
+    ]);
+  });
+
   test("a rejected key is told apart as auth_failed", async () => {
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",

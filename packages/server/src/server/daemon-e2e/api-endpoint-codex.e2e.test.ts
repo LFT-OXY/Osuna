@@ -1142,6 +1142,55 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     expect((await client.apiEndpointList("codex")).endpoints[0]?.modelSettings).toBeUndefined();
   });
 
+  // 接口管理好用性工单 15：上游模型名去掉首尾空白存下；只用这种格式要有那种地址（magpie setModelAPI），地址后来删了设置照留、作废。
+  test("an upstream name is kept trimmed; a format is kept only with its URL, and stays once that URL goes", async () => {
+    await start({});
+    const endpointId = await switchOn("https://relay.example/api", ["kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const responses = stored?.baseUrls ?? [];
+    const chat = { format: "openai_chat", url: "https://relay.example/chat" };
+    const save = (input: { baseUrls: { format: string; url: string }[]; modelSettings: object }) =>
+      client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        models: [{ id: "kimi-k2" }],
+        ...input,
+      });
+
+    const noUrl = await save({
+      baseUrls: responses,
+      modelSettings: { models: { "kimi-k2": { format: "openai_chat" } } },
+    });
+    expect(noUrl.error?.code).toBe("invalid_model_settings");
+    const notFormat = await save({
+      baseUrls: [...responses, chat],
+      modelSettings: { models: { "kimi-k2": { format: "gemini" } } },
+    });
+    expect(notFormat.error?.code).toBe("invalid_model_settings");
+
+    const pinned = { upstreamName: "moonshot/kimi-k2", format: "openai_chat" };
+    const saved = await save({
+      baseUrls: [...responses, chat],
+      modelSettings: {
+        defaults: { upstreamName: " vendor/* " },
+        models: { "kimi-k2": { ...pinned, upstreamName: "  moonshot/kimi-k2 " } },
+      },
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.modelSettings).toEqual({
+      defaults: { upstreamName: "vendor/*" },
+      models: { "kimi-k2": pinned },
+    });
+
+    const urlGone = await save({
+      baseUrls: responses,
+      modelSettings: { defaults: { upstreamName: "vendor/*" }, models: { "kimi-k2": pinned } },
+    });
+    expect(urlGone.error).toBeNull();
+    expect(urlGone.endpoint?.modelSettings?.models?.["kimi-k2"]).toEqual(pinned);
+  });
+
   test("models.dev is not downloaded with both switches off; Codex alone allows it and the catalog follows", async () => {
     const requests: string[] = [];
     // 价格表自动更新开着；检查的定时器由测试手动到点。

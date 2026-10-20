@@ -1304,10 +1304,12 @@ describe("API endpoint model scope and auto-pick rules (apiEndpointManagement)",
 describe("API endpoint model settings (apiEndpointManagement)", () => {
   it("parses an endpoint and a save with model settings and the automatic facts, and one without them", () => {
     const modelSettings = {
-      defaults: { context: 200_000, output: 32_000, compact: 150_000 },
+      defaults: { context: 200_000, output: 32_000, compact: 150_000, upstreamName: "zhipu/*" },
       models: {
         "glm-5": { name: "GLM", context: 128_000, efforts: [], images: true, compact: 90_000 },
         "kimi-k2": { output: 8_000, efforts: ["low", "high"] },
+        // 工单 15：上游模型名与只用这种格式。
+        "glm-4.6": { upstreamName: "vendor/glm-4.6", format: "openai_chat" },
       },
     };
     const save = {

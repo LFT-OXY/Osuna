@@ -9214,3 +9214,139 @@ describe("Amazon Bedrock and Azure OpenAI endpoints, by their template", () => {
     ]);
   });
 });
+
+// 接口管理好用性工单 15：上游模型名与只用这种格式（magpie modelprefs.go 的 UpstreamNameIn、SetModelAPI 与 ModelAPI）。
+describe("an upstream name and a model's one format", () => {
+  async function setModelSettings(endpointsDir: string, settings: Record<string, unknown>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+    };
+    for (const endpoint of file.endpoints) {
+      if (endpoint.id in settings) endpoint.modelSettings = settings[endpoint.id];
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  async function dropBaseUrl(endpointsDir: string, input: { id: string; format: string }) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; baseUrls: { format: string }[] }[];
+    };
+    for (const endpoint of file.endpoints) {
+      if (endpoint.id !== input.id) continue;
+      endpoint.baseUrls = endpoint.baseUrls.filter((entry) => entry.format !== input.format);
+    }
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  /** Anthropic 回复里写上收到的模型名，像上游那样。 */
+  function echoAnthropic(request: RecordedRequest, res: ServerResponse) {
+    const model = receivedModel(request);
+    if (receivedBody(request).stream === true) {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const opening = { type: "message_start", message: { model, usage: { input_tokens: 1 } } };
+      res.write(`event: message_start\ndata: ${JSON.stringify(opening)}\n\n`);
+      res.end(`event: message_stop\ndata: {"type":"message_stop"}\n\n`);
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        type: "message",
+        role: "assistant",
+        model,
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    );
+  }
+
+  const claudeAsk = (gateway: string, input: { model: string; stream: boolean }) =>
+    fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: input.model,
+        stream: input.stream,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+  test("the endpoint is sent the upstream name, a * template for every model, while the CLI's reply keeps the model's name", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = echoAnthropic;
+    const { gateway, endpointsDir } = await start({ upstreamA, modelsA: ["kimi-k2", "glm-4.6"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        defaults: { upstreamName: "zhipu/*" },
+        models: { "glm-4.6": { upstreamName: "vendor/glm-4.6-pro" } },
+      },
+    });
+
+    const whole = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(whole.status).toBe(200);
+    expect(((await whole.json()) as { model?: string }).model).toBe("kimi-k2");
+    const streamed = await claudeAsk(gateway, { model: "glm-4.6", stream: true });
+    expect(streamed.status).toBe(200);
+    const events = sseData(await streamed.text()) as { message?: { model?: string } }[];
+    expect(events[0]?.message?.model).toBe("glm-4.6");
+
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["zhipu/kimi-k2", "vendor/glm-4.6-pro"]);
+  });
+
+  test("a translated request goes out under the upstream name and comes back under the model's", async () => {
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({ chatUpstream: chat });
+    await setModelSettings(endpointsDir, { ep_c: { defaults: { upstreamName: "router-model" } } });
+
+    const response = await claudeAsk(gateway, { model: "deepseek-v3", stream: false });
+
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { model?: string }).model).toBe("deepseek-v3");
+    expect(chat.requests.map(receivedModel)).toEqual(["router-model"]);
+  });
+
+  test("two endpoints with one model are still the same model when one of them renames it", async () => {
+    const upstreamA = await startUpstream();
+    const upstreamB = await startUpstream();
+    upstreamA.respond = (_request, res) => failWith(res, { status: 503, message: "upstream busy" });
+    upstreamB.respond = echoAnthropic;
+    const { gateway, endpointsDir } = await start({ upstreamA, upstreamB });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "kimi-k2": { upstreamName: "moonshot/kimi-k2-turbo" } } },
+    });
+
+    const response = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    expect(upstreamA.requests.map(receivedModel)).toEqual(["moonshot/kimi-k2-turbo"]);
+    expect(upstreamB.requests.map(receivedModel)).toEqual(["kimi-k2"]);
+  });
+
+  test("a model pinned to one format is asked only in it, and asked as before once that URL is gone", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (request, res) => {
+      if (request.url.startsWith("/v1/responses")) answerResponsesWhole(res);
+      else echoAnthropic(request, res);
+    };
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "kimi-k2": { format: "openai_responses" } } },
+    });
+
+    const pinned = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(pinned.status).toBe(200);
+    await pinned.text();
+    expect(upstreamA.requests.splice(0).map((request) => request.url)).toEqual(["/v1/responses"]);
+
+    await dropBaseUrl(endpointsDir, { id: "ep_a", format: "openai_responses" });
+    const unpinned = await claudeAsk(gateway, { model: "kimi-k2", stream: false });
+    expect(unpinned.status).toBe(200);
+    await unpinned.text();
+    expect(upstreamA.requests.map((request) => request.url)).toEqual(["/v1/messages"]);
+  });
+});

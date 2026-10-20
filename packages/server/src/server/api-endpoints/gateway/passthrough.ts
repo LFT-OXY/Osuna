@@ -50,6 +50,7 @@ import {
   withoutSampling,
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
+import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-model-name.js";
 import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
@@ -131,6 +132,8 @@ export async function attemptEndpoint(input: {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
+  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
+  sentModel?: string;
   headerTimeoutMs: number;
   // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
   userAgent: string;
@@ -220,6 +223,7 @@ async function answerOpened(input: {
   apiKey: string | null;
   requestedModel: string;
   upstreamModel: string;
+  sentModel?: string;
   url: URL;
   opened: OpenedUpstream;
   keepAlive?: AgentKeepAlive;
@@ -246,25 +250,34 @@ async function answerOpened(input: {
   return { kind: "answered", finished };
 }
 
-/** Grok 的对话回复要去掉调用参数里的零小数（grok-integral.ts）；别的回复原样转，为 null。 */
+/**
+ * 要改的回复：Grok 的对话回复去掉调用参数里的零小数（grok-integral.ts）；按上游模型名发的，回复里的模型名换回这家列出的写法
+ * （reply-model-name.ts），CLI 看到的模型名不随上游模型名变。别的回复原样转，为 null。
+ */
 function replyTidy(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   requestedModel: string;
   upstreamModel: string;
+  sentModel?: string;
   opened: OpenedUpstream;
-}): WholeArgsTidy | null {
+}): ReplyTidy | null {
   const { format, opened } = input;
   const conversation = input.pathSuffix === undefined;
   // 直通只有 Agent 说的两种格式，Chat 不会来。
-  if (format === "openai_chat") return null;
-  const grokConversation = conversation && isGrokReply(input);
-  if (!grokConversation) return null;
-  return new WholeArgsTidy({ format, stream: isEventStream(opened.response, opened.held) });
+  if (format === "openai_chat" || !conversation) return null;
+  const stream = isEventStream(opened.response, opened.held);
+  const tidies: ReplyTidy[] = [];
+  if (isGrokReply(input)) tidies.push(new WholeArgsTidy({ format, stream }));
+  const sent = input.sentModel ?? input.upstreamModel;
+  if (sent !== input.upstreamModel) {
+    tidies.push(new ReplyModelName({ format, stream, sent, shown: input.upstreamModel }));
+  }
+  return chainedTidy(tidies);
 }
 
 /** 交给 Agent 的那一路：要改的回复先经 tidy，按 UTF-8 接好字符再改；别的直接写给 Agent。 */
-function agentSink(input: { res: Response; tidy: WholeArgsTidy | null }): Writable {
+function agentSink(input: { res: Response; tidy: ReplyTidy | null }): Writable {
   const { tidy } = input;
   if (tidy === null) return input.res;
   const utf8 = new StringDecoder("utf8");
@@ -290,7 +303,7 @@ async function wholeAsStream(input: {
   url: URL;
   apiKey: string | null;
   opened: OpenedUpstream;
-  tidy: WholeArgsTidy | null;
+  tidy: ReplyTidy | null;
   keepAlive?: AgentKeepAlive;
 }): Promise<AttemptOutcome> {
   const { res, tidy } = input;
@@ -309,7 +322,7 @@ async function wholeAsStream(input: {
 function relay(input: {
   opened: OpenedUpstream;
   res: Response;
-  tidy: WholeArgsTidy | null;
+  tidy: ReplyTidy | null;
   format: ApiEndpointRequestFormat;
   endpointName: string;
 }): Promise<AnswerEnd> {
@@ -415,6 +428,8 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
+  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
+  sentModel?: string;
   endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId">;
   refusals?: ShapeRefusals;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
@@ -433,7 +448,8 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const fits = (anthropic || input.format === "openai_responses") && conversation;
   const replays = replaysThinking(input.upstreamModel);
   let text = input.body.toString("utf8");
-  if (input.upstreamModel !== input.requestedModel) text = replaceModel(text, input.upstreamModel);
+  const sent = input.sentModel ?? input.upstreamModel;
+  if (sent !== input.requestedModel) text = replaceModel(text, sent);
   if (anthropic) {
     text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
   }
