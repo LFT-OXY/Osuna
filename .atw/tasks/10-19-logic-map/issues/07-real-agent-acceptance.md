@@ -6,9 +6,13 @@
 
 **Status:** ready-for-human
 
-**Impl:** ready
+**Impl:** done
 
 - [ ] Claude Code：开开关聊一个小功能，图自动出现并随对话更新；回复里有改动说明；点节点能打开文档。
 - [ ] Codex：同上。
 - [ ] Pi：同上。
 - [ ] 任一 provider 不按说明块行事时，记下现象并另开工单。
+
+## Comments
+
+2026-10-20 用户在 dev 桌面端完成三个 provider 的真机验收，记录见 `research/07-real-agent-acceptance-notes.md`。Claude Code、Codex、Pi 都能画图、标失败步骤、回复里说明增改删，界面（自动刷新、子图与面包屑、点节点开文档并蓝框）用户确认正常。发现两处问题，另开工单：Osuna 工具关着时逻辑图开关没有提示（08）；Codex、Pi 没给每个节点写文档（09）。修完后的复测是 10。
