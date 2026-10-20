@@ -252,6 +252,8 @@ async function prepareTestDaemonConfig(
       fetchSite: async ({ url }) => {
         throw new Error(`The test daemon never fetches ${url}: pass fetchSite`);
       },
+      // 保存后当场拉清单只去本机的假上游，绝不上网（真实厂商地址、relay.example 都跳过）。
+      reachesOnSave: (baseUrl) => isLoopbackUrl(baseUrl),
       // 绝不读真实的进程表、不跑真的 codex：缺省一个什么都没在跑的假适配器，关心它的用例自己传。
       hostProcesses: new FakeHostProcesses(),
       ...(options.apiEndpoints ?? {
@@ -303,4 +305,11 @@ function isStartupTimeoutError(error: unknown): boolean {
   }
   const record = error as { code?: string };
   return record.code === "TEST_DAEMON_START_TIMEOUT";
+}
+
+/** 本机地址：127.0.0.1、::1 与 localhost。 */
+function isLoopbackUrl(baseUrl: string): boolean {
+  if (!URL.canParse(baseUrl)) return false;
+  const host = new URL(baseUrl).hostname;
+  return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
 }

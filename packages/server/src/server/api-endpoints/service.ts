@@ -453,6 +453,8 @@ export interface ApiEndpointServiceOptions {
   modelsDevTimers?: UsagePricingTimers;
   // 「从网站取图标」取网址用的；缺省真的连公网 https 站点，测试 daemon 一律换成假的，关心它的用例换成本机假站点。
   fetchSite?: FetchSite;
+  // 新建或换 key 保存后当场拉清单前，问这个地址能不能去；缺省都能去，测试 daemon 只放行本机地址（不上网）。
+  reachesOnSave?: (baseUrl: string) => boolean;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
@@ -622,6 +624,7 @@ export class ApiEndpointService {
   private readonly modelsDev: ModelsDevCatalog;
   private readonly icons: EndpointIcons;
   private readonly fetchSite: FetchSite;
+  private readonly reachesOnSave: (baseUrl: string) => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -691,6 +694,7 @@ export class ApiEndpointService {
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
     this.fetchSite = options.fetchSite ?? createPublicFetchSite({ userAgent });
+    this.reachesOnSave = options.reachesOnSave ?? reachesAnyAddress;
     this.readCodexSignIn =
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
@@ -1050,6 +1054,7 @@ export class ApiEndpointService {
     const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
     for (const { format, url } of endpoint.baseUrls) {
       if (signal.aborted) break;
+      if (!this.reachesOnSave(url)) continue;
       try {
         await this.fetchModels(
           input.provider,
@@ -3705,6 +3710,10 @@ function savedKeyOf(input: {
   if (typed) return typed;
   if (!input.copySource) return undefined;
   return input.store.getApiKey(input.copySource.id) ?? undefined;
+}
+
+function reachesAnyAddress(): boolean {
+  return true;
 }
 
 /** 照 magpie：新建一家，或换成了另一把 key，保存后当场拉一次清单。要在写入新 key 之前问。 */

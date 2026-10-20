@@ -1075,15 +1075,16 @@ describe("Claude API endpoint over the daemon RPC", () => {
     expect((await client.apiEndpointList("claude")).activeEndpointId).toBe(endpointId);
   });
 
-  test("rejects invalid input and unsupported providers with a code", async () => {
-    const missingKey = await client.apiEndpointSave({
+  test("rejects invalid input and unsupported providers with a code; a save without a key is not one", async () => {
+    // key 选填（工单 02）：不填就保存成没有 key 的一家，不再拒收。
+    const withoutKey = await client.apiEndpointSave({
       provider: "claude",
       name: "Relay",
       baseUrl: "https://relay.example",
       models: [{ id: "m" }],
       defaultModelId: "m",
     });
-    expect(missingKey).toMatchObject({ endpoint: null, error: { code: "invalid_input" } });
+    expect(withoutKey).toMatchObject({ error: null, endpoint: { hasApiKey: false } });
 
     const badDefault = await client.apiEndpointSave({
       provider: "claude",
