@@ -6,7 +6,7 @@
 
 **Status:** ready-for-human
 
-**Impl:** ready
+**Impl:** done
 
 - [ ] 关掉 Osuna 工具时，逻辑图开关旁显示提示；打开后提示消失。
 - [ ] Codex：没有 spec 框架的项目里，聊完后每个节点都有文档（或 Agent 按提醒补齐）。

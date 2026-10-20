@@ -24,3 +24,12 @@
 1. Osuna 工具关着时，逻辑图开关照样能开、说明块照样发，用户要等 Agent 自己报"没有工具"才知道。应像 @ 提及 Agent 那样，在开关旁提示"需要先在设置 → 主机 → Agent 中启用 Osuna 工具"，或不发说明块。
 2. 已核实，不是问题：`config.ts` 对没存过的 `injectIntoAgents` 解析成 `false`，`createInitialMutableDaemonConfig` 的 `?? true` 因此不生效，设置页读到的也是 `false`，两边一致。默认关是上游（getpaseo/paseo）的既有行为，不改。
 3. Codex、Pi 都没给每个节点写文档（Codex 43 个里 3 个有，Pi 20 个里 7 个有），Claude Code 40 个全有。说明块里"没有 spec 框架时每个节点写完整节点文档"对这两个 provider 约束不够。可能的改法：说明块把"每个节点都要有文档"写得更硬；或 `update_logic_map` 在没有 spec 框架时对缺文档的节点返回提醒。
+
+## 10 复测（08、09 合入后）
+
+环境同上，2026-10-20 13:10 起，dev daemon 重建到含 08、09 的 `dist`。
+
+- Codex：`~/Downloads/docs/logic-maps/untitled-9032de6c/`，标题"修改头像：图片校验、一次重试与成功替换"，14 节点，没有子图；spec 框架判为 none；14 个节点都有自有文档，缺文档 0 个（07 时 43 个里缺 40 个）。问题 3 对 Codex 已解决。
+- Osuna 工具关闭时开关旁的提示、Pi：用户口头确认通过；本次 dev 数据里没有 Pi 新建的逻辑图，未从文件核对。
+- 副作用：dev daemon 运行时把真实 `~/.codex/config.toml` 的 `[model_providers.osuna_api_endpoint]` 的 `base_url` 从 `127.0.0.1:55246` 改成 `127.0.0.1:6769`，并换了 token（该 provider 是顶层 `model_provider`）。运行前 55246 已没有进程监听，停掉 dev 后两者都连不上。
+- 结论：通过。
