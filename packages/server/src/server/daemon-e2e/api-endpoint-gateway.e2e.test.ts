@@ -9824,6 +9824,65 @@ describe("an endpoint's own headers, extra body and key header (magpie Sign, ext
     expect(upstreamB.requests).toHaveLength(1);
   });
 
+  test("a header that can't be sent fails that endpoint's request with a reason, and the next endpoint answers", async () => {
+    const { upstreamA, upstreamB, ask, endpointsDir, logLines } = await twoRelays();
+    await setExtras(endpointsDir, { ep_a: { headers: { "X Team": "a" } } });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamA.requests).toHaveLength(0);
+    expect(upstreamB.requests).toHaveLength(1);
+    expect(logLines.join("\n")).toContain("is not a valid header name");
+  });
+
+  test("a user's auth header value echoed back by the endpoint never reaches the agent", async () => {
+    const upstreamA = await startUpstream();
+    upstreamA.respond = (request, res) =>
+      failWith(res, {
+        status: 400,
+        message: `bad token: ${String(request.headers.authorization)}`,
+      });
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    await setExtras(endpointsDir, {
+      ep_a: { headers: { Authorization: `Bearer ${SECRET_HEADER}` } },
+    });
+
+    const response = await turn({ gateway, messages: [{ role: "user", content: "hi" }] });
+
+    expect(response.status).toBe(400);
+    const text = await response.text();
+    expect(text).toContain("bad token: ***");
+    expect(text).not.toContain(SECRET_HEADER);
+  });
+
+  test("the extra body goes on a request translated to Responses too", async () => {
+    const responses = await startUpstream();
+    responses.respond = (_request, res) => responsesStream(res);
+    const { gateway, endpointsDir } = await start({ responsesUpstream: responses });
+    await setExtras(endpointsDir, {
+      ep_d: { extraBody: { prompt_cache_key: "${sessionId}", "!service_tier": "flex" } },
+    });
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "grok-4",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(responses.requests[0]?.url).toBe("/v1/responses");
+    expect(receivedBody(responses.requests[0])).toMatchObject({
+      prompt_cache_key: "session-1",
+      service_tier: "flex",
+    });
+  });
+
   test("a save keeps the headers, extra body and key header, an older client's save leaves them, and one naming a reserved field is refused", async () => {
     const upstreamA = await startUpstream();
     const { daemon } = await start({ upstreamA });
@@ -9844,14 +9903,15 @@ describe("an endpoint's own headers, extra body and key header (magpie Sign, ext
     });
     expect(saved.error).toBeNull();
     expect(saved.endpoint).toMatchObject({
-      headers: { "anthropic-workspace-id": "wrkspc_1" },
+      // 值空的头照 magpie cleanHeaders 照存。
+      headers: { "anthropic-workspace-id": "wrkspc_1", Empty: "" },
       extraBody: { "!service_tier": "flex", prompt_cache_key: "${sessionId}" },
       keyHeader: "bearer",
     });
     // 老客户端的保存不带这三项：原样留着。
     const older = await client.apiEndpointSave(form);
     expect(older.endpoint).toMatchObject({ keyHeader: "bearer" });
-    expect(older.endpoint?.headers).toEqual({ "anthropic-workspace-id": "wrkspc_1" });
+    expect(older.endpoint?.headers).toEqual({ "anthropic-workspace-id": "wrkspc_1", Empty: "" });
 
     const reserved = await client.apiEndpointSave({ ...form, extraBody: { "!messages": [] } });
     expect(reserved.endpoint).toBeNull();
@@ -9859,9 +9919,14 @@ describe("an endpoint's own headers, extra body and key header (magpie Sign, ext
       code: "invalid_extra_body",
       params: { reason: "reserved", field: "messages" },
     });
-    const badHeader = await client.apiEndpointSave({ ...form, headers: { "X Team": "a" } });
-    expect(badHeader.error).toMatchObject({ code: "invalid_header", params: { name: "X Team" } });
-    // 拒收的什么都没改；清掉时空的与 both 都不存。
+    // 发不出去的头照 magpie 照存（发时每个请求报错），值空的头也照存。
+    const badHeader = await client.apiEndpointSave({
+      ...form,
+      headers: { "X Team": "a", "X-Empty": "" },
+    });
+    expect(badHeader.error).toBeNull();
+    expect(badHeader.endpoint?.headers).toEqual({ "X Team": "a", "X-Empty": "" });
+    // 清掉时空的与 both 都不存。
     const cleared = await client.apiEndpointSave({
       ...form,
       headers: {},

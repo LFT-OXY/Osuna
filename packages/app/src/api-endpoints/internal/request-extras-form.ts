@@ -39,7 +39,10 @@ export function looksLikeJson(value: string): boolean {
   return trimmed.startsWith("{") || trimmed.startsWith("[");
 }
 
-function parsedJson(value: string): { ok: true; value: unknown } | { ok: false } {
+/** 读 JSON 的结果：读通了带值，读不通的没有。 */
+type ParsedJson = { ok: true; value: unknown } | { ok: false };
+
+function parsedJson(value: string): ParsedJson {
   try {
     return { ok: true, value: JSON.parse(value) as unknown };
   } catch (error) {
@@ -65,17 +68,17 @@ export function minifiedJson(value: string): string {
   return parsed.ok ? JSON.stringify(parsed.value) : value;
 }
 
-/** 保存时发的请求头：名字或值空的不要，大小写不同的同名只留后写的，JSON 值压成一行（"2.0" 这种照原样）。 */
+/**
+ * 保存时发的请求头（照 magpie headersOf）：值空的行不要，JSON 值压成一行（"2.0" 这种照原样）；
+ * 名字空的与大小写不同的同名交给 cleanRequestHeaders（只留后写的）。
+ */
 export function headersToSave(rows: readonly HeaderRow[]): Record<string, string> {
   const pairs: Record<string, string> = {};
   for (const row of rows) {
-    const value = row.value.trim();
-    const name = row.name.trim();
-    if (name === "" || value === "") continue;
-    for (const had of Object.keys(pairs)) {
-      if (had.toLowerCase() === name.toLowerCase()) delete pairs[had];
-    }
-    pairs[name] = looksLikeJson(value) ? minifiedJson(value) : value;
+    let value = row.value.trim();
+    if (value === "") continue;
+    if (looksLikeJson(value)) value = minifiedJson(value);
+    pairs[row.name] = value;
   }
   return cleanRequestHeaders(pairs) ?? {};
 }
@@ -113,11 +116,13 @@ export function extraBodyOf(text: string): ExtraBodyRead {
   if (trimmed === "") return { kind: "ok", value: {} };
   const parsed = parsedJson(trimmed);
   if (!parsed.ok) return { kind: "invalid", problem: { reason: "notJson" } };
-  const { value } = parsed;
-  const isObject = typeof value === "object" && value !== null && !Array.isArray(value);
-  if (!isObject) return { kind: "invalid", problem: { reason: "notObject" } };
-  const body = value as Record<string, unknown>;
+  const body = parsed.value;
+  if (!isJsonObject(body)) return { kind: "invalid", problem: { reason: "notObject" } };
   const problem = extraBodyProblem(body);
   if (problem !== null) return { kind: "invalid", problem };
   return { kind: "ok", value: body };
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

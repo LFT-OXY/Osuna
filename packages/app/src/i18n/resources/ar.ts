@@ -2607,11 +2607,13 @@ export const ar: TranslationResources = {
           headerValue: "القيمة",
           addHeader: "إضافة ترويسة",
           addSuggested: "إضافة الترويسة {{name}}؛ القيمة تملؤها أنت",
+          suggested: "مقترحة",
           editAsJson: "تحرير كـ JSON",
           collapseJson: "طيّ في سطر واحد",
           removeHeader: "إزالة الترويسة {{name}}",
-          headerBadName: "«{{name}}» ليس اسم ترويسة صالحًا: استخدم الأحرف والأرقام و- فقط",
-          headerBadValue: "قيمة «{{name}}» فيها سطر جديد أو محرف تحكّم",
+          headerBadName:
+            "«{{name}}» ليس اسم ترويسة صالحًا: استخدم الأحرف والأرقام و! # $ % & ' * + - . ^ _ ` | ~ فقط. ستفشل الطلبات التي تحملها.",
+          headerBadValue: "قيمة «{{name}}» فيها سطر جديد أو محرف تحكّم. ستفشل الطلبات التي تحملها.",
           extraBody: "جسم إضافي",
           extraBodyInfo:
             'حقول JSON تُضاف إلى جسم كل طلب Messages وChat وResponses إلى نقطة الاتصال هذه، بما في ذلك الاختبارات؛ طلبات عدّ الرموز وحدها لا تحملها. الحقل الموجود في الطلب يبقى كما هو؛ اكتب "!الاسم" لاستبداله. يصبح ${sessionId} معرّف المحادثة.',

@@ -2631,11 +2631,14 @@ export const ja: TranslationResources = {
           headerValue: "値",
           addHeader: "ヘッダーを追加",
           addSuggested: "{{name}} ヘッダーを追加します。値はご自身で入力してください",
+          suggested: "おすすめ",
           editAsJson: "JSON として編集",
           collapseJson: "1 行にまとめる",
           removeHeader: "ヘッダー {{name}} を削除",
-          headerBadName: "「{{name}}」はヘッダー名として使えません。英数字と - のみ使えます",
-          headerBadValue: "「{{name}}」の値に改行または制御文字が含まれています",
+          headerBadName:
+            "「{{name}}」はヘッダー名として使えません。英数字と ! # $ % & ' * + - . ^ _ ` | ~ のみ使えます。このヘッダーを付けたリクエストは失敗します。",
+          headerBadValue:
+            "「{{name}}」の値に改行または制御文字が含まれています。このヘッダーを付けたリクエストは失敗します。",
           extraBody: "追加リクエストボディ",
           extraBodyInfo:
             'このエンドポイントへの Messages、Chat、Responses の各リクエスト本文（テストを含む）に加える JSON フィールドです。トークン数を数えるだけのリクエストには付けません。リクエストに既にあるフィールドはそのまま残り、名前の前に "!" を付けると置き換えます。${sessionId} は会話の ID になります。',

@@ -2523,7 +2523,7 @@ describe("connection form: headers, extra body and key header", () => {
     expect(model.getState()).toMatchObject({ extraBodyProblem: null, canSubmit: true });
   });
 
-  it("starts a custom endpoint with one empty row, holds a bad name, and lays a JSON value out and back", () => {
+  it("starts a custom endpoint with one empty row, warns of a bad name without holding the save, and lays a JSON value out and back", () => {
     const { deps } = fakeDeps();
     const model = createConnectionFormModel(
       { mode: "edit", endpoint: SAVED_ENDPOINT },
@@ -2534,9 +2534,10 @@ describe("connection form: headers, extra body and key header", () => {
     expect(model.getState().headerRows).toHaveLength(1);
     model.setHeaderName(row?.id ?? -1, "X Meta");
     model.setHeaderValue(row?.id ?? -1, "a");
+    // magpie 照存：只提示带这个头的请求会失败，保存照样能点。
     expect(model.getState()).toMatchObject({
       headerProblem: { reason: "name", name: "X Meta" },
-      canSubmit: false,
+      canSubmit: true,
     });
     model.setHeaderName(row?.id ?? -1, "X-Meta");
     model.setHeaderValue(row?.id ?? -1, '{"a":1}');

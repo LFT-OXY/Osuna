@@ -2633,11 +2633,13 @@ export const zhCN: TranslationResources = {
           headerValue: "值",
           addHeader: "添加请求头",
           addSuggested: "添加请求头 {{name}}，值由你填",
+          suggested: "建议添加",
           editAsJson: "按 JSON 编辑",
           collapseJson: "收成一行",
           removeHeader: "删除请求头 {{name}}",
-          headerBadName: "“{{name}}”不是合法的请求头名：只能用字母、数字和 -",
-          headerBadValue: "“{{name}}”的值里有换行或控制字符",
+          headerBadName:
+            "“{{name}}”不是合法的请求头名：只能用字母、数字和 ! # $ % & ' * + - . ^ _ ` | ~。带这个头的请求会失败。",
+          headerBadValue: "“{{name}}”的值里有换行或控制字符。带这个头的请求会失败。",
           extraBody: "附加请求体",
           extraBodyInfo:
             '加进这家每个 Messages、Chat、Responses 请求正文的 JSON 字段，测试也算；只数 token 的请求不带。请求里已有的字段保留，名字前加 "!" 才换掉它。${sessionId} 会换成这段对话的编号。',

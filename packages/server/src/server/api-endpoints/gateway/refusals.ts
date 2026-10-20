@@ -3,9 +3,8 @@
 
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
-import { templateKeyHeaders } from "../templates.js";
 import {
-  chosenKeyHeaders,
+  keyHeadersAt,
   ownsKeyHeader,
   withUserHeaders,
   type RequestExtras,
@@ -231,8 +230,8 @@ export function refusesBothKeyHeaders(input: { status: number; text: string }): 
 export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey";
 
 /**
- * 发给这家时 key 放哪：Bedrock、Azure 由模板定（templateKeyHeaders）；其余 OpenAI 格式只放 Bearer；
- * 第三方 Anthropic 地址用户选了只放一个的照用户的（chosenKeyHeaders），否则两个都放，这家说过不能同时带的只放它收的那个。
+ * 发给这家时 key 放哪：先按 keyHeadersAt（模板、格式、Anthropic 自己的地址、用户选的）；两个都放时，
+ * 这家说过不能同时带的只放它收的那个。
  */
 export function keyHeadersFor(input: {
   format: ApiEndpointRequestFormat;
@@ -242,11 +241,9 @@ export function keyHeadersFor(input: {
   refusals: ShapeRefusals | undefined;
 }): KeyHeaders {
   const { refusals } = input;
-  const fixed = templateKeyHeaders({ templateId: input.templateId, format: input.format });
-  if (fixed !== null) return fixed;
-  if (input.format !== "anthropic_messages") return "bearer";
-  const chosen = chosenKeyHeaders({ ...input, keyHeader: input.extras.keyHeader });
-  if (chosen !== null) return chosen;
+  const keyHeader = input.extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, keyHeader, anthropicDefault: "both" });
+  if (keys !== "both") return keys;
   if (refusals?.has("xApiKeyAlone")) return "bearer";
   return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
 }

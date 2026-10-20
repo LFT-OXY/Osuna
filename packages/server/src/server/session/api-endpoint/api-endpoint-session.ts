@@ -3,13 +3,15 @@ import type {
   ApiEndpointAgentSettings,
   ApiEndpointError,
   ApiEndpointIconImage,
+  ApiEndpointRequestExtras,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
   type ApiEndpointService,
-  type ApiEndpointUpstreamInput,
+  type ApiEndpointRequestExtrasInput,
   type KeepCurrentSettingsCode,
   validateModelScope,
 } from "../../api-endpoints/service.js";
@@ -862,15 +864,14 @@ function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
   return requested;
 }
 
-/** 请求带的请求头、附加请求体、key 放哪个头（保存、拉模型、测试、检测都一样）；没带的不传。 */
-function requestExtrasOf(request: {
-  headers?: Record<string, string>;
-  extraBody?: Record<string, unknown>;
-  keyHeader?: string;
-}): Pick<ApiEndpointUpstreamInput, "headers" | "extraBody" | "keyHeader"> {
-  return {
-    ...(request.headers !== undefined ? { headers: request.headers } : {}),
-    ...(request.extraBody !== undefined ? { extraBody: request.extraBody } : {}),
-    ...(request.keyHeader !== undefined ? { keyHeader: request.keyHeader } : {}),
-  };
+/**
+ * 请求带的请求头、附加请求体、key 放哪个头（保存、拉模型、测试、检测都一样）；没带的不传。
+ * 线上的 keyHeader 是字符串，在这里换成认得的一种（不认识的当 both）。
+ */
+function requestExtrasOf(request: ApiEndpointRequestExtras): ApiEndpointRequestExtrasInput {
+  const extras: ApiEndpointRequestExtrasInput = {};
+  if (request.headers !== undefined) extras.headers = request.headers;
+  if (request.extraBody !== undefined) extras.extraBody = request.extraBody;
+  if (request.keyHeader !== undefined) extras.keyHeader = keyHeaderOf(request.keyHeader);
+  return extras;
 }

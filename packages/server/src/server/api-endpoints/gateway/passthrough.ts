@@ -12,7 +12,7 @@ import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { StoredApiEndpoint } from "../store.js";
-import { isRecord, parseJson } from "../upstream-http.js";
+import { isRecord, parseJson, type Secrets } from "../upstream-http.js";
 import {
   adaptiveThinkingAsTaken,
   isAnthropicModel,
@@ -60,7 +60,14 @@ import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
 import { BEDROCK_TEMPLATE_ID } from "../templates.js";
-import { storedRequestExtras, withExtraBody, type RequestExtras } from "../request-extras.js";
+import {
+  secretsOf,
+  storedRequestExtras,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "../request-extras.js";
 import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
 import { wholeEvents } from "./whole-stream.js";
 import {
@@ -70,6 +77,7 @@ import {
   openUpstream,
   readLimited,
   answerUnlessRefused,
+  failedBySelf,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -148,6 +156,12 @@ export async function attemptEndpoint(input: {
 }): Promise<AttemptOutcome> {
   const { res, apiKey, refusals } = input;
   const extras = storedRequestExtras(input.endpoint);
+  const secrets = secretsOf({ apiKey, extras });
+  // 这家的请求头发不出去：这一个请求当作连不上，照常换家（magpie 里 Go 发请求时报错也是这样）。
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return failedBySelf({ status: 502, detail: unsendableHeaderMessage(unsendable) });
+  }
   const { originalUrl } = input.req;
   const url = upstreamUrl({
     baseUrl: input.baseUrl,
@@ -181,7 +195,7 @@ export async function attemptEndpoint(input: {
         userAgent: input.userAgent,
       }),
       body,
-      apiKey,
+      secrets,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: input.pathSuffix === undefined ? input.format : null,
       onHeard: () => input.keepAlive?.heard(),
@@ -223,7 +237,7 @@ export async function attemptEndpoint(input: {
   return answerUnlessRefused({
     opened,
     format: input.format,
-    answer: (ready) => answerOpened({ ...input, url, opened: ready }),
+    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready }),
   });
 }
 
@@ -233,7 +247,7 @@ async function answerOpened(input: {
   format: ApiEndpointRequestFormat;
   pathSuffix?: string;
   endpoint: StoredApiEndpoint;
-  apiKey: string | null;
+  secrets: Secrets;
   requestedModel: string;
   upstreamModel: string;
   url: URL;
@@ -326,7 +340,7 @@ async function wholeAsStream(input: {
   res: Response;
   format: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string | null;
+  secrets: Secrets;
   opened: OpenedUpstream;
   tidy: ReplyTidy | null;
   keepAlive?: AgentKeepAlive;
@@ -336,7 +350,7 @@ async function wholeAsStream(input: {
   let text = raw;
   if (tidy !== null) text = tidy.write(raw) + tidy.end();
   const events = wholeEvents(input.format, parseJson(text));
-  if (events === null) return notAStream({ url: input.url, text: raw, apiKey: input.apiKey });
+  if (events === null) return notAStream({ url: input.url, text: raw, secrets: input.secrets });
   input.keepAlive?.stop();
   for (const event of events) res.write(sseEvent(event.name, event.data));
   res.end();
@@ -513,10 +527,14 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
 function withExtraBodyText(args: { text: string; input: PassthroughBodyInput }): string {
   const { text, input } = args;
   const extraBody = input.endpoint.extraBody ?? {};
+  const hasExtraBody = Object.keys(extraBody).length > 0;
+  if (!hasExtraBody) return text;
   const body = parseJson(text);
-  if (Object.keys(extraBody).length === 0 || !isRecord(body)) return text;
-  const added = withExtraBody({ body, extraBody, session: input.sessionId ?? "" });
-  if (added === body) return text;
+  if (!isRecord(body)) return text;
+  const session = input.sessionId ?? "";
+  const added = withExtraBody({ body, extraBody, session });
+  const isUnchanged = added === body;
+  if (isUnchanged) return text;
   let fitted = added;
   if (input.format === "anthropic_messages") {
     fitted = adaptiveThinkingAsTaken(fitted, input.upstreamModel);

@@ -2659,13 +2659,14 @@ export const fr: TranslationResources = {
           headerValue: "valeur",
           addHeader: "Ajouter un en-tête",
           addSuggested: "Ajouter l'en-tête {{name}} ; sa valeur est à remplir",
+          suggested: "Suggérés",
           editAsJson: "Modifier en JSON",
           collapseJson: "Replier sur une ligne",
           removeHeader: "Retirer l'en-tête {{name}}",
           headerBadName:
-            "« {{name}} » n'est pas un nom d'en-tête : lettres, chiffres et - uniquement",
+            "« {{name}} » n'est pas un nom d'en-tête valide : lettres, chiffres et ! # $ % & ' * + - . ^ _ ` | ~ uniquement. Les requêtes qui le portent échoueront.",
           headerBadValue:
-            "La valeur de « {{name}} » contient un saut de ligne ou un caractère de contrôle",
+            "La valeur de « {{name}} » contient un saut de ligne ou un caractère de contrôle. Les requêtes qui le portent échoueront.",
           extraBody: "Corps supplémentaire",
           extraBodyInfo:
             "Champs JSON ajoutés au corps de chaque requête Messages, Chat et Responses vers ce point de terminaison, tests compris ; les requêtes qui ne font que compter les tokens n'en ont pas. Un champ déjà présent dans la requête est conservé ; écrivez \"!nom\" pour le remplacer. ${sessionId} devient l'identifiant de la conversation.",

@@ -8,12 +8,15 @@ import type { IncomingHttpHeaders } from "node:http";
 const MAX_DETAIL_LENGTH = 300;
 export const ANTHROPIC_VERSION = "2023-06-01";
 
+/** 报错里要换成 *** 的：一把 key（没有为 null），或 key 加上用户请求头的值（request-extras.ts 的 secretsOf）。 */
+export type Secrets = string | null | readonly string[];
+
 /**
  * 上游错误体常见的几种写法：{error:{message}}、{error:"..."}、{message}、{detail}；否则取原文。
- * 其中出现的 apiKey 换成 ***。
+ * 其中出现的 key 与请求头值换成 ***。
  */
-export function extractErrorDetail(text: string, apiKey: string | null): string {
-  const detail = redactKey(structuredErrorMessage(text) ?? text, apiKey);
+export function extractErrorDetail(text: string, secrets: Secrets): string {
+  const detail = redactKey(structuredErrorMessage(text) ?? text, secrets);
   return truncate(detail.replace(/\s+/g, " ").trim());
 }
 
@@ -39,10 +42,15 @@ function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }
 
-/** 文字里出现的 key 换成 ***；没 key 或 key 为空时原样（空串会在每两个字之间插入 ***）。 */
-export function redactKey(text: string, apiKey: string | null): string {
-  if (apiKey === null || apiKey === "") return text;
-  return text.replaceAll(apiKey, "***");
+/** 文字里出现的 key（与请求头值）换成 ***，长的先换；空的跳过（空串会在每两个字之间插入 ***）。 */
+export function redactKey(text: string, secrets: Secrets): string {
+  const list = typeof secrets === "string" ? [secrets] : (secrets ?? []);
+  const longestFirst = [...list].sort((a, b) => b.length - a.length);
+  let out = text;
+  for (const secret of longestFirst) {
+    if (secret !== "") out = out.replaceAll(secret, "***");
+  }
+  return out;
 }
 
 /** 响应头里的 Content-Type，小写；没有为空。 */

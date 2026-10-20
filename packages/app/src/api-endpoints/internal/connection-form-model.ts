@@ -13,6 +13,7 @@ import {
   type ApiEndpointTestConnectionRequest,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import equal from "fast-deep-equal";
 import { curlOf, type CurlCommand } from "./curl-command";
 import { isRequestFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { withModelFormat } from "./model-settings-form";
@@ -175,7 +176,9 @@ export type DetectionReason =
   | { code: "batch_timeout" }
   | { code: "not_asked" }
   | { code: "image_model" }
-  | { code: "no_model_to_try" };
+  | { code: "no_model_to_try" }
+  // 这家的请求头发不出去（name 是头名，headerReason 是名字不合法还是值里有换行）。
+  | { code: "invalid_header"; name: string; headerReason: "name" | "value" };
 
 /**
  * 最近一次自动检测：每种格式一行；isTaken 是已按它「采用这些」。
@@ -539,7 +542,7 @@ interface CurlBaseUrl {
 }
 
 // 什么也没设的「高级」保存时的样子。
-const EMPTY_EXTRAS = JSON.stringify({ headers: {}, extraBody: {}, keyHeader: "both" });
+const EMPTY_EXTRAS = { headers: {}, extraBody: {}, keyHeader: "both" };
 
 const EMPTY_URLS: Urls = { anthropic_messages: "", openai_chat: "", openai_responses: "" };
 
@@ -617,8 +620,8 @@ export function createConnectionFormModel(
     ...seededExtras,
   };
   let state = derive(values);
-  const seededExtrasJson = JSON.stringify(extrasNow());
-  const hasSeededExtras = seededExtrasJson !== EMPTY_EXTRAS;
+  const extrasAtOpen = extrasNow();
+  const hasSeededExtras = !equal(extrasAtOpen, EMPTY_EXTRAS);
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
   let pendingIcon: object | null = null;
 
@@ -699,10 +702,10 @@ export function createConnectionFormModel(
     serviceAddressInvalid: boolean;
     extras: ExtrasState;
   }): boolean {
-    const { extras } = input;
-    const hasExtrasProblem = extras.headerProblem !== null || extras.extraBodyProblem !== null;
+    // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
+    const hasExtraBodyProblem = input.extras.extraBodyProblem !== null;
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
-    return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
+    return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtraBodyProblem;
   }
 
   type ExtrasState = Pick<
@@ -720,19 +723,29 @@ export function createConnectionFormModel(
 
   /** 「高级」那部分：请求头、附加请求体、key 放哪个头与哪里不对。主机不认它们时都不算。 */
   function deriveExtras(next: Values): ExtrasState {
-    const extraBody = extraBodyOf(next.extraBodyText);
+    const { headerRows, extraBodyText, keyHeader } = next;
+    const extraBody = extraBodyOf(extraBodyText);
     const anthropicUrl = urlsToSave(next).anthropic_messages;
+    const headerHints = headerHintsLeft(next.template?.headerHints ?? [], headerRows);
+    let headerProblem: HeaderProblem | null = null;
+    let extraBodyProblem: ExtraBodyTextProblem | null = null;
+    let showsKeyHeader = false;
+    if (canSetRequestExtras) {
+      headerProblem = headerRowsProblem(headerRows);
+      if (extraBody.kind === "invalid") extraBodyProblem = extraBody.problem;
+      showsKeyHeader = isThirdPartyAnthropicUrl(anthropicUrl);
+    }
+    const isAdvancedOpen = next.isAdvancedOpen;
     return {
       canSetRequestExtras,
-      isAdvancedOpen: next.isAdvancedOpen,
-      headerRows: next.headerRows,
-      headerHints: headerHintsLeft(next.template?.headerHints ?? [], next.headerRows),
-      headerProblem: canSetRequestExtras ? headerRowsProblem(next.headerRows) : null,
-      extraBodyText: next.extraBodyText,
-      extraBodyProblem:
-        canSetRequestExtras && extraBody.kind === "invalid" ? extraBody.problem : null,
-      keyHeader: next.keyHeader,
-      showsKeyHeader: canSetRequestExtras && isThirdPartyAnthropicUrl(anthropicUrl),
+      isAdvancedOpen,
+      headerRows,
+      headerHints,
+      headerProblem,
+      extraBodyText,
+      extraBodyProblem,
+      keyHeader,
+      showsKeyHeader,
     };
   }
 
@@ -1021,27 +1034,27 @@ export function createConnectionFormModel(
     "headers" | "extraBody" | "keyHeader"
   > {
     // 表单和那家存的都什么也没设：不带，和以前一样。
-    const isAllEmpty = !hasSeededExtras && JSON.stringify(extrasNow()) === EMPTY_EXTRAS;
+    const isAllEmpty = !hasSeededExtras && equal(extrasNow(), EMPTY_EXTRAS);
     if (!canSetRequestExtras || isAllEmpty) return {};
     const extraBody = extraBodyOf(values.extraBodyText);
-    const hasValidHeaders = headerRowsProblem(values.headerRows) === null;
-    return {
-      ...(hasValidHeaders ? { headers: headersToSave(values.headerRows) } : {}),
-      ...(extraBody.kind === "ok" ? { extraBody: extraBody.value } : {}),
+    const headers = headersToSave(values.headerRows);
+    const typed: Pick<ConnectionSaveRequest, "headers" | "extraBody" | "keyHeader"> = {
+      headers,
       keyHeader: values.keyHeader,
     };
+    if (extraBody.kind === "ok") typed.extraBody = extraBody.value;
+    return typed;
   }
 
   /** 表单里这三项保存时的样子（空的、both 即清掉）；能保存时这几项都已读通。 */
   function extrasNow(): Required<
     Pick<ConnectionSaveRequest, "headers" | "extraBody" | "keyHeader">
   > {
-    const extraBody = extraBodyOf(values.extraBodyText);
-    return {
-      headers: headersToSave(values.headerRows),
-      extraBody: extraBody.kind === "ok" ? extraBody.value : {},
-      keyHeader: values.keyHeader,
-    };
+    const extraBodyRead = extraBodyOf(values.extraBodyText);
+    const headers = headersToSave(values.headerRows);
+    let extraBody: Record<string, unknown> = {};
+    if (extraBodyRead.kind === "ok") extraBody = extraBodyRead.value;
+    return { headers, extraBody, keyHeader: values.keyHeader };
   }
 
   /** 保存时只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。 */
@@ -1051,12 +1064,17 @@ export function createConnectionFormModel(
   > {
     if (!canSetRequestExtras) return {};
     const now = extrasNow();
-    return JSON.stringify(now) === seededExtrasJson ? {} : now;
+    const isUnchanged = equal(now, extrasAtOpen);
+    return isUnchanged ? {} : now;
   }
 
   /** 改一行请求头。 */
   function updateHeaderRow(id: number, change: (row: HeaderRow) => HeaderRow): void {
-    update({ headerRows: values.headerRows.map((row) => (row.id === id ? change(row) : row)) });
+    const headerRows = values.headerRows.map((row) => {
+      if (row.id !== id) return row;
+      return change(row);
+    });
+    update({ headerRows });
   }
 
   /** 表单里的全部地址一次交给 daemon：各格式各拉一次、按模型 id 合并（照 magpie）。 */
@@ -1524,7 +1542,8 @@ export function createConnectionFormModel(
     toggleHeaderJson(id) {
       updateHeaderRow(id, (row) => {
         const isJson = !row.isJson;
-        const value = isJson ? prettyJson(row.value) : minifiedJson(row.value);
+        let value = minifiedJson(row.value);
+        if (isJson) value = prettyJson(row.value);
         return { ...row, isJson, value };
       });
     },
@@ -1791,6 +1810,12 @@ function detectionReasonOf(result: ApiEndpointFormatDetection): DetectionReason 
     case "image_model":
     case "no_model_to_try":
       return { code: result.code };
+    case "invalid_header":
+      return {
+        code: result.code,
+        name: result.params?.name ?? "",
+        headerReason: result.params?.reason === "value" ? "value" : "name",
+      };
     default:
       return null;
   }

@@ -19,7 +19,7 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
-import { requestExtrasErrorText } from "./request-extras-copy";
+import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
@@ -457,7 +457,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
           requestId,
         );
         if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
-        if (response.error) return { status: "failed", message: response.error.message };
+        if (response.error) {
+          const message = requestExtrasErrorText(t, response.error) ?? response.error.message;
+          return { status: "failed", message };
+        }
         return { status: "done", models: response.models };
       } catch (error) {
         if (signal.aborted) return { status: "cancelled" };
@@ -482,7 +485,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
         if (response.error) return { status: "failed", message: response.error.message };
         if (!response.result) throw new Error("The host returned neither a result nor an error");
-        return { status: "done", result: response.result };
+        return { status: "done", result: localizedTestResult(t, response.result) };
       } catch (error) {
         if (signal.aborted) return { status: "cancelled" };
         return { status: "failed", message: toErrorMessage(error) };

@@ -15,15 +15,18 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  type Secrets,
 } from "./upstream-http.js";
 import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
 import {
-  chosenKeyHeaders,
+  keyHeadersAt,
+  secretsOf,
   testSession,
+  unsendableHeader,
+  unsendableHeaderMessage,
   withExtraBody,
   type RequestExtras,
 } from "./request-extras.js";
-import { templateKeyHeaders } from "./templates.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
 import type { CliHeaderSample } from "./store.js";
 import { asCliBody, type CliTestClient } from "./test-as.js";
@@ -240,6 +243,7 @@ export async function probeUpstreamFormat(input: {
 }): Promise<ApiEndpointFormatDetection> {
   const { format, baseUrl } = input;
   const startedAt = performance.now();
+  const secrets = secretsOf(input);
   // daemon 自己写的原因另带 code 与 params，界面按语言说；message 是英文原文（测试连接、测试模型照登）。
   const result = (
     status: ApiEndpointFormatDetection["status"],
@@ -248,7 +252,7 @@ export async function probeUpstreamFormat(input: {
     reason: DaemonReason | null = null,
   ): ApiEndpointFormatDetection => {
     let redacted: string | null = null;
-    if (message !== null) redacted = redactKey(message, input.apiKey);
+    if (message !== null) redacted = redactKey(message, secrets);
     const detection: ApiEndpointFormatDetection = {
       format,
       url: baseUrl,
@@ -258,12 +262,19 @@ export async function probeUpstreamFormat(input: {
       durationMs: Math.round(performance.now() - startedAt),
     };
     if (input.modelId !== null) detection.modelId = input.modelId;
-    if (reason !== null) Object.assign(detection, reasonPartOf(reason, input.apiKey));
+    if (reason !== null) Object.assign(detection, reasonPartOf(reason, secrets));
     return detection;
   };
   if (input.modelId === null) {
     return result("not_detected", null, "The upstream listed no models to try", {
       code: "no_model_to_try",
+    });
+  }
+  const unsendable = unsendableHeader(input.extras);
+  if (unsendable !== null) {
+    return result("not_detected", null, unsendableHeaderMessage(unsendable), {
+      code: "invalid_header",
+      params: { ...unsendable },
     });
   }
   const probe = FORMAT_PROBES[format];
@@ -309,27 +320,30 @@ export async function probeUpstreamFormat(input: {
       params: { format },
     });
   }
-  const detail = extractErrorDetail(text, input.apiKey);
+  const detail = extractErrorDetail(text, secrets);
   const message = detail ? `${prefix}: ${detail}` : prefix;
   return result(status === 401 || status === 403 ? "auth_failed" : "not_detected", status, message);
 }
 
 /** daemon 自己写的检测原因（ApiEndpointFormatDetectionSchema 的 code 与 params）。 */
 interface DaemonReason {
-  code: "no_model_to_try" | "upstream_timeout" | "upstream_unreachable" | "wrong_shape";
+  code:
+    | "no_model_to_try"
+    | "upstream_timeout"
+    | "upstream_unreachable"
+    | "wrong_shape"
+    | "invalid_header";
   params?: Record<string, string>;
 }
 
 function reasonPartOf(
   reason: DaemonReason,
-  apiKey: string | null,
+  secrets: Secrets,
 ): Pick<ApiEndpointFormatDetection, "code" | "params"> {
   if (reason.params === undefined) return { code: reason.code };
-  const entries = Object.entries(reason.params).map(([key, value]) => [
-    key,
-    redactKey(value, apiKey),
-  ]);
-  return { code: reason.code, params: Object.fromEntries(entries) };
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(reason.params)) params[key] = redactKey(value, secrets);
+  return { code: reason.code, params };
 }
 
 function isSuccess(status: number): boolean {
@@ -350,14 +364,13 @@ function probeRequest(input: {
   extras: RequestExtras;
 }): { body: Record<string, unknown>; headers: Record<string, string> } {
   const { format, probe, templateId, asCli, extras } = input;
-  const keys =
-    templateKeyHeaders({ templateId, format }) ??
-    chosenKeyHeaders({ format, baseUrl: input.baseUrl, keyHeader: extras.keyHeader }) ??
-    probe.keys;
+  const keyHeader = extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, keyHeader, anthropicDefault: probe.keys });
   const tiny = probe.body(input.sentModel ?? input.modelId);
   if (input.capsReply === true && format === "openai_responses") tiny.max_output_tokens = 16;
   // 附加请求体在测试自己的一段对话上也带（magpie tested），再按模板改。
-  const asked = withExtraBody({ body: tiny, extraBody: extras.extraBody, session: testSession() });
+  const session = testSession();
+  const asked = withExtraBody({ body: tiny, extraBody: extras.extraBody, session });
   // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
   const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
   const capped = completionTokens ? asCompletionTokens(asked) : asked;
@@ -368,17 +381,13 @@ function probeRequest(input: {
     body = asCliBody({ client: asCli.client, format, body: capped });
     cliHeaders = { ...asCli.headers, accept: "application/json, text/event-stream" };
   }
-  const headers = signedHeaders({
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      ...probe.headers,
-      ...cliHeaders,
-    },
-    apiKey: input.apiKey,
-    keys,
-    extras,
-  });
+  const ownHeaders = {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...probe.headers,
+    ...cliHeaders,
+  };
+  const headers = signedHeaders({ headers: ownHeaders, apiKey: input.apiKey, keys, extras });
   return { body, headers };
 }
 

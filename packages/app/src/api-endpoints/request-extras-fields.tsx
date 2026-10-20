@@ -19,8 +19,9 @@ const ThemedChevronDown = withUnistyles(ChevronDown);
 const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 // 多行值框（JSON 排版的请求头值、附加请求体）的高度：普通对象，FormTextInput 拆样式时要读得到值。
-const JSON_VALUE_STYLE = { height: 112, alignItems: "flex-start" as const, paddingVertical: 8 };
-const EXTRA_BODY_STYLE = { height: 128, alignItems: "flex-start" as const, paddingVertical: 8 };
+// 框内的输入区要撑满框宽，排好的 JSON 才不会在缩进处折行。
+const JSON_VALUE_STYLE = { height: 112, paddingVertical: 8 };
+const EXTRA_BODY_STYLE = { height: 128, paddingVertical: 8 };
 const EXTRA_BODY_PLACEHOLDER = '{\n  "prompt_cache_key": "${sessionId}"\n}';
 
 /**
@@ -119,7 +120,7 @@ function HeadersField({
       {problem ? (
         <Text
           variant="caption"
-          color="statusDanger"
+          color="statusWarning"
           selectable
           testID="api-endpoint-connection-headers-problem"
         >
@@ -136,10 +137,17 @@ function HeadersField({
         >
           {t("settings.apiEndpoints.form.extras.addHeader")}
         </Button>
-        {state.headerHints.map((name) => (
-          <SuggestedHeaderButton key={name} name={name} model={model} />
-        ))}
       </View>
+      {state.headerHints.length > 0 ? (
+        <View style={styles.suggested} testID="api-endpoint-connection-suggested-headers">
+          <Text variant="caption" color="foregroundMuted">
+            {t("settings.apiEndpoints.form.extras.suggested")}
+          </Text>
+          {state.headerHints.map((name) => (
+            <SuggestedHeaderButton key={name} name={name} model={model} />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -150,8 +158,8 @@ function SuggestedHeaderButton({ name, model }: { name: string; model: Connectio
   const handlePress = useCallback(() => model.addHeader(name), [model, name]);
   return (
     <Button
-      variant="outline"
-      size="sm"
+      variant="ghost"
+      size="xs"
       leftIcon={Plus}
       onPress={handlePress}
       accessibilityLabel={t("settings.apiEndpoints.form.extras.addSuggested", { name })}
@@ -395,6 +403,13 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing[2],
+  },
+  // 模板提示的头：一行浅色的小按钮，前面写着「建议添加」，和「添加请求头」分开。
+  suggested: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing[1],
   },
   segmentRow: {
     flexDirection: "row",

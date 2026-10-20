@@ -2644,11 +2644,14 @@ export const ptBR: TranslationResources = {
           headerValue: "valor",
           addHeader: "Adicionar cabeçalho",
           addSuggested: "Adicionar o cabeçalho {{name}}; o valor você preenche",
+          suggested: "Sugeridos",
           editAsJson: "Editar como JSON",
           collapseJson: "Juntar em uma linha",
           removeHeader: "Remover o cabeçalho {{name}}",
-          headerBadName: "“{{name}}” não é um nome de cabeçalho: use só letras, dígitos e -",
-          headerBadValue: "O valor de “{{name}}” tem quebra de linha ou caractere de controle",
+          headerBadName:
+            "“{{name}}” não é um nome de cabeçalho válido: use só letras, dígitos e ! # $ % & ' * + - . ^ _ ` | ~. Requisições com ele vão falhar.",
+          headerBadValue:
+            "O valor de “{{name}}” tem quebra de linha ou caractere de controle. Requisições com ele vão falhar.",
           extraBody: "Corpo extra",
           extraBodyInfo:
             'Campos JSON adicionados ao corpo de cada requisição Messages, Chat e Responses para este endpoint, incluindo testes; requisições que só contam tokens não recebem. Um campo que a requisição já tem é mantido; escreva "!nome" para substituí-lo. ${sessionId} vira o id da conversa.',

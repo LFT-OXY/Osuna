@@ -6,6 +6,7 @@ import {
   headerProblem,
   isThirdPartyAnthropicUrl,
   keyHeaderOf,
+  takesXApiKeyAlone,
 } from "./request-extras";
 
 // 用例照 magpie internal/provider/extrabody_test.go、authheader.go 与 app.js 的说法（7597c132）。
@@ -40,8 +41,9 @@ describe("extra body", () => {
 });
 
 describe("request headers", () => {
-  it("drops empty names and values and keeps the later of two names differing in case", () => {
+  it("drops empty names, keeps empty values as magpie does, and keeps the later of two names differing in case", () => {
     expect(cleanRequestHeaders({ " X-Team ": " a ", "": "b", Empty: " ", "x-team": "c" })).toEqual({
+      Empty: "",
       "x-team": "c",
     });
     expect(cleanRequestHeaders({ "": "" })).toBeNull();
@@ -72,5 +74,11 @@ describe("key header", () => {
     expect(isThirdPartyAnthropicUrl("https://bedrock-runtime.us-east-1.amazonaws.com")).toBe(false);
     expect(isThirdPartyAnthropicUrl("https://res.services.ai.azure.com/anthropic")).toBe(false);
     expect(isThirdPartyAnthropicUrl("")).toBe(false);
+  });
+
+  it("says Anthropic's own and Bedrock's addresses take x-api-key alone", () => {
+    expect(takesXApiKeyAlone("https://api.anthropic.com")).toBe(true);
+    expect(takesXApiKeyAlone("https://bedrock-runtime.us-east-1.amazonaws.com")).toBe(true);
+    expect(takesXApiKeyAlone("https://relay.example.com")).toBe(false);
   });
 });

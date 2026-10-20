@@ -52,6 +52,9 @@ import { ModelFactsSchema } from "./model-facts.js";
 export const API_ENDPOINT_PROVIDERS = ["claude", "codex"] as const;
 export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
+// 存下的 key 头：两个都放（缺省）不存。
+const STORED_KEY_HEADERS = ["x-api-key", "bearer"] as const;
+
 const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
 
 // 上游清单里的模型多带列表给的上下文、回复上限与思考档位，以及哪些格式列过它（catalog-merge.ts）；
@@ -104,7 +107,8 @@ const StoredApiEndpointSchema = z.object({
   // key 放哪个头（x-api-key、bearer；两个都放不存）。都没有即不加（request-extras.ts）。
   headers: z.record(z.string(), z.string()).optional(),
   extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  // 手改成别的值时当两个都放（照 magpie normalize），不让整个文件读不懂。
+  keyHeader: z.enum(STORED_KEY_HEADERS).optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

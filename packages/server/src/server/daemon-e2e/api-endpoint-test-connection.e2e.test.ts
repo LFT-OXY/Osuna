@@ -45,6 +45,12 @@ async function startUpstream(): Promise<FakeUpstream> {
       >;
       upstream.requests.push({ url: request.url ?? "", headers: request.headers, body });
       if (upstream.hang) return;
+      // /echo 把收到的认证头写进报错里（有的中转站就是这样回的）。
+      if ((request.url ?? "").startsWith("/echo/")) {
+        const message = `bad token: ${String(request.headers.authorization)}`;
+        sendJson(response, 400, { error: { message } });
+        return;
+      }
       const authorized =
         request.headers.authorization === `Bearer ${TYPED_KEY}` ||
         request.headers.authorization === `Bearer ${SAVED_KEY}`;
@@ -595,6 +601,76 @@ describe("API endpoint connection test by base URL and request format", () => {
     expect(upstream.requests[0]?.headers["x-relay-team"]).toBe("typed");
     expect(upstream.requests[0]?.headers["x-api-key"]).toBeUndefined();
     expect(upstream.requests[0]?.body.service_tier).toBe("typed");
+  });
+
+  // 接口管理好用性工单 22 复查：用户填的认证头值和 key 一样打码；发不出去的头每个请求报 invalid_header。
+  test("an endpoint echoing the user's Authorization never gets it back to the client, in a test, a listing or a detection", async () => {
+    const own = "Bearer sk-user-own-secret-42";
+    const headers = { Authorization: own };
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/echo`,
+      format: "anthropic_messages",
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+    const listed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/echo`,
+      format: "anthropic_messages",
+      preview: true,
+      headers,
+    });
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/echo`,
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+
+    expect(upstream.requests[0]?.headers.authorization).toBe(own);
+    expect(tested.result?.error?.message).toContain("bad token: ***");
+    expect(listed.error?.message).toContain("bad token: ***");
+    for (const answer of [tested, listed, detected]) {
+      expect(JSON.stringify(answer)).not.toContain("sk-user-own-secret-42");
+    }
+  });
+
+  test("a header that can't be sent fails each check with invalid_header and its name, and nothing is sent", async () => {
+    const headers = { "X Team": "a" };
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+    const listed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      format: "anthropic_messages",
+      preview: true,
+      headers,
+    });
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/claude`,
+      apiKey: TYPED_KEY,
+      modelId: "claude-sonnet-4-5",
+      headers,
+    });
+
+    expect(tested.result?.error).toMatchObject({
+      code: "invalid_header",
+      params: { name: "X Team" },
+    });
+    expect(listed.error).toMatchObject({ code: "invalid_header", params: { name: "X Team" } });
+    expect(detected.results.map((result) => result.code)).toEqual([
+      "invalid_header",
+      "invalid_header",
+      "invalid_header",
+    ]);
+    expect(upstream.requests).toEqual([]);
   });
 
   test("an unsaved Azure form is asked with the key in api-key alone", async () => {

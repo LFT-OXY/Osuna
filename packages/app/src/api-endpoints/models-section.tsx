@@ -59,6 +59,7 @@ import {
   type OfferedCliTest,
 } from "./internal/model-tests";
 import { relativeAgo } from "./reopen-hints-copy";
+import { headerProblemText } from "./request-extras-copy";
 import { formatLabel } from "./model-settings-sheet";
 import type {
   ApiEndpointModelTestResult,
@@ -992,6 +993,10 @@ function failureCause(t: TFunction, result: ApiEndpointModelTestResult): string 
       return t(`${key}.noFormat`);
     case "cli_sample_missing":
       return t(`${key}.claudeCodeSampleMissing`);
+    case "invalid_header": {
+      const reason = error.params?.reason === "value" ? "value" : "name";
+      return headerProblemText(t, { reason, name: error.params?.name ?? "" });
+    }
     default:
       return error?.message || t(`${key}.noAnswer`);
   }

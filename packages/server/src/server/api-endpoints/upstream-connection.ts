@@ -1,5 +1,6 @@
 import {
   apiEndpointProtocolName,
+  type ApiEndpointError,
   type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -15,12 +16,14 @@ import {
 } from "./upstream-http.js";
 import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
 import {
-  chosenKeyHeaders,
+  keyHeadersAt,
+  secretsOf,
   testSession,
+  unsendableHeader,
+  unsendableHeaderMessage,
   withExtraBody,
   type RequestExtras,
 } from "./request-extras.js";
-import { templateKeyHeaders } from "./templates.js";
 
 /*
  * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求，只验证接口本身。
@@ -32,7 +35,9 @@ export type UpstreamConnectionFailureCode =
   | "upstream_error"
   | "upstream_unreachable"
   | "upstream_timeout"
-  | "protocol_unsupported";
+  | "protocol_unsupported"
+  // 这家的请求头发不出去（params.name）。
+  | "invalid_header";
 
 export type UpstreamConnectionOutcome =
   | { kind: "result"; result: ApiEndpointTestConnectionResult }
@@ -96,14 +101,15 @@ export async function testUpstreamConnection(input: {
   timeoutMs: number;
 }): Promise<UpstreamConnectionOutcome> {
   const protocol = PROTOCOLS[input.provider];
-  const keys =
-    templateKeyHeaders({ templateId: input.templateId, format: protocol.format }) ??
-    chosenKeyHeaders({
-      format: protocol.format,
-      baseUrl: input.baseUrl,
-      keyHeader: input.extras.keyHeader,
-    }) ??
-    protocol.keys;
+  const { extras } = input;
+  const keys = keyHeadersAt({
+    format: protocol.format,
+    templateId: input.templateId,
+    baseUrl: input.baseUrl,
+    keyHeader: extras.keyHeader,
+    anthropicDefault: protocol.keys,
+  });
+  const secrets = secretsOf(input);
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const url = `${input.baseUrl.trim().replace(/\/+$/, "")}${protocol.path}`;
@@ -113,14 +119,31 @@ export async function testUpstreamConnection(input: {
     status: number | null,
     code: UpstreamConnectionFailureCode,
     message: string,
-  ): UpstreamConnectionOutcome => ({
-    kind: "result",
-    result: {
-      ok: false,
-      status,
-      durationMs: elapsed(),
-      error: { code, message: redactKey(message, input.apiKey) },
+    params?: Record<string, string>,
+  ): UpstreamConnectionOutcome => {
+    const error: ApiEndpointError = { code, message: redactKey(message, secrets) };
+    if (params !== undefined) error.params = params;
+    return { kind: "result", result: { ok: false, status, durationMs: elapsed(), error } };
+  };
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return fail(null, "invalid_header", unsendableHeaderMessage(unsendable), { ...unsendable });
+  }
+  const headers = signedHeaders({
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      ...protocol.headers,
     },
+    apiKey: input.apiKey,
+    keys,
+    extras,
+  });
+  // 测试自己的一段对话（magpie tested）。
+  const asked = withExtraBody({
+    body: protocol.body(input.sentModel),
+    extraBody: extras.extraBody,
+    session: testSession(),
   });
 
   let status: number;
@@ -128,24 +151,8 @@ export async function testUpstreamConnection(input: {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: signedHeaders({
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          ...protocol.headers,
-        },
-        apiKey: input.apiKey,
-        keys,
-        extras: input.extras,
-      }),
-      body: JSON.stringify(
-        withExtraBody({
-          body: protocol.body(input.sentModel),
-          extraBody: input.extras.extraBody,
-          // 测试自己的一段对话（magpie tested）。
-          session: testSession(),
-        }),
-      ),
+      headers,
+      body: JSON.stringify(asked),
       signal,
     });
     status = response.status;
@@ -164,7 +171,7 @@ export async function testUpstreamConnection(input: {
 
   const prefix = `POST ${url}: HTTP ${status}`;
   if (status < 200 || status >= 300) {
-    const detail = extractErrorDetail(text, input.apiKey);
+    const detail = extractErrorDetail(text, secrets);
     const message = detail ? `${prefix}: ${detail}` : prefix;
     const code = isPathMissing(status, text) ? "protocol_unsupported" : "upstream_error";
     return fail(status, code, message);

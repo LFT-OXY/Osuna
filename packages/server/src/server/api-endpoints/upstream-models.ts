@@ -11,10 +11,17 @@ import {
   isRecord,
   parseJson,
   redactKey,
+  type Secrets,
 } from "./upstream-http.js";
 import { signedHeaders } from "./gateway/refusals.js";
-import { chosenKeyHeaders, type RequestExtras } from "./request-extras.js";
-import { templateKeyHeaders, templateModelListUrls } from "./templates.js";
+import {
+  keyHeadersAt,
+  secretsOf,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  type RequestExtras,
+} from "./request-extras.js";
+import { templateModelListUrls } from "./templates.js";
 
 /*
  * 从第三方接口列出模型。daemon 在主机上发请求，key 不经过客户端。
@@ -27,11 +34,14 @@ export type UpstreamFailureCode =
   | "upstream_unreachable"
   | "upstream_timeout"
   | "models_unsupported"
-  | "cancelled";
+  | "cancelled"
+  // 这家的请求头发不出去（params.name）。
+  | "invalid_header";
 
 export interface UpstreamFailure {
   code: UpstreamFailureCode;
   message: string;
+  params?: Record<string, string>;
   // 上游回了非 404 / 405 的错误状态码时带上，自动检测据此认出 key 无效。
   status?: number;
 }
@@ -67,11 +77,17 @@ export async function fetchUpstreamModels(input: {
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<UpstreamModelsResult> {
+  const unsendable = unsendableHeader(input.extras);
+  if (unsendable !== null) {
+    const message = unsendableHeaderMessage(unsendable);
+    return { ok: false, error: { code: "invalid_header", message, params: { ...unsendable } } };
+  }
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const base = input.baseUrl.trim().replace(/\/+$/, "");
   const headers = buildHeaders(input);
-  const redact = (text: string) => redactKey(text, input.apiKey);
+  const secrets = secretsOf(input);
+  const redact = (text: string) => redactKey(text, secrets);
   const urls = templateModelListUrls({ templateId: input.templateId, baseUrl: base }) ?? [
     `${base}/v1/models`,
     `${base}/models`,
@@ -80,7 +96,7 @@ export async function fetchUpstreamModels(input: {
   const attempts: FailedAttempt[] = [];
   for (const url of urls) {
     try {
-      const attempt = await listModels({ url, headers, signal, apiKey: input.apiKey });
+      const attempt = await listModels({ url, headers, signal, secrets });
       if (attempt.kind === "ok") return { ok: true, models: attempt.models };
       attempts.push(attempt);
     } catch (error) {
@@ -111,11 +127,9 @@ function buildHeaders(input: {
 }): Record<string, string> {
   const anthropic = input.provider === "claude";
   const format = anthropic ? "anthropic_messages" : "openai_chat";
-  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上，用户选了只放一个的照用户的。Bedrock、Azure 按模板。
-  const keys =
-    templateKeyHeaders({ templateId: input.templateId, format }) ??
-    chosenKeyHeaders({ format, baseUrl: input.baseUrl, keyHeader: input.extras.keyHeader }) ??
-    (anthropic ? "both" : "bearer");
+  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上，用户选了只放一个的照用户的。
+  const keyHeader = input.extras.keyHeader;
+  const keys = keyHeadersAt({ ...input, format, keyHeader, anthropicDefault: "both" });
   const headers: Record<string, string> = { accept: "application/json" };
   if (anthropic) headers["anthropic-version"] = ANTHROPIC_VERSION;
   return signedHeaders({ headers, apiKey: input.apiKey, keys, extras: input.extras });
@@ -125,7 +139,7 @@ async function listModels(input: {
   url: string;
   headers: Record<string, string>;
   signal: AbortSignal;
-  apiKey: string | null;
+  secrets: Secrets;
 }): Promise<Attempt> {
   const { url, headers, signal } = input;
   const models: ListedModel[] = [];
@@ -138,7 +152,7 @@ async function listModels(input: {
         kind: "http",
         url,
         status: response.status,
-        detail: extractErrorDetail(text, input.apiKey),
+        detail: extractErrorDetail(text, input.secrets),
       };
     }
     const body = parseJson(text);

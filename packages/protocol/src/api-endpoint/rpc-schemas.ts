@@ -182,6 +182,17 @@ export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSche
  * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
  * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
  */
+/**
+ * 用户加给这家每个请求的（Headers，ADR 0008）：请求头（名字照用户写的）、附加请求体（JSON 对象，名字前 `!` 是强制覆盖）、
+ * key 放哪个头（API_ENDPOINT_KEY_HEADERS 之一，线上是字符串，不认识的当 both）。接口、保存与保存前的检查共用这三项。
+ */
+export const ApiEndpointRequestExtrasSchema = z.object({
+  headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+  keyHeader: z.string().optional(),
+});
+export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSchema>;
+
 export const ApiEndpointTestAsSchema = z.object({
   method: z.string(),
   unavailable: z.object({ code: z.string(), message: z.string() }).nullable(),
@@ -231,11 +242,8 @@ export const ApiEndpointSchema = z.object({
   modelFacts: z.record(z.string(), ApiEndpointModelFactsSchema).optional(),
   // 「按 Claude Code / Codex 的样子测」这家提供哪几种；老 daemon 不发，即都不提供。
   testsAs: z.array(ApiEndpointTestAsSchema).optional(),
-  // 用户加给这家每个请求的请求头（名字照用户写的）、附加请求体（JSON 对象，名字前 `!` 是强制覆盖）与 key 放哪个头
-  // （API_ENDPOINT_KEY_HEADERS；没有即两个都放）。都只在设了时发；老 daemon 不发。
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  // 请求头、附加请求体与 key 放哪个头（ApiEndpointRequestExtrasSchema）；都只在设了时发，老 daemon 不发。
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -402,7 +410,7 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * （复制时是原来那家的）。老 daemon 忽略它。
  *
  * headers、extraBody、keyHeader：请求头、附加请求体、key 放哪个头，各自整份替换（空对象、both 清掉），省略即保留。
- * 头名不合法或值里有换行的拒收（invalid_header，params.name）；附加请求体字段没名字、是保留字段（EXTRA_BODY_RESERVED）
+ * 请求头照存（头名不合法的请求发不出去，发时每个请求报 invalid_header）；附加请求体字段没名字、是保留字段（EXTRA_BODY_RESERVED）
  * 或同名写了两次的拒收（invalid_extra_body，params.reason 为 unnamed / reserved / duplicate，params.field）。
  * 不认识的 keyHeader 当 both。老 daemon 忽略它们。
  */
@@ -428,9 +436,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   modelScope: z.string().optional(),
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 
@@ -955,9 +961,7 @@ export const ApiEndpointFetchModelsRequestSchema = z.object({
   templateId: z.string().optional(),
   region: z.string().optional(),
   baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
 
@@ -1015,9 +1019,7 @@ export const ApiEndpointDetectFormatsRequestSchema = z.object({
   modelIds: z.array(z.string()).optional(),
   eachModel: z.boolean().optional(),
   // 表单里还没保存的请求头、附加请求体、key 放哪个头（同 fetch_models）。
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
 
@@ -1113,9 +1115,7 @@ export const ApiEndpointTestConnectionRequestSchema = z.object({
   region: z.string().optional(),
   modelIds: z.array(z.string()).optional(),
   // 表单里还没保存的请求头、附加请求体、key 放哪个头（同 fetch_models）。
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  keyHeader: z.string().optional(),
+  ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointTestConnectionRequest = z.infer<
   typeof ApiEndpointTestConnectionRequestSchema

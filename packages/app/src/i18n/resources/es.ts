@@ -2659,11 +2659,14 @@ export const es: TranslationResources = {
           headerValue: "valor",
           addHeader: "Añadir cabecera",
           addSuggested: "Añadir la cabecera {{name}}; el valor lo rellenas tú",
+          suggested: "Sugeridas",
           editAsJson: "Editar como JSON",
           collapseJson: "Juntar en una línea",
           removeHeader: "Quitar la cabecera {{name}}",
-          headerBadName: "«{{name}}» no es un nombre de cabecera: usa solo letras, dígitos y -",
-          headerBadValue: "El valor de «{{name}}» tiene un salto de línea o un carácter de control",
+          headerBadName:
+            "«{{name}}» no es un nombre de cabecera válido: usa solo letras, dígitos y ! # $ % & ' * + - . ^ _ ` | ~. Las solicitudes con ella fallarán.",
+          headerBadValue:
+            "El valor de «{{name}}» tiene un salto de línea o un carácter de control. Las solicitudes con ella fallarán.",
           extraBody: "Cuerpo adicional",
           extraBodyInfo:
             'Campos JSON añadidos al cuerpo de cada solicitud Messages, Chat y Responses a este endpoint, incluidas sus pruebas; las que solo cuentan tokens no los llevan. Un campo que la solicitud ya tiene se conserva; escribe "!nombre" para sustituirlo. ${sessionId} pasa a ser el id de la conversación.',

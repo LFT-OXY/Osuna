@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
-  chosenKeyHeaders,
   extraBodySession,
+  keyHeadersAt,
+  secretsOf,
+  unsendableHeader,
   ownsKeyHeader,
   testSession,
   withExtraBody,
@@ -43,28 +45,60 @@ describe("user headers", () => {
   });
 });
 
-describe("key header choice", () => {
-  test("narrows a third-party Anthropic address only", () => {
+describe("which header the key goes in (magpie AuthHeaders)", () => {
+  function keysAt(input: {
+    format?: "anthropic_messages" | "openai_chat";
+    baseUrl: string;
+    keyHeader?: "both" | "x-api-key" | "bearer";
+    templateId?: string;
+  }) {
+    return keyHeadersAt({
+      format: input.format ?? "anthropic_messages",
+      templateId: input.templateId,
+      baseUrl: input.baseUrl,
+      keyHeader: input.keyHeader ?? "both",
+      anthropicDefault: "both",
+    });
+  }
+
+  test("a third-party Anthropic address takes both, or the one the user picked", () => {
     const relay = "https://relay.example";
+    expect(keysAt({ baseUrl: relay })).toBe("both");
+    expect(keysAt({ baseUrl: relay, keyHeader: "x-api-key" })).toBe("xApiKey");
+    expect(keysAt({ baseUrl: relay, keyHeader: "bearer" })).toBe("bearer");
+    expect(keysAt({ format: "openai_chat", baseUrl: relay, keyHeader: "x-api-key" })).toBe(
+      "bearer",
+    );
+  });
+
+  test("Anthropic's own and Bedrock's addresses take x-api-key alone, whatever was picked", () => {
+    expect(keysAt({ baseUrl: "https://api.anthropic.com", keyHeader: "bearer" })).toBe("xApiKey");
+    expect(keysAt({ baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com" })).toBe("xApiKey");
     expect(
-      chosenKeyHeaders({ format: "anthropic_messages", baseUrl: relay, keyHeader: "bearer" }),
-    ).toBe("bearer");
-    expect(
-      chosenKeyHeaders({ format: "anthropic_messages", baseUrl: relay, keyHeader: "x-api-key" }),
-    ).toBe("xApiKey");
-    expect(
-      chosenKeyHeaders({ format: "anthropic_messages", baseUrl: relay, keyHeader: "both" }),
-    ).toBe(null);
-    expect(
-      chosenKeyHeaders({ format: "openai_chat", baseUrl: relay, keyHeader: "x-api-key" }),
-    ).toBe(null);
-    expect(
-      chosenKeyHeaders({
-        format: "anthropic_messages",
-        baseUrl: "https://api.anthropic.com",
-        keyHeader: "bearer",
-      }),
-    ).toBe(null);
+      keysAt({ format: "openai_chat", baseUrl: "https://x.example", templateId: "azure" }),
+    ).toBe("apiKey");
+  });
+});
+
+describe("what is redacted from errors", () => {
+  test("the key and every user header value, a scheme's credential on its own too; short values stay", () => {
+    const extras = extrasOf({
+      headers: { Authorization: "Bearer sk-user-own", "X-Team": "t1", "X-Org": "org-secret" },
+    });
+    expect(secretsOf({ apiKey: "sk-key", extras })).toEqual([
+      "sk-key",
+      "Bearer sk-user-own",
+      "sk-user-own",
+      "org-secret",
+    ]);
+  });
+
+  test("a header that can't be sent is found before sending", () => {
+    expect(unsendableHeader(extrasOf({ headers: { "X Team": "a" } }))).toEqual({
+      reason: "name",
+      name: "X Team",
+    });
+    expect(unsendableHeader(extrasOf({ headers: { "X-Team": "" } }))).toBeNull();
   });
 });
 

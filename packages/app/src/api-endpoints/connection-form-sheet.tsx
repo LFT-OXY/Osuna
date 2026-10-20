@@ -36,6 +36,7 @@ import { useConnectionFormModel } from "./use-connection-form-model";
 import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
 import { RequestExtrasFields } from "./request-extras-fields";
+import { headerProblemText } from "./request-extras-copy";
 import type {
   ConnectionCurlFill,
   ConnectionCurlNote,
@@ -668,6 +669,8 @@ function detectionReasonText(t: TFunction, reason: DetectionReason): string {
       return t(`${key}.listFailed`, { detail: reason.detail });
     case "wrong_shape":
       return t(`${key}.wrongShape`, { format: formatLabel(t, reason.format) });
+    case "invalid_header":
+      return headerProblemText(t, { reason: reason.headerReason, name: reason.name });
   }
 }
 

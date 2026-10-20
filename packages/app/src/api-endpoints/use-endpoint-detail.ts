@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,6 +15,7 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
+import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
@@ -190,7 +192,7 @@ export function useEndpointDetail(input: {
               setForgetState({ status: "idle" });
               return;
             }
-            failure = response.error.message;
+            failure = requestExtrasErrorText(t, response.error) ?? response.error.message;
           } catch (error) {
             failure = toErrorMessage(error);
           }
@@ -200,7 +202,7 @@ export function useEndpointDetail(input: {
         );
       })();
     },
-    [client, endpoint, hasManagement, refresh],
+    [client, endpoint, hasManagement, refresh, t],
   );
 
   const fetchModels = useCallback(() => runFetch({ quiet: false }), [runFetch]);
@@ -432,14 +434,14 @@ export function useEndpointDetail(input: {
             { provider: LIST_PROVIDER, endpointId: endpoint.id, baseUrl: url, format },
             createUpstreamRequestId(),
           );
-          outcome = testOutcomeOf(response);
+          outcome = testOutcomeOf({ t, response });
         } catch (error) {
           outcome = { kind: "failed", message: toErrorMessage(error) };
         }
         setTestResults((previous) => ({ ...previous, [format]: outcome }));
       })();
     }
-  }, [client, endpoint]);
+  }, [client, endpoint, t]);
 
   const remove = useCallback(() => {
     if (!client) return;
@@ -554,10 +556,15 @@ function scopeFieldsOf({ draft, hasManagement }: { draft: ModelDraft; hasManagem
   return { modelScope: draft.modelScope, autoPick: draft.autoPick };
 }
 
-function testOutcomeOf(response: ApiEndpointTestConnectionResponse["payload"]): FormatTestOutcome {
+function testOutcomeOf(input: {
+  t: TFunction;
+  response: ApiEndpointTestConnectionResponse["payload"];
+}): FormatTestOutcome {
+  const { response } = input;
   if (response.error) return { kind: "failed", message: response.error.message };
-  const result = response.result;
-  if (!result) return { kind: "failed", message: "" };
+  if (!response.result) return { kind: "failed", message: "" };
+  // 请求头发不出去：原因按界面语言说。
+  const result = localizedTestResult(input.t, response.result);
   if (result.ok) return { kind: "ok", durationMs: result.durationMs };
   const message = result.error?.message ?? "";
   if (result.error?.code === "auth_failed") return { kind: "authFailed", message };

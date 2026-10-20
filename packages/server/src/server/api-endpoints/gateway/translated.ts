@@ -8,8 +8,15 @@ import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/r
 import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { EndpointModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
-import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
-import { storedRequestExtras, withExtraBody, type RequestExtras } from "../request-extras.js";
+import { ANTHROPIC_VERSION, parseJson, type Secrets } from "../upstream-http.js";
+import {
+  secretsOf,
+  storedRequestExtras,
+  unsendableHeader,
+  unsendableHeaderMessage,
+  withExtraBody,
+  type RequestExtras,
+} from "../request-extras.js";
 import { adaptiveThinkingAsTaken } from "./translation/anthropic.js";
 import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
 import {
@@ -50,6 +57,7 @@ import {
   takesImageTool,
   withoutImageToolRequest,
   withoutRefusedFields,
+  type FieldRefused,
 } from "./refused-fields.js";
 import {
   ReplyCollector,
@@ -82,6 +90,7 @@ import {
   openUpstream,
   readLimited,
   answerUnlessRefused,
+  failedBySelf,
   upstreamUrl,
   type AnswerEnd,
   type AttemptOutcome,
@@ -135,6 +144,12 @@ export async function attemptTranslated(input: {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
   const extras = storedRequestExtras(input.endpoint);
+  const secrets = secretsOf({ apiKey, extras });
+  // 这家的请求头发不出去：这一个请求当作连不上，照常换家。
+  const unsendable = unsendableHeader(extras);
+  if (unsendable !== null) {
+    return failedBySelf({ status: 502, detail: unsendableHeaderMessage(unsendable) });
+  }
   const sends = () =>
     keyHeadersFor({
       format: to,
@@ -156,7 +171,7 @@ export async function attemptTranslated(input: {
         clientIdentity: input.clientIdentity,
       }),
       body: Buffer.from(ask.body),
-      apiKey,
+      secrets,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
       onHeard: () => input.keepAlive.heard(),
@@ -192,7 +207,7 @@ export async function attemptTranslated(input: {
       const sent = bodyOf({ request, continuation: mode, refusals });
       const resumeUrl = continuationUrl({ baseUrl: input.baseUrl, to, mode });
       const opening = await openAt({ url: resumeUrl, body: sent, keys: sends() });
-      return resumedFrom({ opening, sent, url: resumeUrl, apiKey, to, refusals });
+      return resumedFrom({ opening, sent, url: resumeUrl, secrets, to, refusals });
     },
   });
   const body = build();
@@ -237,7 +252,7 @@ export async function attemptTranslated(input: {
   return answerUnlessRefused({
     opened,
     format: to,
-    answer: (ready) => answerOpened({ ...input, url, opened: ready, goOn }),
+    answer: (ready) => answerOpened({ ...input, url, secrets, opened: ready, goOn }),
   });
 }
 
@@ -257,7 +272,7 @@ interface TranslatedAnswer {
   res: Response;
   wire: AgentWire;
   endpoint: StoredApiEndpoint;
-  apiKey: string | null;
+  secrets: Secrets;
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   request: GatewayRequest;
@@ -277,14 +292,14 @@ async function upstreamReplyOf(input: {
   opened: OpenedUpstream;
   to: ApiEndpointRequestFormat;
   url: URL;
-  apiKey: string | null;
+  secrets: Secrets;
 }): Promise<UpstreamReply | FailedAttempt> {
   const { response, held } = input.opened;
   if (isEventStream(response, held)) return { kind: "stream", response, held };
   const text = await readLimited({ stream: response, first: held });
   const whole = parseJson(text);
   if (!isWholeReply(input.to, whole))
-    return notAStream({ url: input.url, text, apiKey: input.apiKey });
+    return notAStream({ url: input.url, text, secrets: input.secrets });
   return { kind: "whole", body: whole };
 }
 
@@ -360,7 +375,7 @@ async function resumedFrom(input: {
   opening: UpstreamOpening;
   sent: string;
   url: URL;
-  apiKey: string | null;
+  secrets: Secrets;
   to: ApiEndpointRequestFormat;
   refusals: ShapeRefusals;
 }): Promise<AskedToGoOn> {
@@ -480,8 +495,8 @@ export function translatedBody(input: TranslatedBodyInput): string {
 }
 
 /**
- * 补上用户的附加请求体（照 magpie forwardOnce）：Anthropic 上补进来的思考预算按模型改成 adaptive，
- * 这家这个模型不收的字段照样去掉。
+ * 补上用户的附加请求体（照 magpie forwardOnce）：Anthropic 上补进来的思考预算按模型改成 adaptive；
+ * 这家这个模型不收的字段，补进来的也去掉（每种格式都去，和直通一样；不然被拒的字段每次重问都又补回来）。
  */
 function withExtraFields(input: {
   body: Record<string, unknown>;
@@ -493,13 +508,14 @@ function withExtraFields(input: {
 }): Record<string, unknown> {
   const { body, to, refusals } = input;
   const extraBody = input.extraBody ?? {};
-  const added = withExtraBody({ body, extraBody, session: input.session ?? "" });
-  if (added === body || to !== "anthropic_messages") return added;
-  return withoutRefusedFields({
-    format: to,
-    body: adaptiveThinkingAsTaken(added, input.model),
-    refused: (field) => refusals.has(field),
-  });
+  const session = input.session ?? "";
+  const added = withExtraBody({ body, extraBody, session });
+  const isUnchanged = added === body;
+  if (isUnchanged) return added;
+  let fitted = added;
+  if (to === "anthropic_messages") fitted = adaptiveThinkingAsTaken(added, input.model);
+  const refused: FieldRefused = (field) => refusals.has(field);
+  return withoutRefusedFields({ format: to, body: fitted, refused });
 }
 
 /** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */

@@ -2620,11 +2620,14 @@ export const ko: TranslationResources = {
           headerValue: "값",
           addHeader: "헤더 추가",
           addSuggested: "{{name}} 헤더를 추가합니다. 값은 직접 입력하세요",
+          suggested: "추천",
           editAsJson: "JSON으로 편집",
           collapseJson: "한 줄로 접기",
           removeHeader: "헤더 {{name}} 삭제",
-          headerBadName: "“{{name}}”은(는) 헤더 이름으로 쓸 수 없습니다. 영문자, 숫자, - 만 쓰세요",
-          headerBadValue: "“{{name}}” 값에 줄바꿈이나 제어 문자가 있습니다",
+          headerBadName:
+            "“{{name}}”은(는) 헤더 이름으로 쓸 수 없습니다. 영문자, 숫자와 ! # $ % & ' * + - . ^ _ ` | ~ 만 쓸 수 있습니다. 이 헤더를 붙인 요청은 실패합니다.",
+          headerBadValue:
+            "“{{name}}” 값에 줄바꿈이나 제어 문자가 있습니다. 이 헤더를 붙인 요청은 실패합니다.",
           extraBody: "추가 요청 본문",
           extraBodyInfo:
             '이 엔드포인트로 가는 모든 Messages, Chat, Responses 요청 본문(테스트 포함)에 더하는 JSON 필드입니다. 토큰만 세는 요청에는 붙지 않습니다. 요청에 이미 있는 필드는 그대로 두며, 이름 앞에 "!"를 쓰면 대체합니다. ${sessionId}는 대화 ID로 바뀝니다.',

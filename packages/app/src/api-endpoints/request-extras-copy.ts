@@ -1,5 +1,8 @@
 import type { TFunction } from "i18next";
-import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointError,
+  ApiEndpointTestConnectionResult,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { HeaderProblem } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { ExtraBodyTextProblem } from "./internal/request-extras-form";
 
@@ -43,4 +46,16 @@ export function requestExtrasErrorText(t: TFunction, error: ApiEndpointError): s
   if (params.reason === "reserved") return extraBodyProblemText(t, { reason: "reserved", field });
   if (params.reason === "duplicate") return extraBodyProblemText(t, { reason: "duplicate", field });
   return extraBodyProblemText(t, { reason: "unnamed" });
+}
+
+/** 测试连接的结论里 daemon 说「请求头发不出去」的，原因换成界面语言；别的照原样。 */
+export function localizedTestResult(
+  t: TFunction,
+  result: ApiEndpointTestConnectionResult,
+): ApiEndpointTestConnectionResult {
+  const { error } = result;
+  if (error === null) return result;
+  const localized = requestExtrasErrorText(t, error);
+  if (localized === null) return result;
+  return { ...result, error: { ...error, message: localized } };
 }

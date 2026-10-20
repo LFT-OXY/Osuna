@@ -2670,11 +2670,14 @@ export const en = {
           headerValue: "value",
           addHeader: "Add header",
           addSuggested: "Add the {{name}} header; its value is yours to fill in",
+          suggested: "Suggested",
           editAsJson: "Edit as JSON",
           collapseJson: "Collapse to one line",
           removeHeader: "Remove header {{name}}",
-          headerBadName: "“{{name}}” is not a header name: use letters, digits and - only",
-          headerBadValue: "The value of “{{name}}” has a line break or a control character",
+          headerBadName:
+            "“{{name}}” isn't a valid header name: use letters, digits and ! # $ % & ' * + - . ^ _ ` | ~ only. Requests with it will fail.",
+          headerBadValue:
+            "The value of “{{name}}” has a line break or a control character. Requests with it will fail.",
           extraBody: "Extra body",
           extraBodyInfo:
             'JSON fields added to the body of every Messages, Chat and Responses request to this endpoint, its tests included; token counting gets none. A field the request has already is kept; write "!name" to replace it. ${sessionId} becomes the conversation\'s id.',

@@ -2932,13 +2932,13 @@ test.describe("An endpoint's headers, extra body and key header", () => {
       await expect(page.getByTestId("api-endpoint-connection-key-header")).toBeVisible();
     });
 
-    await test.step("a bad header name and a reserved extra body field say why at once and hold the save", async () => {
+    await test.step("a bad header name warns that its requests will fail without holding the save; a reserved extra body field holds it", async () => {
       await page.getByTestId("api-endpoint-connection-header-name-0").fill("X Relay Team");
       await page.getByTestId("api-endpoint-connection-header-value-0").fill("team-e2e");
       await expect(page.getByTestId("api-endpoint-connection-headers-problem")).toHaveText(
-        "“X Relay Team” is not a header name: use letters, digits and - only",
+        "“X Relay Team” isn't a valid header name: use letters, digits and ! # $ % & ' * + - . ^ _ ` | ~ only. Requests with it will fail.",
       );
-      await expect(save).toBeDisabled();
+      await expect(save).toBeEnabled();
       await page.getByTestId("api-endpoint-connection-header-name-0").fill("X-Relay-Team");
       await expect(page.getByTestId("api-endpoint-connection-headers-problem")).toHaveCount(0);
       const extraBody = page.getByTestId("api-endpoint-connection-extra-body-input");
@@ -2950,6 +2950,15 @@ test.describe("An endpoint's headers, extra body and key header", () => {
       await extraBody.fill('{"prompt_cache_key": "${sessionId}"}');
       await expect(page.getByTestId("api-endpoint-connection-extra-body-problem")).toHaveCount(0);
       await expect(save).toBeEnabled();
+    });
+
+    await test.step("a key header the relay doesn't take fails the test as a rejected key", async () => {
+      // 假中转站只认 Authorization: Bearer：只放 x-api-key 就被拒。
+      await page.getByTestId("api-endpoint-connection-key-header-x-api-key").click();
+      await page.getByTestId("api-endpoint-connection-test-button").click();
+      await expect(
+        page.getByTestId("api-endpoint-connection-test-anthropic_messages-verdict"),
+      ).toHaveText("Key rejected");
     });
 
     await test.step("Test connection carries the typed header, extra body and key header", async () => {
@@ -2980,6 +2989,28 @@ test.describe("An endpoint's headers, extra body and key header", () => {
       );
       await expect(advanced(page)).toBeVisible();
     });
+  });
+
+  test("a save the host refuses for a reserved extra body field says why in the window, in place", async ({
+    page,
+  }) => {
+    // 表单当场就挡住保留字段：在发出去的保存里塞一个，看 daemon 的拒收怎么显示。
+    await addReservedFieldToSaves(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Refused relay");
+    await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    await page
+      .getByTestId("api-endpoint-connection-url-anthropic_messages")
+      .fill(`${relay.origin}/good`);
+    await page.getByTestId("api-endpoint-connection-save").click();
+
+    await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+      "Osuna sets “messages” itself, so it can't be added",
+    );
+    await expect(connectionForm(page)).toBeVisible();
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
   });
 
   test("a template's suggested headers are offered to add, and the key header is not offered on Anthropic's own address", async ({
@@ -4795,6 +4826,25 @@ async function failConnectionSave(page: Page): Promise<{ failing: boolean }> {
     });
   });
   return host;
+}
+
+/** 发往 daemon 的保存里都塞进一个保留字段（!messages），看 daemon 拒收时界面怎么说。 */
+async function addReservedFieldToSaves(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isSave =
+        typeof message === "string" && message.includes("provider.api_endpoint.save.request");
+      if (!isSave) {
+        server.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as { message: Record<string, unknown> };
+      envelope.message.extraBody = { "!messages": [] };
+      server.send(JSON.stringify(envelope));
+    });
+  });
 }
 
 /** 关「使用第三方接口」的确认框里按确认。 */

@@ -291,8 +291,12 @@ function failureOf(input: {
   const { detection } = input;
   let code = "upstream_error";
   if (detection.status === "auth_failed") code = "auth_failed";
+  else if (detection.code === "invalid_header") code = detection.code;
   else if (detection.httpStatus === null) code = "upstream_unreachable";
   const reason = (detection.message ?? "").replace(REQUEST_PREFIX, "").replace(STATUS_PREFIX, "");
+  // 发不出去的头：带上 params.name，界面按语言说。
+  const isUnsendable = code === "invalid_header";
+  const params = isUnsendable ? detection.params : undefined;
   return failedResult({
     modelId: input.modelId,
     format: detection.format,
@@ -300,5 +304,6 @@ function failureOf(input: {
     durationMs: 0,
     code,
     message: reason,
+    params,
   });
 }

@@ -9,13 +9,17 @@ import {
   EXTRA_BODY_SESSION_PLACEHOLDER,
   cleanRequestHeaders,
   extraBodyFieldName,
+  headerProblem,
   isReservedExtraBodyField,
   isThirdPartyAnthropicUrl,
-  keyHeaderOf,
+  takesXApiKeyAlone,
   type ApiEndpointKeyHeader,
+  type HeaderProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { KeyHeaders } from "./gateway/refusals.js";
 import type { StoredApiEndpoint } from "./store.js";
+import { templateKeyHeaders } from "./templates.js";
 import { isRecord } from "./upstream-http.js";
 
 /*
@@ -25,8 +29,9 @@ import { isRecord } from "./upstream-http.js";
  *   原有的在前（照 magpie Sign）。用户自己填了认证头时，「两个认证头被拒就改用一个」不再触发。
  * - 附加请求体只给对话请求（Messages、Chat、Responses），只数 token 的不带；没有的字段补上，`!` 开头的强制覆盖，
  *   保留字段不动；字符串里的 ${sessionId} 换成这段对话的标识（测试与检测用一个 osuna-test- 开头的）。
- * - key 放哪个头只对第三方 Anthropic 地址起作用（chosenKeyHeaders）。
- * 头的值可能是密钥：不写日志、不进报错。
+ * - key 放哪个头只对第三方 Anthropic 地址起作用（keyHeadersAt）。
+ * 头的值可能是密钥：不写日志，报错里和 key 一样打码（secretsOf）。头名、值发不出去的（不合法的头名、值里有换行）
+ * 照存，发时这一个请求报 invalid_header（unsendableHeader），不让 Node 抛错。
  */
 
 export interface RequestExtras {
@@ -43,25 +48,68 @@ export function storedRequestExtras(
   endpoint: Pick<StoredApiEndpoint, "headers" | "extraBody" | "keyHeader"> | null | undefined,
 ): RequestExtras {
   if (!endpoint) return NO_REQUEST_EXTRAS;
-  return {
-    headers: cleanRequestHeaders(endpoint.headers) ?? {},
-    extraBody: endpoint.extraBody ?? {},
-    keyHeader: keyHeaderOf(endpoint.keyHeader),
-  };
+  const headers = cleanRequestHeaders(endpoint.headers) ?? {};
+  const extraBody = endpoint.extraBody ?? {};
+  return { headers, extraBody, keyHeader: endpoint.keyHeader ?? "both" };
 }
 
-/** 用户选的 key 头（只放 x-api-key、只放 Bearer）；两个都放、不是第三方 Anthropic 地址的为 null，按通常的规则。 */
-export function chosenKeyHeaders(input: {
+// 用户选的只放一个头，换成 KeyHeaders 的叫法。
+const CHOSEN_KEY_HEADERS: Record<ApiEndpointKeyHeader, KeyHeaders | null> = {
+  both: null,
+  "x-api-key": "xApiKey",
+  bearer: "bearer",
+};
+
+/**
+ * 发给这家这种格式时 key 放哪（照 magpie AuthHeaders）：Bedrock、Azure 模板由模板定；OpenAI 格式只放 Bearer；
+ * Anthropic 自己与 Bedrock 的地址只放 x-api-key；第三方 Anthropic 地址照用户选的，没选是 anthropicDefault
+ * （中转站与测试两个都放，老客户端的测试连接照 Claude Code 只放 Bearer）。
+ */
+export function keyHeadersAt(input: {
   format: ApiEndpointRequestFormat;
+  templateId: string | undefined;
   baseUrl: string;
   keyHeader: ApiEndpointKeyHeader;
-}): "xApiKey" | "bearer" | null {
-  if (input.format !== "anthropic_messages" || !isThirdPartyAnthropicUrl(input.baseUrl)) {
-    return null;
+  anthropicDefault: KeyHeaders;
+}): KeyHeaders {
+  const fixed = templateKeyHeaders({ templateId: input.templateId, format: input.format });
+  if (fixed !== null) return fixed;
+  if (input.format !== "anthropic_messages") return "bearer";
+  if (takesXApiKeyAlone(input.baseUrl)) return "xApiKey";
+  const chosen = CHOSEN_KEY_HEADERS[input.keyHeader];
+  const isChoiceTaken = chosen !== null && isThirdPartyAnthropicUrl(input.baseUrl);
+  return isChoiceTaken ? chosen : input.anthropicDefault;
+}
+
+/** 这家的请求头里第一个发不出去的（不合法的头名、值里有换行）；都能发为 null。 */
+export function unsendableHeader(extras: RequestExtras): HeaderProblem | null {
+  return headerProblem(extras.headers);
+}
+
+/** 发不出去的头在这一个请求上的原因（英文原文；界面按 invalid_header 与 params.name 用界面语言说）。 */
+export function unsendableHeaderMessage(problem: HeaderProblem): string {
+  const what =
+    problem.reason === "name"
+      ? "is not a valid header name"
+      : "has a line break or control character";
+  return `Request header ${JSON.stringify(problem.name)} set on this endpoint ${what}, so the request can't be sent`;
+}
+
+// 短于这么多的值（如 "2"）不打码：换掉会把报错里不相干的字也换掉。
+const MIN_SECRET_LENGTH = 4;
+// 「Bearer xxx」这类值：上游可能只回显后面的凭据。
+const SCHEMED_CREDENTIAL = /^\S+\s+(\S+)$/;
+
+/** 报错里要打码的：这家的 key 和用户的每个请求头值（带「Bearer 」这类前缀的，凭据本身也算）。 */
+export function secretsOf(input: { apiKey: string | null; extras: RequestExtras }): string[] {
+  const secrets: string[] = [];
+  if (input.apiKey !== null) secrets.push(input.apiKey);
+  for (const value of Object.values(input.extras.headers)) {
+    secrets.push(value);
+    const credential = SCHEMED_CREDENTIAL.exec(value)?.[1];
+    if (credential !== undefined) secrets.push(credential);
   }
-  if (input.keyHeader === "x-api-key") return "xApiKey";
-  if (input.keyHeader === "bearer") return "bearer";
-  return null;
+  return secrets.filter((secret) => secret.length >= MIN_SECRET_LENGTH);
 }
 
 /** 用户自己填了认证头（Authorization 或 x-api-key）：这家的 key 怎么带由用户说了算。 */
@@ -90,7 +138,9 @@ export function withUserHeaders<V extends string | string[]>(
       if (existing !== undefined) had.push(...[existing].flat());
       delete out[key];
     }
-    out[name] = isListHeader(name) ? mergedList([...had, value]) : value;
+    let written = value;
+    if (isListHeader(name)) written = mergedList([...had, value]);
+    out[name] = written;
   }
   return out;
 }
@@ -121,12 +171,15 @@ export function withExtraBody(input: {
   const seen = new Set<string>();
   for (const key of Object.keys(extraBody).sort()) {
     const { name, isForced } = extraBodyFieldName(key);
-    if (name === "" || isReservedExtraBodyField(name) || seen.has(name)) continue;
+    const isSkipped = name === "" || isReservedExtraBodyField(name) || seen.has(name);
+    if (isSkipped) continue;
     seen.add(name);
-    const isPresent = Object.hasOwn(body, name);
-    if (isPresent && !isForced) continue;
+    const keepsOwn = Object.hasOwn(body, name) && !isForced;
+    if (keepsOwn) continue;
     out ??= { ...body };
-    out[name] = withSession(structuredClone(extraBody[key]), input.session);
+    // 拷一份再换：存的附加请求体不能被改。
+    const copied = structuredClone(extraBody[key]);
+    out[name] = withSession(copied, input.session);
   }
   return out ?? body;
 }
@@ -135,9 +188,9 @@ function withSession(value: unknown, session: string): unknown {
   if (typeof value === "string") return value.replaceAll(EXTRA_BODY_SESSION_PLACEHOLDER, session);
   if (Array.isArray(value)) return value.map((item) => withSession(item, session));
   if (!isRecord(value)) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, withSession(item, session)]),
-  );
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) out[key] = withSession(item, session);
+  return out;
 }
 
 // 各家 Agent 说自己是哪段对话的请求头（magpie sessionHeaders）。
@@ -165,9 +218,12 @@ export function extraBodySession(headers: IncomingHttpHeaders, body: unknown): s
   const request = isRecord(body) ? body : {};
   const items = conversationItems(request);
   const isGemini = !Array.isArray(request.messages) && Array.isArray(request.contents);
-  const userItem = items.find(
-    (item) => isRecord(item) && (item.role === "user" || (isGemini && item.role === undefined)),
-  );
+  const userItem = items.find((item) => {
+    if (!isRecord(item)) return false;
+    // Gemini 省略 role 时算用户说的；Chat 与 Responses 不算。
+    const isUnnamedGeminiTurn = isGemini && item.role === undefined;
+    return item.role === "user" || isUnnamedGeminiTurn;
+  });
   const first = userItem ?? items[0] ?? request.input ?? body;
   const digest = createHash("sha256").update(JSON.stringify(first)).digest("hex");
   return `osuna-${digest.slice(0, 24)}`;
