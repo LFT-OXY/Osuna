@@ -223,6 +223,7 @@ describe("connection form: create", () => {
           message: null,
           durationMs: null,
           modelId: null,
+          reason: null,
         },
         {
           format: "openai_chat",
@@ -232,6 +233,7 @@ describe("connection form: create", () => {
           message: null,
           durationMs: null,
           modelId: null,
+          reason: null,
         },
         {
           format: "openai_responses",
@@ -241,11 +243,12 @@ describe("connection form: create", () => {
           message: "nope",
           durationMs: null,
           modelId: null,
+          reason: null,
         },
       ],
       byModel: null,
-      eachCut: null,
-      onlyGiven: [],
+      askedOnlyFirst: null,
+      singleFormatPins: [],
       isTaken: false,
       onlyChoices: null,
       canTake: true,
@@ -1748,6 +1751,7 @@ describe("connection form: checking before saving", () => {
         message: null,
         durationMs: 412,
         modelId: "my-model",
+        reason: null,
       },
     ]);
   });
@@ -2304,9 +2308,9 @@ describe("connection form: detecting each picked model", () => {
       message: "HTTP 400: model glm-4.6 not supported · /x",
     });
     // 只在一种格式上答上的才给「只用这种格式」；试了一个模型的那排按钮这时没有。
-    expect(detected?.onlyGiven).toEqual([{ modelId: "glm-4.6", format: "openai_chat" }]);
+    expect(detected?.singleFormatPins).toEqual([{ modelId: "glm-4.6", format: "openai_chat" }]);
     expect(detected?.onlyChoices).toBeNull();
-    expect(detected?.eachCut).toBeNull();
+    expect(detected?.askedOnlyFirst).toBeNull();
   });
 
   it("Use these fills the addresses and makes each model that answered on one format only use it, with the save", async () => {
@@ -2369,8 +2373,8 @@ describe("connection form: detecting each picked model", () => {
     fake.answerDetect({ status: "done", results: EACH_SUMMARY, models: rows });
     await flush();
     expect(model.getState().detection).toMatchObject({
-      eachCut: { asked: 30, picked: 32 },
-      onlyGiven: [],
+      askedOnlyFirst: { asked: 30, picked: 32 },
+      singleFormatPins: [],
     });
   });
 
@@ -2410,6 +2414,39 @@ describe("connection form: detecting each picked model", () => {
     model.cancelDetect();
     expect(fake.detects[1]?.signal.aborted).toBe(true);
     expect(model.getState()).toMatchObject({ detecting: false, detection: null });
+  });
+
+  it("keeps the host's own reasons as codes to be said in the app's language", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.detectEachModel();
+    const coded = (format: string, code: string, params?: Record<string, string>) => ({
+      ...cell({ format, url: "https://relay.example", modelId: "slow", isOk: false }),
+      httpStatus: null,
+      message: "English from the host",
+      code,
+      ...(params ? { params } : {}),
+    });
+    const row = {
+      modelId: "slow",
+      results: [
+        coded("anthropic_messages", "upstream_timeout", { seconds: "12" }),
+        coded("openai_chat", "not_asked"),
+        coded("openai_responses", "something_new"),
+      ],
+    };
+    fake.answerDetect({ status: "done", results: row.results, models: [row] });
+    await flush();
+    const reasons = model.getState().detection?.byModel?.[0]?.cells.map((c) => c.reason);
+    expect(reasons).toEqual([
+      { code: "upstream_timeout", seconds: "12" },
+      { code: "not_asked" },
+      null,
+    ]);
   });
 
   it("a host without the capability has no Each picked model", () => {

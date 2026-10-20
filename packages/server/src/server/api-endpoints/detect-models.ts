@@ -2,19 +2,20 @@
 // internal/catalog/catalog.go 的 ImagesAPI）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
+  API_ENDPOINT_DETECT_MAX_MODELS,
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointModelDetection,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
-import { disabledMessage } from "./disabled-models.js";
 import { deadlineSignal, runPool } from "./model-tests.js";
-import { DETECT_MAX_MODELS, probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
+import { probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
 
 /*
  * 逐个模型识别（prd 第 11a 条，照 magpie DetectModels）：表单里已选的模型（前 30 个）在每种格式上各问一次最小请求，
- * 几个一起问；每个请求有自己的时限，整次识别也有总时限，到点还没问的记成没问。被禁的模型和生图模型不问。
- * 每种格式的总结论是第一个答上的模型的，都没答上取第一个模型的（magpie 的 sum）。
+ * 几个一起问；每个请求有自己的时限，整次识别也有总时限，到点还没问的记成没问。生图模型不问；被禁的模型照样问
+ * （magpie 的检测不看禁用，只有测试和中转站看）。每种格式的总结论是第一个答上的模型的，都没答上取第一个模型的（magpie 的 sum）。
+ * daemon 自己定的原因带 code 与 params，界面按语言说；message 是英文原文。
  */
 
 export const DETECT_EACH_DEFAULTS = {
@@ -62,12 +63,39 @@ function isImageModel(modelId: string): boolean {
   return IMAGE_MODEL_WORDS.some((word) => id.includes(word));
 }
 
-const NOT_ASKED_OUT_OF_TIME = "Not asked: the detection ran out of time";
-const CUT_OFF_OUT_OF_TIME = "No response before the detection ran out of time";
+/** daemon 自己定的、没发请求或没等到回答的原因。 */
+type CellReason =
+  | { code: "not_asked" }
+  | { code: "image_model" }
+  | { code: "batch_timeout" }
+  | { code: "upstream_timeout"; seconds: number };
+
+const REASON_MESSAGES: Record<Exclude<CellReason["code"], "upstream_timeout">, string> = {
+  not_asked: "Not asked: the detection ran out of time",
+  image_model: "An image model can't chat, so it isn't asked here",
+  batch_timeout: "No response before the detection ran out of time",
+};
+
+function reasonFields(
+  reason: CellReason,
+): Pick<ApiEndpointFormatDetection, "message" | "code" | "params"> {
+  if (reason.code === "upstream_timeout") {
+    const seconds = String(reason.seconds);
+    return { code: reason.code, params: { seconds }, message: `No response within ${seconds}s` };
+  }
+  return { code: reason.code, message: REASON_MESSAGES[reason.code] };
+}
 
 interface ProbeTask {
   row: number;
   column: number;
+}
+
+/** 去掉空白与重复，取前 API_ENDPOINT_DETECT_MAX_MODELS 个。 */
+function modelsToAsk(modelIds: string[]): string[] {
+  const trimmed = modelIds.map((id) => id.trim());
+  const unique = new Set(trimmed.filter((id) => id !== ""));
+  return [...unique].slice(0, API_ENDPOINT_DETECT_MAX_MODELS);
 }
 
 export async function detectEachModel(input: {
@@ -75,8 +103,6 @@ export async function detectEachModel(input: {
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
   modelIds: string[];
-  // 命中的「已禁用的模型」条目；没被禁为 null。
-  disabledBy: (modelId: string) => string | null;
   // 发给上游时模型叫什么（已保存那家的上游模型名）。
   sentNameOf: (modelId: string) => string;
   limits: DetectEachLimits;
@@ -85,32 +111,34 @@ export async function detectEachModel(input: {
   signal: AbortSignal;
 }): Promise<DetectEachOutcome> {
   const { limits, timers } = input;
-  const ids = [...new Set(input.modelIds.map((id) => id.trim()).filter(Boolean))].slice(
-    0,
-    DETECT_MAX_MODELS,
-  );
+  const ids = modelsToAsk(input.modelIds);
   if (ids.length === 0) return { kind: "noModels" };
   const urls = suggestedBaseUrls(input.baseUrl);
   const tasks: ProbeTask[] = [];
-  const cell = (modelId: string, column: number, message: string): ApiEndpointFormatDetection => {
-    const format = API_ENDPOINT_REQUEST_FORMATS[column];
+  const unanswered = (cell: {
+    modelId: string;
+    column: number;
+    reason: CellReason;
+  }): ApiEndpointFormatDetection => {
+    const format = API_ENDPOINT_REQUEST_FORMATS[cell.column];
+    const reason = reasonFields(cell.reason);
     return {
       format,
       url: urls[format],
       status: "not_detected",
       httpStatus: null,
-      message,
-      modelId,
+      modelId: cell.modelId,
+      ...reason,
     };
   };
   const models: ApiEndpointModelDetection[] = ids.map((modelId, row) => {
-    const pattern = input.disabledBy(modelId);
-    let skipped: string | null = null;
-    if (pattern !== null) skipped = disabledMessage({ model: modelId, pattern });
-    else if (isImageModel(modelId)) skipped = "An image model can't chat, so it isn't asked here";
+    const isAskable = !isImageModel(modelId);
+    // 先记成没问，问到了再换成回答。
+    let reason: CellReason = { code: "not_asked" };
+    if (!isAskable) reason = { code: "image_model" };
     const results = API_ENDPOINT_REQUEST_FORMATS.map((_, column) => {
-      if (skipped === null) tasks.push({ row, column });
-      return cell(modelId, column, skipped ?? NOT_ASKED_OUT_OF_TIME);
+      if (isAskable) tasks.push({ row, column });
+      return unanswered({ modelId, column, reason });
     });
     return { modelId, results };
   });
@@ -125,9 +153,11 @@ export async function detectEachModel(input: {
       if (!task) return;
       const row = models[task.row];
       if (!row) return;
-      const modelId = row.modelId;
+      const { modelId } = row;
       const format = API_ENDPOINT_REQUEST_FORMATS[task.column];
       const deadline = deadlineSignal({ timers, ms: limits.probeTimeoutMs });
+      const sentModel = input.sentNameOf(modelId);
+      const probeSignal = AbortSignal.any([signal, deadline.signal]);
       const detection = await probeUpstreamFormat({
         format,
         baseUrl: urls[format],
@@ -135,13 +165,13 @@ export async function detectEachModel(input: {
         // 自动识别只给「自定义」用。
         templateId: undefined,
         modelId,
-        sentModel: input.sentNameOf(modelId),
-        signal: AbortSignal.any([signal, deadline.signal]),
+        sentModel,
+        signal: probeSignal,
         // 单个请求的时限由 deadline 管，这里只要不早于它。
         timeoutMs: limits.probeTimeoutMs + 1_000,
       });
       deadline.clear();
-      row.results[task.column] = cutOffResult({
+      row.results[task.column] = cutOff({
         detection,
         isProbeLate: deadline.signal.aborted,
         isBatchLate: batch.signal.aborted,
@@ -158,8 +188,8 @@ export async function detectEachModel(input: {
   return { kind: "result", results, models };
 }
 
-/** 这一问被时限打断时改写原因：自己的时限到了说几秒没回，整次识别到点了说没赶上。 */
-function cutOffResult(input: {
+/** 这一问被时限打断时换成 daemon 的原因：自己的时限到了说几秒没回，整次识别到点了说没赶上。 */
+function cutOff(input: {
   detection: ApiEndpointFormatDetection;
   isProbeLate: boolean;
   isBatchLate: boolean;
@@ -169,8 +199,9 @@ function cutOffResult(input: {
   if (detection.status === "ok") return detection;
   if (input.isProbeLate) {
     const seconds = Math.round(input.probeTimeoutMs / 1000);
-    return { ...detection, httpStatus: null, message: `No response within ${seconds}s` };
+    const reason = reasonFields({ code: "upstream_timeout", seconds });
+    return { ...detection, httpStatus: null, ...reason };
   }
-  if (input.isBatchLate) return { ...detection, httpStatus: null, message: CUT_OFF_OUT_OF_TIME };
-  return detection;
+  if (!input.isBatchLate) return detection;
+  return { ...detection, httpStatus: null, ...reasonFields({ code: "batch_timeout" }) };
 }

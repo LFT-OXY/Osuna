@@ -3356,7 +3356,8 @@ export class ApiEndpointService {
       baseUrl,
       apiKey,
       modelId: input.modelId?.trim() || null,
-      pickedModelIds: (input.modelIds ?? []).filter(this.isTestAskable(input.endpointId)),
+      // 检测照样问被禁的模型（magpie Detect 不看禁用，只有测试和中转站看）。
+      pickedModelIds: input.modelIds ?? [],
       sentNameOf: this.sentNameOf(input.endpointId),
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
@@ -3368,7 +3369,7 @@ export class ApiEndpointService {
     return { results: outcome.results, models: null };
   }
 
-  /** 逐个模型识别（照 magpie DetectModels）：被禁的模型列出但不问。 */
+  /** 逐个模型识别（照 magpie DetectModels）：和单次检测一样，被禁的模型也问。 */
   private async detectEachModel(args: {
     input: ApiEndpointDetectInput;
     baseUrl: string;
@@ -3376,12 +3377,12 @@ export class ApiEndpointService {
     signal: AbortSignal;
   }): Promise<ApiEndpointDetectOutcome> {
     const { input } = args;
+    const sentNameOf = this.sentNameOf(input.endpointId);
     const outcome = await detectEachModel({
       baseUrl: args.baseUrl,
       apiKey: args.apiKey,
       modelIds: input.modelIds ?? [],
-      disabledBy: this.testDisabledBy(input.endpointId),
-      sentNameOf: this.sentNameOf(input.endpointId),
+      sentNameOf,
       limits: this.detectEachLimits,
       timers: this.modelTestTimers,
       signal: args.signal,
@@ -3491,21 +3492,16 @@ export class ApiEndpointService {
   }
 
   /**
-   * 测试与检测不问被禁的模型（magpie test.go 的 testOne、testModel）：已保存的那家按它的接口标识认，还没保存的只按名字认。
+   * 测试连接不挑被禁的模型（magpie test.go 的 testOne、testModel；检测不看禁用）：已保存的那家按它的接口标识认，
+   * 还没保存的只按名字认。
    */
   private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
-    const disabledBy = this.testDisabledBy(endpointId);
-    return (modelId) => disabledBy(modelId) === null;
-  }
-
-  /** 测试与检测时一个模型被哪条「已禁用的模型」禁了；没被禁为 null。 */
-  private testDisabledBy(endpointId: string | undefined): (modelId: string) => string | null {
     const state = this.readState();
     const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
     return (modelId) =>
-      endpoint
+      (endpoint
         ? endpointDisabledBy({ state, endpoint, model: modelId })
-        : askedDisabledBy({ state, model: modelId });
+        : askedDisabledBy({ state, model: modelId })) === null;
   }
 
   /** 点名测一个被禁的模型：不发请求，结论写明命中的条目（magpie testOne）；没被禁为 null。 */

@@ -49,11 +49,12 @@ import type {
   ConnectionSaveResult,
   ConnectionTemplateState,
   DetectedFormat,
+  DetectionReason,
   FormatTestRow,
   ModelDetectionRow,
   ModelFormatPin,
 } from "./internal/connection-form-model";
-import { DETECT_EACH_MAX_MODELS } from "./internal/connection-form-model";
+import { API_ENDPOINT_DETECT_MAX_MODELS } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
@@ -352,6 +353,10 @@ function AddressField({
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
   const handleDetectEach = useCallback(() => model.detectEachModel(), [model]);
   const eachLabel = t("settings.apiEndpoints.form.detected.eachButton");
+  const eachInfo = t("settings.apiEndpoints.form.detected.eachInfo", {
+    max: API_ENDPOINT_DETECT_MAX_MODELS,
+  });
+  const isCompact = useIsCompactFormFactor();
   const addressInputRef = useCurlPasteField({ model, field: "address" });
   return (
     <Field
@@ -407,8 +412,8 @@ function AddressField({
         ) : null}
       </View>
       {state.canCheckBeforeSave ? (
-        <View style={[styles.subField, styles.inlineRow]}>
-          <View style={styles.flex}>
+        <View style={isCompact ? styles.detectModelStacked : styles.detectModelRow}>
+          <View style={isCompact ? null : styles.flex}>
             <FormTextInput
               initialValue={state.detectModel}
               onChangeText={model.setDetectModel}
@@ -419,22 +424,23 @@ function AddressField({
               testID="api-endpoint-connection-detect-model"
             />
           </View>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleDetectEach}
-            disabled={!state.canDetectEach}
-            testID="api-endpoint-connection-detect-each"
-          >
-            {eachLabel}
-          </Button>
-          <SettingsInfoTip
-            title={eachLabel}
-            info={t("settings.apiEndpoints.form.detected.eachInfo", {
-              max: DETECT_EACH_MAX_MODELS,
-            })}
-            testID="api-endpoint-connection-detect-each-info"
-          />
+          {/* 窄窗口下按钮另起一行，输入框占满宽度、提示文字放得下；按钮与输入框同一档高度。 */}
+          <View style={styles.inlineRow}>
+            <Button
+              variant="outline"
+              size={size}
+              onPress={handleDetectEach}
+              disabled={!state.canDetectEach}
+              testID="api-endpoint-connection-detect-each"
+            >
+              {eachLabel}
+            </Button>
+            <SettingsInfoTip
+              title={eachLabel}
+              info={eachInfo}
+              testID="api-endpoint-connection-detect-each-info"
+            />
+          </View>
         </View>
       ) : null}
       {state.eachNeedsModels ? (
@@ -474,9 +480,9 @@ function DetectionResults({
         />
       ))}
       {detection.byModel ? <ModelDetectionList rows={detection.byModel} /> : null}
-      {detection.eachCut ? (
+      {detection.askedOnlyFirst ? (
         <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-each-cut">
-          {t("settings.apiEndpoints.form.detected.eachCut", detection.eachCut)}
+          {t("settings.apiEndpoints.form.detected.eachCut", detection.askedOnlyFirst)}
         </Text>
       ) : null}
       {detection.canTake ? (
@@ -504,9 +510,9 @@ function DetectionResults({
       {detection.onlyChoices ? (
         <OnlyFormatChoices choices={detection.onlyChoices} model={model} />
       ) : null}
-      {detection.onlyGiven.length > 0 ? (
+      {detection.singleFormatPins.length > 0 ? (
         <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-each-given">
-          {givenPinsText({ t, pins: detection.onlyGiven, isTaken: detection.isTaken })}
+          {givenPinsText({ t, pins: detection.singleFormatPins, isTaken: detection.isTaken })}
         </Text>
       ) : null}
       {detection.isTaken ? (
@@ -587,27 +593,30 @@ function ModelDetectionCell({
 }) {
   const { t } = useTranslation();
   const isOk = cell.label === "ok";
-  let verdict = t(`settings.apiEndpoints.form.detection.${cell.label}`);
+  // 格式名那一行：答上的写耗时，没答上的写 HTTP 状态码（magpie 的格子同样把状态码放在原因前面）。
+  let status: string | null = null;
   if (isOk && cell.durationMs !== null) {
-    verdict = t("settings.apiEndpoints.form.detected.eachOk", { ms: cell.durationMs });
-  }
-  const reason = isOk ? null : cell.message;
+    status = t("settings.apiEndpoints.form.detected.eachOk", { ms: cell.durationMs });
+  } else if (!isOk && cell.httpStatus !== null) status = String(cell.httpStatus);
+  const reason = isOk ? null : cellReasonText({ t, cell });
   return (
     <View style={style} testID={testID}>
-      <View style={styles.checkHeading}>
+      <View style={styles.eachHeading}>
         <View style={styles.checkIcon}>
           {isOk ? <ThemedCheck size={12} /> : <ThemedCross size={12} />}
         </View>
         <Text variant="caption" color="foregroundMuted">
           {t(`settings.apiEndpoints.formats.${cell.format}`)}
         </Text>
-        <Text
-          variant="caption"
-          color={isOk ? "statusSuccess" : "statusDanger"}
-          testID={`${testID}-verdict`}
-        >
-          {verdict}
-        </Text>
+        {status !== null ? (
+          <Text
+            variant="caption"
+            color={isOk ? "statusSuccess" : "statusDanger"}
+            testID={`${testID}-verdict`}
+          >
+            {status}
+          </Text>
+        ) : null}
       </View>
       {reason ? (
         <Text variant="caption" color="foregroundMuted" selectable testID={`${testID}-reason`}>
@@ -616,6 +625,36 @@ function ModelDetectionCell({
       ) : null}
     </View>
   );
+}
+
+/** 没答上的一格的原因：结论（未检测到 / key 被拒）加 daemon 的原因（按界面语言）或上游原文，状态码已在上一行。 */
+function cellReasonText(input: { t: TFunction; cell: DetectedFormat }): string {
+  const { t, cell } = input;
+  const verdict = t(`settings.apiEndpoints.form.detection.${cell.label}`);
+  let said = upstreamReason(cell);
+  if (cell.reason !== null) said = detectionReasonText(t, cell.reason);
+  if (said === null) return verdict;
+  return t("settings.apiEndpoints.form.detected.eachReason", { verdict, reason: said });
+}
+
+/** 上游原文去掉开头的「HTTP 状态码:」（状态码已在格式名那一行）。 */
+function upstreamReason(cell: DetectedFormat): string | null {
+  if (cell.message === null) return null;
+  return cell.message.replace(/^HTTP \d+(: )?/, "") || null;
+}
+
+function detectionReasonText(t: TFunction, reason: DetectionReason): string {
+  const key = "settings.apiEndpoints.form.detected.eachReasons";
+  switch (reason.code) {
+    case "upstream_timeout":
+      return t(`${key}.upstreamTimeout`, { seconds: reason.seconds });
+    case "batch_timeout":
+      return t(`${key}.batchTimeout`);
+    case "not_asked":
+      return t(`${key}.notAsked`);
+    case "image_model":
+      return t(`${key}.imageModel`);
+  }
 }
 
 /**
@@ -1838,7 +1877,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   eachCells: {
     flexDirection: "row",
-    gap: theme.spacing[3],
+    gap: theme.spacing[2],
   },
   eachCellsStacked: {
     gap: theme.spacing[1],
@@ -1846,10 +1885,27 @@ const styles = StyleSheet.create((theme) => ({
   eachCell: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: theme.spacing[0.5],
   },
   eachCellStacked: {
-    gap: 2,
+    gap: theme.spacing[0.5],
+  },
+  // 一格的第一行：图标、格式名与耗时或状态码挨得紧些，三列宽时放得下一行。
+  eachHeading: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    columnGap: theme.spacing[1],
+  },
+  detectModelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  detectModelStacked: {
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
   },
   checkHeading: {
     flexDirection: "row",

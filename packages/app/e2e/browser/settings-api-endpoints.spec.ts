@@ -1319,17 +1319,20 @@ test.describe("Settings API endpoints", () => {
     const each = page.getByTestId("api-endpoint-connection-detect-each");
     const verdict = (model: string, format: string) =>
       page.getByTestId(`api-endpoint-connection-each-${model}-${format}-verdict`);
+    const reason = (model: string, format: string) =>
+      page.getByTestId(`api-endpoint-connection-each-${model}-${format}-reason`);
 
     await test.step("each model gets a row with each format's answer", async () => {
       relay.requests.length = 0;
       await each.click();
       await expect(verdict("claude-sonnet-4-5", "anthropic_messages")).toHaveText(/^\d+ ms$/);
       await expect(verdict("claude-sonnet-4-5", "openai_chat")).toHaveText(/^\d+ ms$/);
-      await expect(verdict("claude-sonnet-4-5", "openai_responses")).toHaveText("Not detected");
-      await expect(verdict("chat-only-glm", "anthropic_messages")).toHaveText("Not detected");
-      await expect(
-        page.getByTestId("api-endpoint-connection-each-chat-only-glm-anthropic_messages-reason"),
-      ).toHaveText("HTTP 400: The model chat-only-glm is not served here · /v1/messages");
+      // 没答上的：格式名那一行写状态码，下一行写结论与原因。
+      await expect(verdict("claude-sonnet-4-5", "openai_responses")).toHaveText("404");
+      await expect(verdict("chat-only-glm", "anthropic_messages")).toHaveText("400");
+      await expect(reason("chat-only-glm", "anthropic_messages")).toHaveText(
+        "Not detected · The model chat-only-glm is not served here · /v1/messages",
+      );
       await expect(verdict("chat-only-glm", "openai_chat")).toHaveText(/^\d+ ms$/);
       // 两个模型、三种格式，各问一次。
       expect(postedPaths(relay)).toHaveLength(6);
@@ -1356,7 +1359,8 @@ test.describe("Settings API endpoints", () => {
       await each.click();
       for (const model of ["claude-sonnet-4-5", "chat-only-glm"]) {
         for (const format of ["anthropic_messages", "openai_chat", "openai_responses"]) {
-          await expect(verdict(model, format)).toHaveText("Key rejected");
+          await expect(verdict(model, format)).toHaveText("401");
+          await expect(reason(model, format)).toHaveText(/^Key rejected · Invalid API key · /);
         }
       }
       await expect(page.getByTestId("api-endpoint-connection-use-detected")).toHaveCount(0);

@@ -1,6 +1,7 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/detect.go、test.go）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
+  API_ENDPOINT_DETECT_MAX_MODELS,
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointRequestFormat,
@@ -27,9 +28,6 @@ import { asCliBody, type CliTestClient } from "./test-as.js";
  * 没填时按格式从表单里已选的模型挑，也没有才向上游列一次模型挑人选（列模型不花钱）。
  * 列模型就被拒（401 / 403）时三种都算 key 无效，不再发对话请求。
  */
-
-// 一次检测最多从这么多个已选模型里挑（照 magpie DetectMax）。
-export const DETECT_MAX_MODELS = 30;
 
 export type DetectOutcome =
   | { kind: "result"; results: ApiEndpointFormatDetection[] }
@@ -118,7 +116,7 @@ export async function detectUpstreamFormats(input: {
   const urls = suggestedBaseUrls(input.baseUrl);
   const picked = [...new Set(input.pickedModelIds.map((id) => id.trim()).filter(Boolean))].slice(
     0,
-    DETECT_MAX_MODELS,
+    API_ENDPOINT_DETECT_MAX_MODELS,
   );
   if (input.modelId !== null || picked.length > 0) {
     return probeAll({

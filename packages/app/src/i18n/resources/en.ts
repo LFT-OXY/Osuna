@@ -2692,6 +2692,13 @@ export const en = {
         detect: "Auto-detect",
         detectModelPlaceholder: "Model to try (optional)",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "No response within {{seconds}} s",
+            batchTimeout: "No response before the detection ran out of time",
+            notAsked: "Not asked: the detection ran out of time",
+            imageModel: "An image model can't chat, so it isn't asked",
+          },
           eachButton: "Each picked model",
           eachInfo:
             "Asks each picked model, up to {{max}}, once on every request format, a few at a time, to see which format serves which model. When you edit an endpoint, Use these also sets a model that answered on only one format to Use only this format.",

@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import { ManualTimers } from "../test-utils/manual-timers.js";
 
 // 自动检测请求格式。上游是本地假 HTTP 服务，绝不访问真实的中转站。
 const SAVED_KEY = "sk-saved-secret";
@@ -376,27 +377,6 @@ const EACH_SERVES: Record<string, string[]> = {
   "/each/v1/messages": ["claude-only"],
 };
 
-/** 只在用例说到点时才到点的计时器；按设定的毫秒数区分单个与整批。 */
-class ManualTimers {
-  private readonly pending: { ms: number; handler: () => void; isLive: boolean }[] = [];
-
-  schedule(handler: () => void, ms: number): () => void {
-    const entry = { ms, handler, isLive: true };
-    this.pending.push(entry);
-    return () => {
-      entry.isLive = false;
-    };
-  }
-
-  fire(ms: number): void {
-    for (const entry of this.pending) {
-      if (!entry.isLive || entry.ms !== ms) continue;
-      entry.isLive = false;
-      entry.handler();
-    }
-  }
-}
-
 interface EachUpstream {
   origin: string;
   posts: { path: string; model: string }[];
@@ -448,8 +428,20 @@ async function startEachUpstream(): Promise<EachUpstream> {
   return upstream;
 }
 
-function messagesOf(models: { results: { message: string | null }[] }[] | undefined) {
-  return (models ?? []).flatMap((row) => row.results.map((result) => result.message));
+/** 只在一种格式上答上的模型与那种格式。 */
+function singleFormatModels(
+  models: { modelId: string; results: { format: string; status: string }[] }[] | undefined,
+): (readonly [string, string])[] {
+  return (models ?? []).flatMap((row) => {
+    const formats = row.results.filter((result) => result.status === "ok");
+    const [only] = formats;
+    if (formats.length !== 1 || !only) return [];
+    return [[row.modelId, only.format] as const];
+  });
+}
+
+function codesOf(models: { results: { code?: string }[] }[] | undefined) {
+  return (models ?? []).flatMap((row) => row.results.map((result) => result.code));
 }
 
 function okFlags(models: { modelId: string; results: { status: string }[] }[] | undefined) {
@@ -528,8 +520,14 @@ describe("Detecting each picked model on every request format", () => {
     expect(gptResp[2]?.durationMs).toBeGreaterThanOrEqual(0);
     // 生图模型不能对话，不问它。
     const image = detected.models?.[4]?.results ?? [];
-    expect(image.map((result) => result.httpStatus)).toEqual([null, null, null]);
+    expect(image.map(({ httpStatus, code }) => [httpStatus, code])).toEqual([
+      [null, "image_model"],
+      [null, "image_model"],
+      [null, "image_model"],
+    ]);
     expect(image[0]?.message).toContain("image model");
+    // 上游给的失败没有 daemon 的原因码。
+    expect(gptResp[1]?.code).toBeUndefined();
     expect(upstream.posts.some((post) => post.model === "gpt-image-2")).toBe(false);
     expect(upstream.posts).toHaveLength(12);
     // 每种格式：第一个答上的模型。
@@ -560,23 +558,70 @@ describe("Detecting each picked model on every request format", () => {
     expect(upstream.maxInFlight).toBeGreaterThan(1);
   });
 
-  test("a disabled model is listed but never asked", async () => {
+  test("a disabled model is still asked, by each model and by a single detection (magpie's detection ignores Disabled models)", async () => {
     await client.apiEndpointSetDisabledModels({ models: ["glm-*"] });
 
-    const detected = await client.apiEndpointDetectFormats({
+    const each = await client.apiEndpointDetectFormats({
       baseUrl: `${upstream.origin}/each/v1`,
       apiKey: TYPED_KEY,
-      modelIds: ["glm-chat", "gpt-resp"],
+      modelIds: ["glm-chat"],
       eachModel: true,
     });
+    expect(okFlags(each.models)).toEqual([["glm-chat", [false, true, false]]]);
 
-    const [disabled] = detected.models ?? [];
-    expect(disabled?.modelId).toBe("glm-chat");
-    for (const result of disabled?.results ?? []) {
-      expect(result).toMatchObject({ status: "not_detected", httpStatus: null });
-      expect(result.message).toContain('matches "glm-*"');
-    }
-    expect(upstream.posts.map((post) => post.model)).toEqual(["gpt-resp", "gpt-resp", "gpt-resp"]);
+    const single = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: ["glm-chat"],
+    });
+    expect(single.results.map((result) => [result.modelId, result.status])).toEqual([
+      ["glm-chat", "not_detected"],
+      ["glm-chat", "ok"],
+      ["glm-chat", "not_detected"],
+    ]);
+    expect(upstream.posts.map((post) => post.model)).toEqual(Array(6).fill("glm-chat"));
+  });
+
+  test("a model that answers on one format only is saved as Use only this format after the detection", async () => {
+    const created = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Each relay",
+      baseUrls: [{ format: "openai_chat", url: `${upstream.origin}/each/v1` }],
+      apiKey: TYPED_KEY,
+      models: [{ id: "gpt-both" }, { id: "gpt-resp" }],
+    });
+    const endpointId = created.endpoint?.id ?? "";
+
+    const detected = await client.apiEndpointDetectFormats({
+      endpointId,
+      baseUrl: `${upstream.origin}/each/v1`,
+      modelIds: ["gpt-both", "gpt-resp"],
+      eachModel: true,
+    });
+    // 采用这些：答上的格式的地址，只在一种格式上答上的模型只用它（界面上「采用这些」做的事）。
+    const answered = detected.results.filter((result) => result.status === "ok");
+    const onlyOne = singleFormatModels(detected.models);
+    expect(onlyOne).toEqual([["gpt-resp", "openai_responses"]]);
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Each relay",
+      baseUrls: answered.map(({ format, url }) => ({ format, url })),
+      models: [{ id: "gpt-both" }, { id: "gpt-resp" }],
+      modelSettings: {
+        models: Object.fromEntries(onlyOne.map(([id, format]) => [id, { format }])),
+      },
+    });
+    expect(saved.error).toBeNull();
+
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    expect(endpoint?.modelSettings).toEqual({
+      models: { "gpt-resp": { format: "openai_responses" } },
+    });
+    expect(endpoint?.baseUrls).toEqual([
+      { format: "openai_chat", url: `${upstream.origin}/each/v1` },
+      { format: "openai_responses", url: `${upstream.origin}/each/v1` },
+    ]);
   });
 
   test("a format that does not answer in time says so", async () => {
@@ -591,13 +636,16 @@ describe("Detecting each picked model on every request format", () => {
     const detected = await pending;
 
     expect(detected.error).toBeNull();
-    expect(
-      detected.models?.[0]?.results.map((result) => [result.message, result.httpStatus]),
-    ).toEqual([
-      ["No response within 30s", null],
-      ["No response within 30s", null],
-      ["No response within 30s", null],
-    ]);
+    const timedOut = detected.models?.[0]?.results ?? [];
+    for (const result of timedOut) {
+      expect(result).toMatchObject({
+        httpStatus: null,
+        code: "upstream_timeout",
+        params: { seconds: "30" },
+        message: "No response within 30s",
+      });
+    }
+    expect(timedOut).toHaveLength(3);
     expect(okFlags(detected.models)[1]).toEqual(["gpt-resp", [false, false, true]]);
   });
 
@@ -615,14 +663,10 @@ describe("Detecting each picked model on every request format", () => {
     const detected = await pending;
 
     expect(detected.error).toBeNull();
-    const messages = messagesOf(detected.models);
-    expect(messages).toHaveLength(27);
-    expect(messages.slice(0, 8)).toEqual(
-      Array.from({ length: 8 }, () => "No response before the detection ran out of time"),
-    );
-    expect(messages.slice(8)).toEqual(
-      Array.from({ length: 19 }, () => "Not asked: the detection ran out of time"),
-    );
+    const codes = codesOf(detected.models);
+    expect(codes).toHaveLength(27);
+    expect(codes.slice(0, 8)).toEqual(Array(8).fill("batch_timeout"));
+    expect(codes.slice(8)).toEqual(Array(19).fill("not_asked"));
     expect(upstream.posts).toHaveLength(8);
   });
 });

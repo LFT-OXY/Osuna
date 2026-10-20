@@ -13,9 +13,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import type { ApiEndpointModelTestResult } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import { ManualTimers } from "../test-utils/manual-timers.js";
 
 /*
  * 测试模型（工单 19，prd 第 26–28 条）：真实 daemon + 本机假上游，绝不连真实中转站。
@@ -28,27 +28,6 @@ const MODEL_TIMEOUT_MS = 60_000;
 // 比内置的 0.159.0 新：没有 Codex 样本时测试用它。
 const FAKE_CODEX_CLI_VERSION = "0.170.2";
 const BATCH_TIMEOUT_MS = 600_000;
-
-/** 只在用例说到点时才到点的计时器；按设定的毫秒数区分单个与整批。 */
-class ManualTimers implements UsagePricingTimers {
-  private readonly pending: { ms: number; handler: () => void; isLive: boolean }[] = [];
-
-  schedule(handler: () => void, ms: number): () => void {
-    const entry = { ms, handler, isLive: true };
-    this.pending.push(entry);
-    return () => {
-      entry.isLive = false;
-    };
-  }
-
-  fire(ms: number): void {
-    for (const entry of this.pending) {
-      if (!entry.isLive || entry.ms !== ms) continue;
-      entry.isLive = false;
-      entry.handler();
-    }
-  }
-}
 
 const servers: Server[] = [];
 const tempRoots: string[] = [];

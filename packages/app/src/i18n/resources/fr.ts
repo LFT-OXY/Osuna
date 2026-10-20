@@ -2682,6 +2682,13 @@ export const fr: TranslationResources = {
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "Aucune réponse en {{seconds}} s",
+            batchTimeout: "Aucune réponse avant la fin du temps de détection",
+            notAsked: "Non interrogé : le temps de détection est écoulé",
+            imageModel: "Un modèle d'images ne peut pas converser, il n'est donc pas interrogé",
+          },
           eachButton: "Chaque modèle choisi",
           eachInfo:
             "Interroge chaque modèle choisi, jusqu'à {{max}}, une fois dans chaque format de requête, quelques-uns à la fois, pour voir quel format sert quel modèle. Quand vous modifiez un endpoint, Utiliser celles-ci règle aussi sur Utiliser uniquement ce format un modèle qui n'a répondu que dans un seul format.",

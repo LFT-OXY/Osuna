@@ -2641,6 +2641,13 @@ export const ko: TranslationResources = {
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "{{seconds}}초 안에 응답 없음",
+            batchTimeout: "감지 시간이 끝날 때까지 응답 없음",
+            notAsked: "묻지 않음: 감지 시간이 끝남",
+            imageModel: "이미지 모델은 대화할 수 없어 묻지 않음",
+          },
           eachButton: "선택한 모델별로",
           eachInfo:
             "선택한 모델(최대 {{max}}개)을 요청 형식마다 한 번씩, 몇 개씩 동시에 물어봐서 어떤 형식이 어떤 모델을 지원하는지 확인합니다. 엔드포인트를 편집할 때는 「이것 사용」이 한 형식에서만 응답한 모델을 「이 형식만 사용」으로 설정합니다.",

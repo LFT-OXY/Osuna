@@ -92,9 +92,6 @@ export type ConnectionIconResult =
 // 正在换图标：存本机的图片，或从网站取。
 export type ConnectionIconTask = "picture" | "website";
 
-/** 逐个模型识别最多问这么多个模型（daemon upstream-detect.ts 的 DETECT_MAX_MODELS，照 magpie DetectMax）；只用于说明文字。 */
-export const DETECT_EACH_MAX_MODELS = 30;
-
 /** 主机最多存这么大的图片（daemon endpoint-icons.ts 的 MAX_ICON_BYTES）；更大的不发过去。 */
 export const MAX_ICON_BYTES = 1 << 20;
 
@@ -149,7 +146,15 @@ export interface DetectedFormat {
   message: string | null;
   durationMs: number | null;
   modelId: string | null;
+  // daemon 自己定的原因（逐个模型识别），界面按语言说；上游的失败与认不出的原因为 null，照 message 显示。
+  reason: DetectionReason | null;
 }
+
+export type DetectionReason =
+  | { code: "upstream_timeout"; seconds: string }
+  | { code: "batch_timeout" }
+  | { code: "not_asked" }
+  | { code: "image_model" };
 
 /**
  * 最近一次自动检测：每种格式一行；isTaken 是已按它「采用这些」。
@@ -161,9 +166,9 @@ export interface ConnectionDetection {
   // 逐个模型识别：每个模型一行，各格式一格（按 Anthropic → Chat → Responses）；别的检测为 null。
   byModel: ModelDetectionRow[] | null;
   // 表单里的模型比问了的多：只问了前 asked 个。
-  eachCut: { asked: number; picked: number } | null;
+  askedOnlyFirst: { asked: number; picked: number } | null;
   // 逐个模型识别后「采用这些」会设成只用这种格式的模型（编辑时，只在一种格式上答上的）。
-  onlyGiven: ModelFormatPin[];
+  singleFormatPins: ModelFormatPin[];
   isTaken: boolean;
   // 「只在 {格式} 上问 {模型}」：编辑时试的是这家的模型、只有部分格式通了才有（照 magpie）；staged 是保存时要设的格式。
   onlyChoices: ConnectionOnlyChoices | null;
@@ -665,6 +670,9 @@ export function createConnectionFormModel(
     const isTesting = tests.some((row) => row.outcome.kind === "testing");
     const hasCheckedUrls = checkedUrlsOf(next).length > 0;
     const canCheck = canCheckBeforeSave && hasKey && !serviceAddressInvalid && hasCheckedUrls;
+    // 逐个模型和自动检测一样问地址框里的地址。
+    const canDetectHere = !busy && hasKey && input.hasValidAddress;
+    const canAskEachModel = canCheckBeforeSave && canDetectHere;
     return {
       canCheckBeforeSave,
       // 添加窗口能拉模型时「模型」框一直显示。
@@ -678,7 +686,7 @@ export function createConnectionFormModel(
             stagedPins: next.stagedPins,
           })
         : null,
-      canDetectEach: canCheckBeforeSave && !busy && hasKey && input.hasValidAddress,
+      canDetectEach: canAskEachModel,
       eachNeedsModels: next.eachNeedsModels,
       keyRejected: isDetectionRejected || isTestRejected,
       catalogFetch: next.catalogFetch,
@@ -756,12 +764,18 @@ export function createConnectionFormModel(
     let noneAnswered: ConnectionDetection["noneAnswered"] = null;
     if (!anyAnswered) noneAnswered = isKeyless ? "keyless" : "check";
     const canTake = anyAnswered && !detection.isTaken;
-    const isCut = each !== null && each.picked > each.rows.length;
+    let askedOnlyFirst: ConnectionDetection["askedOnlyFirst"] = null;
+    let singleFormatPins: ModelFormatPin[] = [];
+    if (each !== null) {
+      const isCut = each.picked > each.rows.length;
+      if (isCut) askedOnlyFirst = { asked: each.rows.length, picked: each.picked };
+      singleFormatPins = singleFormatPinsOf(each.rows);
+    }
     return {
       results: detection.results,
       byModel: each?.rows ?? null,
-      eachCut: isCut ? { asked: each.rows.length, picked: each.picked } : null,
-      onlyGiven: each === null ? [] : onlyGivenOf(each.rows),
+      askedOnlyFirst,
+      singleFormatPins,
       isTaken: detection.isTaken,
       onlyChoices: onlyChoicesOf(detection, input.stagedPins),
       canTake,
@@ -771,24 +785,26 @@ export function createConnectionFormModel(
   }
 
   /**
-   * 照 magpie Detect：编辑一家时，打了试用的模型、它是这家的模型，又不是每种格式都通，每种通了的格式给一个「只在…上问」。
-   * 新建、复制的接口没有可设的模型（magpie 在保存后的 Names & levels 里设）。
-   */
-  /**
    * 照 magpie Each picked model 的「采用这些」：编辑一家时，问了两种以上格式、只在一种上答上的这家的模型，给它那种格式。
    */
-  function onlyGivenOf(rows: ModelDetectionRow[]): ModelFormatPin[] {
+  function singleFormatPinsOf(rows: ModelDetectionRow[]): ModelFormatPin[] {
     if (seed.mode !== "edit") return [];
     const { endpoint } = seed;
     return rows.flatMap((row) => {
       const answered = row.cells.filter((cell) => cell.label === "ok");
       const [only] = answered;
-      const isOnlyOne = answered.length === 1 && row.cells.length > 1;
-      if (!isOnlyOne || !only || !endpointHasModel(endpoint, row.modelId)) return [];
+      const wasAskedOnSeveral = row.cells.length > 1;
+      const isEndpointModel = endpointHasModel(endpoint, row.modelId);
+      const isSingleFormat = answered.length === 1 && wasAskedOnSeveral && isEndpointModel;
+      if (!isSingleFormat || !only) return [];
       return [{ modelId: row.modelId, format: only.format }];
     });
   }
 
+  /**
+   * 照 magpie Detect：编辑一家时，打了试用的模型、它是这家的模型，又不是每种格式都通，每种通了的格式给一个「只在…上问」。
+   * 新建、复制的接口没有可设的模型（magpie 在保存后的 Names & levels 里设）。
+   */
   function onlyChoicesOf(
     detection: DetectionValues,
     stagedPins: StagedPins,
@@ -834,7 +850,8 @@ export function createConnectionFormModel(
     for (const [modelId, format] of changed) {
       modelSettings = withModelFormat({ current: modelSettings, modelId, format });
     }
-    return changed.length === 0 ? {} : { modelSettings };
+    if (changed.length === 0) return {};
+    return { modelSettings };
   }
 
   // 本机服务换了地址时各格式地址挪过去；别的照填的。
@@ -1300,10 +1317,11 @@ export function createConnectionFormModel(
     },
     takeDetected() {
       const detection = values.detection;
-      const given = state.detection?.onlyGiven ?? [];
+      const given = state.detection?.singleFormatPins ?? [];
       if (!state.detection?.canTake || !detection) return;
+      const stagedPins = withGivenPins(values.stagedPins, given);
       update({
-        stagedPins: withGivenPins(values.stagedPins, given),
+        stagedPins,
         urls: takenUrls(detection.results),
         urlGeneration: values.urlGeneration + 1,
         detection: { ...detection, isTaken: true },
@@ -1522,7 +1540,8 @@ function toLabel(status: string): FormatDetectionLabel {
 
 /** 逐个模型识别的一个模型：认不出的格式不列。 */
 function modelDetectionRowOf(row: ApiEndpointModelDetection): ModelDetectionRow {
-  return { modelId: row.modelId, cells: row.results.flatMap(detectedFormatOf) };
+  const cells = row.results.flatMap(detectedFormatOf);
+  return { modelId: row.modelId, cells };
 }
 
 /** 主机给的一行检测结论；认不出的格式不列。 */
@@ -1541,8 +1560,23 @@ function detectedFormatOf(result: ApiEndpointFormatDetection): DetectedFormat[] 
           : conciseUpstreamMessage({ message: result.message, url: result.url }),
       durationMs: result.durationMs ?? null,
       modelId: result.modelId ?? null,
+      reason: detectionReasonOf(result),
     },
   ];
+}
+
+/** 线上的原因码换成界面认得的；认不出的为 null。 */
+function detectionReasonOf(result: ApiEndpointFormatDetection): DetectionReason | null {
+  switch (result.code) {
+    case "upstream_timeout":
+      return { code: result.code, seconds: result.params?.seconds ?? "" };
+    case "batch_timeout":
+    case "not_asked":
+    case "image_model":
+      return { code: result.code };
+    default:
+      return null;
+  }
 }
 
 /**

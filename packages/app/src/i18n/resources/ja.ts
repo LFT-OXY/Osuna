@@ -2654,6 +2654,13 @@ export const ja: TranslationResources = {
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "{{seconds}} 秒以内に応答なし",
+            batchTimeout: "検出の時間切れまでに応答なし",
+            notAsked: "未問い合わせ：検出が時間切れ",
+            imageModel: "画像モデルは会話できないため問い合わせません",
+          },
           eachButton: "選んだモデルごと",
           eachInfo:
             "選んだモデル（最大 {{max}} 個）をリクエスト形式ごとに 1 回ずつ、いくつか同時に問い合わせ、どの形式でどのモデルが使えるかを確かめます。エンドポイントの編集中は、「これを使う」で 1 つの形式でだけ応答したモデルを「この形式だけを使う」に設定します。",

@@ -2651,6 +2651,13 @@ export const zhCN: TranslationResources = {
         detect: "自动检测",
         detectModelPlaceholder: "试用的模型（选填）",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "{{seconds}} 秒内没有回应",
+            batchTimeout: "识别到点了还没有回应",
+            notAsked: "没问：识别到点了",
+            imageModel: "生图模型不能对话，不问它",
+          },
           eachButton: "逐个模型",
           eachInfo:
             "把已选的模型（最多 {{max}} 个）在每种请求格式上各问一次，几个一起问，看哪种格式能用哪个模型。编辑接口时，「采用这些」还会把只在一种格式上答上的模型设成「只用这种格式」。",

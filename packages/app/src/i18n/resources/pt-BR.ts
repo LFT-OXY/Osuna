@@ -2667,6 +2667,13 @@ export const ptBR: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo para testar (opcional)",
         detected: {
+          eachReason: "{{verdict}} · {{reason}}",
+          eachReasons: {
+            upstreamTimeout: "Sem resposta em {{seconds}} s",
+            batchTimeout: "Sem resposta antes de acabar o tempo da detecção",
+            notAsked: "Não perguntado: acabou o tempo da detecção",
+            imageModel: "Um modelo de imagens não conversa, então não é perguntado",
+          },
           eachButton: "Cada modelo escolhido",
           eachInfo:
             "Pergunta a cada modelo escolhido, até {{max}}, uma vez em cada formato de requisição, alguns por vez, para ver qual formato atende qual modelo. Ao editar um endpoint, Usar estes também coloca em Usar só este formato um modelo que respondeu em um só formato.",
