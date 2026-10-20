@@ -21,6 +21,7 @@ import {
   unsendableHeaderMessage,
   type RequestExtras,
 } from "./request-extras.js";
+import { upstreamFetch } from "./insecure-tls.js";
 import { templateModelListUrls } from "./templates.js";
 
 /*
@@ -96,7 +97,13 @@ export async function fetchUpstreamModels(input: {
   const attempts: FailedAttempt[] = [];
   for (const url of urls) {
     try {
-      const attempt = await listModels({ url, headers, signal, secrets });
+      const attempt = await listModels({
+        url,
+        headers,
+        signal,
+        secrets,
+        uncheckedHosts: input.extras.uncheckedHosts,
+      });
       if (attempt.kind === "ok") return { ok: true, models: attempt.models };
       attempts.push(attempt);
     } catch (error) {
@@ -140,12 +147,17 @@ async function listModels(input: {
   headers: Record<string, string>;
   signal: AbortSignal;
   secrets: Secrets;
+  uncheckedHosts: readonly string[];
 }): Promise<Attempt> {
   const { url, headers, signal } = input;
   const models: ListedModel[] = [];
   let pageUrl = url;
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const response = await fetch(pageUrl, { headers, signal });
+    const response = await upstreamFetch({
+      url: pageUrl,
+      init: { headers, signal },
+      uncheckedHosts: input.uncheckedHosts,
+    });
     const text = await response.text();
     if (!response.ok) {
       return {

@@ -172,6 +172,7 @@ export async function attemptTranslated(input: {
       }),
       body: Buffer.from(ask.body),
       secrets,
+      uncheckedHosts: extras.uncheckedHosts,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: to,
       onHeard: () => input.keepAlive.heard(),

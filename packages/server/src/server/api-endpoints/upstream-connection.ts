@@ -24,6 +24,7 @@ import {
   withExtraBody,
   type RequestExtras,
 } from "./request-extras.js";
+import { upstreamFetch } from "./insecure-tls.js";
 
 /*
  * 测试连接：daemon 在主机上用 CLI 实际使用的协议发一条最小对话请求，只验证接口本身。
@@ -149,11 +150,10 @@ export async function testUpstreamConnection(input: {
   let status: number;
   let text: string;
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(asked),
-      signal,
+    const response = await upstreamFetch({
+      url,
+      init: { method: "POST", headers, body: JSON.stringify(asked), signal },
+      uncheckedHosts: extras.uncheckedHosts,
     });
     status = response.status;
     text = await response.text();

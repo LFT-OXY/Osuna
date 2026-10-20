@@ -1,6 +1,7 @@
 // 附加请求体的保留字段、`!` 与校验、key 放哪个头的取值移植自 magpie（https://github.com/yetone/magpie，
 // internal/provider/extrabody.go 的 ExtraBodyReserved、extraName、ExtraBodyOK，authheader.go 的 AuthChoices，
-// internal/gui/assets/app.js 的 twoKeyHeaders）
+// internal/gui/assets/app.js 的 twoKeyHeaders；不校验证书只给自己加的 https 接口照 internal/provider/insecure_tls.go 的 TakesInsecureTLS
+// 与 app.js 的 tlsTakes、onHTTPS）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 /*
@@ -51,6 +52,22 @@ export function isThirdPartyAnthropicUrl(url: string): boolean {
   if (host === null) return true;
   const isAzure = host.endsWith(".azure.com");
   return !takesXApiKeyAlone(url) && !isAzure;
+}
+
+/** 地址是 https 的（照 magpie onHTTPS，前后空白不算）。 */
+export function isHttpsUrl(url: string): boolean {
+  return /^\s*https:\/\//i.test(url);
+}
+
+/**
+ * 这家能不能打开「不校验证书」：只有「自定义」加的（没有模板；模板厂商的证书本来就过得了校验），
+ * 且至少一个地址是 https（http 没有证书可校验）。daemon 只拒收模板接口（照 magpie Validate），https 由表单把关。
+ */
+export function takesInsecureTls(input: {
+  templateId: string | undefined;
+  urls: string[];
+}): boolean {
+  return input.templateId === undefined && input.urls.some(isHttpsUrl);
 }
 
 /** 附加请求体不能设的字段：模型与要不要流式（路由与读回复靠它们），以及对话本身。 */

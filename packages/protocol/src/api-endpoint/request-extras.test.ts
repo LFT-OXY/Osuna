@@ -6,6 +6,7 @@ import {
   headerProblem,
   isThirdPartyAnthropicUrl,
   keyHeaderOf,
+  takesInsecureTls,
   takesXApiKeyAlone,
 } from "./request-extras";
 
@@ -80,5 +81,22 @@ describe("key header", () => {
     expect(takesXApiKeyAlone("https://api.anthropic.com")).toBe(true);
     expect(takesXApiKeyAlone("https://bedrock-runtime.us-east-1.amazonaws.com")).toBe(true);
     expect(takesXApiKeyAlone("https://relay.example.com")).toBe(false);
+  });
+});
+
+// 照 magpie internal/gui/tests/provider-insecure-tls.test.cjs：自己加的 https 接口才有这一项。
+describe("skip the certificate check", () => {
+  it("is offered to an endpoint added as custom with an https address", () => {
+    const urls = ["http://192.168.1.21:8000/v1", " https://192.168.1.20:8443/v1"];
+    expect(takesInsecureTls({ templateId: undefined, urls })).toBe(true);
+  });
+
+  it("is not offered over plain http, nor to a template's endpoint", () => {
+    expect(takesInsecureTls({ templateId: undefined, urls: ["http://192.168.1.21:8000/v1"] })).toBe(
+      false,
+    );
+    expect(takesInsecureTls({ templateId: "openai", urls: ["https://api.openai.com/v1"] })).toBe(
+      false,
+    );
   });
 });

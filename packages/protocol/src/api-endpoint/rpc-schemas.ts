@@ -179,12 +179,15 @@ export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSche
 
 /**
  * 用户加给这家每个请求的（Headers，ADR 0008）：请求头（名字照用户写的）、附加请求体（JSON 对象，名字前 `!` 是强制覆盖）、
- * key 放哪个头（API_ENDPOINT_KEY_HEADERS 之一，线上是字符串，不认识的当 both）。接口、保存与保存前的检查共用这三项。
+ * key 放哪个头（API_ENDPOINT_KEY_HEADERS 之一，线上是字符串，不认识的当 both），
+ * 以及不校验证书（insecureTls：只对这家自己各格式地址的 https 主机起作用，只有「自定义」加的接口能开，见 takesInsecureTls）。
+ * 接口、保存与保存前的检查共用这几项。
  */
 export const ApiEndpointRequestExtrasSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   extraBody: z.record(z.string(), z.unknown()).optional(),
   keyHeader: z.string().optional(),
+  insecureTls: z.boolean().optional(),
 });
 export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSchema>;
 
@@ -242,7 +245,7 @@ export const ApiEndpointSchema = z.object({
   modelFacts: z.record(z.string(), ApiEndpointModelFactsSchema).optional(),
   // 「按 Claude Code / Codex 的样子测」这家提供哪几种；老 daemon 不发，即都不提供。
   testsAs: z.array(ApiEndpointTestAsSchema).optional(),
-  // 请求头、附加请求体与 key 放哪个头（ApiEndpointRequestExtrasSchema）；都只在设了时发，老 daemon 不发。
+  // 请求头、附加请求体、key 放哪个头与不校验证书（ApiEndpointRequestExtrasSchema）；都只在设了时发，老 daemon 不发。
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
@@ -413,6 +416,9 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * 请求头照存（头名不合法的请求发不出去，发时每个请求报 invalid_header）；附加请求体字段没名字、是保留字段（EXTRA_BODY_RESERVED）
  * 或同名写了两次的拒收（invalid_extra_body，params.reason 为 unnamed / reserved / duplicate，params.field）。
  * 不认识的 keyHeader 当 both。老 daemon 忽略它们。
+ *
+ * insecureTls：不校验证书，省略即保留、false 关掉。从模板加的接口打开拒收（insecure_tls_template，params.template）。
+ * 老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -946,8 +952,9 @@ export type ApiEndpointListTemplatesResponse = z.infer<
  * 显示名与模型资料先列出的格式说了算，没说的由后面的补；baseUrl、format 不再起作用（照旧要带，给老 daemon）。
  * 有一种格式答上就算成功；记作上游清单时，这次没答上的格式上次列过的模型留着。只有声明了 apiEndpointManagement 的 daemon 认它。
  *
- * headers、extraBody、keyHeader：表单里还没保存的请求头、附加请求体与 key 放哪个头（同 save），给了就用它们，不看 endpointId
- * 那家存的；省略时用那家存的。拉模型、测试连接、自动检测都这样。只有声明了 apiEndpointManagement 的 daemon 认它们。
+ * headers、extraBody、keyHeader、insecureTls：表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 save），
+ * 给了就用它们，不看 endpointId 那家存的；省略时用那家存的。拉模型、测试连接、自动检测都这样。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它们。
  */
 export const ApiEndpointFetchModelsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.fetch_models.request"),
@@ -1018,7 +1025,7 @@ export const ApiEndpointDetectFormatsRequestSchema = z.object({
   modelId: z.string().optional(),
   modelIds: z.array(z.string()).optional(),
   eachModel: z.boolean().optional(),
-  // 表单里还没保存的请求头、附加请求体、key 放哪个头（同 fetch_models）。
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 fetch_models）。
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
@@ -1114,7 +1121,7 @@ export const ApiEndpointTestConnectionRequestSchema = z.object({
   templateId: z.string().optional(),
   region: z.string().optional(),
   modelIds: z.array(z.string()).optional(),
-  // 表单里还没保存的请求头、附加请求体、key 放哪个头（同 fetch_models）。
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头与不校验证书（同 fetch_models）。
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointTestConnectionRequest = z.infer<

@@ -18,6 +18,7 @@ import {
   redactKey,
   type Secrets,
 } from "../upstream-http.js";
+import { skipsCertificateCheck } from "../insecure-tls.js";
 import type { AgentError } from "./agent-errors.js";
 import { streamStatus } from "./failure.js";
 import { notApiDetail, notApiReply, saysNothingYet, type NotApiReply } from "./not-api-reply.js";
@@ -153,6 +154,8 @@ export async function openUpstream(input: {
   body: Buffer;
   // 报错里打码的：key 与用户的请求头值。
   secrets: Secrets;
+  // 不校验证书的主机（insecure-tls.ts）；没开为空。
+  uncheckedHosts: readonly string[];
   headerTimeoutMs: number;
   // 按哪种协议读回复、认开口；null 时第一段字节就算开口（count_tokens 的回复不是对话）。
   reads: ApiEndpointRequestFormat | null;
@@ -435,6 +438,7 @@ interface UpstreamSend {
   url: URL;
   headers: Record<string, string | string[]>;
   body: Buffer;
+  uncheckedHosts: readonly string[];
   headerTimeoutMs: number;
 }
 
@@ -492,9 +496,12 @@ async function answeredOnLiveConnection(input: {
 
 function sendOnce(input: UpstreamSend): ClientRequest {
   const transport = input.url.protocol === "https:" ? https : http;
+  // 不校验证书的连接与校验的不共用：全局 agent 按 rejectUnauthorized 分开放连接。
+  const skipsCheck = skipsCertificateCheck(input);
   const upstream = transport.request(input.url, {
     method: "POST",
     headers: { ...input.headers, "content-length": String(input.body.length) },
+    ...(skipsCheck ? { rejectUnauthorized: false } : {}),
   });
   // 开口之后的连接错误由 response 的 error / close 处理；这里只为不让无人接的 error 打崩进程。
   upstream.on("error", () => {});

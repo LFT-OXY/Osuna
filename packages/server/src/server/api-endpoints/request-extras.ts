@@ -18,6 +18,7 @@ import {
 } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { KeyHeaders } from "./gateway/refusals.js";
+import { uncheckedHostsOf } from "./insecure-tls.js";
 import type { StoredApiEndpoint } from "./store.js";
 import { templateKeyHeaders } from "./templates.js";
 import { isRecord } from "./upstream-http.js";
@@ -30,6 +31,7 @@ import { isRecord } from "./upstream-http.js";
  * - 附加请求体只给对话请求（Messages、Chat、Responses），只数 token 的不带；没有的字段补上，`!` 开头的强制覆盖，
  *   保留字段不动；字符串里的 ${sessionId} 换成这段对话的标识（测试与检测用一个 osuna-test- 开头的）。
  * - key 放哪个头只对第三方 Anthropic 地址起作用（keyHeadersAt）。
+ * - 不校验证书只对这家自己的 https 主机起作用（insecure-tls.ts）：fetch 走 upstreamFetch，中转站看 skipsCertificateCheck。
  * 头的值可能是密钥：不写日志，报错里和 key 一样打码（secretsOf）。头名、值发不出去的（不合法的头名、值里有换行）
  * 照存，发时这一个请求报 invalid_header（unsendableHeader），不让 Node 抛错。
  */
@@ -39,18 +41,36 @@ export interface RequestExtras {
   headers: Record<string, string>;
   extraBody: Record<string, unknown>;
   keyHeader: ApiEndpointKeyHeader;
+  // 不校验证书的主机（insecure-tls.ts 的 uncheckedHostsOf）；没开为空。
+  uncheckedHosts: readonly string[];
 }
 
-export const NO_REQUEST_EXTRAS: RequestExtras = { headers: {}, extraBody: {}, keyHeader: "both" };
+export const NO_REQUEST_EXTRAS: RequestExtras = {
+  headers: {},
+  extraBody: {},
+  keyHeader: "both",
+  uncheckedHosts: [],
+};
 
-/** 这家存的请求头、附加请求体、key 放哪个头；没有这家时什么都不加。 */
+/** 这家存的请求头、附加请求体、key 放哪个头与不校验证书；没有这家时什么都不加。 */
 export function storedRequestExtras(
-  endpoint: Pick<StoredApiEndpoint, "headers" | "extraBody" | "keyHeader"> | null | undefined,
+  endpoint:
+    | Pick<
+        StoredApiEndpoint,
+        "headers" | "extraBody" | "keyHeader" | "insecureTls" | "templateId" | "baseUrls"
+      >
+    | null
+    | undefined,
 ): RequestExtras {
   if (!endpoint) return NO_REQUEST_EXTRAS;
   const headers = cleanRequestHeaders(endpoint.headers) ?? {};
   const extraBody = endpoint.extraBody ?? {};
-  return { headers, extraBody, keyHeader: endpoint.keyHeader ?? "both" };
+  const uncheckedHosts = uncheckedHostsOf({
+    insecureTls: endpoint.insecureTls,
+    templateId: endpoint.templateId,
+    urls: endpoint.baseUrls.map(({ url }) => url),
+  });
+  return { headers, extraBody, keyHeader: endpoint.keyHeader ?? "both", uncheckedHosts };
 }
 
 // 用户选的只放一个头，换成 KeyHeaders 的叫法。

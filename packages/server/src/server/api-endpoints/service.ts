@@ -337,6 +337,7 @@ import {
   type ApiEndpointKeyHeader,
   type ExtraBodyProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
+import { uncheckedHostsOf } from "./insecure-tls.js";
 import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
@@ -364,6 +365,8 @@ export type ApiEndpointErrorCode =
   | "invalid_model_settings"
   // 附加请求体字段没名字、是保留字段、同名写了两次（params.reason、field）。
   | "invalid_extra_body"
+  // 从模板加的接口打开不校验证书（params.template）。
+  | "insecure_tls_template"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -410,6 +413,8 @@ export interface ApiEndpointRequestExtrasInput {
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
   keyHeader?: ApiEndpointKeyHeader;
+  // 不校验证书：保存时 false 关掉；模板接口打开拒收（insecure_tls_template）。
+  insecureTls?: boolean;
 }
 
 /**
@@ -1307,7 +1312,7 @@ export class ApiEndpointService {
         searchesWeb: keptSearchesWeb(input.searchesWeb, base),
         icon: input.icon,
         catalog: input.catalog,
-        requestExtras: savedRequestExtras({ request: input, base }),
+        requestExtras: savedRequestExtras({ request: input, base, templateId }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -3581,9 +3586,17 @@ export class ApiEndpointService {
     return this.store.getApiKey(input.endpointId);
   }
 
-  /** 拉模型、测试、检测带的请求头、附加请求体与 key 放哪个头：表单给了的用表单的（保存前），没给的用 endpointId 那家存的。 */
+  /**
+   * 拉模型、测试、检测带的请求头、附加请求体、key 放哪个头与不校验证书：表单给了的用表单的（保存前），没给的用 endpointId
+   * 那家存的。不校验证书的主机取表单与那家的地址（照 magpie typed：表单的值盖在那家上），模板按表单的、没给按那家的。
+   */
   private requestExtras(
-    input: { endpointId?: string } & ApiEndpointRequestExtrasInput,
+    input: {
+      endpointId?: string;
+      baseUrl: string;
+      baseUrls?: { url: string }[];
+      templateId?: string;
+    } & ApiEndpointRequestExtrasInput,
   ): RequestExtras {
     let endpoint: StoredApiEndpoint | null = null;
     if (input.endpointId) endpoint = findEndpoint(this.readState(), input.endpointId);
@@ -3592,7 +3605,14 @@ export class ApiEndpointService {
     if (input.headers !== undefined) headers = cleanRequestHeaders(input.headers) ?? {};
     const extraBody = input.extraBody ?? saved.extraBody;
     const keyHeader = input.keyHeader ?? saved.keyHeader;
-    return { headers, extraBody, keyHeader };
+    const addresses = [...(input.baseUrls ?? []), ...(endpoint?.baseUrls ?? [])];
+    const urls = [input.baseUrl, ...addresses.map(({ url }) => url)];
+    const uncheckedHosts = uncheckedHostsOf({
+      insecureTls: input.insecureTls ?? endpoint?.insecureTls,
+      templateId: input.templateId ?? endpoint?.templateId,
+      urls,
+    });
+    return { headers, extraBody, keyHeader, uncheckedHosts };
   }
 
   resolveClaudeSettingsPath(): string {
@@ -4162,6 +4182,7 @@ export class ApiEndpointService {
       ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {}),
       ...(endpoint.extraBody !== undefined ? { extraBody: endpoint.extraBody } : {}),
       ...(endpoint.keyHeader !== undefined ? { keyHeader: endpoint.keyHeader } : {}),
+      ...(endpoint.insecureTls === true ? { insecureTls: true } : {}),
     };
   }
 
@@ -4616,6 +4637,7 @@ function buildEndpoint(input: {
     headers: _headers,
     extraBody: _extraBody,
     keyHeader: _keyHeader,
+    insecureTls: _insecureTls,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -4640,17 +4662,30 @@ function buildEndpoint(input: {
   };
 }
 
-type StoredRequestExtras = Pick<StoredApiEndpoint, "headers" | "extraBody" | "keyHeader">;
+type StoredRequestExtras = Pick<
+  StoredApiEndpoint,
+  "headers" | "extraBody" | "keyHeader" | "insecureTls"
+>;
 
 /**
- * 存下的请求头、附加请求体、key 放哪个头：请求给了的换上（空的、both 不存），没给的留 base 的。
+ * 存下的请求头、附加请求体、key 放哪个头与不校验证书：请求给了的换上（空的、both、false 不存），没给的留 base 的。
  * 请求头照 magpie 照存，发不出去的头发时每个请求报 invalid_header；附加请求体校验后才存。
+ * 模板接口打开不校验证书拒收（照 magpie Validate 的 TakesInsecureTLS）。
  */
 function savedRequestExtras(input: {
   request: ApiEndpointSaveInput;
   base: StoredApiEndpoint | null;
+  templateId: string | undefined;
 }): StoredRequestExtras {
-  const { request, base } = input;
+  const { request, base, templateId } = input;
+  const insecureTls = request.insecureTls ?? base?.insecureTls === true;
+  if (insecureTls && templateId !== undefined) {
+    throw new ApiEndpointRequestError({
+      code: "insecure_tls_template",
+      message: `An endpoint added from the ${templateId} template always checks its certificate: only an endpoint you added as Custom can skip it`,
+      params: { template: templateId },
+    });
+  }
   let headers = base?.headers ?? null;
   if (request.headers !== undefined) headers = cleanRequestHeaders(request.headers);
   let extraBody = base?.extraBody ?? null;
@@ -4661,6 +4696,7 @@ function savedRequestExtras(input: {
   if (headers !== null) saved.headers = headers;
   if (extraBody !== null) saved.extraBody = extraBody;
   if (keyHeader !== "both") saved.keyHeader = keyHeader;
+  if (insecureTls) saved.insecureTls = true;
   return saved;
 }
 

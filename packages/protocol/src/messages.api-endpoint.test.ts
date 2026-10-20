@@ -1178,11 +1178,12 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
-  it("parses an endpoint, a save and the unsaved checks carrying headers, an extra body and a key header, and older ones without", () => {
+  it("parses an endpoint, a save and the unsaved checks carrying headers, an extra body, a key header and the skipped certificate check, and older ones without", () => {
     const extras = {
       headers: { "anthropic-workspace-id": "wrkspc_1", "anthropic-beta": "context-1m" },
       extraBody: { prompt_cache_key: "${sessionId}", "!service_tier": "flex", thinking: { a: 1 } },
       keyHeader: "x-api-key",
+      insecureTls: true,
     };
     const requests = [
       {

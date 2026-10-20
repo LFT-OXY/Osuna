@@ -865,7 +865,7 @@ function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
 }
 
 /**
- * 请求带的请求头、附加请求体、key 放哪个头（保存、拉模型、测试、检测都一样）；没带的不传。
+ * 请求带的请求头、附加请求体、key 放哪个头与不校验证书（保存、拉模型、测试、检测都一样）；没带的不传。
  * 线上的 keyHeader 是字符串，在这里换成认得的一种（不认识的当 both）。
  */
 function requestExtrasOf(request: ApiEndpointRequestExtras): ApiEndpointRequestExtrasInput {
@@ -873,5 +873,6 @@ function requestExtrasOf(request: ApiEndpointRequestExtras): ApiEndpointRequestE
   if (request.headers !== undefined) extras.headers = request.headers;
   if (request.extraBody !== undefined) extras.extraBody = request.extraBody;
   if (request.keyHeader !== undefined) extras.keyHeader = keyHeaderOf(request.keyHeader);
+  if (request.insecureTls !== undefined) extras.insecureTls = request.insecureTls;
   return extras;
 }

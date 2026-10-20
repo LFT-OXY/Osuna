@@ -196,6 +196,7 @@ export async function attemptEndpoint(input: {
       }),
       body,
       secrets,
+      uncheckedHosts: extras.uncheckedHosts,
       headerTimeoutMs: input.headerTimeoutMs,
       reads: input.pathSuffix === undefined ? input.format : null,
       onHeard: () => input.keepAlive?.heard(),

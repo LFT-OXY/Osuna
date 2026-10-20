@@ -552,6 +552,19 @@ headersOf, extraBodyOf and twoKeyHeaders in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/request-extras.test.ts
   packages/app/src/api-endpoints/internal/request-extras-form.ts
 
+Skipping the certificate check for an endpoint (only one added as Custom,
+only the https hosts of its own addresses, each such host on connections of its
+own so a redirect elsewhere and another endpoint at the same server are still
+checked; the switch offered only with an https address) follows TakesInsecureTLS
+and UncheckedHosts in magpie's internal/provider/insecure_tls.go, Via in
+internal/provider/proxy.go, WithUncheckedTLS, uncheckedHost and hostKey in
+internal/netproxy/unchecked.go, dispatch.transport in internal/netproxy/netproxy.go,
+the InsecureTLS check in internal/provider/provider.go's Validate, and tlsTakes and
+onHTTPS in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/request-extras.ts
+  packages/server/src/server/api-endpoints/insecure-tls.ts
+
 The installed Codex CLI's version (its npm package's package.json, or the
 package a Windows npm shim starts, before running --version; a run that said no
 version not made again until the executable changes; lookups at once sharing

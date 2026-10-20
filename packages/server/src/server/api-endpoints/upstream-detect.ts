@@ -27,6 +27,7 @@ import {
   withExtraBody,
   type RequestExtras,
 } from "./request-extras.js";
+import { upstreamFetch } from "./insecure-tls.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
 import type { CliHeaderSample } from "./store.js";
 import { asCliBody, type CliTestClient } from "./test-as.js";
@@ -284,11 +285,15 @@ export async function probeUpstreamFormat(input: {
   let status: number;
   let reply: ProbeReply;
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: request.headers,
-      body: JSON.stringify(request.body),
-      signal: AbortSignal.any([input.signal, timeout]),
+    const response = await upstreamFetch({
+      url,
+      init: {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        signal: AbortSignal.any([input.signal, timeout]),
+      },
+      uncheckedHosts: input.extras.uncheckedHosts,
     });
     status = response.status;
     const isStreamed = input.asCli !== undefined && isSuccess(status);
