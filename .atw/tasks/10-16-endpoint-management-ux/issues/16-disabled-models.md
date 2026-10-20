@@ -9,7 +9,7 @@
 
 **Blocked by:** 12
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：`*-preview` 禁掉后各接口的 preview 模型不在服务；三种格式下硬请求各回 403、正文有条目与位置。
 - [ ] 端到端：默认模型正好被禁时，按子任务 2 的规则提示。
