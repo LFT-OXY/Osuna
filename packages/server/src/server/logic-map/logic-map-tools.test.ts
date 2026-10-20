@@ -513,6 +513,66 @@ describe("update_logic_map", () => {
       nodes: expect.arrayContaining([expect.objectContaining({ id: "step-21" })]),
     });
   });
+
+  test("without a spec framework, every node missing a doc is listed back and the batch is still written", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+
+    const result = await update(client, [
+      ...LOGIN_FLOW,
+      { op: "set_spec_framework", framework: { kind: "none" } },
+      { op: "write_node_doc", id: "check", content: "Compare hashes." },
+    ]);
+
+    expect(result.isError).toBe(false);
+    expect(result.structured).toEqual({
+      mapName: harness.mapName,
+      warnings: [
+        'These nodes have no node doc yet: "start" (Open the login page), "home" (Show the home page), "locked" (Lock the account). Every node needs a doc: write a complete node doc for each with `write_node_doc`.',
+      ],
+    });
+    expect(await readSkeleton(harness)).toMatchObject({
+      nodes: expect.arrayContaining([expect.objectContaining({ id: "locked", doc: null })]),
+    });
+
+    const filled = await update(client, [
+      { op: "write_node_doc", id: "start", content: "Start." },
+      { op: "write_node_doc", id: "home", content: "Home." },
+      { op: "write_node_doc", id: "locked", content: "Locked." },
+    ]);
+
+    expect(filled.structured).toEqual({ mapName: harness.mapName, warnings: [] });
+  });
+
+  test("with a spec framework, only nodes with neither an interim summary nor a link are listed", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+    await writeFile(path.join(harness.cwd, "prd.md"), "# Login\n\n## Lock\n");
+
+    const result = await update(client, [
+      ...LOGIN_FLOW,
+      { op: "set_spec_framework", framework: { kind: "present", docsPath: "." } },
+      { op: "write_node_doc", id: "check", content: "Interim summary." },
+      { op: "link_node_doc", id: "locked", path: "prd.md", heading: "Lock" },
+    ]);
+
+    expect(result.isError).toBe(false);
+    expect(result.structured).toEqual({
+      mapName: harness.mapName,
+      warnings: [
+        'These nodes have no node doc yet: "start" (Open the login page), "home" (Show the home page). Every node needs a doc: link each to its section in the framework docs with `link_node_doc`, or give it an interim summary with `write_node_doc`.',
+      ],
+    });
+  });
+
+  test("a map whose spec framework is not judged yet does not list missing docs", async () => {
+    const harness = await setUp();
+    const client = await connectAgent(harness);
+
+    const result = await update(client, LOGIN_FLOW);
+
+    expect(result.structured).toEqual({ mapName: harness.mapName, warnings: [] });
+  });
 });
 
 describe("read_logic_map", () => {

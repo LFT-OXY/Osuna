@@ -4216,6 +4216,8 @@ export const ptBR: TranslationResources = {
       openNodeDocFailed: "Não foi possível abrir o documento do nó",
       breadcrumb: "Caminho do mapa lógico",
       pendingLink: "Sem documento vinculado",
+      missingDoc: "Sem documento",
+      missingDocHint: "Este nó ainda não tem documento",
     },
   },
 };

@@ -64,8 +64,8 @@ export interface LogicMapNodeBox {
   failure: boolean;
   /** 装了 spec 框架时还停留在临时要点、没指向正式文档。 */
   pendingLink: boolean;
-  /** 有节点文档，点卡片在主区域打开它。 */
-  hasDoc: boolean;
+  /** 不是子图又没有节点文档：卡片带"没有文档"标签，点它只提示还没有文档。 */
+  missingDoc: boolean;
   /** 子图节点里直接包含的节点数；其他种类为 null。 */
   subgraphNodeCount: number | null;
   x: number;
@@ -200,7 +200,7 @@ export function layoutLogicMapLayer(
       kind: node.kind,
       failure: node.failure === true,
       pendingLink: isPendingLink(node),
-      hasDoc: node.doc !== null,
+      missingDoc: isMissingDoc(node),
       subgraphNodeCount,
       ...box,
       branches,
@@ -263,7 +263,7 @@ function runLayeredLayout(
   });
   graph.setDefaultEdgeLabel(() => ({}));
   for (const node of layer.nodes) {
-    const hasTag = node.kind === "subgraph" || isPendingLink(node);
+    const hasTag = node.kind === "subgraph" || isPendingLink(node) || isMissingDoc(node);
     const height = cardHeight({ branchCount: rules.decisionBranches(node).length, hasTag });
     graph.setNode(node.id, { width: LOGIC_MAP_CARD.width, height });
   }
@@ -468,6 +468,11 @@ export function logicMapLayerTrail(
 
 function isPendingLink(node: LogicMapNode): boolean {
   return node.doc?.kind === "own" && node.doc.pendingLink;
+}
+
+// 子图节点点了是进下一层，不打开文档，所以不标"没有文档"。
+function isMissingDoc(node: LogicMapNode): boolean {
+  return node.kind !== "subgraph" && node.doc === null;
 }
 
 function roundPoint(point: LogicMapPoint): LogicMapPoint {

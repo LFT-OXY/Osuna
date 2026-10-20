@@ -4142,6 +4142,8 @@ export const zhCN: TranslationResources = {
       openNodeDocFailed: "打不开节点文档",
       breadcrumb: "逻辑图路径",
       pendingLink: "未指向文档",
+      missingDoc: "没有文档",
+      missingDocHint: "这个节点还没有文档",
     },
   },
 };

@@ -4152,6 +4152,8 @@ export const ar: TranslationResources = {
       openNodeDocFailed: "تعذّر فتح مستند العقدة",
       breadcrumb: "مسار الخريطة المنطقية",
       pendingLink: "بلا مستند مرتبط",
+      missingDoc: "لا يوجد مستند",
+      missingDocHint: "لا يوجد مستند لهذه العقدة بعد",
     },
   },
 };

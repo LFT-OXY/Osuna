@@ -326,7 +326,7 @@ const NO_TRAIL: readonly LogicMapLayerStep[] = [];
 
 /**
  * 点节点打开它的节点文档。外部文档先读一遍文件，用存下的标题换算起始行号；读不到就打开文件开头。
- * 连着点了几个节点时只打开最后点的那个，先发出的读取晚回来也不再打开。
+ * 连着点了几个节点时只打开最后点的那个，先发出的读取晚回来也不再打开。节点没有文档时只提示，不打开标签。
  */
 function useOpenNodeDoc({
   client,
@@ -347,10 +347,15 @@ function useOpenNodeDoc({
   const latestRequestRef = useRef(0);
   const openNodeDoc = useCallback(
     (nodeId: string) => {
-      const doc = skeleton?.nodes.find((node) => node.id === nodeId)?.doc;
-      if (!mapName || !doc) return;
+      const node = skeleton?.nodes.find((entry) => entry.id === nodeId);
+      if (!mapName || !node) return;
       const request = latestRequestRef.current + 1;
       latestRequestRef.current = request;
+      const { doc } = node;
+      if (!doc) {
+        toast.show(t("logicMap.panel.missingDocHint"), { variant: "info" });
+        return;
+      }
       setOpenedNodeId(nodeId);
       if (doc.kind === "own" || !workspaceRoot) {
         onOpenNodeDoc(nodeDocLocation({ mapName, doc, content: null }));

@@ -4240,6 +4240,8 @@ export const es: TranslationResources = {
       openNodeDocFailed: "No se pudo abrir el documento del nodo",
       breadcrumb: "Ruta del mapa lógico",
       pendingLink: "Sin documento vinculado",
+      missingDoc: "Sin documento",
+      missingDocHint: "Este nodo aún no tiene documento",
     },
   },
 };

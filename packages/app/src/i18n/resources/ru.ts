@@ -4222,6 +4222,8 @@ export const ru: TranslationResources = {
       openNodeDocFailed: "Не удалось открыть документ узла",
       breadcrumb: "Путь по логической карте",
       pendingLink: "Документ не привязан",
+      missingDoc: "Нет документа",
+      missingDocHint: "У этого узла пока нет документа",
     },
   },
 };

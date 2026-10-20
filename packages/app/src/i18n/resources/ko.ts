@@ -4178,6 +4178,8 @@ export const ko: TranslationResources = {
       openNodeDocFailed: "노드 문서를 열 수 없습니다",
       breadcrumb: "로직 맵 경로",
       pendingLink: "문서 미연결",
+      missingDoc: "문서 없음",
+      missingDocHint: "이 노드에는 아직 문서가 없습니다",
     },
   },
 };

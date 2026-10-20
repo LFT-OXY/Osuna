@@ -4252,6 +4252,8 @@ export const fr: TranslationResources = {
       openNodeDocFailed: "Impossible d’ouvrir le document du nœud",
       breadcrumb: "Chemin de la carte logique",
       pendingLink: "Aucun doc lié",
+      missingDoc: "Aucun document",
+      missingDocHint: "Ce nœud n’a pas encore de document",
     },
   },
 };

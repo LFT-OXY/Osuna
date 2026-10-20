@@ -285,6 +285,22 @@ function layerWarnings(draft: Draft): string[] {
   return warnings;
 }
 
+/** 判断过 spec 框架之后，每个节点都该有文档（自有文档或外部指向）；逐个列出还缺的。 */
+function missingDocWarnings(draft: Draft): string[] {
+  if (draft.specFramework === null) return [];
+  const missing = [...draft.nodes.values()]
+    .filter((node) => node.doc === null)
+    .map((node) => `"${node.id}" (${node.title})`);
+  if (missing.length === 0) return [];
+  const howToFill =
+    draft.specFramework.kind === "none"
+      ? "write a complete node doc for each with `write_node_doc`"
+      : "link each to its section in the framework docs with `link_node_doc`, or give it an interim summary with `write_node_doc`";
+  return [
+    `These nodes have no node doc yet: ${missing.join(", ")}. Every node needs a doc: ${howToFill}.`,
+  ];
+}
+
 function ownDocFiles(nodes: Iterable<LogicMapNode>): Set<string> {
   const files = new Set<string>();
   for (const node of nodes) {
@@ -341,6 +357,6 @@ export function applyLogicMapOperations(
     docWrites,
     docDeletes,
     externalLinks: [...draft.externalLinks.values()],
-    warnings: layerWarnings(draft),
+    warnings: [...layerWarnings(draft), ...missingDocWarnings(draft)],
   };
 }

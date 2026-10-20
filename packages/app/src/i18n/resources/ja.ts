@@ -4202,6 +4202,8 @@ export const ja: TranslationResources = {
       openNodeDocFailed: "ノードドキュメントを開けませんでした",
       breadcrumb: "ロジックマップのパス",
       pendingLink: "ドキュメント未リンク",
+      missingDoc: "ドキュメントなし",
+      missingDocHint: "このノードにはまだドキュメントがありません",
     },
   },
 } as const;

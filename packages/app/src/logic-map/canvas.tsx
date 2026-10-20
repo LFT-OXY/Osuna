@@ -84,7 +84,7 @@ export const LogicMapCanvas = memo(function LogicMapCanvas({
   selectedNodeId: string | null;
   /** 点子图节点：进入它的下一层。 */
   onEnterSubgraph: (nodeId: string) => void;
-  /** 点其他带文档的节点：在主区域打开它的节点文档。 */
+  /** 点其他节点：在主区域打开它的节点文档；没有文档时提示还没有文档。 */
   onOpenNodeDoc: (nodeId: string) => void;
 }) {
   const reduceMotion = useReduceMotionEnabled();
@@ -239,7 +239,7 @@ function NodeCardContent({ node }: { node: LogicMapNodeBox }) {
   );
 }
 
-/** 卡片里面这一层：子图卡片整张可按（进入下一层），其他带文档的卡片可按（打开节点文档），没有文档的只是展示。 */
+/** 卡片里面这一层整张可按：子图卡片进入下一层，其他卡片打开节点文档（没有文档时由面板提示）。 */
 function NodeCardBody({
   node,
   onEnterSubgraph,
@@ -257,9 +257,6 @@ function NodeCardBody({
     () => (isSubgraph ? onEnterSubgraph(node.id) : onOpenNodeDoc(node.id)),
     [isSubgraph, node.id, onEnterSubgraph, onOpenNodeDoc],
   );
-  if (!isSubgraph && !node.hasDoc) {
-    return <View style={styles.body}>{children}</View>;
-  }
   const accessibilityLabel = isSubgraph
     ? t("logicMap.panel.enterSubgraph", { title: node.title })
     : t("logicMap.panel.openNodeDoc", { title: node.title });
@@ -302,7 +299,7 @@ function BranchRow({ branch, testID }: { branch: LogicMapBranch; testID: string 
 function NodeTags({ node }: { node: LogicMapNodeBox }) {
   const { t } = useTranslation();
   const count = node.subgraphNodeCount;
-  if (count === null && !node.pendingLink) return null;
+  if (count === null && !node.pendingLink && !node.missingDoc) return null;
   const subgraphTagKey =
     count === 1 ? "logicMap.panel.subgraphTagOne" : "logicMap.panel.subgraphTagMany";
   return (
@@ -318,6 +315,13 @@ function NodeTags({ node }: { node: LogicMapNodeBox }) {
         <View style={styles.pendingTag}>
           <Text style={styles.pendingTagText} numberOfLines={1}>
             {t("logicMap.panel.pendingLink")}
+          </Text>
+        </View>
+      ) : null}
+      {node.missingDoc ? (
+        <View style={styles.missingDocTag}>
+          <Text style={styles.missingDocTagText} numberOfLines={1}>
+            {t("logicMap.panel.missingDoc")}
           </Text>
         </View>
       ) : null}
@@ -472,6 +476,21 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.typeScale.micro,
     fontWeight: theme.fontWeight.semibold,
     color: theme.colors.logicMap.pendingTagText,
+  },
+  // 灰色虚线框：表示"这里还空着"，和黄色的"未指向文档"分开。
+  missingDocTag: {
+    height: LOGIC_MAP_CARD.tagHeight,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing[1.5],
+    borderRadius: theme.borderRadius.base,
+    borderWidth: theme.borderWidth[1],
+    borderStyle: "dashed",
+    borderColor: theme.colors.logicMap.neutral,
+  },
+  missingDocTagText: {
+    ...theme.typeScale.micro,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.logicMap.muted,
   },
   tooltipText: {
     ...theme.typeScale.label,

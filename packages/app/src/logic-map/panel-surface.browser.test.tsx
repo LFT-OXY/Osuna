@@ -46,6 +46,8 @@ interface FakeHost {
   disconnectedPaths: Set<string>;
   /** 面板弹出的错误提示。 */
   toastErrors: string[];
+  /** 面板弹出的普通提示。 */
+  toastMessages: unknown[];
   /** 模拟 daemon 推送一条事件给订阅了它的连接。 */
   push: (message: SessionOutboundMessage) => void;
 }
@@ -59,6 +61,7 @@ function createFakeHost(): FakeHost {
     files: new Map(),
     disconnectedPaths: new Set(),
     toastErrors: [],
+    toastMessages: [],
     push: (message) => {
       for (const listener of listeners) listener(message);
     },
@@ -119,10 +122,10 @@ interface SurfaceOverrides {
 
 const noopOpenNodeDoc = () => {};
 
-/** 只记下错误提示的 toast。 */
+/** 记下弹出的提示。 */
 function fakeToast(host: FakeHost): ToastApi {
   return {
-    show: () => {},
+    show: (content) => host.toastMessages.push(content),
     copied: () => {},
     error: (message) => host.toastErrors.push(message),
   };
@@ -420,6 +423,28 @@ describe("the logic map panel", () => {
     expect(onOpenNodeDoc).toHaveBeenCalledWith({
       path: "docs/logic-maps/user-login/reset-count.md",
     });
+  });
+
+  it("marks a node without a doc and says so when it is clicked, without opening a tab", async () => {
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) => (node.id === "home" ? { ...node, doc: null } : node)),
+      },
+    });
+    const onOpenNodeDoc = vi.fn();
+    mountSurface(host, { onOpenNodeDoc });
+
+    expect(shownTexts(await shown("logic-map-node-home"))).toEqual(["进入首页", "No doc"]);
+    expect(shownTexts(byTestId("logic-map-node-reset-count"))).toEqual(["清零失败次数"]);
+
+    await userEvent.click(byTestId("logic-map-node-title-home"));
+
+    expect(host.toastMessages).toEqual(["This node has no doc yet"]);
+    expect(onOpenNodeDoc).not.toHaveBeenCalled();
   });
 
   it("opens a node that points at a framework doc at the line of its heading", async () => {

@@ -4283,6 +4283,8 @@ export const en = {
       openNodeDocFailed: "Couldn't open the node doc",
       breadcrumb: "Logic map path",
       pendingLink: "No doc linked",
+      missingDoc: "No doc",
+      missingDocHint: "This node has no doc yet",
     },
   },
 } as const;

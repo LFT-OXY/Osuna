@@ -93,6 +93,8 @@ test("the first message after switching on to a spec framework map gets interim 
   expect(block).toContain("This project has a spec framework; its docs are at .atw/tasks.");
   expect(block).toContain("3 to 6 sentences");
   expect(block).toContain("`link_node_doc`");
+  expect(block).toContain("Every node must have a node doc");
+  expect(block).toContain(`\`${UPDATE_LOGIC_MAP_TOOL}\` lists the nodes that have no doc yet`);
   expect(block).toContain("If the user corrects the judgment");
   expect(block).toContain(LINK_PENDING_FIRST);
   expect(block).toContain('"start", "check"');
@@ -154,6 +156,8 @@ test("a project without a spec framework gets a complete node doc for every node
   expect(block).not.toContain(JUDGE_FRAMEWORK);
   expect(block).toContain("This project has no spec framework.");
   expect(block).toContain("complete node doc");
+  expect(block).toContain("Every node must have a node doc");
+  expect(block).toContain(`\`${UPDATE_LOGIC_MAP_TOOL}\` lists the nodes that have no doc yet`);
   expect(block).toContain("If the user corrects the judgment");
   expect(block).not.toContain(LINK_PENDING_FIRST);
 });
