@@ -27,7 +27,7 @@ import {
   withExtraBody,
   type RequestExtras,
 } from "./request-extras.js";
-import { upstreamFetch } from "./insecure-tls.js";
+import { upstreamFetch, type UpstreamResponse } from "./insecure-tls.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
 import type { CliHeaderSample } from "./store.js";
 import { asCliBody, type CliTestClient } from "./test-as.js";
@@ -400,7 +400,7 @@ function probeRequest(input: {
 type ProbeReply = { kind: "streamed"; failure: string | null } | { kind: "whole"; text: string };
 
 async function readProbeReply(input: {
-  response: Response;
+  response: UpstreamResponse;
   isStreamed: boolean;
 }): Promise<ProbeReply> {
   if (input.isStreamed) return { kind: "streamed", failure: await streamAnswer(input.response) };
@@ -445,30 +445,24 @@ function streamError(event: Record<string, unknown>, data: string): string | nul
  * 流式请求先回 200，模型还可能在流里失败：读到它第一次开口或报错为止（magpie streamAnswer）。
  * 流读完了两样都没有也算答上，和整份回答的 200 一样。返回失败的原因，答上为 null。
  */
-async function streamAnswer(response: Response): Promise<string | null> {
-  const reader = response.body?.getReader();
-  if (reader === undefined) return null;
+async function streamAnswer(response: UpstreamResponse): Promise<string | null> {
   const decoder = new TextDecoder();
   let pending = "";
   let read = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) return null;
-      read += chunk.value.byteLength;
-      pending += decoder.decode(chunk.value, { stream: true });
-      const lines = pending.split("\n");
-      pending = lines.pop() ?? "";
-      for (const line of lines) {
-        const verdict = lineVerdict(line);
-        if (verdict?.kind === "answered") return null;
-        if (verdict?.kind === "failed") return verdict.reason;
-      }
-      if (read >= STREAM_READ_LIMIT) return null;
+  // 提前 return 时 for await 关掉迭代器，流随之取消。
+  for await (const chunk of response.chunks()) {
+    read += chunk.byteLength;
+    pending += decoder.decode(chunk, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const verdict = lineVerdict(line);
+      if (verdict?.kind === "answered") return null;
+      if (verdict?.kind === "failed") return verdict.reason;
     }
-  } finally {
-    await reader.cancel();
+    if (read >= STREAM_READ_LIMIT) return null;
   }
+  return null;
 }
 
 type StreamVerdict = { kind: "answered" } | { kind: "failed"; reason: string };

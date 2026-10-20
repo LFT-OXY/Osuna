@@ -110,7 +110,7 @@ const StoredApiEndpointSchema = z.object({
   // 手改成别的值时当两个都放（照 magpie normalize），不让整个文件读不懂。
   keyHeader: z.enum(STORED_KEY_HEADERS).optional().catch(undefined),
   // 不校验证书（insecure-tls.ts）：只写 true；只对「自定义」加的接口自己的 https 主机起作用，模板接口手改成 true 也不算。
-  insecureTls: z.boolean().optional(),
+  insecureTls: z.boolean().optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

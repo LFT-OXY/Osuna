@@ -137,6 +137,19 @@ async function startUpstream(root: string): Promise<Upstream> {
   return upstream;
 }
 
+/** 另一台自签证书的服务：什么请求都 307 到 target 的同一路径（去掉 /redir 前缀）。 */
+async function startRedirector(input: { root: string; target: string }): Promise<string> {
+  const certificate = await selfSignedCertificate(await mkdtemp(path.join(input.root, "redir-")));
+  const server = createServer(certificate, (req, res) => {
+    const rest = (req.url ?? "").replace(/^\/redir/, "");
+    req.resume();
+    req.on("end", () => res.writeHead(307, { location: `${input.target}${rest}` }).end());
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `https://127.0.0.1:${(server.address() as AddressInfo).port}/redir`;
+}
+
 /**
  * 三家都指向同一台假上游：own（Anthropic 与 Chat 地址）、chat（只有 Chat 地址，Claude Code 的请求翻译过去）按 insecureTls 定，
  * other 从不打开。
@@ -223,7 +236,7 @@ async function start(input: { insecureTls: boolean }) {
   await client.connect();
   await client.fetchAgents({ subscribe: {} });
   const gateway = `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`;
-  return { upstream, client, gateway };
+  return { upstream, client, gateway, root };
 }
 
 function claudeAsk(input: { gateway: string; model: string; suffix?: string }) {
@@ -375,6 +388,33 @@ describe("skip the certificate check", () => {
       insecureTls: false,
     });
     expect(turnedOff.endpoint?.insecureTls).toBeUndefined();
+  });
+
+  test("before save, an address the form replaced is checked again; one it kept is not (magpie typed)", async () => {
+    const started = await start({ insecureTls: true });
+    const { client, upstream } = started;
+    // 表单上的新地址在另一台服务上，它把请求转回这家存的旧地址。
+    const redirector = await startRedirector({ root: started.root, target: upstream.origin });
+    // chat 只有 Chat 地址：表单把它换成新地址后，旧地址不再是这家的，转过去要校验证书。
+    const replaced = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId: "chat",
+      baseUrl: `${redirector}/v1`,
+      format: "openai_chat",
+      modelId: "chat-model",
+    });
+    expect(replaced.result?.ok).toBe(false);
+    expect(upstream.paths).toEqual([]);
+    // 只换了 Anthropic 地址：Chat 地址还是旧的那台，转过去照样不校验。
+    const kept = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId: "chat",
+      baseUrl: redirector,
+      format: "anthropic_messages",
+      modelId: "chat-model",
+    });
+    expect(kept.result?.ok).toBe(true);
+    expect(upstream.paths).toEqual(["/v1/messages"]);
   });
 
   test("a template endpoint can't turn it on, and is told why", async () => {

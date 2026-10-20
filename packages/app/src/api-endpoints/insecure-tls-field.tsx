@@ -51,47 +51,47 @@ export function InsecureTlsField({
   );
 }
 
-/** 打开前的确认框：风险说明整段显示，不截断；取消与确认都在底部。 */
+// 窄屏底部弹层只高到放得下说明和按钮；长的译文在里面滚动。
+const CONFIRM_SNAP_POINTS = ["50%"];
+
+/**
+ * 打开前的确认框：风险说明整段显示，不截断，正文用主前景色，深色下也看得清；取消与确认紧跟在说明下面，
+ * 不沉到弹层底部隔出一大片空白。
+ */
 function InsecureTlsConfirmSheet({ model }: { model: ConnectionFormModel }) {
   const { t } = useTranslation();
   const header = useMemo<SheetHeader>(() => ({ title: t(`${KEY}.confirmTitle`) }), [t]);
-  const footer = useMemo(
-    () => (
-      <View style={styles.footer}>
-        <Button
-          variant="secondary"
-          size="sm"
-          onPress={model.cancelInsecureTls}
-          testID="api-endpoint-insecure-tls-cancel"
-        >
-          {t("common.actions.cancel")}
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          onPress={model.confirmInsecureTls}
-          testID="api-endpoint-insecure-tls-confirm"
-        >
-          {t(`${KEY}.confirm`)}
-        </Button>
-      </View>
-    ),
-    [model, t],
-  );
+  const risk = useMemo(() => <Text selectable>{t(`${KEY}.confirmMessage`)}</Text>, [t]);
   return (
     <AdaptiveModalSheet
       header={header}
       visible
       onClose={model.cancelInsecureTls}
-      footer={footer}
       desktopMaxWidth={440}
+      snapPoints={CONFIRM_SNAP_POINTS}
       testID="api-endpoint-insecure-tls-confirm-sheet"
     >
-      <Alert
-        variant="warning"
-        description={t(`${KEY}.confirmMessage`)}
-        testID="api-endpoint-insecure-tls-risk"
-      />
+      <View style={styles.confirmBody}>
+        <Alert variant="warning" description={risk} testID="api-endpoint-insecure-tls-risk" />
+        <View style={styles.actions}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={model.cancelInsecureTls}
+            testID="api-endpoint-insecure-tls-cancel"
+          >
+            {t("common.actions.cancel")}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onPress={model.confirmInsecureTls}
+            testID="api-endpoint-insecure-tls-confirm"
+          >
+            {t(`${KEY}.confirm`)}
+          </Button>
+        </View>
+      </View>
     </AdaptiveModalSheet>
   );
 }
@@ -113,8 +113,10 @@ const styles = StyleSheet.create((theme) => ({
   switchText: {
     flex: 1,
   },
-  footer: {
-    flex: 1,
+  confirmBody: {
+    gap: theme.spacing[4],
+  },
+  actions: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: theme.spacing[2],

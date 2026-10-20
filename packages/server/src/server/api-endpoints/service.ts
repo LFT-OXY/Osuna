@@ -337,7 +337,12 @@ import {
   type ApiEndpointKeyHeader,
   type ExtraBodyProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
-import { uncheckedHostsOf } from "./insecure-tls.js";
+import {
+  closeUncheckedDispatchers,
+  liveUncheckedHostsOf,
+  releaseUncheckedHosts,
+  uncheckedHostsOf,
+} from "./insecure-tls.js";
 import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
@@ -972,6 +977,7 @@ export class ApiEndpointService {
   dispose(): void {
     this.reopenHints.dispose();
     this.catalogRefresh.dispose();
+    closeUncheckedDispatchers();
   }
 
   /** 一个 CLI 要重开谁的依据：配置目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
@@ -2493,6 +2499,7 @@ export class ApiEndpointService {
       this.store.setApiKey(id, apiKey);
     }
     this.store.writeState(next);
+    releaseUncheckedHosts(releasedUncheckedHosts({ previous, next }));
     this.icons.prune({ usedBefore: endpointIcons(previous), usedNow: endpointIcons(next) });
     if (!sameTokens(tokens, previousTokens)) this.store.writeGatewayTokens(tokens);
     this.recordCliRewrites(synced);
@@ -3588,13 +3595,14 @@ export class ApiEndpointService {
 
   /**
    * 拉模型、测试、检测带的请求头、附加请求体、key 放哪个头与不校验证书：表单给了的用表单的（保存前），没给的用 endpointId
-   * 那家存的。不校验证书的主机取表单与那家的地址（照 magpie typed：表单的值盖在那家上），模板按表单的、没给按那家的。
+   * 那家存的。不校验证书的主机取表单盖过那家之后的地址（formAddressesOver，照 magpie typed），模板按表单的、没给按那家的。
    */
   private requestExtras(
     input: {
       endpointId?: string;
       baseUrl: string;
-      baseUrls?: { url: string }[];
+      format?: string;
+      baseUrls?: { format: string; url: string }[];
       templateId?: string;
     } & ApiEndpointRequestExtrasInput,
   ): RequestExtras {
@@ -3605,12 +3613,10 @@ export class ApiEndpointService {
     if (input.headers !== undefined) headers = cleanRequestHeaders(input.headers) ?? {};
     const extraBody = input.extraBody ?? saved.extraBody;
     const keyHeader = input.keyHeader ?? saved.keyHeader;
-    const addresses = [...(input.baseUrls ?? []), ...(endpoint?.baseUrls ?? [])];
-    const urls = [input.baseUrl, ...addresses.map(({ url }) => url)];
     const uncheckedHosts = uncheckedHostsOf({
       insecureTls: input.insecureTls ?? endpoint?.insecureTls,
       templateId: input.templateId ?? endpoint?.templateId,
-      urls,
+      urls: formAddressesOver({ saved: endpoint?.baseUrls ?? [], form: input }),
     });
     return { headers, extraBody, keyHeader, uncheckedHosts };
   }
@@ -4698,6 +4704,38 @@ function savedRequestExtras(input: {
   if (keyHeader !== "both") saved.keyHeader = keyHeader;
   if (insecureTls) saved.insecureTls = true;
   return saved;
+}
+
+/** 这次变更后不再不校验证书的主机：地址换了、不校验关了、整家关了或删了的那几家原来的。 */
+function releasedUncheckedHosts(input: {
+  previous: ApiEndpointState;
+  next: ApiEndpointState;
+}): string[] {
+  const released: string[] = [];
+  for (const before of input.previous.endpoints) {
+    const after = findEndpoint(input.next, before.id);
+    const kept = after ? liveUncheckedHostsOf(after) : [];
+    for (const host of liveUncheckedHostsOf(before)) {
+      if (!kept.includes(host)) released.push(host);
+    }
+  }
+  return released;
+}
+
+/**
+ * 拉模型、测试、检测时这家的地址：表单的盖过存的（照 magpie typed）。给了 baseUrls 是表单的全部地址；只给一种格式的
+ * baseUrl 就换掉存的那种格式，被换掉的旧地址不再算这家的；不带格式（自动检测问的那个地址）就加上它。
+ */
+function formAddressesOver(input: {
+  saved: { format: string; url: string }[];
+  form: { baseUrl: string; format?: string; baseUrls?: { format: string; url: string }[] };
+}): string[] {
+  const { form } = input;
+  if (form.baseUrls !== undefined) return form.baseUrls.map(({ url }) => url);
+  const byFormat = new Map(input.saved.map(({ format, url }) => [format, url]));
+  if (form.format === undefined) return [...byFormat.values(), form.baseUrl];
+  byFormat.set(form.format, form.baseUrl);
+  return [...byFormat.values()];
 }
 
 /** 附加请求体：字段没名字、是保留字段、同名写了两次的拒收（照 magpie ExtraBodyOK）。空的为 null。 */
