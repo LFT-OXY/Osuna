@@ -89,6 +89,10 @@ import {
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { logicMapToggleReservedWidth, LogicMapComposerToggle } from "@/logic-map/composer-toggle";
+import {
+  useLogicMapToolsUnavailableReason,
+  type LogicMapToolsUnavailableReason,
+} from "@/logic-map/osuna-tools-availability";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -310,6 +314,8 @@ interface RenderLeftContentArgs {
   showLogicMapToggle: boolean;
   /** 主机是否支持逻辑图；决定给开关还是给更长的更新提示预留宽度。 */
   logicMapSupported: boolean | null;
+  /** 会话拿不到 Osuna 工具的原因；开关旁给出说明，并预留更宽的位置。 */
+  logicMapToolsUnavailableReason: LogicMapToolsUnavailableReason | null;
   /** 输入框外框；逻辑图的选择弹层开在它上方。 */
   messageInputContainerRef: React.RefObject<View | null>;
 }
@@ -323,6 +329,7 @@ function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): Re
       <LogicMapComposerToggle
         serverId={args.serverId}
         popoverEdgeRef={args.messageInputContainerRef}
+        toolsUnavailableReason={args.logicMapToolsUnavailableReason}
         kind="draft"
         draftTabId={args.agentId}
         workspaceId={args.workspaceId}
@@ -333,6 +340,7 @@ function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): Re
     <LogicMapComposerToggle
       serverId={args.serverId}
       popoverEdgeRef={args.messageInputContainerRef}
+      toolsUnavailableReason={args.logicMapToolsUnavailableReason}
       kind="agent"
       agentId={args.agentId}
       workspaceId={args.workspaceId}
@@ -347,7 +355,10 @@ function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
   // 开关放进 Agent controls 那一行的末尾，控件收缩时给它预留宽度。
   const logicMapToggle = renderLogicMapToggle(args, isDraft);
   const trailingControlWidth = logicMapToggle
-    ? logicMapToggleReservedWidth(args.logicMapSupported)
+    ? logicMapToggleReservedWidth({
+        supported: args.logicMapSupported,
+        toolsUnavailable: args.logicMapToolsUnavailableReason !== null,
+      })
     : 0;
   if (isDraft && agentControls) {
     return (
@@ -2437,6 +2448,15 @@ function ComposerContentImpl({
 
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
   const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
+  const logicMapToolsUnavailableReason = useLogicMapToolsUnavailableReason(
+    agentControls
+      ? {
+          kind: "draft",
+          providerEntries: agentControls.providerEntries,
+          selectedProvider: agentControls.selectedProvider,
+        }
+      : { kind: "agent", serverId, agentId },
+  );
   const messageInputContainerRef = useRef<View>(null);
   const leftContent = useMemo(
     () =>
@@ -2450,10 +2470,12 @@ function ComposerContentImpl({
         showAgentControls: mode.showAgentControls,
         showLogicMapToggle,
         logicMapSupported,
+        logicMapToolsUnavailableReason,
         messageInputContainerRef,
       }),
     [
       logicMapSupported,
+      logicMapToolsUnavailableReason,
       agentControls,
       agentId,
       workspaceId,

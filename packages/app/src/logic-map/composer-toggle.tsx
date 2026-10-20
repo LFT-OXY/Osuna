@@ -1,16 +1,18 @@
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
-import { Workflow } from "lucide-react-native";
+import { TriangleAlert, Workflow } from "lucide-react-native";
 import { useCallback, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { useToast } from "@/contexts/toast-context";
+import { openHostSettingsSection } from "@/navigation/settings-navigation";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useHostFeatureAvailability } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
@@ -19,16 +21,23 @@ import type { Theme } from "@/styles/theme";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { buildDraftLogicMapKey, useDraftLogicMapStore } from "./draft-logic-map-store";
 import { LogicMapPicker, type LogicMapChoice, type LogicMapPickerClient } from "./map-picker";
+import type { LogicMapToolsUnavailableReason } from "./osuna-tools-availability";
 
 /** 开关在工具栏里的估计宽度：图标、"逻辑图"、Switch 与内边距，算 Agent controls 收缩档位时预留。 */
 const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
 /** 老主机时那一行是图标、"逻辑图"加整句"需要更新这台主机上的 Osuna"，要预留整句的宽度。 */
 const LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH = 300;
+/** Osuna 工具不可用时开关后面多出警告图标、原因和"去开启"按钮。 */
+const LOGIC_MAP_TOOLS_UNAVAILABLE_EXTRA_WIDTH = 260;
 
-/** Agent controls 收缩时给逻辑图控件预留的宽度；主机太旧时提示比开关长得多。 */
-export function logicMapToggleReservedWidth(supported: boolean | null): number {
-  return supported === false
-    ? LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH
+/** Agent controls 收缩时给逻辑图控件预留的宽度；主机太旧或工具不可用时提示比开关长得多。 */
+export function logicMapToggleReservedWidth(input: {
+  supported: boolean | null;
+  toolsUnavailable: boolean;
+}): number {
+  if (input.supported === false) return LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH;
+  return input.toolsUnavailable
+    ? LOGIC_MAP_TOGGLE_RESERVED_WIDTH + LOGIC_MAP_TOOLS_UNAVAILABLE_EXTRA_WIDTH
     : LOGIC_MAP_TOGGLE_RESERVED_WIDTH;
 }
 
@@ -37,6 +46,8 @@ type LogicMapComposerToggleProps = {
   serverId: string;
   /** 输入框外框，选择弹层开在它上方，不盖住输入框里的文字。 */
   popoverEdgeRef: RefObject<View | null> | null;
+  /** 会话拿不到 Osuna 工具的原因；有原因时开关后面给出说明，开关照常能用。 */
+  toolsUnavailableReason: LogicMapToolsUnavailableReason | null;
 } & (
   | { kind: "agent"; agentId: string; workspaceId: string | null }
   | { kind: "draft"; draftTabId: string; workspaceId: string }
@@ -51,7 +62,9 @@ function revealLogicMapTabOnFirstEnable(serverId: string, workspaceId: string | 
 }
 
 const ThemedWorkflowIcon = withUnistyles(Workflow);
+const ThemedWarningIcon = withUnistyles(TriangleAlert);
 const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const warningIconMapping = (theme: Theme) => ({ color: theme.colors.statusWarning });
 
 /**
  * 输入框工具栏上的"逻辑图"开关。主机不支持时不给开关，只提示更新主机；
@@ -62,23 +75,103 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
   const supported = useHostFeatureAvailability(props.serverId, "logicMap");
   if (supported === null) return null;
   if (!supported) return <LogicMapHostOutdated />;
-  if (props.kind === "agent") {
-    return (
+  const toggle =
+    props.kind === "agent" ? (
       <AgentLogicMapSwitch
         serverId={props.serverId}
         popoverEdgeRef={props.popoverEdgeRef}
         agentId={props.agentId}
         workspaceId={props.workspaceId}
       />
+    ) : (
+      <DraftLogicMapSwitch
+        serverId={props.serverId}
+        popoverEdgeRef={props.popoverEdgeRef}
+        draftTabId={props.draftTabId}
+        workspaceId={props.workspaceId}
+      />
     );
-  }
+  if (!props.toolsUnavailableReason) return toggle;
   return (
-    <DraftLogicMapSwitch
-      serverId={props.serverId}
-      popoverEdgeRef={props.popoverEdgeRef}
-      draftTabId={props.draftTabId}
-      workspaceId={props.workspaceId}
-    />
+    <View style={styles.withHint}>
+      {toggle}
+      <LogicMapToolsUnavailableHint
+        serverId={props.serverId}
+        reason={props.toolsUnavailableReason}
+        isDraft={props.kind === "draft"}
+      />
+    </View>
+  );
+}
+
+const TOOLS_UNAVAILABLE_MESSAGE_KEYS = {
+  tools_not_injected: "logicMap.toggle.toolsNotInjected",
+  mcp_disabled: "logicMap.toggle.mcpDisabled",
+  tools_not_delivered: "logicMap.toggle.toolsNotDelivered",
+} as const satisfies Record<LogicMapToolsUnavailableReason, string>;
+
+/** 说明全文：运行中的 Agent 开启后要重新加载才拿得到工具，草稿新建时就能拿到。 */
+function toolsUnavailableDetailKey(reason: LogicMapToolsUnavailableReason, isDraft: boolean) {
+  if (reason === "tools_not_injected") {
+    return isDraft
+      ? "logicMap.toggle.toolsNotInjectedDraftDetail"
+      : "logicMap.toggle.toolsNotInjectedDetail";
+  }
+  return reason === "mcp_disabled"
+    ? "logicMap.toggle.mcpDisabledDetail"
+    : "logicMap.toggle.toolsNotDeliveredDetail";
+}
+
+/** 开关后面的警告：短原因常显，全文在悬停提示与读屏文字里；能在设置里打开的给"去开启"。 */
+function LogicMapToolsUnavailableHint({
+  serverId,
+  reason,
+  isDraft,
+}: {
+  serverId: string;
+  reason: LogicMapToolsUnavailableReason;
+  isDraft: boolean;
+}) {
+  const { t } = useTranslation();
+  const { glyphSize } = useComposerControlLayout();
+  const detail = t(toolsUnavailableDetailKey(reason, isDraft));
+  const openAgentsSettings = useCallback(
+    () => openHostSettingsSection(serverId, "agents"),
+    [serverId],
+  );
+  return (
+    <View style={styles.hint} testID="composer-logic-map-tools-unavailable">
+      <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+        <TooltipTrigger asChild triggerRefProp="ref">
+          <View
+            style={styles.hintReason}
+            accessible
+            accessibilityLabel={detail}
+            testID="composer-logic-map-tools-unavailable-reason"
+          >
+            <ComposerToolbarGlyph size={glyphSize}>
+              <ThemedWarningIcon size={glyphSize} uniProps={warningIconMapping} />
+            </ComposerToolbarGlyph>
+            <UiText variant="label" color="foregroundMuted" numberOfLines={1}>
+              {t(TOOLS_UNAVAILABLE_MESSAGE_KEYS[reason])}
+            </UiText>
+          </View>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="center" offset={8}>
+          <Text style={styles.tooltipText}>{detail}</Text>
+        </TooltipContent>
+      </Tooltip>
+      {reason === "tools_not_injected" ? (
+        <Button
+          variant="outline"
+          size="xs"
+          onPress={openAgentsSettings}
+          testID="composer-logic-map-tools-unavailable-action"
+        >
+          {t("logicMap.toggle.openAgentsSettings")}
+        </Button>
+      ) : null}
+    </View>
   );
 }
 
@@ -346,6 +439,24 @@ function LogicMapHostOutdated() {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  withHint: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hint: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingRight: theme.spacing[2],
+  },
+  hintReason: {
+    height: theme.controlHeight.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
   control: {
     height: theme.controlHeight.md,
     flexShrink: 0,

@@ -4096,6 +4096,18 @@ export const ar: TranslationResources = {
       hostOutdated: "حدّث Osuna على هذا المضيف",
       hostOutdatedDetail: "حدّث Osuna على هذا المضيف لاستخدام الخريطة المنطقية.",
       failed: "تعذّر تغيير الخريطة المنطقية: {{error}}",
+      toolsNotInjected: "أدوات Osuna متوقفة",
+      toolsNotInjectedDetail:
+        "تحتاج الخريطة المنطقية إلى أدوات Osuna. فعّلها من الإعدادات ← Host ← Agents، ثم أعد تحميل هذا الوكيل.",
+      toolsNotInjectedDraftDetail:
+        "تحتاج الخريطة المنطقية إلى أدوات Osuna. فعّلها من الإعدادات ← Host ← Agents.",
+      openAgentsSettings: "فتح الإعدادات",
+      mcpDisabled: "MCP متوقف على هذا المضيف",
+      mcpDisabledDetail:
+        "تحتاج الخريطة المنطقية إلى أدوات Osuna، ولا يستطيع هذا المضيف توفيرها ما دام MCP متوقفًا.",
+      toolsNotDelivered: "لا تتوفر أدوات Osuna لهذا الوكيل",
+      toolsNotDeliveredDetail:
+        "تحتاج الخريطة المنطقية إلى أدوات Osuna، ولا يستطيع هذا الوكيل استدعاءها.",
     },
     picker: {
       title: "تشغيل الخريطة المنطقية",

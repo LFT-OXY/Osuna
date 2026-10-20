@@ -4,12 +4,42 @@ import type { Locator } from "@playwright/test";
 import { getLogicMapNameFromLabels } from "@getpaseo/protocol/agent-labels";
 import { expect, test, type Page } from "../support/fixtures";
 import { expectComposerVisible } from "../support/helpers/composer";
+import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { clickNewChat, gotoWorkspace } from "../support/helpers/launcher";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import type { SeedDaemonClient } from "../support/helpers/seed-client";
+import { getServerId } from "../support/helpers/server-id";
+
+// 本文件的 worker daemon 注入 Osuna 工具，mock 智能体拿得到逻辑图工具。工具不可用的用例在建智能体前关掉注入：
+// daemon 只在会话启动时判定一次。
+test.use({ e2eInjectPaseoTools: true });
 
 const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
+
+interface DaemonConfigClient {
+  connect(): Promise<void>;
+  close(): Promise<void>;
+  patchDaemonConfig(config: { mcp: { injectIntoAgents: boolean } }): Promise<unknown>;
+}
+
+/** 关着主机的"启用 Osuna 工具"跑完 run，再打开。 */
+async function withOsunaToolsOff<T>(run: () => Promise<T>): Promise<T> {
+  const client = await connectDaemonClient<DaemonConfigClient>({
+    clientIdPrefix: "logic-map-toggle-e2e",
+  });
+  try {
+    await client.patchDaemonConfig({ mcp: { injectIntoAgents: false } });
+    return await run();
+  } finally {
+    await client.patchDaemonConfig({ mcp: { injectIntoAgents: true } }).catch(() => undefined);
+    await client.close().catch(() => undefined);
+  }
+}
+
+function toolsUnavailableHint(page: Page): Locator {
+  return page.getByTestId("composer-logic-map-tools-unavailable").filter({ visible: true });
+}
 
 function logicMapSwitch(page: Page): Locator {
   return page.getByTestId("composer-logic-map-switch").filter({ visible: true });
@@ -140,6 +170,8 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       await expectComposerVisible(page);
       const toggle = logicMapSwitch(page);
       await expect(toggle).toHaveAttribute("aria-checked", "false", { timeout: 30_000 });
+      // Osuna 工具开着：开关旁没有提示。
+      await expect(page.getByTestId("composer-logic-map-tools-unavailable")).toHaveCount(0);
 
       // 这个 workspace 还没有图：选择层里只有"新建"。
       await toggle.click();
@@ -307,6 +339,72 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       await expect(hint).toBeVisible({ timeout: 30_000 });
       await expect(hint).toHaveAccessibleName("Update Osuna on this host to use the logic map.");
       await expect(page.getByTestId("composer-logic-map-switch")).toHaveCount(0);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("with Osuna tools off, a running agent shows why next to the switch and links to the Agents settings", async ({
+    page,
+  }, testInfo) => {
+    const agent = await withOsunaToolsOff(() =>
+      seedMockAgentWorkspace({
+        repoPrefix: `logic-map-tools-off-${testInfo.workerIndex}-`,
+        title: "Logic map tools off",
+      }),
+    );
+    try {
+      await openAgentRoute(page, agent);
+      await expectComposerVisible(page);
+
+      const hint = toolsUnavailableHint(page);
+      await expect(hint).toContainText("Osuna tools are off", { timeout: 30_000 });
+      await expect(
+        hint.getByTestId("composer-logic-map-tools-unavailable-reason"),
+      ).toHaveAccessibleName(
+        "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents, then reload this agent.",
+      );
+      // 开关照常能开。
+      await turnOnWithNewMap(page);
+      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true");
+      await expect
+        .poll(() => agentLogicMap(agent.client, agent.agentId))
+        .toMatch(/^untitled-[0-9a-f]{8}$/);
+
+      await hint.getByTestId("composer-logic-map-tools-unavailable-action").click();
+      await expect(page).toHaveURL(
+        new RegExp(`/settings/hosts/${encodeURIComponent(getServerId())}/agents$`),
+        { timeout: 30_000 },
+      );
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("with Osuna tools off, a draft says to turn them on without a reload", async ({
+    page,
+  }, testInfo) => {
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: `logic-map-draft-tools-off-${testInfo.workerIndex}-`,
+      title: "Existing agent",
+    });
+    try {
+      await gotoWorkspace(page, agent.workspaceId);
+      await clickNewChat(page);
+      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "false", {
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("composer-logic-map-tools-unavailable")).toHaveCount(0);
+
+      await withOsunaToolsOff(async () => {
+        const hint = toolsUnavailableHint(page);
+        await expect(hint).toContainText("Osuna tools are off", { timeout: 30_000 });
+        await expect(
+          hint.getByTestId("composer-logic-map-tools-unavailable-reason"),
+        ).toHaveAccessibleName(
+          "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents.",
+        );
+      });
     } finally {
       await agent.cleanup();
     }

@@ -34,17 +34,26 @@ async function makeTempDir(prefix: string): Promise<string> {
   return dir;
 }
 
-async function startDaemon(
-  input: { cwd?: string; paseoHomeRoot?: string } = {},
-): Promise<Scenario> {
+interface StartDaemonInput {
+  cwd?: string;
+  paseoHomeRoot?: string;
+  /** 主机的"启用 Osuna 工具"；默认开。 */
+  mcpInjectIntoAgents?: boolean;
+  /** 会话能不能接收 MCP 配置（Osuna 工具走这条通道）；默认能。 */
+  supportsMcpServers?: boolean;
+}
+
+async function startDaemon(input: StartDaemonInput = {}): Promise<Scenario> {
   const cwd = input.cwd ?? (await makeTempDir("paseo-logic-map-ws-"));
   const prompts: string[] = [];
   const daemon = await createTestPaseoDaemon({
     agentClients: {
       codex: createTestAgentClient("codex", {
+        supportsMcpServers: input.supportsMcpServers ?? true,
         onStartTurn: (prompt) => prompts.push(promptText(prompt)),
       }),
     },
+    mcpInjectIntoAgents: input.mcpInjectIntoAgents ?? true,
     ...(input.paseoHomeRoot ? { paseoHomeRoot: input.paseoHomeRoot, cleanup: false } : {}),
   });
   daemons.push(daemon);
@@ -151,6 +160,33 @@ describe("Logic map toggle", () => {
     );
     expect(scenario.prompts[0]).toContain(`docs/logic-maps/${mapName}/`);
     expect(await userMessages(scenario, agent.id)).toEqual(["add a login page"]);
+  });
+
+  test("with Osuna tools turned off on the host, the switch still turns on but no block is sent", async () => {
+    const scenario = await startDaemon({ mcpInjectIntoAgents: false });
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    const { mapName } = await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+    });
+    await sendAndFinish(scenario, agent.id, "add a login page");
+
+    expect(await agentLogicMap(scenario, agent.id)).toBe(mapName);
+    expect(scenario.prompts).toEqual(["add a login page"]);
+  });
+
+  test("an agent that cannot receive Osuna tools gets no block", async () => {
+    const scenario = await startDaemon({ supportsMcpServers: false });
+    const agent = await scenario.client.createAgent({ provider: "codex", cwd: scenario.cwd });
+
+    await scenario.client.setAgentLogicMapEnabled({
+      target: { kind: "agent", agentId: agent.id },
+      enabled: true,
+    });
+    await sendAndFinish(scenario, agent.id, "add a login page");
+
+    expect(scenario.prompts).toEqual(["add a login page"]);
   });
 
   test("turning it off stops the block and keeps the map on disk", async () => {

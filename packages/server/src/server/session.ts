@@ -64,6 +64,7 @@ import {
   type RoutingBlockResolver,
 } from "./agent/agent-prompt.js";
 import { resolveRoutingBlock } from "./agent/routing-block.js";
+import { resolvePaseoToolsUnavailableReason } from "./agent/create-agents-capability.js";
 import {
   markLogicMapBriefed,
   resolveLogicMapInstructionBlock,
@@ -8320,7 +8321,7 @@ export class Session {
   }
 
   /**
-   * 客户端发来的用户消息按发出时的会话判定生成 Routing block，再接上逻辑图说明块（开关开着时）；
+   * 客户端发来的用户消息按发出时的会话判定生成 Routing block，再接上逻辑图说明块（开关开着、会话拿得到 Osuna 工具时）；
    * 配置和开关都在发送时现读。
    */
   private routingBlockResolver(text: string): RoutingBlockResolver {
@@ -8334,11 +8335,10 @@ export class Session {
         agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
         providers: this.providerSnapshotManager,
       });
-      const logicMapBlock = await resolveLogicMapInstructionBlock({
-        text,
-        labels: agent.labels,
-        cwd: agent.cwd,
-      });
+      // 会话拿不到 Osuna 工具时不发说明块，免得要求它用没有的 read_logic_map / update_logic_map。
+      const logicMapBlock = resolvePaseoToolsUnavailableReason(agent.createAgentsCapability)
+        ? null
+        : await resolveLogicMapInstructionBlock({ text, labels: agent.labels, cwd: agent.cwd });
       if (logicMapBlock) await markLogicMapBriefed(this.agentManager, agent);
       const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
       return blocks.length > 0 ? blocks.join("\n\n") : null;

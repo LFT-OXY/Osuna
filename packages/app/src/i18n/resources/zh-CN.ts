@@ -4089,6 +4089,15 @@ export const zhCN: TranslationResources = {
       hostOutdated: "需要更新这台主机上的 Osuna",
       hostOutdatedDetail: "需要更新这台主机上的 Osuna 才能使用逻辑图。",
       failed: "无法切换逻辑图：{{error}}",
+      toolsNotInjected: "Osuna 工具未启用",
+      toolsNotInjectedDetail:
+        "逻辑图要用 Osuna 工具读写。在设置 → 主机 → Agent 中开启后，需要重新加载当前 Agent。",
+      toolsNotInjectedDraftDetail: "逻辑图要用 Osuna 工具读写。在设置 → 主机 → Agent 中开启。",
+      openAgentsSettings: "去开启",
+      mcpDisabled: "主机已关闭 MCP",
+      mcpDisabledDetail: "逻辑图要用 Osuna 工具读写，主机关闭 MCP 时提供不了。",
+      toolsNotDelivered: "当前 Agent 无法调用 Osuna 工具",
+      toolsNotDeliveredDetail: "逻辑图要用 Osuna 工具读写，当前 Agent 调用不了它们。",
     },
     picker: {
       title: "打开逻辑图",
