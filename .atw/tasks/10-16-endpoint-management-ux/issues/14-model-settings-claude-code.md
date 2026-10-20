@@ -7,7 +7,7 @@
 
 **Blocked by:** 13
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（临时 `CLAUDE_CONFIG_DIR`）：手改的四项写进 Claude Code 设置；关掉「使用第三方接口」后恢复原值。
 - [ ] 端到端：不手改时写进的值与改动前对照，差异只来自照 magpie 的合并，并在实现记录里列出。
