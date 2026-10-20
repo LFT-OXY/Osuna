@@ -354,24 +354,38 @@ export interface ShapeRefusals {
   add(shape: RefusedShape): void;
 }
 
-/** 哪家的哪个模型不收哪种写法；只在内存里。 */
+/**
+ * 一条拒收记在哪：哪家、哪个模型、哪种格式（照 magpie fits 按协议记）。在 Chat 上不收的字段，Responses 照常发；
+ * 「这个格式的地址没有这个模型」（format:<格式>）本身就说的是格式，只按家与模型记，format 填 null。
+ */
+export interface RefusalKey {
+  endpointId: string;
+  model: string;
+  format: ApiEndpointRequestFormat | null;
+  shape: RefusedShape;
+}
+
+/** 哪家的哪个模型在哪种格式上不收哪种写法；只在内存里。 */
 export class RefusedShapes {
   private readonly refused = new Set<string>();
 
-  has(endpointId: string, model: string, shape: RefusedShape): boolean {
-    return this.refused.has(key(endpointId, model, shape));
+  has(input: RefusalKey): boolean {
+    return this.refused.has(keyOf(input));
   }
 
-  add(endpointId: string, model: string, shape: RefusedShape): void {
-    this.refused.add(key(endpointId, model, shape));
+  add(input: RefusalKey): void {
+    this.refused.add(keyOf(input));
   }
 
   forget(input: { endpointId: string; model: string; shapes: RefusedShape[] }): void {
-    for (const shape of input.shapes)
-      this.refused.delete(key(input.endpointId, input.model, shape));
+    for (const shape of input.shapes) {
+      this.refused.delete(keyOf({ ...input, format: null, shape }));
+    }
   }
 }
 
-function key(endpointId: string, model: string, shape: RefusedShape): string {
-  return `${endpointId}\0${model}\0${shape}`;
+function keyOf(input: RefusalKey): string {
+  const isFormatShape = input.shape.startsWith("format:");
+  const scope = isFormatShape ? "" : (input.format ?? "");
+  return `${input.endpointId}\0${input.model}\0${scope}\0${input.shape}`;
 }

@@ -355,6 +355,7 @@ function KeyHeaderField({
           value={state.keyHeader}
           onValueChange={model.setKeyHeader}
           size="sm"
+          style={styles.keyHeaderTrack}
         />
       </View>
     </View>
@@ -410,6 +411,11 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[1],
+  },
+  // 桌面浅色的对话框底色和分段控件的底几乎一样：描一圈输入框的边，三种主题、两种窗口下都看得出这一组。
+  keyHeaderTrack: {
+    borderWidth: 1,
+    borderColor: theme.colors.borderInput,
   },
   segmentRow: {
     flexDirection: "row",

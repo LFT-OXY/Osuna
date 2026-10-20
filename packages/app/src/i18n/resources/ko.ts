@@ -2627,7 +2627,7 @@ export const ko: TranslationResources = {
           headerBadName:
             "“{{name}}”은(는) 헤더 이름으로 쓸 수 없습니다. 영문자, 숫자와 ! # $ % & ' * + - . ^ _ ` | ~ 만 쓸 수 있습니다. 이 헤더를 붙인 요청은 실패합니다.",
           headerBadValue:
-            "“{{name}}” 값에 줄바꿈이나 제어 문자가 있습니다. 이 헤더를 붙인 요청은 실패합니다.",
+            "“{{name}}” 값에 줄바꿈, 제어 문자 또는 Latin-1 밖의 문자(한글, 중국어 등)가 있어 헤더로 보낼 수 없습니다. 이 헤더를 붙인 요청은 실패합니다.",
           extraBody: "추가 요청 본문",
           extraBodyInfo:
             '이 엔드포인트로 가는 모든 Messages, Chat, Responses 요청 본문(테스트 포함)에 더하는 JSON 필드입니다. 토큰만 세는 요청에는 붙지 않습니다. 요청에 이미 있는 필드는 그대로 두며, 이름 앞에 "!"를 쓰면 대체합니다. ${sessionId}는 대화 ID로 바뀝니다.',

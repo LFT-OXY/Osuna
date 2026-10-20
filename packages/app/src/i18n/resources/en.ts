@@ -2677,7 +2677,7 @@ export const en = {
           headerBadName:
             "“{{name}}” isn't a valid header name: use letters, digits and ! # $ % & ' * + - . ^ _ ` | ~ only. Requests with it will fail.",
           headerBadValue:
-            "The value of “{{name}}” has a line break or a control character. Requests with it will fail.",
+            "The value of “{{name}}” has a line break, a control character or a character outside Latin-1 (such as Chinese), which can't be sent in a header. Requests with it will fail.",
           extraBody: "Extra body",
           extraBodyInfo:
             'JSON fields added to the body of every Messages, Chat and Responses request to this endpoint, its tests included; token counting gets none. A field the request has already is kept; write "!name" to replace it. ${sessionId} becomes the conversation\'s id.',

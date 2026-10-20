@@ -91,7 +91,7 @@ export function unsendableHeaderMessage(problem: HeaderProblem): string {
   const what =
     problem.reason === "name"
       ? "is not a valid header name"
-      : "has a line break or control character";
+      : "has a line break, a control character or a character outside Latin-1 (such as Chinese)";
   return `Request header ${JSON.stringify(problem.name)} set on this endpoint ${what}, so the request can't be sent`;
 }
 

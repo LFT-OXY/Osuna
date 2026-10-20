@@ -2666,7 +2666,7 @@ export const es: TranslationResources = {
           headerBadName:
             "«{{name}}» no es un nombre de cabecera válido: usa solo letras, dígitos y ! # $ % & ' * + - . ^ _ ` | ~. Las solicitudes con ella fallarán.",
           headerBadValue:
-            "El valor de «{{name}}» tiene un salto de línea o un carácter de control. Las solicitudes con ella fallarán.",
+            "El valor de «{{name}}» tiene un salto de línea, un carácter de control o un carácter fuera de Latin-1 (como el chino), que no se pueden enviar en una cabecera. Las solicitudes con ella fallarán.",
           extraBody: "Cuerpo adicional",
           extraBodyInfo:
             'Campos JSON añadidos al cuerpo de cada solicitud Messages, Chat y Responses a este endpoint, incluidas sus pruebas; las que solo cuentan tokens no los llevan. Un campo que la solicitud ya tiene se conserva; escribe "!nombre" para sustituirlo. ${sessionId} pasa a ser el id de la conversación.',

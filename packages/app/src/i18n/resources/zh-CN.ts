@@ -2639,7 +2639,8 @@ export const zhCN: TranslationResources = {
           removeHeader: "删除请求头 {{name}}",
           headerBadName:
             "“{{name}}”不是合法的请求头名：只能用字母、数字和 ! # $ % & ' * + - . ^ _ ` | ~。带这个头的请求会失败。",
-          headerBadValue: "“{{name}}”的值里有换行或控制字符。带这个头的请求会失败。",
+          headerBadValue:
+            "“{{name}}”的值里有换行、控制字符或 Latin-1 以外的字符（比如中文），请求头里发不出去。带这个头的请求会失败。",
           extraBody: "附加请求体",
           extraBodyInfo:
             '加进这家每个 Messages、Chat、Responses 请求正文的 JSON 字段，测试也算；只数 token 的请求不带。请求里已有的字段保留，名字前加 "!" 才换掉它。${sessionId} 会换成这段对话的编号。',

@@ -402,10 +402,6 @@ export class ApiEndpointRequestError extends Error {
 }
 
 /**
- * 新客户端带 baseUrls；老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
- * 两种都没有就拒绝。
- */
-/**
  * 请求带的请求头、附加请求体、key 放哪个头（会话层已把 keyHeader 换成 ApiEndpointKeyHeader）。
  * 保存时各自整份替换（空的、both 清掉），省略保留原来的（复制时是原来那家的）；拉模型、测试、检测时给了就用它们，
  * 不看 endpointId 那家存的（requestExtras）。
@@ -416,6 +412,10 @@ export interface ApiEndpointRequestExtrasInput {
   keyHeader?: ApiEndpointKeyHeader;
 }
 
+/**
+ * 新客户端带 baseUrls；老客户端带 baseUrl（按 provider 落进对应格式）与 defaultModelId。
+ * 两种都没有就拒绝。
+ */
 export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   endpointId?: string;
   name: string;

@@ -99,21 +99,44 @@ describe("an endpoint refusing thinking turned off", () => {
 });
 
 describe("remembering a refusal", () => {
-  test("holds for that endpoint's model and that shape only", () => {
+  test("holds for that endpoint's model, that format and that shape only", () => {
     const refused = new RefusedShapes();
-    refused.add("ep_a", "gpt-6.1-sol", "none");
+    const at = (input: {
+      endpointId?: string;
+      model?: string;
+      format?: "openai_chat" | "openai_responses";
+      shape?: "none" | "thinkingOff" | "cacheKey";
+    }) => ({
+      endpointId: input.endpointId ?? "ep_a",
+      model: input.model ?? "gpt-6.1-sol",
+      format: input.format ?? "openai_chat",
+      shape: input.shape ?? "none",
+    });
+    refused.add(at({}));
+    refused.add(at({ shape: "cacheKey" }));
 
-    expect(refused.has("ep_a", "gpt-6.1-sol", "none")).toBe(true);
-    expect(refused.has("ep_a", "gpt-6.1-sol", "thinkingOff")).toBe(false);
-    expect(refused.has("ep_a", "gpt-5.5", "none")).toBe(false);
-    expect(refused.has("ep_b", "gpt-6.1-sol", "none")).toBe(false);
+    expect(refused.has(at({}))).toBe(true);
+    expect(refused.has(at({ shape: "thinkingOff" }))).toBe(false);
+    expect(refused.has(at({ model: "gpt-5.5" }))).toBe(false);
+    expect(refused.has(at({ endpointId: "ep_b" }))).toBe(false);
+    // 在 Chat 上不收的字段，同一家同一模型的 Responses 照常发（magpie 的 fits 按协议记）。
+    expect(refused.has(at({ format: "openai_responses", shape: "cacheKey" }))).toBe(false);
+  });
+
+  test("a format's own refusal is kept for the endpoint's model whatever format asks", () => {
+    const refused = new RefusedShapes();
+    const shape = "format:openai_chat" as const;
+    refused.add({ endpointId: "ep_a", model: "glm-5", format: "openai_chat", shape });
+    expect(refused.has({ endpointId: "ep_a", model: "glm-5", format: null, shape })).toBe(true);
+    refused.forget({ endpointId: "ep_a", model: "glm-5", shapes: [shape] });
+    expect(refused.has({ endpointId: "ep_a", model: "glm-5", format: null, shape })).toBe(false);
   });
 
   test("a refused prefill can be looked up for that endpoint's model only", () => {
     const refused = new RefusedShapes();
     const of = (endpointId: string, model: string): ShapeRefusals => ({
-      has: (shape) => refused.has(endpointId, model, shape),
-      add: (shape) => refused.add(endpointId, model, shape),
+      has: (shape) => refused.has({ endpointId, model, format: "openai_chat", shape }),
+      add: (shape) => refused.add({ endpointId, model, format: "openai_chat", shape }),
     });
     const body = {
       messages: [

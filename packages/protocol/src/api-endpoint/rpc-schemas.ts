@@ -178,11 +178,6 @@ export const ApiEndpointModelCatalogSchema = z.object({
 export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSchema>;
 
 /**
- * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
- * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
- * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
- */
-/**
  * 用户加给这家每个请求的（Headers，ADR 0008）：请求头（名字照用户写的）、附加请求体（JSON 对象，名字前 `!` 是强制覆盖）、
  * key 放哪个头（API_ENDPOINT_KEY_HEADERS 之一，线上是字符串，不认识的当 both）。接口、保存与保存前的检查共用这三项。
  */
@@ -193,6 +188,11 @@ export const ApiEndpointRequestExtrasSchema = z.object({
 });
 export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSchema>;
 
+/**
+ * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
+ * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
+ * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
+ */
 export const ApiEndpointTestAsSchema = z.object({
   method: z.string(),
   unavailable: z.object({ code: z.string(), message: z.string() }).nullable(),

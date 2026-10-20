@@ -2666,7 +2666,7 @@ export const fr: TranslationResources = {
           headerBadName:
             "« {{name}} » n'est pas un nom d'en-tête valide : lettres, chiffres et ! # $ % & ' * + - . ^ _ ` | ~ uniquement. Les requêtes qui le portent échoueront.",
           headerBadValue:
-            "La valeur de « {{name}} » contient un saut de ligne ou un caractère de contrôle. Les requêtes qui le portent échoueront.",
+            "La valeur de « {{name}} » contient un saut de ligne, un caractère de contrôle ou un caractère hors Latin-1 (comme le chinois), impossibles à envoyer dans un en-tête. Les requêtes qui le portent échoueront.",
           extraBody: "Corps supplémentaire",
           extraBodyInfo:
             "Champs JSON ajoutés au corps de chaque requête Messages, Chat et Responses vers ce point de terminaison, tests compris ; les requêtes qui ne font que compter les tokens n'en ont pas. Un champ déjà présent dans la requête est conservé ; écrivez \"!nom\" pour le remplacer. ${sessionId} devient l'identifiant de la conversation.",

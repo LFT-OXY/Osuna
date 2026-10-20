@@ -106,7 +106,7 @@ export function extraBodyProblem(extraBody: Record<string, unknown>): ExtraBodyP
   return null;
 }
 
-// RFC 9110 的 token；值里不能有换行等控制字符（Node 发请求时会拒绝整个请求）。
+// RFC 9110 的 token；值里不能有换行、控制字符或 Latin-1 以外的字符（如中文），Node 发请求时会拒绝整个请求。
 const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const BAD_HEADER_VALUE = /[^\t\x20-\x7e\x80-\xff]/;
 

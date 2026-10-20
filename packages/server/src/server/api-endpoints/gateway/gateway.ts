@@ -1167,7 +1167,8 @@ function formatsLeft(input: {
   const { id } = input.candidate.endpoint;
   const model = input.candidate.upstreamModel;
   return formatsOf(input.candidate).filter(
-    (format) => !input.refusals.has(id, model, formatShape(format)),
+    (format) =>
+      !input.refusals.has({ endpointId: id, model, format: null, shape: formatShape(format) }),
   );
 }
 
@@ -1610,16 +1611,19 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
   const { refusals } = input.failover;
   const endpointId = candidate.endpoint.id;
   const model = candidate.upstreamModel;
+  // 拒收按这次发去的格式记：在 Chat 上不收的字段，Responses 照常发。
+  const { format } = candidate;
   const foldsRoots = foldsRootsUpFront(candidate.baseUrl);
   return {
     has: (shape) => {
       const foldedUpFront = shape === "rootUnion" && foldsRoots;
-      return foldedUpFront || refusals.has(endpointId, model, shape);
+      return foldedUpFront || refusals.has({ endpointId, model, format, shape });
     },
     add: (shape) => {
       // 并发的请求可能都按旧写法发出、都被拒：日志只在第一次记住时写。
-      if (refusals.has(endpointId, model, shape)) return;
-      refusals.add(endpointId, model, shape);
+      const refusal = { endpointId, model, format, shape };
+      if (refusals.has(refusal)) return;
+      refusals.add(refusal);
       input.logger.info(
         { endpoint: candidate.endpoint.name, model, refused: shape },
         refusalNote(shape),
