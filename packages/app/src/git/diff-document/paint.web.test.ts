@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paintWebViewport } from "./paint.web";
+import { paintWebFileHeader, paintWebViewport } from "./paint.web";
 import type { DiffCell, DiffDocumentModel, DiffLineRow, DiffPalette, DiffSelection } from "./types";
 
 describe("web diff text shaping", () => {
@@ -93,6 +93,24 @@ describe("web diff text shaping", () => {
       { text: "M", x: 182, y: 18, color: "warning", font: "600 11px system-ui" },
       { text: "a.ts", x: 12, y: 18, color: "foreground", font: "14px system-ui" },
       { text: "src", x: 40, y: 18, color: "muted", font: "14px system-ui" },
+    ]);
+  });
+
+  it("paints a collapsed large file's line count muted beside the change counts", () => {
+    const labels = paintHeaderLabels({
+      ...model.files[0]!,
+      file: { ...model.files[0]!.file, additions: 1500, deletions: 0 },
+      headerHeight: 30,
+      bodyTop: 30,
+      bodyHeight: 0,
+      bottom: 30,
+      isCollapsed: true,
+      headerNote: "1,500 lines changed",
+    });
+    expect(labels.filter((label) => label.font === "12px system-ui")).toEqual([
+      { text: "+1.5k", x: 124, color: "success", font: "12px system-ui" },
+      { text: "-0", x: 158, color: "danger", font: "12px system-ui" },
+      { text: "1,500 lines changed", x: 2, color: "muted", font: "12px system-ui" },
     ]);
   });
 
@@ -440,6 +458,7 @@ function createSelectionModel(layout: "unified" | "split"): DiffDocumentModel {
         rowStart: 0,
         rowEnd: 1,
         isCollapsed: false,
+        headerNote: null,
       },
     ],
     rows: [
@@ -536,6 +555,7 @@ const model: DiffDocumentModel = {
       rowStart: 0,
       rowEnd: 1,
       isCollapsed: false,
+      headerNote: null,
     },
   ],
   rows: [
@@ -667,4 +687,48 @@ function paintFills(input: { model: DiffDocumentModel; labels?: PaintedLabel[] }
     devicePixelRatio: 1,
   });
   return fills;
+}
+
+function paintHeaderLabels(
+  file: DiffDocumentModel["files"][number],
+): Array<{ text: string; x: number; color: string; font: string }> {
+  const labels: Array<{ text: string; x: number; color: string; font: string }> = [];
+  let fillStyle = "";
+  let font = "";
+  const context = {
+    fillRect() {},
+    save() {},
+    restore() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
+    measureText(text: string) {
+      return { width: text.length * 6, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 };
+    },
+    fillText(text: string, x: number) {
+      labels.push({ text, x, color: fillStyle, font });
+    },
+    get fillStyle() {
+      return fillStyle;
+    },
+    set fillStyle(value: string | CanvasGradient | CanvasPattern) {
+      fillStyle = String(value);
+    },
+    get font() {
+      return font;
+    },
+    set font(value: string) {
+      font = value;
+    },
+  } as unknown as CanvasRenderingContext2D;
+  paintWebFileHeader({
+    context,
+    file,
+    palette,
+    typography: headerTypography,
+    viewportWidth: 200,
+    y: 0,
+    activePath: null,
+  });
+  return labels;
 }

@@ -2316,6 +2316,9 @@ const CheckoutDiffCompareSchema = z.object({
   mode: z.enum(["uncommitted", "base"]),
   baseRef: z.string().optional(),
   ignoreWhitespace: z.boolean().optional(),
+  // 只要文件清单：每个 file 照常带清单字段，hunks 为空数组，daemon 不读全文、不做高亮。
+  // 客户端只在 server_info.features.checkoutDiffFilesOnly 为 true 时发送。
+  filesOnly: z.boolean().optional(),
 });
 
 export const CheckoutStatusRequestSchema = z.object({
@@ -2854,6 +2857,8 @@ const ParsedDiffFileSchema = z.object({
   deletions: z.number(),
   hunks: z.array(DiffHunkSchema),
   status: z.enum(["ok", "too_large", "binary"]).optional(),
+  // 只在为 true 时发送；旧 daemon 不发，客户端按不是 Generated file 处理。
+  generated: z.boolean().optional(),
 });
 
 const FileExplorerEntrySchema = z.object({
@@ -3947,6 +3952,9 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
+        // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
+        // daemon 理解 checkout diff compare 的 filesOnly，只发文件清单。
+        checkoutDiffFilesOnly: z.boolean().optional(),
       })
       .optional(),
   })

@@ -47,7 +47,13 @@ import {
   isDescendantPath,
   warmCheckoutShortstatInBackground,
 } from "./checkout-git.js";
-import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
+import {
+  configureGitProcessPolicy,
+  runGitCommand,
+  startGitCommandMetrics,
+  stopGitCommandMetrics,
+} from "./run-git-command.js";
+import { resolveGitProcessPolicy } from "./git-process-scheduler.js";
 import { createForgeResolver } from "../services/forge-resolver.js";
 import { GitHubCommandError, GitHubCliMissingError } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
@@ -1434,6 +1440,102 @@ const x = 1;
     expect(diff.diff).not.toContain("base-only.txt");
   });
 
+  it("marks lock files, linguist-generated files and minified assets as generated", async () => {
+    writeFileSync(
+      join(repoDir, ".gitattributes"),
+      [
+        "schema/** linguist-generated",
+        "schema/keep.ts linguist-generated=false",
+        "vendor.min.js linguist-generated=false",
+      ].join("\n") + "\n",
+    );
+    execFileSync("git", ["add", ".gitattributes"], { cwd: repoDir });
+    execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "attributes"], {
+      cwd: repoDir,
+    });
+    mkdirSync(join(repoDir, "schema"));
+    mkdirSync(join(repoDir, "web"));
+    for (const path of [
+      "package-lock.json",
+      "yarn.lock",
+      "schema/types.ts",
+      "schema/keep.ts",
+      "web/app.min.js",
+      "web/app.min.css",
+      "web/app.js.map",
+      "vendor.min.js",
+      "src.ts",
+    ]) {
+      writeFileSync(join(repoDir, path), `content of ${path}\n`);
+    }
+    writeFileSync(join(repoDir, "file.txt"), "changed\n");
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      Object.fromEntries((diff.structured ?? []).map((file) => [file.path, file.generated])),
+    ).toEqual({
+      "file.txt": undefined,
+      "package-lock.json": true,
+      "schema/keep.ts": undefined,
+      "schema/types.ts": true,
+      "src.ts": undefined,
+      "vendor.min.js": undefined,
+      "web/app.js.map": true,
+      "web/app.min.css": true,
+      "web/app.min.js": true,
+      "yarn.lock": true,
+    });
+  });
+
+  it("marks a lock file by its new path after a rename and a deleted lock file", async () => {
+    writeFileSync(join(repoDir, "old.lock"), "lock\n");
+    writeFileSync(join(repoDir, "package-lock.json"), "{}\n");
+    execFileSync("git", ["add", "."], { cwd: repoDir });
+    execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "locks"], {
+      cwd: repoDir,
+    });
+    execFileSync("git", ["mv", "old.lock", "yarn.lock"], { cwd: repoDir });
+    execFileSync("git", ["rm", "-q", "package-lock.json"], { cwd: repoDir });
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      (diff.structured ?? []).map((file) => ({
+        path: file.path,
+        oldPath: file.oldPath,
+        isDeleted: file.isDeleted,
+        generated: file.generated,
+      })),
+    ).toEqual([
+      { path: "package-lock.json", oldPath: undefined, isDeleted: true, generated: true },
+      { path: "yarn.lock", oldPath: "old.lock", isDeleted: false, generated: true },
+    ]);
+  });
+
+  it("falls back to the name rules with a warning when git check-attr fails", async () => {
+    writeFileSync(join(repoDir, ".gitattributes"), "src.ts linguist-generated\n");
+    writeFileSync(join(repoDir, "src.ts"), "export {};\n");
+    writeFileSync(join(repoDir, "yarn.lock"), "lock\n");
+    const warnings: unknown[] = [];
+    const logger = { trace() {}, warn: (context: unknown) => warnings.push(context) };
+    const failingCheckAttr: typeof runGitCommand = async (args, options) => {
+      if (args[0] === "check-attr") throw new Error("check-attr failed");
+      return runGitCommand(args, options);
+    };
+
+    const diff = await getCheckoutDiff(
+      repoDir,
+      { mode: "uncommitted", includeStructured: true },
+      { logger, runGitCommand: failingCheckAttr },
+    );
+
+    expect(
+      Object.fromEntries((diff.structured ?? []).map((file) => [file.path, file.generated])),
+    ).toEqual({ ".gitattributes": undefined, "src.ts": undefined, "yarn.lock": true });
+    expect(warnings).toHaveLength(1);
+  });
+
   it("does not throw on large diffs (marks file as too_large)", async () => {
     const large = Array.from({ length: 200_000 }, (_, i) => `line ${i}`).join("\n") + "\n";
     writeFileSync(join(repoDir, "file.txt"), large);
@@ -1544,6 +1646,126 @@ const x = 1;
     expect(diff.diff).toContain("budget-2.txt");
     expect(diff.diff).toContain("# budget-3.txt: diff too large omitted");
     expect(diff.diff).toContain("# budget-4.txt: diff too large omitted");
+  });
+
+  it("marks untracked files omitted by the total diff budget as too_large", async () => {
+    const largeLine = "x".repeat(700_000);
+    for (let i = 1; i <= 4; i += 1) {
+      writeFileSync(join(repoDir, `new-budget-${i}.txt`), `${largeLine}-${i}\n`);
+    }
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    expect(
+      diff.structured?.map((file) => ({
+        path: file.path,
+        status: file.status,
+        hunks: file.hunks.length,
+      })),
+    ).toEqual([
+      { path: "new-budget-1.txt", status: "ok", hunks: 1 },
+      { path: "new-budget-2.txt", status: "ok", hunks: 1 },
+      { path: "new-budget-3.txt", status: "too_large", hunks: 0 },
+      { path: "new-budget-4.txt", status: "too_large", hunks: 0 },
+    ]);
+    expect(diff.diff).toContain("# new-budget-3.txt: diff too large omitted");
+    expect(diff.diff).toContain("# new-budget-4.txt: diff too large omitted");
+  });
+
+  it("keeps binary status for untracked files after the total diff budget is used up", async () => {
+    function untrackedDiffBytes(path: string): number {
+      const result = spawnSync("git", ["diff", "--no-index", "/dev/null", "--", path], {
+        cwd: repoDir,
+        env: { ...process.env, LC_ALL: "C" },
+      });
+      return result.stdout.length;
+    }
+    // 第一批 64 个新文件正好用满 2MB，第二批不再读 diff
+    for (let i = 3; i < 64; i += 1) {
+      writeFileSync(join(repoDir, `fill-${String(i).padStart(2, "0")}.txt`), `filler ${i}\n`);
+    }
+    let fillerBytes = 0;
+    for (let i = 3; i < 64; i += 1) {
+      fillerBytes += untrackedDiffBytes(`fill-${String(i).padStart(2, "0")}.txt`);
+    }
+    writeFileSync(join(repoDir, "fill-00.txt"), `${"a".repeat(700_000)}\n`);
+    writeFileSync(join(repoDir, "fill-01.txt"), `${"b".repeat(700_000)}\n`);
+    writeFileSync(join(repoDir, "fill-02.txt"), "c\n");
+    const lastFillerOverhead = untrackedDiffBytes("fill-02.txt") - 2;
+    const usedBytes =
+      untrackedDiffBytes("fill-00.txt") + untrackedDiffBytes("fill-01.txt") + fillerBytes;
+    const lastFillerLength = 2 * 1024 * 1024 - usedBytes - lastFillerOverhead - 1;
+    writeFileSync(join(repoDir, "fill-02.txt"), `${"c".repeat(lastFillerLength)}\n`);
+    expect(
+      untrackedDiffBytes("fill-00.txt") +
+        untrackedDiffBytes("fill-01.txt") +
+        untrackedDiffBytes("fill-02.txt") +
+        fillerBytes,
+    ).toBe(2 * 1024 * 1024);
+    writeFileSync(join(repoDir, "z-blob.bin"), Buffer.from([0x00, 0xff, 0x10, 0x00]));
+    writeFileSync(join(repoDir, "z-text.txt"), "late\n");
+
+    const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+
+    const statusByPath = new Map(diff.structured?.map((file) => [file.path, file.status]));
+    expect(statusByPath.get("fill-02.txt")).toBe("ok");
+    expect(statusByPath.get("fill-63.txt")).toBe("ok");
+    expect(statusByPath.get("z-blob.bin")).toBe("binary");
+    expect(statusByPath.get("z-text.txt")).toBe("too_large");
+  });
+
+  it("processes untracked files concurrently with the same result as serial processing", async () => {
+    for (let i = 0; i < 24; i += 1) {
+      const name = `new-${String(i).padStart(2, "0")}.ts`;
+      writeFileSync(join(repoDir, name), `export const value${i} = ${i};\n`);
+    }
+    writeFileSync(join(repoDir, "new-blob.bin"), Buffer.from([0x00, 0xff, 0x10, 0x00]));
+
+    configureGitProcessPolicy({ maxProcessesPerSecond: 10_000, maxProcessConcurrency: 1 });
+    let serial: Awaited<ReturnType<typeof getCheckoutDiff>>;
+    try {
+      serial = await getCheckoutDiff(repoDir, { mode: "uncommitted", includeStructured: true });
+    } finally {
+      configureGitProcessPolicy(resolveGitProcessPolicy({ env: process.env }));
+    }
+
+    startGitCommandMetrics();
+    const concurrent = await getCheckoutDiff(repoDir, {
+      mode: "uncommitted",
+      includeStructured: true,
+    });
+    const metrics = stopGitCommandMetrics();
+
+    expect(metrics.maxConcurrent).toBeGreaterThan(1);
+    expect(concurrent).toEqual(serial);
+    expect(concurrent.structured?.map((file) => file.path)).toEqual([
+      "new-00.ts",
+      "new-01.ts",
+      "new-02.ts",
+      "new-03.ts",
+      "new-04.ts",
+      "new-05.ts",
+      "new-06.ts",
+      "new-07.ts",
+      "new-08.ts",
+      "new-09.ts",
+      "new-10.ts",
+      "new-11.ts",
+      "new-12.ts",
+      "new-13.ts",
+      "new-14.ts",
+      "new-15.ts",
+      "new-16.ts",
+      "new-17.ts",
+      "new-18.ts",
+      "new-19.ts",
+      "new-20.ts",
+      "new-21.ts",
+      "new-22.ts",
+      "new-23.ts",
+      "new-blob.bin",
+    ]);
+    expect(concurrent.structured?.at(-1)?.status).toBe("binary");
   });
 
   it("short-circuits tracked binary files", async () => {

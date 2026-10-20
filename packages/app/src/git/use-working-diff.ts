@@ -7,10 +7,12 @@ import {
   buildReviewDraftKey,
   useInlineReviewController,
   useReviewAttachmentSnapshot,
+  useReviewCommentCount,
 } from "@/review";
-import { useCheckoutDiffQuery } from "@/git/use-diff-query";
+import { type ParsedDiffFile, useCheckoutDiffQuery } from "@/git/use-diff-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
 import { useWorkingDiffComparison } from "@/git/working-diff-comparison";
+import { resolveWorkingDiffSubscription } from "@/git/working-diff-subscription";
 
 interface UseWorkingDiffOptions {
   serverId: string;
@@ -19,6 +21,9 @@ interface UseWorkingDiffOptions {
   ignoreWhitespace: boolean;
   enabled: boolean;
   queryScope?: string;
+  /** 只开文件树、diff 正文不可见。 */
+  diffBodyHidden?: boolean;
+  onFiles?: (files: ParsedDiffFile[]) => void;
 }
 
 export function useWorkingDiff({
@@ -28,6 +33,8 @@ export function useWorkingDiff({
   ignoreWhitespace,
   enabled,
   queryScope,
+  diffBodyHidden = false,
+  onFiles,
 }: UseWorkingDiffOptions) {
   const {
     status,
@@ -55,6 +62,24 @@ export function useWorkingDiff({
   const selectUncommitted = useCallback(() => selectComparison("uncommitted"), [selectComparison]);
   const selectBase = useCallback(() => selectComparison("base"), [selectComparison]);
 
+  const reviewDraftKey = useMemo(
+    () =>
+      buildReviewDraftKey({
+        serverId,
+        workspaceId,
+        cwd,
+        mode: diffMode,
+        baseRef,
+        ignoreWhitespace,
+      }),
+    [baseRef, cwd, diffMode, ignoreWhitespace, serverId, workspaceId],
+  );
+  const pendingReviewCommentCount = useReviewCommentCount(reviewDraftKey);
+  const { filesOnly, publishReviewAttachment } = resolveWorkingDiffSubscription({
+    diffBodyHidden,
+    pendingReviewCommentCount,
+  });
+
   const {
     files,
     payloadError: diffPayloadError,
@@ -68,19 +93,9 @@ export function useWorkingDiff({
     ignoreWhitespace,
     enabled: enabled && isGit,
     queryScope,
+    filesOnly,
+    onFiles,
   });
-  const reviewDraftKey = useMemo(
-    () =>
-      buildReviewDraftKey({
-        serverId,
-        workspaceId,
-        cwd,
-        mode: diffMode,
-        baseRef,
-        ignoreWhitespace,
-      }),
-    [baseRef, cwd, diffMode, ignoreWhitespace, serverId, workspaceId],
-  );
   const reviewActions = useInlineReviewController({ reviewDraftKey });
   const reviewAttachment = useReviewAttachmentSnapshot({
     key: reviewDraftKey,
@@ -107,6 +122,7 @@ export function useWorkingDiff({
     isDiffLoading,
     reviewActions,
     reviewAttachment,
+    publishReviewAttachment,
   };
 }
 

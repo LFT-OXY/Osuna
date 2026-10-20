@@ -7,6 +7,7 @@ import {
   type SplitDiffDisplayLine,
 } from "@/utils/diff-layout";
 import { compactHighlightTokens } from "@/utils/diff-rendering";
+import { diffFileChangedLines, isLargeDiffFile } from "@/git/file-header-presentation";
 import { getInlineReviewThreadState, getSplitInlineReviewThreadState } from "@/review/geometry";
 import { advancesFor, requiresShaping } from "./text-measurement";
 import type {
@@ -130,6 +131,7 @@ export function buildDiffDocumentModel(input: BuildDiffDocumentModelInput): Diff
       rowStart,
       rowEnd: rows.length,
       isCollapsed,
+      headerNote: collapsedHeaderNote({ file, isCollapsed, labels: input.labels }),
     });
   }
 
@@ -143,6 +145,18 @@ export function buildDiffDocumentModel(input: BuildDiffDocumentModelInput): Diff
     viewportWidth: input.viewportWidth,
     reviewGeometryKey: currentReviewGeometryKey,
   };
+}
+
+function collapsedHeaderNote(input: {
+  file: BuildDiffDocumentModelInput["files"][number];
+  isCollapsed: boolean;
+  labels: BuildDiffDocumentModelInput["labels"];
+}): string | null {
+  const { file, isCollapsed, labels } = input;
+  if (!isCollapsed) return null;
+  if (file.generated === true) return labels.generated;
+  if (isLargeDiffFile(file)) return labels.linesChanged(diffFileChangedLines(file));
+  return null;
 }
 
 function appendReusableFileRows(candidate: {

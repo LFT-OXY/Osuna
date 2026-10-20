@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import invariant from "tiny-invariant";
+import { LARGE_DIFF_FILE_CHANGED_LINES } from "@/git/file-header-presentation";
 import { buildDiffDocumentModel, retainReusableModels, reviewGeometryKey } from "./model";
 import type {
   BuildDiffDocumentModelInput,
@@ -122,6 +123,8 @@ function modelVariantKey(input: Omit<BuildDiffDocumentModelInput, "reuseFrom">):
     // 标签是按数量取文案的函数，用两个数量的输出代表它（单复数各一）。
     input.labels.unmodifiedLines(1),
     input.labels.unmodifiedLines(2),
+    input.labels.linesChanged(LARGE_DIFF_FILE_CHANGED_LINES + 1),
+    input.labels.generated,
   ]);
 }
 

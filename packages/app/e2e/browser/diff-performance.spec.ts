@@ -1,12 +1,26 @@
-import { writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { CDPSession, Locator, Page, TestInfo } from "@playwright/test";
 import { buildHostWorkspaceRoute } from "../../src/utils/host-routes";
 import { test, expect } from "../support/fixtures";
 import { getServerId } from "../support/helpers/server-id";
 import { connectSeedClient } from "../support/helpers/seed-client";
-import { createTempGitRepo } from "../support/helpers/workspace";
-import { openChangesPanel, waitForWorkspaceTabsVisible } from "../support/helpers/workspace-tabs";
+import {
+  observeLongTasks,
+  pageNow,
+  runDiffPerfScenario,
+  startCpuProfile,
+  stopCpuProfile,
+  summarizeCpuProfile,
+  summarizeLongTasks,
+  waitForLongTaskQuiet,
+} from "../support/helpers/diff-perf-measure";
+import { createTempGitRepo, resolveTempRoot } from "../support/helpers/workspace";
+import {
+  openChangesPanel,
+  openChangesTreePanel,
+  waitForWorkspaceTabsVisible,
+} from "../support/helpers/workspace-tabs";
 import { DIFF_POC_BASELINE } from "./diff-performance-baseline";
 
 const RUN_DIFF_PERF = process.env.PASEO_DIFF_PERF_E2E === "1";
@@ -27,6 +41,9 @@ const MAX_MEDIAN_FRAME_MS = POC_MEDIAN_FRAME_MS * 2.6;
 const MAX_P95_FRAME_MS = POC_P95_FRAME_MS * 2.4;
 const MANY_FILE_MAX_MEDIAN_FRAME_MS = 45;
 const MANY_FILE_MAX_P95_FRAME_MS = 80;
+const SCENARIO_AGENT_MS = Number(process.env.PASEO_DIFF_PERF_AGENT_MS ?? 60_000);
+const SCENARIO_CPU_SLOWDOWN = Number(process.env.PASEO_DIFF_PERF_SCENARIO_CPU_SLOWDOWN ?? 1);
+const SCENARIO_REPORT_PATH = process.env.PASEO_DIFF_PERF_REPORT_PATH;
 
 diffPerfDescribe("Diff canvas performance", () => {
   test("opening a review stays responsive in a large diff", async ({ page }) => {
@@ -294,6 +311,89 @@ diffPerfDescribe("Diff canvas performance", () => {
       await cdp?.detach().catch(() => undefined);
       await client.close().catch(() => undefined);
       await repo.cleanup().catch(() => undefined);
+    }
+  });
+
+  test("fixed scenario: open time and renderer long tasks under a simulated agent", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(SCENARIO_AGENT_MS + 300_000);
+    const repoPath = await mkdtemp(path.join(await resolveTempRoot(), "diff-perf-scenario-"));
+    const client = await connectSeedClient();
+    let cdp: CDPSession | null = null;
+
+    try {
+      await runDiffPerfScenario(["create", repoPath]);
+      const created = await client.createWorkspace({
+        source: { kind: "directory", path: repoPath },
+      });
+      if (!created.workspace) {
+        throw new Error(created.error ?? "Failed to create diff scenario workspace");
+      }
+
+      await configureUnwrappedUnifiedDiff(page);
+      await observeLongTasks(page);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.goto(buildHostWorkspaceRoute(getServerId(), created.workspace.id));
+      await waitForWorkspaceTabsVisible(page);
+
+      cdp = await page.context().newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: SCENARIO_CPU_SLOWDOWN });
+      await startCpuProfile(cdp);
+      const openStartedAt = await pageNow(page);
+      const openedAt = performance.now();
+      await openChangesTreePanel(page);
+      const firstTreeFile = page
+        .locator('[data-testid^="diff-tree-file-"][data-testid$="-toggle"]')
+        .filter({ visible: true })
+        .first();
+      await expect(firstTreeFile).toBeVisible({ timeout: 120_000 });
+      const treeMs = performance.now() - openedAt;
+      await firstTreeFile.click();
+      await expect(page.getByTestId("git-diff-canvas")).toBeVisible({ timeout: 120_000 });
+      const openMs = performance.now() - openedAt;
+      const openEndedAt = await pageNow(page);
+      const openProfile = summarizeCpuProfile(await stopCpuProfile(cdp));
+
+      await startCpuProfile(cdp);
+      const agentStartedAt = await pageNow(page);
+      await runDiffPerfScenario(["agent", repoPath, String(SCENARIO_AGENT_MS)]);
+      const agentEndedAt = await pageNow(page);
+      // daemon 一次刷新要好几秒，Agent 停下后还会有推送陆续到达；等长任务静默。
+      await waitForLongTaskQuiet({ page, quietMs: 12_000, timeoutMs: 120_000 });
+      const settledAt = await pageNow(page);
+      const agentProfile = summarizeCpuProfile(await stopCpuProfile(cdp));
+
+      const report = {
+        scenario: "fixed-diff-panel-scenario",
+        cpuSlowdown: SCENARIO_CPU_SLOWDOWN,
+        viewport: { width: 1280, height: 900 },
+        open: {
+          treeMs: Math.round(treeMs),
+          openMs: Math.round(openMs),
+          longTasks: await summarizeLongTasks({ page, start: openStartedAt, end: openEndedAt }),
+          profile: openProfile,
+        },
+        agent: {
+          agentMs: SCENARIO_AGENT_MS,
+          agentWindowMs: Math.round(agentEndedAt - agentStartedAt),
+          settleMs: Math.round(settledAt - agentEndedAt),
+          longTasks: await summarizeLongTasks({ page, start: agentStartedAt, end: settledAt }),
+          profile: agentProfile,
+        },
+      };
+      await attachPerformanceReport(testInfo, report);
+      if (SCENARIO_REPORT_PATH) {
+        await writeFile(SCENARIO_REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
+      }
+      console.log(`[perf] Fixed diff scenario: ${JSON.stringify(report)}`);
+      // 这是测量用例，不对耗时设门槛；只确认模拟 Agent 完整跑完、数字覆盖了整段时间。
+      expect(report.agent.agentWindowMs).toBeGreaterThanOrEqual(SCENARIO_AGENT_MS);
+    } finally {
+      await cdp?.send("Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => undefined);
+      await cdp?.detach().catch(() => undefined);
+      await client.close().catch(() => undefined);
+      await rm(repoPath, { recursive: true, force: true }).catch(() => undefined);
     }
   });
 });

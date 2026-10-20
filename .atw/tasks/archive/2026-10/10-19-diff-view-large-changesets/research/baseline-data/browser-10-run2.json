@@ -1,0 +1,113 @@
+{
+  "scenario": "fixed-diff-panel-scenario",
+  "cpuSlowdown": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "open": {
+    "treeMs": 10094,
+    "openMs": 21160,
+    "longTasks": {
+      "count": 4,
+      "over500ms": 0,
+      "maxMs": 142,
+      "p95Ms": 142,
+      "totalMs": 337
+    },
+    "profile": {
+      "longRuns": 7,
+      "longestRunMs": 163,
+      "longRunTotalMs": 814,
+      "segments": {
+        "reactOther": {
+          "ms": 331,
+          "share": 0.407
+        },
+        "gc": {
+          "ms": 167,
+          "share": 0.205
+        },
+        "otherJs": {
+          "ms": 130,
+          "share": 0.16
+        },
+        "program": {
+          "ms": 125,
+          "share": 0.154
+        },
+        "jsonParse": {
+          "ms": 29,
+          "share": 0.036
+        },
+        "validate": {
+          "ms": 20,
+          "share": 0.025
+        },
+        "paint": {
+          "ms": 7,
+          "share": 0.008
+        },
+        "messageDispatchOther": {
+          "ms": 4,
+          "share": 0.005
+        }
+      }
+    }
+  },
+  "agent": {
+    "agentMs": 60000,
+    "agentWindowMs": 60140,
+    "settleMs": 14338,
+    "longTasks": {
+      "count": 27,
+      "over500ms": 0,
+      "maxMs": 146,
+      "p95Ms": 128,
+      "totalMs": 2092
+    },
+    "profile": {
+      "longRuns": 26,
+      "longestRunMs": 312,
+      "longRunTotalMs": 2533,
+      "segments": {
+        "gc": {
+          "ms": 718,
+          "share": 0.283
+        },
+        "program": {
+          "ms": 630,
+          "share": 0.249
+        },
+        "jsonParse": {
+          "ms": 422,
+          "share": 0.166
+        },
+        "reactOther": {
+          "ms": 305,
+          "share": 0.12
+        },
+        "otherJs": {
+          "ms": 299,
+          "share": 0.118
+        },
+        "validate": {
+          "ms": 99,
+          "share": 0.039
+        },
+        "shareCheckoutDiff": {
+          "ms": 51,
+          "share": 0.02
+        },
+        "messageDispatchOther": {
+          "ms": 5,
+          "share": 0.002
+        },
+        "paint": {
+          "ms": 5,
+          "share": 0.002
+        }
+      }
+    }
+  }
+}

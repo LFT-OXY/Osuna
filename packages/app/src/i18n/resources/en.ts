@@ -1006,6 +1006,8 @@ export const en = {
         binaryFile: "Binary file",
         unmodifiedLine: "{{count}} unmodified line",
         unmodifiedLines: "{{count}} unmodified lines",
+        linesChanged: "{{lines}} lines changed",
+        generated: "Generated",
         tooLarge: "Diff too large to display",
         previewTooLargeTitle: "This diff is too large to preview",
         previewTooLargeDescription: "Narrow the comparison to preview it here",

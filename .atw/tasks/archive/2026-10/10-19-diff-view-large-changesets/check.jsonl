@@ -1,0 +1,12 @@
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 侧规范入口：checkout diff 计算、缓存、刷新节流都在 server"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "协议加可选字段（file.generated、compare 只要清单）与 server_info.features 开关、COMPAT 标记"}
+{"file": ".atw/spec/server/backend/testing.md", "reason": "daemon 测试用真实 git 仓库、性能 e2e 的环境变量门控"}
+{"file": ".atw/spec/server/backend/quality-guidelines.md", "reason": "按文件缓存与并发改动的代码质量要求"}
+{"file": ".atw/spec/app/frontend/index.md", "reason": "Changes 面板默认展开规则、标签、订阅释放的界面规范入口"}
+{"file": ".atw/spec/app/frontend/state-management.md", "reason": "Changes tab 状态扩展（记住手动展开）与持久化 schema"}
+{"file": ".atw/spec/app/frontend/hooks-and-data.md", "reason": "diff 订阅、push-router 合并与页面隐藏时释放"}
+{"file": ".atw/spec/app/frontend/testing.md", "reason": "浏览器 diff 性能用例与单测写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "协议、daemon、client、app 四层一起改时的检查点"}
+{"file": ".atw/tasks/10-19-diff-view-large-changesets/research/decisions.md", "reason": "17 题访谈决定与上游对比结论，判断实现是否越界"}
+{"file": ".atw/tasks/10-19-diff-view-large-changesets/research/osuna-current.md", "reason": "现状与卡顿点的代码事实"}
+{"file": ".atw/tasks/10-19-diff-view-large-changesets/research/reference-projects.md", "reason": "参考项目做法，判断实现是否偏离借鉴来源"}

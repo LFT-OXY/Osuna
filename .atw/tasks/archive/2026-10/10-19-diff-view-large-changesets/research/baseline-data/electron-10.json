@@ -1,0 +1,121 @@
+{
+  "scenario": "fixed-diff-panel-scenario",
+  "runtime": "dev-electron",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "open": {
+    "treeMs": 851,
+    "openMs": 8819,
+    "longTasks": {
+      "count": 3,
+      "over500ms": 0,
+      "maxMs": 139,
+      "p95Ms": 139,
+      "totalMs": 265
+    },
+    "profile": {
+      "longRuns": 4,
+      "longestRunMs": 143,
+      "longRunTotalMs": 364,
+      "segments": {
+        "reactOther": {
+          "ms": 107,
+          "share": 0.294
+        },
+        "otherJs": {
+          "ms": 104,
+          "share": 0.287
+        },
+        "program": {
+          "ms": 79,
+          "share": 0.216
+        },
+        "jsonParse": {
+          "ms": 25,
+          "share": 0.068
+        },
+        "gc": {
+          "ms": 17,
+          "share": 0.047
+        },
+        "validate": {
+          "ms": 15,
+          "share": 0.041
+        },
+        "paint": {
+          "ms": 7,
+          "share": 0.02
+        },
+        "buildDiffDocumentModel": {
+          "ms": 7,
+          "share": 0.018
+        },
+        "messageDispatchOther": {
+          "ms": 3,
+          "share": 0.008
+        }
+      }
+    }
+  },
+  "agent": {
+    "agentMs": 60000,
+    "agentWindowMs": 60097,
+    "settleMs": 16240,
+    "longTasks": {
+      "count": 30,
+      "over500ms": 0,
+      "maxMs": 223,
+      "p95Ms": 182,
+      "totalMs": 3668
+    },
+    "profile": {
+      "longRuns": 41,
+      "longestRunMs": 225,
+      "longRunTotalMs": 4760,
+      "segments": {
+        "program": {
+          "ms": 1896,
+          "share": 0.398
+        },
+        "gc": {
+          "ms": 761,
+          "share": 0.16
+        },
+        "jsonParse": {
+          "ms": 748,
+          "share": 0.157
+        },
+        "otherJs": {
+          "ms": 569,
+          "share": 0.119
+        },
+        "validate": {
+          "ms": 475,
+          "share": 0.1
+        },
+        "reactOther": {
+          "ms": 210,
+          "share": 0.044
+        },
+        "shareCheckoutDiff": {
+          "ms": 85,
+          "share": 0.018
+        },
+        "paint": {
+          "ms": 10,
+          "share": 0.002
+        },
+        "messageDispatchOther": {
+          "ms": 6,
+          "share": 0.001
+        },
+        "buildDiffDocumentModel": {
+          "ms": 2,
+          "share": 0
+        }
+      }
+    }
+  }
+}

@@ -141,6 +141,7 @@ import type {
   AgentConfigApply,
   MutableDaemonConfig,
   MutableDaemonConfigPatch,
+  SubscribeCheckoutDiffRequest,
 } from "@getpaseo/protocol/messages";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import {
@@ -499,6 +500,7 @@ type SubscribeCheckoutDiffPayload = Extract<
   { type: "subscribe_checkout_diff_response" }
 >["payload"];
 type CheckoutDiffPayload = Omit<SubscribeCheckoutDiffPayload, "subscriptionId">;
+type CheckoutDiffCompareInput = SubscribeCheckoutDiffRequest["compare"];
 type CheckoutCommitPayload = CheckoutCommitResponse["payload"];
 type CheckoutMergePayload = CheckoutMergeResponse["payload"];
 type CheckoutMergeFromBasePayload = CheckoutMergeFromBaseResponse["payload"];
@@ -4249,30 +4251,26 @@ export class DaemonClient {
     return responsePromise;
   }
 
-  private normalizeCheckoutDiffCompare(compare: {
-    mode: "uncommitted" | "base";
-    baseRef?: string;
-    ignoreWhitespace?: boolean;
-  }): { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean } {
+  private normalizeCheckoutDiffCompare(
+    compare: CheckoutDiffCompareInput,
+  ): CheckoutDiffCompareInput {
+    const ignoreWhitespace = compare.ignoreWhitespace === true ? { ignoreWhitespace: true } : {};
+    const filesOnly = compare.filesOnly === true ? { filesOnly: true } : {};
     if (compare.mode === "uncommitted") {
-      return compare.ignoreWhitespace === true
-        ? { mode: "uncommitted", ignoreWhitespace: true }
-        : { mode: "uncommitted" };
+      return { mode: "uncommitted", ...ignoreWhitespace, ...filesOnly };
     }
     const trimmedBaseRef = compare.baseRef?.trim();
-    if (!trimmedBaseRef) {
-      return compare.ignoreWhitespace === true
-        ? { mode: "base", ignoreWhitespace: true }
-        : { mode: "base" };
-    }
-    return compare.ignoreWhitespace === true
-      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace: true }
-      : { mode: "base", baseRef: trimmedBaseRef };
+    return {
+      mode: "base",
+      ...(trimmedBaseRef ? { baseRef: trimmedBaseRef } : {}),
+      ...ignoreWhitespace,
+      ...filesOnly,
+    };
   }
 
   async getCheckoutDiff(
     cwd: string,
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
+    compare: CheckoutDiffCompareInput,
     requestId?: string,
   ): Promise<CheckoutDiffPayload> {
     return this.sendCorrelatedSessionRequest({
@@ -4288,7 +4286,7 @@ export class DaemonClient {
 
   observeCheckoutDiff(
     cwd: string,
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
+    compare: CheckoutDiffCompareInput,
     options?: { requestId?: string; signal?: AbortSignal },
   ): OwnedSubscription<SubscribeCheckoutDiffPayload> {
     return this.observe(

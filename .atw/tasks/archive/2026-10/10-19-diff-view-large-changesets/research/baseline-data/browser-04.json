@@ -1,0 +1,121 @@
+{
+    "scenario": "fixed-diff-panel-scenario",
+    "cpuSlowdown": 1,
+    "viewport": {
+        "width": 1280,
+        "height": 900
+    },
+    "open": {
+        "treeMs": 12190,
+        "openMs": 12502,
+        "longTasks": {
+            "count": 6,
+            "over500ms": 0,
+            "maxMs": 117,
+            "p95Ms": 117,
+            "totalMs": 456
+        },
+        "profile": {
+            "longRuns": 5,
+            "longestRunMs": 243,
+            "longRunTotalMs": 732,
+            "segments": {
+                "reactOther": {
+                    "ms": 311,
+                    "share": 0.424
+                },
+                "otherJs": {
+                    "ms": 133,
+                    "share": 0.182
+                },
+                "program": {
+                    "ms": 114,
+                    "share": 0.156
+                },
+                "buildDiffDocumentModel": {
+                    "ms": 64,
+                    "share": 0.087
+                },
+                "gc": {
+                    "ms": 49,
+                    "share": 0.067
+                },
+                "jsonParse": {
+                    "ms": 32,
+                    "share": 0.044
+                },
+                "validate": {
+                    "ms": 19,
+                    "share": 0.027
+                },
+                "paint": {
+                    "ms": 9,
+                    "share": 0.012
+                },
+                "messageDispatchOther": {
+                    "ms": 1,
+                    "share": 0.002
+                }
+            }
+        }
+    },
+    "agent": {
+        "agentMs": 60000,
+        "agentWindowMs": 60177,
+        "settleMs": 24611,
+        "longTasks": {
+            "count": 12,
+            "over500ms": 0,
+            "maxMs": 178,
+            "p95Ms": 178,
+            "totalMs": 1350
+        },
+        "profile": {
+            "longRuns": 19,
+            "longestRunMs": 182,
+            "longRunTotalMs": 1862,
+            "segments": {
+                "reactOther": {
+                    "ms": 488,
+                    "share": 0.262
+                },
+                "gc": {
+                    "ms": 431,
+                    "share": 0.231
+                },
+                "program": {
+                    "ms": 338,
+                    "share": 0.181
+                },
+                "otherJs": {
+                    "ms": 184,
+                    "share": 0.099
+                },
+                "jsonParse": {
+                    "ms": 183,
+                    "share": 0.098
+                },
+                "validate": {
+                    "ms": 127,
+                    "share": 0.068
+                },
+                "buildDiffDocumentModel": {
+                    "ms": 52,
+                    "share": 0.028
+                },
+                "paint": {
+                    "ms": 29,
+                    "share": 0.015
+                },
+                "shareCheckoutDiff": {
+                    "ms": 27,
+                    "share": 0.015
+                },
+                "messageDispatchOther": {
+                    "ms": 3,
+                    "share": 0.002
+                }
+            }
+        }
+    }
+}
