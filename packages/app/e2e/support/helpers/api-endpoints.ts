@@ -59,6 +59,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
  * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
+ * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
@@ -90,7 +91,8 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         send(response, 401, { error: { message: "Invalid API key" } });
         return;
       }
-      if (holdsOrLacksList({ url, isNoList, response })) return;
+      const model = relay.requests.at(-1)?.model;
+      if (holdsOrLacksList({ url, isNoList, model, response })) return;
       if (request.method === "GET" && url === "/good/v1/models") {
         send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
         return;
@@ -130,12 +132,28 @@ export async function startFakeRelay(): Promise<FakeRelay> {
   });
 }
 
-/** /slow 什么都不回；/nolist 列模型回 404。返回 true 即已处理（或故意不回）。 */
+/** /good 上的对话请求：bad-* 回 404，slow-* 不回。返回 true 即已处理（或故意不回）。 */
+function answersByModel(input: {
+  url: string;
+  model: string | undefined;
+  response: ServerResponse;
+}): boolean {
+  const { url, model } = input;
+  if (!url.startsWith("/good/") || url.endsWith("/models") || model === undefined) return false;
+  if (model.startsWith("slow-")) return true;
+  if (!model.startsWith("bad-")) return false;
+  send(input.response, 404, { error: { message: `The model ${model} does not exist` } });
+  return true;
+}
+
+/** /slow 什么都不回；/nolist 列模型回 404；再按模型名答（answersByModel）。返回 true 即已处理（或故意不回）。 */
 function holdsOrLacksList(input: {
   url: string;
   isNoList: boolean;
+  model: string | undefined;
   response: ServerResponse;
 }): boolean {
+  if (answersByModel(input)) return true;
   if (input.url.startsWith("/slow/")) return true;
   if (!input.isNoList || !input.url.endsWith("/models")) return false;
   input.response.writeHead(404, { "content-type": "text/plain" }).end("Not Found");

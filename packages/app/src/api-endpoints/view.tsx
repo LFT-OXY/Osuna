@@ -47,8 +47,10 @@ import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
 import { ApiEndpointModelScopeSection } from "./model-scope-section";
 import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
-import { ApiEndpointModelsSection } from "./models-section";
+import { resolveModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { ApiEndpointModelsSection, type ModelTestsControl } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
+import { useModelTests } from "./use-model-tests";
 import { useFormatPins } from "./use-format-pins";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
@@ -739,6 +741,26 @@ function ApiEndpointDetailSections({
     hasManagement,
     save: detail.saveModelSettings,
   });
+  const modelTestsState = useModelTests({ serverId, endpointId: endpoint.id });
+  const servedIds = useMemo(() => detail.source.models.map((model) => model.id), [detail.source]);
+  const modelTests = useMemo<ModelTestsControl | null>(() => {
+    if (!hasManagement) return null;
+    return {
+      tests: modelTestsState.tests,
+      run: modelTestsState.run,
+      onTestAll: () => modelTestsState.testAll(servedIds),
+      onTestOne: modelTestsState.testOne,
+      onCancel: modelTestsState.cancel,
+      factsOf: (modelId) => {
+        const facts = resolveModelFacts({
+          settings: endpoint.modelSettings,
+          modelId,
+          auto: endpoint.modelFacts?.[modelId] ?? {},
+        });
+        return { name: facts.name, context: facts.context };
+      },
+    };
+  }, [endpoint, hasManagement, modelTestsState, servedIds]);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
@@ -824,6 +846,7 @@ function ApiEndpointDetailSections({
         onOpenSettings={hasManagement ? setSettingsModelId : null}
         formatPins={formatPins.pins}
         header={nameDisplayRow}
+        modelTests={modelTests}
       />
       {hasManagement ? (
         <ApiEndpointModelDefaultsSection

@@ -729,6 +729,14 @@ type ApiEndpointDetectFormatsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.detect_formats.response" }
 >["payload"];
+type ApiEndpointTestModelsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.response" }
+>["payload"];
+type ApiEndpointTestModelsProgressPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.test_models.progress" }
+>["payload"];
 type ApiEndpointCancelPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.cancel.response" }
@@ -797,6 +805,11 @@ export type ApiEndpointFetchModelsOptions = Omit<
 
 export type ApiEndpointDetectFormatsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.detect_formats.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointTestModelsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.test_models.request" }>,
   "type" | "requestId"
 >;
 
@@ -1269,6 +1282,8 @@ function toTimeoutError(error: unknown, label: string, timeoutMs: number): Error
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1500;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
 const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60_000;
+// 测试模型整批 3 分钟，再留些余量给最后的回应。
+const API_ENDPOINT_TEST_MODELS_TIMEOUT_MS = 200_000;
 const PUSH_TOKEN_REVOCATION_TIMEOUT_MS = 2_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
@@ -6616,6 +6631,35 @@ export class DaemonClient {
       requestId,
       message: { type: "provider.api_endpoint.detect_formats.request", ...options },
     });
+  }
+
+  /**
+   * 测试这家的模型（或只测 modelId 一个）。每测完一个调一次 onProgress；整批最长 3 分钟，所以等得比一般请求久。
+   * 传入 requestId 才能用 apiEndpointCancel 取消。
+   */
+  async apiEndpointTestModels(
+    options: ApiEndpointTestModelsOptions,
+    input: {
+      requestId?: string;
+      onProgress?: (progress: ApiEndpointTestModelsProgressPayload) => void;
+    } = {},
+  ): Promise<ApiEndpointTestModelsPayload> {
+    const requestId = this.createRequestId(input.requestId);
+    const { onProgress } = input;
+    const unsubscribe = onProgress
+      ? this.on("provider.api_endpoint.test_models.progress", (message) => {
+          if (message.payload.requestId === requestId) onProgress(message.payload);
+        })
+      : null;
+    try {
+      return await this.sendNamespacedCorrelatedSessionRequest({
+        requestId,
+        message: { type: "provider.api_endpoint.test_models.request", ...options },
+        timeout: API_ENDPOINT_TEST_MODELS_TIMEOUT_MS,
+      });
+    } finally {
+      unsubscribe?.();
+    }
   }
 
   async apiEndpointCancel(

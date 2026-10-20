@@ -481,6 +481,17 @@ smallest request) follows magpie's internal/provider/detect.go and test.go:
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
 
+Test models (four at a time, one "hi" capped at 16 tokens per model, a
+disabled model never asked, each model's result in page memory, the free word
+in a model's id or name, the context tag over a million tokens, and how long a
+test took) follows TestModels, testOne and tinyBody in magpie's
+internal/provider/test.go and modelTests, namedFree, contextTag and ledTook in
+internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/model-tests.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-test-models.e2e.test.ts
+  packages/app/src/api-endpoints/internal/model-tests.ts
+
 Who owns the modelPicker in Claude Code's settings.json (the user's is left
 alone; magpie's own is rewritten, or dropped when it has no rows) follows
 writePicker and dropPicker in magpie's internal/agent/claude.go:

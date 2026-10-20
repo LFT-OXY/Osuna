@@ -203,6 +203,8 @@ export async function probeUpstreamFormat(input: {
   modelId: string | null;
   // 请求体里的模型名（上游模型名）；没有模型时为 null。
   sentModel: string | null;
+  // 测试模型时 Responses 也限回复 16（照 magpie tinyBody）；检测与测试连接不带，照 Codex 自己的样子。
+  capsReply?: boolean;
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {
@@ -230,6 +232,7 @@ export async function probeUpstreamFormat(input: {
   const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
   // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
   const asked = probe.body(input.sentModel ?? input.modelId);
+  if (input.capsReply === true && format === "openai_responses") asked.max_output_tokens = 16;
   const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
   const body = completionTokens ? asCompletionTokens(asked) : asked;
   const timeout = AbortSignal.timeout(input.timeoutMs);

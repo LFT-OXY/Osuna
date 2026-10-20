@@ -10,7 +10,7 @@ import {
   type TextInputKeyPressEventData,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Eraser, Plus, RotateCw, Search, SlidersHorizontal } from "lucide-react-native";
+import { Eraser, Gauge, Plus, RotateCw, Search, SlidersHorizontal } from "lucide-react-native";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -43,10 +44,24 @@ import {
 } from "./internal/endpoint-models";
 import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
+import {
+  contextTag,
+  filterModelIds,
+  hasFinishedTests,
+  isNamedFree,
+  offersFreeOnly,
+  testTook,
+  type ModelTestState,
+  type ModelTests,
+} from "./internal/model-tests";
 import { relativeAgo } from "./reopen-hints-copy";
 import { formatLabel } from "./model-settings-sheet";
-import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointModelTestResult,
+  ApiEndpointRequestFormat,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
+import type { ModelTestRun } from "./use-model-tests";
 
 /*
  * 接口详情页的「模型」区：搜索行，下面左栏家族目录、右栏当前家族的模型，每行一个小开关。
@@ -75,6 +90,18 @@ interface ApiEndpointModelsSectionProps {
   formatPins: ModelFormatPins | null;
   // 卡片顶上的一行（「接口名显示方式」，照 magpie 放在模型名字上面）；没有为 null。
   header: ReactNode | null;
+  // 测试模型、筛选与小标；老主机没有，为 null。
+  modelTests: ModelTestsControl | null;
+}
+
+/** 「测试模型」：结果只在页面内存里；factsOf 给免费与上下文小标用的显示名与上下文。 */
+export interface ModelTestsControl {
+  tests: ModelTests;
+  run: ModelTestRun;
+  onTestAll: () => void;
+  onTestOne: (modelId: string) => void;
+  onCancel: () => void;
+  factsOf: (modelId: string) => { name: string | undefined; context: number | undefined };
 }
 
 /**
@@ -115,6 +142,7 @@ export function ApiEndpointModelsSection({
   onOpenSettings,
   formatPins,
   header,
+  modelTests,
 }: ApiEndpointModelsSectionProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -123,7 +151,9 @@ export function ApiEndpointModelsSection({
   // 窄窗口里两栏会把家族名和模型名都截短：家族改成上面一行可横滑的标签，模型在下面占满宽。
   const isCompact = useIsCompactFormFactor();
   const entries = useMemo(() => buildModelEntries(source), [source]);
-  const groups = useMemo(() => groupModelEntries(entries, query), [entries, query]);
+  const filters = useModelFilters({ entries, modelTests });
+  const { nameOf, shownEntries } = filters;
+  const groups = useMemo(() => groupModelEntries(shownEntries, query), [shownEntries, query]);
   const active = groups.find((group) => group.family === activeFamily) ?? groups[0] ?? null;
   const selectedCount = entries.filter((entry) => entry.selected).length;
   const isFetching = fetchState.status === "fetching";
@@ -162,9 +192,21 @@ export function ApiEndpointModelsSection({
         onFetch={onFetch}
         onAdd={openAdd}
         onForget={fetchedAt && onForget ? onForget : null}
+        modelTests={modelTests}
+        canTest={selectedCount > 0}
       />
     ),
-    [fetchedAt, isCompact, isFetching, isForgetting, onFetch, onForget, openAdd],
+    [
+      fetchedAt,
+      isCompact,
+      isFetching,
+      isForgetting,
+      modelTests,
+      onFetch,
+      onForget,
+      openAdd,
+      selectedCount,
+    ],
   );
 
   let body: React.ReactNode;
@@ -173,7 +215,9 @@ export function ApiEndpointModelsSection({
   } else if (!active) {
     body = (
       <CenteredMessage testID="api-endpoint-models-no-matches">
-        {t("settings.apiEndpoints.models.noMatches", { query: query.trim() })}
+        {query.trim() === ""
+          ? t("settings.apiEndpoints.models.tests.noFilterMatches")
+          : t("settings.apiEndpoints.models.noMatches", { query: query.trim() })}
       </CenteredMessage>
     );
   } else {
@@ -202,6 +246,9 @@ export function ApiEndpointModelsSection({
           onSelectAll={handleSelectFamily}
           onOpenSettings={onOpenSettings}
           formatPins={formatPins}
+          modelTests={modelTests}
+          nameOf={nameOf}
+          isCompact={isCompact}
         />
       </View>
     );
@@ -241,6 +288,10 @@ export function ApiEndpointModelsSection({
             testID="api-endpoint-models-search"
           />
         </View>
+        <ModelFiltersRow filters={filters} />
+        {modelTests !== null ? (
+          <TestRunRow run={modelTests.run} onCancel={modelTests.onCancel} />
+        ) : null}
         {isAddOpen ? <AddModelRow existing={entries} onAdd={onAdd} onClose={closeAdd} /> : null}
         {forgetState.status === "failed" ? (
           <View style={[styles.inlineError, settingsStyles.rowBorder]}>
@@ -269,6 +320,56 @@ export function ApiEndpointModelsSection({
       </View>
     </SettingsSection>
   );
+}
+
+/** 「只看免费」「只看能用」：只在有意义时出现（magpie），不在时不起作用。 */
+function useModelFilters({
+  entries,
+  modelTests,
+}: {
+  entries: ModelEntry[];
+  modelTests: ModelTestsControl | null;
+}) {
+  const [isFreeOnly, setIsFreeOnly] = useState(false);
+  const [isWorkingOnly, setIsWorkingOnly] = useState(false);
+  const nameOf = useCallback(
+    (id: string) => entries.find((entry) => entry.id === id)?.label ?? modelTests?.factsOf(id).name,
+    [entries, modelTests],
+  );
+  const offered = useMemo(() => {
+    if (modelTests === null) return { showsFreeOnly: false, showsWorkingOnly: false };
+    const ids = entries.map((entry) => entry.id);
+    return {
+      showsFreeOnly: offersFreeOnly({ ids, nameOf }),
+      showsWorkingOnly: hasFinishedTests(modelTests.tests),
+    };
+  }, [entries, modelTests, nameOf]);
+  // 筛选不在时不起作用：清单换了不再有免费的、或结果随页面清掉后，开关自然失效。
+  const isFreeFilterOn = isFreeOnly && offered.showsFreeOnly;
+  const isWorkingFilterOn = isWorkingOnly && offered.showsWorkingOnly;
+  const shownEntries = useMemo(() => {
+    if (modelTests === null || (!isFreeFilterOn && !isWorkingFilterOn)) return entries;
+    const kept = new Set(
+      filterModelIds({
+        ids: entries.map((entry) => entry.id),
+        nameOf,
+        tests: modelTests.tests,
+        isFreeOnly: isFreeFilterOn,
+        isWorkingOnly: isWorkingFilterOn,
+      }),
+    );
+    return entries.filter((entry) => kept.has(entry.id));
+  }, [entries, isFreeFilterOn, isWorkingFilterOn, modelTests, nameOf]);
+  return {
+    nameOf,
+    shownEntries,
+    showsFreeOnly: offered.showsFreeOnly,
+    showsWorkingOnly: offered.showsWorkingOnly,
+    isFreeOnly,
+    isWorkingOnly,
+    setIsFreeOnly,
+    setIsWorkingOnly,
+  };
 }
 
 /** 「Models」标题下面一行：拉取时间；丢掉清单进行中写在这里（菜单选了就收起）。 */
@@ -311,7 +412,10 @@ function fetchedCopy(input: { t: TFunction; ago: string | null }): string {
   return input.t("settings.apiEndpoints.models.fetchedAgo", { time: input.ago });
 }
 
-/** 一行：重新拉取、手动添加，次要的「丢掉拉回的清单」在 ⋯ 菜单里；窄窗口两个按钮只留图标。 */
+/**
+ * 一行：测试模型、重新拉取、手动添加，次要的「丢掉拉回的清单」在 ⋯ 菜单里；窄窗口按钮只留图标。
+ * 测试模型在没有已选模型或正在测时点不了（onTestAll 为 null）；showsTest 为 false 是老主机。
+ */
 function ModelsActions({
   isCompact,
   isFetching,
@@ -319,6 +423,8 @@ function ModelsActions({
   onFetch,
   onAdd,
   onForget,
+  modelTests,
+  canTest,
 }: {
   isCompact: boolean;
   isFetching: boolean;
@@ -326,13 +432,32 @@ function ModelsActions({
   onFetch: () => void;
   onAdd: () => void;
   onForget: (() => void) | null;
+  modelTests: ModelTestsControl | null;
+  // 有已选模型才有可测的。
+  canTest: boolean;
 }) {
   const { t } = useTranslation();
+  const testLabel = t("settings.apiEndpoints.models.tests.test");
+  const isTesting = modelTests?.run.status === "running";
   const fetchLabel = isFetching
     ? t("settings.apiEndpoints.models.fetching")
     : t("settings.apiEndpoints.models.refetch");
   return (
     <View style={styles.trailing}>
+      {modelTests ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={Gauge}
+          loading={isTesting}
+          disabled={!canTest || isTesting}
+          onPress={modelTests.onTestAll}
+          accessibilityLabel={testLabel}
+          testID="api-endpoint-models-test"
+        >
+          {isCompact ? null : testLabel}
+        </Button>
+      ) : null}
       <Button
         variant="ghost"
         size="sm"
@@ -385,6 +510,118 @@ function ModelsMenu({ isBusy, onForget }: { isBusy: boolean; onForget: () => voi
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function ModelFiltersRow({ filters }: { filters: ReturnType<typeof useModelFilters> }) {
+  const { t } = useTranslation();
+  if (!filters.showsFreeOnly && !filters.showsWorkingOnly) return null;
+  return (
+    <View style={[styles.filtersRow, settingsStyles.rowBorder]}>
+      {filters.showsFreeOnly ? (
+        <FilterSwitch
+          label={t("settings.apiEndpoints.models.tests.freeOnly")}
+          value={filters.isFreeOnly}
+          onChange={filters.setIsFreeOnly}
+          testID="api-endpoint-models-free-only"
+        />
+      ) : null}
+      {filters.showsWorkingOnly ? (
+        <FilterSwitch
+          label={t("settings.apiEndpoints.models.tests.workingOnly")}
+          value={filters.isWorkingOnly}
+          onChange={filters.setIsWorkingOnly}
+          testID="api-endpoint-models-working-only"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function FilterSwitch({
+  label,
+  value,
+  onChange,
+  testID,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  testID: string;
+}) {
+  return (
+    <View style={styles.filter}>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} testID={testID} />
+      <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/** 测试的进度与取消，测完后是一句汇总；整批没成时原因留在这里。 */
+function TestRunRow({ run, onCancel }: { run: ModelTestRun; onCancel: () => void }) {
+  const { t } = useTranslation();
+  if (run.status === "idle") return null;
+  if (run.status === "failed") {
+    return (
+      <View style={[styles.inlineError, settingsStyles.rowBorder]}>
+        <Alert
+          variant="error"
+          size="sm"
+          title={t("settings.apiEndpoints.models.tests.failed")}
+          description={run.message}
+          testID="api-endpoint-models-test-error"
+        />
+      </View>
+    );
+  }
+  let text: string;
+  let color: "foregroundMuted" | "statusSuccess" | "statusDanger" = "foregroundMuted";
+  if (run.status === "running") {
+    text = run.isCancelling
+      ? t("settings.apiEndpoints.models.tests.cancelling")
+      : t("settings.apiEndpoints.models.tests.progress", { done: run.done, total: run.total });
+  } else if (run.status === "finished") {
+    const isAllOk = run.failed === 0;
+    text = isAllOk
+      ? t("settings.apiEndpoints.models.tests.allAnswered", { total: run.total })
+      : t("settings.apiEndpoints.models.tests.someFailed", {
+          failed: run.failed,
+          total: run.total,
+        });
+    color = isAllOk ? "statusSuccess" : "statusDanger";
+  } else if (run.status === "cancelled") {
+    text = t("settings.apiEndpoints.models.tests.cancelled");
+  } else {
+    return null;
+  }
+  return (
+    <View
+      style={[styles.testRunRow, settingsStyles.rowBorder]}
+      testID="api-endpoint-models-test-run"
+    >
+      <Text
+        variant="caption"
+        color={color}
+        style={styles.flex}
+        numberOfLines={1}
+        testID="api-endpoint-models-test-status"
+      >
+        {text}
+      </Text>
+      {run.status === "running" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={onCancel}
+          disabled={run.isCancelling}
+          testID="api-endpoint-models-test-cancel"
+        >
+          {t("common.actions.cancel")}
+        </Button>
+      ) : null}
+    </View>
   );
 }
 
@@ -481,12 +718,18 @@ function FamilyModels({
   onSelectAll,
   onOpenSettings,
   formatPins,
+  modelTests,
+  nameOf,
+  isCompact,
 }: {
   group: ModelFamilyGroup;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
   onSelectAll: (group: ModelFamilyGroup, selected: boolean) => void;
   onOpenSettings: ((modelId: string) => void) | null;
   formatPins: ModelFormatPins | null;
+  modelTests: ModelTestsControl | null;
+  nameOf: (id: string) => string | undefined;
+  isCompact: boolean;
 }) {
   const { t } = useTranslation();
   const familyName = useFamilyName();
@@ -527,6 +770,9 @@ function FamilyModels({
             onToggle={onToggle}
             onOpenSettings={onOpenSettings}
             formatPins={formatPins}
+            modelTests={modelTests}
+            name={nameOf(entry.id)}
+            isCompact={isCompact}
           />
         ))}
       </ScrollView>
@@ -539,17 +785,95 @@ function ModelRow({
   onToggle,
   onOpenSettings,
   formatPins,
+  modelTests,
+  name,
+  isCompact,
 }: {
   entry: ModelEntry;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
   onOpenSettings: ((modelId: string) => void) | null;
   formatPins: ModelFormatPins | null;
+  modelTests: ModelTestsControl | null;
+  name: string | undefined;
+  isCompact: boolean;
 }) {
   const { t } = useTranslation();
   const handleChange = useCallback((value: boolean) => onToggle(entry, value), [entry, onToggle]);
   const pinned = formatPins?.pinOf(entry.id) ?? null;
+  const test = modelTests?.tests[entry.id] ?? null;
   return (
-    <View style={styles.modelRow} testID={`api-endpoint-model-${entry.id}`}>
+    <View style={styles.modelItem} testID={`api-endpoint-model-${entry.id}`}>
+      <View style={styles.modelRow}>
+        <ModelNameGroup entry={entry} name={name} modelTests={modelTests} />
+        {/* 窄窗口里结果挪到名字下面一行，名字不被挤短。 */}
+        {test !== null && !isCompact ? <ModelTestMark modelId={entry.id} state={test} /> : null}
+        {entry.goneUpstream ? (
+          <Text
+            variant="caption"
+            color="foregroundExtraMuted"
+            numberOfLines={1}
+            testID={`api-endpoint-model-gone-${entry.id}`}
+          >
+            {t("settings.apiEndpoints.models.goneUpstream")}
+          </Text>
+        ) : null}
+        {pinned !== null ? (
+          <Text
+            variant="caption"
+            color={pinned.isVoid ? "statusWarning" : "foregroundMuted"}
+            numberOfLines={1}
+            testID={`api-endpoint-model-format-${entry.id}`}
+          >
+            {t(
+              pinned.isVoid
+                ? "settings.apiEndpoints.modelSettings.formatTagVoid"
+                : "settings.apiEndpoints.modelSettings.formatTag",
+              { format: formatLabel(t, pinned.format) },
+            )}
+          </Text>
+        ) : null}
+        <Switch
+          value={entry.selected}
+          onValueChange={handleChange}
+          accessibilityLabel={t("settings.apiEndpoints.models.modelSwitch", { model: entry.id })}
+          testID={`api-endpoint-model-switch-${entry.id}`}
+        />
+        {onOpenSettings ? (
+          <ModelRowMenu
+            modelId={entry.id}
+            onOpenSettings={onOpenSettings}
+            onTest={modelTests?.onTestOne ?? null}
+            isTesting={modelTests?.run.status === "running"}
+            formatPins={formatPins}
+            pinned={pinned}
+          />
+        ) : null}
+      </View>
+      {test !== null ? (
+        <ModelTestBelow modelId={entry.id} state={test} isCompact={isCompact} />
+      ) : null}
+    </View>
+  );
+}
+
+/** 模型名，后面是「免费」与上下文小标（老主机没有）。 */
+function ModelNameGroup({
+  entry,
+  name,
+  modelTests,
+}: {
+  entry: ModelEntry;
+  name: string | undefined;
+  modelTests: ModelTestsControl | null;
+}) {
+  const { t } = useTranslation();
+  const isFree = modelTests !== null && isNamedFree([entry.id, name]);
+  const context =
+    modelTests === null
+      ? null
+      : contextTag({ context: modelTests.factsOf(entry.id).context, name });
+  return (
+    <View style={styles.modelNameGroup}>
       <Text
         color={entry.selected ? "foreground" : "foregroundMuted"}
         style={styles.modelName}
@@ -558,47 +882,109 @@ function ModelRow({
       >
         {entry.id}
       </Text>
-      {entry.goneUpstream ? (
-        <Text
-          variant="caption"
-          color="foregroundExtraMuted"
-          numberOfLines={1}
-          testID={`api-endpoint-model-gone-${entry.id}`}
-        >
-          {t("settings.apiEndpoints.models.goneUpstream")}
-        </Text>
+      {isFree ? (
+        <View testID={`api-endpoint-model-free-${entry.id}`}>
+          <StatusBadge
+            size="xs"
+            variant="success"
+            label={t("settings.apiEndpoints.models.tests.free")}
+          />
+        </View>
       ) : null}
-      {pinned !== null ? (
-        <Text
-          variant="caption"
-          color={pinned.isVoid ? "statusWarning" : "foregroundMuted"}
-          numberOfLines={1}
-          testID={`api-endpoint-model-format-${entry.id}`}
-        >
-          {t(
-            pinned.isVoid
-              ? "settings.apiEndpoints.modelSettings.formatTagVoid"
-              : "settings.apiEndpoints.modelSettings.formatTag",
-            { format: formatLabel(t, pinned.format) },
-          )}
-        </Text>
-      ) : null}
-      <Switch
-        value={entry.selected}
-        onValueChange={handleChange}
-        accessibilityLabel={t("settings.apiEndpoints.models.modelSwitch", { model: entry.id })}
-        testID={`api-endpoint-model-switch-${entry.id}`}
-      />
-      {onOpenSettings ? (
-        <ModelRowMenu
-          modelId={entry.id}
-          onOpenSettings={onOpenSettings}
-          formatPins={formatPins}
-          pinned={pinned}
-        />
+      {context !== null ? (
+        <View testID={`api-endpoint-model-context-${entry.id}`}>
+          <StatusBadge size="xs" label={context} />
+        </View>
       ) : null}
     </View>
   );
+}
+
+/** 名字下面一行：窄窗口里的测试结果，与失败的原因。 */
+function ModelTestBelow({
+  modelId,
+  state,
+  isCompact,
+}: {
+  modelId: string;
+  state: ModelTestState;
+  isCompact: boolean;
+}) {
+  const { t } = useTranslation();
+  const reason =
+    state.status === "done" && !state.result.ok ? failureReason(t, state.result) : null;
+  if (!isCompact && reason === null) return null;
+  return (
+    <View style={styles.modelBelow}>
+      {isCompact ? <ModelTestMark modelId={modelId} state={state} /> : null}
+      {reason !== null ? (
+        <Text
+          variant="caption"
+          color="statusDanger"
+          numberOfLines={2}
+          selectable
+          testID={`api-endpoint-model-test-reason-${modelId}`}
+        >
+          {reason}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+const ThemedGauge = withUnistyles(Gauge);
+
+/** 红绿点，后面是走的格式与耗时；还在测时是灰点。 */
+function ModelTestMark({ modelId, state }: { modelId: string; state: ModelTestState }) {
+  const { t } = useTranslation();
+  let text: string;
+  let dotStyle = styles.dotWaiting;
+  let dotKind = "testing";
+  if (state.status === "testing") {
+    text = t("settings.apiEndpoints.models.tests.testing");
+  } else {
+    const { result } = state;
+    dotStyle = result.ok ? styles.dotOk : styles.dotFailed;
+    dotKind = result.ok ? "ok" : "failed";
+    const parts: string[] = [];
+    if (result.format !== null) parts.push(formatLabel(t, result.format));
+    if (result.error?.code === "model_disabled") {
+      parts.push(t("settings.apiEndpoints.models.tests.disabled"));
+    } else if (result.durationMs > 0 || result.ok) {
+      const took = testTook(result.durationMs);
+      parts.push(t(`settings.apiEndpoints.models.tests.took.${took.unit}`, { value: took.value }));
+    }
+    text = parts.join(" · ");
+  }
+  return (
+    <View style={styles.testMark} testID={`api-endpoint-model-test-${modelId}`}>
+      <View
+        style={[styles.dot, dotStyle]}
+        testID={`api-endpoint-model-test-dot-${modelId}-${dotKind}`}
+      />
+      <Text variant="caption" color="foregroundMuted" numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/** 失败的原因：已禁用、超时、没有地址用界面语言说；上游的原文照登。 */
+function failureReason(t: TFunction, result: ApiEndpointModelTestResult): string {
+  const { error } = result;
+  const key = "settings.apiEndpoints.models.tests";
+  switch (error?.code) {
+    case "model_disabled":
+      return t(`${key}.disabledReason`, { pattern: error.params?.pattern ?? "" });
+    case "upstream_timeout":
+      return t(`${key}.timeout`);
+    case "batch_timeout":
+      return t(`${key}.batchTimeout`);
+    case "no_format":
+      return t(`${key}.noFormat`);
+    default:
+      return error?.message || t(`${key}.noAnswer`);
+  }
 }
 
 const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
@@ -617,16 +1003,26 @@ function pinnedFormatLabel(t: TFunction, pinned: ModelFormatPin | null): string 
 function ModelRowMenu({
   modelId,
   onOpenSettings,
+  onTest,
+  isTesting,
   formatPins,
   pinned,
 }: {
   modelId: string;
   onOpenSettings: (modelId: string) => void;
+  // 「测试这个」；老主机没有，为 null。
+  onTest: ((modelId: string) => void) | null;
+  isTesting: boolean;
   formatPins: ModelFormatPins | null;
   pinned: ModelFormatPin | null;
 }) {
   const { t } = useTranslation();
   const handleOpen = useCallback(() => onOpenSettings(modelId), [modelId, onOpenSettings]);
+  const handleTest = useCallback(() => onTest?.(modelId), [modelId, onTest]);
+  const testLeading = useMemo(
+    () => <ThemedGauge size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
   const leading = useMemo(
     () => <ThemedSlidersHorizontal size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
     [],
@@ -669,6 +1065,16 @@ function ModelRowMenu({
         >
           {t("settings.apiEndpoints.modelSettings.menu")}
         </DropdownMenuItem>
+        {onTest ? (
+          <DropdownMenuItem
+            leading={testLeading}
+            onSelect={handleTest}
+            disabled={isTesting}
+            testID={`api-endpoint-model-test-one-${modelId}`}
+          >
+            {t("settings.apiEndpoints.models.tests.testOne")}
+          </DropdownMenuItem>
+        ) : null}
         {pages ? (
           <DropdownMenuSubTrigger
             id={FORMAT_PAGE}
@@ -902,16 +1308,71 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: theme.spacing[4],
     paddingRight: theme.spacing[2],
   },
+  modelItem: {
+    paddingHorizontal: theme.spacing[4],
+  },
   modelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
     minHeight: 36,
-    paddingHorizontal: theme.spacing[4],
   },
-  modelName: {
+  modelNameGroup: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+  },
+  modelName: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  modelBelow: {
+    gap: theme.spacing[0.5],
+    paddingBottom: theme.spacing[2],
+    marginTop: -theme.spacing[1],
+  },
+  testMark: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
+    flexShrink: 0,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+  },
+  dotWaiting: {
+    backgroundColor: theme.colors.foregroundExtraMuted,
+  },
+  dotOk: {
+    backgroundColor: theme.colors.statusSuccess,
+  },
+  dotFailed: {
+    backgroundColor: theme.colors.statusDanger,
+  },
+  filtersRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: theme.spacing[6],
+    rowGap: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+  },
+  filter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  testRunRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minHeight: 40,
+    paddingHorizontal: theme.spacing[4],
   },
   centered: {
     flex: 1,

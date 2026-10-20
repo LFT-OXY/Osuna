@@ -1080,3 +1080,61 @@ export const ApiEndpointTestConnectionResponseSchema = z.object({
 export type ApiEndpointTestConnectionResponse = z.infer<
   typeof ApiEndpointTestConnectionResponseSchema
 >;
+
+/**
+ * 测试模型（Test models，照 magpie TestModels）：daemon 给这家的每个在服务的模型发一条最小请求（「hi」，回复上限 16），
+ * 并发 4 个、单个 20 秒、整批 3 分钟。给了 `modelId` 只测这一个（可以不在服务）。`method` 是测法：缺省 plain，
+ * 按这家的地址依次试格式（设了「只用这种格式」的只试那种）；以后加的测法老 daemon 拒收。
+ * 每测完一个推一条 test_models.progress，最后回 test_models.response 带全部结果。用 cancel 按 requestId 取消：
+ * 不再发新请求，回应带已测完的结果与 cancelled。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const API_ENDPOINT_MODEL_TEST_METHODS = ["plain"] as const;
+export type ApiEndpointModelTestMethod = (typeof API_ENDPOINT_MODEL_TEST_METHODS)[number];
+
+export const ApiEndpointTestModelsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+  modelId: z.string().optional(),
+  method: z.string().optional(),
+});
+export type ApiEndpointTestModelsRequest = z.infer<typeof ApiEndpointTestModelsRequestSchema>;
+
+/**
+ * 一个模型的测试结果。`format` 是答上（或最后失败）的请求格式，没发请求（已禁用、没有能问的地址）时为 null；
+ * `status` 是 HTTP 状态码，没收到响应时为 null；`durationMs` 是这个模型花的时间。
+ * `error.code`：model_disabled（params：model、pattern）、auth_failed、upstream_error、upstream_unreachable、
+ * upstream_timeout（单个超时）、batch_timeout（整批超时，没来得及测或被打断）、no_format（这家没有能问它的地址）。
+ */
+export const ApiEndpointModelTestResultSchema = z.object({
+  modelId: z.string(),
+  ok: z.boolean(),
+  format: z.string().nullable(),
+  status: z.number().nullable(),
+  durationMs: z.number(),
+  error: ApiEndpointErrorSchema.nullable(),
+});
+export type ApiEndpointModelTestResult = z.infer<typeof ApiEndpointModelTestResultSchema>;
+
+/** 测完一个模型推一条；done / total 是这次已测完与一共要测的个数。 */
+export const ApiEndpointTestModelsProgressSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.progress"),
+  payload: z.object({
+    requestId: z.string(),
+    result: ApiEndpointModelTestResultSchema,
+    done: z.number(),
+    total: z.number(),
+  }),
+});
+export type ApiEndpointTestModelsProgress = z.infer<typeof ApiEndpointTestModelsProgressSchema>;
+
+/** 全部结果按测试顺序；请求被拒（找不到接口、不认识的测法）时为空，被取消时是已测完的，原因在 `error`。 */
+export const ApiEndpointTestModelsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.test_models.response"),
+  payload: z.object({
+    requestId: z.string(),
+    results: z.array(ApiEndpointModelTestResultSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointTestModelsResponse = z.infer<typeof ApiEndpointTestModelsResponseSchema>;

@@ -1815,6 +1815,101 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("Test models: each model gets a dot, its format and time; a failure says why; one model alone; the filters; a refused test; cancel; and the results go with the page", async ({
+    page,
+  }) => {
+    // 都在「其他」家族里，一屏看得到；保存后 daemon 当场拉的清单也是这些。
+    relay.goodModels = ["relay-ok", "bad-model", "lite:free", "slow-one", "slow-two"];
+    const asked = () => modelsAsked(relay).filter((model) => model !== undefined);
+    const slowAsked = () => asked().filter((model) => model.startsWith("slow-")).length;
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["relay-ok", "bad-model", "lite:free"],
+    });
+    const slowId = await seedApiEndpoint(client, {
+      name: "Slow relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["slow-one", "slow-two"],
+    });
+    const host = await refuseTestModels(page);
+    await openEndpointDetail(page, endpointId);
+    const status = page.getByTestId("api-endpoint-models-test-status").filter({ visible: true });
+    const testButton = page.getByTestId("api-endpoint-models-test").filter({ visible: true });
+    const dot = (modelId: string, kind: string) =>
+      page.getByTestId(`api-endpoint-model-test-dot-${modelId}-${kind}`).filter({ visible: true });
+    const modelRow = (modelId: string) =>
+      page.getByTestId(`api-endpoint-model-${modelId}`).filter({ visible: true });
+
+    await test.step("a refused test says why in place and marks no model", async () => {
+      await testButton.click();
+      await expect(page.getByTestId("api-endpoint-models-test-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      await expect(page.getByTestId("api-endpoint-model-test-relay-ok")).toHaveCount(0);
+      expect(asked()).toEqual([]);
+    });
+
+    await test.step("the whole list: a green dot, the format and the time; the failure keeps its reason", async () => {
+      host.refusing = false;
+      await testButton.click();
+      await expect(status).toHaveText("Tested 3: 1 didn't answer");
+      await expect(dot("relay-ok", "ok")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-model-test-relay-ok")).toHaveText(
+        /^Anthropic · \d+ ms$/,
+      );
+      await expect(dot("bad-model", "failed")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-model-test-reason-bad-model")).toContainText(
+        "The model bad-model does not exist",
+      );
+      expect([...new Set(asked())].sort()).toEqual(["bad-model", "lite:free", "relay-ok"]);
+      await expect(page.getByTestId("api-endpoint-model-free-lite:free")).toHaveText("Free");
+    });
+
+    await test.step("Working only drops the failure, Free only keeps the free one", async () => {
+      const working = page.getByTestId("api-endpoint-models-working-only");
+      await expect(working).toHaveRole("switch");
+      await working.click();
+      await expect(modelRow("bad-model")).toHaveCount(0);
+      await expect(modelRow("relay-ok")).toBeVisible();
+      await working.click();
+      await page.getByTestId("api-endpoint-models-free-only").click();
+      await expect(modelRow("lite:free")).toBeVisible();
+      await expect(modelRow("relay-ok")).toHaveCount(0);
+      await page.getByTestId("api-endpoint-models-free-only").click();
+    });
+
+    await test.step("Test this asks one model and keeps the others' results", async () => {
+      relay.requests.length = 0;
+      await page.getByTestId("api-endpoint-model-menu-relay-ok").filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-model-test-one-relay-ok").click();
+      await expect(status).toHaveText("Tested 1: all answered");
+      expect(asked()).toEqual(["relay-ok"]);
+      await expect(dot("bad-model", "failed")).toBeVisible();
+    });
+
+    await test.step("leaving the page clears the results", async () => {
+      await openEndpointDetail(page, slowId);
+      await openEndpointDetail(page, endpointId);
+      await expect(page.getByTestId("api-endpoint-model-test-relay-ok")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-models-working-only")).toHaveCount(0);
+    });
+
+    await test.step("a test in progress shows its progress and can be cancelled", async () => {
+      await openEndpointDetail(page, slowId);
+      await testButton.click();
+      await expect(status).toHaveText("Testing models… 0 / 2");
+      await expect(dot("slow-one", "testing")).toBeVisible();
+      await expect.poll(slowAsked).toBe(2);
+      await page.getByTestId("api-endpoint-models-test-cancel").filter({ visible: true }).click();
+      await expect(status).toHaveText("Test cancelled");
+      await expect(page.getByTestId("api-endpoint-model-test-slow-one")).toHaveCount(0);
+    });
+  });
+
   test("a host without apiEndpointManagement has no Duplicate, no Show and no model scope", async ({
     page,
   }) => {
@@ -1824,8 +1919,9 @@ test.describe("Settings API endpoints", () => {
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-detail-duplicate")).toHaveCount(0);
-    // 也没有服务范围。
+    // 也没有服务范围与测试模型。
     await expect(page.getByTestId("api-endpoint-model-scope-section")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoint-models-test")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-connection-api-key")).toBeVisible();
@@ -4759,6 +4855,40 @@ async function catalogOf(endpointId: string) {
 }
 
 /** 从 server_info 去掉 apiEndpointManagement，模拟还不能改接口顺序的主机。 */
+/** 测试模型的请求在 refusing 时由页面这头直接回一条被拒的响应，不到 daemon。 */
+async function refuseTestModels(page: Page): Promise<{ refusing: boolean }> {
+  const host = { refusing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const request =
+        typeof message === "string" &&
+        message.includes('"provider.api_endpoint.test_models.request"')
+          ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+          : undefined;
+      if (!host.refusing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.test_models.response",
+            payload: {
+              requestId: request.requestId,
+              results: [],
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
 async function hideManagementCapability(page: Page): Promise<void> {
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();

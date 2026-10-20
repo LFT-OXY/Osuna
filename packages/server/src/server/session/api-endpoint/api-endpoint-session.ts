@@ -42,6 +42,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.fetch_models.request"
       | "provider.api_endpoint.test_connection.request"
       | "provider.api_endpoint.detect_formats.request"
+      | "provider.api_endpoint.test_models.request"
       | "provider.api_endpoint.cancel.request";
   }
 >;
@@ -69,6 +70,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.fetch_models.request": true,
   "provider.api_endpoint.test_connection.request": true,
   "provider.api_endpoint.detect_formats.request": true,
+  "provider.api_endpoint.test_models.request": true,
   "provider.api_endpoint.cancel.request": true,
 };
 
@@ -156,6 +158,7 @@ export class ApiEndpointSession {
           | "provider.api_endpoint.fetch_models.request"
           | "provider.api_endpoint.test_connection.request"
           | "provider.api_endpoint.detect_formats.request"
+          | "provider.api_endpoint.test_models.request"
           | "provider.api_endpoint.cancel.request";
       }
     >,
@@ -170,6 +173,8 @@ export class ApiEndpointSession {
         return this.handleTestConnection(request, connectionSignal);
       case "provider.api_endpoint.detect_formats.request":
         return this.handleDetectFormats(request, connectionSignal);
+      case "provider.api_endpoint.test_models.request":
+        return this.handleTestModels(request, connectionSignal);
       case "provider.api_endpoint.cancel.request":
         return this.handleCancel(request);
     }
@@ -689,6 +694,48 @@ export class ApiEndpointSession {
           results: [],
           error: this.toWireError(error, request),
         },
+      });
+    } finally {
+      release();
+    }
+  }
+
+  /** 每测完一个模型推一条进度；取消时回应带已测完的结果与 cancelled。 */
+  private async handleTestModels(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.test_models.request" }>,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    const { requestId } = request;
+    const { signal, release } = this.trackUpstreamRequest(requestId, connectionSignal);
+    try {
+      const outcome = await this.service.testModels({
+        request: {
+          endpointId: request.endpointId,
+          ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
+          ...(request.method !== undefined ? { method: request.method } : {}),
+        },
+        signal,
+        onResult: ({ result, done, total }) =>
+          this.host.emit({
+            type: "provider.api_endpoint.test_models.progress",
+            payload: { requestId, result, done, total },
+          }),
+      });
+      this.host.emit({
+        type: "provider.api_endpoint.test_models.response",
+        payload: {
+          requestId,
+          results: outcome.results,
+          error:
+            outcome.kind === "cancelled"
+              ? { code: "cancelled", message: "Request cancelled" }
+              : null,
+        },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "provider.api_endpoint.test_models.response",
+        payload: { requestId, results: [], error: this.toWireError(error, request) },
       });
     } finally {
       release();

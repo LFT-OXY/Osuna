@@ -12,6 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import type pino from "pino";
 import {
   API_ENDPOINT_MODEL_SCOPES,
+  API_ENDPOINT_MODEL_TEST_METHODS,
   API_ENDPOINT_MODEL_TIERS,
   API_ENDPOINT_REQUEST_FORMATS,
   apiEndpointHasModelMapping,
@@ -30,6 +31,7 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointModelFacts,
   type ApiEndpointModelSettings,
+  type ApiEndpointModelTestResult,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -44,6 +46,7 @@ import {
   listsNoModels,
   modelFormatsAt,
   planModelsOf,
+  servedFormats,
   templateBaseUrl,
   templateBaseUrls,
   type TemplatePlace,
@@ -245,6 +248,15 @@ const CLAUDE_START_THINKING = "high";
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import {
+  MODEL_TEST_DEFAULTS,
+  runModelTests,
+  type ModelTestAttempt,
+  type ModelTestLimits,
+  type ModelTestPlan,
+  type ModelTestsOutcome,
+} from "./model-tests.js";
+import { isClaudeModel } from "./gateway/routing.js";
+import {
   hostOf,
   mergeModelFacts,
   type EndpointModelFacts,
@@ -296,6 +308,7 @@ import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-p
 import {
   WORKING_WINDOW,
   distinctModelLabels,
+  pinnedFormat,
   resolveModelFacts,
   upstreamModelName,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
@@ -464,6 +477,14 @@ export interface ApiEndpointDetectInput {
   modelIds?: string[];
 }
 
+export interface ApiEndpointTestModelsInput {
+  endpointId: string;
+  // 只测这一个（可以不在服务）；省略为这家所有在服务的模型。
+  modelId?: string;
+  // 测法；省略为 plain。
+  method?: string;
+}
+
 export interface ApiEndpointServiceOptions {
   paseoHome: string;
   logger: pino.Logger;
@@ -506,6 +527,8 @@ export interface ApiEndpointServiceOptions {
   findCodexCommand?: FindCodexCommand;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
+  // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
+  modelTests?: Partial<ModelTestLimits>;
   // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着），
   // 也才每天给开着的接口重新拉清单；缺省都不做。
   isModelsDevAutoUpdate?: () => boolean;
@@ -682,6 +705,7 @@ export class ApiEndpointService {
   private readonly proxyEnv: ProxyEnv;
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
+  private readonly modelTestLimits: ModelTestLimits;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
@@ -755,6 +779,7 @@ export class ApiEndpointService {
     this.upstreamTimeoutMs = options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS;
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
+    this.modelTestLimits = { ...MODEL_TEST_DEFAULTS, ...options.modelTests };
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
@@ -3297,6 +3322,53 @@ export class ApiEndpointService {
   }
 
   /**
+   * 测试模型（照 magpie TestModels）：给 modelId 只测那一个，否则测这家所有在服务的模型（一周内下线的不算），
+   * 被禁的不发请求、记成已禁用。每测完一个调 onResult。和拉取模型一样只读、不进串行队列。
+   */
+  async testModels(input: {
+    request: ApiEndpointTestModelsInput;
+    signal: AbortSignal;
+    onResult: (progress: {
+      result: ApiEndpointModelTestResult;
+      done: number;
+      total: number;
+    }) => void;
+  }): Promise<ModelTestsOutcome> {
+    const { request } = input;
+    const method = request.method ?? "plain";
+    if (!API_ENDPOINT_MODEL_TEST_METHODS.some((known) => known === method)) {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: `Unknown test method '${method}'`,
+      });
+    }
+    const state = this.readState();
+    const endpoint = findEndpoint(state, request.endpointId);
+    if (!endpoint) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    const listed = findEndpoint(this.retiredModels.listed(state), endpoint.id) ?? endpoint;
+    const typed = request.modelId?.trim();
+    const modelIds = typed ? [typed] : listed.models.map((model) => model.id);
+    const plans = modelIds.map(
+      (modelId): ModelTestPlan => ({
+        modelId,
+        sentModel: upstreamModelName({ settings: endpoint.modelSettings, modelId }),
+        disabledBy: endpointDisabledBy({ state, endpoint, model: modelId }),
+        attempts: testAttempts({ endpoint, modelId }),
+      }),
+    );
+    return runModelTests({
+      plans,
+      apiKey: this.store.getApiKey(endpoint.id),
+      templateId: endpoint.templateId,
+      limits: this.modelTestLimits,
+      signal: input.signal,
+      onResult: input.onResult,
+    });
+  }
+
+  /**
    * 测试与检测不问被禁的模型（magpie test.go 的 testOne、testModel）：已保存的那家按它的接口标识认，还没保存的只按名字认。
    */
   private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
@@ -4646,6 +4718,38 @@ function requireFormat(format: string): ApiEndpointRequestFormat {
  */
 function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpointProvider {
   return format === "anthropic_messages" ? "claude" : "codex";
+}
+
+/**
+ * 测一个模型时按先后试的格式与地址：设了「只用这种格式」且还有那种地址时只有它（同中转站）；否则这家给它的格式按地址顺序，
+ * 上游清单说它在哪几种格式上的先问那几种，没说时 Claude 模型先问 Anthropic（magpie testOne 挑格式的先后）。
+ */
+function testAttempts(input: { endpoint: StoredApiEndpoint; modelId: string }): ModelTestAttempt[] {
+  const { endpoint, modelId } = input;
+  const pin = pinnedFormat({
+    settings: endpoint.modelSettings,
+    modelId,
+    baseUrls: endpoint.baseUrls,
+  });
+  const formats =
+    pin.kind === "pinned"
+      ? [pin.format]
+      : servedFormats({
+          templateId: endpoint.templateId,
+          baseUrls: endpoint.baseUrls,
+          model: modelId,
+        });
+  const listedOn = endpoint.catalog?.models.find((model) => model.id === modelId)?.formats ?? [];
+  let preferred: string[] = listedOn;
+  if (preferred.length === 0) preferred = isClaudeModel(modelId) ? ["anthropic_messages"] : [];
+  const ordered = [
+    ...formats.filter((format) => preferred.includes(format)),
+    ...formats.filter((format) => !preferred.includes(format)),
+  ];
+  return ordered.flatMap((format) => {
+    const url = endpoint.baseUrls.find((entry) => entry.format === format)?.url;
+    return url === undefined ? [] : [{ format, baseUrl: url.replace(/\/+$/, "") }];
+  });
 }
 
 /** 按格式测试的结论换成测试连接的结果；没收到响应的是连不上。 */

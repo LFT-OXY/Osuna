@@ -1414,3 +1414,66 @@ describe("API endpoint model settings (apiEndpointManagement)", () => {
     }
   });
 });
+
+describe("provider.api_endpoint.test_models", () => {
+  it("parses a whole-endpoint request and a single-model request with a method", () => {
+    const whole = {
+      type: "provider.api_endpoint.test_models.request" as const,
+      requestId: "req-t1",
+      endpointId: "ep_1",
+    };
+    expect(SessionInboundMessageSchema.parse(whole)).toEqual(whole);
+    const one = { ...whole, modelId: "glm-5", method: "a_future_method" };
+    expect(SessionInboundMessageSchema.parse(one)).toEqual(one);
+  });
+
+  it("parses progress and the response, with error codes and formats the client has never seen", () => {
+    const passed = {
+      modelId: "glm-5",
+      ok: true,
+      format: "openai_chat",
+      status: 200,
+      durationMs: 412,
+      error: null,
+    };
+    const failed = {
+      modelId: "kimi-k2",
+      ok: false,
+      format: "a_future_format",
+      status: null,
+      durationMs: 20_000,
+      error: { code: "a_future_code", message: "No response within 20s" },
+    };
+    const disabled = {
+      modelId: "gpt-5-preview",
+      ok: false,
+      format: null,
+      status: null,
+      durationMs: 0,
+      error: {
+        code: "model_disabled",
+        params: { model: "gpt-5-preview", pattern: "*-preview" },
+        message: "disabled",
+      },
+    };
+    const progress = {
+      type: "provider.api_endpoint.test_models.progress" as const,
+      payload: { requestId: "req-t1", result: failed, done: 2, total: 3 },
+    };
+    expect(SessionOutboundMessageSchema.parse(progress)).toEqual(progress);
+    const response = {
+      type: "provider.api_endpoint.test_models.response" as const,
+      payload: { requestId: "req-t1", results: [passed, failed, disabled], error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const cancelled = {
+      type: "provider.api_endpoint.test_models.response" as const,
+      payload: {
+        requestId: "req-t1",
+        results: [passed],
+        error: { code: "cancelled", message: "Request cancelled" },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(cancelled)).toEqual(cancelled);
+  });
+});
