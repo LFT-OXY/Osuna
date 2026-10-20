@@ -91,6 +91,7 @@ import { useToast } from "@/contexts/toast-context";
 import { logicMapToggleReservedWidth, LogicMapComposerToggle } from "@/logic-map/composer-toggle";
 import {
   useLogicMapToolsUnavailableReason,
+  type LogicMapToolsTarget,
   type LogicMapToolsUnavailableReason,
 } from "@/logic-map/osuna-tools-availability";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -318,6 +319,24 @@ interface RenderLeftContentArgs {
   logicMapToolsUnavailableReason: LogicMapToolsUnavailableReason | null;
   /** 输入框外框；逻辑图的选择弹层开在它上方。 */
   messageInputContainerRef: React.RefObject<View | null>;
+}
+
+interface LogicMapToolsTargetInput {
+  serverId: string;
+  agentId: string;
+  agentControls: DraftAgentControlsProps | undefined;
+}
+
+/** 草稿按所选 provider 的预测判定 Osuna 工具，运行中的 Agent 按 daemon 对会话的判定。 */
+function resolveLogicMapToolsTarget(input: LogicMapToolsTargetInput): LogicMapToolsTarget {
+  if (input.agentControls) {
+    return {
+      kind: "draft",
+      providerEntries: input.agentControls.providerEntries,
+      selectedProvider: input.agentControls.selectedProvider,
+    };
+  }
+  return { kind: "agent", serverId: input.serverId, agentId: input.agentId };
 }
 
 function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): ReactElement | null {
@@ -2449,13 +2468,7 @@ function ComposerContentImpl({
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
   const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
   const logicMapToolsUnavailableReason = useLogicMapToolsUnavailableReason(
-    agentControls
-      ? {
-          kind: "draft",
-          providerEntries: agentControls.providerEntries,
-          selectedProvider: agentControls.selectedProvider,
-        }
-      : { kind: "agent", serverId, agentId },
+    resolveLogicMapToolsTarget({ serverId, agentId, agentControls }),
   );
   const messageInputContainerRef = useRef<View>(null);
   const leftContent = useMemo(

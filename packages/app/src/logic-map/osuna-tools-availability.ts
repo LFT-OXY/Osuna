@@ -1,6 +1,9 @@
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { useShallow } from "zustand/shallow";
-import type { CreateAgentsVerdict } from "@/hooks/use-agent-autocomplete";
+import {
+  resolveDraftCreateAgentsVerdict,
+  type CreateAgentsVerdict,
+} from "@/hooks/use-agent-autocomplete";
 import { useSessionStore } from "@/stores/session-store";
 
 /** 逻辑图读写靠的 Osuna 工具没送到会话的原因；与 daemon 不发说明块的判定一致。 */
@@ -62,11 +65,8 @@ export function useLogicMapToolsUnavailableReason(
     }),
   );
   if (target.kind === "agent") return resolveLogicMapToolsUnavailableReason(agentVerdict);
-  const entry = target.providerEntries.find(
-    (candidate) => candidate.provider === target.selectedProvider,
+  if (target.selectedProvider === null) return null;
+  return resolveLogicMapToolsUnavailableReason(
+    resolveDraftCreateAgentsVerdict(target.providerEntries, target.selectedProvider),
   );
-  return resolveLogicMapToolsUnavailableReason({
-    canCreateAgents: entry?.canCreateAgents,
-    unavailableReason: entry?.createAgentsUnavailableReason,
-  });
 }

@@ -4195,16 +4195,13 @@ export const fr: TranslationResources = {
       hostOutdated: "Mettez à jour Osuna sur cet hôte",
       hostOutdatedDetail: "Mettez à jour Osuna sur cet hôte pour utiliser la carte logique.",
       failed: "Impossible de modifier la carte logique : {{error}}",
-      toolsNotInjected: "Les outils Osuna sont désactivés",
       toolsNotInjectedDetail:
         "La carte logique a besoin des outils Osuna. Activez-les dans Réglages → Host → Agents, puis rechargez cet agent.",
       toolsNotInjectedDraftDetail:
         "La carte logique a besoin des outils Osuna. Activez-les dans Réglages → Host → Agents.",
       openAgentsSettings: "Ouvrir les réglages",
-      mcpDisabled: "MCP est désactivé sur cet hôte",
       mcpDisabledDetail:
         "La carte logique a besoin des outils Osuna, que cet hôte ne peut pas fournir tant que MCP est désactivé.",
-      toolsNotDelivered: "Pas d’outils Osuna pour cet agent",
       toolsNotDeliveredDetail:
         "La carte logique a besoin des outils Osuna, et cet agent ne peut pas les appeler.",
     },

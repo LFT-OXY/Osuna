@@ -4227,16 +4227,13 @@ export const en = {
       hostOutdated: "Update Osuna on this host",
       hostOutdatedDetail: "Update Osuna on this host to use the logic map.",
       failed: "Could not change the logic map: {{error}}",
-      toolsNotInjected: "Osuna tools are off",
       toolsNotInjectedDetail:
         "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents, then reload this agent.",
       toolsNotInjectedDraftDetail:
         "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents.",
       openAgentsSettings: "Open settings",
-      mcpDisabled: "MCP is off on this host",
       mcpDisabledDetail:
         "The logic map needs Osuna tools, which this host can't provide while MCP is turned off.",
-      toolsNotDelivered: "No Osuna tools for this agent",
       toolsNotDeliveredDetail: "The logic map needs Osuna tools, and this agent can't call them.",
     },
     picker: {

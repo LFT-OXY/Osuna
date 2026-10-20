@@ -4159,16 +4159,13 @@ export const ptBR: TranslationResources = {
       hostOutdated: "Atualize o Osuna neste host",
       hostOutdatedDetail: "Atualize o Osuna neste host para usar o mapa lógico.",
       failed: "Não foi possível alterar o mapa lógico: {{error}}",
-      toolsNotInjected: "As ferramentas do Osuna estão desligadas",
       toolsNotInjectedDetail:
         "O mapa lógico precisa das ferramentas do Osuna. Ative-as em Configurações → Host → Agentes e recarregue este agente.",
       toolsNotInjectedDraftDetail:
         "O mapa lógico precisa das ferramentas do Osuna. Ative-as em Configurações → Host → Agentes.",
       openAgentsSettings: "Abrir configurações",
-      mcpDisabled: "O MCP está desligado neste host",
       mcpDisabledDetail:
         "O mapa lógico precisa das ferramentas do Osuna, e este host não consegue fornecê-las com o MCP desligado.",
-      toolsNotDelivered: "Este agente não tem as ferramentas do Osuna",
       toolsNotDeliveredDetail:
         "O mapa lógico precisa das ferramentas do Osuna, e este agente não consegue chamá-las.",
     },

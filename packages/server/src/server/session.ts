@@ -8336,9 +8336,17 @@ export class Session {
         providers: this.providerSnapshotManager,
       });
       // 会话拿不到 Osuna 工具时不发说明块，免得要求它用没有的 read_logic_map / update_logic_map。
-      const logicMapBlock = resolvePaseoToolsUnavailableReason(agent.createAgentsCapability)
-        ? null
-        : await resolveLogicMapInstructionBlock({ text, labels: agent.labels, cwd: agent.cwd });
+      const toolsUnavailableReason = resolvePaseoToolsUnavailableReason(
+        agent.createAgentsCapability,
+      );
+      let logicMapBlock: string | null = null;
+      if (toolsUnavailableReason === null) {
+        logicMapBlock = await resolveLogicMapInstructionBlock({
+          text,
+          labels: agent.labels,
+          cwd: agent.cwd,
+        });
+      }
       if (logicMapBlock) await markLogicMapBriefed(this.agentManager, agent);
       const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
       return blocks.length > 0 ? blocks.join("\n\n") : null;

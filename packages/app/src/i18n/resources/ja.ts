@@ -4145,16 +4145,13 @@ export const ja: TranslationResources = {
       hostOutdated: "このホストの Osuna を更新してください",
       hostOutdatedDetail: "ロジックマップを使うには、このホストの Osuna を更新してください。",
       failed: "ロジックマップを切り替えられませんでした: {{error}}",
-      toolsNotInjected: "Osuna ツールがオフです",
       toolsNotInjectedDetail:
         "ロジックマップには Osuna ツールが必要です。設定 → Host → エージェント でオンにしてから、この Agent を再読み込みしてください。",
       toolsNotInjectedDraftDetail:
         "ロジックマップには Osuna ツールが必要です。設定 → Host → エージェント でオンにしてください。",
       openAgentsSettings: "設定を開く",
-      mcpDisabled: "このホストでは MCP がオフです",
       mcpDisabledDetail:
         "ロジックマップには Osuna ツールが必要ですが、MCP がオフの間はこのホストから提供できません。",
-      toolsNotDelivered: "この Agent は Osuna ツールを使えません",
       toolsNotDeliveredDetail:
         "ロジックマップには Osuna ツールが必要ですが、この Agent はそれを呼び出せません。",
     },

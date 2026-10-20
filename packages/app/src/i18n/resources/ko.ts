@@ -4121,16 +4121,13 @@ export const ko: TranslationResources = {
       hostOutdated: "이 호스트의 Osuna를 업데이트하세요",
       hostOutdatedDetail: "로직 맵을 사용하려면 이 호스트의 Osuna를 업데이트하세요.",
       failed: "로직 맵을 전환할 수 없습니다: {{error}}",
-      toolsNotInjected: "Osuna 도구가 꺼져 있습니다",
       toolsNotInjectedDetail:
         "로직 맵에는 Osuna 도구가 필요합니다. 설정 → Host → 에이전트에서 켠 다음 이 Agent를 다시 불러오세요.",
       toolsNotInjectedDraftDetail:
         "로직 맵에는 Osuna 도구가 필요합니다. 설정 → Host → 에이전트에서 켜세요.",
       openAgentsSettings: "설정 열기",
-      mcpDisabled: "이 호스트에서 MCP가 꺼져 있습니다",
       mcpDisabledDetail:
         "로직 맵에는 Osuna 도구가 필요하지만, MCP가 꺼져 있는 동안 이 호스트는 제공할 수 없습니다.",
-      toolsNotDelivered: "이 Agent는 Osuna 도구를 쓸 수 없습니다",
       toolsNotDeliveredDetail:
         "로직 맵에는 Osuna 도구가 필요하지만, 이 Agent는 호출할 수 없습니다.",
     },

@@ -358,7 +358,10 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       await expectComposerVisible(page);
 
       const hint = toolsUnavailableHint(page);
-      await expect(hint).toContainText("Osuna tools are off", { timeout: 30_000 });
+      await expect(hint.getByTestId("composer-logic-map-tools-unavailable-action")).toHaveText(
+        "Open settings",
+        { timeout: 30_000 },
+      );
       await expect(
         hint.getByTestId("composer-logic-map-tools-unavailable-reason"),
       ).toHaveAccessibleName(
@@ -398,7 +401,7 @@ test.describe("Logic map toggle in the composer toolbar", () => {
 
       await withOsunaToolsOff(async () => {
         const hint = toolsUnavailableHint(page);
-        await expect(hint).toContainText("Osuna tools are off", { timeout: 30_000 });
+        await expect(hint).toBeVisible({ timeout: 30_000 });
         await expect(
           hint.getByTestId("composer-logic-map-tools-unavailable-reason"),
         ).toHaveAccessibleName(

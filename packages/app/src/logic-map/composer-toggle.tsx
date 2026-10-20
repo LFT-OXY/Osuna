@@ -27,14 +27,16 @@ import type { LogicMapToolsUnavailableReason } from "./osuna-tools-availability"
 const LOGIC_MAP_TOGGLE_RESERVED_WIDTH = 140;
 /** 老主机时那一行是图标、"逻辑图"加整句"需要更新这台主机上的 Osuna"，要预留整句的宽度。 */
 const LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH = 300;
-/** Osuna 工具不可用时开关后面多出警告图标、原因和"去开启"按钮。 */
-const LOGIC_MAP_TOOLS_UNAVAILABLE_EXTRA_WIDTH = 260;
+/** Osuna 工具不可用时开关后面多出警告图标和"去开启"按钮（英文"Open settings"最长）。 */
+const LOGIC_MAP_TOOLS_UNAVAILABLE_EXTRA_WIDTH = 130;
 
-/** Agent controls 收缩时给逻辑图控件预留的宽度；主机太旧或工具不可用时提示比开关长得多。 */
-export function logicMapToggleReservedWidth(input: {
+interface LogicMapReservedWidthInput {
   supported: boolean | null;
   toolsUnavailable: boolean;
-}): number {
+}
+
+/** Agent controls 收缩时给逻辑图控件预留的宽度；主机太旧或工具不可用时要多留位置。 */
+export function logicMapToggleReservedWidth(input: LogicMapReservedWidthInput): number {
   if (input.supported === false) return LOGIC_MAP_HOST_OUTDATED_RESERVED_WIDTH;
   return input.toolsUnavailable
     ? LOGIC_MAP_TOGGLE_RESERVED_WIDTH + LOGIC_MAP_TOOLS_UNAVAILABLE_EXTRA_WIDTH
@@ -104,12 +106,6 @@ export function LogicMapComposerToggle(props: LogicMapComposerToggleProps) {
   );
 }
 
-const TOOLS_UNAVAILABLE_MESSAGE_KEYS = {
-  tools_not_injected: "logicMap.toggle.toolsNotInjected",
-  mcp_disabled: "logicMap.toggle.mcpDisabled",
-  tools_not_delivered: "logicMap.toggle.toolsNotDelivered",
-} as const satisfies Record<LogicMapToolsUnavailableReason, string>;
-
 /** 说明全文：运行中的 Agent 开启后要重新加载才拿得到工具，草稿新建时就能拿到。 */
 function toolsUnavailableDetailKey(reason: LogicMapToolsUnavailableReason, isDraft: boolean) {
   if (reason === "tools_not_injected") {
@@ -122,16 +118,21 @@ function toolsUnavailableDetailKey(reason: LogicMapToolsUnavailableReason, isDra
     : "logicMap.toggle.toolsNotDeliveredDetail";
 }
 
-/** 开关后面的警告：短原因常显，全文在悬停提示与读屏文字里；能在设置里打开的给"去开启"。 */
+interface LogicMapToolsUnavailableHintProps {
+  serverId: string;
+  reason: LogicMapToolsUnavailableReason;
+  isDraft: boolean;
+}
+
+/**
+ * 开关后面的警告图标，原因全文在悬停提示与读屏文字里，不挤占 Agent controls；
+ * 能在设置里打开的再跟一个"去开启"。
+ */
 function LogicMapToolsUnavailableHint({
   serverId,
   reason,
   isDraft,
-}: {
-  serverId: string;
-  reason: LogicMapToolsUnavailableReason;
-  isDraft: boolean;
-}) {
+}: LogicMapToolsUnavailableHintProps) {
   const { t } = useTranslation();
   const { glyphSize } = useComposerControlLayout();
   const detail = t(toolsUnavailableDetailKey(reason, isDraft));
@@ -140,11 +141,11 @@ function LogicMapToolsUnavailableHint({
     [serverId],
   );
   return (
-    <View style={styles.hint} testID="composer-logic-map-tools-unavailable">
-      <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-        <TooltipTrigger asChild triggerRefProp="ref">
+    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <View style={styles.hint} testID="composer-logic-map-tools-unavailable">
           <View
-            style={styles.hintReason}
+            style={styles.hintIcon}
             accessible
             accessibilityLabel={detail}
             testID="composer-logic-map-tools-unavailable-reason"
@@ -152,26 +153,23 @@ function LogicMapToolsUnavailableHint({
             <ComposerToolbarGlyph size={glyphSize}>
               <ThemedWarningIcon size={glyphSize} uniProps={warningIconMapping} />
             </ComposerToolbarGlyph>
-            <UiText variant="label" color="foregroundMuted" numberOfLines={1}>
-              {t(TOOLS_UNAVAILABLE_MESSAGE_KEYS[reason])}
-            </UiText>
           </View>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center" offset={8}>
-          <Text style={styles.tooltipText}>{detail}</Text>
-        </TooltipContent>
-      </Tooltip>
-      {reason === "tools_not_injected" ? (
-        <Button
-          variant="outline"
-          size="xs"
-          onPress={openAgentsSettings}
-          testID="composer-logic-map-tools-unavailable-action"
-        >
-          {t("logicMap.toggle.openAgentsSettings")}
-        </Button>
-      ) : null}
-    </View>
+          {reason === "tools_not_injected" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={openAgentsSettings}
+              testID="composer-logic-map-tools-unavailable-action"
+            >
+              {t("logicMap.toggle.openAgentsSettings")}
+            </Button>
+          ) : null}
+        </View>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{detail}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -448,14 +446,11 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
-    paddingRight: theme.spacing[2],
-  },
-  hintReason: {
-    height: theme.controlHeight.md,
-    flexDirection: "row",
-    alignItems: "center",
     gap: theme.spacing[1],
+  },
+  hintIcon: {
+    height: theme.controlHeight.md,
+    justifyContent: "center",
   },
   control: {
     height: theme.controlHeight.md,

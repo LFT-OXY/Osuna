@@ -4165,16 +4165,13 @@ export const ru: TranslationResources = {
       hostOutdated: "Обновите Osuna на этом хосте",
       hostOutdatedDetail: "Обновите Osuna на этом хосте, чтобы пользоваться логической картой.",
       failed: "Не удалось переключить логическую карту: {{error}}",
-      toolsNotInjected: "Инструменты Osuna выключены",
       toolsNotInjectedDetail:
         "Логической карте нужны инструменты Osuna. Включите их в Настройки → Host → Агенты, затем перезагрузите этого агента.",
       toolsNotInjectedDraftDetail:
         "Логической карте нужны инструменты Osuna. Включите их в Настройки → Host → Агенты.",
       openAgentsSettings: "Открыть настройки",
-      mcpDisabled: "MCP на этом хосте выключен",
       mcpDisabledDetail:
         "Логической карте нужны инструменты Osuna, а этот хост не может их дать, пока MCP выключен.",
-      toolsNotDelivered: "У этого агента нет инструментов Osuna",
       toolsNotDeliveredDetail:
         "Логической карте нужны инструменты Osuna, а этот агент не может их вызывать.",
     },
