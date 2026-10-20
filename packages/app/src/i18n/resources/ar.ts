@@ -2710,7 +2710,8 @@ export const ar: TranslationResources = {
       models: {
         title: "النماذج",
         count: "المحدد {{selected}} / الإجمالي {{total}}",
-        fetchedAt: "جُلبت {{time}}",
+        fetchedJustNow: "جُلبت للتو",
+        fetchedAgo: "جُلبت {{time}}",
         refetch: "الجلب مجددًا",
         forget: "مسح القائمة المجلوبة",
         forgetting: "جارٍ المسح…",

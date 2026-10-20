@@ -2748,7 +2748,8 @@ export const ru: TranslationResources = {
       models: {
         title: "Модели",
         count: "Выбрано {{selected}} из {{total}}",
-        fetchedAt: "Получено {{time}}",
+        fetchedJustNow: "Получен только что",
+        fetchedAgo: "Получен {{time}}",
         refetch: "Получить заново",
         forget: "Сбросить полученный список",
         forgetting: "Сброс…",

@@ -2741,7 +2741,8 @@ export const ja: TranslationResources = {
       models: {
         title: "モデル",
         count: "選択 {{selected}} / 全 {{total}}",
-        fetchedAt: "取得: {{time}}",
+        fetchedJustNow: "たった今取得",
+        fetchedAgo: "{{time}}に取得",
         refetch: "再取得",
         forget: "取得したリストを破棄",
         forgetting: "破棄中…",

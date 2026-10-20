@@ -2727,7 +2727,8 @@ export const ko: TranslationResources = {
       models: {
         title: "모델",
         count: "{{selected}}개 선택 / 전체 {{total}}개",
-        fetchedAt: "{{time}} 가져옴",
+        fetchedJustNow: "방금 가져옴",
+        fetchedAgo: "{{time}} 가져옴",
         refetch: "다시 가져오기",
         forget: "가져온 목록 버리기",
         forgetting: "버리는 중…",

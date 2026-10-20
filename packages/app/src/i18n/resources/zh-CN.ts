@@ -2735,7 +2735,8 @@ export const zhCN: TranslationResources = {
       models: {
         title: "模型",
         count: "已选 {{selected}} / 共 {{total}}",
-        fetchedAt: "拉取于 {{time}}",
+        fetchedJustNow: "刚刚拉取",
+        fetchedAgo: "{{time}}拉取",
         refetch: "重新拉取",
         forget: "丢掉拉回的清单",
         forgetting: "正在丢掉…",

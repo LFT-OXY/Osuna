@@ -2754,7 +2754,8 @@ export const ptBR: TranslationResources = {
       models: {
         title: "Modelos",
         count: "{{selected}} selecionados / {{total}} no total",
-        fetchedAt: "Obtidos {{time}}",
+        fetchedJustNow: "Obtida agora mesmo",
+        fetchedAgo: "Obtida {{time}}",
         refetch: "Obter de novo",
         forget: "Descartar lista obtida",
         forgetting: "Descartando…",

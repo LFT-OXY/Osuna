@@ -45,7 +45,8 @@ export class CatalogRefreshSchedule {
     signal: AbortSignal,
   ) => Promise<CatalogRefreshOutcome>;
   private readonly timers: UsagePricingTimers;
-  private readonly failedAt = new Map<string, number>();
+  // 每家最近一次开始拉的时刻（照 magpie autolist.go 先记 listsTried 再拉）；拉成后去掉。
+  private readonly triedAt = new Map<string, number>();
   private readonly stopped = new AbortController();
   private cancelPendingCheck: (() => void) | null = null;
 
@@ -93,11 +94,24 @@ export class CatalogRefreshSchedule {
       const fetchedAt =
         candidate.fetchedAt === undefined ? Number.NaN : Date.parse(candidate.fetchedAt);
       if (Number.isFinite(fetchedAt) && now - fetchedAt < REFRESH_EVERY_MS) continue;
-      const failedAt = this.failedAt.get(candidate.id);
-      if (failedAt !== undefined && now - failedAt < LIST_RETRY_MS) continue;
-      const outcome = await this.refresh(candidate.id, this.stopped.signal);
-      if (outcome === "failed") this.failedAt.set(candidate.id, now);
-      else this.failedAt.delete(candidate.id);
+      const triedAt = this.triedAt.get(candidate.id);
+      if (triedAt !== undefined && now - triedAt < LIST_RETRY_MS) continue;
+      this.triedAt.set(candidate.id, now);
+      const outcome = await this.refreshOne(candidate.id);
+      if (outcome === "listed") this.triedAt.delete(candidate.id);
+    }
+  }
+
+  /**
+   * 一家的边界：上游失败 refresh 自己回 failed；意料之外的错（如写清单 EACCES）在这里记日志、算作失败，
+   * 不挡后面的接口，也照样等过重试间隔再拉。
+   */
+  private async refreshOne(endpointId: string): Promise<CatalogRefreshOutcome> {
+    try {
+      return await this.refresh(endpointId, this.stopped.signal);
+    } catch (error) {
+      this.logger.error({ err: error, endpointId }, "Failed to refresh a model list");
+      return "failed";
     }
   }
 }

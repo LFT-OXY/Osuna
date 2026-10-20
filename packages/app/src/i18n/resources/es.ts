@@ -2769,7 +2769,8 @@ export const es: TranslationResources = {
       models: {
         title: "Modelos",
         count: "{{selected}} seleccionados / {{total}} en total",
-        fetchedAt: "Obtenidos {{time}}",
+        fetchedJustNow: "Obtenida ahora mismo",
+        fetchedAgo: "Obtenida {{time}}",
         refetch: "Volver a obtener",
         forget: "Descartar la lista obtenida",
         forgetting: "Descartando…",

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   Pressable,
   ScrollView,
@@ -36,7 +37,7 @@ import {
 } from "./internal/endpoint-models";
 import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
-import { agoOf } from "./reopen-hints-copy";
+import { relativeAgo } from "./reopen-hints-copy";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 
 /*
@@ -260,11 +261,18 @@ function ModelsCaption({
       numberOfLines={1}
       testID="api-endpoint-models-fetched-at"
     >
-      {t("settings.apiEndpoints.models.fetchedAt", {
-        time: agoOf({ t, since: new Date(fetchedAt), now, locale: i18n.language }),
+      {fetchedCopy({
+        t,
+        ago: relativeAgo({ since: new Date(fetchedAt), now, locale: i18n.language }),
       })}
     </Text>
   );
+}
+
+/** 每种语言一整句：「刚刚拉取」「5分钟前拉取」，不是前缀拼上「刚刚」。 */
+function fetchedCopy(input: { t: TFunction; ago: string | null }): string {
+  if (input.ago === null) return input.t("settings.apiEndpoints.models.fetchedJustNow");
+  return input.t("settings.apiEndpoints.models.fetchedAgo", { time: input.ago });
 }
 
 /** 一行：重新拉取、手动添加，次要的「丢掉拉回的清单」在 ⋯ 菜单里；窄窗口两个按钮只留图标。 */

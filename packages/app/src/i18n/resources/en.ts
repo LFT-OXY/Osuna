@@ -2778,7 +2778,8 @@ export const en = {
       models: {
         title: "Models",
         count: "{{selected}} selected / {{total}} total",
-        fetchedAt: "Fetched {{time}}",
+        fetchedJustNow: "Fetched just now",
+        fetchedAgo: "Fetched {{time}}",
         refetch: "Fetch again",
         forget: "Forget fetched list",
         forgetting: "Forgetting…",

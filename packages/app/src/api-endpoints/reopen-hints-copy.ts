@@ -55,12 +55,17 @@ export function describeReopenHints(input: ReopenHintsCopyInput): ReopenHintsCop
 
 /** 「3 小时前」「昨天」，按看的人的语言（magpie 的 ago）。 */
 export function agoOf(input: { t: TFunction; since: Date; now: Date; locale: string }): string {
+  return relativeAgo(input) ?? input.t(`${KEY}.justNow`);
+}
+
+/** 「3 小时前」「昨天」（Intl，按看的人的语言）；不到一分钟为 null，由调用方写自己的「刚刚」整句。 */
+export function relativeAgo(input: { since: Date; now: Date; locale: string }): string | null {
   const seconds = (input.since.getTime() - input.now.getTime()) / 1000;
   const format = new Intl.RelativeTimeFormat(input.locale, { numeric: "auto" });
   for (const [unit, size] of AGO_UNITS) {
     if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
   }
-  return input.t(`${KEY}.justNow`);
+  return null;
 }
 
 const AGO_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
