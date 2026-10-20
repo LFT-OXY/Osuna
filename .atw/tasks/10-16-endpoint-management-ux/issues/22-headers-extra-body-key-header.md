@@ -10,7 +10,7 @@
 
 **Blocked by:** 19
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：用户头覆盖认证头、`anthropic-beta` 合并；拉模型、测试连接、测试模型也带这些头。
 - [ ] 端到端：附加请求体的补字段与 `!` 覆盖、`${sessionId}` 同一对话每轮相同；含保留字段时保存被拒并给原因。
