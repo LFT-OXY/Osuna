@@ -4,13 +4,14 @@ import {
   afterProgress,
   afterResponse,
   contextTag,
-  keepIdWhole,
+  splitAroundId,
   filterModelIds,
   isNamedFree,
   offersFreeOnly,
   startTests,
   testSummary,
   testTook,
+  wasAsked,
   type ModelTests,
 } from "./model-tests";
 
@@ -128,11 +129,36 @@ describe("filterModelIds", () => {
   });
 });
 
-describe("keepIdWhole", () => {
-  it("keeps a model id from breaking at its hyphens and leaves the rest alone", () => {
-    expect(keepIdWhole({ text: "The model bad-model does not exist", id: "bad-model" })).toBe(
-      "The model bad\u2011model does not exist",
-    );
-    expect(keepIdWhole({ text: "rate-limited", id: "gpt5" })).toBe("rate-limited");
+describe("splitAroundId", () => {
+  it("cuts the text around the model id and keeps every character as sent", () => {
+    const text = "The model bad-model does not exist";
+    const pieces = splitAroundId({ text, id: "bad-model" });
+    expect(pieces).toEqual([
+      { text: "The model ", isId: false, offset: 0 },
+      { text: "bad-model", isId: true, offset: 10 },
+      { text: " does not exist", isId: false, offset: 19 },
+    ]);
+    expect(pieces.map((piece) => piece.text).join("")).toBe(text);
+    expect(splitAroundId({ text: "rate limited", id: "gpt-5" })).toEqual([
+      { text: "rate limited", isId: false, offset: 0 },
+    ]);
+  });
+});
+
+describe("wasAsked", () => {
+  it("is true only for a result that sent a request", () => {
+    expect(wasAsked(result("a", true))).toBe(true);
+    expect(wasAsked(result("b", false))).toBe(true);
+    for (const code of ["model_disabled", "no_format", "batch_timeout"]) {
+      const unsent = {
+        modelId: "c",
+        ok: false,
+        format: null,
+        status: null,
+        durationMs: 0,
+        error: { code, message: "" },
+      };
+      expect(wasAsked(unsent)).toBe(false);
+    }
   });
 });

@@ -7,6 +7,7 @@ import {
 } from "@getpaseo/client/internal/daemon-client";
 import type { ApiEndpointModelTestResult } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { toErrorMessage } from "@/utils/error-messages";
 import {
   afterProgress,
   afterResponse,
@@ -58,12 +59,17 @@ interface RunInput {
   setRun: SetRun;
 }
 
-/** 请 daemon 停下还在测的；连接已断时 daemon 那边已随连接一起取消。 */
+/**
+ * 请 daemon 停下还在测的。只有连接已断开时不算失败：daemon 那边已随连接一起取消了。
+ * 取消请求超时等别的错误照抛，由调用方显示出来。
+ */
 async function cancelOnHost(input: { client: DaemonClient; requestId: string }): Promise<void> {
   try {
     await input.client.apiEndpointCancel(input.requestId);
   } catch (error) {
-    if (!(error instanceof DaemonConnectionError)) throw error;
+    const isConnectionGone =
+      error instanceof DaemonConnectionError && error.code === "DAEMON_CONNECTION_LOST";
+    if (!isConnectionGone) throw error;
   }
 }
 
@@ -133,7 +139,14 @@ export function useModelTests(input: {
       const requestId = createUpstreamRequestId();
       runningRef.current = requestId;
       setRun({ status: "running", requestId, done: 0, total: null, isCancelling: false });
-      void runTests({ client, endpointId, modelId, requestId, runningRef, setTests, setRun });
+      // 没料到的错误也落在这一批的失败状态里，不留成没人接的 rejection。
+      const showFailure = (error: unknown) => {
+        runningRef.current = null;
+        setRun({ status: "failed", message: toErrorMessage(error) });
+      };
+      void runTests({ client, endpointId, modelId, requestId, runningRef, setTests, setRun }).catch(
+        showFailure,
+      );
     },
     [client, endpointId],
   );
@@ -146,7 +159,9 @@ export function useModelTests(input: {
     if (!client || requestId === null) return;
     setRun((previous) => runningWith(previous, { isCancelling: true }));
     // daemon 那边已测完时照常回结果。
-    void cancelOnHost({ client, requestId });
+    const showFailure = (error: unknown) =>
+      setRun({ status: "failed", message: toErrorMessage(error) });
+    void cancelOnHost({ client, requestId }).catch(showFailure);
   }, [client]);
 
   // 离开页面：结果随组件丢掉，还在测的请 daemon 停下。
@@ -154,7 +169,11 @@ export function useModelTests(input: {
     () => () => {
       const requestId = runningRef.current;
       runningRef.current = null;
-      if (client && requestId !== null) void cancelOnHost({ client, requestId });
+      if (!client || requestId === null) return;
+      // 页面已经没了，没有地方显示：记到控制台。
+      const report = (error: unknown) =>
+        console.error("[api-endpoints] Couldn't cancel the model test", error);
+      void cancelOnHost({ client, requestId }).catch(report);
     },
     [client],
   );

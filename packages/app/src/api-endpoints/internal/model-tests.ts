@@ -104,8 +104,28 @@ export function filterModelIds(input: {
   });
 }
 
-/** 把文字里的模型名的连字符换成不折行的连字符，免得行尾把 bad-model 折成 bad- 与 model。 */
-export function keepIdWhole(input: { text: string; id: string }): string {
-  if (!input.id.includes("-")) return input.text;
-  return input.text.replaceAll(input.id, input.id.replaceAll("-", "\u2011"));
+/** 真的向上游发过请求：已禁用、没有能问它的地址、整批到点前没轮到的都没有格式，也就没有耗时可说。 */
+export function wasAsked(result: ApiEndpointModelTestResult): boolean {
+  return result.format !== null;
+}
+
+/** 把文字按模型名切开（原文不改，复制出来一字不差）；isId 的那段在界面上不折行。offset 是这段在原文里的位置。 */
+export function splitAroundId(input: {
+  text: string;
+  id: string;
+}): { text: string; isId: boolean; offset: number }[] {
+  const { text, id } = input;
+  const pieces: { text: string; isId: boolean; offset: number }[] = [];
+  let offset = 0;
+  while (offset < text.length) {
+    const found = id === "" ? -1 : text.indexOf(id, offset);
+    if (found === -1) {
+      pieces.push({ text: text.slice(offset), isId: false, offset });
+      break;
+    }
+    if (found > offset) pieces.push({ text: text.slice(offset, found), isId: false, offset });
+    pieces.push({ text: id, isId: true, offset: found });
+    offset = found + id.length;
+  }
+  return pieces;
 }

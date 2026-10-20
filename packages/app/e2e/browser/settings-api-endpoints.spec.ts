@@ -1864,9 +1864,9 @@ test.describe("Settings API endpoints", () => {
         /^Anthropic · \d+ ms$/,
       );
       await expect(dot("bad-model", "failed")).toBeVisible();
-      // 照 magpie：「格式 · 状态码 · 原因」，不露地址；模型名不在连字符处折行。
+      // 照 magpie：「格式 · 状态码 · 原因」，不露地址；原因与上游原文一字不差。
       await expect(page.getByTestId("api-endpoint-model-test-reason-bad-model")).toHaveText(
-        "Anthropic · 404 · The model bad\u2011model does not exist",
+        "Anthropic · 404 · The model bad-model does not exist",
       );
       expect([...new Set(asked())].sort()).toEqual(["bad-model", "lite:free", "relay-ok"]);
       await expect(page.getByTestId("api-endpoint-model-free-lite:free")).toHaveText("Free");

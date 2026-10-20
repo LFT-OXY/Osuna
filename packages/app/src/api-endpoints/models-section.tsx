@@ -49,9 +49,10 @@ import {
   filterModelIds,
   hasFinishedTests,
   isNamedFree,
-  keepIdWhole,
   offersFreeOnly,
+  splitAroundId,
   testTook,
+  wasAsked,
   type ModelTestState,
   type ModelTests,
 } from "./internal/model-tests";
@@ -934,17 +935,7 @@ function ModelTestBelow({
   return (
     <View style={styles.modelBelow}>
       {isCompact ? <ModelTestMark modelId={modelId} state={state} /> : null}
-      {reason !== null ? (
-        <Text
-          variant="caption"
-          color="statusDanger"
-          numberOfLines={2}
-          selectable
-          testID={`api-endpoint-model-test-reason-${modelId}`}
-        >
-          {reason}
-        </Text>
-      ) : null}
+      {reason !== null ? <ReasonText modelId={modelId} reason={reason} /> : null}
     </View>
   );
 }
@@ -960,15 +951,9 @@ function ModelTestMark({ modelId, state }: { modelId: string; state: ModelTestSt
   let dotKind = "testing";
   if (state.status === "done") {
     const { result } = state;
-    const isDisabled = result.error?.code === "model_disabled";
-    const took = testTook(result.durationMs);
-    const tookText = t(`${key}.took.${took.unit}`, { value: took.value });
     dotStyle = result.ok ? styles.dotOk : styles.dotFailed;
     dotKind = result.ok ? "ok" : "failed";
-    // 答上的写走的格式与耗时；失败的格式与状态码在原因那一行（照 magpie），这里只写耗时。
-    const formatText = result.ok && result.format !== null ? formatLabel(t, result.format) : null;
-    const parts = isDisabled ? [t(`${key}.disabled`)] : [formatText, tookText];
-    text = parts.filter((part) => part !== null).join(" · ");
+    text = markText({ t, result });
   }
   return (
     <View style={styles.testMark} testID={`api-endpoint-model-test-${modelId}`}>
@@ -1006,10 +991,54 @@ function failureCause(t: TFunction, result: ApiEndpointModelTestResult): string 
 /** 失败行的原因（照 magpie）：「格式 · 状态码 · 原因」，没发请求的只写原因；模型名不在连字符处折行。 */
 function failureReason(input: { t: TFunction; result: ApiEndpointModelTestResult }): string {
   const { t, result } = input;
-  const formatText = result.format === null ? null : formatLabel(t, result.format);
-  const statusText = result.status === null ? null : String(result.status);
-  const cause = keepIdWhole({ text: failureCause(t, result), id: result.modelId });
-  return [formatText, statusText, cause].filter((part) => part !== null).join(" · ");
+  const parts: string[] = [];
+  if (result.format !== null) parts.push(formatLabel(t, result.format));
+  if (result.status !== null) parts.push(String(result.status));
+  parts.push(failureCause(t, result));
+  return parts.join(" · ");
+}
+
+/**
+ * 点后面的一句：已禁用就写已禁用；答上的写走的格式（失败的格式与状态码在原因那一行，照 magpie）；
+ * 真发过请求的才写耗时。
+ */
+function markText(input: { t: TFunction; result: ApiEndpointModelTestResult }): string {
+  const { t, result } = input;
+  const key = "settings.apiEndpoints.models.tests";
+  if (result.error?.code === "model_disabled") return t(`${key}.disabled`);
+  const parts: string[] = [];
+  // 只有答上的格式写在这里。
+  const answeredFormat = result.ok ? result.format : null;
+  if (answeredFormat !== null) parts.push(formatLabel(t, answeredFormat));
+  if (wasAsked(result)) {
+    const took = testTook(result.durationMs);
+    parts.push(t(`${key}.took.${took.unit}`, { value: took.value }));
+  }
+  return parts.join(" · ");
+}
+
+/** 原因原文照登（复制出来一字不差）；Web 上模型名整段不折行，原生端照常折。 */
+function ReasonText({ modelId, reason }: { modelId: string; reason: string }) {
+  const pieces = useMemo(() => splitAroundId({ text: reason, id: modelId }), [modelId, reason]);
+  return (
+    <Text
+      variant="caption"
+      color="statusDanger"
+      numberOfLines={2}
+      selectable
+      testID={`api-endpoint-model-test-reason-${modelId}`}
+    >
+      {pieces.map((piece) =>
+        piece.isId ? (
+          <Text key={piece.offset} variant="caption" color="statusDanger" style={styles.keepWhole}>
+            {piece.text}
+          </Text>
+        ) : (
+          <React.Fragment key={piece.offset}>{piece.text}</React.Fragment>
+        ),
+      )}
+    </Text>
+  );
 }
 
 const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
@@ -1363,6 +1392,11 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1.5],
     flexShrink: 0,
+  },
+  keepWhole: {
+    _web: {
+      whiteSpace: "nowrap",
+    },
   },
   dot: {
     width: 8,

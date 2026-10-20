@@ -1,6 +1,7 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/provider/test.go 的 TestModels、testOne）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type {
+  ApiEndpointError,
   ApiEndpointFormatDetection,
   ApiEndpointModelTestResult,
   ApiEndpointRequestFormat,
@@ -79,9 +80,8 @@ function failedResult(input: {
   message: string;
   params?: Record<string, string>;
 }): ApiEndpointModelTestResult {
-  const error = input.params
-    ? { code: input.code, params: input.params, message: input.message }
-    : { code: input.code, message: input.message };
+  const error: ApiEndpointError = { code: input.code, message: input.message };
+  if (input.params) error.params = input.params;
   return {
     modelId: input.modelId,
     ok: false,
