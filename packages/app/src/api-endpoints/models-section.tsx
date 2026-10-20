@@ -10,7 +10,7 @@ import {
   type TextInputKeyPressEventData,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Eraser, Plus, RotateCw, Search } from "lucide-react-native";
+import { Eraser, Plus, RotateCw, Search, SlidersHorizontal } from "lucide-react-native";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
@@ -61,6 +61,8 @@ interface ApiEndpointModelsSectionProps {
   onChange: (next: Pick<ModelSource, "models" | "manualModels">) => void;
   // 一次可加几个（逗号分隔）；返回失败原因，成功为 null；添加行据此收起或留在原处显示原因。
   onAdd: (modelIds: string[]) => Promise<string | null>;
+  // 模型行菜单的「模型设置」；老主机没有，为 null。
+  onOpenSettings: ((modelId: string) => void) | null;
 }
 
 function useFamilyName(): (family: ModelFamilyId) => string {
@@ -82,6 +84,7 @@ export function ApiEndpointModelsSection({
   onForget,
   onChange,
   onAdd,
+  onOpenSettings,
 }: ApiEndpointModelsSectionProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -167,6 +170,7 @@ export function ApiEndpointModelsSection({
           group={active}
           onToggle={handleToggleModel}
           onSelectAll={handleSelectFamily}
+          onOpenSettings={onOpenSettings}
         />
       </View>
     );
@@ -443,10 +447,12 @@ function FamilyModels({
   group,
   onToggle,
   onSelectAll,
+  onOpenSettings,
 }: {
   group: ModelFamilyGroup;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
   onSelectAll: (group: ModelFamilyGroup, selected: boolean) => void;
+  onOpenSettings: ((modelId: string) => void) | null;
 }) {
   const { t } = useTranslation();
   const familyName = useFamilyName();
@@ -481,7 +487,12 @@ function FamilyModels({
       </View>
       <ScrollView style={styles.flex} testID="api-endpoint-family-model-list">
         {group.matches.map((entry) => (
-          <ModelRow key={entry.id} entry={entry} onToggle={onToggle} />
+          <ModelRow
+            key={entry.id}
+            entry={entry}
+            onToggle={onToggle}
+            onOpenSettings={onOpenSettings}
+          />
         ))}
       </ScrollView>
     </View>
@@ -491,9 +502,11 @@ function FamilyModels({
 function ModelRow({
   entry,
   onToggle,
+  onOpenSettings,
 }: {
   entry: ModelEntry;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
+  onOpenSettings: ((modelId: string) => void) | null;
 }) {
   const { t } = useTranslation();
   const handleChange = useCallback((value: boolean) => onToggle(entry, value), [entry, onToggle]);
@@ -523,7 +536,43 @@ function ModelRow({
         accessibilityLabel={t("settings.apiEndpoints.models.modelSwitch", { model: entry.id })}
         testID={`api-endpoint-model-switch-${entry.id}`}
       />
+      {onOpenSettings ? <ModelRowMenu modelId={entry.id} onOpenSettings={onOpenSettings} /> : null}
     </View>
+  );
+}
+
+const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
+
+/** 模型行的 ⋯ 菜单：「模型设置」。 */
+function ModelRowMenu({
+  modelId,
+  onOpenSettings,
+}: {
+  modelId: string;
+  onOpenSettings: (modelId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const handleOpen = useCallback(() => onOpenSettings(modelId), [modelId, onOpenSettings]);
+  const leading = useMemo(
+    () => <ThemedSlidersHorizontal size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  return (
+    <DropdownMenu>
+      <RowActionsMenuTrigger
+        accessibilityLabel={t("settings.apiEndpoints.modelSettings.rowMenu", { model: modelId })}
+        testID={`api-endpoint-model-menu-${modelId}`}
+      />
+      <DropdownMenuContent align="end" width={220}>
+        <DropdownMenuItem
+          leading={leading}
+          onSelect={handleOpen}
+          testID={`api-endpoint-model-settings-open-${modelId}`}
+        >
+          {t("settings.apiEndpoints.modelSettings.menu")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

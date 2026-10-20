@@ -38,7 +38,9 @@ import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/a
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
+import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
 import { ApiEndpointModelScopeSection } from "./model-scope-section";
+import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
 import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { SwitchOffSheet } from "./switch-off-sheet";
@@ -667,6 +669,9 @@ function ApiEndpointDetailSections({
     agents,
     hasManagement,
   });
+  // 开着「模型设置」窗口的模型；关着为 null。
+  const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
+  const closeModelSettings = useCallback(() => setSettingsModelId(null), []);
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
@@ -744,7 +749,24 @@ function ApiEndpointDetailSections({
         onForget={detail.canForgetCatalog ? detail.forgetCatalog : null}
         onChange={detail.changeModels}
         onAdd={detail.addModels}
+        onOpenSettings={hasManagement ? setSettingsModelId : null}
       />
+      {hasManagement ? (
+        <ApiEndpointModelDefaultsSection
+          key={endpoint.id}
+          endpoint={endpoint}
+          onSave={detail.saveModelSettings}
+        />
+      ) : null}
+      {settingsModelId !== null ? (
+        <ApiEndpointModelSettingsSheet
+          key={`${endpoint.id}:${settingsModelId}`}
+          endpoint={endpoint}
+          modelId={settingsModelId}
+          onSave={detail.saveModelSettings}
+          onClose={closeModelSettings}
+        />
+      ) : null}
       <ApiEndpointMappingSection
         models={detail.source.models}
         mapping={detail.modelMapping}

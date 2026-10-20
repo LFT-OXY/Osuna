@@ -986,6 +986,130 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  // 接口管理好用性工单 13：模型行菜单的「模型设置」与详情页的「整家默认」。
+  test("Model settings: the row menu opens it, a failed save or Restore default stays in place, and saving reaches the endpoint", async ({
+    page,
+  }) => {
+    relay.goodModels = ["model-01", "model-02"];
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["model-01"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    host.failing = false;
+    await openEndpointDetail(page, endpointId);
+    const sheet = page.getByTestId("api-endpoint-model-settings");
+    const openSettingsOf = async (modelId: string) => {
+      await page
+        .getByTestId(`api-endpoint-model-menu-${modelId}`)
+        .filter({ visible: true })
+        .click();
+      await page.getByTestId(`api-endpoint-model-settings-open-${modelId}`).click();
+      await expect(sheet).toBeVisible();
+    };
+    const settingsReader = async () => (await endpointOf(endpointId))?.modelSettings;
+
+    await test.step("every item and the CLIs they don't reach are shown; the switch is a switch", async () => {
+      await openSettingsOf("model-01");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-model")).toContainText(
+        "model-01",
+      );
+      await expect(sheet.getByTestId("api-endpoint-model-settings-name-field-hint")).toContainText(
+        "Claude Code has no display name setting",
+      );
+      await expect(
+        sheet.getByTestId("api-endpoint-model-settings-output-field-hint"),
+      ).toContainText("Codex has no output limit setting");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-images")).toHaveRole("switch");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-save")).toBeDisabled();
+    });
+
+    await test.step("a number that isn't one is refused in place", async () => {
+      await sheet.getByTestId("api-endpoint-model-settings-context").fill("12.5k");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-context-field-error")).toHaveText(
+        "Enter a whole number of tokens",
+      );
+      await expect(sheet.getByTestId("api-endpoint-model-settings-save")).toBeDisabled();
+    });
+
+    await test.step("a failed save says why and keeps every input", async () => {
+      await sheet.getByTestId("api-endpoint-model-settings-name").fill("Fast one");
+      await sheet.getByTestId("api-endpoint-model-settings-context").fill("128,000");
+      await sheet.getByTestId("api-endpoint-model-settings-efforts").click();
+      await page.getByTestId("api-endpoint-model-settings-effort-high").click();
+      await page.keyboard.press("Escape");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-efforts")).toContainText("high");
+      await sheet.getByTestId("api-endpoint-model-settings-images").click();
+      host.failing = true;
+      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet.getByTestId("api-endpoint-model-settings-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      await expect(sheet.getByTestId("api-endpoint-model-settings-name")).toHaveValue("Fast one");
+      expect(await settingsReader()).toBeUndefined();
+    });
+
+    await test.step("saving closes the window and reaches the endpoint", async () => {
+      host.failing = false;
+      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet).toHaveCount(0);
+      await expect.poll(settingsReader).toEqual({
+        models: {
+          "model-01": { name: "Fast one", context: 128_000, efforts: ["high"], images: true },
+        },
+      });
+    });
+
+    await test.step("Restore default: a failure stays in place, then it goes back to automatic", async () => {
+      await openSettingsOf("model-01");
+      await expect(sheet.getByTestId("api-endpoint-model-settings-name")).toHaveValue("Fast one");
+      host.failing = true;
+      await sheet.getByTestId("api-endpoint-model-settings-restore").click();
+      await expect(sheet.getByTestId("api-endpoint-model-settings-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      expect((await settingsReader())?.models?.["model-01"]?.name).toBe("Fast one");
+      host.failing = false;
+      await sheet.getByTestId("api-endpoint-model-settings-restore").click();
+      await expect(sheet).toHaveCount(0);
+      await expect.poll(settingsReader).toBeUndefined();
+    });
+  });
+
+  test("Defaults for all models: a failed save keeps the numbers, and saving reaches the endpoint", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["model-01"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    await openEndpointDetail(page, endpointId);
+    const section = page
+      .getByTestId("api-endpoint-model-defaults-section")
+      .filter({ visible: true });
+    const save = section.getByTestId("api-endpoint-model-defaults-save");
+    const settingsReader = async () => (await endpointOf(endpointId))?.modelSettings;
+
+    await expect(save).toBeDisabled();
+    await section.getByTestId("api-endpoint-model-defaults-context").fill("200000");
+    await section.getByTestId("api-endpoint-model-defaults-compact").fill("150000");
+    await save.click();
+    await expect(section.getByTestId("api-endpoint-model-defaults-error")).toContainText(
+      "EACCES: permission denied",
+    );
+    await expect(section.getByTestId("api-endpoint-model-defaults-compact")).toHaveValue("150000");
+    expect(await settingsReader()).toBeUndefined();
+
+    host.failing = false;
+    await save.click();
+    await expect.poll(settingsReader).toEqual({ defaults: { context: 200_000, compact: 150_000 } });
+    await expect(section.getByTestId("api-endpoint-model-defaults-error")).toHaveCount(0);
+    await expect(save).toBeDisabled();
+  });
+
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
     page,
   }) => {

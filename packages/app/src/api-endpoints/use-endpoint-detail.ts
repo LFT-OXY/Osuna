@@ -18,6 +18,7 @@ import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
 import { modelScopeOf, RULE_PROBLEM_KEYS, typedRuleOf } from "./internal/model-scope";
+import type { SaveModelSettings } from "./internal/model-settings-form";
 import { createUpstreamRequestId } from "./internal/upstream-request";
 import { LIST_PROVIDER } from "./use-host-endpoints";
 
@@ -97,6 +98,8 @@ export interface UseEndpointDetailResult {
   // 返回是否加上了；没加上的原因在 ruleError。
   addRule: (text: string) => Promise<boolean>;
   removeRule: (rule: string) => void;
+  // 模型设置窗口与「整家默认」的保存；失败原因交给它们在原处显示。
+  saveModelSettings: SaveModelSettings;
   testConnection: () => void;
   remove: () => void;
 }
@@ -392,6 +395,32 @@ export function useEndpointDetail(input: {
     [client, current, endpoint, hasManagement, refresh, t],
   );
 
+  const saveModelSettings = useCallback<SaveModelSettings>(
+    async (update) => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      let failure: string | null = null;
+      try {
+        const result = await client.apiEndpointSave({
+          provider: LIST_PROVIDER,
+          endpointId: endpoint.id,
+          name: endpoint.name,
+          baseUrls: endpoint.baseUrls ?? [],
+          models: current.models,
+          manualModels: current.manualModels,
+          ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
+          ...scopeFieldsOf({ draft: current, hasManagement }),
+          modelSettings: update(endpoint.modelSettings),
+        });
+        failure = result.error?.message ?? null;
+      } catch (error) {
+        failure = toErrorMessage(error);
+      }
+      await refresh();
+      return failure;
+    },
+    [client, current, endpoint, hasManagement, refresh, t],
+  );
+
   const addModels = useCallback(
     (modelIds: string[]) => save({ ...current, ...addManualModels(current, modelIds) }),
     [current, save],
@@ -497,6 +526,7 @@ export function useEndpointDetail(input: {
     changeScope,
     addRule,
     removeRule,
+    saveModelSettings,
     testConnection,
     remove,
   };
