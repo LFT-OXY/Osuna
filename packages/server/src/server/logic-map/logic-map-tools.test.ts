@@ -382,6 +382,7 @@ describe("update_logic_map", () => {
     await update(client, LOGIN_FLOW);
     const before = await snapshotMapFolder(harness);
     // 文件名本身合法，但写入时的临时文件名超过系统上限，第二份文档在真实磁盘上写失败。
+    // macOS / Linux 报 ENAMETOOLONG；Windows 路径超 260 字符时报 ENOENT。
     const longId = "n".repeat(240);
 
     const result = await update(client, [
@@ -391,7 +392,7 @@ describe("update_logic_map", () => {
     ]);
 
     expect(result.isError).toBe(true);
-    expect(result.text).toMatch(/ENAMETOOLONG/);
+    expect(result.text).toMatch(/ENAMETOOLONG|ENOENT/);
     expect(await snapshotMapFolder(harness)).toEqual(before);
     expect(harness.changes).toHaveLength(1);
   });

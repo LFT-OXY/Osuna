@@ -24,7 +24,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   // CSS 背景图只在 Web 上有；RN 的 ViewStyle 没有这两个属性，交给 StyleSheet.create 推断，
   // react-native-web 与 Unistyles 的 Web 端原样输出为 CSS（同 styles/floating-surface.ts）。
+  // backgroundColor 是真实的 ViewStyle 属性，免得整条样式只剩 Web 属性被弱类型检查拒掉（CI 没有 .expo 类型时才报）。
   dots: {
+    backgroundColor: theme.colors.logicMap.canvas,
     backgroundImage: `radial-gradient(${theme.colors.logicMap.dot} 1px, transparent 1px)`,
     backgroundSize: `${DOT_SPACING}px ${DOT_SPACING}px`,
   },

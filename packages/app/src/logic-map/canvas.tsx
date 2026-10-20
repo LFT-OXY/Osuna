@@ -358,13 +358,16 @@ const styles = StyleSheet.create((theme) => ({
     boxShadow: theme.colors.logicMap.cardShadow,
   },
   // 只在 Web 上有 CSS 过渡与动画；原生端不加这两个样式（canvas 只有在 isWeb 时才挂上）。
+  // 各带一条与 card 相同的 position，免得整条样式只剩 Web 属性被弱类型检查拒掉（CI 没有 .expo 类型时才报）。
   cardMoving: {
+    position: "absolute",
     // 平移 200ms；选中外圈与悬停投影 150ms（ui-direction.md）。
     transitionProperty: "left, top, box-shadow",
     transitionDuration: "200ms, 200ms, 150ms",
     transitionTimingFunction: "ease-out",
   },
   cardEntering: {
+    position: "absolute",
     animationName: LOGIC_MAP_NODE_ENTER_ANIMATION,
     animationDuration: "150ms",
     animationTimingFunction: "ease-out",
