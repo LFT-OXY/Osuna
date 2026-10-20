@@ -726,35 +726,32 @@ export function createConnectionFormModel(
     return [...new Set([...formModelIds(), ...listed.map((model) => model.id)])];
   }
 
+  /** 表单里的全部地址一次交给 daemon：各格式各拉一次、按模型 id 合并（照 magpie）。 */
   async function runFetch(controller: AbortController): Promise<void> {
-    let failure = "";
-    // 第一个地址列不出模型时依次试其余地址，都失败就显示最后一个的原因（同详情页）。
-    for (const { format, url } of checkedUrlsOf(values)) {
-      const outcome = await deps.fetchModels(
-        {
-          ...keyOwnerRequest(),
-          baseUrl: url,
-          format,
-          preview: true,
-          ...placeRequest(),
-        },
-        controller.signal,
-      );
-      if (pendingFetch !== controller) return;
-      if (outcome.status === "cancelled") {
-        pendingFetch = null;
-        update({ catalogFetch: { status: "idle" } });
-        return;
-      }
-      if (outcome.status === "done") {
-        pendingFetch = null;
-        update({ catalogFetch: { status: "fetched", models: outcome.models } });
-        return;
-      }
-      failure = outcome.message;
+    const checked = checkedUrlsOf(values);
+    const [first] = checked;
+    if (!first) {
+      pendingFetch = null;
+      update({ catalogFetch: { status: "idle" } });
+      return;
     }
+    const outcome = await deps.fetchModels(
+      {
+        ...keyOwnerRequest(),
+        baseUrl: first.url,
+        format: first.format,
+        baseUrls: checked,
+        preview: true,
+        ...placeRequest(),
+      },
+      controller.signal,
+    );
+    if (pendingFetch !== controller) return;
     pendingFetch = null;
-    update({ catalogFetch: { status: "failed", message: failure } });
+    if (outcome.status === "cancelled") update({ catalogFetch: { status: "idle" } });
+    else if (outcome.status === "done") {
+      update({ catalogFetch: { status: "fetched", models: outcome.models } });
+    } else update({ catalogFetch: { status: "failed", message: outcome.message } });
   }
 
   async function runTest(controller: AbortController, checked: CheckedUrl): Promise<void> {

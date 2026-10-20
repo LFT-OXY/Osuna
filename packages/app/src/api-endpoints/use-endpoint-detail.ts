@@ -14,7 +14,7 @@ import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
-import { addManualModel, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
+import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
 import { createUpstreamRequestId } from "./internal/upstream-request";
 import { LIST_PROVIDER } from "./use-host-endpoints";
@@ -27,6 +27,12 @@ import { LIST_PROVIDER } from "./use-host-endpoints";
 export type ModelFetchState =
   | { status: "idle" }
   | { status: "fetching" }
+  | { status: "failed"; message: string };
+
+// 「丢掉拉回的清单」：失败原因留在原处，直到再点或拉到新清单。
+export type CatalogForgetState =
+  | { status: "idle" }
+  | { status: "forgetting" }
   | { status: "failed"; message: string };
 
 export type FormatTestOutcome =
@@ -59,6 +65,9 @@ export interface UseEndpointDetailResult {
   source: ModelSource;
   modelMapping: ApiEndpointModelMapping | undefined;
   fetchState: ModelFetchState;
+  forgetState: CatalogForgetState;
+  // 主机声明了 apiEndpointManagement：能丢掉拉回的清单。
+  canForgetCatalog: boolean;
   // 模型开关或档位映射没保存成功的原因。
   saveError: string | null;
   deleteError: string | null;
@@ -70,9 +79,10 @@ export interface UseEndpointDetailResult {
   webSearchSave: WebSearchSaveState;
   setSearchesWeb: (value: boolean) => void;
   fetchModels: () => void;
+  forgetCatalog: () => void;
   changeModels: (next: ModelSelection) => void;
-  // 失败原因交给调用方（手动添加那一行自己显示），不进 saveError。
-  addModel: (modelId: string) => Promise<string | null>;
+  // 一次加几个（逗号分隔拆好的）；失败原因交给调用方（手动添加那一行自己显示），不进 saveError。
+  addModels: (modelIds: string[]) => Promise<string | null>;
   changeMapping: (mapping: ApiEndpointModelMapping | undefined) => void;
   testConnection: () => void;
   remove: () => void;
@@ -91,13 +101,16 @@ export function useEndpointDetail(input: {
   endpoint: ApiEndpoint;
   endpoints: ApiEndpoint[];
   agents: Record<string, ApiEndpointAgentSettings>;
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不认 baseUrls 与 forget_catalog。
+  hasManagement: boolean;
 }): UseEndpointDetailResult {
-  const { serverId, endpoint, endpoints, agents } = input;
+  const { serverId, endpoint, endpoints, agents, hasManagement } = input;
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const client = useHostRuntimeClient(serverId);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   const [fetchState, setFetchState] = useState<ModelFetchState>({ status: "idle" });
+  const [forgetState, setForgetState] = useState<CatalogForgetState>({ status: "idle" });
   const [draft, setDraft] = useState<ModelDraft | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -123,43 +136,84 @@ export function useEndpointDetail(input: {
     [draft, endpoint.manualModels, endpoint.modelMapping, endpoint.models],
   );
 
-  // 第一个地址列不出模型时依次试其余地址；都失败就显示最后一个的原因。
-  const fetchModels = useCallback(() => {
-    if (!client) return;
-    setFetchState({ status: "fetching" });
-    void (async () => {
-      let failure = "";
-      for (const address of formatAddresses(endpoint)) {
-        try {
-          const response = await client.apiEndpointFetchModels(
-            {
-              provider: LIST_PROVIDER,
-              endpointId: endpoint.id,
-              baseUrl: address.url,
-              format: address.format,
-            },
-            createUpstreamRequestId(),
-          );
-          if (!response.error) {
-            await refresh();
-            setFetchState({ status: "idle" });
-            return;
+  /**
+   * 主机认 baseUrls：一次交出这家的全部地址，daemon 各格式各拉一次合并后记下。
+   * 老主机：第一个地址列不出模型时依次试其余地址；都失败就显示最后一个的原因。
+   * quiet：打开页面时自己拉的，已有清单时失败不报（daemon 已记日志、清单不动）。
+   */
+  const runFetch = useCallback(
+    (quiet: boolean) => {
+      if (!client) return;
+      setFetchState({ status: "fetching" });
+      void (async () => {
+        const addresses = formatAddresses(endpoint);
+        const [first] = addresses;
+        const merged = first ? [{ format: first.format, url: first.url, baseUrls: addresses }] : [];
+        const requests: (FormatAddress & { baseUrls?: FormatAddress[] })[] = hasManagement
+          ? merged
+          : addresses;
+        let failure = "";
+        for (const { format, url, ...rest } of requests) {
+          try {
+            const response = await client.apiEndpointFetchModels(
+              {
+                provider: LIST_PROVIDER,
+                endpointId: endpoint.id,
+                baseUrl: url,
+                format,
+                ...rest,
+              },
+              createUpstreamRequestId(),
+            );
+            if (!response.error) {
+              await refresh();
+              setFetchState({ status: "idle" });
+              setForgetState({ status: "idle" });
+              return;
+            }
+            failure = response.error.message;
+          } catch (error) {
+            failure = toErrorMessage(error);
           }
-          failure = response.error.message;
-        } catch (error) {
-          failure = toErrorMessage(error);
         }
-      }
-      setFetchState({ status: "failed", message: failure });
-    })();
-  }, [client, endpoint, refresh]);
+        setFetchState(
+          quiet && endpoint.catalog ? { status: "idle" } : { status: "failed", message: failure },
+        );
+      })();
+    },
+    [client, endpoint, hasManagement, refresh],
+  );
 
-  // 新建后进来、还没拉过清单的接口，打开就拉一次。
+  const fetchModels = useCallback(() => runFetch(false), [runFetch]);
+
+  // 打开接口页就拉一次（主机认合并时每次都拉，照 prd 第 15 条）；老主机只在还没拉过清单时拉。
   useEffect(() => {
-    if (endpoint.catalog || autoFetchedFor.current === endpoint.id) return;
+    if (autoFetchedFor.current === endpoint.id) return;
+    if (!hasManagement && endpoint.catalog) return;
     autoFetchedFor.current = endpoint.id;
-    fetchModels();
-  }, [endpoint.catalog, endpoint.id, fetchModels]);
+    runFetch(true);
+  }, [endpoint.catalog, endpoint.id, hasManagement, runFetch]);
+
+  const forgetCatalog = useCallback(() => {
+    if (!client) {
+      setForgetState({ status: "failed", message: t("workspace.terminal.hostDisconnected") });
+      return;
+    }
+    setForgetState({ status: "forgetting" });
+    void (async () => {
+      let failure: string | null = null;
+      try {
+        const response = await client.apiEndpointForgetCatalog(endpoint.id);
+        failure = response.error?.message ?? null;
+      } catch (error) {
+        failure = toErrorMessage(error);
+      }
+      await refresh();
+      setForgetState(
+        failure === null ? { status: "idle" } : { status: "failed", message: failure },
+      );
+    })();
+  }, [client, endpoint.id, refresh, t]);
 
   /** 保存整份模型选择与映射；返回失败原因，成功为 null。 */
   const save = useCallback(
@@ -279,8 +333,8 @@ export function useEndpointDetail(input: {
     [client, current, endpoint, refresh, t],
   );
 
-  const addModel = useCallback(
-    (modelId: string) => save({ ...current, ...addManualModel(current, modelId) }),
+  const addModels = useCallback(
+    (modelIds: string[]) => save({ ...current, ...addManualModels(current, modelIds) }),
     [current, save],
   );
 
@@ -362,6 +416,8 @@ export function useEndpointDetail(input: {
     source,
     modelMapping: current.modelMapping,
     fetchState,
+    forgetState,
+    canForgetCatalog: hasManagement,
     saveError,
     deleteError,
     testResults,
@@ -372,8 +428,9 @@ export function useEndpointDetail(input: {
     webSearchSave,
     setSearchesWeb,
     fetchModels,
+    forgetCatalog,
     changeModels,
-    addModel,
+    addModels,
     changeMapping,
     testConnection,
     remove,

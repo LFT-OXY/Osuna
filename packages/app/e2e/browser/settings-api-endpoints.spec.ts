@@ -776,6 +776,83 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("Forget fetched list empties the list and its time; a failed forget stays in place", async ({
+    page,
+  }) => {
+    relay.goodModels = ["claude-sonnet-4-5", "gpt-5"];
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["gpt-5"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.forget_catalog");
+    await openEndpointDetail(page, endpointId);
+    const models = page.getByTestId("api-endpoint-models-section").filter({ visible: true });
+    await expect(models).toContainText(/Fetched/);
+    const forget = models.getByTestId("api-endpoint-models-forget");
+
+    await test.step("a failed forget says why and keeps the list", async () => {
+      await forget.click();
+      await expect(models.getByTestId("api-endpoint-models-forget-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      expect((await catalogOf(endpointId))?.models.length).toBe(2);
+      await expect(models.getByTestId("api-endpoint-model-family-claude")).toBeVisible();
+    });
+
+    await test.step("forgetting empties the list and its time; the selected model stays", async () => {
+      host.failing = false;
+      await forget.click();
+      await expect(models.getByTestId("api-endpoint-models-forget-error")).toHaveCount(0);
+      await expect.poll(catalogReader(endpointId)).toBeUndefined();
+      await expect(models).not.toContainText(/Fetched/);
+      await expect(forget).toHaveCount(0);
+      await expect(models.getByTestId("api-endpoint-model-family-claude")).toHaveCount(0);
+      await expect(modelSwitch(page, "gpt-5")).toBeChecked();
+      expect(await selectedModelsOf(endpointId)).toEqual(["gpt-5"]);
+    });
+  });
+
+  test("Add by hand takes several model names separated by commas; a failed add stays in place", async ({
+    page,
+  }) => {
+    relay.goodModels = ["claude-sonnet-4-5"];
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    await openEndpointDetail(page, endpointId);
+    const models = page.getByTestId("api-endpoint-models-section").filter({ visible: true });
+    await expect(models.getByTestId("api-endpoint-model-family-claude")).toBeVisible();
+    await models.getByTestId("api-endpoint-models-add").click();
+    const input = page.getByTestId("api-endpoint-models-add-input");
+    await input.fill("first-own, second-own ,, first-own");
+
+    await test.step("a failed add keeps what was typed and says why", async () => {
+      await page.getByTestId("api-endpoint-models-add-submit").click();
+      await expect(page.getByTestId("api-endpoint-models-add-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      await expect(input).toHaveValue("first-own, second-own ,, first-own");
+      expect(await selectedAndManualReader(endpointId)()).toEqual([[], []]);
+    });
+
+    await test.step("adding again adds each name once, turned on", async () => {
+      host.failing = false;
+      await page.getByTestId("api-endpoint-models-add-submit").click();
+      await expect(input).toHaveCount(0);
+      await expect.poll(selectedAndManualReader(endpointId)).toEqual([
+        ["first-own", "second-own"],
+        ["first-own", "second-own"],
+      ]);
+      await models.getByTestId("api-endpoint-model-family-other").click();
+      await expect(modelSwitch(page, "first-own")).toBeChecked();
+      await expect(modelSwitch(page, "second-own")).toBeChecked();
+    });
+  });
+
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
     page,
   }) => {
@@ -1484,9 +1561,11 @@ test.describe("Templates", () => {
       await expect(connectionForm(page)).toHaveCount(0);
       await expect(modelSwitch(page, "my-gpt-deployment")).toBeVisible();
       await expect(modelSwitch(page, "my-kimi-deployment")).toBeVisible();
-      expect(deploymentListings(relay)).toEqual([
-        expect.objectContaining({ apiKey: RELAY_KEY, authorization: undefined }),
-      ]);
+      // 保存当场列一次、打开接口页又列一次；两种格式在同一个地址上，每次只问一遍。
+      await expect.poll(deploymentCountReader(relay)).toBe(2);
+      for (const listing of deploymentListings(relay)) {
+        expect(listing).toMatchObject({ apiKey: RELAY_KEY, authorization: undefined });
+      }
       const [saved] = (await client.apiEndpointList("claude")).endpoints;
       expect(saved).toMatchObject({
         templateId: "azure",
@@ -1844,8 +1923,8 @@ test.describe("Checking an API endpoint before saving it", () => {
         catalog: { models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] },
       });
       await expect(headerTitle(page)).toHaveText("Unsaved relay");
-      // 新建一家保存时当场再拉一次（照 magpie），清单还是那两个。
-      expect(listingsOf(relay)).toHaveLength(4);
+      // 新建一家保存时当场再拉一次（照 magpie），打开接口页又拉一次；清单还是那两个。
+      await expect.poll(listingCountReader(relay)).toBe(6);
     });
   });
 
@@ -3939,6 +4018,56 @@ async function failSetOrder(page: Page): Promise<{ failing: boolean }> {
     });
   });
   return host;
+}
+
+/** `failing` 为 true 时，这一种请求不送到 daemon，直接回一个失败响应（响应里除 error 外的字段取空值）。 */
+async function failRequests(page: Page, rpc: string): Promise<{ failing: boolean }> {
+  const host = { failing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const request =
+        typeof message === "string" && message.includes(`"${rpc}.request"`)
+          ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+          : undefined;
+      if (!host.failing || !request) {
+        server.send(message);
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: `${rpc}.response`,
+            payload: {
+              requestId: request.requestId,
+              endpoint: null,
+              error: { code: "unknown", message: "EACCES: permission denied" },
+            },
+          },
+        }),
+      );
+    });
+  });
+  return host;
+}
+
+function catalogReader(endpointId: string) {
+  return () => catalogOf(endpointId);
+}
+
+function deploymentCountReader(target: FakeRelay): () => number {
+  return () => deploymentListings(target).length;
+}
+
+function listingCountReader(target: FakeRelay): () => number {
+  return () => listingsOf(target).length;
+}
+
+async function catalogOf(endpointId: string) {
+  const list = await client.apiEndpointList("claude");
+  return list.endpoints.find((endpoint) => endpoint.id === endpointId)?.catalog;
 }
 
 /** 从 server_info 去掉 apiEndpointManagement，模拟还不能改接口顺序的主机。 */

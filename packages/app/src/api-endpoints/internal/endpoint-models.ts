@@ -119,21 +119,25 @@ export function setFamilySelected({
   return [...models, ...group.matches.filter((entry) => !selectedIds.has(entry.id)).map(toModel)];
 }
 
-/** 手动添加的模型记作手动添加并直接打开。 */
-export function addManualModel(
+/** 手动添加的模型记作手动添加并直接打开；已有的不重复加。 */
+export function addManualModels(
   current: Pick<ModelSource, "models" | "manualModels">,
-  rawId: string,
+  ids: string[],
 ): Pick<ModelSource, "models" | "manualModels"> {
-  const id = rawId.trim();
-  const model = { id };
-  return {
-    models: current.models.some((entry) => entry.id === id)
-      ? current.models
-      : [...current.models, model],
-    manualModels: current.manualModels.some((entry) => entry.id === id)
-      ? current.manualModels
-      : [...current.manualModels, model],
+  const append = (list: ApiEndpointModel[]) => {
+    const present = new Set(list.map((entry) => entry.id));
+    return [...list, ...ids.filter((id) => !present.has(id)).map((id) => ({ id }))];
   };
+  return { models: append(current.models), manualModels: append(current.manualModels) };
+}
+
+/** 添加框里打的模型 id：按逗号与换行拆开（id 里可以有空格，照 magpie typedIds），去掉空的与重复的。 */
+export function typedModelIds(text: string): string[] {
+  const ids = text
+    .split(/[,\n]/)
+    .map((id) => id.trim())
+    .filter((id) => id !== "");
+  return [...new Set(ids)];
 }
 
 /** daemon 拒绝指向未选模型的档位；关掉模型时把指向它的档位一起去掉。 */

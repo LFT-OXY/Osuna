@@ -1778,7 +1778,7 @@ describe("connection form: checking before saving", () => {
     expect(fake.tests).toEqual([]);
   });
 
-  it("Fetch models asks with the form's template and plan, one address after another until one lists", async () => {
+  it("Fetch models asks once with every address of the form, its template and plan, and the daemon merges the lists", async () => {
     const { fake, model } = zhipuForm();
     expect(model.getState()).toMatchObject({ hasModelField: true, canFetchModels: true });
 
@@ -1787,21 +1787,21 @@ describe("connection form: checking before saving", () => {
       catalogFetch: { status: "fetching" },
       canSubmit: false,
     });
+    expect(fake.fetches).toHaveLength(1);
     expect(fake.fetches[0]?.request).toEqual({
       apiKey: "sk-zhipu",
       baseUrl: "https://open.bigmodel.cn/api/anthropic",
       format: "anthropic_messages",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://open.bigmodel.cn/api/anthropic" },
+        { format: "openai_chat", url: "https://open.bigmodel.cn/api/coding/paas/v4" },
+        { format: "openai_responses", url: "https://open.bigmodel.cn/api/v1" },
+      ],
       preview: true,
       templateId: "zhipu",
       region: "coding",
     });
-    fake.answerFetch(0, { status: "failed", message: "HTTP 404" });
-    await flush();
-    expect(fake.fetches[1]?.request).toMatchObject({
-      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
-      format: "openai_chat",
-    });
-    fake.answerFetch(1, {
+    fake.answerFetch(0, {
       status: "done",
       models: [{ id: "glm-5.3", label: "GLM 5.3" }, { id: "glm-5" }],
     });
@@ -1842,19 +1842,17 @@ describe("connection form: checking before saving", () => {
     });
   });
 
-  it("a failed fetch says why from the last address; a cancelled one goes back to nothing", async () => {
+  it("a failed fetch says why; a cancelled one goes back to nothing", async () => {
     const { fake, model } = zhipuForm();
     model.fetchModels();
-    for (let index = 0; index < 3; index += 1) {
-      fake.answerFetch(index, { status: "failed", message: `HTTP 40${index}` });
-      await flush();
-    }
+    fake.answerFetch(0, { status: "failed", message: "HTTP 402" });
+    await flush();
     expect(model.getState().catalogFetch).toEqual({ status: "failed", message: "HTTP 402" });
 
     model.fetchModels();
     model.cancelFetchModels();
-    expect(fake.fetches[3]?.signal.aborted).toBe(true);
-    fake.answerFetch(3, { status: "done", models: [{ id: "late" }] });
+    expect(fake.fetches[1]?.signal.aborted).toBe(true);
+    fake.answerFetch(1, { status: "done", models: [{ id: "late" }] });
     await flush();
     expect(model.getState().catalogFetch).toEqual({ status: "idle" });
     await model.submit();
@@ -1959,6 +1957,10 @@ describe("connection form: checking before saving", () => {
       endpointId: "ep_1",
       baseUrl: "https://relay.example",
       format: "anthropic_messages",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://relay.example" },
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ],
       preview: true,
     });
   });

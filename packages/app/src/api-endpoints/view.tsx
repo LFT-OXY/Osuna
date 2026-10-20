@@ -655,9 +655,16 @@ function ApiEndpointDetailSections({
 }) {
   const { t } = useTranslation();
   const now = useClock();
-  const detail = useEndpointDetail({ serverId, endpoint, endpoints: allEndpoints, agents });
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机上没 key 是缺失。
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机上没 key 是缺失，
+  // 也不认合并拉取与丢掉清单。
   const isKeyOptional = useHostFeature(serverId, "apiEndpointManagement");
+  const detail = useEndpointDetail({
+    serverId,
+    endpoint,
+    endpoints: allEndpoints,
+    agents,
+    hasManagement: isKeyOptional,
+  });
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
@@ -719,10 +726,12 @@ function ApiEndpointDetailSections({
       <ApiEndpointModelsSection
         source={detail.source}
         fetchState={detail.fetchState}
+        forgetState={detail.forgetState}
         now={now}
         onFetch={detail.fetchModels}
+        onForget={detail.canForgetCatalog ? detail.forgetCatalog : null}
         onChange={detail.changeModels}
-        onAdd={detail.addModel}
+        onAdd={detail.addModels}
       />
       <ApiEndpointMappingSection
         models={detail.source.models}

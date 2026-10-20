@@ -9,7 +9,7 @@ import {
   type TextInputKeyPressEventData,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Plus, RotateCw, Search } from "lucide-react-native";
+import { Eraser, Plus, RotateCw, Search } from "lucide-react-native";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { Alert } from "@/components/ui/alert";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -28,13 +28,14 @@ import {
   groupModelEntries,
   setFamilySelected,
   setModelSelected,
+  typedModelIds,
   type ModelEntry,
   type ModelFamilyGroup,
   type ModelSource,
 } from "./internal/endpoint-models";
 import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
-import type { ModelFetchState } from "./use-endpoint-detail";
+import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 
 /*
  * 接口详情页的「模型」区：搜索行，下面左栏家族目录、右栏当前家族的模型，每行一个小开关。
@@ -49,11 +50,14 @@ const FAMILY_ICON_SIZE = ICON_SIZE.md;
 interface ApiEndpointModelsSectionProps {
   source: ModelSource;
   fetchState: ModelFetchState;
+  forgetState: CatalogForgetState;
   now: Date;
   onFetch: () => void;
+  // 「丢掉拉回的清单」；老主机不认，为 null。
+  onForget: (() => void) | null;
   onChange: (next: Pick<ModelSource, "models" | "manualModels">) => void;
-  // 返回失败原因，成功为 null；添加行据此收起或留在原处显示原因。
-  onAdd: (modelId: string) => Promise<string | null>;
+  // 一次可加几个（逗号分隔）；返回失败原因，成功为 null；添加行据此收起或留在原处显示原因。
+  onAdd: (modelIds: string[]) => Promise<string | null>;
 }
 
 function useFamilyName(): (family: ModelFamilyId) => string {
@@ -69,8 +73,10 @@ function useFamilyName(): (family: ModelFamilyId) => string {
 export function ApiEndpointModelsSection({
   source,
   fetchState,
+  forgetState,
   now,
   onFetch,
+  onForget,
   onChange,
   onAdd,
 }: ApiEndpointModelsSectionProps) {
@@ -85,6 +91,7 @@ export function ApiEndpointModelsSection({
   const active = groups.find((group) => group.family === activeFamily) ?? groups[0] ?? null;
   const selectedCount = entries.filter((entry) => entry.selected).length;
   const isFetching = fetchState.status === "fetching";
+  const isForgetting = forgetState.status === "forgetting";
   const fetchedAt = source.catalog?.fetchedAt;
 
   const openAdd = useCallback(() => setIsAddOpen(true), []);
@@ -129,6 +136,21 @@ export function ApiEndpointModelsSection({
             ? t("settings.apiEndpoints.models.fetching")
             : t("settings.apiEndpoints.models.refetch")}
         </Button>
+        {fetchedAt && onForget ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={Eraser}
+            loading={isForgetting}
+            disabled={isForgetting || isFetching}
+            onPress={onForget}
+            testID="api-endpoint-models-forget"
+          >
+            {isForgetting
+              ? t("settings.apiEndpoints.models.forgetting")
+              : t("settings.apiEndpoints.models.forget")}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -140,7 +162,7 @@ export function ApiEndpointModelsSection({
         </Button>
       </View>
     ),
-    [fetchedAt, isCompact, isFetching, now, onFetch, openAdd, t],
+    [fetchedAt, isCompact, isFetching, isForgetting, now, onFetch, onForget, openAdd, t],
   );
 
   let body: React.ReactNode;
@@ -214,6 +236,17 @@ export function ApiEndpointModelsSection({
           />
         </View>
         {isAddOpen ? <AddModelRow existing={entries} onAdd={onAdd} onClose={closeAdd} /> : null}
+        {forgetState.status === "failed" ? (
+          <View style={[styles.inlineError, settingsStyles.rowBorder]}>
+            <Alert
+              variant="error"
+              size="sm"
+              title={t("settings.apiEndpoints.models.forgetFailed")}
+              description={forgetState.message}
+              testID="api-endpoint-models-forget-error"
+            />
+          </View>
+        ) : null}
         {/* 已有清单时重新拉取失败：原因接在搜索行下面，清单照常可用。 */}
         {entries.length > 0 && fetchState.status === "failed" ? (
           <View style={[styles.inlineError, settingsStyles.rowBorder]}>
@@ -415,25 +448,26 @@ function AddModelRow({
   onClose,
 }: {
   existing: ModelEntry[];
-  onAdd: (modelId: string) => Promise<string | null>;
+  onAdd: (modelIds: string[]) => Promise<string | null>;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<AddModelStatus>({ kind: "idle" });
-  const trimmed = draft.trim();
   const isAdding = status.kind === "adding";
-  const isAlreadyAdded = existing.some((entry) => entry.id === trimmed && entry.manual);
-  const canAdd = !isAdding && trimmed.length > 0 && !isAlreadyAdded;
+  // 逗号或换行分开的几个一次加（照 magpie）；都已手动加过时没什么可加。
+  const typedIds = useMemo(() => typedModelIds(draft), [draft]);
+  const hasNew = typedIds.some((id) => !existing.some((entry) => entry.id === id && entry.manual));
+  const canAdd = !isAdding && hasNew;
   const handleAdd = useCallback(() => {
     if (!canAdd) return;
     setStatus({ kind: "adding" });
     void (async () => {
-      const failure = await onAdd(trimmed);
+      const failure = await onAdd(typedIds);
       if (failure === null) onClose();
       else setStatus({ kind: "failed", reason: failure });
     })();
-  }, [canAdd, onAdd, onClose, trimmed]);
+  }, [canAdd, onAdd, onClose, typedIds]);
   const handleKeyPress = useCallback(
     (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
       if (event.nativeEvent.key === "Escape" && !isAdding) onClose();
