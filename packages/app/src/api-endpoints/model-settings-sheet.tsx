@@ -258,9 +258,10 @@ function EffortsField({
 }) {
   const { t } = useTranslation();
   const { levels, picked, isSet } = state.efforts;
-  let summary = picked.join(", ");
-  if (!isSet && picked.length === 0) summary = t(`${KEY}.effortsAutomatic`);
-  else if (picked.length === 0) summary = t(`${KEY}.effortsNone`);
+  // 没设、也不知道它的档位时只有灰字「自动」；勾着的档位与「不发」用正文颜色。
+  const isUnset = !isSet && picked.length === 0;
+  const summary = picked.length === 0 ? t(`${KEY}.effortsNone`) : picked.join(", ");
+  const display = useMemo(() => (isUnset ? null : { label: summary }), [isUnset, summary]);
   return (
     <Field
       label={t(`${KEY}.efforts`)}
@@ -276,8 +277,8 @@ function EffortsField({
         >
           {({ hovered, open }: DropdownMenuTriggerState) => (
             <SelectFieldTrigger
-              label={summary}
-              placeholder={summary}
+              display={display}
+              placeholder={t(`${KEY}.effortsAutomatic`)}
               hovered={hovered}
               active={open}
               disabled={state.isBusy}

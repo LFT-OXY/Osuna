@@ -6,8 +6,11 @@ import type {
 import {
   openModelDefaultsForm,
   openModelSettingsForm,
+  parseTokens,
+  tokenFormatOf,
   type SaveModelSettings,
 } from "./model-settings-form";
+import { LANGUAGE_OPTIONS } from "@/i18n/locales";
 
 const ENDPOINT: ApiEndpoint = {
   id: "ep_1",
@@ -27,7 +30,7 @@ const ENDPOINT: ApiEndpoint = {
   },
 };
 
-const EN = { format: (value: number) => value.toLocaleString("en"), group: "," };
+const EN = tokenFormatOf("en");
 
 function recorder(result: string | null = null) {
   const saved: ApiEndpointModelSettings[] = [];
@@ -212,12 +215,28 @@ describe("the endpoint's defaults for all models", () => {
 
   it("reads numbers written the way the language groups them", async () => {
     const deps = recorder();
-    const es = { format: (value: number) => value.toLocaleString("es"), group: "." };
+    const es = tokenFormatOf("es");
     const form = openModelDefaultsForm({ endpoint: ENDPOINT, ...deps, tokenFormat: es });
-    form.setTokens("output", "32.000");
+    expect(form.getState().context.text).toBe(es.format(150_000));
+    form.setTokens("output", es.format(32_000));
     await form.submit();
     expect(deps.saved[0]?.defaults).toEqual({ context: 150_000, output: 32_000 });
   });
+});
+
+describe("token counts in every app language", () => {
+  it.each(LANGUAGE_OPTIONS.flatMap((option) => (option.value === "system" ? [] : [option.value])))(
+    "%s: a number as the form shows it reads back as the same number",
+    (locale) => {
+      const tokenFormat = tokenFormatOf(locale);
+      for (const value of [4_096, 150_000, 1_000_000]) {
+        expect(parseTokens(tokenFormat.format(value), tokenFormat)).toEqual({
+          kind: "count",
+          value,
+        });
+      }
+    },
+  );
 });
 
 describe("what counts as a change, by the daemon's own rules", () => {

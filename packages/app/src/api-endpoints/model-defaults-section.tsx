@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { MODEL_TOKEN_FIELDS } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
@@ -24,7 +25,6 @@ import {
  */
 
 const KEY = "settings.apiEndpoints.modelSettings.defaults";
-const FIELDS: TokenFieldName[] = ["context", "output", "compact"];
 // FormTextInput 会压平 style 拆成外框与文字，Unistyles 样式在 Web 上压平后没有值，所以用普通对象。
 const WIDE_INPUT_STYLE = { width: 180 };
 const COMPACT_INPUT_STYLE = { width: 140 };
@@ -55,7 +55,7 @@ export function ApiEndpointModelDefaultsSection({
   return (
     <SettingsSection title={t(`${KEY}.title`)} testID="api-endpoint-model-defaults-section">
       <SettingsCard>
-        {FIELDS.map((name) => (
+        {MODEL_TOKEN_FIELDS.map((name) => (
           <DefaultRow key={name} form={form} name={name} field={state[name]} label={labels[name]} />
         ))}
         <View style={styles.footer}>

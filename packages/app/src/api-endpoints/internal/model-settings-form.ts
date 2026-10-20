@@ -33,15 +33,21 @@ export interface TokenField {
 /** 按界面语言写 token 数（千分位），并认回这种写法。 */
 export interface TokenFormat {
   format(value: number): string;
-  // 这种语言的千分位符号（如 en 的「,」、es 的「.」）。
+  // 这种语言的千分位符号（如 en 的「,」、es 的「.」、ar 的「٬」）。
   group: string;
+  // 这种语言写数字用的字符到 0–9（ar 写阿拉伯-印度数字）。
+  digits: ReadonlyMap<string, string>;
 }
 
-/** 界面语言的千分位写法（Intl）。 */
+/**
+ * 界面语言的千分位写法（Intl）。千分位符号从一百万里读：有的语言（es）四位数不分组，从 1000 读不到。
+ */
 export function tokenFormatOf(locale: string): TokenFormat {
   const numbers = new Intl.NumberFormat(locale);
-  const group = numbers.formatToParts(1000).find((part) => part.type === "group")?.value ?? ",";
-  return { format: (value) => numbers.format(value), group };
+  const grouped = numbers.formatToParts(1_000_000).find((part) => part.type === "group");
+  const digits = new Map<string, string>();
+  for (let digit = 0; digit <= 9; digit += 1) digits.set(numbers.format(digit), String(digit));
+  return { format: (value) => numbers.format(value), group: grouped?.value ?? ",", digits };
 }
 
 export type ModelSettingsStatus =
@@ -95,11 +101,12 @@ export interface ModelSettingsForm {
 
 type ParsedTokens = { kind: "empty" } | { kind: "count"; value: number } | { kind: "invalid" };
 
-/** 认空白、逗号、下划线与这种语言的千分位符号；不是大于零的整数为 invalid。 */
-export function parseTokens(text: string, group: string): ParsedTokens {
-  const cleaned = text
+/** 认空白、逗号、下划线、这种语言的千分位符号与数字写法；不是大于零的整数为 invalid。 */
+export function parseTokens(text: string, tokenFormat: TokenFormat): ParsedTokens {
+  const ascii = [...text].map((char) => tokenFormat.digits.get(char) ?? char).join("");
+  const cleaned = ascii
     .replace(/[\s,_]/g, "")
-    .split(group)
+    .split(tokenFormat.group)
     .join("");
   if (cleaned === "") return { kind: "empty" };
   if (!/^\d+$/.test(cleaned)) return { kind: "invalid" };
@@ -134,7 +141,7 @@ function createTokenInputs(input: { initial: ApiEndpointModelDefaults; tokenForm
     const value = input.initial[field];
     texts[field] = value === undefined ? "" : tokenFormat.format(value);
   }
-  const parsed = (field: TokenFieldName) => parseTokens(texts[field], tokenFormat.group);
+  const parsed = (field: TokenFieldName) => parseTokens(texts[field], tokenFormat);
   return {
     set(field: TokenFieldName, text: string) {
       texts[field] = text;
