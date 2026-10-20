@@ -1458,6 +1458,14 @@ if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId
 
 - Default thinking wire fields (cli-wiring-web-search ticket 20), all optional, old daemons neither send nor read them: agent settings and `set_agent_settings` carry `defaultThinkingOptionId: z.string().nullable().optional()` (null = unset, omitted = unchanged) and `usesUltraCode: z.boolean().optional()` (Claude Code only); `ProviderSnapshotEntry.lockedThinkingOptionId?: string` is present only when every session of that provider runs at one level (Claude Code default thinking max). Responses report the clamped Claude level, not the stored one. The app hides the default-thinking row when the model groups carry no `thinkingOptions` (old daemon) — tagged `COMPAT(apiEndpointCliWiring)`.
 
+### Per-model detection (endpoint-management-ux ticket 21, magpie `DetectModels` / app "Each picked model")
+
+- `detect_formats.request` gains optional `eachModel` and `models` (`api-endpoints/detect-models.ts`): the first `API_ENDPOINT_DETECT_MAX_MODELS` (30, protocol) picked models, each asked once per format; 8 at a time, 12 s per request, 2 min overall, image-generation models skipped, unfinished ones "not asked". Response `models` lists each model's per-format result; `results` per format is the first model that answered, else the first model's. Results arrive together at the end (magpie has no per-row progress). Shares the pool / deadline / timers with test models; cancel is the detect cancel.
+- Detection (single and per-model) **asks disabled models** — magpie's detect never checks `ModelDisabled`; only test models and the gateway skip them (prd 27 / 72).
+- Every reason the daemon writes itself is an error code + params, localized by the app (single detection too: no model to ask, no models listed, unreachable, timeout, not an X response); upstream text is shown as-is.
+- "Use these": on an existing endpoint only, a model that answered on exactly one format of two or more asked gets that format as "Use only this format" (saved with the form); a new endpoint gets none (magpie `give = p ? … : []`).
+- `apiEndpointManagement` and `eachModel` ship in the same unreleased version, so no extra gate.
+
 ## Scenario: test models — a user-pressed batch of real upstream requests with progress
 
 ### 1. Scope / Trigger
