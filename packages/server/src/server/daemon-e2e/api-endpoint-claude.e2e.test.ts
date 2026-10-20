@@ -592,13 +592,13 @@ describe("Claude API endpoint over the daemon RPC", () => {
     "options": [
       {
         "model": "relay/relay/sonnet",
-        "label": "relay/sonnet",
-        "description": "Relay"
+        "label": "relay/sonnet (Relay)",
+        "description": "via Osuna"
       },
       {
         "model": "relay/relay/haiku",
-        "label": "relay/haiku",
-        "description": "Relay"
+        "label": "relay/haiku (Relay)",
+        "description": "via Osuna"
       }
     ]
   },
@@ -976,11 +976,11 @@ describe("Claude API endpoint over the daemon RPC", () => {
                 { op: "removed", text: '  "modelPicker": {' },
                 { op: "removed", text: '    "options": [' },
                 { op: "removed", text: '        "model": "relay/relay/sonnet",' },
-                { op: "removed", text: '        "label": "relay/sonnet",' },
-                { op: "removed", text: '        "description": "Relay"' },
+                { op: "removed", text: '        "label": "relay/sonnet (Relay)",' },
+                { op: "removed", text: '        "description": "via Osuna"' },
                 { op: "removed", text: '        "model": "relay/relay/haiku",' },
-                { op: "removed", text: '        "label": "relay/haiku",' },
-                { op: "removed", text: '        "description": "Relay"' },
+                { op: "removed", text: '        "label": "relay/haiku (Relay)",' },
+                { op: "removed", text: '        "description": "via Osuna"' },
               ],
             },
           ],
