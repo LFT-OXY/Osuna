@@ -79,13 +79,13 @@ describe("disabled models list", () => {
     });
   });
 
-  it("takes nothing for an empty entry, and says so for one already on the list in another case", async () => {
+  it("takes nothing for an empty entry or one already on the list in another case", async () => {
     const { sent, save } = recorder();
     const list = openDisabledModelsList({ initial: ["*fable*"], save });
     expect(await list.disable("  ")).toBe("unchanged");
     expect(await list.disable("*FABLE*")).toBe("duplicate");
     expect(sent).toEqual([]);
-    expect(list.getState().status).toEqual({ kind: "duplicate", pattern: "*FABLE*" });
+    expect(list.getState()).toEqual({ patterns: ["*fable*"], status: { kind: "idle" } });
   });
 
   it("enables an entry by taking it off the list; a refusal keeps the list as it was and says why", async () => {

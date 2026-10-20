@@ -1,4 +1,5 @@
 import { RE2JS, RE2JSSyntaxException } from "re2js";
+import { compileGlob, type GlobMatcher } from "./glob.js";
 
 /*
  * 自动勾选规则（Auto-pick rules）的读法，daemon 校验与匹配、app 当场提示共用一份（照 magpie groupmatch.go）。
@@ -11,10 +12,7 @@ export const AUTO_PICK_REGEX_PREFIX = "re:";
 
 export type AutoPickRuleProblem = "not_rule" | "empty_regex" | "invalid_regex";
 
-export interface AutoPickRuleMatcher {
-  // 整个模型名都要匹配。
-  matches(modelId: string): boolean;
-}
+export type AutoPickRuleMatcher = GlobMatcher;
 
 /** 规则（已去掉首尾空白）有什么问题；能用时为 null。 */
 export function autoPickRuleProblem(rule: string): AutoPickRuleProblem | null {
@@ -36,19 +34,4 @@ export function compileAutoPickRule(rule: string): AutoPickRuleMatcher {
   }
   // glob：* 之间的照字面，整名匹配、不分大小写（magpie 的 "(?i)^" + … + "$"）。
   return compileGlob({ glob: rule, isQuestionMarkAnyOne: false });
-}
-
-/**
- * glob 编译成整名匹配、不分大小写的匹配器（re2js，线性时间）：* 是任意一段字符（斜杠也算），
- * isQuestionMarkAnyOne 时 ? 是任意一个字符（已禁用的模型，照 magpie globMatch），否则照字面；其余照字面。
- */
-export function compileGlob(input: {
-  glob: string;
-  isQuestionMarkAnyOne: boolean;
-}): AutoPickRuleMatcher {
-  const literal = (part: string) => (part === "" ? "" : RE2JS.quote(part));
-  const quoted = (part: string) =>
-    input.isQuestionMarkAnyOne ? part.split("?").map(literal).join(".") : literal(part);
-  const pattern = input.glob.split("*").map(quoted).join(".*");
-  return RE2JS.compile(pattern, RE2JS.CASE_INSENSITIVE | RE2JS.DOTALL);
 }

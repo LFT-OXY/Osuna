@@ -1356,15 +1356,16 @@ test.describe("Settings API endpoints", () => {
     const section = page.getByTestId("api-endpoints-disabled-models").filter({ visible: true });
     const error = section.getByTestId("api-endpoints-disabled-models-error");
     const hostList = async () => (await client.apiEndpointList("claude")).disabledModels;
+    const search = () =>
+      page.locator('input[placeholder*="*-preview"]').filter({ visible: true }).last();
     const disable = async (typed: string) => {
       await section.getByTestId("api-endpoints-disabled-models-add").click();
-      const search = page.getByRole("textbox").filter({ visible: true }).last();
-      await search.fill(typed);
-      await search.press("Enter");
+      await search().fill(typed);
+      await search().press("Enter");
     };
 
-    // 空着时只有说明用法的那一行。
-    await expect(section).toContainText("Type a pattern such as *-preview");
+    // 空着时只有「禁用模型」那一行；式子的写法在标题旁的说明里。
+    await expect(section).toContainText("No endpoint offers it any more");
     await disable("*-PREVIEW");
     await expect(error).toContainText("EACCES: permission denied");
     expect(await hostList()).toEqual([]);
@@ -1374,13 +1375,21 @@ test.describe("Settings API endpoints", () => {
     await disable("*-PREVIEW");
     await expect.poll(hostList).toEqual(["*-PREVIEW"]);
     await expect(error).toHaveCount(0);
-    await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toContainText(
-      "Matches 1: good-relay/gemini-3-preview",
-    );
+    const entry = section.getByTestId("api-endpoints-disabled-model-*-PREVIEW");
+    await expect(entry).toContainText("Matches 1:");
+    await expect(entry).toContainText("good-relay/gemini-3-preview");
 
-    // 只差大小写的不再加，说它已在名单里。
-    await disable("*-preview");
-    await expect(error).toContainText("*-preview is already on the list");
+    // 只差大小写的在选单里置灰，写明存着的是哪一条；回车不加，名单下面也不冒出报错。
+    await section.getByTestId("api-endpoints-disabled-models-add").click();
+    await search().fill("*-preview");
+    const listed = page
+      .getByTestId("api-endpoints-disabled-models-listed-option")
+      .filter({ visible: true });
+    await expect(listed).toContainText("Already on the list as *-PREVIEW");
+    await expect(listed).toBeDisabled();
+    await search().press("Enter");
+    await expect(search()).toHaveCount(0);
+    await expect(error).toHaveCount(0);
     expect(await hostList()).toEqual(["*-PREVIEW"]);
 
     await section

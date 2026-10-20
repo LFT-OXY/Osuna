@@ -68,15 +68,25 @@ async function startUpstream(): Promise<FakeUpstream> {
   return upstream;
 }
 
-function endpoint(input: { id: string; slug: string; url: string; models: string[] }) {
+function endpoint(input: {
+  id: string;
+  slug: string;
+  url: string;
+  models: string[];
+  // 只有 OpenAI Chat 地址的一家；缺省 Anthropic 与 Responses 两个地址。
+  isChatOnly?: boolean;
+}) {
+  const baseUrls = input.isChatOnly
+    ? [{ format: "openai_chat", url: `${input.url}/v1` }]
+    : [
+        { format: "anthropic_messages", url: input.url },
+        { format: "openai_responses", url: `${input.url}/v1` },
+      ];
   return {
     id: input.id,
     slug: input.slug,
     name: input.slug.toUpperCase(),
-    baseUrls: [
-      { format: "anthropic_messages", url: input.url },
-      { format: "openai_responses", url: `${input.url}/v1` },
-    ],
+    baseUrls,
     models: input.models.map((id) => ({ id })),
     enabled: true,
     createdAt: "2026-10-01T00:00:00.000Z",
@@ -85,7 +95,8 @@ function endpoint(input: { id: string; slug: string; url: string; models: string
 }
 
 /**
- * 两家接口都开着：A 有 kimi-k2、gemini-3-preview、gpt-5.5，B 有 kimi-k2、glm-5-preview。
+ * 三家接口都开着：A 有 kimi-k2、gemini-3-preview、gpt-5.5，B 有 kimi-k2、glm-5-preview，
+ * C 只有 OpenAI Chat 地址、有 deepseek-v4-preview。
  * Claude Code 与 Codex 的总开关都开着。
  */
 async function start(input: { claudeDefaultModel?: string; processes?: FakeHostProcesses } = {}) {
@@ -114,13 +125,20 @@ async function start(input: { claudeDefaultModel?: string; processes?: FakeHostP
           url: upstream.url,
           models: ["kimi-k2", "glm-5-preview"],
         }),
+        endpoint({
+          id: "ep_c",
+          slug: "relay-c",
+          url: upstream.url,
+          models: ["deepseek-v4-preview"],
+          isChatOnly: true,
+        }),
       ],
       agents: {
         claude: { enabled: true, defaultModelId: input.claudeDefaultModel ?? "kimi-k2" },
         codex: { enabled: true, defaultModelId: "gpt-5.5" },
       },
     },
-    "keys.json": { keys: { ep_a: "sk-a", ep_b: "sk-b" } },
+    "keys.json": { keys: { ep_a: "sk-a", ep_b: "sk-b", ep_c: "sk-c" } },
     "gateway-tokens.json": { tokens: { claude: CLAUDE_TOKEN, codex: CODEX_TOKEN } },
   };
   for (const [name, value] of Object.entries(files)) {
@@ -200,22 +218,32 @@ describe("disabled models", () => {
   test("with *-preview disabled no endpoint serves a preview model: the gateway's list and Codex's catalog go without them", async () => {
     const { client, gateway, daemon } = await start();
 
+    const servedIds = async () =>
+      (
+        (await (
+          await fetch(`${gateway}/v1/models`, {
+            headers: { authorization: `Bearer ${CLAUDE_TOKEN}` },
+          })
+        ).json()) as { data: { id: string }[] }
+      ).data.map((model) => model.id);
+    // 只有 OpenAI Chat 地址的那家也在服务，直到被禁。
+    expect(await servedIds()).toContain("deepseek-v4-preview");
+
     await client.apiEndpointSetDisabledModels({ models: ["*-preview"] });
 
-    const listed = (await (
-      await fetch(`${gateway}/v1/models`, { headers: { authorization: `Bearer ${CLAUDE_TOKEN}` } })
-    ).json()) as { data: { id: string }[] };
-    expect(listed.data.map((model) => model.id)).toEqual(["kimi-k2", "gpt-5.5"]);
+    expect(await servedIds()).toEqual(["kimi-k2", "gpt-5.5"]);
     const catalog = JSON.parse(
       await readFile(path.join(daemon.paseoHome, "api-endpoints", "codex-models.json"), "utf8"),
     ) as { models: { slug: string }[] };
     expect(catalog.models.map((model) => model.slug)).not.toContain("relay-a/gemini-3-preview");
     expect(catalog.models.map((model) => model.slug)).not.toContain("relay-b/glm-5-preview");
+    expect(catalog.models.map((model) => model.slug)).not.toContain("relay-c/deepseek-v4-preview");
     expect(catalog.models.map((model) => model.slug)).toContain("relay-a/kimi-k2");
     // 存下的已选模型不改：解禁后原样回来。
     expect(modelIdsOf((await client.apiEndpointList("claude")).endpoints)).toEqual([
       ["kimi-k2", "gemini-3-preview", "gpt-5.5"],
       ["kimi-k2", "glm-5-preview"],
+      ["deepseek-v4-preview"],
     ]);
   });
 
@@ -250,6 +278,13 @@ describe("disabled models", () => {
         param: null,
       },
     });
+    // 只有 OpenAI Chat 地址的那家的模型同样拒收，不翻译过去。
+    const chatOnly = await asClaude(gateway, "/v1/messages", "deepseek-v4-preview");
+    expect(chatOnly.status).toBe(403);
+    expect(((await chatOnly.json()) as { error: { message: string } }).error.message).toBe(
+      refusal("deepseek-v4-preview", "*-preview"),
+    );
+    expect((await asCodex(gateway, "relay-c/deepseek-v4-preview")).status).toBe(403);
     expect(upstream.models).toEqual([]);
 
     // 别的模型照常。

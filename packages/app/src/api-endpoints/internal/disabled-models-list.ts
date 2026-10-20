@@ -2,18 +2,19 @@ import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   cleanDisabledModels,
   endpointModelDisabledBy,
+  listedDisabledEntry,
+  withoutDisabledModels,
 } from "@getpaseo/protocol/api-endpoint/disabled-models";
 
 /*
  * 「第三方接口」页底部的「已禁用的模型」（照 magpie 设置页的 Disabled models）：纯 TypeScript，无 React（docs/forms.md）。
- * 每次增删都把整份名单交给主机；只差大小写的重复不加，告诉用户已经在名单里。存失败时名单回到原样，原因留在原处。
+ * 每次增删都把整份名单交给主机；只差大小写的重复不加（选单里那一项已经置灰写明）。存失败时名单回到原样，原因留在原处。
  * 每条现在命中谁、能从哪些模型里挑，按开着的接口的已选模型算（magpie DisabledHits、titleModels）。
  */
 
 export type DisabledModelsStatus =
   | { kind: "idle" }
   | { kind: "saving" }
-  | { kind: "duplicate"; pattern: string }
   | { kind: "failed"; message: string };
 
 export interface DisabledModelsListState {
@@ -64,11 +65,7 @@ export function openDisabledModelsList(input: {
     disable(typed) {
       const pattern = typed.trim();
       if (pattern === "") return Promise.resolve("unchanged");
-      const isListed = state.patterns.some(
-        (known) => known.toLowerCase() === pattern.toLowerCase(),
-      );
-      if (isListed) {
-        publish({ ...state, status: { kind: "duplicate", pattern } });
+      if (listedDisabledEntry({ patterns: state.patterns, pattern }) !== null) {
         return Promise.resolve("duplicate");
       }
       return saveList(cleanDisabledModels([...state.patterns, pattern]));
@@ -133,9 +130,6 @@ export function withoutDisabledEndpointModels(input: {
   if (patterns.length === 0) return input.endpoints;
   return input.endpoints.map((endpoint) => ({
     ...endpoint,
-    models: endpoint.models.filter(
-      (model) =>
-        endpointModelDisabledBy({ patterns, slug: endpoint.slug ?? "", model: model.id }) === null,
-    ),
+    models: withoutDisabledModels({ patterns, slug: endpoint.slug ?? "", models: endpoint.models }),
   }));
 }

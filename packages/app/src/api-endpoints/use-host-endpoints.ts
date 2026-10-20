@@ -9,6 +9,7 @@ import type {
   ApiEndpointListResponse,
   ApiEndpointSetAgentSettingsRequest,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
@@ -310,7 +311,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         await refresh();
         return null;
       } catch (error) {
-        return toErrorMessage(error);
+        return requestFailureMessage(error);
       }
     },
     [client, describeError, refresh, t],
@@ -325,7 +326,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         await refresh();
         return null;
       } catch (error) {
-        return toErrorMessage(error);
+        return requestFailureMessage(error);
       }
     },
     [client, describeError, refresh, t],
@@ -554,6 +555,14 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
 }
 
 type HostClient = NonNullable<ReturnType<typeof useHostRuntimeClient>>;
+
+/** 请求本身没成：连接断了或超时（DaemonConnectionError）、主机回了 RPC 错误（DaemonRpcError）。别的照抛。 */
+function requestFailureMessage(error: unknown): string {
+  if (error instanceof DaemonConnectionError || error instanceof DaemonRpcError) {
+    return toErrorMessage(error);
+  }
+  throw error;
+}
 
 /** daemon 的错误码认得的按界面语言说明，别的照原文显示。 */
 function iconErrorOf(error: ApiEndpointError): ConnectionIconError {

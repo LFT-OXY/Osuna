@@ -2,15 +2,15 @@
 // matchDisabled、globMatch、namesOf、IDDisabled 与 normalDisabled）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { compileGlob, type AutoPickRuleMatcher } from "./auto-pick-rules.js";
+import { compileGlob, type GlobMatcher } from "./glob.js";
 
 /*
  * 已禁用的模型（Disabled models，整台主机共用）：每条是完整 id 或 glob（* 任意一段字符、跨过斜杠，? 任意一个字符），
  * 不分大小写。daemon 拿它从在服务的模型里去掉、中转站拒收；app 拿它去掉默认模型候选、算每条现在命中谁。
- * 用户写的式子一律经 re2js 编译（auto-pick-rules.ts 的 compileGlob），不会卡住。
+ * 用户写的式子一律经 re2js 编译（glob.ts 的 compileGlob），不会卡住。
  */
 
-function matcherOf(pattern: string): AutoPickRuleMatcher | null {
+function matcherOf(pattern: string): GlobMatcher | null {
   const glob = pattern.trim();
   if (glob === "") return null;
   return compileGlob({ glob, isQuestionMarkAnyOne: true });
@@ -61,13 +61,36 @@ export function askedModelDisabledBy(input: {
   return disabledBy({ patterns: input.patterns, names });
 }
 
+/** 名单里只差大小写就算同一条：回存着的那条，没有为 null。 */
+export function listedDisabledEntry(input: {
+  patterns: readonly string[];
+  pattern: string;
+}): string | null {
+  const wanted = input.pattern.trim().toLowerCase();
+  return input.patterns.find((known) => known.toLowerCase() === wanted) ?? null;
+}
+
 /** 存下的样子：去掉首尾空白、空的与只差大小写的重复，保持原来的顺序（magpie normalDisabled）。 */
 export function cleanDisabledModels(patterns: readonly string[]): string[] {
   const kept: string[] = [];
   for (const raw of patterns) {
     const pattern = raw.trim();
-    const isRepeat = kept.some((known) => known.toLowerCase() === pattern.toLowerCase());
-    if (pattern !== "" && !isRepeat) kept.push(pattern);
+    if (pattern !== "" && listedDisabledEntry({ patterns: kept, pattern }) === null) {
+      kept.push(pattern);
+    }
   }
   return kept;
+}
+
+/** 一家接口的模型里去掉被禁的（daemon 算在服务的模型、app 算默认模型候选共用）。名单是空的原样返回。 */
+export function withoutDisabledModels<Model extends { id: string }>(input: {
+  patterns: readonly string[];
+  slug: string;
+  models: Model[];
+}): Model[] {
+  const { patterns, slug } = input;
+  if (patterns.length === 0) return input.models;
+  return input.models.filter(
+    (model) => endpointModelDisabledBy({ patterns, slug, model: model.id }) === null,
+  );
 }

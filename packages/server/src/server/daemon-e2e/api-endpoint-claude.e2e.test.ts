@@ -1577,15 +1577,30 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
-  test("the old client's switch keeps the host's long conversations", async () => {
+  test("the old client's save and switch keep the host's long conversations and disabled models", async () => {
     await start(USER_SETTINGS);
     await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    await client.apiEndpointSetDisabledModels({ models: ["*-preview"] });
+    const hostWide = async () => {
+      const list = await client.apiEndpointList("claude");
+      return { longConversations: list.longConversations, disabledModels: list.disabledModels };
+    };
+    const kept = { longConversations: { compactAt: 400_000 }, disabledModels: ["*-preview"] };
     // switchOn 走老客户端的 save 与 set_active。
-    await switchOn();
-    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
-      compactAt: 400_000,
-    });
+    const endpointId = await switchOn();
+    expect(await hostWide()).toEqual(kept);
     expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
+    // 老样子的 save 改一家：两项主机设置照样留着。
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay renamed",
+      baseUrl: "https://relay.example/api",
+      models: [{ id: "gpt-6-sol" }, { id: "gpt-6-preview" }],
+      defaultModelId: "gpt-6-sol",
+    });
+    expect(edited.error).toBeNull();
+    expect(await hostWide()).toEqual(kept);
   });
 
   test("Osuna's 272K gives way to an autoCompactWindow the user set in Claude Code", async () => {

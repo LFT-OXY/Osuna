@@ -3,6 +3,8 @@ import {
   askedModelDisabledBy,
   cleanDisabledModels,
   endpointModelDisabledBy,
+  listedDisabledEntry,
+  withoutDisabledModels,
 } from "./disabled-models";
 
 // 用例照 magpie internal/provider/disabled_test.go 的说法（7597c132）：完整 id 或 glob，不分大小写。
@@ -66,6 +68,18 @@ describe("disabled models", () => {
       "GPT-5",
       "o3",
     ]);
+  });
+
+  it("finds the entry already on the list in another case, and drops an endpoint's disabled models", () => {
+    expect(listedDisabledEntry({ patterns: ["*-PREVIEW"], pattern: " *-preview " })).toBe(
+      "*-PREVIEW",
+    );
+    expect(listedDisabledEntry({ patterns: ["*-PREVIEW"], pattern: "o3" })).toBeNull();
+    const models = [{ id: "glm-5" }, { id: "glm-5-preview" }];
+    expect(withoutDisabledModels({ patterns: ["*-preview"], slug: "z", models })).toEqual([
+      { id: "glm-5" },
+    ]);
+    expect(withoutDisabledModels({ patterns: [], slug: "z", models })).toBe(models);
   });
 
   it("answers in linear time where a backtracking glob hangs", () => {

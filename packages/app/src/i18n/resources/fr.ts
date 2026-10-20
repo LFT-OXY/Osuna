@@ -2887,20 +2887,22 @@ export const fr: TranslationResources = {
       },
       disabledModels: {
         title: "Modèles désactivés",
+        info: "Seules les requêtes qui passent par Osuna sont concernées. Une entrée est un identifiant de modèle, point d'accès/modèle ou un motif où * correspond à n'importe quelle suite de caractères et ? à un seul caractère, sans tenir compte de la casse ; {{example}} désactive tous les modèles preview.",
         addLabel: "Désactiver un modèle",
         addHint:
-          "Un modèle désactivé n'apparaît dans aucune liste de modèles, aucun choix de modèle par défaut ni aucun test, et la passerelle refuse les requêtes qui le demandent. Seules les requêtes qui passent par Osuna sont concernées. Saisissez un motif comme *-preview pour désactiver tous les modèles correspondants ; la casse est ignorée.",
+          "Aucun point d'accès ne le propose plus, et la passerelle refuse les requêtes qui le demandent.",
         disable: "Désactiver…",
         searchPlaceholder: "Nom de modèle ou motif, par exemple *-preview",
         noModels: "Aucun modèle sur les points d'accès activés",
         customValuePrefix: "Désactiver",
-        customValueDescription: "Tous les modèles correspondant à ce nom ou motif",
-        matches: "Correspond à {{n}} : {{list}}",
+        customValueDescription: "Tous les modèles correspondants",
+        alreadyListed: "Déjà dans la liste : {{pattern}}",
+        matches: "Correspond à {{n}} :",
+        more: "et {{n}} de plus",
         matchesNone:
           "Ne correspond à aucun modèle pour l'instant ; un modèle qui apparaît sera refusé",
         enable: "Activer",
         enableModel: "Activer {{model}}",
-        duplicate: "{{pattern}} est déjà dans la liste",
         saveFailed: "Enregistrement impossible : {{message}}",
       },
       modelScope: {

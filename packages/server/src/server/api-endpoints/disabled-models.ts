@@ -5,6 +5,7 @@
 import {
   askedModelDisabledBy,
   endpointModelDisabledBy,
+  withoutDisabledModels as withoutDisabledEndpointModels,
 } from "@getpaseo/protocol/api-endpoint/disabled-models";
 import { ONE_MILLION_MARK } from "./claude-model-hints.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
@@ -37,13 +38,17 @@ function withoutDisabled(input: {
   patterns: readonly string[];
 }): StoredApiEndpoint {
   const { endpoint, patterns } = input;
-  const isOff = (model: string) =>
-    endpointModelDisabledBy({ patterns, slug: endpoint.slug, model }) !== null;
-  if (!endpoint.models.some((model) => isOff(model.id))) return endpoint;
-  const models = endpoint.models.filter((model) => !isOff(model.id));
+  const models = withoutDisabledEndpointModels({
+    patterns,
+    slug: endpoint.slug,
+    models: endpoint.models,
+  });
+  if (models.length === endpoint.models.length) return endpoint;
+  const served = new Set(models.map((model) => model.id));
   if (endpoint.modelMapping === undefined) return { ...endpoint, models };
+  // 档位只留指向还在服务的模型的。
   const mapping = Object.entries(endpoint.modelMapping).filter(
-    ([, model]) => typeof model !== "string" || !isOff(model),
+    ([, model]) => typeof model !== "string" || served.has(model),
   );
   return { ...endpoint, models, modelMapping: Object.fromEntries(mapping) };
 }
