@@ -56,8 +56,10 @@ export function modelIdOf(path: string): string | null {
   if (raw === "") return null;
   try {
     return decodeURIComponent(raw);
-  } catch {
-    return raw;
+  } catch (error) {
+    // 编码坏了的名字原样拿去找，找不到就是 404。
+    if (error instanceof URIError) return raw;
+    throw error;
   }
 }
 

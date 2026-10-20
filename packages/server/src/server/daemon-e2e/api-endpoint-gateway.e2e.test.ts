@@ -5234,7 +5234,7 @@ describe("model list and warm-up", () => {
     await writeFile(endpointsPath, JSON.stringify(file));
     const headers = { authorization: `Bearer ${CODEX_TOKEN}` };
 
-    const asked = ["nothing-here", "qwen3-coder", "relay-a/qwen3-coder"];
+    const asked = ["nothing-here", "qwen3-coder", "relay-a/qwen3-coder", "%E0%A4%A"];
     const answers = await Promise.all(
       asked.map(async (id) => {
         const answer = await fetch(`${gateway}/v1/models/${id}`, { headers });
