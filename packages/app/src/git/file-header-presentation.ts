@@ -26,6 +26,17 @@ export function allocateDiffHeaderTextWidths(input: {
   return { name: nameWidth, directory: Math.min(directoryWidth, directoryAvailable) };
 }
 
+/** 超过这个改动行数（增 + 删）的文件默认收起，收起时文件头标出行数。 */
+export const LARGE_DIFF_FILE_CHANGED_LINES = 1000;
+
+export function diffFileChangedLines(file: { additions: number; deletions: number }): number {
+  return file.additions + file.deletions;
+}
+
+export function isLargeDiffFile(file: { additions: number; deletions: number }): boolean {
+  return diffFileChangedLines(file) > LARGE_DIFF_FILE_CHANGED_LINES;
+}
+
 export function formatDiffCount(value: number): string {
   return compactFormatter.format(value).toLowerCase();
 }

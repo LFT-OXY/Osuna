@@ -11,6 +11,8 @@ export const changesStateSchema = z
     treeVisible: z.boolean(),
     treeWidth: z.number().optional(),
     collapsedFilePaths: z.array(z.string()),
+    // 已展开（默认决定或用户手动展开）的文件；旧版本存下的状态没有这个字段。
+    expandedFilePaths: z.array(z.string()).optional(),
     collapsedFolderPaths: z.array(z.string()),
     commitsCollapsed: z.boolean(),
   })

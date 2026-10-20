@@ -1011,6 +1011,8 @@ export const ja: TranslationResources = {
         binaryFile: "バイナリファイル",
         unmodifiedLine: "変更のない {{count}} 行",
         unmodifiedLines: "変更のない {{count}} 行",
+        linesChanged: "{{lines}} 行の変更",
+        generated: "生成",
         tooLarge: "差分が大きすぎて表示できません",
         previewTooLargeTitle: "この差分は大きすぎるためプレビューできません",
         previewTooLargeDescription: "比較範囲を狭めると、ここでプレビューできます",

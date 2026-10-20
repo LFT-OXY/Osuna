@@ -15,3 +15,20 @@ describe("Changes pane state", () => {
     ).toEqual(defaultChangesState);
   });
 });
+
+describe("Changes pane state persistence", () => {
+  it("reads state saved before expanded files were remembered", () => {
+    const saved = {
+      treeVisible: true,
+      collapsedFilePaths: ["a.ts"],
+      collapsedFolderPaths: [],
+      commitsCollapsed: true,
+    };
+    expect(changesStateSchema.parse(saved)).toEqual(saved);
+  });
+
+  it("keeps remembered expanded files across a save and reload", () => {
+    const state = { ...defaultChangesState, expandedFilePaths: ["big.ts"] };
+    expect(changesStateSchema.parse(JSON.parse(JSON.stringify(state)))).toEqual(state);
+  });
+});

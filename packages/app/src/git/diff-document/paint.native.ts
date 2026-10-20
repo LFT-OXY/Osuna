@@ -112,6 +112,21 @@ export function recordNativeHeaderPicture(input: {
   const statX = changeSlotX - 8 - additionsText.width - 4 - deletionsText.width;
   paintNativeHeaderText(canvas, additionsText, statX);
   paintNativeHeaderText(canvas, deletionsText, statX + additionsText.width + 4);
+  // 收起的大文件：增删行数左侧一枚同字号的灰色行数标签。
+  const noteText = input.file.headerNote
+    ? shapeNativeHeaderText({
+        layout: input.textLayout,
+        text: input.file.headerNote,
+        size: "stat",
+        tone: "foregroundMuted",
+      })
+    : null;
+  let textEnd = statX;
+  if (noteText) {
+    const noteX = statX - 8 - noteText.width;
+    paintNativeHeaderText(canvas, noteText, noteX);
+    textEnd = noteX - 8;
+  }
   const change = diffFileChangePresentation(diffFileChangeKind(input.file.file));
   const changeText = shapeNativeHeaderText({
     layout: input.textLayout,
@@ -126,7 +141,7 @@ export function recordNativeHeaderPicture(input: {
     changeSlotX + (DIFF_FILE_CHANGE_SLOT_SIZE - changeText.width) / 2,
   );
 
-  const available = Math.max(0, statX - DIFF_FILE_HEADER_LEFT);
+  const available = Math.max(0, textEnd - DIFF_FILE_HEADER_LEFT);
   const name = fileNameForPath(input.file.path);
   const directory = directorySuffix(input.file.path).trimStart();
   const fitted = fitNativeHeaderText(input.textLayout, name, directory, available);
@@ -148,6 +163,7 @@ export function recordNativeHeaderPicture(input: {
   const picture = recorder.finishRecordingAsPicture();
   additionsText.paragraph.dispose();
   deletionsText.paragraph.dispose();
+  noteText?.paragraph.dispose();
   changeText.paragraph.dispose();
   fitted.name.paragraph.dispose();
   fitted.directory.paragraph.dispose();

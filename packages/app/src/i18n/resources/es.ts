@@ -1032,6 +1032,8 @@ export const es: TranslationResources = {
         binaryFile: "archivo binario",
         unmodifiedLine: "{{count}} línea sin cambios",
         unmodifiedLines: "{{count}} líneas sin cambios",
+        linesChanged: "{{lines}} líneas cambiadas",
+        generated: "Generado",
         tooLarge: "La diferencia es demasiado grande para mostrarse",
         previewTooLargeTitle: "Este diff es demasiado grande para previsualizarlo",
         previewTooLargeDescription: "Reduce la comparación para previsualizarla aquí",

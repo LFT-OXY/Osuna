@@ -8,6 +8,7 @@ import type pino from "pino";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import type { CheckoutContext } from "../utils/checkout-git.js";
+import type { CheckoutDiffFileReuse } from "../utils/checkout-diff-file-reuse.js";
 import {
   type BranchCheckoutResolution,
   type BranchSuggestion,
@@ -219,7 +220,7 @@ export interface WorkspaceGitService {
   getCheckoutDiff(
     cwd: string,
     options: CheckoutDiffCompare,
-    readOptions?: WorkspaceGitReadOptions,
+    readOptions?: CheckoutDiffReadOptions,
   ): Promise<CheckoutDiffResult>;
   validateBranchRef(
     cwd: string,
@@ -250,7 +251,7 @@ export interface WorkspaceGitService {
   refresh(cwd: string, options?: { priority?: "normal" | "high" }): Promise<void>;
   requestWorkingTreeWatch(
     cwd: string,
-    onChange: () => void,
+    onChange: WorkingTreeChangeListener,
   ): Promise<{ repoRoot: string | null; unsubscribe: () => void }>;
   scheduleRefreshForCwd(cwd: string): void;
   onWorkspaceStateMayHaveChanged(cwd: string): void;
@@ -258,6 +259,18 @@ export interface WorkspaceGitService {
   getMetrics(): WorkspaceGitServiceMetrics;
   dispose(): Promise<void>;
 }
+
+/** 订阅中的读取带上按文件复用；一次性读取不带。 */
+export type CheckoutDiffReadOptions = WorkspaceGitReadOptions & {
+  fileReuse?: CheckoutDiffFileReuse;
+};
+
+/** 文件监听给出的变动路径（绝对路径）只是提示；轮询降级等信号不带路径。 */
+export interface WorkingTreeChange {
+  changedPaths?: readonly string[];
+}
+
+export type WorkingTreeChangeListener = (change?: WorkingTreeChange) => void;
 
 export interface WorkspaceGitServiceMetrics {
   workspaceTargetCount: number;
@@ -513,7 +526,7 @@ interface WorkingTreeWatchTarget {
   fallbackPollTimer: NodeJS.Timeout | null;
   fallbackPollQuietTickCount: number;
   recovery: WatchRecoveryState;
-  listeners: Set<() => void>;
+  listeners: Set<WorkingTreeChangeListener>;
   closed: boolean;
 }
 
@@ -800,7 +813,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   async getCheckoutDiff(
     cwd: string,
     options: CheckoutDiffCompare,
-    readOptions?: WorkspaceGitReadOptions,
+    readOptions?: CheckoutDiffReadOptions,
   ): Promise<CheckoutDiffResult> {
     this.assertNotDisposed();
     const normalizedCwd = resolve(cwd);
@@ -817,6 +830,8 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         this.deps.getCheckoutDiff(normalizedCwd, normalizedOptions, {
           paseoHome: this.paseoHome,
           worktreesRoot: this.worktreesRoot,
+          logger: this.logger,
+          diffFileReuse: readOptions?.fileReuse,
         }),
     });
   }
@@ -829,6 +844,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
         : {}),
       ...(options.ignoreWhitespace === true ? { ignoreWhitespace: true } : {}),
       ...(options.includeStructured === true ? { includeStructured: true } : {}),
+      ...(options.filesOnly === true ? { filesOnly: true } : {}),
     };
   }
 
@@ -977,7 +993,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
 
   async requestWorkingTreeWatch(
     cwd: string,
-    onChange: () => void,
+    onChange: WorkingTreeChangeListener,
   ): Promise<{ repoRoot: string | null; unsubscribe: () => void }> {
     this.assertNotDisposed();
     cwd = resolve(cwd);
@@ -1528,7 +1544,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
           if (!this.hasRelevantWorkingTreeEvent(target, events)) {
             return;
           }
-          this.notifyWorkingTreeChanged(target, "working-tree-watch");
+          this.notifyWorkingTreeChanged(target, "working-tree-watch", {
+            changedPaths: events.map((event) => event.path),
+          });
         },
         { ignore },
         markSubscribeSettled,
@@ -2079,20 +2097,27 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     return true;
   }
 
-  private notifyWorkingTreeChanged(target: WorkingTreeWatchTarget, reason: string): void {
+  private notifyWorkingTreeChanged(
+    target: WorkingTreeWatchTarget,
+    reason: string,
+    change: WorkingTreeChange = {},
+  ): void {
     if (target.closed) {
       return;
     }
-    this.notifyWorkingTreeConsumers(target);
+    this.notifyWorkingTreeConsumers(target, change);
     this.scheduleWorkingTreeRefreshes(target, reason);
   }
 
-  private notifyWorkingTreeConsumers(target: WorkingTreeWatchTarget): void {
+  private notifyWorkingTreeConsumers(
+    target: WorkingTreeWatchTarget,
+    change: WorkingTreeChange = {},
+  ): void {
     for (const alias of target.aliases) {
       this.invalidateCheckoutDiffCache(alias, "uncommitted");
     }
     for (const listener of target.listeners) {
-      listener();
+      listener(change);
     }
   }
 
@@ -3669,7 +3694,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     this.workspaceTargets.delete(target.cwd);
   }
 
-  private removeWorkingTreeWatchListener(cwd: string, listener: () => void): void {
+  private removeWorkingTreeWatchListener(cwd: string, listener: WorkingTreeChangeListener): void {
     const target = this.workingTreeWatchTargets.get(cwd);
     if (!target) {
       return;

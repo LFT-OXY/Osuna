@@ -26,6 +26,8 @@ export interface ParsedDiffFile {
   deletions: number;
   hunks: DiffHunk[];
   status?: "ok" | "too_large" | "binary";
+  /** Generated file（lock 文件、linguist-generated、压缩产物），只在为 true 时带上。 */
+  generated?: boolean;
 }
 
 interface HighlightDiffWithFileContentOptions {

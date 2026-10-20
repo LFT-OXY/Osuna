@@ -30,12 +30,16 @@ type StatusMessage = Extract<SessionOutboundMessage, { type: "status" }>;
 type TerminalsChangedMessage = Extract<SessionOutboundMessage, { type: "terminals_changed" }>;
 type CheckoutDiffResponsePayload = SubscribeCheckoutDiffResponseMessage["payload"];
 type CheckoutDiffCachePayload = Omit<CheckoutDiffResponsePayload, "subscriptionId">;
+type CheckoutDiffPushPayload = Omit<CheckoutDiffResponsePayload, "requestId"> & {
+  requestId?: string;
+};
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
 
 interface CheckoutDiffCompare {
   mode: "uncommitted" | "base";
   baseRef?: string;
   ignoreWhitespace?: boolean;
+  filesOnly?: boolean;
 }
 
 interface CheckoutDiffRoute {
@@ -49,6 +53,7 @@ interface CheckoutDiffRoute {
 
 interface CheckoutDiffRegistration extends CheckoutDiffRoute {
   subscription: OwnedSubscription<CheckoutDiffResponsePayload>;
+  cancelPendingUpdate(): void;
 }
 
 interface WorkspaceTerminalsRoute {
@@ -64,6 +69,8 @@ interface WorkspaceTerminalsRegistration extends WorkspaceTerminalsRoute {
 }
 
 type ServerDataRoute = CheckoutDiffRoute | WorkspaceTerminalsRoute;
+
+const CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS = 1000;
 
 export interface ServerDataQueryMeta extends Record<string, unknown> {
   serverData: ServerDataRoute;
@@ -312,6 +319,7 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
     unsubscribeQueryCache();
     void events.release().catch(console.error);
     for (const current of activeCheckoutDiffSubscriptions.values()) {
+      current.cancelPendingUpdate();
       void current.subscription.release().catch(console.error);
     }
     activeCheckoutDiffSubscriptions.clear();
@@ -333,16 +341,24 @@ function reconcileCheckoutDiffSubscriptions(input: {
     const desired = input.desired.get(key);
     if (desired && areCheckoutDiffRoutesEqual(current, desired)) continue;
     input.active.delete(key);
+    current.cancelPendingUpdate();
     void current.subscription.release().catch(console.error);
   }
   for (const [key, desired] of input.desired) {
     if (input.active.has(key)) continue;
     const subscription = input.client.observeCheckoutDiff(desired.cwd, desired.compare);
-    const registration = { ...desired, subscription };
+    // 推送每秒最多处理一次：窗口内只留最后一份，窗口结束时补上，连旧 daemon 也生效
+    let lastUpdateAppliedAt: number | null = null;
+    let pendingUpdate: CheckoutDiffPushPayload | null = null;
+    let pendingUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelPendingUpdate = () => {
+      if (pendingUpdateTimer) clearTimeout(pendingUpdateTimer);
+      pendingUpdateTimer = null;
+      pendingUpdate = null;
+    };
+    const registration = { ...desired, subscription, cancelPendingUpdate };
     input.active.set(key, registration);
-    const apply = (
-      payload: Omit<CheckoutDiffResponsePayload, "requestId"> & { requestId?: string },
-    ) => {
+    const apply = (payload: CheckoutDiffPushPayload) => {
       if (input.active.get(key) !== registration) return;
       const { subscriptionId, ...snapshot } = payload;
       setCheckoutDiffPayload({
@@ -357,12 +373,40 @@ function reconcileCheckoutDiffSubscriptions(input: {
         },
       });
     };
+    const applyUpdate = (payload: CheckoutDiffPushPayload) => {
+      lastUpdateAppliedAt = Date.now();
+      apply(payload);
+    };
+    const throttleUpdate = (payload: CheckoutDiffPushPayload) => {
+      let waitMs = 0;
+      if (lastUpdateAppliedAt !== null) {
+        waitMs = lastUpdateAppliedAt + CHECKOUT_DIFF_MIN_APPLY_INTERVAL_MS - Date.now();
+      }
+      if (waitMs <= 0 && !pendingUpdateTimer) {
+        applyUpdate(payload);
+        return;
+      }
+      pendingUpdate = payload;
+      pendingUpdateTimer ??= setTimeout(
+        () => {
+          pendingUpdateTimer = null;
+          const latest = pendingUpdate;
+          pendingUpdate = null;
+          if (latest) applyUpdate(latest);
+        },
+        Math.max(waitMs, 0),
+      );
+    };
     subscription.subscribe({
-      snapshot: apply,
+      snapshot: (payload) => {
+        cancelPendingUpdate();
+        apply(payload);
+      },
       update: (message) => {
-        if (message.type === "checkout_diff_update") apply(message.payload);
+        if (message.type === "checkout_diff_update") throttleUpdate(message.payload);
       },
       error: (error) => {
+        cancelPendingUpdate();
         if (input.active.get(key) === registration) input.active.delete(key);
         console.error("[server-data] observeCheckoutDiff failed", {
           serverId: input.serverId,
@@ -494,6 +538,14 @@ function getActiveServerDataRoute(
   if (query.getObserversCount() === 0) {
     return null;
   }
+  // Query metadata belongs to the last observer that updated its options. A
+  // retained hidden panel must not cancel demand from another visible panel.
+  const observerRoutes = query.observers
+    .map((observer) => getServerDataRoute({ meta: observer.options.meta }))
+    .filter((route): route is ServerDataRoute => route !== null);
+  if (observerRoutes.length > 0) {
+    return observerRoutes.find((route) => route.enabled && route.serverId === serverId) ?? null;
+  }
   const route = getServerDataRoute(query);
   if (route) {
     return route.enabled && route.serverId === serverId ? route : null;
@@ -590,7 +642,7 @@ function canEventChangeDesiredSubscriptions(type: QueryCacheNotifyEvent["type"])
   );
 }
 
-function getServerDataRoute(query: Query): ServerDataRoute | null {
+function getServerDataRoute(query: Pick<Query, "meta">): ServerDataRoute | null {
   const meta = query.meta;
   if (!isRecord(meta) || !isRecord(meta.serverData)) {
     return null;
@@ -647,6 +699,7 @@ function readCheckoutDiffCompare(value: unknown): CheckoutDiffCompare | null {
   const mode = value.mode;
   const baseRef = value.baseRef;
   const ignoreWhitespace = value.ignoreWhitespace;
+  const filesOnly = value.filesOnly;
   if (mode !== "uncommitted" && mode !== "base") {
     return null;
   }
@@ -656,10 +709,14 @@ function readCheckoutDiffCompare(value: unknown): CheckoutDiffCompare | null {
   if (ignoreWhitespace !== undefined && typeof ignoreWhitespace !== "boolean") {
     return null;
   }
+  if (filesOnly !== undefined && typeof filesOnly !== "boolean") {
+    return null;
+  }
   return {
     mode,
     ...(baseRef ? { baseRef } : {}),
     ...(ignoreWhitespace !== undefined ? { ignoreWhitespace } : {}),
+    ...(filesOnly === true ? { filesOnly } : {}),
   };
 }
 
@@ -673,7 +730,8 @@ function areCheckoutDiffRoutesEqual(
     left.cwd === right.cwd &&
     left.compare.mode === right.compare.mode &&
     left.compare.baseRef === right.compare.baseRef &&
-    left.compare.ignoreWhitespace === right.compare.ignoreWhitespace
+    left.compare.ignoreWhitespace === right.compare.ignoreWhitespace &&
+    left.compare.filesOnly === right.compare.filesOnly
   );
 }
 
@@ -684,7 +742,8 @@ function isCheckoutDiffQueryKeyForRoute(queryKey: QueryKey, route: CheckoutDiffR
     queryKey[2] === route.cwd &&
     queryKey[3] === route.compare.mode &&
     queryKey[4] === (route.compare.baseRef ?? "") &&
-    queryKey[5] === (route.compare.ignoreWhitespace === true)
+    queryKey[5] === (route.compare.ignoreWhitespace === true) &&
+    (queryKey[6] === "filesOnly") === (route.compare.filesOnly === true)
   );
 }
 

@@ -27,8 +27,18 @@ export function checkoutDiffQueryKey(
   mode: "uncommitted" | "base",
   baseRef?: string,
   ignoreWhitespace?: boolean,
+  options?: { filesOnly?: boolean },
 ) {
-  return ["checkoutDiff", serverId, cwd, mode, baseRef ?? "", ignoreWhitespace === true] as const;
+  const key = [
+    "checkoutDiff",
+    serverId,
+    cwd,
+    mode,
+    baseRef ?? "",
+    ignoreWhitespace === true,
+  ] as const;
+  // 清单订阅的数据没有 hunks，单独一个缓存，不和完整订阅共用
+  return options?.filesOnly === true ? ([...key, "filesOnly"] as const) : key;
 }
 
 export function checkoutPrStatusQueryKey(serverId: string, cwd: string) {

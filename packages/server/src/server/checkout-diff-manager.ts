@@ -1,10 +1,16 @@
 import type pino from "pino";
 import type { SubscribeCheckoutDiffRequest, SessionOutboundMessage } from "./messages.js";
-import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
+import type {
+  CheckoutDiffReadOptions,
+  WorkspaceGitRuntimeSnapshot,
+  WorkspaceGitService,
+} from "./workspace-git-service.js";
 import { expandTilde } from "../utils/path.js";
+import { CheckoutDiffFileReuse } from "../utils/checkout-diff-file-reuse.js";
 import { toCheckoutError } from "./checkout-git-utils.js";
 
 const CHECKOUT_DIFF_WATCH_DEBOUNCE_MS = 150;
+const CHECKOUT_DIFF_MIN_PUSH_INTERVAL_MS = 1000;
 
 type CheckoutDiffWorkspace = Pick<
   WorkspaceGitService,
@@ -42,12 +48,19 @@ interface CheckoutDiffWatchTarget {
   latestWorkspaceForgeFingerprint: string | null;
   debounceTimer: NodeJS.Timeout | null;
   pendingDebounceForce: boolean;
+  throttleTimer: NodeJS.Timeout | null;
+  pendingThrottleForce: boolean;
+  lastRefreshStartedAt: number | null;
+  lastPushAt: number | null;
+  pushGapWait: { timer: NodeJS.Timeout; release: () => void } | null;
   refreshPromise: Promise<void> | null;
   refreshQueued: boolean;
   refreshQueuedForce: boolean;
   latestPayload: CheckoutDiffSnapshotPayload | null;
   latestFingerprint: string | null;
   openPromise: Promise<void> | null;
+  // 按文件复用 patch 与高亮，随 target 关闭释放
+  fileReuse: CheckoutDiffFileReuse;
 }
 
 export interface CheckoutDiffSubscriptionRequest {
@@ -59,6 +72,13 @@ export interface CheckoutDiffSubscriptionRequest {
 export interface CheckoutDiffSubscription {
   initial: CheckoutDiffSnapshotPayload;
   unsubscribe: () => void;
+}
+
+function msUntilIntervalElapsed(lastAt: number | null): number {
+  if (lastAt === null) {
+    return 0;
+  }
+  return lastAt + CHECKOUT_DIFF_MIN_PUSH_INTERVAL_MS - Date.now();
 }
 
 export class CheckoutDiffManager {
@@ -109,6 +129,7 @@ export class CheckoutDiffManager {
         target.latestPayload ??
         (await this.computeCheckoutDiffSnapshot(target.cwd, target.compare, {
           diffCwd: target.diffCwd,
+          fileReuse: target.fileReuse,
         }));
       target.latestPayload = initial;
       target.latestFingerprint = JSON.stringify(initial);
@@ -153,13 +174,15 @@ export class CheckoutDiffManager {
 
   private normalizeCompare(compare: CheckoutDiffCompareInput): CheckoutDiffCompareInput {
     const ignoreWhitespace = compare.ignoreWhitespace === true;
+    // 清单订阅与完整订阅各算各的：filesOnly 进 target key，各自缓存、各自推送
+    const filesOnly = compare.filesOnly === true ? { filesOnly: true } : {};
     if (compare.mode === "uncommitted") {
-      return { mode: "uncommitted", ignoreWhitespace };
+      return { mode: "uncommitted", ignoreWhitespace, ...filesOnly };
     }
     const trimmedBaseRef = compare.baseRef?.trim();
     return trimmedBaseRef
-      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace }
-      : { mode: "base", ignoreWhitespace };
+      ? { mode: "base", baseRef: trimmedBaseRef, ignoreWhitespace, ...filesOnly }
+      : { mode: "base", ignoreWhitespace, ...filesOnly };
   }
 
   private buildTargetKey(cwd: string, compare: CheckoutDiffCompareInput): string {
@@ -168,6 +191,7 @@ export class CheckoutDiffManager {
       compare.mode,
       compare.mode === "base" ? (compare.baseRef ?? "") : "",
       compare.ignoreWhitespace === true,
+      compare.filesOnly === true,
     ]);
   }
 
@@ -176,11 +200,21 @@ export class CheckoutDiffManager {
       clearTimeout(target.debounceTimer);
       target.debounceTimer = null;
     }
+    if (target.throttleTimer) {
+      clearTimeout(target.throttleTimer);
+      target.throttleTimer = null;
+    }
+    if (target.pushGapWait) {
+      clearTimeout(target.pushGapWait.timer);
+      target.pushGapWait.release();
+      target.pushGapWait = null;
+    }
     target.workingTreeWatchUnsubscribe?.();
     target.workingTreeWatchUnsubscribe = null;
     target.workspaceGitUnsubscribe?.();
     target.workspaceGitUnsubscribe = null;
     target.listeners.clear();
+    target.fileReuse.clear();
   }
 
   private rememberWorkspaceSnapshot(
@@ -246,16 +280,48 @@ export class CheckoutDiffManager {
       target.debounceTimer = null;
       const pendingForce = target.pendingDebounceForce;
       target.pendingDebounceForce = false;
-      void this.refreshTarget(target, pendingForce);
+      this.scheduleThrottledRefresh(target, pendingForce);
     }, CHECKOUT_DIFF_WATCH_DEBOUNCE_MS);
+  }
+
+  // 同一 target 两次开算至少隔 1 秒：防抖到点后离上次开算不足 1 秒，就等到满 1 秒再算
+  private scheduleThrottledRefresh(target: CheckoutDiffWatchTarget, force: boolean): void {
+    target.pendingThrottleForce ||= force;
+    if (target.throttleTimer) {
+      return;
+    }
+    const waitMs = msUntilIntervalElapsed(target.lastRefreshStartedAt);
+    if (waitMs <= 0) {
+      this.runThrottledRefresh(target);
+      return;
+    }
+    target.throttleTimer = setTimeout(() => {
+      target.throttleTimer = null;
+      this.runThrottledRefresh(target);
+    }, waitMs);
+  }
+
+  private runThrottledRefresh(target: CheckoutDiffWatchTarget): void {
+    const pendingForce = target.pendingThrottleForce;
+    target.pendingThrottleForce = false;
+    void this.refreshTarget(target, pendingForce);
   }
 
   private async computeCheckoutDiffSnapshot(
     cwd: string,
     compare: CheckoutDiffCompareInput,
-    options?: { diffCwd?: string; force?: boolean; reason?: string },
+    options?: {
+      diffCwd?: string;
+      force?: boolean;
+      reason?: string;
+      fileReuse?: CheckoutDiffFileReuse;
+    },
   ): Promise<CheckoutDiffSnapshotPayload> {
     const diffCwd = options?.diffCwd ?? cwd;
+    const fileReuse = options?.fileReuse;
+    const readOptions: CheckoutDiffReadOptions | undefined = options?.force
+      ? { force: true, reason: options.reason ?? "checkout-diff-refresh", fileReuse }
+      : fileReuse && { fileReuse };
     try {
       const diffResult = await this.workspaceGitService.getCheckoutDiff(
         diffCwd,
@@ -264,10 +330,9 @@ export class CheckoutDiffManager {
           baseRef: compare.baseRef,
           ignoreWhitespace: compare.ignoreWhitespace,
           includeStructured: true,
+          ...(compare.filesOnly === true ? { filesOnly: true } : {}),
         },
-        options?.force
-          ? { force: true, reason: options.reason ?? "checkout-diff-refresh" }
-          : undefined,
+        readOptions,
       );
       if (diffResult.diffTooLarge) {
         return {
@@ -304,25 +369,35 @@ export class CheckoutDiffManager {
     }
 
     target.refreshPromise = (async () => {
-      let currentForce = force;
-      do {
-        target.refreshQueued = false;
-        target.refreshQueuedForce = false;
-        const snapshot = await this.computeCheckoutDiffSnapshot(target.cwd, target.compare, {
-          diffCwd: target.diffCwd,
-          force: currentForce,
-          ...(currentForce ? { reason: "working-tree-watch" } : {}),
-        });
+      target.refreshQueued = false;
+      target.refreshQueuedForce = false;
+      target.lastRefreshStartedAt = Date.now();
+      const snapshot = await this.computeCheckoutDiffSnapshot(target.cwd, target.compare, {
+        diffCwd: target.diffCwd,
+        force,
+        ...(force ? { reason: "working-tree-watch" } : {}),
+        fileReuse: target.fileReuse,
+      });
+      const fingerprint = JSON.stringify(snapshot);
+      if (fingerprint === target.latestFingerprint) {
         target.latestPayload = snapshot;
-        const fingerprint = JSON.stringify(snapshot);
-        if (fingerprint !== target.latestFingerprint) {
-          target.latestFingerprint = fingerprint;
-          for (const listener of target.listeners) {
-            listener(snapshot);
-          }
+        return;
+      }
+      // 两次开算隔了 1 秒，但前一次算得慢、这次算得快时推送仍可能挨得太近，补足间隔再推。
+      // 等待期间 latestPayload 仍是上一份，新订阅者拿到的首份与随后的推送不会重复
+      const pushWaitMs = msUntilIntervalElapsed(target.lastPushAt);
+      if (pushWaitMs > 0) {
+        await this.waitForPushGap(target, pushWaitMs);
+        if (target.listeners.size === 0) {
+          return;
         }
-        currentForce = target.refreshQueuedForce;
-      } while (target.refreshQueued);
+      }
+      target.latestPayload = snapshot;
+      target.latestFingerprint = fingerprint;
+      target.lastPushAt = Date.now();
+      for (const listener of target.listeners) {
+        listener(snapshot);
+      }
     })();
 
     try {
@@ -330,6 +405,25 @@ export class CheckoutDiffManager {
     } finally {
       target.refreshPromise = null;
     }
+    // 算的过程中又来的变化只补一次，同样受 1 秒间隔约束
+    if (target.refreshQueued && this.targets.get(target.key) === target) {
+      const queuedForce = target.refreshQueuedForce;
+      target.refreshQueued = false;
+      target.refreshQueuedForce = false;
+      this.scheduleThrottledRefresh(target, queuedForce);
+    }
+  }
+
+  private waitForPushGap(target: CheckoutDiffWatchTarget, waitMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      target.pushGapWait = {
+        timer: setTimeout(() => {
+          target.pushGapWait = null;
+          resolve();
+        }, waitMs),
+        release: resolve,
+      };
+    });
   }
 
   private ensureTarget(cwd: string, compare: CheckoutDiffCompareInput): CheckoutDiffWatchTarget {
@@ -352,12 +446,18 @@ export class CheckoutDiffManager {
       latestWorkspaceForgeFingerprint: null,
       debounceTimer: null,
       pendingDebounceForce: false,
+      throttleTimer: null,
+      pendingThrottleForce: false,
+      lastRefreshStartedAt: null,
+      lastPushAt: null,
+      pushGapWait: null,
       refreshPromise: null,
       refreshQueued: false,
       refreshQueuedForce: false,
       latestPayload: null,
       latestFingerprint: null,
       openPromise: null,
+      fileReuse: new CheckoutDiffFileReuse(),
     };
     this.targets.set(targetKey, target);
     return target;
@@ -387,7 +487,10 @@ export class CheckoutDiffManager {
 
     const { repoRoot, unsubscribe } = await this.workspaceGitService.requestWorkingTreeWatch(
       target.cwd,
-      () => this.scheduleTargetRefresh(target),
+      (change) => {
+        target.fileReuse.markChanged(change?.changedPaths ?? []);
+        this.scheduleTargetRefresh(target);
+      },
     );
     target.diffCwd = repoRoot ?? target.cwd;
     if (this.targets.get(target.key) !== target || target.listeners.size === 0) {

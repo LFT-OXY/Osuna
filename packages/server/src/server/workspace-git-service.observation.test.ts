@@ -363,6 +363,31 @@ describe("WorkspaceGitService checkout observation", () => {
     service.dispose();
   });
 
+  test("working tree listeners receive the watcher's changed paths as a hint", async () => {
+    const watcher = createWatcherHarness();
+    const runGitCommand = vi.fn(async (args: string[]) => ({
+      stdout: args[0] === "rev-parse" ? `${REPO_CWD}\n` : "",
+      stderr: "",
+      truncated: false,
+      exitCode: 0,
+      signal: null,
+    }));
+    const service = createService(watcher, { runGitCommand });
+    const listener = vi.fn();
+    const subscription = await service.requestWorkingTreeWatch(REPO_CWD, listener);
+
+    watcher.records[0]?.callback(null, [
+      { path: path.join(REPO_CWD, "src", "a.ts"), type: "update" },
+      { path: path.join(REPO_CWD, "b.ts"), type: "delete" },
+    ]);
+
+    expect(listener).toHaveBeenCalledWith({
+      changedPaths: [path.join(REPO_CWD, "src", "a.ts"), path.join(REPO_CWD, "b.ts")],
+    });
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
   test("a second workspace client adds no observation or Git work", async () => {
     const watcher = createWatcherHarness();
     const getCheckoutSnapshotFacts = vi.fn(async (cwd: string) => createCheckoutFacts(cwd));
