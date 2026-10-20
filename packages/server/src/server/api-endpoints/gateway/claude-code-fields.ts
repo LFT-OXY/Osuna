@@ -159,15 +159,12 @@ function advisorModel(input: { endpoint: AdvisorEndpoint; model: unknown }): str
   if (model === "") return null;
   const slash = model.indexOf("/");
   const own = `${input.endpoint.slug}/`;
-  let name: string | null = model;
-  if (model.startsWith(own)) name = listedAs(input.endpoint, model.slice(own.length));
-  else if (slash !== -1) name = null;
-  if (name === null) return null;
-  // 这家的模型按它的上游模型名问（magpie advisorModel 的 UpstreamNameIn），是不是 Claude 也按这个名字认。
-  const isOwnModel = input.endpoint.models.some((entry) => entry.id === name);
-  const sent = isOwnModel
-    ? upstreamModelName({ settings: input.endpoint.modelSettings, modelId: name })
-    : name;
+  // 不带斜杠的是 Claude 自己的 id：原样用，也按它认是不是 Claude（magpie advisorModel 的最后两步）。
+  if (!model.startsWith(own)) return slash === -1 && isAnthropicModel(model) ? model : null;
+  const listed = listedAs(input.endpoint, model.slice(own.length));
+  if (listed === null) return null;
+  // 点名这家的模型按它的上游模型名问，是不是 Claude 也按这个名字认（magpie advisorModel 的 UpstreamNameIn）。
+  const sent = upstreamModelName({ settings: input.endpoint.modelSettings, modelId: listed });
   return isAnthropicModel(sent) ? sent : null;
 }
 

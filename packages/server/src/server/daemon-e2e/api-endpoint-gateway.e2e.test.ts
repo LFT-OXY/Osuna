@@ -9380,6 +9380,100 @@ describe("an upstream name and a model's one format", () => {
     ]);
   });
 
+  test("a Claude id the advisor names without this endpoint's prefix goes as it is, not under an upstream name", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["claude-opus-4-8", "claude-opus-5-5"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "claude-opus-5-5": { upstreamName: "vendor/opus-5-5" } } },
+    });
+    const advisor = { type: "advisor_20260301", name: "advisor", model: "claude-opus-5-5" };
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "relay-a/claude-opus-4-8",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        tools: [advisor],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(receivedBody(upstream.requests[0]).tools).toEqual([advisor]);
+  });
+
+  test("a DeepSeek model's reasoning is replayed when either its own name or its upstream name says DeepSeek", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => answerResponsesWhole(res);
+    const { gateway, endpointsDir } = await start({
+      upstreamA: upstream,
+      modelsA: ["ds-alias", "deepseek-v4", "plain"],
+    });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "ds-alias": { upstreamName: "deepseek-v4-flash" },
+          "deepseek-v4": { upstreamName: "vendor/v4" },
+        },
+      },
+    });
+    const input = [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+      { type: "reasoning", id: "rs_bare", summary: [] },
+      { type: "message", role: "user", content: [{ type: "input_text", text: "again" }] },
+    ];
+    const keepsReasoning = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ model, input, store: false, stream: false }),
+      );
+      expect(response.status).toBe(200);
+      await response.text();
+      const sent = receivedBody(upstream.requests.at(-1)).input as { type: string }[];
+      return sent.some((item) => item.type === "reasoning");
+    };
+
+    expect(await keepsReasoning("ds-alias")).toBe(true);
+    expect(await keepsReasoning("deepseek-v4")).toBe(true);
+    expect(await keepsReasoning("plain")).toBe(false);
+  });
+
+  test("a Grok reply's whole numbers are fixed when either its own name or its upstream name says Grok", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(grokResponsesWhole(GROK_ARGS_PIECES.join(""))));
+    };
+    const { gateway, endpointsDir } = await start({
+      upstreamA: upstream,
+      modelsA: ["fast-alias", "grok-4.6"],
+    });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "fast-alias": { upstreamName: "grok-4.6-fast" },
+          "grok-4.6": { upstreamName: "vendor/fast" },
+        },
+      },
+    });
+    const argsOf = async (model: string) => {
+      const response = await fetch(
+        `${gateway}/v1/responses`,
+        codexRequest({ ...codexConversation(model, false), stream: false }),
+      );
+      expect(response.status).toBe(200);
+      const reply = (await response.json()) as { output: { arguments?: string }[] };
+      return reply.output[0]?.arguments;
+    };
+
+    expect(await argsOf("fast-alias")).toBe(GROK_WHOLE_ARGS);
+    expect(await argsOf("grok-4.6")).toBe(GROK_WHOLE_ARGS);
+  });
+
   test("a model pinned to one format is asked only in it, and asked as before once that URL is gone", async () => {
     const upstreamA = await startUpstream();
     upstreamA.respond = (request, res) => {

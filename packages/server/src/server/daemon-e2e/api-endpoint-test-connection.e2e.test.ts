@@ -334,6 +334,34 @@ describe("API endpoint connection test by base URL and request format", () => {
     ]);
   });
 
+  test("editing with a newly typed key asks with that key, under the endpoint's upstream name", async () => {
+    const endpointId = await saveHostEndpoint(["claude-sonnet-4-5"]);
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const resaved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "claude-sonnet-4-5" }],
+      modelSettings: { models: { "claude-sonnet-4-5": { upstreamName: "vendor/sonnet" } } },
+    });
+    expect(resaved.error).toBeNull();
+    upstream.requests.length = 0;
+
+    const tested = await client.apiEndpointTestConnection({
+      provider: "claude",
+      endpointId,
+      apiKey: TYPED_KEY,
+      baseUrl: `${upstream.origin}/claude`,
+      format: "anthropic_messages",
+    });
+
+    expect(tested).toMatchObject({ error: null, result: { ok: true, status: 200 } });
+    expect(
+      upstream.requests.map((request) => [request.headers.authorization, request.body.model]),
+    ).toEqual([[`Bearer ${TYPED_KEY}`, "vendor/sonnet"]]);
+  });
+
   test("a rejected key is told apart as auth_failed", async () => {
     const tested = await client.apiEndpointTestConnection({
       provider: "claude",

@@ -1212,13 +1212,24 @@ test.describe("Settings API endpoints", () => {
       await expect(sheet.getByTestId("api-endpoint-model-settings-format-field-hint")).toHaveText(
         "This endpoint no longer has a base URL for OpenAI Responses, so this setting doesn't apply.",
       );
-      const format = sheet.getByTestId("api-endpoint-model-settings-format");
-      await expect(format).toHaveText("OpenAI Responses · not in effect");
-      await format.click();
-      await page.getByTestId("api-endpoint-model-settings-format-automatic").click();
-      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet.getByTestId("api-endpoint-model-settings-format")).toHaveText(
+        "OpenAI Responses · not in effect",
+      );
+      await page.keyboard.press("Escape");
       await expect(sheet).toHaveCount(0);
+    });
+
+    await test.step("the row menu shows a void format checked and not in effect, and picking it again clears it", async () => {
+      await page.getByTestId("api-endpoint-model-menu-model-01").filter({ visible: true }).click();
+      const root = page.getByTestId("api-endpoint-model-format-menu-model-01");
+      await expect(root).toContainText("OpenAI Responses · not in effect");
+      await root.click();
+      const voidRow = page.getByTestId("api-endpoint-model-format-pin-model-01-openai_responses");
+      await expect(voidRow).toContainText("OpenAI Responses · not in effect");
+      await expect(voidRow).toHaveAttribute("aria-checked", "true");
+      await voidRow.click();
       await expect.poll(settingsReader).toBeUndefined();
+      await expect(page.getByTestId("api-endpoint-model-format-model-01")).toHaveCount(0);
     });
   });
 

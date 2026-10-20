@@ -601,6 +601,14 @@ const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
 
 const FORMAT_PAGE = "format";
 
+/** 格式的名字；不起作用的标出来，没设为「自动」。 */
+function pinnedFormatLabel(t: TFunction, pinned: ModelFormatPin | null): string {
+  if (pinned === null) return t("settings.apiEndpoints.modelSettings.formatAutomatic");
+  const label = formatLabel(t, pinned.format);
+  if (!pinned.isVoid) return label;
+  return t("settings.apiEndpoints.modelSettings.formatNotInEffect", { format: label });
+}
+
 /** 模型行的 ⋯ 菜单：「模型设置」，这家有两种以上格式的地址时还有「只用这种格式」一页。 */
 function ModelRowMenu({
   modelId,
@@ -622,27 +630,27 @@ function ModelRowMenu({
   const formatTitle = t("settings.apiEndpoints.modelSettings.format");
   const pages = useMemo<MenuPageDefinition[] | undefined>(() => {
     if (formatPins === null) return undefined;
-    // 没有「自动」一行：再点勾着的那个即回到自动（docs/menus.md）。
+    // 没有「自动」一行：再点勾着的那个即回到自动（docs/menus.md）。作废的格式这家已没有地址，照样列出、勾着，好在这里取消。
+    const isListed = pinned === null || formatPins.formats.includes(pinned.format);
+    const formats = isListed ? formatPins.formats : [...formatPins.formats, pinned.format];
     return [
       {
         id: FORMAT_PAGE,
         title: formatTitle,
-        content: formatPins.formats.map((format) => (
+        content: formats.map((format) => (
           <FormatPinItem
             key={format}
             modelId={modelId}
             format={format}
             selected={format === pinned?.format}
+            isVoid={format === pinned?.format && pinned.isVoid}
             onPin={formatPins.onPin}
           />
         )),
       },
     ];
   }, [formatPins, formatTitle, modelId, pinned]);
-  const pinnedLabel =
-    pinned === null
-      ? t("settings.apiEndpoints.modelSettings.formatAutomatic")
-      : formatLabel(t, pinned.format);
+  const pinnedLabel = pinnedFormatLabel(t, pinned);
   return (
     <DropdownMenu>
       <RowActionsMenuTrigger
@@ -675,11 +683,13 @@ function FormatPinItem({
   modelId,
   format,
   selected,
+  isVoid,
   onPin,
 }: {
   modelId: string;
   format: ApiEndpointRequestFormat;
   selected: boolean;
+  isVoid: boolean;
   onPin: (modelId: string, format: ApiEndpointRequestFormat | null) => void;
 }) {
   const { t } = useTranslation();
@@ -693,7 +703,7 @@ function FormatPinItem({
       onSelect={handleSelect}
       testID={`api-endpoint-model-format-pin-${modelId}-${format}`}
     >
-      {formatLabel(t, format)}
+      {pinnedFormatLabel(t, { format, isVoid })}
     </DropdownMenuItem>
   );
 }
