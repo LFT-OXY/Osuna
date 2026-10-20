@@ -6,7 +6,7 @@
 
 **Blocked by:** 13
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：中转站 `/v1/models` 每条带上述字段，手改的值生效；已禁用的模型不在列表里（16 号做完后补这一条断言，或在 16 号里补）。
 - [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
