@@ -2830,7 +2830,7 @@ export const en = {
           testAsClaudeCode: "Test as Claude Code",
           testAsCodex: "Test as Codex",
           claudeCodeSampleMissing:
-            'No Claude Code request has come through the built-in gateway yet. Run Claude Code once with "Use API endpoints" on, then test again.',
+            'Claude Code hasn\'t used API endpoints yet. Use Claude Code once with "Use API endpoints" on, then test again.',
           noAnswer: "Didn't answer",
           took: {
             ms: "{{value}} ms",

@@ -2802,7 +2802,7 @@ export const ru: TranslationResources = {
           testAsClaudeCode: "Проверить как Claude Code",
           testAsCodex: "Проверить как Codex",
           claudeCodeSampleMissing:
-            "Через встроенный шлюз ещё не проходил ни один запрос Claude Code. Запустите Claude Code один раз с включённым «Использовать сторонние API», затем проверьте снова.",
+            "Claude Code ещё не использовал сторонние API. Запустите Claude Code один раз с включённым «Использовать сторонние API», затем проверьте снова.",
           noAnswer: "Не ответила",
           took: {
             ms: "{{value}} мс",

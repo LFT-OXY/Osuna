@@ -1,11 +1,39 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 modelTests、namedFree、contextTag、ledTook）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import type { ApiEndpointModelTestResult } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointModelTestResult,
+  ApiEndpointTestAs,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
  * 测试模型在接口详情页的纯计算。结果只在页面内存里（prd 第 29 条，照 magpie modelTests），离开页面就没了。
  * 「只看能用」去掉最近一次测试失败的，没测过的和还在测的都留着；「只看免费」看模型 id 或显示名里的独立单词 free。
  */
+
+/** 「按 Claude Code / Codex 的样子测」的测法（ADR 0013）。 */
+export type CliTestMethod = "claude_code" | "codex";
+export type ModelTestMethod = "plain" | CliTestMethod;
+
+const CLI_TEST_METHODS: readonly CliTestMethod[] = ["claude_code", "codex"];
+
+/** 这家提供的一种 CLI 测法；unavailable 为 null 即现在就能测。 */
+export interface OfferedCliTest {
+  method: CliTestMethod;
+  unavailable: ApiEndpointTestAs["unavailable"];
+}
+
+function isCliTestMethod(method: string): method is CliTestMethod {
+  return CLI_TEST_METHODS.some((known) => known === method);
+}
+
+/** 主机报来的 CLI 测法里认得的那些（新主机多出来的不列）；老主机不发即没有。 */
+export function offeredCliTests(testsAs: ApiEndpointTestAs[] | undefined): OfferedCliTest[] {
+  const offered: OfferedCliTest[] = [];
+  for (const { method, unavailable } of testsAs ?? []) {
+    if (isCliTestMethod(method)) offered.push({ method, unavailable });
+  }
+  return offered;
+}
 
 export type ModelTestState =
   | { status: "testing" }

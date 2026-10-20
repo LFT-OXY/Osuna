@@ -120,6 +120,8 @@ export async function attemptTranslated(input: {
   headerTimeoutMs: number;
   // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
   userAgent: string;
+  // 照原样带给上游的 CLI 身份头（Codex 发往 Responses 或 Chat 时的 originator、x-codex-* 等）；没有为空。
+  clientIdentity: Record<string, string>;
   // 这家的这个模型不收哪些不思考的写法。
   refusals: ShapeRefusals;
   keepAlive: AgentKeepAlive;
@@ -134,7 +136,13 @@ export async function attemptTranslated(input: {
     openUpstream({
       res,
       url: ask.url,
-      headers: translatedHeaders({ apiKey, keys: ask.keys, to, userAgent: input.userAgent }),
+      headers: translatedHeaders({
+        apiKey,
+        keys: ask.keys,
+        to,
+        userAgent: input.userAgent,
+        clientIdentity: input.clientIdentity,
+      }),
       body: Buffer.from(ask.body),
       apiKey,
       headerTimeoutMs: input.headerTimeoutMs,
@@ -372,8 +380,10 @@ function translatedHeaders(input: {
   keys: KeyHeaders;
   to: ApiEndpointRequestFormat;
   userAgent: string;
+  clientIdentity: Record<string, string>;
 }): Record<string, string> {
   const headers: Record<string, string> = {
+    ...input.clientIdentity,
     "content-type": "application/json",
     "user-agent": input.userAgent,
     accept: "text/event-stream",

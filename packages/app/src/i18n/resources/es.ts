@@ -2822,7 +2822,7 @@ export const es: TranslationResources = {
           testAsClaudeCode: "Probar como Claude Code",
           testAsCodex: "Probar como Codex",
           claudeCodeSampleMissing:
-            'Todavía no ha pasado ninguna solicitud de Claude Code por la pasarela integrada. Ejecuta Claude Code una vez con "Usar endpoints de API" activado y vuelve a probar.',
+            'Claude Code todavía no ha usado endpoints de API. Usa Claude Code una vez con "Usar endpoints de API" activado y vuelve a probar.',
           noAnswer: "No respondió",
           took: {
             ms: "{{value}} ms",

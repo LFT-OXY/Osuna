@@ -4,9 +4,12 @@ import { describe, expect, test } from "vitest";
 import {
   cliHeaderSample,
   codexSignHeaders,
+  codexVersionOf,
   isFromClaudeCode,
   isFromCodex,
   newerCodexVersion,
+  newestCodexVersion,
+  SeenCodexVersion,
 } from "./cli-header-samples.js";
 
 describe("CLI header samples", () => {
@@ -110,5 +113,26 @@ describe("CLI header samples", () => {
     expect(newerCodexVersion("0.159.0", "0.99.9")).toBe("0.159.0");
     expect(newerCodexVersion("0.159.0", null)).toBe("0.159.0");
     expect(newerCodexVersion("0.159.0", "not a version")).toBe("0.159.0");
+  });
+
+  test("a Codex request says its version in its version header, else at the start of its User-Agent's version", () => {
+    expect(
+      codexVersionOf({ "user-agent": "codex_cli_rs/0.162.3 (Mac OS)", version: "0.163.0" }),
+    ).toBe("0.163.0");
+    expect(
+      codexVersionOf({ "user-agent": "Codex Desktop/0.162.3", originator: "Codex Desktop" }),
+    ).toBe("0.162.3");
+    expect(codexVersionOf({ "user-agent": "claude-cli/2.1.302" })).toBeNull();
+    expect(codexVersionOf({ "user-agent": "codex_cli_rs/dev-0.1.2" })).toBeNull();
+  });
+
+  test("without a Codex sample, the version is the newest of the built-in, cached, installed and seen ones", () => {
+    const seen = new SeenCodexVersion();
+    seen.saw({ "user-agent": "codex_cli_rs/0.171.0" });
+    seen.saw({ "user-agent": "codex_cli_rs/0.165.0" });
+    seen.saw({ "user-agent": "curl/8.4.0" });
+    expect(seen.version()).toBe("0.171.0");
+    expect(newestCodexVersion(["0.160.0", "0.170.2", seen.version()])).toBe("0.171.0");
+    expect(newestCodexVersion([null, null, null])).toBe("0.159.0");
   });
 });

@@ -2793,7 +2793,7 @@ export const ja: TranslationResources = {
           testAsClaudeCode: "Claude Code としてテスト",
           testAsCodex: "Codex としてテスト",
           claudeCodeSampleMissing:
-            "まだ Claude Code のリクエストが内蔵ゲートウェイを通っていません。「サードパーティ API を使う」をオンにして Claude Code を一度使ってから、もう一度テストしてください。",
+            "Claude Code はまだサードパーティ API を使っていません。「サードパーティ API を使う」をオンにして Claude Code を一度使ってから、もう一度テストしてください。",
           noAnswer: "応答なし",
           took: {
             ms: "{{value}} ミリ秒",

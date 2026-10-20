@@ -18,8 +18,8 @@ import {
 import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
 import { templateKeyHeaders } from "./templates.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
-import type { CliHeaderSample, CliTestClient } from "./store.js";
-import { asCliBody } from "./test-as.js";
+import type { CliHeaderSample } from "./store.js";
+import { asCliBody, type CliTestClient } from "./test-as.js";
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，

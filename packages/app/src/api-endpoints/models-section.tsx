@@ -53,15 +53,16 @@ import {
   splitAroundId,
   testTook,
   wasAsked,
+  type CliTestMethod,
   type ModelTestState,
   type ModelTests,
+  type OfferedCliTest,
 } from "./internal/model-tests";
 import { relativeAgo } from "./reopen-hints-copy";
 import { formatLabel } from "./model-settings-sheet";
 import type {
   ApiEndpointModelTestResult,
   ApiEndpointRequestFormat,
-  ApiEndpointTestAs,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 import type { ModelTestRun } from "./use-model-tests";
@@ -104,8 +105,8 @@ export interface ModelTestsControl {
   onTestAll: () => void;
   onTestOne: (modelId: string) => void;
   // 「按 Claude Code / Codex 的样子测」：这家提供的测法（老主机为空），与测一个模型。
-  testsAs: ApiEndpointTestAs[];
-  onTestOneAs: (input: { modelId: string; method: string }) => void;
+  testsAs: OfferedCliTest[];
+  onTestOneAs: (input: { modelId: string; method: CliTestMethod }) => void;
   onCancel: () => void;
   factsOf: (modelId: string) => { name: string | undefined; context: number | undefined };
 }
@@ -1076,8 +1077,8 @@ function ModelRowMenu({
   onOpenSettings: (modelId: string) => void;
   // 「测试这个」；老主机没有，为 null。
   onTest: ((modelId: string) => void) | null;
-  testsAs: ApiEndpointTestAs[];
-  onTestAs: ((input: { modelId: string; method: string }) => void) | null;
+  testsAs: OfferedCliTest[];
+  onTestAs: ((input: { modelId: string; method: CliTestMethod }) => void) | null;
   isTesting: boolean;
   formatPins: ModelFormatPins | null;
   pinned: ModelFormatPin | null;
@@ -1170,11 +1171,8 @@ function ModelRowMenu({
   );
 }
 
-// 测不了的原因整段写出来，不截断（最长的语言在窄窗口里也在这几行内）。
-const TEST_AS_REASON_LINES = 6;
-
-// 认得的 CLI 测法与它的菜单文字；新 daemon 多出来的测法不列。
-const TEST_AS_LABEL_KEYS: Record<string, string> = {
+// 每种 CLI 测法的菜单文字。
+const TEST_AS_LABEL_KEYS: Record<CliTestMethod, string> = {
   claude_code: "settings.apiEndpoints.models.tests.testAsClaudeCode",
   codex: "settings.apiEndpoints.models.tests.testAsCodex",
 };
@@ -1182,7 +1180,7 @@ const TEST_AS_LABEL_KEYS: Record<string, string> = {
 /** 现在测不了的原因：认得的用界面语言说，否则照 daemon 的原文。 */
 function testAsUnavailableReason(input: {
   t: TFunction;
-  unavailable: NonNullable<ApiEndpointTestAs["unavailable"]>;
+  unavailable: NonNullable<OfferedCliTest["unavailable"]>;
 }): string {
   const { t, unavailable } = input;
   if (unavailable.code === "cli_sample_missing") {
@@ -1199,9 +1197,9 @@ function TestAsItem({
   onTestAs,
 }: {
   modelId: string;
-  offered: ApiEndpointTestAs;
+  offered: OfferedCliTest;
   isTesting: boolean;
-  onTestAs: (input: { modelId: string; method: string }) => void;
+  onTestAs: (input: { modelId: string; method: CliTestMethod }) => void;
 }) {
   const { t } = useTranslation();
   const { method, unavailable } = offered;
@@ -1214,7 +1212,6 @@ function TestAsItem({
     [],
   );
   const labelKey = TEST_AS_LABEL_KEYS[method];
-  if (labelKey === undefined) return null;
   let description: string | undefined;
   if (unavailable !== null) description = testAsUnavailableReason({ t, unavailable });
   return (
@@ -1223,7 +1220,7 @@ function TestAsItem({
       onSelect={handleSelect}
       disabled={isTesting || unavailable !== null}
       description={description}
-      descriptionLines={TEST_AS_REASON_LINES}
+      explainsFully
       testID={`api-endpoint-model-test-as-${method}-${modelId}`}
     >
       {t(labelKey)}

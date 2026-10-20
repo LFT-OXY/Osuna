@@ -2762,7 +2762,7 @@ export const ar: TranslationResources = {
           testAsClaudeCode: "اختبار كـ Claude Code",
           testAsCodex: "اختبار كـ Codex",
           claudeCodeSampleMissing:
-            'لم يمر أي طلب من Claude Code عبر البوابة المدمجة بعد. شغّل Claude Code مرة واحدة مع تفعيل "استخدام واجهات API الخارجية"، ثم اختبر مرة أخرى.',
+            'لم يستخدم Claude Code واجهات API الخارجية بعد. استخدم Claude Code مرة واحدة مع تفعيل "استخدام واجهات API الخارجية"، ثم اختبر مرة أخرى.',
           noAnswer: "لم يستجب",
           took: {
             ms: "{{value}} مللي ثانية",

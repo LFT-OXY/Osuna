@@ -34,7 +34,12 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { judgeCaller } from "./callers.js";
-import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
+import {
+  CliHeaderSamples,
+  isFromClaudeCode,
+  isFromCodex,
+  type SeenCodexVersion,
+} from "../cli-header-samples.js";
 import type { GatewaySightings } from "../cli-bypass.js";
 import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
@@ -189,6 +194,8 @@ export function createApiEndpointGateway(options: {
   codexChatGptListing: () => ChatGptModelsListing;
   // 每个提供方最近一次收到请求的时刻，接口服务据此判断「被绕过」。
   sightings: GatewaySightings;
+  // 经中转站来过的 Codex 的最新版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
+  codexSeenVersion: SeenCodexVersion;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -237,6 +244,7 @@ export function createApiEndpointGateway(options: {
     const chatgptRest = chatgptBackendRest(req.path);
     if (chatgptRest !== null) {
       options.sightings.saw("codex");
+      options.codexSeenVersion.saw(req.headers);
       const served = serveChatGptBackend({
         req,
         res,
@@ -635,6 +643,12 @@ async function routeAgentRequest(input: {
     reply(400, "The request has no model");
     return null;
   }
+  // 读出模型名就记下 Claude Code 的头，在选路之前：被禁、找不到路、读不了状态的请求也算它来过
+  // （magpie 同样不管最后去哪家：去订阅、Chat 或翻译过的那家的请求都不带它的头）。
+  const isClaudeCodeTurn = wire === "anthropic" && isFromClaudeCode(input.req.headers);
+  if (isClaudeCodeTurn) {
+    input.failover.cliSamples.saw({ client: "claude_code", headers: input.req.headers });
+  }
   const state = readState({ res, wire, store: input.store, logger: input.logger });
   if (!state) return null;
   const codexed = codexApiRequest({
@@ -1005,10 +1019,6 @@ async function handleAgentRequest(input: {
 
   const routed = await routeAgentRequest(input);
   if (!routed) return;
-  // Claude Code 的请求不管最后去哪家都记下它的头（magpie：去订阅、Chat 或翻译过的那家的请求都不带它的头）。
-  const isClaudeCodeTurn = input.format === "anthropic_messages" && isFromClaudeCode(req.headers);
-  if (isClaudeCodeTurn)
-    input.failover.cliSamples.saw({ client: "claude_code", headers: req.headers });
   const { model, candidates, fixedEffort } = routed;
   const body = withAgentEffort({ body: routed.body, agent: input.agent, fixedEffort });
   const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
@@ -1620,7 +1630,7 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
 /** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
 function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
   const { candidate } = input;
-  noteCodexSample(input);
+  const clientIdentity = codexIdentityFor(input);
   const refused = shapeRefusals(input);
   const target = {
     res: input.res,
@@ -1652,19 +1662,31 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     from: input.format,
     to: candidate.format,
     request: withWebSearchFor({ request: candidate.translated, searches }),
+    clientIdentity,
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });
 }
 
-/** Codex 的请求发往一家的 Responses 或 Chat 地址时，记下它表明身份的头（magpie：只放行 Codex 的中转服务认这些头）。 */
-function noteCodexSample(input: EndpointAsk): void {
+/**
+ * Codex 的请求发往一家的 Responses 或 Chat 地址时：记下它表明身份的头（「按 Codex 的样子测」用），翻译过去的请求也照原样
+ * 带上这些头（magpie：只放行 Codex 的中转服务认 User-Agent、originator 与 x-codex-* 头，key 从不带）。
+ * 直通的请求本来就带着 Agent 的头。返回翻译时要带的身份头；不是 Codex 发往这两种格式的为空。
+ */
+function codexIdentityFor(input: EndpointAsk): Record<string, string> {
   const headers = input.forwardedHeaders ?? input.req.headers;
   const toOpenAi =
     input.candidate.format === "openai_responses" || input.candidate.format === "openai_chat";
-  if (toOpenAi && isFromCodex(headers)) {
-    input.failover.cliSamples.saw({ client: "codex", headers });
+  if (!toOpenAi || !isFromCodex(headers)) return {};
+  input.failover.cliSamples.saw({ client: "codex", headers });
+  const identity: Record<string, string> = {};
+  for (const [name, value] of Object.entries(codexIdentityHeaders(headers))) {
+    // 请求体的格式由翻译定，不用 Codex 原来的。
+    const describesBody = name === "content-type" || name === "accept";
+    if (describesBody || value === undefined) continue;
+    identity[name] = Array.isArray(value) ? value.join(", ") : value;
   }
+  return identity;
 }
 
 /**

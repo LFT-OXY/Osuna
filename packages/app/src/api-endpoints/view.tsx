@@ -51,6 +51,7 @@ import { resolveModelFacts } from "@getpaseo/protocol/api-endpoint/model-setting
 import { ApiEndpointModelsSection, type ModelTestsControl } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { useModelTests } from "./use-model-tests";
+import { offeredCliTests } from "./internal/model-tests";
 import { useFormatPins } from "./use-format-pins";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
@@ -751,8 +752,7 @@ function ApiEndpointDetailSections({
       onTestAll: modelTestsState.testAll,
       onTestOne: modelTestsState.testOne,
       onTestOneAs: modelTestsState.testOneAs,
-      // 老 daemon 不发，即都不提供。
-      testsAs: endpoint.testsAs ?? [],
+      testsAs: offeredCliTests(endpoint.testsAs),
       onCancel: modelTestsState.cancel,
       factsOf: (modelId) => {
         const auto = endpoint.modelFacts?.[modelId] ?? {};

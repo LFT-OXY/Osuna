@@ -25,6 +25,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  */
 
 const MODEL_TIMEOUT_MS = 60_000;
+// 比内置的 0.159.0 新：没有 Codex 样本时测试用它。
+const FAKE_CODEX_CLI_VERSION = "0.170.2";
 const BATCH_TIMEOUT_MS = 600_000;
 
 /** 只在用例说到点时才到点的计时器；按设定的毫秒数区分单个与整批。 */
@@ -241,6 +243,8 @@ async function start(input: {
         batchTimeoutMs: BATCH_TIMEOUT_MS,
       },
       modelTestTimers: timers,
+      // 绝不跑真的 codex：本机 Codex CLI 的版本换成假的。
+      readCodexCliVersion: async () => FAKE_CODEX_CLI_VERSION,
     },
   });
   daemons.push(daemon);
@@ -608,7 +612,38 @@ describe("test models as Claude Code or Codex", () => {
     expect(sent?.body).toMatchObject({ model: "cc-only-sonnet", stream: true });
   });
 
-  test("without a Claude Code sample, testing as Claude Code sends nothing and says to run Claude Code through the gateway first", async () => {
+  test("a Claude Code request for a model no endpoint serves still leaves its sample", async () => {
+    const { upstream, endpointsDir, gateway } = await start({
+      endpoint: twoFormats(["cc-only-sonnet"]),
+    });
+    const response = await fetch(`${gateway}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "user-agent": CLAUDE_CODE_UA,
+        "x-app": "cli",
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "no-such-model",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    });
+    expect(response.status).toBe(404);
+    await response.text();
+    const text = await readFile(path.join(endpointsDir, "cli-header-samples.json"), "utf8");
+    expect(JSON.parse(text)).toEqual({
+      claude_code: {
+        "user-agent": CLAUDE_CODE_UA,
+        "x-app": "cli",
+        "anthropic-version": "2023-06-01",
+      },
+    });
+    expect(upstream.requests).toHaveLength(0);
+  });
+
+  test("without a Claude Code sample, testing as Claude Code sends nothing and says to use Claude Code with API endpoints first", async () => {
     const { client, upstream } = await start({
       endpoint: (url) => ({ ...twoFormats(["claude-sonnet-4-5"])(url), templateId: "openrouter" }),
     });
@@ -617,7 +652,10 @@ describe("test models as Claude Code or Codex", () => {
       { method: "codex", unavailable: null },
       {
         method: "claude_code",
-        unavailable: { code: "cli_sample_missing", message: expect.stringContaining("gateway") },
+        unavailable: {
+          code: "cli_sample_missing",
+          message: expect.stringContaining("API endpoints"),
+        },
       },
     ]);
     const response = await client.apiEndpointTestModels({
@@ -636,7 +674,7 @@ describe("test models as Claude Code or Codex", () => {
         error: {
           code: "cli_sample_missing",
           message:
-            "No Claude Code request has come through the gateway yet: run Claude Code with API endpoints once, then test again",
+            "Claude Code hasn't used API endpoints yet: use Claude Code once with Use API endpoints on, then test again",
         },
       },
     ]);
@@ -655,6 +693,21 @@ describe("test models as Claude Code or Codex", () => {
     });
     expect(refused).toMatchObject({ results: [], error: { code: "invalid_input" } });
     expect(vendor.upstream.requests).toHaveLength(0);
+
+    // 「自定义」加的，地址却是 Anthropic 自己的或 Bedrock 的：同样不冒充 Claude Code。
+    for (const anthropicUrl of [
+      "https://api.anthropic.com",
+      "https://bedrock-runtime.us-east-1.amazonaws.com",
+    ]) {
+      const ownApi = await start({
+        endpoint: () => ({
+          models: ["claude-sonnet-4-5"],
+          baseUrls: [{ format: "anthropic_messages", url: anthropicUrl }],
+        }),
+      });
+      const ownListed = await ownApi.client.apiEndpointList("claude");
+      expect(testsAsOf(ownListed.endpoints)).toEqual([]);
+    }
 
     const chatOnly = await start({
       endpoint: (url) => ({
@@ -688,16 +741,16 @@ describe("test models as Claude Code or Codex", () => {
     const [sent] = upstream.requests;
     expect(sent?.path).toBe("/r/v1/responses");
     expect(sent?.headers.originator).toBe("codex_cli_rs");
-    expect(sent?.headers["user-agent"]).toMatch(/^codex_cli_rs\/\d+\.\d+\.\d+ \(.+; .+\) \S+$/);
-    expect(sent?.headers.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(sent?.headers["user-agent"]).toMatch(/^codex_cli_rs\/0\.170\.2 \(.+; .+\) \S+$/);
+    expect(sent?.headers.version).toBe(FAKE_CODEX_CLI_VERSION);
     expect(sent?.headers.authorization).toBe("Bearer sk-a");
     expect(sent?.body).toMatchObject({ stream: true, store: false });
   });
 
-  test("a Codex request through the gateway leaves its sample, and testing as Codex goes to Chat when there is no Responses URL", async () => {
+  test("a Codex request translated to a Chat-only endpoint carries Codex's identity and leaves its sample, and testing as Codex goes to Chat", async () => {
     const { client, upstream, endpointsDir, gateway } = await start({
       endpoint: (url) => ({
-        models: ["codex-only-glm", "stream-fails-glm", "ok-glm"],
+        models: ["codex-only-glm", "stream-fails-glm"],
         baseUrls: [{ format: "openai_chat", url: `${url}/c/v1` }],
       }),
     });
@@ -716,7 +769,7 @@ describe("test models as Claude Code or Codex", () => {
         authorization: "Bearer gateway-token-1",
       },
       body: JSON.stringify({
-        model: "ok-glm",
+        model: "codex-only-glm",
         input: [
           {
             type: "message",
@@ -726,8 +779,18 @@ describe("test models as Claude Code or Codex", () => {
         ],
       }),
     });
+    // 翻成 Chat 的请求照原样带着 Codex 的身份头，只放行 Codex 的分组收下了它；中转站的口令不带过去。
     expect(response.status).toBe(200);
     await response.text();
+    const relayed = upstream.requests.find((request) => request.model === "codex-only-glm");
+    expect(relayed?.path).toBe("/c/v1/chat/completions");
+    expect(relayed?.headers).toMatchObject({
+      "user-agent": CODEX_UA,
+      originator: "codex_cli_rs",
+      version: "0.162.3",
+      "x-codex-beta-features": "collab",
+      authorization: "Bearer sk-a",
+    });
     const text = await readFile(path.join(endpointsDir, "cli-header-samples.json"), "utf8");
     for (const secret of SECRETS) expect(text).not.toContain(secret);
     expect(JSON.parse(text)).toEqual({

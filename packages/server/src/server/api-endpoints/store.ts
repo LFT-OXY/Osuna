@@ -1,3 +1,4 @@
+import type { CliTestClient } from "./test-as.js";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type pino from "pino";
@@ -235,9 +236,6 @@ export interface CliStartRead {
   digest: string;
   at: Date;
 }
-
-/** 「按 Claude Code / Codex 的样子测」的两种 CLI（ADR 0013）。 */
-export type CliTestClient = "claude_code" | "codex";
 
 // CLI 请求头样本：头名小写，只有表明 CLI 身份的头，不含认证、会话与请求体（cli-header-samples.ts）。
 const CliHeaderSampleSchema = z.record(z.string(), z.string());

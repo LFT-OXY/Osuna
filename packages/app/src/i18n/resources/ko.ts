@@ -2779,7 +2779,7 @@ export const ko: TranslationResources = {
           testAsClaudeCode: "Claude Code로 테스트",
           testAsCodex: "Codex로 테스트",
           claudeCodeSampleMissing:
-            '아직 Claude Code 요청이 내장 게이트웨이를 거친 적이 없습니다. "서드파티 API 사용"을 켠 상태로 Claude Code를 한 번 실행한 뒤 다시 테스트하세요.',
+            'Claude Code가 아직 서드파티 API를 사용한 적이 없습니다. "서드파티 API 사용"을 켠 상태로 Claude Code를 한 번 실행한 뒤 다시 테스트하세요.',
           noAnswer: "응답 없음",
           took: {
             ms: "{{value}}밀리초",

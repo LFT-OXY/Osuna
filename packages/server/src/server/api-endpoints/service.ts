@@ -247,11 +247,11 @@ const CLAUDE_START_THINKING = "high";
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import {
-  CODEX_CLIENT_VERSION,
   cachedCodexVersion,
   codexSignHeaders,
-  newerCodexVersion,
+  newestCodexVersion,
   readCodexSystem,
+  SeenCodexVersion,
 } from "./cli-header-samples.js";
 import {
   cliTestAddress,
@@ -259,6 +259,7 @@ import {
   cliTestsOffered,
   CLI_SAMPLE_MISSING,
   isCliTestClient,
+  needsCliSample,
 } from "./test-as.js";
 import {
   MODEL_TEST_DEFAULTS,
@@ -540,6 +541,11 @@ export interface ApiEndpointServiceOptions {
   daemonVersion: string;
   // 真的适配器找哪个 codex 执行它自己的命令；缺省按默认找，daemon 传用户配的 codex 命令（假的适配器自己答）。
   findCodexCommand?: FindCodexCommand;
+  // 本机 Codex CLI 自报的版本（没有 Codex 样本时「按 Codex 的样子测」用，magpie codexCLIVersion）；daemon 传跑
+  // `codex --version` 的，缺省不查。测试一律换成假的，绝不跑真的 codex。
+  readCodexCliVersion?: () => Promise<string | null>;
+  // 经中转站来过的 Codex 里最新的版本；daemon 传中转站共用的那个，缺省是空的。
+  codexSeenVersion?: SeenCodexVersion;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
   // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
@@ -728,6 +734,10 @@ export class ApiEndpointService {
   private readonly cooldowns: EndpointCooldowns;
   private readonly retiredModels: RetiredModels;
   private readonly sightings: GatewaySightings;
+  private readonly readCodexCliVersion: (() => Promise<string | null>) | null;
+  private readonly codexSeenVersion: SeenCodexVersion;
+  // 本机 Codex CLI 的版本隔一阵才重新问一次（magpie codexVersionCache 的 10 分钟）。
+  private codexCliVersionCache: { at: number; version: string | null } | null = null;
   private readonly readCliUse: ReadCliUse;
   // daemon（和它里面的中转站）起来的时刻：之前中转站没收到说明不了什么。
   private readonly startedAt: Date;
@@ -802,6 +812,8 @@ export class ApiEndpointService {
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
     this.sightings = options.sightings;
+    ({ readCli: this.readCodexCliVersion, seen: this.codexSeenVersion } =
+      codexVersionSources(options));
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
@@ -3408,11 +3420,27 @@ export class ApiEndpointService {
     }
     const sample = this.store.readCliHeaderSample(method);
     if (sample !== null) return { kind: "cli", client: method, headers: sample };
-    if (method === "claude_code") return { kind: "refused", error: CLI_SAMPLE_MISSING };
+    if (needsCliSample(method)) return { kind: "sampleMissing", error: CLI_SAMPLE_MISSING };
     const cached = readCodexModelsCache(path.dirname(this.resolveCodexConfigPath()));
-    const version = newerCodexVersion(CODEX_CLIENT_VERSION, cachedCodexVersion(cached));
+    const version = newestCodexVersion([
+      cachedCodexVersion(cached),
+      await this.installedCodexVersion(),
+      this.codexSeenVersion.version(),
+    ]);
     const headers = codexSignHeaders({ version, system: await readCodexSystem() });
     return { kind: "cli", client: method, headers };
+  }
+
+  /** 本机 Codex CLI 的版本，十分钟内问过就用上次的；问不到为 null。 */
+  private async installedCodexVersion(): Promise<string | null> {
+    const read = this.readCodexCliVersion;
+    if (read === null) return null;
+    const now = this.now().getTime();
+    const cache = this.codexCliVersionCache;
+    if (cache !== null && now - cache.at < CODEX_CLI_VERSION_TTL_MS) return cache.version;
+    const version = await read();
+    this.codexCliVersionCache = { at: now, version };
+    return version;
   }
 
   /**
@@ -4769,6 +4797,19 @@ function requireFormat(format: string): ApiEndpointRequestFormat {
  */
 function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpointProvider {
   return format === "anthropic_messages" ? "claude" : "codex";
+}
+
+const CODEX_CLI_VERSION_TTL_MS = 10 * 60_000;
+
+/** 没有 Codex 样本时取版本的两个来源：本机 CLI（缺省不问）与中转站见过的（缺省是空的）。 */
+function codexVersionSources(options: ApiEndpointServiceOptions): {
+  readCli: (() => Promise<string | null>) | null;
+  seen: SeenCodexVersion;
+} {
+  return {
+    readCli: options.readCodexCliVersion ?? null,
+    seen: options.codexSeenVersion ?? new SeenCodexVersion(),
+  };
 }
 
 /** 测试模型的限值与计时器：没给的用缺省（并发 4、单个 20 秒、整批 3 分钟，真的计时器）。 */

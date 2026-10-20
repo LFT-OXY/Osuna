@@ -450,6 +450,12 @@ async function forgetTakeovers(): Promise<void> {
 
 const TakeoverRecordSchema = z.object({ takeover: z.unknown() });
 
+export const CODEX_SAMPLE = {
+  "user-agent": "codex_cli_rs/0.162.3 (Mac OS 26.6.0; arm64) kitty",
+  originator: "codex_cli_rs",
+  version: "0.162.3",
+};
+
 export const CLAUDE_CODE_SAMPLE = {
   "user-agent": "claude-cli/2.1.302 (external, cli)",
   "x-app": "cli",
@@ -458,10 +464,11 @@ export const CLAUDE_CODE_SAMPLE = {
 
 /**
  * 中转站记下的 CLI 请求头样本（按 Claude Code / Codex 的样子测用）：给了就写成 daemon 记下的样子，null 即删掉。
- * 记下样本本身由 daemon 的 e2e 经中转站测，这里只摆好状态。
+ * 记下样本本身由 daemon 的 e2e 经中转站测，这里只摆好状态。Codex 也要摆上样本：没有它时 daemon 会问本机的 codex 版本，
+ * 浏览器用例绝不能让它跑真的 codex。
  */
 export async function setCliHeaderSamples(
-  samples: { claude_code?: Record<string, string> } | null,
+  samples: { claude_code?: Record<string, string>; codex?: Record<string, string> } | null,
 ): Promise<void> {
   const home = process.env.E2E_PASEO_HOME;
   if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");

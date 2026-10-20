@@ -159,6 +159,7 @@ import {
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { GatewaySightings } from "./api-endpoints/cli-bypass.js";
+import { readInstalledCodexVersion, SeenCodexVersion } from "./api-endpoints/cli-header-samples.js";
 import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
@@ -818,6 +819,8 @@ export async function createPaseoDaemon(
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
   // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
+  // 经中转站来过的 Codex 的最新版本：中转站记、「按 Codex 的样子测」读（只在内存里）。
+  const codexSeenVersion = new SeenCodexVersion();
   const apiEndpointSightings = new GatewaySightings({
     now: apiEndpointClock(config),
     filePath: path.join(config.paseoHome, "api-endpoints", "gateway-seen.json"),
@@ -844,6 +847,7 @@ export async function createPaseoDaemon(
       modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
       codexChatGptListing: () => apiEndpointService.codexChatGptListing(),
       sightings: apiEndpointSightings,
+      codexSeenVersion,
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1076,6 +1080,11 @@ export async function createPaseoDaemon(
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
     // 问 Codex 自己是怎么登录的（临时 app-server 的 account/read），决定 config.toml 的接法（ADR 0010）。
+    codexSeenVersion,
+    readCodexCliVersion: () =>
+      readInstalledCodexVersion(({ env }) =>
+        findCodexCommand({ runtimeSettings: config.agentProviderSettings?.codex, env }),
+      ),
     readCodexSignIn: createCodexSignInReader({
       runtimeSettings: config.agentProviderSettings?.codex,
       logger,

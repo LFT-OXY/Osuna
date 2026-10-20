@@ -13,6 +13,8 @@ import {
   afterResponse,
   startTests,
   testSummary,
+  type CliTestMethod,
+  type ModelTestMethod,
   type ModelTests,
 } from "./internal/model-tests";
 import { createUpstreamRequestId } from "./internal/upstream-request";
@@ -44,7 +46,7 @@ export interface UseModelTestsResult {
   testAll: () => void;
   testOne: (modelId: string) => void;
   // 按 Claude Code / Codex 的样子测一个模型（method 是 claude_code 或 codex）。
-  testOneAs: (input: { modelId: string; method: string }) => void;
+  testOneAs: (input: { modelId: string; method: CliTestMethod }) => void;
   cancel: () => void;
 }
 
@@ -55,8 +57,7 @@ interface RunInput {
   client: DaemonClient;
   endpointId: string;
   modelId: string | null;
-  // 测法；null 为普通测试。
-  method: string | null;
+  method: ModelTestMethod;
   requestId: string;
   runningRef: MutableRefObject<string | null>;
   setTests: SetTests;
@@ -90,7 +91,8 @@ async function runTests(input: RunInput): Promise<void> {
   const isCurrent = () => runningRef.current === requestId;
   const options: ApiEndpointTestModelsOptions = { endpointId: input.endpointId };
   if (input.modelId !== null) options.modelId = input.modelId;
-  if (input.method !== null) options.method = input.method;
+  // 普通测试不带测法，老主机也认。
+  if (input.method !== "plain") options.method = input.method;
   const onStarted = ({ modelIds }: { modelIds: string[] }) => {
     if (!isCurrent()) return;
     setTests((previous) => startTests(previous, modelIds));
@@ -139,7 +141,7 @@ export function useModelTests(input: {
   const runningRef = useRef<string | null>(null);
 
   const start = useCallback(
-    (target: { modelId: string | null; method: string | null }) => {
+    (target: { modelId: string | null; method: ModelTestMethod }) => {
       const { modelId, method } = target;
       if (!client || runningRef.current !== null) return;
       const requestId = createUpstreamRequestId();
@@ -165,10 +167,10 @@ export function useModelTests(input: {
     [client, endpointId],
   );
 
-  const testAll = useCallback(() => start({ modelId: null, method: null }), [start]);
-  const testOne = useCallback((modelId: string) => start({ modelId, method: null }), [start]);
+  const testAll = useCallback(() => start({ modelId: null, method: "plain" }), [start]);
+  const testOne = useCallback((modelId: string) => start({ modelId, method: "plain" }), [start]);
   const testOneAs = useCallback(
-    (target: { modelId: string; method: string }) => start(target),
+    (target: { modelId: string; method: CliTestMethod }) => start(target),
     [start],
   );
 

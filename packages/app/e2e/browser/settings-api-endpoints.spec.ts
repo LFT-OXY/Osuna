@@ -9,6 +9,7 @@ import {
   CLAUDE_CODE_ONLY,
   CLAUDE_CODE_SAMPLE,
   CODEX_ONLY,
+  CODEX_SAMPLE,
   connectApiEndpointClient,
   RELAY_KEY,
   setCliHeaderSamples,
@@ -1934,7 +1935,8 @@ test.describe("Settings API endpoints", () => {
     page,
   }) => {
     relay.goodModels = ["cc-only-sonnet", "codex-only-glm"];
-    await setCliHeaderSamples(null);
+    // 只有 Codex 来过：按 Claude Code 测还测不了。
+    await setCliHeaderSamples({ codex: CODEX_SAMPLE });
     const endpointId = await seedApiEndpoint(client, {
       name: "Members relay",
       baseUrls: [
@@ -1969,13 +1971,13 @@ test.describe("Settings API endpoints", () => {
       const item = testAs("claude_code", "cc-only-sonnet");
       await expect(item).toHaveAttribute("aria-disabled", "true");
       await expect(item).toContainText(
-        'No Claude Code request has come through the built-in gateway yet. Run Claude Code once with "Use API endpoints" on, then test again.',
+        'Claude Code hasn\'t used API endpoints yet. Use Claude Code once with "Use API endpoints" on, then test again.',
       );
       await page.keyboard.press("Escape");
       expect(sent("cc-only-sonnet")).toEqual([]);
     });
 
-    await test.step("Test as Codex with no Codex sample says it is Codex CLI, and passes the Codex-only group", async () => {
+    await test.step("Test as Codex sends Codex's headers and passes the Codex-only group", async () => {
       relay.requests.length = 0;
       await openMenu("codex-only-glm");
       await testAs("codex", "codex-only-glm").click();
@@ -1987,7 +1989,7 @@ test.describe("Settings API endpoints", () => {
         expect.objectContaining({
           url: "/good/v1/chat/completions",
           originator: "codex_cli_rs",
-          userAgent: expect.stringMatching(/^codex_cli_rs\//),
+          userAgent: CODEX_SAMPLE["user-agent"],
           stream: true,
         }),
       ]);
@@ -2001,7 +2003,7 @@ test.describe("Settings API endpoints", () => {
     });
 
     await test.step("once Claude Code has come through, Test as Claude Code sends its headers and passes", async () => {
-      await setCliHeaderSamples({ claude_code: CLAUDE_CODE_SAMPLE });
+      await setCliHeaderSamples({ claude_code: CLAUDE_CODE_SAMPLE, codex: CODEX_SAMPLE });
       // 样本是打开页面时读的：重新打开这一页。
       await openEndpointDetail(page, endpointId);
       relay.requests.length = 0;

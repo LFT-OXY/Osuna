@@ -7,6 +7,7 @@ import {
   splitAroundId,
   filterModelIds,
   isNamedFree,
+  offeredCliTests,
   offersFreeOnly,
   startTests,
   testSummary,
@@ -160,5 +161,22 @@ describe("wasAsked", () => {
       };
       expect(wasAsked(unsent)).toBe(false);
     }
+  });
+});
+
+describe("offeredCliTests", () => {
+  it("keeps the CLI test methods the app knows and drops a newer host's others", () => {
+    const missing = { code: "cli_sample_missing", message: "No sample" };
+    expect(
+      offeredCliTests([
+        { method: "codex", unavailable: null },
+        { method: "claude_code", unavailable: missing },
+        { method: "a_future_cli", unavailable: null },
+      ]),
+    ).toEqual([
+      { method: "codex", unavailable: null },
+      { method: "claude_code", unavailable: missing },
+    ]);
+    expect(offeredCliTests(undefined)).toEqual([]);
   });
 });

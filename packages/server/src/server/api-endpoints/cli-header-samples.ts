@@ -7,7 +7,9 @@ import { execFile } from "node:child_process";
 import type { IncomingHttpHeaders } from "node:http";
 import os from "node:os";
 import type pino from "pino";
-import type { ApiEndpointStore, CliHeaderSample, CliTestClient } from "./store.js";
+import type { FindCodexCommand } from "./host-processes.js";
+import type { ApiEndpointStore, CliHeaderSample } from "./store.js";
+import type { CliTestClient } from "./test-as.js";
 
 /*
  * CLI 请求头样本（ADR 0013）：中转站每放行一次 Claude Code 或 Codex 的请求，就把它表明身份的那些头记成这个 CLI
@@ -125,6 +127,7 @@ export class CliHeaderSamples {
 export const CODEX_CLIENT_VERSION = "0.159.0";
 
 const SEMVER = /\d+\.\d+\.\d+/;
+const LEADING_SEMVER = /^\d+\.\d+\.\d+/;
 
 function compareVersions(a: string, b: string): number {
   const left = a.split(".").map(Number);
@@ -134,6 +137,46 @@ function compareVersions(a: string, b: string): number {
     if (difference !== 0) return difference;
   }
   return 0;
+}
+
+/** 一个 Codex 请求说的自己的版本：version 头，没有就取 User-Agent 斜杠后开头的版本（magpie SawCodexClient）。 */
+export function codexVersionOf(headers: IncomingHttpHeaders): string | null {
+  const userAgent = headerOf(headers, "user-agent");
+  const isCodex =
+    headerOf(headers, "originator") !== "" || userAgent.toLowerCase().startsWith("codex");
+  if (!isCodex) return null;
+  const fromHeader = headerOf(headers, "version").match(SEMVER)?.[0];
+  if (fromHeader !== undefined) return fromHeader;
+  const afterSlash = userAgent.slice(userAgent.indexOf("/") + 1);
+  const hasSlash = userAgent.includes("/");
+  const leading = afterSlash.match(LEADING_SEMVER)?.[0];
+  return hasSlash && leading !== undefined ? leading : null;
+}
+
+/**
+ * 经中转站来过的 Codex 里最新的版本（magpie codexSeen）：用 ChatGPT 登录、只用 ChatGPT 自带模型的 Codex 不留样本，
+ * 但它说了自己是哪个版本。只记在内存里。
+ */
+export class SeenCodexVersion {
+  private newest: string | null = null;
+
+  saw(headers: IncomingHttpHeaders): void {
+    const version = codexVersionOf(headers);
+    if (version === null) return;
+    this.newest = newerCodexVersion(this.newest ?? version, version);
+  }
+
+  version(): string | null {
+    return this.newest;
+  }
+}
+
+/** 没有 Codex 样本时用的版本：内置的、Codex 缓存里记的、本机 Codex CLI 的、经中转站见过的，取最新（magpie codexVersion）。 */
+export function newestCodexVersion(candidates: (string | null)[]): string {
+  return candidates.reduce<string>(
+    (newest, candidate) => newerCodexVersion(newest, candidate),
+    CODEX_CLIENT_VERSION,
+  );
 }
 
 /** 两个版本里较新的；other 不是版本时为 known（magpie newerVersion）。 */
@@ -189,15 +232,29 @@ export function codexSignHeaders(input: { version: string; system: CodexSystem }
 const VERSION_DIGITS = /\d+(\.\d+)+/;
 const SYSTEM_COMMAND_TIMEOUT_MS = 3_000;
 
-function commandVersion(command: string, args: string[]): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile(command, args, { timeout: SYSTEM_COMMAND_TIMEOUT_MS }, (error, stdout) => {
-      // 命令不在、超时都只是少了版本号，照 magpie 写不带版本的系统名。
-      if (error) {
+function commandVersion(input: {
+  command: string;
+  args: string[];
+  env?: NodeJS.ProcessEnv;
+}): Promise<string | null> {
+  const { command, args, env } = input;
+  return new Promise((resolve, reject) => {
+    const options = { timeout: SYSTEM_COMMAND_TIMEOUT_MS, env };
+    execFile(command, args, options, (error, stdout) => {
+      if (error === null) {
+        resolve(stdout.match(VERSION_DIGITS)?.[0] ?? null);
+        return;
+      }
+      // 只认三种意料之中的：命令不在（ENOENT）、命令自己报错退出（退出码是数字）、超时被杀。这三种都只是少了版本号，
+      // 照 magpie 当作没有这个来源；别的（权限、资源耗尽等）不是「这台机器没这个命令」，照抛给调用方。
+      const isMissing = error.code === "ENOENT";
+      const isFailedRun = typeof error.code === "number";
+      const isTimedOut = error.killed === true;
+      if (isMissing || isFailedRun || isTimedOut) {
         resolve(null);
         return;
       }
-      resolve(stdout.match(VERSION_DIGITS)?.[0] ?? null);
+      reject(error);
     });
   });
 }
@@ -210,15 +267,15 @@ function threeParts(version: string): string {
 
 async function codexOsName(platform: NodeJS.Platform): Promise<string> {
   if (platform === "darwin") {
-    const version = await commandVersion("sw_vers", ["-productVersion"]);
+    const version = await commandVersion({ command: "sw_vers", args: ["-productVersion"] });
     return version === null ? "Mac OS" : `Mac OS ${threeParts(version)}`;
   }
   if (platform === "win32") {
     // 「Microsoft Windows [Version 10.0.26100.4652]」取前三段。
-    const version = await commandVersion("cmd", ["/c", "ver"]);
+    const version = await commandVersion({ command: "cmd", args: ["/c", "ver"] });
     return version === null ? "Windows" : `Windows ${version.split(".").slice(0, 3).join(".")}`;
   }
-  const version = await commandVersion("uname", ["-r"]);
+  const version = await commandVersion({ command: "uname", args: ["-r"] });
   return version === null ? "Linux" : `Linux ${threeParts(version)}`;
 }
 
@@ -233,4 +290,14 @@ export function readCodexSystem(): Promise<CodexSystem> {
     platform,
   }));
   return codexSystem;
+}
+
+/** 本机 Codex CLI 自报的版本（`codex --version`，magpie codexCLIVersion）；找不到 codex 或问不到为 null。 */
+export async function readInstalledCodexVersion(
+  findCodex: FindCodexCommand,
+): Promise<string | null> {
+  const program = await findCodex({ env: {} });
+  if (program === null) return null;
+  const { command, env } = program;
+  return commandVersion({ command, args: [...program.args, "--version"], env });
 }

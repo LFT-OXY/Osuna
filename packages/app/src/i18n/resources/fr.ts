@@ -2826,7 +2826,7 @@ export const fr: TranslationResources = {
           testAsClaudeCode: "Tester comme Claude Code",
           testAsCodex: "Tester comme Codex",
           claudeCodeSampleMissing:
-            "Aucune requête de Claude Code n'est encore passée par la passerelle intégrée. Lancez Claude Code une fois avec « Utiliser les points d'accès API » activé, puis testez à nouveau.",
+            "Claude Code n'a pas encore utilisé de point d'accès API. Utilisez Claude Code une fois avec « Utiliser les points d'accès API » activé, puis testez à nouveau.",
           noAnswer: "Pas de réponse",
           took: {
             ms: "{{value}} ms",

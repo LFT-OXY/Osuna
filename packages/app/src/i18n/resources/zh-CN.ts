@@ -2787,7 +2787,7 @@ export const zhCN: TranslationResources = {
           testAsClaudeCode: "按 Claude Code 的样子测",
           testAsCodex: "按 Codex 的样子测",
           claudeCodeSampleMissing:
-            "还没有 Claude Code 的请求经过内置中转站。先打开「使用第三方接口」用 Claude Code 跑一次，再来测试。",
+            "Claude Code 还没用过第三方接口。先打开「使用第三方接口」用 Claude Code 跑一次，再来测试。",
           noAnswer: "没有回应",
           took: {
             ms: "{{value}} 毫秒",
