@@ -1110,6 +1110,8 @@ describe("an API key is optional", () => {
       searchesWeb: true,
       templateId: "zhipu",
       region: "coding",
+      modelScope: "vendor",
+      autoPick: ["glm-*"],
     });
     const endpointId = saved.endpoint?.id ?? "";
     await client.apiEndpointFetchModels({
@@ -1145,6 +1147,8 @@ describe("an API key is optional", () => {
       catalog: { models: [{ id: "local-1" }] },
       templateId: "zhipu",
       region: "coding",
+      modelScope: "vendor",
+      autoPick: ["glm-*"],
     });
   });
 });

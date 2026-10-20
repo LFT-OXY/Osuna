@@ -78,6 +78,11 @@ const StoredApiEndpointSchema = z.object({
     .optional(),
   // 用户手动添加的模型名，开没开都留着。
   manualModels: z.array(StoredModelSchema).optional(),
+  // 服务范围：vendor「跟随接口清单」时 models 由 model-scope.ts 按清单算好写回；没有或别的值都当 picked。
+  // 存成字符串：以后加了范围再降级时整个文件仍读得懂。
+  modelScope: z.string().optional(),
+  // 自动勾选规则（model-scope.ts），只在 picked 时起作用；没有即没有规则。
+  autoPick: z.array(z.string()).optional(),
   // 「自己能联网搜索」：只写 true；没有或手改成 false 都是关（ADR 0009）。
   searchesWeb: z.boolean().optional(),
   // 从哪个模板加的（templates.ts 的 id）、选的哪个区域或套餐；「自定义」加的都没有。

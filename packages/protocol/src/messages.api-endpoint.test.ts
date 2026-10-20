@@ -1239,3 +1239,32 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
 });
+
+describe("API endpoint model scope and auto-pick rules (apiEndpointManagement)", () => {
+  it("parses an endpoint and a save with a scope and rules, a scope it does not know, and one without either", () => {
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-s1",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "OpenRouter",
+      baseUrls: [{ format: "openai_chat", url: "https://openrouter.ai/api/v1" }],
+      models: [{ id: "gpt-5" }],
+      modelScope: "picked",
+      autoPick: ["gpt-*", "re:claude-\\d"],
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+
+    for (const endpoint of [
+      { ...ENDPOINT, modelScope: "vendor", autoPick: ["gpt-*"] },
+      { ...ENDPOINT, modelScope: "usage" },
+      ENDPOINT,
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-s1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+});

@@ -194,6 +194,8 @@ export class ApiEndpointSession {
         ...(request.region !== undefined ? { region: request.region } : {}),
         ...(request.icon !== undefined ? { icon: request.icon } : {}),
         ...(request.catalog !== undefined ? { catalog: request.catalog } : {}),
+        ...(request.modelScope !== undefined ? { modelScope: request.modelScope } : {}),
+        ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",

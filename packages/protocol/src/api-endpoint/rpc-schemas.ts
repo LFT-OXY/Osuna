@@ -108,6 +108,13 @@ export const ApiEndpointCooldownSchema = z.object({
 });
 export type ApiEndpointCooldown = z.infer<typeof ApiEndpointCooldownSchema>;
 
+/**
+ * 服务范围（Model scope）：vendor「跟随接口清单」——在服务的模型是上游清单去掉没有对应地址的模型后的前 24 个，
+ * 加上手动添加的；picked「只用挑选的」——用户勾的那些。线上是字符串，以后加范围时老客户端照常解析；缺省当 picked。
+ */
+export const API_ENDPOINT_MODEL_SCOPES = ["vendor", "picked"] as const;
+export type ApiEndpointModelScope = (typeof API_ENDPOINT_MODEL_SCOPES)[number];
+
 /** daemon 上次向上游列出的模型（详情页按格式拉取后记下）；只用来挑选，不等于已选。 */
 export const ApiEndpointModelCatalogSchema = z.object({
   fetchedAt: z.string(),
@@ -134,6 +141,10 @@ export const ApiEndpointSchema = z.object({
   catalog: ApiEndpointModelCatalogSchema.optional(),
   // 用户手动添加的模型名，不管开没开都留在清单里。
   manualModels: z.array(ApiEndpointModelSchema).optional(),
+  // 服务范围（API_ENDPOINT_MODEL_SCOPES）；没有即 picked。models 总是在服务的模型。老 daemon 不发。
+  modelScope: z.string().optional(),
+  // 自动勾选规则：glob（* 任意字符，不分大小写）或 `re:` 开头的整名正则；只在 picked 时起作用。老 daemon 不发。
+  autoPick: z.array(z.string()).optional(),
   // 「自己能联网搜索」（ADR 0009）：只在这家有 Anthropic 或 OpenAI Responses 地址时算数；老 daemon 不发即为关。
   searchesWeb: z.boolean().optional(),
   // 接口标识：默认模型写「接口标识/模型名」时用的那段；列表搜索也按它找。老 daemon 不发。
@@ -294,6 +305,10 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * icon：「自定义」加的接口的图标（取值见 ApiEndpointSchema.icon）；null 去掉，省略即保留。`file:` 的要先经 store_icon 存过；
  * 从模板加的接口带图标拒收。老 daemon 忽略它。
  *
+ * modelScope：服务范围，省略即保留这家原来的（新建时为 picked）；vendor 时 models 由 daemon 按清单算，请求里的忽略。
+ * 不认识的范围拒收。autoPick：自动勾选规则，整份替换，空数组清掉；改了规则时当前清单里匹配的也勾上（照 magpie）。
+ * 不是规则的（没有 *、不以 re: 开头）或读不懂的拒收。老 daemon 忽略这两项。
+ *
  * catalog：添加窗口里保存前拉到的上游清单，随保存记作这家的上游清单（拉取时间记为保存时刻）；省略即保留这家原来的
  * （复制时是原来那家的）。老 daemon 忽略它。
  */
@@ -316,6 +331,8 @@ export const ApiEndpointSaveRequestSchema = z.object({
   region: z.string().optional(),
   icon: z.string().nullable().optional(),
   catalog: z.array(ApiEndpointModelSchema).optional(),
+  modelScope: z.string().optional(),
+  autoPick: z.array(z.string()).optional(),
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;
 

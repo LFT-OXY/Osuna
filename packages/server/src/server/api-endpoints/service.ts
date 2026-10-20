@@ -11,9 +11,11 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type pino from "pino";
 import {
+  API_ENDPOINT_MODEL_SCOPES,
   API_ENDPOINT_MODEL_TIERS,
   API_ENDPOINT_REQUEST_FORMATS,
   apiEndpointHasModelMapping,
+  type ApiEndpointModelScope,
   type ApiEndpoint,
   type ApiEndpointAgentIssue,
   type ApiEndpointAgentSettings,
@@ -269,6 +271,13 @@ import {
   type FormatList,
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
+import {
+  cleanAutoPickRules,
+  followsList,
+  keepValidMapping,
+  settleServedModels,
+  vendorServedModels,
+} from "./model-scope.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
@@ -345,6 +354,10 @@ export interface ApiEndpointSaveInput {
   icon?: string | null;
   // 添加窗口里保存前拉到的上游清单：记作这家的上游清单；undefined 保留原来的（复制时是原来那家的）。
   catalog?: ApiEndpointModel[];
+  // 服务范围（API_ENDPOINT_MODEL_SCOPES）；undefined 保留原来的，新建时为 picked。
+  modelScope?: string;
+  // 自动勾选规则，整份替换、空数组清掉；undefined 保留原来的。
+  autoPick?: string[];
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -1138,11 +1151,15 @@ export class ApiEndpointService {
       const template = validateTemplate(input, existing ?? copySource);
       // Azure 模板的地址不论怎么粘来（只有资源名也行），都先放到资源的 v1 API 上再校验。
       const templateId = input.templateId ?? (existing ?? copySource)?.templateId;
-      const fields = isLegacyForm
-        ? validateLegacyFields(supported, input, existing)
-        : validateFields(templateBaseUrls({ templateId, baseUrls: input.baseUrls ?? [] }), input);
+      const { fields, modelScope } = savedFieldsOf({
+        provider: supported,
+        input,
+        existing,
+        base: existing ?? copySource,
+        templateId,
+      });
       this.validateIcon({ icon: input.icon, templateId });
-      const endpoint = buildEndpoint({
+      const built = buildEndpoint({
         state,
         existing,
         copySource,
@@ -1154,6 +1171,13 @@ export class ApiEndpointService {
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
+      });
+      const endpoint = settleSavedScope({
+        endpoint: built,
+        base: existing ?? copySource,
+        input,
+        modelScope,
+        isLegacyForm,
       });
       const endpoints = withEndpoint(state.endpoints, endpoint);
       const fetchesList = fetchesListOnSave({ existing, apiKey, store: this.store });
@@ -2781,16 +2805,29 @@ export class ApiEndpointService {
     await this.writeCatalog(endpointId, undefined);
   }
 
+  /**
+   * 换上新清单（或丢掉）。在服务的模型跟着定（model-scope.ts）：跟随清单时重算，挑选时按规则勾上清单里新出的；
+   * 它们变了就和保存一样走 commit，默认模型与 CLI 配置跟着对账。
+   */
   private writeCatalog(endpointId: string, catalog: StoredApiEndpoint["catalog"]): Promise<void> {
-    return this.exclusiveFollowing(() => {
+    return this.exclusiveFollowing(async () => {
       const state = this.readState();
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint) return;
       const { catalog: _previous, ...rest } = endpoint;
-      const next = {
-        ...state,
-        endpoints: withEndpoint(state.endpoints, catalog ? { ...rest, catalog } : rest),
-      };
+      const listedBefore = new Set((endpoint.catalog?.models ?? []).map((model) => model.id));
+      const updated = settleServedModels(
+        catalog ? { ...rest, catalog } : rest,
+        (modelId) => !listedBefore.has(modelId),
+      );
+      const next = { ...state, endpoints: withEndpoint(state.endpoints, updated) };
+      const servesOthers =
+        !isDeepStrictEqual(updated.models, endpoint.models) ||
+        !isDeepStrictEqual(updated.modelMapping, endpoint.modelMapping);
+      if (servesOthers) {
+        await this.commit(state, next);
+        return;
+      }
       this.store.writeState(next);
       this.rewriteCodexCatalog(next);
       const tokens = this.store.readGatewayTokens();
@@ -3544,6 +3581,8 @@ export class ApiEndpointService {
           }
         : {}),
       ...(endpoint.manualModels ? { manualModels: endpoint.manualModels } : {}),
+      ...(endpoint.modelScope !== undefined ? { modelScope: endpoint.modelScope } : {}),
+      ...(endpoint.autoPick ? { autoPick: endpoint.autoPick } : {}),
       searchesWeb: endpoint.searchesWeb === true,
       ...(endpoint.templateId !== undefined ? { templateId: endpoint.templateId } : {}),
       ...(endpoint.region !== undefined ? { region: endpoint.region } : {}),
@@ -3989,6 +4028,82 @@ function buildEndpoint(input: {
   };
 }
 
+/** 请求里的字段与这次定下的服务范围（省略时取原来那家的）。 */
+function savedFieldsOf(input: {
+  provider: ApiEndpointProvider;
+  input: ApiEndpointSaveInput;
+  existing: StoredApiEndpoint | null;
+  base: StoredApiEndpoint | null;
+  templateId: string | undefined;
+}): { fields: EndpointFields; modelScope: string | undefined } {
+  const { input: request } = input;
+  const modelScope = validateModelScope(request.modelScope) ?? input.base?.modelScope;
+  if (request.baseUrls === undefined) {
+    return { fields: validateLegacyFields(input.provider, request, input.existing), modelScope };
+  }
+  // 跟随清单时档位映射对着在服务的模型校验（settleSavedScope），不对着请求里的 models。
+  const formInput = followsList({ modelScope }) ? { ...request, modelMapping: undefined } : request;
+  const baseUrls = templateBaseUrls({ templateId: input.templateId, baseUrls: request.baseUrls });
+  return { fields: validateFields(baseUrls, formInput), modelScope };
+}
+
+function validateModelScope(raw: string | undefined): ApiEndpointModelScope | undefined {
+  if (raw === undefined) return undefined;
+  const scope = API_ENDPOINT_MODEL_SCOPES.find((candidate) => candidate === raw);
+  if (!scope) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown model scope '${raw}'`,
+    });
+  }
+  return scope;
+}
+
+/**
+ * 保存时定下服务范围、自动勾选规则与在服务的模型（model-scope.ts）。跟随清单：models 按清单与手动添加的算，
+ * 新客户端的档位映射对着它校验，老客户端的只留还在服务的档位。挑选：规则改了时当前清单里匹配的也勾上
+ * （照 magpie SetAutoInclude），随保存带来新清单时勾上其中新出的。
+ */
+function settleSavedScope(input: {
+  endpoint: StoredApiEndpoint;
+  base: StoredApiEndpoint | null;
+  input: ApiEndpointSaveInput;
+  modelScope: string | undefined;
+  isLegacyForm: boolean;
+}): StoredApiEndpoint {
+  const { base, input: request } = input;
+  const { modelScope: _scope, autoPick: _autoPick, ...rest } = input.endpoint;
+  const autoPick =
+    request.autoPick === undefined ? (base?.autoPick ?? []) : validateAutoPick(request.autoPick);
+  const endpoint: StoredApiEndpoint = {
+    ...rest,
+    ...(input.modelScope !== undefined ? { modelScope: input.modelScope } : {}),
+    ...(autoPick.length > 0 ? { autoPick } : {}),
+  };
+  if (followsList(endpoint)) {
+    const models = vendorServedModels(endpoint);
+    const { modelMapping: _mapping, ...unmapped } = endpoint;
+    const modelMapping = input.isLegacyForm
+      ? keepValidMapping(endpoint.modelMapping, models)
+      : validateModelMapping(request.modelMapping, models);
+    return { ...unmapped, models, ...(modelMapping ? { modelMapping } : {}) };
+  }
+  const rulesChanged = !isDeepStrictEqual(autoPick, base?.autoPick ?? []);
+  const listedBefore = new Set((base?.catalog?.models ?? []).map((model) => model.id));
+  let isNew: ((modelId: string) => boolean) | null = null;
+  if (rulesChanged) isNew = () => true;
+  else if (request.catalog !== undefined) isNew = (modelId) => !listedBefore.has(modelId);
+  return settleServedModels(endpoint, isNew);
+}
+
+function validateAutoPick(raw: string[]): string[] {
+  const cleaned = cleanAutoPickRules(raw);
+  if (!cleaned.ok) {
+    throw new ApiEndpointRequestError({ code: "invalid_input", message: cleaned.message });
+  }
+  return cleaned.rules;
+}
+
 /** 添加窗口里保存前拉到的清单：拉取时间记为保存时刻；没给时不写，留下 base 的。 */
 function catalogFieldOf(input: {
   requested: ApiEndpointModel[] | undefined;
@@ -4138,20 +4253,6 @@ function validateModelMapping(
     mapping[tier] = modelId;
   }
   return Object.keys(mapping).length === 0 ? undefined : mapping;
-}
-
-/** 保留已有映射里仍在模型之中的档位。 */
-function keepValidMapping(
-  mapping: ApiEndpointModelMapping | undefined,
-  models: ApiEndpointModel[],
-): ApiEndpointModelMapping | undefined {
-  if (!mapping) return undefined;
-  const kept: ApiEndpointModelMapping = {};
-  for (const tier of API_ENDPOINT_MODEL_TIERS) {
-    const modelId = mapping[tier];
-    if (modelId && models.some((model) => model.id === modelId)) kept[tier] = modelId;
-  }
-  return Object.keys(kept).length === 0 ? undefined : kept;
 }
 
 function requireFormat(format: string): ApiEndpointRequestFormat {

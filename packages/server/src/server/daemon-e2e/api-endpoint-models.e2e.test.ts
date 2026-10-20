@@ -830,4 +830,214 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
       "not_found",
     );
   });
+  /* 服务范围与自动勾选规则（prd 第 17、18a 条；照 magpie models.go 的 manyModels、autolist.go）。 */
+
+  const numbered = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ id: `m${String(index + 1).padStart(2, "0")}` }));
+
+  async function endpointOf(endpointId: string) {
+    const listed = await client.apiEndpointList("claude");
+    const endpoint = listed.endpoints.find((entry) => entry.id === endpointId);
+    if (!endpoint) throw new Error(`Expected endpoint ${endpointId}`);
+    return endpoint;
+  }
+
+  const servedIds = async (endpointId: string) =>
+    (await endpointOf(endpointId)).models.map((model) => model.id);
+
+  function refetch(endpointId: string, baseUrls: { format: string; url: string }[]) {
+    const [first] = baseUrls;
+    return client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: first?.url ?? "",
+      format: first?.format ?? "",
+      baseUrls,
+    });
+  }
+
+  test("following the list serves its first 24 models and hand-added ones, and moves with what upstream lists", async () => {
+    const followUrls = [{ format: "anthropic_messages", url: `${upstream.origin}/follow` }];
+    upstream.lists["/follow/v1/models"] = numbered(30);
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Follow",
+      baseUrls: followUrls,
+      apiKey: SAVED_KEY,
+      models: [],
+      modelScope: "vendor",
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    expect((await endpointOf(endpointId)).modelScope).toBe("vendor");
+    expect(await servedIds(endpointId)).toEqual(numbered(24).map((model) => model.id));
+
+    // 手动添加的总在里面；档位映射只能指向在服务的模型。
+    const withManual = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Follow",
+      baseUrls: followUrls,
+      models: [],
+      manualModels: [{ id: "by-hand" }],
+      modelMapping: { opus: "m01", sonnet: "by-hand" },
+    });
+    expect(withManual.error).toBeNull();
+    expect(await servedIds(endpointId)).toEqual([...numbered(24).map((m) => m.id), "by-hand"]);
+
+    // 上游下架 m01、在最前面新出 m00：在服务的跟着变，指向 m01 的档位一起去掉。
+    upstream.lists["/follow/v1/models"] = [{ id: "m00" }, ...numbered(30).slice(1)];
+    expect((await refetch(endpointId, followUrls)).error).toBeNull();
+    const after = await endpointOf(endpointId);
+    expect(after.models.map((model) => model.id)).toEqual([
+      "m00",
+      ...numbered(24)
+        .slice(1)
+        .map((model) => model.id),
+      "by-hand",
+    ]);
+    expect(after.modelMapping).toEqual({ sonnet: "by-hand" });
+
+    // 每天刷新拉到的新清单也一样。
+    upstream.lists["/follow/v1/models"] = [{ id: "fresh" }, { id: "m00" }];
+    clock = new Date(clock.getTime() + DAY_MS + 60 * 1000);
+    await runDailyCheck();
+    expect(await servedIds(endpointId)).toEqual(["fresh", "m00", "by-hand"]);
+
+    // 丢掉清单：只剩手动添加的。
+    expect((await client.apiEndpointForgetCatalog(endpointId)).error).toBeNull();
+    expect(await servedIds(endpointId)).toEqual(["by-hand"]);
+  });
+
+  test("following the list leaves out a model listed only on a format the endpoint no longer has a URL for", async () => {
+    upstream.lists["/multi/anthropic/v1/models"] = [{ id: "shared" }, { id: "anthropic-only" }];
+    upstream.lists["/multi/v1/models"] = [{ id: "shared" }, { id: "chat-only" }];
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Multi",
+      baseUrls: multiBaseUrls(),
+      apiKey: SAVED_KEY,
+      models: [],
+      modelScope: "vendor",
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(await servedIds(endpointId)).toEqual(["shared", "anthropic-only", "chat-only"]);
+
+    const [anthropicUrl] = multiBaseUrls();
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Multi",
+      baseUrls: anthropicUrl ? [anthropicUrl] : [],
+      models: [],
+    });
+    expect(edited.error).toBeNull();
+    expect(await servedIds(endpointId)).toEqual(["shared", "anthropic-only"]);
+  });
+
+  test("an endpoint saved without a scope keeps only what was picked through new lists", async () => {
+    const urls = [{ format: "anthropic_messages", url: `${upstream.origin}/kept` }];
+    upstream.lists["/kept/v1/models"] = numbered(3);
+    const endpointId = await saveEndpoint({
+      name: "Kept",
+      baseUrls: urls,
+      models: [{ id: "m02" }],
+    });
+
+    upstream.lists["/kept/v1/models"] = [...numbered(3), { id: "m04" }];
+    expect((await refetch(endpointId, urls)).error).toBeNull();
+    const endpoint = await endpointOf(endpointId);
+    expect(endpoint.modelScope).toBeUndefined();
+    expect(endpoint.models).toEqual([{ id: "m02" }]);
+  });
+
+  test("switching to picked keeps what was served; rules tick matching new models and never untick", async () => {
+    const urls = [{ format: "anthropic_messages", url: `${upstream.origin}/pick` }];
+    upstream.lists["/pick/v1/models"] = numbered(30);
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Pick",
+      baseUrls: urls,
+      apiKey: SAVED_KEY,
+      models: [],
+      modelScope: "vendor",
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    const served = (await endpointOf(endpointId)).models;
+    const save = (fields: { models: { id: string }[]; autoPick?: string[] }) =>
+      client.apiEndpointSave({
+        provider: "claude",
+        endpointId,
+        name: "Pick",
+        baseUrls: urls,
+        modelScope: "picked",
+        ...fields,
+      });
+
+    // 客户端切换时把在服务的写成已选。
+    expect((await save({ models: served })).error).toBeNull();
+    expect((await endpointOf(endpointId)).modelScope).toBe("picked");
+    expect(await servedIds(endpointId)).toEqual(numbered(24).map((model) => model.id));
+
+    // 不是规则的（没有 *、不以 re: 开头）与读不懂的正则拒收，规则不变。
+    for (const rule of ["gpt-5", "re:(", "re: "]) {
+      const refused = await save({ models: served, autoPick: [rule] });
+      expect(refused.error?.code).toBe("invalid_input");
+      expect(refused.error?.message).toContain(rule.trim());
+    }
+    expect((await endpointOf(endpointId)).autoPick).toBeUndefined();
+
+    // 设规则时当前清单里匹配的也勾上（照 magpie SetAutoInclude），新的在前；不分大小写，重复与空白的去掉。
+    const unticked = served.filter((model) => model.id !== "m01");
+    expect(
+      (await save({ models: unticked, autoPick: [" M2* ", "M2*", "", "re:m3\\d"] })).error,
+    ).toBeNull();
+    const ruled = await endpointOf(endpointId);
+    expect(ruled.autoPick).toEqual(["M2*", "re:m3\\d"]);
+    expect(ruled.models.map((model) => model.id)).toEqual([
+      "m25",
+      "m26",
+      "m27",
+      "m28",
+      "m29",
+      "m30",
+      ...unticked.map((model) => model.id),
+    ]);
+
+    // 取消勾选规则匹配的 m25：清单里它不算新的，下次拉也不再勾上；新出的匹配的才勾上，不匹配的不动。
+    const withoutM25 = ruled.models.filter((model) => model.id !== "m25");
+    expect((await save({ models: withoutM25, autoPick: ["M2*", "re:m3\\d"] })).error).toBeNull();
+    upstream.lists["/pick/v1/models"] = [{ id: "m2-fresh" }, { id: "other-new" }, ...numbered(30)];
+    expect((await refetch(endpointId, urls)).error).toBeNull();
+    expect(await servedIds(endpointId)).toEqual([
+      "m2-fresh",
+      ...withoutM25.map((model) => model.id),
+    ]);
+
+    // 每天刷新拉到的也一样；已勾的不因规则取消。
+    upstream.lists["/pick/v1/models"] = [{ id: "m31" }, { id: "m2-fresh" }];
+    clock = new Date(clock.getTime() + DAY_MS + 60 * 1000);
+    await runDailyCheck();
+    expect(await servedIds(endpointId)).toEqual([
+      "m31",
+      "m2-fresh",
+      ...withoutM25.map((model) => model.id),
+    ]);
+
+    // 清空规则。
+    expect((await save({ models: [{ id: "m31" }], autoPick: [] })).error).toBeNull();
+    expect((await endpointOf(endpointId)).autoPick).toBeUndefined();
+  });
+
+  test("an unknown scope is refused", async () => {
+    const refused = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Odd",
+      baseUrls: [{ format: "anthropic_messages", url: `${upstream.origin}/odd` }],
+      apiKey: SAVED_KEY,
+      models: [],
+      modelScope: "usage",
+    });
+    expect(refused.error?.code).toBe("invalid_input");
+  });
 });
