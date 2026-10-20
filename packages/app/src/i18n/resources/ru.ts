@@ -2662,6 +2662,8 @@ export const ru: TranslationResources = {
         detect: "Определить",
         detectModelPlaceholder: "Модель для проверки (необязательно)",
         detected: {
+          askOnly: "Запрашивать {{model}} только в {{format}}",
+          onlyOnceSaved: "После сохранения {{model}} будет запрашиваться только в {{format}}",
           useThese: "Использовать эти",
           taken: "Применено · сохраните, чтобы оставить",
           noneAnswered:
@@ -2818,10 +2820,23 @@ export const ru: TranslationResources = {
         automaticUnknown: "Автоматически",
         invalidTokens: "Введите число вроде 272k",
         restoreAll: "Вернуть всё по умолчанию",
+        upstreamName: "Имя у поставщика",
+        upstreamNameHint:
+          "Имя, под которым эта модель отправляется на этот эндпоинт. * заменяется на ID модели. Списки моделей и модель по умолчанию сохраняют исходное имя.",
+        format: "Только этот формат",
+        formatHint: "Запрашивать эту модель у этого эндпоинта только в одном формате запросов.",
+        formatAutomatic: "Автоматически",
+        formatVoid:
+          "У этого эндпоинта больше нет базового URL {{format}}, поэтому настройка не действует.",
+        formatTag: "Только {{format}}",
+        formatPinFailed: "Не удалось изменить формат",
         save: "Сохранить",
         saving: "Сохранение…",
         saveFailed: "Не удалось сохранить: {{message}}",
         defaults: {
+          upstreamNameHint:
+            "* заменяется на ID каждой модели; без * все модели отправляются под этим именем.",
+          upstreamNamePlaceholder: "ID модели",
           title: "Значения для всех моделей",
           hint: "Настройки отдельной модели важнее. Оставьте пустым, чтобы использовать найденное Osuna.",
           save: "Сохранить",

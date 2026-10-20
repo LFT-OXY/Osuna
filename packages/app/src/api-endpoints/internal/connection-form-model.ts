@@ -13,6 +13,7 @@ import {
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { curlOf, type CurlCommand } from "./curl-command";
+import { withModelFormat } from "./model-settings-form";
 import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
 
 /*
@@ -146,9 +147,19 @@ export interface DetectedFormat {
 export interface ConnectionDetection {
   results: DetectedFormat[];
   isTaken: boolean;
+  // 「只在 {格式} 上问 {模型}」：编辑时试的是这家的模型、只有部分格式通了才有（照 magpie）；staged 是保存时要设的格式。
+  onlyChoices: ConnectionOnlyChoices | null;
   canTake: boolean;
   waitsForTake: boolean;
   noneAnswered: "keyless" | "check" | null;
+}
+
+export interface ConnectionOnlyChoices {
+  modelId: string;
+  formats: ApiEndpointRequestFormat[];
+  staged: string | null;
+  // 选了和已存的不同的格式，要保存才算。
+  isPending: boolean;
 }
 
 /** 添加时「拉取模型」：拉到的清单只在表单里，保存时一起写入。 */
@@ -368,6 +379,8 @@ export interface ConnectionFormModel {
   cancelDetect(): void;
   // 「采用这些」：通了的格式填上建议地址，没在那里找到的（404 / 405）清掉。
   takeDetected(): void;
+  // 「只在 {格式} 上问 {模型}」：保存时把试的那个模型设成只用这种格式；这家还没有那种地址时先采用检测到的地址。
+  askOnlyOn(format: ApiEndpointRequestFormat): void;
   submit(): Promise<ConnectionSaveResult | null>;
   close(): void;
 }
@@ -378,6 +391,14 @@ type FormatTests = Partial<Record<ApiEndpointRequestFormat, FormatTestOutcome>>;
 interface DetectionValues {
   results: DetectedFormat[];
   isTaken: boolean;
+  // 这次检测试的模型（自动检测框里打的）；没打为 null。
+  askedModel: string | null;
+}
+
+// 保存时要设成只用这种格式的模型。
+interface StagedPin {
+  modelId: string;
+  format: ApiEndpointRequestFormat;
 }
 
 // 表单里一种格式要问的地址。
@@ -410,6 +431,7 @@ interface Values {
   detection: DetectionValues | null;
   detecting: boolean;
   detectError: string | null;
+  stagedPin: StagedPin | null;
   catalogFetch: ConnectionCatalogFetch;
   tests: FormatTests;
   serviceAddress: string;
@@ -487,6 +509,7 @@ export function createConnectionFormModel(
     detection: null,
     detecting: false,
     detectError: null,
+    stagedPin: null,
     catalogFetch: { status: "idle" },
     tests: {},
     serviceAddress: serviceAddressWas,
@@ -603,7 +626,12 @@ export function createConnectionFormModel(
       hasModelField: next.hasModelField || (canCheckBeforeSave && isAdding),
       detectModel: next.detectModel,
       detection: next.detection
-        ? detectionStateOf({ detection: next.detection, apiKey: next.apiKey, hasValidUrls })
+        ? detectionStateOf({
+            detection: next.detection,
+            apiKey: next.apiKey,
+            hasValidUrls,
+            stagedPin: next.stagedPin,
+          })
         : null,
       keyRejected: isDetectionRejected || isTestRejected,
       catalogFetch: next.catalogFetch,
@@ -672,6 +700,7 @@ export function createConnectionFormModel(
     detection: DetectionValues;
     apiKey: string;
     hasValidUrls: boolean;
+    stagedPin: StagedPin | null;
   }): ConnectionDetection {
     const { detection } = input;
     const anyAnswered = detection.results.some((result) => result.label === "ok");
@@ -682,10 +711,47 @@ export function createConnectionFormModel(
     return {
       results: detection.results,
       isTaken: detection.isTaken,
+      onlyChoices: onlyChoicesOf(detection, input.stagedPin),
       canTake,
       waitsForTake: canTake && !input.hasValidUrls,
       noneAnswered,
     };
+  }
+
+  /**
+   * 照 magpie Detect：编辑一家时，打了试用的模型、它是这家的模型，又不是每种格式都通，每种通了的格式给一个「只在…上问」。
+   * 新建、复制的接口没有可设的模型（magpie 在保存后的 Names & levels 里设）。
+   */
+  function onlyChoicesOf(
+    detection: DetectionValues,
+    stagedPin: StagedPin | null,
+  ): ConnectionOnlyChoices | null {
+    const modelId = detection.askedModel;
+    if (seed.mode !== "edit" || modelId === null || !endpointHasModel(seed.endpoint, modelId)) {
+      return null;
+    }
+    const formats = detection.results
+      .filter((result) => result.label === "ok")
+      .map((result) => result.format);
+    const isSomeOnly = formats.length > 0 && formats.length < detection.results.length;
+    if (!isSomeOnly) return null;
+    const saved = savedPinOf(modelId);
+    const isStagedHere = stagedPin?.modelId === modelId;
+    const staged = isStagedHere ? stagedPin.format : saved;
+    return { modelId, formats, staged, isPending: staged !== saved };
+  }
+
+  function savedPinOf(modelId: string): string | null {
+    if (seed.mode !== "edit") return null;
+    return seed.endpoint.modelSettings?.models?.[modelId]?.format ?? null;
+  }
+
+  /** 保存时带的模型设置：只在设了、又和已存的不同时才带（照 magpie stageAPI）。 */
+  function stagedModelSettings(): Pick<ConnectionSaveRequest, "modelSettings"> {
+    const pin = values.stagedPin;
+    if (seed.mode !== "edit" || pin === null || pin.format === savedPinOf(pin.modelId)) return {};
+    const current = seed.endpoint.modelSettings;
+    return { modelSettings: withModelFormat({ current, ...pin }) };
   }
 
   // 本机服务换了地址时各格式地址挪过去；别的照填的。
@@ -812,7 +878,8 @@ export function createConnectionFormModel(
     }
     // 只列出结论，「采用这些」才填进地址栏（照 magpie Detect）。
     const results = outcome.results.flatMap(detectedFormatOf);
-    update({ detecting: false, detection: { results, isTaken: false } });
+    const askedModel = canCheckBeforeSave && detectModel !== "" ? detectModel : null;
+    update({ detecting: false, detection: { results, isTaken: false, askedModel } });
   }
 
   /** 照 magpie useDetected：通了的填上建议地址；没在那里找到的（404、405）清掉，但只清和建议地址一样的那栏。 */
@@ -858,6 +925,7 @@ export function createConnectionFormModel(
       ...(followsListWhenNew && seed.mode === "create" ? { modelScope: "vendor" } : {}),
       // 添加时拉到的清单随保存写入。
       ...(values.catalogFetch.status === "fetched" ? { catalog: values.catalogFetch.models } : {}),
+      ...stagedModelSettings(),
     };
   }
 
@@ -1134,6 +1202,24 @@ export function createConnectionFormModel(
         ...invalidateChecks(),
       });
     },
+    askOnlyOn(format) {
+      const detection = values.detection;
+      const choices = state.detection?.onlyChoices;
+      if (!detection || !choices?.formats.includes(format)) return;
+      const stagedPin = { modelId: choices.modelId, format };
+      if (values.urls[format].trim() !== "") {
+        update({ stagedPin });
+        return;
+      }
+      // 这家还没有那种格式的地址：先采用检测到的地址（magpie 的 use(r.results)）。
+      update({
+        stagedPin,
+        urls: takenUrls(detection.results),
+        urlGeneration: values.urlGeneration + 1,
+        detection: { ...detection, isTaken: true },
+        ...invalidateChecks(),
+      });
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -1214,6 +1300,12 @@ function initialNameOf(seed: ConnectionFormSeed): string {
   if (seed.mode === "edit") return seed.endpoint.name;
   if (seed.mode === "duplicate") return seed.name;
   return "";
+}
+
+/** 这家有这个模型：已选、上游清单里或手动添加的（同 daemon 的 endpointKnowsModel）。 */
+function endpointHasModel(endpoint: ApiEndpoint, modelId: string): boolean {
+  const lists = [endpoint.models, endpoint.catalog?.models ?? [], endpoint.manualModels ?? []];
+  return lists.some((models) => models.some((model) => model.id === modelId));
 }
 
 function keyOwnerOf(seed: ConnectionFormSeed): ApiEndpoint | null {

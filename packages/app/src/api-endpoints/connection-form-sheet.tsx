@@ -32,6 +32,7 @@ import {
   templateRegionName,
 } from "./template-copy";
 import { useConnectionFormModel } from "./use-connection-form-model";
+import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
 import type {
   ConnectionCurlFill,
@@ -43,6 +44,7 @@ import type {
   ConnectionFormState,
   ConnectionFormatField,
   ConnectionIconError,
+  ConnectionOnlyChoices,
   ConnectionSaveResult,
   ConnectionTemplateState,
   DetectedFormat,
@@ -459,6 +461,9 @@ function DetectionResults({
           ) : null}
         </View>
       ) : null}
+      {detection.onlyChoices ? (
+        <OnlyFormatChoices choices={detection.onlyChoices} model={model} />
+      ) : null}
       {detection.isTaken ? (
         <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-taken">
           {t("settings.apiEndpoints.form.detected.taken")}
@@ -476,6 +481,78 @@ function DetectionResults({
         </Text>
       ) : null}
     </View>
+  );
+}
+
+/**
+ * 「只在 {格式} 上问 {模型}」（照 magpie Detect 的 Ask {model} on {api} only）：每种通了的格式一个，选着的用实底；
+ * 保存时随这家一起存进模型设置。
+ */
+function OnlyFormatChoices({
+  choices,
+  model,
+}: {
+  choices: ConnectionOnlyChoices;
+  model: ConnectionFormModel;
+}) {
+  const { t } = useTranslation();
+  const staged = choices.staged === null ? null : formatLabel(t, choices.staged);
+  return (
+    <View style={styles.checkList} testID="api-endpoint-connection-only-choices">
+      <View style={styles.wrapRow}>
+        {choices.formats.map((format) => (
+          <OnlyFormatButton
+            key={format}
+            format={format}
+            modelId={choices.modelId}
+            isStaged={choices.staged === format}
+            onPress={model.askOnlyOn}
+          />
+        ))}
+      </View>
+      {choices.isPending && staged !== null ? (
+        <Text
+          variant="caption"
+          color="foregroundMuted"
+          testID="api-endpoint-connection-only-pending"
+        >
+          {t("settings.apiEndpoints.form.detected.onlyOnceSaved", {
+            model: choices.modelId,
+            format: staged,
+          })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function OnlyFormatButton({
+  format,
+  modelId,
+  isStaged,
+  onPress,
+}: {
+  format: ApiEndpointRequestFormat;
+  modelId: string;
+  isStaged: boolean;
+  onPress: (format: ApiEndpointRequestFormat) => void;
+}) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => onPress(format), [format, onPress]);
+  const accessibilityState = useMemo(() => ({ selected: isStaged }), [isStaged]);
+  return (
+    <Button
+      variant={isStaged ? "secondary" : "outline"}
+      size="sm"
+      onPress={handlePress}
+      accessibilityState={accessibilityState}
+      testID={`api-endpoint-connection-only-${format}`}
+    >
+      {t("settings.apiEndpoints.form.detected.askOnly", {
+        model: modelId,
+        format: formatLabel(t, format),
+      })}
+    </Button>
   );
 }
 
@@ -1567,6 +1644,11 @@ const styles = StyleSheet.create((theme) => ({
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  wrapRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing[2],
   },
   // 三种格式的地址同属一把 key，收在一块浅底里。

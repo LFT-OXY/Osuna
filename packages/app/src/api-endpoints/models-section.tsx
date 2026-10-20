@@ -11,7 +11,13 @@ import {
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Eraser, Plus, RotateCw, Search, SlidersHorizontal } from "lucide-react-native";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSubTrigger,
+  type MenuPageDefinition,
+} from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { Alert } from "@/components/ui/alert";
@@ -38,6 +44,7 @@ import {
 import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
 import { relativeAgo } from "./reopen-hints-copy";
+import { formatLabel } from "./model-settings-sheet";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 
 /*
@@ -63,6 +70,18 @@ interface ApiEndpointModelsSectionProps {
   onAdd: (modelIds: string[]) => Promise<string | null>;
   // 模型行菜单的「模型设置」；老主机没有，为 null。
   onOpenSettings: ((modelId: string) => void) | null;
+  // 模型行菜单的「只用这种格式」与行上的格式小标；老主机或这家只有一种格式的地址时为 null。
+  formatPins: ModelFormatPins | null;
+}
+
+/**
+ * 模型行上直接设「只用这种格式」（照 magpie 模型行右键的 Asked on…）：可选的格式（不含「自动」），
+ * 每个模型现在设的格式（null 为自动；作废的不算），与设一个格式（null 回到自动）。
+ */
+export interface ModelFormatPins {
+  formats: string[];
+  pinOf: (modelId: string) => string | null;
+  onPin: (modelId: string, format: string | null) => void;
 }
 
 function useFamilyName(): (family: ModelFamilyId) => string {
@@ -85,6 +104,7 @@ export function ApiEndpointModelsSection({
   onChange,
   onAdd,
   onOpenSettings,
+  formatPins,
 }: ApiEndpointModelsSectionProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -171,6 +191,7 @@ export function ApiEndpointModelsSection({
           onToggle={handleToggleModel}
           onSelectAll={handleSelectFamily}
           onOpenSettings={onOpenSettings}
+          formatPins={formatPins}
         />
       </View>
     );
@@ -448,11 +469,13 @@ function FamilyModels({
   onToggle,
   onSelectAll,
   onOpenSettings,
+  formatPins,
 }: {
   group: ModelFamilyGroup;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
   onSelectAll: (group: ModelFamilyGroup, selected: boolean) => void;
   onOpenSettings: ((modelId: string) => void) | null;
+  formatPins: ModelFormatPins | null;
 }) {
   const { t } = useTranslation();
   const familyName = useFamilyName();
@@ -492,6 +515,7 @@ function FamilyModels({
             entry={entry}
             onToggle={onToggle}
             onOpenSettings={onOpenSettings}
+            formatPins={formatPins}
           />
         ))}
       </ScrollView>
@@ -503,13 +527,16 @@ function ModelRow({
   entry,
   onToggle,
   onOpenSettings,
+  formatPins,
 }: {
   entry: ModelEntry;
   onToggle: (entry: ModelEntry, selected: boolean) => void;
   onOpenSettings: ((modelId: string) => void) | null;
+  formatPins: ModelFormatPins | null;
 }) {
   const { t } = useTranslation();
   const handleChange = useCallback((value: boolean) => onToggle(entry, value), [entry, onToggle]);
+  const pinned = formatPins?.pinOf(entry.id) ?? null;
   return (
     <View style={styles.modelRow} testID={`api-endpoint-model-${entry.id}`}>
       <Text
@@ -530,26 +557,49 @@ function ModelRow({
           {t("settings.apiEndpoints.models.goneUpstream")}
         </Text>
       ) : null}
+      {pinned !== null ? (
+        <Text
+          variant="caption"
+          color="foregroundMuted"
+          numberOfLines={1}
+          testID={`api-endpoint-model-format-${entry.id}`}
+        >
+          {t("settings.apiEndpoints.modelSettings.formatTag", { format: formatLabel(t, pinned) })}
+        </Text>
+      ) : null}
       <Switch
         value={entry.selected}
         onValueChange={handleChange}
         accessibilityLabel={t("settings.apiEndpoints.models.modelSwitch", { model: entry.id })}
         testID={`api-endpoint-model-switch-${entry.id}`}
       />
-      {onOpenSettings ? <ModelRowMenu modelId={entry.id} onOpenSettings={onOpenSettings} /> : null}
+      {onOpenSettings ? (
+        <ModelRowMenu
+          modelId={entry.id}
+          onOpenSettings={onOpenSettings}
+          formatPins={formatPins}
+          pinned={pinned}
+        />
+      ) : null}
     </View>
   );
 }
 
 const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
 
-/** 模型行的 ⋯ 菜单：「模型设置」。 */
+const FORMAT_PAGE = "format";
+
+/** 模型行的 ⋯ 菜单：「模型设置」，这家有两种以上格式的地址时还有「只用这种格式」一页。 */
 function ModelRowMenu({
   modelId,
   onOpenSettings,
+  formatPins,
+  pinned,
 }: {
   modelId: string;
   onOpenSettings: (modelId: string) => void;
+  formatPins: ModelFormatPins | null;
+  pinned: string | null;
 }) {
   const { t } = useTranslation();
   const handleOpen = useCallback(() => onOpenSettings(modelId), [modelId, onOpenSettings]);
@@ -557,13 +607,37 @@ function ModelRowMenu({
     () => <ThemedSlidersHorizontal size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
     [],
   );
+  const formatTitle = t("settings.apiEndpoints.modelSettings.format");
+  const pages = useMemo<MenuPageDefinition[] | undefined>(() => {
+    if (formatPins === null) return undefined;
+    const choices = [null, ...formatPins.formats];
+    return [
+      {
+        id: FORMAT_PAGE,
+        title: formatTitle,
+        content: choices.map((format) => (
+          <FormatPinItem
+            key={format ?? "automatic"}
+            modelId={modelId}
+            format={format}
+            selected={format === pinned}
+            onPin={formatPins.onPin}
+          />
+        )),
+      },
+    ];
+  }, [formatPins, formatTitle, modelId, pinned]);
+  const pinnedLabel =
+    pinned === null
+      ? t("settings.apiEndpoints.modelSettings.formatAutomatic")
+      : formatLabel(t, pinned);
   return (
     <DropdownMenu>
       <RowActionsMenuTrigger
         accessibilityLabel={t("settings.apiEndpoints.modelSettings.rowMenu", { model: modelId })}
         testID={`api-endpoint-model-menu-${modelId}`}
       />
-      <DropdownMenuContent align="end" width={220}>
+      <DropdownMenuContent align="end" width={240} pages={pages}>
         <DropdownMenuItem
           leading={leading}
           onSelect={handleOpen}
@@ -571,8 +645,45 @@ function ModelRowMenu({
         >
           {t("settings.apiEndpoints.modelSettings.menu")}
         </DropdownMenuItem>
+        {pages ? (
+          <DropdownMenuSubTrigger
+            id={FORMAT_PAGE}
+            value={pinnedLabel}
+            testID={`api-endpoint-model-format-menu-${modelId}`}
+          >
+            {formatTitle}
+          </DropdownMenuSubTrigger>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function FormatPinItem({
+  modelId,
+  format,
+  selected,
+  onPin,
+}: {
+  modelId: string;
+  format: string | null;
+  selected: boolean;
+  onPin: (modelId: string, format: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => onPin(modelId, format), [format, modelId, onPin]);
+  const label =
+    format === null
+      ? t("settings.apiEndpoints.modelSettings.formatAutomatic")
+      : formatLabel(t, format);
+  return (
+    <DropdownMenuItem
+      selected={selected}
+      onSelect={handleSelect}
+      testID={`api-endpoint-model-format-pin-${modelId}-${format ?? "automatic"}`}
+    >
+      {label}
+    </DropdownMenuItem>
   );
 }
 

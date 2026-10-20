@@ -44,6 +44,7 @@ import { ApiEndpointModelScopeSection } from "./model-scope-section";
 import { ApiEndpointModelSettingsSheet } from "./model-settings-sheet";
 import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
+import { useFormatPins } from "./use-format-pins";
 import { SwitchOffSheet } from "./switch-off-sheet";
 import { ApiEndpointWebSearchSection } from "./web-search-section";
 import { EndpointIconHostProvider } from "./endpoint-icon";
@@ -679,6 +680,11 @@ function ApiEndpointDetailSections({
   // 开着「模型设置」窗口的模型；关着为 null。
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
   const closeModelSettings = useCallback(() => setSettingsModelId(null), []);
+  const formatPins = useFormatPins({
+    endpoint,
+    hasManagement,
+    save: detail.saveModelSettings,
+  });
   // COMPAT(apiEndpointCliWiring): added in v0.17.0, remove gate after 2027-04-18.
   const hasCliWiring = useHostFeature(serverId, "apiEndpointCliWiring");
   // 「自己能联网搜索」只在有 Anthropic 或 Responses 地址时算数（ADR 0009）。
@@ -694,6 +700,11 @@ function ApiEndpointDetailSections({
     };
   } else if (detail.saveError !== null) {
     pageError = { title: t("settings.apiEndpoints.detail.saveFailed"), message: detail.saveError };
+  } else if (formatPins.error !== null) {
+    pageError = {
+      title: t("settings.apiEndpoints.modelSettings.formatPinFailed"),
+      message: formatPins.error,
+    };
   } else if (hostEndpoints.actionError !== null) {
     pageError = { title: hostEndpoints.actionError, message: "" };
   }
@@ -757,6 +768,7 @@ function ApiEndpointDetailSections({
         onChange={detail.changeModels}
         onAdd={detail.addModels}
         onOpenSettings={hasManagement ? setSettingsModelId : null}
+        formatPins={formatPins.pins}
       />
       {hasManagement ? (
         <ApiEndpointModelDefaultsSection

@@ -1110,6 +1110,170 @@ test.describe("Settings API endpoints", () => {
     await expect(save).toBeDisabled();
   });
 
+  // 接口管理好用性工单 15：上游模型名与只用这种格式。
+  test("Upstream name and Use only this format: a failed save keeps them, saving reaches the endpoint, the row menu sets the format, and a gone URL is told", async ({
+    page,
+  }) => {
+    relay.goodModels = ["model-01", "model-02"];
+    const anthropicUrl = { format: "anthropic_messages", url: `${relay.origin}/good` };
+    const chatUrl = { format: "openai_chat", url: `${relay.origin}/good/v1` };
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [anthropicUrl, chatUrl],
+      models: ["model-01"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    host.failing = false;
+    await openEndpointDetail(page, endpointId);
+    const sheet = page.getByTestId("api-endpoint-model-settings");
+    const settingsReader = async () => (await endpointOf(endpointId))?.modelSettings;
+    const openModelSettings = async () => {
+      await page.getByTestId("api-endpoint-model-menu-model-01").filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-model-settings-open-model-01").click();
+      await expect(sheet).toBeVisible();
+    };
+
+    await test.step("the model settings: a failed save keeps both, then saving reaches the endpoint", async () => {
+      await openModelSettings();
+      const upstreamName = sheet.getByTestId("api-endpoint-model-settings-upstream-name");
+      await expect(upstreamName).toHaveAttribute("placeholder", "model-01");
+      await upstreamName.fill("vendor/*");
+      await sheet.getByTestId("api-endpoint-model-settings-format-openai_chat").click();
+      host.failing = true;
+      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet.getByTestId("api-endpoint-model-settings-error")).toContainText(
+        "EACCES: permission denied",
+      );
+      await expect(upstreamName).toHaveValue("vendor/*");
+      expect(await settingsReader()).toBeUndefined();
+      host.failing = false;
+      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet).toHaveCount(0);
+      await expect.poll(settingsReader).toEqual({
+        models: { "model-01": { upstreamName: "vendor/*", format: "openai_chat" } },
+      });
+      await expect(
+        page.getByTestId("api-endpoint-model-format-model-01").filter({ visible: true }),
+      ).toHaveText("OpenAI Chat only");
+    });
+
+    await test.step("the row menu: a failed change is told on the page, then Automatic takes it away", async () => {
+      const pickAutomatic = async () => {
+        await page
+          .getByTestId("api-endpoint-model-menu-model-01")
+          .filter({ visible: true })
+          .click();
+        await expect(page.getByTestId("api-endpoint-model-format-menu-model-01")).toContainText(
+          "OpenAI Chat",
+        );
+        await page.getByTestId("api-endpoint-model-format-menu-model-01").click();
+        await page.getByTestId("api-endpoint-model-format-pin-model-01-automatic").click();
+      };
+      host.failing = true;
+      await pickAutomatic();
+      await expect(
+        page.getByTestId("api-endpoint-detail-error-alert").filter({ visible: true }),
+      ).toContainText("EACCES: permission denied");
+      expect((await settingsReader())?.models?.["model-01"]?.format).toBe("openai_chat");
+      host.failing = false;
+      await pickAutomatic();
+      await expect
+        .poll(settingsReader)
+        .toEqual({ models: { "model-01": { upstreamName: "vendor/*" } } });
+      await expect(page.getByTestId("api-endpoint-model-format-model-01")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-detail-error-alert")).toHaveCount(0);
+    });
+
+    await test.step("a format whose URL is gone no longer applies, and the model settings say so", async () => {
+      const saved = await client.apiEndpointSave({
+        provider: "claude",
+        endpointId,
+        name: "Good relay",
+        baseUrls: [anthropicUrl, chatUrl],
+        models: [{ id: "model-01" }],
+        modelSettings: { models: { "model-01": { format: "openai_chat" } } },
+      });
+      expect(saved.error).toBeNull();
+      const gone = await client.apiEndpointSave({
+        provider: "claude",
+        endpointId,
+        name: "Good relay",
+        baseUrls: [anthropicUrl],
+        models: [{ id: "model-01" }],
+      });
+      expect(gone.error).toBeNull();
+      // 别处改的这家：重新打开详情页读到新的。
+      await openEndpointDetail(page, endpointId);
+      await openModelSettings();
+      await expect(sheet.getByTestId("api-endpoint-model-settings-format-field-error")).toHaveText(
+        "This endpoint no longer has a base URL for OpenAI Chat, so this setting doesn't apply.",
+      );
+      await sheet.getByTestId("api-endpoint-model-settings-format-automatic").click();
+      await sheet.getByTestId("api-endpoint-model-settings-save").click();
+      await expect(sheet).toHaveCount(0);
+      await expect.poll(settingsReader).toBeUndefined();
+    });
+  });
+
+  test("Defaults for all models: the upstream name for every model fails in place, then reaches the endpoint", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["model-01"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    await openEndpointDetail(page, endpointId);
+    const section = page
+      .getByTestId("api-endpoint-model-defaults-section")
+      .filter({ visible: true });
+    const input = section.getByTestId("api-endpoint-model-defaults-upstream-name");
+    const save = section.getByTestId("api-endpoint-model-defaults-save");
+    const settingsReader = async () => (await endpointOf(endpointId))?.modelSettings;
+
+    await input.fill("zhipu/*");
+    await save.click();
+    await expect(section.getByTestId("api-endpoint-model-defaults-error")).toContainText(
+      "EACCES: permission denied",
+    );
+    await expect(input).toHaveValue("zhipu/*");
+    expect(await settingsReader()).toBeUndefined();
+    host.failing = false;
+    await save.click();
+    await expect.poll(settingsReader).toEqual({ defaults: { upstreamName: "zhipu/*" } });
+  });
+
+  test("Auto-detect on a saved endpoint offers to ask the tried model in one format only, made with the Save", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["model-01"],
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-connection-detect-model").fill("model-01");
+    await page.getByTestId("api-endpoint-connection-detect").click();
+    const chatOnly = page.getByTestId("api-endpoint-connection-only-openai_chat");
+    await expect(chatOnly).toHaveText("Ask model-01 on OpenAI Chat only");
+    await expect(page.getByTestId("api-endpoint-connection-only-anthropic_messages")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-only-openai_responses")).toHaveCount(0);
+    await chatOnly.click();
+    await expect(page.getByTestId("api-endpoint-connection-only-pending")).toHaveText(
+      "model-01 is asked on OpenAI Chat only once saved",
+    );
+    await page.getByTestId("api-endpoint-connection-save").click();
+    await expect(connectionForm(page)).toHaveCount(0);
+    await expect
+      .poll(async () => (await endpointOf(endpointId))?.modelSettings)
+      .toEqual({ models: { "model-01": { format: "openai_chat" } } });
+  });
+
   test("Long conversations: Full window and Compact at reach the host, and a refusal keeps what was there", async ({
     page,
   }) => {

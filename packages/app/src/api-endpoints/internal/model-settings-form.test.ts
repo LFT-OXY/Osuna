@@ -8,6 +8,7 @@ import {
   openModelSettingsForm,
   parseTokens,
   tokenFormatOf,
+  withModelFormat,
   type SaveModelSettings,
 } from "./model-settings-form";
 import { LANGUAGE_OPTIONS } from "@/i18n/locales";
@@ -281,5 +282,94 @@ describe("magpie's shorthand (ParseTokens, parseContexts)", () => {
     expect(parseTokens("1.5m", tokenFormatOf("es"))).toEqual({ kind: "count", value: 1_500_000 });
     const ar = tokenFormatOf("ar");
     expect(parseTokens(`${ar.format(272)}k`, ar)).toEqual({ kind: "count", value: 272_000 });
+  });
+});
+
+// 接口管理好用性工单 15：上游模型名与只用这种格式。
+describe("upstream name and the one format", () => {
+  const TWO_FORMATS: ApiEndpoint = {
+    ...ENDPOINT,
+    baseUrls: [
+      { format: "anthropic_messages", url: "https://relay.example" },
+      { format: "openai_chat", url: "https://relay.example/v1" },
+    ],
+    modelSettings: {
+      defaults: { upstreamName: "zhipu/*" },
+      models: { "kimi-k2": { format: "openai_responses", name: "Kimi" } },
+    },
+  };
+
+  function open(endpoint: ApiEndpoint, modelId: string) {
+    const saved: ApiEndpointModelSettings[] = [];
+    const save: SaveModelSettings = (update) => {
+      saved.push(update(endpoint.modelSettings));
+      return Promise.resolve(null);
+    };
+    const form = openModelSettingsForm({ endpoint, modelId, save, tokenFormat: EN });
+    return { form, saved };
+  }
+
+  it("shows the name sent now, the endpoint's * template filled in, and saves a typed one trimmed", async () => {
+    const { form, saved } = open(TWO_FORMATS, "glm-5");
+    expect(form.getState().upstreamName).toEqual({ text: "", automatic: "zhipu/glm-5" });
+    form.setUpstreamName("  vendor/glm-5-pro ");
+    await form.submit();
+    expect(saved[0]?.models?.["glm-5"]).toEqual({ upstreamName: "vendor/glm-5-pro" });
+  });
+
+  it("offers Automatic and each format the endpoint has a URL for, and saves the one picked", async () => {
+    const { form, saved } = open(TWO_FORMATS, "glm-5");
+    expect(form.getState().format).toEqual({
+      options: ["anthropic_messages", "openai_chat"],
+      value: null,
+      voidFormat: null,
+    });
+    form.setFormat("openai_chat");
+    expect(form.getState().canSubmit).toBe(true);
+    await form.submit();
+    expect(saved[0]?.models?.["glm-5"]).toEqual({ format: "openai_chat" });
+  });
+
+  it("says a format whose URL is gone no longer applies, and Automatic takes it away", async () => {
+    const { form, saved } = open(TWO_FORMATS, "kimi-k2");
+    expect(form.getState().format).toEqual({
+      options: ["anthropic_messages", "openai_chat", "openai_responses"],
+      value: "openai_responses",
+      voidFormat: "openai_responses",
+    });
+    form.setFormat(null);
+    expect(form.getState().format.voidFormat).toBeNull();
+    await form.submit();
+    expect(saved[0]?.models?.["kimi-k2"]).toEqual({ name: "Kimi" });
+  });
+
+  it("offers no format choice for an endpoint with one URL", () => {
+    const { form } = open(ENDPOINT, "glm-5");
+    expect(form.getState().format.options).toEqual([]);
+  });
+
+  it("the defaults save an upstream name for every model", async () => {
+    const saved: ApiEndpointModelSettings[] = [];
+    const save: SaveModelSettings = (update) => {
+      saved.push(update(TWO_FORMATS.modelSettings));
+      return Promise.resolve(null);
+    };
+    const form = openModelDefaultsForm({ endpoint: TWO_FORMATS, save, tokenFormat: EN });
+    expect(form.getState().upstreamName).toBe("zhipu/*");
+    form.setUpstreamName(" vendor/* ");
+    await form.submit();
+    expect(saved[0]).toEqual({
+      defaults: { upstreamName: "vendor/*" },
+      models: TWO_FORMATS.modelSettings?.models,
+    });
+  });
+
+  it("the row menu sets one model's format and keeps its other settings", () => {
+    expect(
+      withModelFormat({ current: TWO_FORMATS.modelSettings, modelId: "kimi-k2", format: null }),
+    ).toEqual({ defaults: { upstreamName: "zhipu/*" }, models: { "kimi-k2": { name: "Kimi" } } });
+    expect(
+      withModelFormat({ current: undefined, modelId: "glm-5", format: "openai_chat" }),
+    ).toEqual({ models: { "glm-5": { format: "openai_chat" } } });
   });
 });

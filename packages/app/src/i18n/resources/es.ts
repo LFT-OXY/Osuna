@@ -2682,6 +2682,8 @@ export const es: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo a probar (opcional)",
         detected: {
+          askOnly: "Pedir {{model}} solo en {{format}}",
+          onlyOnceSaved: "Al guardar, {{model}} se pedirá solo en {{format}}",
           useThese: "Usar estas",
           taken: "Aplicadas · guarda para conservarlas",
           noneAnswered:
@@ -2839,10 +2841,23 @@ export const es: TranslationResources = {
         automaticUnknown: "Automático",
         invalidTokens: "Usa un número como 272k",
         restoreAll: "Restaurar todos los predeterminados",
+        upstreamName: "Nombre upstream",
+        upstreamNameHint:
+          "El nombre con el que se envía este modelo a este endpoint. Un * se sustituye por el ID del modelo. Las listas de modelos y el modelo predeterminado mantienen su nombre propio.",
+        format: "Usar solo este formato",
+        formatHint: "Pide este modelo a este endpoint en un solo formato de solicitud.",
+        formatAutomatic: "Automático",
+        formatVoid:
+          "Este endpoint ya no tiene una URL base de {{format}}, así que este ajuste no se aplica.",
+        formatTag: "Solo {{format}}",
+        formatPinFailed: "No se pudo cambiar el formato",
         save: "Guardar",
         saving: "Guardando…",
         saveFailed: "No se pudo guardar: {{message}}",
         defaults: {
+          upstreamNameHint:
+            "Un * se sustituye por el ID de cada modelo; sin él, todos los modelos se envían con este nombre.",
+          upstreamNamePlaceholder: "ID del modelo",
           title: "Valores para todos los modelos",
           hint: "Los ajustes de cada modelo tienen prioridad. Déjalo vacío para usar lo que encontró Osuna.",
           save: "Guardar",

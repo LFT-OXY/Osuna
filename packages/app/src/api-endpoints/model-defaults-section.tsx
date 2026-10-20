@@ -19,7 +19,7 @@ import {
 } from "./internal/model-settings-form";
 
 /*
- * 接口详情页的「整家默认」（prd 第 19 条，用户故事 54）：这家所有模型共用的上下文、回复上限、压缩阈值。
+ * 接口详情页的「整家默认」（prd 第 19 条，用户故事 54）：这家所有模型共用的上下文、回复上限、压缩阈值与上游模型名。
  * 单个模型的设置在它前面；空着就是每个模型用自动取到的。改了按「保存」才算，失败原因留在原处。
  * 调用方按接口 id 给 key：换一家是新的表单（docs/forms.md）。
  */
@@ -58,6 +58,7 @@ export function ApiEndpointModelDefaultsSection({
         {MODEL_TOKEN_FIELDS.map((name) => (
           <DefaultRow key={name} form={form} name={name} field={state[name]} label={labels[name]} />
         ))}
+        <UpstreamNameRow form={form} text={state.upstreamName} />
         <View style={styles.footer}>
           <View style={styles.footerRow}>
             <Text variant="caption" color="foregroundMuted" style={styles.flex}>
@@ -121,6 +122,32 @@ function DefaultRow({
         size={isCompact ? "md" : "sm"}
         style={isCompact ? COMPACT_INPUT_STYLE : WIDE_INPUT_STYLE}
         testID={`api-endpoint-model-defaults-${name}`}
+      />
+    </SettingsRow>
+  );
+}
+
+/** 整家的上游模型名：`*` 换成每个模型的 id。 */
+function UpstreamNameRow({ form, text }: { form: ModelDefaultsForm; text: string }) {
+  const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const label = t("settings.apiEndpoints.modelSettings.upstreamName");
+  return (
+    <SettingsRow
+      label={label}
+      hint={t(`${KEY}.upstreamNameHint`)}
+      testID="api-endpoint-model-defaults-upstream-name-row"
+    >
+      <FormTextInput
+        initialValue={text}
+        onChangeText={form.setUpstreamName}
+        placeholder={t(`${KEY}.upstreamNamePlaceholder`)}
+        autoCapitalize="none"
+        autoCorrect={false}
+        accessibilityLabel={label}
+        size={isCompact ? "md" : "sm"}
+        style={isCompact ? COMPACT_INPUT_STYLE : WIDE_INPUT_STYLE}
+        testID="api-endpoint-model-defaults-upstream-name"
       />
     </SettingsRow>
   );

@@ -1,8 +1,9 @@
-import type {
-  ApiEndpoint,
-  ApiEndpointModelDefaults,
-  ApiEndpointModelSetting,
-  ApiEndpointModelSettings,
+import {
+  API_ENDPOINT_REQUEST_FORMATS,
+  type ApiEndpoint,
+  type ApiEndpointModelDefaults,
+  type ApiEndpointModelSetting,
+  type ApiEndpointModelSettings,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   choosableEfforts,
@@ -10,6 +11,7 @@ import {
   resolveModelFacts,
   settleModelDefaults,
   settleModelSetting,
+  upstreamModelName,
   type ModelTokenField,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
 
@@ -19,6 +21,8 @@ import {
  * 有没有改动按 protocol 的 settleModelSetting 收拢后比较，和 daemon 存的是同一份规则：勾回全部档位不算改动。
  * 保存时整份模型设置一起交给 daemon。
  * 「全部恢复默认」去掉这个模型的全部设置并立刻保存；显示名旁的「恢复默认」只清空显示名，保存时才算。
+ * 上游模型名空着就按整家默认（`*` 换成模型 id），灰字写出现在发的名字；「只用这种格式」照 magpie 的 Names & levels：
+ * 这家有两种以上格式的地址时可选「自动」或其中一种，存着的格式没地址了也列出来并说明已作废。
  */
 
 export type TokenFieldName = ModelTokenField;
@@ -65,10 +69,45 @@ export interface ModelSettingsFormState {
   // levels：能勾的档位；picked：勾着的；isSet：用户设过（没设时按自动的档位）。
   efforts: { levels: string[]; picked: string[]; isSet: boolean };
   images: { value: boolean; isSet: boolean };
+  // automatic：空着时发给这家的名字。
+  upstreamName: { text: string; automatic: string };
+  format: FormatChoice;
   status: ModelSettingsStatus;
   // 有改动、数都读得懂、不在保存中。
   canSubmit: boolean;
   isBusy: boolean;
+}
+
+/**
+ * 「只用这种格式」：options 是可选的格式（不含「自动」），没有就不显示这一项；value 为 null 即自动；
+ * voidFormat 是选着的、这家却已没有地址的格式（设置作废）。
+ */
+export interface FormatChoice {
+  options: string[];
+  value: string | null;
+  voidFormat: string | null;
+}
+
+/** 这家可以给模型选的格式：有两种以上格式的地址时是它们（照 magpie modelAPIs），按协议的顺序。 */
+export function choosableFormats(endpoint: Pick<ApiEndpoint, "baseUrls">): string[] {
+  const formats = API_ENDPOINT_REQUEST_FORMATS.filter((format) =>
+    (endpoint.baseUrls ?? []).some((entry) => entry.format === format),
+  );
+  return formats.length < 2 ? [] : formats;
+}
+
+function formatChoiceOf(input: {
+  choosable: string[];
+  stored: string | undefined;
+  value: string | null;
+  hasUrl: (format: string) => boolean;
+}): FormatChoice {
+  const { choosable, stored, value } = input;
+  // 存着的格式不在可选里（地址没了，或这家只剩一种地址）也列出来，免得看不到它设着什么（照 magpie）。
+  const options =
+    stored !== undefined && !choosable.includes(stored) ? [...choosable, stored] : choosable;
+  const voidFormat = value !== null && !input.hasUrl(value) ? value : null;
+  return { options, value, voidFormat };
 }
 
 export type FormSubmitResult = "saved" | "failed" | "invalid";
@@ -95,6 +134,9 @@ export interface ModelSettingsForm {
   setTokens(field: TokenFieldName, text: string): void;
   toggleEffort(level: string): void;
   setImages(value: boolean): void;
+  setUpstreamName(text: string): void;
+  // null 即自动。
+  setFormat(format: string | null): void;
   submit(): Promise<FormSubmitResult>;
   restoreDefaults(): Promise<FormSubmitResult>;
 }
@@ -188,15 +230,22 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
   const tokens = createTokenInputs({ initial: own, tokenFormat: input.tokenFormat });
   let efforts: string[] | null = own.efforts ?? null;
   let images: boolean | null = own.images ?? null;
+  let upstreamName = own.upstreamName ?? "";
+  let format: string | null = own.format ?? null;
+  const choosable = choosableFormats(endpoint);
+  const hasUrl = (candidate: string) =>
+    (endpoint.baseUrls ?? []).some((entry) => entry.format === candidate);
+  const automaticUpstreamName = upstreamModelName({ settings: defaultsOnly, modelId });
   let status: ModelSettingsStatus = { kind: "idle" };
 
   /** 按 daemon 的同一份规则收拢后的这个模型的设置；有读不懂的数为 null。 */
   function settledEntry(): ApiEndpointModelSetting | null {
     const counts = tokens.values();
     if (counts === null) return null;
-    const raw: ApiEndpointModelSetting = { ...counts, name };
+    const raw: ApiEndpointModelSetting = { ...counts, name, upstreamName };
     if (efforts !== null) raw.efforts = efforts;
     if (images !== null) raw.images = images;
+    if (format !== null) raw.format = format;
     const settled = settleModelSetting({
       setting: raw,
       knownEfforts: auto.efforts,
@@ -227,6 +276,8 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
       compact: tokenField("compact"),
       efforts: { levels, picked, isSet: efforts !== null },
       images: { value: imagesValue, isSet: images !== null },
+      upstreamName: { text: upstreamName, automatic: automaticUpstreamName },
+      format: formatChoiceOf({ choosable, stored: own.format, value: format, hasUrl }),
       status,
       canSubmit: !isBusy && isReadable && isChanged,
       isBusy,
@@ -276,6 +327,14 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
       images = value === opened ? (own.images ?? null) : value;
       publish();
     },
+    setUpstreamName(text) {
+      upstreamName = text;
+      publish();
+    },
+    setFormat(next) {
+      format = next;
+      publish();
+    },
     async submit() {
       const entry = settledEntry();
       if (entry === null) return "invalid";
@@ -296,6 +355,8 @@ export interface ModelDefaultsFormState {
   context: TokenField;
   output: TokenField;
   compact: TokenField;
+  // 整家的上游模型名：`*` 换成模型 id，没有 `*` 时每个模型都用这个名字。
+  upstreamName: string;
   status: ModelDefaultsStatus;
   canSubmit: boolean;
 }
@@ -304,23 +365,23 @@ export interface ModelDefaultsForm {
   getState(): ModelDefaultsFormState;
   subscribe(listener: () => void): () => void;
   setTokens(field: TokenFieldName, text: string): void;
+  setUpstreamName(text: string): void;
   submit(): Promise<FormSubmitResult>;
 }
 
-/** 整家默认：上下文、回复上限、压缩阈值；空着就是没设（每个模型按自己自动取到的）。 */
+/** 整家默认：上下文、回复上限、压缩阈值与上游模型名；空着就是没设（每个模型按自己自动取到的）。 */
 export function openModelDefaultsForm(input: {
   endpoint: ApiEndpoint;
   save: SaveModelSettings;
   tokenFormat: TokenFormat;
 }): ModelDefaultsForm {
-  const tokens = createTokenInputs({
-    initial: input.endpoint.modelSettings?.defaults ?? {},
-    tokenFormat: input.tokenFormat,
-  });
+  const initial = input.endpoint.modelSettings?.defaults ?? {};
+  const tokens = createTokenInputs({ initial, tokenFormat: input.tokenFormat });
+  let upstreamName = initial.upstreamName ?? "";
   function settledDefaults(): ApiEndpointModelDefaults | null {
     const counts = tokens.values();
     if (counts === null) return null;
-    const settled = settleModelDefaults(counts);
+    const settled = settleModelDefaults({ ...counts, upstreamName });
     return settled.kind === "settled" ? settled.setting : null;
   }
   let saved = JSON.stringify(settledDefaults());
@@ -335,6 +396,7 @@ export function openModelDefaultsForm(input: {
       context: tokens.field("context", null),
       output: tokens.field("output", null),
       compact: tokens.field("compact", null),
+      upstreamName,
       status,
       canSubmit: !isSaving && isReadable && isChanged,
     };
@@ -348,6 +410,10 @@ export function openModelDefaultsForm(input: {
     subscribe: store.subscribe,
     setTokens(field, text) {
       tokens.set(field, text);
+      publish();
+    },
+    setUpstreamName(text) {
+      upstreamName = text;
       publish();
     },
     async submit() {
@@ -389,4 +455,18 @@ function withDefaults(input: {
   if (Object.keys(input.defaults).length > 0) next.defaults = input.defaults;
   if (input.current?.models) next.models = input.current.models;
   return next;
+}
+
+/**
+ * 只改一个模型的「只用这种格式」，它别的设置与整家默认照旧；format 为 null 即回到自动（模型行菜单、自动检测的「只在…上问」用）。
+ */
+export function withModelFormat(input: {
+  current: ApiEndpointModelSettings | undefined;
+  modelId: string;
+  format: string | null;
+}): ApiEndpointModelSettings {
+  const { current, modelId, format } = input;
+  const { format: _format, ...rest } = current?.models?.[modelId] ?? {};
+  const entry: ApiEndpointModelSetting = format === null ? rest : { ...rest, format };
+  return withModelSetting({ current, modelId, entry });
 }

@@ -13,6 +13,7 @@ import type {
   ApiEndpointBaseUrl,
   ApiEndpointListResponse,
   ApiEndpointModel,
+  ApiEndpointModelSettings,
   ApiEndpointSaveResponse,
   ApiEndpointSetAgentSettingsResponse,
   ApiEndpointListTemplatesResponse,
@@ -226,6 +227,7 @@ interface ApiEndpointSeedClient {
     icon?: string | null;
     modelScope?: string;
     autoPick?: string[];
+    modelSettings?: ApiEndpointModelSettings;
   }): Promise<ApiEndpointSaveResponse["payload"]>;
   apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
   apiEndpointStoreIcon(options: {

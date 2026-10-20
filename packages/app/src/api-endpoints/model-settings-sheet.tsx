@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
   type DropdownMenuTriggerState,
 } from "@/components/ui/dropdown-menu";
+import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { SelectFieldTrigger } from "@/components/ui/select-field";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
@@ -33,10 +34,14 @@ import {
  * 「模型设置」窗口（prd 第 19、22 条）：模型行菜单打开，一次只改这家的一个模型。
  * 调用方按「接口 id + 模型 id」给 key，每次打开都是新挂载（docs/forms.md）；表单模型只在挂载时构造一次。
  * 写明哪些项对哪个 CLI 不起作用：Claude Code 没有显示名与看图的设置，Codex 没有回复上限的设置（R2-Q6）。
+ * 上游模型名与「只用这种格式」只改中转站发给这家的请求（工单 15）；格式连「自动」不超过 4 项用分段切换，多了用下拉。
  */
 
 const KEY = "settings.apiEndpoints.modelSettings";
 const SNAP_POINTS = ["85%"];
+const AUTOMATIC_FORMAT = "";
+// 分段切换最多这么多段，多了折行读不出选中哪段（docs/design.md §6）。
+const MAX_FORMAT_SEGMENTS = 4;
 
 export interface ApiEndpointModelSettingsSheetProps {
   endpoint: ApiEndpoint;
@@ -181,6 +186,24 @@ export function ApiEndpointModelSettingsSheet({
         />
         <EffortsField state={state} form={form} size={fieldSize} />
         <ImagesRow state={state} form={form} />
+        <Field
+          label={t(`${KEY}.upstreamName`)}
+          hint={t(`${KEY}.upstreamNameHint`)}
+          testID="api-endpoint-model-settings-upstream-name-field"
+        >
+          <FormTextInput
+            initialValue={state.upstreamName.text}
+            onChangeText={form.setUpstreamName}
+            placeholder={state.upstreamName.automatic}
+            autoCapitalize="none"
+            autoCorrect={false}
+            size={fieldSize}
+            testID="api-endpoint-model-settings-upstream-name"
+          />
+        </Field>
+        {state.format.options.length > 0 ? (
+          <FormatField state={state} form={form} size={fieldSize} />
+        ) : null}
         {state.status.kind === "failed" ? (
           <Text
             variant="caption"
@@ -324,6 +347,144 @@ function EffortItem({
   );
 }
 
+/** 只用这种格式：「自动」加这家有地址的格式；存着的格式没地址了在下面说明作废。 */
+function FormatField({
+  state,
+  form,
+  size,
+}: {
+  state: ModelSettingsFormState;
+  form: ModelSettingsForm;
+  size: "sm" | "md";
+}) {
+  const { t } = useTranslation();
+  const { options, value, voidFormat } = state.format;
+  const choices = useMemo<SegmentedControlOption<string>[]>(
+    () => [
+      {
+        value: AUTOMATIC_FORMAT,
+        label: t(`${KEY}.formatAutomatic`),
+        testID: "api-endpoint-model-settings-format-automatic",
+      },
+      ...options.map((format) => ({
+        value: format,
+        label: formatLabel(t, format),
+        testID: `api-endpoint-model-settings-format-${format}`,
+      })),
+    ],
+    [options, t],
+  );
+  const handleChange = useCallback(
+    (next: string) => form.setFormat(next === AUTOMATIC_FORMAT ? null : next),
+    [form],
+  );
+  const selected = value ?? AUTOMATIC_FORMAT;
+  const label = t(`${KEY}.format`);
+  const voidCopy =
+    voidFormat === null ? null : t(`${KEY}.formatVoid`, { format: formatLabel(t, voidFormat) });
+  return (
+    <Field
+      label={label}
+      hint={t(`${KEY}.formatHint`)}
+      error={voidCopy}
+      testID="api-endpoint-model-settings-format-field"
+    >
+      {choices.length > MAX_FORMAT_SEGMENTS ? (
+        <FormatDropdown
+          label={label}
+          choices={choices}
+          selected={selected}
+          onSelect={handleChange}
+          disabled={state.isBusy}
+          size={size}
+        />
+      ) : (
+        <View style={styles.segmentRow}>
+          <SegmentedControl
+            options={choices}
+            value={selected}
+            onValueChange={handleChange}
+            size="sm"
+            testID="api-endpoint-model-settings-format"
+          />
+        </View>
+      )}
+    </Field>
+  );
+}
+
+function FormatDropdown({
+  label,
+  choices,
+  selected,
+  onSelect,
+  disabled,
+  size,
+}: {
+  label: string;
+  choices: SegmentedControlOption<string>[];
+  selected: string;
+  onSelect: (value: string) => void;
+  disabled: boolean;
+  size: "sm" | "md";
+}) {
+  const current = choices.find((choice) => choice.value === selected) ?? null;
+  const display = useMemo(() => (current ? { label: current.label } : null), [current]);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        testID="api-endpoint-model-settings-format"
+      >
+        {({ hovered, open }: DropdownMenuTriggerState) => (
+          <SelectFieldTrigger
+            display={display}
+            placeholder=""
+            hovered={hovered}
+            active={open}
+            disabled={disabled}
+            size={size}
+          />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="bottom" align="start" width={240}>
+        {choices.map((choice) => (
+          <FormatItem
+            key={choice.value}
+            choice={choice}
+            selected={choice.value === selected}
+            onSelect={onSelect}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function FormatItem({
+  choice,
+  selected,
+  onSelect,
+}: {
+  choice: SegmentedControlOption<string>;
+  selected: boolean;
+  onSelect: (value: string) => void;
+}) {
+  const handleSelect = useCallback(() => onSelect(choice.value), [choice.value, onSelect]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={handleSelect} testID={choice.testID}>
+      {choice.label}
+    </DropdownMenuItem>
+  );
+}
+
+/** 请求格式的名字（Anthropic、OpenAI Chat…）；不认识的格式照原样。 */
+export function formatLabel(t: TFunction, format: string): string {
+  return t(`settings.apiEndpoints.formats.${format}`, { defaultValue: format });
+}
+
 function ImagesRow({ state, form }: { state: ModelSettingsFormState; form: ModelSettingsForm }) {
   const { t } = useTranslation();
   const label = t(`${KEY}.images`);
@@ -358,6 +519,9 @@ const styles = StyleSheet.create((theme) => ({
   switchText: {
     flex: 1,
     gap: theme.spacing[0.5],
+  },
+  segmentRow: {
+    flexDirection: "row",
   },
   footer: {
     flex: 1,

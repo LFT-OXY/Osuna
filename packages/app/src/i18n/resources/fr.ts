@@ -2682,6 +2682,8 @@ export const fr: TranslationResources = {
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {
+          askOnly: "Interroger {{model}} uniquement en {{format}}",
+          onlyOnceSaved: "Une fois enregistré, {{model}} sera interrogé uniquement en {{format}}",
           useThese: "Utiliser celles-ci",
           taken: "Reprises · enregistrez pour les garder",
           noneAnswered:
@@ -2842,10 +2844,24 @@ export const fr: TranslationResources = {
         automaticUnknown: "Automatique",
         invalidTokens: "Saisissez un nombre comme 272k",
         restoreAll: "Tout rétablir par défaut",
+        upstreamName: "Nom en amont",
+        upstreamNameHint:
+          "Le nom sous lequel ce modèle est envoyé à ce point de terminaison. Un * est remplacé par l'ID du modèle. Les listes de modèles et le modèle par défaut gardent le nom du modèle.",
+        format: "Utiliser uniquement ce format",
+        formatHint:
+          "Interroger ce point de terminaison pour ce modèle dans un seul format de requête.",
+        formatAutomatic: "Automatique",
+        formatVoid:
+          "Ce point de terminaison n'a plus d'URL de base {{format}} : ce réglage ne s'applique pas.",
+        formatTag: "{{format}} uniquement",
+        formatPinFailed: "Impossible de changer le format",
         save: "Enregistrer",
         saving: "Enregistrement…",
         saveFailed: "Échec de l'enregistrement : {{message}}",
         defaults: {
+          upstreamNameHint:
+            "Un * est remplacé par l'ID de chaque modèle ; sans *, tous les modèles sont envoyés sous ce nom.",
+          upstreamNamePlaceholder: "ID du modèle",
           title: "Valeurs pour tous les modèles",
           hint: "Les réglages propres à un modèle passent avant. Laissez vide pour utiliser ce qu'Osuna a trouvé.",
           save: "Enregistrer",

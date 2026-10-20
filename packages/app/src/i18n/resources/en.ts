@@ -2692,6 +2692,8 @@ export const en = {
         detect: "Auto-detect",
         detectModelPlaceholder: "Model to try (optional)",
         detected: {
+          askOnly: "Ask {{model}} on {{format}} only",
+          onlyOnceSaved: "{{model}} is asked on {{format}} only once saved",
           useThese: "Use these",
           taken: "Taken · save to keep",
           noneAnswered:
@@ -2847,10 +2849,23 @@ export const en = {
         automaticUnknown: "Automatic",
         invalidTokens: "Use a count like 272k",
         restoreAll: "Restore all defaults",
+        upstreamName: "Upstream name",
+        upstreamNameHint:
+          "The name this endpoint is sent for this model. A * stands for the model ID. Model lists and the default model keep the model's own name.",
+        format: "Use only this format",
+        formatHint: "Ask this endpoint for this model in one request format only.",
+        formatAutomatic: "Automatic",
+        formatVoid:
+          "This endpoint no longer has a base URL for {{format}}, so this setting doesn't apply.",
+        formatTag: "{{format}} only",
+        formatPinFailed: "Couldn't change the format",
         save: "Save",
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",
         defaults: {
+          upstreamNameHint:
+            "A * stands for each model's ID; without one, every model is sent under this name.",
+          upstreamNamePlaceholder: "Model ID",
           title: "Defaults for all models",
           hint: "A model's own settings come first. Leave blank to use what Osuna found.",
           save: "Save",

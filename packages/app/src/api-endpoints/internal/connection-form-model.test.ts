@@ -244,6 +244,7 @@ describe("connection form: create", () => {
         },
       ],
       isTaken: false,
+      onlyChoices: null,
       canTake: true,
       // 还没有地址：先「采用这些」才能保存，表单要说一句。
       waitsForTake: true,
@@ -2045,5 +2046,115 @@ describe("conciseUpstreamMessage", () => {
     expect(
       conciseUpstreamMessage({ message: "No response within 30s", url: "https://relay.example" }),
     ).toBe("No response within 30s");
+  });
+});
+
+// 接口管理好用性工单 15：自动检测后「只在 {格式} 上问 {模型}」（照 magpie Detect 的 Ask {model} on {api} only）。
+describe("connection form: asking the detected model in one format only", () => {
+  const API_FORMATS = ["anthropic_messages", "openai_chat", "openai_responses"];
+  const PICKED_ONLY = [
+    { ...detection("anthropic_messages", "https://relay.example", "ok"), modelId: "glm-4.6" },
+    { ...detection("openai_chat", "https://relay.example/v1", "ok"), modelId: "glm-4.6" },
+    {
+      ...detection("openai_responses", "https://relay.example/v1", "not_detected"),
+      modelId: "glm-4.6",
+    },
+  ];
+
+  async function detectedOn(input: {
+    endpoint?: ApiEndpoint;
+    mode?: "edit" | "create";
+    model: string;
+    results: ApiEndpointFormatDetection[];
+  }) {
+    const fake = fakeDeps();
+    const seed =
+      input.mode === "create"
+        ? ({ mode: "create", templateId: null } as const)
+        : ({ mode: "edit", endpoint: input.endpoint ?? SAVED_ENDPOINT } as const);
+    const model = createConnectionFormModel(seed, fake.deps, KEY_OPTIONAL);
+    if (input.mode === "create") model.setAddress("https://relay.example");
+    model.setDetectModel(input.model);
+    model.detect();
+    fake.answerDetect({ status: "done", results: input.results });
+    await flush();
+    return { fake, model };
+  }
+
+  it("offers each format that answered when only some did, and saves the one picked with the endpoint", async () => {
+    const { fake, model } = await detectedOn({ model: " glm-4.6 ", results: PICKED_ONLY });
+    expect(model.getState().detection?.onlyChoices).toEqual({
+      modelId: "glm-4.6",
+      formats: ["anthropic_messages", "openai_chat"],
+      staged: null,
+      isPending: false,
+    });
+
+    model.askOnlyOn("openai_chat");
+    expect(model.getState().detection?.onlyChoices).toMatchObject({
+      staged: "openai_chat",
+      isPending: true,
+    });
+    await model.submit();
+    expect(fake.saves[0]?.modelSettings).toEqual({
+      models: { "glm-4.6": { format: "openai_chat" } },
+    });
+    expect(fake.saves[0]?.baseUrls).toEqual(SAVED_ENDPOINT.baseUrls);
+  });
+
+  it("takes the detected addresses when the endpoint has no address in that format yet", async () => {
+    const results = [
+      { ...detection("anthropic_messages", "https://relay.example", "not_detected") },
+      { ...detection("openai_chat", "https://relay.example/v1", "not_detected") },
+      { ...detection("openai_responses", "https://relay.example/v1", "ok"), modelId: "glm-4.6" },
+    ];
+    const { fake, model } = await detectedOn({ model: "glm-4.6", results });
+    model.askOnlyOn("openai_responses");
+    expect(model.getState().detection?.isTaken).toBe(true);
+    await model.submit();
+    expect(fake.saves[0]?.baseUrls).toContainEqual({
+      format: "openai_responses",
+      url: "https://relay.example/v1",
+    });
+    expect(fake.saves[0]?.modelSettings?.models?.["glm-4.6"]).toEqual({
+      format: "openai_responses",
+    });
+  });
+
+  it("keeps the model's other settings, and picking the format it already has stages nothing", async () => {
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      modelSettings: {
+        defaults: { upstreamName: "zhipu/*" },
+        models: { "glm-4.6": { name: "GLM", format: "anthropic_messages" } },
+      },
+    };
+    const { fake, model } = await detectedOn({ endpoint, model: "glm-4.6", results: PICKED_ONLY });
+    expect(model.getState().detection?.onlyChoices?.staged).toBe("anthropic_messages");
+    model.askOnlyOn("openai_chat");
+    await model.submit();
+    expect(fake.saves[0]?.modelSettings).toEqual({
+      defaults: { upstreamName: "zhipu/*" },
+      models: { "glm-4.6": { name: "GLM", format: "openai_chat" } },
+    });
+
+    const again = await detectedOn({ endpoint, model: "glm-4.6", results: PICKED_ONLY });
+    again.model.askOnlyOn("anthropic_messages");
+    await again.model.submit();
+    expect(again.fake.saves[0]?.modelSettings).toBeUndefined();
+  });
+
+  it("is not offered when adding, for a model the endpoint lacks, with no model typed, or when every format answered", async () => {
+    const adding = await detectedOn({ mode: "create", model: "glm-4.6", results: PICKED_ONLY });
+    expect(adding.model.getState().detection?.onlyChoices).toBeNull();
+    const unknown = await detectedOn({ model: "kimi-k2", results: PICKED_ONLY });
+    expect(unknown.model.getState().detection?.onlyChoices).toBeNull();
+    const untyped = await detectedOn({ model: "", results: PICKED_ONLY });
+    expect(untyped.model.getState().detection?.onlyChoices).toBeNull();
+    const all = API_FORMATS.map((format) =>
+      Object.assign(detection(format, "https://relay.example", "ok"), { modelId: "glm-4.6" }),
+    );
+    const everywhere = await detectedOn({ model: "glm-4.6", results: all });
+    expect(everywhere.model.getState().detection?.onlyChoices).toBeNull();
   });
 });

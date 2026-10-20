@@ -2654,6 +2654,8 @@ export const ja: TranslationResources = {
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {
+          askOnly: "{{model}} を {{format}} だけで問い合わせる",
+          onlyOnceSaved: "保存すると {{model}} は {{format}} だけで問い合わせます",
           useThese: "これを使う",
           taken: "反映済み · 保存すると確定します",
           noneAnswered:
@@ -2810,10 +2812,24 @@ export const ja: TranslationResources = {
         automaticUnknown: "自動",
         invalidTokens: "272k のような数を入力",
         restoreAll: "すべてデフォルトに戻す",
+        upstreamName: "上流のモデル名",
+        upstreamNameHint:
+          "このエンドポイントへこのモデルを送るときの名前。* はモデル ID に置き換わります。モデル一覧とデフォルトモデルは元の名前のままです。",
+        format: "この形式だけを使う",
+        formatHint:
+          "このエンドポイントでは、このモデルに 1 つのリクエスト形式だけで問い合わせます。",
+        formatAutomatic: "自動",
+        formatVoid:
+          "このエンドポイントには {{format}} のベース URL がもうないため、この設定は効きません。",
+        formatTag: "{{format}} のみ",
+        formatPinFailed: "形式を変更できませんでした",
         save: "保存",
         saving: "保存中…",
         saveFailed: "保存できませんでした：{{message}}",
         defaults: {
+          upstreamNameHint:
+            "* は各モデルの ID に置き換わります。* がなければ、すべてのモデルをこの名前で送ります。",
+          upstreamNamePlaceholder: "モデル ID",
           title: "全モデル共通のデフォルト",
           hint: "モデルごとの設定が優先されます。空欄なら Osuna が取得した値を使います。",
           save: "保存",

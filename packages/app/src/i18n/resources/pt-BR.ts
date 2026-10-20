@@ -2667,6 +2667,8 @@ export const ptBR: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo para testar (opcional)",
         detected: {
+          askOnly: "Pedir {{model}} só em {{format}}",
+          onlyOnceSaved: "Ao salvar, {{model}} será pedido só em {{format}}",
           useThese: "Usar estes",
           taken: "Aplicados · salve para manter",
           noneAnswered:
@@ -2824,10 +2826,23 @@ export const ptBR: TranslationResources = {
         automaticUnknown: "Automático",
         invalidTokens: "Use um número como 272k",
         restoreAll: "Restaurar todos os padrões",
+        upstreamName: "Nome upstream",
+        upstreamNameHint:
+          "O nome com que este modelo é enviado a este endpoint. Um * é trocado pelo ID do modelo. As listas de modelos e o modelo padrão mantêm o nome do modelo.",
+        format: "Usar só este formato",
+        formatHint: "Pede este modelo a este endpoint em um único formato de requisição.",
+        formatAutomatic: "Automático",
+        formatVoid:
+          "Este endpoint não tem mais uma URL base de {{format}}, então esta configuração não se aplica.",
+        formatTag: "Só {{format}}",
+        formatPinFailed: "Não foi possível mudar o formato",
         save: "Salvar",
         saving: "Salvando…",
         saveFailed: "Não foi possível salvar: {{message}}",
         defaults: {
+          upstreamNameHint:
+            "Um * é trocado pelo ID de cada modelo; sem ele, todos os modelos são enviados com este nome.",
+          upstreamNamePlaceholder: "ID do modelo",
           title: "Padrões para todos os modelos",
           hint: "As configurações de cada modelo vêm primeiro. Deixe em branco para usar o que o Osuna encontrou.",
           save: "Salvar",

@@ -2641,6 +2641,8 @@ export const ko: TranslationResources = {
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {
+          askOnly: "{{model}}을(를) {{format}}으로만 요청",
+          onlyOnceSaved: "저장하면 {{model}}을(를) {{format}}으로만 요청합니다",
           useThese: "이것 사용",
           taken: "반영됨 · 저장하면 유지됩니다",
           noneAnswered:
@@ -2797,10 +2799,23 @@ export const ko: TranslationResources = {
         automaticUnknown: "자동",
         invalidTokens: "272k 같은 수를 입력하세요",
         restoreAll: "모두 기본값으로 복원",
+        upstreamName: "업스트림 모델 이름",
+        upstreamNameHint:
+          "이 엔드포인트에 이 모델을 보낼 때 쓰는 이름입니다. *는 모델 ID로 바뀝니다. 모델 목록과 기본 모델은 원래 이름을 그대로 씁니다.",
+        format: "이 형식만 사용",
+        formatHint: "이 엔드포인트에서는 이 모델에 한 가지 요청 형식으로만 요청합니다.",
+        formatAutomatic: "자동",
+        formatVoid:
+          "이 엔드포인트에 더 이상 {{format}} 기본 URL이 없어 이 설정은 적용되지 않습니다.",
+        formatTag: "{{format}}만",
+        formatPinFailed: "형식을 바꾸지 못했습니다",
         save: "저장",
         saving: "저장 중…",
         saveFailed: "저장하지 못했습니다: {{message}}",
         defaults: {
+          upstreamNameHint:
+            "*는 각 모델의 ID로 바뀝니다. *가 없으면 모든 모델을 이 이름으로 보냅니다.",
+          upstreamNamePlaceholder: "모델 ID",
           title: "모든 모델 기본값",
           hint: "모델별 설정이 우선합니다. 비워 두면 Osuna가 찾은 값을 씁니다.",
           save: "저장",
