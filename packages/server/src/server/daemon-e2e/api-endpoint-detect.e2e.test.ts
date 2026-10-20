@@ -315,6 +315,29 @@ describe("API endpoint request format detection over the daemon RPC", () => {
     expect(upstream.requests.filter((request) => request.method === "GET")).toEqual([]);
   });
 
+  // 接口管理好用性工单 22：表单里还没保存的请求头、附加请求体与 key 头，单次检测也带。
+  test("asks with the form's unsaved headers, extra body and key header", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/relay`,
+      apiKey: TYPED_KEY,
+      modelId: "claude-sonnet-4-5",
+      headers: { "X-Relay-Team": "typed" },
+      extraBody: { "!max_tokens": 4, prompt_cache_key: "${sessionId}" },
+      keyHeader: "bearer",
+    });
+
+    expect(detected.error).toBeNull();
+    const posts = upstream.requests.filter((request) => request.method === "POST");
+    expect(posts).toHaveLength(3);
+    for (const post of posts) {
+      expect(post.headers["x-relay-team"]).toBe("typed");
+      expect(String(post.body.prompt_cache_key)).toMatch(/^osuna-test-/);
+    }
+    const anthropic = posts.find((post) => post.url === "/relay/v1/messages");
+    expect(anthropic?.headers["x-api-key"]).toBeUndefined();
+    expect(anthropic?.body.max_tokens).toBe(4);
+  });
+
   test("detects with no key headers when there is no key", async () => {
     const noKey = await client.apiEndpointDetectFormats({ baseUrl: `${upstream.origin}/relay` });
 
@@ -416,7 +439,7 @@ const EACH_SERVES: Record<string, string[]> = {
 
 interface EachUpstream {
   origin: string;
-  posts: { path: string; model: string }[];
+  posts: { path: string; model: string; team: unknown; session: unknown }[];
   inFlight: number;
   maxInFlight: number;
 }
@@ -429,10 +452,12 @@ async function startEachUpstream(): Promise<EachUpstream> {
     request.on("end", () => {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
         model?: string;
+        prompt_cache_key?: unknown;
       };
       const model = body.model ?? "";
       const requestPath = request.url ?? "";
-      upstream.posts.push({ path: requestPath, model });
+      const team = request.headers["x-relay-team"];
+      upstream.posts.push({ path: requestPath, model, team, session: body.prompt_cache_key });
       if (model.startsWith("slow-")) return;
       upstream.inFlight += 1;
       upstream.maxInFlight = Math.max(upstream.maxInFlight, upstream.inFlight);
@@ -576,6 +601,35 @@ describe("Detecting each picked model on every request format", () => {
       ["openai_responses", `${upstream.origin}/each/v1`, "ok", "gpt-both"],
     ]);
     expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+
+  // 接口管理好用性工单 22：逐个模型识别也带这家存的请求头与附加请求体，在识别自己的会话上（magpie tested）。
+  test("asks with the saved endpoint's headers and extra body, on a session of its own", async () => {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Each",
+      baseUrls: [{ format: "openai_chat", url: `${upstream.origin}/each/v1` }],
+      apiKey: SAVED_KEY,
+      models: [{ id: "gpt-both" }],
+      headers: { "X-Relay-Team": "team-each" },
+      extraBody: { prompt_cache_key: "${sessionId}" },
+    });
+    expect(saved.error).toBeNull();
+    upstream.posts.length = 0;
+
+    const detected = await client.apiEndpointDetectFormats({
+      endpointId: saved.endpoint?.id,
+      baseUrl: `${upstream.origin}/each/v1`,
+      modelIds: ["gpt-both"],
+      eachModel: true,
+    });
+
+    expect(detected.error).toBeNull();
+    expect(upstream.posts).toHaveLength(3);
+    for (const post of upstream.posts) {
+      expect(post.team).toBe("team-each");
+      expect(String(post.session)).toMatch(/^osuna-test-[0-9a-f]{12}$/);
+    }
   });
 
   test("asks no more than the first 30 models, 8 requests at a time", async () => {

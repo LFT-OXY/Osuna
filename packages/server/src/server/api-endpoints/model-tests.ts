@@ -11,6 +11,7 @@ import { disabledMessage } from "./disabled-models.js";
 import type { CliHeaderSample } from "./store.js";
 import type { CliTestClient } from "./test-as.js";
 import { probeUpstreamFormat } from "./upstream-detect.js";
+import type { RequestExtras } from "./request-extras.js";
 
 /*
  * 测试模型（prd 第 26–28 条，照 magpie TestModels）：每个模型发一条「hi」、回复上限 16，几个一起问。
@@ -127,6 +128,8 @@ export async function runModelTests(input: {
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
   templateId: string | undefined;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   identity: ModelTestIdentity;
   limits: ModelTestLimits;
   clock: ModelTestClock;
@@ -181,6 +184,8 @@ async function testOne(input: {
   plan: ModelTestPlan;
   apiKey: string | null;
   templateId: string | undefined;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   identity: ModelTestIdentity;
   limits: ModelTestLimits;
   clock: ModelTestClock;
@@ -230,6 +235,7 @@ async function testOne(input: {
         sentModel: plan.sentModel,
         capsReply: true,
         asCli,
+        extras: input.extras,
         signal,
         // 单个模型的总时限由 deadline 管，这里只要不早于它。
         timeoutMs: modelTimeoutMs + 1_000,

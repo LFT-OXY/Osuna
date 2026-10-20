@@ -532,6 +532,26 @@ internal/gateway/gateway.go:
   packages/server/src/server/api-endpoints/gateway/gateway.ts
   packages/server/src/server/api-endpoints/gateway/translated.ts
 
+An endpoint's own headers, extra body and key header (the user's headers
+written after Osuna's, in place of the same name in any case, anthropic-beta
+added to rather than replaced; the reserved extra body fields, a "!" name
+forcing its value, ${sessionId} from the agent's session header or its first
+user message, a test's own session; which header the key goes in on a
+third-party Anthropic address, and not asking again with one header when the
+user wrote an auth header) follows Sign, ListHeader and MergeList in magpie's
+internal/provider/account.go, PutUserHeader in internal/catalog/userheader.go,
+ExtraBodyReserved, extraName, ExtraBodyOK, WithExtraBody, withSession and
+tested in internal/provider/extrabody.go, AuthChoices and RetryOneAuth in
+internal/provider/authheader.go, cleanHeaders in internal/provider/provider.go,
+sessionOf and conversationID in internal/gateway/gateway.go, and headerEditor,
+headersOf, extraBodyOf and twoKeyHeaders in internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/request-extras.ts
+  packages/protocol/src/api-endpoint/request-extras.test.ts
+  packages/server/src/server/api-endpoints/request-extras.ts
+  packages/server/src/server/api-endpoints/request-extras.test.ts
+  packages/app/src/api-endpoints/internal/request-extras-form.ts
+
 The installed Codex CLI's version (its npm package's package.json, or the
 package a Windows npm shim starts, before running --version; a run that said no
 version not made again until the executable changes; lookups at once sharing

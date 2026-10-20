@@ -12,7 +12,8 @@ import {
   parseJson,
   redactKey,
 } from "./upstream-http.js";
-import { keyHeaderValues } from "./gateway/refusals.js";
+import { signedHeaders } from "./gateway/refusals.js";
+import { chosenKeyHeaders, type RequestExtras } from "./request-extras.js";
 import { templateKeyHeaders, templateModelListUrls } from "./templates.js";
 
 /*
@@ -60,6 +61,8 @@ export async function fetchUpstreamModels(input: {
   apiKey: string | null;
   // 这家从哪个模板加的：Bedrock、Azure 的认证头与 Azure 列模型的地址由它定；「自定义」的没有。
   templateId: string | undefined;
+  // 这家的请求头与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
@@ -101,19 +104,21 @@ export async function fetchUpstreamModels(input: {
 
 function buildHeaders(input: {
   provider: ApiEndpointProvider;
+  baseUrl: string;
   apiKey: string | null;
   templateId: string | undefined;
+  extras: RequestExtras;
 }): Record<string, string> {
   const anthropic = input.provider === "claude";
   const format = anthropic ? "anthropic_messages" : "openai_chat";
-  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上。Bedrock、Azure 按模板。
+  // Claude 接口可能是 Anthropic 兼容网关，只认 x-api-key；两种都带上，用户选了只放一个的照用户的。Bedrock、Azure 按模板。
   const keys =
-    templateKeyHeaders({ templateId: input.templateId, format }) ?? (anthropic ? "both" : "bearer");
-  return {
-    accept: "application/json",
-    ...keyHeaderValues({ apiKey: input.apiKey, keys }),
-    ...(anthropic ? { "anthropic-version": ANTHROPIC_VERSION } : {}),
-  };
+    templateKeyHeaders({ templateId: input.templateId, format }) ??
+    chosenKeyHeaders({ format, baseUrl: input.baseUrl, keyHeader: input.extras.keyHeader }) ??
+    (anthropic ? "both" : "bearer");
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (anthropic) headers["anthropic-version"] = ANTHROPIC_VERSION;
+  return signedHeaders({ headers, apiKey: input.apiKey, keys, extras: input.extras });
 }
 
 async function listModels(input: {

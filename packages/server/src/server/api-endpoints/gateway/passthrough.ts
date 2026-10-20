@@ -36,8 +36,8 @@ import {
   askRefitted,
   askWithOneKeyHeader,
   askWithoutField,
-  keyHeaderValues,
   keyHeadersFor,
+  signedHeaders,
   type KeyHeaders,
   type RefusedShape,
   type ShapeRefusals,
@@ -60,6 +60,7 @@ import { sseEvent } from "./translation/sse.js";
 import { hasVendorRewrites, withVendorRewrites } from "./vendor-rewrites.js";
 import { withTemplatePassthroughRewrites } from "./template-rewrites.js";
 import { BEDROCK_TEMPLATE_ID } from "../templates.js";
+import { storedRequestExtras, withExtraBody, type RequestExtras } from "../request-extras.js";
 import { searchesWebItself, withoutResponsesWebSearch } from "./web-search.js";
 import { wholeEvents } from "./whole-stream.js";
 import {
@@ -142,8 +143,11 @@ export async function attemptEndpoint(input: {
   keepAlive?: AgentKeepAlive;
   // 只把这些 Agent 的请求头转给上游（ChatGPT 登录的 Codex 只带表明身份的头）；缺省是 Agent 的全部请求头。
   forwardedHeaders?: IncomingHttpHeaders;
+  // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）；count_tokens 不带附加请求体。
+  sessionId?: string;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, refusals } = input;
+  const extras = storedRequestExtras(input.endpoint);
   const { originalUrl } = input.req;
   const url = upstreamUrl({
     baseUrl: input.baseUrl,
@@ -152,7 +156,13 @@ export async function attemptEndpoint(input: {
     query: originalUrl.includes("?") ? originalUrl.slice(originalUrl.indexOf("?")) : "",
   });
   const sends = () =>
-    keyHeadersFor({ format: input.format, templateId: input.endpoint.templateId, refusals });
+    keyHeadersFor({
+      format: input.format,
+      templateId: input.endpoint.templateId,
+      baseUrl: input.baseUrl,
+      extras,
+      refusals,
+    });
   const anthropic = input.format === "anthropic_messages";
   const sent = sentModelOf(input);
   const isClaude = isAnthropicModel(input.upstreamModel) || isAnthropicModel(sent);
@@ -165,6 +175,7 @@ export async function attemptEndpoint(input: {
         headers: input.forwardedHeaders ?? input.req.headers,
         apiKey,
         keys,
+        extras,
         dropsReviewBeta,
         forBedrock: input.endpoint.templateId === BEDROCK_TEMPLATE_ID,
         userAgent: input.userAgent,
@@ -183,6 +194,7 @@ export async function attemptEndpoint(input: {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
+      extras,
       failed: opened,
       ask: (alone) => open(body, alone),
     });
@@ -441,8 +453,11 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId">;
+  endpoint: AdvisorEndpoint &
+    Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId" | "extraBody">;
   refusals?: ShapeRefusals;
+  // 附加请求体里 ${sessionId} 换成的对话标识；没有为空。
+  sessionId?: string;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
   fixedEffort?: FixedEffort;
   // 模型设置里一档思考都不留：对话请求不带任何思考参数，固定的档位也不发（magpie Reasonless）。
@@ -485,9 +500,30 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   // count_tokens 不带 refusals。
   const refusals = conversation ? input.refusals : undefined;
   if (refusals) text = withoutRefusedText({ text, format: input.format, refusals });
+  if (conversation) text = withExtraBodyText({ text, input });
   text = withVendorText({ ...input, text });
   text = withTemplateText({ ...input, text, replaysReasoning: replays });
   return Buffer.from(withoutReasoningText({ text, input, conversation }));
+}
+
+/**
+ * 用户的附加请求体（request-extras.ts）：只改补上或覆盖的顶层字段，其余字节原样。补进来的思考预算照样按模型改成 adaptive、
+ * 这家这个模型不收的字段照样去掉（magpie forwardOnce 的 adaptiveThinking、withoutRefusedShapes）。
+ */
+function withExtraBodyText(args: { text: string; input: PassthroughBodyInput }): string {
+  const { text, input } = args;
+  const extraBody = input.endpoint.extraBody ?? {};
+  const body = parseJson(text);
+  if (Object.keys(extraBody).length === 0 || !isRecord(body)) return text;
+  const added = withExtraBody({ body, extraBody, session: input.sessionId ?? "" });
+  if (added === body) return text;
+  let fitted = added;
+  if (input.format === "anthropic_messages") {
+    fitted = adaptiveThinkingAsTaken(fitted, input.upstreamModel);
+  }
+  const out = withChangedKeys({ text, body, fitted });
+  if (!input.refusals) return out;
+  return withoutRefusedText({ text: out, format: input.format, refusals: input.refusals });
 }
 
 /** 模型设置里一档思考都不留的模型，固定的档位也不发（magpie Reasonless）。 */
@@ -721,6 +757,7 @@ function upstreamHeaders(input: {
   headers: IncomingHttpHeaders;
   apiKey: string | null;
   keys: KeyHeaders;
+  extras: RequestExtras;
   // 发给 Anthropic 地址上的非 Claude 模型：anthropic-beta 去掉自动模式审查的 beta。
   dropsReviewBeta: boolean;
   // 发给从 Bedrock 模板加的接口：anthropic-beta 照 Bedrock 的叫法改。
@@ -744,7 +781,7 @@ function upstreamHeaders(input: {
   // 要上游不压缩：错误体要读出原文，回复原样转给 Agent。
   out["accept-encoding"] = "identity";
   out["user-agent"] = input.userAgent;
-  return { ...out, ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }) };
+  return signedHeaders({ ...input, headers: out });
 }
 
 function responseHeaders(headers: IncomingHttpHeaders): Record<string, string | string[]> {

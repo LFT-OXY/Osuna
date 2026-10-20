@@ -9,6 +9,7 @@ import {
   ApiEndpointRequestError,
   type ApiEndpointAgentSettingsInput,
   type ApiEndpointService,
+  type ApiEndpointUpstreamInput,
   type KeepCurrentSettingsCode,
   validateModelScope,
 } from "../../api-endpoints/service.js";
@@ -238,6 +239,7 @@ export class ApiEndpointSession {
           : {}),
         ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
         ...(request.modelSettings !== undefined ? { modelSettings: request.modelSettings } : {}),
+        ...requestExtrasOf(request),
       });
       this.host.emit({
         type: "provider.api_endpoint.save.response",
@@ -607,6 +609,7 @@ export class ApiEndpointSession {
           ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
           ...(request.region !== undefined ? { region: request.region } : {}),
           ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -645,6 +648,7 @@ export class ApiEndpointSession {
           ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
           ...(request.region !== undefined ? { region: request.region } : {}),
           ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -680,6 +684,7 @@ export class ApiEndpointSession {
           ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
           ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
           ...(request.eachModel !== undefined ? { eachModel: request.eachModel } : {}),
+          ...requestExtrasOf(request),
         },
         signal,
       );
@@ -855,4 +860,17 @@ function sideModelsRequested(request: SideModelsRequest): SideModelsRequest {
     requested.allowsAnySubagentModel = request.allowsAnySubagentModel;
   }
   return requested;
+}
+
+/** 请求带的请求头、附加请求体、key 放哪个头（保存、拉模型、测试、检测都一样）；没带的不传。 */
+function requestExtrasOf(request: {
+  headers?: Record<string, string>;
+  extraBody?: Record<string, unknown>;
+  keyHeader?: string;
+}): Pick<ApiEndpointUpstreamInput, "headers" | "extraBody" | "keyHeader"> {
+  return {
+    ...(request.headers !== undefined ? { headers: request.headers } : {}),
+    ...(request.extraBody !== undefined ? { extraBody: request.extraBody } : {}),
+    ...(request.keyHeader !== undefined ? { keyHeader: request.keyHeader } : {}),
+  };
 }

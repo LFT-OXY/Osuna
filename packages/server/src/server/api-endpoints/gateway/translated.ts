@@ -9,6 +9,8 @@ import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-setting
 import type { EndpointModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
+import { storedRequestExtras, withExtraBody, type RequestExtras } from "../request-extras.js";
+import { adaptiveThinkingAsTaken } from "./translation/anthropic.js";
 import { sendAgentError, sendRefusal, type AgentError, type AgentWire } from "./agent-errors.js";
 import {
   ENDED_SHORT,
@@ -34,9 +36,9 @@ import {
   askRefitted,
   askWithOneKeyHeader,
   askWithoutField,
-  keyHeaderValues,
   keyHeadersFor,
   noteRefusal,
+  signedHeaders,
   refusesPrefill,
   type KeyHeaders,
   type RefusedShape,
@@ -127,11 +129,20 @@ export async function attemptTranslated(input: {
   keepAlive: AgentKeepAlive;
   // 断了的回复接着写之前等多久（第二次加倍）。
   retryPauseMs: number;
+  // 附加请求体里 ${sessionId} 换成的对话标识（request-extras.ts 的 extraBodySession）。
+  sessionId: string;
 }): Promise<AttemptOutcome> {
   const { res, apiKey, to, refusals } = input;
   const url = upstreamUrl({ baseUrl: input.baseUrl, format: to });
+  const extras = storedRequestExtras(input.endpoint);
   const sends = () =>
-    keyHeadersFor({ format: to, templateId: input.endpoint.templateId, refusals });
+    keyHeadersFor({
+      format: to,
+      templateId: input.endpoint.templateId,
+      baseUrl: input.baseUrl,
+      extras,
+      refusals,
+    });
   const openAt = (ask: { url: URL; body: string; keys: KeyHeaders }) =>
     openUpstream({
       res,
@@ -139,6 +150,7 @@ export async function attemptTranslated(input: {
       headers: translatedHeaders({
         apiKey,
         keys: ask.keys,
+        extras,
         to,
         userAgent: input.userAgent,
         clientIdentity: input.clientIdentity,
@@ -168,6 +180,8 @@ export async function attemptTranslated(input: {
         modelId: input.upstreamModel,
       }),
       facts: input.facts,
+      extraBody: extras.extraBody,
+      session: input.sessionId,
     });
   const build = (asked: ShapeRefusals = refusals) =>
     bodyOf({ request: input.request, continuation: null, refusals: asked });
@@ -189,6 +203,7 @@ export async function attemptTranslated(input: {
     opened = await askWithOneKeyHeader({
       refusals,
       sent: keys,
+      extras,
       failed: opened,
       ask: (alone) => open(body, alone),
     });
@@ -378,6 +393,7 @@ type UpstreamReply =
 function translatedHeaders(input: {
   apiKey: string | null;
   keys: KeyHeaders;
+  extras: RequestExtras;
   to: ApiEndpointRequestFormat;
   userAgent: string;
   clientIdentity: Record<string, string>;
@@ -389,10 +405,9 @@ function translatedHeaders(input: {
     accept: "text/event-stream",
     // 要上游不压缩：错误体要读出原文。
     "accept-encoding": "identity",
-    ...keyHeaderValues({ apiKey: input.apiKey, keys: input.keys }),
   };
   if (input.to === "anthropic_messages") headers["anthropic-version"] = ANTHROPIC_VERSION;
-  return headers;
+  return signedHeaders({ ...input, headers });
 }
 
 /** 翻译后发给上游的请求体要的：Agent 的请求、这家的地址、两种格式、上游模型名与资料、这家这个模型不收的写法。 */
@@ -412,6 +427,9 @@ export interface TranslatedBodyInput {
   refusals: ShapeRefusals;
   // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
   continuation: PrefillMode | null;
+  // 这家的附加请求体与 ${sessionId} 换成的对话标识（request-extras.ts）；没有为不加。
+  extraBody?: Record<string, unknown>;
+  session?: string;
 }
 
 /**
@@ -454,10 +472,34 @@ export function translatedBody(input: TranslatedBodyInput): string {
   if (to === "openai_responses") {
     body = withSearchSourcesFor({ baseUrl, body, asked: request.include });
   }
+  body = withExtraFields({ ...input, body });
   body = withVendorRewrites({ format: to, baseUrl, model: input.model, body });
   return JSON.stringify(
     withTemplateTranslatedRewrites({ templateId: input.templateId, format: to, body }),
   );
+}
+
+/**
+ * 补上用户的附加请求体（照 magpie forwardOnce）：Anthropic 上补进来的思考预算按模型改成 adaptive，
+ * 这家这个模型不收的字段照样去掉。
+ */
+function withExtraFields(input: {
+  body: Record<string, unknown>;
+  to: ApiEndpointRequestFormat;
+  model: string;
+  refusals: ShapeRefusals;
+  extraBody?: Record<string, unknown>;
+  session?: string;
+}): Record<string, unknown> {
+  const { body, to, refusals } = input;
+  const extraBody = input.extraBody ?? {};
+  const added = withExtraBody({ body, extraBody, session: input.session ?? "" });
+  if (added === body || to !== "anthropic_messages") return added;
+  return withoutRefusedFields({
+    format: to,
+    body: adaptiveThinkingAsTaken(added, input.model),
+    refused: (field) => refusals.has(field),
+  });
 }
 
 /** 这次翻出的请求带着 prompt_cache_key：Chat 与 Responses 上游才收，这家这个模型没说过不收。 */

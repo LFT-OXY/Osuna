@@ -1178,6 +1178,56 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses an endpoint, a save and the unsaved checks carrying headers, an extra body and a key header, and older ones without", () => {
+    const extras = {
+      headers: { "anthropic-workspace-id": "wrkspc_1", "anthropic-beta": "context-1m" },
+      extraBody: { prompt_cache_key: "${sessionId}", "!service_tier": "flex", thinking: { a: 1 } },
+      keyHeader: "x-api-key",
+    };
+    const requests = [
+      {
+        type: "provider.api_endpoint.save.request" as const,
+        requestId: "req-h1",
+        provider: "claude",
+        endpointId: "ep_1",
+        name: "Relay",
+        baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+        models: [],
+      },
+      {
+        type: "provider.api_endpoint.fetch_models.request" as const,
+        requestId: "req-h2",
+        provider: "claude",
+        baseUrl: "https://relay.example",
+      },
+      {
+        type: "provider.api_endpoint.test_connection.request" as const,
+        requestId: "req-h3",
+        provider: "claude",
+        baseUrl: "https://relay.example",
+        format: "anthropic_messages",
+      },
+      {
+        type: "provider.api_endpoint.detect_formats.request" as const,
+        requestId: "req-h4",
+        baseUrl: "https://relay.example",
+      },
+    ];
+    for (const older of requests) {
+      const request = { ...older, ...extras };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+      expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    }
+    // 不认识的 keyHeader 照常解析（daemon 当 both）。
+    for (const endpoint of [{ ...ENDPOINT, ...extras, keyHeader: "cookie" }, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-h1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
+
   it("parses an endpoint and a save that carry an icon, a save that takes it off, and older ones without", () => {
     const save = {
       type: "provider.api_endpoint.save.request" as const,

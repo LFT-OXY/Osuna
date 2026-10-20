@@ -17,6 +17,9 @@ import {
   type ShapeRefusals,
 } from "./refusals.js";
 import { failedBySelf, type FailedAttempt } from "./upstream-call.js";
+import { NO_REQUEST_EXTRAS } from "../request-extras.js";
+
+const RELAY = "https://relay.example";
 
 /*
  * 上游不收的写法：effort none、关掉思考、这个格式的地址、两个认证头一起带。错误原文照 magpie 的
@@ -237,6 +240,7 @@ describe("asking again with the key in one header", () => {
     const outcome = await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: failed(401, BOTH_REFUSED_ZH),
       ask: upstream.ask,
     });
@@ -244,9 +248,15 @@ describe("asking again with the key in one header", () => {
     expect(outcome.kind).toBe("opened");
     expect(upstream.asked).toEqual(["xApiKey"]);
     expect(refusals.added).toEqual(["bothKeyHeaders"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals })).toBe(
-      "xApiKey",
-    );
+    expect(
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals,
+      }),
+    ).toBe("xApiKey");
   });
 
   test("goes on to Bearer alone when x-api-key alone is refused too, and remembers that", async () => {
@@ -255,15 +265,22 @@ describe("asking again with the key in one header", () => {
     await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: failed(401, BOTH_REFUSED_ZH),
       ask: upstream.ask,
     });
 
     expect(upstream.asked).toEqual(["xApiKey", "bearer"]);
     expect(refusals.added).toEqual(["xApiKeyAlone"]);
-    expect(keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals })).toBe(
-      "bearer",
-    );
+    expect(
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals,
+      }),
+    ).toBe("bearer");
   });
 
   test("hands the failure back as it came for another 401, or when one header was sent already", async () => {
@@ -273,6 +290,7 @@ describe("asking again with the key in one header", () => {
     const once = await askWithOneKeyHeader({
       refusals,
       sent: "both",
+      extras: NO_REQUEST_EXTRAS,
       failed: invalid,
       ask: upstream.ask,
     });
@@ -280,6 +298,7 @@ describe("asking again with the key in one header", () => {
     const narrowed = await askWithOneKeyHeader({
       refusals,
       sent: "xApiKey",
+      extras: NO_REQUEST_EXTRAS,
       failed: refusedAgain,
       ask: upstream.ask,
     });
@@ -292,14 +311,59 @@ describe("asking again with the key in one header", () => {
 
   test("only an Anthropic address gets both headers; OpenAI formats send Bearer", () => {
     expect(
-      keyHeadersFor({ format: "anthropic_messages", templateId: undefined, refusals: memory() }),
+      keyHeadersFor({
+        format: "anthropic_messages",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: memory(),
+      }),
     ).toBe("both");
     expect(
-      keyHeadersFor({ format: "openai_chat", templateId: undefined, refusals: memory() }),
+      keyHeadersFor({
+        format: "openai_chat",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: memory(),
+      }),
     ).toBe("bearer");
     expect(
-      keyHeadersFor({ format: "openai_responses", templateId: undefined, refusals: undefined }),
+      keyHeadersFor({
+        format: "openai_responses",
+        templateId: undefined,
+        baseUrl: RELAY,
+        extras: NO_REQUEST_EXTRAS,
+        refusals: undefined,
+      }),
     ).toBe("bearer");
+  });
+
+  test("a key header the user picked wins on a third-party Anthropic address only", () => {
+    const refusals = memory();
+    refusals.add("bothKeyHeaders");
+    const bearer = { ...NO_REQUEST_EXTRAS, keyHeader: "bearer" as const };
+    const anthropic = { format: "anthropic_messages" as const, templateId: undefined, refusals };
+    expect(keyHeadersFor({ ...anthropic, baseUrl: RELAY, extras: bearer })).toBe("bearer");
+    // Anthropic 自己的地址不看这一项，照通常的规则。
+    expect(
+      keyHeadersFor({ ...anthropic, baseUrl: "https://api.anthropic.com", extras: bearer }),
+    ).toBe("xApiKey");
+  });
+
+  test("does not ask again with one header when the user wrote an auth header of their own", async () => {
+    const refusals = memory();
+    const upstream = oneHeaderOnly("xApiKey");
+    const own = failed(401, BOTH_REFUSED_ZH);
+    const outcome = await askWithOneKeyHeader({
+      refusals,
+      sent: "both",
+      extras: { ...NO_REQUEST_EXTRAS, headers: { "X-Api-Key": "mine" } },
+      failed: own,
+      ask: upstream.ask,
+    });
+    expect(outcome).toBe(own);
+    expect(upstream.asked).toEqual([]);
   });
 });
 

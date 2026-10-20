@@ -9,6 +9,7 @@ import {
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { deadlineSignal, runPool } from "./model-tests.js";
 import { modelsToAsk, probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
+import type { RequestExtras } from "./request-extras.js";
 
 /*
  * 逐个模型识别（prd 第 11a 条，照 magpie DetectModels）：表单里已选的模型（前 30 个）在每种格式上各问一次最小请求，
@@ -97,6 +98,8 @@ export async function detectEachModel(input: {
   modelIds: string[];
   // 发给上游时模型叫什么（已保存那家的上游模型名）。
   sentNameOf: (modelId: string) => string;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   limits: DetectEachLimits;
   timers: UsagePricingTimers;
   // 调用方取消（客户端取消或断开）。
@@ -158,6 +161,7 @@ export async function detectEachModel(input: {
         templateId: undefined,
         modelId,
         sentModel,
+        extras: input.extras,
         signal: probeSignal,
         // 单个请求的时限由 deadline 管，这里只要不早于它。
         timeoutMs: limits.probeTimeoutMs + 1_000,

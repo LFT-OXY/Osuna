@@ -33,6 +33,7 @@ import {
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
+import { extraBodySession } from "../request-extras.js";
 import { judgeCaller } from "./callers.js";
 import {
   CliHeaderSamples,
@@ -1643,6 +1644,7 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     userAgent: userAgentFor(input),
     refusals: refused,
     keepAlive: input.keepAlive,
+    sessionId: sessionForExtraBody(input),
   };
   if (candidate.translated === null) {
     return attemptEndpoint({
@@ -1666,6 +1668,14 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });
+}
+
+/** 附加请求体里 ${sessionId} 换成的对话标识；这家没设附加请求体时不用算。 */
+function sessionForExtraBody(input: EndpointAsk): string {
+  const { extraBody } = input.candidate.endpoint;
+  const hasExtraBody = extraBody !== undefined && Object.keys(extraBody).length > 0;
+  if (!hasExtraBody) return "";
+  return extraBodySession(input.forwardedHeaders ?? input.req.headers, input.parsed);
 }
 
 /**

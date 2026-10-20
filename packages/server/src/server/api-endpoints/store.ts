@@ -100,6 +100,11 @@ const StoredApiEndpointSchema = z.object({
   region: z.string().optional(),
   // 「自定义」加的接口自选的图标：内置图标名，或 `file:<名字>` 指 icons/ 里的图片副本（endpoint-icons.ts）。
   icon: z.string().optional(),
+  // 用户加给这家每个请求的请求头（名字照用户写的，值可能是密钥，不写日志）、附加请求体（JSON 对象）、
+  // key 放哪个头（x-api-key、bearer；两个都放不存）。都没有即不加（request-extras.ts）。
+  headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+  keyHeader: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

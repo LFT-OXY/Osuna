@@ -13,7 +13,13 @@ import {
   structuredErrorMessage,
   redactKey,
 } from "./upstream-http.js";
-import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
+import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
+import {
+  chosenKeyHeaders,
+  testSession,
+  withExtraBody,
+  type RequestExtras,
+} from "./request-extras.js";
 import { templateKeyHeaders } from "./templates.js";
 
 /*
@@ -83,13 +89,21 @@ export async function testUpstreamConnection(input: {
   modelId: string;
   // 请求体里的模型名（已保存那家的上游模型名，magpie test.go）；新加的就是 modelId。
   sentModel: string;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<UpstreamConnectionOutcome> {
   const protocol = PROTOCOLS[input.provider];
   const keys =
-    templateKeyHeaders({ templateId: input.templateId, format: protocol.format }) ?? protocol.keys;
+    templateKeyHeaders({ templateId: input.templateId, format: protocol.format }) ??
+    chosenKeyHeaders({
+      format: protocol.format,
+      baseUrl: input.baseUrl,
+      keyHeader: input.extras.keyHeader,
+    }) ??
+    protocol.keys;
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = AbortSignal.any([input.signal, timeout]);
   const url = `${input.baseUrl.trim().replace(/\/+$/, "")}${protocol.path}`;
@@ -114,13 +128,24 @@ export async function testUpstreamConnection(input: {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        ...protocol.headers,
-        ...keyHeaderValues({ apiKey: input.apiKey, keys }),
-      },
-      body: JSON.stringify(protocol.body(input.sentModel)),
+      headers: signedHeaders({
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          ...protocol.headers,
+        },
+        apiKey: input.apiKey,
+        keys,
+        extras: input.extras,
+      }),
+      body: JSON.stringify(
+        withExtraBody({
+          body: protocol.body(input.sentModel),
+          extraBody: input.extras.extraBody,
+          // 测试自己的一段对话（magpie tested）。
+          session: testSession(),
+        }),
+      ),
       signal,
     });
     status = response.status;

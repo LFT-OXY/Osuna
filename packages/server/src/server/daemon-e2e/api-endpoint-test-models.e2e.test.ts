@@ -170,6 +170,8 @@ interface EndpointInput {
   baseUrls: { format: string; url: string }[];
   modelSettings?: Record<string, unknown>;
   templateId?: string;
+  // 这家的请求头、附加请求体、key 放哪个头（工单 22），原样写进 endpoints.json。
+  requestExtras?: Record<string, unknown>;
 }
 
 async function start(input: {
@@ -194,6 +196,7 @@ async function start(input: {
           models: shape.models.map((id) => ({ id })),
           ...(shape.modelSettings ? { modelSettings: shape.modelSettings } : {}),
           ...(shape.templateId ? { templateId: shape.templateId } : {}),
+          ...shape.requestExtras,
           enabled: true,
           createdAt: "2026-10-01T00:00:00.000Z",
           updatedAt: "2026-10-01T00:00:00.000Z",
@@ -465,6 +468,39 @@ describe("test models", () => {
         error: { code: "upstream_error", message: "The model bad-then-slow-model does not exist" },
       },
     ]);
+  });
+
+  // 接口管理好用性工单 22：测试模型也带这家的请求头与附加请求体，按 CLI 的样子测时用户的头仍在 CLI 的之上（magpie Sign）。
+  test("plain and CLI-style tests carry the endpoint's headers and extra body, the user's headers last", async () => {
+    const { client, upstream } = await start({
+      endpoint: (url) => ({
+        ...twoFormats(["ok-1"])(url),
+        baseUrls: [
+          { format: "anthropic_messages", url: `${url}/a` },
+          { format: "openai_responses", url: `${url}/r/v1` },
+        ],
+        requestExtras: {
+          headers: { "X-Relay-Team": "team-t", "User-Agent": "relay-app/1.0" },
+          extraBody: { prompt_cache_key: "${sessionId}" },
+          keyHeader: "x-api-key",
+        },
+      }),
+    });
+
+    const plain = await client.apiEndpointTestModels({ endpointId: "ep_a" });
+    expect(plain.results[0]).toMatchObject({ ok: true, format: "anthropic_messages" });
+    const asCodex = await client.apiEndpointTestModels({ endpointId: "ep_a", method: "codex" });
+    expect(asCodex.results[0]).toMatchObject({ ok: true, format: "openai_responses" });
+
+    const [anthropic, codex] = upstream.requests;
+    expect(anthropic?.headers["x-relay-team"]).toBe("team-t");
+    expect(anthropic?.headers["x-api-key"]).toBe("sk-a");
+    expect(anthropic?.authorization).toBeUndefined();
+    expect(String(anthropic?.body.prompt_cache_key)).toMatch(/^osuna-test-[0-9a-f]{12}$/);
+    expect(codex?.headers["x-relay-team"]).toBe("team-t");
+    expect(codex?.headers.originator).toBe("codex_cli_rs");
+    expect(codex?.headers["user-agent"]).toBe("relay-app/1.0");
+    expect(String(codex?.body.prompt_cache_key)).toMatch(/^osuna-test-/);
   });
 
   test("an unknown endpoint and an unknown method are refused before any request", async () => {

@@ -4,6 +4,12 @@
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { templateKeyHeaders } from "../templates.js";
+import {
+  chosenKeyHeaders,
+  ownsKeyHeader,
+  withUserHeaders,
+  type RequestExtras,
+} from "../request-extras.js";
 import { FAILURE_WORDS, wordsOf } from "./failure.js";
 import { refusedDowngrades, type DowngradedShape } from "./refused-downgrades.js";
 import { refusedFields, refusesContent, type DroppedField } from "./refused-fields.js";
@@ -225,18 +231,22 @@ export function refusesBothKeyHeaders(input: { status: number; text: string }): 
 export type KeyHeaders = "both" | "xApiKey" | "bearer" | "apiKey";
 
 /**
- * 发给这家时 key 放哪：Bedrock、Azure 由模板定（templateKeyHeaders）；其余 OpenAI 格式只放 Bearer，
- * Anthropic 地址两个都放，这家说过不能同时带的只放它收的那个。
+ * 发给这家时 key 放哪：Bedrock、Azure 由模板定（templateKeyHeaders）；其余 OpenAI 格式只放 Bearer；
+ * 第三方 Anthropic 地址用户选了只放一个的照用户的（chosenKeyHeaders），否则两个都放，这家说过不能同时带的只放它收的那个。
  */
 export function keyHeadersFor(input: {
   format: ApiEndpointRequestFormat;
   templateId: string | undefined;
+  baseUrl: string;
+  extras: RequestExtras;
   refusals: ShapeRefusals | undefined;
 }): KeyHeaders {
   const { refusals } = input;
   const fixed = templateKeyHeaders({ templateId: input.templateId, format: input.format });
   if (fixed !== null) return fixed;
   if (input.format !== "anthropic_messages") return "bearer";
+  const chosen = chosenKeyHeaders({ ...input, keyHeader: input.extras.keyHeader });
+  if (chosen !== null) return chosen;
   if (refusals?.has("xApiKeyAlone")) return "bearer";
   return refusals?.has("bothKeyHeaders") ? "xApiKey" : "both";
 }
@@ -255,6 +265,20 @@ export function keyHeaderValues(input: {
   return headers;
 }
 
+/**
+ * 发给这家的每个上游请求最后都经这里定请求头：Osuna 填的头，再加 key，最后写上用户自己的头（request-extras.ts）。
+ * 中转站转发、测试连接、自动检测、拉模型、测试模型都用它。
+ */
+export function signedHeaders<V extends string | string[]>(input: {
+  headers: Record<string, V>;
+  apiKey: string | null;
+  keys: KeyHeaders;
+  extras: RequestExtras;
+}): Record<string, V | string> {
+  const signed = { ...input.headers, ...keyHeaderValues(input) };
+  return withUserHeaders(signed, input.extras);
+}
+
 /** 问一次上游的结果（开口、失败、Agent 走了）里，要不要换头只看这些。 */
 export type AskedUpstream = { kind: "opened" | "gone" } | { kind: "failed"; status: number };
 
@@ -271,11 +295,13 @@ const ONE_KEY_HEADER_ORDER = [
 export async function askWithOneKeyHeader<T extends AskedUpstream>(input: {
   refusals: ShapeRefusals;
   sent: KeyHeaders;
+  // 用户自己填了认证头时 key 怎么带由用户说了算，不换（magpie RetryOneAuth）。
+  extras: RequestExtras;
   failed: FailedAttempt;
   ask: (keys: KeyHeaders) => Promise<T | FailedAttempt>;
 }): Promise<T | FailedAttempt> {
   const { failed } = input;
-  if (input.sent !== "both") return failed;
+  if (input.sent !== "both" || ownsKeyHeader(input.extras)) return failed;
   if (!refusesBothKeyHeaders(failed)) return failed;
   let outcome: T | FailedAttempt = failed;
   for (const { keys, learned } of ONE_KEY_HEADER_ORDER) {

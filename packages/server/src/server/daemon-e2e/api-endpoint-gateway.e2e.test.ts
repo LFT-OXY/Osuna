@@ -9644,3 +9644,232 @@ describe("an upstream name and a model's one format", () => {
     expect(upstreamA.requests.map((request) => request.url)).toEqual(["/v1/messages"]);
   });
 });
+
+describe("an endpoint's own headers, extra body and key header (magpie Sign, extrabody.go, authheader.go)", () => {
+  async function setExtras(endpointsDir: string, extras: Record<string, Record<string, unknown>>) {
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: Record<string, unknown>[];
+    };
+    file.endpoints = file.endpoints.map((endpoint) => {
+      const { headers: _h, extraBody: _e, keyHeader: _k, ...rest } = endpoint;
+      const id = String(endpoint.id);
+      return id in extras ? { ...rest, ...extras[id] } : rest;
+    });
+    await writeFile(endpointsPath, JSON.stringify(file));
+  }
+
+  const SECRET_HEADER = "relay-secret-value-0001";
+
+  function turn(input: { gateway: string; messages: unknown[]; session?: string }) {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${CLAUDE_TOKEN}`,
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
+    };
+    if (input.session) headers["x-claude-code-session-id"] = input.session;
+    return fetch(`${input.gateway}/v1/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ model: "kimi-k2", max_tokens: 32, messages: input.messages }),
+    });
+  }
+
+  test("the user's headers come after Osuna's, win in any case, merge anthropic-beta, and reach count_tokens and translated requests", async () => {
+    const upstreamA = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir, logLines } = await start({ upstreamA, chatUpstream: chat });
+    await setExtras(endpointsDir, {
+      ep_a: {
+        headers: {
+          "X-Api-Key": "sk-relay-own",
+          "Anthropic-Beta": "relay-beta,claude-code-20250219",
+          "X-Relay-Secret": SECRET_HEADER,
+          "User-Agent": "relay-app/1.0",
+        },
+      },
+      ep_c: { headers: { "X-Relay-Secret": SECRET_HEADER } },
+    });
+
+    const answered = await turn({ gateway, messages: [{ role: "user", content: "hi" }] });
+    expect(answered.status).toBe(200);
+    await answered.text();
+    const counted = await fetch(
+      `${gateway}/v1/messages/count_tokens`,
+      claudeRequest({ model: "kimi-k2", messages: [{ role: "user", content: "hi" }] }),
+    );
+    expect(counted.status).toBe(200);
+    await counted.text();
+    const translated = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest(claudeConversation(false)),
+    );
+    expect(translated.status).toBe(200);
+    await translated.text();
+
+    for (const request of upstreamA.requests) {
+      // 用户的 x-api-key 换掉了 Osuna 填的那个，Bearer 仍是这家的 key。
+      expect(request.headers["x-api-key"]).toBe("sk-relay-own");
+      expect(request.headers.authorization).toBe(`Bearer ${KEY_A}`);
+      expect(request.headers["x-relay-secret"]).toBe(SECRET_HEADER);
+      expect(request.headers["user-agent"]).toBe("relay-app/1.0");
+    }
+    expect(upstreamA.requests.map((request) => request.url)).toEqual([
+      "/v1/messages",
+      "/v1/messages/count_tokens",
+    ]);
+    expect(upstreamA.requests[0]?.headers["anthropic-beta"]).toBe(
+      "claude-code-20250219,interleaved-thinking-2025-05-14,relay-beta",
+    );
+    expect(chat.requests).toHaveLength(1);
+    expect(chat.requests[0]?.headers["x-relay-secret"]).toBe(SECRET_HEADER);
+    expect(chat.requests[0]?.headers.authorization).toBe(`Bearer ${KEY_C}`);
+    expect(logLines.join("\n")).not.toContain(SECRET_HEADER);
+  });
+
+  test("the extra body fills in what a request lacks, forces a ! field, keeps ${sessionId} per conversation, and skips count_tokens", async () => {
+    const upstreamA = await startUpstream();
+    const chat = await startUpstream();
+    chat.respond = (_request, res) => chatStream(res);
+    const { gateway, endpointsDir } = await start({ upstreamA, chatUpstream: chat });
+    const extraBody = {
+      metadata: { user_id: "team-${sessionId}" },
+      "!max_tokens": 64,
+      temperature: 0.5,
+    };
+    await setExtras(endpointsDir, {
+      ep_a: { extraBody },
+      ep_c: { extraBody: { prompt_cache_key: "${sessionId}" } },
+    });
+    const first = [{ role: "user", content: "fix the bug" }];
+    const second = [
+      ...first,
+      { role: "assistant", content: "done" },
+      { role: "user", content: "thanks" },
+    ];
+    for (const messages of [first, second]) {
+      const response = await turn({ gateway, messages });
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    const named = await turn({ gateway, messages: first, session: "cc-session-7" });
+    await named.text();
+    const counted = await fetch(
+      `${gateway}/v1/messages/count_tokens`,
+      claudeRequest({ model: "kimi-k2", messages: first }),
+    );
+    await counted.text();
+    const translated = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest(claudeConversation(false)),
+    );
+    expect(translated.status).toBe(200);
+    await translated.text();
+
+    const bodies = upstreamA.requests.map(receivedBody);
+    const [one, two, three, count] = bodies;
+    expect(one?.max_tokens).toBe(64);
+    expect(one?.temperature).toBe(0.5);
+    const userIdOf = (body: Record<string, unknown> | undefined) =>
+      (body?.metadata as { user_id?: string } | undefined)?.user_id;
+    const conversation = userIdOf(one);
+    expect(conversation).toMatch(/^team-osuna-[0-9a-f]{24}$/);
+    // 同一段对话每轮相同；带会话头的用会话头。
+    expect(userIdOf(two)).toBe(conversation);
+    expect(userIdOf(three)).toBe("team-cc-session-7");
+    expect(count).not.toHaveProperty("metadata");
+    expect(count).not.toHaveProperty("temperature");
+    // 补上的字段之外逐字节原样：消息还是 CLI 发的。
+    expect(one?.messages).toEqual(first);
+    // 翻译后的请求也补；claudeRequest 带着会话头 session-1。
+    expect(receivedBody(chat.requests[0]).prompt_cache_key).toBe("session-1");
+  });
+
+  test("the key goes in the header the user picked on a third-party Anthropic address", async () => {
+    const upstreamA = await startUpstream();
+    const { gateway, endpointsDir } = await start({ upstreamA });
+    const messages = [{ role: "user", content: "hi" }];
+    const sent: { xApiKey: unknown; authorization: unknown }[] = [];
+    for (const keyHeader of ["x-api-key", "bearer", "both"]) {
+      await setExtras(endpointsDir, { ep_a: { keyHeader } });
+      const response = await turn({ gateway, messages });
+      expect(response.status).toBe(200);
+      await response.text();
+      const headers = upstreamA.requests.at(-1)?.headers ?? {};
+      sent.push({ xApiKey: headers["x-api-key"], authorization: headers.authorization });
+    }
+    expect(sent).toEqual([
+      { xApiKey: KEY_A, authorization: undefined },
+      { xApiKey: undefined, authorization: `Bearer ${KEY_A}` },
+      { xApiKey: KEY_A, authorization: `Bearer ${KEY_A}` },
+    ]);
+  });
+
+  test("a refusal of both key headers is not asked again with one when the user wrote an auth header", async () => {
+    const { upstreamA, upstreamB, ask, endpointsDir } = await twoRelays();
+    upstreamA.respond = (_request, res) => {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(BOTH_KEY_HEADERS_REFUSED);
+    };
+    await setExtras(endpointsDir, { ep_a: { headers: { Authorization: "Bearer sk-user-own" } } });
+
+    const response = await ask();
+
+    expect(response.headers.get("x-osuna-api-endpoint")).toBe("relay-b");
+    await response.text();
+    expect(upstreamA.requests).toHaveLength(1);
+    expect(upstreamA.requests[0]?.headers.authorization).toBe("Bearer sk-user-own");
+    expect(upstreamB.requests).toHaveLength(1);
+  });
+
+  test("a save keeps the headers, extra body and key header, an older client's save leaves them, and one naming a reserved field is refused", async () => {
+    const upstreamA = await startUpstream();
+    const { daemon } = await start({ upstreamA });
+    const client = await connectTo(daemon);
+    const form = {
+      provider: "claude",
+      endpointId: "ep_a",
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: upstreamA.url }],
+      models: [{ id: "kimi-k2" }],
+    };
+
+    const saved = await client.apiEndpointSave({
+      ...form,
+      headers: { " anthropic-workspace-id ": " wrkspc_1 ", Empty: " " },
+      extraBody: { "!service_tier": "flex", prompt_cache_key: "${sessionId}" },
+      keyHeader: "bearer",
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint).toMatchObject({
+      headers: { "anthropic-workspace-id": "wrkspc_1" },
+      extraBody: { "!service_tier": "flex", prompt_cache_key: "${sessionId}" },
+      keyHeader: "bearer",
+    });
+    // 老客户端的保存不带这三项：原样留着。
+    const older = await client.apiEndpointSave(form);
+    expect(older.endpoint).toMatchObject({ keyHeader: "bearer" });
+    expect(older.endpoint?.headers).toEqual({ "anthropic-workspace-id": "wrkspc_1" });
+
+    const reserved = await client.apiEndpointSave({ ...form, extraBody: { "!messages": [] } });
+    expect(reserved.endpoint).toBeNull();
+    expect(reserved.error).toMatchObject({
+      code: "invalid_extra_body",
+      params: { reason: "reserved", field: "messages" },
+    });
+    const badHeader = await client.apiEndpointSave({ ...form, headers: { "X Team": "a" } });
+    expect(badHeader.error).toMatchObject({ code: "invalid_header", params: { name: "X Team" } });
+    // 拒收的什么都没改；清掉时空的与 both 都不存。
+    const cleared = await client.apiEndpointSave({
+      ...form,
+      headers: {},
+      extraBody: {},
+      keyHeader: "both",
+    });
+    expect(cleared.endpoint).not.toHaveProperty("headers");
+    expect(cleared.endpoint).not.toHaveProperty("extraBody");
+    expect(cleared.endpoint).not.toHaveProperty("keyHeader");
+  });
+});

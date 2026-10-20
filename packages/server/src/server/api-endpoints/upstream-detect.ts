@@ -16,7 +16,13 @@ import {
   parseJson,
   redactKey,
 } from "./upstream-http.js";
-import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
+import { signedHeaders, type KeyHeaders } from "./gateway/refusals.js";
+import {
+  chosenKeyHeaders,
+  testSession,
+  withExtraBody,
+  type RequestExtras,
+} from "./request-extras.js";
 import { templateKeyHeaders } from "./templates.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
 import type { CliHeaderSample } from "./store.js";
@@ -108,6 +114,8 @@ export async function detectUpstreamFormats(input: {
   pickedModelIds: string[];
   // 发给上游时模型叫什么（已保存那家的上游模型名，magpie detect.go 的 UpstreamName）；新加的是模型 id 本身。
   sentNameOf: (modelId: string) => string;
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   modelsTimeoutMs: number;
@@ -129,6 +137,7 @@ export async function detectUpstreamFormats(input: {
     apiKey: input.apiKey,
     // 自动检测只给「自定义」用。
     templateId: undefined,
+    extras: input.extras,
     signal: input.signal,
     timeoutMs: input.modelsTimeoutMs,
   });
@@ -182,6 +191,7 @@ async function probeAll(args: {
     signal: AbortSignal;
     probeTimeoutMs: number;
     sentNameOf: (modelId: string) => string;
+    extras: RequestExtras;
   };
   urls: Record<ApiEndpointRequestFormat, string>;
   modelFor: (format: ApiEndpointRequestFormat) => string | null;
@@ -198,6 +208,7 @@ async function probeAll(args: {
         templateId: undefined,
         modelId,
         sentModel: modelId === null ? null : input.sentNameOf(modelId),
+        extras: input.extras,
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
       });
@@ -222,6 +233,8 @@ export async function probeUpstreamFormat(input: {
   capsReply?: boolean;
   // 按 CLI 的样子测（ADR 0013）：带这些请求头、流式发；缺省是 Osuna 自己的样子。
   asCli?: { client: CliTestClient; headers: CliHeaderSample };
+  // 这家的请求头、附加请求体与 key 放哪个头（request-extras.ts）。
+  extras: RequestExtras;
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {
@@ -333,11 +346,18 @@ function probeRequest(input: {
   sentModel: string | null;
   capsReply?: boolean;
   asCli?: { client: CliTestClient; headers: CliHeaderSample };
+  baseUrl: string;
+  extras: RequestExtras;
 }): { body: Record<string, unknown>; headers: Record<string, string> } {
-  const { format, probe, templateId, asCli } = input;
-  const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
-  const asked = probe.body(input.sentModel ?? input.modelId);
-  if (input.capsReply === true && format === "openai_responses") asked.max_output_tokens = 16;
+  const { format, probe, templateId, asCli, extras } = input;
+  const keys =
+    templateKeyHeaders({ templateId, format }) ??
+    chosenKeyHeaders({ format, baseUrl: input.baseUrl, keyHeader: extras.keyHeader }) ??
+    probe.keys;
+  const tiny = probe.body(input.sentModel ?? input.modelId);
+  if (input.capsReply === true && format === "openai_responses") tiny.max_output_tokens = 16;
+  // 附加请求体在测试自己的一段对话上也带（magpie tested），再按模板改。
+  const asked = withExtraBody({ body: tiny, extraBody: extras.extraBody, session: testSession() });
   // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
   const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
   const capped = completionTokens ? asCompletionTokens(asked) : asked;
@@ -348,13 +368,17 @@ function probeRequest(input: {
     body = asCliBody({ client: asCli.client, format, body: capped });
     cliHeaders = { ...asCli.headers, accept: "application/json, text/event-stream" };
   }
-  const headers = {
-    accept: "application/json",
-    "content-type": "application/json",
-    ...probe.headers,
-    ...cliHeaders,
-    ...keyHeaderValues({ apiKey: input.apiKey, keys }),
-  };
+  const headers = signedHeaders({
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      ...probe.headers,
+      ...cliHeaders,
+    },
+    apiKey: input.apiKey,
+    keys,
+    extras,
+  });
   return { body, headers };
 }
 

@@ -499,15 +499,18 @@ describe("API endpoint models by base URL and request format", () => {
 interface ListingUpstream {
   origin: string;
   requests: string[];
+  // 每个请求的请求头，和 requests 一一对应。
+  headers: IncomingHttpHeaders[];
   // 各列表路径答什么；没有的路径 404，值为 "fail" 的回 500。
   lists: Record<string, unknown[] | "fail">;
 }
 
 async function startListingUpstream(): Promise<ListingUpstream> {
-  const upstream: ListingUpstream = { origin: "", requests: [], lists: {} };
+  const upstream: ListingUpstream = { origin: "", requests: [], headers: [], lists: {} };
   const server = createServer((request, response) => {
     const url = request.url ?? "";
     upstream.requests.push(url);
+    upstream.headers.push(request.headers);
     const list = upstream.lists[url];
     if (list === undefined) {
       response.writeHead(404).end();
@@ -649,6 +652,58 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     // 新建时保存当场拉的那次也合并。
     const endpointId = await saveEndpoint({ name: "Multi", baseUrls: multiBaseUrls() });
     expect((await catalogOf(endpointId))?.models).toEqual(merged);
+  });
+
+  // 接口管理好用性工单 22：拉模型也带这家的请求头与 key 头（magpie account.go Sign、listAuth）。
+  test("every list fetch carries the endpoint's headers and key header: the add window's, the save's and the daily one", async () => {
+    upstream.lists["/relay/v1/models"] = [{ id: "listed" }];
+    const baseUrls = [{ format: "anthropic_messages", url: `${upstream.origin}/relay` }];
+    const preview = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/relay`,
+      format: "anthropic_messages",
+      apiKey: TYPED_KEY,
+      preview: true,
+      baseUrls,
+      headers: { "X-Relay-Team": "typed" },
+      keyHeader: "x-api-key",
+    });
+    expect(preview.error).toBeNull();
+    expect(upstream.headers[0]).toMatchObject({ "x-relay-team": "typed", "x-api-key": TYPED_KEY });
+    expect(upstream.headers[0]?.authorization).toBeUndefined();
+
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Relay",
+      baseUrls,
+      apiKey: SAVED_KEY,
+      models: [],
+      headers: { "X-Relay-Team": "saved", Authorization: "Token relay-own" },
+    });
+    expect(saved.error).toBeNull();
+    const endpointId = saved.endpoint?.id ?? "";
+    // 保存当场拉的那次：用户的认证头换掉 Osuna 的 Bearer。
+    expect(upstream.headers.at(-1)).toMatchObject({
+      "x-relay-team": "saved",
+      authorization: "Token relay-own",
+      "x-api-key": SAVED_KEY,
+    });
+
+    upstream.headers.length = 0;
+    clock = new Date(clock.getTime() + DAY_MS + 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.headers).toHaveLength(1);
+    expect(upstream.headers[0]?.["x-relay-team"]).toBe("saved");
+
+    upstream.headers.length = 0;
+    const refreshed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/relay`,
+      format: "anthropic_messages",
+    });
+    expect(refreshed.error).toBeNull();
+    expect(upstream.headers[0]?.["x-relay-team"]).toBe("saved");
   });
 
   test("a format that fails this time keeps the models it listed before; one that answered drops what it no longer lists", async () => {

@@ -330,6 +330,14 @@ import {
   resolveModelFacts,
   upstreamModelName,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
+import {
+  cleanRequestHeaders,
+  extraBodyProblem,
+  headerProblem,
+  keyHeaderOf,
+  type ExtraBodyProblem,
+} from "@getpaseo/protocol/api-endpoint/request-extras";
+import { storedRequestExtras, type RequestExtras } from "./request-extras.js";
 import { endpointKnowsModel, settleModelSettings } from "./model-settings.js";
 import {
   cleanAutoPickRules,
@@ -354,6 +362,9 @@ export type ApiEndpointErrorCode =
   | "no_usable_model"
   // 模型设置里的数不是正整数、档位不是这个模型的、显示名太长，或设的模型这家没有。
   | "invalid_model_settings"
+  // 请求头名字不合法或值里有换行（params.name）；附加请求体字段没名字、是保留字段、同名写了两次（params.reason、field）。
+  | "invalid_header"
+  | "invalid_extra_body"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -424,6 +435,10 @@ export interface ApiEndpointSaveInput {
   autoPick?: string[];
   // 模型设置，整份替换；undefined 保留原来的。
   modelSettings?: ApiEndpointModelSettings;
+  // 请求头、附加请求体、key 放哪个头，各自整份替换（空的、both 清掉）；undefined 保留原来的（复制时是原来那家的）。
+  headers?: Record<string, string>;
+  extraBody?: Record<string, unknown>;
+  keyHeader?: string;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -470,6 +485,10 @@ export interface ApiEndpointUpstreamInput {
   // 表单当前的模板与区域或套餐：给了就按它们，不看 endpointId 那家记下的。
   templateId?: string;
   region?: string;
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头：给了就用它们，不看 endpointId 那家存的（requestExtras）。
+  headers?: Record<string, string>;
+  extraBody?: Record<string, unknown>;
+  keyHeader?: string;
 }
 
 export interface ApiEndpointFetchModelsInput extends ApiEndpointUpstreamInput {
@@ -495,6 +514,10 @@ export interface ApiEndpointDetectInput {
   modelIds?: string[];
   // 逐个模型：modelIds 的前 30 个每个在每种格式上各问一次。
   eachModel?: boolean;
+  // 表单里还没保存的请求头、附加请求体、key 放哪个头：给了就用它们，不看 endpointId 那家存的（requestExtras）。
+  headers?: Record<string, string>;
+  extraBody?: Record<string, unknown>;
+  keyHeader?: string;
 }
 
 /** 自动识别的结论：每种格式一条；逐个模型识别时另有逐个模型的，否则为 null。 */
@@ -1261,17 +1284,19 @@ export class ApiEndpointService {
         throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
       }
       const copySource = copySourceOf(state, input);
+      // 编辑的这家，或复制时原来那家：请求没给的从它取。
+      const base = existing ?? copySource;
       // key 选填：新建时不填就不留条目，发请求时不带认证头；编辑时不填保留原 key；复制时不填用原来那家的。
       const apiKey = savedKeyOf({ input, copySource, store: this.store });
       const isLegacyForm = input.baseUrls === undefined;
-      const template = validateTemplate(input, existing ?? copySource);
+      const template = validateTemplate(input, base);
       // Azure 模板的地址不论怎么粘来（只有资源名也行），都先放到资源的 v1 API 上再校验。
-      const templateId = input.templateId ?? (existing ?? copySource)?.templateId;
+      const templateId = input.templateId ?? base?.templateId;
       const { fields, modelScope } = savedFieldsOf({
         provider: supported,
         input,
         existing,
-        base: existing ?? copySource,
+        base,
         templateId,
       });
       this.validateIcon({ icon: input.icon, templateId });
@@ -1281,16 +1306,17 @@ export class ApiEndpointService {
         copySource,
         fields,
         template,
-        searchesWeb: keptSearchesWeb(input.searchesWeb, existing ?? copySource),
+        searchesWeb: keptSearchesWeb(input.searchesWeb, base),
         icon: input.icon,
         catalog: input.catalog,
+        requestExtras: savedRequestExtras({ request: input, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
       });
       const scoped = settleSavedScope({
         endpoint: built,
-        base: existing ?? copySource,
+        base,
         input,
         modelScope,
         isLegacyForm,
@@ -3045,6 +3071,7 @@ export class ApiEndpointService {
         baseUrl,
         apiKey,
         templateId: place.templateId,
+        extras: this.requestExtras(input),
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
@@ -3070,6 +3097,7 @@ export class ApiEndpointService {
     const { input, addresses, signal } = options;
     const place = this.upstreamPlace(input);
     const apiKey = this.resolveRequestKey(input);
+    const extras = this.requestExtras(input);
     const endpointId = options.keeps ? input.endpointId : undefined;
     let models: CatalogModel[];
     if (listsNoModels(place)) {
@@ -3090,6 +3118,7 @@ export class ApiEndpointService {
             baseUrl,
             apiKey,
             templateId: place.templateId,
+            extras,
             signal,
             timeoutMs: this.upstreamTimeoutMs,
           });
@@ -3202,6 +3231,7 @@ export class ApiEndpointService {
       templateId,
       modelId,
       sentModel: this.sentNameOf(input.endpointId)(modelId),
+      extras: this.requestExtras(input),
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -3221,6 +3251,7 @@ export class ApiEndpointService {
     const { templateId } = place;
     const baseUrl = upstreamBaseUrl({ place, format, raw: input.baseUrl });
     const apiKey = this.resolveRequestKey(input);
+    const extras = this.requestExtras(input);
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
     const isAskable = this.isTestAskable(input.endpointId);
@@ -3253,6 +3284,7 @@ export class ApiEndpointService {
         baseUrl,
         apiKey,
         templateId,
+        extras,
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
@@ -3281,6 +3313,7 @@ export class ApiEndpointService {
       templateId,
       modelId: modelId ?? null,
       sentModel: modelId ? this.sentNameOf(input.endpointId)(modelId) : null,
+      extras,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });
@@ -3359,6 +3392,7 @@ export class ApiEndpointService {
       // 检测照样问被禁的模型（magpie Detect 不看禁用，只有测试和中转站看）。
       pickedModelIds: input.modelIds ?? [],
       sentNameOf: this.sentNameOf(input.endpointId),
+      extras: this.requestExtras(input),
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
       probeTimeoutMs: this.connectionTestTimeoutMs,
@@ -3383,6 +3417,7 @@ export class ApiEndpointService {
       apiKey: args.apiKey,
       modelIds: input.modelIds ?? [],
       sentNameOf,
+      extras: this.requestExtras(input),
       limits: this.detectEachLimits,
       timers: this.modelTestTimers,
       signal: args.signal,
@@ -3444,6 +3479,7 @@ export class ApiEndpointService {
       plans,
       apiKey,
       templateId: endpoint.templateId,
+      extras: storedRequestExtras(endpoint),
       identity,
       limits: this.modelTestLimits,
       clock,
@@ -3540,6 +3576,28 @@ export class ApiEndpointService {
    * 请求里带了 key 就用它；否则用 endpointId 对应的已保存 key。都没有为 null：不带认证头。
    * key 从不回给客户端。
    */
+  /**
+   * 拉模型、测试、检测带的请求头、附加请求体与 key 放哪个头：表单给了的用表单的（保存前），没给的用 endpointId 那家存的。
+   * 表单的请求头不合法时拒收，和保存一样。
+   */
+  private requestExtras(input: {
+    endpointId?: string;
+    headers?: Record<string, string>;
+    extraBody?: Record<string, unknown>;
+    keyHeader?: string;
+  }): RequestExtras {
+    const saved = storedRequestExtras(
+      input.endpointId ? findEndpoint(this.readState(), input.endpointId) : null,
+    );
+    let { headers } = saved;
+    if (input.headers !== undefined) headers = validatedHeaders(input.headers) ?? {};
+    return {
+      headers,
+      extraBody: input.extraBody ?? saved.extraBody,
+      keyHeader: input.keyHeader === undefined ? saved.keyHeader : keyHeaderOf(input.keyHeader),
+    };
+  }
+
   private resolveRequestKey(input: { endpointId?: string; apiKey?: string }): string | null {
     const typed = input.apiKey?.trim();
     if (typed) return typed;
@@ -4114,6 +4172,9 @@ export class ApiEndpointService {
         endpoint,
         hasSample: (client) => this.store.readCliHeaderSample(client) !== null,
       }),
+      ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {}),
+      ...(endpoint.extraBody !== undefined ? { extraBody: endpoint.extraBody } : {}),
+      ...(endpoint.keyHeader !== undefined ? { keyHeader: endpoint.keyHeader } : {}),
     };
   }
 
@@ -4550,6 +4611,8 @@ function buildEndpoint(input: {
   icon: string | null | undefined;
   // 添加窗口里保存前拉到的上游清单：拉取时间记为保存时刻；undefined 留下 base 的。
   catalog: ApiEndpointModel[] | undefined;
+  // 请求头、附加请求体、key 放哪个头：savedRequestExtras 已按请求与 base 定好，没有的项就是没有。
+  requestExtras: StoredRequestExtras;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -4563,6 +4626,9 @@ function buildEndpoint(input: {
     searchesWeb: _searchesWeb,
     region: keptRegion,
     icon: keptIcon,
+    headers: _headers,
+    extraBody: _extraBody,
+    keyHeader: _keyHeader,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -4581,9 +4647,65 @@ function buildEndpoint(input: {
     ...(input.searchesWeb ? { searchesWeb: true as const } : {}),
     ...iconFieldOf({ requested: input.icon, kept: keptIcon }),
     ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
+    ...input.requestExtras,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
+}
+
+type StoredRequestExtras = Pick<StoredApiEndpoint, "headers" | "extraBody" | "keyHeader">;
+
+/** 存下的请求头、附加请求体、key 放哪个头：请求给了的校验后换上（空的、both 不存），没给的留 base 的。 */
+function savedRequestExtras(input: {
+  request: ApiEndpointSaveInput;
+  base: StoredApiEndpoint | null;
+}): StoredRequestExtras {
+  const { request, base } = input;
+  let headers = base?.headers ?? null;
+  if (request.headers !== undefined) headers = validatedHeaders(request.headers);
+  let extraBody = base?.extraBody ?? null;
+  if (request.extraBody !== undefined) extraBody = validatedExtraBody(request.extraBody);
+  let keyHeader: string | null = base?.keyHeader ?? null;
+  if (request.keyHeader !== undefined) keyHeader = keyHeaderOf(request.keyHeader);
+  const isDefaultKeyHeader = keyHeader === null || keyHeaderOf(keyHeader) === "both";
+  return {
+    ...(headers === null ? {} : { headers }),
+    ...(extraBody === null ? {} : { extraBody }),
+    ...(isDefaultKeyHeader ? {} : { keyHeader: keyHeaderOf(keyHeader ?? undefined) }),
+  };
+}
+
+/** 收拢后的请求头；名字不合法或值里有换行的拒收。一个都不剩为 null。 */
+function validatedHeaders(raw: Record<string, string>): Record<string, string> | null {
+  const headers = cleanRequestHeaders(raw);
+  if (headers === null) return null;
+  const problem = headerProblem(headers);
+  if (problem === null) return headers;
+  const what =
+    problem.reason === "name" ? "is not a header name" : "has a line break or control character";
+  throw new ApiEndpointRequestError({
+    code: "invalid_header",
+    message: `Request header ${JSON.stringify(problem.name)} ${what}`,
+    params: { reason: problem.reason, name: problem.name },
+  });
+}
+
+/** 附加请求体：字段没名字、是保留字段、同名写了两次的拒收（照 magpie ExtraBodyOK）。空的为 null。 */
+function validatedExtraBody(raw: Record<string, unknown>): Record<string, unknown> | null {
+  if (Object.keys(raw).length === 0) return null;
+  const problem = extraBodyProblem(raw);
+  if (problem === null) return raw;
+  const field = problem.reason === "unnamed" ? "" : problem.field;
+  const messages: Record<ExtraBodyProblem["reason"], string> = {
+    unnamed: "An extra body field needs a name",
+    reserved: `Extra body can't set "${field}": Osuna sets the model, stream and the conversation itself`,
+    duplicate: `Extra body names "${field}" twice`,
+  };
+  throw new ApiEndpointRequestError({
+    code: "invalid_extra_body",
+    message: messages[problem.reason],
+    params: { reason: problem.reason, field },
+  });
 }
 
 /** 请求里的字段与这次定下的服务范围（省略时取原来那家的）。 */
