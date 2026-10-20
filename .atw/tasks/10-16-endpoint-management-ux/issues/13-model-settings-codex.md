@@ -10,7 +10,7 @@
 
 **Blocked by:** 12
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（临时 `CODEX_HOME`）：手改的上下文、档位、看图、压缩阈值写进 Codex 的模型清单；整家默认被单个模型的设置覆盖；恢复默认后回到自动值。
 - [ ] 端到端：一档不勾时中转站发往上游的请求不带思考参数。
