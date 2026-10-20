@@ -6,14 +6,22 @@ import { StyleSheet } from "react-native-unistyles";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  type DropdownMenuTriggerState,
+} from "@/components/ui/dropdown-menu";
+import { SelectFieldTrigger } from "@/components/ui/select-field";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   openModelSettingsForm,
+  tokenFormatOf,
+  type TokenFormat,
   type ModelSettingsForm,
   type ModelSettingsFormState,
   type SaveModelSettings,
@@ -46,9 +54,11 @@ export function ApiEndpointModelSettingsSheet({
   const { t, i18n } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const fieldSize = isCompact ? "md" : "sm";
-  const [form] = useState(() => openModelSettingsForm({ endpoint, modelId, save: onSave }));
+  const [tokenFormat] = useState(() => tokenFormatOf(i18n.language));
+  const [form] = useState(() =>
+    openModelSettingsForm({ endpoint, modelId, save: onSave, tokenFormat }),
+  );
   const state = useSyncExternalStore(form.subscribe, form.getState, form.getState);
-  const formatNumber = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
 
   const handleSubmit = useCallback(() => {
     void (async () => {
@@ -90,7 +100,7 @@ export function ApiEndpointModelSettingsSheet({
           loading={state.status.kind === "restoring"}
           testID="api-endpoint-model-settings-restore"
         >
-          {t(`${KEY}.restoreDefaults`)}
+          {t(`${KEY}.restoreAll`)}
         </Button>
         <View style={styles.footerActions}>
           <Button variant="secondary" size="sm" onPress={onClose} disabled={state.isBusy}>
@@ -149,7 +159,7 @@ export function ApiEndpointModelSettingsSheet({
           label={t(`${KEY}.context`)}
           hint={null}
           size={fieldSize}
-          formatNumber={formatNumber}
+          tokenFormat={tokenFormat}
         />
         <TokenInput
           form={form}
@@ -158,7 +168,7 @@ export function ApiEndpointModelSettingsSheet({
           label={t(`${KEY}.output`)}
           hint={t(`${KEY}.outputHint`)}
           size={fieldSize}
-          formatNumber={formatNumber}
+          tokenFormat={tokenFormat}
         />
         <TokenInput
           form={form}
@@ -167,9 +177,9 @@ export function ApiEndpointModelSettingsSheet({
           label={t(`${KEY}.compact`)}
           hint={t(`${KEY}.compactHint`)}
           size={fieldSize}
-          formatNumber={formatNumber}
+          tokenFormat={tokenFormat}
         />
-        <EffortsField state={state} form={form} />
+        <EffortsField state={state} form={form} size={fieldSize} />
         <ImagesRow state={state} form={form} />
         {state.status.kind === "failed" ? (
           <Text
@@ -195,7 +205,7 @@ export function TokenInput({
   label,
   hint,
   size,
-  formatNumber,
+  tokenFormat,
 }: {
   form: Pick<ModelSettingsForm, "setTokens">;
   name: TokenFieldName;
@@ -203,7 +213,7 @@ export function TokenInput({
   label: string;
   hint: string | null;
   size: "sm" | "md";
-  formatNumber: Intl.NumberFormat;
+  tokenFormat: TokenFormat;
 }) {
   const { t } = useTranslation();
   const handleChange = useCallback((text: string) => form.setTokens(name, text), [form, name]);
@@ -217,7 +227,7 @@ export function TokenInput({
       <FormTextInput
         initialValue={field.text}
         onChangeText={handleChange}
-        placeholder={automaticCopy({ t, value: field.automatic, formatNumber })}
+        placeholder={automaticCopy({ t, value: field.automatic, tokenFormat })}
         keyboardType="number-pad"
         invalid={field.invalid}
         size={size}
@@ -230,14 +240,22 @@ export function TokenInput({
 function automaticCopy(input: {
   t: TFunction;
   value: number | null;
-  formatNumber: Intl.NumberFormat;
+  tokenFormat: TokenFormat;
 }): string {
   if (input.value === null) return input.t(`${KEY}.automaticUnknown`);
-  return input.t(`${KEY}.automatic`, { value: input.formatNumber.format(input.value) });
+  return input.t(`${KEY}.automatic`, { value: input.tokenFormat.format(input.value) });
 }
 
 /** 思考档位：多选下拉，勾着的带勾，点了不收起；一档不勾就不发思考参数。 */
-function EffortsField({ state, form }: { state: ModelSettingsFormState; form: ModelSettingsForm }) {
+function EffortsField({
+  state,
+  form,
+  size,
+}: {
+  state: ModelSettingsFormState;
+  form: ModelSettingsForm;
+  size: "sm" | "md";
+}) {
   const { t } = useTranslation();
   const { levels, picked, isSet } = state.efforts;
   let summary = picked.join(", ");
@@ -250,14 +268,23 @@ function EffortsField({ state, form }: { state: ModelSettingsFormState; form: Mo
       testID="api-endpoint-model-settings-efforts-field"
     >
       <DropdownMenu>
-        <DropdownTrigger
+        <DropdownMenuTrigger
           accessibilityRole="button"
           accessibilityLabel={t(`${KEY}.efforts`)}
           disabled={state.isBusy}
           testID="api-endpoint-model-settings-efforts"
         >
-          {summary}
-        </DropdownTrigger>
+          {({ hovered, open }: DropdownMenuTriggerState) => (
+            <SelectFieldTrigger
+              label={summary}
+              placeholder={summary}
+              hovered={hovered}
+              active={open}
+              disabled={state.isBusy}
+              size={size}
+            />
+          )}
+        </DropdownMenuTrigger>
         <DropdownMenuContent side="bottom" align="start" width={240}>
           {levels.map((level) => (
             <EffortItem

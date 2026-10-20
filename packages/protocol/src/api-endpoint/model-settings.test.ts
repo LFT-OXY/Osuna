@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { distinctModelLabels, keptEfforts, resolveModelFacts } from "./model-settings";
+import {
+  distinctModelLabels,
+  keptEfforts,
+  resolveModelFacts,
+  settleModelSetting,
+  setsOnlyEfforts,
+} from "./model-settings";
 
 const AUTO = {
   name: "GLM-5",
@@ -22,16 +28,19 @@ describe("which value a model's setting takes", () => {
       efforts: ["low", "high", "max"],
       images: false,
       compact: 80_000,
+      contextSet: true,
       noThinking: false,
     });
     expect(resolveModelFacts({ settings, modelId: "kimi-k2", auto: {} })).toEqual({
       context: 150_000,
       output: 32_000,
       compact: 120_000,
+      contextSet: true,
       noThinking: false,
     });
     expect(resolveModelFacts({ settings: undefined, modelId: "glm-5", auto: AUTO })).toEqual({
       ...AUTO,
+      contextSet: false,
       noThinking: false,
     });
   });
@@ -110,5 +119,49 @@ describe("levels kept when saving", () => {
       kind: "invalid",
       level: "ultra",
     });
+  });
+});
+
+describe("a model's setting as it is stored", () => {
+  it("collapses the name, keeps whole token counts, the levels kept and an image answer the list doesn't give", () => {
+    const settled = settleModelSetting({
+      setting: { name: "  My   GLM ", context: 128_000, efforts: ["max", "low"], images: true },
+      knownEfforts: ["low", "high", "max"],
+      listedImages: undefined,
+    });
+    expect(settled).toEqual({
+      kind: "settled",
+      setting: { name: "My GLM", context: 128_000, efforts: ["low", "max"], images: true },
+    });
+  });
+
+  it("drops what equals the automatic value: every level, the list's own image answer, a blank name", () => {
+    const settled = settleModelSetting({
+      setting: { name: " ", efforts: ["high", "low", "max"], images: false },
+      knownEfforts: ["low", "high", "max"],
+      listedImages: false,
+    });
+    expect(settled).toEqual({ kind: "settled", setting: {} });
+  });
+
+  it("refuses a count that is not a whole number above zero, a long name and a level the model lacks", () => {
+    const base = { knownEfforts: ["low"], listedImages: undefined };
+    expect(settleModelSetting({ ...base, setting: { output: 1.5 } })).toEqual({
+      kind: "invalid",
+      problem: { kind: "tokens", field: "output", value: 1.5 },
+    });
+    expect(settleModelSetting({ ...base, setting: { name: "x".repeat(81) } })).toEqual({
+      kind: "invalid",
+      problem: { kind: "name_too_long" },
+    });
+    expect(settleModelSetting({ ...base, setting: { efforts: ["max"] } })).toEqual({
+      kind: "invalid",
+      problem: { kind: "effort", level: "max" },
+    });
+  });
+
+  it("knows a setting of levels alone", () => {
+    expect(setsOnlyEfforts({ efforts: ["low"] })).toBe(true);
+    expect(setsOnlyEfforts({ efforts: [], name: "x" })).toBe(false);
   });
 });

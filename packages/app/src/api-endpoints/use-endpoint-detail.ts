@@ -372,14 +372,7 @@ export function useEndpointDetail(input: {
         let failure: string | null = null;
         try {
           const result = await client.apiEndpointSave({
-            provider: LIST_PROVIDER,
-            endpointId: endpoint.id,
-            name: endpoint.name,
-            baseUrls: endpoint.baseUrls ?? [],
-            models: current.models,
-            manualModels: current.manualModels,
-            ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
-            ...scopeFieldsOf({ draft: current, hasManagement }),
+            ...unchangedSaveFields({ endpoint, draft: current, hasManagement }),
             searchesWeb: value,
           });
           failure = result.error?.message ?? null;
@@ -401,14 +394,7 @@ export function useEndpointDetail(input: {
       let failure: string | null = null;
       try {
         const result = await client.apiEndpointSave({
-          provider: LIST_PROVIDER,
-          endpointId: endpoint.id,
-          name: endpoint.name,
-          baseUrls: endpoint.baseUrls ?? [],
-          models: current.models,
-          manualModels: current.manualModels,
-          ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
-          ...scopeFieldsOf({ draft: current, hasManagement }),
+          ...unchangedSaveFields({ endpoint, draft: current, hasManagement }),
           modelSettings: update(endpoint.modelSettings),
         });
         failure = result.error?.message ?? null;
@@ -538,6 +524,25 @@ function ruleSaveError(
 ): string | null {
   if (failure === null) return null;
   return t("settings.apiEndpoints.modelScope.rules.saveFailed", { message: failure });
+}
+
+/** 只改一项（联网搜索、模型设置）的保存：其余字段照这家现在的（模型选择以草稿为准）带上。 */
+function unchangedSaveFields(input: {
+  endpoint: ApiEndpoint;
+  draft: ModelDraft;
+  hasManagement: boolean;
+}) {
+  const { endpoint, draft } = input;
+  return {
+    provider: LIST_PROVIDER,
+    endpointId: endpoint.id,
+    name: endpoint.name,
+    baseUrls: endpoint.baseUrls ?? [],
+    models: draft.models,
+    manualModels: draft.manualModels,
+    ...(draft.modelMapping ? { modelMapping: draft.modelMapping } : {}),
+    ...scopeFieldsOf({ draft, hasManagement: input.hasManagement }),
+  };
 }
 
 /** 老主机不认服务范围与规则：不发，免得它们看起来存上了。 */

@@ -2846,7 +2846,7 @@ export const en = {
         automatic: "Automatic: {{value}}",
         automaticUnknown: "Automatic",
         invalidTokens: "Enter a whole number of tokens",
-        restoreDefaults: "Restore default",
+        restoreAll: "Restore all defaults",
         save: "Save",
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",

@@ -981,6 +981,90 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     expect(await named()).toMatchObject({ "glm-5": "glm-5" });
   });
 
+  // magpie settings.Working 与 CompactFor（#1809）：比 272K 大的窗口告诉 Codex 272K，整个窗口写进 max_context_window；
+  // 用户手填的上下文（这个模型的或整家默认）照写整个。
+  test("a window over 272K is told as 272K with the whole window beside it, unless the user typed the context", async () => {
+    await start({
+      modelsDevCache: {
+        ...MODELS_DEV_CACHE,
+        models: { ...MODELS_DEV_CACHE.models, "big-model": { context: 1_000_000, efforts: [] } },
+      },
+    });
+    const endpointId = await switchOn("https://relay.example/api", ["big-model", "kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const save = async (modelSettings: object) => {
+      const saved = await client.apiEndpointSave({
+        provider: "codex",
+        endpointId,
+        name: "Relay",
+        baseUrls: stored?.baseUrls ?? [],
+        models: [{ id: "big-model" }, { id: "kimi-k2" }],
+        modelSettings,
+      });
+      expect(saved.error).toBeNull();
+    };
+    const windows = async () => {
+      const all = await entries();
+      return ["big-model", "kimi-k2"].map((slug) => {
+        const entry = all[slug];
+        return [entry?.context_window, entry?.max_context_window];
+      });
+    };
+
+    // 262K 的照写，不另写整个窗口。
+    expect(await windows()).toEqual([
+      [272_000, 1_000_000],
+      [262_144, undefined],
+    ]);
+    await save({ models: { "big-model": { context: 500_000 } } });
+    expect(await windows()).toEqual([
+      [500_000, undefined],
+      [262_144, undefined],
+    ]);
+    // 整家默认的上下文也算手填；它不超过模型自己的窗口。
+    await save({ defaults: { context: 400_000 } });
+    expect(await windows()).toEqual([
+      [400_000, undefined],
+      [262_144, undefined],
+    ]);
+    // 压缩阈值仍在前面。
+    await save({ defaults: { context: 400_000 }, models: { "big-model": { compact: 300_000 } } });
+    expect((await windows())[0]).toEqual([300_000, 400_000]);
+  });
+
+  test("an image answer is kept unless the endpoint's own list says the same; levels alone need no model of the endpoint", async () => {
+    await start({ modelsDevCache: MODELS_DEV_CACHE });
+    upstream = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "glm-5", modalities: { input: ["text"] } }] }));
+    });
+    await new Promise<void>((resolve) => upstream?.listen(0, "127.0.0.1", resolve));
+    const baseUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/api`;
+    const endpointId = await switchOn(baseUrl, ["glm-5", "kimi-k2"]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "glm-5" }, { id: "kimi-k2" }],
+      modelSettings: {
+        models: {
+          // 清单明说不看图：一样的不记。
+          "glm-5": { images: false },
+          // 只有 models.dev 说看图、清单没说：用户的话照记（magpie vendorSees）。
+          "kimi-k2": { images: true },
+          // 只设档位，不要求这家列着它（magpie setModelEfforts）。
+          "not-served": { efforts: ["high"] },
+        },
+      },
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.modelSettings).toEqual({
+      models: { "kimi-k2": { images: true }, "not-served": { efforts: ["high"] } },
+    });
+  });
+
   test("two models one picker would call the same are shown by their ids", async () => {
     await start({});
     const endpointId = await switchOn("https://relay.example/api", ["glm-5", "glm-5-air", "kimi"]);
@@ -1073,8 +1157,9 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     await expect
       .poll(async () => facts((await entries()).mystery))
       .toEqual({
-        context: 400_000,
-        max: undefined,
+        // 比 272K 大的窗口告诉 Codex 272K，整个窗口另写（magpie settings.Working）。
+        context: 272_000,
+        max: 400_000,
         levels: ["minimal", "low"],
         start: "minimal",
         input: ["text", "image"],

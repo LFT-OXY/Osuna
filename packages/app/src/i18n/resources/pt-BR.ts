@@ -2823,7 +2823,7 @@ export const ptBR: TranslationResources = {
         automatic: "Automático: {{value}}",
         automaticUnknown: "Automático",
         invalidTokens: "Digite um número inteiro de tokens maior que zero",
-        restoreDefaults: "Restaurar padrão",
+        restoreAll: "Restaurar todos os padrões",
         save: "Salvar",
         saving: "Salvando…",
         saveFailed: "Não foi possível salvar: {{message}}",

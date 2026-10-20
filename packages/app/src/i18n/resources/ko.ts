@@ -2796,7 +2796,7 @@ export const ko: TranslationResources = {
         automatic: "자동: {{value}}",
         automaticUnknown: "자동",
         invalidTokens: "0보다 큰 정수 토큰 수를 입력하세요",
-        restoreDefaults: "기본값으로 복원",
+        restoreAll: "모두 기본값으로 복원",
         save: "저장",
         saving: "저장 중…",
         saveFailed: "저장하지 못했습니다: {{message}}",

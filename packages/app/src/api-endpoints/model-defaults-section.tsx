@@ -1,15 +1,16 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { Text as RNText, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
+import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { settingsStyles } from "@/styles/settings";
 import {
   openModelDefaultsForm,
+  tokenFormatOf,
   type ModelDefaultsForm,
   type SaveModelSettings,
   type TokenField,
@@ -35,8 +36,10 @@ export function ApiEndpointModelDefaultsSection({
   endpoint: ApiEndpoint;
   onSave: SaveModelSettings;
 }) {
-  const { t } = useTranslation();
-  const [form] = useState(() => openModelDefaultsForm({ endpoint, save: onSave }));
+  const { t, i18n } = useTranslation();
+  const [form] = useState(() =>
+    openModelDefaultsForm({ endpoint, save: onSave, tokenFormat: tokenFormatOf(i18n.language) }),
+  );
   const state = useSyncExternalStore(form.subscribe, form.getState, form.getState);
   const handleSave = useCallback(() => {
     void form.submit();
@@ -57,7 +60,9 @@ export function ApiEndpointModelDefaultsSection({
         ))}
         <View style={styles.footer}>
           <View style={styles.footerRow}>
-            <RNText style={[settingsStyles.rowHint, styles.flex]}>{t(`${KEY}.hint`)}</RNText>
+            <Text variant="caption" color="foregroundMuted" style={styles.flex}>
+              {t(`${KEY}.hint`)}
+            </Text>
             <Button
               variant="outline"
               size="sm"
@@ -70,14 +75,15 @@ export function ApiEndpointModelDefaultsSection({
             </Button>
           </View>
           {state.status.kind === "failed" ? (
-            <RNText
+            <Text
+              variant="caption"
+              color="statusDanger"
               accessibilityRole="alert"
-              style={settingsStyles.rowError}
               selectable
               testID="api-endpoint-model-defaults-error"
             >
               {t(`${KEY}.saveFailed`, { message: state.status.message })}
-            </RNText>
+            </Text>
           ) : null}
         </View>
       </SettingsCard>

@@ -2778,7 +2778,7 @@ export const ar: TranslationResources = {
         automatic: "تلقائي: {{value}}",
         automaticUnknown: "تلقائي",
         invalidTokens: "أدخل عددًا صحيحًا من الرموز أكبر من صفر",
-        restoreDefaults: "استعادة الافتراضي",
+        restoreAll: "استعادة كل القيم الافتراضية",
         save: "حفظ",
         saving: "جارٍ الحفظ…",
         saveFailed: "تعذّر الحفظ: {{message}}",

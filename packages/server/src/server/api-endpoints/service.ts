@@ -1250,7 +1250,10 @@ export class ApiEndpointService {
       requested,
       stored,
       isOwnModel: (modelId) => endpointKnowsModel(endpoint, modelId),
-      autoFacts: (modelId) => this.autoModelFacts(endpoint, modelId),
+      basisOf: (modelId) => ({
+        knownEfforts: this.autoModelFacts(endpoint, modelId).efforts,
+        listedImages: listedFactsOf(endpoint, modelId)?.images,
+      }),
     });
     if (settled.kind === "invalid") {
       throw new ApiEndpointRequestError({
@@ -2540,7 +2543,7 @@ export class ApiEndpointService {
   modelFacts(endpoint: StoredApiEndpoint, modelId: string): EndpointModelFacts {
     const auto = this.autoModelFacts(endpoint, modelId);
     const resolved = resolveModelFacts({ settings: endpoint.modelSettings, modelId, auto });
-    const { noThinking, ...facts } = resolved;
+    const { noThinking, contextSet, ...facts } = resolved;
     // 档位不知道的模型（或知道它没有可挑的）由用户给的几档当它自己的（magpie Efforts）。
     const vendorEfforts = auto.efforts?.length ? auto.efforts : resolved.efforts;
     // 收不收采样参数只认这家自己（按地址的主机名）在 models.dev 的条目，不借别家的目录。
@@ -2550,6 +2553,7 @@ export class ApiEndpointService {
       ...facts,
       ...(vendorEfforts === undefined ? {} : { vendorEfforts }),
       ...(noThinking ? { noThinking } : {}),
+      ...(contextSet ? { contextSet } : {}),
       ...(takesSampling === undefined ? {} : { takesSampling }),
     };
   }
@@ -2560,7 +2564,8 @@ export class ApiEndpointService {
    */
   private autoModelFacts(endpoint: StoredApiEndpoint, modelId: string): ModelFacts {
     const listed = endpoint.catalog?.models.find((model) => model.id === modelId);
-    const facts = mergeModelFacts(listed?.facts, this.modelsDev.facts(modelId));
+    const known = this.modelsDev.facts(modelId);
+    const facts = mergeModelFacts(listed?.facts, known);
     const label =
       listed?.label ??
       endpoint.models.find((model) => model.id === modelId)?.label ??
@@ -2591,14 +2596,12 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     models: ReadonlyArray<{ id: string }>,
   ): string[] {
-    return distinctModelLabels(
-      models.map(({ id }) => {
-        const endpoint = state.endpoints.find(
-          (entry) => entry.enabled && entry.models.some((model) => model.id === id),
-        );
-        return { id, label: endpoint ? this.modelName(endpoint, id) : id };
-      }),
-    );
+    const named = models.map(({ id }) => {
+      const endpoint = firstEnabledServing(state, id);
+      const label = endpoint ? this.modelName(endpoint, id) : id;
+      return { id, label };
+    });
+    return distinctModelLabels(named);
   }
 
   /**
@@ -3696,14 +3699,14 @@ export class ApiEndpointService {
 
   /** 这家每个模型（在服务的、清单里的、手动添加的）自动取到的资料，模型设置窗口拿它当默认。 */
   private wireModelFacts(endpoint: StoredApiEndpoint): Record<string, ApiEndpointModelFacts> {
-    const ids = new Set(
-      [
-        ...endpoint.models,
-        ...(endpoint.catalog?.models ?? []),
-        ...(endpoint.manualModels ?? []),
-      ].map((model) => model.id),
-    );
-    return Object.fromEntries([...ids].map((id) => [id, this.autoModelFacts(endpoint, id)]));
+    const models = [
+      ...endpoint.models,
+      ...(endpoint.catalog?.models ?? []),
+      ...(endpoint.manualModels ?? []),
+    ];
+    const facts: Record<string, ApiEndpointModelFacts> = {};
+    for (const { id } of models) facts[id] ??= this.autoModelFacts(endpoint, id);
+    return facts;
   }
 
   /** 整家接口的冷却；只冷却了某个模型的不算。 */
@@ -3730,6 +3733,21 @@ export class ApiEndpointService {
     this.queue = next.catch(() => undefined);
     return next;
   }
+}
+
+/** 接口顺序里最靠前、开着、选了这个模型的那家（中转站对光秃秃的模型名先发给它）。 */
+function firstEnabledServing(
+  state: ApiEndpointState,
+  modelId: string,
+): StoredApiEndpoint | undefined {
+  return state.endpoints.find(
+    (entry) => entry.enabled && entry.models.some((model) => model.id === modelId),
+  );
+}
+
+/** 这家上游清单自己给的资料（不含 models.dev 补的）。 */
+function listedFactsOf(endpoint: StoredApiEndpoint, modelId: string): ModelFacts | undefined {
+  return endpoint.catalog?.models.find((model) => model.id === modelId)?.facts;
 }
 
 function findProvider(provider: string): ApiEndpointProvider | undefined {

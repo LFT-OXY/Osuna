@@ -2838,7 +2838,7 @@ export const es: TranslationResources = {
         automatic: "Automático: {{value}}",
         automaticUnknown: "Automático",
         invalidTokens: "Escribe un número entero de tokens mayor que cero",
-        restoreDefaults: "Restaurar predeterminado",
+        restoreAll: "Restaurar todos los predeterminados",
         save: "Guardar",
         saving: "Guardando…",
         saveFailed: "No se pudo guardar: {{message}}",

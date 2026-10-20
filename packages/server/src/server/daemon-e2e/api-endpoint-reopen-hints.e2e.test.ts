@@ -15,6 +15,9 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
  */
 
 const CliStartReadsSchema = z.object({ codex: z.object({ digest: z.string(), at: z.string() }) });
+const CliStartReadsClaudeSchema = z.object({
+  claude: z.object({ digest: z.string(), at: z.string() }),
+});
 const RESTART_ARGS = ["app-server", "daemon", "restart"];
 
 async function connect(daemon: TestPaseoDaemon): Promise<DaemonClient> {
@@ -288,6 +291,35 @@ describe.skipIf(process.platform === "win32")("who to reopen after a rewrite", (
     });
     expect(saved.error).toBeNull();
     expect(await reopenHints()).toMatchObject({ codex: [{ kind: "cli", count: 1 }] });
+  });
+
+  // Claude Code 没有看图的设置：只改看图不让 Claude Code 的副本要重开。
+  test("a model's image answer alone doesn't send Claude Code to reopen", async () => {
+    fake.processes = [
+      running({ pid: 10, startedAt: ago(1_800), commandLine: "/Users/me/.local/bin/claude" }),
+    ];
+    await switchOn("claude");
+    await reopenHints();
+    const file = path.join(daemon.paseoHome, "api-endpoints", "cli-start-reads.json");
+    const stored = CliStartReadsClaudeSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+    writeFileSync(
+      file,
+      JSON.stringify({ claude: { ...stored.claude, at: ago(3_600).toISOString() } }),
+    );
+    expect(await reopenHints()).toEqual({ claude: [], codex: [] });
+
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId: endpoint?.id,
+      name: "Relay claude",
+      baseUrls: endpoint?.baseUrls ?? [],
+      models: [{ id: "relay-claude" }],
+      modelSettings: { models: { "relay-claude": { images: true } } },
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.endpoint?.modelSettings).toEqual({ models: { "relay-claude": { images: true } } });
+    expect(await reopenHints()).toEqual({ claude: [], codex: [] });
   });
 
   test("processes that can't be listed block neither the list nor the other hints", async () => {

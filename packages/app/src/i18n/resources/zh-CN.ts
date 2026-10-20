@@ -2802,7 +2802,7 @@ export const zhCN: TranslationResources = {
         automatic: "自动：{{value}}",
         automaticUnknown: "自动",
         invalidTokens: "请填大于零的整数 token 数",
-        restoreDefaults: "恢复默认",
+        restoreAll: "全部恢复默认",
         save: "保存",
         saving: "正在保存…",
         saveFailed: "没能保存：{{message}}",

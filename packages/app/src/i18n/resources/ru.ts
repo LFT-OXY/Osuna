@@ -2817,7 +2817,7 @@ export const ru: TranslationResources = {
         automatic: "Автоматически: {{value}}",
         automaticUnknown: "Автоматически",
         invalidTokens: "Введите целое число токенов больше нуля",
-        restoreDefaults: "Вернуть по умолчанию",
+        restoreAll: "Вернуть всё по умолчанию",
         save: "Сохранить",
         saving: "Сохранение…",
         saveFailed: "Не удалось сохранить: {{message}}",

@@ -2,7 +2,12 @@
 // internal/provider/models.go 的 WindowOf、ReplyLimit，compact.go 的 compactOf，modelprefs.go 的 Levels、effortsKept、Labels）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import type { ApiEndpointModelFacts, ApiEndpointModelSettings } from "./rpc-schemas.js";
+import type {
+  ApiEndpointModelDefaults,
+  ApiEndpointModelFacts,
+  ApiEndpointModelSetting,
+  ApiEndpointModelSettings,
+} from "./rpc-schemas.js";
 
 /*
  * 模型设置（Model settings）的读法，daemon 写进 CLI 与中转站、app 的模型设置窗口共用一份：
@@ -23,6 +28,10 @@ export const MODEL_THINKING_LEVELS = [
 /** 模型显示名最长多少个字符（magpie setModelName）。 */
 export const MODEL_NAME_MAX_LENGTH = 80;
 
+/** 按 token 数记的几项；整家默认只有这几项。 */
+export const MODEL_TOKEN_FIELDS = ["context", "output", "compact"] as const;
+export type ModelTokenField = (typeof MODEL_TOKEN_FIELDS)[number];
+
 export interface ResolvedModelFacts {
   name?: string;
   context?: number;
@@ -31,6 +40,8 @@ export interface ResolvedModelFacts {
   efforts?: string[];
   images?: boolean;
   compact?: number;
+  // 上下文是用户手填的（这个模型的或整家默认）：照 magpie Entry.WindowSet，不再套 Codex 的 272K 工作窗口。
+  contextSet: boolean;
   // 用户一档都没留：中转站不发任何思考参数（magpie Reasonless）。
   noThinking: boolean;
 }
@@ -57,8 +68,14 @@ export function resolveModelFacts(input: {
     ...(efforts === undefined ? {} : { efforts }),
     ...(images === undefined ? {} : { images }),
     ...(compact === undefined ? {} : { compact }),
+    contextSet: isContextSet(own.context, defaults.context),
     noThinking,
   };
+}
+
+/** 上下文是用户手填的：这个模型的，或整家默认。 */
+function isContextSet(own: number | undefined, endpointWide: number | undefined): boolean {
+  return own !== undefined || endpointWide !== undefined;
 }
 
 /** 整家的上下文不超过模型自己已知的窗口（magpie WindowOf 的 "*"：设成 512K 省钱，不该把只有 262K 的模型说成 512K）。 */
@@ -116,4 +133,65 @@ export function distinctModelLabels(
   return entries.map((entry) =>
     (counts.get(entry.label.toLowerCase()) ?? 0) > 1 ? entry.id : entry.label,
   );
+}
+
+/** 存模型设置时不收的：token 数不是大于零的整数、显示名太长、档位不是这个模型的。 */
+export type ModelSettingProblem =
+  | { kind: "tokens"; field: ModelTokenField; value: number }
+  | { kind: "name_too_long" }
+  | { kind: "effort"; level: string };
+
+export type ModelSettingSettled<T> =
+  | { kind: "settled"; setting: T }
+  | { kind: "invalid"; problem: ModelSettingProblem };
+
+/** token 数只留大于零的整数（magpie SetModelOutput、SetModelCompacts）。 */
+export function settleModelDefaults(
+  setting: ApiEndpointModelDefaults,
+): ModelSettingSettled<ApiEndpointModelDefaults> {
+  const out: ApiEndpointModelDefaults = {};
+  for (const field of MODEL_TOKEN_FIELDS) {
+    const value = setting[field];
+    if (value === undefined) continue;
+    const isTokenCount = Number.isInteger(value) && value > 0;
+    if (!isTokenCount) return { kind: "invalid", problem: { kind: "tokens", field, value } };
+    out[field] = value;
+  }
+  return { kind: "settled", setting: out };
+}
+
+/**
+ * daemon 存、app 判断有没有改动都按这一份收拢一个模型的设置：token 数同 settleModelDefaults；显示名收拢空白，
+ * 空的去掉（magpie setModelName）；档位按 keptEfforts；看图答案和上游清单明说的一样就不记（magpie setModelImage 的 vendorSees，
+ * 只认清单明说的，不认 models.dev 补的）。
+ */
+export function settleModelSetting(input: {
+  setting: ApiEndpointModelSetting;
+  knownEfforts: string[] | undefined;
+  listedImages: boolean | undefined;
+}): ModelSettingSettled<ApiEndpointModelSetting> {
+  const { setting } = input;
+  const tokens = settleModelDefaults(setting);
+  if (tokens.kind === "invalid") return tokens;
+  const out: ApiEndpointModelSetting = { ...tokens.setting };
+  const name = (setting.name ?? "").split(/\s+/).filter(Boolean).join(" ");
+  if ([...name].length > MODEL_NAME_MAX_LENGTH) {
+    return { kind: "invalid", problem: { kind: "name_too_long" } };
+  }
+  if (name !== "") out.name = name;
+  if (setting.efforts !== undefined) {
+    const kept = keptEfforts({ picked: setting.efforts, known: input.knownEfforts });
+    if (kept.kind === "invalid") {
+      return { kind: "invalid", problem: { kind: "effort", level: kept.level } };
+    }
+    if (kept.efforts !== undefined) out.efforts = kept.efforts;
+  }
+  const isListedAnswer = setting.images === input.listedImages;
+  if (setting.images !== undefined && !isListedAnswer) out.images = setting.images;
+  return { kind: "settled", setting: out };
+}
+
+/** 只设了档位：照 magpie setModelEfforts，不要求这家列着这个模型（只对着已知的档位查）。 */
+export function setsOnlyEfforts(setting: ApiEndpointModelSetting): boolean {
+  return Object.keys(setting).every((field) => field === "efforts");
 }

@@ -3,6 +3,8 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { z } from "zod";
+import { ApiEndpointModelFactsSchema } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ResolvedModelFacts } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { isRecord } from "./upstream-http.js";
 
 /*
@@ -10,29 +12,21 @@ import { isRecord } from "./upstream-http.js";
  * 不知道的字段不出现；Claude Code 的模型提示与中转站只用知道的。
  */
 
-export const ModelFactsSchema = z.object({
-  // models.dev 给的显示名；接口自己清单的显示名记在清单条目的 label 上。
-  name: z.string().optional(),
-  context: z.number().optional(),
-  output: z.number().optional(),
-  efforts: z.array(z.string()).optional(),
-  images: z.boolean().optional(),
-  // false 是这家的这个模型不收 temperature 与 top_p：只按这家自己在 models.dev 的条目（samplingFor）。
+// 和线上发给模型设置窗口的自动资料是同一个东西（protocol 的 ApiEndpointModelFactsSchema），daemon 另记一项：
+// false 是这家的这个模型不收 temperature 与 top_p，只按这家自己在 models.dev 的条目（samplingFor）。
+export const ModelFactsSchema = ApiEndpointModelFactsSchema.extend({
   takesSampling: z.boolean().optional(),
 });
 export type ModelFacts = z.infer<typeof ModelFactsSchema>;
 
 /**
- * 这家这个模型用起来的资料：自动取到的（上游清单在前，models.dev 补上）按用户的模型设置改过（model-settings.ts）。
+ * 这家这个模型用起来的资料：自动取到的（上游清单在前，models.dev 补上）按用户的模型设置改过（protocol 的 resolveModelFacts）。
  * efforts 是告诉 Agent 的档位（用户只留了几档时只有那几档）；中转站挑档位按 vendorEfforts：
  * 模型自己的档位，用户少列几档不妨碍 Agent 要别的（照 magpie Efforts），档位不知道时才是用户给的那几档。
  */
-export interface EndpointModelFacts extends ModelFacts {
+export interface EndpointModelFacts
+  extends ModelFacts, Partial<Pick<ResolvedModelFacts, "compact" | "contextSet" | "noThinking">> {
   vendorEfforts?: string[];
-  // 压缩阈值（token 数）：Codex 的上下文取它与窗口中较小的。
-  compact?: number;
-  // 用户一档思考都没留：中转站不发任何思考参数（magpie Reasonless）。
-  noThinking?: boolean;
 }
 
 /** 按去掉前缀的小写模型名索引的 models.dev 数据。 */

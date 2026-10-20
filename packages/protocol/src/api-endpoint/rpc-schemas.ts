@@ -131,10 +131,10 @@ export const ApiEndpointModelSettingSchema = z.object({
 });
 export type ApiEndpointModelSetting = z.infer<typeof ApiEndpointModelSettingSchema>;
 
-export const ApiEndpointModelDefaultsSchema = z.object({
-  context: z.number().optional(),
-  output: z.number().optional(),
-  compact: z.number().optional(),
+export const ApiEndpointModelDefaultsSchema = ApiEndpointModelSettingSchema.pick({
+  context: true,
+  output: true,
+  compact: true,
 });
 export type ApiEndpointModelDefaults = z.infer<typeof ApiEndpointModelDefaultsSchema>;
 

@@ -2841,7 +2841,7 @@ export const fr: TranslationResources = {
         automatic: "Automatique : {{value}}",
         automaticUnknown: "Automatique",
         invalidTokens: "Saisissez un nombre entier de tokens supérieur à zéro",
-        restoreDefaults: "Rétablir la valeur par défaut",
+        restoreAll: "Tout rétablir par défaut",
         save: "Enregistrer",
         saving: "Enregistrement…",
         saveFailed: "Échec de l'enregistrement : {{message}}",

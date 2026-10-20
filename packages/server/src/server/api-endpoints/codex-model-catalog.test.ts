@@ -6,7 +6,7 @@ import {
   codexModelEntry,
   codexReasoningLevels,
 } from "./codex-model-catalog.js";
-import type { ModelFacts } from "./model-facts.js";
+import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 function endpoint(input: {
@@ -176,7 +176,7 @@ describe("buildCodexModelCatalog", () => {
 });
 
 describe("codexModelEntry", () => {
-  function entry(facts: ModelFacts, reasoningEffort: string | null = null) {
+  function entry(facts: EndpointModelFacts, reasoningEffort: string | null = null) {
     return codexModelEntry({
       slug: "relay/m",
       displayName: "M",
@@ -199,7 +199,8 @@ describe("codexModelEntry", () => {
       display_name: "M",
       visibility: "hide",
       priority: 3,
-      context_window: 1_000_000,
+      context_window: 272_000,
+      max_context_window: 1_000_000,
       input_modalities: ["text", "image"],
       supported_reasoning_levels: [
         { effort: "low", description: "Fast responses with lighter reasoning" },
@@ -211,8 +212,21 @@ describe("codexModelEntry", () => {
     });
   });
 
-  it("a known window is the whole window: no larger maximum is claimed", () => {
-    expect(entry({ context: 1_000_000 })).not.toHaveProperty("max_context_window");
+  it("a known window up to 272K is told whole, with no larger maximum claimed", () => {
+    expect(entry({ context: 262_144 })).toMatchObject({ context_window: 262_144 });
+    expect(entry({ context: 262_144 })).not.toHaveProperty("max_context_window");
+  });
+
+  it("a larger window is told as 272K unless the user typed it; a compaction threshold comes first (magpie Working, CompactFor)", () => {
+    const told = (facts: Parameters<typeof entry>[0]) => {
+      const written = entry(facts);
+      return [written.context_window, written.max_context_window];
+    };
+    expect(told({ context: 1_000_000 })).toEqual([272_000, 1_000_000]);
+    expect(told({ context: 1_000_000, contextSet: true })).toEqual([1_000_000, undefined]);
+    expect(told({ context: 1_000_000, contextSet: true, compact: 500_000 })).toEqual([
+      500_000, 1_000_000,
+    ]);
   });
 
   it("says text only for a model known not to see images", () => {

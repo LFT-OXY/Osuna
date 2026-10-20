@@ -6,23 +6,42 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   choosableEfforts,
+  MODEL_TOKEN_FIELDS,
   resolveModelFacts,
+  settleModelDefaults,
+  settleModelSetting,
+  type ModelTokenField,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
 
 /*
  * 「模型设置」窗口与详情页「整家默认」的表单模型：纯 TypeScript，无 React（docs/forms.md）。
  * 打开时按这家已存的模型设置填好；输入框空着就是用自动的值，框里灰字显示自动的值是多少（整家默认在 Osuna 自动取到的前面）。
- * 只把改过的项写进这个模型的设置，保存时整份模型设置一起交给 daemon（它按 protocol 的 model-settings.ts 收拢）。
- * 「恢复默认」去掉这个模型的全部设置并立刻保存；显示名旁的「恢复默认」只清空显示名，保存时才算。
+ * 有没有改动按 protocol 的 settleModelSetting 收拢后比较，和 daemon 存的是同一份规则：勾回全部档位不算改动。
+ * 保存时整份模型设置一起交给 daemon。
+ * 「全部恢复默认」去掉这个模型的全部设置并立刻保存；显示名旁的「恢复默认」只清空显示名，保存时才算。
  */
 
-export type TokenFieldName = "context" | "output" | "compact";
+export type TokenFieldName = ModelTokenField;
 
 export interface TokenField {
   text: string;
   // 灰字：空着时用的值；不知道为 null。
   automatic: number | null;
   invalid: boolean;
+}
+
+/** 按界面语言写 token 数（千分位），并认回这种写法。 */
+export interface TokenFormat {
+  format(value: number): string;
+  // 这种语言的千分位符号（如 en 的「,」、es 的「.」）。
+  group: string;
+}
+
+/** 界面语言的千分位写法（Intl）。 */
+export function tokenFormatOf(locale: string): TokenFormat {
+  const numbers = new Intl.NumberFormat(locale);
+  const group = numbers.formatToParts(1000).find((part) => part.type === "group")?.value ?? ",";
+  return { format: (value) => numbers.format(value), group };
 }
 
 export type ModelSettingsStatus =
@@ -59,6 +78,7 @@ export interface ModelSettingsFormInput {
   endpoint: ApiEndpoint;
   modelId: string;
   save: SaveModelSettings;
+  tokenFormat: TokenFormat;
 }
 
 export interface ModelSettingsForm {
@@ -73,22 +93,19 @@ export interface ModelSettingsForm {
   restoreDefaults(): Promise<FormSubmitResult>;
 }
 
-/** 「200000」「200,000」「200 000」都认；不是大于零的整数为 invalid。 */
-export function parseTokens(text: string):
-  | { kind: "empty" }
-  | { kind: "count"; value: number }
-  | {
-      kind: "invalid";
-    } {
-  const cleaned = text.replace(/[\s,_]/g, "");
+type ParsedTokens = { kind: "empty" } | { kind: "count"; value: number } | { kind: "invalid" };
+
+/** 认空白、逗号、下划线与这种语言的千分位符号；不是大于零的整数为 invalid。 */
+export function parseTokens(text: string, group: string): ParsedTokens {
+  const cleaned = text
+    .replace(/[\s,_]/g, "")
+    .split(group)
+    .join("");
   if (cleaned === "") return { kind: "empty" };
   if (!/^\d+$/.test(cleaned)) return { kind: "invalid" };
   const value = Number(cleaned);
-  return value > 0 && Number.isSafeInteger(value) ? { kind: "count", value } : { kind: "invalid" };
-}
-
-function tokenText(value: number | undefined): string {
-  return value === undefined ? "" : String(value);
+  const isTokenCount = value > 0 && Number.isSafeInteger(value);
+  return isTokenCount ? { kind: "count", value } : { kind: "invalid" };
 }
 
 function createStore<T>(initial: T) {
@@ -109,71 +126,93 @@ function createStore<T>(initial: T) {
   };
 }
 
+/** 三个 token 数输入框：模型设置窗口与整家默认共用。 */
+function createTokenInputs(input: { initial: ApiEndpointModelDefaults; tokenFormat: TokenFormat }) {
+  const { tokenFormat } = input;
+  const texts = {} as Record<TokenFieldName, string>;
+  for (const field of MODEL_TOKEN_FIELDS) {
+    const value = input.initial[field];
+    texts[field] = value === undefined ? "" : tokenFormat.format(value);
+  }
+  const parsed = (field: TokenFieldName) => parseTokens(texts[field], tokenFormat.group);
+  return {
+    set(field: TokenFieldName, text: string) {
+      texts[field] = text;
+    },
+    field(field: TokenFieldName, automatic: number | null): TokenField {
+      return { text: texts[field], automatic, invalid: parsed(field).kind === "invalid" };
+    },
+    /** 填了的数；有读不懂的为 null。 */
+    values(): ApiEndpointModelDefaults | null {
+      const out: ApiEndpointModelDefaults = {};
+      for (const field of MODEL_TOKEN_FIELDS) {
+        const result = parsed(field);
+        if (result.kind === "invalid") return null;
+        if (result.kind === "count") out[field] = result.value;
+      }
+      return out;
+    },
+  };
+}
+
 export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSettingsForm {
   const { endpoint, modelId } = input;
   const settings = endpoint.modelSettings ?? {};
   const own: ApiEndpointModelSetting = settings.models?.[modelId] ?? {};
   const auto = endpoint.modelFacts?.[modelId] ?? {};
   // 灰字：不看这个模型自己的设置，只看整家默认与自动取到的。
-  const fallback = resolveModelFacts({
-    settings: settings.defaults ? { defaults: settings.defaults } : undefined,
-    modelId,
-    auto,
-  });
+  const defaultsOnly = settings.defaults ? { defaults: settings.defaults } : undefined;
+  const fallback = resolveModelFacts({ settings: defaultsOnly, modelId, auto });
   const levels = choosableEfforts(auto.efforts);
   const autoPicked = auto.efforts?.length ? auto.efforts : [];
+  const autoImages = auto.images ?? false;
 
   let name = own.name ?? "";
   let nameGeneration = 0;
-  const tokens: Record<TokenFieldName, string> = {
-    context: tokenText(own.context),
-    output: tokenText(own.output),
-    compact: tokenText(own.compact),
-  };
+  const tokens = createTokenInputs({ initial: own, tokenFormat: input.tokenFormat });
   let efforts: string[] | null = own.efforts ?? null;
   let images: boolean | null = own.images ?? null;
   let status: ModelSettingsStatus = { kind: "idle" };
-  const initial = JSON.stringify(entryOf());
 
-  function entryOf(): ApiEndpointModelSetting | null {
-    const entry: ApiEndpointModelSetting = {};
-    const trimmed = name.trim();
-    if (trimmed !== "") entry.name = trimmed;
-    for (const field of ["context", "output", "compact"] as const) {
-      const parsed = parseTokens(tokens[field]);
-      if (parsed.kind === "invalid") return null;
-      if (parsed.kind === "count") entry[field] = parsed.value;
-    }
-    if (efforts !== null) entry.efforts = levels.filter((level) => efforts?.includes(level));
-    if (images !== null) entry.images = images;
-    return entry;
+  /** 按 daemon 的同一份规则收拢后的这个模型的设置；有读不懂的数为 null。 */
+  function settledEntry(): ApiEndpointModelSetting | null {
+    const counts = tokens.values();
+    if (counts === null) return null;
+    const raw: ApiEndpointModelSetting = { ...counts, name };
+    if (efforts !== null) raw.efforts = efforts;
+    if (images !== null) raw.images = images;
+    const settled = settleModelSetting({
+      setting: raw,
+      knownEfforts: auto.efforts,
+      // 线上的自动资料不分清单明说的与 models.dev 补的，留给 daemon 判断（setImages 切回原样时已不算改动）。
+      listedImages: undefined,
+    });
+    return settled.kind === "settled" ? settled.setting : null;
   }
+  const initial = JSON.stringify(settledEntry());
 
   function tokenField(field: TokenFieldName): TokenField {
-    return {
-      text: tokens[field],
-      automatic: fallback[field] ?? null,
-      invalid: parseTokens(tokens[field]).kind === "invalid",
-    };
+    return tokens.field(field, fallback[field] ?? null);
   }
 
   function build(): ModelSettingsFormState {
-    const entry = entryOf();
+    const entry = settledEntry();
     const isBusy = status.kind === "saving" || status.kind === "restoring";
+    const isReadable = entry !== null;
+    const isChanged = JSON.stringify(entry) !== initial;
+    const picked =
+      efforts === null ? autoPicked : levels.filter((level) => efforts?.includes(level));
+    const imagesValue = images ?? autoImages;
     return {
       modelId,
       name: { text: name, automatic: fallback.name ?? modelId, generation: nameGeneration },
       context: tokenField("context"),
       output: tokenField("output"),
       compact: tokenField("compact"),
-      efforts: {
-        levels,
-        picked: efforts === null ? autoPicked : levels.filter((level) => efforts?.includes(level)),
-        isSet: efforts !== null,
-      },
-      images: { value: images ?? auto.images ?? false, isSet: images !== null },
+      efforts: { levels, picked, isSet: efforts !== null },
+      images: { value: imagesValue, isSet: images !== null },
       status,
-      canSubmit: !isBusy && entry !== null && JSON.stringify(entry) !== initial,
+      canSubmit: !isBusy && isReadable && isChanged,
       isBusy,
     };
   }
@@ -187,7 +226,7 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
   ): Promise<FormSubmitResult> {
     status = { kind: busy };
     publish();
-    const failure = await input.save((current) => withModelSetting(current, modelId, entry));
+    const failure = await input.save((current) => withModelSetting({ current, modelId, entry }));
     status = failure === null ? { kind: "idle" } : { kind: "failed", message: failure };
     publish();
     return failure === null ? "saved" : "failed";
@@ -206,22 +245,23 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
       publish();
     },
     setTokens(field, text) {
-      tokens[field] = text;
+      tokens.set(field, text);
       publish();
     },
     toggleEffort(level) {
       const current = efforts ?? autoPicked;
-      efforts = current.includes(level)
-        ? current.filter((kept) => kept !== level)
-        : [...current, level];
+      const isPicked = current.includes(level);
+      efforts = isPicked ? current.filter((kept) => kept !== level) : [...current, level];
       publish();
     },
     setImages(value) {
-      images = value;
+      // 切回打开时的样子就是没改。
+      const opened = own.images ?? autoImages;
+      images = value === opened ? (own.images ?? null) : value;
       publish();
     },
     async submit() {
-      const entry = entryOf();
+      const entry = settledEntry();
       if (entry === null) return "invalid";
       return saveWith(entry, "saving");
     },
@@ -255,42 +295,32 @@ export interface ModelDefaultsForm {
 export function openModelDefaultsForm(input: {
   endpoint: ApiEndpoint;
   save: SaveModelSettings;
+  tokenFormat: TokenFormat;
 }): ModelDefaultsForm {
-  const defaults = input.endpoint.modelSettings?.defaults ?? {};
-  const tokens: Record<TokenFieldName, string> = {
-    context: tokenText(defaults.context),
-    output: tokenText(defaults.output),
-    compact: tokenText(defaults.compact),
-  };
-  let saved = JSON.stringify(defaultsOf());
+  const tokens = createTokenInputs({
+    initial: input.endpoint.modelSettings?.defaults ?? {},
+    tokenFormat: input.tokenFormat,
+  });
+  function settledDefaults(): ApiEndpointModelDefaults | null {
+    const counts = tokens.values();
+    if (counts === null) return null;
+    const settled = settleModelDefaults(counts);
+    return settled.kind === "settled" ? settled.setting : null;
+  }
+  let saved = JSON.stringify(settledDefaults());
   let status: ModelDefaultsStatus = { kind: "idle" };
 
-  function defaultsOf(): ApiEndpointModelDefaults | null {
-    const out: ApiEndpointModelDefaults = {};
-    for (const field of ["context", "output", "compact"] as const) {
-      const parsed = parseTokens(tokens[field]);
-      if (parsed.kind === "invalid") return null;
-      if (parsed.kind === "count") out[field] = parsed.value;
-    }
-    return out;
-  }
-
-  function tokenFieldOf(name: TokenFieldName): TokenField {
-    return {
-      text: tokens[name],
-      automatic: null,
-      invalid: parseTokens(tokens[name]).kind === "invalid",
-    };
-  }
-
   function build(): ModelDefaultsFormState {
-    const next = defaultsOf();
+    const next = settledDefaults();
+    const isSaving = status.kind === "saving";
+    const isReadable = next !== null;
+    const isChanged = JSON.stringify(next) !== saved;
     return {
-      context: tokenFieldOf("context"),
-      output: tokenFieldOf("output"),
-      compact: tokenFieldOf("compact"),
+      context: tokens.field("context", null),
+      output: tokens.field("output", null),
+      compact: tokens.field("compact", null),
       status,
-      canSubmit: status.kind !== "saving" && next !== null && JSON.stringify(next) !== saved,
+      canSubmit: !isSaving && isReadable && isChanged,
     };
   }
 
@@ -300,19 +330,16 @@ export function openModelDefaultsForm(input: {
   return {
     getState: store.get,
     subscribe: store.subscribe,
-    setTokens(name, text) {
-      tokens[name] = text;
+    setTokens(field, text) {
+      tokens.set(field, text);
       publish();
     },
     async submit() {
-      const next = defaultsOf();
+      const next = settledDefaults();
       if (next === null) return "invalid";
       status = { kind: "saving" };
       publish();
-      const failure = await input.save((current) => ({
-        ...(Object.keys(next).length > 0 ? { defaults: next } : {}),
-        ...(current?.models ? { models: current.models } : {}),
-      }));
+      const failure = await input.save((current) => withDefaults({ current, defaults: next }));
       if (failure === null) saved = JSON.stringify(next);
       status = failure === null ? { kind: "idle" } : { kind: "failed", message: failure };
       publish();
@@ -322,15 +349,28 @@ export function openModelDefaultsForm(input: {
 }
 
 /** 换掉一个模型的设置；entry 为 null 或空即去掉它。 */
-function withModelSetting(
-  current: ApiEndpointModelSettings | undefined,
-  modelId: string,
-  entry: ApiEndpointModelSetting | null,
-): ApiEndpointModelSettings {
-  const { [modelId]: _own, ...others } = current?.models ?? {};
-  const models = entry && Object.keys(entry).length > 0 ? { ...others, [modelId]: entry } : others;
-  return {
-    ...(current?.defaults ? { defaults: current.defaults } : {}),
-    ...(Object.keys(models).length > 0 ? { models } : {}),
-  };
+function withModelSetting(input: {
+  current: ApiEndpointModelSettings | undefined;
+  modelId: string;
+  entry: ApiEndpointModelSetting | null;
+}): ApiEndpointModelSettings {
+  const { current, modelId, entry } = input;
+  const { [modelId]: _own, ...models } = current?.models ?? {};
+  const hasEntry = entry !== null && Object.keys(entry).length > 0;
+  if (hasEntry) models[modelId] = entry;
+  const next: ApiEndpointModelSettings = {};
+  if (current?.defaults) next.defaults = current.defaults;
+  if (Object.keys(models).length > 0) next.models = models;
+  return next;
+}
+
+/** 换掉整家默认；空的即去掉。 */
+function withDefaults(input: {
+  current: ApiEndpointModelSettings | undefined;
+  defaults: ApiEndpointModelDefaults;
+}): ApiEndpointModelSettings {
+  const next: ApiEndpointModelSettings = {};
+  if (Object.keys(input.defaults).length > 0) next.defaults = input.defaults;
+  if (input.current?.models) next.models = input.current.models;
+  return next;
 }

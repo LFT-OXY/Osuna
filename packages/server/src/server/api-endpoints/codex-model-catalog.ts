@@ -28,6 +28,8 @@ import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 const FALLBACK_LEVELS = ["low", "medium", "high", "xhigh"];
 const FALLBACK_CONTEXT = 272_000;
+// magpie settings.WorkingWindow：比它大的窗口默认只告诉 Codex 这么多。
+const CODEX_WORKING_WINDOW = 272_000;
 
 // Codex 自带目录里这几档的说明；别的档位 magpie 写空串，Codex 只要求有这个字段。
 const LEVEL_DESCRIPTIONS: Record<string, string> = {
@@ -169,8 +171,9 @@ export function codexModelEntry(input: CodexModelEntryInput) {
   const agentsVersion = input.marksAgentsV1 ? AGENTS_V1 : UNMARKED;
   const levels = codexModelLevels(facts);
   const window = facts.context ?? FALLBACK_CONTEXT;
-  // 有压缩阈值时告诉 Codex 的窗口取二者较小，整个窗口写进 max_context_window（magpie entriesAt 的 Compact）。
-  const context = facts.compact === undefined ? window : Math.min(window, facts.compact);
+  const context = codexWorkingWindow({ window, facts });
+  // 查不到时照 Codex 回退元数据两项都写；查到的只在告诉它的比整个窗口小时另写整个窗口。
+  const writesWholeWindow = facts.context === undefined || context < window;
   return {
     slug: input.slug,
     display_name: input.displayName,
@@ -194,8 +197,7 @@ export function codexModelEntry(input: CodexModelEntryInput) {
     apply_patch_tool_type: null,
     truncation_policy: { mode: "bytes", limit: 10_000 },
     context_window: context,
-    // 查不到时照 Codex 回退元数据两项都写；查到的就是整个窗口，照 magpie 只在压缩阈值更小时另写整个窗口。
-    ...(facts.context === undefined || context < window ? { max_context_window: window } : {}),
+    ...(writesWholeWindow ? { max_context_window: window } : {}),
     effective_context_window_percent: 95,
     experimental_supported_tools: [],
     ...(facts.images === undefined
@@ -206,6 +208,19 @@ export function codexModelEntry(input: CodexModelEntryInput) {
     supports_reasoning_summaries: levels.length > 0,
     ...agentsVersion,
   };
+}
+
+/**
+ * 告诉 Codex 的窗口（magpie entriesAt 与 settings.Working、CompactFor）：有压缩阈值时取它与窗口中较小的；
+ * 没有时，上下文是用户手填的就用整个窗口（magpie #1809），否则比 272K 大的窗口说成 272K（Codex 给 OpenAI 自家大窗口模型的工作窗口），
+ * 小的照写。比整个窗口小时，整个窗口另写进 max_context_window。
+ * magpie 另有全局的「完整窗口」开关与全局压缩阈值，属设置页，这里不做。
+ */
+function codexWorkingWindow(input: { window: number; facts: EndpointModelFacts }): number {
+  const { window, facts } = input;
+  if (facts.compact !== undefined) return Math.min(window, facts.compact);
+  if (facts.contextSet === true) return window;
+  return Math.min(window, CODEX_WORKING_WINDOW);
 }
 
 /** 这个模型在 Codex 里能选的档位：查不到资料时四档固定。 */

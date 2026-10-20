@@ -474,7 +474,8 @@ function withoutReasoningText(input: {
 }): string {
   const { text, conversation } = input;
   const { noThinking, format } = input.input;
-  if (noThinking !== true || !conversation) return text;
+  const stripsReasoning = noThinking === true && conversation;
+  if (!stripsReasoning) return text;
   const body = parseJson(text);
   if (!isRecord(body)) return text;
   return withChangedKeys({ text, body, fitted: withoutAnyReasoning(format, body) });

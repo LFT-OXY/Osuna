@@ -2809,7 +2809,7 @@ export const ja: TranslationResources = {
         automatic: "自動：{{value}}",
         automaticUnknown: "自動",
         invalidTokens: "0 より大きい整数のトークン数を入力してください",
-        restoreDefaults: "デフォルトに戻す",
+        restoreAll: "すべてデフォルトに戻す",
         save: "保存",
         saving: "保存中…",
         saveFailed: "保存できませんでした：{{message}}",
