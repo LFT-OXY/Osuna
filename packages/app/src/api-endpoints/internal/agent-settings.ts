@@ -6,6 +6,7 @@ import type {
   ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
+import { showsEndpointNames } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import { withoutDisabledEndpointModels } from "./disabled-models-list";
 import {
   endpointRowStatus,
@@ -207,8 +208,8 @@ function toReopenView(hint: ApiEndpointReopenHint): ReopenHintView {
 }
 
 /**
- * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（endpointName 为 null，哪家提供都行），
- * 或「接口标识/模型名」（指定这一家，显示成「模型名（接口名）」）。
+ * 默认模型的一个选项（ADR 0012）：光秃秃的模型名（哪家提供都行），或「接口标识/模型名」（指定这一家）。
+ * endpointName 是显示在模型名后面的接口名（「模型名（接口名）」）：光秃秃的名字、或接口名显示方式说不带时为 null。
  */
 export interface DefaultModelOption {
   id: string;
@@ -310,12 +311,15 @@ export function selectAgentApiEndpointsView(input: {
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
   // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
-  const modelOptions = defaultModelOptions({
-    enabledEndpoints: withoutDisabledEndpointModels({
-      endpoints: enabledEndpoints,
-      patterns: state.disabledModels,
+  const modelOptions = withEndpointNamesShown({
+    options: defaultModelOptions({
+      enabledEndpoints: withoutDisabledEndpointModels({
+        endpoints: enabledEndpoints,
+        patterns: state.disabledModels,
+      }),
+      groups: input.endpointModelGroups ?? [],
     }),
-    groups: input.endpointModelGroups ?? [],
+    display: state.endpointNameDisplay,
   });
 
   let enableBlockedBy: AgentSwitchBlock | null = null;
@@ -364,7 +368,10 @@ export function selectAgentApiEndpointsView(input: {
     provider,
     agent,
     subagentThinkingOptions: input.subagentThinkingOptions,
-    sideModelOptions: input.sideModelOptions,
+    sideModelOptions: withEndpointNamesShown({
+      options: input.sideModelOptions,
+      display: state.endpointNameDisplay,
+    }),
   });
 
   return {
@@ -494,6 +501,22 @@ function defaultModelOptions(input: {
     }
   }
   return options;
+}
+
+/** 按接口名显示方式去掉不显示的接口名；撞名只在带接口名的选项之间算（光秃秃的名字本来就不带）。 */
+function withEndpointNamesShown(input: {
+  options: DefaultModelOption[];
+  display: string;
+}): DefaultModelOption[] {
+  const named = input.options.filter((option) => option.endpointName !== null);
+  const shows = showsEndpointNames({
+    display: input.display,
+    names: named.map((option) => option.model),
+  });
+  const hidden = new Set(named.filter((_option, index) => !shows[index]));
+  return input.options.map((option) =>
+    hidden.has(option) ? { ...option, endpointName: null } : option,
+  );
 }
 
 function displayedDefaultModel(

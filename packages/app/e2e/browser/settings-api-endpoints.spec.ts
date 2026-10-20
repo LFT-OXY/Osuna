@@ -3286,6 +3286,91 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
+  test("Endpoint name in model lists: a refusal stays in place, then Only when names clash names only the shared model's endpoints in the selector and Never names none", async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await seedApiEndpoint(client, {
+      name: "Relay A",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "kimi-k2"],
+    });
+    await seedApiEndpoint(client, {
+      name: "Relay B",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5", "claude-sonnet-4-5"],
+    });
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "gpt-5",
+    });
+    const hostDisplay = async () => (await client.apiEndpointList("claude")).endpointNameDisplay;
+    const host = await failRequests(page, "provider.api_endpoint.set_endpoint_name_display");
+    await openApiEndpointsPage(page);
+    const section = page.getByTestId("api-endpoints-endpoint-names").filter({ visible: true });
+    const trigger = section.getByTestId("api-endpoints-endpoint-names-trigger");
+
+    await test.step("a refused choice goes back to the saved one and says why in the row", async () => {
+      await expect(trigger).toHaveText("Always");
+      await trigger.click();
+      await page.getByTestId("api-endpoints-endpoint-names-clash").click();
+      await expect(section).toContainText("Couldn't save: EACCES: permission denied");
+      await expect(trigger).toHaveText("Always");
+      expect(await hostDisplay()).toBe("always");
+    });
+
+    await test.step("a saved choice reaches the host and the error goes", async () => {
+      host.failing = false;
+      await trigger.click();
+      await page.getByTestId("api-endpoints-endpoint-names-clash").click();
+      await expect.poll(hostDisplay).toBe("clash");
+      await expect(trigger).toHaveText("Only when names clash");
+      await expect(section).not.toContainText("Couldn't save");
+    });
+
+    const workspace = await seedWorkspace({ repoPrefix: "api-endpoint-names-" });
+    try {
+      await carryPreferencesAcrossReloads(page);
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await keepPreferencesForNextLoad(page, { provider: "claude" });
+      await gotoWorkspace(page, workspace.workspaceId);
+      await waitForSidebarHydration(page);
+      await openGlobalNewWorkspaceComposer(page);
+      const picker = page.getByTestId("combobox-desktop-container");
+      const rowOf = (modelId: string) => picker.getByTestId(`model-row-claude-${modelId}`);
+      // 快照推过来之前打开的选单还是上一种：每次打开读一遍，读完关上。
+      const sharedRowText = async () => {
+        await openModelPicker(page);
+        const text = await rowOf("relay-a/claude-sonnet-4-5").textContent();
+        await closeModelPicker(page);
+        return text;
+      };
+
+      await test.step("only when names clash: no endpoint headings, only the shared name's two rows name their endpoint", async () => {
+        await openModelPicker(page);
+        await expect(picker.locator('[data-testid^="model-endpoint-group-"]')).toHaveCount(0);
+        await expect(rowOf("relay-a/claude-sonnet-4-5")).toHaveText("claude-sonnet-4-5Relay A");
+        await expect(rowOf("relay-b/claude-sonnet-4-5")).toHaveText("claude-sonnet-4-5Relay B");
+        await expect(rowOf("relay-a/kimi-k2")).toHaveText("kimi-k2");
+        await expect(rowOf("relay-b/gpt-5")).toHaveText("gpt-5");
+        await closeModelPicker(page);
+      });
+
+      await test.step("never: no row names its endpoint", async () => {
+        await client.apiEndpointSetEndpointNameDisplay({ display: "never" });
+        await expect.poll(sharedRowText).toBe("claude-sonnet-4-5");
+        await openModelPicker(page);
+        await expect(rowOf("relay-b/claude-sonnet-4-5")).toHaveText("claude-sonnet-4-5");
+        await expect(picker).not.toContainText("Relay");
+        await closeModelPicker(page);
+      });
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
   test("Codex gets the same section, and its model selector is grouped the same way", async ({
     page,
   }) => {

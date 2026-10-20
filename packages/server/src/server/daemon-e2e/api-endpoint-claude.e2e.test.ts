@@ -1577,20 +1577,29 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
-  test("the old client's save and switch keep the host's long conversations and disabled models", async () => {
+  test("the old client's save and switch keep the host's long conversations, disabled models and endpoint name display", async () => {
     await start(USER_SETTINGS);
     await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
     await client.apiEndpointSetDisabledModels({ models: ["*-preview"] });
+    await client.apiEndpointSetEndpointNameDisplay({ display: "clash" });
     const hostWide = async () => {
       const list = await client.apiEndpointList("claude");
-      return { longConversations: list.longConversations, disabledModels: list.disabledModels };
+      return {
+        longConversations: list.longConversations,
+        disabledModels: list.disabledModels,
+        endpointNameDisplay: list.endpointNameDisplay,
+      };
     };
-    const kept = { longConversations: { compactAt: 400_000 }, disabledModels: ["*-preview"] };
+    const kept = {
+      longConversations: { compactAt: 400_000 },
+      disabledModels: ["*-preview"],
+      endpointNameDisplay: "clash",
+    };
     // switchOn 走老客户端的 save 与 set_active。
     const endpointId = await switchOn();
     expect(await hostWide()).toEqual(kept);
     expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
-    // 老样子的 save 改一家：两项主机设置照样留着。
+    // 老样子的 save 改一家：几项主机设置照样留着。
     const edited = await client.apiEndpointSave({
       provider: "claude",
       endpointId,

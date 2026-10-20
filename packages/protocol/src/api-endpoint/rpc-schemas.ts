@@ -344,6 +344,8 @@ export const ApiEndpointListResponseSchema = z.object({
     longConversations: ApiEndpointLongConversationsSchema.optional(),
     // 已禁用的模型（整台主机共用，照存的样子）：完整 id 或 glob，不分大小写；老 daemon 不发。
     disabledModels: z.array(z.string()).optional(),
+    // 接口名显示方式（endpoint-names.ts 的 API_ENDPOINT_NAME_DISPLAYS），整台主机共用；没设为 always，老 daemon 不发。
+    endpointNameDisplay: z.string().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -701,6 +703,30 @@ export const ApiEndpointSetDisabledModelsResponseSchema = z.object({
 });
 export type ApiEndpointSetDisabledModelsResponse = z.infer<
   typeof ApiEndpointSetDisabledModelsResponseSchema
+>;
+
+/**
+ * 设接口名显示方式（照 magpie settings/plain-names）：display 是 always、clash 或 never，别的拒收。
+ * 作用于聊天模型选择器、默认模型选项和写给 Codex 的显示名。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetEndpointNameDisplayRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_name_display.request"),
+  requestId: z.string(),
+  display: z.string(),
+});
+export type ApiEndpointSetEndpointNameDisplayRequest = z.infer<
+  typeof ApiEndpointSetEndpointNameDisplayRequestSchema
+>;
+
+export const ApiEndpointSetEndpointNameDisplayResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_endpoint_name_display.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetEndpointNameDisplayResponse = z.infer<
+  typeof ApiEndpointSetEndpointNameDisplayResponseSchema
 >;
 
 /**

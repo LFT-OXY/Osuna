@@ -206,7 +206,7 @@ export function buildModelListItems(
   const groups = new Map<number, { name: string; rows: ProviderSelectionModelRow[] }>();
   for (const row of rows) {
     const group = row.apiEndpointGroup;
-    if (!options.groupByApiEndpoint || !group) {
+    if (!options.groupByApiEndpoint || group?.nameShown !== "heading") {
       return rows.map((entry) => ({ kind: "row", key: entry.favoriteKey, row: entry }));
     }
     const bucket = groups.get(group.index) ?? { name: group.name, rows: [] };

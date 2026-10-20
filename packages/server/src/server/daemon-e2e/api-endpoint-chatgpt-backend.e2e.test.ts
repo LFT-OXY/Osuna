@@ -510,6 +510,10 @@ interface ListedModel {
   visibility?: string;
 }
 
+const DisplayNamesSchema = z.object({
+  models: z.array(z.object({ slug: z.string(), display_name: z.string().optional() })),
+});
+
 function modelsOf(reply: Reply): ListedModel[] {
   return (JSON.parse(reply.body.toString("utf8")) as { models: ListedModel[] }).models;
 }
@@ -568,6 +572,77 @@ describe("endpoint models in the /model of a Codex signed in with ChatGPT", () =
     expect(reached.url).toBe("/backend-api/codex/models?client_version=0.163.0");
     expect(reached.headers.authorization).toBe(`Bearer ${CHATGPT_TOKEN}`);
     expect(reached.headers["chatgpt-account-id"]).toBe(ACCOUNT_ID);
+  });
+
+  test("the endpoint's name after a model follows the host's setting: always, only when names clash, never; the slugs keep them apart", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json", etag: 'W/"list-1"' });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase, daemon } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [
+        {
+          id: "ep_a",
+          slug: "relay-a",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2", facts: { name: "Kimi K2" } }, { id: "glm-5" }],
+        },
+        {
+          id: "ep_b",
+          slug: "relay-b",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2", facts: { name: "kimi k2" } }],
+        },
+      ],
+    });
+    const client = new DaemonClient({
+      url: `ws://127.0.0.1:${daemon.port}/ws`,
+      appVersion: "0.17.0",
+    });
+    await client.connect();
+    const named = async () => {
+      const reply = await send({
+        url: `${codexBase}/models?client_version=0.163.0`,
+        method: "GET",
+        headers: codexHeaders(),
+      });
+      const list = DisplayNamesSchema.parse(JSON.parse(reply.body.toString("utf8")));
+      return list.models
+        .filter((model) => model.slug.includes("/"))
+        .map((model) => [model.slug, model.display_name]);
+    };
+
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("always");
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5 (RELAY-A)"],
+      ["relay-b/kimi-k2", "kimi k2 (RELAY-B)"],
+    ]);
+
+    // 只差大小写也算同名（照 magpie）。
+    expect((await client.apiEndpointSetEndpointNameDisplay({ display: "clash" })).error).toBeNull();
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("clash");
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2 (RELAY-A)"],
+      ["relay-a/glm-5", "glm-5"],
+      ["relay-b/kimi-k2", "kimi k2 (RELAY-B)"],
+    ]);
+
+    await client.apiEndpointSetEndpointNameDisplay({ display: "never" });
+    expect(await named()).toEqual([
+      ["relay-a/kimi-k2", "Kimi K2"],
+      ["relay-a/glm-5", "glm-5"],
+      ["relay-b/kimi-k2", "kimi k2"],
+    ]);
+
+    const refused = await client.apiEndpointSetEndpointNameDisplay({ display: "sometimes" });
+    expect(refused.error?.code).toBe("invalid_input");
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("never");
+    await client.apiEndpointSetEndpointNameDisplay({ display: "always" });
+    expect((await client.apiEndpointList("codex")).endpointNameDisplay).toBe("always");
+    await client.close();
   });
 
   test("a default model naming one endpoint is in the merged list, so Codex knows it", async () => {

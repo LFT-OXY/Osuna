@@ -2885,6 +2885,19 @@ export const fr: TranslationResources = {
           "Où Codex et Claude Code compactent une longue conversation ; vide vaut {{size}}. Un modèle avec son propre seuil Compacter à utilise le sien.",
         saveFailed: "Échec de l'enregistrement : {{message}}",
       },
+      endpointNames: {
+        title: "Nom de l'endpoint dans les listes de modèles",
+        info: "Indique si un modèle proposé par un endpoint affiche ensuite le nom de l'endpoint, comme « Kimi K2 (Relay A) ». Avec Jamais, les modèles de même nom de deux endpoints restent distincts dans le /model de Codex par endpoint/modèle.",
+        label: "Après chaque modèle",
+        hint: "Dans le sélecteur de modèle, les choix de Modèle par défaut et le /model de Codex.",
+        choices: {
+          always: "Toujours",
+          clash: "Seulement si les noms se recoupent",
+          never: "Jamais",
+        },
+        accessibilityLabel: "Nom de l'endpoint dans les listes de modèles : {{value}}",
+        saveFailed: "Échec de l'enregistrement : {{message}}",
+      },
       disabledModels: {
         title: "Modèles désactivés",
         info: "Seules les requêtes qui passent par Osuna sont concernées. Une entrée est un identifiant de modèle, point d'accès/modèle ou un motif où * correspond à n'importe quelle suite de caractères et ? à un seul caractère, sans tenir compte de la casse ; {{example}} désactive tous les modèles preview.",

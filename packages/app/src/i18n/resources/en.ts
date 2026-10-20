@@ -2887,6 +2887,19 @@ export const en = {
           "Where Codex and Claude Code compact a long conversation; blank is {{size}}. A model with its own Compact at uses that.",
         saveFailed: "Couldn't save: {{message}}",
       },
+      endpointNames: {
+        title: "Endpoint name in model lists",
+        info: "Whether a model an endpoint offers shows the endpoint's name after it, as in “Kimi K2 (Relay A)”. Under Never, two endpoints' models of one name stay apart in Codex's /model by endpoint/model.",
+        label: "After each model",
+        hint: "In the model picker, the Default model choices and Codex's /model.",
+        choices: {
+          always: "Always",
+          clash: "Only when names clash",
+          never: "Never",
+        },
+        accessibilityLabel: "Endpoint name in model lists: {{value}}",
+        saveFailed: "Couldn't save: {{message}}",
+      },
       disabledModels: {
         title: "Disabled models",
         info: "Only requests through Osuna are covered. An entry is a model id, endpoint/model, or a pattern where * matches any run of characters and ? any one character, ignoring case; {{example}} disables every preview model.",

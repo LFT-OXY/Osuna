@@ -110,6 +110,8 @@ export interface UseHostEndpointsResult {
   setLongConversations: (change: LongConversationsChange) => Promise<string | null>;
   // 换掉整台主机的已禁用的模型；返回失败原因，成功为 null。只有声明了 apiEndpointManagement 的主机认。
   setDisabledModels: (models: string[]) => Promise<string | null>;
+  // 设接口名显示方式；返回失败原因，成功为 null。
+  setEndpointNameDisplay: (display: string) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -307,6 +309,21 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!client) return t("workspace.terminal.hostDisconnected");
       try {
         const result = await client.apiEndpointSetDisabledModels({ models });
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return requestFailureMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
+  );
+
+  const setEndpointNameDisplay = useCallback(
+    async (display: string): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetEndpointNameDisplay({ display });
         if (result.error) return describeError(result.error);
         await refresh();
         return null;
@@ -537,6 +554,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     arrange,
     setLongConversations,
     setDisabledModels,
+    setEndpointNameDisplay,
     pendingAgent,
     setAgentSettings,
     lastConnection,

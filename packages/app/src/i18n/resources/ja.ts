@@ -2851,6 +2851,19 @@ export const ja: TranslationResources = {
           "Codex と Claude Code が長い会話を圧縮する位置です。空欄なら {{size}}。独自の圧縮しきい値を持つモデルはそれを使います。",
         saveFailed: "保存できませんでした：{{message}}",
       },
+      endpointNames: {
+        title: "モデル一覧のエンドポイント名",
+        info: "エンドポイントのモデルの後ろにエンドポイント名を付けるかどうか（例：「Kimi K2 (Relay A)」）。「表示しない」でも、同じ名前の 2 つのエンドポイントのモデルは Codex の /model で「エンドポイント/モデル」によって区別されます。",
+        label: "各モデルの後ろ",
+        hint: "モデル選択、既定のモデルの選択肢、Codex の /model。",
+        choices: {
+          always: "常に表示",
+          clash: "名前が重なるときだけ",
+          never: "表示しない",
+        },
+        accessibilityLabel: "モデル一覧のエンドポイント名：{{value}}",
+        saveFailed: "保存できませんでした：{{message}}",
+      },
       disabledModels: {
         title: "無効にしたモデル",
         info: "対象は Osuna を通るリクエストだけです。各項目はモデル ID、「エンドポイント/モデル」、またはパターンです。* は任意の文字列、? は任意の 1 文字に一致し、大文字と小文字は区別しません。{{example}} ですべての preview モデルを無効にできます。",

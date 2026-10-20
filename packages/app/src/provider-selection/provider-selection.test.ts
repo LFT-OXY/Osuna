@@ -551,9 +551,55 @@ describe("models grouped by API endpoint", () => {
     expect(
       rows.map((row) => [row.modelId, row.modelLabel, row.description, row.apiEndpointGroup]),
     ).toEqual([
-      ["relay-a/shared", "shared", undefined, { name: "Relay A", index: 0 }],
-      ["relay-a/kimi-k2", "kimi-k2", undefined, { name: "Relay A", index: 0 }],
-      ["relay-b/shared", "shared", undefined, { name: "Relay B", index: 1 }],
+      ["relay-a/shared", "shared", undefined, { name: "Relay A", index: 0, nameShown: "heading" }],
+      [
+        "relay-a/kimi-k2",
+        "kimi-k2",
+        undefined,
+        { name: "Relay A", index: 0, nameShown: "heading" },
+      ],
+      ["relay-b/shared", "shared", undefined, { name: "Relay B", index: 1, nameShown: "heading" }],
+    ]);
+  });
+
+  function rowsWith(display: string) {
+    const [provider] = buildSelectableProviderSelectorProviders([
+      { ...entry, apiEndpointNameDisplay: display },
+    ]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    return rows.map((row) => [row.modelId, row.description, row.apiEndpointGroup?.nameShown]);
+  }
+
+  it("only when names clash: the endpoint's name follows the two models of one name, the rest go without it", () => {
+    expect(rowsWith("clash")).toEqual([
+      ["relay-a/shared", "Relay A", "inline"],
+      ["relay-a/kimi-k2", undefined, "none"],
+      ["relay-b/shared", "Relay B", "inline"],
+    ]);
+  });
+
+  it("never: no row names its endpoint; an unknown setting reads as always", () => {
+    expect(rowsWith("never")).toEqual([
+      ["relay-a/shared", undefined, "none"],
+      ["relay-a/kimi-k2", undefined, "none"],
+      ["relay-b/shared", undefined, "none"],
+    ]);
+    expect(rowsWith("sometimes").map(([, , shown]) => shown)).toEqual([
+      "heading",
+      "heading",
+      "heading",
+    ]);
+  });
+
+  it("cross-provider results name the endpoint only where the setting shows it", () => {
+    const [provider] = buildSelectableProviderSelectorProviders([
+      { ...entry, apiEndpointNameDisplay: "clash" },
+    ]);
+    const rows = provider.modelSelection.kind === "models" ? provider.modelSelection.rows : [];
+    expect(rows.map(buildProviderQualifiedDescription)).toEqual([
+      "Claude Code · Relay A",
+      "Claude Code",
+      "Claude Code · Relay B",
     ]);
   });
 

@@ -108,6 +108,8 @@ const EndpointsFileSchema = z.object({
   longConversations: ApiEndpointLongConversationsSchema.optional(),
   // 已禁用的模型（完整 id 或 glob，不分大小写）；没有即一个都没禁。
   disabledModels: z.array(z.string()).optional(),
+  // 接口名显示方式（clash、never；always 不存）；没有即一直显示。
+  endpointNameDisplay: z.string().optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -147,6 +149,7 @@ export interface ApiEndpointState {
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
   longConversations?: ApiEndpointLongConversations;
   disabledModels?: string[];
+  endpointNameDisplay?: string;
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
@@ -300,7 +303,7 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents, longConversations, disabledModels } = content.file;
+    const { agents, longConversations, disabledModels, endpointNameDisplay } = content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
@@ -309,6 +312,7 @@ export class ApiEndpointStore {
       },
       ...(longConversations === undefined ? {} : { longConversations }),
       ...(disabledModels === undefined ? {} : { disabledModels }),
+      ...(endpointNameDisplay === undefined ? {} : { endpointNameDisplay }),
     };
   }
 

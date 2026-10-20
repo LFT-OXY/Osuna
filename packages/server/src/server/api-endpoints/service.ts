@@ -286,6 +286,7 @@ import {
   withoutDisabledModels,
 } from "./disabled-models.js";
 import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
+import { isApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
   WORKING_WINDOW,
@@ -621,6 +622,7 @@ export type ApiEndpointListResult = Required<
     | "reopenHints"
     | "longConversations"
     | "disabledModels"
+    | "endpointNameDisplay"
   >
 >;
 
@@ -844,6 +846,7 @@ export class ApiEndpointService {
       reopenHints,
       longConversations: state.longConversations ?? {},
       disabledModels: state.disabledModels ?? [],
+      endpointNameDisplay: state.endpointNameDisplay ?? "always",
     };
   }
 
@@ -2256,6 +2259,35 @@ export class ApiEndpointService {
       const { disabledModels: _previous, ...rest } = state;
       await this.commit(state, disabledModels.length === 0 ? rest : { ...rest, disabledModels });
     });
+  }
+
+  /**
+   * 接口名显示方式（照 magpie SetSuffixMode）：always 不存。写给 Codex 的显示名跟着改、Codex 的清单标记跟着变，所以走 commit。
+   */
+  setEndpointNameDisplay(input: { display: string }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const { display } = input;
+      if (!isApiEndpointNameDisplay(display)) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Endpoint name in model lists must be always, clash or never, not ${display}`,
+        });
+      }
+      const state = this.readState();
+      const { endpointNameDisplay: _previous, ...rest } = state;
+      await this.commit(
+        state,
+        display === "always" ? rest : { ...rest, endpointNameDisplay: display },
+      );
+    });
+  }
+
+  /** 选择器里接口名的显示方式；官方模式、不支持的提供方或文件读不懂时返回 null。 */
+  endpointNameDisplay(provider: string): string | null {
+    const state = this.readStateForSnapshot();
+    const supported = findProvider(provider);
+    if (!state || !supported || !state.agents[supported].enabled) return null;
+    return state.endpointNameDisplay ?? "always";
   }
 
   /** 在服务的模型：去掉一周内下线的与已禁用的。选单、默认模型、写给 CLI 的模型都按它。 */
@@ -3952,6 +3984,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.memoryModelId ?? null,
     usableModels(state),
     state.disabledModels ?? null,
+    state.endpointNameDisplay ?? null,
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [
       group.endpoint.name,

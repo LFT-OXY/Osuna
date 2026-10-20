@@ -2840,6 +2840,19 @@ export const zhCN: TranslationResources = {
           "Codex 和 Claude Code 在这里压缩长对话，空着是 {{size}}。设了自己压缩阈值的模型用它自己的。",
         saveFailed: "没能保存：{{message}}",
       },
+      endpointNames: {
+        title: "接口名显示方式",
+        info: "接口的模型后面带不带接口名，比如「GLM-5（智谱）」。选「不显示」时，两家同名的模型在 Codex 的模型列表里仍按「接口标识/模型名」分开。",
+        label: "模型名后面",
+        hint: "聊天模型选择器、默认模型选项和 Codex 的模型列表里。",
+        choices: {
+          always: "一直显示",
+          clash: "同名时显示",
+          never: "不显示",
+        },
+        accessibilityLabel: "接口名显示方式：{{value}}",
+        saveFailed: "没能保存：{{message}}",
+      },
       disabledModels: {
         title: "已禁用的模型",
         info: "只管经过 Osuna 的请求。每条可以是模型 id、「接口标识/模型」，或式子：* 是任意一段字符，? 是任意一个字符，不分大小写；{{example}} 会禁掉所有 preview 模型。",

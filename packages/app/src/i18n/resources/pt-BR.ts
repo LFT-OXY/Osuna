@@ -2864,6 +2864,19 @@ export const ptBR: TranslationResources = {
           "Onde Codex e Claude Code compactam uma conversa longa; vazio é {{size}}. Um modelo com seu próprio Compactar em usa o dele.",
         saveFailed: "Não foi possível salvar: {{message}}",
       },
+      endpointNames: {
+        title: "Nome do endpoint nas listas de modelos",
+        info: "Se um modelo oferecido por um endpoint mostra o nome do endpoint depois dele, como em “Kimi K2 (Relay A)”. Com Nunca, modelos de mesmo nome de dois endpoints continuam separados no /model do Codex por endpoint/modelo.",
+        label: "Depois de cada modelo",
+        hint: "No seletor de modelos, nas opções de Modelo padrão e no /model do Codex.",
+        choices: {
+          always: "Sempre",
+          clash: "Só quando os nomes coincidem",
+          never: "Nunca",
+        },
+        accessibilityLabel: "Nome do endpoint nas listas de modelos: {{value}}",
+        saveFailed: "Não foi possível salvar: {{message}}",
+      },
       disabledModels: {
         title: "Modelos desativados",
         info: "Só vale para solicitações que passam pelo Osuna. Cada entrada é um id de modelo, endpoint/modelo ou um padrão em que * corresponde a qualquer sequência de caracteres e ? a um único caractere, sem diferenciar maiúsculas; {{example}} desativa todos os modelos preview.",

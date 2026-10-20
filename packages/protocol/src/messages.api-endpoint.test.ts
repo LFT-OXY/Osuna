@@ -968,6 +968,40 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     const older = { ...list, payload: olderPayload };
     expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
   });
+  it("parses set_endpoint_name_display, a list and a snapshot carrying the host's setting, and an older host's without it", () => {
+    const request = {
+      type: "provider.api_endpoint.set_endpoint_name_display.request" as const,
+      requestId: "req-nd",
+      display: "clash",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.set_endpoint_name_display.response" as const,
+      payload: { requestId: "req-nd", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const list = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-nd-list",
+        provider: "codex",
+        endpoints: [],
+        activeEndpointId: null,
+        endpointNameDisplay: "never",
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(list)).toEqual(list);
+    const { endpointNameDisplay: _omitted, ...olderPayload } = list.payload;
+    const older = { ...list, payload: olderPayload };
+    expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
+    const entry = { provider: "codex", status: "ready" as const, enabled: true };
+    expect(
+      ProviderSnapshotEntrySchema.parse({ ...entry, apiEndpointNameDisplay: "clash" })
+        .apiEndpointNameDisplay,
+    ).toBe("clash");
+    expect(ProviderSnapshotEntrySchema.parse(entry).apiEndpointNameDisplay).toBeUndefined();
+  });
   it("parses a list whose rows carry the key mask and whose default model goes there, and an older host's", () => {
     const response = {
       type: "provider.api_endpoint.list.response" as const,

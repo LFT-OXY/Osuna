@@ -34,6 +34,8 @@ export type HostEndpointsLoadState =
       longConversations: ApiEndpointLongConversations;
       // 整台主机的已禁用的模型；没设或老主机不发时为空。
       disabledModels: string[];
+      // 整台主机的接口名显示方式（always、clash、never）；老主机不发时为 always。
+      endpointNameDisplay: string;
     };
 
 export function selectHostEndpointsState(input: {
@@ -51,6 +53,7 @@ export function selectHostEndpointsState(input: {
       reopenHints: input.data.reopenHints ?? {},
       longConversations: input.data.longConversations ?? {},
       disabledModels: input.data.disabledModels ?? [],
+      endpointNameDisplay: input.data.endpointNameDisplay ?? "always",
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

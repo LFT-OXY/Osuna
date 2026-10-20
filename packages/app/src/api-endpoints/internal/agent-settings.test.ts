@@ -44,6 +44,7 @@ function view(input: {
   gatewayUnavailable?: { code: string; message: string } | null;
   agentIssues?: Record<string, ApiEndpointAgentIssue[]>;
   reopenHints?: Record<string, ApiEndpointReopenHint[]>;
+  endpointNameDisplay?: string;
 }) {
   return selectAgentApiEndpointsView({
     state: {
@@ -68,6 +69,7 @@ function view(input: {
       reopenHints: input.reopenHints ?? {},
       longConversations: {},
       disabledModels: [],
+      endpointNameDisplay: input.endpointNameDisplay ?? "always",
     },
     provider: input.provider ?? "claude",
     endpointModelGroups: input.endpointModelGroups ?? null,
@@ -146,6 +148,52 @@ describe("the default model on an agent page", () => {
       model: "shared",
       endpointName: "Relay B",
     });
+  });
+
+  it("the endpoint's name follows a model as the host's Endpoint name in model lists says: always, only when names clash, never", () => {
+    const groupModel = (id: string, label: string) => ({ provider: "claude", id, label });
+    const shown = (endpointNameDisplay: string) =>
+      view({
+        enabled: true,
+        defaultModelId: "relay-a/glm-5",
+        endpointNameDisplay,
+        endpoints: [
+          endpoint({ id: "a", name: "Relay A", models: [{ id: "Shared" }, { id: "glm-5" }] }),
+          endpoint({ id: "b", name: "Relay B", models: [{ id: "shared" }] }),
+        ],
+        endpointModelGroups: [
+          {
+            name: "Relay A",
+            models: [groupModel("relay-a/Shared", "Shared"), groupModel("relay-a/glm-5", "glm-5")],
+          },
+          { name: "Relay B", models: [groupModel("relay-b/shared", "shared")] },
+        ],
+      });
+    const named = (endpointNameDisplay: string) =>
+      shown(endpointNameDisplay).modelOptions.map((option) => [option.id, option.endpointName]);
+    expect(named("always")).toEqual([
+      ["Shared", null],
+      ["glm-5", null],
+      ["shared", null],
+      ["relay-a/Shared", "Relay A"],
+      ["relay-a/glm-5", "Relay A"],
+      ["relay-b/shared", "Relay B"],
+    ]);
+    // 只差大小写也算同名（照 magpie）；光秃秃的名字本来就不带接口名，不算进去。
+    expect(named("clash")).toEqual([
+      ["Shared", null],
+      ["glm-5", null],
+      ["shared", null],
+      ["relay-a/Shared", "Relay A"],
+      ["relay-a/glm-5", null],
+      ["relay-b/shared", "Relay B"],
+    ]);
+    expect(shown("clash").defaultModel).toEqual({
+      id: "relay-a/glm-5",
+      model: "glm-5",
+      endpointName: null,
+    });
+    expect(named("never").every(([, endpointName]) => endpointName === null)).toBe(true);
   });
 
   it("shows a default model no option names as it is", () => {
@@ -497,6 +545,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         reopenHints: {},
         longConversations: {},
         disabledModels: [],
+        endpointNameDisplay: "always",
       },
       provider: "claude",
       endpointModelGroups: null,
@@ -516,6 +565,7 @@ describe("Keep claude.ai sign-in on an agent page", () => {
         reopenHints: {},
         longConversations: {},
         disabledModels: [],
+        endpointNameDisplay: "always",
       },
       provider: "codex",
       endpointModelGroups: null,
@@ -728,6 +778,22 @@ describe("Codex's default Subagent model and memory model", () => {
       allowsAnySubagentModel: true,
     });
     expect(shown.sideModels).toBeNull();
+    // 接口名显示方式同样管这几项：只有一个 gpt-5.5 / kimi-k2，同名时显示就都不带。
+    const clash = view({
+      provider: "codex",
+      endpoints,
+      endpointModelGroups: groups,
+      enabled: true,
+      defaultModelId: "glm-5.3",
+      subagentThinkingOptions: levels,
+      sideModelOptions,
+      endpointNameDisplay: "clash",
+    });
+    expect(clash.codexSideModels?.modelOptions.map((option) => option.endpointName)).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("leaves both to Codex while nothing is set", () => {

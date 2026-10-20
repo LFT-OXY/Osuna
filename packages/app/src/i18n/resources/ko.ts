@@ -2837,6 +2837,19 @@ export const ko: TranslationResources = {
           "Codex와 Claude Code가 긴 대화를 압축하는 지점입니다. 비워 두면 {{size}}입니다. 자체 압축 기준이 있는 모델은 그 값을 씁니다.",
         saveFailed: "저장하지 못했습니다: {{message}}",
       },
+      endpointNames: {
+        title: "모델 목록의 엔드포인트 이름",
+        info: "엔드포인트가 제공하는 모델 뒤에 엔드포인트 이름을 붙일지 정합니다(예: “Kimi K2 (Relay A)”). ‘표시 안 함’이어도 이름이 같은 두 엔드포인트의 모델은 Codex의 /model에서 엔드포인트/모델로 구분됩니다.",
+        label: "각 모델 뒤",
+        hint: "모델 선택기, 기본 모델 선택지, Codex의 /model.",
+        choices: {
+          always: "항상",
+          clash: "이름이 겹칠 때만",
+          never: "표시 안 함",
+        },
+        accessibilityLabel: "모델 목록의 엔드포인트 이름: {{value}}",
+        saveFailed: "저장하지 못했습니다: {{message}}",
+      },
       disabledModels: {
         title: "비활성화한 모델",
         info: "Osuna를 거치는 요청에만 적용됩니다. 각 항목은 모델 ID, 「엔드포인트/모델」 또는 패턴입니다. *는 임의의 문자열, ?는 임의의 한 글자와 일치하며 대소문자는 구분하지 않습니다. {{example}}은(는) 모든 preview 모델을 비활성화합니다.",

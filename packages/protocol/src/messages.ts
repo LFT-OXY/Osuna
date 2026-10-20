@@ -114,6 +114,8 @@ import {
   ApiEndpointSetLongConversationsResponseSchema,
   ApiEndpointSetDisabledModelsRequestSchema,
   ApiEndpointSetDisabledModelsResponseSchema,
+  ApiEndpointSetEndpointNameDisplayRequestSchema,
+  ApiEndpointSetEndpointNameDisplayResponseSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogRequestSchema,
@@ -477,6 +479,8 @@ export const ProviderSnapshotEntrySchema = z.object({
   // Codex 的默认 Subagent 模型与记忆模型的选项：用 ChatGPT 登录时 Codex 自己的模型在前（id 是 /model 里的写法），
   // 再是接口的模型；总开关开着才有，老 daemon 不发。
   sideModelOptions: z.array(ApiEndpointSideModelOptionSchema).optional(),
+  // 接口名显示方式（api-endpoint/endpoint-names.ts）：选择器里接口名带不带；总开关开着才有，老 daemon 不发（当 always）。
+  apiEndpointNameDisplay: z.string().optional(),
   // 已装 CLI 的版本号（纯 x.y.z），只有启用的内置提供方才有；取不到时省略。
   version: z.string().optional(),
 });
@@ -3593,6 +3597,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetOrderRequestSchema,
   ApiEndpointSetLongConversationsRequestSchema,
   ApiEndpointSetDisabledModelsRequestSchema,
+  ApiEndpointSetEndpointNameDisplayRequestSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointListTemplatesRequestSchema,
@@ -3977,7 +3982,8 @@ export const ServerInfoStatusPayloadSchema = z
         // 接口与保存带 templateId、region；store_icon、fetch_site_icon、read_icon 与接口、保存的 icon（自选图标）；
         // fetch_models 的 baseUrls（各格式各拉一次再合并）与 forget_catalog（丢掉拉回的清单）；
         // 列表带 longConversations，支持 set_long_conversations（长对话：完整窗口与全局压缩阈值）；
-        // 列表带 disabledModels，支持 set_disabled_models（已禁用的模型）。
+        // 列表带 disabledModels，支持 set_disabled_models（已禁用的模型）；
+        // 列表带 endpointNameDisplay、快照带 apiEndpointNameDisplay，支持 set_endpoint_name_display（接口名显示方式）。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7384,6 +7390,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetOrderResponseSchema,
   ApiEndpointSetLongConversationsResponseSchema,
   ApiEndpointSetDisabledModelsResponseSchema,
+  ApiEndpointSetEndpointNameDisplayResponseSchema,
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointListTemplatesResponseSchema,

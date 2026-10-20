@@ -440,7 +440,7 @@ describe("model list items grouped by API endpoint", () => {
       providerLabel: "Claude Code",
       modelId,
       modelLabel: modelId.slice(modelId.indexOf("/") + 1),
-      apiEndpointGroup: { name, index },
+      apiEndpointGroup: { name, index, nameShown: "heading" },
     };
   }
 
@@ -456,6 +456,24 @@ describe("model list items grouped by API endpoint", () => {
     expect(buildModelListItems(rows, { groupByApiEndpoint: false })).toEqual([
       { kind: "row", key: "claude:a/shared", row: rows[0] },
     ]);
+  });
+
+  it("without headings (the endpoint's name shown only when names clash, or never) the list stays flat in the given order", () => {
+    const rows = [
+      {
+        ...grouped("a/shared", "A", 0),
+        apiEndpointGroup: { name: "A", index: 0, nameShown: "inline" as const },
+      },
+      {
+        ...grouped("a/a1", "A", 0),
+        apiEndpointGroup: { name: "A", index: 0, nameShown: "none" as const },
+      },
+    ];
+    expect(
+      buildModelListItems(rows, { groupByApiEndpoint: true }).map((item) =>
+        item.kind === "group" ? `# ${item.name}` : item.row.modelId,
+      ),
+    ).toEqual(["a/shared", "a/a1"]);
   });
 
   it("each endpoint gets a heading, in creation order even after search ranking", () => {
@@ -476,7 +494,7 @@ describe("desktop model picker height", () => {
   function endpointRow(modelId: string): ProviderSelectionModelRow {
     return {
       ...modelRow("claude", "Claude Code", modelId, modelId),
-      apiEndpointGroup: { name: "Relay", index: 0 },
+      apiEndpointGroup: { name: "Relay", index: 0, nameShown: "heading" },
     };
   }
   function officialRow(modelId: string): ProviderSelectionModelRow {

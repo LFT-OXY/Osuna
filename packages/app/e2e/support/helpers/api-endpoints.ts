@@ -263,6 +263,9 @@ interface ApiEndpointSeedClient {
   apiEndpointSetDisabledModels(options: {
     models: string[];
   }): Promise<{ error: { code: string; message: string } | null }>;
+  apiEndpointSetEndpointNameDisplay(options: {
+    display: string;
+  }): Promise<{ error: { code: string; message: string } | null }>;
   apiEndpointFetchModels(options: {
     provider: string;
     endpointId?: string;
@@ -334,6 +337,7 @@ export async function resetApiEndpoints(client: ApiEndpointSeedClient): Promise<
   // 长对话是整台主机的设置，同样会带进下一个用例。
   await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
   await client.apiEndpointSetDisabledModels({ models: [] });
+  await client.apiEndpointSetEndpointNameDisplay({ display: "always" });
   const list = await client.apiEndpointList("claude");
   for (const endpoint of list.endpoints) {
     await client.apiEndpointDelete("claude", endpoint.id);

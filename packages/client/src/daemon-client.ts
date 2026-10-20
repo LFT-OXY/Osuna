@@ -688,6 +688,10 @@ type ApiEndpointSetDisabledModelsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_disabled_models.response" }
 >["payload"];
+type ApiEndpointSetEndpointNameDisplayPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_endpoint_name_display.response" }
+>["payload"];
 type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
@@ -775,6 +779,14 @@ export type ApiEndpointSetLongConversationsOptions = Omit<
 
 export type ApiEndpointSetDisabledModelsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_disabled_models.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetEndpointNameDisplayOptions = Omit<
+  Extract<
+    SessionInboundMessage,
+    { type: "provider.api_endpoint.set_endpoint_name_display.request" }
+  >,
   "type" | "requestId"
 >;
 
@@ -6492,6 +6504,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_disabled_models.request", ...options },
+    });
+  }
+
+  /** 设整台主机的接口名显示方式：always、clash 或 never。 */
+  async apiEndpointSetEndpointNameDisplay(
+    options: ApiEndpointSetEndpointNameDisplayOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetEndpointNameDisplayPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_endpoint_name_display.request", ...options },
     });
   }
 

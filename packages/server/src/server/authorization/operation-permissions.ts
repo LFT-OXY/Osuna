@@ -165,6 +165,7 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.set_order.request": "daemon.manage",
   "provider.api_endpoint.set_long_conversations.request": "daemon.manage",
   "provider.api_endpoint.set_disabled_models.request": "daemon.manage",
+  "provider.api_endpoint.set_endpoint_name_display.request": "daemon.manage",
   // 回的是 key 原文，和保存同一级。
   "provider.api_endpoint.reveal_key.request": "daemon.manage",
   "provider.api_endpoint.forget_catalog.request": "daemon.manage",
@@ -428,6 +429,7 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.set_order.response": "daemon.manage",
   "provider.api_endpoint.set_long_conversations.response": "daemon.manage",
   "provider.api_endpoint.set_disabled_models.response": "daemon.manage",
+  "provider.api_endpoint.set_endpoint_name_display.response": "daemon.manage",
   "provider.api_endpoint.reveal_key.response": "daemon.manage",
   "provider.api_endpoint.forget_catalog.response": "daemon.manage",
   "provider.api_endpoint.list_templates.response": "daemon.read",
