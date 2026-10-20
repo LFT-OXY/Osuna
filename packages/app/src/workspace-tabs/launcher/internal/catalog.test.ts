@@ -12,6 +12,7 @@ describe("getBuiltInLaunchOrder", () => {
       "browser",
       "pullRequest",
       "sessionHistory",
+      "logicMap",
     ]);
   });
 
@@ -25,6 +26,7 @@ describe("getBuiltInLaunchOrder", () => {
       "browser",
       "pullRequest",
       "sessionHistory",
+      "logicMap",
     ]);
   });
 });

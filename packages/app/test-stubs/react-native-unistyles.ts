@@ -1,3 +1,5 @@
+import { LOGIC_MAP_LIGHT_PALETTE } from "../src/styles/logic-map-palette";
+
 const testTheme = {
   colorScheme: "light",
   colors: {
@@ -58,6 +60,8 @@ const testTheme = {
       // Combobox 的底部表单把手色。
       zinc: { 600: "#52525b" },
     },
+    // 逻辑图画布的颜色例外，取浅色主题的值。
+    logicMap: LOGIC_MAP_LIGHT_PALETTE,
     // 终端三色：前景/光标沿用浅色主题的 foreground，背景为白。
     terminal: {
       foreground: "#1a1a1e",

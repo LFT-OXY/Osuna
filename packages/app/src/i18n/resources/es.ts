@@ -4176,4 +4176,75 @@ export const es: TranslationResources = {
       month: "Mes",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "Mapa lógico",
+      hintOff:
+        "Actívalo para que el agente mantenga un mapa lógico de esta función mientras la comentáis.",
+      hintOn: "El agente mantiene el mapa lógico al día mientras comentáis la función.",
+      hostOutdated: "Actualiza Osuna en este host",
+      hostOutdatedDetail: "Actualiza Osuna en este host para usar el mapa lógico.",
+      failed: "No se pudo cambiar el mapa lógico: {{error}}",
+      toolsNotInjectedDetail:
+        "El mapa lógico necesita las herramientas de Osuna. Actívalas en Ajustes → Host → Agents y luego recarga este agente.",
+      toolsNotInjectedDraftDetail:
+        "El mapa lógico necesita las herramientas de Osuna. Actívalas en Ajustes → Host → Agents.",
+      openAgentsSettings: "Abrir ajustes",
+      mcpDisabledDetail:
+        "El mapa lógico necesita las herramientas de Osuna, y este host no puede ofrecerlas mientras MCP esté desactivado.",
+      toolsNotDeliveredDetail:
+        "El mapa lógico necesita las herramientas de Osuna, y este agente no puede llamarlas.",
+    },
+    picker: {
+      title: "Activar el mapa lógico",
+      newMap: "Nuevo mapa lógico",
+      continueSection: "Continuar un mapa lógico",
+      loading: "Cargando mapas lógicos…",
+      listFailed: "No se pueden listar los mapas lógicos de este espacio de trabajo",
+    },
+    panel: {
+      label: "Mapa lógico",
+      subtitle: "El flujo de la función que estás discutiendo",
+      tooltip: "Ver los mapas lógicos que el agente mantiene en este espacio de trabajo",
+      canvas: "Lienzo del mapa lógico",
+      pickerLabel: "Mapa lógico: {{title}}",
+      untitled: "Mapa lógico sin título",
+      nodeCountOne: "{{count}} nodo",
+      nodeCountMany: "{{count}} nodos",
+      loading: "Cargando mapa lógico…",
+      empty: {
+        title: "Aún no hay mapas lógicos",
+        body: "Activa Mapa lógico en la barra del compositor. El agente mantendrá un mapa de la función mientras la discutes.",
+      },
+      newMap: {
+        start: "Inicio",
+        body: "El agente aún no ha añadido nodos.",
+      },
+      unreadable: "No se puede leer este mapa lógico",
+      corruptDetail:
+        "{{map}}: {{file}} no tiene un formato que Osuna pueda leer. Corrige o restaura el archivo.",
+      details: "Detalles",
+      hideDetails: "Ocultar detalles",
+      listFailed: "No se pueden listar los mapas lógicos de este espacio de trabajo",
+      hostOutdated: {
+        title: "Actualiza Osuna en este host",
+        body: "La versión de Osuna de este host es demasiado antigua para mostrar mapas lógicos.",
+      },
+      branch: {
+        if: "Si",
+        elseIf: "Si no, si",
+        else: "Si no",
+      },
+      subgraphTagOne: "Subgrafo · {{count}} nodo",
+      subgraphTagMany: "Subgrafo · {{count}} nodos",
+      enterSubgraph: "Abrir subgrafo {{title}}",
+      openNodeDoc: "Abrir el documento de {{title}}",
+      openNodeDocFailed: "No se pudo abrir el documento del nodo",
+      breadcrumb: "Ruta del mapa lógico",
+      pendingLink: "Sin documento vinculado",
+      missingDoc: "Sin documento",
+      missingDocHint: "Este nodo aún no tiene documento",
+      missingDocLabel: "{{title}} aún no tiene documento",
+    },
+  },
 };

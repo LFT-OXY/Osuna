@@ -4221,6 +4221,75 @@ export const en = {
       month: "Month",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "Logic map",
+      hintOff: "Turn on to have the agent keep a logic map of this feature as you discuss it.",
+      hintOn: "The agent keeps the logic map current as you discuss the feature.",
+      hostOutdated: "Update Osuna on this host",
+      hostOutdatedDetail: "Update Osuna on this host to use the logic map.",
+      failed: "Could not change the logic map: {{error}}",
+      toolsNotInjectedDetail:
+        "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents, then reload this agent.",
+      toolsNotInjectedDraftDetail:
+        "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents.",
+      openAgentsSettings: "Open settings",
+      mcpDisabledDetail:
+        "The logic map needs Osuna tools, which this host can't provide while MCP is turned off.",
+      toolsNotDeliveredDetail: "The logic map needs Osuna tools, and this agent can't call them.",
+    },
+    picker: {
+      title: "Turn on the logic map",
+      newMap: "New logic map",
+      continueSection: "Continue a logic map",
+      loading: "Loading logic maps…",
+      listFailed: "Can't list this workspace's logic maps",
+    },
+    panel: {
+      label: "Logic map",
+      subtitle: "The flow of the feature you're discussing",
+      tooltip: "See the logic maps the agent keeps in this workspace",
+      canvas: "Logic map canvas",
+      pickerLabel: "Logic map: {{title}}",
+      untitled: "Untitled logic map",
+      nodeCountOne: "{{count}} node",
+      nodeCountMany: "{{count}} nodes",
+      loading: "Loading logic map…",
+      empty: {
+        title: "No logic map yet",
+        body: "Turn on Logic map in the composer toolbar. The agent then keeps a map of the feature as you discuss it.",
+      },
+      newMap: {
+        start: "Start",
+        body: "The agent hasn't added any nodes yet.",
+      },
+      unreadable: "Can't read this logic map",
+      corruptDetail:
+        "{{map}}: {{file}} is not in a format Osuna can read. Fix or restore the file.",
+      details: "Details",
+      hideDetails: "Hide details",
+      listFailed: "Can't list this workspace's logic maps",
+      hostOutdated: {
+        title: "Update Osuna on this host",
+        body: "This host's Osuna is too old to show logic maps.",
+      },
+      branch: {
+        if: "If",
+        elseIf: "Else if",
+        else: "Else",
+      },
+      subgraphTagOne: "Subgraph · {{count}} node",
+      subgraphTagMany: "Subgraph · {{count}} nodes",
+      enterSubgraph: "Open subgraph {{title}}",
+      openNodeDoc: "Open the doc for {{title}}",
+      openNodeDocFailed: "Couldn't open the node doc",
+      breadcrumb: "Logic map path",
+      pendingLink: "No doc linked",
+      missingDoc: "No doc",
+      missingDocHint: "This node has no doc yet",
+      missingDocLabel: "{{title}} has no doc yet",
+    },
+  },
 } as const;
 
 type WidenStringLeaves<T> = {

@@ -64,6 +64,16 @@ import {
   type RoutingBlockResolver,
 } from "./agent/agent-prompt.js";
 import { resolveRoutingBlock } from "./agent/routing-block.js";
+import { resolvePaseoToolsUnavailableReason } from "./agent/create-agents-capability.js";
+import {
+  markLogicMapBriefed,
+  resolveLogicMapInstructionBlock,
+} from "./logic-map/logic-map-instruction-block.js";
+import { setLogicMapEnabled } from "./logic-map/logic-map-toggle.js";
+import {
+  listWorkspaceLogicMaps,
+  readWorkspaceLogicMap,
+} from "./logic-map/logic-map-workspace-reads.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -2673,6 +2683,12 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.logic_map.set_enabled.request":
+        return this.handleSetLogicMapEnabledRequest(msg);
+      case "workspace.logic_map.list.request":
+        return this.handleListWorkspaceLogicMapsRequest(msg);
+      case "workspace.logic_map.get.request":
+        return this.handleGetWorkspaceLogicMapRequest(msg);
       default:
         return undefined;
     }
@@ -3407,6 +3423,101 @@ export class Session {
     }
 
     return { agentId, archivedAt };
+  }
+
+  private async handleSetLogicMapEnabledRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.logic_map.set_enabled.request" }>,
+  ): Promise<void> {
+    const agentId = msg.target.kind === "agent" ? msg.target.agentId : null;
+    try {
+      const result = await setLogicMapEnabled(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          workspaceRegistry: this.workspaceRegistry,
+        },
+        { target: msg.target, enabled: msg.enabled, mapName: msg.mapName },
+      );
+      // 运行中的 Agent 改 labels 时自己会推送；没加载的要把新记录推给客户端。
+      if (result.labelWrite && !result.labelWrite.live && result.labelWrite.record) {
+        await this.agentUpdates.emitStoredRecord(result.labelWrite.record);
+      }
+      this.emit({
+        type: "agent.logic_map.set_enabled.response",
+        payload: { requestId: msg.requestId, agentId, mapName: result.mapName, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, agentId, requestId: msg.requestId },
+        "Failed to set logic map toggle",
+      );
+      this.emit({
+        type: "agent.logic_map.set_enabled.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId,
+          mapName: null,
+          error: getErrorMessageOr(error, "Failed to set logic map toggle"),
+        },
+      });
+    }
+  }
+
+  private async handleListWorkspaceLogicMapsRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.logic_map.list.request" }>,
+  ): Promise<void> {
+    const { requestId, workspaceId } = msg;
+    try {
+      const maps = await listWorkspaceLogicMaps(
+        { workspaceRegistry: this.workspaceRegistry },
+        workspaceId,
+      );
+      this.emit({
+        type: "workspace.logic_map.list.response",
+        payload: { requestId, workspaceId, maps, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error, workspaceId, requestId }, "Failed to list logic maps");
+      this.emit({
+        type: "workspace.logic_map.list.response",
+        payload: {
+          requestId,
+          workspaceId,
+          maps: [],
+          error: getErrorMessageOr(error, "Failed to list logic maps"),
+        },
+      });
+    }
+  }
+
+  private async handleGetWorkspaceLogicMapRequest(
+    msg: Extract<SessionInboundMessage, { type: "workspace.logic_map.get.request" }>,
+  ): Promise<void> {
+    const { requestId, workspaceId, mapName } = msg;
+    try {
+      const result = await readWorkspaceLogicMap(
+        { workspaceRegistry: this.workspaceRegistry },
+        { workspaceId, mapName },
+      );
+      this.emit({
+        type: "workspace.logic_map.get.response",
+        payload: { requestId, workspaceId, mapName, result },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, workspaceId, mapName, requestId },
+        "Failed to read logic map",
+      );
+      this.emit({
+        type: "workspace.logic_map.get.response",
+        payload: {
+          requestId,
+          workspaceId,
+          mapName,
+          result: { kind: "error", message: getErrorMessageOr(error, "Failed to read logic map") },
+        },
+      });
+    }
   }
 
   private async handleDetachAgentRequest(agentId: string, requestId: string): Promise<void> {
@@ -8210,10 +8321,13 @@ export class Session {
     }
   }
 
-  /** 客户端发来的用户消息按发出时的会话判定生成 Routing block；配置在发送时现读。 */
+  /**
+   * 客户端发来的用户消息按发出时的会话判定生成 Routing block，再接上逻辑图说明块（开关开着、会话拿得到 Osuna 工具时）；
+   * 配置和开关都在发送时现读。
+   */
   private routingBlockResolver(text: string): RoutingBlockResolver {
-    return (agent) =>
-      resolveRoutingBlock({
+    return async (agent) => {
+      const routingBlock = await resolveRoutingBlock({
         text,
         cwd: agent.cwd,
         canCreateAgents: agent.createAgentsCapability?.canCreateAgents === true,
@@ -8222,6 +8336,22 @@ export class Session {
         agentProfiles: this.daemonConfigStore.get().agentProfiles ?? [],
         providers: this.providerSnapshotManager,
       });
+      // 会话拿不到 Osuna 工具时不发说明块，免得要求它用没有的 read_logic_map / update_logic_map。
+      const toolsUnavailableReason = resolvePaseoToolsUnavailableReason(
+        agent.createAgentsCapability,
+      );
+      let logicMapBlock: string | null = null;
+      if (toolsUnavailableReason === null) {
+        logicMapBlock = await resolveLogicMapInstructionBlock({
+          text,
+          labels: agent.labels,
+          cwd: agent.cwd,
+        });
+      }
+      if (logicMapBlock) await markLogicMapBriefed(this.agentManager, agent);
+      const blocks = [routingBlock, logicMapBlock].filter((block): block is string => !!block);
+      return blocks.length > 0 ? blocks.join("\n\n") : null;
+    };
   }
 
   private async prepareAgentMessage(agentId: string, text: string): Promise<void> {
@@ -8713,6 +8843,7 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
+    case "workspace.logic_map.changed":
       return message.type;
     case "status":
       return statusEventCategory(message.payload.status);
@@ -8763,6 +8894,8 @@ function legacyWantsEvent(
     case "usage.backfill.progress":
     case "usage.updated":
     case "usage.pricing.updated":
+    // 逻辑图事件同样晚于订阅机制出现，只发给订阅了它的连接。
+    case "workspace.logic_map.changed":
       return false;
     default:
       return true;

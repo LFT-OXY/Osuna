@@ -127,6 +127,9 @@ import type {
   PluginUpdateResult,
   AgentSkillSelection,
   AgentSkillsStatus,
+  AgentLogicMapTarget,
+  WorkspaceLogicMapReadResult,
+  WorkspaceLogicMapSummary,
   AgentSkillsSaveResult,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -1146,6 +1149,18 @@ export class DaemonConnectionError extends Error {
   ) {
     super(message);
     this.name = "DaemonConnectionError";
+  }
+}
+
+/** daemon 读不出这个文件（不存在、不可读、是目录等）；message 是 daemon 给的原因。 */
+export class FileReadError extends Error {
+  constructor(
+    message: string,
+    readonly cwd: string,
+    readonly path: string,
+  ) {
+    super(message);
+    this.name = "FileReadError";
   }
 }
 
@@ -3142,6 +3157,59 @@ export class DaemonClient {
     }
   }
 
+  /**
+   * 开关逻辑图。对象是 Agent 时改这个 Agent；是草稿时打开拿回新图的名字，
+   * 新建 Agent 时放进 `LOGIC_MAP_LABEL`。关着时 mapName 为 null。
+   * 打开时给了 mapName 就接着 workspace 里这张已有的图，不新建。
+   */
+  async setAgentLogicMapEnabled(input: {
+    target: AgentLogicMapTarget;
+    enabled: boolean;
+    mapName?: string;
+  }): Promise<{ mapName: string | null }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.logic_map.set_enabled.response">({
+        message: {
+          type: "agent.logic_map.set_enabled.request",
+          target: input.target,
+          enabled: input.enabled,
+          ...(input.mapName !== undefined ? { mapName: input.mapName } : {}),
+        },
+      });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { mapName: payload.mapName };
+  }
+
+  /** 列出 workspace 里的逻辑图（图名与标题）。 */
+  async listWorkspaceLogicMaps(workspaceId: string): Promise<WorkspaceLogicMapSummary[]> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.logic_map.list.response">({
+        message: { type: "workspace.logic_map.list.request", workspaceId },
+      });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return payload.maps;
+  }
+
+  /** 读一张逻辑图；文件被改坏时返回 corrupt（哪个文件、什么问题），读不到时返回 error。 */
+  async getWorkspaceLogicMap(input: {
+    workspaceId: string;
+    mapName: string;
+  }): Promise<WorkspaceLogicMapReadResult> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.logic_map.get.response">({
+        message: {
+          type: "workspace.logic_map.get.request",
+          workspaceId: input.workspaceId,
+          mapName: input.mapName,
+        },
+      });
+    return payload.result;
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string> },
@@ -4906,7 +4974,7 @@ export class DaemonClient {
         maxBytes,
       );
       if (payload.error) {
-        throw new Error(payload.error);
+        throw new FileReadError(payload.error, cwd, path);
       }
       const binaryResult = this.completedBinaryFileReads.get(resolvedRequestId);
       if (binaryResult) {
@@ -4914,7 +4982,7 @@ export class DaemonClient {
         return binaryResult;
       }
       if (!payload.file) {
-        throw new Error("File unavailable.");
+        throw new FileReadError("File unavailable.", cwd, path);
       }
       return legacyExplorerFileToBytes(payload.file);
     } finally {

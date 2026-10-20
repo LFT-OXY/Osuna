@@ -4115,4 +4115,74 @@ export const ko: TranslationResources = {
       month: "월",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "로직 맵",
+      hintOff: "켜면 기능을 논의하는 동안 Agent가 로직 맵을 계속 업데이트합니다.",
+      hintOn: "Agent가 논의에 맞춰 로직 맵을 업데이트합니다.",
+      hostOutdated: "이 호스트의 Osuna를 업데이트하세요",
+      hostOutdatedDetail: "로직 맵을 사용하려면 이 호스트의 Osuna를 업데이트하세요.",
+      failed: "로직 맵을 전환할 수 없습니다: {{error}}",
+      toolsNotInjectedDetail:
+        "로직 맵에는 Osuna 도구가 필요합니다. 설정 → Host → 에이전트에서 켠 다음 이 Agent를 다시 불러오세요.",
+      toolsNotInjectedDraftDetail:
+        "로직 맵에는 Osuna 도구가 필요합니다. 설정 → Host → 에이전트에서 켜세요.",
+      openAgentsSettings: "설정 열기",
+      mcpDisabledDetail:
+        "로직 맵에는 Osuna 도구가 필요하지만, MCP가 꺼져 있는 동안 이 호스트는 제공할 수 없습니다.",
+      toolsNotDeliveredDetail:
+        "로직 맵에는 Osuna 도구가 필요하지만, 이 Agent는 호출할 수 없습니다.",
+    },
+    picker: {
+      title: "로직 맵 켜기",
+      newMap: "새 로직 맵",
+      continueSection: "기존 로직 맵 이어 하기",
+      loading: "로직 맵을 불러오는 중…",
+      listFailed: "이 워크스페이스의 로직 맵을 불러올 수 없습니다",
+    },
+    panel: {
+      label: "로직 맵",
+      subtitle: "논의 중인 기능의 흐름",
+      tooltip: "이 워크스페이스에서 에이전트가 관리하는 로직 맵 보기",
+      canvas: "로직 맵 캔버스",
+      pickerLabel: "로직 맵: {{title}}",
+      untitled: "제목 없는 로직 맵",
+      nodeCountOne: "노드 {{count}}개",
+      nodeCountMany: "노드 {{count}}개",
+      loading: "로직 맵 불러오는 중…",
+      empty: {
+        title: "아직 로직 맵이 없습니다",
+        body: "컴포저 도구 모음에서 로직 맵을 켜면 논의하는 동안 에이전트가 기능의 맵을 관리합니다.",
+      },
+      newMap: {
+        start: "시작",
+        body: "에이전트가 아직 노드를 추가하지 않았습니다.",
+      },
+      unreadable: "이 로직 맵을 읽을 수 없습니다",
+      corruptDetail:
+        "{{map}}: {{file}} 파일 형식이 올바르지 않아 읽을 수 없습니다. 파일을 고치거나 복원하세요.",
+      details: "자세히",
+      hideDetails: "자세히 숨기기",
+      listFailed: "이 워크스페이스의 로직 맵 목록을 가져올 수 없습니다",
+      hostOutdated: {
+        title: "이 호스트의 Osuna를 업데이트하세요",
+        body: "이 호스트의 Osuna가 오래되어 로직 맵을 표시할 수 없습니다.",
+      },
+      branch: {
+        if: "만약",
+        elseIf: "아니고 만약",
+        else: "아니면",
+      },
+      subgraphTagOne: "하위 그래프 · 노드 {{count}}개",
+      subgraphTagMany: "하위 그래프 · 노드 {{count}}개",
+      enterSubgraph: "하위 그래프 {{title}} 열기",
+      openNodeDoc: "{{title}} 노드 문서 열기",
+      openNodeDocFailed: "노드 문서를 열 수 없습니다",
+      breadcrumb: "로직 맵 경로",
+      pendingLink: "문서 미연결",
+      missingDoc: "문서 없음",
+      missingDocHint: "이 노드에는 아직 문서가 없습니다",
+      missingDocLabel: "{{title}}에는 아직 문서가 없습니다",
+    },
+  },
 };

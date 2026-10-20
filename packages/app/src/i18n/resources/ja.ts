@@ -4139,4 +4139,74 @@ export const ja: TranslationResources = {
       month: "月",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "ロジックマップ",
+      hintOff: "オンにすると、機能について話し合う間 Agent がロジックマップを更新し続けます。",
+      hintOn: "Agent は話し合いに合わせてロジックマップを更新します。",
+      hostOutdated: "このホストの Osuna を更新してください",
+      hostOutdatedDetail: "ロジックマップを使うには、このホストの Osuna を更新してください。",
+      failed: "ロジックマップを切り替えられませんでした: {{error}}",
+      toolsNotInjectedDetail:
+        "ロジックマップには Osuna ツールが必要です。設定 → Host → エージェント でオンにしてから、この Agent を再読み込みしてください。",
+      toolsNotInjectedDraftDetail:
+        "ロジックマップには Osuna ツールが必要です。設定 → Host → エージェント でオンにしてください。",
+      openAgentsSettings: "設定を開く",
+      mcpDisabledDetail:
+        "ロジックマップには Osuna ツールが必要ですが、MCP がオフの間はこのホストから提供できません。",
+      toolsNotDeliveredDetail:
+        "ロジックマップには Osuna ツールが必要ですが、この Agent はそれを呼び出せません。",
+    },
+    picker: {
+      title: "ロジックマップをオンにする",
+      newMap: "新しいロジックマップ",
+      continueSection: "既存のロジックマップを続ける",
+      loading: "ロジックマップを読み込み中…",
+      listFailed: "このワークスペースのロジックマップを一覧できません",
+    },
+    panel: {
+      label: "ロジックマップ",
+      subtitle: "話し合っている機能の流れ",
+      tooltip: "このワークスペースでエージェントが管理するロジックマップを表示",
+      canvas: "ロジックマップのキャンバス",
+      pickerLabel: "ロジックマップ: {{title}}",
+      untitled: "無題のロジックマップ",
+      nodeCountOne: "{{count}} 個のノード",
+      nodeCountMany: "{{count}} 個のノード",
+      loading: "ロジックマップを読み込み中…",
+      empty: {
+        title: "ロジックマップはまだありません",
+        body: "コンポーザーのツールバーで「ロジックマップ」をオンにすると、話し合いに合わせてエージェントが機能のマップを管理します。",
+      },
+      newMap: {
+        start: "開始",
+        body: "エージェントはまだノードを追加していません。",
+      },
+      unreadable: "このロジックマップを読み込めません",
+      corruptDetail:
+        "{{map}}: {{file}} の形式が正しくないため読み込めません。ファイルを修正するか元に戻してください。",
+      details: "詳細",
+      hideDetails: "詳細を隠す",
+      listFailed: "このワークスペースのロジックマップを一覧できません",
+      hostOutdated: {
+        title: "このホストの Osuna を更新してください",
+        body: "このホストの Osuna は古いため、ロジックマップを表示できません。",
+      },
+      branch: {
+        if: "もし",
+        elseIf: "それ以外でもし",
+        else: "それ以外",
+      },
+      subgraphTagOne: "サブグラフ · {{count}} 個のノード",
+      subgraphTagMany: "サブグラフ · {{count}} 個のノード",
+      enterSubgraph: "サブグラフ {{title}} を開く",
+      openNodeDoc: "{{title}} のノードドキュメントを開く",
+      openNodeDocFailed: "ノードドキュメントを開けませんでした",
+      breadcrumb: "ロジックマップのパス",
+      pendingLink: "ドキュメント未リンク",
+      missingDoc: "ドキュメントなし",
+      missingDocHint: "このノードにはまだドキュメントがありません",
+      missingDocLabel: "{{title}} にはまだドキュメントがありません",
+    },
+  },
 } as const;

@@ -1613,6 +1613,10 @@ export async function createPaseoDaemon(
     voiceOnly: runtime.voiceOnly,
     resolveSpeakHandler: (agentId) => wsServer?.resolveVoiceSpeakHandler(agentId) ?? null,
     resolveCallerContext: (agentId) => wsServer?.resolveVoiceCallerContext(agentId) ?? null,
+    onLogicMapChanged: (event) =>
+      wsServer?.broadcast(
+        wrapSessionMessage({ type: "workspace.logic_map.changed", payload: event }),
+      ),
     logger,
   });
   const createAgentToolCatalog = (runtime: PaseoToolRuntimeContext) =>

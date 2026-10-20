@@ -372,6 +372,61 @@ Reference implementation: cli-wiring-web-search ticket 13 (`server/codex-convers
 - Ticket 14: Session history multi-select moves rows of one provider at a time (one `CODEX_HOME` per move) and lists per-row results. Codex's ``Model provider `…` not found`` on resume becomes `CodexModelProviderMissingError` (`codex-conversations/model-provider-missing.ts`); import, `resume_agent_request` and `refresh_agent_request` map errors through `toAgentResumeWireError` (`agent-resume-errors.ts`) so the wire error carries `codex_model_provider_missing` (`CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE`) and the app never matches English text. The app shows the explanation and the move button in Session history's import error and in the archived agent callout; an unarchive (`refresh_agent_request`) that fails to resume puts the agent back in the archive with the error kept only when `isCodexModelProviderMissing(error)` (walks `cause` for `CodexModelProviderMissingError`); any other resume failure leaves the agent unarchived and still returns `agent_refresh_failed`. Worktree restore depends on that: unarchiving an agent whose workspace directory is gone fails on the missing cwd, yet the agent must end up unarchived (`worktree-restore.spec.ts`; `session.workspaces.test.ts` "cannot resume because …" covers both branches). `resume_agent_request` (CLI only) still re-archives on any failure; the difference is intentional. Not covered (user deferred): an unarchived agent that fails to load after a daemon restart ("Failed to load agent" page).
 - Known limit (verified with real Codex 0.163.0, temp `CODEX_HOME`): if Codex rebuilds its state DB before the moved conversation is resumed once, the move reverts; the dialog says to resume once.
 
+## Scenario: a folder of files an agent edits in batches, inside the workspace
+
+Reference implementation: logic maps (`server/logic-map/`, logic-map ticket 02). Reuse this shape when agent tools write several files that must change together, in the user's repo rather than `$PASEO_HOME`.
+
+### 1. Scope / Trigger
+
+- One logical write touches a skeleton JSON plus per-item Markdown files, can come from two agents at once, and the files are hand-editable (they live in git under `<cwd>/docs/logic-maps/<name>/`).
+
+### 2. Signatures
+
+- `updateLogicMap(location: { cwd, mapName }, operations): Promise<{ skeleton, warnings }>` (`logic-map-store.ts`); `applyLogicMapOperations(current, operations)` is pure and returns `{ skeleton, docWrites, docDeletes, externalLinks, problems, warnings }` (`logic-map-operations.ts`).
+- `parseLogicMapSkeleton(value)` (`logic-map-skeleton.ts`): the disk schema. Wire schema `LogicMapSkeletonSchema` lives in `@getpaseo/protocol/messages`.
+- Tools `read_logic_map` / `update_logic_map` (`logic-map-tools.ts`), registered next to `create_agent`; they resolve the map from the caller agent's `paseo.logic-map` label and `cwd`, never from tool input.
+
+### 3. Contracts
+
+- Two schemas: the disk schema is `.strict()` with non-empty ids/titles so a hand-broken file reads as corrupt; the wire schema stays loose and pure so an old client parses a map with fields it does not know. New disk fields are optional with a default (`failure: z.boolean().default(false)`).
+- Validate the whole batch first (pure apply + external-file checks); any problem → `LogicMapUpdateRejectedError(problems)` and nothing touches disk.
+- Writes are serialized per resolved folder (`runExclusive`), so concurrent batches both land instead of last-write-wins.
+- Write order: docs → skeleton (atomic) → deletes. Before writing, `snapshotFiles` captures every file the batch touches; any failure runs `restoreFiles(snapshot)` and rethrows.
+- Derived flags (`pendingLink`) are recomputed over all nodes on every batch, not only the nodes written in it, so a later framework change updates old nodes.
+- Missing node docs are a warning, not a rejection (logic-map ticket 09): after every batch `missingDocWarnings` lists each non-subgraph node that should have a doc and has none — framework `none`: `doc === null`; framework present: no notes and no external link — as `id (title)` in the same `warnings` array as the 20-node reminder, and the instruction block tells the agent the tool lists them. Before the framework is judged nothing is listed. Subgraph nodes are exempt because clicking one enters its layer, so a doc on it has no way to be opened; the app's "没有文档" tag (`isMissingDoc`, `app/src/logic-map/layout.ts`) uses the same rule, change both together. Without the warning, Codex and Pi wrote docs for 3 of 43 and 7 of 20 nodes in real runs.
+- External-file checks branch on the error code: `ENOENT`/`ENOTDIR` → "does not exist", `EISDIR` → "is a folder", anything else rethrows.
+
+### 4. Validation & Error Matrix
+
+- Caller has no label → `LogicMapOffError`. Bad batch → `LogicMapUpdateRejectedError` with every problem listed for the agent. Over 20 nodes in a layer → written, plus a warning. Non-subgraph node missing its doc (framework judged) → written, plus a warning naming it. Hand-broken `map.json` on read → readable "which map, which file, what problem" error to clients.
+
+### 5. Good/Base/Bad Cases
+
+- Good: two agents update the same map concurrently; both changes are on disk.
+- Base: a batch with one bad edge; nothing changes on disk.
+- Bad: `fs.readFile(p).catch(() => null)` to test existence — EACCES reads as "missing".
+
+### 6. Tests Required
+
+- `logic-map-tools.test.ts`: one rejection case per rule (`test.each`), concurrency, rollback on a real write failure (a 240-char id makes the temp filename hit `ENAMETOOLONG`), `pendingLink` across framework changes, missing-doc warnings in both framework modes (listed, cleared once filled, subgraph nodes never listed), external heading matching (setext, inline code, links, fenced code ignored).
+- `logic-map-store.test.ts`: disk schema rejects empty id/title and unknown fields; missing `failure` reads as `false`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+for (const [file, content] of docWrites) await writeFileAtomic(file, content);
+await writeJsonFileAtomic(skeletonFile, skeleton); // fails → new docs stay on disk
+```
+
+#### Correct
+
+```ts
+const snapshot = await snapshotFiles([...docFiles, skeletonFile, ...docDeletes]);
+try { /* docs → skeleton → deletes */ } catch (error) { await restoreFiles(snapshot); throw error; }
+```
+
 ## Anti-patterns
 
 - `JSON.parse(raw) as StoredAgentRecord`. Parse with the schema.

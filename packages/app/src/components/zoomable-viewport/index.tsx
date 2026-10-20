@@ -8,10 +8,11 @@ import {
   fitContentSize,
   isActivePinchUpdate,
   isPointInsideTransformedContent,
+  topAlignedTransform,
   zoomContentAtPoint,
   type ViewportSize,
 } from "./geometry";
-import { ViewportToolbar } from "./toolbar";
+import { ViewportToolbar, ViewportZoomBar } from "./toolbar";
 import type { ZoomableViewportProps } from "./types";
 
 const DEFAULT_MAX_SCALE = 8;
@@ -23,6 +24,9 @@ export function ZoomableViewport({
   actions = [],
   accessibilityLabel,
   fit,
+  initialPosition = "center",
+  controls = "hover-icons",
+  renderAtContentSize = false,
   maxScale = DEFAULT_MAX_SCALE,
   minScale = DEFAULT_MIN_SCALE,
   onPressOutsideContent,
@@ -46,12 +50,23 @@ export function ZoomableViewport({
     [contentSize, fit, viewport],
   );
 
+  const initialTransform = useMemo(
+    () =>
+      initialPosition === "top" && fittedContent && viewport
+        ? topAlignedTransform({ fittedContent, viewport, limits: { minScale, maxScale } })
+        : FIT_TRANSFORM,
+    [fittedContent, initialPosition, maxScale, minScale, viewport],
+  );
+  // 适配比例：内容原始尺寸到适配尺寸。按原始尺寸排版时缩放要再乘上它，百分比也按它算。
+  const fitRatio = fittedContent ? fittedContent.width / contentSize.width : 1;
+  const contentScaleRatio = renderAtContentSize ? fitRatio : 1;
+
   const reset = useCallback(() => {
-    scale.value = FIT_TRANSFORM.scale;
-    translateX.value = FIT_TRANSFORM.x;
-    translateY.value = FIT_TRANSFORM.y;
-    setToolbarScale(FIT_TRANSFORM.scale);
-  }, [scale, translateX, translateY]);
+    scale.value = initialTransform.scale;
+    translateX.value = initialTransform.x;
+    translateY.value = initialTransform.y;
+    setToolbarScale(initialTransform.scale);
+  }, [initialTransform, scale, translateX, translateY]);
 
   useEffect(() => reset(), [contentSize.height, contentSize.width, reset, viewport]);
 
@@ -199,14 +214,18 @@ export function ZoomableViewport({
   const translationStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
   }));
-  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value * contentScaleRatio }],
+  }));
   const frameStyle = useMemo(
     () => [
       styles.contentFrame,
-      { width: fittedContent?.width ?? 0, height: fittedContent?.height ?? 0 },
+      renderAtContentSize
+        ? { width: contentSize.width, height: contentSize.height }
+        : { width: fittedContent?.width ?? 0, height: fittedContent?.height ?? 0 },
       translationStyle,
     ],
-    [fittedContent, translationStyle],
+    [contentSize, fittedContent, renderAtContentSize, translationStyle],
   );
 
   return (
@@ -225,16 +244,30 @@ export function ZoomableViewport({
           ) : null}
         </View>
       </GestureDetector>
-      <ViewportToolbar
-        actions={actions}
-        maxScale={maxScale}
-        minScale={minScale}
-        onReset={reset}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        scale={toolbarScale}
-        visible
-      />
+      {controls === "zoom-bar" ? (
+        <ViewportZoomBar
+          displayScale={toolbarScale * fitRatio}
+          maxScale={maxScale}
+          minScale={minScale}
+          onReset={reset}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          resetDisabled={toolbarScale === initialTransform.scale}
+          scale={toolbarScale}
+        />
+      ) : (
+        <ViewportToolbar
+          actions={actions}
+          maxScale={maxScale}
+          minScale={minScale}
+          onReset={reset}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          resetDisabled={toolbarScale === initialTransform.scale}
+          scale={toolbarScale}
+          visible
+        />
+      )}
     </View>
   );
 }

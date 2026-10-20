@@ -43,6 +43,7 @@ export type WorkspaceTabTarget =
   | { kind: "files" }
   | { kind: "pull_request" }
   | { kind: "session_history" }
+  | { kind: "logic_map" }
   | WorkspaceFileTabTarget
   | WorkspaceWorkingDiffTabTarget
   | PluginWorkspaceTabTarget

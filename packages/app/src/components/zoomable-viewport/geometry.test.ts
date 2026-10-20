@@ -6,6 +6,8 @@ import {
   isActivePinchUpdate,
   isPointInsideTransformedContent,
   panContent,
+  revealContentRect,
+  topAlignedTransform,
   zoomContentAtPoint,
 } from "./geometry";
 
@@ -104,5 +106,109 @@ describe("zoomable viewport geometry", () => {
         maxScale: 8,
       }),
     ).toEqual({ scale: 0.25, x: 0, y: 0 });
+  });
+
+  it("fits only the width when asked, never enlarging past the cap", () => {
+    expect(
+      fitContentSize({ width: 600, height: 1200 }, { width: 300, height: 400 }, { mode: "width" }),
+    ).toEqual({ width: 300, height: 600 });
+    expect(
+      fitContentSize(
+        { width: 200, height: 100 },
+        { width: 300, height: 400 },
+        { mode: "width", maxFitScale: 1 },
+      ),
+    ).toEqual({ width: 200, height: 100 });
+  });
+
+  it("stops shrinking at the floor and lets the wider content overflow", () => {
+    expect(
+      fitContentSize(
+        { width: 600, height: 800 },
+        { width: 300, height: 400 },
+        { mode: "width", minFitScale: 0.7, maxFitScale: 1 },
+      ),
+    ).toEqual({ width: 420, height: 560 });
+  });
+
+  it("opens wide content at its top-left corner and narrow content centred at the top", () => {
+    const limits = { minScale: 0.25, maxScale: 8 };
+    const panel = { width: 300, height: 400 };
+
+    expect(
+      topAlignedTransform({ fittedContent: { width: 420, height: 560 }, viewport: panel, limits }),
+    ).toEqual({ scale: 1, x: 60, y: 80 });
+    expect(
+      topAlignedTransform({ fittedContent: { width: 200, height: 560 }, viewport: panel, limits }),
+    ).toEqual({ scale: 1, x: 0, y: 80 });
+  });
+
+  it("lets content smaller than the viewport sit anywhere inside it when asked", () => {
+    const limits = { minScale: 0.25, maxScale: 8, panWithinViewport: true };
+    const panel = { width: 300, height: 400 };
+
+    // 高度只有 200 的内容贴到视口顶边，而不是被拉回正中。
+    expect(
+      topAlignedTransform({ fittedContent: { width: 300, height: 200 }, viewport: panel, limits }),
+    ).toEqual({ scale: 1, x: 0, y: -100 });
+    // 但不能拖出视口。
+    expect(
+      clampTransform({ scale: 1, x: 0, y: -500 }, { width: 300, height: 200 }, panel, limits),
+    ).toEqual({ scale: 1, x: 0, y: -100 });
+  });
+
+  it("pans just enough to bring an off-screen part of the content into view", () => {
+    const limits = { minScale: 0.25, maxScale: 8 };
+    const panel = { width: 300, height: 400 };
+    const content = { width: 420, height: 560 };
+    // 从左上看起时内容坐标就是视口坐标。
+    const topLeft = { scale: 1, x: 60, y: 80 };
+
+    expect(
+      revealContentRect({
+        transform: topLeft,
+        rect: { x: 100, y: 500, width: 80, height: 40 },
+        fittedContent: content,
+        viewport: panel,
+        limits,
+      }),
+    ).toEqual({ scale: 1, x: 60, y: -60 });
+    expect(
+      revealContentRect({
+        transform: topLeft,
+        rect: { x: 350, y: 20, width: 60, height: 40 },
+        fittedContent: content,
+        viewport: panel,
+        limits,
+      }),
+    ).toEqual({ scale: 1, x: -50, y: 80 });
+  });
+
+  it("leaves the view alone when that part is already visible", () => {
+    const limits = { minScale: 0.25, maxScale: 8 };
+    const topLeft = { scale: 1, x: 60, y: 80 };
+    expect(
+      revealContentRect({
+        transform: topLeft,
+        rect: { x: 10, y: 10, width: 80, height: 40 },
+        fittedContent: { width: 420, height: 560 },
+        viewport: { width: 300, height: 400 },
+        limits,
+      }),
+    ).toBe(topLeft);
+  });
+
+  it("follows the current zoom when it brings the part into view", () => {
+    const limits = { minScale: 0.25, maxScale: 8 };
+    // 放大两倍、居中：内容点 (cx, cy) 在视口的 (150 + 2(cx - 210), 200 + 2(cy - 280))。
+    expect(
+      revealContentRect({
+        transform: { scale: 2, x: 0, y: 0 },
+        rect: { x: 0, y: 0, width: 50, height: 50 },
+        fittedContent: { width: 420, height: 560 },
+        viewport: { width: 300, height: 400 },
+        limits,
+      }),
+    ).toEqual({ scale: 2, x: 270, y: 360 });
   });
 });

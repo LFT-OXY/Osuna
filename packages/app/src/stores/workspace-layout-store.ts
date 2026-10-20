@@ -119,12 +119,19 @@ interface WorkspaceLayoutStore {
   sidePaneIdByWorkspace: Record<string, string | null>;
   /** Workspaces where PR detection already added its tab once; a closed tab never returns. */
   pullRequestTabAutoOpenedByWorkspace: Record<string, true>;
+  /** Workspaces whose Explorer already got the logic map tab on the first switch-on; a closed tab never returns. */
+  logicMapTabAutoOpenedByWorkspace: Record<string, true>;
   openTab: (input: OpenWorkspaceTabInput) => string | null;
   /** Placement resolves lazily so an already acknowledged workspace never creates a side pane. */
   autoOpenPullRequestTab: (
     workspaceKey: string,
     resolvePlacement: () => Pick<OpenWorkspaceTabInput, "placement" | "insertionPosition">,
   ) => string | null;
+  /**
+   * The first time a conversation in the workspace turns on its logic map, shows Explorer and
+   * selects the logic map tab there. Later calls do nothing, so a closed tab stays closed.
+   */
+  autoOpenLogicMapTab: (workspaceKey: string) => string | null;
   /** Reveals the Explorer sidebar without selecting a view. Returns its pane id. */
   showExplorerSidebar: (workspaceKey: string) => string | null;
   hideExplorerSidebar: (workspaceKey: string) => void;
@@ -678,6 +685,26 @@ export function createWorkspaceLayoutStore(
           }
           return tabId;
         },
+        autoOpenLogicMapTab: (workspaceKey) => {
+          const key = trimNonEmpty(workspaceKey);
+          if (!key || get().logicMapTabAutoOpenedByWorkspace[key]) return null;
+          const paneId = get().showExplorerSidebar(key);
+          const tabId = get().openTab({
+            workspaceKey: key,
+            target: { kind: "logic_map" },
+            intent: "reveal",
+            placement: paneId ? { mode: "pane", paneId } : undefined,
+          });
+          if (tabId) {
+            set((state) => ({
+              logicMapTabAutoOpenedByWorkspace: {
+                ...state.logicMapTabAutoOpenedByWorkspace,
+                [key]: true,
+              },
+            }));
+          }
+          return tabId;
+        },
         layoutByWorkspace: {},
         splitSizesByWorkspace: {},
         explorerSidebarWidthByWorkspace: {},
@@ -687,6 +714,7 @@ export function createWorkspaceLayoutStore(
         explorerSidebarPaneIdByWorkspace: {},
         sidePaneIdByWorkspace: {},
         pullRequestTabAutoOpenedByWorkspace: {},
+        logicMapTabAutoOpenedByWorkspace: {},
         openTab: (input) => {
           const normalizedWorkspaceKey = trimNonEmpty(input.workspaceKey);
           const normalizedTarget = normalizeWorkspaceTabTarget(input.target);
@@ -1663,7 +1691,8 @@ export function createWorkspaceLayoutStore(
               normalizedWorkspaceKey in state.focusRestorationByWorkspace ||
               normalizedWorkspaceKey in state.explorerSidebarPaneIdByWorkspace ||
               normalizedWorkspaceKey in state.sidePaneIdByWorkspace ||
-              normalizedWorkspaceKey in state.pullRequestTabAutoOpenedByWorkspace;
+              normalizedWorkspaceKey in state.pullRequestTabAutoOpenedByWorkspace ||
+              normalizedWorkspaceKey in state.logicMapTabAutoOpenedByWorkspace;
             if (!hasAny) {
               return state;
             }
@@ -1671,6 +1700,10 @@ export function createWorkspaceLayoutStore(
               [normalizedWorkspaceKey]: _autoOpened,
               ...pullRequestTabAutoOpenedByWorkspace
             } = state.pullRequestTabAutoOpenedByWorkspace;
+            const {
+              [normalizedWorkspaceKey]: _logicMapAutoOpened,
+              ...logicMapTabAutoOpenedByWorkspace
+            } = state.logicMapTabAutoOpenedByWorkspace;
             const { [normalizedWorkspaceKey]: _layout, ...layoutByWorkspace } =
               state.layoutByWorkspace;
             const { [normalizedWorkspaceKey]: _splits, ...splitSizesByWorkspace } =
@@ -1693,6 +1726,7 @@ export function createWorkspaceLayoutStore(
               state.sidePaneIdByWorkspace;
             return {
               pullRequestTabAutoOpenedByWorkspace,
+              logicMapTabAutoOpenedByWorkspace,
               layoutByWorkspace,
               splitSizesByWorkspace,
               explorerSidebarWidthByWorkspace,
@@ -1741,6 +1775,7 @@ export function createWorkspaceLayoutStore(
               ]),
             ),
             pullRequestTabAutoOpenedByWorkspace: state.pullRequestTabAutoOpenedByWorkspace,
+            logicMapTabAutoOpenedByWorkspace: state.logicMapTabAutoOpenedByWorkspace,
           };
         },
         merge: (persistedState, currentState) => {
@@ -1803,6 +1838,7 @@ export function createWorkspaceLayoutStore(
             sidePaneIdByWorkspace: result.data.sidePaneIdByWorkspace ?? {},
             pullRequestTabAutoOpenedByWorkspace:
               result.data.pullRequestTabAutoOpenedByWorkspace ?? {},
+            logicMapTabAutoOpenedByWorkspace: result.data.logicMapTabAutoOpenedByWorkspace ?? {},
           };
         },
       },

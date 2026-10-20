@@ -28,11 +28,13 @@ const WorkspaceTabTargetStorageSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("files") }),
   z.strictObject({ kind: z.literal("pull_request") }),
   z.strictObject({ kind: z.literal("session_history") }),
+  z.strictObject({ kind: z.literal("logic_map") }),
   z.strictObject({
     kind: z.literal("file"),
     path: z.string(),
     lineStart: z.number().int().positive().optional(),
     lineEnd: z.number().int().positive().optional(),
+    lineView: z.literal("preview").optional(),
   }),
   z.strictObject({
     kind: z.literal("working_diff"),
@@ -113,6 +115,7 @@ export const WorkspaceLayoutPersistedStateSchema = z.strictObject({
   // missing a kind here gets it once on load. Absent means none were offered.
   explorerSidebarSeededTabKindsByWorkspace: z.record(z.string(), z.array(z.string())).optional(),
   pullRequestTabAutoOpenedByWorkspace: z.record(z.string(), z.literal(true)).optional(),
+  logicMapTabAutoOpenedByWorkspace: z.record(z.string(), z.literal(true)).optional(),
   // COMPAT(pullRequestAutoAdd): PR detection stopped opening a tab in v0.5; accepted
   // and ignored so upgrading does not discard the layout. Remove after 2027-08-20.
   acknowledgedPullRequestByWorkspace: z.record(z.string(), z.string()).optional(),

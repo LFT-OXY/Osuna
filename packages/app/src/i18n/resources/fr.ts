@@ -4188,4 +4188,75 @@ export const fr: TranslationResources = {
       month: "Mois",
     },
   },
+  logicMap: {
+    toggle: {
+      label: "Carte logique",
+      hintOff:
+        "Activez-la pour que l’agent tienne à jour une carte logique de cette fonctionnalité pendant la discussion.",
+      hintOn: "L’agent tient la carte logique à jour au fil de la discussion.",
+      hostOutdated: "Mettez à jour Osuna sur cet hôte",
+      hostOutdatedDetail: "Mettez à jour Osuna sur cet hôte pour utiliser la carte logique.",
+      failed: "Impossible de modifier la carte logique : {{error}}",
+      toolsNotInjectedDetail:
+        "La carte logique a besoin des outils Osuna. Activez-les dans Réglages → Host → Agents, puis rechargez cet agent.",
+      toolsNotInjectedDraftDetail:
+        "La carte logique a besoin des outils Osuna. Activez-les dans Réglages → Host → Agents.",
+      openAgentsSettings: "Ouvrir les réglages",
+      mcpDisabledDetail:
+        "La carte logique a besoin des outils Osuna, que cet hôte ne peut pas fournir tant que MCP est désactivé.",
+      toolsNotDeliveredDetail:
+        "La carte logique a besoin des outils Osuna, et cet agent ne peut pas les appeler.",
+    },
+    picker: {
+      title: "Activer la carte logique",
+      newMap: "Nouvelle carte logique",
+      continueSection: "Continuer une carte logique",
+      loading: "Chargement des cartes logiques…",
+      listFailed: "Impossible de lister les cartes logiques de cet espace de travail",
+    },
+    panel: {
+      label: "Carte logique",
+      subtitle: "Le déroulement de la fonctionnalité en discussion",
+      tooltip: "Voir les cartes logiques que l'agent tient à jour dans cet espace de travail",
+      canvas: "Canevas de la carte logique",
+      pickerLabel: "Carte logique : {{title}}",
+      untitled: "Carte logique sans titre",
+      nodeCountOne: "{{count}} nœud",
+      nodeCountMany: "{{count}} nœuds",
+      loading: "Chargement de la carte logique…",
+      empty: {
+        title: "Pas encore de carte logique",
+        body: "Activez Carte logique dans la barre du compositeur. L'agent tiendra alors une carte de la fonctionnalité pendant la discussion.",
+      },
+      newMap: {
+        start: "Début",
+        body: "L'agent n'a encore ajouté aucun nœud.",
+      },
+      unreadable: "Impossible de lire cette carte logique",
+      corruptDetail:
+        "{{map}} : {{file}} n'est pas dans un format lisible par Osuna. Corrigez ou restaurez le fichier.",
+      details: "Détails",
+      hideDetails: "Masquer les détails",
+      listFailed: "Impossible de lister les cartes logiques de cet espace de travail",
+      hostOutdated: {
+        title: "Mettez à jour Osuna sur cet hôte",
+        body: "La version d'Osuna de cet hôte est trop ancienne pour afficher les cartes logiques.",
+      },
+      branch: {
+        if: "Si",
+        elseIf: "Sinon si",
+        else: "Sinon",
+      },
+      subgraphTagOne: "Sous-graphe · {{count}} nœud",
+      subgraphTagMany: "Sous-graphe · {{count}} nœuds",
+      enterSubgraph: "Ouvrir le sous-graphe {{title}}",
+      openNodeDoc: "Ouvrir le document de {{title}}",
+      openNodeDocFailed: "Impossible d’ouvrir le document du nœud",
+      breadcrumb: "Chemin de la carte logique",
+      pendingLink: "Aucun doc lié",
+      missingDoc: "Aucun document",
+      missingDocHint: "Ce nœud n’a pas encore de document",
+      missingDocLabel: "{{title}} n’a pas encore de document",
+    },
+  },
 };

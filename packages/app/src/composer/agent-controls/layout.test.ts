@@ -133,6 +133,35 @@ describe("composer control layout", () => {
     ).toBe("condensed");
   });
 
+  it("leaves room for a control placed after the agent controls", () => {
+    const controls = {
+      hasProvider: false,
+      hasModel: true,
+      hasThinking: true,
+      hasMode: true,
+      features: [{ type: "toggle" as const }],
+      fontScale: 1,
+    };
+
+    expect(
+      resolveComposerControlDensity({ availableWidth: 420, currentDensity: "full", controls }),
+    ).toBe("full");
+    expect(
+      resolveComposerControlDensity({
+        availableWidth: 420,
+        currentDensity: "full",
+        controls: { ...controls, trailingWidth: 140 },
+      }),
+    ).toBe("tight");
+    expect(
+      resolveComposerControlDensity({
+        availableWidth: 580,
+        currentDensity: "full",
+        controls: { ...controls, trailingWidth: 140 },
+      }),
+    ).toBe("full");
+  });
+
   it("condenses before a labeled feature would overflow", () => {
     const base = {
       availableWidth: 430,

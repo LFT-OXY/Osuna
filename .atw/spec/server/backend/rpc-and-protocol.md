@@ -569,7 +569,7 @@ metadata: { providerSubagentID: childSessionId },
 
 ## Scenario: a provider-bound prompt that differs from what the user sent
 
-Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider.
+Reference implementation: the Routing block for Agent mentions (multi-agent tickets 05, 07 and 09). Reuse this shape when the daemon appends system text to a user message on its way to the provider. The logic map instruction block (`logic-map/logic-map-instruction-block.ts`, logic-map ticket 01) is the second user of the same resolver.
 
 ### 1. Scope / Trigger
 
@@ -582,6 +582,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - `resolveRoutingBlock({ text, cwd, canCreateAgents, mentionDefaults, agentProfiles, providers })` (`agent/routing-block.ts`); `mentionDefaults: (providerId) => ProviderMentionDefaults | undefined` reads `daemonConfigStore.get().providers[id]?.mentionDefaults` and `agentProfiles` is `daemonConfigStore.get().agentProfiles ?? []`, both taken when the message is sent, so a `set_daemon_config` applies to the next message. `RoutingBlockSettings` is `{ modeId?, thinkingOptionId?, features? }`. Model and thinking fallbacks use `selectDefaultModel` / `resolveThinkingOptionId` shared with metadata generation.
 - Config: `ProviderMentionDefaultsSchema = { model?, thinkingOptionId?, modeId? }` (each `z.string().min(1)`) in `packages/protocol/src/provider-config.ts`, on both `ProviderOverrideSchema` (persisted `agents.providers.<id>`) and `MutableDaemonProviderConfigSchema` (wire). Documented in `docs/data-model.md` "Mention defaults".
 - `stripTrailingRoutingBlock(text)` (`agent/trailing-routing-block.ts`, a leaf module so providers can import it).
+- A second trailing block joins inside `Session.routingBlockResolver`: `[routingBlock, logicMapBlock].filter(Boolean).join("\n\n")`, Routing block first. `resolveLogicMapInstructionBlock({ text, labels })` reads the agent's labels at send time and returns `null` for empty text, like the Routing block. Do not add a second resolver parameter.
 
 ### 3. Contracts
 
@@ -591,7 +592,7 @@ Reference implementation: the Routing block for Agent mentions (multi-agent tick
 - A profile mention (`paseo://agent/profile/<id>`) resolves to its profile's `provider` and stacks layers: the profile's `model` / `thinkingOptionId` / `modeId` first, then that provider's Mention defaults (`resolveAgainstCatalog(entry, layers)`). Its non-empty `featureValues` go to `settings.features` as written; they are never validated.
 - Layers resolve per field against a `ready` snapshot, first valid layer wins: model → first layer model in the selectable catalog, else the default model; thinking option → first layer value the chosen model offers, skipping any layer whose own model is stale (a retired model takes its thinking option with it), else that model's default (an unset model means the current default model); mode → first layer mode in `entry.modes`, else `defaultModeId` if in `entry.modes`, else `modes[0]`; no modes at all → no `modeId`. A stale profile value therefore falls back to Mention defaults before runtime defaults (decided with the user in ticket 09). A valid lower-layer thinking option applies to a profile's model when that model offers it. Only catalog modes are written because `create_agent` rejects a mode outside `availableModes` and, given none, inherits the parent's mode (same provider) or throws (cross provider).
 - `DaemonConfigStore.applySupportedPatch` replaces a provider's `mentionDefaults` wholesale instead of deep-merging, so the card resets a field by omitting it. The persisted side already replaces it through the shallow spread in `applyMutableProviderConfigToOverrides`. `removeProviders` drops it with the entry. Changing it does not rebuild provider catalogs: `mentionDefaults` is not part of a provider definition's `configuration`.
-- `stripTrailingRoutingBlock` needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
+- `stripTrailingRoutingBlock` strips every trailing `<paseo-system>` block in a loop, so Routing + logic map blocks both go; a message that is nothing but blocks is an envelope and comes back unchanged. It needs the closing tag at the end and runs only on provider-sourced text: live echoes, the echo fallback in `reconcileSubmittedPromptEcho`, force hydrate, prime, `buildImportedTimelineRows`, and import previews. Providers that collapse whitespace and truncate (`claude/agent.ts`, `acp-agent.ts`, `omp/` and `pi/session-descriptor.ts`) strip inside their `normalize*PromptPreview` before collapsing; `toRecentProviderSessionDescriptorPayload` strips full-text previews and titles (Codex thread preview).
 
 ### 4. Validation & Error Matrix
 
@@ -643,6 +644,71 @@ const modeIds = (entry.modes ?? []).map((mode) => mode.id);
 const modeId = [configuredModeId, entry.defaultModeId ?? undefined].find(
   (id) => id !== undefined && modeIds.includes(id),
 ) ?? modeIds[0];
+```
+
+## Scenario: a per-agent switch stored as a label, settable before the agent exists
+
+Reference implementation: the logic map switch (`agent.logic_map.set_enabled.request`, logic-map ticket 01). Reuse this shape for a per-conversation on/off the user flips in the composer, on a running agent or on a draft that has no agent yet.
+
+### 1. Scope / Trigger
+
+- New RPC, new `server_info.features.logicMap` (`// COMPAT(logicMap)`), state that must survive a daemon restart and reach the client with the agent.
+
+### 2. Signatures
+
+- `AgentLogicMapTargetSchema = z.discriminatedUnion("kind", [{ kind: "agent", agentId }, { kind: "draft", workspaceId, createdMapName? }])` (`packages/protocol/src/messages.ts`); request `{ type, requestId, target, enabled, mapName? }` (`mapName` = continue that existing map; added with `features.logicMap`, so no separate flag); response payload `{ requestId, agentId: string | null, mapName: string | null, error: string | null }`.
+- `setLogicMapEnabled(deps, { target, enabled })` (`server/logic-map/logic-map-toggle.ts`), deps `Pick`ed from `AgentManager` / `AgentStorage` / `WorkspaceRegistry`; typed errors in `logic-map-errors.ts`.
+- Label `LOGIC_MAP_LABEL = "paseo.logic-map"`, value = map name; read with `getLogicMapNameFromLabels` (`@getpaseo/protocol/agent-labels`). `LOGIC_MAP_BRIEFED_LABEL = "paseo.logic-map.briefed"` = the map the agent was last given the once-per-switch-on reminder for; cleared on every on/off/switch.
+- App: `useDraftLogicMapStore` (`app/src/logic-map/draft-logic-map-store.ts`, persisted, keyed `buildDraftLogicMapKey({ serverId, draftTabId })`, `createdMapName` optional so older stored drafts still parse); `readDraftLogicMapLabels(store, key)` goes into the create-agent `labels`; `forget(key)` after the agent is created.
+
+### 3. Contracts
+
+- The state is an agent label, not a new `StoredAgentRecord` field: labels already persist atomically, ship in the agent snapshot, and survive restart, so no schema or snapshot change. Cost: anything that can write labels (`update_agent`, `create_agent` labels) can also set it — fine for a user preference, not for a fact the model must not forge (that needs the tool-path stripping in "a daemon-owned agent label fed from the provider's tool call").
+- Off removes the label only; the map on disk stays. On with the label already set reuses that map.
+- Draft target: daemon creates the empty map under the workspace's `cwd` (or confirms the continued `mapName` exists) and returns `mapName`; it writes no state. The app keeps the draft's chosen map plus the empty map it created (`createdMapName`), reuses the created one when the user picks "新建" again, and sends the chosen map as the label when the first message creates the agent. Switching a draft from its created map to an existing one sends `createdMapName`; the daemon deletes that map only if it is still unwritten (no title, framework, nodes, edges, or other files) and no stored or live agent's label points at it (`discardUnwrittenLogicMap`, `isLogicMapInUse`). Known gap: another draft continuing the same empty map is not checked.
+- The instruction block (`resolveLogicMapInstructionBlock`, async, reads the map at send time) varies by map state: framework not judged → judge, record, tell the user; framework present → 3–6 sentence notes, and on the first message after switch-on only (briefed label ≠ map) list marked nodes and ask to link them first; no framework → full node docs; map broken/missing → say which file and what problem. `markLogicMapBriefed` writes the briefed label before the provider receives the message, so a failed send loses that reminder.
+- The block is only attached when the session can call the Osuna tools: `resolvePaseoToolsUnavailableReason(agent.createAgentsCapability)` (`server/agent/create-agents-capability.ts`) returns `mcp_disabled` / `tools_not_injected` / `tools_not_delivered` → no block and no `markLogicMapBriefed`, so the first message after the user turns the tools on still gets the once-per-switch-on reminder. `create_agent_not_allowed` covers only `create_agent` and does not count; `undefined` (not resolved yet) sends the block. Without this gate the agent is told to call `read_logic_map` it does not have and answers "tool not found" (logic-map ticket 08). The switch, its label and the map are unaffected. The app shows the same verdict next to the switch, only while the switch is on (`useLogicMapToolsUnavailableReason`, `app/src/logic-map/osuna-tools-availability.ts`, gated by `useLogicMapEnabled` in `composer/index.tsx`; Osuna tools are off by default, and an always-on hint squeezed the Codex speed control into its icon tier at 1280 — CI `codex-speed.spec.ts`): drafts reuse `resolveDraftCreateAgentsVerdict` from `hooks/use-agent-autocomplete.ts` instead of a second selector; only `tools_not_injected` gets the "open settings" action (Settings → Host → Agents), like the Agent mention notice, and only its running-agent copy says to reload the agent. Known gap: a provider tool filter that hides just `read_logic_map` / `update_logic_map` is not detected.
+- A label patch on an unloaded agent does not push; the handler calls `agentUpdates.emitStoredRecord(labelWrite.record)` when `labelWrite.live` is false.
+- Reads go through `workspace.logic_map.list` / `.get` (`.get` returns a `result` union so a hand-broken file is a readable `corrupt` case, not a transport error). `workspace.logic_map.changed` is opt-in: it is in `SessionEventSubscriptionSchema` and `legacyWantsEvent` returns `false` for it, so only clients that subscribed after seeing `features.logicMap` get it. Disk format and batch writes: `persistence.md` "a folder of files an agent edits in batches".
+
+### 4. Validation & Error Matrix
+
+- `target` missing or wrong `kind` → wire parse rejects (no runtime "agentId or cwd" fallback).
+- Agent neither loaded nor stored → `LogicMapAgentNotFoundError`.
+- `workspaceId` unknown or `archivedAt` set → `LogicMapWorkspaceNotFoundError` (never trust a client-sent `cwd`: the daemon would create folders anywhere).
+- Workspace directory gone → `LogicMapDirectoryMissingError`; no free random name → `LogicMapNameUnavailableError`.
+- Every error → response with `error` string; the app toasts and puts the switch back.
+- Osuna tools unavailable (any reason except `create_agent_not_allowed`) → not an error: the switch stays on, the block is withheld, the app shows the warning hint.
+
+### 5. Good/Base/Bad Cases
+
+- Good: draft on → off → on → send: one `untitled-*` folder, agent created with the label.
+- Base: running agent on twice → second call returns the same `mapName`, no new folder.
+- Bad: draft state in a non-persisted store — the draft tab survives restart but the switch comes back off and the folder is orphaned.
+
+### 6. Tests Required
+
+- `messages.logic-map.test.ts`: both target kinds parse, bad target rejected, `features.logicMap` optional.
+- `logic-map-store.test.ts`, `logic-map-instruction-block.test.ts`, `trailing-routing-block.test.ts` (both blocks stripped, envelope kept).
+- Daemon E2E `daemon-e2e/logic-map-toggle.e2e.test.ts`: label after on/off, restart read-back, unknown workspace rejected, block present only when on, no block when the host turns the tools off or the session cannot receive them.
+- App `draft-logic-map-store.test.ts` (rehydrate, reuse); browser `composer-logic-map-toggle.spec.ts` (on/off, reload keeps draft state, host rejects → toast + switch off, old host hint).
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// Bag of optionals: both or neither is a valid payload, and cwd is client-chosen.
+z.object({ agentId: z.string().optional(), cwd: z.string().optional(), enabled: z.boolean() });
+```
+
+#### Correct
+
+```ts
+target: z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("agent"), agentId: z.string() }),
+  z.object({ kind: z.literal("draft"), workspaceId: z.string() }),
+]),
 ```
 
 ## Scenario: the daemon calls an upstream with a secret the client never sees

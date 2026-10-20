@@ -1,0 +1,11 @@
+{"file": ".atw/spec/app/frontend/index.md", "reason": "前端分层与面板、状态、样式约定"}
+{"file": ".atw/spec/server/backend/index.md", "reason": "daemon 模块、持久化、错误处理约定"}
+{"file": ".atw/spec/server/backend/rpc-and-protocol.md", "reason": "新增 RPC 与协议字段的写法"}
+{"file": ".atw/spec/guides/cross-layer-thinking-guide.md", "reason": "daemon、协议、app 三层联动"}
+{"file": "docs/protocol-compatibility.md", "reason": "新字段可选、server_info.features 门控"}
+{"file": "docs/rpc-namespacing.md", "reason": "dotted 命名空间与 request/response 成对"}
+{"file": "docs/explorer-sidebar.md", "reason": "逻辑图标签挂在 Explorer sidebar"}
+{"file": "docs/design.md", "reason": "界面设计规则"}
+{"file": "docs/i18n.md", "reason": "zh-CN 与 en 文案"}
+{"file": "docs/adr/0013-logic-map-stores-skeleton-and-links-existing-docs.md", "reason": "骨架与外部文档指向的决定"}
+{"file": ".atw/tasks/10-19-logic-map/ui-direction.md", "reason": "选定的视觉方向（贴近 Dify / Coze）、色表、各状态画面与画布配色例外"}
