@@ -4,7 +4,10 @@
 
 import { CODEX_BASE_INSTRUCTIONS } from "./codex-base-instructions.js";
 import { endpointModelGroups, usableModels } from "./host-endpoints.js";
-import { distinctModelLabels, hostCompactAt } from "@getpaseo/protocol/api-endpoint/model-settings";
+import {
+  compactThreshold,
+  distinctModelLabels,
+} from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
@@ -235,12 +238,8 @@ function codexWorkingWindow(input: {
   facts: EndpointModelFacts;
   longConversations: ApiEndpointLongConversations | undefined;
 }): number {
-  const { window, facts, longConversations } = input;
-  if (facts.compact !== undefined) return Math.min(window, facts.compact);
-  const isHostCompactTyped = longConversations?.compactAt !== undefined;
-  if (facts.contextSet === true && !isHostCompactTyped) return window;
-  const compactAt = hostCompactAt(longConversations);
-  return compactAt === undefined ? window : Math.min(window, compactAt);
+  const threshold = compactThreshold(input);
+  return threshold === undefined ? input.window : Math.min(input.window, threshold);
 }
 
 /** 这个模型在 Codex 里能选的档位：查不到资料时四档固定。 */

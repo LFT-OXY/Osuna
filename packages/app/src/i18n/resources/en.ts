@@ -2845,7 +2845,7 @@ export const en = {
         imagesHint: "Tells Codex it can send images. Claude Code has no image setting.",
         automatic: "Automatic: {{value}}",
         automaticUnknown: "Automatic",
-        invalidTokens: "Enter a whole number of tokens",
+        invalidTokens: "Use a count like 272k",
         restoreAll: "Restore all defaults",
         save: "Save",
         saving: "Saving…",
@@ -2861,7 +2861,9 @@ export const en = {
       longConversations: {
         title: "Long conversations",
         fullWindow: "Full window",
-        hint: "Codex and Claude Code compact a long conversation at {{size}} tokens (non-Claude [1m] models too) or at the size you type. A model's own Compact at comes first. Full window is slower and costs more.",
+        fullWindowHint: "Use the model's whole context window; slower and costs more.",
+        compactAtHint:
+          "Where Codex and Claude Code compact a long conversation; blank is {{size}}. A model with its own Compact at uses that.",
         saveFailed: "Couldn't save: {{message}}",
       },
       modelScope: {

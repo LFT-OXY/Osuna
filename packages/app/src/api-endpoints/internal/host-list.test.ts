@@ -53,7 +53,7 @@ describe("selectHostEndpointsState", () => {
       // 老主机不发 agentIssues、reopenHints：提示区为空。
       agentIssues: {},
       reopenHints: {},
-      longConversations: null,
+      longConversations: {},
     });
   });
 

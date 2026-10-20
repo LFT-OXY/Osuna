@@ -456,7 +456,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order。
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order 与长对话设置。
   const canArrange = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
@@ -517,8 +517,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onArrange={canArrange ? endpoints.arrange : undefined}
         management={management}
       />
-      {/* COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有长对话设置。 */}
-      {canArrange && endpoints.state.status === "ready" && endpoints.state.longConversations ? (
+      {canArrange && endpoints.state.status === "ready" ? (
         <ApiEndpointLongConversationsSection
           initial={endpoints.state.longConversations}
           onSave={endpoints.setLongConversations}

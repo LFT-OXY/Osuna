@@ -1577,6 +1577,17 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
   });
 
+  test("the old client's switch keeps the host's long conversations", async () => {
+    await start(USER_SETTINGS);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    // switchOn 走老客户端的 save 与 set_active。
+    await switchOn();
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
+      compactAt: 400_000,
+    });
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
+  });
+
   test("Osuna's 272K gives way to an autoCompactWindow the user set in Claude Code", async () => {
     const own = USER_SETTINGS.replace(
       `"env": {`,

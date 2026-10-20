@@ -559,7 +559,7 @@ describe("applyClaudeApiEndpoint", () => {
 
   it("Osuna's default compaction gives way to an autoCompactWindow the user set in Claude Code (magpie claudeOwnCompact, #876)", () => {
     const compact = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000" };
-    const patch = (text: string, compactYieldsToOwn: boolean) => {
+    const patch = ({ text, compactYieldsToOwn }: { text: string; compactYieldsToOwn: boolean }) => {
       const result = applyClaudeApiEndpoint({
         text,
         wiring: { ...GATEWAY, hintEnv: compact, compactYieldsToOwn },
@@ -572,12 +572,12 @@ describe("applyClaudeApiEndpoint", () => {
     // modelSettings 按 Claude Code 拿到的模型名记（带点的版本换成连字符、去掉 [1m]、不分大小写）。
     const forModel = `{ "modelSettings": { "Kimi-K2[1m]": { "autoCompactWindow": "auto" } } }\n`;
     const forOther = `{ "modelSettings": { "glm-5": { "autoCompactWindow": 500000 } } }\n`;
-    expect(patch(topLevel, true)).toBeUndefined();
-    expect(patch(forModel, true)).toBeUndefined();
-    expect(patch(forOther, true)).toBe("272000");
-    expect(patch("{}\n", true)).toBe("272000");
+    expect(patch({ text: topLevel, compactYieldsToOwn: true })).toBeUndefined();
+    expect(patch({ text: forModel, compactYieldsToOwn: true })).toBeUndefined();
+    expect(patch({ text: forOther, compactYieldsToOwn: true })).toBe("272000");
+    expect(patch({ text: "{}\n", compactYieldsToOwn: true })).toBe("272000");
     // 模型自己的或全局打了的压缩阈值不让。
-    expect(patch(topLevel, false)).toBe("272000");
+    expect(patch({ text: topLevel, compactYieldsToOwn: false })).toBe("272000");
   });
 
   it("turns the auto mode review off while no reachable model is reviewed, and takes it out once one is", () => {

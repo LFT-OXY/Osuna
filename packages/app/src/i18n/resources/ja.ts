@@ -2808,7 +2808,7 @@ export const ja: TranslationResources = {
         imagesHint: "Codex に画像を送れることを伝えます。Claude Code には画像の設定がありません。",
         automatic: "自動：{{value}}",
         automaticUnknown: "自動",
-        invalidTokens: "0 より大きい整数のトークン数を入力してください",
+        invalidTokens: "272k のような数を入力",
         restoreAll: "すべてデフォルトに戻す",
         save: "保存",
         saving: "保存中…",
@@ -2824,7 +2824,9 @@ export const ja: TranslationResources = {
       longConversations: {
         title: "長い会話",
         fullWindow: "ウィンドウ全体",
-        hint: "Codex と Claude Code は長い会話を {{size}} トークン（Claude 以外の [1m] モデルも）か、入力したサイズで圧縮します。モデル自身の圧縮しきい値が優先されます。ウィンドウ全体は遅く、費用もかかります。",
+        fullWindowHint: "モデルのコンテキストウィンドウ全体を使います。遅くなり、費用も増えます。",
+        compactAtHint:
+          "Codex と Claude Code が長い会話を圧縮する位置です。空欄なら {{size}}。独自の圧縮しきい値を持つモデルはそれを使います。",
         saveFailed: "保存できませんでした：{{message}}",
       },
       modelScope: {

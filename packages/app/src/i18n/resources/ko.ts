@@ -2795,7 +2795,7 @@ export const ko: TranslationResources = {
           "Codex에 이미지를 보낼 수 있다고 알립니다. Claude Code에는 이미지 설정이 없습니다.",
         automatic: "자동: {{value}}",
         automaticUnknown: "자동",
-        invalidTokens: "0보다 큰 정수 토큰 수를 입력하세요",
+        invalidTokens: "272k 같은 수를 입력하세요",
         restoreAll: "모두 기본값으로 복원",
         save: "저장",
         saving: "저장 중…",
@@ -2811,7 +2811,9 @@ export const ko: TranslationResources = {
       longConversations: {
         title: "긴 대화",
         fullWindow: "전체 창",
-        hint: "Codex와 Claude Code는 긴 대화를 {{size}} 토큰(Claude가 아닌 [1m] 모델 포함) 또는 입력한 크기에서 압축합니다. 모델 자체의 압축 기준이 우선합니다. 전체 창은 더 느리고 비용이 더 듭니다.",
+        fullWindowHint: "모델의 전체 컨텍스트 창을 사용합니다. 더 느리고 비용이 더 듭니다.",
+        compactAtHint:
+          "Codex와 Claude Code가 긴 대화를 압축하는 지점입니다. 비워 두면 {{size}}입니다. 자체 압축 기준이 있는 모델은 그 값을 씁니다.",
         saveFailed: "저장하지 못했습니다: {{message}}",
       },
       modelScope: {

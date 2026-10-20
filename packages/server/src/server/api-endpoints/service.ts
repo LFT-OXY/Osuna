@@ -1394,6 +1394,7 @@ export class ApiEndpointService {
       const next = await this.commit(
         state,
         {
+          ...state,
           endpoints: withEndpoint(state.endpoints, { ...endpoint, enabled: true }),
           agents: {
             ...state.agents,

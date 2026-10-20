@@ -1,7 +1,7 @@
 // 规则移植自 magpie（https://github.com/yetone/magpie，internal/agent/claude.go 的 claude1M / claudeWindow /
 // claudeOutput / claudeCaps / claudeCapabilities / writeCompact，含提交 d1c485f7 的「到 max 无 xhigh 也报 xhigh」）。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { hostCompactAt } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { compactThreshold } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { CLAUDE_EFFORTS, claudeEffortsFor } from "./claude-model-name.js";
 import { bareModelId, type EndpointModelFacts } from "./model-facts.js";
@@ -98,16 +98,15 @@ function windowOf(input: ClaudeHintInput): number | undefined {
   return least;
 }
 
+/** Claude 模型没设自己的压缩阈值时跑到它自己的窗口（Anthropic 自家就这样跑）；别家的照 compactThreshold。 */
 function compactOf(input: ClaudeHintInput): { value: number | undefined; yieldsToOwn: boolean } {
   const { facts } = input.start;
-  if (facts.compact !== undefined) return { value: facts.compact, yieldsToOwn: false };
-  const none = { value: undefined, yieldsToOwn: false };
-  if (isClaudeModel(input.start.id)) return none;
-  const isHostCompactTyped = input.longConversations?.compactAt !== undefined;
-  if (facts.contextSet === true && !isHostCompactTyped) return none;
-  const value = hostCompactAt(input.longConversations);
-  if (value === undefined) return none;
-  return { value, yieldsToOwn: !isHostCompactTyped };
+  const isOwn = facts.compact !== undefined;
+  if (!isOwn && isClaudeModel(input.start.id)) return { value: undefined, yieldsToOwn: false };
+  const value = compactThreshold({ facts, longConversations: input.longConversations });
+  // 只有 272K 这个默认让给用户在 Claude Code 里设的 autoCompactWindow；模型自己的和打了的全局阈值不让。
+  const isDefault = !isOwn && input.longConversations?.compactAt === undefined;
+  return { value, yieldsToOwn: value !== undefined && isDefault };
 }
 
 function leastOutput(models: ClaudeHintModel[]): number | undefined {
@@ -125,7 +124,7 @@ function capabilitiesOf(models: ClaudeHintModel[]): string {
   let value = "";
   for (const model of models) {
     // Claude Code 去掉 [1m]、把模型转成小写再和模式比较，模式本身不转。
-    const pattern = unmarked(model.id).toLowerCase();
+    const pattern = withoutOneMillionMark(model.id).toLowerCase();
     if (seen.has(pattern) || /[;=,]/.test(pattern) || pattern.endsWith("*")) continue;
     seen.add(pattern);
     const caps = capabilityNames({ efforts: model.facts.efforts ?? [], id: pattern });
@@ -151,7 +150,8 @@ function capabilityNames(input: { efforts: string[]; id: string }): string[] {
   return caps;
 }
 
-function unmarked(id: string): string {
+/** 去掉模型名后的 [1m]（Claude Code 发请求、比模型名前都先去掉它）。 */
+export function withoutOneMillionMark(id: string): string {
   return id.endsWith(ONE_MILLION_MARK) ? id.slice(0, -ONE_MILLION_MARK.length) : id;
 }
 

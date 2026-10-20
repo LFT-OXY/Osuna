@@ -115,7 +115,7 @@ function DefaultRow({
         initialValue={field.text}
         onChangeText={handleChange}
         placeholder={t("settings.apiEndpoints.modelSettings.automaticUnknown")}
-        keyboardType="number-pad"
+        keyboardType="default"
         accessibilityLabel={label}
         invalid={field.invalid}
         size={isCompact ? "md" : "sm"}

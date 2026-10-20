@@ -2777,7 +2777,7 @@ export const ar: TranslationResources = {
         imagesHint: "يخبر Codex بأنه يمكنه إرسال الصور إليه. لا يوجد في Claude Code إعداد للصور.",
         automatic: "تلقائي: {{value}}",
         automaticUnknown: "تلقائي",
-        invalidTokens: "أدخل عددًا صحيحًا من الرموز أكبر من صفر",
+        invalidTokens: "أدخل عددًا مثل 272k",
         restoreAll: "استعادة كل القيم الافتراضية",
         save: "حفظ",
         saving: "جارٍ الحفظ…",
@@ -2793,7 +2793,9 @@ export const ar: TranslationResources = {
       longConversations: {
         title: "المحادثات الطويلة",
         fullWindow: "النافذة كاملة",
-        hint: "يضغط Codex وClaude Code المحادثة الطويلة عند {{size}} رمز (ونماذج [1m] غير Claude أيضًا) أو عند الحجم الذي تكتبه. قيمة «الضغط عند» الخاصة بالنموذج لها الأولوية. النافذة كاملة أبطأ وأعلى تكلفة.",
+        fullWindowHint: "استخدام نافذة السياق الكاملة للنموذج؛ أبطأ وأعلى تكلفة.",
+        compactAtHint:
+          "حيث يضغط Codex وClaude Code المحادثة الطويلة؛ الفراغ يعني {{size}}. النموذج الذي له قيمة «الضغط عند» خاصة به يستخدمها.",
         saveFailed: "تعذّر الحفظ: {{message}}",
       },
       modelScope: {

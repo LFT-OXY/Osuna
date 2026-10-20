@@ -2801,7 +2801,7 @@ export const zhCN: TranslationResources = {
         imagesHint: "告诉 Codex 可以发图片给它。Claude Code 没有看图的设置。",
         automatic: "自动：{{value}}",
         automaticUnknown: "自动",
-        invalidTokens: "请填大于零的整数 token 数",
+        invalidTokens: "请填类似 272k 的数",
         restoreAll: "全部恢复默认",
         save: "保存",
         saving: "正在保存…",
@@ -2817,7 +2817,9 @@ export const zhCN: TranslationResources = {
       longConversations: {
         title: "长对话",
         fullWindow: "完整窗口",
-        hint: "Codex 和 Claude Code 在 {{size}} token 处压缩长对话（非 Claude 的 [1m] 模型也是），或在你填的大小处压缩。模型自己的压缩阈值优先。完整窗口更慢、更贵。",
+        fullWindowHint: "用模型的整个上下文窗口；更慢、更贵。",
+        compactAtHint:
+          "Codex 和 Claude Code 在这里压缩长对话，空着是 {{size}}。设了自己压缩阈值的模型用它自己的。",
         saveFailed: "没能保存：{{message}}",
       },
       modelScope: {

@@ -15,7 +15,7 @@ import { tokenFormatOf } from "./internal/model-settings-form";
 
 /*
  * 「第三方接口」页底部的「长对话」（照 magpie 设置页的 Long conversations）：整台主机共用，告诉 Codex、Claude Code
- * 在哪压缩。「完整窗口」开着时压缩阈值的输入框收起（magpie 同样）；输入框回车或离开时存。
+ * 在哪压缩。「完整窗口」开着时压缩阈值照样列出但改不了；输入框回车或离开时存。
  */
 
 const KEY = "settings.apiEndpoints.longConversations";
@@ -36,14 +36,14 @@ export function ApiEndpointLongConversationsSection({
     openLongConversationsForm({ initial, save: onSave, tokenFormat: tokenFormatOf(i18n.language) }),
   );
   const state = useSyncExternalStore(form.subscribe, form.getState, form.getState);
-  const handleSwitch = useCallback((on: boolean) => void form.setFullContext(on), [form]);
+  const handleSwitch = useCallback((on: boolean) => void form.setFullContext({ on }), [form]);
   const handleCommit = useCallback(() => void form.commitCompact(), [form]);
   const fullWindow = t(`${KEY}.fullWindow`);
   const compactAt = t("settings.apiEndpoints.modelSettings.compact");
   const isSaving = state.status.kind === "saving";
-  const hint = (
+  const switchHint = (
     <>
-      <Text style={settingsStyles.rowHint}>{t(`${KEY}.hint`, { size: state.placeholder })}</Text>
+      <Text style={settingsStyles.rowHint}>{t(`${KEY}.fullWindowHint`)}</Text>
       {state.status.kind === "failed" ? (
         <Text
           accessibilityRole="alert"
@@ -59,7 +59,7 @@ export function ApiEndpointLongConversationsSection({
   return (
     <SettingsSection title={t(`${KEY}.title`)} testID="api-endpoints-long-conversations">
       <SettingsCard>
-        <SettingsRow label={fullWindow} hint={hint}>
+        <SettingsRow label={fullWindow} hint={switchHint}>
           <Switch
             value={state.fullContext}
             onValueChange={handleSwitch}
@@ -68,33 +68,34 @@ export function ApiEndpointLongConversationsSection({
             testID="api-endpoints-full-window-switch"
           />
         </SettingsRow>
-        {state.fullContext ? null : (
-          <SettingsRow
-            label={compactAt}
-            error={
-              state.compactAt.invalid
-                ? t("settings.apiEndpoints.modelSettings.invalidTokens")
-                : undefined
-            }
-            testID="api-endpoints-compact-at-row"
-          >
-            <FormTextInput
-              initialValue={state.compactAt.text}
-              onChangeText={form.setCompactText}
-              onBlur={handleCommit}
-              onSubmitEditing={handleCommit}
-              placeholder={state.placeholder}
-              keyboardType="number-pad"
-              returnKeyType="done"
-              accessibilityLabel={compactAt}
-              invalid={state.compactAt.invalid}
-              editable={!isSaving}
-              size={isCompact ? "md" : "sm"}
-              style={isCompact ? COMPACT_INPUT_STYLE : WIDE_INPUT_STYLE}
-              testID="api-endpoints-compact-at"
-            />
-          </SettingsRow>
-        )}
+        {/* 完整窗口开着时照样列出、但改不了：看得出存着的数还在（magpie 在「压缩于 {n}」选项上写着它）。 */}
+        <SettingsRow
+          label={compactAt}
+          hint={t(`${KEY}.compactAtHint`, { size: state.placeholder })}
+          error={
+            state.compactAt.invalid
+              ? t("settings.apiEndpoints.modelSettings.invalidTokens")
+              : undefined
+          }
+          testID="api-endpoints-compact-at-row"
+        >
+          <FormTextInput
+            key={state.compactAt.generation}
+            initialValue={state.compactAt.text}
+            onChangeText={form.setCompactText}
+            onBlur={handleCommit}
+            onSubmitEditing={handleCommit}
+            placeholder={state.placeholder}
+            keyboardType="default"
+            returnKeyType="done"
+            accessibilityLabel={compactAt}
+            invalid={state.compactAt.invalid}
+            editable={!isSaving && !state.fullContext}
+            size={isCompact ? "md" : "sm"}
+            style={isCompact ? COMPACT_INPUT_STYLE : WIDE_INPUT_STYLE}
+            testID="api-endpoints-compact-at"
+          />
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );

@@ -118,7 +118,7 @@ describe("the model settings form", () => {
       ...deps,
       tokenFormat: EN,
     });
-    form.setTokens("output", "12.5k");
+    form.setTokens("output", "12.5");
     expect(form.getState().output.invalid).toBe(true);
     expect(form.getState().canSubmit).toBe(false);
     expect(await form.submit()).toBe("invalid");
@@ -258,5 +258,28 @@ describe("what counts as a change, by the daemon's own rules", () => {
     expect(form.getState()).toMatchObject({ images: { isSet: false }, canSubmit: false });
     form.setName("   ");
     expect(form.getState().canSubmit).toBe(false);
+  });
+});
+
+describe("magpie's shorthand (ParseTokens, parseContexts)", () => {
+  it("reads k and m, a decimal before them, any case, underscores and spaces", () => {
+    const read = (text: string) => parseTokens(text, EN);
+    expect(read("272k")).toEqual({ kind: "count", value: 272_000 });
+    expect(read("1.5m")).toEqual({ kind: "count", value: 1_500_000 });
+    expect(read(" 1M ")).toEqual({ kind: "count", value: 1_000_000 });
+    expect(read("128_000")).toEqual({ kind: "count", value: 128_000 });
+    expect(read("0.5K")).toEqual({ kind: "count", value: 500 });
+  });
+
+  it("refuses what is no token count", () => {
+    for (const text of ["k", "1.5", "1,5m", "0k", "0.0001k", "2g", "-1k", "1.2.3m"]) {
+      expect(parseTokens(text, EN)).toEqual({ kind: "invalid" });
+    }
+  });
+
+  it("works in a language that groups with a dot, and in its own digits", () => {
+    expect(parseTokens("1.5m", tokenFormatOf("es"))).toEqual({ kind: "count", value: 1_500_000 });
+    const ar = tokenFormatOf("ar");
+    expect(parseTokens(`${ar.format(272)}k`, ar)).toEqual({ kind: "count", value: 272_000 });
   });
 });

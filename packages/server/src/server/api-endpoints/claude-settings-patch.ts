@@ -18,6 +18,7 @@ import { CLAUDE_CLOUD_SWITCH_KEYS, isClaudeSwitchOn } from "./claude-cloud-switc
 import {
   CLAUDE_HINT_ENV_KEYS,
   ONE_MILLION_MARK,
+  withoutOneMillionMark,
   type ClaudeHintEnv,
 } from "./claude-model-hints.js";
 import { claudeModelName } from "./claude-model-name.js";
@@ -42,8 +43,9 @@ import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-mode
  *   有了就拿掉自己写的那条（ADR 0009）。用户自己写的同名规则不归 Osuna 所有。
  * - 顶层 modelPicker：终端 /model 列出各家接口的已选模型（Claude Code v2.1.242 起，只读用户设置）。
  *   用户自己写的完全不碰，没有可列的模型就不写；Osuna 写过之后被手改的那份仍归 Osuna，下次重写会盖掉。
- * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES（见 claude-model-hints.ts）：
- *   键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，不碰也不删。
+ * - env 下的模型提示 CLAUDE_CODE_MAX_CONTEXT_TOKENS / _MAX_OUTPUT_TOKENS / _MODEL_CAPABILITIES / _AUTO_COMPACT_WINDOW
+ *   （见 claude-model-hints.ts）：键不在或还是 Osuna 上次写的值时才写；用户设的、或 Osuna 写过后被用户改了的，归用户，
+ *   不碰也不删。压缩阈值是 Osuna 默认的 272K 时，还让给用户在 Claude Code 里设的 autoCompactWindow（magpie #876）。
  * - env 下的 CLAUDE_CODE_AUTO_MODE_SERVER=0：经中转站能到的模型都不会被 Anthropic 审查时写，免得 Claude Code
  *   先请服务器审查、拿不到再弹「这个会话不符合条件」的提示（ADR 0012）。归属规则同模型提示，记在同一份记录里。
  * - env 下开着的云平台开关（见 claude-cloud-switches.ts）：接管与每次重写时拿掉、原样记下，切回官方时放回，
@@ -582,10 +584,7 @@ function hasOwnAutoCompact(settings: ParsedSettings, mainModel: string | null): 
 }
 
 function compactKey(model: string): string {
-  const unmarked = model.endsWith(ONE_MILLION_MARK)
-    ? model.slice(0, -ONE_MILLION_MARK.length)
-    : model;
-  return claudeDashed(unmarked).toLowerCase();
+  return claudeDashed(withoutOneMillionMark(model)).toLowerCase();
 }
 
 /** 能到的模型都不会被审查时让 Claude Code 只在本地分类；有一个会被审查就不写。 */

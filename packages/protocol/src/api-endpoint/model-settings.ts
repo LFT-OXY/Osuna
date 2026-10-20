@@ -47,6 +47,21 @@ export function hostCompactAt(
   return longConversations?.compactAt ?? WORKING_WINDOW;
 }
 
+/**
+ * 告诉 Codex、Claude Code 在哪压缩（magpie CompactSet → CompactFor → Settings.Compact）：模型自己或整家默认的压缩阈值在前；
+ * 没有时，手填了上下文且没打全局压缩阈值就用整个窗口（magpie #1809）；否则按 hostCompactAt。undefined 为整个窗口。
+ */
+export function compactThreshold(input: {
+  facts: Partial<Pick<ResolvedModelFacts, "compact" | "contextSet">>;
+  longConversations: ApiEndpointLongConversations | undefined;
+}): number | undefined {
+  const { facts, longConversations } = input;
+  if (facts.compact !== undefined) return facts.compact;
+  const isHostCompactTyped = longConversations?.compactAt !== undefined;
+  if (facts.contextSet === true && !isHostCompactTyped) return undefined;
+  return hostCompactAt(longConversations);
+}
+
 export interface ResolvedModelFacts {
   name?: string;
   context?: number;

@@ -2816,7 +2816,7 @@ export const ru: TranslationResources = {
           "Сообщает Codex, что ей можно отправлять изображения. В Claude Code нет настройки изображений.",
         automatic: "Автоматически: {{value}}",
         automaticUnknown: "Автоматически",
-        invalidTokens: "Введите целое число токенов больше нуля",
+        invalidTokens: "Введите число вроде 272k",
         restoreAll: "Вернуть всё по умолчанию",
         save: "Сохранить",
         saving: "Сохранение…",
@@ -2832,7 +2832,9 @@ export const ru: TranslationResources = {
       longConversations: {
         title: "Длинные разговоры",
         fullWindow: "Всё окно",
-        hint: "Codex и Claude Code сжимают длинный разговор при {{size}} токенов (модели [1m] не от Claude тоже) или при введённом размере. Собственный порог «Сжимать при» у модели важнее. Всё окно медленнее и дороже.",
+        fullWindowHint: "Использовать всё контекстное окно модели; медленнее и дороже.",
+        compactAtHint:
+          "Где Codex и Claude Code сжимают длинный разговор; пусто — {{size}}. Модель со своим порогом «Сжимать при» использует его.",
         saveFailed: "Не удалось сохранить: {{message}}",
       },
       modelScope: {

@@ -228,7 +228,7 @@ export function TokenInput({
         initialValue={field.text}
         onChangeText={handleChange}
         placeholder={automaticCopy({ t, value: field.automatic, tokenFormat })}
-        keyboardType="number-pad"
+        keyboardType="default"
         invalid={field.invalid}
         size={size}
         testID={`api-endpoint-model-settings-${name}`}

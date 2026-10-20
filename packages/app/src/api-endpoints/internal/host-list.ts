@@ -30,8 +30,8 @@ export type HostEndpointsLoadState =
       agentIssues: Record<string, ApiEndpointAgentIssue[]>;
       // 每个 Agent 要重开的副本，按 provider 索引；老主机不发时为空。
       reopenHints: Record<string, ApiEndpointReopenHint[]>;
-      // 整台主机的长对话设置；老主机不发时为 null。
-      longConversations: ApiEndpointLongConversations | null;
+      // 整台主机的长对话设置；没设或老主机不发时为空。
+      longConversations: ApiEndpointLongConversations;
     };
 
 export function selectHostEndpointsState(input: {
@@ -47,7 +47,7 @@ export function selectHostEndpointsState(input: {
       gatewayUnavailable: input.data.gatewayUnavailable ?? null,
       agentIssues: input.data.agentIssues ?? {},
       reopenHints: input.data.reopenHints ?? {},
-      longConversations: input.data.longConversations ?? null,
+      longConversations: input.data.longConversations ?? {},
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

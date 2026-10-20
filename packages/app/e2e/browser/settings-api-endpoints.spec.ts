@@ -1026,9 +1026,9 @@ test.describe("Settings API endpoints", () => {
     });
 
     await test.step("a number that isn't one is refused in place", async () => {
-      await sheet.getByTestId("api-endpoint-model-settings-context").fill("12.5k");
+      await sheet.getByTestId("api-endpoint-model-settings-context").fill("12.5");
       await expect(sheet.getByTestId("api-endpoint-model-settings-context-field-error")).toHaveText(
-        "Enter a whole number of tokens",
+        "Use a count like 272k",
       );
       await expect(sheet.getByTestId("api-endpoint-model-settings-save")).toBeDisabled();
     });
@@ -1133,19 +1133,26 @@ test.describe("Settings API endpoints", () => {
     await compactAt.press("Enter");
     await expect.poll(hostSettings).toEqual({ compactAt: 400_000 });
     await expect(section.getByTestId("api-endpoints-long-conversations-error")).toHaveCount(0);
+    // 存好的数按千分位写回；magpie 的简写也认。
+    await expect(compactAt).toHaveValue("400,000");
+    await compactAt.fill("1.5m");
+    await compactAt.press("Enter");
+    await expect.poll(hostSettings).toEqual({ compactAt: 1_500_000 });
+    await expect(compactAt).toHaveValue("1,500,000");
 
-    // 「完整窗口」开着时压缩阈值收起（magpie 同样），关回来时还是存着的那个数。
+    // 「完整窗口」开着时压缩阈值照样列出、改不了，看得出存着的数还在。
     await fullWindow.click();
-    await expect.poll(hostSettings).toEqual({ fullContext: true, compactAt: 400_000 });
-    await expect(compactAt).toHaveCount(0);
+    await expect.poll(hostSettings).toEqual({ fullContext: true, compactAt: 1_500_000 });
+    await expect(compactAt).not.toBeEditable();
+    await expect(compactAt).toHaveValue("1,500,000");
     host.failing = true;
     await fullWindow.click();
     await expect(section.getByTestId("api-endpoints-long-conversations-error")).toBeVisible();
-    await expect(compactAt).toHaveCount(0);
+    await expect(compactAt).not.toBeEditable();
     host.failing = false;
     await fullWindow.click();
-    await expect.poll(hostSettings).toEqual({ compactAt: 400_000 });
-    await expect(compactAt).toHaveValue("400000");
+    await expect.poll(hostSettings).toEqual({ compactAt: 1_500_000 });
+    await expect(compactAt).toBeEditable();
   });
 
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({

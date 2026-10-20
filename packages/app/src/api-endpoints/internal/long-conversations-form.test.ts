@@ -37,11 +37,11 @@ describe("openLongConversationsForm", () => {
 
   it("the switch saves at once; a refusal puts it back and says why", async () => {
     const { form, sent } = open({}, [null, "host refused"]);
-    await form.setFullContext(true);
+    await form.setFullContext({ on: true });
     expect(sent).toEqual([{ fullContext: true }]);
     expect(form.getState().fullContext).toBe(true);
 
-    await form.setFullContext(false);
+    await form.setFullContext({ on: false });
     expect(sent[1]).toEqual({ fullContext: false });
     expect(form.getState()).toMatchObject({
       fullContext: true,
@@ -54,6 +54,8 @@ describe("openLongConversationsForm", () => {
     form.setCompactText("500,000");
     expect(await form.commitCompact()).toBe("saved");
     expect(sent).toEqual([{ fullContext: false, compactAt: 500_000 }]);
+    // 存好的数按界面语言的千分位重写，输入框换新。
+    expect(form.getState().compactAt).toMatchObject({ text: "500,000", generation: 1 });
 
     // 没改不发。
     expect(await form.commitCompact()).toBe("unchanged");
@@ -76,7 +78,7 @@ describe("openLongConversationsForm", () => {
     expect(form.getState().compactAt.invalid).toBe(true);
     expect(sent).toEqual([]);
 
-    form.setCompactText("300k");
+    form.setCompactText("300g");
     expect(form.getState().compactAt.invalid).toBe(true);
     form.setCompactText("300000");
     expect(await form.commitCompact()).toBe("failed");

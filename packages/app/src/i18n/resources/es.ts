@@ -2837,7 +2837,7 @@ export const es: TranslationResources = {
           "Indica a Codex que puede enviarle imágenes. Claude Code no tiene ajuste de imágenes.",
         automatic: "Automático: {{value}}",
         automaticUnknown: "Automático",
-        invalidTokens: "Escribe un número entero de tokens mayor que cero",
+        invalidTokens: "Usa un número como 272k",
         restoreAll: "Restaurar todos los predeterminados",
         save: "Guardar",
         saving: "Guardando…",
@@ -2853,7 +2853,9 @@ export const es: TranslationResources = {
       longConversations: {
         title: "Conversaciones largas",
         fullWindow: "Ventana completa",
-        hint: "Codex y Claude Code compactan una conversación larga en {{size}} tokens (también los modelos [1m] que no son de Claude) o en el tamaño que escribas. El valor de Compactar en de cada modelo tiene prioridad. La ventana completa es más lenta y cuesta más.",
+        fullWindowHint: "Usa toda la ventana de contexto del modelo; es más lento y cuesta más.",
+        compactAtHint:
+          "Dónde Codex y Claude Code compactan una conversación larga; vacío es {{size}}. Un modelo con su propio Compactar en usa el suyo.",
         saveFailed: "No se pudo guardar: {{message}}",
       },
       modelScope: {

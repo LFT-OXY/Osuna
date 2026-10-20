@@ -5,7 +5,7 @@ import { parseTokens, type TokenFormat } from "./model-settings-form";
 /*
  * 「第三方接口」页的「长对话」（照 magpie 设置页的 Long conversations）：纯 TypeScript，无 React（docs/forms.md）。
  * 「完整窗口」开关一拨就存；压缩阈值在输入框交出（回车或离开）时存，同时关掉完整窗口（magpie SetCompactAt）。
- * 框里空着是 272K（灰字），填 272K 等于不设。存失败时开关回到原样、输入留着，原因留在原处。
+ * 框里空着是 272K（灰字），填 272K 等于不设；存好后按界面语言的千分位重写一遍。存失败时开关回到原样、输入留着，原因留在原处。
  */
 
 /** 交给主机的一次修改；compactAt 为 null 回到 272K，省略即不变。 */
@@ -21,7 +21,8 @@ export type LongConversationsStatus =
 
 export interface LongConversationsFormState {
   fullContext: boolean;
-  compactAt: { text: string; invalid: boolean };
+  // generation：框里的字被改写（存好后按千分位重写）时加一，输入框按它换新。
+  compactAt: { text: string; invalid: boolean; generation: number };
   // 输入框灰字：没设时用的 272K，按界面语言写。
   placeholder: string;
   status: LongConversationsStatus;
@@ -32,7 +33,7 @@ export type CompactCommitResult = "saved" | "unchanged" | "invalid" | "failed";
 export interface LongConversationsForm {
   getState(): LongConversationsFormState;
   subscribe(listener: () => void): () => void;
-  setFullContext(on: boolean): Promise<void>;
+  setFullContext(input: { on: boolean }): Promise<void>;
   setCompactText(text: string): void;
   commitCompact(): Promise<CompactCommitResult>;
 }
@@ -47,13 +48,18 @@ export function openLongConversationsForm(input: {
   let fullContext = input.initial.fullContext === true;
   let savedCompact: number | null = input.initial.compactAt ?? null;
   let text = savedCompact === null ? "" : tokenFormat.format(savedCompact);
+  let generation = 0;
   let status: LongConversationsStatus = { kind: "idle" };
   const listeners = new Set<() => void>();
 
   function build(): LongConversationsFormState {
     return {
       fullContext,
-      compactAt: { text, invalid: parseTokens(text, tokenFormat).kind === "invalid" },
+      compactAt: {
+        text,
+        invalid: parseTokens(text, tokenFormat).kind === "invalid",
+        generation,
+      },
       placeholder: tokenFormat.format(WORKING_WINDOW),
       status,
     };
@@ -72,7 +78,7 @@ export function openLongConversationsForm(input: {
         listeners.delete(listener);
       };
     },
-    async setFullContext(on) {
+    async setFullContext({ on }) {
       const before = fullContext;
       fullContext = on;
       status = { kind: "saving" };
@@ -98,6 +104,8 @@ export function openLongConversationsForm(input: {
       if (failure === null) {
         savedCompact = value;
         fullContext = false;
+        text = value === null ? "" : tokenFormat.format(value);
+        generation += 1;
       }
       status = failure === null ? { kind: "idle" } : { kind: "failed", message: failure };
       publish();

@@ -101,16 +101,25 @@ export interface ModelSettingsForm {
 
 type ParsedTokens = { kind: "empty" } | { kind: "count"; value: number } | { kind: "invalid" };
 
-/** 认空白、逗号、下划线、这种语言的千分位符号与数字写法；不是大于零的整数为 invalid。 */
+/**
+ * 认空白、逗号、下划线、这种语言的千分位符号与数字写法；也认 magpie 的简写（ParseTokens、parseContexts）：
+ * 带 k、m 的数，前面可以有小数点（272k、1.5m），不分大小写。不是大于零的整数为 invalid。
+ */
 export function parseTokens(text: string, tokenFormat: TokenFormat): ParsedTokens {
   const ascii = [...text].map((char) => tokenFormat.digits.get(char) ?? char).join("");
-  const cleaned = ascii
-    .replace(/[\s,_]/g, "")
-    .split(tokenFormat.group)
-    .join("");
-  if (cleaned === "") return { kind: "empty" };
+  const compact = ascii.toLowerCase().replace(/[\s_]/g, "");
+  if (compact === "") return { kind: "empty" };
+  const shorthand = /^(\d+(?:\.\d+)?)([km])$/.exec(compact);
+  if (shorthand) {
+    const [, number = "", unit] = shorthand;
+    return tokenCount(Math.round(Number(number) * (unit === "m" ? 1_000_000 : 1_000)));
+  }
+  const cleaned = compact.replace(/,/g, "").split(tokenFormat.group).join("");
   if (!/^\d+$/.test(cleaned)) return { kind: "invalid" };
-  const value = Number(cleaned);
+  return tokenCount(Number(cleaned));
+}
+
+function tokenCount(value: number): ParsedTokens {
   const isTokenCount = value > 0 && Number.isSafeInteger(value);
   return isTokenCount ? { kind: "count", value } : { kind: "invalid" };
 }
