@@ -2823,6 +2823,26 @@ export const en = {
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",
       },
+      modelScope: {
+        title: "Model scope",
+        label: "Models served",
+        vendor: "Vendor's list",
+        picked: "Picked only",
+        vendorHint:
+          "Serves every model in the fetched list, except ones listed only for a format this endpoint has no base URL for, and follows the list as it changes. With more than {{limit}}, the first {{limit}} in list order. Models you add by hand are always served. Switching a model on or off below moves to Picked only.",
+        pickedHint: "Serves only the models switched on below.",
+        rules: {
+          title: "Auto-pick rules",
+          hint: "When a fetched list brings new models, the ones matching a rule are switched on; adding a rule also switches on the matching models listed now. * matches any characters, in any case; start with re: for a regular expression. Rules never switch a model off.",
+          placeholder: "e.g. gpt-* or re:claude-.*",
+          add: "Add",
+          adding: "Adding…",
+          remove: "Remove rule {{rule}}",
+          notRule:
+            "“{{text}}” is a model name, not a rule: a rule has a * in it or starts with re:.",
+          saveFailed: "Couldn't save: {{message}}",
+        },
+      },
       agent: {
         title: "API endpoints",
         useSwitch: "Use API endpoints",

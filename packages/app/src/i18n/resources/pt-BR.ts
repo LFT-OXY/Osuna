@@ -2799,6 +2799,26 @@ export const ptBR: TranslationResources = {
         saving: "Salvando…",
         saveFailed: "Não foi possível salvar: {{message}}",
       },
+      modelScope: {
+        title: "Escopo de modelos",
+        label: "Modelos servidos",
+        vendor: "Lista do fornecedor",
+        picked: "Só os escolhidos",
+        vendorHint:
+          "Serve todos os modelos da lista obtida, exceto os listados só em um formato para o qual este endpoint não tem URL base, e acompanha a lista quando ela muda. Com mais de {{limit}}, os {{limit}} primeiros na ordem da lista. Modelos adicionados à mão são sempre servidos. Ligar ou desligar um modelo abaixo muda para Só os escolhidos.",
+        pickedHint: "Serve só os modelos ligados abaixo.",
+        rules: {
+          title: "Regras de seleção automática",
+          hint: "Quando uma lista obtida traz modelos novos, os que combinam com uma regra são ligados; adicionar uma regra também liga os modelos da lista atual que combinam. * combina com quaisquer caracteres, sem diferenciar maiúsculas; comece com re: para uma expressão regular. As regras nunca desligam um modelo.",
+          placeholder: "ex.: gpt-* ou re:claude-.*",
+          add: "Adicionar",
+          adding: "Adicionando…",
+          remove: "Remover a regra {{rule}}",
+          notRule:
+            "“{{text}}” é um nome de modelo, não uma regra: uma regra tem * ou começa com re:.",
+          saveFailed: "Não foi possível salvar: {{message}}",
+        },
+      },
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",

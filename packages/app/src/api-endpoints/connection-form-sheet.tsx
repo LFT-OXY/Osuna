@@ -58,6 +58,8 @@ export interface ApiEndpointConnectionSheetProps {
   canPasteCurl: boolean;
   // 同上：保存前能测试连接、添加时能拉模型，自动检测能填试用的模型。
   canCheckBeforeSave: boolean;
+  // 同上：新建的接口「跟随接口清单」。
+  followsListWhenNew: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -99,6 +101,7 @@ export function ApiEndpointConnectionSheet({
   canPickIcon,
   canPasteCurl,
   canCheckBeforeSave,
+  followsListWhenNew,
   templates,
   onBack,
   onSave,
@@ -125,7 +128,15 @@ export function ApiEndpointConnectionSheet({
       fetchModels: onFetchModels,
       testConnection: onTestConnection,
     },
-    { isKeyOptional, canRevealKey, canPickIcon, canPasteCurl, canCheckBeforeSave, templates },
+    {
+      isKeyOptional,
+      canRevealKey,
+      canPickIcon,
+      canPasteCurl,
+      canCheckBeforeSave,
+      followsListWhenNew,
+      templates,
+    },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const keyInputRef = useCurlPasteField({ model, field: "apiKey" });

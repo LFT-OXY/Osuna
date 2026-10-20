@@ -2772,6 +2772,26 @@ export const ko: TranslationResources = {
         saving: "저장 중…",
         saveFailed: "저장하지 못했습니다: {{message}}",
       },
+      modelScope: {
+        title: "제공 범위",
+        label: "제공하는 모델",
+        vendor: "API 목록 따르기",
+        picked: "고른 것만",
+        vendorHint:
+          "가져온 목록의 모델을 모두 제공하고(이 API에 기본 URL이 없는 형식에만 있는 모델은 제외) 목록이 바뀌면 따라갑니다. {{limit}}개를 넘으면 목록 순서로 앞의 {{limit}}개입니다. 직접 추가한 모델은 항상 포함됩니다. 아래에서 모델을 켜거나 끄면 '고른 것만'으로 바뀝니다.",
+        pickedHint: "아래에서 켠 모델만 제공합니다.",
+        rules: {
+          title: "자동 선택 규칙",
+          hint: "가져온 목록에 새 모델이 있으면 규칙에 맞는 모델을 자동으로 켭니다. 규칙을 추가할 때도 지금 목록에 있는 맞는 모델을 켭니다. *는 아무 문자와 맞고 대소문자를 가리지 않습니다. re:로 시작하면 정규식입니다. 규칙이 모델을 끄지는 않습니다.",
+          placeholder: "예: gpt-* 또는 re:claude-.*",
+          add: "추가",
+          adding: "추가하는 중…",
+          remove: "규칙 {{rule}} 삭제",
+          notRule:
+            "'{{text}}'은(는) 모델 이름이지 규칙이 아닙니다. 규칙에는 *가 있거나 re:로 시작해야 합니다.",
+          saveFailed: "저장하지 못했습니다: {{message}}",
+        },
+      },
       agent: {
         title: "서드파티 API",
         useSwitch: "서드파티 API 사용",

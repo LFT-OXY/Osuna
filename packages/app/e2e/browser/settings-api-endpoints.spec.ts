@@ -856,6 +856,128 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("Model scope: Vendor's list serves the list's first 24; Picked only keeps them; a failed switch stays as it was", async ({
+    page,
+  }) => {
+    relay.goodModels = numberedModels(26);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+      modelScope: "vendor",
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    await openEndpointDetail(page, endpointId);
+    const scope = page.getByTestId("api-endpoint-model-scope-section").filter({ visible: true });
+    const firstServed = numberedModels(24);
+
+    await test.step("Vendor's list says only the first 24 are served, and they are on", async () => {
+      await expect(scope.getByTestId("api-endpoint-model-scope-hint")).toContainText(
+        "the first 24 in list order",
+      );
+      await expect(scope.getByTestId("api-endpoint-auto-pick")).toHaveCount(0);
+      expect(await selectedModelsOf(endpointId)).toEqual(firstServed);
+      const models = page.getByTestId("api-endpoint-models-section").filter({ visible: true });
+      await expect(models.getByTestId("api-endpoint-model-family-other")).toContainText("24/26");
+      await expect(modelSwitch(page, "model-25")).not.toBeChecked();
+    });
+
+    await test.step("a failed switch says why and stays on Vendor's list", async () => {
+      await scope.getByTestId("api-endpoint-model-scope-picked").click();
+      await expect(page.getByTestId("api-endpoint-detail-error-alert")).toContainText(
+        "EACCES: permission denied",
+      );
+      await expect(scope.getByTestId("api-endpoint-model-scope-hint")).toContainText(
+        "the first 24 in list order",
+      );
+      expect((await endpointOf(endpointId))?.modelScope).toBe("vendor");
+    });
+
+    await test.step("Picked only keeps exactly what was served", async () => {
+      host.failing = false;
+      await scope.getByTestId("api-endpoint-model-scope-picked").click();
+      await expect(scope.getByTestId("api-endpoint-auto-pick")).toBeVisible();
+      await expect.poll(scopeReader(endpointId)).toBe("picked");
+      expect(await selectedModelsOf(endpointId)).toEqual(firstServed);
+    });
+
+    await test.step("back on Vendor's list, switching a model off moves to Picked only", async () => {
+      await scope.getByTestId("api-endpoint-model-scope-vendor").click();
+      await expect.poll(scopeReader(endpointId)).toBe("vendor");
+      await modelSwitch(page, "model-01").click();
+      await expect.poll(scopeReader(endpointId)).toBe("picked");
+      expect(await selectedModelsOf(endpointId)).toEqual(firstServed.slice(1));
+      await expect(scope.getByTestId("api-endpoint-auto-pick")).toBeVisible();
+    });
+  });
+
+  test("Auto-pick rules: a model name is not a rule, a failed add or remove stays in place, and a rule switches on what it matches", async ({
+    page,
+  }) => {
+    relay.goodModels = numberedModels(26);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["model-01"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.save");
+    host.failing = false;
+    await openEndpointDetail(page, endpointId);
+    const scope = page.getByTestId("api-endpoint-model-scope-section").filter({ visible: true });
+    const input = scope.getByTestId("api-endpoint-auto-pick-input");
+    const add = scope.getByTestId("api-endpoint-auto-pick-add");
+    const error = scope.getByTestId("api-endpoint-auto-pick-error");
+
+    await test.step("a model name is turned away before anything is sent", async () => {
+      await input.fill("model-02");
+      await add.click();
+      await expect(error).toContainText("is a model name, not a rule");
+      await expect(input).toHaveValue("model-02");
+      expect((await endpointOf(endpointId))?.autoPick).toBeUndefined();
+    });
+
+    await test.step("a failed add says why and keeps what was typed", async () => {
+      host.failing = true;
+      await input.fill("MODEL-2*");
+      await add.click();
+      await expect(error).toContainText("EACCES: permission denied");
+      await expect(input).toHaveValue("MODEL-2*");
+      expect((await endpointOf(endpointId))?.autoPick).toBeUndefined();
+    });
+
+    await test.step("adding the rule switches on the matching models listed now, in any case", async () => {
+      host.failing = false;
+      await add.click();
+      await expect(scope.getByTestId("api-endpoint-auto-pick-rule-MODEL-2*")).toBeVisible();
+      await expect(input).toHaveValue("");
+      await expect(error).toHaveCount(0);
+      await expect
+        .poll(selectedModelsReader(endpointId))
+        .toEqual([
+          "model-20",
+          "model-21",
+          "model-22",
+          "model-23",
+          "model-24",
+          "model-25",
+          "model-26",
+          "model-01",
+        ]);
+    });
+
+    await test.step("a failed remove says why and keeps the rule; removing again drops it and keeps the models", async () => {
+      host.failing = true;
+      await scope.getByTestId("api-endpoint-auto-pick-remove-MODEL-2*").click();
+      await expect(error).toContainText("EACCES: permission denied");
+      await expect(scope.getByTestId("api-endpoint-auto-pick-rule-MODEL-2*")).toBeVisible();
+      host.failing = false;
+      await scope.getByTestId("api-endpoint-auto-pick-remove-MODEL-2*").click();
+      await expect(scope.getByTestId("api-endpoint-auto-pick-rule-MODEL-2*")).toHaveCount(0);
+      await expect.poll(autoPickReader(endpointId)).toBeUndefined();
+      expect(await selectedModelsOf(endpointId)).toHaveLength(8);
+    });
+  });
+
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
     page,
   }) => {
@@ -1263,13 +1385,17 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
-  test("a host without apiEndpointManagement has no Duplicate and no Show", async ({ page }) => {
+  test("a host without apiEndpointManagement has no Duplicate, no Show and no model scope", async ({
+    page,
+  }) => {
     const [endpointId = ""] = await seedRelays(["Relay A"]);
     await hideManagementCapability(page);
     await openEndpointDetail(page, endpointId);
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-detail-edit-connection")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-detail-duplicate")).toHaveCount(0);
+    // 也没有服务范围。
+    await expect(page.getByTestId("api-endpoint-model-scope-section")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
     await expect(page.getByTestId("api-endpoint-connection-api-key")).toBeVisible();
@@ -1514,11 +1640,16 @@ test.describe("Templates", () => {
       await page.getByTestId("api-endpoint-connection-save").click();
       await expect(connectionForm(page)).toHaveCount(0);
       await expect(headerTitle(page)).toHaveText("Amazon Bedrock");
-      // 内置清单 18 个；左栏先选中的家族是 DeepSeek（Bedrock 的 Claude id 认不出家族，归「其他」）。
-      await expect(page.getByText("0 selected / 18 total")).toBeVisible();
-      await expect(modelSwitch(page, "deepseek.v3.2")).toBeVisible();
+      // 内置清单 18 个，新建的跟随接口清单全都在服务；左栏先选中的家族是 DeepSeek（Bedrock 的 Claude id 认不出家族，归「其他」）。
+      await expect(page.getByText("18 selected / 18 total")).toBeVisible();
+      await expect(modelSwitch(page, "deepseek.v3.2")).toBeChecked();
       const [saved] = (await client.apiEndpointList("claude")).endpoints;
-      expect(saved).toMatchObject({ templateId: "bedrock", region: "eu-west-1", hasApiKey: true });
+      expect(saved).toMatchObject({
+        templateId: "bedrock",
+        region: "eu-west-1",
+        hasApiKey: true,
+        modelScope: "vendor",
+      });
     });
   });
 
@@ -1925,6 +2056,8 @@ test.describe("Checking an API endpoint before saving it", () => {
         models: [{ id: "gpt-5" }],
         catalog: { models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] },
       });
+      // 挑了模型的只用挑的。
+      expect(endpoint?.modelScope).toBeUndefined();
       await expect(headerTitle(page)).toHaveText("Unsaved relay");
       // 新建一家保存时当场再拉一次（照 magpie），打开接口页又拉一次；清单还是那两个。
       await expect.poll(listingCountReader(relay)).toBe(6);
@@ -3911,6 +4044,24 @@ function testResult(page: Page, format: string): Locator {
 
 function ids(models: { id: string }[] | undefined): string[] {
   return (models ?? []).map((model) => model.id);
+}
+
+/** model-01、model-02……：同属「其他」家族、按清单顺序排的一串模型名。 */
+function numberedModels(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `model-${String(index + 1).padStart(2, "0")}`);
+}
+
+function scopeReader(endpointId: string): () => Promise<string | undefined> {
+  return async () => (await endpointOf(endpointId))?.modelScope;
+}
+
+function autoPickReader(endpointId: string): () => Promise<string[] | undefined> {
+  return async () => (await endpointOf(endpointId))?.autoPick;
+}
+
+async function endpointOf(endpointId: string) {
+  const list = await client.apiEndpointList("claude");
+  return list.endpoints.find((endpoint) => endpoint.id === endpointId);
 }
 
 async function selectedModelsOf(endpointId: string): Promise<string[]> {

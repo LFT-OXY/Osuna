@@ -159,6 +159,7 @@ const KEY_REQUIRED = {
   canPickIcon: false,
   canPasteCurl: false,
   canCheckBeforeSave: false,
+  followsListWhenNew: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -167,6 +168,7 @@ const KEY_OPTIONAL = {
   canPickIcon: true,
   canPasteCurl: true,
   canCheckBeforeSave: true,
+  followsListWhenNew: true,
   templates: [],
 };
 
@@ -466,6 +468,8 @@ describe("connection form: the key is optional when the host says so", () => {
         name: "Ollama",
         baseUrls: [{ format: "openai_chat", url: "http://127.0.0.1:11434/v1" }],
         models: [],
+        // 新建的接口跟随接口清单。
+        modelScope: "vendor",
       },
     ]);
   });
@@ -803,6 +807,7 @@ describe("connection form: from a template", () => {
         models: [],
         templateId: "zhipu",
         region: "coding",
+        modelScope: "vendor",
       },
     ]);
   });

@@ -38,6 +38,7 @@ import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/a
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointMappingSection } from "./mapping-section";
+import { ApiEndpointModelScopeSection } from "./model-scope-section";
 import { ApiEndpointModelsSection } from "./models-section";
 import { useEndpointDetail } from "./use-endpoint-detail";
 import { SwitchOffSheet } from "./switch-off-sheet";
@@ -408,6 +409,7 @@ function ConnectionSheet({
       canPickIcon={hasManagement}
       canPasteCurl={hasManagement}
       canCheckBeforeSave={hasManagement}
+      followsListWhenNew={hasManagement}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}
@@ -721,6 +723,16 @@ function ApiEndpointDetailSections({
           value={detail.searchesWeb}
           save={detail.webSearchSave}
           onChange={detail.setSearchesWeb}
+        />
+      ) : null}
+      {hasManagement ? (
+        <ApiEndpointModelScopeSection
+          scope={detail.modelScope}
+          rules={detail.autoPick}
+          ruleError={detail.ruleError}
+          onChangeScope={detail.changeScope}
+          onAddRule={detail.addRule}
+          onRemoveRule={detail.removeRule}
         />
       ) : null}
       <ApiEndpointModelsSection

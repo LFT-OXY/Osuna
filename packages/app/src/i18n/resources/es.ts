@@ -2814,6 +2814,26 @@ export const es: TranslationResources = {
         saving: "Guardando…",
         saveFailed: "No se pudo guardar: {{message}}",
       },
+      modelScope: {
+        title: "Alcance de modelos",
+        label: "Modelos servidos",
+        vendor: "Lista del proveedor",
+        picked: "Solo los elegidos",
+        vendorHint:
+          "Sirve todos los modelos de la lista obtenida, salvo los que solo aparecen en un formato para el que este endpoint no tiene URL base, y sigue la lista cuando cambia. Si hay más de {{limit}}, los primeros {{limit}} en el orden de la lista. Los modelos añadidos a mano siempre se sirven. Activar o desactivar un modelo abajo cambia a Solo los elegidos.",
+        pickedHint: "Sirve solo los modelos activados abajo.",
+        rules: {
+          title: "Reglas de selección automática",
+          hint: "Cuando una lista obtenida trae modelos nuevos, se activan los que coinciden con una regla; al añadir una regla también se activan los modelos de la lista actual que coinciden. * coincide con cualquier carácter, sin distinguir mayúsculas; empieza con re: para una expresión regular. Las reglas nunca desactivan un modelo.",
+          placeholder: "p. ej. gpt-* o re:claude-.*",
+          add: "Añadir",
+          adding: "Añadiendo…",
+          remove: "Quitar la regla {{rule}}",
+          notRule:
+            "«{{text}}» es un nombre de modelo, no una regla: una regla lleva * o empieza con re:.",
+          saveFailed: "No se pudo guardar: {{message}}",
+        },
+      },
       agent: {
         title: "Endpoints de API",
         useSwitch: "Usar endpoints de API",

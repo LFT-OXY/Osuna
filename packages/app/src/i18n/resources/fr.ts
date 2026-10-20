@@ -2817,6 +2817,26 @@ export const fr: TranslationResources = {
         saving: "Enregistrement…",
         saveFailed: "Impossible d'enregistrer : {{message}}",
       },
+      modelScope: {
+        title: "Portée des modèles",
+        label: "Modèles servis",
+        vendor: "Liste du fournisseur",
+        picked: "Choisis uniquement",
+        vendorHint:
+          "Sert tous les modèles de la liste récupérée, sauf ceux listés seulement pour un format sans URL de base sur ce point d'accès, et suit la liste quand elle change. Au-delà de {{limit}}, les {{limit}} premiers dans l'ordre de la liste. Les modèles ajoutés à la main sont toujours servis. Activer ou désactiver un modèle ci-dessous passe à Choisis uniquement.",
+        pickedHint: "Sert uniquement les modèles activés ci-dessous.",
+        rules: {
+          title: "Règles de sélection automatique",
+          hint: "Quand une liste récupérée apporte de nouveaux modèles, ceux qui correspondent à une règle sont activés ; ajouter une règle active aussi les modèles correspondants déjà listés. * correspond à n'importe quels caractères, sans tenir compte de la casse ; commencez par re: pour une expression régulière. Les règles ne désactivent jamais un modèle.",
+          placeholder: "ex. gpt-* ou re:claude-.*",
+          add: "Ajouter",
+          adding: "Ajout…",
+          remove: "Supprimer la règle {{rule}}",
+          notRule:
+            "« {{text}} » est un nom de modèle, pas une règle : une règle contient * ou commence par re:.",
+          saveFailed: "Impossible d'enregistrer : {{message}}",
+        },
+      },
       agent: {
         title: "Points d'accès API",
         useSwitch: "Utiliser les points d'accès API",

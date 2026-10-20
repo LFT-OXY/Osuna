@@ -6,6 +6,7 @@ import {
   type ApiEndpoint,
   type ApiEndpointAgentSettings,
   type ApiEndpointModelMapping,
+  type ApiEndpointModelScope,
   type ApiEndpointRequestFormat,
   type ApiEndpointTestConnectionResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -16,6 +17,7 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
+import { modelScopeOf, typedRuleOf } from "./internal/model-scope";
 import { createUpstreamRequestId } from "./internal/upstream-request";
 import { LIST_PROVIDER } from "./use-host-endpoints";
 
@@ -53,6 +55,9 @@ type ModelSelection = Pick<ModelSource, "models" | "manualModels">;
 
 interface ModelDraft extends ModelSelection {
   modelMapping: ApiEndpointModelMapping | undefined;
+  // 服务范围与自动勾选规则：只发给声明了 apiEndpointManagement 的主机。
+  modelScope: ApiEndpointModelScope;
+  autoPick: string[];
 }
 
 interface FormatAddress {
@@ -66,8 +71,12 @@ export interface UseEndpointDetailResult {
   modelMapping: ApiEndpointModelMapping | undefined;
   fetchState: ModelFetchState;
   forgetState: CatalogForgetState;
-  // 主机声明了 apiEndpointManagement：能丢掉拉回的清单。
+  // 主机声明了 apiEndpointManagement：能丢掉拉回的清单、改服务范围与自动勾选规则。
   canForgetCatalog: boolean;
+  modelScope: ApiEndpointModelScope;
+  autoPick: string[];
+  // 规则区要显示的错误：不是规则，或增删没保存成功（加规则时输入留在原处）；再改规则时清掉。
+  ruleError: string | null;
   // 模型开关或档位映射没保存成功的原因。
   saveError: string | null;
   deleteError: string | null;
@@ -84,6 +93,10 @@ export interface UseEndpointDetailResult {
   // 一次加几个（逗号分隔拆好的）；失败原因交给调用方（手动添加那一行自己显示），不进 saveError。
   addModels: (modelIds: string[]) => Promise<string | null>;
   changeMapping: (mapping: ApiEndpointModelMapping | undefined) => void;
+  changeScope: (scope: ApiEndpointModelScope) => void;
+  // 返回是否加上了；没加上的原因在 ruleError。
+  addRule: (text: string) => Promise<boolean>;
+  removeRule: (rule: string) => void;
   testConnection: () => void;
   remove: () => void;
 }
@@ -113,6 +126,7 @@ export function useEndpointDetail(input: {
   const [forgetState, setForgetState] = useState<CatalogForgetState>({ status: "idle" });
   const [draft, setDraft] = useState<ModelDraft | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<FormatTestResults>({});
   const [isDeleting, setIsDeleting] = useState(false);
@@ -132,8 +146,10 @@ export function useEndpointDetail(input: {
         models: endpoint.models,
         manualModels: endpoint.manualModels ?? [],
         modelMapping: endpoint.modelMapping,
+        modelScope: modelScopeOf(endpoint),
+        autoPick: endpoint.autoPick ?? [],
       },
-    [draft, endpoint.manualModels, endpoint.modelMapping, endpoint.models],
+    [draft, endpoint],
   );
 
   /**
@@ -231,6 +247,7 @@ export function useEndpointDetail(input: {
           models: next.models,
           manualModels: next.manualModels,
           ...(next.modelMapping ? { modelMapping: next.modelMapping } : {}),
+          ...scopeFieldsOf(next, hasManagement),
         });
         failure = result.error?.message ?? null;
       } catch (error) {
@@ -243,7 +260,7 @@ export function useEndpointDetail(input: {
       }
       return failure;
     },
-    [client, endpoint, refresh, t],
+    [client, endpoint, hasManagement, refresh, t],
   );
 
   const saveReportingError = useCallback(
@@ -291,13 +308,51 @@ export function useEndpointDetail(input: {
     (next: ModelSelection) => {
       void (async () => {
         if (!(await confirmModelsOff(next))) return;
+        // 跟随清单时开关一个模型：从在服务的那些起改成「只用挑选的」（照 magpie：挑选从在服务的开始）。
         saveReportingError({
+          ...current,
           ...next,
           modelMapping: keepMappingWithin(current.modelMapping, next.models),
+          modelScope: "picked",
         });
       })();
     },
-    [confirmModelsOff, current.modelMapping, saveReportingError],
+    [confirmModelsOff, current, saveReportingError],
+  );
+
+  // 切到「只用挑选的」时已选就是 models 里在服务的那些，原样写回（prd 第 17 条）。
+  const changeScope = useCallback(
+    (scope: ApiEndpointModelScope) => {
+      if (scope === current.modelScope) return;
+      saveReportingError({ ...current, modelScope: scope });
+    },
+    [current, saveReportingError],
+  );
+
+  const addRule = useCallback(
+    async (text: string): Promise<boolean> => {
+      setRuleError(null);
+      const typed = typedRuleOf(text, current.autoPick);
+      if (typed.kind === "empty" || typed.kind === "duplicate") return typed.kind === "duplicate";
+      if (typed.kind === "notRule") {
+        setRuleError(t("settings.apiEndpoints.modelScope.rules.notRule", { text: typed.text }));
+        return false;
+      }
+      const failure = await save({ ...current, autoPick: [...current.autoPick, typed.rule] });
+      setRuleError(ruleSaveError(failure, t));
+      return failure === null;
+    },
+    [current, save, t],
+  );
+
+  const removeRule = useCallback(
+    (rule: string) => {
+      setRuleError(null);
+      void save({ ...current, autoPick: current.autoPick.filter((kept) => kept !== rule) }).then(
+        (failure) => setRuleError(ruleSaveError(failure, t)),
+      );
+    },
+    [current, save, t],
   );
 
   const setSearchesWeb = useCallback(
@@ -318,6 +373,7 @@ export function useEndpointDetail(input: {
             models: current.models,
             manualModels: current.manualModels,
             ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
+            ...scopeFieldsOf(current, hasManagement),
             searchesWeb: value,
           });
           failure = result.error?.message ?? null;
@@ -330,7 +386,7 @@ export function useEndpointDetail(input: {
         );
       })();
     },
-    [client, current, endpoint, refresh, t],
+    [client, current, endpoint, hasManagement, refresh, t],
   );
 
   const addModels = useCallback(
@@ -418,6 +474,9 @@ export function useEndpointDetail(input: {
     fetchState,
     forgetState,
     canForgetCatalog: hasManagement,
+    modelScope: current.modelScope,
+    autoPick: current.autoPick,
+    ruleError,
     saveError,
     deleteError,
     testResults,
@@ -432,9 +491,29 @@ export function useEndpointDetail(input: {
     changeModels,
     addModels,
     changeMapping,
+    changeScope,
+    addRule,
+    removeRule,
     testConnection,
     remove,
   };
+}
+
+function ruleSaveError(
+  failure: string | null,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string | null {
+  if (failure === null) return null;
+  return t("settings.apiEndpoints.modelScope.rules.saveFailed", { message: failure });
+}
+
+/** 老主机不认服务范围与规则：不发，免得它们看起来存上了。 */
+function scopeFieldsOf(
+  draft: ModelDraft,
+  hasManagement: boolean,
+): { modelScope?: ApiEndpointModelScope; autoPick?: string[] } {
+  if (!hasManagement) return {};
+  return { modelScope: draft.modelScope, autoPick: draft.autoPick };
 }
 
 function testOutcomeOf(response: ApiEndpointTestConnectionResponse["payload"]): FormatTestOutcome {

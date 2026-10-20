@@ -2780,6 +2780,25 @@ export const zhCN: TranslationResources = {
         saving: "正在保存…",
         saveFailed: "没能保存：{{message}}",
       },
+      modelScope: {
+        title: "服务范围",
+        label: "在服务的模型",
+        vendor: "跟随接口清单",
+        picked: "只用挑选的",
+        vendorHint:
+          "用拉回的清单里的全部模型（只在这家没填地址的格式上列出的除外），清单变了跟着变。超过 {{limit}} 个时用清单顺序的前 {{limit}} 个。手动添加的总在里面。在下面开关某个模型会改成「只用挑选的」。",
+        pickedHint: "只用下面开着的模型。",
+        rules: {
+          title: "自动勾选规则",
+          hint: "拉到的清单里有新模型时，匹配规则的自动打开；加规则时，清单里现有的匹配模型也一起打开。* 匹配任意字符，不分大小写；以 re: 开头写正则表达式。规则只打开、不关掉模型。",
+          placeholder: "例如 gpt-* 或 re:claude-.*",
+          add: "添加",
+          adding: "正在添加…",
+          remove: "删除规则 {{rule}}",
+          notRule: "「{{text}}」是模型名，不是规则：规则要带 *，或以 re: 开头。",
+          saveFailed: "没能保存：{{message}}",
+        },
+      },
       agent: {
         title: "第三方接口",
         useSwitch: "使用第三方接口",

@@ -224,6 +224,8 @@ interface ApiEndpointSeedClient {
     templateId?: string;
     region?: string;
     icon?: string | null;
+    modelScope?: string;
+    autoPick?: string[];
   }): Promise<ApiEndpointSaveResponse["payload"]>;
   apiEndpointListTemplates(): Promise<ApiEndpointListTemplatesResponse["payload"]>;
   apiEndpointStoreIcon(options: {
@@ -272,7 +274,14 @@ export async function connectApiEndpointClient(): Promise<ApiEndpointSeedClient>
 /** 存一家主机级接口（新客户端写法，存好即开着），返回它的 id。 */
 export async function seedApiEndpoint(
   client: ApiEndpointSeedClient,
-  input: { name: string; baseUrls: ApiEndpointBaseUrl[]; models: string[]; apiKey?: string },
+  input: {
+    name: string;
+    baseUrls: ApiEndpointBaseUrl[];
+    models: string[];
+    apiKey?: string;
+    // 服务范围；省略即「只用挑选的」。
+    modelScope?: string;
+  },
 ): Promise<string> {
   const saved = await client.apiEndpointSave({
     provider: "claude",
@@ -280,6 +289,7 @@ export async function seedApiEndpoint(
     baseUrls: input.baseUrls,
     apiKey: input.apiKey ?? RELAY_KEY,
     models: input.models.map((id) => ({ id })),
+    ...(input.modelScope !== undefined ? { modelScope: input.modelScope } : {}),
   });
   if (!saved.endpoint) throw new Error(`Saving ${input.name} failed: ${saved.error?.message}`);
   return saved.endpoint.id;
