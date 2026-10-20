@@ -31,6 +31,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.set_order.request"
       | "provider.api_endpoint.set_long_conversations.request"
+      | "provider.api_endpoint.set_disabled_models.request"
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.list_templates.request"
@@ -56,6 +57,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.set_endpoint_state.request": true,
   "provider.api_endpoint.set_order.request": true,
   "provider.api_endpoint.set_long_conversations.request": true,
+  "provider.api_endpoint.set_disabled_models.request": true,
   "provider.api_endpoint.reveal_key.request": true,
   "provider.api_endpoint.forget_catalog.request": true,
   "provider.api_endpoint.list_templates.request": true,
@@ -123,6 +125,8 @@ export class ApiEndpointSession {
         return this.handleSetOrder(request);
       case "provider.api_endpoint.set_long_conversations.request":
         return this.handleSetLongConversations(request);
+      case "provider.api_endpoint.set_disabled_models.request":
+        return this.handleSetDisabledModels(request);
       case "provider.api_endpoint.reveal_key.request":
         return this.handleRevealKey(request);
       case "provider.api_endpoint.forget_catalog.request":
@@ -438,6 +442,24 @@ export class ApiEndpointSession {
     }
     this.host.emit({
       type: "provider.api_endpoint.set_long_conversations.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
+  private async handleSetDisabledModels(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.set_disabled_models.request" }
+    >,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.setDisabledModels({ models: request.models });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.set_disabled_models.response",
       payload: { requestId: request.requestId, error },
     });
   }

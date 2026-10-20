@@ -2887,6 +2887,23 @@ export const en = {
           "Where Codex and Claude Code compact a long conversation; blank is {{size}}. A model with its own Compact at uses that.",
         saveFailed: "Couldn't save: {{message}}",
       },
+      disabledModels: {
+        title: "Disabled models",
+        addLabel: "Disable a model",
+        addHint:
+          "A disabled model is left out of every model list, default model choice and test, and the gateway refuses requests for it. Only requests through Osuna are covered. Type a pattern such as *-preview to disable every model it matches; case doesn't matter.",
+        disable: "Disable…",
+        searchPlaceholder: "Model name or pattern, such as *-preview",
+        noModels: "No models on the endpoints that are on",
+        customValuePrefix: "Disable",
+        customValueDescription: "Every model this name or pattern matches",
+        matches: "Matches {{n}}: {{list}}",
+        matchesNone: "Matches no model now; it is refused if one appears",
+        enable: "Enable",
+        enableModel: "Enable {{model}}",
+        duplicate: "{{pattern}} is already on the list",
+        saveFailed: "Couldn't save: {{message}}",
+      },
       modelScope: {
         title: "Model scope",
         label: "Models served",

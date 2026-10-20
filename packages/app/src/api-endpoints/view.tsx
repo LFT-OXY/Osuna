@@ -37,6 +37,7 @@ import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-sectio
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
+import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
 import { ApiEndpointLongConversationsSection } from "./long-conversations-section";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
@@ -457,7 +458,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const router = useRouter();
   const now = useClock();
   const endpoints = useHostEndpoints(serverId);
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order 与长对话设置。
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order、长对话设置与已禁用的模型。
   const canArrange = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
@@ -522,6 +523,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         <ApiEndpointLongConversationsSection
           initial={endpoints.state.longConversations}
           onSave={endpoints.setLongConversations}
+        />
+      ) : null}
+      {canArrange && endpoints.state.status === "ready" ? (
+        <ApiEndpointDisabledModelsSection
+          initial={endpoints.state.disabledModels}
+          endpoints={endpoints.state.endpoints}
+          onSave={endpoints.setDisabledModels}
         />
       ) : null}
       <ConnectionSheet

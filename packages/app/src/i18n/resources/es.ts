@@ -2879,6 +2879,23 @@ export const es: TranslationResources = {
           "Dónde Codex y Claude Code compactan una conversación larga; vacío es {{size}}. Un modelo con su propio Compactar en usa el suyo.",
         saveFailed: "No se pudo guardar: {{message}}",
       },
+      disabledModels: {
+        title: "Modelos desactivados",
+        addLabel: "Desactivar un modelo",
+        addHint:
+          "Un modelo desactivado no aparece en ninguna lista de modelos, opción de modelo predeterminado ni prueba, y la pasarela rechaza las solicitudes para él. Solo cubre las solicitudes que pasan por Osuna. Escribe un patrón como *-preview para desactivar todos los modelos que coincidan; no distingue mayúsculas.",
+        disable: "Desactivar…",
+        searchPlaceholder: "Nombre de modelo o patrón, como *-preview",
+        noModels: "No hay modelos en los endpoints activados",
+        customValuePrefix: "Desactivar",
+        customValueDescription: "Todos los modelos que coinciden con este nombre o patrón",
+        matches: "Coincide con {{n}}: {{list}}",
+        matchesNone: "Ahora no coincide con ningún modelo; si aparece uno, se rechaza",
+        enable: "Activar",
+        enableModel: "Activar {{model}}",
+        duplicate: "{{pattern}} ya está en la lista",
+        saveFailed: "No se pudo guardar: {{message}}",
+      },
       modelScope: {
         title: "Alcance de modelos",
         label: "Modelos servidos",

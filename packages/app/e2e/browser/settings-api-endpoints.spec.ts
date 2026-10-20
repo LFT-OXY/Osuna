@@ -1343,6 +1343,59 @@ test.describe("Settings API endpoints", () => {
     await expect(compactAt).toBeEditable();
   });
 
+  test("Disabled models: an entry picked or typed reaches the host with what it matches, Enable takes it off, and a refusal or a repeat keeps the list", async ({
+    page,
+  }) => {
+    await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5", "gemini-3-preview"],
+    });
+    const host = await failRequests(page, "provider.api_endpoint.set_disabled_models");
+    await openApiEndpointsPage(page);
+    const section = page.getByTestId("api-endpoints-disabled-models").filter({ visible: true });
+    const error = section.getByTestId("api-endpoints-disabled-models-error");
+    const hostList = async () => (await client.apiEndpointList("claude")).disabledModels;
+    const disable = async (typed: string) => {
+      await section.getByTestId("api-endpoints-disabled-models-add").click();
+      const search = page.getByRole("textbox").filter({ visible: true }).last();
+      await search.fill(typed);
+      await search.press("Enter");
+    };
+
+    // 空着时只有说明用法的那一行。
+    await expect(section).toContainText("Type a pattern such as *-preview");
+    await disable("*-PREVIEW");
+    await expect(error).toContainText("EACCES: permission denied");
+    expect(await hostList()).toEqual([]);
+    await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toHaveCount(0);
+
+    host.failing = false;
+    await disable("*-PREVIEW");
+    await expect.poll(hostList).toEqual(["*-PREVIEW"]);
+    await expect(error).toHaveCount(0);
+    await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toContainText(
+      "Matches 1: good-relay/gemini-3-preview",
+    );
+
+    // 只差大小写的不再加，说它已在名单里。
+    await disable("*-preview");
+    await expect(error).toContainText("*-preview is already on the list");
+    expect(await hostList()).toEqual(["*-PREVIEW"]);
+
+    await section
+      .getByTestId("api-endpoints-disabled-model-*-PREVIEW")
+      .getByRole("button", { name: "Enable *-PREVIEW" })
+      .click();
+    await expect.poll(hostList).toEqual([]);
+    await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toHaveCount(0);
+
+    // 从选单里挑：只禁这一家的这个模型（接口标识/模型）。
+    await section.getByTestId("api-endpoints-disabled-models-add").click();
+    await page.getByText("gemini-3-preview", { exact: true }).filter({ visible: true }).click();
+    await expect.poll(hostList).toEqual(["good-relay/gemini-3-preview"]);
+  });
+
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
     page,
   }) => {

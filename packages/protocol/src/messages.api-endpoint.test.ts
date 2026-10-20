@@ -940,6 +940,34 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     const older = { ...list, payload: olderPayload };
     expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
   });
+  it("parses set_disabled_models and a list carrying the host's disabled models, and an older host's list without them", () => {
+    const request = {
+      type: "provider.api_endpoint.set_disabled_models.request" as const,
+      requestId: "req-dm",
+      models: ["*-preview", "relay/glm-5"],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const response = {
+      type: "provider.api_endpoint.set_disabled_models.response" as const,
+      payload: { requestId: "req-dm", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const list = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-dm-list",
+        provider: "codex",
+        endpoints: [],
+        activeEndpointId: null,
+        disabledModels: ["*-preview"],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(list)).toEqual(list);
+    const { disabledModels: _omitted, ...olderPayload } = list.payload;
+    const older = { ...list, payload: olderPayload };
+    expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
+  });
   it("parses a list whose rows carry the key mask and whose default model goes there, and an older host's", () => {
     const response = {
       type: "provider.api_endpoint.list.response" as const,

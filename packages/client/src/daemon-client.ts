@@ -684,6 +684,10 @@ type ApiEndpointSetLongConversationsPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_long_conversations.response" }
 >["payload"];
+type ApiEndpointSetDisabledModelsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_disabled_models.response" }
+>["payload"];
 type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
@@ -766,6 +770,11 @@ export type ApiEndpointSetOrderOptions = Omit<
 
 export type ApiEndpointSetLongConversationsOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_long_conversations.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetDisabledModelsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_disabled_models.request" }>,
   "type" | "requestId"
 >;
 
@@ -6470,6 +6479,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_long_conversations.request", ...options },
+    });
+  }
+
+  /** 设整台主机的已禁用的模型：整份名单一起发。 */
+  async apiEndpointSetDisabledModels(
+    options: ApiEndpointSetDisabledModelsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetDisabledModelsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_disabled_models.request", ...options },
     });
   }
 

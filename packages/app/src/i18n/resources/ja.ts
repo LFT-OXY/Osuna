@@ -2851,6 +2851,23 @@ export const ja: TranslationResources = {
           "Codex と Claude Code が長い会話を圧縮する位置です。空欄なら {{size}}。独自の圧縮しきい値を持つモデルはそれを使います。",
         saveFailed: "保存できませんでした：{{message}}",
       },
+      disabledModels: {
+        title: "無効にしたモデル",
+        addLabel: "モデルを無効にする",
+        addHint:
+          "無効にしたモデルは、どのモデル一覧・既定モデルの候補・テストにも出ず、ゲートウェイはそのモデルへのリクエストを拒否します。対象は Osuna を通るリクエストだけです。*-preview のようなパターンを入力すると、一致するモデルをすべて無効にします。大文字と小文字は区別しません。",
+        disable: "無効にする…",
+        searchPlaceholder: "モデル名またはパターン（例: *-preview）",
+        noModels: "オンのエンドポイントにモデルがありません",
+        customValuePrefix: "無効にする",
+        customValueDescription: "この名前またはパターンに一致するすべてのモデル",
+        matches: "{{n}} 件に一致: {{list}}",
+        matchesNone: "今は一致するモデルがありません。現れた場合も拒否されます",
+        enable: "有効にする",
+        enableModel: "{{model}} を有効にする",
+        duplicate: "{{pattern}} はすでに一覧にあります",
+        saveFailed: "保存できませんでした: {{message}}",
+      },
       modelScope: {
         title: "提供範囲",
         label: "提供するモデル",

@@ -2885,6 +2885,24 @@ export const fr: TranslationResources = {
           "Où Codex et Claude Code compactent une longue conversation ; vide vaut {{size}}. Un modèle avec son propre seuil Compacter à utilise le sien.",
         saveFailed: "Échec de l'enregistrement : {{message}}",
       },
+      disabledModels: {
+        title: "Modèles désactivés",
+        addLabel: "Désactiver un modèle",
+        addHint:
+          "Un modèle désactivé n'apparaît dans aucune liste de modèles, aucun choix de modèle par défaut ni aucun test, et la passerelle refuse les requêtes qui le demandent. Seules les requêtes qui passent par Osuna sont concernées. Saisissez un motif comme *-preview pour désactiver tous les modèles correspondants ; la casse est ignorée.",
+        disable: "Désactiver…",
+        searchPlaceholder: "Nom de modèle ou motif, par exemple *-preview",
+        noModels: "Aucun modèle sur les points d'accès activés",
+        customValuePrefix: "Désactiver",
+        customValueDescription: "Tous les modèles correspondant à ce nom ou motif",
+        matches: "Correspond à {{n}} : {{list}}",
+        matchesNone:
+          "Ne correspond à aucun modèle pour l'instant ; un modèle qui apparaît sera refusé",
+        enable: "Activer",
+        enableModel: "Activer {{model}}",
+        duplicate: "{{pattern}} est déjà dans la liste",
+        saveFailed: "Enregistrement impossible : {{message}}",
+      },
       modelScope: {
         title: "Portée des modèles",
         label: "Modèles servis",

@@ -106,6 +106,8 @@ const EndpointsFileSchema = z.object({
   agents: z.record(z.string(), ApiEndpointAgentSettingsSchema),
   // 整台主机的长对话设置（完整窗口、全局压缩阈值）；没有即关着、272K。
   longConversations: ApiEndpointLongConversationsSchema.optional(),
+  // 已禁用的模型（完整 id 或 glob，不分大小写）；没有即一个都没禁。
+  disabledModels: z.array(z.string()).optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -144,6 +146,7 @@ export interface ApiEndpointState {
   endpoints: StoredApiEndpoint[];
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
   longConversations?: ApiEndpointLongConversations;
+  disabledModels?: string[];
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
@@ -297,7 +300,7 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents, longConversations } = content.file;
+    const { agents, longConversations, disabledModels } = content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
@@ -305,6 +308,7 @@ export class ApiEndpointStore {
         codex: agents.codex ?? OFFICIAL_AGENT,
       },
       ...(longConversations === undefined ? {} : { longConversations }),
+      ...(disabledModels === undefined ? {} : { disabledModels }),
     };
   }
 

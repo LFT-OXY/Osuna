@@ -2864,6 +2864,23 @@ export const ptBR: TranslationResources = {
           "Onde Codex e Claude Code compactam uma conversa longa; vazio é {{size}}. Um modelo com seu próprio Compactar em usa o dele.",
         saveFailed: "Não foi possível salvar: {{message}}",
       },
+      disabledModels: {
+        title: "Modelos desativados",
+        addLabel: "Desativar um modelo",
+        addHint:
+          "Um modelo desativado fica fora de todas as listas de modelos, opções de modelo padrão e testes, e o gateway recusa solicitações para ele. Só vale para solicitações que passam pelo Osuna. Digite um padrão como *-preview para desativar todos os modelos que correspondem; maiúsculas e minúsculas não importam.",
+        disable: "Desativar…",
+        searchPlaceholder: "Nome do modelo ou padrão, como *-preview",
+        noModels: "Nenhum modelo nos endpoints ativados",
+        customValuePrefix: "Desativar",
+        customValueDescription: "Todos os modelos que correspondem a este nome ou padrão",
+        matches: "Corresponde a {{n}}: {{list}}",
+        matchesNone: "Não corresponde a nenhum modelo agora; se aparecer um, ele será recusado",
+        enable: "Ativar",
+        enableModel: "Ativar {{model}}",
+        duplicate: "{{pattern}} já está na lista",
+        saveFailed: "Não foi possível salvar: {{message}}",
+      },
       modelScope: {
         title: "Escopo de modelos",
         label: "Modelos servidos",

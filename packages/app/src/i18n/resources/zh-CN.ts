@@ -2840,6 +2840,23 @@ export const zhCN: TranslationResources = {
           "Codex 和 Claude Code 在这里压缩长对话，空着是 {{size}}。设了自己压缩阈值的模型用它自己的。",
         saveFailed: "没能保存：{{message}}",
       },
+      disabledModels: {
+        title: "已禁用的模型",
+        addLabel: "禁用模型",
+        addHint:
+          "禁用的模型不出现在任何模型选单、默认模型选项和测试里，中转站拒收对它的请求。只管经过 Osuna 的请求。写 *-preview 这样的式子可以禁掉它命中的所有模型，不分大小写。",
+        disable: "禁用…",
+        searchPlaceholder: "模型名或式子，如 *-preview",
+        noModels: "开着的接口里没有模型",
+        customValuePrefix: "禁用",
+        customValueDescription: "这个名字或式子命中的所有模型",
+        matches: "命中 {{n}} 个：{{list}}",
+        matchesNone: "现在没有命中的模型；出现了也会被拒收",
+        enable: "启用",
+        enableModel: "启用 {{model}}",
+        duplicate: "{{pattern}} 已在名单里",
+        saveFailed: "没能保存：{{message}}",
+      },
       modelScope: {
         title: "服务范围",
         label: "在服务的模型",

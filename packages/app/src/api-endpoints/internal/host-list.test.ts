@@ -54,6 +54,7 @@ describe("selectHostEndpointsState", () => {
       agentIssues: {},
       reopenHints: {},
       longConversations: {},
+      disabledModels: [],
     });
   });
 

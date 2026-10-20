@@ -32,6 +32,8 @@ export type HostEndpointsLoadState =
       reopenHints: Record<string, ApiEndpointReopenHint[]>;
       // 整台主机的长对话设置；没设或老主机不发时为空。
       longConversations: ApiEndpointLongConversations;
+      // 整台主机的已禁用的模型；没设或老主机不发时为空。
+      disabledModels: string[];
     };
 
 export function selectHostEndpointsState(input: {
@@ -48,6 +50,7 @@ export function selectHostEndpointsState(input: {
       agentIssues: input.data.agentIssues ?? {},
       reopenHints: input.data.reopenHints ?? {},
       longConversations: input.data.longConversations ?? {},
+      disabledModels: input.data.disabledModels ?? [],
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

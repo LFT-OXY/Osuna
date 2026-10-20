@@ -23,6 +23,14 @@ import {
 import { servedFormats, translationOrderAt } from "../templates.js";
 import type { EndpointModelFacts } from "../model-facts.js";
 import type { RetiredModels } from "../retired-models.js";
+import {
+  askedDisabledBy,
+  codexOwnDisabledBy,
+  disabledMessage,
+  disabledPatterns,
+  endpointDisabledBy,
+  withoutDisabledModels,
+} from "../disabled-models.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
@@ -265,7 +273,7 @@ export function createApiEndpointGateway(options: {
     }
     if (req.path === "/v1/models" && req.method === "GET") {
       const state = readState({ res, wire, store, logger });
-      if (state) res.status(200).json(modelList(failover.retired.listed(state)));
+      if (state) res.status(200).json(modelList(servedOf({ failover, state })));
       return;
     }
     const target = req.method === "POST" ? agentPath(req.path) : null;
@@ -369,6 +377,15 @@ async function serveChatGptBackend(input: {
   const shaped = shapeChatGptTurn({ ...input, text: sentText, model: sentModel });
   const { text, model } = shaped;
   if (shaped.goesTo === "chatgpt") {
+    // Codex 自己的模型被禁了：不转给 ChatGPT（magpie codexNativeOff）。
+    const state = stateForShaping(input);
+    const patterns = state === null ? [] : disabledPatterns(state);
+    const pattern = codexOwnDisabledBy({ patterns, model });
+    if (pattern !== null) {
+      const message = disabledMessage({ model, pattern });
+      sendAgentError({ res: input.res, wire: "openai", error: { status: 403, message } });
+      return;
+    }
     const isShaped = text !== sentText;
     relayChatGpt({ ...input, sent: chatgptBodyFor({ rest, raw: raw.body, text, isShaped }) });
     return;
@@ -401,7 +418,7 @@ function shapeChatGptTurn(input: {
   if (input.rest !== "/responses") return { text, model, goesTo: chatgptTurnDestination(model) };
   const state = stateForShaping(input);
   let listed: ApiEndpointState | null = null;
-  if (state !== null) listed = input.failover.retired.listed(state);
+  if (state !== null) listed = servedOf({ failover: input.failover, state });
   return shapeCodexChatGptRequest({
     headers: input.req.headers,
     text,
@@ -631,9 +648,17 @@ async function routeAgentRequest(input: {
     state,
   });
   const { body, parsed, model, fixedEffort } = withoutAskedEffort({ ...codexed, state });
+  // 被禁的模型在问任何一家之前拒收（magpie idOff）：名字本身命中，或只剩被禁的那几家提供它。
+  const askedOff = askedDisabledBy({ state, model });
+  if (askedOff !== null) {
+    reply(403, disabledMessage({ model, pattern: askedOff }));
+    return null;
+  }
   const route = routeModel({ ...input, state, model });
   if (!route.ok) {
-    reply(404, route.message);
+    const servedOff = disabledServerOf({ ...input, state, model });
+    if (servedOff !== null) reply(403, disabledMessage({ model, pattern: servedOff }));
+    else reply(404, route.message);
     return null;
   }
   if (input.wire === "anthropic" && asksAnthropicWebSearch(parsed)) {
@@ -702,7 +727,7 @@ function codexApiRequest(
     text: sentText,
     model,
     state,
-    listed: input.failover.retired.listed(state),
+    listed: servedOf({ failover: input.failover, state }),
     logger: input.logger,
   });
   if (shaped.text === sentText) return { body, parsed, model };
@@ -782,6 +807,36 @@ function noWebSearchMessage(model: string): string {
   );
 }
 
+/** 在服务的模型：去掉一周内下线的与已禁用的。选路、模型清单都按它。 */
+function servedOf(input: { failover: Failover; state: ApiEndpointState }): ApiEndpointState {
+  return withoutDisabledModels(input.failover.retired.listed(input.state));
+}
+
+/**
+ * 在服务的模型里找不到它，不算被禁时却找得到：回禁掉它的那条（magpie BareDisabled、modelOff）；不是这样为 null。
+ */
+function disabledServerOf(input: {
+  agent: ApiEndpointProvider;
+  state: ApiEndpointState;
+  model: string;
+  failover: Failover;
+}): string | null {
+  const { state } = input;
+  if (disabledPatterns(state).length === 0) return null;
+  const listed = input.failover.retired.listed(state);
+  const route = resolveGatewayRoute({ state, listed, agent: input.agent, model: input.model });
+  if (!route.ok) return null;
+  for (const candidate of route.candidates) {
+    const pattern = endpointDisabledBy({
+      state,
+      endpoint: candidate.endpoint,
+      model: candidate.upstreamModel,
+    });
+    if (pattern !== null) return pattern;
+  }
+  return null;
+}
+
 /**
  * 按模型名找候选。Codex 的记忆整理与 auto-review 找不到模型时，改用 Codex 上一轮对话用的模型找；
  * 找得到的 Codex 对话轮记下它问的模型。请求里的模型名不变，发给每家时照常换成候选的写法。
@@ -795,8 +850,8 @@ function routeModel(input: {
   failover: Failover;
 }): GatewayRoute {
   const { req, agent, state, model } = input;
-  const { codexTurns, retired } = input.failover;
-  const listed = retired.listed(state);
+  const { codexTurns } = input.failover;
+  const listed = servedOf({ failover: input.failover, state });
   const route = resolveGatewayRoute({ state, listed, agent, model });
   if (route.ok) {
     if (agent === "codex") codexTurns.asked(req.headers, model);

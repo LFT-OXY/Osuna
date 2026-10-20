@@ -279,6 +279,13 @@ import {
   type FormatList,
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
+import {
+  askedDisabledBy,
+  disabledMessage,
+  endpointDisabledBy,
+  withoutDisabledModels,
+} from "./disabled-models.js";
+import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
 import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
   WORKING_WINDOW,
@@ -613,6 +620,7 @@ export type ApiEndpointListResult = Required<
     | "agentIssues"
     | "reopenHints"
     | "longConversations"
+    | "disabledModels"
   >
 >;
 
@@ -835,6 +843,7 @@ export class ApiEndpointService {
       agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
       reopenHints,
       longConversations: state.longConversations ?? {},
+      disabledModels: state.disabledModels ?? [],
     };
   }
 
@@ -1013,7 +1022,7 @@ export class ApiEndpointService {
     // 指定了某一家的默认模型，在老客户端的光秃秃列表里标它的模型名。
     const defaultModel = bareDefaultModel(state, agent.defaultModelId);
     const thinkingOf = this.chatThinking(state, supported);
-    const models = usableModels(this.retiredModels.listed(state));
+    const models = usableModels(this.served(state));
     const labels = this.bareModelLabels(state, models);
     return models.map((model, index) =>
       Object.assign(
@@ -1094,7 +1103,7 @@ export class ApiEndpointService {
       if (isDefault) defaultMarked = true;
       return { provider: agentProvider, id, label, isDefault, ...thinkingOf(id) };
     }
-    return endpointModelGroups(this.retiredModels.listed(state)).map((group) => {
+    return endpointModelGroups(this.served(state)).map((group) => {
       const labels = this.groupModelLabels(group);
       const models = group.models.map((entry, index) =>
         toDefinition(entry, labels[index] ?? entry.model.id),
@@ -1629,7 +1638,7 @@ export class ApiEndpointService {
     const state = this.readStateForSnapshot();
     if (!state || findProvider(provider) !== "codex") return null;
     if (!state.agents.codex.enabled) return null;
-    const listed = this.retiredModels.listed(state);
+    const listed = this.served(state);
     const options: ApiEndpointSideModelOption[] = this.codexOwnModels().map((model) => ({
       id: model.slug,
       model: model.label,
@@ -2237,6 +2246,24 @@ export class ApiEndpointService {
   }
 
   /**
+   * 已禁用的模型（照 magpie SetDisabledModels）：整份名单换掉，去掉首尾空白、空的与只差大小写的重复。命中的模型不再在服务，
+   * 默认模型被禁时按失踪规则换掉，CLI 配置与 Codex 目录跟着改，所以走 commit。
+   */
+  setDisabledModels(input: { models: string[] }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const disabledModels = cleanDisabledModels(input.models);
+      const { disabledModels: _previous, ...rest } = state;
+      await this.commit(state, disabledModels.length === 0 ? rest : { ...rest, disabledModels });
+    });
+  }
+
+  /** 在服务的模型：去掉一周内下线的与已禁用的。选单、默认模型、写给 CLI 的模型都按它。 */
+  private served(state: ApiEndpointState): ApiEndpointState {
+    return withoutDisabledModels(this.retiredModels.listed(state));
+  }
+
+  /**
    * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
    * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
    * 开着却没有口令的补一个；口令关掉不作废（nextGatewayTokens）。
@@ -2253,10 +2280,12 @@ export class ApiEndpointService {
     } = {},
   ): Promise<ApiEndpointState> {
     const ownModels = this.codexOwnModels().map((model) => model.slug);
-    const settled = this.settleThinking({
-      previous,
-      next: settleAgentSettings({ state: proposed, codexOwnModels: ownModels }),
+    // 默认模型等按在服务的模型整理：被禁的和删掉的一样换掉；存下的已选模型不动。
+    const { agents } = settleAgentSettings({
+      state: withoutDisabledModels(proposed),
+      codexOwnModels: ownModels,
     });
+    const settled = this.settleThinking({ previous, next: { ...proposed, agents } });
     const next = this.settleSubagentThinking(settled);
     for (const provider of API_ENDPOINT_PROVIDERS) {
       if (!previous.agents[provider].enabled && next.agents[provider].enabled) {
@@ -2480,7 +2509,7 @@ export class ApiEndpointService {
 
   /** 一个模型写进 Claude Code env 的写法（同起始模型）。 */
   private claudeEnvModel(state: ApiEndpointState, modelId: string): string {
-    const listed = this.retiredModels.listed(state);
+    const listed = this.served(state);
     const marked = markOneMillion({ id: modelId, facts: this.startModelFacts(listed, modelId) });
     const served = [
       ...usableModels(listed).map((model) => model.id),
@@ -2531,12 +2560,12 @@ export class ApiEndpointService {
     "model" | "modelPicker" | "hintEnv" | "compactYieldsToOwn" | "endpointModels"
   > {
     if (provider !== "claude") {
-      const endpointModels = endpointModelGroups(this.retiredModels.listed(state)).flatMap(
-        (group) => group.models.map(({ id }) => id),
+      const endpointModels = endpointModelGroups(this.served(state)).flatMap((group) =>
+        group.models.map(({ id }) => id),
       );
       return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
     }
-    const listed = this.retiredModels.listed(state);
+    const listed = this.served(state);
     const rows = endpointModelGroups(listed).flatMap((group) => {
       const labels = this.groupModelLabels(group);
       return group.models.map(({ id, model }, index) => ({
@@ -2727,14 +2756,20 @@ export class ApiEndpointService {
     let entries: CodexModelEntry[] = [];
     if (state) {
       entries = codexEndpointEntries({
-        state: this.retiredModels.listed(state),
+        state: this.served(state),
         reasoningEffort: this.codexStartEffort(state),
         factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
         marksAgentsV1,
       });
     }
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
-    let tag = codexListTag({ entries, defaultModelId });
+    const disabledModels = state?.disabledModels ?? [];
+    // 被禁的 Codex 自己的模型也从清单里拿掉（magpie 把名单算进标记），名单一变 Codex 就重拉。
+    let tag = codexListTag(
+      disabledModels.length === 0
+        ? { entries, defaultModelId }
+        : { entries, defaultModelId, disabledModels },
+    );
     if (marksAgentsV1) tag = agentsV1Tag(tag);
     return {
       entries,
@@ -2742,6 +2777,7 @@ export class ApiEndpointService {
       codexHome,
       marksAgentsV1,
       agentVersionsPath: this.store.codexAgentVersionsPath,
+      disabledModels,
     };
   }
 
@@ -3017,6 +3053,8 @@ export class ApiEndpointService {
     if (!modelId) {
       throw new ApiEndpointRequestError({ code: "invalid_input", message: "A model is required" });
     }
+    const disabled = this.testDisabledResult(input.endpointId, modelId);
+    if (disabled !== null) return disabled;
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
     const { templateId } = this.upstreamPlace(input);
@@ -3050,10 +3088,19 @@ export class ApiEndpointService {
     const apiKey = this.resolveRequestKey(input);
     const startedAt = performance.now();
     const elapsed = () => Math.round(performance.now() - startedAt);
+    const isAskable = this.isTestAskable(input.endpointId);
     const servedHere = (ids: string[]) =>
-      ids.filter((model) => modelFormatsAt({ templateId, model })?.includes(format) ?? true);
+      ids.filter(
+        (model) =>
+          isAskable(model) && (modelFormatsAt({ templateId, model })?.includes(format) ?? true),
+      );
+    const typedModelId = input.modelId?.trim();
+    if (typedModelId) {
+      const disabled = this.testDisabledResult(input.endpointId, typedModelId);
+      if (disabled !== null) return disabled;
+    }
     let modelId =
-      input.modelId?.trim() ||
+      typedModelId ||
       (input.modelIds === undefined
         ? this.probeModelFromEndpoint(input.endpointId, format)
         : pickProbeModel(servedHere(input.modelIds), format));
@@ -3145,8 +3192,12 @@ export class ApiEndpointService {
     const endpoint = findEndpoint(this.readState(), endpointId);
     if (!endpoint) return null;
     const { templateId } = endpoint;
+    const isAskable = this.isTestAskable(endpointId);
     const servedHere = (ids: string[]) =>
-      ids.filter((model) => modelFormatsAt({ templateId, model })?.includes(format) ?? true);
+      ids.filter(
+        (model) =>
+          isAskable(model) && (modelFormatsAt({ templateId, model })?.includes(format) ?? true),
+      );
     return (
       pickProbeModel(servedHere(endpoint.models.map((model) => model.id)), format) ??
       pickProbeModel(servedHere((endpoint.catalog?.models ?? []).map((model) => model.id)), format)
@@ -3167,7 +3218,7 @@ export class ApiEndpointService {
       baseUrl,
       apiKey,
       modelId: input.modelId?.trim() || null,
-      pickedModelIds: input.modelIds ?? [],
+      pickedModelIds: (input.modelIds ?? []).filter(this.isTestAskable(input.endpointId)),
       sentNameOf: this.sentNameOf(input.endpointId),
       signal,
       modelsTimeoutMs: this.upstreamTimeoutMs,
@@ -3177,6 +3228,41 @@ export class ApiEndpointService {
       throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
     return outcome.results;
+  }
+
+  /**
+   * 测试与检测不问被禁的模型（magpie test.go 的 testOne、testModel）：已保存的那家按它的接口标识认，还没保存的只按名字认。
+   */
+  private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
+    const state = this.readState();
+    const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
+    return (modelId) =>
+      (endpoint
+        ? endpointDisabledBy({ state, endpoint, model: modelId })
+        : askedDisabledBy({ state, model: modelId })) === null;
+  }
+
+  /** 点名测一个被禁的模型：不发请求，结论写明命中的条目（magpie testOne）；没被禁为 null。 */
+  private testDisabledResult(
+    endpointId: string | undefined,
+    modelId: string,
+  ): ApiEndpointTestConnectionResult | null {
+    const state = this.readState();
+    const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
+    const pattern = endpoint
+      ? endpointDisabledBy({ state, endpoint, model: modelId })
+      : askedDisabledBy({ state, model: modelId });
+    if (pattern === null) return null;
+    return {
+      ok: false,
+      status: null,
+      durationMs: 0,
+      error: {
+        code: "model_disabled",
+        params: { model: modelId, pattern },
+        message: disabledMessage({ model: modelId, pattern }),
+      },
+    };
   }
 
   /** 测试与自动检测发给上游的模型名：已保存那家的上游模型名（magpie test.go、detect.go 的 UpstreamName）；新加的按模型 id。 */
@@ -3233,7 +3319,7 @@ export class ApiEndpointService {
   /** 目录的默认档跟着默认思考档位，没设时跟着用户 config.toml 的 model_reasoning_effort；读不出按没设。 */
   private codexModelCatalog(state: ApiEndpointState): string {
     return buildCodexModelCatalog({
-      state: this.retiredModels.listed(state),
+      state: this.served(state),
       reasoningEffort: this.codexStartEffort(state),
       factsFor: (endpoint, modelId) => this.modelFacts(endpoint, modelId),
       marksAgentsV1: state.agents.codex.allowsAnySubagentModel === true,
@@ -3865,6 +3951,7 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
     agent.subagentThinkingOptionId ?? null,
     agent.memoryModelId ?? null,
     usableModels(state),
+    state.disabledModels ?? null,
     target ? [target.id, target.name] : null,
     endpointModelGroups(state).map((group) => [
       group.endpoint.name,

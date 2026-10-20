@@ -2817,6 +2817,23 @@ export const ar: TranslationResources = {
           "حيث يضغط Codex وClaude Code المحادثة الطويلة؛ الفراغ يعني {{size}}. النموذج الذي له قيمة «الضغط عند» خاصة به يستخدمها.",
         saveFailed: "تعذّر الحفظ: {{message}}",
       },
+      disabledModels: {
+        title: "النماذج المعطّلة",
+        addLabel: "تعطيل نموذج",
+        addHint:
+          "لا يظهر النموذج المعطّل في أي قائمة نماذج أو خيارات النموذج الافتراضي أو الاختبارات، وترفض البوابة الطلبات الموجّهة إليه. ينطبق ذلك على الطلبات التي تمر عبر Osuna فقط. اكتب نمطًا مثل *-preview لتعطيل كل النماذج المطابقة له؛ لا فرق بين الأحرف الكبيرة والصغيرة.",
+        disable: "تعطيل…",
+        searchPlaceholder: "اسم النموذج أو نمط، مثل *-preview",
+        noModels: "لا توجد نماذج في نقاط النهاية المفعّلة",
+        customValuePrefix: "تعطيل",
+        customValueDescription: "كل النماذج المطابقة لهذا الاسم أو النمط",
+        matches: "يطابق {{n}}: {{list}}",
+        matchesNone: "لا يطابق أي نموذج الآن؛ وإن ظهر نموذج مطابق فسيُرفض",
+        enable: "تفعيل",
+        enableModel: "تفعيل {{model}}",
+        duplicate: "{{pattern}} موجود في القائمة بالفعل",
+        saveFailed: "تعذّر الحفظ: {{message}}",
+      },
       modelScope: {
         title: "نطاق النماذج",
         label: "النماذج المقدَّمة",

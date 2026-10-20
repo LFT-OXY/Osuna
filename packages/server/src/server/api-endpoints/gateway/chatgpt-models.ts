@@ -21,6 +21,7 @@ import {
   withListTag,
 } from "../codex-models-cache.js";
 import { isRecord, parseJson } from "../upstream-http.js";
+import { codexOwnDisabledBy } from "../disabled-models.js";
 import { relayedHeaders, type ChatGptBases } from "./chatgpt-backend.js";
 
 /*
@@ -47,6 +48,8 @@ export interface ChatGptModelsListing {
   codexHome: string;
   marksAgentsV1: boolean;
   agentVersionsPath: string;
+  // 已禁用的模型：ChatGPT 自带的模型命中了就不列（magpie codexModels 用 codexNativeOff 去掉）。
+  disabledModels: string[];
 }
 
 /** ChatGPT 自带模型原样在前，接口模型排在它们后面。 */
@@ -93,11 +96,22 @@ export async function answerChatGptModels(input: {
     own = codexLastOwnModels({ listing, logger: input.logger });
   }
   if (asked.kind === "list") rememberVersions({ listing, models: own, logger: input.logger });
+  own = withoutDisabledOwn({ own, patterns: listing.disabledModels });
   if (listing.marksAgentsV1) own = markedAgentsV1(own);
   res
     .status(200)
     .set("etag", withListTag(etag, listing.tag))
     .json({ models: mergeChatGptModels({ own, endpoints: listing.entries }) });
+}
+
+/** 去掉被禁的 ChatGPT 自带模型（按 slug 认）。 */
+function withoutDisabledOwn(input: { own: unknown[]; patterns: readonly string[] }): unknown[] {
+  const { patterns } = input;
+  if (patterns.length === 0) return input.own;
+  return input.own.filter((entry) => {
+    const slug = isRecord(entry) && typeof entry.slug === "string" ? entry.slug : "";
+    return codexOwnDisabledBy({ patterns, model: slug }) === null;
+  });
 }
 
 /**

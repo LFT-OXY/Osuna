@@ -133,6 +133,8 @@ async function start(input: {
   // 强制 Subagent 模型与「Codex Subagent 可用任意模型」；缺省没设、关着。
   forcedSubagentModelId?: string;
   allowsAnySubagentModel?: boolean;
+  // 已禁用的模型；缺省没有。
+  disabledModels?: string[];
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-chatgpt-backend-"));
   tempRoots.push(root);
@@ -164,6 +166,7 @@ async function start(input: {
         allowsAnySubagentModel: input.allowsAnySubagentModel === true,
       },
     },
+    ...(input.disabledModels ? { disabledModels: input.disabledModels } : {}),
   };
   await writeFile(path.join(endpointsDir, "endpoints.json"), JSON.stringify(endpoints));
   await writeFile(
@@ -783,6 +786,64 @@ function compactionItemOf(reply: Reply): CompactionItem {
   const completed = events.find((event) => event.type === "response.completed");
   return completed!.response!.output[0]!;
 }
+
+// 已禁用的模型（工单 16）照 magpie codex_backend.go 的 codexNativeOff：Codex 自己的模型被禁了不转给 ChatGPT、不列。
+describe("disabled models for a Codex signed in with ChatGPT", () => {
+  test("a disabled ChatGPT model is refused with a 403 and never reaches ChatGPT, and is left out of the list with the disabled endpoint models", async () => {
+    const chatgpt = await startBackend();
+    chatgpt.respond = (_request, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ models: CHATGPT_MODELS }));
+    };
+    const { codexBase } = await start({
+      chatgptBaseUrl: `${chatgpt.url}/backend-api/codex`,
+      endpoints: [
+        {
+          id: "ep_a",
+          slug: "relay-a",
+          url: "http://127.0.0.1:9/v1",
+          models: [{ id: "kimi-k2" }, { id: "glm-5-preview" }],
+        },
+      ],
+      disabledModels: ["GPT-5.?", "*-preview"],
+    });
+
+    const turn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ accept: "application/json" }),
+      body: Buffer.from(JSON.stringify({ model: "gpt-5.5", input: "hi", stream: false })),
+    });
+    expect(turn.status).toBe(403);
+    expect(JSON.parse(turn.body.toString("utf8"))).toEqual({
+      error: {
+        message:
+          'model gpt-5.5 is disabled in Osuna (it matches "GPT-5.?" in Settings › API endpoints › Disabled models); enable it there. Only requests through Osuna are refused',
+        type: "permission_error",
+        code: null,
+        param: null,
+      },
+    });
+    const endpointTurn = await send({
+      url: `${codexBase}/responses`,
+      headers: codexHeaders({ accept: "application/json" }),
+      body: Buffer.from(
+        JSON.stringify({ model: "relay-a/glm-5-preview", input: "hi", stream: false }),
+      ),
+    });
+    expect(endpointTurn.status).toBe(403);
+    expect(chatgpt.requests).toEqual([]);
+
+    const listed = await send({
+      url: `${codexBase}/models`,
+      method: "GET",
+      headers: codexHeaders(),
+    });
+    expect(modelsOf(listed).map((model) => model.slug)).toEqual([
+      "codex-auto-review",
+      "relay-a/kimi-k2",
+    ]);
+  });
+});
 
 describe("compaction of an endpoint model's conversation for a Codex signed in with ChatGPT", () => {
   test("the compaction_trigger is summarised by the endpoint model, and the summary is read back in the next turn", async () => {

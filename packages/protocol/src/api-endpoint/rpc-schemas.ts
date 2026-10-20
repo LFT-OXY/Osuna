@@ -342,6 +342,8 @@ export const ApiEndpointListResponseSchema = z.object({
     reopenHints: z.record(z.string(), z.array(ApiEndpointReopenHintSchema)).optional(),
     // 整台主机的长对话设置，与请求的 provider 无关；老 daemon 不发。
     longConversations: ApiEndpointLongConversationsSchema.optional(),
+    // 已禁用的模型（整台主机共用，照存的样子）：完整 id 或 glob，不分大小写；老 daemon 不发。
+    disabledModels: z.array(z.string()).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -675,6 +677,30 @@ export const ApiEndpointSetLongConversationsResponseSchema = z.object({
 });
 export type ApiEndpointSetLongConversationsResponse = z.infer<
   typeof ApiEndpointSetLongConversationsResponseSchema
+>;
+
+/**
+ * 设已禁用的模型（照 magpie settings/disabled-models）：整份名单一起发，daemon 去掉首尾空白、空的与只差大小写的重复后存下。
+ * 命中的模型从每家接口在服务的模型里去掉，中转站拒收对它的请求。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetDisabledModelsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_disabled_models.request"),
+  requestId: z.string(),
+  models: z.array(z.string()),
+});
+export type ApiEndpointSetDisabledModelsRequest = z.infer<
+  typeof ApiEndpointSetDisabledModelsRequestSchema
+>;
+
+export const ApiEndpointSetDisabledModelsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_disabled_models.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetDisabledModelsResponse = z.infer<
+  typeof ApiEndpointSetDisabledModelsResponseSchema
 >;
 
 /**

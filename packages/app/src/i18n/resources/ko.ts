@@ -2837,6 +2837,23 @@ export const ko: TranslationResources = {
           "Codex와 Claude Code가 긴 대화를 압축하는 지점입니다. 비워 두면 {{size}}입니다. 자체 압축 기준이 있는 모델은 그 값을 씁니다.",
         saveFailed: "저장하지 못했습니다: {{message}}",
       },
+      disabledModels: {
+        title: "비활성화한 모델",
+        addLabel: "모델 비활성화",
+        addHint:
+          "비활성화한 모델은 모델 목록, 기본 모델 선택지, 테스트 어디에도 나오지 않으며 게이트웨이는 해당 모델 요청을 거부합니다. Osuna를 거치는 요청에만 적용됩니다. *-preview 같은 패턴을 입력하면 일치하는 모델을 모두 비활성화합니다. 대소문자는 구분하지 않습니다.",
+        disable: "비활성화…",
+        searchPlaceholder: "모델 이름 또는 패턴(예: *-preview)",
+        noModels: "켜진 엔드포인트에 모델이 없습니다",
+        customValuePrefix: "비활성화",
+        customValueDescription: "이 이름이나 패턴과 일치하는 모든 모델",
+        matches: "{{n}}개 일치: {{list}}",
+        matchesNone: "지금 일치하는 모델이 없습니다. 생기면 거부됩니다",
+        enable: "활성화",
+        enableModel: "{{model}} 활성화",
+        duplicate: "{{pattern}}은(는) 이미 목록에 있습니다",
+        saveFailed: "저장하지 못했습니다: {{message}}",
+      },
       modelScope: {
         title: "제공 범위",
         label: "제공하는 모델",

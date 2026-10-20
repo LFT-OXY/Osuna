@@ -6,6 +6,7 @@ import type {
   ApiEndpointReopenHint,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointModelGroup } from "@getpaseo/protocol/agent-types";
+import { withoutDisabledEndpointModels } from "./disabled-models-list";
 import {
   endpointRowStatus,
   type CooldownRemaining,
@@ -308,8 +309,12 @@ export function selectAgentApiEndpointsView(input: {
   const { state, provider, now } = input;
   const agent = state.agents[provider] ?? { enabled: false, defaultModelId: null };
   const enabledEndpoints = state.endpoints.filter((endpoint) => endpoint.enabled !== false);
+  // 被禁的模型不在服务：默认模型候选不列（分组由主机按在服务的模型给，已经去掉）。
   const modelOptions = defaultModelOptions({
-    enabledEndpoints,
+    enabledEndpoints: withoutDisabledEndpointModels({
+      endpoints: enabledEndpoints,
+      patterns: state.disabledModels,
+    }),
     groups: input.endpointModelGroups ?? [],
   });
 
