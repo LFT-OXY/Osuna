@@ -259,8 +259,16 @@ import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/s
 import {
   fetchUpstreamModels,
   type ListedModel,
+  type UpstreamFailure,
   type UpstreamFailureCode,
 } from "./upstream-models.js";
+import {
+  keepFailedFormats,
+  mergeFormatLists,
+  type CatalogModel,
+  type FormatList,
+} from "./catalog-merge.js";
+import { CatalogRefreshSchedule } from "./catalog-refresh.js";
 
 export type ApiEndpointErrorCode =
   | "unsupported_provider"
@@ -286,6 +294,8 @@ const DEFAULT_UPSTREAM_TIMEOUT_MS = 15_000;
 const CODEX_GATEWAY_SUFFIX = "/v1";
 // 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
 const SAVE_LIST_TIMEOUT_MS = 8_000;
+// 每天刷新时一家各格式加起来最多拉这么久。
+const DAILY_LIST_TIMEOUT_MS = 60_000;
 // 测试连接要等模型真正回一句话，比列出模型慢。
 const DEFAULT_CONNECTION_TEST_TIMEOUT_MS = 30_000;
 
@@ -386,6 +396,8 @@ export interface ApiEndpointUpstreamInput {
 export interface ApiEndpointFetchModelsInput extends ApiEndpointUpstreamInput {
   // 添加窗口保存前拉的：只看不记，endpointId 只为借它的 key。
   preview?: boolean;
+  // 这家的全部格式地址：给了就各拉一次再合并，baseUrl、format 不再起作用。
+  baseUrls?: { format: string; url: string }[];
 }
 
 export interface ApiEndpointTestConnectionInput extends ApiEndpointUpstreamInput {
@@ -446,15 +458,19 @@ export interface ApiEndpointServiceOptions {
   findCodexCommand?: FindCodexCommand;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
-  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着）；缺省不下载。
+  // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着），
+  // 也才每天给开着的接口重新拉清单；缺省都不做。
   isModelsDevAutoUpdate?: () => boolean;
   // 只给进程内 daemon 测试换掉 models.dev 的下载与检查定时器，生产不传。
   modelsDevFetch?: typeof globalThis.fetch;
   modelsDevTimers?: UsagePricingTimers;
   // 「从网站取图标」取网址用的；缺省真的连公网 https 站点，测试 daemon 一律换成假的，关心它的用例换成本机假站点。
   fetchSite?: FetchSite;
-  // 新建或换 key 保存后当场拉清单前，问这个地址能不能去；缺省都能去，测试 daemon 只放行本机地址（不上网）。
-  reachesOnSave?: (baseUrl: string) => boolean;
+  // daemon 自己发起的拉清单（新建或换 key 保存后当场、每天刷新）前，问这个地址能不能去；
+  // 缺省都能去，测试 daemon 只放行本机地址（不上网）。
+  reachesUnasked?: (baseUrl: string) => boolean;
+  // 每天刷新清单的检查定时器；测试换成手动到点的。
+  catalogRefreshTimers?: UsagePricingTimers;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
@@ -624,7 +640,8 @@ export class ApiEndpointService {
   private readonly modelsDev: ModelsDevCatalog;
   private readonly icons: EndpointIcons;
   private readonly fetchSite: FetchSite;
-  private readonly reachesOnSave: (baseUrl: string) => boolean;
+  private readonly reachesUnasked: (baseUrl: string) => boolean;
+  private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -694,7 +711,7 @@ export class ApiEndpointService {
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
     this.fetchSite = options.fetchSite ?? createPublicFetchSite({ userAgent });
-    this.reachesOnSave = options.reachesOnSave ?? reachesAnyAddress;
+    this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
     this.readCodexSignIn =
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
@@ -710,6 +727,24 @@ export class ApiEndpointService {
       timers: options.modelsDevTimers,
     });
     this.modelsDev.start();
+    this.catalogRefresh = new CatalogRefreshSchedule({
+      logger: this.logger,
+      now: this.now,
+      isAllowed: isModelsDevAutoUpdate,
+      candidates: () =>
+        (this.readStateForSnapshot()?.endpoints ?? []).map((endpoint) => ({
+          id: endpoint.id,
+          enabled: endpoint.enabled,
+          fetchedAt: endpoint.catalog?.fetchedAt,
+        })),
+      refresh: (endpointId, signal) =>
+        this.refreshCatalog({
+          endpointId,
+          signal: AbortSignal.any([signal, AbortSignal.timeout(DAILY_LIST_TIMEOUT_MS)]),
+        }),
+      timers: options.catalogRefreshTimers,
+    });
+    this.catalogRefresh.start();
   }
 
   /**
@@ -785,6 +820,7 @@ export class ApiEndpointService {
   /** daemon 停下：不再每隔一会儿看要重开谁。 */
   dispose(): void {
     this.reopenHints.dispose();
+    this.catalogRefresh.dispose();
   }
 
   /** 一个 CLI 要重开谁的依据：配置目录、启动时读的那部分最近一次变了的时刻、Osuna 里那之前启动的会话数。 */
@@ -1044,31 +1080,38 @@ export class ApiEndpointService {
     return this.toWire(state, stored, supported);
   }
 
-  /** 按这家的各格式地址依次拉，第一个列得出的记作上游清单；都不成只记日志。 */
   private async fetchListAfterSave(input: {
     provider: ApiEndpointProvider;
     endpointId: string;
   }): Promise<void> {
+    await this.refreshCatalog({
+      endpointId: input.endpointId,
+      signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS),
+    });
+  }
+
+  /**
+   * daemon 自己发起的拉清单（保存后当场、每天刷新）：按这家已存的地址与 key 各格式拉一次、合并后记下；
+   * 只问 reachesUnasked 放行的地址。都没答上只记日志，清单不动。
+   */
+  private async refreshCatalog(input: { endpointId: string; signal: AbortSignal }): Promise<void> {
     const endpoint = findEndpoint(this.readState(), input.endpointId);
     if (!endpoint) return;
-    const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
-    for (const { format, url } of endpoint.baseUrls) {
-      if (signal.aborted) break;
-      if (!this.reachesOnSave(url)) continue;
-      try {
-        await this.fetchModels(
-          input.provider,
-          { endpointId: endpoint.id, baseUrl: url, format },
-          signal,
-        );
-        return;
-      } catch (error) {
-        if (!(error instanceof ApiEndpointRequestError)) throw error;
-        this.logger.info(
-          { endpointId: endpoint.id, format, code: error.code },
-          "Could not fetch the model list after saving",
-        );
-      }
+    const addresses = endpoint.baseUrls.filter(({ url }) => this.reachesUnasked(url));
+    if (addresses.length === 0) return;
+    try {
+      await this.fetchMergedModels({
+        input: { endpointId: endpoint.id, baseUrl: addresses[0]?.url ?? "" },
+        addresses,
+        keeps: true,
+        signal: input.signal,
+      });
+    } catch (error) {
+      if (!(error instanceof ApiEndpointRequestError)) throw error;
+      this.logger.info(
+        { endpointId: endpoint.id, code: error.code },
+        "Could not fetch the model list",
+      );
     }
   }
 
@@ -2606,6 +2649,7 @@ export class ApiEndpointService {
   /**
    * 从上游列出模型。只读，不进串行队列：慢的上游不该挡住切换。
    * 失败抛 ApiEndpointRequestError，code 区分鉴权/不支持/超时/取消。
+   * 带 baseUrls 时各格式各拉一次再合并（fetchMergedModels）。
    */
   async fetchModels(
     provider: string,
@@ -2613,6 +2657,19 @@ export class ApiEndpointService {
     signal: AbortSignal,
   ): Promise<ApiEndpointModel[]> {
     const supported = requireProvider(provider);
+    if (input.baseUrls !== undefined) {
+      const addresses = input.baseUrls.map(({ format, url }) => ({
+        format: requireFormat(format),
+        url,
+      }));
+      const models = await this.fetchMergedModels({
+        input,
+        addresses,
+        keeps: input.endpointId !== undefined && input.preview !== true,
+        signal,
+      });
+      return models.map(toWireModel);
+    }
     const format = input.format === undefined ? null : requireFormat(input.format);
     // 从模板加的这家：没有清单接口的用内置清单、不问上游，有前缀的只留套餐自己的（照 magpie）。
     const place = this.upstreamPlace(input);
@@ -2630,11 +2687,7 @@ export class ApiEndpointService {
         signal,
         timeoutMs: this.upstreamTimeoutMs,
       });
-      if (!result.ok)
-        throw new ApiEndpointRequestError({
-          code: result.error.code,
-          message: result.error.message,
-        });
+      if (!result.ok) throw requestErrorOf(result.error);
       models = planModelsOf(place, result.models);
     }
     if (format !== null && input.endpointId && input.preview !== true) {
@@ -2644,18 +2697,94 @@ export class ApiEndpointService {
   }
 
   /**
+   * 有几种格式地址就各拉一次，按模型 id 合并（catalog-merge.ts，照 magpie fetchOne）；同一个列表地址只问一次。
+   * 有一种答上就算成功：keeps 时记作这家的上游清单，这次没答上的格式上次列过的模型留着。都没答上抛最后的原因。
+   */
+  private async fetchMergedModels(options: {
+    input: ApiEndpointUpstreamInput;
+    addresses: { format: ApiEndpointRequestFormat; url: string }[];
+    keeps: boolean;
+    signal: AbortSignal;
+  }): Promise<CatalogModel[]> {
+    const { input, addresses, signal } = options;
+    const place = this.upstreamPlace(input);
+    const apiKey = this.resolveRequestKey(input);
+    const endpointId = options.keeps ? input.endpointId : undefined;
+    let models: CatalogModel[];
+    if (listsNoModels(place)) {
+      models = planModelsOf(place, []);
+    } else {
+      const asked = new Map<string, ReturnType<typeof fetchUpstreamModels>>();
+      const lists: FormatList[] = [];
+      const failed: ApiEndpointRequestFormat[] = [];
+      let lastFailure: UpstreamFailure | null = null;
+      for (const { format, url } of addresses) {
+        const baseUrl = upstreamBaseUrl({ place, format, raw: url });
+        const listing = providerWithListingHeaders(format);
+        const key = `${listing} ${baseUrl}`;
+        let pending = asked.get(key);
+        if (!pending) {
+          pending = fetchUpstreamModels({
+            provider: listing,
+            baseUrl,
+            apiKey,
+            templateId: place.templateId,
+            signal,
+            timeoutMs: this.upstreamTimeoutMs,
+          });
+          asked.set(key, pending);
+        }
+        const result = await pending;
+        if (result.ok) {
+          lists.push({ format, models: result.models });
+          continue;
+        }
+        if (result.error.code === "cancelled") throw requestErrorOf(result.error);
+        failed.push(format);
+        lastFailure = result.error;
+      }
+      if (lists.length === 0) {
+        throw lastFailure
+          ? requestErrorOf(lastFailure)
+          : new ApiEndpointRequestError({ code: "invalid_input", message: "No base URL to ask" });
+      }
+      const previous = endpointId
+        ? (findEndpoint(this.readState(), endpointId)?.catalog?.models ?? [])
+        : [];
+      models = planModelsOf(
+        place,
+        keepFailedFormats({ merged: mergeFormatLists(lists), previous, failed }),
+      );
+    }
+    if (endpointId) await this.keepCatalog(endpointId, models);
+    return models;
+  }
+
+  /**
    * 记下这家的上游清单，不影响路由。拉取期间被删的接口不再写回。
    * 清单带的模型资料改变了 Codex 模型目录或 Claude Code 的模型提示时，跟着重写。
    */
-  private keepCatalog(endpointId: string, models: ListedModel[]): Promise<void> {
+  private keepCatalog(endpointId: string, models: CatalogModel[]): Promise<void> {
+    return this.writeCatalog(endpointId, { fetchedAt: this.now().toISOString(), models });
+  }
+
+  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
+  async forgetCatalog(endpointId: string): Promise<void> {
+    if (!findEndpoint(this.readState(), endpointId)) {
+      throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
+    }
+    await this.writeCatalog(endpointId, undefined);
+  }
+
+  private writeCatalog(endpointId: string, catalog: StoredApiEndpoint["catalog"]): Promise<void> {
     return this.exclusiveFollowing(() => {
       const state = this.readState();
       const endpoint = findEndpoint(state, endpointId);
       if (!endpoint) return;
-      const catalog = { fetchedAt: this.now().toISOString(), models };
+      const { catalog: _previous, ...rest } = endpoint;
       const next = {
         ...state,
-        endpoints: withEndpoint(state.endpoints, { ...endpoint, catalog }),
+        endpoints: withEndpoint(state.endpoints, catalog ? { ...rest, catalog } : rest),
       };
       this.store.writeState(next);
       this.rewriteCodexCatalog(next);
@@ -3498,6 +3627,10 @@ function agentFingerprint(state: ApiEndpointState, provider: ApiEndpointProvider
       group.models.map((entry) => [entry.id, entry.model.label]),
     ]),
   ]);
+}
+
+function requestErrorOf(failure: UpstreamFailure): ApiEndpointRequestError {
+  return new ApiEndpointRequestError({ code: failure.code, message: failure.message });
 }
 
 /** 上游清单里的模型资料只留在 daemon 里；发给客户端的只有 id 和显示名。 */

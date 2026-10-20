@@ -16,7 +16,7 @@ export interface ApiEndpointSessionHost {
   emit(msg: SessionOutboundMessage): void;
 }
 
-type ApiEndpointRequest = Extract<
+export type ApiEndpointRequest = Extract<
   SessionInboundMessage,
   {
     type:
@@ -30,6 +30,7 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_endpoint_state.request"
       | "provider.api_endpoint.set_order.request"
       | "provider.api_endpoint.reveal_key.request"
+      | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
       | "provider.api_endpoint.fetch_site_icon.request"
@@ -40,6 +41,33 @@ type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.cancel.request";
   }
 >;
+
+// 写成以类型为键的对象：ApiEndpointRequest 加了类型而这里漏了，类型检查就过不去。
+const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
+  "provider.api_endpoint.list.request": true,
+  "provider.api_endpoint.save.request": true,
+  "provider.api_endpoint.delete.request": true,
+  "provider.api_endpoint.set_active.request": true,
+  "provider.api_endpoint.set_agent_settings.request": true,
+  "provider.api_endpoint.keep_current_settings.request": true,
+  "provider.api_endpoint.preview_switch_off.request": true,
+  "provider.api_endpoint.set_endpoint_state.request": true,
+  "provider.api_endpoint.set_order.request": true,
+  "provider.api_endpoint.reveal_key.request": true,
+  "provider.api_endpoint.forget_catalog.request": true,
+  "provider.api_endpoint.list_templates.request": true,
+  "provider.api_endpoint.store_icon.request": true,
+  "provider.api_endpoint.fetch_site_icon.request": true,
+  "provider.api_endpoint.read_icon.request": true,
+  "provider.api_endpoint.fetch_models.request": true,
+  "provider.api_endpoint.test_connection.request": true,
+  "provider.api_endpoint.detect_formats.request": true,
+  "provider.api_endpoint.cancel.request": true,
+};
+
+export function isApiEndpointRequest(msg: SessionInboundMessage): msg is ApiEndpointRequest {
+  return Object.hasOwn(API_ENDPOINT_REQUEST_TYPES, msg.type);
+}
 
 /** daemon 没有这项服务时为 null，同时也不声明 apiEndpoints 能力。 */
 export function createApiEndpointSession(options: {
@@ -92,6 +120,8 @@ export class ApiEndpointSession {
         return this.handleSetOrder(request);
       case "provider.api_endpoint.reveal_key.request":
         return this.handleRevealKey(request);
+      case "provider.api_endpoint.forget_catalog.request":
+        return this.handleForgetCatalog(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
@@ -376,6 +406,21 @@ export class ApiEndpointSession {
     });
   }
 
+  private async handleForgetCatalog(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.forget_catalog.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.forgetCatalog(request.endpointId);
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.forget_catalog.response",
+      payload: { requestId: request.requestId, error },
+    });
+  }
+
   private handleListTemplates(
     request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.list_templates.request" }>,
   ): void {
@@ -460,6 +505,7 @@ export class ApiEndpointSession {
           ...(request.preview !== undefined ? { preview: request.preview } : {}),
           ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
           ...(request.region !== undefined ? { region: request.region } : {}),
+          ...(request.baseUrls !== undefined ? { baseUrls: request.baseUrls } : {}),
         },
         signal,
       );

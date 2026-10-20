@@ -46,8 +46,12 @@ export type ApiEndpointProvider = (typeof API_ENDPOINT_PROVIDERS)[number];
 
 const StoredModelSchema = z.object({ id: z.string(), label: z.string().optional() });
 
-// 上游清单里的模型多带列表给的上下文、回复上限与思考档位；只留在 daemon 里，投影给客户端时去掉。
-const StoredCatalogModelSchema = StoredModelSchema.extend({ facts: ModelFactsSchema.optional() });
+// 上游清单里的模型多带列表给的上下文、回复上限与思考档位，以及哪些格式列过它（catalog-merge.ts）；
+// 只留在 daemon 里，投影给客户端时去掉。
+const StoredCatalogModelSchema = StoredModelSchema.extend({
+  facts: ModelFactsSchema.optional(),
+  formats: z.array(z.enum(API_ENDPOINT_REQUEST_FORMATS)).optional(),
+});
 
 const StoredBaseUrlSchema = z.object({
   format: z.enum(API_ENDPOINT_REQUEST_FORMATS),

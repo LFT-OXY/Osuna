@@ -684,6 +684,10 @@ type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
 >["payload"];
+type ApiEndpointForgetCatalogPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.forget_catalog.response" }
+>["payload"];
 type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
@@ -6457,6 +6461,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.reveal_key.request", endpointId },
+    });
+  }
+
+  /** 丢掉这家拉回的上游清单与拉取时间；只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointForgetCatalog(
+    endpointId: string,
+    requestId?: string,
+  ): Promise<ApiEndpointForgetCatalogPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.forget_catalog.request", endpointId },
     });
   }
 

@@ -964,6 +964,38 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses fetch_models with every format's address, and the same request without them", () => {
+    const request = {
+      type: "provider.api_endpoint.fetch_models.request" as const,
+      requestId: "req-m11",
+      provider: "claude",
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example/anthropic",
+      format: "anthropic_messages",
+      baseUrls: [
+        { format: "anthropic_messages", url: "https://relay.example/anthropic" },
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ],
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const { baseUrls: _baseUrls, ...older } = request;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+  });
+  it("parses forget_catalog and a rejection", () => {
+    const request = {
+      type: "provider.api_endpoint.forget_catalog.request" as const,
+      requestId: "req-m11b",
+      endpointId: "ep_1",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    for (const payload of [
+      { requestId: "req-m11b", error: null },
+      { requestId: "req-m11b", error: { code: "not_found", message: "API endpoint not found" } },
+    ]) {
+      const response = { type: "provider.api_endpoint.forget_catalog.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
   it("parses list_templates with a template that has plans, one that has none, one at the user's own resource, and a rejection", () => {
     const request = {
       type: "provider.api_endpoint.list_templates.request" as const,

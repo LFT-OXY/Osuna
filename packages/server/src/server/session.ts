@@ -190,6 +190,7 @@ import type { UsageService } from "./usage/service.js";
 import type { ApiEndpointService } from "./api-endpoints/service.js";
 import {
   createApiEndpointSession,
+  isApiEndpointRequest,
   type ApiEndpointSession,
 } from "./session/api-endpoint/api-endpoint-session.js";
 import {
@@ -3139,42 +3140,21 @@ export class Session {
   }
 
   private dispatchApiEndpointMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    switch (msg.type) {
-      case "provider.api_endpoint.list.request":
-      case "provider.api_endpoint.save.request":
-      case "provider.api_endpoint.delete.request":
-      case "provider.api_endpoint.set_active.request":
-      case "provider.api_endpoint.set_agent_settings.request":
-      case "provider.api_endpoint.keep_current_settings.request":
-      case "provider.api_endpoint.preview_switch_off.request":
-      case "provider.api_endpoint.set_endpoint_state.request":
-      case "provider.api_endpoint.set_order.request":
-      case "provider.api_endpoint.reveal_key.request":
-      case "provider.api_endpoint.list_templates.request":
-      case "provider.api_endpoint.store_icon.request":
-      case "provider.api_endpoint.fetch_site_icon.request":
-      case "provider.api_endpoint.read_icon.request":
-      case "provider.api_endpoint.fetch_models.request":
-      case "provider.api_endpoint.test_connection.request":
-      case "provider.api_endpoint.detect_formats.request":
-      case "provider.api_endpoint.cancel.request":
-        if (!this.apiEndpointSession) {
-          // 没声明 apiEndpoints 能力的 daemon 明确拒绝，而不是沉默。
-          this.emit({
-            type: "rpc_error",
-            payload: {
-              requestId: msg.requestId,
-              requestType: msg.type,
-              error: "API endpoints are not available on this daemon",
-              code: "api_endpoints_unavailable",
-            },
-          });
-          return Promise.resolve();
-        }
-        return this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
-      default:
-        return undefined;
+    if (!isApiEndpointRequest(msg)) return undefined;
+    if (!this.apiEndpointSession) {
+      // 没声明 apiEndpoints 能力的 daemon 明确拒绝，而不是沉默。
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "API endpoints are not available on this daemon",
+          code: "api_endpoints_unavailable",
+        },
+      });
+      return Promise.resolve();
     }
+    return this.apiEndpointSession.handle(msg, this.delivery.requestSignal);
   }
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {

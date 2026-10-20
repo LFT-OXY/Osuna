@@ -490,3 +490,285 @@ describe("API endpoint models by base URL and request format", () => {
     ]);
   });
 });
+
+/*
+ * 清单合并、每天刷新与丢掉清单。假上游按路径分格式：/multi/anthropic 是 Anthropic 地址，/multi/v1 是 Chat 地址，
+ * 两边各列一部分模型；/day 是定时刷新用的单格式地址。
+ */
+interface ListingUpstream {
+  origin: string;
+  requests: string[];
+  // 各列表路径答什么；没有的路径 404，值为 "fail" 的回 500。
+  lists: Record<string, unknown[] | "fail">;
+}
+
+async function startListingUpstream(): Promise<ListingUpstream> {
+  const upstream: ListingUpstream = { origin: "", requests: [], lists: {} };
+  const server = createServer((request, response) => {
+    const url = request.url ?? "";
+    upstream.requests.push(url);
+    const list = upstream.lists[url];
+    if (list === undefined) {
+      response.writeHead(404).end();
+      return;
+    }
+    if (list === "fail") {
+      response.writeHead(500, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "upstream is down" } }));
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ data: list }));
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe("API endpoint model lists merged across formats, refreshed daily, and forgotten", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: ListingUpstream;
+  let clock: Date;
+  let autoUpdate: boolean;
+  // 每天刷新的检查定时器由测试手动到点；同一时刻只有一个在等。
+  let pendingCheck: (() => void) | null;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-merge-"));
+    tempRoots.push(root);
+    upstream = await startListingUpstream();
+    clock = new Date("2026-10-20T08:00:00.000Z");
+    autoUpdate = true;
+    pendingCheck = null;
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: { CLAUDE_CONFIG_DIR: path.join(root, "claude") },
+        homeDir: root,
+        now: () => clock,
+        isModelsDevAutoUpdate: () => autoUpdate,
+        // 价格表开关也管 models.dev 的下载：这里绝不下载，定时器也不到点。
+        modelsDevFetch: async () => {
+          throw new Error("This suite never downloads models.dev");
+        },
+        modelsDevTimers: { schedule: () => () => {} },
+        catalogRefreshTimers: {
+          schedule(handler) {
+            pendingCheck = handler;
+            return () => {
+              if (pendingCheck === handler) pendingCheck = null;
+            };
+          },
+        },
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.12.1" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  /** 到点跑一次检查，等它跑完（跑完会排下一次）。 */
+  async function runDailyCheck(): Promise<void> {
+    const handler = pendingCheck;
+    if (!handler) throw new Error("Expected a scheduled model list check");
+    pendingCheck = null;
+    handler();
+    await expect.poll(() => pendingCheck !== null).toBe(true);
+  }
+
+  async function catalogOf(endpointId: string) {
+    const listed = await client.apiEndpointList("claude");
+    return listed.endpoints.find((entry) => entry.id === endpointId)?.catalog;
+  }
+
+  async function saveEndpoint(input: {
+    name: string;
+    baseUrls: { format: string; url: string }[];
+    models?: { id: string }[];
+  }): Promise<string> {
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: input.name,
+      baseUrls: input.baseUrls,
+      apiKey: SAVED_KEY,
+      models: input.models ?? [],
+    });
+    expect(saved.error).toBeNull();
+    if (!saved.endpoint) throw new Error("Expected a saved endpoint");
+    return saved.endpoint.id;
+  }
+
+  const multiBaseUrls = () => [
+    { format: "anthropic_messages", url: `${upstream.origin}/multi/anthropic` },
+    { format: "openai_chat", url: `${upstream.origin}/multi/v1` },
+  ];
+
+  test("each format's list is fetched and merged by model id; the first format's names win and later ones fill gaps", async () => {
+    upstream.lists["/multi/anthropic/v1/models"] = [
+      { id: "shared", display_name: "Shared by Anthropic" },
+      { id: "anthropic-only" },
+      { id: "filled" },
+    ];
+    upstream.lists["/multi/v1/models"] = [
+      { id: "shared", display_name: "Shared by Chat" },
+      { id: "filled", display_name: "Filled by Chat" },
+      { id: "chat-only" },
+    ];
+
+    // 添加窗口里保存前拉：只看不记，也合并。
+    const preview = await client.apiEndpointFetchModels({
+      provider: "claude",
+      baseUrl: `${upstream.origin}/multi/anthropic`,
+      format: "anthropic_messages",
+      apiKey: TYPED_KEY,
+      preview: true,
+      baseUrls: multiBaseUrls(),
+    });
+    const merged = [
+      { id: "shared", label: "Shared by Anthropic" },
+      { id: "anthropic-only" },
+      { id: "filled", label: "Filled by Chat" },
+      { id: "chat-only" },
+    ];
+    expect(preview.error).toBeNull();
+    expect(preview.models).toEqual(merged);
+
+    // 新建时保存当场拉的那次也合并。
+    const endpointId = await saveEndpoint({ name: "Multi", baseUrls: multiBaseUrls() });
+    expect((await catalogOf(endpointId))?.models).toEqual(merged);
+  });
+
+  test("a format that fails this time keeps the models it listed before; one that answered drops what it no longer lists", async () => {
+    upstream.lists["/multi/anthropic/v1/models"] = [{ id: "shared" }, { id: "anthropic-only" }];
+    upstream.lists["/multi/v1/models"] = [{ id: "shared" }, { id: "chat-only" }];
+    const endpointId = await saveEndpoint({ name: "Multi", baseUrls: multiBaseUrls() });
+
+    upstream.lists["/multi/anthropic/v1/models"] = [{ id: "shared" }, { id: "anthropic-new" }];
+    upstream.lists["/multi/v1/models"] = "fail";
+    const refetched = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/multi/anthropic`,
+      format: "anthropic_messages",
+      baseUrls: multiBaseUrls(),
+    });
+
+    expect(refetched.error).toBeNull();
+    expect((await catalogOf(endpointId))?.models.map((model) => model.id)).toEqual([
+      "shared",
+      "anthropic-new",
+      "chat-only",
+    ]);
+
+    // 两种格式都没答上：报错，清单不动。
+    upstream.lists["/multi/anthropic/v1/models"] = "fail";
+    const kept = await catalogOf(endpointId);
+    const failed = await client.apiEndpointFetchModels({
+      provider: "claude",
+      endpointId,
+      baseUrl: `${upstream.origin}/multi/anthropic`,
+      format: "anthropic_messages",
+      baseUrls: multiBaseUrls(),
+    });
+    expect(failed.error?.code).toBe("upstream_error");
+    expect(await catalogOf(endpointId)).toEqual(kept);
+  });
+
+  test("once a day the daemon fetches again for endpoints that are on, keeps the list when that fails, and stops with auto-update off", async () => {
+    upstream.lists["/on/v1/models"] = [{ id: "day-one" }];
+    upstream.lists["/off/v1/models"] = [{ id: "day-one" }];
+    const onId = await saveEndpoint({
+      name: "On",
+      baseUrls: [{ format: "anthropic_messages", url: `${upstream.origin}/on` }],
+    });
+    const offId = await saveEndpoint({
+      name: "Off",
+      baseUrls: [{ format: "anthropic_messages", url: `${upstream.origin}/off` }],
+    });
+    expect(
+      (await client.apiEndpointSetEndpointState({ endpointId: offId, enabled: false })).error,
+    ).toBeNull();
+    const savedAt = clock.toISOString();
+    expect((await catalogOf(onId))?.fetchedAt).toBe(savedAt);
+    upstream.requests.length = 0;
+
+    // 刚拉过：不到一天不再拉。
+    clock = new Date(clock.getTime() + 60 * 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.requests).toEqual([]);
+
+    // 过了一天：开着的那家重新拉，关着的不拉。
+    upstream.lists["/on/v1/models"] = [{ id: "day-one" }, { id: "day-two" }];
+    clock = new Date(Date.parse(savedAt) + DAY_MS + 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.requests).toEqual(["/on/v1/models"]);
+    const refreshed = await catalogOf(onId);
+    expect(refreshed).toEqual({
+      fetchedAt: clock.toISOString(),
+      models: [{ id: "day-one" }, { id: "day-two" }],
+    });
+    expect((await catalogOf(offId))?.fetchedAt).toBe(savedAt);
+
+    // 又过一天，上游挂了：问过，清单不动。
+    upstream.requests.length = 0;
+    upstream.lists["/on/v1/models"] = "fail";
+    clock = new Date(clock.getTime() + DAY_MS + 60 * 1000);
+    await runDailyCheck();
+    expect(upstream.requests.length).toBeGreaterThan(0);
+    expect(await catalogOf(onId)).toEqual(refreshed);
+
+    // 「价格表自动更新」关掉：再过几天也不拉。
+    upstream.requests.length = 0;
+    upstream.lists["/on/v1/models"] = [{ id: "day-three" }];
+    autoUpdate = false;
+    clock = new Date(clock.getTime() + 3 * DAY_MS);
+    await runDailyCheck();
+    expect(upstream.requests).toEqual([]);
+    expect(await catalogOf(onId)).toEqual(refreshed);
+  });
+
+  test("forgetting the fetched list empties it and its time, keeping the selected and hand-added models", async () => {
+    upstream.lists["/on/v1/models"] = [{ id: "listed" }, { id: "picked" }];
+    const endpointId = await saveEndpoint({
+      name: "On",
+      baseUrls: [{ format: "anthropic_messages", url: `${upstream.origin}/on` }],
+      models: [{ id: "picked" }],
+    });
+    expect(
+      (
+        await client.apiEndpointSave({
+          provider: "claude",
+          endpointId,
+          name: "On",
+          baseUrls: [{ format: "anthropic_messages", url: `${upstream.origin}/on` }],
+          models: [{ id: "picked" }, { id: "by-hand" }],
+          manualModels: [{ id: "by-hand" }],
+        })
+      ).error,
+    ).toBeNull();
+    expect((await catalogOf(endpointId))?.models).toHaveLength(2);
+
+    expect((await client.apiEndpointForgetCatalog(endpointId)).error).toBeNull();
+
+    const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+    expect(endpoint?.catalog).toBeUndefined();
+    expect(endpoint?.models).toEqual([{ id: "picked" }, { id: "by-hand" }]);
+    expect(endpoint?.manualModels).toEqual([{ id: "by-hand" }]);
+
+    expect((await client.apiEndpointForgetCatalog("no-such-endpoint")).error?.code).toBe(
+      "not_found",
+    );
+  });
+});

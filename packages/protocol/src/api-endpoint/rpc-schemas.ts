@@ -747,6 +747,10 @@ export type ApiEndpointListTemplatesResponse = z.infer<
  * templateId、region：表单当前的模板与区域或套餐（同 save）。给了就按它们定认证头、Azure 的地址与列法、
  * 没有清单接口时的内置清单，不看 endpointId 那家记下的；省略时用那家的，没有 endpointId 即「自定义」。
  * 不认识的模板拒收。老 daemon 忽略这三个字段。
+ *
+ * baseUrls：这家的全部格式地址。给了就每种格式各拉一次、按模型 id 合并（照 magpie）：顺序以先列出的为准，
+ * 显示名与模型资料先列出的格式说了算，没说的由后面的补；baseUrl、format 不再起作用（照旧要带，给老 daemon）。
+ * 有一种格式答上就算成功；记作上游清单时，这次没答上的格式上次列过的模型留着。只有声明了 apiEndpointManagement 的 daemon 认它。
  */
 export const ApiEndpointFetchModelsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.fetch_models.request"),
@@ -759,6 +763,7 @@ export const ApiEndpointFetchModelsRequestSchema = z.object({
   preview: z.boolean().optional(),
   templateId: z.string().optional(),
   region: z.string().optional(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema).optional(),
 });
 export type ApiEndpointFetchModelsRequest = z.infer<typeof ApiEndpointFetchModelsRequestSchema>;
 
@@ -771,6 +776,28 @@ export const ApiEndpointFetchModelsResponseSchema = z.object({
   }),
 });
 export type ApiEndpointFetchModelsResponse = z.infer<typeof ApiEndpointFetchModelsResponseSchema>;
+
+/**
+ * 丢掉拉回的清单：清空这家的上游清单与拉取时间（照 magpie unfetch），已选与手动添加的模型不动，下次拉取再有。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointForgetCatalogRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.forget_catalog.request"),
+  requestId: z.string(),
+  endpointId: z.string(),
+});
+export type ApiEndpointForgetCatalogRequest = z.infer<typeof ApiEndpointForgetCatalogRequestSchema>;
+
+export const ApiEndpointForgetCatalogResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.forget_catalog.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointForgetCatalogResponse = z.infer<
+  typeof ApiEndpointForgetCatalogResponseSchema
+>;
 
 /**
  * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，按每种格式各发一条最小对话请求（照 magpie Detect）。
