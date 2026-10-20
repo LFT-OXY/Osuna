@@ -7,7 +7,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（临时 `CODEX_HOME`）：三种设置下写给 Codex 的显示名符合规则。
 - [ ] 浏览器测试：切换设置后选单显示随之变化；保存失败时提示留在原处。
