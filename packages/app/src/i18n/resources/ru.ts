@@ -2662,8 +2662,12 @@ export const ru: TranslationResources = {
         detect: "Определить",
         detectModelPlaceholder: "Модель для проверки (необязательно)",
         detected: {
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "Нажмите ещё раз, чтобы отменить.",
+          onlyClearedOnceSaved:
+            "После сохранения {{model}} снова будет запрашиваться в любом формате.",
           askOnly: "Запрашивать {{model}} только в {{format}}",
-          onlyOnceSaved: "После сохранения {{model}} будет запрашиваться только в {{format}}",
+          onlyOnceSaved: "После сохранения {{model}} будет запрашиваться только в {{format}}.",
           useThese: "Использовать эти",
           taken: "Применено · сохраните, чтобы оставить",
           noneAnswered:
@@ -2830,6 +2834,9 @@ export const ru: TranslationResources = {
           "У этого эндпоинта больше нет базового URL {{format}}, поэтому настройка не действует.",
         formatTag: "Только {{format}}",
         formatPinFailed: "Не удалось изменить формат",
+        formatTagVoid: "Только {{format}} · не действует",
+        formatUnknown: "Неизвестный формат",
+        formatNotInEffect: "{{format}} · не действует",
         save: "Сохранить",
         saving: "Сохранение…",
         saveFailed: "Не удалось сохранить: {{message}}",

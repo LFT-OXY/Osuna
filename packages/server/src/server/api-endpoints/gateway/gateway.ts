@@ -11,7 +11,7 @@ import type { Request, RequestHandler, Response } from "express";
 import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
-import { pinnedFormat, upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { pinnedFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { AGENT_REQUEST_FORMAT, isDefaultModelChoice, usableModels } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
@@ -876,7 +876,6 @@ async function countOnEndpoint(input: {
     body: input.body,
     requestedModel: input.model,
     upstreamModel: input.counter.upstreamModel,
-    sentModel: sentModelOf(input.counter),
     headerTimeoutMs: input.failover.headerTimeoutMs,
     userAgent: userAgentFor({ req: input.req, failover: input.failover }),
   });
@@ -1057,14 +1056,6 @@ function formatsOf(candidate: GatewayCandidate): ApiEndpointRequestFormat[] {
     baseUrls: endpoint.baseUrls,
   });
   return pin.kind === "pinned" ? [pin.format] : served;
-}
-
-/** 发给这家时请求体里的模型名：上游模型名（magpie UpstreamNameIn），没设就是这家列出的写法。 */
-function sentModelOf(candidate: GatewayCandidate): string {
-  return upstreamModelName({
-    settings: candidate.endpoint.modelSettings,
-    modelId: candidate.upstreamModel,
-  });
 }
 
 /** 这家还没说过不提供这个模型的格式。 */
@@ -1547,7 +1538,6 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     apiKey: candidate.apiKey,
     requestedModel: input.model,
     upstreamModel: candidate.upstreamModel,
-    sentModel: sentModelOf(candidate),
     headerTimeoutMs: input.failover.headerTimeoutMs,
     userAgent: userAgentFor(input),
     refusals: refused,

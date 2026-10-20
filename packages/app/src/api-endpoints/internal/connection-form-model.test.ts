@@ -2102,6 +2102,29 @@ describe("connection form: asking the detected model in one format only", () => 
     expect(fake.saves[0]?.baseUrls).toEqual(SAVED_ENDPOINT.baseUrls);
   });
 
+  it("picking the chosen format again takes it back, and a saved one can be taken away", async () => {
+    const { model } = await detectedOn({ model: "glm-4.6", results: PICKED_ONLY });
+    model.askOnlyOn("openai_chat");
+    model.askOnlyOn("openai_chat");
+    expect(model.getState().detection?.onlyChoices).toMatchObject({
+      staged: null,
+      isPending: false,
+    });
+
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      modelSettings: { models: { "glm-4.6": { format: "openai_chat", name: "GLM" } } },
+    };
+    const saved = await detectedOn({ endpoint, model: "glm-4.6", results: PICKED_ONLY });
+    saved.model.askOnlyOn("openai_chat");
+    expect(saved.model.getState().detection?.onlyChoices).toMatchObject({
+      staged: null,
+      isPending: true,
+    });
+    await saved.model.submit();
+    expect(saved.fake.saves[0]?.modelSettings).toEqual({ models: { "glm-4.6": { name: "GLM" } } });
+  });
+
   it("takes the detected addresses when the endpoint has no address in that format yet", async () => {
     const results = [
       { ...detection("anthropic_messages", "https://relay.example", "not_detected") },
@@ -2121,7 +2144,7 @@ describe("connection form: asking the detected model in one format only", () => 
     });
   });
 
-  it("keeps the model's other settings, and picking the format it already has stages nothing", async () => {
+  it("keeps the model's other settings, and leaving the saved format chosen stages nothing", async () => {
     const endpoint: ApiEndpoint = {
       ...SAVED_ENDPOINT,
       modelSettings: {
@@ -2139,9 +2162,33 @@ describe("connection form: asking the detected model in one format only", () => 
     });
 
     const again = await detectedOn({ endpoint, model: "glm-4.6", results: PICKED_ONLY });
+    again.model.askOnlyOn("openai_chat");
     again.model.askOnlyOn("anthropic_messages");
     await again.model.submit();
     expect(again.fake.saves[0]?.modelSettings).toBeUndefined();
+  });
+
+  it("a newly typed key is still sent with the endpoint, so the host asks under its upstream names", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setApiKey("sk-new");
+    model.setDetectModel("glm-4.6");
+    model.detect();
+    expect(fake.detects[0]?.request).toEqual({
+      endpointId: "ep_1",
+      apiKey: "sk-new",
+      baseUrl: "https://relay.example",
+      modelId: "glm-4.6",
+      modelIds: ["claude-sonnet-4-5", "glm-4.6"],
+    });
+    fake.answerDetect({ status: "done", results: PICKED_ONLY });
+    await flush();
+    model.testConnection();
+    expect(fake.tests[0]?.request).toMatchObject({ endpointId: "ep_1", apiKey: "sk-new" });
   });
 
   it("is not offered when adding, for a model the endpoint lacks, with no model typed, or when every format answered", async () => {

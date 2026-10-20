@@ -2654,8 +2654,11 @@ export const ja: TranslationResources = {
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {
+          noteAndUndo: "{{note}}{{undo}}",
+          onlyUndo: "もう一度押すと取り消せます。",
+          onlyClearedOnceSaved: "保存すると {{model}} はどの形式でも問い合わせます。",
           askOnly: "{{model}} を {{format}} だけで問い合わせる",
-          onlyOnceSaved: "保存すると {{model}} は {{format}} だけで問い合わせます",
+          onlyOnceSaved: "保存すると {{model}} は {{format}} だけで問い合わせます。",
           useThese: "これを使う",
           taken: "反映済み · 保存すると確定します",
           noneAnswered:
@@ -2823,6 +2826,9 @@ export const ja: TranslationResources = {
           "このエンドポイントには {{format}} のベース URL がもうないため、この設定は効きません。",
         formatTag: "{{format}} のみ",
         formatPinFailed: "形式を変更できませんでした",
+        formatTagVoid: "{{format}} のみ · 無効",
+        formatUnknown: "不明な形式",
+        formatNotInEffect: "{{format}} · 無効",
         save: "保存",
         saving: "保存中…",
         saveFailed: "保存できませんでした：{{message}}",

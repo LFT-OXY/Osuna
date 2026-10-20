@@ -81,8 +81,8 @@ export async function testUpstreamConnection(input: {
   // Bedrock、Azure 的认证头由模板定；「自定义」的没有。
   templateId: string | undefined;
   modelId: string;
-  // 请求体里的模型名（已保存那家的上游模型名，magpie test.go）；缺省即 modelId。
-  sentModel?: string;
+  // 请求体里的模型名（已保存那家的上游模型名，magpie test.go）；新加的就是 modelId。
+  sentModel: string;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   timeoutMs: number;
@@ -120,7 +120,7 @@ export async function testUpstreamConnection(input: {
         ...protocol.headers,
         ...keyHeaderValues({ apiKey: input.apiKey, keys }),
       },
-      body: JSON.stringify(protocol.body(input.sentModel ?? input.modelId)),
+      body: JSON.stringify(protocol.body(input.sentModel)),
       signal,
     });
     status = response.status;

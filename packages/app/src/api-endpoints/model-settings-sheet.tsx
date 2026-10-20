@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpoint,
+  ApiEndpointRequestFormat,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { isRequestFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,8 +44,7 @@ import {
 
 const KEY = "settings.apiEndpoints.modelSettings";
 const SNAP_POINTS = ["85%"];
-const AUTOMATIC_FORMAT = "";
-// 分段切换最多这么多段，多了折行读不出选中哪段（docs/design.md §6）。
+// 「自动」加三种格式的四段在宽窗口放得下；390 宽的窄窗口里第四段（OpenAI Responses）会被截掉，多于三段就改用下拉。
 const MAX_FORMAT_SEGMENTS = 4;
 const MAX_COMPACT_FORMAT_SEGMENTS = 3;
 
@@ -348,7 +352,11 @@ function EffortItem({
   );
 }
 
-/** 只用这种格式：「自动」加这家有地址的格式；存着的格式没地址了在下面说明作废。 */
+// 「自动」那一段的值；其余段的值就是请求格式。
+const AUTOMATIC = "automatic";
+type FormatPick = ApiEndpointRequestFormat | typeof AUTOMATIC;
+
+/** 只用这种格式：「自动」加这家有地址的格式；存着的格式没地址了照样显示它、标成不起作用，并在下面说明。 */
 function FormatField({
   state,
   form,
@@ -359,11 +367,11 @@ function FormatField({
   size: "sm" | "md";
 }) {
   const { t } = useTranslation();
-  const { options, value, voidFormat } = state.format;
-  const choices = useMemo<SegmentedControlOption<string>[]>(
+  const { options, value, isVoid } = state.format;
+  const choices = useMemo<SegmentedControlOption<FormatPick>[]>(
     () => [
       {
-        value: AUTOMATIC_FORMAT,
+        value: AUTOMATIC,
         label: t(`${KEY}.formatAutomatic`),
         testID: "api-endpoint-model-settings-format-automatic",
       },
@@ -376,38 +384,26 @@ function FormatField({
     [options, t],
   );
   const handleChange = useCallback(
-    (next: string) => form.setFormat(next === AUTOMATIC_FORMAT ? null : next),
+    (next: FormatPick) => form.setFormat(next === AUTOMATIC ? null : next),
     [form],
   );
-  const selected = value ?? AUTOMATIC_FORMAT;
+  const selected: FormatPick = value ?? AUTOMATIC;
   const label = t(`${KEY}.format`);
-  // 窄窗口放不下四段（OpenAI Responses 被截掉）：多于三段就改用下拉。
   const isCompact = useIsCompactFormFactor();
   const maxSegments = isCompact ? MAX_COMPACT_FORMAT_SEGMENTS : MAX_FORMAT_SEGMENTS;
-  const usesDropdown = choices.length > maxSegments;
-  const voidCopy =
-    voidFormat === null ? null : t(`${KEY}.formatVoid`, { format: formatLabel(t, voidFormat) });
+  const usesDropdown = isVoid || choices.length > maxSegments;
+  const hint =
+    isVoid && value !== null
+      ? t(`${KEY}.formatVoid`, { format: formatLabel(t, value) })
+      : t(`${KEY}.formatHint`);
   return (
-    <Field
-      label={label}
-      hint={t(`${KEY}.formatHint`)}
-      testID="api-endpoint-model-settings-format-field"
-    >
-      {voidCopy !== null ? (
-        <Text
-          variant="caption"
-          color="statusDanger"
-          accessibilityRole="alert"
-          testID="api-endpoint-model-settings-format-void"
-        >
-          {voidCopy}
-        </Text>
-      ) : null}
+    <Field label={label} hint={hint} testID="api-endpoint-model-settings-format-field">
       {usesDropdown ? (
         <FormatDropdown
           label={label}
           choices={choices}
           selected={selected}
+          isVoid={isVoid}
           onSelect={handleChange}
           disabled={state.isBusy}
           size={size}
@@ -418,7 +414,7 @@ function FormatField({
             options={choices}
             value={selected}
             onValueChange={handleChange}
-            size="sm"
+            size={size}
             testID="api-endpoint-model-settings-format"
           />
         </View>
@@ -427,53 +423,52 @@ function FormatField({
   );
 }
 
+/** 格式多到分段放不下，或选着的已不起作用时用下拉；不起作用的值照样显示，外框标成警告。 */
 function FormatDropdown({
   label,
   choices,
   selected,
+  isVoid,
   onSelect,
   disabled,
   size,
 }: {
   label: string;
-  choices: SegmentedControlOption<string>[];
-  selected: string;
-  onSelect: (value: string) => void;
+  choices: SegmentedControlOption<FormatPick>[];
+  selected: FormatPick;
+  isVoid: boolean;
+  onSelect: (value: FormatPick) => void;
   disabled: boolean;
   size: "sm" | "md";
 }) {
-  const current = choices.find((choice) => choice.value === selected) ?? null;
-  const display = useMemo(() => (current ? { label: current.label } : null), [current]);
+  const { t } = useTranslation();
+  const current = choices.find((choice) => choice.value === selected)?.label ?? "";
+  const shown = isVoid ? t(`${KEY}.formatNotInEffect`, { format: current }) : current;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        disabled={disabled}
-        testID="api-endpoint-model-settings-format"
-      >
-        {({ hovered, open }: DropdownMenuTriggerState) => (
-          <SelectFieldTrigger
-            display={display}
-            placeholder=""
-            hovered={hovered}
-            active={open}
-            disabled={disabled}
-            size={size}
-          />
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="bottom" align="start" width={240}>
-        {choices.map((choice) => (
-          <FormatItem
-            key={choice.value}
-            choice={choice}
-            selected={choice.value === selected}
-            onSelect={onSelect}
-          />
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <View style={styles.segmentRow}>
+      <DropdownMenu>
+        <DropdownTrigger
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          disabled={disabled}
+          size={size}
+          tone={isVoid ? "warning" : undefined}
+          testID="api-endpoint-model-settings-format"
+        >
+          {shown}
+        </DropdownTrigger>
+        <DropdownMenuContent side="bottom" align="start" width={240}>
+          {choices.map((choice) => (
+            <FormatItem
+              key={choice.value}
+              choice={choice}
+              selected={choice.value === selected}
+              onSelect={onSelect}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
   );
 }
 
@@ -482,9 +477,9 @@ function FormatItem({
   selected,
   onSelect,
 }: {
-  choice: SegmentedControlOption<string>;
+  choice: SegmentedControlOption<FormatPick>;
   selected: boolean;
-  onSelect: (value: string) => void;
+  onSelect: (value: FormatPick) => void;
 }) {
   const handleSelect = useCallback(() => onSelect(choice.value), [choice.value, onSelect]);
   return (
@@ -494,9 +489,10 @@ function FormatItem({
   );
 }
 
-/** 请求格式的名字（Anthropic、OpenAI Chat…）；不认识的格式照原样。 */
+/** 请求格式的名字（Anthropic、OpenAI Chat、OpenAI Responses）；中转站不认识的格式说「未知格式」，不露原始 id。 */
 export function formatLabel(t: TFunction, format: string): string {
-  return t(`settings.apiEndpoints.formats.${format}`, { defaultValue: format });
+  if (!isRequestFormat(format)) return t(`${KEY}.formatUnknown`);
+  return t(`settings.apiEndpoints.formats.${format}`);
 }
 
 function ImagesRow({ state, form }: { state: ModelSettingsFormState; form: ModelSettingsForm }) {

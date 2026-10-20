@@ -3098,7 +3098,7 @@ export class ApiEndpointService {
       apiKey,
       templateId,
       modelId: modelId ?? null,
-      ...(modelId ? { sentModel: this.sentNameOf(input.endpointId)(modelId) } : {}),
+      sentModel: modelId ? this.sentNameOf(input.endpointId)(modelId) : null,
       signal,
       timeoutMs: this.connectionTestTimeoutMs,
     });

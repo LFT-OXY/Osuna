@@ -273,6 +273,7 @@ export function pinnedFormat(input: {
   return { kind: "pinned", format };
 }
 
-function isRequestFormat(format: string): format is ApiEndpointRequestFormat {
+/** 是不是中转站认的请求格式（线上是字符串，以后新增的老版本不认）。 */
+export function isRequestFormat(format: string): format is ApiEndpointRequestFormat {
   return (API_ENDPOINT_REQUEST_FORMATS as readonly string[]).includes(format);
 }

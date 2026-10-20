@@ -322,7 +322,7 @@ describe("upstream name and the one format", () => {
     expect(form.getState().format).toEqual({
       options: ["anthropic_messages", "openai_chat"],
       value: null,
-      voidFormat: null,
+      isVoid: false,
     });
     form.setFormat("openai_chat");
     expect(form.getState().canSubmit).toBe(true);
@@ -335,10 +335,10 @@ describe("upstream name and the one format", () => {
     expect(form.getState().format).toEqual({
       options: ["anthropic_messages", "openai_chat", "openai_responses"],
       value: "openai_responses",
-      voidFormat: "openai_responses",
+      isVoid: true,
     });
     form.setFormat(null);
-    expect(form.getState().format.voidFormat).toBeNull();
+    expect(form.getState().format.isVoid).toBe(false);
     await form.submit();
     expect(saved[0]?.models?.["kimi-k2"]).toEqual({ name: "Kimi" });
   });

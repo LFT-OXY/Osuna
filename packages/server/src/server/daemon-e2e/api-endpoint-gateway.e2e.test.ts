@@ -9327,6 +9327,59 @@ describe("an upstream name and a model's one format", () => {
     expect(upstreamB.requests.map(receivedModel)).toEqual(["kimi-k2"]);
   });
 
+  test("a model whose upstream name is Claude keeps Claude Code's billing line and review, as a Claude model does", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["my-opus"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: { models: { "my-opus": { upstreamName: "claude-opus-4-8" } } },
+    });
+    const init = claudeRequest(CLAUDE_CODE_TURN("my-opus"));
+    const headers = { ...(init.headers as Record<string, string>) };
+    headers["anthropic-beta"] = CLAUDE_CODE_BETAS;
+
+    const response = await fetch(`${gateway}/v1/messages?beta=true`, { ...init, headers });
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(upstream.requests[0]!.body.toString()).toBe(CLAUDE_CODE_TURN("claude-opus-4-8"));
+    expect(upstream.requests[0]!.headers["anthropic-beta"]).toBe(CLAUDE_CODE_BETAS);
+  });
+
+  test("the advisor is asked for under this endpoint's upstream name, which is what says it is Claude", async () => {
+    const upstream = await startUpstream();
+    upstream.respond = (_request, res) => streamReply(res);
+    const { gateway, endpointsDir } = await start({ upstreamA: upstream });
+    await selectModels(endpointsDir, { ep_a: ["my-opus", "my-advisor"] });
+    await setModelSettings(endpointsDir, {
+      ep_a: {
+        models: {
+          "my-opus": { upstreamName: "claude-opus-4-8" },
+          "my-advisor": { upstreamName: "claude-opus-5-5" },
+        },
+      },
+    });
+    const advisor = { type: "advisor_20260301", name: "advisor", model: "relay-a/my-advisor" };
+
+    const response = await fetch(
+      `${gateway}/v1/messages`,
+      claudeRequest({
+        model: "my-opus",
+        stream: true,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }],
+        tools: [advisor],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(receivedBody(upstream.requests[0]).tools).toEqual([
+      { ...advisor, model: "claude-opus-5-5" },
+    ]);
+  });
+
   test("a model pinned to one format is asked only in it, and asked as before once that URL is gone", async () => {
     const upstreamA = await startUpstream();
     upstreamA.respond = (request, res) => {

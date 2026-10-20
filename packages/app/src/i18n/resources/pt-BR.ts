@@ -2667,8 +2667,11 @@ export const ptBR: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo para testar (opcional)",
         detected: {
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "Toque de novo para desfazer.",
+          onlyClearedOnceSaved: "Ao salvar, {{model}} volta a ser pedido em qualquer formato.",
           askOnly: "Pedir {{model}} só em {{format}}",
-          onlyOnceSaved: "Ao salvar, {{model}} será pedido só em {{format}}",
+          onlyOnceSaved: "Ao salvar, {{model}} será pedido só em {{format}}.",
           useThese: "Usar estes",
           taken: "Aplicados · salve para manter",
           noneAnswered:
@@ -2836,6 +2839,9 @@ export const ptBR: TranslationResources = {
           "Este endpoint não tem mais uma URL base de {{format}}, então esta configuração não se aplica.",
         formatTag: "Só {{format}}",
         formatPinFailed: "Não foi possível mudar o formato",
+        formatTagVoid: "Só {{format}} · sem efeito",
+        formatUnknown: "Formato desconhecido",
+        formatNotInEffect: "{{format}} · sem efeito",
         save: "Salvar",
         saving: "Salvando…",
         saveFailed: "Não foi possível salvar: {{message}}",

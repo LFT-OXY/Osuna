@@ -5,6 +5,7 @@ import type { IncomingMessage } from "node:http";
 import { StringDecoder } from "node:string_decoder";
 import type { Response } from "express";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { EndpointModelFacts } from "../model-facts.js";
 import type { StoredApiEndpoint } from "../store.js";
 import { ANTHROPIC_VERSION, parseJson } from "../upstream-http.js";
@@ -54,6 +55,7 @@ import {
   passingFilter,
   requestForModel,
   reasoningOff,
+  replaysThinking,
   thinkingBackOn,
   type EmitEvent,
   type GatewayRequest,
@@ -113,8 +115,6 @@ export async function attemptTranslated(input: {
   request: GatewayRequest;
   requestedModel: string;
   upstreamModel: string;
-  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
-  sentModel?: string;
   // 这家这个模型的资料（ModelFactsLookup）。
   facts: EndpointModelFacts;
   headerTimeoutMs: number;
@@ -155,7 +155,10 @@ export async function attemptTranslated(input: {
       from: input.from,
       to,
       model: input.upstreamModel,
-      sentModel: input.sentModel,
+      sentModel: upstreamModelName({
+        settings: input.endpoint.modelSettings,
+        modelId: input.upstreamModel,
+      }),
       facts: input.facts,
     });
   const build = (asked: ShapeRefusals = refusals) =>
@@ -393,8 +396,8 @@ export interface TranslatedBodyInput {
   from: ApiEndpointRequestFormat;
   to: ApiEndpointRequestFormat;
   model: string;
-  // 请求体里的模型名（上游模型名）；缺省即 model。
-  sentModel?: string;
+  // 请求体里的模型名（上游模型名）；没设上游模型名时同 model。
+  sentModel: string;
   facts: EndpointModelFacts;
   refusals: ShapeRefusals;
   // 断了的回复接着写时这家怎么接（request 的最后一条是 Agent 已经收到的部分）；平常的请求为 null。
@@ -426,7 +429,10 @@ export function translatedBody(input: TranslatedBodyInput): string {
   // 模型设置里一档思考都不留：编出的请求不带任何思考参数（no-thinking.ts）。
   if (input.facts.noThinking === true) request = withoutThinkingAsk(request);
   if (to === "openai_chat") request = withThinkingInline({ baseUrl, request });
-  const built = protocolOf(to).build({ ...request, stream: true }, input.sentModel ?? input.model);
+  // 要回放推理的模型按原名或上游模型名认出一个就算（magpie）；请求体里的模型名总是上游模型名。
+  const replayModel = replaysThinking(input.model) ? input.model : input.sentModel;
+  const built = protocolOf(to).build({ ...request, stream: true }, replayModel);
+  built.model = input.sentModel;
   let body = withoutRefusedFields({
     format: to,
     body: built,
@@ -523,6 +529,7 @@ async function streamReply(input: {
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
+    endpoint: input.endpoint,
     emit: (event) => fence.event(event),
   });
   // 接着写时 Agent 收到的要连成一份回复：这之后的几道修补与编码器各次共用。
@@ -633,6 +640,7 @@ async function wholeReply(input: {
   const numbers = wholeNumbersFilter({
     requestedModel: input.requestedModel,
     upstreamModel: input.upstreamModel,
+    endpoint: input.endpoint,
     emit: (event) => collector.add(event),
   });
   const calls = textCallFilter({
@@ -708,9 +716,14 @@ function wholeFailureError(input: { failure: WholeFailure; endpointName: string 
 function wholeNumbersFilter(input: {
   requestedModel: string;
   upstreamModel: string;
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
   emit: EmitEvent;
 }): ReplyFilter {
-  if (isGrokReply(input)) return wholeArgsFilter(input.emit);
+  const sentModel = upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+  if (isGrokReply({ ...input, sentModel })) return wholeArgsFilter(input.emit);
   return passingFilter(input.emit);
 }
 

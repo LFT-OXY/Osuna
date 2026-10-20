@@ -4,12 +4,14 @@ import {
   type ApiEndpointModelDefaults,
   type ApiEndpointModelSetting,
   type ApiEndpointModelSettings,
+  type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   choosableEfforts,
   MODEL_TOKEN_FIELDS,
   resolveModelFacts,
   settleModelDefaults,
+  isRequestFormat,
   settleModelSetting,
   upstreamModelName,
   type ModelTokenField,
@@ -80,34 +82,41 @@ export interface ModelSettingsFormState {
 
 /**
  * 「只用这种格式」：options 是可选的格式（不含「自动」），没有就不显示这一项；value 为 null 即自动；
- * voidFormat 是选着的、这家却已没有地址的格式（设置作废）。
+ * isVoid：选着的格式这家已没有地址（设置作废，照 magpie 仍显示它）。
  */
 export interface FormatChoice {
-  options: string[];
-  value: string | null;
-  voidFormat: string | null;
+  options: ApiEndpointRequestFormat[];
+  value: ApiEndpointRequestFormat | null;
+  isVoid: boolean;
 }
 
 /** 这家可以给模型选的格式：有两种以上格式的地址时是它们（照 magpie modelAPIs），按协议的顺序。 */
-export function choosableFormats(endpoint: Pick<ApiEndpoint, "baseUrls">): string[] {
+export function choosableFormats(
+  endpoint: Pick<ApiEndpoint, "baseUrls">,
+): ApiEndpointRequestFormat[] {
   const formats = API_ENDPOINT_REQUEST_FORMATS.filter((format) =>
     (endpoint.baseUrls ?? []).some((entry) => entry.format === format),
   );
   return formats.length < 2 ? [] : formats;
 }
 
+/** 存着的格式：中转站认的才算；不认识的（手改的文件）当自动，daemon 本来就不收。 */
+function storedFormatOf(setting: ApiEndpointModelSetting): ApiEndpointRequestFormat | null {
+  const { format } = setting;
+  return format !== undefined && isRequestFormat(format) ? format : null;
+}
+
 function formatChoiceOf(input: {
-  choosable: string[];
-  stored: string | undefined;
-  value: string | null;
-  hasUrl: (format: string) => boolean;
+  choosable: ApiEndpointRequestFormat[];
+  stored: ApiEndpointRequestFormat | null;
+  value: ApiEndpointRequestFormat | null;
+  hasUrl: (format: ApiEndpointRequestFormat) => boolean;
 }): FormatChoice {
   const { choosable, stored, value } = input;
   // 存着的格式不在可选里（地址没了，或这家只剩一种地址）也列出来，免得看不到它设着什么（照 magpie）。
-  const options =
-    stored !== undefined && !choosable.includes(stored) ? [...choosable, stored] : choosable;
-  const voidFormat = value !== null && !input.hasUrl(value) ? value : null;
-  return { options, value, voidFormat };
+  const isListed = stored === null || choosable.includes(stored);
+  const options = isListed ? choosable : [...choosable, stored];
+  return { options, value, isVoid: value !== null && !input.hasUrl(value) };
 }
 
 export type FormSubmitResult = "saved" | "failed" | "invalid";
@@ -136,7 +145,7 @@ export interface ModelSettingsForm {
   setImages(value: boolean): void;
   setUpstreamName(text: string): void;
   // null 即自动。
-  setFormat(format: string | null): void;
+  setFormat(format: ApiEndpointRequestFormat | null): void;
   submit(): Promise<FormSubmitResult>;
   restoreDefaults(): Promise<FormSubmitResult>;
 }
@@ -231,9 +240,10 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
   let efforts: string[] | null = own.efforts ?? null;
   let images: boolean | null = own.images ?? null;
   let upstreamName = own.upstreamName ?? "";
-  let format: string | null = own.format ?? null;
+  const storedFormat = storedFormatOf(own);
+  let format = storedFormat;
   const choosable = choosableFormats(endpoint);
-  const hasUrl = (candidate: string) =>
+  const hasUrl = (candidate: ApiEndpointRequestFormat) =>
     (endpoint.baseUrls ?? []).some((entry) => entry.format === candidate);
   const automaticUpstreamName = upstreamModelName({ settings: defaultsOnly, modelId });
   let status: ModelSettingsStatus = { kind: "idle" };
@@ -277,7 +287,7 @@ export function openModelSettingsForm(input: ModelSettingsFormInput): ModelSetti
       efforts: { levels, picked, isSet: efforts !== null },
       images: { value: imagesValue, isSet: images !== null },
       upstreamName: { text: upstreamName, automatic: automaticUpstreamName },
-      format: formatChoiceOf({ choosable, stored: own.format, value: format, hasUrl }),
+      format: formatChoiceOf({ choosable, stored: storedFormat, value: format, hasUrl }),
       status,
       canSubmit: !isBusy && isReadable && isChanged,
       isBusy,
@@ -463,7 +473,7 @@ function withDefaults(input: {
 export function withModelFormat(input: {
   current: ApiEndpointModelSettings | undefined;
   modelId: string;
-  format: string | null;
+  format: ApiEndpointRequestFormat | null;
 }): ApiEndpointModelSettings {
   const { current, modelId, format } = input;
   const { format: _format, ...rest } = current?.models?.[modelId] ?? {};

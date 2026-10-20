@@ -6,6 +6,7 @@ import { applyEdits, findNodeAtLocation, modify, parseTree, type JSONPath } from
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { isRecord, parseJson } from "../upstream-http.js";
 import type { EmitEvent, ReplyFilter, StreamEvent } from "./translation/ir.js";
+import { JsonEventTidy } from "./reply-tidy.js";
 import { isGrokModel } from "./vendor-rewrites.js";
 
 /*
@@ -16,9 +17,14 @@ import { isGrokModel } from "./vendor-rewrites.js";
  * 按文字流处理，参数整段来还是切成几段来，结果都一样。
  */
 
-/** 回复是不是 Grok 的模型给的：按 Agent 要的名字或发给上游的名字认。 */
-export function isGrokReply(input: { requestedModel: string; upstreamModel: string }): boolean {
-  return isGrokModel(input.requestedModel) || isGrokModel(input.upstreamModel);
+/** 回复是不是 Grok 的模型给的：按 Agent 要的名字、这家列出的写法或上游模型名认（magpie grokReply）。 */
+export function isGrokReply(input: {
+  requestedModel: string;
+  upstreamModel: string;
+  sentModel: string;
+}): boolean {
+  const names = [input.requestedModel, input.upstreamModel, input.sentModel];
+  return names.some(isGrokModel);
 }
 
 /**
@@ -134,52 +140,22 @@ interface ArgsAt {
  * Anthropic 的 tool_use input 与 input_json_delta。流按行转出，带参数又改了的那行只改参数，其余字节原样；
  * 不是流的回复攒齐了在最后改。
  */
-export class WholeArgsTidy {
-  private held = "";
+export class WholeArgsTidy extends JsonEventTidy {
   // 流式调用到目前为止的参数，按它的位置或项 id。
   private readonly calls = new Map<string, WholeNumbers>();
 
-  constructor(private readonly reply: { format: PassedReplyFormat; stream: boolean }) {}
-
-  write(text: string): string {
-    this.held += text;
-    if (!this.reply.stream) return "";
-    const end = this.held.lastIndexOf("\n");
-    if (end < 0) return "";
-    const lines = this.held.slice(0, end + 1);
-    this.held = this.held.slice(end + 1);
-    return this.lines(lines);
-  }
-
-  end(): string {
-    const rest = this.held;
-    this.held = "";
-    if (this.reply.stream) return this.lines(rest);
-    return this.event(rest);
+  constructor(private readonly reply: { format: PassedReplyFormat; stream: boolean }) {
+    super(reply.stream);
   }
 
   /** 这段文字可能带着调用参数。 */
-  private carries(text: string): boolean {
+  protected carries(text: string): boolean {
     if (this.reply.format === "openai_responses") return text.includes("function_call");
     return text.includes('"tool_use"') || text.includes('"input_json_delta"');
   }
 
-  private lines(text: string): string {
-    if (!this.carries(text)) return text;
-    return text
-      .split(/(?<=\n)/)
-      .map((line) => this.line(line))
-      .join("");
-  }
-
-  private line(line: string): string {
-    const isData = line.startsWith("data:") && this.carries(line);
-    if (!isData) return line;
-    return `data:${this.event(line.slice("data:".length))}`;
-  }
-
   /** 一个事件（或整份回复）的 JSON 原文，参数去掉零小数；读不懂的原样。 */
-  private event(text: string): string {
+  protected event(text: string): string {
     const event = parseJson(text);
     if (!isRecord(event)) return text;
     const places = this.argsIn(event);

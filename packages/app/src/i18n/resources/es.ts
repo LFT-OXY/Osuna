@@ -2682,8 +2682,11 @@ export const es: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo a probar (opcional)",
         detected: {
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "Púlsalo de nuevo para deshacer.",
+          onlyClearedOnceSaved: "Al guardar, {{model}} se volverá a pedir en cualquier formato.",
           askOnly: "Pedir {{model}} solo en {{format}}",
-          onlyOnceSaved: "Al guardar, {{model}} se pedirá solo en {{format}}",
+          onlyOnceSaved: "Al guardar, {{model}} se pedirá solo en {{format}}.",
           useThese: "Usar estas",
           taken: "Aplicadas · guarda para conservarlas",
           noneAnswered:
@@ -2851,6 +2854,9 @@ export const es: TranslationResources = {
           "Este endpoint ya no tiene una URL base de {{format}}, así que este ajuste no se aplica.",
         formatTag: "Solo {{format}}",
         formatPinFailed: "No se pudo cambiar el formato",
+        formatTagVoid: "Solo {{format}} · sin efecto",
+        formatUnknown: "Formato desconocido",
+        formatNotInEffect: "{{format}} · sin efecto",
         save: "Guardar",
         saving: "Guardando…",
         saveFailed: "No se pudo guardar: {{message}}",

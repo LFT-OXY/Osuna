@@ -485,8 +485,8 @@ function DetectionResults({
 }
 
 /**
- * 「只在 {格式} 上问 {模型}」（照 magpie Detect 的 Ask {model} on {api} only）：每种通了的格式一个，选着的用实底；
- * 保存时随这家一起存进模型设置。
+ * 「只用 {格式} 问 {模型}」（照 magpie Detect 的 Ask {model} on {api} only，那里是一排可切换的按钮）：每种通了的格式一个，
+ * 选着的是实底带勾，再点一次取消；保存时随这家一起存进模型设置。
  */
 function OnlyFormatChoices({
   choices,
@@ -496,7 +496,17 @@ function OnlyFormatChoices({
   model: ConnectionFormModel;
 }) {
   const { t } = useTranslation();
-  const staged = choices.staged === null ? null : formatLabel(t, choices.staged);
+  const { staged, modelId } = choices;
+  let note: string | null = null;
+  if (choices.isPending && staged !== null) {
+    note = t("settings.apiEndpoints.form.detected.onlyOnceSaved", {
+      model: modelId,
+      format: formatLabel(t, staged),
+    });
+  } else if (choices.isPending) {
+    note = t("settings.apiEndpoints.form.detected.onlyClearedOnceSaved", { model: modelId });
+  }
+  const undo = staged === null ? null : t("settings.apiEndpoints.form.detected.onlyUndo");
   return (
     <View style={styles.checkList} testID="api-endpoint-connection-only-choices">
       <View style={styles.wrapRow}>
@@ -504,22 +514,21 @@ function OnlyFormatChoices({
           <OnlyFormatButton
             key={format}
             format={format}
-            modelId={choices.modelId}
-            isStaged={choices.staged === format}
+            modelId={modelId}
+            isStaged={staged === format}
             onPress={model.askOnlyOn}
           />
         ))}
       </View>
-      {choices.isPending && staged !== null ? (
+      {note !== null || undo !== null ? (
         <Text
           variant="caption"
           color="foregroundMuted"
           testID="api-endpoint-connection-only-pending"
         >
-          {t("settings.apiEndpoints.form.detected.onlyOnceSaved", {
-            model: choices.modelId,
-            format: staged,
-          })}
+          {note !== null && undo !== null
+            ? t("settings.apiEndpoints.form.detected.noteAndUndo", { note, undo })
+            : (note ?? undo)}
         </Text>
       ) : null}
     </View>
@@ -542,8 +551,9 @@ function OnlyFormatButton({
   const accessibilityState = useMemo(() => ({ selected: isStaged }), [isStaged]);
   return (
     <Button
-      variant={isStaged ? "secondary" : "outline"}
+      variant={isStaged ? "default" : "outline"}
       size="sm"
+      leftIcon={isStaged ? Check : undefined}
       onPress={handlePress}
       accessibilityState={accessibilityState}
       testID={`api-endpoint-connection-only-${format}`}

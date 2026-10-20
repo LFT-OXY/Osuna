@@ -106,8 +106,8 @@ export async function detectUpstreamFormats(input: {
   modelId: string | null;
   // 表单里已选、还没保存的模型：没填试用模型时按格式从它们里挑，空的才向上游列。
   pickedModelIds: string[];
-  // 发给上游时模型叫什么（已保存那家的上游模型名，magpie detect.go 的 UpstreamName）；缺省即模型 id。
-  sentNameOf?: (modelId: string) => string;
+  // 发给上游时模型叫什么（已保存那家的上游模型名，magpie detect.go 的 UpstreamName）；新加的是模型 id 本身。
+  sentNameOf: (modelId: string) => string;
   // 调用方取消（客户端取消或断开）。
   signal: AbortSignal;
   modelsTimeoutMs: number;
@@ -166,7 +166,7 @@ async function probeAll(args: {
     apiKey: string | null;
     signal: AbortSignal;
     probeTimeoutMs: number;
-    sentNameOf?: (modelId: string) => string;
+    sentNameOf: (modelId: string) => string;
   };
   urls: Record<ApiEndpointRequestFormat, string>;
   modelFor: (format: ApiEndpointRequestFormat) => string | null;
@@ -175,7 +175,6 @@ async function probeAll(args: {
   const results = await Promise.all(
     API_ENDPOINT_REQUEST_FORMATS.map((format) => {
       const modelId = modelFor(format);
-      const sentModel = modelId === null ? undefined : input.sentNameOf?.(modelId);
       return probeUpstreamFormat({
         format,
         baseUrl: urls[format],
@@ -183,7 +182,7 @@ async function probeAll(args: {
         // 自动检测只给「自定义」用。
         templateId: undefined,
         modelId,
-        ...(sentModel === undefined ? {} : { sentModel }),
+        sentModel: modelId === null ? null : input.sentNameOf(modelId),
         signal: input.signal,
         timeoutMs: input.probeTimeoutMs,
       });
@@ -202,8 +201,8 @@ export async function probeUpstreamFormat(input: {
   // Bedrock、Azure 的认证头与 Chat 的回复上限字段由模板定；「自定义」的没有。
   templateId: string | undefined;
   modelId: string | null;
-  // 请求体里的模型名（上游模型名）；缺省即 modelId。
-  sentModel?: string;
+  // 请求体里的模型名（上游模型名）；没有模型时为 null。
+  sentModel: string | null;
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {

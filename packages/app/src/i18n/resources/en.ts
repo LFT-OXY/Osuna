@@ -2692,8 +2692,11 @@ export const en = {
         detect: "Auto-detect",
         detectModelPlaceholder: "Model to try (optional)",
         detected: {
-          askOnly: "Ask {{model}} on {{format}} only",
-          onlyOnceSaved: "{{model}} is asked on {{format}} only once saved",
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "Press it again to undo.",
+          onlyClearedOnceSaved: "After saving, {{model}} is asked over any format again.",
+          askOnly: "Ask {{model}} over {{format}} only",
+          onlyOnceSaved: "After saving, {{model}} is only asked over {{format}}.",
           useThese: "Use these",
           taken: "Taken · save to keep",
           noneAnswered:
@@ -2851,7 +2854,7 @@ export const en = {
         restoreAll: "Restore all defaults",
         upstreamName: "Upstream name",
         upstreamNameHint:
-          "The name this endpoint is sent for this model. A * stands for the model ID. Model lists and the default model keep the model's own name.",
+          "The name sent to this endpoint for this model. A * stands for the model ID. Model lists and the default model keep the model's own name.",
         format: "Use only this format",
         formatHint: "Ask this endpoint for this model in one request format only.",
         formatAutomatic: "Automatic",
@@ -2859,6 +2862,9 @@ export const en = {
           "This endpoint no longer has a base URL for {{format}}, so this setting doesn't apply.",
         formatTag: "{{format}} only",
         formatPinFailed: "Couldn't change the format",
+        formatTagVoid: "{{format}} only · not in effect",
+        formatUnknown: "Unknown format",
+        formatNotInEffect: "{{format}} · not in effect",
         save: "Save",
         saving: "Saving…",
         saveFailed: "Couldn't save: {{message}}",

@@ -45,6 +45,7 @@ import { MODEL_FAMILIES, type ModelFamilyId } from "./internal/model-families";
 import { ModelFamilyIcon } from "./model-family-icon";
 import { relativeAgo } from "./reopen-hints-copy";
 import { formatLabel } from "./model-settings-sheet";
+import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 
 /*
@@ -76,12 +77,18 @@ interface ApiEndpointModelsSectionProps {
 
 /**
  * 模型行上直接设「只用这种格式」（照 magpie 模型行右键的 Asked on…）：可选的格式（不含「自动」），
- * 每个模型现在设的格式（null 为自动；作废的不算），与设一个格式（null 回到自动）。
+ * 每个模型存着的格式（null 为自动），与设一个格式（null 回到自动）。
  */
 export interface ModelFormatPins {
-  formats: string[];
-  pinOf: (modelId: string) => string | null;
-  onPin: (modelId: string, format: string | null) => void;
+  formats: ApiEndpointRequestFormat[];
+  pinOf: (modelId: string) => ModelFormatPin | null;
+  onPin: (modelId: string, format: ApiEndpointRequestFormat | null) => void;
+}
+
+/** 一个模型存着的格式；isVoid 为这家已没有那种地址、不起作用。 */
+export interface ModelFormatPin {
+  format: ApiEndpointRequestFormat;
+  isVoid: boolean;
 }
 
 function useFamilyName(): (family: ModelFamilyId) => string {
@@ -560,11 +567,16 @@ function ModelRow({
       {pinned !== null ? (
         <Text
           variant="caption"
-          color="foregroundMuted"
+          color={pinned.isVoid ? "statusWarning" : "foregroundMuted"}
           numberOfLines={1}
           testID={`api-endpoint-model-format-${entry.id}`}
         >
-          {t("settings.apiEndpoints.modelSettings.formatTag", { format: formatLabel(t, pinned) })}
+          {t(
+            pinned.isVoid
+              ? "settings.apiEndpoints.modelSettings.formatTagVoid"
+              : "settings.apiEndpoints.modelSettings.formatTag",
+            { format: formatLabel(t, pinned.format) },
+          )}
         </Text>
       ) : null}
       <Switch
@@ -599,7 +611,7 @@ function ModelRowMenu({
   modelId: string;
   onOpenSettings: (modelId: string) => void;
   formatPins: ModelFormatPins | null;
-  pinned: string | null;
+  pinned: ModelFormatPin | null;
 }) {
   const { t } = useTranslation();
   const handleOpen = useCallback(() => onOpenSettings(modelId), [modelId, onOpenSettings]);
@@ -610,17 +622,17 @@ function ModelRowMenu({
   const formatTitle = t("settings.apiEndpoints.modelSettings.format");
   const pages = useMemo<MenuPageDefinition[] | undefined>(() => {
     if (formatPins === null) return undefined;
-    const choices = [null, ...formatPins.formats];
+    // 没有「自动」一行：再点勾着的那个即回到自动（docs/menus.md）。
     return [
       {
         id: FORMAT_PAGE,
         title: formatTitle,
-        content: choices.map((format) => (
+        content: formatPins.formats.map((format) => (
           <FormatPinItem
-            key={format ?? "automatic"}
+            key={format}
             modelId={modelId}
             format={format}
-            selected={format === pinned}
+            selected={format === pinned?.format}
             onPin={formatPins.onPin}
           />
         )),
@@ -630,7 +642,7 @@ function ModelRowMenu({
   const pinnedLabel =
     pinned === null
       ? t("settings.apiEndpoints.modelSettings.formatAutomatic")
-      : formatLabel(t, pinned);
+      : formatLabel(t, pinned.format);
   return (
     <DropdownMenu>
       <RowActionsMenuTrigger
@@ -666,23 +678,22 @@ function FormatPinItem({
   onPin,
 }: {
   modelId: string;
-  format: string | null;
+  format: ApiEndpointRequestFormat;
   selected: boolean;
-  onPin: (modelId: string, format: string | null) => void;
+  onPin: (modelId: string, format: ApiEndpointRequestFormat | null) => void;
 }) {
   const { t } = useTranslation();
-  const handleSelect = useCallback(() => onPin(modelId, format), [format, modelId, onPin]);
-  const label =
-    format === null
-      ? t("settings.apiEndpoints.modelSettings.formatAutomatic")
-      : formatLabel(t, format);
+  const handleSelect = useCallback(
+    () => onPin(modelId, selected ? null : format),
+    [format, modelId, onPin, selected],
+  );
   return (
     <DropdownMenuItem
       selected={selected}
       onSelect={handleSelect}
-      testID={`api-endpoint-model-format-pin-${modelId}-${format ?? "automatic"}`}
+      testID={`api-endpoint-model-format-pin-${modelId}-${format}`}
     >
-      {label}
+      {formatLabel(t, format)}
     </DropdownMenuItem>
   );
 }

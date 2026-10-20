@@ -13,6 +13,7 @@ import {
   type ApiEndpointTestConnectionResult,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { curlOf, type CurlCommand } from "./curl-command";
+import { isRequestFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { withModelFormat } from "./model-settings-form";
 import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
 
@@ -157,8 +158,9 @@ export interface ConnectionDetection {
 export interface ConnectionOnlyChoices {
   modelId: string;
   formats: ApiEndpointRequestFormat[];
-  staged: string | null;
-  // 选了和已存的不同的格式，要保存才算。
+  // 保存后这个模型只用的格式；null 为不限（自动）。
+  staged: ApiEndpointRequestFormat | null;
+  // 和已存的不同，要保存才算。
   isPending: boolean;
 }
 
@@ -379,7 +381,7 @@ export interface ConnectionFormModel {
   cancelDetect(): void;
   // 「采用这些」：通了的格式填上建议地址，没在那里找到的（404 / 405）清掉。
   takeDetected(): void;
-  // 「只在 {格式} 上问 {模型}」：保存时把试的那个模型设成只用这种格式；这家还没有那种地址时先采用检测到的地址。
+  // 「只用 {格式} 问 {模型}」：保存时把试的那个模型设成只用这种格式，再点一次取消；这家还没有那种地址时先采用检测到的地址。
   askOnlyOn(format: ApiEndpointRequestFormat): void;
   submit(): Promise<ConnectionSaveResult | null>;
   close(): void;
@@ -395,10 +397,10 @@ interface DetectionValues {
   askedModel: string | null;
 }
 
-// 保存时要设成只用这种格式的模型。
+// 保存时要给这个模型设的格式；null 为取消只用这种格式。
 interface StagedPin {
   modelId: string;
-  format: ApiEndpointRequestFormat;
+  format: ApiEndpointRequestFormat | null;
 }
 
 // 表单里一种格式要问的地址。
@@ -741,9 +743,10 @@ export function createConnectionFormModel(
     return { modelId, formats, staged, isPending: staged !== saved };
   }
 
-  function savedPinOf(modelId: string): string | null {
+  function savedPinOf(modelId: string): ApiEndpointRequestFormat | null {
     if (seed.mode !== "edit") return null;
-    return seed.endpoint.modelSettings?.models?.[modelId]?.format ?? null;
+    const format = seed.endpoint.modelSettings?.models?.[modelId]?.format;
+    return format !== undefined && isRequestFormat(format) ? format : null;
   }
 
   /** 保存时带的模型设置：只在设了、又和已存的不同时才带（照 magpie stageAPI）。 */
@@ -770,10 +773,15 @@ export function createConnectionFormModel(
     });
   }
 
-  /** 编辑、复制时没打 key 就借那家已存的 key：带上它的 id。 */
+  /**
+   * 编辑时总带这家的 id（照 magpie 的 id: p?.id）：daemon 按它找上游模型名，打了的 key 照样优先；
+   * 复制时没打 key 才带原来那家的 id，借它已存的 key。
+   */
   function keyOwnerRequest(): { endpointId?: string; apiKey?: string } {
     const apiKey = typedKey();
-    if (apiKey) return { apiKey };
+    const typed = apiKey ? { apiKey } : {};
+    if (seed.mode === "edit") return { endpointId: seed.endpoint.id, ...typed };
+    if (apiKey) return typed;
     return keyOwner ? { endpointId: keyOwner.id } : {};
   }
 
@@ -853,14 +861,12 @@ export function createConnectionFormModel(
   }
 
   async function runDetect(controller: AbortController): Promise<void> {
-    const apiKey = typedKey();
     const detectModel = values.detectModel.trim();
     const picked = canCheckBeforeSave ? formModelIds() : [];
     const outcome = await deps.detect(
       {
-        ...(keyOwner && !apiKey ? { endpointId: keyOwner.id } : {}),
+        ...keyOwnerRequest(),
         baseUrl: values.address.trim(),
-        ...(apiKey ? { apiKey } : {}),
         ...(canCheckBeforeSave && detectModel !== "" ? { modelId: detectModel } : {}),
         ...(picked.length > 0 ? { modelIds: picked } : {}),
       },
@@ -1206,8 +1212,10 @@ export function createConnectionFormModel(
       const detection = values.detection;
       const choices = state.detection?.onlyChoices;
       if (!detection || !choices?.formats.includes(format)) return;
-      const stagedPin = { modelId: choices.modelId, format };
-      if (values.urls[format].trim() !== "") {
+      // 再点选着的那个即取消（照 magpie stageAPI 的切换）。
+      const next = choices.staged === format ? null : format;
+      const stagedPin = { modelId: choices.modelId, format: next };
+      if (next === null || values.urls[format].trim() !== "") {
         update({ stagedPin });
         return;
       }

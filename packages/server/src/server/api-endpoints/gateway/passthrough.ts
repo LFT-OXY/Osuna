@@ -10,6 +10,7 @@ import { Transform, type Writable } from "node:stream";
 import type { Request, Response } from "express";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { StoredApiEndpoint } from "../store.js";
 import { isRecord, parseJson } from "../upstream-http.js";
 import {
@@ -50,7 +51,7 @@ import {
   withoutSampling,
 } from "./refused-fields.js";
 import { isGrokReply, WholeArgsTidy } from "./grok-integral.js";
-import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-model-name.js";
+import { chainedTidy, ReplyModelName, type ReplyTidy } from "./reply-tidy.js";
 import type { ReplyTap } from "./reply-tap.js";
 import { refusedAfterOpening } from "./safety-filter.js";
 import { withFixedEffort, type FixedEffort } from "./fixed-effort.js";
@@ -132,8 +133,6 @@ export async function attemptEndpoint(input: {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
-  sentModel?: string;
   headerTimeoutMs: number;
   // CLI 自己的 User-Agent，它没带时是 Osuna/<版本>。
   userAgent: string;
@@ -155,7 +154,9 @@ export async function attemptEndpoint(input: {
   const sends = () =>
     keyHeadersFor({ format: input.format, templateId: input.endpoint.templateId, refusals });
   const anthropic = input.format === "anthropic_messages";
-  const dropsReviewBeta = anthropic && !isAnthropicModel(input.upstreamModel);
+  const sent = sentModelOf(input);
+  const isClaude = isAnthropicModel(input.upstreamModel) || isAnthropicModel(sent);
+  const dropsReviewBeta = anthropic && !isClaude;
   const open = (body: Buffer, keys: KeyHeaders = sends()) =>
     openUpstream({
       res,
@@ -223,7 +224,6 @@ async function answerOpened(input: {
   apiKey: string | null;
   requestedModel: string;
   upstreamModel: string;
-  sentModel?: string;
   url: URL;
   opened: OpenedUpstream;
   keepAlive?: AgentKeepAlive;
@@ -250,6 +250,17 @@ async function answerOpened(input: {
   return { kind: "answered", finished };
 }
 
+/** 发给这家的模型名：这个模型的上游模型名（protocol 的 upstreamModelName），没设就是这家列出的写法。 */
+function sentModelOf(input: {
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
+  upstreamModel: string;
+}): string {
+  return upstreamModelName({
+    settings: input.endpoint.modelSettings,
+    modelId: input.upstreamModel,
+  });
+}
+
 /**
  * 要改的回复：Grok 的对话回复去掉调用参数里的零小数（grok-integral.ts）；按上游模型名发的，回复里的模型名换回这家列出的写法
  * （reply-model-name.ts），CLI 看到的模型名不随上游模型名变。别的回复原样转，为 null。
@@ -259,7 +270,7 @@ function replyTidy(input: {
   pathSuffix?: string;
   requestedModel: string;
   upstreamModel: string;
-  sentModel?: string;
+  endpoint: Pick<StoredApiEndpoint, "modelSettings">;
   opened: OpenedUpstream;
 }): ReplyTidy | null {
   const { format, opened } = input;
@@ -268,8 +279,10 @@ function replyTidy(input: {
   if (format === "openai_chat" || !conversation) return null;
   const stream = isEventStream(opened.response, opened.held);
   const tidies: ReplyTidy[] = [];
-  if (isGrokReply(input)) tidies.push(new WholeArgsTidy({ format, stream }));
-  const sent = input.sentModel ?? input.upstreamModel;
+  const sent = sentModelOf(input);
+  if (isGrokReply({ ...input, sentModel: sent })) {
+    tidies.push(new WholeArgsTidy({ format, stream }));
+  }
   if (sent !== input.upstreamModel) {
     tidies.push(new ReplyModelName({ format, stream, sent, shown: input.upstreamModel }));
   }
@@ -428,8 +441,6 @@ export interface PassthroughBodyInput {
   body: Buffer;
   requestedModel: string;
   upstreamModel: string;
-  // 请求体里发给这家的模型名（上游模型名）；缺省即 upstreamModel。
-  sentModel?: string;
   endpoint: AdvisorEndpoint & Pick<StoredApiEndpoint, "searchesWeb" | "baseUrls" | "templateId">;
   refusals?: ShapeRefusals;
   // 「模型名:档位」固定的档位，已按这家这个模型落定；没有为省略。
@@ -446,25 +457,27 @@ export function upstreamBody(input: PassthroughBodyInput): Buffer {
   const conversation = input.pathSuffix === undefined;
   const anthropic = input.format === "anthropic_messages";
   const fits = (anthropic || input.format === "openai_responses") && conversation;
-  const replays = replaysThinking(input.upstreamModel);
+  const sent = sentModelOf(input);
+  // 要回放推理的模型按原名或上游模型名认出一个就算（magpie replaysReasoning(model) || replaysReasoning(upstream)）。
+  const replayModel = replaysThinking(input.upstreamModel) ? input.upstreamModel : sent;
+  const replays = replaysThinking(replayModel);
   let text = input.body.toString("utf8");
-  const sent = input.sentModel ?? input.upstreamModel;
   if (sent !== input.requestedModel) text = replaceModel(text, sent);
   if (anthropic) {
-    text = fitClaudeCodeBody({ text, model: input.upstreamModel, endpoint: input.endpoint });
+    text = fitClaudeCodeBody({ text, model: input.upstreamModel, sent, endpoint: input.endpoint });
   }
   const fixedEffort = fixedEffortOf(input);
   const isEffortFixed = fixedEffort !== undefined && conversation;
   if (isEffortFixed) text = withFixedEffort({ format: input.format, text, effort: fixedEffort });
   if (fits && anthropic) {
-    text = fitAnthropicBody({ text, model: input.upstreamModel, isEffortFixed });
+    text = fitAnthropicBody({ text, model: replayModel, isEffortFixed });
     text = fitThinkingOff({
       text,
       model: input.upstreamModel,
       leftOn: input.refusals?.has("thinkingOff") ?? false,
     });
   } else if (fits) {
-    if (replays) text = fitResponsesBody(text, input.upstreamModel);
+    if (replays) text = fitResponsesBody(text, replayModel);
     else text = withoutBareReasoning(text);
     if (input.refusals?.has("none")) text = noneAsLow(text);
     if (!searchesWebItself(input.endpoint, "openai_responses")) text = withoutWebSearchText(text);
@@ -576,13 +589,17 @@ function withChangedKeys(input: {
 function fitClaudeCodeBody(input: {
   text: string;
   model: string;
+  // 发给这家的名字（上游模型名）。
+  sent: string;
   endpoint: AdvisorEndpoint;
 }): string {
-  const { text, model } = input;
+  const { text, model, sent } = input;
   const body = parseJson(text);
   if (!isRecord(body)) return text;
-  let fitted = withAdvisorFitted({ body, model, endpoint: input.endpoint });
-  if (!isAnthropicModel(model)) fitted = withoutSafeguards(withoutBillingLine(fitted));
+  let fitted = withAdvisorFitted({ body, model: sent, endpoint: input.endpoint });
+  // 计费行与审查只给 Claude：原名或上游模型名是 Claude 都算（magpie keepsBillingLine）。
+  const isClaude = isAnthropicModel(model) || isAnthropicModel(sent);
+  if (!isClaude) fitted = withoutSafeguards(withoutBillingLine(fitted));
   fitted = adaptiveThinkingAsTaken(fitted, model);
   if (refusesSampling(model)) fitted = withoutSampling(fitted);
   return withChangedKeys({ text, body, fitted });

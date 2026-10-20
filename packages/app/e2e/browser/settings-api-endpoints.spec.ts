@@ -1117,6 +1117,7 @@ test.describe("Settings API endpoints", () => {
     relay.goodModels = ["model-01", "model-02"];
     const anthropicUrl = { format: "anthropic_messages", url: `${relay.origin}/good` };
     const chatUrl = { format: "openai_chat", url: `${relay.origin}/good/v1` };
+    const responsesUrl = { format: "openai_responses", url: `${relay.origin}/good/v1` };
     const endpointId = await seedApiEndpoint(client, {
       name: "Good relay",
       baseUrls: [anthropicUrl, chatUrl],
@@ -1157,8 +1158,8 @@ test.describe("Settings API endpoints", () => {
       ).toHaveText("OpenAI Chat only");
     });
 
-    await test.step("the row menu: a failed change is told on the page, then Automatic takes it away", async () => {
-      const pickAutomatic = async () => {
+    await test.step("the row menu: a failed change is told on the page, then picking the checked format again takes it away", async () => {
+      const pickChecked = async () => {
         await page
           .getByTestId("api-endpoint-model-menu-model-01")
           .filter({ visible: true })
@@ -1167,16 +1168,16 @@ test.describe("Settings API endpoints", () => {
           "OpenAI Chat",
         );
         await page.getByTestId("api-endpoint-model-format-menu-model-01").click();
-        await page.getByTestId("api-endpoint-model-format-pin-model-01-automatic").click();
+        await page.getByTestId("api-endpoint-model-format-pin-model-01-openai_chat").click();
       };
       host.failing = true;
-      await pickAutomatic();
+      await pickChecked();
       await expect(
         page.getByTestId("api-endpoint-detail-error-alert").filter({ visible: true }),
       ).toContainText("EACCES: permission denied");
       expect((await settingsReader())?.models?.["model-01"]?.format).toBe("openai_chat");
       host.failing = false;
-      await pickAutomatic();
+      await pickChecked();
       await expect
         .poll(settingsReader)
         .toEqual({ models: { "model-01": { upstreamName: "vendor/*" } } });
@@ -1189,26 +1190,32 @@ test.describe("Settings API endpoints", () => {
         provider: "claude",
         endpointId,
         name: "Good relay",
-        baseUrls: [anthropicUrl, chatUrl],
+        baseUrls: [anthropicUrl, chatUrl, responsesUrl],
         models: [{ id: "model-01" }],
-        modelSettings: { models: { "model-01": { format: "openai_chat" } } },
+        modelSettings: { models: { "model-01": { format: "openai_responses" } } },
       });
       expect(saved.error).toBeNull();
       const gone = await client.apiEndpointSave({
         provider: "claude",
         endpointId,
         name: "Good relay",
-        baseUrls: [anthropicUrl],
+        baseUrls: [anthropicUrl, chatUrl],
         models: [{ id: "model-01" }],
       });
       expect(gone.error).toBeNull();
       // 别处改的这家：重新打开详情页读到新的。
       await openEndpointDetail(page, endpointId);
+      await expect(
+        page.getByTestId("api-endpoint-model-format-model-01").filter({ visible: true }),
+      ).toHaveText("OpenAI Responses only · not in effect");
       await openModelSettings();
-      await expect(sheet.getByTestId("api-endpoint-model-settings-format-void")).toHaveText(
-        "This endpoint no longer has a base URL for OpenAI Chat, so this setting doesn't apply.",
+      await expect(sheet.getByTestId("api-endpoint-model-settings-format-field-hint")).toHaveText(
+        "This endpoint no longer has a base URL for OpenAI Responses, so this setting doesn't apply.",
       );
-      await sheet.getByTestId("api-endpoint-model-settings-format-automatic").click();
+      const format = sheet.getByTestId("api-endpoint-model-settings-format");
+      await expect(format).toHaveText("OpenAI Responses · not in effect");
+      await format.click();
+      await page.getByTestId("api-endpoint-model-settings-format-automatic").click();
       await sheet.getByTestId("api-endpoint-model-settings-save").click();
       await expect(sheet).toHaveCount(0);
       await expect.poll(settingsReader).toBeUndefined();
@@ -1260,13 +1267,19 @@ test.describe("Settings API endpoints", () => {
     await page.getByTestId("api-endpoint-connection-detect-model").fill("model-01");
     await page.getByTestId("api-endpoint-connection-detect").click();
     const chatOnly = page.getByTestId("api-endpoint-connection-only-openai_chat");
-    await expect(chatOnly).toHaveText("Ask model-01 on OpenAI Chat only");
+    const pending = page.getByTestId("api-endpoint-connection-only-pending");
+    await expect(chatOnly).toHaveText("Ask model-01 over OpenAI Chat only");
     await expect(page.getByTestId("api-endpoint-connection-only-anthropic_messages")).toBeVisible();
     await expect(page.getByTestId("api-endpoint-connection-only-openai_responses")).toHaveCount(0);
     await chatOnly.click();
-    await expect(page.getByTestId("api-endpoint-connection-only-pending")).toHaveText(
-      "model-01 is asked on OpenAI Chat only once saved",
+    await expect(pending).toHaveText(
+      "After saving, model-01 is only asked over OpenAI Chat. Press it again to undo.",
     );
+    // 再点一次取消，再选上。
+    await chatOnly.click();
+    await expect(pending).toHaveCount(0);
+    await chatOnly.click();
+    await expect(pending).toBeVisible();
     await page.getByTestId("api-endpoint-connection-save").click();
     await expect(connectionForm(page)).toHaveCount(0);
     await expect

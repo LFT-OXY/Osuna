@@ -59,6 +59,7 @@ function translated(input: {
 }): Record<string, unknown> {
   const text = translatedBody({
     ...input,
+    sentModel: input.model,
     request: claudeCodeTurn,
     templateId: undefined,
     chatOnly: false,
@@ -370,6 +371,7 @@ describe("the search sources asked of a Responses address", () => {
       from: "anthropic_messages",
       to: "openai_responses",
       model: "grok-4",
+      sentModel: "grok-4",
       facts: {},
       refusals: NO_REFUSALS,
       continuation: null,
@@ -401,6 +403,7 @@ describe("rewrites by template: Amazon Bedrock and Azure OpenAI", () => {
           from: "openai_responses",
           to: "anthropic_messages",
           model: "global.anthropic.claude-sonnet-5",
+          sentModel: "global.anthropic.claude-sonnet-5",
           facts: {},
           refusals: NO_REFUSALS,
           continuation: null,

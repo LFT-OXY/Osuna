@@ -2641,8 +2641,11 @@ export const ko: TranslationResources = {
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "다시 누르면 취소됩니다.",
+          onlyClearedOnceSaved: "저장하면 {{model}}을(를) 다시 모든 형식으로 요청합니다.",
           askOnly: "{{model}}을(를) {{format}}으로만 요청",
-          onlyOnceSaved: "저장하면 {{model}}을(를) {{format}}으로만 요청합니다",
+          onlyOnceSaved: "저장하면 {{model}}을(를) {{format}}으로만 요청합니다.",
           useThese: "이것 사용",
           taken: "반영됨 · 저장하면 유지됩니다",
           noneAnswered:
@@ -2809,6 +2812,9 @@ export const ko: TranslationResources = {
           "이 엔드포인트에 더 이상 {{format}} 기본 URL이 없어 이 설정은 적용되지 않습니다.",
         formatTag: "{{format}}만",
         formatPinFailed: "형식을 바꾸지 못했습니다",
+        formatTagVoid: "{{format}}만 · 적용 안 됨",
+        formatUnknown: "알 수 없는 형식",
+        formatNotInEffect: "{{format}} · 적용 안 됨",
         save: "저장",
         saving: "저장 중…",
         saveFailed: "저장하지 못했습니다: {{message}}",

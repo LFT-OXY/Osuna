@@ -2682,8 +2682,12 @@ export const fr: TranslationResources = {
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {
+          noteAndUndo: "{{note}} {{undo}}",
+          onlyUndo: "Appuyez de nouveau pour annuler.",
+          onlyClearedOnceSaved:
+            "Une fois enregistré, {{model}} sera de nouveau interrogé dans n'importe quel format.",
           askOnly: "Interroger {{model}} uniquement en {{format}}",
-          onlyOnceSaved: "Une fois enregistré, {{model}} sera interrogé uniquement en {{format}}",
+          onlyOnceSaved: "Une fois enregistré, {{model}} sera interrogé uniquement en {{format}}.",
           useThese: "Utiliser celles-ci",
           taken: "Reprises · enregistrez pour les garder",
           noneAnswered:
@@ -2855,6 +2859,9 @@ export const fr: TranslationResources = {
           "Ce point de terminaison n'a plus d'URL de base {{format}} : ce réglage ne s'applique pas.",
         formatTag: "{{format}} uniquement",
         formatPinFailed: "Impossible de changer le format",
+        formatTagVoid: "{{format}} uniquement · sans effet",
+        formatUnknown: "Format inconnu",
+        formatNotInEffect: "{{format}} · sans effet",
         save: "Enregistrer",
         saving: "Enregistrement…",
         saveFailed: "Échec de l'enregistrement : {{message}}",

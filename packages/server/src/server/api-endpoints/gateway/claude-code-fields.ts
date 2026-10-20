@@ -2,6 +2,7 @@
 // claude_subscription.go 的 billingHeader，automode.go 的 serverReview，betas.go 的 askedBetas，advisor.go 的 advisorTools、advisorModel、advisorGoneIn、withoutAdvisor、advisorRefName）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
+import { upstreamModelName } from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { StoredApiEndpoint } from "../store.js";
 import { isRecord } from "../upstream-http.js";
 import { isDeferredBlock, withoutKeys } from "./refused-fields.js";
@@ -15,8 +16,8 @@ import { isAnthropicModel } from "./translation/anthropic.js";
 
 type Body = Record<string, unknown>;
 
-/** advisor 工具要看的这家接口：标识与已选模型。 */
-export type AdvisorEndpoint = Pick<StoredApiEndpoint, "slug" | "models">;
+/** advisor 工具要看的这家接口：标识、已选模型与模型设置（上游模型名）。 */
+export type AdvisorEndpoint = Pick<StoredApiEndpoint, "slug" | "models" | "modelSettings">;
 
 // 只有计费行的 system 块；system 开头的计费行（后面直接接提示词，中间没有换行）。
 const BILLING_LINE = /^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*$/;
@@ -114,6 +115,7 @@ const BEDROCK_REFUSED_BETAS: ReadonlySet<string> = new Set([
  */
 export function withAdvisorFitted(input: {
   body: Body;
+  // 发给上游的名字（上游模型名）：是不是 Claude 按它认（magpie advisorTools）。
   model: string;
   endpoint: AdvisorEndpoint;
 }): Body {
@@ -160,8 +162,13 @@ function advisorModel(input: { endpoint: AdvisorEndpoint; model: unknown }): str
   let name: string | null = model;
   if (model.startsWith(own)) name = listedAs(input.endpoint, model.slice(own.length));
   else if (slash !== -1) name = null;
-  if (name === null || !isAnthropicModel(name)) return null;
-  return name;
+  if (name === null) return null;
+  // 这家的模型按它的上游模型名问（magpie advisorModel 的 UpstreamNameIn），是不是 Claude 也按这个名字认。
+  const isOwnModel = input.endpoint.models.some((entry) => entry.id === name);
+  const sent = isOwnModel
+    ? upstreamModelName({ settings: input.endpoint.modelSettings, modelId: name })
+    : name;
+  return isAnthropicModel(sent) ? sent : null;
 }
 
 /**
