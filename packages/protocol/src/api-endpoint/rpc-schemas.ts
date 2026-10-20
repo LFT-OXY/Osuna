@@ -192,6 +192,19 @@ export const ApiEndpointRequestExtrasSchema = z.object({
 export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSchema>;
 
 /**
+ * 冷却设置（Cooldown settings，照 magpie 的 QuotaRest、RestCap，见 cooldown-settings.ts）：都以分钟计，0 或没有即用中转站自己的。
+ * quotaRestMinutes：额度用完、厂商没说何时恢复时冷却多久（缺省 15 分钟；厂商给的时间仍优先）。
+ * restCapMinutes：接连失败或接连被限流时冷却最长多久（缺省失败 10 分钟、限流 30 分钟；厂商说的「多久后再试」仍优先）。
+ * noFailRest：原因不明的失败不冷却（magpie RestCapOff），开着时 restCapMinutes 不存、限流仍按缺省。老 daemon 不发、忽略。
+ */
+export const ApiEndpointCooldownSettingsSchema = z.object({
+  quotaRestMinutes: z.number().optional(),
+  restCapMinutes: z.number().optional(),
+  noFailRest: z.boolean().optional(),
+});
+export type ApiEndpointCooldownSettings = z.infer<typeof ApiEndpointCooldownSettingsSchema>;
+
+/**
  * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
  * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
  * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
@@ -247,6 +260,8 @@ export const ApiEndpointSchema = z.object({
   testsAs: z.array(ApiEndpointTestAsSchema).optional(),
   // 请求头、附加请求体、key 放哪个头与不校验证书（ApiEndpointRequestExtrasSchema）；都只在设了时发，老 daemon 不发。
   ...ApiEndpointRequestExtrasSchema.shape,
+  // 冷却设置（cooldown 是正在冷却的状态，这是用户设的时长）；设了才发，老 daemon 不发。
+  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -419,6 +434,10 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  *
  * insecureTls：不校验证书，省略即保留、false 关掉。从模板加的接口打开拒收（insecure_tls_template，params.template）。
  * 老 daemon 忽略它。
+ *
+ * cooldownSettings：冷却设置，整份替换（空对象清掉），省略即保留（复制时是原来那家的）。分钟数不是 0 到八天
+ * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes / restCapMinutes，
+ * params.max）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),
@@ -442,6 +461,7 @@ export const ApiEndpointSaveRequestSchema = z.object({
   modelScope: z.string().optional(),
   autoPick: z.array(z.string()).optional(),
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
+  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional(),
   ...ApiEndpointRequestExtrasSchema.shape,
 });
 export type ApiEndpointSaveRequest = z.infer<typeof ApiEndpointSaveRequestSchema>;

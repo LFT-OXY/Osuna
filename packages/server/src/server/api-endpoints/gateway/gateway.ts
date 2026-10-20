@@ -174,6 +174,8 @@ export interface ApiEndpointGatewayOverrides {
   gatewayOpenAiApiBaseUrl?: string;
   // 只给测试缩短等 ChatGPT 模型清单的时间（缺省 3 秒）。
   gatewayChatGptModelsWaitMs?: number;
+  // 只给测试换冷却用的时钟，冷却时长算出来是确定的。
+  cooldownsNow?: () => number;
 }
 
 /** 每种 Agent 自己说的请求格式，按请求路径认；口令与 User-Agent 都认不出是谁时，路径也说明是哪个 Agent。 */

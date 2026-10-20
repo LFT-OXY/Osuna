@@ -10,6 +10,7 @@ import {
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
+  ApiEndpointCooldownSettingsSchema,
   ApiEndpointLongConversationsSchema,
   ApiEndpointModelMappingSchema,
   ApiEndpointModelSettingsSchema,
@@ -111,6 +112,8 @@ const StoredApiEndpointSchema = z.object({
   keyHeader: z.enum(STORED_KEY_HEADERS).optional().catch(undefined),
   // 不校验证书（insecure-tls.ts）：只写 true；只对「自定义」加的接口自己的 https 主机起作用，模板接口手改成 true 也不算。
   insecureTls: z.boolean().optional().catch(undefined),
+  // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
+  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

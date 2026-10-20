@@ -1229,6 +1229,47 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     }
   });
 
+  it("parses an endpoint and a save carrying cooldown settings, a save that clears them, and older ones without", () => {
+    const cooldownSettings = { quotaRestMinutes: 60, restCapMinutes: 0, noFailRest: true };
+    const save = {
+      type: "provider.api_endpoint.save.request" as const,
+      requestId: "req-c1",
+      provider: "claude",
+      endpointId: "ep_1",
+      name: "Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      models: [],
+      cooldownSettings,
+    };
+    expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const cleared = { ...save, cooldownSettings: {} };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const { cooldownSettings: _settings, ...older } = save;
+    expect(SessionInboundMessageSchema.parse(older)).toEqual(older);
+    // cooldown（正在冷却）与 cooldownSettings（设的时长）同时在。
+    const cooling = { ...ENDPOINT, cooldown: null, cooldownSettings };
+    for (const endpoint of [cooling, ENDPOINT]) {
+      const response = {
+        type: "provider.api_endpoint.save.response" as const,
+        payload: { requestId: "req-c1", endpoint, error: null },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    const rejected = {
+      type: "provider.api_endpoint.save.response" as const,
+      payload: {
+        requestId: "req-c1",
+        endpoint: null,
+        error: {
+          code: "invalid_cooldown_settings",
+          message: "too long",
+          params: { field: "quotaRestMinutes", max: "11520" },
+        },
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(rejected)).toEqual(rejected);
+  });
+
   it("parses an endpoint and a save that carry an icon, a save that takes it off, and older ones without", () => {
     const save = {
       type: "provider.api_endpoint.save.request" as const,

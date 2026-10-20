@@ -33,6 +33,7 @@ import {
   type ApiEndpointModelMapping,
   type ApiEndpointModelFacts,
   type ApiEndpointModelSettings,
+  type ApiEndpointCooldownSettings,
   type ApiEndpointRef,
   type ApiEndpointRequestFormat,
   type ApiEndpointSwitchOffFile,
@@ -338,6 +339,10 @@ import {
   type ExtraBodyProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
 import {
+  API_ENDPOINT_COOLDOWN_MAX_MINUTES,
+  cooldownSettingsProblem,
+} from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
   closeUncheckedDispatchers,
   liveUncheckedHostsOf,
   releaseUncheckedHosts,
@@ -372,6 +377,8 @@ export type ApiEndpointErrorCode =
   | "invalid_extra_body"
   // 从模板加的接口打开不校验证书（params.template）。
   | "insecure_tls_template"
+  // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
+  | "invalid_cooldown_settings"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -455,6 +462,8 @@ export interface ApiEndpointSaveInput extends ApiEndpointRequestExtrasInput {
   autoPick?: string[];
   // 模型设置，整份替换；undefined 保留原来的。
   modelSettings?: ApiEndpointModelSettings;
+  // 冷却设置，整份替换、空对象清掉；undefined 保留原来的（复制时是原来那家的）。
+  cooldownSettings?: ApiEndpointCooldownSettings;
 }
 
 export interface ApiEndpointAgentSettingsInput {
@@ -1319,6 +1328,7 @@ export class ApiEndpointService {
         icon: input.icon,
         catalog: input.catalog,
         requestExtras: savedRequestExtras({ request: input, base, templateId }),
+        cooldownSettings: savedCooldownSettings({ requested: input.cooldownSettings, base }),
         // 新客户端建的接口默认开着；老客户端建的要等 set_active 才开，和以前「保存不启用」一样。
         enabledWhenNew: !isLegacyForm,
         timestamp: this.now().toISOString(),
@@ -4189,6 +4199,9 @@ export class ApiEndpointService {
       ...(endpoint.extraBody !== undefined ? { extraBody: endpoint.extraBody } : {}),
       ...(endpoint.keyHeader !== undefined ? { keyHeader: endpoint.keyHeader } : {}),
       ...(endpoint.insecureTls === true ? { insecureTls: true } : {}),
+      ...(endpoint.cooldownSettings !== undefined
+        ? { cooldownSettings: endpoint.cooldownSettings }
+        : {}),
     };
   }
 
@@ -4627,6 +4640,8 @@ function buildEndpoint(input: {
   catalog: ApiEndpointModel[] | undefined;
   // 请求头、附加请求体、key 放哪个头：savedRequestExtras 已按请求与 base 定好，没有的项就是没有。
   requestExtras: StoredRequestExtras;
+  // 冷却设置：savedCooldownSettings 已按请求与 base 定好，没设就没有这项。
+  cooldownSettings: StoredCooldownSettings;
   enabledWhenNew: boolean;
   timestamp: string;
 }): StoredApiEndpoint {
@@ -4644,6 +4659,7 @@ function buildEndpoint(input: {
     extraBody: _extraBody,
     keyHeader: _keyHeader,
     insecureTls: _insecureTls,
+    cooldownSettings: _cooldownSettings,
     ...kept
   } = base ?? {};
   const name = existing ? fields.name : freeEndpointName(state, fields.name);
@@ -4663,6 +4679,7 @@ function buildEndpoint(input: {
     ...iconFieldOf({ requested: input.icon, kept: keptIcon }),
     ...catalogFieldOf({ requested: input.catalog, timestamp: input.timestamp }),
     ...input.requestExtras,
+    ...input.cooldownSettings,
     createdAt: existing?.createdAt ?? input.timestamp,
     updatedAt: input.timestamp,
   };
@@ -4704,6 +4721,38 @@ function savedRequestExtras(input: {
   if (keyHeader !== "both") saved.keyHeader = keyHeader;
   if (insecureTls) saved.insecureTls = true;
   return saved;
+}
+
+type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
+
+/**
+ * 存下的冷却设置：请求给了就整份换上（0 是用中转站自己的，不存；「原因不明不冷却」开着时冷却上限不存，照 magpie 的
+ * RestCapOff 与 RestCap 是同一项），没给留 base 的。分钟数不是 0 到八天的整数拒收（照 magpie SetQuotaRest、SetRestCap）。
+ * 什么都没设时没有这项。
+ */
+function savedCooldownSettings(input: {
+  requested: ApiEndpointCooldownSettings | undefined;
+  base: StoredApiEndpoint | null;
+}): StoredCooldownSettings {
+  const { requested } = input;
+  const kept = input.base?.cooldownSettings;
+  if (requested === undefined) return kept !== undefined ? { cooldownSettings: kept } : {};
+  const problem = cooldownSettingsProblem(requested);
+  if (problem !== null) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_cooldown_settings",
+      message: `${problem.field} is whole minutes from 0 (the gateway's own) to ${API_ENDPOINT_COOLDOWN_MAX_MINUTES} (8 days), not ${requested[problem.field]}`,
+      params: { field: problem.field, max: String(API_ENDPOINT_COOLDOWN_MAX_MINUTES) },
+    });
+  }
+  const saved: ApiEndpointCooldownSettings = {};
+  const noFailRest = requested.noFailRest === true;
+  const quotaRest = requested.quotaRestMinutes ?? 0;
+  const restCap = requested.restCapMinutes ?? 0;
+  if (quotaRest > 0) saved.quotaRestMinutes = quotaRest;
+  if (noFailRest) saved.noFailRest = true;
+  else if (restCap > 0) saved.restCapMinutes = restCap;
+  return Object.keys(saved).length > 0 ? { cooldownSettings: saved } : {};
 }
 
 /** 这次变更后不再不校验证书的主机：地址换了、不校验关了、整家关了或删了的那几家原来的。 */

@@ -241,6 +241,9 @@ export class ApiEndpointSession {
           : {}),
         ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
         ...(request.modelSettings !== undefined ? { modelSettings: request.modelSettings } : {}),
+        ...(request.cooldownSettings !== undefined
+          ? { cooldownSettings: request.cooldownSettings }
+          : {}),
         ...requestExtrasOf(request),
       });
       this.host.emit({
