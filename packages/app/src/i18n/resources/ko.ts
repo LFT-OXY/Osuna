@@ -2808,6 +2808,12 @@ export const ko: TranslationResources = {
           saveFailed: "저장하지 못했습니다: {{message}}",
         },
       },
+      longConversations: {
+        title: "긴 대화",
+        fullWindow: "전체 창",
+        hint: "Codex와 Claude Code는 긴 대화를 {{size}} 토큰(Claude가 아닌 [1m] 모델 포함) 또는 입력한 크기에서 압축합니다. 모델 자체의 압축 기준이 우선합니다. 전체 창은 더 느리고 비용이 더 듭니다.",
+        saveFailed: "저장하지 못했습니다: {{message}}",
+      },
       modelScope: {
         title: "제공 범위",
         label: "제공하는 모델",

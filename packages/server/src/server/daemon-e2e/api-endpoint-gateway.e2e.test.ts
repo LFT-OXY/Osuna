@@ -5367,6 +5367,7 @@ experimental_bearer_token = "${token}"
         ANTHROPIC_BASE_URL: gateway,
         ANTHROPIC_AUTH_TOKEN: claude,
         ANTHROPIC_API_KEY: "",
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
         CLAUDE_CODE_AUTO_MODE_SERVER: "0",
       },
       permissions: { deny: ["WebSearch"] },

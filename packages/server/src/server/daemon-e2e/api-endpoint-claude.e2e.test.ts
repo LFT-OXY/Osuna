@@ -157,6 +157,8 @@ describe("Claude API endpoint over the daemon RPC", () => {
         ANTHROPIC_BASE_URL: gatewayUrl(),
         ANTHROPIC_AUTH_TOKEN: token,
         ANTHROPIC_API_KEY: "",
+        // 别家的起始模型照 magpie 在 272K 压缩（WorkingWindow）。
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
         // 接口模型都不是 Claude：Claude Code 的自动模式不请服务器审查。
         CLAUDE_CODE_AUTO_MODE_SERVER: "0",
       },
@@ -220,6 +222,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
       "ANTHROPIC_BASE_URL",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
       "CLAUDE_CODE_AUTO_MODE_SERVER",
     ]);
 
@@ -525,6 +528,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
     "DISABLE_TELEMETRY": "1", // 关遥测
     "ANTHROPIC_AUTH_TOKEN": "${token}",
     "ANTHROPIC_API_KEY": "",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "272000",
     "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
   },
   "theme": "dark",
@@ -913,6 +917,7 @@ describe("Claude API endpoint over the daemon RPC", () => {
                 // 中转站口令遮住。
                 { op: "removed", text: '    "ANTHROPIC_AUTH_TOKEN": ••••' },
                 { op: "removed", text: '    "ANTHROPIC_API_KEY": "",' },
+                { op: "removed", text: '    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "272000",' },
                 { op: "removed", text: '    "CLAUDE_CODE_AUTO_MODE_SERVER": "0"' },
                 { op: "restored", text: '  "model": "opus"', was: '  "model": "relay/sonnet",' },
                 { op: "removed", text: '  "permissions": {' },
@@ -1431,7 +1436,7 @@ describe("Claude Code is told what the endpoint models can do", () => {
     return JSON.parse(await readFile(settingsPath, "utf8"));
   }
 
-  test("marks [1m], writes the three hints, and Official returns the file to its bytes", async () => {
+  test("marks [1m], writes the four hints, and Official returns the file to its bytes", async () => {
     await start(USER_SETTINGS);
     await switchOn();
 
@@ -1442,11 +1447,14 @@ describe("Claude Code is told what the endpoint models can do", () => {
       "relay/deepseek-v4-pro[1m]",
       "relay/claude-opus-5-5[1m]",
     ]);
+    // 工单 14 照 magpie 合并后，没有手改时与之前的差别只有两处：Claude 模型也报档位（只报 Claude Code 给它的），
+    // 别家起始模型在 272K 压缩（magpie WorkingWindow）。
     expect(switched.env).toMatchObject({
       CLAUDE_CODE_MAX_CONTEXT_TOKENS: "922000",
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000",
       CLAUDE_CODE_MODEL_CAPABILITIES:
-        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort",
+        "gpt-6-sol=effort,xhigh_effort,max_effort;relay/gpt-6-sol=effort,xhigh_effort,max_effort;relay/deepseek-v4-pro=effort,xhigh_effort,max_effort;relay/claude-opus-5-5=effort,xhigh_effort,max_effort",
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "272000",
     });
     // 这几个值不算 Osuna 负责的键，健康检查不会因为它们报「被外部改动」。
     expect((await client.apiEndpointList("claude")).health ?? []).toEqual([]);
@@ -1469,6 +1477,118 @@ describe("Claude Code is told what the endpoint models can do", () => {
     expect(switched.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("922000");
 
     await client.apiEndpointSetActive("claude", null);
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  async function saveModelSettings(endpointId: string, modelSettings: object): Promise<void> {
+    const [stored] = (await client.apiEndpointList("claude")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: stored?.models ?? [],
+      modelSettings,
+    });
+    expect(saved.error).toBeNull();
+  }
+
+  test("hand-set context, reply limit, levels and Compact at reach Claude Code; Official puts the user's own values back", async () => {
+    const own = USER_SETTINGS.replace(
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example"`,
+      `"ANTHROPIC_BASE_URL": "https://hand-written.example",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "150000"`,
+    );
+    await start(USER_SETTINGS);
+    const endpointId = await switchOn();
+    await saveModelSettings(endpointId, {
+      models: {
+        "gpt-6-sol": {
+          context: 600_000,
+          output: 64_000,
+          efforts: ["low", "high"],
+          compact: 500_000,
+        },
+      },
+    });
+    expect((await settings()).env).toMatchObject({
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "600000",
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: "64000",
+      CLAUDE_CODE_MODEL_CAPABILITIES: expect.stringMatching(
+        /^gpt-6-sol=effort;relay\/gpt-6-sol=effort;/,
+      ),
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "500000",
+    });
+
+    // 整家默认的上下文算手填：没有压缩阈值时整个窗口跑到底（magpie #1809）。
+    await saveModelSettings(endpointId, { defaults: { context: 500_000 } });
+    const typed = (await settings()).env;
+    expect(typed.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(typed.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+
+    // 用户自己写的压缩阈值归用户：开着时不碰，关掉后原样还在。
+    await writeFile(settingsPath, own);
+    await client.apiEndpointSetAgentSettings({
+      provider: "claude",
+      enabled: true,
+      defaultModelId: "gpt-6-sol",
+    });
+    await saveModelSettings(endpointId, { models: { "gpt-6-sol": { compact: 400_000 } } });
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("150000");
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(own);
+  });
+
+  test("the host's long conversations: Full window drops the compaction, a typed Compact at replaces 272K and beats a typed window", async () => {
+    await start(USER_SETTINGS);
+    const endpointId = await switchOn();
+    const compactAt = async () => (await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    expect(await compactAt()).toBe("272000");
+
+    const full = await client.apiEndpointSetLongConversations({ fullContext: true });
+    expect(full.error).toBeNull();
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
+      fullContext: true,
+    });
+    expect(await compactAt()).toBeUndefined();
+
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({
+      compactAt: 400_000,
+    });
+    expect(await compactAt()).toBe("400000");
+    await saveModelSettings(endpointId, { defaults: { context: 600_000 } });
+    expect(await compactAt()).toBe("400000");
+
+    // 272K 等于不设；数不是正整数拒收。
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 272_000 });
+    expect((await client.apiEndpointList("claude")).longConversations).toEqual({});
+    expect(await compactAt()).toBeUndefined();
+    const refused = await client.apiEndpointSetLongConversations({
+      fullContext: false,
+      compactAt: 1.5,
+    });
+    expect(refused.error?.code).toBe("invalid_input");
+
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
+    expect(await readFile(settingsPath, "utf8")).toBe(USER_SETTINGS);
+  });
+
+  test("Osuna's 272K gives way to an autoCompactWindow the user set in Claude Code", async () => {
+    const own = USER_SETTINGS.replace(
+      `"env": {`,
+      `"autoCompactWindow": 300000,
+  "env": {`,
+    );
+    await start(own);
+    await switchOn();
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 400_000 });
+    expect((await settings()).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe("400000");
+    await client.apiEndpointSetAgentSettings({ provider: "claude", enabled: false });
     expect(await readFile(settingsPath, "utf8")).toBe(own);
   });
 

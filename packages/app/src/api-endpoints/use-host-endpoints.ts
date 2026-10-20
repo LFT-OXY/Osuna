@@ -39,6 +39,7 @@ import {
   type HostEndpointsLoadState,
 } from "./internal/host-list";
 import type { AgentIssueAction } from "./internal/agent-settings";
+import type { LongConversationsChange } from "./internal/long-conversations-form";
 import { createUpstreamRequestId, linkAbortToCancel } from "./internal/upstream-request";
 
 // 接口是主机共用的，按哪个 provider 查列表都一样；和 Claude Code 页共用同一份缓存。
@@ -104,6 +105,8 @@ export interface UseHostEndpointsResult {
   // 挪动接口顺序：列表先按新顺序排，保存失败时回到主机上的顺序，原因在 actionError 里。
   // 搜索时带上显示着的行，上移、下移与拖动只在它们之间挪。
   arrange: (arrangement: EndpointArrangement) => void;
+  // 改整台主机的长对话设置；返回失败原因，成功为 null。只有声明了 apiEndpointManagement 的主机认。
+  setLongConversations: (change: LongConversationsChange) => Promise<string | null>;
   // 正在改总开关或默认模型的 Agent。
   pendingAgent: string | null;
   // 改失败的原因在 actionError 里。
@@ -294,6 +297,21 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       })();
     },
     [client, describeError, queryClient, queryKey, refresh, t, toast],
+  );
+
+  const setLongConversations = useCallback(
+    async (change: LongConversationsChange): Promise<string | null> => {
+      if (!client) return t("workspace.terminal.hostDisconnected");
+      try {
+        const result = await client.apiEndpointSetLongConversations(change);
+        if (result.error) return describeError(result.error);
+        await refresh();
+        return null;
+      } catch (error) {
+        return toErrorMessage(error);
+      }
+    },
+    [client, describeError, refresh, t],
   );
 
   const setAgentSettings = useCallback(
@@ -499,6 +517,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
     setEnabled,
     resume,
     arrange,
+    setLongConversations,
     pendingAgent,
     setAgentSettings,
     lastConnection,

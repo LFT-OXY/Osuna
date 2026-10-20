@@ -21,6 +21,7 @@ import {
   type ClaudeHintEnv,
 } from "./claude-model-hints.js";
 import { claudeModelName } from "./claude-model-name.js";
+import { claudeDashed } from "./claude-spelling.js";
 import { CliModelHoldSchema, type CliModelHold, type CliPicks } from "./cli-model-hold.js";
 
 /*
@@ -184,6 +185,8 @@ export interface ClaudeGatewayWiring {
   model: string;
   modelPicker: ClaudeModelPickerOption[];
   hintEnv: ClaudeHintEnv;
+  // hintEnv 的压缩阈值是 Osuna 的默认：用户在 Claude Code 里给主模型设了 autoCompactWindow 时不写（magpie #876）。省略为 false。
+  compactYieldsToOwn?: boolean;
   allowWebSearch: boolean;
   isAutoModeReviewed: boolean;
   defaultThinking: string | null;
@@ -275,7 +278,12 @@ export function applyClaudeApiEndpoint(input: {
     text,
     envObject,
     hints: {
-      ...input.wiring.hintEnv,
+      ...hintsBesideOwnCompact({
+        hints: input.wiring.hintEnv,
+        yields: input.wiring.compactYieldsToOwn === true,
+        settings: parsed.settings,
+        mainModel,
+      }),
       ...autoModeServerEnv({ isReviewed: input.wiring.isAutoModeReviewed }),
     },
     takeover: input.takeover,
@@ -541,6 +549,43 @@ function dropClouds(input: {
     text = edit(text, ["env", key], undefined, input.formatting);
   }
   return { text, record };
+}
+
+/** Osuna 默认的压缩阈值让给用户在 Claude Code 里给主模型设的 autoCompactWindow（它比 env 排得后，env 会盖过它）。 */
+function hintsBesideOwnCompact(input: {
+  hints: ClaudeHintEnv;
+  yields: boolean;
+  settings: ParsedSettings;
+  mainModel: string | null;
+}): ClaudeHintEnv {
+  if (!input.yields || !hasOwnAutoCompact(input.settings, input.mainModel)) return input.hints;
+  const { CLAUDE_CODE_AUTO_COMPACT_WINDOW: _given, ...rest } = input.hints;
+  return rest;
+}
+
+/**
+ * magpie claudeOwnCompact：顶层 autoCompactWindow，或 modelSettings 里这个模型的（/autocompact 存在那里），数或 "auto" 都算。
+ * modelSettings 按 Claude Code 拿到的模型名记：去掉 [1m]、带点的 Claude 版本换成连字符、不分大小写。
+ */
+function hasOwnAutoCompact(settings: ParsedSettings, mainModel: string | null): boolean {
+  if (Object.hasOwn(settings, "autoCompactWindow")) return true;
+  const { modelSettings } = settings;
+  if (mainModel === null || !isRecord(modelSettings)) return false;
+  const model = compactKey(mainModel);
+  return Object.entries(modelSettings).some(
+    ([key, entry]) =>
+      isRecord(entry) &&
+      entry.autoCompactWindow !== undefined &&
+      entry.autoCompactWindow !== null &&
+      compactKey(key) === model,
+  );
+}
+
+function compactKey(model: string): string {
+  const unmarked = model.endsWith(ONE_MILLION_MARK)
+    ? model.slice(0, -ONE_MILLION_MARK.length)
+    : model;
+  return claudeDashed(unmarked).toLowerCase();
 }
 
 /** 能到的模型都不会被审查时让 Claude Code 只在本地分类；有一个会被审查就不写。 */
@@ -942,6 +987,7 @@ interface ParsedSettings {
   modelSettings?: unknown;
   effortLevel?: unknown;
   ultracode?: unknown;
+  autoCompactWindow?: unknown;
   permissions?: { deny?: unknown[] };
 }
 

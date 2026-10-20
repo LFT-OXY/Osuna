@@ -110,6 +110,8 @@ import {
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointSetOrderRequestSchema,
   ApiEndpointSetOrderResponseSchema,
+  ApiEndpointSetLongConversationsRequestSchema,
+  ApiEndpointSetLongConversationsResponseSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogRequestSchema,
@@ -3587,6 +3589,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointPreviewSwitchOffRequestSchema,
   ApiEndpointSetEndpointStateRequestSchema,
   ApiEndpointSetOrderRequestSchema,
+  ApiEndpointSetLongConversationsRequestSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointListTemplatesRequestSchema,
@@ -3969,7 +3972,8 @@ export const ServerInfoStatusPayloadSchema = z
         // 任务 10-16-endpoint-management-ux 的新界面：接口的 key 选填（没 key 不带认证头），保存时没给的字段保留原值；
         // set_order 改接口顺序；保存时 copyOf 复制一家、reveal_key 读回 key 原文；list_templates 给模板清单，
         // 接口与保存带 templateId、region；store_icon、fetch_site_icon、read_icon 与接口、保存的 icon（自选图标）；
-        // fetch_models 的 baseUrls（各格式各拉一次再合并）与 forget_catalog（丢掉拉回的清单）。
+        // fetch_models 的 baseUrls（各格式各拉一次再合并）与 forget_catalog（丢掉拉回的清单）；
+        // 列表带 longConversations，支持 set_long_conversations（长对话：完整窗口与全局压缩阈值）。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7374,6 +7378,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointPreviewSwitchOffResponseSchema,
   ApiEndpointSetEndpointStateResponseSchema,
   ApiEndpointSetOrderResponseSchema,
+  ApiEndpointSetLongConversationsResponseSchema,
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogResponseSchema,
   ApiEndpointListTemplatesResponseSchema,

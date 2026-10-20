@@ -1110,6 +1110,44 @@ test.describe("Settings API endpoints", () => {
     await expect(save).toBeDisabled();
   });
 
+  test("Long conversations: Full window and Compact at reach the host, and a refusal keeps what was there", async ({
+    page,
+  }) => {
+    const host = await failRequests(page, "provider.api_endpoint.set_long_conversations");
+    await openApiEndpointsPage(page);
+    const section = page.getByTestId("api-endpoints-long-conversations").filter({ visible: true });
+    const fullWindow = section.getByTestId("api-endpoints-full-window-switch");
+    const compactAt = section.getByTestId("api-endpoints-compact-at");
+    const hostSettings = async () => (await client.apiEndpointList("claude")).longConversations;
+
+    await expect(compactAt).toHaveAttribute("placeholder", "272,000");
+    await compactAt.fill("400000");
+    await compactAt.press("Enter");
+    await expect(section.getByTestId("api-endpoints-long-conversations-error")).toContainText(
+      "EACCES: permission denied",
+    );
+    await expect(compactAt).toHaveValue("400000");
+    expect(await hostSettings()).toEqual({});
+
+    host.failing = false;
+    await compactAt.press("Enter");
+    await expect.poll(hostSettings).toEqual({ compactAt: 400_000 });
+    await expect(section.getByTestId("api-endpoints-long-conversations-error")).toHaveCount(0);
+
+    // 「完整窗口」开着时压缩阈值收起（magpie 同样），关回来时还是存着的那个数。
+    await fullWindow.click();
+    await expect.poll(hostSettings).toEqual({ fullContext: true, compactAt: 400_000 });
+    await expect(compactAt).toHaveCount(0);
+    host.failing = true;
+    await fullWindow.click();
+    await expect(section.getByTestId("api-endpoints-long-conversations-error")).toBeVisible();
+    await expect(compactAt).toHaveCount(0);
+    host.failing = false;
+    await fullWindow.click();
+    await expect.poll(hostSettings).toEqual({ compactAt: 400_000 });
+    await expect(compactAt).toHaveValue("400000");
+  });
+
   test("the tier mapping offers only the selected models, and Claude Code's opus goes out as the mapped model", async ({
     page,
   }) => {

@@ -680,6 +680,10 @@ type ApiEndpointSetOrderPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.set_order.response" }
 >["payload"];
+type ApiEndpointSetLongConversationsPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.set_long_conversations.response" }
+>["payload"];
 type ApiEndpointRevealKeyPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.reveal_key.response" }
@@ -757,6 +761,11 @@ export type ApiEndpointSetEndpointStateOptions = Omit<
 
 export type ApiEndpointSetOrderOptions = Omit<
   Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_order.request" }>,
+  "type" | "requestId"
+>;
+
+export type ApiEndpointSetLongConversationsOptions = Omit<
+  Extract<SessionInboundMessage, { type: "provider.api_endpoint.set_long_conversations.request" }>,
   "type" | "requestId"
 >;
 
@@ -6450,6 +6459,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.set_order.request", ...options },
+    });
+  }
+
+  /** 设整台主机的长对话：完整窗口与全局压缩阈值。 */
+  async apiEndpointSetLongConversations(
+    options: ApiEndpointSetLongConversationsOptions,
+    requestId?: string,
+  ): Promise<ApiEndpointSetLongConversationsPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.set_long_conversations.request", ...options },
     });
   }
 

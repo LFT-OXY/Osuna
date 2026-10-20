@@ -5,6 +5,7 @@ import {
   type ApiEndpointAgentSettings,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
+  type ApiEndpointLongConversations,
   type ApiEndpointReopenHint,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
@@ -29,6 +30,8 @@ export type HostEndpointsLoadState =
       agentIssues: Record<string, ApiEndpointAgentIssue[]>;
       // 每个 Agent 要重开的副本，按 provider 索引；老主机不发时为空。
       reopenHints: Record<string, ApiEndpointReopenHint[]>;
+      // 整台主机的长对话设置；老主机不发时为 null。
+      longConversations: ApiEndpointLongConversations | null;
     };
 
 export function selectHostEndpointsState(input: {
@@ -44,6 +47,7 @@ export function selectHostEndpointsState(input: {
       gatewayUnavailable: input.data.gatewayUnavailable ?? null,
       agentIssues: input.data.agentIssues ?? {},
       reopenHints: input.data.reopenHints ?? {},
+      longConversations: input.data.longConversations ?? null,
     };
   }
   if (input.error) return { status: "error", message: input.error.message };

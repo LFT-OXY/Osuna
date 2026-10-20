@@ -2814,6 +2814,12 @@ export const zhCN: TranslationResources = {
           saveFailed: "没能保存：{{message}}",
         },
       },
+      longConversations: {
+        title: "长对话",
+        fullWindow: "完整窗口",
+        hint: "Codex 和 Claude Code 在 {{size}} token 处压缩长对话（非 Claude 的 [1m] 模型也是），或在你填的大小处压缩。模型自己的压缩阈值优先。完整窗口更慢、更贵。",
+        saveFailed: "没能保存：{{message}}",
+      },
       modelScope: {
         title: "服务范围",
         label: "在服务的模型",

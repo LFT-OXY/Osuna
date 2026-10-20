@@ -4,7 +4,8 @@
 
 import { CODEX_BASE_INSTRUCTIONS } from "./codex-base-instructions.js";
 import { endpointModelGroups, usableModels } from "./host-endpoints.js";
-import { distinctModelLabels } from "@getpaseo/protocol/api-endpoint/model-settings";
+import { distinctModelLabels, hostCompactAt } from "@getpaseo/protocol/api-endpoint/model-settings";
+import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
@@ -29,7 +30,6 @@ import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 const FALLBACK_LEVELS = ["low", "medium", "high", "xhigh"];
 const FALLBACK_CONTEXT = 272_000;
 // magpie settings.WorkingWindow：比它大的窗口默认只告诉 Codex 这么多。
-const CODEX_WORKING_WINDOW = 272_000;
 
 // Codex 自带目录里这几档的说明；别的档位 magpie 写空串，Codex 只要求有这个字段。
 const LEVEL_DESCRIPTIONS: Record<string, string> = {
@@ -99,7 +99,13 @@ export function buildCodexModelCatalog(input: {
     });
   }
   const entries = models.map((model, index) =>
-    codexModelEntry({ ...model, priority: index + 1, reasoningEffort, marksAgentsV1 }),
+    codexModelEntry({
+      ...model,
+      priority: index + 1,
+      reasoningEffort,
+      marksAgentsV1,
+      longConversations: state.longConversations,
+    }),
   );
   return `${JSON.stringify({ models: entries }, null, 2)}\n`;
 }
@@ -139,6 +145,7 @@ export function codexEndpointEntries(input: {
       facts,
       reasoningEffort: input.reasoningEffort,
       marksAgentsV1: input.marksAgentsV1,
+      longConversations: input.state.longConversations,
     }),
   );
 }
@@ -155,6 +162,8 @@ export interface CodexModelEntryInput {
   reasoningEffort: string | null;
   // 「Codex Subagent 可用任意模型」：写 multi_agent_version = "v1"，Codex 给这个模型的 Subagent 发明文任务（magpie Stamp）。
   marksAgentsV1: boolean;
+  // 整台主机的长对话设置；没有即关着、272K。
+  longConversations?: ApiEndpointLongConversations;
 }
 
 /**
@@ -171,7 +180,11 @@ export function codexModelEntry(input: CodexModelEntryInput) {
   const agentsVersion = input.marksAgentsV1 ? AGENTS_V1 : UNMARKED;
   const levels = codexModelLevels(facts);
   const window = facts.context ?? FALLBACK_CONTEXT;
-  const context = codexWorkingWindow({ window, facts });
+  const context = codexWorkingWindow({
+    window,
+    facts,
+    longConversations: input.longConversations,
+  });
   // 查不到时照 Codex 回退元数据两项都写；查到的只在告诉它的比整个窗口小时另写整个窗口。
   const writesWholeWindow = facts.context === undefined || context < window;
   return {
@@ -214,13 +227,20 @@ export function codexModelEntry(input: CodexModelEntryInput) {
  * 告诉 Codex 的窗口（magpie entriesAt 与 settings.Working、CompactFor）：有压缩阈值时取它与窗口中较小的；
  * 没有时，上下文是用户手填的就用整个窗口（magpie #1809），否则比 272K 大的窗口说成 272K（Codex 给 OpenAI 自家大窗口模型的工作窗口），
  * 小的照写。比整个窗口小时，整个窗口另写进 max_context_window。
- * magpie 另有全局的「完整窗口」开关与全局压缩阈值，属设置页，这里不做。
+ * 整台主机的长对话设置（magpie FullContext、CompactAt）：「完整窗口」开着时整个窗口；打了全局压缩阈值时它代替 272K，
+ * 手填的窗口也按它（magpie CompactFor 只在 CompactAt 为 0 时给手填的整个窗口）。
  */
-function codexWorkingWindow(input: { window: number; facts: EndpointModelFacts }): number {
-  const { window, facts } = input;
+function codexWorkingWindow(input: {
+  window: number;
+  facts: EndpointModelFacts;
+  longConversations: ApiEndpointLongConversations | undefined;
+}): number {
+  const { window, facts, longConversations } = input;
   if (facts.compact !== undefined) return Math.min(window, facts.compact);
-  if (facts.contextSet === true) return window;
-  return Math.min(window, CODEX_WORKING_WINDOW);
+  const isHostCompactTyped = longConversations?.compactAt !== undefined;
+  if (facts.contextSet === true && !isHostCompactTyped) return window;
+  const compactAt = hostCompactAt(longConversations);
+  return compactAt === undefined ? window : Math.min(window, compactAt);
 }
 
 /** 这个模型在 Codex 里能选的档位：查不到资料时四档固定。 */

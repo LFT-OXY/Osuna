@@ -2858,6 +2858,12 @@ export const en = {
           saveFailed: "Couldn't save: {{message}}",
         },
       },
+      longConversations: {
+        title: "Long conversations",
+        fullWindow: "Full window",
+        hint: "Codex and Claude Code compact a long conversation at {{size}} tokens (non-Claude [1m] models too) or at the size you type. A model's own Compact at comes first. Full window is slower and costs more.",
+        saveFailed: "Couldn't save: {{message}}",
+      },
       modelScope: {
         title: "Model scope",
         label: "Models served",

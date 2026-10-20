@@ -2850,6 +2850,12 @@ export const es: TranslationResources = {
           saveFailed: "No se pudo guardar: {{message}}",
         },
       },
+      longConversations: {
+        title: "Conversaciones largas",
+        fullWindow: "Ventana completa",
+        hint: "Codex y Claude Code compactan una conversación larga en {{size}} tokens (también los modelos [1m] que no son de Claude) o en el tamaño que escribas. El valor de Compactar en de cada modelo tiene prioridad. La ventana completa es más lenta y cuesta más.",
+        saveFailed: "No se pudo guardar: {{message}}",
+      },
       modelScope: {
         title: "Alcance de modelos",
         label: "Modelos servidos",

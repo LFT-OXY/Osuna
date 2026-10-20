@@ -144,6 +144,17 @@ export const ApiEndpointModelSettingsSchema = z.object({
 });
 export type ApiEndpointModelSettings = z.infer<typeof ApiEndpointModelSettingsSchema>;
 
+/**
+ * 长对话（Long conversations，整台主机共用，照 magpie 的 FullContext 与 CompactAt）：告诉 Codex、Claude Code 的窗口。
+ * fullContext 为 true 时告诉模型的整个窗口；否则比压缩阈值大的窗口说成压缩阈值——compactAt，没有就是 272K。
+ * 单个模型或整家默认的压缩阈值在它之前。都没有即关着、272K。老 daemon 不发。
+ */
+export const ApiEndpointLongConversationsSchema = z.object({
+  fullContext: z.boolean().optional(),
+  compactAt: z.number().optional(),
+});
+export type ApiEndpointLongConversations = z.infer<typeof ApiEndpointLongConversationsSchema>;
+
 /** Osuna 自动取到的模型资料（上游清单在前，models.dev 补上）：不含用户的模型设置，模型设置窗口拿它当「默认」。 */
 export const ApiEndpointModelFactsSchema = z.object({
   name: z.string().optional(),
@@ -324,6 +335,8 @@ export const ApiEndpointListResponseSchema = z.object({
     agentIssues: z.record(z.string(), z.array(ApiEndpointAgentIssueSchema)).optional(),
     // 每个 Agent 要重开的副本，按 provider 索引，与请求的 provider 无关；老 daemon 不发。
     reopenHints: z.record(z.string(), z.array(ApiEndpointReopenHintSchema)).optional(),
+    // 整台主机的长对话设置，与请求的 provider 无关；老 daemon 不发。
+    longConversations: ApiEndpointLongConversationsSchema.optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });
@@ -633,6 +646,31 @@ export const ApiEndpointSetOrderResponseSchema = z.object({
   }),
 });
 export type ApiEndpointSetOrderResponse = z.infer<typeof ApiEndpointSetOrderResponseSchema>;
+
+/**
+ * 设长对话（照 magpie settings/full-context）：fullContext 开关「完整窗口」；compactAt 为正整数时设全局压缩阈值，
+ * null 回到 272K，省略即不变。设成 272K 等于不设。数不是正整数时拒收。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointSetLongConversationsRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_long_conversations.request"),
+  requestId: z.string(),
+  fullContext: z.boolean(),
+  compactAt: z.number().nullable().optional(),
+});
+export type ApiEndpointSetLongConversationsRequest = z.infer<
+  typeof ApiEndpointSetLongConversationsRequestSchema
+>;
+
+export const ApiEndpointSetLongConversationsResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.set_long_conversations.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointSetLongConversationsResponse = z.infer<
+  typeof ApiEndpointSetLongConversationsResponseSchema
+>;
 
 /**
  * 读回一家接口已保存的 key 原文（编辑窗口的「显示」）；没有 key 时 apiKey 为 null。照 magpie 不确认、不限次数。

@@ -25,6 +25,7 @@ import {
   type ApiEndpointFormatDetection,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
+  type ApiEndpointLongConversations,
   type ApiEndpointModel,
   type ApiEndpointModelMapping,
   type ApiEndpointModelFacts,
@@ -76,7 +77,7 @@ import {
   type ProbeGatewayAt,
 } from "./gateway-reach.js";
 import { createLoginShellEnvReader, type ReadLoginShellEnv } from "./login-shell-env.js";
-import { claudeHintEnv, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
+import { claudeHints, markOneMillion, type ClaudeHintModel } from "./claude-model-hints.js";
 import { claudeSpelled } from "./claude-spelling.js";
 import {
   applyClaudeApiEndpoint,
@@ -280,6 +281,7 @@ import {
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
+  WORKING_WINDOW,
   distinctModelLabels,
   resolveModelFacts,
 } from "@getpaseo/protocol/api-endpoint/model-settings";
@@ -609,6 +611,7 @@ export type ApiEndpointListResult = Required<
     | "gatewayUnavailable"
     | "agentIssues"
     | "reopenHints"
+    | "longConversations"
   >
 >;
 
@@ -830,6 +833,7 @@ export class ApiEndpointService {
       gatewayUnavailable: this.gatewayUnavailable(),
       agentIssues: { claude: statuses.claude.issues, codex: statuses.codex.issues },
       reopenHints,
+      longConversations: state.longConversations ?? {},
     };
   }
 
@@ -1219,7 +1223,7 @@ export class ApiEndpointService {
       }
       const next = await this.commit(
         state,
-        { endpoints, agents },
+        { ...state, endpoints, agents },
         {
           keys: apiKey ? { [endpoint.id]: apiKey } : {},
         },
@@ -2199,6 +2203,37 @@ export class ApiEndpointService {
   }
 
   /**
+   * 长对话（照 magpie SetFullContext、SetCompactAt）：fullContext 开关「完整窗口」；compactAt 为正整数时设全局压缩阈值
+   * （272K 等于不设），null 回到 272K，省略即不变。告诉 Codex 的窗口与 Claude Code 的压缩阈值跟着改，所以走 commit。
+   */
+  setLongConversations(input: { fullContext: boolean; compactAt?: number | null }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const { compactAt } = input;
+      const isTokenCount =
+        compactAt === undefined ||
+        compactAt === null ||
+        (Number.isInteger(compactAt) && compactAt > 0);
+      if (!isTokenCount) {
+        throw new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `Compact at must be a number of tokens, not ${compactAt}`,
+        });
+      }
+      const state = this.readState();
+      let kept = state.longConversations?.compactAt;
+      if (compactAt !== undefined) kept = compactAt ?? undefined;
+      if (kept === WORKING_WINDOW) kept = undefined;
+      const longConversations: ApiEndpointLongConversations = {
+        ...(input.fullContext ? { fullContext: true } : {}),
+        ...(kept === undefined ? {} : { compactAt: kept }),
+      };
+      const { longConversations: _previous, ...rest } = state;
+      const isEmpty = Object.keys(longConversations).length === 0;
+      await this.commit(state, isEmpty ? rest : { ...rest, longConversations });
+    });
+  }
+
+  /**
    * 落下一次变更：先按默认模型失踪规则整理各 Agent，再让 Codex 模型目录与 CLI 配置跟上（改不成就整个不保存），
    * 最后写 key、endpoints.json 与口令，并通知设置有变的 Agent。返回落下的状态。
    * 开着却没有口令的补一个；口令关掉不作废（nextGatewayTokens）。
@@ -2488,7 +2523,10 @@ export class ApiEndpointService {
     state: ApiEndpointState,
     provider: ApiEndpointProvider,
     defaultModelId: string,
-  ): Pick<CliWiring, "model" | "modelPicker" | "hintEnv" | "endpointModels"> {
+  ): Pick<
+    CliWiring,
+    "model" | "modelPicker" | "hintEnv" | "compactYieldsToOwn" | "endpointModels"
+  > {
     if (provider !== "claude") {
       const endpointModels = endpointModelGroups(this.retiredModels.listed(state)).flatMap(
         (group) => group.models.map(({ id }) => id),
@@ -2496,10 +2534,6 @@ export class ApiEndpointService {
       return { model: defaultModelId, modelPicker: [], hintEnv: {}, endpointModels };
     }
     const listed = this.retiredModels.listed(state);
-    const start: ClaudeHintModel = {
-      id: defaultModelId,
-      facts: this.startModelFacts(listed, defaultModelId),
-    };
     const rows = endpointModelGroups(listed).flatMap((group) => {
       const labels = this.groupModelLabels(group);
       return group.models.map(({ id, model }, index) => ({
@@ -2513,14 +2547,33 @@ export class ApiEndpointService {
       ...usableModels(listed).map((model) => model.id),
       ...rows.map((row) => row.hint.id),
     ];
+    const spelled = (model: ClaudeHintModel): ClaudeHintModel => ({
+      id: claudeSpelled({ model: model.id, served }),
+      facts: model.facts,
+    });
+    const hintModel = (modelId: string): ClaudeHintModel =>
+      spelled({ id: modelId, facts: this.startModelFacts(listed, modelId) });
+    const start = hintModel(defaultModelId);
+    // 后台小任务模型是 magpie 的 haiku 档位模型；Subagent 模型只在设了时算（只设档位时跟主模型）。
+    const agent = state.agents.claude;
+    const tiers = agent.backgroundModelId ? [hintModel(agent.backgroundModelId)] : [];
+    const subagent = agent.subagentModelId ? hintModel(agent.subagentModelId) : null;
+    const hints = claudeHints({
+      start,
+      tiers,
+      subagent,
+      listed: rows.map((row) => spelled(row.hint)),
+      longConversations: state.longConversations,
+    });
     return {
-      model: claudeSpelled({ model: markOneMillion(start), served }),
+      model: markOneMillion(start),
       modelPicker: rows.map((row) => ({
-        model: claudeSpelled({ model: markOneMillion(row.hint), served }),
+        model: markOneMillion(spelled(row.hint)),
         label: row.label,
         description: row.description,
       })),
-      hintEnv: claudeHintEnv({ start, listed: rows.map((row) => row.hint) }),
+      hintEnv: hints.env,
+      compactYieldsToOwn: hints.compactYieldsToOwn,
       endpointModels: [],
     };
   }

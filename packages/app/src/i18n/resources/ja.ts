@@ -2821,6 +2821,12 @@ export const ja: TranslationResources = {
           saveFailed: "保存できませんでした：{{message}}",
         },
       },
+      longConversations: {
+        title: "長い会話",
+        fullWindow: "ウィンドウ全体",
+        hint: "Codex と Claude Code は長い会話を {{size}} トークン（Claude 以外の [1m] モデルも）か、入力したサイズで圧縮します。モデル自身の圧縮しきい値が優先されます。ウィンドウ全体は遅く、費用もかかります。",
+        saveFailed: "保存できませんでした：{{message}}",
+      },
       modelScope: {
         title: "提供範囲",
         label: "提供するモデル",

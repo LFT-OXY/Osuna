@@ -163,6 +163,7 @@ const INBOUND_PERMISSION = {
   "provider.codex.session.move_model_provider.request": "daemon.manage",
   "provider.api_endpoint.set_endpoint_state.request": "daemon.manage",
   "provider.api_endpoint.set_order.request": "daemon.manage",
+  "provider.api_endpoint.set_long_conversations.request": "daemon.manage",
   // 回的是 key 原文，和保存同一级。
   "provider.api_endpoint.reveal_key.request": "daemon.manage",
   "provider.api_endpoint.forget_catalog.request": "daemon.manage",
@@ -424,6 +425,7 @@ const OUTBOUND_PERMISSION = {
   "provider.codex.session.move_model_provider.response": "daemon.manage",
   "provider.api_endpoint.set_endpoint_state.response": "daemon.manage",
   "provider.api_endpoint.set_order.response": "daemon.manage",
+  "provider.api_endpoint.set_long_conversations.response": "daemon.manage",
   "provider.api_endpoint.reveal_key.response": "daemon.manage",
   "provider.api_endpoint.forget_catalog.response": "daemon.manage",
   "provider.api_endpoint.list_templates.response": "daemon.read",

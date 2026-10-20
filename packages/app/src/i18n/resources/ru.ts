@@ -2829,6 +2829,12 @@ export const ru: TranslationResources = {
           saveFailed: "Не удалось сохранить: {{message}}",
         },
       },
+      longConversations: {
+        title: "Длинные разговоры",
+        fullWindow: "Всё окно",
+        hint: "Codex и Claude Code сжимают длинный разговор при {{size}} токенов (модели [1m] не от Claude тоже) или при введённом размере. Собственный порог «Сжимать при» у модели важнее. Всё окно медленнее и дороже.",
+        saveFailed: "Не удалось сохранить: {{message}}",
+      },
       modelScope: {
         title: "Набор моделей",
         label: "Обслуживаемые модели",

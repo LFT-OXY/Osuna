@@ -2853,6 +2853,12 @@ export const fr: TranslationResources = {
           saveFailed: "Échec de l'enregistrement : {{message}}",
         },
       },
+      longConversations: {
+        title: "Longues conversations",
+        fullWindow: "Fenêtre complète",
+        hint: "Codex et Claude Code compactent une longue conversation à {{size}} tokens (y compris les modèles [1m] hors Claude) ou à la taille saisie. Le seuil Compacter à propre à un modèle passe en premier. La fenêtre complète est plus lente et plus coûteuse.",
+        saveFailed: "Échec de l'enregistrement : {{message}}",
+      },
       modelScope: {
         title: "Portée des modèles",
         label: "Modèles servis",

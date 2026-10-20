@@ -7,6 +7,7 @@ import {
   codexReasoningLevels,
 } from "./codex-model-catalog.js";
 import type { EndpointModelFacts, ModelFacts } from "./model-facts.js";
+import type { ApiEndpointLongConversations } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ApiEndpointState, StoredApiEndpoint } from "./store.js";
 
 function endpoint(input: {
@@ -227,6 +228,33 @@ describe("codexModelEntry", () => {
     expect(told({ context: 1_000_000, contextSet: true, compact: 500_000 })).toEqual([
       500_000, 1_000_000,
     ]);
+  });
+
+  it("the host's long conversation settings: Full window tells the whole window, a host Compact at replaces 272K and a typed window (magpie Settings.Working, CompactFor)", () => {
+    const told = (facts: EndpointModelFacts, longConversations: ApiEndpointLongConversations) => {
+      const written = codexModelEntry({
+        slug: "relay/m",
+        displayName: "M",
+        visibility: "hide",
+        priority: 1,
+        facts,
+        reasoningEffort: null,
+        marksAgentsV1: false,
+        longConversations,
+      });
+      return [written.context_window, written.max_context_window];
+    };
+    expect(told({ context: 1_000_000 }, { fullContext: true })).toEqual([1_000_000, undefined]);
+    // 「完整窗口」也让不过模型自己的压缩阈值。
+    expect(told({ context: 1_000_000, compact: 300_000 }, { fullContext: true })).toEqual([
+      300_000, 1_000_000,
+    ]);
+    expect(told({ context: 1_000_000 }, { compactAt: 400_000 })).toEqual([400_000, 1_000_000]);
+    // 用户打了全局压缩阈值时，手填的窗口也按它压缩（magpie CompactFor 只在 CompactAt 为 0 时给整个窗口）。
+    expect(told({ context: 1_000_000, contextSet: true }, { compactAt: 400_000 })).toEqual([
+      400_000, 1_000_000,
+    ]);
+    expect(told({ context: 262_144 }, { compactAt: 128_000 })).toEqual([128_000, 262_144]);
   });
 
   it("says text only for a model known not to see images", () => {

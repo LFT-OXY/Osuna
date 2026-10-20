@@ -37,6 +37,7 @@ import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-sectio
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
+import { ApiEndpointLongConversationsSection } from "./long-conversations-section";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
 import { ApiEndpointModelScopeSection } from "./model-scope-section";
@@ -516,6 +517,13 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onArrange={canArrange ? endpoints.arrange : undefined}
         management={management}
       />
+      {/* COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有长对话设置。 */}
+      {canArrange && endpoints.state.status === "ready" && endpoints.state.longConversations ? (
+        <ApiEndpointLongConversationsSection
+          initial={endpoints.state.longConversations}
+          onSave={endpoints.setLongConversations}
+        />
+      ) : null}
       <ConnectionSheet
         serverId={serverId}
         sheet={sheet}

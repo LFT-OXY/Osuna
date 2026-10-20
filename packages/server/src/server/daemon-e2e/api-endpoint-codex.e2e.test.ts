@@ -1032,6 +1032,39 @@ describe("Codex's model catalog carries what the endpoint models can do", () => 
     expect((await windows())[0]).toEqual([300_000, 400_000]);
   });
 
+  // magpie FullContext 与 CompactAt：整台主机的长对话设置。
+  test("the host's Full window tells the whole window; its Compact at replaces 272K, a typed window's too", async () => {
+    await start({
+      modelsDevCache: {
+        ...MODELS_DEV_CACHE,
+        models: { ...MODELS_DEV_CACHE.models, "big-model": { context: 1_000_000, efforts: [] } },
+      },
+    });
+    const endpointId = await switchOn("https://relay.example/api", ["big-model"]);
+    const told = async () => {
+      const entry = (await entries())["big-model"];
+      return [entry?.context_window, entry?.max_context_window];
+    };
+    expect(await told()).toEqual([272_000, 1_000_000]);
+    await client.apiEndpointSetLongConversations({ fullContext: true });
+    expect(await told()).toEqual([1_000_000, undefined]);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: 500_000 });
+    expect(await told()).toEqual([500_000, 1_000_000]);
+    const [stored] = (await client.apiEndpointList("codex")).endpoints;
+    const saved = await client.apiEndpointSave({
+      provider: "codex",
+      endpointId,
+      name: "Relay",
+      baseUrls: stored?.baseUrls ?? [],
+      models: [{ id: "big-model" }],
+      modelSettings: { models: { "big-model": { context: 800_000 } } },
+    });
+    expect(saved.error).toBeNull();
+    expect(await told()).toEqual([500_000, 800_000]);
+    await client.apiEndpointSetLongConversations({ fullContext: false, compactAt: null });
+    expect(await told()).toEqual([800_000, undefined]);
+  });
+
   test("an image answer is kept unless the endpoint's own list says the same; levels alone need no model of the endpoint", async () => {
     await start({ modelsDevCache: MODELS_DEV_CACHE });
     upstream = createServer((_request, response) => {

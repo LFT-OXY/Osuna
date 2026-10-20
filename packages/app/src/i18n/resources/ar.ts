@@ -2790,6 +2790,12 @@ export const ar: TranslationResources = {
           saveFailed: "تعذّر الحفظ: {{message}}",
         },
       },
+      longConversations: {
+        title: "المحادثات الطويلة",
+        fullWindow: "النافذة كاملة",
+        hint: "يضغط Codex وClaude Code المحادثة الطويلة عند {{size}} رمز (ونماذج [1m] غير Claude أيضًا) أو عند الحجم الذي تكتبه. قيمة «الضغط عند» الخاصة بالنموذج لها الأولوية. النافذة كاملة أبطأ وأعلى تكلفة.",
+        saveFailed: "تعذّر الحفظ: {{message}}",
+      },
       modelScope: {
         title: "نطاق النماذج",
         label: "النماذج المقدَّمة",

@@ -5,9 +5,11 @@ import { z } from "zod";
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
+  ApiEndpointLongConversationsSchema,
   ApiEndpointModelMappingSchema,
   ApiEndpointModelSettingsSchema,
   type ApiEndpointAgentSettings,
+  type ApiEndpointLongConversations,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   AGENT_REQUEST_FORMAT,
@@ -102,6 +104,8 @@ const EndpointsFileSchema = z.object({
   // 数组顺序即接口顺序（Endpoint order）：用户可整体改写（set_order），新建的追加在最后。
   endpoints: z.array(StoredApiEndpointSchema),
   agents: z.record(z.string(), ApiEndpointAgentSettingsSchema),
+  // 整台主机的长对话设置（完整窗口、全局压缩阈值）；没有即关着、272K。
+  longConversations: ApiEndpointLongConversationsSchema.optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -139,6 +143,7 @@ function parseEndpointsFile(filePath: string, raw: unknown): EndpointsFileConten
 export interface ApiEndpointState {
   endpoints: StoredApiEndpoint[];
   agents: Record<ApiEndpointProvider, ApiEndpointAgentSettings>;
+  longConversations?: ApiEndpointLongConversations;
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };
@@ -292,13 +297,14 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents } = content.file;
+    const { agents, longConversations } = content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
         claude: agents.claude ?? OFFICIAL_AGENT,
         codex: agents.codex ?? OFFICIAL_AGENT,
       },
+      ...(longConversations === undefined ? {} : { longConversations }),
     };
   }
 

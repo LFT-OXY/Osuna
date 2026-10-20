@@ -3,6 +3,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type {
+  ApiEndpointLongConversations,
   ApiEndpointModelDefaults,
   ApiEndpointModelFacts,
   ApiEndpointModelSetting,
@@ -31,6 +32,20 @@ export const MODEL_NAME_MAX_LENGTH = 80;
 /** 按 token 数记的几项；整家默认只有这几项。 */
 export const MODEL_TOKEN_FIELDS = ["context", "output", "compact"] as const;
 export type ModelTokenField = (typeof MODEL_TOKEN_FIELDS)[number];
+
+/** 没设全局压缩阈值时告诉 Codex、Claude Code 的工作窗口（magpie WorkingWindow：Codex 给 OpenAI 自家大窗口模型的）。 */
+export const WORKING_WINDOW = 272_000;
+
+/**
+ * 模型和整家都没设压缩阈值时，比它大的窗口说成多少（magpie Settings.Compact）：「完整窗口」开着为 undefined（整个窗口），
+ * 否则是全局压缩阈值，没设就是 WORKING_WINDOW。
+ */
+export function hostCompactAt(
+  longConversations: ApiEndpointLongConversations | undefined,
+): number | undefined {
+  if (longConversations?.fullContext === true) return undefined;
+  return longConversations?.compactAt ?? WORKING_WINDOW;
+}
 
 export interface ResolvedModelFacts {
   name?: string;

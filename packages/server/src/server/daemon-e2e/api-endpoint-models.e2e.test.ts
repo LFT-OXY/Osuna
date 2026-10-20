@@ -217,6 +217,7 @@ describe("API endpoint models over the daemon RPC", () => {
       "ANTHROPIC_BASE_URL",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
       "CLAUDE_CODE_AUTO_MODE_SERVER",
     ]);
 

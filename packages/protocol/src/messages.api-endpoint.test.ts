@@ -908,6 +908,38 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     };
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
+
+  it("parses set_long_conversations and a list carrying the host's long conversation settings, and an older host's list without them", () => {
+    const request = {
+      type: "provider.api_endpoint.set_long_conversations.request" as const,
+      requestId: "req-lc",
+      fullContext: false,
+      compactAt: 400_000,
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const cleared = { ...request, compactAt: null };
+    expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
+    const response = {
+      type: "provider.api_endpoint.set_long_conversations.response" as const,
+      payload: { requestId: "req-lc", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const list = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-lc-list",
+        provider: "claude",
+        endpoints: [],
+        activeEndpointId: null,
+        longConversations: { fullContext: true, compactAt: 400_000 },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(list)).toEqual(list);
+    const { longConversations: _omitted, ...olderPayload } = list.payload;
+    const older = { ...list, payload: olderPayload };
+    expect(SessionOutboundMessageSchema.parse(older)).toEqual(older);
+  });
   it("parses a list whose rows carry the key mask and whose default model goes there, and an older host's", () => {
     const response = {
       type: "provider.api_endpoint.list.response" as const,
