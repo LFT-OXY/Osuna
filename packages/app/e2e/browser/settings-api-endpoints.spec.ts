@@ -911,7 +911,7 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
-  test("Auto-pick rules: a model name or a regex that can hang is not a rule, a failed add or remove stays in place, and a rule switches on what it matches", async ({
+  test("Auto-pick rules: a model name or a regex RE2 cannot read is not a rule, a failed add or remove stays in place, and a rule switches on what it matches", async ({
     page,
   }) => {
     relay.goodModels = numberedModels(26);
@@ -932,13 +932,15 @@ test.describe("Settings API endpoints", () => {
       await input.fill("model-02");
       await add.click();
       await expect(error).toHaveText(
-        "“model-02” is a model name. A rule has a * or starts with re:.",
+        "“model-02” is a model name. A rule has a * in it or begins with “re:”.",
       );
       await expect(input).toHaveValue("model-02");
-      // 会回溯爆炸的正则也当场说明（magpie 的 RE2 不回溯）。
-      await input.fill("re:(model-\\d+)+x");
+      // RE2 读不懂的（如反向引用）也当场说明，和 magpie 一样。
+      await input.fill("re:(model)\\1");
       await add.click();
-      await expect(error).toContainText("can make matching hang");
+      await expect(error).toHaveText(
+        "“re:(model)\\1” is not a regular expression that can be read.",
+      );
       expect((await endpointOf(endpointId))?.autoPick).toBeUndefined();
     });
 

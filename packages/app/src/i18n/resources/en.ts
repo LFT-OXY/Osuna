@@ -2843,14 +2843,9 @@ export const en = {
           remove: "Remove rule {{rule}}",
           saveFailed: "Couldn't save: {{message}}",
           problem: {
-            notRule: "“{{text}}” is a model name. A rule has a * or starts with re:.",
-            tooLong: "A rule can be at most 200 characters.",
-            emptyRegex: "Write a regular expression after re:.",
+            notRule: "“{{text}}” is a model name. A rule has a * in it or begins with “re:”.",
+            emptyRegex: "Write a regular expression after “re:”.",
             invalidRegex: "“{{text}}” is not a regular expression that can be read.",
-            backreference: "Backreferences like \\1 can make matching hang. Leave them out.",
-            lookaround: "Lookahead and lookbehind can make matching hang. Leave them out.",
-            nestedQuantifier:
-              "A repeated group that repeats inside, or has |, can make matching hang.",
           },
         },
       },

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   autoPickRuleProblem,
-  autoPickRuleRegExp,
+  compileAutoPickRule,
   type AutoPickRuleProblem,
 } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
@@ -71,7 +71,7 @@ export type CleanedAutoPickRules =
 
 /**
  * 规则按存的样子：去掉首尾空白、空的与重复的；每条都要是能用的规则（auto-pick-rules.ts，照 magpie CleanAutoInclude，
- * 另拒收会回溯爆炸的正则）。不能用时回是哪条、什么问题。
+ * 用 RE2 编译，读不懂的拒收）。不能用时回是哪条、什么问题。
  */
 export function cleanAutoPickRules(rules: string[]): CleanedAutoPickRules {
   const cleaned: string[] = [];
@@ -95,7 +95,7 @@ function withAutoPicked(
 ): StoredModel[] {
   // 存下的规则保存时都校验过；手改坏的跳过。
   const rules = (endpoint.autoPick ?? []).flatMap((rule) =>
-    autoPickRuleProblem(rule) === null ? [autoPickRuleRegExp(rule)] : [],
+    autoPickRuleProblem(rule) === null ? [compileAutoPickRule(rule)] : [],
   );
   if (rules.length === 0) return endpoint.models;
   const hasNoAddress = noAddressFilter(endpoint);
@@ -103,7 +103,7 @@ function withAutoPicked(
   const taken: StoredModel[] = [];
   for (const model of endpoint.catalog?.models ?? []) {
     if (picked.has(model.id) || !isNew(model.id) || hasNoAddress(model.id)) continue;
-    if (!rules.some((rule) => rule.test(model.id))) continue;
+    if (!rules.some((rule) => rule.matches(model.id))) continue;
     picked.add(model.id);
     taken.push(model.label ? { id: model.id, label: model.label } : { id: model.id });
   }

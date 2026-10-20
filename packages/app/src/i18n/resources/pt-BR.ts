@@ -2821,13 +2821,8 @@ export const ptBR: TranslationResources = {
           saveFailed: "Não foi possível salvar: {{message}}",
           problem: {
             notRule: "“{{text}}” é um nome de modelo. Uma regra tem * ou começa com re:.",
-            tooLong: "Uma regra pode ter no máximo 200 caracteres.",
             emptyRegex: "Escreva uma expressão regular depois de re:.",
             invalidRegex: "“{{text}}” não é uma expressão regular legível.",
-            backreference: "Referências como \\1 podem travar a busca. Remova-as.",
-            lookaround: "Lookahead e lookbehind podem travar a busca. Remova-os.",
-            nestedQuantifier:
-              "Um grupo repetido que repete por dentro, ou tem |, pode travar a busca.",
           },
         },
       },

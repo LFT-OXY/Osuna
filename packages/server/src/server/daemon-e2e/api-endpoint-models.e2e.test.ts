@@ -1024,15 +1024,13 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(await servedIds(endpointId)).toEqual(numbered(24).map((model) => model.id));
 
     // 不是规则的（没有 *、不以 re: 开头）与读不懂的正则拒收，规则不变。
-    // 会回溯爆炸的正则也拒收（magpie 的 RE2 不回溯），并说明是什么问题。
+    // RE2 读不懂的（含反向引用、环视）拒收，和 magpie 一样，并说明是什么问题。
     for (const [rule, problem] of [
       ["gpt-5", "not_rule"],
       ["re:(", "invalid_regex"],
       ["re: ", "empty_regex"],
-      ["re:(a+)+b", "nested_quantifier"],
-      ["re:(m)\\1", "backreference"],
-      ["re:m(?=1)", "lookaround"],
-      [`${"m".repeat(200)}*`, "too_long"],
+      ["re:(m)\\1", "invalid_regex"],
+      ["re:m(?=1)", "invalid_regex"],
     ]) {
       const refused = await save({ models: served, autoPick: [rule ?? ""] });
       expect(refused.error?.code).toBe("invalid_input");

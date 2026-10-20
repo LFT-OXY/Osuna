@@ -271,10 +271,7 @@ import {
   type FormatList,
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
-import {
-  AUTO_PICK_RULE_MAX_LENGTH,
-  type AutoPickRuleProblem,
-} from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
+import type { AutoPickRuleProblem } from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import {
   cleanAutoPickRules,
   followsList,
@@ -4122,13 +4119,8 @@ function validateAutoPick(raw: string[]): string[] {
 
 const AUTO_PICK_PROBLEM_MESSAGES: Record<AutoPickRuleProblem, string> = {
   not_rule: "is a model's id, not a rule: a rule has a * in it, or starts with re:",
-  too_long: `is longer than ${AUTO_PICK_RULE_MAX_LENGTH} characters`,
   empty_regex: "has no regular expression after re:",
-  invalid_regex: "is not a regular expression Osuna can read",
-  backreference: "uses a backreference, which can make matching hang",
-  lookaround: "uses a lookahead or lookbehind, which can make matching hang",
-  nested_quantifier:
-    "repeats a group that itself repeats or has alternatives, which can make matching hang",
+  invalid_regex: "is not a regular expression RE2 can read",
 };
 
 /** 添加窗口里保存前拉到的清单：拉取时间记为保存时刻；没给时不写，留下 base 的。 */

@@ -2807,13 +2807,8 @@ export const ja: TranslationResources = {
           saveFailed: "保存できませんでした：{{message}}",
           problem: {
             notRule: "「{{text}}」はモデル名です。ルールには * を含めるか、re: で始めます。",
-            tooLong: "ルールは 200 文字までです。",
             emptyRegex: "re: の後に正規表現を書いてください。",
             invalidRegex: "「{{text}}」は読み取れる正規表現ではありません。",
-            backreference: "\\1 のような後方参照は照合が止まる原因になります。外してください。",
-            lookaround: "先読み・後読みは照合が止まる原因になります。外してください。",
-            nestedQuantifier:
-              "繰り返すグループの中に繰り返しや | があると、照合が止まる原因になります。",
           },
         },
       },

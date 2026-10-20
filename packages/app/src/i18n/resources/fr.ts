@@ -2839,15 +2839,8 @@ export const fr: TranslationResources = {
           saveFailed: "Impossible d'enregistrer : {{message}}",
           problem: {
             notRule: "« {{text}} » est un nom de modèle. Une règle contient * ou commence par re:.",
-            tooLong: "Une règle compte au plus 200 caractères.",
             emptyRegex: "Écrivez une expression régulière après re:.",
             invalidRegex: "« {{text}} » n'est pas une expression régulière lisible.",
-            backreference:
-              "Les références arrière comme \\1 peuvent bloquer la correspondance. Retirez-les.",
-            lookaround:
-              "Les assertions avant ou arrière peuvent bloquer la correspondance. Retirez-les.",
-            nestedQuantifier:
-              "Un groupe répété qui se répète à l'intérieur, ou contient |, peut bloquer la correspondance.",
           },
         },
       },

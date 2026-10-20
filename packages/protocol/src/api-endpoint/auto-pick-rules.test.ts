@@ -1,36 +1,53 @@
 import { describe, expect, it } from "vitest";
-import { autoPickRuleProblem, autoPickRuleRegExp } from "./auto-pick-rules";
+import { autoPickRuleProblem, compileAutoPickRule } from "./auto-pick-rules";
+
+// 会让回溯引擎卡住几秒以上的规则与输入：RE2 线性时间，要在 100 ms 内答出。
+function timedMatch(rule: string, modelId: string): { matched: boolean; ms: number } {
+  const started = performance.now();
+  expect(autoPickRuleProblem(rule)).toBeNull();
+  const matched = compileAutoPickRule(rule).matches(modelId);
+  return { matched, ms: performance.now() - started };
+}
 
 describe("auto-pick rules", () => {
-  it("takes globs and whole-name regular expressions", () => {
-    expect(autoPickRuleProblem("gpt-*")).toBeNull();
-    expect(autoPickRuleProblem("re:claude-(opus|sonnet)-\\d+")).toBeNull();
-    expect(autoPickRuleProblem("re:gpt-5(-mini)?")).toBeNull();
-    expect(autoPickRuleRegExp("GPT-*").test("gpt-5-mini")).toBe(true);
-    expect(autoPickRuleRegExp("re:m3\\d").test("m30")).toBe(true);
-    expect(autoPickRuleRegExp("re:m3\\d").test("xm30")).toBe(false);
+  it("takes globs in any case and whole-name regular expressions as written", () => {
+    expect(compileAutoPickRule("GPT-*").matches("gpt-5-mini")).toBe(true);
+    expect(compileAutoPickRule("gpt-*").matches("o3")).toBe(false);
+    expect(compileAutoPickRule("openrouter/*:free").matches("openrouter/llama:free")).toBe(true);
+    expect(compileAutoPickRule("gpt-5.*").matches("gpt-5x1")).toBe(false);
+    expect(compileAutoPickRule("re:m3\\d").matches("m30")).toBe(true);
+    expect(compileAutoPickRule("re:m3\\d").matches("xm30")).toBe(false);
+    // re: 照 magpie 区分大小写，要不分就写 (?i)。
+    expect(compileAutoPickRule("re:gpt-5").matches("GPT-5")).toBe(false);
+    expect(compileAutoPickRule("re:(?i)gpt-5").matches("GPT-5")).toBe(true);
   });
 
-  it("turns away a model name, an empty or unreadable expression, and one too long", () => {
+  it("turns away a model name, an empty expression, and one RE2 cannot read", () => {
     expect(autoPickRuleProblem("gpt-5")).toBe("not_rule");
     expect(autoPickRuleProblem("re: ")).toBe("empty_regex");
     expect(autoPickRuleProblem("re:(")).toBe("invalid_regex");
-    expect(autoPickRuleProblem(`${"a".repeat(200)}*`)).toBe("too_long");
+    // RE2 不支持反向引用与环视，和 magpie 一样编译不过。
+    expect(autoPickRuleProblem("re:(a)\\1")).toBe("invalid_regex");
+    expect(autoPickRuleProblem("re:gpt(?=-5)")).toBe("invalid_regex");
+    expect(autoPickRuleProblem("re:(?<!x)gpt.*")).toBe("invalid_regex");
   });
 
-  it("turns away what backtracks without bound, which RE2 in magpie never does", () => {
-    expect(autoPickRuleProblem("re:(a+)+b")).toBe("nested_quantifier");
-    expect(autoPickRuleProblem("re:(a|aa)*b")).toBe("nested_quantifier");
-    expect(autoPickRuleProblem("re:((ab)*c)+")).toBe("nested_quantifier");
-    expect(autoPickRuleProblem("re:(a)\\1")).toBe("backreference");
-    expect(autoPickRuleProblem("re:(?<n>a)\\k<n>")).toBe("backreference");
-    expect(autoPickRuleProblem("re:gpt(?=-5)")).toBe("lookaround");
-    expect(autoPickRuleProblem("re:(?<!x)gpt.*")).toBe("lookaround");
-    // 字符类里的符号照字面。
-    expect(autoPickRuleProblem("re:[(+)]+x")).toBeNull();
-  });
-
-  it("collapses a run of * in a glob into one", () => {
-    expect(autoPickRuleRegExp("gpt-***mini").source).toBe("^gpt-.*mini$");
+  it("answers in linear time where a backtracking engine hangs", () => {
+    const as = "a".repeat(40);
+    const cases: [string, string, boolean][] = [
+      [`re:${"[a]+".repeat(12)}`, `${as}b`, false],
+      [`re:${".*".repeat(12)}z`, `${as}b`, false],
+      [`re:${"(a|a)".repeat(30)}`, "a".repeat(29), false],
+      ["*a*a*a*a*a*a*a*a*a*a*b", as, false],
+      ["*a*a*a*a*a*a*a*a*a*a*b", `${as}b`, true],
+      ["re:(a+)+b", `${as}c`, false],
+      ["re:(a|aa)*b", `${as}b`, true],
+      ["re:((ab)*c)+", "abcabc", true],
+    ];
+    for (const [rule, modelId, expected] of cases) {
+      const { matched, ms } = timedMatch(rule, modelId);
+      expect(matched, rule).toBe(expected);
+      expect(ms, rule).toBeLessThan(100);
+    }
   });
 });

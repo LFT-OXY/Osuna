@@ -19,10 +19,10 @@ describe("model scope", () => {
       text: "gpt-5",
       problem: "not_rule",
     });
-    expect(typedRuleOf("re:(a+)+b", [])).toEqual({
+    expect(typedRuleOf("re:(a)\\1", [])).toEqual({
       kind: "problem",
-      text: "re:(a+)+b",
-      problem: "nested_quantifier",
+      text: "re:(a)\\1",
+      problem: "invalid_regex",
     });
   });
 });

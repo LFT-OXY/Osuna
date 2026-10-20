@@ -9,7 +9,7 @@ import type {
 
 /*
  * 服务范围与自动勾选规则的纯计算。daemon 定下在服务的模型（models）；这里只读范围、检查用户打的规则。
- * 规则和 daemon 用同一份检查（protocol 的 auto-pick-rules.ts）：有 * 的 glob，或 `re:` 开头、不会回溯爆炸的正则。
+ * 规则和 daemon 用同一份检查（protocol 的 auto-pick-rules.ts）：有 * 的 glob，或 `re:` 开头、RE2 读得懂的正则。
  */
 
 // 「跟随接口清单」在服务的上限（daemon model-scope.ts 的 SERVED_LIST_LIMIT，照 magpie manyModels）。
@@ -29,12 +29,8 @@ export type TypedRule =
 /** 规则问题的文案键，在 settings.apiEndpoints.modelScope.rules.problem 下。 */
 export const RULE_PROBLEM_KEYS: Record<AutoPickRuleProblem, string> = {
   not_rule: "notRule",
-  too_long: "tooLong",
   empty_regex: "emptyRegex",
   invalid_regex: "invalidRegex",
-  backreference: "backreference",
-  lookaround: "lookaround",
-  nested_quantifier: "nestedQuantifier",
 };
 
 /** 规则框里打的：去掉首尾空白；空的、已有的不加；不能用的说明原因。 */

@@ -2793,12 +2793,8 @@ export const ko: TranslationResources = {
           saveFailed: "저장하지 못했습니다: {{message}}",
           problem: {
             notRule: "'{{text}}'은(는) 모델 이름입니다. 규칙에는 *가 있거나 re:로 시작해야 합니다.",
-            tooLong: "규칙은 200자까지입니다.",
             emptyRegex: "re: 뒤에 정규식을 쓰세요.",
             invalidRegex: "'{{text}}'은(는) 읽을 수 있는 정규식이 아닙니다.",
-            backreference: "\\1 같은 역참조는 매칭을 멈추게 할 수 있습니다. 빼 주세요.",
-            lookaround: "전방·후방 탐색은 매칭을 멈추게 할 수 있습니다. 빼 주세요.",
-            nestedQuantifier: "반복되는 그룹 안에 반복이나 |가 있으면 매칭이 멈출 수 있습니다.",
           },
         },
       },

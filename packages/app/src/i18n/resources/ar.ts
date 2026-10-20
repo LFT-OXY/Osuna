@@ -2776,12 +2776,8 @@ export const ar: TranslationResources = {
           saveFailed: "تعذّر الحفظ: {{message}}",
           problem: {
             notRule: "«{{text}}» اسم نموذج. القاعدة تحتوي على * أو تبدأ بـ re:.",
-            tooLong: "لا تتجاوز القاعدة 200 حرف.",
             emptyRegex: "اكتب تعبيرًا نمطيًا بعد re:.",
             invalidRegex: "«{{text}}» ليس تعبيرًا نمطيًا مقروءًا.",
-            backreference: "المراجع الخلفية مثل \\1 قد تعلّق المطابقة. احذفها.",
-            lookaround: "النظر للأمام أو للخلف قد يعلّق المطابقة. احذفه.",
-            nestedQuantifier: "مجموعة مكرَّرة فيها تكرار أو | قد تعلّق المطابقة.",
           },
         },
       },

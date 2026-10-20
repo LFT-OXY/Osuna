@@ -2801,12 +2801,8 @@ export const zhCN: TranslationResources = {
           saveFailed: "没能保存：{{message}}",
           problem: {
             notRule: "「{{text}}」是模型名。规则要带 *，或以 re: 开头。",
-            tooLong: "规则最长 200 个字符。",
             emptyRegex: "re: 后面要写正则表达式。",
             invalidRegex: "「{{text}}」不是读得懂的正则表达式。",
-            backreference: "\\1 这类反向引用可能让匹配卡住，请去掉。",
-            lookaround: "前瞻、后顾可能让匹配卡住，请去掉。",
-            nestedQuantifier: "重复的组里又有重复或 |，可能让匹配卡住。",
           },
         },
       },
