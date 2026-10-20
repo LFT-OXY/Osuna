@@ -5111,6 +5111,77 @@ describe("model list and warm-up", () => {
     expect(list.data.map((model) => model.id)).toEqual(["kimi-k2", "gpt-5.5", "glm-4.6"]);
     expect(hello.status).toBe(200);
   });
+
+  // 接口管理好用性工单 17：每条带模型资料（magpie gateway.go 的 modelObject），按模型设置改过；已禁用的不列。
+  test("/v1/models gives each model's facts as the model settings leave them, and lists no disabled model", async () => {
+    const { gateway, endpointsDir } = await start({
+      modelsA: ["kimi-k2", "gpt-5.5", "qwen3-coder"],
+      modelsDev: {
+        "kimi-k2": {
+          name: "Kimi K2",
+          context: 262_144,
+          output: 32_768,
+          efforts: ["low", "medium", "high"],
+          images: false,
+        },
+        "glm-4.6": { name: "GLM-4.6", context: 200_000, output: 131_072, images: false },
+        "qwen3-coder": { name: "Qwen3 Coder", context: 262_144 },
+      },
+      catalogB: { "glm-4.6": { efforts: ["low", "high"] } },
+    });
+    const endpointsPath = path.join(endpointsDir, "endpoints.json");
+    const file = JSON.parse(await readFile(endpointsPath, "utf8")) as {
+      endpoints: { id: string; modelSettings?: unknown }[];
+      disabledModels?: string[];
+    };
+    // 回复上限手填得比窗口大：照 magpie PublishedOutput 收在窗口以内。
+    file.endpoints[0].modelSettings = {
+      models: { "kimi-k2": { name: "My Kimi", output: 500_000, efforts: ["high"], images: true } },
+    };
+    file.disabledModels = ["qwen3-*"];
+    await writeFile(endpointsPath, JSON.stringify(file));
+
+    const models = await fetch(`${gateway}/v1/models`, {
+      headers: { authorization: `Bearer ${CODEX_TOKEN}` },
+    });
+
+    expect(models.status).toBe(200);
+    const list = (await models.json()) as { data: Record<string, unknown>[] };
+    const shared = { object: "model", type: "model", created: 0 };
+    expect(list.data.map(({ created_at: _at, owned_by: _by, ...model }) => model)).toEqual([
+      {
+        ...shared,
+        id: "kimi-k2",
+        display_name: "My Kimi",
+        reasoning: true,
+        supported_reasoning_levels: [{ effort: "high" }],
+        context_window: 262_144,
+        context_length: 262_144,
+        max_input_tokens: 262_144,
+        max_output_tokens: 262_144,
+        modalities: { input: ["text", "image"] },
+      },
+      {
+        ...shared,
+        id: "gpt-5.5",
+        display_name: "gpt-5.5",
+        reasoning: false,
+        supported_reasoning_levels: [],
+      },
+      {
+        ...shared,
+        id: "glm-4.6",
+        display_name: "GLM-4.6",
+        reasoning: true,
+        supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
+        context_window: 200_000,
+        context_length: 200_000,
+        max_input_tokens: 200_000,
+        max_output_tokens: 131_072,
+        modalities: { input: ["text"] },
+      },
+    ]);
+  });
 });
 
 describe("the CLI configs follow the gateway across daemon starts", () => {

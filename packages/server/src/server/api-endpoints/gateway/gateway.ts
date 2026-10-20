@@ -12,7 +12,7 @@ import type pino from "pino";
 import { applyEdits, modify } from "jsonc-parser";
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { pinnedFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
-import { AGENT_REQUEST_FORMAT, isDefaultModelChoice, usableModels } from "../host-endpoints.js";
+import { AGENT_REQUEST_FORMAT, isDefaultModelChoice } from "../host-endpoints.js";
 import {
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
@@ -54,6 +54,7 @@ import {
 } from "./chatgpt-models.js";
 import { answerCodexCompaction, type CompactionAnswer } from "./codex-compaction-answer.js";
 import { CompactionFailures } from "./codex-compaction-fallback.js";
+import { modelList } from "./model-list.js";
 import { codexCompactionInput, localCompactionTurn } from "./codex-compaction.js";
 import {
   chatgptTurnDestination,
@@ -273,7 +274,10 @@ export function createApiEndpointGateway(options: {
     }
     if (req.path === "/v1/models" && req.method === "GET") {
       const state = readState({ res, wire, store, logger });
-      if (state) res.status(200).json(modelList(servedOf({ failover, state })));
+      if (state)
+        res
+          .status(200)
+          .json(modelList({ state: servedOf({ failover, state }), factsOf: failover.modelFacts }));
       return;
     }
     const target = req.method === "POST" ? agentPath(req.path) : null;
@@ -1757,24 +1761,4 @@ function readState(input: {
     });
     return null;
   }
-}
-
-/** OpenAI 与 Anthropic 两种列表写法合在一份里：开着的接口的已选模型，去重后的光秃秃名字。 */
-function modelList(state: ApiEndpointState) {
-  const data = usableModels(state).map((model) => ({
-    id: model.id,
-    object: "model",
-    type: "model",
-    display_name: model.label ?? model.id,
-    created: 0,
-    created_at: "1970-01-01T00:00:00Z",
-    owned_by: "osuna",
-  }));
-  return {
-    object: "list",
-    data,
-    has_more: false,
-    first_id: data[0]?.id ?? null,
-    last_id: data.at(-1)?.id ?? null,
-  };
 }
