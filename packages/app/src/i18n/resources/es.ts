@@ -4242,6 +4242,7 @@ export const es: TranslationResources = {
       pendingLink: "Sin documento vinculado",
       missingDoc: "Sin documento",
       missingDocHint: "Este nodo aún no tiene documento",
+      missingDocLabel: "{{title}} aún no tiene documento",
     },
   },
 };

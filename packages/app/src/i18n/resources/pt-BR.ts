@@ -4218,6 +4218,7 @@ export const ptBR: TranslationResources = {
       pendingLink: "Sem documento vinculado",
       missingDoc: "Sem documento",
       missingDocHint: "Este nó ainda não tem documento",
+      missingDocLabel: "{{title}} ainda não tem documento",
     },
   },
 };

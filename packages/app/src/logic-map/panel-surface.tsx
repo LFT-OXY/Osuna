@@ -224,15 +224,23 @@ function LogicMapPanelContent({
   });
   // 打开文档后主区域聚焦的是文件标签，"当前对话维护的图"就没了；把正在看的这张记成挑过的，
   // 面板不会跳回列表里的第一张，也停在当前这一层。
+  // 点了没有文档的节点：主区域还停在原来的文档上，但用户已经不在读它，先撤掉那张卡片的蓝圈，
+  // 聚焦的标签换了再按标签算。
+  const [outlineDroppedPath, setOutlineDroppedPath] = useState<string | null>(null);
+  if (outlineDroppedPath !== null && outlineDroppedPath !== focusedFilePath) {
+    setOutlineDroppedPath(null);
+  }
   const handleOpenNodeDoc = useCallback(
     (nodeId: string) => {
       setPickedMapName(selectedMapName);
+      const missingDoc = skeleton?.nodes.find((node) => node.id === nodeId)?.doc === null;
+      setOutlineDroppedPath(missingDoc ? focusedFilePath : null);
       openNodeDoc(nodeId);
     },
-    [openNodeDoc, selectedMapName],
+    [focusedFilePath, openNodeDoc, selectedMapName, skeleton],
   );
   const selectedNodeId =
-    skeleton && selectedMapName
+    skeleton && selectedMapName && outlineDroppedPath === null
       ? focusedNodeDocId({
           skeleton,
           mapName: selectedMapName,

@@ -28,6 +28,10 @@ export interface LogicMapCanvasPalette {
   pendingTagBackground: string;
   pendingTagBorder: string;
   pendingTagText: string;
+  /** "没有文档"标签：灰底虚线框，和黄色的"未指向文档"分开。 */
+  missingDocTagBackground: string;
+  missingDocTagBorder: string;
+  missingDocTagText: string;
   branchLabel: string;
   conditionBackground: string;
   conditionText: string;
@@ -58,6 +62,9 @@ export const LOGIC_MAP_LIGHT_PALETTE: LogicMapCanvasPalette = {
   pendingTagBackground: "#fffaeb",
   pendingTagBorder: "#fedf89",
   pendingTagText: "#b54708",
+  missingDocTagBackground: "#f2f4f7",
+  missingDocTagBorder: "#98a2b3",
+  missingDocTagText: "#475467",
   branchLabel: "#98a2b3",
   conditionBackground: "#f2f4f7",
   conditionText: "#344054",
@@ -87,6 +94,9 @@ export const LOGIC_MAP_DARK_PALETTE: LogicMapCanvasPalette = {
   pendingTagBackground: "#3a2d0f",
   pendingTagBorder: "#7a5a12",
   pendingTagText: "#fec84b",
+  missingDocTagBackground: "#31333a",
+  missingDocTagBorder: "#85888e",
+  missingDocTagText: "#cecfd2",
   branchLabel: "#85888e",
   conditionBackground: "#31333a",
   conditionText: "#cecfd2",

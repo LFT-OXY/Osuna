@@ -4285,6 +4285,7 @@ export const en = {
       pendingLink: "No doc linked",
       missingDoc: "No doc",
       missingDocHint: "This node has no doc yet",
+      missingDocLabel: "{{title}} has no doc yet",
     },
   },
 } as const;

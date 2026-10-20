@@ -4254,6 +4254,7 @@ export const fr: TranslationResources = {
       pendingLink: "Aucun doc lié",
       missingDoc: "Aucun document",
       missingDocHint: "Ce nœud n’a pas encore de document",
+      missingDocLabel: "{{title}} n’a pas encore de document",
     },
   },
 };

@@ -4224,6 +4224,7 @@ export const ru: TranslationResources = {
       pendingLink: "Документ не привязан",
       missingDoc: "Нет документа",
       missingDocHint: "У этого узла пока нет документа",
+      missingDocLabel: "У узла {{title}} пока нет документа",
     },
   },
 };

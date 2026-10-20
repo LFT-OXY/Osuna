@@ -285,11 +285,14 @@ function layerWarnings(draft: Draft): string[] {
   return warnings;
 }
 
-/** 判断过 spec 框架之后，每个节点都该有文档（自有文档或外部指向）；逐个列出还缺的。 */
+/**
+ * 判断过 spec 框架之后，除子图节点外每个节点都该有文档（自有文档或外部指向）；逐个列出还缺的。
+ * 子图节点点了是进下一层，不需要文档——app 的"没有文档"标签（logic-map/layout.ts）按同一条规则。
+ */
 function missingDocWarnings(draft: Draft): string[] {
   if (draft.specFramework === null) return [];
   const missing = [...draft.nodes.values()]
-    .filter((node) => node.doc === null)
+    .filter((node) => node.kind !== "subgraph" && node.doc === null)
     .map((node) => `"${node.id}" (${node.title})`);
   if (missing.length === 0) return [];
   const howToFill =

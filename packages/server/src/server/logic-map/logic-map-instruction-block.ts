@@ -54,7 +54,7 @@ function specFrameworkLines(map: LogicMapOnDisk, turn: LogicMapTurn): string[] {
     return [
       [
         "Spec framework:",
-        "- This project has no spec framework. Every node must have a node doc, start, end and subgraph nodes included. Write a complete node doc for each one with `write_node_doc`: how this part works, its rules and branches, so it can be built from that doc alone.",
+        "- This project has no spec framework. Every node except a subgraph node must have a node doc, start and end nodes included. Write a complete node doc for each one with `write_node_doc`: how this part works, its rules and branches, so it can be built from that doc alone.",
         MISSING_DOCS_RULE,
         CORRECTION_RULE,
       ].join("\n"),
@@ -68,7 +68,7 @@ function specFrameworkLines(map: LogicMapOnDisk, turn: LogicMapTurn): string[] {
       "Spec framework:",
       `- This project has a spec framework; its docs are at ${framework.docsPath}. Do not write the final requirement into the map. Until the framework has a doc for a node, give the node an interim summary of 3 to 6 sentences with \`write_node_doc\`: what the step does, its rules, and which branch it takes. Such a node carries a "not linked to the final doc yet" marker.`,
       "- Once the framework writes the doc for a node, point the node at that section with `link_node_doc`.",
-      "- Every node must have a node doc: either an interim summary or a link to the framework's doc.",
+      "- Every node except a subgraph node must have a node doc: either an interim summary or a link to the framework's doc.",
       MISSING_DOCS_RULE,
       CORRECTION_RULE,
     ].join("\n"),

@@ -4144,6 +4144,7 @@ export const zhCN: TranslationResources = {
       pendingLink: "未指向文档",
       missingDoc: "没有文档",
       missingDocHint: "这个节点还没有文档",
+      missingDocLabel: "{{title}} 还没有文档",
     },
   },
 };

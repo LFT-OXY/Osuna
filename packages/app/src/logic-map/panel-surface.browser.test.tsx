@@ -445,6 +445,33 @@ describe("the logic map panel", () => {
 
     expect(host.toastMessages).toEqual(["This node has no doc yet"]);
     expect(onOpenNodeDoc).not.toHaveBeenCalled();
+    expect(
+      byTestId("logic-map-node-home").querySelector('[role="button"]')?.getAttribute("aria-label"),
+    ).toBe("进入首页 has no doc yet");
+  });
+
+  it("drops the outline from the node being read when a node without a doc is clicked", async () => {
+    const host = loginMapHost();
+    const map = buildLoginLogicMap();
+    host.reads.set("user-login", {
+      kind: "ok",
+      map: {
+        ...map,
+        nodes: map.nodes.map((node) => (node.id === "reset-count" ? { ...node, doc: null } : node)),
+      },
+    });
+    const update = mountSurface(host, {
+      focusedFilePath: "docs/logic-maps/user-login/password.md",
+    });
+    await expect.poll(() => outlined("logic-map-node-password")).toBe(true);
+
+    await userEvent.click(byTestId("logic-map-node-title-reset-count"));
+
+    await expect.poll(() => outlined("logic-map-node-password")).toBe(false);
+    expect(await outlined("logic-map-node-reset-count")).toBe(false);
+
+    update({ focusedFilePath: "docs/logic-maps/user-login/submit.md" });
+    await expect.poll(() => outlined("logic-map-node-submit")).toBe(true);
   });
 
   it("opens a node that points at a framework doc at the line of its heading", async () => {

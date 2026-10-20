@@ -4204,6 +4204,7 @@ export const ja: TranslationResources = {
       pendingLink: "ドキュメント未リンク",
       missingDoc: "ドキュメントなし",
       missingDocHint: "このノードにはまだドキュメントがありません",
+      missingDocLabel: "{{title}} にはまだドキュメントがありません",
     },
   },
 } as const;

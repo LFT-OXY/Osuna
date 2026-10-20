@@ -4180,6 +4180,7 @@ export const ko: TranslationResources = {
       pendingLink: "문서 미연결",
       missingDoc: "문서 없음",
       missingDocHint: "이 노드에는 아직 문서가 없습니다",
+      missingDocLabel: "{{title}}에는 아직 문서가 없습니다",
     },
   },
 };

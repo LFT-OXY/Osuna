@@ -239,6 +239,12 @@ function NodeCardContent({ node }: { node: LogicMapNodeBox }) {
   );
 }
 
+function cardActionLabelKey(node: LogicMapNodeBox) {
+  if (node.kind === "subgraph") return "logicMap.panel.enterSubgraph" as const;
+  if (node.missingDoc) return "logicMap.panel.missingDocLabel" as const;
+  return "logicMap.panel.openNodeDoc" as const;
+}
+
 /** 卡片里面这一层整张可按：子图卡片进入下一层，其他卡片打开节点文档（没有文档时由面板提示）。 */
 function NodeCardBody({
   node,
@@ -257,9 +263,7 @@ function NodeCardBody({
     () => (isSubgraph ? onEnterSubgraph(node.id) : onOpenNodeDoc(node.id)),
     [isSubgraph, node.id, onEnterSubgraph, onOpenNodeDoc],
   );
-  const accessibilityLabel = isSubgraph
-    ? t("logicMap.panel.enterSubgraph", { title: node.title })
-    : t("logicMap.panel.openNodeDoc", { title: node.title });
+  const accessibilityLabel = t(cardActionLabelKey(node), { title: node.title });
   return (
     <Pressable
       style={styles.body}
@@ -485,12 +489,13 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.base,
     borderWidth: theme.borderWidth[1],
     borderStyle: "dashed",
-    borderColor: theme.colors.logicMap.neutral,
+    borderColor: theme.colors.logicMap.missingDocTagBorder,
+    backgroundColor: theme.colors.logicMap.missingDocTagBackground,
   },
   missingDocTagText: {
     ...theme.typeScale.micro,
     fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.logicMap.muted,
+    color: theme.colors.logicMap.missingDocTagText,
   },
   tooltipText: {
     ...theme.typeScale.label,

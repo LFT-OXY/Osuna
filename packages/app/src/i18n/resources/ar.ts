@@ -4154,6 +4154,7 @@ export const ar: TranslationResources = {
       pendingLink: "بلا مستند مرتبط",
       missingDoc: "لا يوجد مستند",
       missingDocHint: "لا يوجد مستند لهذه العقدة بعد",
+      missingDocLabel: "لا يوجد مستند لـ {{title}} بعد",
     },
   },
 };

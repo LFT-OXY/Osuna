@@ -520,6 +520,7 @@ describe("update_logic_map", () => {
 
     const result = await update(client, [
       ...LOGIN_FLOW,
+      { op: "add_node", id: "second-factor", title: "Second factor", kind: "subgraph" },
       { op: "set_spec_framework", framework: { kind: "none" } },
       { op: "write_node_doc", id: "check", content: "Compare hashes." },
     ]);
@@ -544,13 +545,14 @@ describe("update_logic_map", () => {
     expect(filled.structured).toEqual({ mapName: harness.mapName, warnings: [] });
   });
 
-  test("with a spec framework, only nodes with neither an interim summary nor a link are listed", async () => {
+  test("with a spec framework, only nodes with neither an interim summary nor a link are listed, until they get one", async () => {
     const harness = await setUp();
     const client = await connectAgent(harness);
     await writeFile(path.join(harness.cwd, "prd.md"), "# Login\n\n## Lock\n");
 
     const result = await update(client, [
       ...LOGIN_FLOW,
+      { op: "add_node", id: "second-factor", title: "Second factor", kind: "subgraph" },
       { op: "set_spec_framework", framework: { kind: "present", docsPath: "." } },
       { op: "write_node_doc", id: "check", content: "Interim summary." },
       { op: "link_node_doc", id: "locked", path: "prd.md", heading: "Lock" },
@@ -563,6 +565,14 @@ describe("update_logic_map", () => {
         'These nodes have no node doc yet: "start" (Open the login page), "home" (Show the home page). Every node needs a doc: link each to its section in the framework docs with `link_node_doc`, or give it an interim summary with `write_node_doc`.',
       ],
     });
+
+    await writeFile(path.join(harness.cwd, "prd.md"), "# Login\n\n## Lock\n\n## Home\n");
+    const filled = await update(client, [
+      { op: "write_node_doc", id: "start", content: "Interim summary." },
+      { op: "link_node_doc", id: "home", path: "prd.md", heading: "Home" },
+    ]);
+
+    expect(filled.structured).toEqual({ mapName: harness.mapName, warnings: [] });
   });
 
   test("a map whose spec framework is not judged yet does not list missing docs", async () => {
