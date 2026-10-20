@@ -2641,6 +2641,16 @@ export const ko: TranslationResources = {
         detect: "자동 감지",
         detectModelPlaceholder: "시도할 모델(선택)",
         detected: {
+          eachButton: "선택한 모델별로",
+          eachInfo:
+            "선택한 모델(최대 {{max}}개)을 요청 형식마다 한 번씩, 몇 개씩 동시에 물어봐서 어떤 형식이 어떤 모델을 지원하는지 확인합니다. 엔드포인트를 편집할 때는 「이것 사용」이 한 형식에서만 응답한 모델을 「이 형식만 사용」으로 설정합니다.",
+          eachNeedsModels:
+            "먼저 모델을 선택하거나, 시험할 모델을 입력하고 「자동 감지」를 누르세요.",
+          eachCut: "모델 {{picked}}개 중 처음 {{asked}}개만 물어봤습니다.",
+          eachOk: "{{ms}}ms",
+          eachGivenItem: "{{model}}: {{format}}만",
+          eachGivenByTake: "「이것 사용」이 「이 형식만 사용」도 설정합니다: {{list}}",
+          eachGivenOnceSaved: "저장하면 이 모델들은 이 형식만 사용합니다: {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "다시 누르면 취소됩니다.",
           onlyClearedOnceSaved: "저장하면 {{model}}을(를) 다시 모든 형식으로 요청합니다.",

@@ -2626,6 +2626,15 @@ export const ar: TranslationResources = {
         detect: "اكتشاف تلقائي",
         detectModelPlaceholder: "نموذج للتجربة (اختياري)",
         detected: {
+          eachButton: "كل نموذج مختار",
+          eachInfo:
+            "يسأل كل نموذج مختار، حتى {{max}} نموذجًا، مرة واحدة بكل تنسيق طلب، بضعة نماذج في كل مرة، لمعرفة أي تنسيق يخدم أي نموذج. عند تعديل نقطة نهاية، يضبط «استخدم هذه» أيضًا النموذج الذي أجاب بتنسيق واحد فقط على «استخدام هذا التنسيق فقط».",
+          eachNeedsModels: "اختر النماذج أولًا، أو اكتب نموذجًا للتجربة واضغط «اكتشاف تلقائي».",
+          eachCut: "سُئلت أول {{asked}} نماذج فقط من أصل {{picked}}.",
+          eachOk: "{{ms}} مللي ثانية",
+          eachGivenItem: "{{model}}: {{format}} فقط",
+          eachGivenByTake: "يضبط «استخدم هذه» أيضًا «استخدام هذا التنسيق فقط»: {{list}}",
+          eachGivenOnceSaved: "بعد الحفظ، تستخدم هذه النماذج هذا التنسيق فقط: {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "اضغط مرة أخرى للتراجع.",
           onlyClearedOnceSaved: "بعد الحفظ يُطلب {{model}} بأي تنسيق مجددًا.",

@@ -481,6 +481,22 @@ smallest request) follows magpie's internal/provider/detect.go and test.go:
 
   packages/server/src/server/api-endpoints/upstream-detect.ts
 
+Detecting each picked model (the first 30 picked models asked once on every
+format, eight requests at a time, each waiting 12 seconds and the whole
+detection two minutes, what was not reached in time said not asked, image
+models not asked, by format the first model that answered; the model-by-model
+table, the note when only the first models were asked, and Use these giving a
+model that answered on one format only that format) follows DetectModels,
+DetectMax, DetectWide and detectWait in magpie's internal/provider/detect.go,
+ImagesAPI in internal/catalog/catalog.go, TestDetectModels and
+TestDetectModelsOutOfTime in internal/provider/detect_test.go, and the "Each
+picked model" button of detectAPIs in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/detect-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-detect.e2e.test.ts
+  packages/app/src/api-endpoints/internal/connection-form-model.ts
+  packages/app/src/api-endpoints/connection-form-sheet.tsx
+
 Test models (four at a time, one "hi" capped at 16 tokens per model, a
 disabled model never asked, each model's result in page memory, the free word
 in a model's id or name, the context tag over a million tokens, and how long a

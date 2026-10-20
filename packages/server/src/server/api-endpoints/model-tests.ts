@@ -72,7 +72,7 @@ export interface ModelTestProgress {
 }
 
 /** 到点就 abort 的信号；用完要 clear，免得计时器留着。 */
-function deadlineSignal(input: { timers: UsagePricingTimers; ms: number }): {
+export function deadlineSignal(input: { timers: UsagePricingTimers; ms: number }): {
   signal: AbortSignal;
   clear: () => void;
 } {
@@ -103,6 +103,25 @@ function failedResult(input: {
   };
 }
 
+/** 最多 concurrency 件一起做，按序号先后取下一件；signal 中止后不再取新的（测试模型与逐个模型识别共用）。 */
+export async function runPool(input: {
+  count: number;
+  concurrency: number;
+  signal: AbortSignal;
+  run: (index: number) => Promise<void>;
+}): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < input.count && !input.signal.aborted) {
+      const index = next;
+      next += 1;
+      await input.run(index);
+    }
+  };
+  const workers = Math.max(1, Math.min(input.concurrency, input.count));
+  await Promise.all(Array.from({ length: workers }, worker));
+}
+
 export async function runModelTests(input: {
   plans: ModelTestPlan[];
   // 没 key 的接口为 null，不带认证头。
@@ -125,21 +144,19 @@ export async function runModelTests(input: {
     done += 1;
     input.onResult({ result, done, total: plans.length });
   };
-  let next = 0;
-  const worker = async () => {
-    while (next < plans.length && !signal.aborted) {
-      const index = next;
-      next += 1;
+  await runPool({
+    count: plans.length,
+    concurrency: limits.concurrency,
+    signal,
+    run: async (index) => {
       const plan = plans[index];
       if (!plan) return;
       const result = await testOne({ ...input, plan, signal });
       // 取消或整批到点时被打断的不算测完。
       if (signal.aborted) return;
       finish(index, result);
-    }
-  };
-  const workers = Math.max(1, Math.min(limits.concurrency, plans.length));
-  await Promise.all(Array.from({ length: workers }, worker));
+    },
+  });
   batch.clear();
   const finished = () => results.filter((result) => result !== null);
   if (input.signal.aborted) return { kind: "cancelled", results: finished() };

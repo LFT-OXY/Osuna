@@ -207,7 +207,7 @@ describe("connection form: create", () => {
       apiKey: "sk-1",
     });
 
-    fake.answerDetect({ status: "done", results: DETECTED });
+    fake.answerDetect({ status: "done", results: DETECTED, models: null });
     await flush();
 
     // 先只列结论，地址栏不动（照 magpie Detect）。
@@ -243,6 +243,9 @@ describe("connection form: create", () => {
           modelId: null,
         },
       ],
+      byModel: null,
+      eachCut: null,
+      onlyGiven: [],
       isTaken: false,
       onlyChoices: null,
       canTake: true,
@@ -292,6 +295,7 @@ describe("connection form: create", () => {
     model.detect();
     fake.answerDetect({
       status: "done",
+      models: null,
       results: [
         detection("anthropic_messages", "https://relay.example", "auth_failed", 401),
         detection("openai_chat", "https://relay.example/v1", "auth_failed", 401),
@@ -320,7 +324,7 @@ describe("connection form: create", () => {
     model.setAddress("https://relay.example");
     model.setUrl("openai_responses", "https://other.example/v1");
     model.detect();
-    fake.answerDetect({ status: "done", results: DETECTED });
+    fake.answerDetect({ status: "done", results: DETECTED, models: null });
     await flush();
     model.takeDetected();
     expect(model.getState().formats[2]?.url).toBe("https://other.example/v1");
@@ -328,7 +332,7 @@ describe("connection form: create", () => {
     // 照 magpie useDetected：没在那里找到（404）、而地址栏正是建议地址的那栏清掉。
     model.setUrl("openai_responses", "https://relay.example/v1/");
     model.detect();
-    fake.answerDetect({ status: "done", results: DETECTED });
+    fake.answerDetect({ status: "done", results: DETECTED, models: null });
     await flush();
     model.takeDetected();
     expect(model.getState().formats[2]?.url).toBe("");
@@ -369,7 +373,7 @@ describe("connection form: create", () => {
     expect(fake.detects[0]?.signal.aborted).toBe(true);
     expect(model.getState().detecting).toBe(false);
 
-    fake.answerDetect({ status: "done", results: DETECTED });
+    fake.answerDetect({ status: "done", results: DETECTED, models: null });
     await flush();
     expect(model.getState().formats.map((entry) => entry.url)).toEqual(["", "", ""]);
   });
@@ -420,7 +424,7 @@ describe("connection form: edit", () => {
       baseUrl: "https://relay.example",
     });
     expect(model.getState().canSubmit).toBe(false);
-    fake.answerDetect({ status: "done", results: DETECTED });
+    fake.answerDetect({ status: "done", results: DETECTED, models: null });
     await flush();
 
     model.setName("Relay 2");
@@ -457,6 +461,7 @@ describe("connection form: the key is optional when the host says so", () => {
     expect(fake.detects[0]?.request).toEqual({ baseUrl: "http://127.0.0.1:11434" });
     fake.answerDetect({
       status: "done",
+      models: null,
       results: [detection("openai_chat", "http://127.0.0.1:11434/v1", "ok")],
     });
     await flush();
@@ -1723,6 +1728,7 @@ describe("connection form: checking before saving", () => {
 
     fake.answerDetect({
       status: "done",
+      models: null,
       results: [
         {
           ...detection("openai_chat", "https://relay.example/v1", "ok"),
@@ -1757,6 +1763,7 @@ describe("connection form: checking before saving", () => {
     model.detect();
     fake.answerDetect({
       status: "done",
+      models: null,
       results: [detection("openai_chat", "https://relay.example/v1", "auth_failed", 401)],
     });
     await flush();
@@ -2076,7 +2083,7 @@ describe("connection form: asking the detected model in one format only", () => 
     if (input.mode === "create") model.setAddress("https://relay.example");
     model.setDetectModel(input.model);
     model.detect();
-    fake.answerDetect({ status: "done", results: input.results });
+    fake.answerDetect({ status: "done", results: input.results, models: null });
     await flush();
     return { fake, model };
   }
@@ -2185,7 +2192,7 @@ describe("connection form: asking the detected model in one format only", () => 
       modelId: "glm-4.6",
       modelIds: ["claude-sonnet-4-5", "glm-4.6"],
     });
-    fake.answerDetect({ status: "done", results: PICKED_ONLY });
+    fake.answerDetect({ status: "done", results: PICKED_ONLY, models: null });
     await flush();
     model.testConnection();
     expect(fake.tests[0]?.request).toMatchObject({ endpointId: "ep_1", apiKey: "sk-new" });
@@ -2203,5 +2210,217 @@ describe("connection form: asking the detected model in one format only", () => 
     );
     const everywhere = await detectedOn({ model: "glm-4.6", results: all });
     expect(everywhere.model.getState().detection?.onlyChoices).toBeNull();
+  });
+});
+
+function labelsByModel(rows: { modelId: string; cells: { label: string }[] }[] | null | undefined) {
+  return (rows ?? []).map((row) => [row.modelId, row.cells.map((cell) => cell.label)]);
+}
+
+// 接口管理好用性工单 21：自动识别「逐个模型」（照 magpie Detect 的 Each picked model）。
+describe("connection form: detecting each picked model", () => {
+  function cell(input: {
+    format: string;
+    url: string;
+    modelId: string;
+    isOk: boolean;
+  }): ApiEndpointFormatDetection {
+    const { format, url, modelId, isOk } = input;
+    return {
+      format,
+      url,
+      status: isOk ? "ok" : "not_detected",
+      httpStatus: isOk ? 200 : 400,
+      message: isOk ? null : `POST ${url}/x: HTTP 400: model ${modelId} not supported`,
+      durationMs: 120,
+      modelId,
+    };
+  }
+
+  // 按 Anthropic、Chat、Responses 答没答上。
+  function modelRow(modelId: string, answers: [boolean, boolean, boolean]) {
+    const urls = ["https://relay.example", "https://relay.example/v1", "https://relay.example/v1"];
+    const formats = ["anthropic_messages", "openai_chat", "openai_responses"];
+    return {
+      modelId,
+      results: formats.map((format, index) =>
+        cell({ format, url: urls[index] ?? "", modelId, isOk: answers[index] === true }),
+      ),
+    };
+  }
+
+  const EACH_ROWS = [
+    modelRow("claude-sonnet-4-5", [true, true, false]),
+    modelRow("glm-4.6", [false, true, false]),
+  ];
+  const EACH_SUMMARY = [
+    cell({
+      format: "anthropic_messages",
+      url: "https://relay.example",
+      modelId: "claude-sonnet-4-5",
+      isOk: true,
+    }),
+    cell({
+      format: "openai_chat",
+      url: "https://relay.example/v1",
+      modelId: "claude-sonnet-4-5",
+      isOk: true,
+    }),
+    cell({
+      format: "openai_responses",
+      url: "https://relay.example/v1",
+      modelId: "claude-sonnet-4-5",
+      isOk: false,
+    }),
+  ];
+
+  it("asks the endpoint's picked models on every format and shows them model by model", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState().canDetectEach).toBe(true);
+    model.detectEachModel();
+    expect(model.getState()).toMatchObject({ detecting: true, canDetectEach: false });
+    expect(fake.detects[0]?.request).toEqual({
+      endpointId: "ep_1",
+      baseUrl: "https://relay.example",
+      modelIds: ["claude-sonnet-4-5", "glm-4.6"],
+      eachModel: true,
+    });
+
+    fake.answerDetect({ status: "done", results: EACH_SUMMARY, models: EACH_ROWS });
+    await flush();
+    const detected = model.getState().detection;
+    expect(detected?.results.map((result) => result.label)).toEqual(["ok", "ok", "not_detected"]);
+    expect(labelsByModel(detected?.byModel)).toEqual([
+      ["claude-sonnet-4-5", ["ok", "ok", "not_detected"]],
+      ["glm-4.6", ["not_detected", "ok", "not_detected"]],
+    ]);
+    expect(detected?.byModel?.[1]?.cells[0]).toMatchObject({
+      durationMs: 120,
+      message: "HTTP 400: model glm-4.6 not supported · /x",
+    });
+    // 只在一种格式上答上的才给「只用这种格式」；试了一个模型的那排按钮这时没有。
+    expect(detected?.onlyGiven).toEqual([{ modelId: "glm-4.6", format: "openai_chat" }]);
+    expect(detected?.onlyChoices).toBeNull();
+    expect(detected?.eachCut).toBeNull();
+  });
+
+  it("Use these fills the addresses and makes each model that answered on one format only use it, with the save", async () => {
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      baseUrls: [{ format: "anthropic_messages", url: "https://relay.example" }],
+      modelSettings: { models: { "glm-4.6": { name: "GLM" } } },
+    };
+    const fake = fakeDeps();
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, KEY_OPTIONAL);
+    model.detectEachModel();
+    fake.answerDetect({ status: "done", results: EACH_SUMMARY, models: EACH_ROWS });
+    await flush();
+
+    model.takeDetected();
+    expect(model.getState().detection).toMatchObject({ isTaken: true, canTake: false });
+    await model.submit();
+    expect(fake.saves[0]?.baseUrls).toEqual([
+      { format: "anthropic_messages", url: "https://relay.example" },
+      { format: "openai_chat", url: "https://relay.example/v1" },
+    ]);
+    expect(fake.saves[0]?.modelSettings).toEqual({
+      models: { "glm-4.6": { name: "GLM", format: "openai_chat" } },
+    });
+  });
+
+  it("a model already using that format only stages nothing", async () => {
+    const endpoint: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      modelSettings: { models: { "glm-4.6": { format: "openai_chat" } } },
+    };
+    const fake = fakeDeps();
+    const model = createConnectionFormModel({ mode: "edit", endpoint }, fake.deps, KEY_OPTIONAL);
+    model.detectEachModel();
+    fake.answerDetect({ status: "done", results: EACH_SUMMARY, models: EACH_ROWS });
+    await flush();
+    model.takeDetected();
+    await model.submit();
+    expect(fake.saves[0]?.modelSettings).toBeUndefined();
+  });
+
+  it("a new endpoint asks the models typed in, says when only the first were asked, and gives no model a format", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName("Relay");
+    model.setAddress("https://relay.example");
+    const typed = Array.from({ length: 32 }, (_, index) => `m-${index}`);
+    model.setModelIds(typed.join(", "));
+    model.detectEachModel();
+    expect(fake.detects[0]?.request).toEqual({
+      baseUrl: "https://relay.example",
+      modelIds: typed,
+      eachModel: true,
+    });
+    const rows = typed.slice(0, 30).map((id) => modelRow(id, [false, true, false]));
+    fake.answerDetect({ status: "done", results: EACH_SUMMARY, models: rows });
+    await flush();
+    expect(model.getState().detection).toMatchObject({
+      eachCut: { asked: 30, picked: 32 },
+      onlyGiven: [],
+    });
+  });
+
+  it("with no model picked it says to pick some first and asks nothing", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setName("Relay");
+    model.setAddress("https://relay.example");
+    model.detectEachModel();
+    expect(fake.detects).toEqual([]);
+    expect(model.getState()).toMatchObject({ eachNeedsModels: true, detecting: false });
+    model.setModelIds("glm-4.6");
+    expect(model.getState().eachNeedsModels).toBe(false);
+  });
+
+  it("a detection that failed says why, and one can be cancelled", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.detectEachModel();
+    fake.answerDetect({ status: "failed", message: "No model to try: pick the models first" });
+    await flush();
+    expect(model.getState()).toMatchObject({
+      detecting: false,
+      detectError: "No model to try: pick the models first",
+      detection: null,
+    });
+
+    model.detectEachModel();
+    model.cancelDetect();
+    expect(fake.detects[1]?.signal.aborted).toBe(true);
+    expect(model.getState()).toMatchObject({ detecting: false, detection: null });
+  });
+
+  it("a host without the capability has no Each picked model", () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_REQUIRED,
+    );
+    expect(model.getState().canDetectEach).toBe(false);
+    model.detectEachModel();
+    expect(fake.detects).toEqual([]);
   });
 });

@@ -1337,6 +1337,53 @@ describe("API endpoint management (apiEndpointManagement)", () => {
     };
     expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
   });
+
+  it("parses detect_formats asking each picked model, with the model-by-model results", () => {
+    const request = {
+      type: "provider.api_endpoint.detect_formats.request" as const,
+      requestId: "req-p5",
+      baseUrl: "https://relay.example",
+      modelIds: ["gpt-resp", "claude-only"],
+      eachModel: true,
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+
+    const answered = {
+      format: "openai_responses",
+      url: "https://relay.example/v1",
+      status: "ok",
+      httpStatus: 200,
+      message: null,
+      durationMs: 210,
+      modelId: "gpt-resp",
+    };
+    const response = {
+      type: "provider.api_endpoint.detect_formats.response" as const,
+      payload: {
+        requestId: "req-p5",
+        results: [answered],
+        models: [
+          {
+            modelId: "gpt-resp",
+            results: [
+              {
+                format: "openai_chat",
+                url: "https://relay.example/v1",
+                status: "not_detected",
+                httpStatus: 400,
+                message: "HTTP 400: not supported",
+                durationMs: 90,
+                modelId: "gpt-resp",
+              },
+              answered,
+            ],
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+  });
 });
 
 describe("API endpoint model scope and auto-pick rules (apiEndpointManagement)", () => {

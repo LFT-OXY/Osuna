@@ -1303,6 +1303,77 @@ test.describe("Settings API endpoints", () => {
       .toEqual({ models: { "model-01": { format: "openai_chat" } } });
   });
 
+  test("Each picked model lists every model on every format; Use these makes a model that answered on one format only use it; a rejected key and a cancel", async ({
+    page,
+  }) => {
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["claude-sonnet-4-5", "chat-only-glm"],
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const each = page.getByTestId("api-endpoint-connection-detect-each");
+    const verdict = (model: string, format: string) =>
+      page.getByTestId(`api-endpoint-connection-each-${model}-${format}-verdict`);
+
+    await test.step("each model gets a row with each format's answer", async () => {
+      relay.requests.length = 0;
+      await each.click();
+      await expect(verdict("claude-sonnet-4-5", "anthropic_messages")).toHaveText(/^\d+ ms$/);
+      await expect(verdict("claude-sonnet-4-5", "openai_chat")).toHaveText(/^\d+ ms$/);
+      await expect(verdict("claude-sonnet-4-5", "openai_responses")).toHaveText("Not detected");
+      await expect(verdict("chat-only-glm", "anthropic_messages")).toHaveText("Not detected");
+      await expect(
+        page.getByTestId("api-endpoint-connection-each-chat-only-glm-anthropic_messages-reason"),
+      ).toHaveText("HTTP 400: The model chat-only-glm is not served here · /v1/messages");
+      await expect(verdict("chat-only-glm", "openai_chat")).toHaveText(/^\d+ ms$/);
+      // 两个模型、三种格式，各问一次。
+      expect(postedPaths(relay)).toHaveLength(6);
+      await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
+        "Use these also sets Use only this format: chat-only-glm: OpenAI Chat only",
+      );
+    });
+
+    await test.step("Use these and Save make it use only that format", async () => {
+      await page.getByTestId("api-endpoint-connection-use-detected").click();
+      await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
+        "After saving, these use only this format: chat-only-glm: OpenAI Chat only",
+      );
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      await expect
+        .poll(modelSettingsReader(endpointId))
+        .toEqual({ models: { "chat-only-glm": { format: "openai_chat" } } });
+    });
+
+    await test.step("a rejected key reads Key rejected on every format", async () => {
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await page.getByTestId("api-endpoint-connection-api-key").fill("sk-wrong");
+      await each.click();
+      for (const model of ["claude-sonnet-4-5", "chat-only-glm"]) {
+        for (const format of ["anthropic_messages", "openai_chat", "openai_responses"]) {
+          await expect(verdict(model, format)).toHaveText("Key rejected");
+        }
+      }
+      await expect(page.getByTestId("api-endpoint-connection-use-detected")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-none-answered")).toBeVisible();
+    });
+
+    await test.step("a detection that hangs can be cancelled", async () => {
+      await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+      await page.getByTestId("api-endpoint-connection-address").fill(`${relay.origin}/slow`);
+      await each.click();
+      await page.getByTestId("api-endpoint-connection-detect-cancel").click();
+      await expect(page.getByTestId("api-endpoint-connection-detect-cancel")).toHaveCount(0);
+      await expect(page.getByTestId("api-endpoint-connection-each-results")).toHaveCount(0);
+      await expect(each).toBeEnabled();
+    });
+  });
+
   test("Long conversations: Full window and Compact at reach the host, and a refusal keeps what was there", async ({
     page,
   }) => {
@@ -4828,6 +4899,10 @@ function numberedModels(count: number): string[] {
 
 function scopeReader(endpointId: string): () => Promise<string | undefined> {
   return async () => (await endpointOf(endpointId))?.modelScope;
+}
+
+function modelSettingsReader(endpointId: string) {
+  return async () => (await endpointOf(endpointId))?.modelSettings;
 }
 
 function autoPickReader(endpointId: string): () => Promise<string[] | undefined> {

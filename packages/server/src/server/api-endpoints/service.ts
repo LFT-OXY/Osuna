@@ -24,6 +24,7 @@ import {
   type ApiEndpointConnection,
   type ApiEndpointCooldown,
   type ApiEndpointFormatDetection,
+  type ApiEndpointModelDetection,
   type ApiEndpointHealthIssue,
   type ApiEndpointListResponse,
   type ApiEndpointLongConversations,
@@ -246,6 +247,7 @@ const CLAUDE_START_THINKING = "high";
 /** 挑默认模型时从 CLI 配置与接管记录里读的那些。 */
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
+import { DETECT_EACH_DEFAULTS, detectEachModel, type DetectEachLimits } from "./detect-models.js";
 import {
   cachedCodexVersion,
   codexSignHeaders,
@@ -491,6 +493,14 @@ export interface ApiEndpointDetectInput {
   // 用户填的试用模型；没填时从 modelIds（表单里已选的）挑，也没有才向上游列。
   modelId?: string;
   modelIds?: string[];
+  // 逐个模型：modelIds 的前 30 个每个在每种格式上各问一次。
+  eachModel?: boolean;
+}
+
+/** 自动识别的结论：每种格式一条；逐个模型识别时另有逐个模型的，否则为 null。 */
+export interface ApiEndpointDetectOutcome {
+  results: ApiEndpointFormatDetection[];
+  models: ApiEndpointModelDetection[] | null;
 }
 
 export interface ApiEndpointTestModelsInput {
@@ -550,7 +560,9 @@ export interface ApiEndpointServiceOptions {
   connectionTestTimeoutMs?: number;
   // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
   modelTests?: Partial<ModelTestLimits>;
-  // 测试模型的单个与整批计时器；测试换成手动到点的。
+  // 逐个模型识别的并发与时限；缺省 8 个一起、单个 12 秒、整次 2 分钟（detect-models.ts），测试换成短的。
+  detectEach?: Partial<DetectEachLimits>;
+  // 测试模型与逐个模型识别的单个与整批计时器；测试换成手动到点的。
   modelTestTimers?: UsagePricingTimers;
   // 价格表的自动更新开关：开着才下载 models.dev（另外还要 Claude Code 或 Codex 的总开关开着），
   // 也才每天给开着的接口重新拉清单；缺省都不做。
@@ -729,6 +741,7 @@ export class ApiEndpointService {
   private readonly upstreamTimeoutMs: number;
   private readonly connectionTestTimeoutMs: number;
   private readonly modelTestLimits: ModelTestLimits;
+  private readonly detectEachLimits: DetectEachLimits;
   private readonly modelTestTimers: UsagePricingTimers;
   private readonly beforeConfigRecheck: ((filePath: string) => void) | undefined;
   private readonly cooldowns: EndpointCooldowns;
@@ -808,6 +821,7 @@ export class ApiEndpointService {
     this.connectionTestTimeoutMs =
       options.connectionTestTimeoutMs ?? DEFAULT_CONNECTION_TEST_TIMEOUT_MS;
     ({ limits: this.modelTestLimits, timers: this.modelTestTimers } = modelTestSetup(options));
+    this.detectEachLimits = { ...DETECT_EACH_DEFAULTS, ...options.detectEach };
     this.beforeConfigRecheck = options.beforeConfigRecheck;
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
@@ -3332,9 +3346,12 @@ export class ApiEndpointService {
   async detectFormats(
     input: ApiEndpointDetectInput,
     signal: AbortSignal,
-  ): Promise<ApiEndpointFormatDetection[]> {
+  ): Promise<ApiEndpointDetectOutcome> {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
     const apiKey = this.resolveRequestKey(input);
+    if (input.eachModel === true) {
+      return this.detectEachModel({ input, baseUrl, apiKey, signal });
+    }
     const outcome = await detectUpstreamFormats({
       baseUrl,
       apiKey,
@@ -3348,7 +3365,37 @@ export class ApiEndpointService {
     if (outcome.kind === "cancelled") {
       throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
     }
-    return outcome.results;
+    return { results: outcome.results, models: null };
+  }
+
+  /** 逐个模型识别（照 magpie DetectModels）：被禁的模型列出但不问。 */
+  private async detectEachModel(args: {
+    input: ApiEndpointDetectInput;
+    baseUrl: string;
+    apiKey: string | null;
+    signal: AbortSignal;
+  }): Promise<ApiEndpointDetectOutcome> {
+    const { input } = args;
+    const outcome = await detectEachModel({
+      baseUrl: args.baseUrl,
+      apiKey: args.apiKey,
+      modelIds: input.modelIds ?? [],
+      disabledBy: this.testDisabledBy(input.endpointId),
+      sentNameOf: this.sentNameOf(input.endpointId),
+      limits: this.detectEachLimits,
+      timers: this.modelTestTimers,
+      signal: args.signal,
+    });
+    if (outcome.kind === "cancelled") {
+      throw new ApiEndpointRequestError({ code: "cancelled", message: "Request cancelled" });
+    }
+    if (outcome.kind === "noModels") {
+      throw new ApiEndpointRequestError({
+        code: "invalid_input",
+        message: "No model to try: pick the models first",
+      });
+    }
+    return { results: outcome.results, models: outcome.models };
   }
 
   /**
@@ -3447,12 +3494,18 @@ export class ApiEndpointService {
    * 测试与检测不问被禁的模型（magpie test.go 的 testOne、testModel）：已保存的那家按它的接口标识认，还没保存的只按名字认。
    */
   private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
+    const disabledBy = this.testDisabledBy(endpointId);
+    return (modelId) => disabledBy(modelId) === null;
+  }
+
+  /** 测试与检测时一个模型被哪条「已禁用的模型」禁了；没被禁为 null。 */
+  private testDisabledBy(endpointId: string | undefined): (modelId: string) => string | null {
     const state = this.readState();
     const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
     return (modelId) =>
-      (endpoint
+      endpoint
         ? endpointDisabledBy({ state, endpoint, model: modelId })
-        : askedDisabledBy({ state, model: modelId })) === null;
+        : askedDisabledBy({ state, model: modelId });
   }
 
   /** 点名测一个被禁的模型：不发请求，结论写明命中的条目（magpie testOne）；没被禁为 null。 */

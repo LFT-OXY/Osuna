@@ -362,3 +362,267 @@ describe("API endpoint request format detection over the daemon RPC", () => {
     expect(await pending).toMatchObject({ results: [], error: { code: "cancelled" } });
   });
 });
+
+/*
+ * 逐个模型识别（工单 21，照 magpie DetectModels 与其用例 TestDetectModels，MIT，见 THIRD_PARTY_NOTICES）：
+ * 假上游按路径只答某些模型，slow-* 一直不答。单个与整批的时限用手动计时器，用例自己决定何时到点。
+ */
+const EACH_PROBE_TIMEOUT_MS = 30_000;
+const EACH_BATCH_TIMEOUT_MS = 600_000;
+
+const EACH_SERVES: Record<string, string[]> = {
+  "/each/v1/chat/completions": ["gpt-both", "glm-chat"],
+  "/each/v1/responses": ["gpt-both", "gpt-resp"],
+  "/each/v1/messages": ["claude-only"],
+};
+
+/** 只在用例说到点时才到点的计时器；按设定的毫秒数区分单个与整批。 */
+class ManualTimers {
+  private readonly pending: { ms: number; handler: () => void; isLive: boolean }[] = [];
+
+  schedule(handler: () => void, ms: number): () => void {
+    const entry = { ms, handler, isLive: true };
+    this.pending.push(entry);
+    return () => {
+      entry.isLive = false;
+    };
+  }
+
+  fire(ms: number): void {
+    for (const entry of this.pending) {
+      if (!entry.isLive || entry.ms !== ms) continue;
+      entry.isLive = false;
+      entry.handler();
+    }
+  }
+}
+
+interface EachUpstream {
+  origin: string;
+  posts: { path: string; model: string }[];
+  inFlight: number;
+  maxInFlight: number;
+}
+
+async function startEachUpstream(): Promise<EachUpstream> {
+  const upstream: EachUpstream = { origin: "", posts: [], inFlight: 0, maxInFlight: 0 };
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+        model?: string;
+      };
+      const model = body.model ?? "";
+      const requestPath = request.url ?? "";
+      upstream.posts.push({ path: requestPath, model });
+      if (model.startsWith("slow-")) return;
+      upstream.inFlight += 1;
+      upstream.maxInFlight = Math.max(upstream.maxInFlight, upstream.inFlight);
+      // 晚一点回，好让同时在问的请求叠起来。
+      setTimeout(() => {
+        upstream.inFlight -= 1;
+        const served = EACH_SERVES[requestPath]?.includes(model) || model.startsWith("m-");
+        if (!served) {
+          sendJson(response, 400, {
+            error: { message: `model ${model} not supported on this endpoint` },
+          });
+          return;
+        }
+        if (requestPath.endsWith("/messages")) {
+          sendJson(response, 200, { type: "message", content: [{ type: "text", text: "hi" }] });
+        } else if (requestPath.endsWith("/responses")) {
+          sendJson(response, 200, { object: "response", output: [] });
+        } else {
+          sendJson(response, 200, {
+            object: "chat.completion",
+            choices: [{ index: 0, message: { role: "assistant", content: "hi" } }],
+          });
+        }
+      }, 20);
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  upstream.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return upstream;
+}
+
+function messagesOf(models: { results: { message: string | null }[] }[] | undefined) {
+  return (models ?? []).flatMap((row) => row.results.map((result) => result.message));
+}
+
+function okFlags(models: { modelId: string; results: { status: string }[] }[] | undefined) {
+  return (models ?? []).map((row) => [
+    row.modelId,
+    row.results.map((result) => result.status === "ok"),
+  ]);
+}
+
+describe("Detecting each picked model on every request format", () => {
+  let daemon: TestPaseoDaemon;
+  let client: DaemonClient;
+  let upstream: EachUpstream;
+  let timers: ManualTimers;
+
+  beforeEach(async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-detect-each-"));
+    tempRoots.push(root);
+    upstream = await startEachUpstream();
+    timers = new ManualTimers();
+    daemon = await createTestPaseoDaemon({
+      apiEndpoints: {
+        env: {
+          CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+          CODEX_HOME: path.join(root, "codex"),
+        },
+        homeDir: root,
+        detectEach: {
+          concurrency: 8,
+          probeTimeoutMs: EACH_PROBE_TIMEOUT_MS,
+          batchTimeoutMs: EACH_BATCH_TIMEOUT_MS,
+        },
+        modelTestTimers: timers,
+      },
+    });
+    client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws`, appVersion: "0.17.0" });
+    await client.connect();
+    await client.fetchAgents({ subscribe: {} });
+  });
+
+  afterEach(async () => {
+    await client?.close();
+    await daemon?.close();
+    await Promise.all(servers.splice(0).map(closeServer));
+    await Promise.all(
+      tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+    );
+  });
+
+  test("says model by model which formats answered, and by format the first model that answered", async () => {
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: ["gpt-both", "gpt-resp", " glm-chat", "claude-only", "gpt-both", "gpt-image-2", ""],
+      eachModel: true,
+    });
+
+    expect(detected.error).toBeNull();
+    // 按 Anthropic、Chat、Responses。
+    expect(okFlags(detected.models)).toEqual([
+      ["gpt-both", [false, true, true]],
+      ["gpt-resp", [false, false, true]],
+      ["glm-chat", [false, true, false]],
+      ["claude-only", [true, false, false]],
+      ["gpt-image-2", [false, false, false]],
+    ]);
+    const gptResp = detected.models?.[1]?.results ?? [];
+    expect(gptResp[1]).toMatchObject({
+      format: "openai_chat",
+      url: `${upstream.origin}/each/v1`,
+      status: "not_detected",
+      httpStatus: 400,
+      modelId: "gpt-resp",
+    });
+    expect(gptResp[1]?.message).toContain("not supported on this endpoint");
+    expect(gptResp[2]?.durationMs).toBeGreaterThanOrEqual(0);
+    // 生图模型不能对话，不问它。
+    const image = detected.models?.[4]?.results ?? [];
+    expect(image.map((result) => result.httpStatus)).toEqual([null, null, null]);
+    expect(image[0]?.message).toContain("image model");
+    expect(upstream.posts.some((post) => post.model === "gpt-image-2")).toBe(false);
+    expect(upstream.posts).toHaveLength(12);
+    // 每种格式：第一个答上的模型。
+    expect(
+      detected.results.map(({ format, url, status, modelId }) => [format, url, status, modelId]),
+    ).toEqual([
+      ["anthropic_messages", `${upstream.origin}/each`, "ok", "claude-only"],
+      ["openai_chat", `${upstream.origin}/each/v1`, "ok", "gpt-both"],
+      ["openai_responses", `${upstream.origin}/each/v1`, "ok", "gpt-both"],
+    ]);
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+
+  test("asks no more than the first 30 models, 8 requests at a time", async () => {
+    const many = Array.from({ length: 35 }, (_, index) => `m-${String(index).padStart(2, "0")}`);
+
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: many,
+      eachModel: true,
+    });
+
+    expect(detected.models?.map((row) => row.modelId)).toEqual(many.slice(0, 30));
+    expect(upstream.posts).toHaveLength(90);
+    expect(new Set(upstream.posts.map((post) => post.model))).toEqual(new Set(many.slice(0, 30)));
+    expect(upstream.maxInFlight).toBeLessThanOrEqual(8);
+    expect(upstream.maxInFlight).toBeGreaterThan(1);
+  });
+
+  test("a disabled model is listed but never asked", async () => {
+    await client.apiEndpointSetDisabledModels({ models: ["glm-*"] });
+
+    const detected = await client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: ["glm-chat", "gpt-resp"],
+      eachModel: true,
+    });
+
+    const [disabled] = detected.models ?? [];
+    expect(disabled?.modelId).toBe("glm-chat");
+    for (const result of disabled?.results ?? []) {
+      expect(result).toMatchObject({ status: "not_detected", httpStatus: null });
+      expect(result.message).toContain('matches "glm-*"');
+    }
+    expect(upstream.posts.map((post) => post.model)).toEqual(["gpt-resp", "gpt-resp", "gpt-resp"]);
+  });
+
+  test("a format that does not answer in time says so", async () => {
+    const pending = client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: ["slow-a", "gpt-resp"],
+      eachModel: true,
+    });
+    await expect.poll(() => upstream.posts.length).toBe(6);
+    timers.fire(EACH_PROBE_TIMEOUT_MS);
+    const detected = await pending;
+
+    expect(detected.error).toBeNull();
+    expect(
+      detected.models?.[0]?.results.map((result) => [result.message, result.httpStatus]),
+    ).toEqual([
+      ["No response within 30s", null],
+      ["No response within 30s", null],
+      ["No response within 30s", null],
+    ]);
+    expect(okFlags(detected.models)[1]).toEqual(["gpt-resp", [false, false, true]]);
+  });
+
+  test("when the detection runs out of time, what was asked says so and the rest is not asked", async () => {
+    const slow = Array.from({ length: 9 }, (_, index) => `slow-${index}`);
+    const pending = client.apiEndpointDetectFormats({
+      baseUrl: `${upstream.origin}/each/v1`,
+      apiKey: TYPED_KEY,
+      modelIds: slow,
+      eachModel: true,
+    });
+    // 8 个一起问，到齐了再让整批到点。
+    await expect.poll(() => upstream.posts.length).toBe(8);
+    timers.fire(EACH_BATCH_TIMEOUT_MS);
+    const detected = await pending;
+
+    expect(detected.error).toBeNull();
+    const messages = messagesOf(detected.models);
+    expect(messages).toHaveLength(27);
+    expect(messages.slice(0, 8)).toEqual(
+      Array.from({ length: 8 }, () => "No response before the detection ran out of time"),
+    );
+    expect(messages.slice(8)).toEqual(
+      Array.from({ length: 19 }, () => "Not asked: the detection ran out of time"),
+    );
+    expect(upstream.posts).toHaveLength(8);
+  });
+});

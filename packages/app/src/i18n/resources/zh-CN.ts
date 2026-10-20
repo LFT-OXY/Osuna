@@ -2651,6 +2651,15 @@ export const zhCN: TranslationResources = {
         detect: "自动检测",
         detectModelPlaceholder: "试用的模型（选填）",
         detected: {
+          eachButton: "逐个模型",
+          eachInfo:
+            "把已选的模型（最多 {{max}} 个）在每种请求格式上各问一次，几个一起问，看哪种格式能用哪个模型。编辑接口时，「采用这些」还会把只在一种格式上答上的模型设成「只用这种格式」。",
+          eachNeedsModels: "先选模型，或填一个试用的模型再点「自动检测」。",
+          eachCut: "只问了 {{picked}} 个模型中的前 {{asked}} 个。",
+          eachOk: "{{ms}} 毫秒",
+          eachGivenItem: "{{model}}：只用 {{format}}",
+          eachGivenByTake: "「采用这些」还会设「只用这种格式」：{{list}}",
+          eachGivenOnceSaved: "保存后这些模型只用这种格式：{{list}}",
           noteAndUndo: "{{note}}{{undo}}",
           onlyUndo: "再点一次取消。",
           onlyClearedOnceSaved: "保存后 {{model}} 不再只用一种格式。",

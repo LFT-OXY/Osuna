@@ -979,6 +979,9 @@ export type ApiEndpointForgetCatalogResponse = z.infer<
  * 问哪个模型：`modelId`（用户填的试用模型）每种格式都问它；没填时按格式从 `modelIds`（表单里已选、还没保存的模型，
  * 最多取前 30 个）挑，也没有才向上游列出模型挑。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
  * 老 daemon 忽略 modelId、modelIds，总是先列模型。
+ * `eachModel`（逐个模型，照 magpie Detect 的 Each picked model）：`modelIds` 的前 30 个每个在每种格式上各问一次，
+ * 回应里 `models` 逐个模型列出，`results` 是每种格式第一个答上的（都没答上为第一个模型的）。只有声明了
+ * apiEndpointManagement 的 daemon 认它。
  */
 export const ApiEndpointDetectFormatsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.request"),
@@ -988,6 +991,7 @@ export const ApiEndpointDetectFormatsRequestSchema = z.object({
   apiKey: z.string().optional(),
   modelId: z.string().optional(),
   modelIds: z.array(z.string()).optional(),
+  eachModel: z.boolean().optional(),
 });
 export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFormatsRequestSchema>;
 
@@ -1007,12 +1011,23 @@ export const ApiEndpointFormatDetectionSchema = z.object({
 });
 export type ApiEndpointFormatDetection = z.infer<typeof ApiEndpointFormatDetectionSchema>;
 
-/** 请求本身被拒（地址无效、找不到接口、被取消；老 daemon 还有缺 key）时 `results` 为空，原因在 `error`。 */
+/** 逐个模型识别的一个模型：每种格式一条结论，按 Anthropic、Chat、Responses。 */
+export const ApiEndpointModelDetectionSchema = z.object({
+  modelId: z.string(),
+  results: z.array(ApiEndpointFormatDetectionSchema),
+});
+export type ApiEndpointModelDetection = z.infer<typeof ApiEndpointModelDetectionSchema>;
+
+/**
+ * 请求本身被拒（地址无效、找不到接口、被取消；老 daemon 还有缺 key）时 `results` 为空，原因在 `error`。
+ * `models` 只在逐个模型识别（eachModel）时有。
+ */
 export const ApiEndpointDetectFormatsResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.response"),
   payload: z.object({
     requestId: z.string(),
     results: z.array(ApiEndpointFormatDetectionSchema),
+    models: z.array(ApiEndpointModelDetectionSchema).optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

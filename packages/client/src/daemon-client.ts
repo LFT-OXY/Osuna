@@ -1288,6 +1288,8 @@ const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
 const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60_000;
 // 测试模型整批 3 分钟，再留些余量给最后的回应。
 const API_ENDPOINT_TEST_MODELS_TIMEOUT_MS = 200_000;
+// 逐个模型识别整次 2 分钟，同样留些余量。
+const API_ENDPOINT_DETECT_EACH_TIMEOUT_MS = 140_000;
 const PUSH_TOKEN_REVOCATION_TIMEOUT_MS = 2_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
@@ -6626,7 +6628,10 @@ export class DaemonClient {
     });
   }
 
-  /** 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。传入 requestId 才能用 apiEndpointCancel 取消。 */
+  /**
+   * 自动检测三种请求格式；key 规则同 apiEndpointFetchModels。逐个模型（eachModel）整次最长 2 分钟，所以等得比一般请求久。
+   * 传入 requestId 才能用 apiEndpointCancel 取消。
+   */
   async apiEndpointDetectFormats(
     options: ApiEndpointDetectFormatsOptions,
     requestId?: string,
@@ -6634,6 +6639,7 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.detect_formats.request", ...options },
+      ...(options.eachModel === true ? { timeout: API_ENDPOINT_DETECT_EACH_TIMEOUT_MS } : {}),
     });
   }
 

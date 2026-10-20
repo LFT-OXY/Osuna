@@ -428,7 +428,7 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
         const response = await client.apiEndpointDetectFormats(request, requestId);
         if (signal.aborted || response.error?.code === "cancelled") return { status: "cancelled" };
         if (response.error) return { status: "failed", message: response.error.message };
-        return { status: "done", results: response.results };
+        return { status: "done", results: response.results, models: response.models ?? null };
       } catch (error) {
         if (signal.aborted) return { status: "cancelled" };
         return { status: "failed", message: toErrorMessage(error) };

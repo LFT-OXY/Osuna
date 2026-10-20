@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, ScrollView, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { AlertTriangle, Check, Info, X } from "lucide-react-native";
 import type {
@@ -19,6 +19,7 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
 import { useFilePicker, type FilePickFilter } from "@/hooks/use-file-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
@@ -49,7 +50,10 @@ import type {
   ConnectionTemplateState,
   DetectedFormat,
   FormatTestRow,
+  ModelDetectionRow,
+  ModelFormatPin,
 } from "./internal/connection-form-model";
+import { DETECT_EACH_MAX_MODELS } from "./internal/connection-form-model";
 
 export interface ApiEndpointConnectionSheetProps {
   seed: ConnectionFormSeed;
@@ -346,6 +350,8 @@ function AddressField({
   const { t } = useTranslation();
   const handleDetect = useCallback(() => model.detect(), [model]);
   const handleCancelDetect = useCallback(() => model.cancelDetect(), [model]);
+  const handleDetectEach = useCallback(() => model.detectEachModel(), [model]);
+  const eachLabel = t("settings.apiEndpoints.form.detected.eachButton");
   const addressInputRef = useCurlPasteField({ model, field: "address" });
   return (
     <Field
@@ -401,17 +407,45 @@ function AddressField({
         ) : null}
       </View>
       {state.canCheckBeforeSave ? (
-        <View style={styles.subField}>
-          <FormTextInput
-            initialValue={state.detectModel}
-            onChangeText={model.setDetectModel}
-            placeholder={t("settings.apiEndpoints.form.detectModelPlaceholder")}
-            autoCapitalize="none"
-            autoCorrect={false}
-            size={size}
-            testID="api-endpoint-connection-detect-model"
+        <View style={[styles.subField, styles.inlineRow]}>
+          <View style={styles.flex}>
+            <FormTextInput
+              initialValue={state.detectModel}
+              onChangeText={model.setDetectModel}
+              placeholder={t("settings.apiEndpoints.form.detectModelPlaceholder")}
+              autoCapitalize="none"
+              autoCorrect={false}
+              size={size}
+              testID="api-endpoint-connection-detect-model"
+            />
+          </View>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleDetectEach}
+            disabled={!state.canDetectEach}
+            testID="api-endpoint-connection-detect-each"
+          >
+            {eachLabel}
+          </Button>
+          <SettingsInfoTip
+            title={eachLabel}
+            info={t("settings.apiEndpoints.form.detected.eachInfo", {
+              max: DETECT_EACH_MAX_MODELS,
+            })}
+            testID="api-endpoint-connection-detect-each-info"
           />
         </View>
+      ) : null}
+      {state.eachNeedsModels ? (
+        <Text
+          variant="caption"
+          color="foregroundMuted"
+          style={styles.subField}
+          testID="api-endpoint-connection-each-needs-models"
+        >
+          {t("settings.apiEndpoints.form.detected.eachNeedsModels")}
+        </Text>
       ) : null}
       {state.detection ? <DetectionResults detection={state.detection} model={model} /> : null}
     </Field>
@@ -439,6 +473,12 @@ function DetectionResults({
           testID={`api-endpoint-connection-detection-${result.format}`}
         />
       ))}
+      {detection.byModel ? <ModelDetectionList rows={detection.byModel} /> : null}
+      {detection.eachCut ? (
+        <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-each-cut">
+          {t("settings.apiEndpoints.form.detected.eachCut", detection.eachCut)}
+        </Text>
+      ) : null}
       {detection.canTake ? (
         <View style={styles.inlineRow}>
           <Button
@@ -464,6 +504,11 @@ function DetectionResults({
       {detection.onlyChoices ? (
         <OnlyFormatChoices choices={detection.onlyChoices} model={model} />
       ) : null}
+      {detection.onlyGiven.length > 0 ? (
+        <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-each-given">
+          {givenPinsText({ t, pins: detection.onlyGiven, isTaken: detection.isTaken })}
+        </Text>
+      ) : null}
       {detection.isTaken ? (
         <Text variant="caption" color="foregroundMuted" testID="api-endpoint-connection-taken">
           {t("settings.apiEndpoints.form.detected.taken")}
@@ -478,6 +523,95 @@ function DetectionResults({
           {detection.noneAnswered === "keyless"
             ? t("settings.apiEndpoints.form.detected.noneAnsweredKeyless")
             : t("settings.apiEndpoints.form.detected.noneAnswered")}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** 「采用这些」会（或已经）把哪些模型设成只用这种格式。 */
+function givenPinsText(input: { t: TFunction; pins: ModelFormatPin[]; isTaken: boolean }): string {
+  const { t, pins } = input;
+  const list = pins
+    .map((pin) =>
+      t("settings.apiEndpoints.form.detected.eachGivenItem", {
+        model: pin.modelId,
+        format: formatLabel(t, pin.format),
+      }),
+    )
+    .join(" · ");
+  if (input.isTaken) return t("settings.apiEndpoints.form.detected.eachGivenOnceSaved", { list });
+  return t("settings.apiEndpoints.form.detected.eachGivenByTake", { list });
+}
+
+/** 逐个模型识别的结论（照 magpie Each picked model 的表）：每个模型一行，下面每种格式一格，原因写全。 */
+function ModelDetectionList({ rows }: { rows: ModelDetectionRow[] }) {
+  const isCompact = useIsCompactFormFactor();
+  const cellsStyle = isCompact ? styles.eachCellsStacked : styles.eachCells;
+  const cellStyle = isCompact ? styles.eachCellStacked : styles.eachCell;
+  return (
+    <View style={styles.eachList} testID="api-endpoint-connection-each-results">
+      {rows.map((row) => (
+        <View
+          key={row.modelId}
+          style={styles.eachRow}
+          testID={`api-endpoint-connection-each-${row.modelId}`}
+        >
+          <Text variant="label" selectable>
+            {row.modelId}
+          </Text>
+          <View style={cellsStyle}>
+            {row.cells.map((cell) => (
+              <ModelDetectionCell
+                key={cell.format}
+                cell={cell}
+                style={cellStyle}
+                testID={`api-endpoint-connection-each-${row.modelId}-${cell.format}`}
+              />
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ModelDetectionCell({
+  cell,
+  style,
+  testID,
+}: {
+  cell: DetectedFormat;
+  style: ViewStyle;
+  testID: string;
+}) {
+  const { t } = useTranslation();
+  const isOk = cell.label === "ok";
+  let verdict = t(`settings.apiEndpoints.form.detection.${cell.label}`);
+  if (isOk && cell.durationMs !== null) {
+    verdict = t("settings.apiEndpoints.form.detected.eachOk", { ms: cell.durationMs });
+  }
+  const reason = isOk ? null : cell.message;
+  return (
+    <View style={style} testID={testID}>
+      <View style={styles.checkHeading}>
+        <View style={styles.checkIcon}>
+          {isOk ? <ThemedCheck size={12} /> : <ThemedCross size={12} />}
+        </View>
+        <Text variant="caption" color="foregroundMuted">
+          {t(`settings.apiEndpoints.formats.${cell.format}`)}
+        </Text>
+        <Text
+          variant="caption"
+          color={isOk ? "statusSuccess" : "statusDanger"}
+          testID={`${testID}-verdict`}
+        >
+          {verdict}
+        </Text>
+      </View>
+      {reason ? (
+        <Text variant="caption" color="foregroundMuted" selectable testID={`${testID}-reason`}>
+          {reason}
         </Text>
       ) : null}
     </View>
@@ -1691,6 +1825,31 @@ const styles = StyleSheet.create((theme) => ({
     width: 12,
     height: theme.typeScale.label.lineHeight,
     justifyContent: "center",
+  },
+  eachList: {
+    gap: theme.spacing[2],
+  },
+  // 模型之间一条细线，模型名在上，各格式的结论在下。
+  eachRow: {
+    gap: theme.spacing[1],
+    paddingTop: theme.spacing[2],
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+  },
+  eachCells: {
+    flexDirection: "row",
+    gap: theme.spacing[3],
+  },
+  eachCellsStacked: {
+    gap: theme.spacing[1],
+  },
+  eachCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  eachCellStacked: {
+    gap: 2,
   },
   checkHeading: {
     flexDirection: "row",

@@ -68,6 +68,7 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
  * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回；cc-only-* 只答 User-Agent 是
  *   Claude Code 的，codex-only-* 只答 originator 是 Codex 的（照只放行某 CLI 的分组），别的回 403。
+ * - 逐个模型识别用：/good 上 chat-only-* 在 Anthropic 上回 400，只在 Chat 上答。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
@@ -165,7 +166,7 @@ function turnsAwayOtherClients(input: {
   return false;
 }
 
-/** /good 上的对话请求：bad-* 回 404，slow-* 不回。返回 true 即已处理（或故意不回）。 */
+/** /good 上的对话请求：bad-* 回 404，chat-only-* 在 Anthropic 上回 400，slow-* 不回。返回 true 即已处理（或故意不回）。 */
 function answersByModel(input: {
   url: string;
   model: string | undefined;
@@ -177,6 +178,10 @@ function answersByModel(input: {
   if (!isChatRequest || model === undefined) return false;
   if (model.startsWith("slow-")) {
     input.response.on("close", input.onAbandoned);
+    return true;
+  }
+  if (model.startsWith("chat-only-") && url.endsWith("/messages")) {
+    send(input.response, 400, { error: { message: `The model ${model} is not served here` } });
     return true;
   }
   if (!model.startsWith("bad-")) return false;

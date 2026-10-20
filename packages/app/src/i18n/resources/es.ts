@@ -2682,6 +2682,16 @@ export const es: TranslationResources = {
         detect: "Detectar",
         detectModelPlaceholder: "Modelo a probar (opcional)",
         detected: {
+          eachButton: "Cada modelo elegido",
+          eachInfo:
+            "Pregunta a cada modelo elegido, hasta {{max}}, una vez en cada formato de solicitud, unos pocos a la vez, para ver qué formato sirve a qué modelo. Al editar un endpoint, Usar estas también pone en Usar solo este formato a un modelo que respondió en un solo formato.",
+          eachNeedsModels:
+            "Elige modelos primero, o escribe un modelo para probar y pulsa Detectar.",
+          eachCut: "Solo se preguntó a los primeros {{asked}} de {{picked}} modelos.",
+          eachOk: "{{ms}} ms",
+          eachGivenItem: "{{model}}: solo {{format}}",
+          eachGivenByTake: "Usar estas también aplica Usar solo este formato: {{list}}",
+          eachGivenOnceSaved: "Al guardar, estos usan solo este formato: {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "Púlsalo de nuevo para deshacer.",
           onlyClearedOnceSaved: "Al guardar, {{model}} se volverá a pedir en cualquier formato.",

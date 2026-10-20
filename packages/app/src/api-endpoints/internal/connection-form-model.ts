@@ -5,6 +5,7 @@ import {
   type ApiEndpointFetchModelsRequest,
   type ApiEndpointFormatDetection,
   type ApiEndpointModel,
+  type ApiEndpointModelDetection,
   type ApiEndpointRequestFormat,
   type ApiEndpointSaveRequest,
   type ApiEndpointTemplate,
@@ -36,6 +37,8 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
  * 「自定义」加的接口可选图标（只在声明了 apiEndpointManagement 的主机上）：内置图标名，本机一张图片（先经 storeIcon
  * 存到主机上），或从地址所在网站取（fetchSiteIcon，主机找到后同样存下）；保存时带主机给的值。图标没改时保存不带它，由 daemon 保留（复制时由 daemon 从原来那家拷）。
  * 自动检测照 magpie Detect：每种格式一行耗时或错误，「采用这些」才把通了的地址填进去，没在那里找到（404 / 405）的清掉。
+ * 「逐个模型」（同样只在这种主机上，照 magpie Each picked model）：表单里的模型（前 30 个）在每种格式上各问一次，逐个模型列出；
+ * 编辑时「采用这些」还把只在一种格式上答上的模型设成只用这种格式，随保存生效（新建的在保存后到模型设置里设，同 magpie）。
  * 保存前检查（同样只在这种主机上）：自动检测可填试用的模型，不填时从表单里的模型挑；「测试连接」按表单里的各格式地址、
  * 模板与区域逐格式发最小请求；添加时「拉取模型」用表单的值向上游拉清单预览、点选进「模型」，保存时清单随之写入（照 magpie
  * addFormModels）。三样都只看不存，带的 endpointId 只为借已存的 key。
@@ -89,6 +92,9 @@ export type ConnectionIconResult =
 // 正在换图标：存本机的图片，或从网站取。
 export type ConnectionIconTask = "picture" | "website";
 
+/** 逐个模型识别最多问这么多个模型（daemon upstream-detect.ts 的 DETECT_MAX_MODELS，照 magpie DetectMax）；只用于说明文字。 */
+export const DETECT_EACH_MAX_MODELS = 30;
+
 /** 主机最多存这么大的图片（daemon endpoint-icons.ts 的 MAX_ICON_BYTES）；更大的不发过去。 */
 export const MAX_ICON_BYTES = 1 << 20;
 
@@ -99,8 +105,13 @@ export type ConnectionRevealKeyResult =
 export type ConnectionDetectRequest = Omit<ApiEndpointDetectFormatsRequest, "type" | "requestId">;
 
 // failed：请求本身没成立（缺 key、地址无效、断线）；每种格式的失败在 done 的 results 里。
+// models 是逐个模型识别的逐个模型结论，别的检测为 null。
 export type ConnectionDetectResult =
-  | { status: "done"; results: ApiEndpointFormatDetection[] }
+  | {
+      status: "done";
+      results: ApiEndpointFormatDetection[];
+      models: ApiEndpointModelDetection[] | null;
+    }
   | { status: "failed"; message: string }
   | { status: "cancelled" };
 
@@ -147,12 +158,28 @@ export interface DetectedFormat {
  */
 export interface ConnectionDetection {
   results: DetectedFormat[];
+  // 逐个模型识别：每个模型一行，各格式一格（按 Anthropic → Chat → Responses）；别的检测为 null。
+  byModel: ModelDetectionRow[] | null;
+  // 表单里的模型比问了的多：只问了前 asked 个。
+  eachCut: { asked: number; picked: number } | null;
+  // 逐个模型识别后「采用这些」会设成只用这种格式的模型（编辑时，只在一种格式上答上的）。
+  onlyGiven: ModelFormatPin[];
   isTaken: boolean;
   // 「只在 {格式} 上问 {模型}」：编辑时试的是这家的模型、只有部分格式通了才有（照 magpie）；staged 是保存时要设的格式。
   onlyChoices: ConnectionOnlyChoices | null;
   canTake: boolean;
   waitsForTake: boolean;
   noneAnswered: "keyless" | "check" | null;
+}
+
+export interface ModelDetectionRow {
+  modelId: string;
+  cells: DetectedFormat[];
+}
+
+export interface ModelFormatPin {
+  modelId: string;
+  format: ApiEndpointRequestFormat;
 }
 
 export interface ConnectionOnlyChoices {
@@ -303,6 +330,9 @@ export interface ConnectionFormState {
   detecting: boolean;
   detectError: string | null;
   detection: ConnectionDetection | null;
+  // 能点「逐个模型」；点了但表单里还没有模型时 eachNeedsModels 为真，提示先选模型。
+  canDetectEach: boolean;
+  eachNeedsModels: boolean;
   // 上游拒绝了这把 key（401 / 403）；改 key 之前一直标红。
   keyRejected: boolean;
   canDetect: boolean;
@@ -378,6 +408,8 @@ export interface ConnectionFormModel {
   fetchSiteIcon(): void;
   setDetectModel(value: string): void;
   detect(): void;
+  // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
+  detectEachModel(): void;
   cancelDetect(): void;
   // 「采用这些」：通了的格式填上建议地址，没在那里找到的（404 / 405）清掉。
   takeDetected(): void;
@@ -395,13 +427,12 @@ interface DetectionValues {
   isTaken: boolean;
   // 这次检测试的模型（自动检测框里打的）；没打为 null。
   askedModel: string | null;
+  // 逐个模型识别的结论与当时表单里有几个模型；别的检测为 null。
+  each: { rows: ModelDetectionRow[]; picked: number } | null;
 }
 
-// 保存时要给这个模型设的格式；null 为取消只用这种格式。
-interface StagedPin {
-  modelId: string;
-  format: ApiEndpointRequestFormat | null;
-}
+// 保存时要给各模型设的格式；null 为取消只用这种格式。没列的不动。
+type StagedPins = Record<string, ApiEndpointRequestFormat | null>;
 
 // 表单里一种格式要问的地址。
 interface CheckedUrl {
@@ -433,7 +464,8 @@ interface Values {
   detection: DetectionValues | null;
   detecting: boolean;
   detectError: string | null;
-  stagedPin: StagedPin | null;
+  stagedPins: StagedPins;
+  eachNeedsModels: boolean;
   catalogFetch: ConnectionCatalogFetch;
   tests: FormatTests;
   serviceAddress: string;
@@ -511,7 +543,8 @@ export function createConnectionFormModel(
     detection: null,
     detecting: false,
     detectError: null,
-    stagedPin: null,
+    stagedPins: {},
+    eachNeedsModels: false,
     catalogFetch: { status: "idle" },
     tests: {},
     serviceAddress: serviceAddressWas,
@@ -545,7 +578,14 @@ export function createConnectionFormModel(
     // 检测、拉模型、保存或存图片进行中时检测与保存都不可点。
     const isFetching = next.catalogFetch.status === "fetching";
     const busy = next.detecting || next.submitting || next.iconTask !== null || isFetching;
-    const checks = deriveChecks({ next, hasKey, busy, serviceAddressInvalid, hasValidUrls });
+    const checks = deriveChecks({
+      next,
+      hasKey,
+      busy,
+      serviceAddressInvalid,
+      hasValidUrls,
+      hasValidAddress,
+    });
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -591,6 +631,8 @@ export function createConnectionFormModel(
     | "hasModelField"
     | "detectModel"
     | "detection"
+    | "canDetectEach"
+    | "eachNeedsModels"
     | "keyRejected"
     | "catalogFetch"
     | "canFetchModels"
@@ -606,6 +648,7 @@ export function createConnectionFormModel(
     busy: boolean;
     serviceAddressInvalid: boolean;
     hasValidUrls: boolean;
+    hasValidAddress: boolean;
   }): CheckState {
     const { next, hasKey, busy, serviceAddressInvalid, hasValidUrls } = input;
     const isDetectionRejected =
@@ -632,9 +675,11 @@ export function createConnectionFormModel(
             detection: next.detection,
             apiKey: next.apiKey,
             hasValidUrls,
-            stagedPin: next.stagedPin,
+            stagedPins: next.stagedPins,
           })
         : null,
+      canDetectEach: canCheckBeforeSave && !busy && hasKey && input.hasValidAddress,
+      eachNeedsModels: next.eachNeedsModels,
       keyRejected: isDetectionRejected || isTestRejected,
       catalogFetch: next.catalogFetch,
       canFetchModels: canCheck && isAdding && !busy,
@@ -702,18 +747,23 @@ export function createConnectionFormModel(
     detection: DetectionValues;
     apiKey: string;
     hasValidUrls: boolean;
-    stagedPin: StagedPin | null;
+    stagedPins: StagedPins;
   }): ConnectionDetection {
     const { detection } = input;
+    const { each } = detection;
     const anyAnswered = detection.results.some((result) => result.label === "ok");
     const isKeyless = input.apiKey.trim() === "" && !hasSavedKey;
     let noneAnswered: ConnectionDetection["noneAnswered"] = null;
     if (!anyAnswered) noneAnswered = isKeyless ? "keyless" : "check";
     const canTake = anyAnswered && !detection.isTaken;
+    const isCut = each !== null && each.picked > each.rows.length;
     return {
       results: detection.results,
+      byModel: each?.rows ?? null,
+      eachCut: isCut ? { asked: each.rows.length, picked: each.picked } : null,
+      onlyGiven: each === null ? [] : onlyGivenOf(each.rows),
       isTaken: detection.isTaken,
-      onlyChoices: onlyChoicesOf(detection, input.stagedPin),
+      onlyChoices: onlyChoicesOf(detection, input.stagedPins),
       canTake,
       waitsForTake: canTake && !input.hasValidUrls,
       noneAnswered,
@@ -724,9 +774,24 @@ export function createConnectionFormModel(
    * 照 magpie Detect：编辑一家时，打了试用的模型、它是这家的模型，又不是每种格式都通，每种通了的格式给一个「只在…上问」。
    * 新建、复制的接口没有可设的模型（magpie 在保存后的 Names & levels 里设）。
    */
+  /**
+   * 照 magpie Each picked model 的「采用这些」：编辑一家时，问了两种以上格式、只在一种上答上的这家的模型，给它那种格式。
+   */
+  function onlyGivenOf(rows: ModelDetectionRow[]): ModelFormatPin[] {
+    if (seed.mode !== "edit") return [];
+    const { endpoint } = seed;
+    return rows.flatMap((row) => {
+      const answered = row.cells.filter((cell) => cell.label === "ok");
+      const [only] = answered;
+      const isOnlyOne = answered.length === 1 && row.cells.length > 1;
+      if (!isOnlyOne || !only || !endpointHasModel(endpoint, row.modelId)) return [];
+      return [{ modelId: row.modelId, format: only.format }];
+    });
+  }
+
   function onlyChoicesOf(
     detection: DetectionValues,
-    stagedPin: StagedPin | null,
+    stagedPins: StagedPins,
   ): ConnectionOnlyChoices | null {
     const modelId = detection.askedModel;
     if (seed.mode !== "edit" || modelId === null || !endpointHasModel(seed.endpoint, modelId)) {
@@ -738,9 +803,19 @@ export function createConnectionFormModel(
     const isSomeOnly = formats.length > 0 && formats.length < detection.results.length;
     if (!isSomeOnly) return null;
     const saved = savedPinOf(modelId);
-    const isStagedHere = stagedPin?.modelId === modelId;
-    const staged = isStagedHere ? stagedPin.format : saved;
+    const isStagedHere = modelId in stagedPins;
+    const staged = isStagedHere ? (stagedPins[modelId] ?? null) : saved;
     return { modelId, formats, staged, isPending: staged !== saved };
+  }
+
+  /** 照 magpie stageAPI：和已存的相同就不改（去掉暂存），否则暂存那种格式。 */
+  function withGivenPins(current: StagedPins, given: ModelFormatPin[]): StagedPins {
+    const pins = { ...current };
+    for (const pin of given) {
+      if (savedPinOf(pin.modelId) === pin.format) delete pins[pin.modelId];
+      else pins[pin.modelId] = pin.format;
+    }
+    return pins;
   }
 
   function savedPinOf(modelId: string): ApiEndpointRequestFormat | null {
@@ -751,10 +826,15 @@ export function createConnectionFormModel(
 
   /** 保存时带的模型设置：只在设了、又和已存的不同时才带（照 magpie stageAPI）。 */
   function stagedModelSettings(): Pick<ConnectionSaveRequest, "modelSettings"> {
-    const pin = values.stagedPin;
-    if (seed.mode !== "edit" || pin === null || pin.format === savedPinOf(pin.modelId)) return {};
-    const current = seed.endpoint.modelSettings;
-    return { modelSettings: withModelFormat({ current, ...pin }) };
+    if (seed.mode !== "edit") return {};
+    const changed = Object.entries(values.stagedPins).filter(
+      ([modelId, format]) => format !== savedPinOf(modelId),
+    );
+    let modelSettings = seed.endpoint.modelSettings;
+    for (const [modelId, format] of changed) {
+      modelSettings = withModelFormat({ current: modelSettings, modelId, format });
+    }
+    return changed.length === 0 ? {} : { modelSettings };
   }
 
   // 本机服务换了地址时各格式地址挪过去；别的照填的。
@@ -860,8 +940,8 @@ export function createConnectionFormModel(
     return apiKey === "" ? undefined : apiKey;
   }
 
-  async function runDetect(controller: AbortController): Promise<void> {
-    const detectModel = values.detectModel.trim();
+  async function runDetect(controller: AbortController, isEach: boolean): Promise<void> {
+    const detectModel = isEach ? "" : values.detectModel.trim();
     const picked = canCheckBeforeSave ? formModelIds() : [];
     const outcome = await deps.detect(
       {
@@ -869,6 +949,7 @@ export function createConnectionFormModel(
         baseUrl: values.address.trim(),
         ...(canCheckBeforeSave && detectModel !== "" ? { modelId: detectModel } : {}),
         ...(picked.length > 0 ? { modelIds: picked } : {}),
+        ...(isEach ? { eachModel: true } : {}),
       },
       controller.signal,
     );
@@ -885,7 +966,20 @@ export function createConnectionFormModel(
     // 只列出结论，「采用这些」才填进地址栏（照 magpie Detect）。
     const results = outcome.results.flatMap(detectedFormatOf);
     const askedModel = canCheckBeforeSave && detectModel !== "" ? detectModel : null;
-    update({ detecting: false, detection: { results, isTaken: false, askedModel } });
+    let each: DetectionValues["each"] = null;
+    if (outcome.models !== null) {
+      const rows = outcome.models.map(modelDetectionRowOf);
+      each = { rows, picked: picked.length };
+    }
+    update({ detecting: false, detection: { results, isTaken: false, askedModel, each } });
+  }
+
+  function startDetect(isEach: boolean): void {
+    abortPendingDetect();
+    const controller = new AbortController();
+    pendingDetect = controller;
+    update({ detecting: true, detectError: null, detection: null, eachNeedsModels: false });
+    void runDetect(controller, isEach);
   }
 
   /** 照 magpie useDetected：通了的填上建议地址；没在那里找到的（404、405）清掉，但只清和建议地址一样的那栏。 */
@@ -1111,7 +1205,7 @@ export function createConnectionFormModel(
       return () => curlInputListeners.delete(listener);
     },
     setModelIds(value) {
-      update({ modelIds: typedModelIds(value) });
+      update({ modelIds: typedModelIds(value), eachNeedsModels: false });
     },
     toggleModel(modelId) {
       const modelIds = values.modelIds.includes(modelId)
@@ -1192,16 +1286,24 @@ export function createConnectionFormModel(
     setDetectModel: (detectModel) => update({ detectModel }),
     detect() {
       if (!state.canDetect) return;
-      abortPendingDetect();
-      const controller = new AbortController();
-      pendingDetect = controller;
-      update({ detecting: true, detectError: null, detection: null });
-      void runDetect(controller);
+      startDetect(false);
+    },
+    detectEachModel() {
+      if (!state.canDetectEach) return;
+      // 照 magpie：没有模型时只提示先选，什么也不问。
+      if (formModelIds().length === 0) {
+        abortPendingDetect();
+        update({ eachNeedsModels: true, detection: null, detectError: null });
+        return;
+      }
+      startDetect(true);
     },
     takeDetected() {
       const detection = values.detection;
+      const given = state.detection?.onlyGiven ?? [];
       if (!state.detection?.canTake || !detection) return;
       update({
+        stagedPins: withGivenPins(values.stagedPins, given),
         urls: takenUrls(detection.results),
         urlGeneration: values.urlGeneration + 1,
         detection: { ...detection, isTaken: true },
@@ -1214,14 +1316,14 @@ export function createConnectionFormModel(
       if (!detection || !choices?.formats.includes(format)) return;
       // 再点选着的那个即取消（照 magpie stageAPI 的切换）。
       const next = choices.staged === format ? null : format;
-      const stagedPin = { modelId: choices.modelId, format: next };
+      const stagedPins = { ...values.stagedPins, [choices.modelId]: next };
       if (next === null || values.urls[format].trim() !== "") {
-        update({ stagedPin });
+        update({ stagedPins });
         return;
       }
       // 这家还没有那种格式的地址：先采用检测到的地址（magpie 的 use(r.results)）。
       update({
-        stagedPin,
+        stagedPins,
         urls: takenUrls(detection.results),
         urlGeneration: values.urlGeneration + 1,
         detection: { ...detection, isTaken: true },
@@ -1416,6 +1518,11 @@ function atOrigin(urls: Urls, origin: string): Urls {
 function toLabel(status: string): FormatDetectionLabel {
   if (status === "ok" || status === "auth_failed") return status;
   return "not_detected";
+}
+
+/** 逐个模型识别的一个模型：认不出的格式不列。 */
+function modelDetectionRowOf(row: ApiEndpointModelDetection): ModelDetectionRow {
+  return { modelId: row.modelId, cells: row.results.flatMap(detectedFormatOf) };
 }
 
 /** 主机给的一行检测结论；认不出的格式不列。 */

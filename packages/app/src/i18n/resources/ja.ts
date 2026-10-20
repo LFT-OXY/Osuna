@@ -2654,6 +2654,15 @@ export const ja: TranslationResources = {
         detect: "自動検出",
         detectModelPlaceholder: "試すモデル（任意）",
         detected: {
+          eachButton: "選んだモデルごと",
+          eachInfo:
+            "選んだモデル（最大 {{max}} 個）をリクエスト形式ごとに 1 回ずつ、いくつか同時に問い合わせ、どの形式でどのモデルが使えるかを確かめます。エンドポイントの編集中は、「これを使う」で 1 つの形式でだけ応答したモデルを「この形式だけを使う」に設定します。",
+          eachNeedsModels: "先にモデルを選ぶか、試すモデルを入力して「自動検出」を押してください。",
+          eachCut: "{{picked}} 個のモデルのうち最初の {{asked}} 個だけを問い合わせました。",
+          eachOk: "{{ms}} ms",
+          eachGivenItem: "{{model}}：{{format}} だけ",
+          eachGivenByTake: "「これを使う」で「この形式だけを使う」も設定します：{{list}}",
+          eachGivenOnceSaved: "保存後、これらはこの形式だけを使います：{{list}}",
           noteAndUndo: "{{note}}{{undo}}",
           onlyUndo: "もう一度押すと取り消せます。",
           onlyClearedOnceSaved: "保存すると {{model}} はどの形式でも問い合わせます。",

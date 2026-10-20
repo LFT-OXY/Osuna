@@ -2682,6 +2682,18 @@ export const fr: TranslationResources = {
         detect: "Détecter",
         detectModelPlaceholder: "Modèle à essayer (facultatif)",
         detected: {
+          eachButton: "Chaque modèle choisi",
+          eachInfo:
+            "Interroge chaque modèle choisi, jusqu'à {{max}}, une fois dans chaque format de requête, quelques-uns à la fois, pour voir quel format sert quel modèle. Quand vous modifiez un endpoint, Utiliser celles-ci règle aussi sur Utiliser uniquement ce format un modèle qui n'a répondu que dans un seul format.",
+          eachNeedsModels:
+            "Choisissez d'abord des modèles, ou saisissez un modèle à essayer et appuyez sur Détecter.",
+          eachCut: "Seuls les {{asked}} premiers modèles sur {{picked}} ont été interrogés.",
+          eachOk: "{{ms}} ms",
+          eachGivenItem: "{{model}} : {{format}} uniquement",
+          eachGivenByTake:
+            "Utiliser celles-ci règle aussi Utiliser uniquement ce format : {{list}}",
+          eachGivenOnceSaved:
+            "Après l'enregistrement, ceux-ci n'utilisent que ce format : {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "Appuyez de nouveau pour annuler.",
           onlyClearedOnceSaved:

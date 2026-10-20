@@ -672,19 +672,25 @@ export class ApiEndpointSession {
   ): Promise<void> {
     const { signal, release } = this.trackUpstreamRequest(request.requestId, connectionSignal);
     try {
-      const results = await this.service.detectFormats(
+      const { results, models } = await this.service.detectFormats(
         {
           ...(request.endpointId !== undefined ? { endpointId: request.endpointId } : {}),
           baseUrl: request.baseUrl,
           ...(request.apiKey !== undefined ? { apiKey: request.apiKey } : {}),
           ...(request.modelId !== undefined ? { modelId: request.modelId } : {}),
           ...(request.modelIds !== undefined ? { modelIds: request.modelIds } : {}),
+          ...(request.eachModel !== undefined ? { eachModel: request.eachModel } : {}),
         },
         signal,
       );
       this.host.emit({
         type: "provider.api_endpoint.detect_formats.response",
-        payload: { requestId: request.requestId, results, error: null },
+        payload: {
+          requestId: request.requestId,
+          results,
+          ...(models === null ? {} : { models }),
+          error: null,
+        },
       });
     } catch (error) {
       this.host.emit({
