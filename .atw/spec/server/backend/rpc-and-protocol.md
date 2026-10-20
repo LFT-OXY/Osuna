@@ -667,6 +667,7 @@ Reference implementation: the logic map switch (`agent.logic_map.set_enabled.req
 - Off removes the label only; the map on disk stays. On with the label already set reuses that map.
 - Draft target: daemon creates the empty map under the workspace's `cwd` (or confirms the continued `mapName` exists) and returns `mapName`; it writes no state. The app keeps the draft's chosen map plus the empty map it created (`createdMapName`), reuses the created one when the user picks "新建" again, and sends the chosen map as the label when the first message creates the agent. Switching a draft from its created map to an existing one sends `createdMapName`; the daemon deletes that map only if it is still unwritten (no title, framework, nodes, edges, or other files) and no stored or live agent's label points at it (`discardUnwrittenLogicMap`, `isLogicMapInUse`). Known gap: another draft continuing the same empty map is not checked.
 - The instruction block (`resolveLogicMapInstructionBlock`, async, reads the map at send time) varies by map state: framework not judged → judge, record, tell the user; framework present → 3–6 sentence notes, and on the first message after switch-on only (briefed label ≠ map) list marked nodes and ask to link them first; no framework → full node docs; map broken/missing → say which file and what problem. `markLogicMapBriefed` writes the briefed label before the provider receives the message, so a failed send loses that reminder.
+- The block is only attached when the session can call the Osuna tools: `resolvePaseoToolsUnavailableReason(agent.createAgentsCapability)` (`server/agent/create-agents-capability.ts`) returns `mcp_disabled` / `tools_not_injected` / `tools_not_delivered` → no block and no `markLogicMapBriefed`, so the first message after the user turns the tools on still gets the once-per-switch-on reminder. `create_agent_not_allowed` covers only `create_agent` and does not count; `undefined` (not resolved yet) sends the block. Without this gate the agent is told to call `read_logic_map` it does not have and answers "tool not found" (logic-map ticket 08). The switch, its label and the map are unaffected. The app shows the same verdict next to the switch (`useLogicMapToolsUnavailableReason`, `app/src/logic-map/osuna-tools-availability.ts`): drafts reuse `resolveDraftCreateAgentsVerdict` from `hooks/use-agent-autocomplete.ts` instead of a second selector; only `tools_not_injected` gets the "open settings" action (Settings → Host → Agents), like the Agent mention notice, and only its running-agent copy says to reload the agent. Known gap: a provider tool filter that hides just `read_logic_map` / `update_logic_map` is not detected.
 - A label patch on an unloaded agent does not push; the handler calls `agentUpdates.emitStoredRecord(labelWrite.record)` when `labelWrite.live` is false.
 - Reads go through `workspace.logic_map.list` / `.get` (`.get` returns a `result` union so a hand-broken file is a readable `corrupt` case, not a transport error). `workspace.logic_map.changed` is opt-in: it is in `SessionEventSubscriptionSchema` and `legacyWantsEvent` returns `false` for it, so only clients that subscribed after seeing `features.logicMap` get it. Disk format and batch writes: `persistence.md` "a folder of files an agent edits in batches".
 
@@ -677,6 +678,7 @@ Reference implementation: the logic map switch (`agent.logic_map.set_enabled.req
 - `workspaceId` unknown or `archivedAt` set → `LogicMapWorkspaceNotFoundError` (never trust a client-sent `cwd`: the daemon would create folders anywhere).
 - Workspace directory gone → `LogicMapDirectoryMissingError`; no free random name → `LogicMapNameUnavailableError`.
 - Every error → response with `error` string; the app toasts and puts the switch back.
+- Osuna tools unavailable (any reason except `create_agent_not_allowed`) → not an error: the switch stays on, the block is withheld, the app shows the warning hint.
 
 ### 5. Good/Base/Bad Cases
 
@@ -688,7 +690,7 @@ Reference implementation: the logic map switch (`agent.logic_map.set_enabled.req
 
 - `messages.logic-map.test.ts`: both target kinds parse, bad target rejected, `features.logicMap` optional.
 - `logic-map-store.test.ts`, `logic-map-instruction-block.test.ts`, `trailing-routing-block.test.ts` (both blocks stripped, envelope kept).
-- Daemon E2E `daemon-e2e/logic-map-toggle.e2e.test.ts`: label after on/off, restart read-back, unknown workspace rejected, block present only when on.
+- Daemon E2E `daemon-e2e/logic-map-toggle.e2e.test.ts`: label after on/off, restart read-back, unknown workspace rejected, block present only when on, no block when the host turns the tools off or the session cannot receive them.
 - App `draft-logic-map-store.test.ts` (rehydrate, reuse); browser `composer-logic-map-toggle.spec.ts` (on/off, reload keeps draft state, host rejects → toast + switch off, old host hint).
 
 ### 7. Wrong vs Correct

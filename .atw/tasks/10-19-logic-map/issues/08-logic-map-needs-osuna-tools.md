@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Impl:** ready
+**Impl:** done
 
 - [ ] 工具不可用时，开关旁显示原因和"去开启"入口；草稿和运行中的 Agent 分别用对应文案（运行中的要提示开启后重新加载 Agent）。
 - [ ] 工具不可用时发给 provider 的消息不带逻辑图说明块，工具可用时照常带；daemon 测试覆盖两种情况。
