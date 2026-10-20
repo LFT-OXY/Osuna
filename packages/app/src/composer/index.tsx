@@ -88,7 +88,11 @@ import {
 } from "@/composer/actions";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
-import { logicMapToggleReservedWidth, LogicMapComposerToggle } from "@/logic-map/composer-toggle";
+import {
+  logicMapToggleReservedWidth,
+  LogicMapComposerToggle,
+  useLogicMapEnabled,
+} from "@/logic-map/composer-toggle";
 import {
   useLogicMapToolsUnavailableReason,
   type LogicMapToolsTarget,
@@ -2467,9 +2471,16 @@ function ComposerContentImpl({
 
   // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
   const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
-  const logicMapToolsUnavailableReason = useLogicMapToolsUnavailableReason(
+  const logicMapToolsReason = useLogicMapToolsUnavailableReason(
     resolveLogicMapToolsTarget({ serverId, agentId, agentControls }),
   );
+  const logicMapEnabled = useLogicMapEnabled({
+    serverId,
+    agentId,
+    isDraft: resolveAgentControlsMode(agentControls) === "draft",
+  });
+  // 只在开关开着时提示工具不可用：Osuna 工具默认关，常驻提示会挤掉速度等控件。
+  const logicMapToolsUnavailableReason = logicMapEnabled ? logicMapToolsReason : null;
   const messageInputContainerRef = useRef<View>(null);
   const leftContent = useMemo(
     () =>

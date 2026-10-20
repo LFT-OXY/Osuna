@@ -43,12 +43,34 @@ export function logicMapToggleReservedWidth(input: LogicMapReservedWidthInput): 
     : LOGIC_MAP_TOGGLE_RESERVED_WIDTH;
 }
 
+interface LogicMapEnabledInput {
+  serverId: string;
+  /** 草稿时是草稿 tab 的 id。 */
+  agentId: string;
+  isDraft: boolean;
+}
+
+/** 这个对话的逻辑图开关是否开着：运行中的 Agent 看标签，草稿看草稿记录。 */
+export function useLogicMapEnabled(input: LogicMapEnabledInput): boolean {
+  const { serverId, agentId, isDraft } = input;
+  const agentEnabled = useSessionStore((state) => {
+    if (isDraft) return false;
+    const agent = state.sessions[serverId]?.agents?.get(agentId);
+    return getLogicMapNameFromLabels(agent?.labels) !== null;
+  });
+  const draftKey = buildDraftLogicMapKey({ serverId, draftTabId: agentId });
+  const draftEnabled = useDraftLogicMapStore(
+    (state) => isDraft && (state.draftsByKey[draftKey]?.enabled ?? false),
+  );
+  return isDraft ? draftEnabled : agentEnabled;
+}
+
 /** 运行中的 Agent 按 agentId 开关；草稿还没有 Agent，按草稿 tab 记住 daemon 建好的图名。 */
 type LogicMapComposerToggleProps = {
   serverId: string;
   /** 输入框外框，选择弹层开在它上方，不盖住输入框里的文字。 */
   popoverEdgeRef: RefObject<View | null> | null;
-  /** 会话拿不到 Osuna 工具的原因；有原因时开关后面给出说明，开关照常能用。 */
+  /** 会话拿不到 Osuna 工具的原因；开关开着且有原因时，开关后面给出说明，开关照常能用。 */
   toolsUnavailableReason: LogicMapToolsUnavailableReason | null;
 } & (
   | { kind: "agent"; agentId: string; workspaceId: string | null }
@@ -216,10 +238,7 @@ function AgentLogicMapSwitch({
   workspaceId: string | null;
 }) {
   const client = useHostRuntimeClient(serverId);
-  const enabled = useSessionStore((state) => {
-    const agent = state.sessions[serverId]?.agents?.get(agentId);
-    return getLogicMapNameFromLabels(agent?.labels) !== null;
-  });
+  const enabled = useLogicMapEnabled({ serverId, agentId, isDraft: false });
   const run = useCallback(
     async (change: LogicMapSwitchChange) => {
       if (!client) return;

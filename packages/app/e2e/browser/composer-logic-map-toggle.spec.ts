@@ -344,7 +344,7 @@ test.describe("Logic map toggle in the composer toolbar", () => {
     }
   });
 
-  test("with Osuna tools off, a running agent shows why next to the switch and links to the Agents settings", async ({
+  test("with Osuna tools off, a running agent shows why once the switch is on and links to the Agents settings", async ({
     page,
   }, testInfo) => {
     const agent = await withOsunaToolsOff(() =>
@@ -356,7 +356,18 @@ test.describe("Logic map toggle in the composer toolbar", () => {
     try {
       await openAgentRoute(page, agent);
       await expectComposerVisible(page);
+      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "false", {
+        timeout: 30_000,
+      });
+      // 开关关着时不提示，工具栏不为它多占位置。
+      await expect(page.getByTestId("composer-logic-map-tools-unavailable")).toHaveCount(0);
 
+      // 开关照常能开，开了才说明原因。
+      await turnOnWithNewMap(page);
+      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true");
+      await expect
+        .poll(() => agentLogicMap(agent.client, agent.agentId))
+        .toMatch(/^untitled-[0-9a-f]{8}$/);
       const hint = toolsUnavailableHint(page);
       await expect(hint.getByTestId("composer-logic-map-tools-unavailable-action")).toHaveText(
         "Open settings",
@@ -367,12 +378,6 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       ).toHaveAccessibleName(
         "The logic map needs Osuna tools. Turn them on in Settings → Host → Agents, then reload this agent.",
       );
-      // 开关照常能开。
-      await turnOnWithNewMap(page);
-      await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true");
-      await expect
-        .poll(() => agentLogicMap(agent.client, agent.agentId))
-        .toMatch(/^untitled-[0-9a-f]{8}$/);
 
       await hint.getByTestId("composer-logic-map-tools-unavailable-action").click();
       await expect(page).toHaveURL(
@@ -400,6 +405,12 @@ test.describe("Logic map toggle in the composer toolbar", () => {
       await expect(page.getByTestId("composer-logic-map-tools-unavailable")).toHaveCount(0);
 
       await withOsunaToolsOff(async () => {
+        // 开关关着时不提示；打开后才说明原因。
+        await expect(page.getByTestId("composer-logic-map-tools-unavailable")).toHaveCount(0);
+        await turnOnWithNewMap(page);
+        await expect(logicMapSwitch(page)).toHaveAttribute("aria-checked", "true", {
+          timeout: 30_000,
+        });
         const hint = toolsUnavailableHint(page);
         await expect(hint).toBeVisible({ timeout: 30_000 });
         await expect(
