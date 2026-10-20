@@ -8,11 +8,11 @@
 
 **Impl:** done
 
-- [ ] 设置开关的 RPC 按 `docs/rpc-namespacing.md` 用带点的命名空间与成对的 `.request` / `.response`；协议新增字段全部可选，旧客户端能解析新消息、新 daemon 能解析旧消息，有协议兼容测试。
-- [ ] 开关状态随 Agent 记录持久保存（zod schema、原子写入、不做迁移），daemon 重启后读回；草稿对话设置的状态在第一条消息发出后归到新建的 Agent 上。
-- [ ] 打开开关时在 workspace `cwd` 下的 `docs/logic-maps/<临时名>/` 创建空图（骨架文件合法、节点为空）。
-- [ ] 开着时发给 provider 的消息带说明块，关着时不带；时间线、provider 历史、导入和预览里都看不到说明块。测试照 `routing-block.test.ts`、`trailing-routing-block.test.ts` 的写法。
-- [ ] `server_info.features` 有逻辑图标记；标记不在时输入框不显示开关，显示"需要更新主机"的提示。
-- [ ] UI：桌面 1280 宽 / 输入框工具栏 / 开关关、开两态，以及连到旧主机时的提示——截图显示开关是 Switch、位置与其他 Agent 控件对齐，提示文字完整。
-- [ ] 新增文案 zh-CN、en 齐全，用词与 `docs/glossary.md` 的 Logic map 条目一致（"逻辑图"）。
-- [ ] `npm run typecheck`、`npm run lint` 通过；本票新增或修改的测试文件单独跑通过。
+- [x] 设置开关的 RPC 按 `docs/rpc-namespacing.md` 用带点的命名空间与成对的 `.request` / `.response`；协议新增字段全部可选，旧客户端能解析新消息、新 daemon 能解析旧消息，有协议兼容测试。
+- [x] 开关状态随 Agent 记录持久保存（zod schema、原子写入、不做迁移），daemon 重启后读回；草稿对话设置的状态在第一条消息发出后归到新建的 Agent 上。
+- [x] 打开开关时在 workspace `cwd` 下的 `docs/logic-maps/<临时名>/` 创建空图（骨架文件合法、节点为空）。
+- [x] 开着时发给 provider 的消息带说明块，关着时不带；时间线、provider 历史、导入和预览里都看不到说明块。测试照 `routing-block.test.ts`、`trailing-routing-block.test.ts` 的写法。
+- [x] `server_info.features` 有逻辑图标记；标记不在时输入框不显示开关，显示"需要更新主机"的提示。
+- [x] UI：桌面 1280 宽 / 输入框工具栏 / 开关关、开两态，以及连到旧主机时的提示——截图显示开关是 Switch、位置与其他 Agent 控件对齐，提示文字完整。
+- [x] 新增文案 zh-CN、en 齐全，用词与 `docs/glossary.md` 的 Logic map 条目一致（"逻辑图"）。
+- [x] `npm run typecheck`、`npm run lint` 通过；本票新增或修改的测试文件单独跑通过。
