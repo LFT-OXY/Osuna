@@ -8,7 +8,7 @@
 
 **Blocked by:** 19, 01
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假 Claude Code 请求经过中转站后样本落盘，敏感头不在样本里；按 Claude Code 测时假上游收到样本里的头。
 - [ ] 端到端：没有 Claude Code 样本时拒绝并给原因；官方地址的接口不提供按 Claude Code 测。

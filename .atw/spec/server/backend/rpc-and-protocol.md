@@ -1464,6 +1464,16 @@ if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId
 
 - endpoint-management-ux ticket 19 (`api-endpoints/model-tests.ts`, magpie `internal/provider/test.go` `TestModels` / `testOne`, MIT). Every request carries the user's key, so it runs only when the user presses "Test models" or a row's "Test this" — no timer, no automatic run.
 
+### CLI-style methods (ticket 20, ADR 0013, magpie `test_as.go` / `codexSign`)
+
+- Methods: `plain` | `claude_code` | `codex` (`CliTestClient` and the per-CLI rules live in one table, `CLI_TEST_POLICIES` in `api-endpoints/test-as.ts`: formats, needs-a-sample, relay-only). The list response's optional `testsAs` says which a given endpoint offers; the app narrows the wire string to the literal union once.
+- Samples: `api-endpoints/cli-header-samples.json` (0600, atomic, rewritten only on change). Headers only, never a body; magpie's strip list (`claudeCodeHeader` / `codexClientHeader` filter then `shapeHeader`) plus cookie: no auth, session, thread, request id, cookie, `anthropic-beta`; no sample without a User-Agent. Claude Code's sample is taken right after the gateway reads the model, before routing (magpie `gateway.go:1372-1380`) — a disabled-model 403 or a missing route still leaves one. Codex's is taken when it goes to Responses or Chat.
+- `claude_code`: Anthropic only; only endpoints whose template group is relay service or that were added as custom, and never a vendor's own API (`isVendorApi`: anthropic.com, googleapis.com, Bedrock, Azure — by preset or host). No sample → `sampleMissing`, no request, reason says to use Claude Code with one of these endpoints once (copy never names the gateway — glossary "Gateway").
+- `codex`: Responses, else Chat, any address; `store: false` on Responses. No sample → headers built as magpie `codexSign`, version = newest of built-in, `models_cache.json`, the local CLI, and the version seen through the gateway. Local CLI version follows magpie `proc.Version`: read the npm package first, run the binary (`probeCodexVersion`) only if that fails, never run the same executable (path + size + mtime) again after a failure (magpie #864, macOS malware prompt each run), concurrent lookups share one process. Known difference: a timeout also counts as failure (magpie retries) because `probeCodexVersion` can't tell them apart. A failed system-name lookup is not cached.
+- Stream read to the first content or error, 1 MB cap (magpie test.go:564-611).
+- Gateway fix found here: a Codex request translated to Chat carries the Codex identity headers as magpie `forwardOnce` does (gateway.go:3729-3737); `authorization`, `chatgpt-account-id`, cookies never reach the upstream (e2e asserts both).
+- Menu: an unavailable method stays in the row menu, not clickable; only icon and title dim, the reason keeps full `foregroundMuted` and is never truncated.
+
 ### 2. Signatures
 
 - `provider.api_endpoint.test_models.request { requestId, endpointId, modelId?, method? }` → pushes `test_models.started { requestId, modelIds }`, then one `test_models.progress { requestId, result, done, total }` per finished model, then `test_models.response { requestId, results, error }`. Cancel with the existing `provider.api_endpoint.cancel` by `requestId`.
