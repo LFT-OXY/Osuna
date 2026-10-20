@@ -8,7 +8,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：用未保存的值拉模型、测试连接、识别，假上游收到正确请求；不保存时 daemon 不留任何清单。
 - [ ] 端到端：上游列不出模型时，指定模型后识别成功。
