@@ -17,8 +17,7 @@ describe("endpoint name in model lists", () => {
     expect(showsEndpointNames({ display: "never", names })).toEqual([false, false, false]);
   });
 
-  it("an older host's missing setting, or one this side does not know, reads as always", () => {
-    expect(apiEndpointNameDisplayOf(undefined)).toBe("always");
+  it("a way this side does not know (one added later) reads as always", () => {
     expect(apiEndpointNameDisplayOf("sometimes")).toBe("always");
     expect(apiEndpointNameDisplayOf("clash")).toBe("clash");
   });

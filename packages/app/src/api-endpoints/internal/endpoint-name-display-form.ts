@@ -2,6 +2,11 @@ import {
   showsEndpointNames,
   type ApiEndpointNameDisplay,
 } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { withoutDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
+import {
+  distinctModelLabels,
+  resolveModelFacts,
+} from "@getpaseo/protocol/api-endpoint/model-settings";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
@@ -69,34 +74,64 @@ export function openEndpointNameDisplayForm(input: {
   };
 }
 
-type PreviewEndpoint = Pick<ApiEndpoint, "name" | "enabled" | "models" | "modelSettings">;
+type PreviewEndpoint = Pick<
+  ApiEndpoint,
+  "name" | "slug" | "enabled" | "models" | "modelSettings" | "modelFacts"
+>;
 
 /**
- * 接口详情页的预览（magpie 的 Agents’ lists show “{label}”）：这家第一个已选模型在选单里叫什么。
- * 名字取用户起的、再是清单给的、都没有是模型 id；同名按开着的接口的已选模型一起算。没有已选模型为 null。
+ * 接口详情页的预览（magpie 的 Agents’ lists show “{label}”）：这家第一个在服务的模型在选单里叫什么。
+ * 和 daemon 给选单起名用同一套：去掉已禁用的模型（withoutDisabledModels），名字按模型设置与自动取到的资料
+ * （resolveModelFacts），同一家里撞名的改显示模型 id（distinctModelLabels），再按开着的接口一起判断同名。
+ * 这家没有在服务的模型时为 null。
  */
 export function endpointNamePreview(input: {
   endpoint: PreviewEndpoint;
   endpoints: readonly PreviewEndpoint[];
   display: ApiEndpointNameDisplay;
+  disabledModels: readonly string[];
 }): string | null {
   const { endpoint } = input;
-  const first = endpoint.models[0];
-  if (first === undefined) return null;
   const listed = input.endpoints.filter(
     (candidate) => candidate === endpoint || candidate.enabled !== false,
   );
-  const names = listed.flatMap((candidate) =>
-    candidate.models.map((model) => nameOf(candidate, model)),
-  );
-  const own = nameOf(endpoint, first);
-  const ownIndex = listed
-    .slice(0, listed.indexOf(endpoint))
-    .reduce((count, candidate) => count + candidate.models.length, 0);
+  const labelled = listed.map((candidate) => ({
+    endpoint: candidate,
+    labels: shownLabels({ endpoint: candidate, disabledModels: input.disabledModels }),
+  }));
+  const own = labelled.find((entry) => entry.endpoint === endpoint);
+  if (own === undefined) return null;
+  const first = own.labels[0];
+  if (first === undefined) return null;
+  const names = labelled.flatMap((entry) => entry.labels);
+  // 这家第一个模型在整份名字里的位置：排在它前面的几家的模型数。
+  const position = labelled
+    .slice(0, labelled.indexOf(own))
+    .reduce((count, entry) => count + entry.labels.length, 0);
   const shows = showsEndpointNames({ display: input.display, names });
-  return shows[ownIndex] ? `${own} (${endpoint.name})` : own;
+  return shows[position] ? `${first} (${endpoint.name})` : first;
 }
 
-function nameOf(endpoint: PreviewEndpoint, model: PreviewEndpoint["models"][number]): string {
-  return endpoint.modelSettings?.models?.[model.id]?.name ?? model.label ?? model.id;
+/** 一家在服务的模型在选单里的名字，按顺序。 */
+function shownLabels(input: {
+  endpoint: PreviewEndpoint;
+  disabledModels: readonly string[];
+}): string[] {
+  const { endpoint } = input;
+  const served = withoutDisabledModels({
+    patterns: input.disabledModels,
+    slug: endpoint.slug ?? "",
+    models: endpoint.models,
+  });
+  return distinctModelLabels(
+    served.map((model) => ({
+      id: model.id,
+      label:
+        resolveModelFacts({
+          settings: endpoint.modelSettings,
+          modelId: model.id,
+          auto: endpoint.modelFacts?.[model.id] ?? {},
+        }).name ?? model.id,
+    })),
+  );
 }

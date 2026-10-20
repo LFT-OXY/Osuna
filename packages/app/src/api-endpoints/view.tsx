@@ -1,4 +1,3 @@
-import type { ApiEndpointNameDisplay } from "@getpaseo/protocol/api-endpoint/endpoint-names";
 import React, {
   useCallback,
   useEffect,
@@ -39,8 +38,10 @@ import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/a
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
 import { findHostEndpoint } from "./internal/host-list";
 import { ApiEndpointDisabledModelsSection } from "./disabled-models-section";
-import { ApiEndpointNameDisplaySection } from "./endpoint-name-display-section";
-import { endpointNamePreview } from "./internal/endpoint-name-display-form";
+import {
+  ApiEndpointNameDisplayRow,
+  ApiEndpointNameDisplaySection,
+} from "./endpoint-name-display-section";
 import { ApiEndpointLongConversationsSection } from "./long-conversations-section";
 import { ApiEndpointMappingSection } from "./mapping-section";
 import { ApiEndpointModelDefaultsSection } from "./model-defaults-section";
@@ -542,7 +543,9 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
           unreachedAgents={endpoints.state.endpointNamesUnreached.map((provider) =>
             resolveProviderLabel(provider, providerEntries),
           )}
-          preview={null}
+          previewEndpoint={null}
+          allEndpoints={endpoints.state.endpoints}
+          disabledModels={endpoints.state.disabledModels}
           testID="api-endpoints-endpoint-names"
         />
       ) : null}
@@ -701,11 +704,33 @@ function ApiEndpointDetailSections({
   });
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // 「接口名显示方式」的预览：这家第一个模型在选单里叫什么（magpie 的 Agents’ lists show）。
-  const namePreview = useCallback(
-    (display: ApiEndpointNameDisplay) =>
-      endpointNamePreview({ endpoint, endpoints: allEndpoints, display }),
-    [allEndpoints, endpoint],
-  );
+  const hostState = hostEndpoints.state;
+  const nameDisplayRow = useMemo(() => {
+    if (!hasManagement || hostState.status !== "ready") return null;
+    const unreachedAgents = hostState.endpointNamesUnreached.map((provider) =>
+      resolveProviderLabel(provider, providerEntries),
+    );
+    return (
+      <ApiEndpointNameDisplayRow
+        label={t("settings.apiEndpoints.endpointNames.title")}
+        value={hostState.endpointNameDisplay}
+        onSave={hostEndpoints.setEndpointNameDisplay}
+        unreachedAgents={unreachedAgents}
+        previewEndpoint={endpoint}
+        allEndpoints={allEndpoints}
+        disabledModels={hostState.disabledModels}
+        testID="api-endpoint-endpoint-names"
+      />
+    );
+  }, [
+    allEndpoints,
+    endpoint,
+    hasManagement,
+    hostEndpoints.setEndpointNameDisplay,
+    hostState,
+    providerEntries,
+    t,
+  ]);
   // 开着「模型设置」窗口的模型；关着为 null。
   const [settingsModelId, setSettingsModelId] = useState<string | null>(null);
   const closeModelSettings = useCallback(() => setSettingsModelId(null), []);
@@ -798,6 +823,7 @@ function ApiEndpointDetailSections({
         onAdd={detail.addModels}
         onOpenSettings={hasManagement ? setSettingsModelId : null}
         formatPins={formatPins.pins}
+        header={nameDisplayRow}
       />
       {hasManagement ? (
         <ApiEndpointModelDefaultsSection
@@ -806,17 +832,7 @@ function ApiEndpointDetailSections({
           onSave={detail.saveModelSettings}
         />
       ) : null}
-      {hasManagement && hostEndpoints.state.status === "ready" ? (
-        <ApiEndpointNameDisplaySection
-          value={hostEndpoints.state.endpointNameDisplay}
-          onSave={hostEndpoints.setEndpointNameDisplay}
-          unreachedAgents={hostEndpoints.state.endpointNamesUnreached.map((provider) =>
-            resolveProviderLabel(provider, providerEntries),
-          )}
-          preview={namePreview}
-          testID="api-endpoint-endpoint-names"
-        />
-      ) : null}
+
       {settingsModelId !== null ? (
         <ApiEndpointModelSettingsSheet
           key={`${endpoint.id}:${settingsModelId}`}

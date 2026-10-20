@@ -204,6 +204,7 @@ import {
   API_ENDPOINT_PROVIDERS,
   ApiEndpointStore,
   ApiEndpointsFileUnparsableError,
+  endpointNameDisplayOf,
   type ApiEndpointProvider,
   type ApiEndpointState,
   type GatewayTokens,
@@ -287,7 +288,6 @@ import {
 } from "./disabled-models.js";
 import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
 import {
-  apiEndpointNameDisplayOf,
   isApiEndpointNameDisplay,
   showsEndpointNames,
   type ApiEndpointNameDisplay,
@@ -854,7 +854,7 @@ export class ApiEndpointService {
       reopenHints,
       longConversations: state.longConversations ?? {},
       disabledModels: state.disabledModels ?? [],
-      endpointNameDisplay: apiEndpointNameDisplayOf(state.endpointNameDisplay),
+      endpointNameDisplay: endpointNameDisplayOf(state),
       endpointNamesUnreached: this.endpointNamesUnreached(state),
     };
   }
@@ -2305,7 +2305,7 @@ export class ApiEndpointService {
     const state = this.readStateForSnapshot();
     const supported = findProvider(provider);
     if (!state || !supported || !state.agents[supported].enabled) return null;
-    return apiEndpointNameDisplayOf(state.endpointNameDisplay);
+    return endpointNameDisplayOf(state);
   }
 
   /** 在服务的模型：去掉一周内下线的与已禁用的。选单、默认模型、写给 CLI 的模型都按它。 */
@@ -2627,7 +2627,7 @@ export class ApiEndpointService {
     // 接口名显示方式也管终端 /model（magpie listLabels）：带接口名的行写「模型名 (接口名)」，说明换成 via Osuna，
     // 不重复说接口名；不带的照旧在说明里写接口名（magpie 的 note 同样留着提供方）。
     const shows = showsEndpointNames({
-      display: apiEndpointNameDisplayOf(state.endpointNameDisplay),
+      display: endpointNameDisplayOf(state),
       names: named.map(({ name }) => name),
     });
     const rows = named.map(({ hint, name, endpointName }, index) =>
@@ -2823,7 +2823,7 @@ export class ApiEndpointService {
         marksAgentsV1,
       });
     }
-    const nameDisplay = apiEndpointNameDisplayOf(state?.endpointNameDisplay);
+    const nameDisplay = state ? endpointNameDisplayOf(state) : "always";
     const defaultModelId = state?.agents.codex.defaultModelId ?? null;
     const disabledModels = state?.disabledModels ?? [];
     // 被禁的 Codex 自己的模型也从清单里拿掉（magpie 把名单算进标记），名单一变 Codex 就重拉；

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
@@ -73,6 +73,8 @@ interface ApiEndpointModelsSectionProps {
   onOpenSettings: ((modelId: string) => void) | null;
   // 模型行菜单的「只用这种格式」与行上的格式小标；老主机或这家只有一种格式的地址时为 null。
   formatPins: ModelFormatPins | null;
+  // 卡片顶上的一行（「接口名显示方式」，照 magpie 放在模型名字上面）；没有为 null。
+  header: ReactNode | null;
 }
 
 /**
@@ -112,6 +114,7 @@ export function ApiEndpointModelsSection({
   onAdd,
   onOpenSettings,
   formatPins,
+  header,
 }: ApiEndpointModelsSectionProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -220,6 +223,7 @@ export function ApiEndpointModelsSection({
       testID="api-endpoint-models-section"
     >
       <View style={settingsStyles.card}>
+        {header !== null ? <View style={styles.headerRow}>{header}</View> : null}
         <View style={styles.searchRow}>
           <ThemedSearch size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />
           <AdaptiveTextInput
@@ -806,6 +810,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     flexShrink: 1,
+  },
+  headerRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderCardRow,
   },
   searchRow: {
     flexDirection: "row",

@@ -157,10 +157,16 @@ export interface ApiEndpointState {
   endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
 }
 
-/** 文件里的接口名显示方式：认不出的当 always，always 不放进状态。 */
+/** 文件里的接口名显示方式：没有或认不出的当 always，always 不放进状态。 */
 function storedNameDisplay(raw: string | undefined): Pick<ApiEndpointState, "endpointNameDisplay"> {
+  if (raw === undefined) return {};
   const display = apiEndpointNameDisplayOf(raw);
   return display === "always" ? {} : { endpointNameDisplay: display };
+}
+
+/** 主机的接口名显示方式：没存即 always。 */
+export function endpointNameDisplayOf(state: ApiEndpointState): ApiEndpointNameDisplay {
+  return state.endpointNameDisplay ?? "always";
 }
 
 const OFFICIAL_AGENT: ApiEndpointAgentSettings = { enabled: false, defaultModelId: null };

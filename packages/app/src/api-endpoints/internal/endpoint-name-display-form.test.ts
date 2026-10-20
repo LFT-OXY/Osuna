@@ -57,32 +57,73 @@ describe("openEndpointNameDisplayForm", () => {
 describe("endpointNamePreview", () => {
   const relayA = {
     name: "Relay A",
+    slug: "relay-a",
     enabled: true,
-    models: [{ id: "kimi-k2", label: "Kimi K2" }, { id: "glm-5" }],
+    models: [{ id: "kimi-k2" }, { id: "glm-5" }],
+    modelFacts: { "kimi-k2": { name: "Kimi K2" }, "glm-5": { name: "GLM-5" } },
     modelSettings: { models: { "glm-5": { name: "GLM Five" } } },
   };
-  const relayB = { name: "Relay B", enabled: true, models: [{ id: "kimi-k2", label: "kimi k2" }] };
-  const off = { name: "Off", enabled: false, models: [{ id: "glm five" }] };
+  const relayB = {
+    name: "Relay B",
+    slug: "relay-b",
+    enabled: true,
+    models: [{ id: "kimi-k2" }],
+    modelFacts: { "kimi-k2": { name: "kimi k2" } },
+  };
+  const off = { name: "Off", slug: "off", enabled: false, models: [{ id: "Kimi K2" }] };
+  const preview = (input: {
+    endpoints?: (typeof relayA | typeof relayB | typeof off)[];
+    display: ApiEndpointNameDisplay;
+    disabledModels?: string[];
+  }) =>
+    endpointNamePreview({
+      endpoint: relayA,
+      endpoints: input.endpoints ?? [relayA, relayB, off],
+      display: input.display,
+      disabledModels: input.disabledModels ?? [],
+    });
 
-  it("names the endpoint's first model as the lists would, the endpoint's name after it by the setting", () => {
-    const endpoints = [relayA, relayB, off];
-    expect(endpointNamePreview({ endpoint: relayA, endpoints, display: "always" })).toBe(
-      "Kimi K2 (Relay A)",
-    );
-    // 只差大小写也算同名；关着的接口不在选单里。
-    expect(endpointNamePreview({ endpoint: relayA, endpoints, display: "clash" })).toBe(
-      "Kimi K2 (Relay A)",
-    );
-    expect(
-      endpointNamePreview({ endpoint: relayA, endpoints: [relayA, off], display: "clash" }),
-    ).toBe("Kimi K2");
-    expect(endpointNamePreview({ endpoint: relayA, endpoints, display: "never" })).toBe("Kimi K2");
+  it("names the endpoint's first model by its shown name, the endpoint's name after it by the setting", () => {
+    expect(preview({ display: "always" })).toBe("Kimi K2 (Relay A)");
+    expect(preview({ display: "never" })).toBe("Kimi K2");
   });
 
-  it("is null for an endpoint with no model selected", () => {
-    const empty = { name: "Empty", enabled: true, models: [] };
-    expect(endpointNamePreview({ endpoint: empty, endpoints: [empty], display: "always" })).toBe(
-      null,
-    );
+  it("only when names clash: another endpoint that is on offering the name, ignoring case, keeps it; one that is off doesn't", () => {
+    expect(preview({ display: "clash" })).toBe("Kimi K2 (Relay A)");
+    expect(preview({ endpoints: [relayA, off], display: "clash" })).toBe("Kimi K2");
+  });
+
+  it("a disabled model is in no list: the clash it made goes, and the first model left is the one shown", () => {
+    expect(preview({ display: "clash", disabledModels: ["relay-b/kimi-k2"] })).toBe("Kimi K2");
+    expect(preview({ display: "always", disabledModels: ["kimi-*"] })).toBe("GLM Five (Relay A)");
+  });
+
+  it("two models of the endpoint the list would call the same are shown by their ids, as in the picker", () => {
+    const twins = {
+      ...relayA,
+      modelFacts: { "kimi-k2": { name: "Kimi" }, "glm-5": { name: "kimi" } },
+      modelSettings: undefined,
+    };
+    expect(
+      endpointNamePreview({
+        endpoint: twins,
+        endpoints: [twins],
+        display: "never",
+        disabledModels: [],
+      }),
+    ).toBe("kimi-k2");
+  });
+
+  it("is null when the endpoint serves no model", () => {
+    const empty = { name: "Empty", slug: "empty", enabled: true, models: [] };
+    expect(
+      endpointNamePreview({
+        endpoint: empty,
+        endpoints: [empty],
+        display: "always",
+        disabledModels: [],
+      }),
+    ).toBe(null);
+    expect(preview({ display: "always", disabledModels: ["*"] })).toBe(null);
   });
 });

@@ -172,8 +172,12 @@ function buildEntryModelSelection(
         provider: entry.provider,
         providerLabel: label,
         groups,
-        // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
-        nameDisplay: apiEndpointNameDisplayOf(entry.apiEndpointNameDisplay),
+        nameDisplay:
+          // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
+          entry.apiEndpointNameDisplay === undefined
+            ? "always"
+            : // 认不出的方式（以后加的）当一直显示，长久保留。
+              apiEndpointNameDisplayOf(entry.apiEndpointNameDisplay),
       }),
     };
   }

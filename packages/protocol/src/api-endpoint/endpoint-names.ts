@@ -10,9 +10,12 @@ export function isApiEndpointNameDisplay(value: string): value is ApiEndpointNam
   return (API_ENDPOINT_NAME_DISPLAYS as readonly string[]).includes(value);
 }
 
-/** 线上或文件里读到的值：没有（老主机、没设）或认不出的都当 always。只在边界上用这一处。 */
-export function apiEndpointNameDisplayOf(value: string | undefined): ApiEndpointNameDisplay {
-  return value !== undefined && isApiEndpointNameDisplay(value) ? value : "always";
+/**
+ * 线上或文件里读到的值，在边界上解析。认不出的（以后加的方式）当 always：这是长久的向前兼容，不是要删的兼容。
+ * 没有值时是什么由调用方定（文件里没有即 always；老主机不发由客户端按 COMPAT 处理）。
+ */
+export function apiEndpointNameDisplayOf(value: string): ApiEndpointNameDisplay {
+  return isApiEndpointNameDisplay(value) ? value : "always";
 }
 
 /**

@@ -3371,7 +3371,7 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     }
   });
 
-  test("Endpoint name in model lists on an endpoint's page: the same host setting, with a preview of its first model and a refusal kept in place", async ({
+  test("Endpoint name in model lists atop an endpoint's models: the same host setting, with a preview of its first model and a refusal kept in place", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -3387,7 +3387,11 @@ test.describe("API endpoints on the Claude Code page and in the model selector",
     });
     const host = await failRequests(page, "provider.api_endpoint.set_endpoint_name_display");
     await openEndpointDetail(page, relayA);
-    const section = page.getByTestId("api-endpoint-endpoint-names").filter({ visible: true });
+    // 在「模型」区顶上一行（照 magpie 放在模型名字上面）。
+    const section = page
+      .getByTestId("api-endpoint-models-section")
+      .getByTestId("api-endpoint-endpoint-names-row")
+      .filter({ visible: true });
     const trigger = section.getByTestId("api-endpoint-endpoint-names-trigger");
     const preview = section.getByTestId("api-endpoint-endpoint-names-preview");
 

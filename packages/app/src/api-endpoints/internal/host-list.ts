@@ -59,13 +59,20 @@ export function selectHostEndpointsState(input: {
       reopenHints: input.data.reopenHints ?? {},
       longConversations: input.data.longConversations ?? {},
       disabledModels: input.data.disabledModels ?? [],
-      // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
-      endpointNameDisplay: apiEndpointNameDisplayOf(input.data.endpointNameDisplay),
+      endpointNameDisplay: nameDisplayOf(input.data.endpointNameDisplay),
+      // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当谁都管得到。
       endpointNamesUnreached: input.data.endpointNamesUnreached ?? [],
     };
   }
   if (input.error) return { status: "error", message: input.error.message };
   return { status: "loading" };
+}
+
+function nameDisplayOf(value: string | undefined): ApiEndpointNameDisplay {
+  // COMPAT(apiEndpointNameDisplay): added in v0.17.0, remove fallback after 2027-04-20. 老主机不发，当一直显示。
+  if (value === undefined) return "always";
+  // 认不出的方式（以后加的）当一直显示，长久保留。
+  return apiEndpointNameDisplayOf(value);
 }
 
 /** 列表里这一家；还没加载完、出错或已被删除时为 null。 */
