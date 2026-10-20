@@ -10,6 +10,7 @@ import {
   type ApiEndpointAgentSettingsInput,
   type ApiEndpointService,
   type KeepCurrentSettingsCode,
+  validateModelScope,
 } from "../../api-endpoints/service.js";
 
 export interface ApiEndpointSessionHost {
@@ -194,7 +195,9 @@ export class ApiEndpointSession {
         ...(request.region !== undefined ? { region: request.region } : {}),
         ...(request.icon !== undefined ? { icon: request.icon } : {}),
         ...(request.catalog !== undefined ? { catalog: request.catalog } : {}),
-        ...(request.modelScope !== undefined ? { modelScope: request.modelScope } : {}),
+        ...(request.modelScope !== undefined
+          ? { modelScope: validateModelScope(request.modelScope) }
+          : {}),
         ...(request.autoPick !== undefined ? { autoPick: request.autoPick } : {}),
       });
       this.host.emit({

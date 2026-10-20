@@ -935,6 +935,50 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(await servedIds(endpointId)).toEqual(["shared", "anthropic-only"]);
   });
 
+  test("picked only also leaves out a model listed only on a format with no URL, and a rule never ticks one", async () => {
+    upstream.lists["/multi/anthropic/v1/models"] = [{ id: "shared" }, { id: "anthropic-only" }];
+    upstream.lists["/multi/v1/models"] = [{ id: "shared" }, { id: "chat-only" }];
+    const saved = await client.apiEndpointSave({
+      provider: "claude",
+      name: "Multi",
+      baseUrls: multiBaseUrls(),
+      apiKey: SAVED_KEY,
+      models: [{ id: "shared" }, { id: "chat-only" }, { id: "by-hand" }],
+      manualModels: [{ id: "by-hand" }],
+      modelMapping: { opus: "chat-only", sonnet: "shared" },
+    });
+    const endpointId = saved.endpoint?.id ?? "";
+    expect(await servedIds(endpointId)).toEqual(["shared", "chat-only", "by-hand"]);
+
+    // 去掉 Chat 地址：只在 Chat 上列的 chat-only 不再服务，指向它的档位一起去掉；手动添加的留着。
+    const [anthropicUrl] = multiBaseUrls();
+    const anthropicOnly = anthropicUrl ? [anthropicUrl] : [];
+    const edited = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Multi",
+      baseUrls: anthropicOnly,
+      models: [{ id: "shared" }, { id: "chat-only" }, { id: "by-hand" }],
+      modelMapping: { sonnet: "shared" },
+    });
+    expect(edited.error).toBeNull();
+    const after = await endpointOf(endpointId);
+    expect(after.models.map((model) => model.id)).toEqual(["shared", "by-hand"]);
+    expect(after.modelMapping).toEqual({ sonnet: "shared" });
+
+    // 规则匹配到没有地址的模型也不勾。
+    const ruled = await client.apiEndpointSave({
+      provider: "claude",
+      endpointId,
+      name: "Multi",
+      baseUrls: anthropicOnly,
+      models: after.models,
+      autoPick: ["*-only"],
+    });
+    expect(ruled.error).toBeNull();
+    expect(await servedIds(endpointId)).toEqual(["anthropic-only", "shared", "by-hand"]);
+  });
+
   test("an endpoint saved without a scope keeps only what was picked through new lists", async () => {
     const urls = [{ format: "anthropic_messages", url: `${upstream.origin}/kept` }];
     upstream.lists["/kept/v1/models"] = numbered(3);
@@ -980,10 +1024,19 @@ describe("API endpoint model lists merged across formats, refreshed daily, and f
     expect(await servedIds(endpointId)).toEqual(numbered(24).map((model) => model.id));
 
     // 不是规则的（没有 *、不以 re: 开头）与读不懂的正则拒收，规则不变。
-    for (const rule of ["gpt-5", "re:(", "re: "]) {
-      const refused = await save({ models: served, autoPick: [rule] });
+    // 会回溯爆炸的正则也拒收（magpie 的 RE2 不回溯），并说明是什么问题。
+    for (const [rule, problem] of [
+      ["gpt-5", "not_rule"],
+      ["re:(", "invalid_regex"],
+      ["re: ", "empty_regex"],
+      ["re:(a+)+b", "nested_quantifier"],
+      ["re:(m)\\1", "backreference"],
+      ["re:m(?=1)", "lookaround"],
+      [`${"m".repeat(200)}*`, "too_long"],
+    ]) {
+      const refused = await save({ models: served, autoPick: [rule ?? ""] });
       expect(refused.error?.code).toBe("invalid_input");
-      expect(refused.error?.message).toContain(rule.trim());
+      expect(refused.error?.params).toEqual({ rule: rule?.trim(), problem });
     }
     expect((await endpointOf(endpointId)).autoPick).toBeUndefined();
 

@@ -14,6 +14,15 @@ describe("model scope", () => {
     expect(typedRuleOf("re:claude-\\d", [])).toEqual({ kind: "rule", rule: "re:claude-\\d" });
     expect(typedRuleOf("   ", [])).toEqual({ kind: "empty" });
     expect(typedRuleOf("gpt-*", ["gpt-*"])).toEqual({ kind: "duplicate" });
-    expect(typedRuleOf(" gpt-5 ", [])).toEqual({ kind: "notRule", text: "gpt-5" });
+    expect(typedRuleOf(" gpt-5 ", [])).toEqual({
+      kind: "problem",
+      text: "gpt-5",
+      problem: "not_rule",
+    });
+    expect(typedRuleOf("re:(a+)+b", [])).toEqual({
+      kind: "problem",
+      text: "re:(a+)+b",
+      problem: "nested_quantifier",
+    });
   });
 });

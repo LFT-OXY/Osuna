@@ -2820,18 +2820,32 @@ export const es: TranslationResources = {
         vendor: "Lista del proveedor",
         picked: "Solo los elegidos",
         vendorHint:
-          "Sirve todos los modelos de la lista obtenida, salvo los que solo aparecen en un formato para el que este endpoint no tiene URL base, y sigue la lista cuando cambia. Si hay más de {{limit}}, los primeros {{limit}} en el orden de la lista. Los modelos añadidos a mano siempre se sirven. Activar o desactivar un modelo abajo cambia a Solo los elegidos.",
+          "Sirve la lista obtenida y la sigue cuando cambia, sin los modelos que solo aparecen en un formato sin URL base aquí. Los modelos añadidos a mano siempre se sirven; activar o desactivar uno abajo cambia a Solo los elegidos.",
+        vendorLimit:
+          "Si hay más de {{limit}}, solo se sirven los primeros {{limit}} en el orden de la lista.",
         pickedHint: "Sirve solo los modelos activados abajo.",
         rules: {
           title: "Reglas de selección automática",
-          hint: "Cuando una lista obtenida trae modelos nuevos, se activan los que coinciden con una regla; al añadir una regla también se activan los modelos de la lista actual que coinciden. * coincide con cualquier carácter, sin distinguir mayúsculas; empieza con re: para una expresión regular. Las reglas nunca desactivan un modelo.",
+          hint: "Los modelos nuevos de una lista obtenida que coinciden con una regla se activan.",
+          syntax:
+            "* coincide con cualquier carácter, sin distinguir mayúsculas; empieza con re: para una expresión regular que debe coincidir con el nombre completo. Al añadir una regla también se activan los modelos de la lista actual que coinciden. Las reglas nunca desactivan un modelo.",
           placeholder: "p. ej. gpt-* o re:claude-.*",
           add: "Añadir",
           adding: "Añadiendo…",
           remove: "Quitar la regla {{rule}}",
-          notRule:
-            "«{{text}}» es un nombre de modelo, no una regla: una regla lleva * o empieza con re:.",
           saveFailed: "No se pudo guardar: {{message}}",
+          problem: {
+            notRule: "«{{text}}» es un nombre de modelo. Una regla lleva * o empieza con re:.",
+            tooLong: "Una regla puede tener como máximo 200 caracteres.",
+            emptyRegex: "Escribe una expresión regular después de re:.",
+            invalidRegex: "«{{text}}» no es una expresión regular legible.",
+            backreference:
+              "Las referencias inversas como \\1 pueden bloquear la búsqueda. Quítalas.",
+            lookaround:
+              "Las búsquedas hacia delante o hacia atrás pueden bloquear la búsqueda. Quítalas.",
+            nestedQuantifier:
+              "Un grupo repetido que repite por dentro, o tiene |, puede bloquear la búsqueda.",
+          },
         },
       },
       agent: {

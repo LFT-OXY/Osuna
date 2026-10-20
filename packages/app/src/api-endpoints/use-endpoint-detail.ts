@@ -17,7 +17,7 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { addManualModels, keepMappingWithin, type ModelSource } from "./internal/endpoint-models";
 import { previewAgentSettlements, type AgentSettlement } from "./internal/host-list";
-import { modelScopeOf, typedRuleOf } from "./internal/model-scope";
+import { modelScopeOf, RULE_PROBLEM_KEYS, typedRuleOf } from "./internal/model-scope";
 import { createUpstreamRequestId } from "./internal/upstream-request";
 import { LIST_PROVIDER } from "./use-host-endpoints";
 
@@ -247,7 +247,7 @@ export function useEndpointDetail(input: {
           models: next.models,
           manualModels: next.manualModels,
           ...(next.modelMapping ? { modelMapping: next.modelMapping } : {}),
-          ...scopeFieldsOf(next, hasManagement),
+          ...scopeFieldsOf({ draft: next, hasManagement }),
         });
         failure = result.error?.message ?? null;
       } catch (error) {
@@ -334,8 +334,11 @@ export function useEndpointDetail(input: {
       setRuleError(null);
       const typed = typedRuleOf(text, current.autoPick);
       if (typed.kind === "empty" || typed.kind === "duplicate") return typed.kind === "duplicate";
-      if (typed.kind === "notRule") {
-        setRuleError(t("settings.apiEndpoints.modelScope.rules.notRule", { text: typed.text }));
+      if (typed.kind === "problem") {
+        const key = RULE_PROBLEM_KEYS[typed.problem];
+        setRuleError(
+          t(`settings.apiEndpoints.modelScope.rules.problem.${key}`, { text: typed.text }),
+        );
         return false;
       }
       const failure = await save({ ...current, autoPick: [...current.autoPick, typed.rule] });
@@ -373,7 +376,7 @@ export function useEndpointDetail(input: {
             models: current.models,
             manualModels: current.manualModels,
             ...(current.modelMapping ? { modelMapping: current.modelMapping } : {}),
-            ...scopeFieldsOf(current, hasManagement),
+            ...scopeFieldsOf({ draft: current, hasManagement }),
             searchesWeb: value,
           });
           failure = result.error?.message ?? null;
@@ -508,10 +511,10 @@ function ruleSaveError(
 }
 
 /** 老主机不认服务范围与规则：不发，免得它们看起来存上了。 */
-function scopeFieldsOf(
-  draft: ModelDraft,
-  hasManagement: boolean,
-): { modelScope?: ApiEndpointModelScope; autoPick?: string[] } {
+function scopeFieldsOf({ draft, hasManagement }: { draft: ModelDraft; hasManagement: boolean }): {
+  modelScope?: ApiEndpointModelScope;
+  autoPick?: string[];
+} {
   if (!hasManagement) return {};
   return { modelScope: draft.modelScope, autoPick: draft.autoPick };
 }

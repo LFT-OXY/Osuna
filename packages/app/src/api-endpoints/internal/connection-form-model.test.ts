@@ -1548,6 +1548,8 @@ describe("connection form: a pasted curl command", () => {
       ],
       models: [{ id: "kimi-k3" }, { id: "claude-opus-5-5" }],
       manualModels: [{ id: "kimi-k3" }, { id: "claude-opus-5-5" }],
+      // 打了模型也跟随接口清单：它们记作手动添加，跟随时总在服务。
+      modelScope: "vendor",
     });
   });
 

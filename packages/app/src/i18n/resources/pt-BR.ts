@@ -2805,18 +2805,30 @@ export const ptBR: TranslationResources = {
         vendor: "Lista do fornecedor",
         picked: "Só os escolhidos",
         vendorHint:
-          "Serve todos os modelos da lista obtida, exceto os listados só em um formato para o qual este endpoint não tem URL base, e acompanha a lista quando ela muda. Com mais de {{limit}}, os {{limit}} primeiros na ordem da lista. Modelos adicionados à mão são sempre servidos. Ligar ou desligar um modelo abaixo muda para Só os escolhidos.",
+          "Serve a lista obtida e a acompanha quando muda, sem os modelos listados só em um formato sem URL base aqui. Modelos adicionados à mão são sempre servidos; ligar ou desligar um modelo abaixo muda para Só os escolhidos.",
+        vendorLimit:
+          "Com mais de {{limit}}, só os {{limit}} primeiros na ordem da lista são servidos.",
         pickedHint: "Serve só os modelos ligados abaixo.",
         rules: {
           title: "Regras de seleção automática",
-          hint: "Quando uma lista obtida traz modelos novos, os que combinam com uma regra são ligados; adicionar uma regra também liga os modelos da lista atual que combinam. * combina com quaisquer caracteres, sem diferenciar maiúsculas; comece com re: para uma expressão regular. As regras nunca desligam um modelo.",
+          hint: "Modelos novos de uma lista obtida que combinam com uma regra são ligados.",
+          syntax:
+            "* combina com quaisquer caracteres, sem diferenciar maiúsculas; comece com re: para uma expressão regular que combina com o nome inteiro. Adicionar uma regra também liga os modelos da lista atual que combinam. As regras nunca desligam um modelo.",
           placeholder: "ex.: gpt-* ou re:claude-.*",
           add: "Adicionar",
           adding: "Adicionando…",
           remove: "Remover a regra {{rule}}",
-          notRule:
-            "“{{text}}” é um nome de modelo, não uma regra: uma regra tem * ou começa com re:.",
           saveFailed: "Não foi possível salvar: {{message}}",
+          problem: {
+            notRule: "“{{text}}” é um nome de modelo. Uma regra tem * ou começa com re:.",
+            tooLong: "Uma regra pode ter no máximo 200 caracteres.",
+            emptyRegex: "Escreva uma expressão regular depois de re:.",
+            invalidRegex: "“{{text}}” não é uma expressão regular legível.",
+            backreference: "Referências como \\1 podem travar a busca. Remova-as.",
+            lookaround: "Lookahead e lookbehind podem travar a busca. Remova-os.",
+            nestedQuantifier:
+              "Um grupo repetido que repete por dentro, ou tem |, pode travar a busca.",
+          },
         },
       },
       agent: {

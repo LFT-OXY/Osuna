@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { X } from "lucide-react-native";
 import type { ApiEndpointModelScope } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
+import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
@@ -19,6 +20,8 @@ import { SERVED_LIST_LIMIT } from "./internal/model-scope";
 
 // FormTextInput 会压平 style 拆成外框与文字，Unistyles 样式在 Web 上压平后没有值，所以用普通对象。
 const RULE_INPUT_STYLE = { flex: 1 };
+// xs 按钮 24px，四周各加 4 到 32px 的点按范围。
+const REMOVE_HIT_SLOP = 4;
 
 export function ApiEndpointModelScopeSection({
   scope,
@@ -53,11 +56,18 @@ export function ApiEndpointModelScopeSection({
   );
   const hint = useMemo(
     () => (
-      <RNText style={settingsStyles.rowHint} testID="api-endpoint-model-scope-hint">
-        {scope === "vendor"
-          ? t("settings.apiEndpoints.modelScope.vendorHint", { limit: SERVED_LIST_LIMIT })
-          : t("settings.apiEndpoints.modelScope.pickedHint")}
-      </RNText>
+      <View testID="api-endpoint-model-scope-hint">
+        <RNText style={settingsStyles.rowHint}>
+          {scope === "vendor"
+            ? t("settings.apiEndpoints.modelScope.vendorHint")
+            : t("settings.apiEndpoints.modelScope.pickedHint")}
+        </RNText>
+        {scope === "vendor" ? (
+          <RNText style={settingsStyles.rowHint} testID="api-endpoint-model-scope-limit">
+            {t("settings.apiEndpoints.modelScope.vendorLimit", { limit: SERVED_LIST_LIMIT })}
+          </RNText>
+        ) : null}
+      </View>
     ),
     [scope, t],
   );
@@ -120,9 +130,16 @@ function AutoPickRules({
   return (
     <View style={styles.rules} testID="api-endpoint-auto-pick">
       <View style={styles.rulesHeading}>
-        <RNText style={settingsStyles.rowTitle}>
-          {t("settings.apiEndpoints.modelScope.rules.title")}
-        </RNText>
+        <View style={styles.rulesTitleRow}>
+          <RNText style={settingsStyles.rowTitle}>
+            {t("settings.apiEndpoints.modelScope.rules.title")}
+          </RNText>
+          <SettingsInfoTip
+            title={t("settings.apiEndpoints.modelScope.rules.title")}
+            info={t("settings.apiEndpoints.modelScope.rules.syntax")}
+            testID="api-endpoint-auto-pick-info"
+          />
+        </View>
         <RNText style={settingsStyles.rowHint}>
           {t("settings.apiEndpoints.modelScope.rules.hint")}
         </RNText>
@@ -190,6 +207,7 @@ function RuleChip({ rule, onRemove }: { rule: string; onRemove: (rule: string) =
         leftIcon={X}
         onPress={handleRemove}
         accessibilityLabel={t("settings.apiEndpoints.modelScope.rules.remove", { rule })}
+        hitSlop={REMOVE_HIT_SLOP}
         testID={`api-endpoint-auto-pick-remove-${rule}`}
       />
     </View>
@@ -204,6 +222,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   rulesHeading: {
     gap: theme.spacing[0.5],
+  },
+  rulesTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1.5],
   },
   ruleList: {
     flexDirection: "row",

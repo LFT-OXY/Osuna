@@ -272,6 +272,10 @@ import {
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import {
+  AUTO_PICK_RULE_MAX_LENGTH,
+  type AutoPickRuleProblem,
+} from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
+import {
   cleanAutoPickRules,
   followsList,
   keepValidMapping,
@@ -354,8 +358,8 @@ export interface ApiEndpointSaveInput {
   icon?: string | null;
   // 添加窗口里保存前拉到的上游清单：记作这家的上游清单；undefined 保留原来的（复制时是原来那家的）。
   catalog?: ApiEndpointModel[];
-  // 服务范围（API_ENDPOINT_MODEL_SCOPES）；undefined 保留原来的，新建时为 picked。
-  modelScope?: string;
+  // 服务范围（会话层已用 validateModelScope 校验）；undefined 保留原来的，新建时为 picked。
+  modelScope?: ApiEndpointModelScope;
   // 自动勾选规则，整份替换、空数组清掉；undefined 保留原来的。
   autoPick?: string[];
 }
@@ -4035,9 +4039,9 @@ function savedFieldsOf(input: {
   existing: StoredApiEndpoint | null;
   base: StoredApiEndpoint | null;
   templateId: string | undefined;
-}): { fields: EndpointFields; modelScope: string | undefined } {
+}): { fields: EndpointFields; modelScope: ApiEndpointModelScope | undefined } {
   const { input: request } = input;
-  const modelScope = validateModelScope(request.modelScope) ?? input.base?.modelScope;
+  const modelScope = request.modelScope ?? storedModelScopeOf(input.base);
   if (request.baseUrls === undefined) {
     return { fields: validateLegacyFields(input.provider, request, input.existing), modelScope };
   }
@@ -4047,7 +4051,14 @@ function savedFieldsOf(input: {
   return { fields: validateFields(baseUrls, formInput), modelScope };
 }
 
-function validateModelScope(raw: string | undefined): ApiEndpointModelScope | undefined {
+/** 存的范围是字符串（降级后读得懂）；不认识的当 picked。没有就是没设过。 */
+function storedModelScopeOf(endpoint: StoredApiEndpoint | null): ApiEndpointModelScope | undefined {
+  if (endpoint?.modelScope === undefined) return undefined;
+  return endpoint.modelScope === "vendor" ? "vendor" : "picked";
+}
+
+/** 线上的服务范围是字符串：不认识的拒收。 */
+export function validateModelScope(raw: string | undefined): ApiEndpointModelScope | undefined {
   if (raw === undefined) return undefined;
   const scope = API_ENDPOINT_MODEL_SCOPES.find((candidate) => candidate === raw);
   if (!scope) {
@@ -4068,7 +4079,7 @@ function settleSavedScope(input: {
   endpoint: StoredApiEndpoint;
   base: StoredApiEndpoint | null;
   input: ApiEndpointSaveInput;
-  modelScope: string | undefined;
+  modelScope: ApiEndpointModelScope | undefined;
   isLegacyForm: boolean;
 }): StoredApiEndpoint {
   const { base, input: request } = input;
@@ -4099,10 +4110,26 @@ function settleSavedScope(input: {
 function validateAutoPick(raw: string[]): string[] {
   const cleaned = cleanAutoPickRules(raw);
   if (!cleaned.ok) {
-    throw new ApiEndpointRequestError({ code: "invalid_input", message: cleaned.message });
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `"${cleaned.rule}" ${AUTO_PICK_PROBLEM_MESSAGES[cleaned.problem]}`,
+      // app 按 problem 用界面语言说明。
+      params: { rule: cleaned.rule, problem: cleaned.problem },
+    });
   }
   return cleaned.rules;
 }
+
+const AUTO_PICK_PROBLEM_MESSAGES: Record<AutoPickRuleProblem, string> = {
+  not_rule: "is a model's id, not a rule: a rule has a * in it, or starts with re:",
+  too_long: `is longer than ${AUTO_PICK_RULE_MAX_LENGTH} characters`,
+  empty_regex: "has no regular expression after re:",
+  invalid_regex: "is not a regular expression Osuna can read",
+  backreference: "uses a backreference, which can make matching hang",
+  lookaround: "uses a lookahead or lookbehind, which can make matching hang",
+  nested_quantifier:
+    "repeats a group that itself repeats or has alternatives, which can make matching hang",
+};
 
 /** 添加窗口里保存前拉到的清单：拉取时间记为保存时刻；没给时不写，留下 base 的。 */
 function catalogFieldOf(input: {

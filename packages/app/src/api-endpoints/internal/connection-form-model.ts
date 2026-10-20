@@ -188,7 +188,7 @@ export interface ConnectionFormOptions {
   canPasteCurl: boolean;
   // 同上：保存前能测试连接、添加时能拉模型，自动检测能填试用的模型。
   canCheckBeforeSave: boolean;
-  // 同上：新建时没挑模型的接口「跟随接口清单」（服务范围 vendor）；复制的随原来那家，由 daemon 拷。
+  // 同上：新建的接口「跟随接口清单」（服务范围 vendor）；复制的随原来那家，由 daemon 拷。
   followsListWhenNew: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
@@ -854,10 +854,8 @@ export function createConnectionFormModel(
       ...(keyOwner?.modelMapping ? { modelMapping: keyOwner.modelMapping } : {}),
       // 复制：上游清单、手动添加的模型、联网搜索开关等其余设置由 daemon 从原来那家拷。
       ...(seed.mode === "duplicate" ? { copyOf: seed.source.id } : {}),
-      // 新建时没挑模型就「跟随接口清单」；挑了的只用挑的（照 magpie：没有 picks 才露出清单）。
-      ...(followsListWhenNew && seed.mode === "create" && models.length === 0
-        ? { modelScope: "vendor" }
-        : {}),
+      // 新建的「跟随接口清单」；表单里打的模型记作手动添加，跟随时总在服务。
+      ...(followsListWhenNew && seed.mode === "create" ? { modelScope: "vendor" } : {}),
       // 添加时拉到的清单随保存写入。
       ...(values.catalogFetch.status === "fetched" ? { catalog: values.catalogFetch.models } : {}),
     };

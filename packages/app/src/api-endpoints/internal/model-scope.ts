@@ -1,3 +1,7 @@
+import {
+  autoPickRuleProblem,
+  type AutoPickRuleProblem,
+} from "@getpaseo/protocol/api-endpoint/auto-pick-rules";
 import type {
   ApiEndpoint,
   ApiEndpointModelScope,
@@ -5,8 +9,7 @@ import type {
 
 /*
  * 服务范围与自动勾选规则的纯计算。daemon 定下在服务的模型（models）；这里只读范围、检查用户打的规则。
- * 规则照 daemon（magpie autolist.go）：有 * 的 glob，或 `re:` 开头的正则；没有 * 的是模型名，不是规则。
- * 正则读不读得懂由 daemon 说。
+ * 规则和 daemon 用同一份检查（protocol 的 auto-pick-rules.ts）：有 * 的 glob，或 `re:` 开头、不会回溯爆炸的正则。
  */
 
 // 「跟随接口清单」在服务的上限（daemon model-scope.ts 的 SERVED_LIST_LIMIT，照 magpie manyModels）。
@@ -21,13 +24,25 @@ export type TypedRule =
   | { kind: "rule"; rule: string }
   | { kind: "empty" }
   | { kind: "duplicate" }
-  | { kind: "notRule"; text: string };
+  | { kind: "problem"; text: string; problem: AutoPickRuleProblem };
 
-/** 规则框里打的：去掉首尾空白；空的、已有的不加；不是规则的说明原因。 */
+/** 规则问题的文案键，在 settings.apiEndpoints.modelScope.rules.problem 下。 */
+export const RULE_PROBLEM_KEYS: Record<AutoPickRuleProblem, string> = {
+  not_rule: "notRule",
+  too_long: "tooLong",
+  empty_regex: "emptyRegex",
+  invalid_regex: "invalidRegex",
+  backreference: "backreference",
+  lookaround: "lookaround",
+  nested_quantifier: "nestedQuantifier",
+};
+
+/** 规则框里打的：去掉首尾空白；空的、已有的不加；不能用的说明原因。 */
 export function typedRuleOf(text: string, rules: readonly string[]): TypedRule {
   const rule = text.trim();
   if (rule === "") return { kind: "empty" };
   if (rules.includes(rule)) return { kind: "duplicate" };
-  if (!rule.startsWith("re:") && !rule.includes("*")) return { kind: "notRule", text: rule };
+  const problem = autoPickRuleProblem(rule);
+  if (problem !== null) return { kind: "problem", text: rule, problem };
   return { kind: "rule", rule };
 }

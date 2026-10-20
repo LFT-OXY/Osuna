@@ -2823,18 +2823,32 @@ export const fr: TranslationResources = {
         vendor: "Liste du fournisseur",
         picked: "Choisis uniquement",
         vendorHint:
-          "Sert tous les modèles de la liste récupérée, sauf ceux listés seulement pour un format sans URL de base sur ce point d'accès, et suit la liste quand elle change. Au-delà de {{limit}}, les {{limit}} premiers dans l'ordre de la liste. Les modèles ajoutés à la main sont toujours servis. Activer ou désactiver un modèle ci-dessous passe à Choisis uniquement.",
+          "Sert la liste récupérée et la suit quand elle change, sans les modèles listés seulement pour un format sans URL de base ici. Les modèles ajoutés à la main sont toujours servis ; activer ou désactiver un modèle ci-dessous passe à Choisis uniquement.",
+        vendorLimit:
+          "Au-delà de {{limit}}, seuls les {{limit}} premiers dans l'ordre de la liste sont servis.",
         pickedHint: "Sert uniquement les modèles activés ci-dessous.",
         rules: {
           title: "Règles de sélection automatique",
-          hint: "Quand une liste récupérée apporte de nouveaux modèles, ceux qui correspondent à une règle sont activés ; ajouter une règle active aussi les modèles correspondants déjà listés. * correspond à n'importe quels caractères, sans tenir compte de la casse ; commencez par re: pour une expression régulière. Les règles ne désactivent jamais un modèle.",
+          hint: "Les nouveaux modèles d'une liste récupérée qui correspondent à une règle sont activés.",
+          syntax:
+            "* correspond à n'importe quels caractères, sans tenir compte de la casse ; commencez par re: pour une expression régulière qui doit correspondre au nom entier. Ajouter une règle active aussi les modèles correspondants déjà listés. Les règles ne désactivent jamais un modèle.",
           placeholder: "ex. gpt-* ou re:claude-.*",
           add: "Ajouter",
           adding: "Ajout…",
           remove: "Supprimer la règle {{rule}}",
-          notRule:
-            "« {{text}} » est un nom de modèle, pas une règle : une règle contient * ou commence par re:.",
           saveFailed: "Impossible d'enregistrer : {{message}}",
+          problem: {
+            notRule: "« {{text}} » est un nom de modèle. Une règle contient * ou commence par re:.",
+            tooLong: "Une règle compte au plus 200 caractères.",
+            emptyRegex: "Écrivez une expression régulière après re:.",
+            invalidRegex: "« {{text}} » n'est pas une expression régulière lisible.",
+            backreference:
+              "Les références arrière comme \\1 peuvent bloquer la correspondance. Retirez-les.",
+            lookaround:
+              "Les assertions avant ou arrière peuvent bloquer la correspondance. Retirez-les.",
+            nestedQuantifier:
+              "Un groupe répété qui se répète à l'intérieur, ou contient |, peut bloquer la correspondance.",
+          },
         },
       },
       agent: {

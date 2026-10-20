@@ -911,7 +911,7 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
-  test("Auto-pick rules: a model name is not a rule, a failed add or remove stays in place, and a rule switches on what it matches", async ({
+  test("Auto-pick rules: a model name or a regex that can hang is not a rule, a failed add or remove stays in place, and a rule switches on what it matches", async ({
     page,
   }) => {
     relay.goodModels = numberedModels(26);
@@ -931,8 +931,14 @@ test.describe("Settings API endpoints", () => {
     await test.step("a model name is turned away before anything is sent", async () => {
       await input.fill("model-02");
       await add.click();
-      await expect(error).toContainText("is a model name, not a rule");
+      await expect(error).toHaveText(
+        "“model-02” is a model name. A rule has a * or starts with re:.",
+      );
       await expect(input).toHaveValue("model-02");
+      // 会回溯爆炸的正则也当场说明（magpie 的 RE2 不回溯）。
+      await input.fill("re:(model-\\d+)+x");
+      await add.click();
+      await expect(error).toContainText("can make matching hang");
       expect((await endpointOf(endpointId))?.autoPick).toBeUndefined();
     });
 
@@ -1925,8 +1931,10 @@ test.describe("Templates", () => {
       expect(saved).toMatchObject({
         name: "Pasted relay",
         baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
-        models: [{ id: "good-1" }],
+        // 新建的跟随接口清单：拉到的清单加上粘贴带来的（记作手动添加）。
+        models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }, { id: "good-1" }],
         manualModels: [{ id: "good-1" }],
+        modelScope: "vendor",
         hasApiKey: true,
       });
     });
@@ -1941,7 +1949,7 @@ test.describe("Templates", () => {
       const { endpoints } = await client.apiEndpointList("claude");
       const copy = endpoints.find(isPastedRelayCopy);
       expect(copy).toMatchObject({
-        models: [{ id: "good-1" }, { id: "good-2" }],
+        models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }, { id: "good-1" }, { id: "good-2" }],
         manualModels: [{ id: "good-1" }, { id: "good-2" }],
         hasApiKey: true,
       });
@@ -2016,7 +2024,7 @@ test.describe("Checking an API endpoint before saving it", () => {
     return page.getByTestId(`api-endpoint-connection-test-${format}-verdict`);
   }
 
-  test("Fetch models lists the vendor's models to pick from, and the save keeps the picks and that list", async ({
+  test("Fetch models lists the vendor's models to pick from, and the save follows that list with the pick added by hand", async ({
     page,
   }) => {
     await openCustomForm(page, { apiKey: RELAY_KEY });
@@ -2047,17 +2055,18 @@ test.describe("Checking an API endpoint before saving it", () => {
       await expect(page.getByTestId("api-endpoint-connection-save")).toHaveText("Save");
     });
 
-    await test.step("saving keeps the picks and the list, fetched once more as magpie does", async () => {
+    await test.step("saving keeps the list, fetched once more as magpie does, and follows it with the pick added by hand", async () => {
       await page.getByTestId("api-endpoint-connection-save").click();
       await expect(connectionForm(page)).toHaveCount(0);
       const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
       expect(endpoint).toMatchObject({
         name: "Unsaved relay",
-        models: [{ id: "gpt-5" }],
+        models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }],
         catalog: { models: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5" }] },
       });
-      // 挑了模型的只用挑的。
-      expect(endpoint?.modelScope).toBeUndefined();
+      // 新建的跟随接口清单；挑的模型记作手动添加，总在服务。
+      expect(endpoint?.modelScope).toBe("vendor");
+      expect(endpoint?.manualModels).toEqual([{ id: "gpt-5" }]);
       await expect(headerTitle(page)).toHaveText("Unsaved relay");
       // 新建一家保存时当场再拉一次（照 magpie），打开接口页又拉一次；清单还是那两个。
       await expect.poll(listingCountReader(relay)).toBe(6);
