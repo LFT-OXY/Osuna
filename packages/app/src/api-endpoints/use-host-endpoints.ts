@@ -19,6 +19,7 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
+import { requestExtrasErrorText } from "./request-extras-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
@@ -404,7 +405,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
       try {
         const result = await client.apiEndpointSave({ provider: LIST_PROVIDER, ...request });
-        if (result.error) return { status: "failed", message: result.error.message };
+        if (result.error) {
+          const message = requestExtrasErrorText(t, result.error) ?? result.error.message;
+          return { status: "failed", message };
+        }
         if (!result.endpoint) throw new Error("The host returned neither an endpoint nor an error");
         return { status: "saved", endpointId: result.endpoint.id };
       } catch (error) {

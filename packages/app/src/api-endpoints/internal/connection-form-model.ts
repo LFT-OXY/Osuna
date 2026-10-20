@@ -17,6 +17,24 @@ import { curlOf, type CurlCommand } from "./curl-command";
 import { isRequestFormat } from "@getpaseo/protocol/api-endpoint/model-settings";
 import { withModelFormat } from "./model-settings-form";
 import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
+import {
+  isThirdPartyAnthropicUrl,
+  keyHeaderOf,
+  type ApiEndpointKeyHeader,
+  type HeaderProblem,
+} from "@getpaseo/protocol/api-endpoint/request-extras";
+import {
+  extraBodyOf,
+  extraBodyTextOf,
+  headerHintsLeft,
+  headerRowsOf,
+  headerRowsProblem,
+  headersToSave,
+  minifiedJson,
+  prettyJson,
+  type ExtraBodyTextProblem,
+  type HeaderRow,
+} from "./request-extras-form";
 
 /*
  * 第三方接口「添加 / 编辑连接」弹窗的表单模型：纯 TypeScript，无 React（docs/forms.md）。
@@ -238,6 +256,8 @@ export interface ConnectionFormOptions {
   canCheckBeforeSave: boolean;
   // 同上：新建的接口「跟随接口清单」（服务范围 vendor）；复制的随原来那家，由 daemon 拷。
   followsListWhenNew: boolean;
+  // 同上：「高级」里能设请求头、附加请求体、key 放哪个头。
+  canSetRequestExtras: boolean;
   // 主机给的模板清单；老主机没有，为空。
   templates: readonly ApiEndpointTemplate[];
 }
@@ -353,6 +373,18 @@ export interface ConnectionFormState {
   canSubmit: boolean;
   submitting: boolean;
   submitError: string | null;
+  // 「高级」：请求头、附加请求体、key 放哪个头（只在 canSetRequestExtras 时有）。设了任一项时一打开就展开（照 magpie advancedSet）。
+  canSetRequestExtras: boolean;
+  isAdvancedOpen: boolean;
+  headerRows: HeaderRow[];
+  // 模板提示的、还没加的请求头名。
+  headerHints: string[];
+  headerProblem: HeaderProblem | null;
+  extraBodyText: string;
+  extraBodyProblem: ExtraBodyTextProblem | null;
+  keyHeader: ApiEndpointKeyHeader;
+  // 只对第三方 Anthropic 地址显示（Anthropic 自己、Bedrock、Azure 的只收一种）。
+  showsKeyHeader: boolean;
 }
 
 export interface ConnectionFormDeps {
@@ -415,6 +447,17 @@ export interface ConnectionFormModel {
   // 「从网站取图标」：按填的地址找它所在网站的图标（照 magpie）。
   fetchSiteIcon(): void;
   setDetectModel(value: string): void;
+  // 「高级」展开或收起。
+  toggleAdvanced(): void;
+  // 「添加请求头」加一行空的；点模板提示的头时带上它的名字。
+  addHeader(name: string | null): void;
+  setHeaderName(id: number, value: string): void;
+  setHeaderValue(id: number, value: string): void;
+  removeHeader(id: number): void;
+  // 值框在一行与按 JSON 排版的多行之间切换；收起时压回一行。
+  toggleHeaderJson(id: number): void;
+  setExtraBody(value: string): void;
+  setKeyHeader(value: ApiEndpointKeyHeader): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -482,6 +525,11 @@ interface Values {
   iconError: ConnectionIconError | null;
   submitting: boolean;
   submitError: string | null;
+  isAdvancedOpen: boolean;
+  headerRows: HeaderRow[];
+  nextHeaderId: number;
+  extraBodyText: string;
+  keyHeader: ApiEndpointKeyHeader;
 }
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
@@ -489,6 +537,9 @@ interface CurlBaseUrl {
   format: ApiEndpointRequestFormat;
   url: string;
 }
+
+// 什么也没设的「高级」保存时的样子。
+const EMPTY_EXTRAS = JSON.stringify({ headers: {}, extraBody: {}, keyHeader: "both" });
 
 const EMPTY_URLS: Urls = { anthropic_messages: "", openai_chat: "", openai_responses: "" };
 
@@ -504,6 +555,7 @@ export function createConnectionFormModel(
     canPasteCurl,
     canCheckBeforeSave,
     followsListWhenNew,
+    canSetRequestExtras,
     templates,
   } = options;
   // 添加窗口（新建或复制）：能在保存前拉模型，「模型」框一直显示。
@@ -528,6 +580,7 @@ export function createConnectionFormModel(
   // 服务地址从开表单时的地址起步，改了才挪这些地址（照 magpie addressFrom / addressWas）。
   const serviceAddressWas = originOf(seededUrls);
   const seededIcon = keyOwner?.icon ?? null;
+  const seededExtras = seededRequestExtras({ keyOwner, isCustom: seededTemplate === null });
   let values: Values = {
     template: seededTemplate,
     regionId: seededRegion?.id ?? null,
@@ -561,8 +614,11 @@ export function createConnectionFormModel(
     iconError: null,
     submitting: false,
     submitError: null,
+    ...seededExtras,
   };
   let state = derive(values);
+  const seededExtrasJson = JSON.stringify(extrasNow());
+  const hasSeededExtras = seededExtrasJson !== EMPTY_EXTRAS;
   // 当前这次换图标；再换一次或关掉表单后，旧请求晚到的结果不再生效。
   let pendingIcon: object | null = null;
 
@@ -594,6 +650,7 @@ export function createConnectionFormModel(
       hasValidUrls,
       hasValidAddress,
     });
+    const extras = deriveExtras(next);
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -626,10 +683,56 @@ export function createConnectionFormModel(
       detecting: next.detecting,
       detectError: next.detectError,
       canDetect: !busy && hasKey && hasValidAddress,
-      canSubmit:
-        !busy && next.name.trim() !== "" && hasKey && hasValidUrls && !serviceAddressInvalid,
+      canSubmit: canSubmitOf({ next, busy, hasKey, hasValidUrls, serviceAddressInvalid, extras }),
       submitting: next.submitting,
       submitError: next.submitError,
+      ...extras,
+    };
+  }
+
+  /** 能保存：不在忙、有名称、有 key（选填时不要求）、地址都像样，「高级」里也没有读不通的。 */
+  function canSubmitOf(input: {
+    next: Values;
+    busy: boolean;
+    hasKey: boolean;
+    hasValidUrls: boolean;
+    serviceAddressInvalid: boolean;
+    extras: ExtrasState;
+  }): boolean {
+    const { extras } = input;
+    const hasExtrasProblem = extras.headerProblem !== null || extras.extraBodyProblem !== null;
+    const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
+    return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
+  }
+
+  type ExtrasState = Pick<
+    ConnectionFormState,
+    | "canSetRequestExtras"
+    | "isAdvancedOpen"
+    | "headerRows"
+    | "headerHints"
+    | "headerProblem"
+    | "extraBodyText"
+    | "extraBodyProblem"
+    | "keyHeader"
+    | "showsKeyHeader"
+  >;
+
+  /** 「高级」那部分：请求头、附加请求体、key 放哪个头与哪里不对。主机不认它们时都不算。 */
+  function deriveExtras(next: Values): ExtrasState {
+    const extraBody = extraBodyOf(next.extraBodyText);
+    const anthropicUrl = urlsToSave(next).anthropic_messages;
+    return {
+      canSetRequestExtras,
+      isAdvancedOpen: next.isAdvancedOpen,
+      headerRows: next.headerRows,
+      headerHints: headerHintsLeft(next.template?.headerHints ?? [], next.headerRows),
+      headerProblem: canSetRequestExtras ? headerRowsProblem(next.headerRows) : null,
+      extraBodyText: next.extraBodyText,
+      extraBodyProblem:
+        canSetRequestExtras && extraBody.kind === "invalid" ? extraBody.problem : null,
+      keyHeader: next.keyHeader,
+      showsKeyHeader: canSetRequestExtras && isThirdPartyAnthropicUrl(anthropicUrl),
     };
   }
 
@@ -909,6 +1012,53 @@ export function createConnectionFormModel(
     return [...new Set([...formModelIds(), ...listed.map((model) => model.id)])];
   }
 
+  /**
+   * 拉模型、测试连接、检测带上表单里还没保存的请求头、附加请求体与 key 头（照 magpie asTyped）：
+   * 读不通的附加请求体、不合法的请求头不带，daemon 用这家存的。
+   */
+  function typedExtrasRequest(): Pick<
+    ConnectionSaveRequest,
+    "headers" | "extraBody" | "keyHeader"
+  > {
+    // 表单和那家存的都什么也没设：不带，和以前一样。
+    const isAllEmpty = !hasSeededExtras && JSON.stringify(extrasNow()) === EMPTY_EXTRAS;
+    if (!canSetRequestExtras || isAllEmpty) return {};
+    const extraBody = extraBodyOf(values.extraBodyText);
+    const hasValidHeaders = headerRowsProblem(values.headerRows) === null;
+    return {
+      ...(hasValidHeaders ? { headers: headersToSave(values.headerRows) } : {}),
+      ...(extraBody.kind === "ok" ? { extraBody: extraBody.value } : {}),
+      keyHeader: values.keyHeader,
+    };
+  }
+
+  /** 表单里这三项保存时的样子（空的、both 即清掉）；能保存时这几项都已读通。 */
+  function extrasNow(): Required<
+    Pick<ConnectionSaveRequest, "headers" | "extraBody" | "keyHeader">
+  > {
+    const extraBody = extraBodyOf(values.extraBodyText);
+    return {
+      headers: headersToSave(values.headerRows),
+      extraBody: extraBody.kind === "ok" ? extraBody.value : {},
+      keyHeader: values.keyHeader,
+    };
+  }
+
+  /** 保存时只在改过时整份带上；没改的省略，daemon 留着那家原来的（复制时由 daemon 拷）。 */
+  function savedExtrasRequest(): Pick<
+    ConnectionSaveRequest,
+    "headers" | "extraBody" | "keyHeader"
+  > {
+    if (!canSetRequestExtras) return {};
+    const now = extrasNow();
+    return JSON.stringify(now) === seededExtrasJson ? {} : now;
+  }
+
+  /** 改一行请求头。 */
+  function updateHeaderRow(id: number, change: (row: HeaderRow) => HeaderRow): void {
+    update({ headerRows: values.headerRows.map((row) => (row.id === id ? change(row) : row)) });
+  }
+
   /** 表单里的全部地址一次交给 daemon：各格式各拉一次、按模型 id 合并（照 magpie）。 */
   async function runFetch(controller: AbortController): Promise<void> {
     const checked = checkedUrlsOf(values);
@@ -926,6 +1076,7 @@ export function createConnectionFormModel(
         baseUrls: checked,
         preview: true,
         ...placeRequest(),
+        ...typedExtrasRequest(),
       },
       controller.signal,
     );
@@ -945,6 +1096,7 @@ export function createConnectionFormModel(
         format: checked.format,
         ...placeRequest(),
         modelIds: testModelIds(),
+        ...typedExtrasRequest(),
       },
       controller.signal,
     );
@@ -970,6 +1122,7 @@ export function createConnectionFormModel(
         ...(canCheckBeforeSave && detectModel !== "" ? { modelId: detectModel } : {}),
         ...(picked.length > 0 ? { modelIds: picked } : {}),
         ...(isEach ? { eachModel: true } : {}),
+        ...typedExtrasRequest(),
       },
       controller.signal,
     );
@@ -1046,6 +1199,7 @@ export function createConnectionFormModel(
       // 添加时拉到的清单随保存写入。
       ...(values.catalogFetch.status === "fetched" ? { catalog: values.catalogFetch.models } : {}),
       ...stagedModelSettings(),
+      ...savedExtrasRequest(),
     };
   }
 
@@ -1351,6 +1505,35 @@ export function createConnectionFormModel(
         ...invalidateChecks(),
       });
     },
+    toggleAdvanced() {
+      update({ isAdvancedOpen: !values.isAdvancedOpen });
+    },
+    addHeader(name) {
+      const row = { id: values.nextHeaderId, name: name ?? "", value: "", isJson: false };
+      update({ headerRows: [...values.headerRows, row], nextHeaderId: values.nextHeaderId + 1 });
+    },
+    setHeaderName(id, value) {
+      updateHeaderRow(id, (row) => ({ ...row, name: value }));
+    },
+    setHeaderValue(id, value) {
+      updateHeaderRow(id, (row) => ({ ...row, value }));
+    },
+    removeHeader(id) {
+      update({ headerRows: values.headerRows.filter((row) => row.id !== id) });
+    },
+    toggleHeaderJson(id) {
+      updateHeaderRow(id, (row) => {
+        const isJson = !row.isJson;
+        const value = isJson ? prettyJson(row.value) : minifiedJson(row.value);
+        return { ...row, isJson, value };
+      });
+    },
+    setExtraBody(value) {
+      update({ extraBodyText: value });
+    },
+    setKeyHeader(value) {
+      update({ keyHeader: value });
+    },
     cancelDetect() {
       if (!pendingDetect) return;
       abortPendingDetect();
@@ -1375,6 +1558,29 @@ export function createConnectionFormModel(
       listeners.clear();
       curlInputListeners.clear();
     },
+  };
+}
+
+/**
+ * 表单起步时的「高级」：编辑、复制时那家存的；「自定义」没有请求头时先放一行空的（照 magpie）。设了任一项就展开。
+ */
+function seededRequestExtras(input: {
+  keyOwner: ApiEndpoint | null;
+  isCustom: boolean;
+}): Pick<Values, "isAdvancedOpen" | "headerRows" | "nextHeaderId" | "extraBodyText" | "keyHeader"> {
+  const { keyOwner } = input;
+  const saved = headerRowsOf(keyOwner?.headers);
+  const extraBodyText = extraBodyTextOf(keyOwner?.extraBody);
+  const keyHeader = keyHeaderOf(keyOwner?.keyHeader);
+  const isSet = saved.length > 0 || extraBodyText !== "" || keyHeader !== "both";
+  const startsEmpty = input.isCustom && saved.length === 0;
+  const headerRows = startsEmpty ? [{ id: 0, name: "", value: "", isJson: false }] : saved;
+  return {
+    isAdvancedOpen: isSet,
+    headerRows,
+    nextHeaderId: headerRows.length,
+    extraBodyText,
+    keyHeader,
   };
 }
 

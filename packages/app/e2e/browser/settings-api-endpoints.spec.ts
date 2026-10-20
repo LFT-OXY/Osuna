@@ -2704,6 +2704,8 @@ test.describe("Templates", () => {
     await expect(page.getByTestId("api-endpoint-connection-detect-model")).toHaveCount(0);
     await expect(page.getByTestId("api-endpoint-connection-test-button")).toHaveCount(0);
     await expect(page.getByTestId("api-endpoint-connection-fetch-models")).toHaveCount(0);
+    // 老主机不认请求头、附加请求体与 key 头：没有「高级」。
+    await expect(page.getByTestId("api-endpoint-connection-advanced")).toHaveCount(0);
     await page.getByRole("button", { name: "Cancel" }).click();
     await openEndpointRow(page, endpointId);
     await page.getByTestId("api-endpoint-detail-menu").filter({ visible: true }).click();
@@ -2892,6 +2894,111 @@ test.describe("Checking an API endpoint before saving it", () => {
       await expect(page.getByTestId("api-endpoint-connection-detection")).toHaveCount(0);
       await expect(detect).toBeEnabled();
     });
+  });
+});
+
+function postsOf(target: FakeRelay): FakeRelay["requests"] {
+  return target.requests.filter((request) => request.method === "POST");
+}
+
+function relayTeamsOf(requests: FakeRelay["requests"]): (string | undefined)[] {
+  return requests.map((request) => request.relayTeam);
+}
+
+// 接口管理好用性工单 22：「高级」里的请求头、附加请求体、key 放在哪个头（照 magpie 编辑窗口的 Advanced）。
+test.describe("An endpoint's headers, extra body and key header", () => {
+  function advanced(page: Page): Locator {
+    return page.getByTestId("api-endpoint-connection-advanced");
+  }
+
+  test("a reserved field and a bad header name are refused on the spot; the typed values go with Test connection and are saved", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Relay with extras");
+    await page.getByTestId("api-endpoint-connection-api-key").fill(RELAY_KEY);
+    await page
+      .getByTestId("api-endpoint-connection-url-anthropic_messages")
+      .fill(`${relay.origin}/good`);
+    const save = page.getByTestId("api-endpoint-connection-save");
+
+    await test.step("Advanced is folded until opened; a custom endpoint starts with one empty header row", async () => {
+      await expect(page.getByTestId("api-endpoint-connection-headers")).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+      await expect(page.getByTestId("api-endpoint-connection-header-name-0")).toHaveValue("");
+      // 第三方 Anthropic 地址才有 key 放在哪个头。
+      await expect(page.getByTestId("api-endpoint-connection-key-header")).toBeVisible();
+    });
+
+    await test.step("a bad header name and a reserved extra body field say why at once and hold the save", async () => {
+      await page.getByTestId("api-endpoint-connection-header-name-0").fill("X Relay Team");
+      await page.getByTestId("api-endpoint-connection-header-value-0").fill("team-e2e");
+      await expect(page.getByTestId("api-endpoint-connection-headers-problem")).toHaveText(
+        "“X Relay Team” is not a header name: use letters, digits and - only",
+      );
+      await expect(save).toBeDisabled();
+      await page.getByTestId("api-endpoint-connection-header-name-0").fill("X-Relay-Team");
+      await expect(page.getByTestId("api-endpoint-connection-headers-problem")).toHaveCount(0);
+      const extraBody = page.getByTestId("api-endpoint-connection-extra-body-input");
+      await extraBody.fill('{"!messages": []}');
+      await expect(page.getByTestId("api-endpoint-connection-extra-body-problem")).toHaveText(
+        "Osuna sets “messages” itself, so it can't be added",
+      );
+      await expect(save).toBeDisabled();
+      await extraBody.fill('{"prompt_cache_key": "${sessionId}"}');
+      await expect(page.getByTestId("api-endpoint-connection-extra-body-problem")).toHaveCount(0);
+      await expect(save).toBeEnabled();
+    });
+
+    await test.step("Test connection carries the typed header, extra body and key header", async () => {
+      await page.getByTestId("api-endpoint-connection-key-header-bearer").click();
+      relay.requests.length = 0;
+      await page.getByTestId("api-endpoint-connection-test-button").click();
+      await expect(
+        page.getByTestId("api-endpoint-connection-test-anthropic_messages-verdict"),
+      ).toHaveText(/^Connected · \d+ ms$/);
+      const posted = postsOf(relay);
+      expect(relayTeamsOf(posted)).toEqual(["team-e2e"]);
+      expect(posted[0]?.xApiKey).toBeUndefined();
+      expect(posted[0]?.body).toMatch(/"prompt_cache_key":"osuna-test-[0-9a-f]{12}"/);
+    });
+
+    await test.step("saving keeps all three, and the edit window opens with Advanced unfolded", async () => {
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+      expect(endpoint).toMatchObject({
+        headers: { "X-Relay-Team": "team-e2e" },
+        extraBody: { prompt_cache_key: "${sessionId}" },
+        keyHeader: "bearer",
+      });
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await expect(page.getByTestId("api-endpoint-connection-header-value-0")).toHaveValue(
+        "team-e2e",
+      );
+      await expect(advanced(page)).toBeVisible();
+    });
+  });
+
+  test("a template's suggested headers are offered to add, and the key header is not offered on Anthropic's own address", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-anthropic").click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    const suggested = page.getByTestId(
+      "api-endpoint-connection-suggested-header-anthropic-workspace-id",
+    );
+    await expect(suggested).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-key-header")).toHaveCount(0);
+    await suggested.click();
+    await expect(page.getByTestId("api-endpoint-connection-header-name-0")).toHaveValue(
+      "anthropic-workspace-id",
+    );
+    await expect(suggested).toHaveCount(0);
   });
 });
 

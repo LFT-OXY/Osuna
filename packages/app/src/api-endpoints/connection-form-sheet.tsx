@@ -35,6 +35,7 @@ import {
 import { useConnectionFormModel } from "./use-connection-form-model";
 import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
+import { RequestExtrasFields } from "./request-extras-fields";
 import type {
   ConnectionCurlFill,
   ConnectionCurlNote,
@@ -67,6 +68,8 @@ export interface ApiEndpointConnectionSheetProps {
   canCheckBeforeSave: boolean;
   // 同上：新建的接口「跟随接口清单」。
   followsListWhenNew: boolean;
+  // 同上：「高级」里能设请求头、附加请求体、key 放哪个头。
+  canSetRequestExtras: boolean;
   // 主机给的模板清单（老主机为空）：新建时按 seed 的模板填好，编辑从模板加的接口时能切区域或套餐。
   templates: readonly ApiEndpointTemplate[];
   // 从模板列表进来时回到列表；其余为 null。
@@ -109,6 +112,7 @@ export function ApiEndpointConnectionSheet({
   canPasteCurl,
   canCheckBeforeSave,
   followsListWhenNew,
+  canSetRequestExtras,
   templates,
   onBack,
   onSave,
@@ -142,6 +146,7 @@ export function ApiEndpointConnectionSheet({
       canPasteCurl,
       canCheckBeforeSave,
       followsListWhenNew,
+      canSetRequestExtras,
       templates,
     },
   );
@@ -292,6 +297,7 @@ export function ApiEndpointConnectionSheet({
         <Text variant="caption" color="foregroundMuted">
           {footerTextOf({ t, state })}
         </Text>
+        <RequestExtrasFields state={state} model={model} size={fieldSize} isCompact={isCompact} />
         {state.submitError ? (
           <Text
             variant="caption"

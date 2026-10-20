@@ -160,6 +160,7 @@ const KEY_REQUIRED = {
   canPasteCurl: false,
   canCheckBeforeSave: false,
   followsListWhenNew: false,
+  canSetRequestExtras: false,
   templates: [],
 };
 const KEY_OPTIONAL = {
@@ -169,6 +170,7 @@ const KEY_OPTIONAL = {
   canPasteCurl: true,
   canCheckBeforeSave: true,
   followsListWhenNew: true,
+  canSetRequestExtras: true,
   templates: [],
 };
 
@@ -2463,5 +2465,125 @@ describe("connection form: detecting each picked model", () => {
     expect(model.getState().canDetectEach).toBe(false);
     model.detectEachModel();
     expect(fake.detects).toEqual([]);
+  });
+});
+
+// 接口管理好用性工单 22：「高级」里的请求头、附加请求体、key 放哪个头（照 magpie headerEditor、extraBodyEditor、asTyped）。
+describe("connection form: headers, extra body and key header", () => {
+  const WITH_EXTRAS: ApiEndpoint = {
+    ...SAVED_ENDPOINT,
+    headers: { "anthropic-workspace-id": "wrkspc_1" },
+    extraBody: { prompt_cache_key: "${sessionId}" },
+    keyHeader: "bearer",
+  };
+
+  it("opens an endpoint with them set unfolded, and a save that leaves them alone leaves them out", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: WITH_EXTRAS },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      headerRows: [{ name: "anthropic-workspace-id", value: "wrkspc_1", isJson: false }],
+      extraBodyText: '{\n  "prompt_cache_key": "${sessionId}"\n}',
+      keyHeader: "bearer",
+      showsKeyHeader: true,
+    });
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("headers");
+
+    model.setKeyHeader("both");
+    model.removeHeader(0);
+    await model.submit();
+    expect(fake.saves[1]).toMatchObject({
+      headers: {},
+      extraBody: { prompt_cache_key: "${sessionId}" },
+      keyHeader: "both",
+    });
+  });
+
+  it("says on the spot when the extra body names a reserved field or is no JSON object, and holds the save", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState().isAdvancedOpen).toBe(false);
+    model.setExtraBody('{"!messages": []}');
+    expect(model.getState()).toMatchObject({
+      extraBodyProblem: { reason: "reserved", field: "messages" },
+      canSubmit: false,
+    });
+    model.setExtraBody("[1]");
+    expect(model.getState().extraBodyProblem).toEqual({ reason: "notObject" });
+    model.setExtraBody('{"service_tier": "flex"}');
+    expect(model.getState()).toMatchObject({ extraBodyProblem: null, canSubmit: true });
+  });
+
+  it("starts a custom endpoint with one empty row, holds a bad name, and lays a JSON value out and back", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      deps,
+      KEY_OPTIONAL,
+    );
+    const [row] = model.getState().headerRows;
+    expect(model.getState().headerRows).toHaveLength(1);
+    model.setHeaderName(row?.id ?? -1, "X Meta");
+    model.setHeaderValue(row?.id ?? -1, "a");
+    expect(model.getState()).toMatchObject({
+      headerProblem: { reason: "name", name: "X Meta" },
+      canSubmit: false,
+    });
+    model.setHeaderName(row?.id ?? -1, "X-Meta");
+    model.setHeaderValue(row?.id ?? -1, '{"a":1}');
+    model.toggleHeaderJson(row?.id ?? -1);
+    expect(model.getState().headerRows[0]).toMatchObject({ isJson: true, value: '{\n  "a": 1\n}' });
+    model.toggleHeaderJson(row?.id ?? -1);
+    expect(model.getState().headerRows[0]).toMatchObject({ isJson: false, value: '{"a":1}' });
+  });
+
+  it("asks the checks with what the form has typed, before it is saved", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setAddress("https://relay.example");
+    const [row] = model.getState().headerRows;
+    model.setHeaderName(row?.id ?? -1, "X-Team");
+    model.setHeaderValue(row?.id ?? -1, "t1");
+    model.setExtraBody('{"!service_tier": "flex"}');
+    model.setKeyHeader("x-api-key");
+    model.detect();
+    expect(fake.detects[0]?.request).toMatchObject({
+      headers: { "X-Team": "t1" },
+      extraBody: { "!service_tier": "flex" },
+      keyHeader: "x-api-key",
+    });
+  });
+
+  it("offers the key header for a third-party Anthropic address only, and nothing on an older host", () => {
+    const { deps } = fakeDeps();
+    const official: ApiEndpoint = {
+      ...SAVED_ENDPOINT,
+      baseUrls: [{ format: "anthropic_messages", url: "https://api.anthropic.com" }],
+    };
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: official },
+      deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState().showsKeyHeader).toBe(false);
+    const older = createConnectionFormModel(
+      { mode: "edit", endpoint: WITH_EXTRAS },
+      deps,
+      KEY_REQUIRED,
+    );
+    expect(older.getState()).toMatchObject({ canSetRequestExtras: false, showsKeyHeader: false });
   });
 });

@@ -157,6 +157,8 @@ const zhCNRetiredTermExemptKeys = [
   "settings.apiEndpoints.agent.reopen.appServer",
   "settings.apiEndpoints.agent.reopen.appServerRestarted",
   "settings.apiEndpoints.agent.reopen.appServerRestartedLine",
+  // 请求头名 anthropic-beta 照原样写。
+  "settings.apiEndpoints.form.extras.headersInfo",
 ];
 
 function findRetiredZhCNTerms(): string[] {

@@ -2620,6 +2620,38 @@ export const ja: TranslationResources = {
         apiKeyOptionalLabel: "API キー（任意）",
         apiKeyLocalPlaceholder: "ローカルサーバーでは任意",
         keyRejected: "上流がこのキーを拒否しました（401 / 403）",
+        extras: {
+          advanced: "詳細",
+          advancedShow: "詳細を表示",
+          advancedHide: "詳細を隠す",
+          headers: "リクエストヘッダー",
+          headersInfo:
+            "このエンドポイントへのすべてのリクエスト（テストとモデル一覧の取得を含む）に、Osuna 自身のヘッダーの後に付けます。大文字小文字を問わず同じ名前のヘッダーは Osuna のもの（キーのヘッダーを含む）を置き換えます。anthropic-beta は CLI の値に追加されます。",
+          headerName: "ヘッダー名",
+          headerValue: "値",
+          addHeader: "ヘッダーを追加",
+          addSuggested: "{{name}} ヘッダーを追加します。値はご自身で入力してください",
+          editAsJson: "JSON として編集",
+          collapseJson: "1 行にまとめる",
+          removeHeader: "ヘッダー {{name}} を削除",
+          headerBadName: "「{{name}}」はヘッダー名として使えません。英数字と - のみ使えます",
+          headerBadValue: "「{{name}}」の値に改行または制御文字が含まれています",
+          extraBody: "追加リクエストボディ",
+          extraBodyInfo:
+            'このエンドポイントへの Messages、Chat、Responses の各リクエスト本文（テストを含む）に加える JSON フィールドです。トークン数を数えるだけのリクエストには付けません。リクエストに既にあるフィールドはそのまま残り、名前の前に "!" を付けると置き換えます。${sessionId} は会話の ID になります。',
+          extraBodyProblems: {
+            notJson: "有効な JSON ではありません",
+            notObject:
+              '{"prompt_cache_key": "${sessionId}"} のような JSON オブジェクトを書いてください',
+            unnamed: "フィールドには名前が必要です",
+            reserved: "「{{field}}」は Osuna が自分で設定するため追加できません",
+            duplicate: "「{{field}}」が 2 回書かれています",
+          },
+          keyHeader: "キーを入れるヘッダー",
+          keyHeaderInfo:
+            "Anthropic のアドレスで API キーをどのヘッダーに入れるか。多くのサービスは両方を受け付けます。両方同時を拒否するサービスでは片方を選んでください。サービスがそう返したときは Osuna も自動で片方に切り替えます。",
+          keyHeaderBoth: "両方",
+        },
         address: "アドレス",
         resourceEndpoint: "リソースのエンドポイント",
         serviceAddress: "サーバーのアドレス",

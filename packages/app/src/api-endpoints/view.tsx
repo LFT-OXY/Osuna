@@ -373,7 +373,8 @@ function ConnectionSheet({
   // 模板列表里点了已加过的模板：打开已有那家。
   onOpenEndpoint: (endpointId: string) => void;
 }) {
-  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板。
+  // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机新建时要求 key，也读不回 key，没有模板，
+  // 也不认请求头、附加请求体与 key 放哪个头。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const templates = useEndpointTemplates({ serverId, enabled: hasManagement });
   const handlePick = useCallback(
@@ -422,6 +423,7 @@ function ConnectionSheet({
       canPasteCurl={hasManagement}
       canCheckBeforeSave={hasManagement}
       followsListWhenNew={hasManagement}
+      canSetRequestExtras={hasManagement}
       templates={templates.status === "ready" ? templates.templates : []}
       onBack={sheet.backToPicker ? handleBack : null}
       onSave={endpoints.save}

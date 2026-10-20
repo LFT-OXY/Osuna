@@ -44,6 +44,10 @@ export interface FakeRelay {
     userAgent: string | undefined;
     originator: string | undefined;
     stream: boolean;
+    // 接口自己加的请求头与附加请求体（工单 22）：x-relay-team、x-api-key 与请求体原文。
+    relayTeam: string | undefined;
+    xApiKey: string | undefined;
+    body: string;
   }[];
   // /good 列出的模型；用例可以改它模拟上游清单变化。
   goodModels: string[];
@@ -241,6 +245,9 @@ function recordOf(input: {
     userAgent: headers["user-agent"],
     originator: typeof headers.originator === "string" ? headers.originator : undefined,
     stream: streamOf(text),
+    relayTeam: typeof headers["x-relay-team"] === "string" ? headers["x-relay-team"] : undefined,
+    xApiKey: typeof headers["x-api-key"] === "string" ? headers["x-api-key"] : undefined,
+    body: text,
   };
 }
 

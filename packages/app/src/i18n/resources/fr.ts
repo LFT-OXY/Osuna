@@ -2648,6 +2648,39 @@ export const fr: TranslationResources = {
         apiKeyOptionalLabel: "Clé d'API (facultative)",
         apiKeyLocalPlaceholder: "Facultative pour les serveurs locaux",
         keyRejected: "Le serveur a refusé cette clé (401 / 403)",
+        extras: {
+          advanced: "Avancé",
+          advancedShow: "Afficher les options avancées",
+          advancedHide: "Masquer les options avancées",
+          headers: "En-têtes",
+          headersInfo:
+            "Envoyés avec chaque requête vers ce point de terminaison, tests et listes de modèles compris, après les en-têtes d'Osuna. Un en-tête du même nom, quelle que soit la casse, remplace celui d'Osuna, y compris celui de la clé ; anthropic-beta s'ajoute à celui du CLI.",
+          headerName: "Nom-En-Tete",
+          headerValue: "valeur",
+          addHeader: "Ajouter un en-tête",
+          addSuggested: "Ajouter l'en-tête {{name}} ; sa valeur est à remplir",
+          editAsJson: "Modifier en JSON",
+          collapseJson: "Replier sur une ligne",
+          removeHeader: "Retirer l'en-tête {{name}}",
+          headerBadName:
+            "« {{name}} » n'est pas un nom d'en-tête : lettres, chiffres et - uniquement",
+          headerBadValue:
+            "La valeur de « {{name}} » contient un saut de ligne ou un caractère de contrôle",
+          extraBody: "Corps supplémentaire",
+          extraBodyInfo:
+            "Champs JSON ajoutés au corps de chaque requête Messages, Chat et Responses vers ce point de terminaison, tests compris ; les requêtes qui ne font que compter les tokens n'en ont pas. Un champ déjà présent dans la requête est conservé ; écrivez \"!nom\" pour le remplacer. ${sessionId} devient l'identifiant de la conversation.",
+          extraBodyProblems: {
+            notJson: "JSON non valide",
+            notObject: 'Écrivez un objet JSON, comme {"prompt_cache_key": "${sessionId}"}',
+            unnamed: "Un champ doit avoir un nom",
+            reserved: "Osuna définit « {{field}} » lui-même : impossible de l'ajouter",
+            duplicate: "« {{field}} » est écrit deux fois",
+          },
+          keyHeader: "En-tête de la clé",
+          keyHeaderInfo:
+            "L'en-tête qui porte la clé API sur l'adresse Anthropic. La plupart des services acceptent les deux ; choisissez-en un pour un service qui refuse les deux ensemble. Osuna passe aussi à un seul de lui-même quand le service le dit.",
+          keyHeaderBoth: "Les deux",
+        },
         address: "Adresse",
         resourceEndpoint: "Point de terminaison de la ressource",
         serviceAddress: "Adresse du serveur",
