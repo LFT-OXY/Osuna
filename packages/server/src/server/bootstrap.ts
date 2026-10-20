@@ -159,13 +159,14 @@ import {
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { GatewaySightings } from "./api-endpoints/cli-bypass.js";
-import { readInstalledCodexVersion, SeenCodexVersion } from "./api-endpoints/cli-header-samples.js";
+import { SeenCodexVersion } from "./api-endpoints/cli-header-samples.js";
 import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.js";
 import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
 import { ApiEndpointStore } from "./api-endpoints/store.js";
 import { createCodexSignInReader } from "./api-endpoints/codex-sign-in.js";
-import { findCodexCommand } from "./agent/providers/codex-app-server-agent.js";
+import { findCodexCommand, probeCodexVersion } from "./agent/providers/codex-app-server-agent.js";
+import { InstalledCodexVersion } from "./api-endpoints/codex-cli-version.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -818,9 +819,20 @@ export async function createPaseoDaemon(
   // itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = new EndpointCooldowns({ logger });
-  // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
   // 经中转站来过的 Codex 的最新版本：中转站记、「按 Codex 的样子测」读（只在内存里）。
   const codexSeenVersion = new SeenCodexVersion();
+  // 本机 Codex CLI 的版本：先读 npm 包，读不到才跑 codex --version，跑失败的同一个文件不再跑（magpie proc.Version）。
+  const installedCodexVersion = new InstalledCodexVersion({
+    locate: async () => {
+      const program = await findCodexCommand({
+        runtimeSettings: config.agentProviderSettings?.codex,
+        env: {},
+      });
+      return program?.command ?? null;
+    },
+    runVersion: () => probeCodexVersion(config.agentProviderSettings?.codex),
+  });
+  // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
   const apiEndpointSightings = new GatewaySightings({
     now: apiEndpointClock(config),
     filePath: path.join(config.paseoHome, "api-endpoints", "gateway-seen.json"),
@@ -1079,12 +1091,9 @@ export async function createPaseoDaemon(
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
-    // 问 Codex 自己是怎么登录的（临时 app-server 的 account/read），决定 config.toml 的接法（ADR 0010）。
     codexSeenVersion,
-    readCodexCliVersion: () =>
-      readInstalledCodexVersion(({ env }) =>
-        findCodexCommand({ runtimeSettings: config.agentProviderSettings?.codex, env }),
-      ),
+    readCodexCliVersion: () => installedCodexVersion.read(),
+    // 问 Codex 自己是怎么登录的（临时 app-server 的 account/read），决定 config.toml 的接法（ADR 0010）。
     readCodexSignIn: createCodexSignInReader({
       runtimeSettings: config.agentProviderSettings?.codex,
       logger,

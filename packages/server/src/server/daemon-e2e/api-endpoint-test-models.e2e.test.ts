@@ -508,6 +508,7 @@ const CODEX_UA = "codex_cli_rs/0.162.3 (Mac OS 26.6.0; arm64) kitty";
 // 这些只属于会话、账号或签名，样本里一个都不能有。
 const SECRETS = [
   "gateway-token-1",
+  "account-secret-1",
   "session-secret-1",
   "beta-secret-1",
   "cookie-secret-1",
@@ -767,6 +768,8 @@ describe("test models as Claude Code or Codex", () => {
         "x-codex-turn-metadata": '{"turn_id":"session-secret-1"}',
         "x-codex-beta-features": "collab",
         authorization: "Bearer gateway-token-1",
+        cookie: "id=cookie-secret-1",
+        "chatgpt-account-id": "account-secret-1",
       },
       body: JSON.stringify({
         model: "codex-only-glm",
@@ -791,6 +794,9 @@ describe("test models as Claude Code or Codex", () => {
       "x-codex-beta-features": "collab",
       authorization: "Bearer sk-a",
     });
+    expect(relayed?.headers.cookie).toBeUndefined();
+    expect(relayed?.headers["chatgpt-account-id"]).toBeUndefined();
+    expect(JSON.stringify(relayed?.headers)).not.toContain("gateway-token-1");
     const text = await readFile(path.join(endpointsDir, "cli-header-samples.json"), "utf8");
     for (const secret of SECRETS) expect(text).not.toContain(secret);
     expect(JSON.parse(text)).toEqual({

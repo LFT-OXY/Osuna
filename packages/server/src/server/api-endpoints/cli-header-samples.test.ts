@@ -5,6 +5,7 @@ import {
   cliHeaderSample,
   codexSignHeaders,
   codexVersionOf,
+  CodexSystemReader,
   isFromClaudeCode,
   isFromCodex,
   newerCodexVersion,
@@ -134,5 +135,22 @@ describe("CLI header samples", () => {
     expect(seen.version()).toBe("0.171.0");
     expect(newestCodexVersion(["0.160.0", "0.170.2", seen.version()])).toBe("0.171.0");
     expect(newestCodexVersion([null, null, null])).toBe("0.159.0");
+  });
+
+  test("a system lookup that failed is not kept: the next test asks again", async () => {
+    let calls = 0;
+    const reader = new CodexSystemReader({
+      platform: "darwin",
+      run: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("EACCES: permission denied, sw_vers");
+        return "26.6";
+      },
+    });
+
+    await expect(reader.read()).rejects.toThrow("EACCES");
+    expect((await reader.read()).os).toBe("Mac OS 26.6.0");
+    expect((await reader.read()).os).toBe("Mac OS 26.6.0");
+    expect(calls).toBe(2);
   });
 });

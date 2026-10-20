@@ -7,7 +7,6 @@ import { execFile } from "node:child_process";
 import type { IncomingHttpHeaders } from "node:http";
 import os from "node:os";
 import type pino from "pino";
-import type { FindCodexCommand } from "./host-processes.js";
 import type { ApiEndpointStore, CliHeaderSample } from "./store.js";
 import type { CliTestClient } from "./test-as.js";
 
@@ -232,21 +231,18 @@ export function codexSignHeaders(input: { version: string; system: CodexSystem }
 const VERSION_DIGITS = /\d+(\.\d+)+/;
 const SYSTEM_COMMAND_TIMEOUT_MS = 3_000;
 
-function commandVersion(input: {
-  command: string;
-  args: string[];
-  env?: NodeJS.ProcessEnv;
-}): Promise<string | null> {
-  const { command, args, env } = input;
-  return new Promise((resolve, reject) => {
-    const options = { timeout: SYSTEM_COMMAND_TIMEOUT_MS, env };
-    execFile(command, args, options, (error, stdout) => {
+/** 跑一个报版本的系统命令，取输出里的版本号；意料之中的失败为 null。 */
+export type VersionCommand = (input: { command: string; args: string[] }) => Promise<string | null>;
+
+const runVersionCommand: VersionCommand = ({ command, args }) =>
+  new Promise((resolve, reject) => {
+    execFile(command, args, { timeout: SYSTEM_COMMAND_TIMEOUT_MS }, (error, stdout) => {
       if (error === null) {
         resolve(stdout.match(VERSION_DIGITS)?.[0] ?? null);
         return;
       }
       // 只认三种意料之中的：命令不在（ENOENT）、命令自己报错退出（退出码是数字）、超时被杀。这三种都只是少了版本号，
-      // 照 magpie 当作没有这个来源；别的（权限、资源耗尽等）不是「这台机器没这个命令」，照抛给调用方。
+      // 照 magpie 写不带版本的系统名；别的（权限、资源耗尽等）不是「这台机器没这个命令」，照抛给调用方。
       const isMissing = error.code === "ENOENT";
       const isFailedRun = typeof error.code === "number";
       const isTimedOut = error.killed === true;
@@ -257,7 +253,6 @@ function commandVersion(input: {
       reject(error);
     });
   });
-}
 
 function threeParts(version: string): string {
   let text = version;
@@ -265,39 +260,57 @@ function threeParts(version: string): string {
   return text;
 }
 
-async function codexOsName(platform: NodeJS.Platform): Promise<string> {
+async function codexOsName(input: {
+  platform: NodeJS.Platform;
+  run: VersionCommand;
+}): Promise<string> {
+  const { platform, run } = input;
   if (platform === "darwin") {
-    const version = await commandVersion({ command: "sw_vers", args: ["-productVersion"] });
+    const version = await run({ command: "sw_vers", args: ["-productVersion"] });
     return version === null ? "Mac OS" : `Mac OS ${threeParts(version)}`;
   }
   if (platform === "win32") {
     // 「Microsoft Windows [Version 10.0.26100.4652]」取前三段。
-    const version = await commandVersion({ command: "cmd", args: ["/c", "ver"] });
+    const version = await run({ command: "cmd", args: ["/c", "ver"] });
     return version === null ? "Windows" : `Windows ${version.split(".").slice(0, 3).join(".")}`;
   }
-  const version = await commandVersion({ command: "uname", args: ["-r"] });
+  const version = await run({ command: "uname", args: ["-r"] });
   return version === null ? "Linux" : `Linux ${threeParts(version)}`;
 }
 
-let codexSystem: Promise<CodexSystem> | null = null;
+/**
+ * 本机的系统名与架构，照 Codex CLI 的写法。问成了就一直用；问失败（命令照抛的错）不留下，下次再问。
+ */
+export class CodexSystemReader {
+  private readonly platform: NodeJS.Platform;
+  private readonly run: VersionCommand;
+  private system: Promise<CodexSystem> | null = null;
 
-/** 本机的系统名与架构，照 Codex CLI 的写法；只问一次。 */
-export function readCodexSystem(): Promise<CodexSystem> {
-  const platform = process.platform;
-  codexSystem ??= codexOsName(platform).then((name) => ({
-    os: name,
-    arch: os.arch(),
-    platform,
-  }));
-  return codexSystem;
+  constructor(options: { platform?: NodeJS.Platform; run?: VersionCommand } = {}) {
+    this.platform = options.platform ?? process.platform;
+    this.run = options.run ?? runVersionCommand;
+  }
+
+  read(): Promise<CodexSystem> {
+    if (this.system !== null) return this.system;
+    const { platform } = this;
+    const asked = codexOsName({ platform, run: this.run }).then((name) => ({
+      os: name,
+      arch: os.arch(),
+      platform,
+    }));
+    this.system = asked;
+    const forget = () => {
+      if (this.system === asked) this.system = null;
+    };
+    asked.catch(forget);
+    return asked;
+  }
 }
 
-/** 本机 Codex CLI 自报的版本（`codex --version`，magpie codexCLIVersion）；找不到 codex 或问不到为 null。 */
-export async function readInstalledCodexVersion(
-  findCodex: FindCodexCommand,
-): Promise<string | null> {
-  const program = await findCodex({ env: {} });
-  if (program === null) return null;
-  const { command, env } = program;
-  return commandVersion({ command, args: [...program.args, "--version"], env });
+const sharedCodexSystem = new CodexSystemReader();
+
+/** 本机的系统名与架构（daemon 共用一份）。 */
+export function readCodexSystem(): Promise<CodexSystem> {
+  return sharedCodexSystem.read();
 }
