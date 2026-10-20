@@ -2653,6 +2653,10 @@ export const zhCN: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry: "没有模型可问：上游没列出模型，请填一个试用的模型",
+            unreachable: "连不上：{{detail}}",
+            listFailed: "列不出可试的模型：{{detail}}",
+            wrongShape: "有回应，但不是 {{format}} 格式的",
             upstreamTimeout: "{{seconds}} 秒内没有回应",
             batchTimeout: "识别到点了还没有回应",
             notAsked: "没问：识别到点了",

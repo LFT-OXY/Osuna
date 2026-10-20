@@ -2,14 +2,13 @@
 // internal/catalog/catalog.go 的 ImagesAPI）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
-  API_ENDPOINT_DETECT_MAX_MODELS,
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpointFormatDetection,
   type ApiEndpointModelDetection,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { deadlineSignal, runPool } from "./model-tests.js";
-import { probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
+import { modelsToAsk, probeUpstreamFormat, suggestedBaseUrls } from "./upstream-detect.js";
 
 /*
  * 逐个模型识别（prd 第 11a 条，照 magpie DetectModels）：表单里已选的模型（前 30 个）在每种格式上各问一次最小请求，
@@ -89,13 +88,6 @@ function reasonFields(
 interface ProbeTask {
   row: number;
   column: number;
-}
-
-/** 去掉空白与重复，取前 API_ENDPOINT_DETECT_MAX_MODELS 个。 */
-function modelsToAsk(modelIds: string[]): string[] {
-  const trimmed = modelIds.map((id) => id.trim());
-  const unique = new Set(trimmed.filter((id) => id !== ""));
-  return [...unique].slice(0, API_ENDPOINT_DETECT_MAX_MODELS);
 }
 
 export async function detectEachModel(input: {

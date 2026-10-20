@@ -3498,10 +3498,12 @@ export class ApiEndpointService {
   private isTestAskable(endpointId: string | undefined): (modelId: string) => boolean {
     const state = this.readState();
     const endpoint = endpointId ? findEndpoint(state, endpointId) : null;
-    return (modelId) =>
-      (endpoint
-        ? endpointDisabledBy({ state, endpoint, model: modelId })
-        : askedDisabledBy({ state, model: modelId })) === null;
+    const disabledBy = (modelId: string): string | null => {
+      // 已保存的那家按它的接口标识认，还没保存的只按名字认。
+      if (endpoint) return endpointDisabledBy({ state, endpoint, model: modelId });
+      return askedDisabledBy({ state, model: modelId });
+    };
+    return (modelId) => disabledBy(modelId) === null;
   }
 
   /** 点名测一个被禁的模型：不发请求，结论写明命中的条目（magpie testOne）；没被禁为 null。 */

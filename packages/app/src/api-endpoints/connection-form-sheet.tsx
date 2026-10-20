@@ -654,6 +654,14 @@ function detectionReasonText(t: TFunction, reason: DetectionReason): string {
       return t(`${key}.notAsked`);
     case "image_model":
       return t(`${key}.imageModel`);
+    case "no_model_to_try":
+      return t(`${key}.noModelToTry`);
+    case "upstream_unreachable":
+      return t(`${key}.unreachable`, { detail: reason.detail });
+    case "models_list_failed":
+      return t(`${key}.listFailed`, { detail: reason.detail });
+    case "wrong_shape":
+      return t(`${key}.wrongShape`, { format: formatLabel(t, reason.format) });
   }
 }
 
@@ -759,7 +767,10 @@ function detectionRowOf(input: { t: TFunction; result: DetectedFormat }): CheckR
         : t("settings.apiEndpoints.form.detected.okTook", { ms: result.durationMs });
     return { isOk: true, verdict, reason: modelNote };
   }
-  const reason = [result.message, modelNote].filter((part) => part !== null).join(" · ");
+  // daemon 自己写的原因按界面语言说，上游原文照登。
+  let said = result.message;
+  if (result.reason !== null) said = detectionReasonText(t, result.reason);
+  const reason = [said, modelNote].filter((part) => part !== null).join(" · ");
   return {
     isOk: false,
     verdict: t(`settings.apiEndpoints.form.detection.${result.label}`),

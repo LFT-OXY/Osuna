@@ -974,18 +974,18 @@ export type ApiEndpointForgetCatalogResponse = z.infer<
   typeof ApiEndpointForgetCatalogResponseSchema
 >;
 
+/** 一次自动检测最多问这么多个表单里的模型（照 magpie DetectMax）；daemon 截断、界面说明都用它。 */
+export const API_ENDPOINT_DETECT_MAX_MODELS = 30;
+
 /**
  * 自动检测：daemon 从用户填的一个地址推出三种请求格式各自的地址，按每种格式各发一条最小对话请求（照 magpie Detect）。
  * 问哪个模型：`modelId`（用户填的试用模型）每种格式都问它；没填时按格式从 `modelIds`（表单里已选、还没保存的模型，
- * 最多取前 30 个）挑，也没有才向上游列出模型挑。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
+ * 最多取前 API_ENDPOINT_DETECT_MAX_MODELS 个）挑，也没有才向上游列出模型挑。key 的规则和 fetch_models 相同；可以用 cancel 按 requestId 取消。
  * 老 daemon 忽略 modelId、modelIds，总是先列模型。
  * `eachModel`（逐个模型，照 magpie Detect 的 Each picked model）：`modelIds` 的前 API_ENDPOINT_DETECT_MAX_MODELS 个
  * 每个在每种格式上各问一次，回应里 `models` 逐个模型列出，`results` 是每种格式第一个答上的（都没答上为第一个模型的）。
  * apiEndpointManagement 能力位与 eachModel 在同一个版本里加入（还没发布过声明它的 daemon），所以声明了它的 daemon 都认 eachModel。
  */
-/** 一次自动检测最多问这么多个表单里的模型（照 magpie DetectMax）；daemon 截断、界面说明都用它。 */
-export const API_ENDPOINT_DETECT_MAX_MODELS = 30;
-
 export const ApiEndpointDetectFormatsRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.detect_formats.request"),
   requestId: z.string(),
@@ -1004,7 +1004,9 @@ export type ApiEndpointDetectFormatsRequest = z.infer<typeof ApiEndpointDetectFo
  * `durationMs` 是这一问的耗时，`modelId` 是问的模型（没有模型可问时没有）；老 daemon 都不发。
  * `code`、`params`：逐个模型识别时 daemon 自己定的原因（界面按语言说，`message` 是英文原文）：
  * upstream_timeout（params.seconds 秒内没回）、batch_timeout（问了，整次识别到点还没回）、not_asked（整次识别到点，没轮到问）、
- * image_model（生图模型，不问）。上游给的失败没有 code。
+ * image_model（生图模型，不问）、no_model_to_try（没有模型可问）、models_list_failed（列模型失败，params.detail 是列模型的原因）、
+ * upstream_unreachable（没连上，params.detail 是网络库的原话）、wrong_shape（2xx 但不是 params.format 这种格式的回答）。
+ * 上游给的失败没有 code。
  */
 export const ApiEndpointFormatDetectionSchema = z.object({
   format: z.string(),

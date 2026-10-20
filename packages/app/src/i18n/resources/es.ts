@@ -2684,6 +2684,11 @@ export const es: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry:
+              "Nada que preguntar: el proveedor no listó modelos, así que escribe un modelo para probar",
+            unreachable: "No se pudo conectar: {{detail}}",
+            listFailed: "No se pudieron listar modelos para probar: {{detail}}",
+            wrongShape: "Respondió, pero no en formato {{format}}",
             upstreamTimeout: "Sin respuesta en {{seconds}} s",
             batchTimeout: "Sin respuesta antes de que se agotara el tiempo de la detección",
             notAsked: "No se preguntó: se agotó el tiempo de la detección",
@@ -2691,14 +2696,14 @@ export const es: TranslationResources = {
           },
           eachButton: "Cada modelo elegido",
           eachInfo:
-            "Pregunta a cada modelo elegido, hasta {{max}}, una vez en cada formato de solicitud, unos pocos a la vez, para ver qué formato sirve a qué modelo. Al editar un endpoint, Usar estas también pone en Usar solo este formato a un modelo que respondió en un solo formato.",
+            "Pregunta a cada modelo elegido, hasta {{max}}, una vez en cada formato de solicitud, unos pocos a la vez, para ver qué formato sirve a qué modelo. Al editar un endpoint, “Usar estas” también pone en “Usar solo este formato” a un modelo que respondió en un solo formato.",
           eachNeedsModels:
             "Elige modelos primero, o escribe un modelo para probar y pulsa Detectar.",
           eachCut: "Solo se preguntó a los primeros {{asked}} de {{picked}} modelos.",
           eachOk: "{{ms}} ms",
           eachGivenItem: "{{model}}: solo {{format}}",
-          eachGivenByTake: "Usar estas también aplica Usar solo este formato: {{list}}",
-          eachGivenOnceSaved: "Al guardar, estos usan solo este formato: {{list}}",
+          eachGivenByTake: "“Usar estas” también aplica “Usar solo este formato”: {{list}}",
+          eachGivenOnceSaved: "Al guardar, estos usan “Usar solo este formato”: {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "Púlsalo de nuevo para deshacer.",
           onlyClearedOnceSaved: "Al guardar, {{model}} se volverá a pedir en cualquier formato.",

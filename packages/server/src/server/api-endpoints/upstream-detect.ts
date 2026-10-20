@@ -114,10 +114,7 @@ export async function detectUpstreamFormats(input: {
   probeTimeoutMs: number;
 }): Promise<DetectOutcome> {
   const urls = suggestedBaseUrls(input.baseUrl);
-  const picked = [...new Set(input.pickedModelIds.map((id) => id.trim()).filter(Boolean))].slice(
-    0,
-    API_ENDPOINT_DETECT_MAX_MODELS,
-  );
+  const picked = modelsToAsk(input.pickedModelIds);
   if (input.modelId !== null || picked.length > 0) {
     return probeAll({
       input,
@@ -140,13 +137,19 @@ export async function detectUpstreamFormats(input: {
     const httpStatus = listed.error.status ?? null;
     const rejected = httpStatus === 401 || httpStatus === 403;
     // 列模型就被拒：三种格式都是这把 key 的问题；其余失败是没有模型可问。
-    const outcome: Pick<ApiEndpointFormatDetection, "status" | "httpStatus" | "message"> = rejected
-      ? { status: "auth_failed", httpStatus, message: listed.error.message }
-      : {
-          status: "not_detected",
-          httpStatus: null,
-          message: `Could not list models to try: ${listed.error.message}`,
-        };
+    const rejectedOutcome: ListingOutcome = {
+      status: "auth_failed",
+      httpStatus,
+      message: listed.error.message,
+    };
+    const unlistedOutcome: ListingOutcome = {
+      status: "not_detected",
+      httpStatus: null,
+      message: `Could not list models to try: ${listed.error.message}`,
+      code: "models_list_failed",
+      params: { detail: listed.error.message },
+    };
+    const outcome = rejected ? rejectedOutcome : unlistedOutcome;
     return {
       kind: "result",
       results: API_ENDPOINT_REQUEST_FORMATS.map((format) => ({
@@ -158,6 +161,18 @@ export async function detectUpstreamFormats(input: {
   }
   const modelIds = listed.models.map((model) => model.id);
   return probeAll({ input, urls, modelFor: (format) => pickProbeModel(modelIds, format) });
+}
+
+type ListingOutcome = Pick<
+  ApiEndpointFormatDetection,
+  "status" | "httpStatus" | "message" | "code" | "params"
+>;
+
+/** 去掉空白与重复，取前 API_ENDPOINT_DETECT_MAX_MODELS 个（单次检测挑模型与逐个模型识别共用）。 */
+export function modelsToAsk(modelIds: string[]): string[] {
+  const trimmed = modelIds.map((id) => id.trim());
+  const unique = new Set(trimmed.filter((id) => id !== ""));
+  return [...unique].slice(0, API_ENDPOINT_DETECT_MAX_MODELS);
 }
 
 /** 每种格式同时问一次，各用 modelFor 给它挑的模型。 */
@@ -212,21 +227,31 @@ export async function probeUpstreamFormat(input: {
 }): Promise<ApiEndpointFormatDetection> {
   const { format, baseUrl } = input;
   const startedAt = performance.now();
+  // daemon 自己写的原因另带 code 与 params，界面按语言说；message 是英文原文（测试连接、测试模型照登）。
   const result = (
     status: ApiEndpointFormatDetection["status"],
     httpStatus: number | null,
     message: string | null,
-  ): ApiEndpointFormatDetection => ({
-    format,
-    url: baseUrl,
-    status,
-    httpStatus,
-    message: message === null ? null : redactKey(message, input.apiKey),
-    durationMs: Math.round(performance.now() - startedAt),
-    ...(input.modelId === null ? {} : { modelId: input.modelId }),
-  });
+    reason: DaemonReason | null = null,
+  ): ApiEndpointFormatDetection => {
+    let redacted: string | null = null;
+    if (message !== null) redacted = redactKey(message, input.apiKey);
+    const detection: ApiEndpointFormatDetection = {
+      format,
+      url: baseUrl,
+      status,
+      httpStatus,
+      message: redacted,
+      durationMs: Math.round(performance.now() - startedAt),
+    };
+    if (input.modelId !== null) detection.modelId = input.modelId;
+    if (reason !== null) Object.assign(detection, reasonPartOf(reason, input.apiKey));
+    return detection;
+  };
   if (input.modelId === null) {
-    return result("not_detected", null, "The upstream listed no models to try");
+    return result("not_detected", null, "The upstream listed no models to try", {
+      code: "no_model_to_try",
+    });
   }
   const probe = FORMAT_PROBES[format];
   const url = `${baseUrl}${probe.path}`;
@@ -246,10 +271,17 @@ export async function probeUpstreamFormat(input: {
     reply = await readProbeReply({ response, isStreamed });
   } catch (error) {
     if (timeout.aborted && !input.signal.aborted) {
-      const seconds = Math.round(input.timeoutMs / 1000);
-      return result("not_detected", null, `No response from ${url} within ${seconds}s`);
+      const seconds = String(Math.round(input.timeoutMs / 1000));
+      return result("not_detected", null, `No response from ${url} within ${seconds}s`, {
+        code: "upstream_timeout",
+        params: { seconds },
+      });
     }
-    return result("not_detected", null, `POST ${url}: ${describeNetworkError(error)}`);
+    const detail = describeNetworkError(error);
+    return result("not_detected", null, `POST ${url}: ${detail}`, {
+      code: "upstream_unreachable",
+      params: { detail },
+    });
   }
   const prefix = `POST ${url}: HTTP ${status}`;
   if (reply.kind === "streamed") {
@@ -259,11 +291,32 @@ export async function probeUpstreamFormat(input: {
   const { text } = reply;
   if (isSuccess(status)) {
     if (probe.matches(parseJson(text))) return result("ok", status, null);
-    return result("not_detected", status, `${prefix}: not a ${format} response`);
+    return result("not_detected", status, `${prefix}: not a ${format} response`, {
+      code: "wrong_shape",
+      params: { format },
+    });
   }
   const detail = extractErrorDetail(text, input.apiKey);
   const message = detail ? `${prefix}: ${detail}` : prefix;
   return result(status === 401 || status === 403 ? "auth_failed" : "not_detected", status, message);
+}
+
+/** daemon 自己写的检测原因（ApiEndpointFormatDetectionSchema 的 code 与 params）。 */
+interface DaemonReason {
+  code: "no_model_to_try" | "upstream_timeout" | "upstream_unreachable" | "wrong_shape";
+  params?: Record<string, string>;
+}
+
+function reasonPartOf(
+  reason: DaemonReason,
+  apiKey: string | null,
+): Pick<ApiEndpointFormatDetection, "code" | "params"> {
+  if (reason.params === undefined) return { code: reason.code };
+  const entries = Object.entries(reason.params).map(([key, value]) => [
+    key,
+    redactKey(value, apiKey),
+  ]);
+  return { code: reason.code, params: Object.fromEntries(entries) };
 }
 
 function isSuccess(status: number): boolean {

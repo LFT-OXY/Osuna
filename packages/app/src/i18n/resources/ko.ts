@@ -2643,6 +2643,11 @@ export const ko: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry:
+              "물어볼 모델이 없습니다: 업스트림이 모델을 나열하지 않았으니 시험할 모델을 입력하세요",
+            unreachable: "연결할 수 없음: {{detail}}",
+            listFailed: "시험할 모델을 나열할 수 없음: {{detail}}",
+            wrongShape: "응답은 왔지만 {{format}} 형식이 아님",
             upstreamTimeout: "{{seconds}}초 안에 응답 없음",
             batchTimeout: "감지 시간이 끝날 때까지 응답 없음",
             notAsked: "묻지 않음: 감지 시간이 끝남",

@@ -2664,6 +2664,11 @@ export const ru: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry:
+              "Нечего опрашивать: провайдер не перечислил моделей, введите модель для проверки",
+            unreachable: "Не удалось подключиться: {{detail}}",
+            listFailed: "Не удалось получить список моделей для проверки: {{detail}}",
+            wrongShape: "Ответ получен, но не в формате {{format}}",
             upstreamTimeout: "Нет ответа за {{seconds}} с",
             batchTimeout: "Нет ответа до окончания времени определения",
             notAsked: "Не опрошено: время определения истекло",

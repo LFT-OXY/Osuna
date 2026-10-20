@@ -236,7 +236,44 @@ describe("API endpoint request format detection over the daemon RPC", () => {
           `GET ${upstream.origin}/relay/models: HTTP 404: Not Found`,
       ),
     );
+    expect(detected.results.map((result) => result.code)).toEqual(
+      Array(3).fill("models_list_failed"),
+    );
+    expect(detected.results[0]?.params?.detail).toContain("HTTP 404: nope");
     expect(upstream.requests.filter((request) => request.method === "POST")).toEqual([]);
+  });
+
+  test("the host's own reasons carry a code: an answer in another shape, and an address nobody listens on", async () => {
+    const wrongShape = createServer((_request, response) => sendJson(response, 200, {}));
+    servers.push(wrongShape);
+    await new Promise<void>((resolve) => wrongShape.listen(0, "127.0.0.1", resolve));
+    const shapeOrigin = `http://127.0.0.1:${(wrongShape.address() as AddressInfo).port}`;
+    const shaped = await client.apiEndpointDetectFormats({
+      baseUrl: shapeOrigin,
+      apiKey: TYPED_KEY,
+      modelId: "my-model",
+    });
+    expect(
+      shaped.results.map(({ httpStatus, code, params }) => [httpStatus, code, params]),
+    ).toEqual([
+      [200, "wrong_shape", { format: "anthropic_messages" }],
+      [200, "wrong_shape", { format: "openai_chat" }],
+      [200, "wrong_shape", { format: "openai_responses" }],
+    ]);
+
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
+    const closedOrigin = `http://127.0.0.1:${(closed.address() as AddressInfo).port}`;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const unreachable = await client.apiEndpointDetectFormats({
+      baseUrl: closedOrigin,
+      apiKey: TYPED_KEY,
+      modelId: "my-model",
+    });
+    for (const result of unreachable.results) {
+      expect(result).toMatchObject({ httpStatus: null, code: "upstream_unreachable" });
+      expect(result.params?.detail).toBeTruthy();
+    }
   });
 
   test("with no model list, a model typed to try is asked on every format", async () => {

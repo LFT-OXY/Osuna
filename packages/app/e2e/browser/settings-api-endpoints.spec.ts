@@ -1337,14 +1337,14 @@ test.describe("Settings API endpoints", () => {
       // 两个模型、三种格式，各问一次。
       expect(postedPaths(relay)).toHaveLength(6);
       await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
-        "Use these also sets Use only this format: chat-only-glm: OpenAI Chat only",
+        "“Use these” also sets “Use only this format”: chat-only-glm: OpenAI Chat only",
       );
     });
 
     await test.step("Use these and Save make it use only that format", async () => {
       await page.getByTestId("api-endpoint-connection-use-detected").click();
       await expect(page.getByTestId("api-endpoint-connection-each-given")).toHaveText(
-        "After saving, these use only this format: chat-only-glm: OpenAI Chat only",
+        "After saving, these use “Use only this format”: chat-only-glm: OpenAI Chat only",
       );
       await page.getByTestId("api-endpoint-connection-save").click();
       await expect(connectionForm(page)).toHaveCount(0);

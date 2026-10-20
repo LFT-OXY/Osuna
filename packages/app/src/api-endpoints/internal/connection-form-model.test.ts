@@ -2437,6 +2437,8 @@ describe("connection form: detecting each picked model", () => {
         coded("anthropic_messages", "upstream_timeout", { seconds: "12" }),
         coded("openai_chat", "not_asked"),
         coded("openai_responses", "something_new"),
+        coded("openai_chat", "wrong_shape", { format: "openai_chat" }),
+        coded("openai_chat", "upstream_unreachable", { detail: "fetch failed" }),
       ],
     };
     fake.answerDetect({ status: "done", results: row.results, models: [row] });
@@ -2446,6 +2448,8 @@ describe("connection form: detecting each picked model", () => {
       { code: "upstream_timeout", seconds: "12" },
       { code: "not_asked" },
       null,
+      { code: "wrong_shape", format: "openai_chat" },
+      { code: "upstream_unreachable", detail: "fetch failed" },
     ]);
   });
 

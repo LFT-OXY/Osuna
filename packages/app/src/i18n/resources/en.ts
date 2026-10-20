@@ -2694,6 +2694,10 @@ export const en = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry: "Nothing to ask: the upstream listed no models, so type a model to try",
+            unreachable: "Couldn't connect: {{detail}}",
+            listFailed: "Couldn't list models to try: {{detail}}",
+            wrongShape: "It answered, but not as {{format}}",
             upstreamTimeout: "No response within {{seconds}} s",
             batchTimeout: "No response before the detection ran out of time",
             notAsked: "Not asked: the detection ran out of time",
@@ -2701,13 +2705,13 @@ export const en = {
           },
           eachButton: "Each picked model",
           eachInfo:
-            "Asks each picked model, up to {{max}}, once on every request format, a few at a time, to see which format serves which model. When you edit an endpoint, Use these also sets a model that answered on only one format to Use only this format.",
+            "Asks each picked model, up to {{max}}, once on every request format, a few at a time, to see which format serves which model. When you edit an endpoint, “Use these” also sets a model that answered on only one format to “Use only this format”.",
           eachNeedsModels: "Pick models first, or type a model to try and press Auto-detect.",
           eachCut: "Only the first {{asked}} of {{picked}} models were asked.",
           eachOk: "{{ms}} ms",
           eachGivenItem: "{{model}}: {{format}} only",
-          eachGivenByTake: "Use these also sets Use only this format: {{list}}",
-          eachGivenOnceSaved: "After saving, these use only this format: {{list}}",
+          eachGivenByTake: "“Use these” also sets “Use only this format”: {{list}}",
+          eachGivenOnceSaved: "After saving, these use “Use only this format”: {{list}}",
           noteAndUndo: "{{note}} {{undo}}",
           onlyUndo: "Press it again to undo.",
           onlyClearedOnceSaved: "After saving, {{model}} is asked over any format again.",

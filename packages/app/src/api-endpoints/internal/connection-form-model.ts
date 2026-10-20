@@ -152,9 +152,12 @@ export interface DetectedFormat {
 
 export type DetectionReason =
   | { code: "upstream_timeout"; seconds: string }
+  | { code: "upstream_unreachable" | "models_list_failed"; detail: string }
+  | { code: "wrong_shape"; format: string }
   | { code: "batch_timeout" }
   | { code: "not_asked" }
-  | { code: "image_model" };
+  | { code: "image_model" }
+  | { code: "no_model_to_try" };
 
 /**
  * 最近一次自动检测：每种格式一行；isTaken 是已按它「采用这些」。
@@ -1548,19 +1551,21 @@ function modelDetectionRowOf(row: ApiEndpointModelDetection): ModelDetectionRow 
 function detectedFormatOf(result: ApiEndpointFormatDetection): DetectedFormat[] {
   const format = API_ENDPOINT_REQUEST_FORMATS.find((candidate) => candidate === result.format);
   if (!format) return [];
+  let message: string | null = null;
+  if (result.message !== null) {
+    message = conciseUpstreamMessage({ message: result.message, url: result.url });
+  }
+  const reason = detectionReasonOf(result);
   return [
     {
       format,
       url: result.url,
       label: toLabel(result.status),
       httpStatus: result.httpStatus,
-      message:
-        result.message === null
-          ? null
-          : conciseUpstreamMessage({ message: result.message, url: result.url }),
+      message,
       durationMs: result.durationMs ?? null,
       modelId: result.modelId ?? null,
-      reason: detectionReasonOf(result),
+      reason,
     },
   ];
 }
@@ -1570,9 +1575,15 @@ function detectionReasonOf(result: ApiEndpointFormatDetection): DetectionReason 
   switch (result.code) {
     case "upstream_timeout":
       return { code: result.code, seconds: result.params?.seconds ?? "" };
+    case "upstream_unreachable":
+    case "models_list_failed":
+      return { code: result.code, detail: result.params?.detail ?? "" };
+    case "wrong_shape":
+      return { code: result.code, format: result.params?.format ?? "" };
     case "batch_timeout":
     case "not_asked":
     case "image_model":
+    case "no_model_to_try":
       return { code: result.code };
     default:
       return null;

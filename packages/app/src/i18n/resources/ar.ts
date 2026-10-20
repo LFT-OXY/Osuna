@@ -2628,6 +2628,10 @@ export const ar: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry: "لا شيء للسؤال: لم يُدرج المزوّد أي نماذج، فاكتب نموذجًا للتجربة",
+            unreachable: "تعذّر الاتصال: {{detail}}",
+            listFailed: "تعذّر سرد النماذج للتجربة: {{detail}}",
+            wrongShape: "أجاب، لكن ليس بتنسيق {{format}}",
             upstreamTimeout: "لا استجابة خلال {{seconds}} ثانية",
             batchTimeout: "لا استجابة قبل انتهاء وقت الاكتشاف",
             notAsked: "لم يُسأل: انتهى وقت الاكتشاف",

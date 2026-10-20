@@ -2656,6 +2656,11 @@ export const ja: TranslationResources = {
         detected: {
           eachReason: "{{verdict}} · {{reason}}",
           eachReasons: {
+            noModelToTry:
+              "問い合わせるモデルがありません：上流がモデルを返さなかったので、試すモデルを入力してください",
+            unreachable: "接続できません：{{detail}}",
+            listFailed: "試すモデルを一覧できません：{{detail}}",
+            wrongShape: "応答はありましたが {{format}} 形式ではありません",
             upstreamTimeout: "{{seconds}} 秒以内に応答なし",
             batchTimeout: "検出の時間切れまでに応答なし",
             notAsked: "未問い合わせ：検出が時間切れ",
