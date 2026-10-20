@@ -46,6 +46,26 @@ describe("buildVisibleComboboxOptions", () => {
       { id: "/Users/me/project-a", label: "/Users/me/project-a", kind: "directory" },
     ]);
   });
+
+  it("marks the custom row as not selectable when asked, with its description", () => {
+    const visible = buildVisibleComboboxOptions({
+      options,
+      searchQuery: "*-PREVIEW",
+      searchable: true,
+      allowCustomValue: true,
+      customValuePrefix: "Disable",
+      customValueDescription: "Already on the list as *-preview",
+      customValueDisabled: true,
+    });
+
+    expect(visible[0]).toEqual({
+      id: "*-PREVIEW",
+      label: 'Disable "*-PREVIEW"',
+      description: "Already on the list as *-preview",
+      kind: undefined,
+      disabled: true,
+    });
+  });
 });
 
 describe("filterAndRankComboboxOptions", () => {

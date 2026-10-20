@@ -3,6 +3,7 @@ import { afterEach, expect, expectTypeOf, test, vi } from "vitest";
 import { z } from "zod";
 import {
   DaemonClient,
+  DaemonConnectionError,
   supportsUsageReports,
   type DaemonClientTrace,
   type CreateAgentRequestOptions,
@@ -1494,6 +1495,32 @@ test("bounds the wait for push token revocation", async () => {
   await vi.advanceTimersByTimeAsync(1);
   await rejection;
   expect(client.getConnectionState().status).toBe("connected");
+});
+
+test("a request still waiting when the client closes fails as a lost connection", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const pending = client.apiEndpointSetDisabledModels({ models: ["*-preview"] });
+  const failed = pending.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  await client.close();
+
+  const error = await failed;
+  expect(error).toBeInstanceOf(DaemonConnectionError);
+  expect(error).toMatchObject({ message: "Daemon client closed", code: "DAEMON_CONNECTION_LOST" });
 });
 
 test("defaults session RPC waiters to sixty seconds", async () => {

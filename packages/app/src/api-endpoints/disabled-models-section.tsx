@@ -6,7 +6,7 @@ import { listedDisabledEntry } from "@getpaseo/protocol/api-endpoint/disabled-mo
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
 import { Button } from "@/components/ui/button";
-import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox, ComboboxItem, type RenderOptionFn } from "@/components/ui/combobox";
 import { isWeb } from "@/constants/platform";
 import { settingsStyles } from "@/styles/settings";
 import {
@@ -66,34 +66,21 @@ export function ApiEndpointDisabledModelsSection({
     }
   }, []);
   const handlePick = useCallback((picked: string) => void list.disable(picked), [list]);
-  const renderOption = useCallback(
-    ({
-      option,
-      selected,
-      active,
-      onPress,
-    }: {
-      option: ComboboxOption;
-      selected: boolean;
-      active: boolean;
-      onPress: () => void;
-    }) => {
-      const isTypedDuplicate = listedAs !== null && option.id === query.trim();
-      return (
-        <ComboboxItem
-          label={option.label}
-          description={
-            isTypedDuplicate ? t(`${KEY}.alreadyListed`, { pattern: listedAs }) : option.description
-          }
-          selected={selected}
-          active={active}
-          disabled={isTypedDuplicate}
-          onPress={onPress}
-          testID={isTypedDuplicate ? "api-endpoints-disabled-models-listed-option" : undefined}
-        />
-      );
-    },
-    [listedAs, query, t],
+  // 模型名可能很长：接口名另起一行，不被截成一个字。
+  const renderOption = useCallback<RenderOptionFn>(
+    ({ option, selected, active, onPress }) => (
+      <ComboboxItem
+        label={option.label}
+        description={option.description}
+        stacksDescription
+        selected={selected}
+        active={active}
+        disabled={option.disabled}
+        onPress={onPress}
+        testID={option.disabled ? "api-endpoints-disabled-models-listed-option" : undefined}
+      />
+    ),
+    [],
   );
   const info = useMemo(
     () => <ExampleSentence text={t(`${KEY}.info`, { example: EXAMPLE_MARK })} />,
@@ -142,7 +129,12 @@ export function ApiEndpointDisabledModelsSection({
         emptyText={t(`${KEY}.noModels`)}
         allowCustomValue
         customValuePrefix={t(`${KEY}.customValuePrefix`)}
-        customValueDescription={t(`${KEY}.customValueDescription`)}
+        customValueDescription={
+          listedAs === null
+            ? t(`${KEY}.customValueDescription`)
+            : t(`${KEY}.alreadyListed`, { pattern: listedAs })
+        }
+        customValueDisabled={listedAs !== null}
         title={t(`${KEY}.addLabel`)}
         open={isPicking}
         onOpenChange={handleOpenChange}

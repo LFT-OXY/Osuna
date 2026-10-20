@@ -11,6 +11,8 @@ export interface ComboboxOptionModel {
   label: string;
   description?: string;
   kind?: ComboboxOptionKind;
+  // 列出来但不能选：置灰、不加高亮，点和回车都不选它。
+  disabled?: boolean;
 }
 
 const DESCRIPTION_FALLBACK_TIER = 99;
@@ -32,6 +34,8 @@ export interface BuildVisibleComboboxOptionsInput {
   customValuePrefix: string;
   customValueDescription?: string;
   customValueKind?: ComboboxOptionKind;
+  // 照写的这一项列出来但不能选（比如已经有了）。
+  customValueDisabled?: boolean;
 }
 
 export function shouldShowCustomComboboxOption(input: {
@@ -97,6 +101,7 @@ export function buildVisibleComboboxOptions(
       label: customLabel,
       description: input.customValueDescription,
       kind: input.customValueKind,
+      ...(input.customValueDisabled ? { disabled: true } : {}),
     });
   }
 

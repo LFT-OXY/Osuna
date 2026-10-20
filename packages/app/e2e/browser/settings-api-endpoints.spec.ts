@@ -1379,7 +1379,7 @@ test.describe("Settings API endpoints", () => {
     await expect(entry).toContainText("Matches 1:");
     await expect(entry).toContainText("good-relay/gemini-3-preview");
 
-    // 只差大小写的在选单里置灰，写明存着的是哪一条；回车不加，名单下面也不冒出报错。
+    // 只差大小写的在选单里置灰，写明存着的是哪一条；不能选，名单下面也不冒出报错。
     await section.getByTestId("api-endpoints-disabled-models-add").click();
     await search().fill("*-preview");
     const listed = page
@@ -1387,7 +1387,10 @@ test.describe("Settings API endpoints", () => {
       .filter({ visible: true });
     await expect(listed).toContainText("Already on the list as *-PREVIEW");
     await expect(listed).toBeDisabled();
+    // 回车在这一项上什么都不做，选单留着。
     await search().press("Enter");
+    await expect(search()).toBeVisible();
+    await search().press("Escape");
     await expect(search()).toHaveCount(0);
     await expect(error).toHaveCount(0);
     expect(await hostList()).toEqual(["*-PREVIEW"]);

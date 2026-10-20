@@ -1751,11 +1751,11 @@ export class DaemonClient {
     this.resetConnectTimeout();
     this.disposeTransport(1000, "Client closed");
     this.providerSnapshotUpdates.clear();
-    this.clearWaiters(new Error("Daemon client closed"));
+    this.clearWaiters(new DaemonConnectionError("Daemon client closed"));
     await this.owned.close();
     this.creations.close();
-    this.rejectPendingSendQueue(new Error("Daemon client closed"));
-    this.rejectPingProbe(new Error("Daemon client closed"));
+    this.rejectPendingSendQueue(new DaemonConnectionError("Daemon client closed"));
+    this.rejectPingProbe(new DaemonConnectionError("Daemon client closed"));
     this.terminalStreams.clearSlots();
     this.lastServerInfoMessage = null;
     if (this.runtimeMetricsInterval) {
@@ -2079,7 +2079,9 @@ export class DaemonClient {
           pending.reject(new DaemonConnectionError("Connection lost before message could be sent"));
         }
       } catch (error) {
-        pending.reject(error instanceof Error ? error : new Error(String(error)));
+        // 排队的消息发不出去就是连接出了问题，和上面「连接已断」一样交给调用方。
+        const reason = error instanceof Error ? error.message : String(error);
+        pending.reject(new DaemonConnectionError(`Message could not be sent: ${reason}`));
       }
     }
   }

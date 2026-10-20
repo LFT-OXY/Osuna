@@ -109,6 +109,8 @@ export interface ComboboxProps {
   customValuePrefix?: string;
   customValueDescription?: string;
   customValueKind?: "directory" | "file";
+  /** 照写的这一项列出来但置灰、不能选（比如已经有了），说明写在 customValueDescription。 */
+  customValueDisabled?: boolean;
   optionsPosition?: "below-search" | "above-search";
   title?: string;
   /**
@@ -244,6 +246,8 @@ export interface ComboboxItemProps {
   /** 标签文字的附加样式，比如每个选项各用自己的字体。 */
   labelStyle?: StyleProp<TextStyle>;
   description?: string;
+  // 说明另起一行、可以折行，不和标签挤在一行里被截断。
+  stacksDescription?: boolean;
   kind?: "directory" | "file";
   leadingSlot?: ReactNode;
   trailingSlot?: ReactNode;
@@ -259,6 +263,7 @@ export function ComboboxItem({
   label,
   labelStyle,
   description,
+  stacksDescription = false,
   kind,
   leadingSlot,
   trailingSlot,
@@ -291,15 +296,18 @@ export function ComboboxItem({
   const itemPressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.comboboxItem,
-      (hovered || pressed || active) && styles.comboboxItemHighlighted,
+      !disabled && (hovered || pressed || active) && styles.comboboxItemHighlighted,
       disabled && styles.comboboxItemDisabled,
     ],
     [active, disabled],
   );
 
   const itemContentStyle = useMemo(
-    () => [styles.comboboxItemContent, description && styles.comboboxItemContentInline],
-    [description],
+    () => [
+      styles.comboboxItemContent,
+      description && !stacksDescription && styles.comboboxItemContentInline,
+    ],
+    [description, stacksDescription],
   );
 
   return (
@@ -317,7 +325,10 @@ export function ComboboxItem({
           {label}
         </Text>
         {description ? (
-          <Text numberOfLines={1} style={styles.comboboxItemDescription}>
+          <Text
+            numberOfLines={stacksDescription ? undefined : 1}
+            style={styles.comboboxItemDescription}
+          >
             {description}
           </Text>
         ) : null}
@@ -342,7 +353,7 @@ export function ComboboxEmpty({ children }: { children: ReactNode }): ReactEleme
   );
 }
 
-type RenderOptionFn = NonNullable<ComboboxProps["renderOption"]>;
+export type RenderOptionFn = NonNullable<ComboboxProps["renderOption"]>;
 
 interface OptionRowProps {
   option: ComboboxOption;
@@ -364,6 +375,7 @@ function OptionRow({ option, selected, active, onSelect, renderOption }: OptionR
       kind={option.kind}
       selected={selected}
       active={active}
+      disabled={option.disabled}
       onPress={handlePress}
     />
   );
@@ -557,7 +569,10 @@ function handleDesktopEnterKey(input: DesktopKeyHandlerInput) {
   if (input.orderedVisibleOptions.length === 0) return;
   const { activeIndex, orderedVisibleOptions } = input;
   const index = activeIndex >= 0 && activeIndex < orderedVisibleOptions.length ? activeIndex : 0;
-  input.handleSelect(orderedVisibleOptions[index].id);
+  const option = orderedVisibleOptions[index];
+  // 不能选的项回车什么都不做，选单留着。
+  if (option.disabled) return;
+  input.handleSelect(option.id);
 }
 
 interface FloatingSizeSetters {
@@ -844,13 +859,15 @@ function runIfPinOpen(isOpen: boolean, pin: () => void) {
   pin();
 }
 
-function runIfSubmitSearch(
-  showCustomOption: boolean,
-  handleSelect: (id: string) => void,
-  sanitizedSearchValue: string,
-) {
-  if (showCustomOption) {
-    handleSelect(sanitizedSearchValue);
+function runIfSubmitSearch(input: {
+  showCustomOption: boolean;
+  // 照写的这一项不能选时回车什么都不做。
+  isCustomValueDisabled: boolean;
+  handleSelect: (id: string) => void;
+  sanitizedSearchValue: string;
+}) {
+  if (input.showCustomOption && !input.isCustomValueDisabled) {
+    input.handleSelect(input.sanitizedSearchValue);
   }
 }
 
@@ -1324,6 +1341,7 @@ export function Combobox({
   customValuePrefix = "Use",
   customValueDescription,
   customValueKind,
+  customValueDisabled,
   optionsPosition = "below-search",
   title,
   header,
@@ -1493,10 +1511,12 @@ export function Combobox({
         customValuePrefix,
         customValueDescription,
         customValueKind,
+        customValueDisabled,
       }),
     [
       allowCustomValue,
       customValueDescription,
+      customValueDisabled,
       customValueKind,
       customValuePrefix,
       options,
@@ -1556,8 +1576,14 @@ export function Combobox({
   );
 
   const handleSubmitSearch = useCallback(
-    () => runIfSubmitSearch(showCustomOption, handleSelect, sanitizedSearchValue),
-    [handleSelect, sanitizedSearchValue, showCustomOption],
+    () =>
+      runIfSubmitSearch({
+        showCustomOption,
+        isCustomValueDisabled: customValueDisabled === true,
+        handleSelect,
+        sanitizedSearchValue,
+      }),
+    [customValueDisabled, handleSelect, sanitizedSearchValue, showCustomOption],
   );
 
   const handleDesktopKey = useCallback(

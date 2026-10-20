@@ -43,14 +43,15 @@ function withoutDisabled(input: {
     slug: endpoint.slug,
     models: endpoint.models,
   });
-  if (models.length === endpoint.models.length) return endpoint;
-  const served = new Set(models.map((model) => model.id));
+  const isOff = (model: string) =>
+    endpointModelDisabledBy({ patterns, slug: endpoint.slug, model }) !== null;
+  const mapping = Object.entries(endpoint.modelMapping ?? {});
+  const isMappedOff = mapping.some(([, model]) => typeof model === "string" && isOff(model));
+  if (models.length === endpoint.models.length && !isMappedOff) return endpoint;
   if (endpoint.modelMapping === undefined) return { ...endpoint, models };
-  // 档位只留指向还在服务的模型的。
-  const mapping = Object.entries(endpoint.modelMapping).filter(
-    ([, model]) => typeof model !== "string" || served.has(model),
-  );
-  return { ...endpoint, models, modelMapping: Object.fromEntries(mapping) };
+  // 只去掉指向被禁模型的档位；指向没选的模型的归 keepValidMapping 管，这里不动。
+  const kept = mapping.filter(([, model]) => typeof model !== "string" || !isOff(model));
+  return { ...endpoint, models, modelMapping: Object.fromEntries(kept) };
 }
 
 /** 中转站拒收时说的话（magpie disabledError，换成 Osuna 的说法；Osuna 没有对应的命令行，只说在哪改）。 */
