@@ -8,6 +8,7 @@ import type {
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { UsagePricingTimers } from "../usage/pricing/service.js";
 import { disabledMessage } from "./disabled-models.js";
+import type { CliHeaderSample, CliTestClient } from "./store.js";
 import { probeUpstreamFormat } from "./upstream-detect.js";
 
 /*
@@ -54,6 +55,15 @@ export type ModelTestsOutcome =
   // 被取消：只带取消前已测完的。
   | { kind: "cancelled"; results: ApiEndpointModelTestResult[] };
 
+/**
+ * 以谁的样子测：Osuna 自己；某个 CLI（带它的请求头，ADR 0013）；或这种测法现在测不了，每个模型都记成这个原因、不发请求
+ * （magpie testOne 的 TestsAs）。
+ */
+export type ModelTestIdentity =
+  | { kind: "own" }
+  | { kind: "cli"; client: CliTestClient; headers: CliHeaderSample }
+  | { kind: "refused"; error: ApiEndpointError };
+
 export interface ModelTestProgress {
   result: ApiEndpointModelTestResult;
   done: number;
@@ -97,6 +107,7 @@ export async function runModelTests(input: {
   // 没 key 的接口为 null，不带认证头。
   apiKey: string | null;
   templateId: string | undefined;
+  identity: ModelTestIdentity;
   limits: ModelTestLimits;
   clock: ModelTestClock;
   // 调用方取消（客户端取消或断开）。
@@ -152,6 +163,7 @@ async function testOne(input: {
   plan: ModelTestPlan;
   apiKey: string | null;
   templateId: string | undefined;
+  identity: ModelTestIdentity;
   limits: ModelTestLimits;
   clock: ModelTestClock;
   signal: AbortSignal;
@@ -171,6 +183,19 @@ async function testOne(input: {
       params: { model: modelId, pattern: plan.disabledBy },
     });
   }
+  const { identity } = input;
+  if (identity.kind === "refused") {
+    return failedResult({
+      modelId,
+      format: null,
+      status: null,
+      durationMs: 0,
+      code: identity.error.code,
+      message: identity.error.message,
+    });
+  }
+  let asCli: { client: CliTestClient; headers: CliHeaderSample } | undefined;
+  if (identity.kind === "cli") asCli = { client: identity.client, headers: identity.headers };
   const startedAt = clock.now().getTime();
   const elapsed = () => clock.now().getTime() - startedAt;
   const deadline = deadlineSignal({ timers: clock.timers, ms: modelTimeoutMs });
@@ -186,6 +211,7 @@ async function testOne(input: {
         modelId,
         sentModel: plan.sentModel,
         capsReply: true,
+        asCli,
         signal,
         // 单个模型的总时限由 deadline 管，这里只要不早于它。
         timeoutMs: modelTimeoutMs + 1_000,

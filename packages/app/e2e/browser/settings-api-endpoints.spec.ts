@@ -6,8 +6,12 @@ import path from "node:path";
 import type { Locator, WebSocketRoute } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import {
+  CLAUDE_CODE_ONLY,
+  CLAUDE_CODE_SAMPLE,
+  CODEX_ONLY,
   connectApiEndpointClient,
   RELAY_KEY,
+  setCliHeaderSamples,
   resetApiEndpoints,
   seedApiEndpoint,
   sendThroughGateway,
@@ -1924,6 +1928,102 @@ test.describe("Settings API endpoints", () => {
       await expect.poll(abandoned).toBe(4);
       expect(slowAsked()).toBe(4);
     });
+  });
+
+  test("Test as Claude Code and as Codex: each passes a group that admits only that CLI, fails one that doesn't, and Claude Code says why it can't test before Claude Code has come through", async ({
+    page,
+  }) => {
+    relay.goodModels = ["cc-only-sonnet", "codex-only-glm"];
+    await setCliHeaderSamples(null);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Members relay",
+      baseUrls: [
+        { format: "anthropic_messages", url: `${relay.origin}/good` },
+        { format: "openai_chat", url: `${relay.origin}/good/v1` },
+      ],
+      models: ["cc-only-sonnet", "codex-only-glm"],
+    });
+    await openEndpointDetail(page, endpointId);
+    // 两个模型分在「GPT」（名字带 codex）与「其他」两个家族标签下：先切到它那一栏。
+    const familyOf: Record<string, RegExp> = {
+      "cc-only-sonnet": /^Other/,
+      "codex-only-glm": /^GPT/,
+    };
+    const openMenu = async (modelId: string) => {
+      await page.getByRole("tab", { name: familyOf[modelId] }).click();
+      await page
+        .getByTestId(`api-endpoint-model-menu-${modelId}`)
+        .filter({ visible: true })
+        .click();
+    };
+    const testAs = (method: string, modelId: string) =>
+      page.getByTestId(`api-endpoint-model-test-as-${method}-${modelId}`);
+    const dot = (modelId: string, kind: string) =>
+      page.getByTestId(`api-endpoint-model-test-dot-${modelId}-${kind}`).filter({ visible: true });
+    const reason = (modelId: string) =>
+      page.getByTestId(`api-endpoint-model-test-reason-${modelId}`).filter({ visible: true });
+    const sent = (model: string) => relay.requests.filter((request) => request.model === model);
+
+    await test.step("before Claude Code has come through, Test as Claude Code can't be pressed and says why", async () => {
+      await openMenu("cc-only-sonnet");
+      const item = testAs("claude_code", "cc-only-sonnet");
+      await expect(item).toHaveAttribute("aria-disabled", "true");
+      await expect(item).toContainText(
+        'No Claude Code request has come through the built-in gateway yet. Run Claude Code once with "Use API endpoints" on, then test again.',
+      );
+      await page.keyboard.press("Escape");
+      expect(sent("cc-only-sonnet")).toEqual([]);
+    });
+
+    await test.step("Test as Codex with no Codex sample says it is Codex CLI, and passes the Codex-only group", async () => {
+      relay.requests.length = 0;
+      await openMenu("codex-only-glm");
+      await testAs("codex", "codex-only-glm").click();
+      await expect(dot("codex-only-glm", "ok")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-model-test-codex-only-glm")).toHaveText(
+        /^OpenAI Chat · \d+ ms$/,
+      );
+      expect(sent("codex-only-glm")).toEqual([
+        expect.objectContaining({
+          url: "/good/v1/chat/completions",
+          originator: "codex_cli_rs",
+          userAgent: expect.stringMatching(/^codex_cli_rs\//),
+          stream: true,
+        }),
+      ]);
+    });
+
+    await test.step("Test as Codex fails on the Claude Code-only group and keeps the upstream's reason", async () => {
+      await openMenu("cc-only-sonnet");
+      await testAs("codex", "cc-only-sonnet").click();
+      await expect(dot("cc-only-sonnet", "failed")).toBeVisible();
+      await expect(reason("cc-only-sonnet")).toHaveText(`OpenAI Chat · 403 · ${CLAUDE_CODE_ONLY}`);
+    });
+
+    await test.step("once Claude Code has come through, Test as Claude Code sends its headers and passes", async () => {
+      await setCliHeaderSamples({ claude_code: CLAUDE_CODE_SAMPLE });
+      // 样本是打开页面时读的：重新打开这一页。
+      await openEndpointDetail(page, endpointId);
+      relay.requests.length = 0;
+      await openMenu("cc-only-sonnet");
+      await testAs("claude_code", "cc-only-sonnet").click();
+      await expect(dot("cc-only-sonnet", "ok")).toBeVisible();
+      expect(sent("cc-only-sonnet")).toEqual([
+        expect.objectContaining({
+          url: "/good/v1/messages",
+          userAgent: CLAUDE_CODE_SAMPLE["user-agent"],
+          stream: true,
+        }),
+      ]);
+    });
+
+    await test.step("Test as Claude Code fails on the Codex-only group", async () => {
+      await openMenu("codex-only-glm");
+      await testAs("claude_code", "codex-only-glm").click();
+      await expect(dot("codex-only-glm", "failed")).toBeVisible();
+      await expect(reason("codex-only-glm")).toHaveText(`Anthropic · 403 · ${CODEX_ONLY}`);
+    });
+    await setCliHeaderSamples(null);
   });
 
   test("a host without apiEndpointManagement has no Duplicate, no Show and no model scope", async ({

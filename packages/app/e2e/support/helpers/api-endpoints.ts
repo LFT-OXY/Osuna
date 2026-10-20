@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingHttpHeaders,
+  type IncomingMessage,
   type Server,
   type ServerResponse,
 } from "node:http";
@@ -39,6 +40,10 @@ export interface FakeRelay {
     // Azure 的 key 头。
     apiKey: string | undefined;
     model: string | undefined;
+    // 表明是哪个 CLI 的头（按 Claude Code / Codex 的样子测时带的）。
+    userAgent: string | undefined;
+    originator: string | undefined;
+    stream: boolean;
   }[];
   // /good 列出的模型；用例可以改它模拟上游清单变化。
   goodModels: string[];
@@ -61,7 +66,8 @@ function send(response: ServerResponse, status: number, body: unknown) {
  * - /reject：Anthropic 对话回 401（中转站把它标成需要检查）。
  * - /free：像不要 key 的本机服务，谁来都答，其余同 /good。
  * - /azure：像 Azure OpenAI 的资源，key 只认 api-key 头；/azure/openai/deployments 列出 AZURE_DEPLOYMENTS。
- * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回。
+ * - 测试模型用：/good 上对话请求问 bad-* 回 404（模型不存在），问 slow-* 什么都不回；cc-only-* 只答 User-Agent 是
+ *   Claude Code 的，codex-only-* 只答 originator 是 Codex 的（照只放行某 CLI 的分组），别的回 403。
  * 除 /free 外，任何路径上 key 不对都回 401。
  */
 export async function startFakeRelay(): Promise<FakeRelay> {
@@ -76,16 +82,11 @@ export async function startFakeRelay(): Promise<FakeRelay> {
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
       const headers: IncomingHttpHeaders = request.headers;
+      const text = Buffer.concat(chunks).toString("utf8");
       const isFree = (request.url ?? "").startsWith("/free/");
       const isNoList = (request.url ?? "").startsWith("/nolist/");
       const url = (request.url ?? "").replace(/^\/(free|nolist)\//, "/good/");
-      relay.requests.push({
-        method: request.method ?? "",
-        url: request.url ?? "",
-        authorization: headers.authorization,
-        apiKey: typeof headers["api-key"] === "string" ? headers["api-key"] : undefined,
-        model: modelOf(Buffer.concat(chunks).toString("utf8")),
-      });
+      relay.requests.push(recordOf({ request, text }));
       if (url.startsWith("/azure/")) {
         answerAzure({ url, apiKey: headers["api-key"], response });
         return;
@@ -98,6 +99,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
       const onAbandoned = () => {
         relay.abandoned += 1;
       };
+      if (turnsAwayOtherClients({ url, model, headers, response })) return;
       if (holdsOrLacksList({ url, isNoList, model, response, onAbandoned })) return;
       if (request.method === "GET" && url === "/good/v1/models") {
         send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
@@ -136,6 +138,31 @@ export async function startFakeRelay(): Promise<FakeRelay> {
         server.close(() => resolve());
       }),
   });
+}
+
+export const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
+export const CODEX_ONLY = "This account only allows Codex official clients";
+
+/** 只放行某个 CLI 的分组：cc-only-* 不是 Claude Code、codex-only-* 不是 Codex 发的回 403。返回 true 即已回。 */
+function turnsAwayOtherClients(input: {
+  url: string;
+  model: string | undefined;
+  headers: IncomingHttpHeaders;
+  response: ServerResponse;
+}): boolean {
+  const { model, headers } = input;
+  const isChatRequest = input.url.startsWith("/good/") && !input.url.endsWith("/models");
+  if (!isChatRequest || model === undefined) return false;
+  const isClaudeCode = String(headers["user-agent"] ?? "").startsWith("claude-cli/");
+  if (model.startsWith("cc-only-") && !isClaudeCode) {
+    send(input.response, 403, { error: { message: CLAUDE_CODE_ONLY } });
+    return true;
+  }
+  if (model.startsWith("codex-only-") && headers.originator !== "codex_cli_rs") {
+    send(input.response, 403, { error: { message: CODEX_ONLY } });
+    return true;
+  }
+  return false;
 }
 
 /** /good 上的对话请求：bad-* 回 404，slow-* 不回。返回 true 即已处理（或故意不回）。 */
@@ -191,6 +218,35 @@ function answerAzure(input: {
     return;
   }
   send(input.response, 404, { error: { code: "404", message: "Resource not found" } });
+}
+
+/** 假中转站记下的一条请求。 */
+function recordOf(input: {
+  request: IncomingMessage;
+  text: string;
+}): FakeRelay["requests"][number] {
+  const { request, text } = input;
+  const { headers } = request;
+  return {
+    method: request.method ?? "",
+    url: request.url ?? "",
+    authorization: headers.authorization,
+    apiKey: typeof headers["api-key"] === "string" ? headers["api-key"] : undefined,
+    model: modelOf(text),
+    userAgent: headers["user-agent"],
+    originator: typeof headers.originator === "string" ? headers.originator : undefined,
+    stream: streamOf(text),
+  };
+}
+
+/** 请求体要不要流式回答（读不出的按不要）。 */
+function streamOf(body: string): boolean {
+  try {
+    return (JSON.parse(body) as { stream?: unknown }).stream === true;
+  } catch (error) {
+    if (error instanceof SyntaxError) return false;
+    throw error;
+  }
 }
 
 function modelOf(body: string): string | undefined {
@@ -393,6 +449,29 @@ async function forgetTakeovers(): Promise<void> {
 }
 
 const TakeoverRecordSchema = z.object({ takeover: z.unknown() });
+
+export const CLAUDE_CODE_SAMPLE = {
+  "user-agent": "claude-cli/2.1.302 (external, cli)",
+  "x-app": "cli",
+  "anthropic-version": "2023-06-01",
+};
+
+/**
+ * 中转站记下的 CLI 请求头样本（按 Claude Code / Codex 的样子测用）：给了就写成 daemon 记下的样子，null 即删掉。
+ * 记下样本本身由 daemon 的 e2e 经中转站测，这里只摆好状态。
+ */
+export async function setCliHeaderSamples(
+  samples: { claude_code?: Record<string, string> } | null,
+): Promise<void> {
+  const home = process.env.E2E_PASEO_HOME;
+  if (!home) throw new Error("E2E_PASEO_HOME is not set (expected from the Playwright worker).");
+  const filePath = path.join(home, "api-endpoints", "cli-header-samples.json");
+  if (samples === null) {
+    await rm(filePath, { force: true });
+    return;
+  }
+  await writeFile(filePath, JSON.stringify(samples, null, 2), { mode: 0o600 });
+}
 
 /**
  * 像 Claude Code 那样经 daemon 中转站发一条对话，让选中这个模型的接口按上游的回复进入冷却或需要检查。

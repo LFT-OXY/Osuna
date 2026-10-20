@@ -2790,6 +2790,10 @@ export const ja: TranslationResources = {
           batchTimeout: "このモデルが応答する前にテストの時間が切れました",
           unreachable: "このアドレスに接続できません",
           noFormat: "このエンドポイントには、このモデルを提供する形式の URL がありません",
+          testAsClaudeCode: "Claude Code としてテスト",
+          testAsCodex: "Codex としてテスト",
+          claudeCodeSampleMissing:
+            "まだ Claude Code のリクエストが内蔵ゲートウェイを通っていません。「サードパーティ API を使う」をオンにして Claude Code を一度使ってから、もう一度テストしてください。",
           noAnswer: "応答なし",
           took: {
             ms: "{{value}} ミリ秒",

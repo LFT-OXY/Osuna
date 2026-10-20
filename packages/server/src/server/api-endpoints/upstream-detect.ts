@@ -18,6 +18,8 @@ import {
 import { keyHeaderValues, type KeyHeaders } from "./gateway/refusals.js";
 import { templateKeyHeaders } from "./templates.js";
 import { asCompletionTokens, takesCompletionTokens } from "./gateway/template-rewrites.js";
+import type { CliHeaderSample, CliTestClient } from "./store.js";
+import { asCliBody } from "./test-as.js";
 
 /*
  * 自动检测请求格式（照 magpie internal/provider/detect.go）：从用户填的一个地址推出每种格式的地址，
@@ -205,6 +207,8 @@ export async function probeUpstreamFormat(input: {
   sentModel: string | null;
   // 测试模型时 Responses 也限回复 16（照 magpie tinyBody）；检测与测试连接不带，照 Codex 自己的样子。
   capsReply?: boolean;
+  // 按 CLI 的样子测（ADR 0013）：带这些请求头、流式发；缺省是 Osuna 自己的样子。
+  asCli?: { client: CliTestClient; headers: CliHeaderSample };
   signal: AbortSignal;
   timeoutMs: number;
 }): Promise<ApiEndpointFormatDetection> {
@@ -228,30 +232,20 @@ export async function probeUpstreamFormat(input: {
   }
   const probe = FORMAT_PROBES[format];
   const url = `${baseUrl}${probe.path}`;
-  const { templateId } = input;
-  const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
-  // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
-  const asked = probe.body(input.sentModel ?? input.modelId);
-  if (input.capsReply === true && format === "openai_responses") asked.max_output_tokens = 16;
-  const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
-  const body = completionTokens ? asCompletionTokens(asked) : asked;
+  const request = probeRequest({ ...input, modelId: input.modelId, probe });
   const timeout = AbortSignal.timeout(input.timeoutMs);
   let status: number;
-  let text: string;
+  let reply: ProbeReply;
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        ...probe.headers,
-        ...keyHeaderValues({ apiKey: input.apiKey, keys }),
-      },
-      body: JSON.stringify(body),
+      headers: request.headers,
+      body: JSON.stringify(request.body),
       signal: AbortSignal.any([input.signal, timeout]),
     });
     status = response.status;
-    text = await response.text();
+    const isStreamed = input.asCli !== undefined && isSuccess(status);
+    reply = await readProbeReply({ response, isStreamed });
   } catch (error) {
     if (timeout.aborted && !input.signal.aborted) {
       const seconds = Math.round(input.timeoutMs / 1000);
@@ -260,13 +254,147 @@ export async function probeUpstreamFormat(input: {
     return result("not_detected", null, `POST ${url}: ${describeNetworkError(error)}`);
   }
   const prefix = `POST ${url}: HTTP ${status}`;
-  if (status >= 200 && status < 300) {
+  if (reply.kind === "streamed") {
+    if (reply.failure === null) return result("ok", status, null);
+    return result("not_detected", status, `${prefix}: ${reply.failure}`);
+  }
+  const { text } = reply;
+  if (isSuccess(status)) {
     if (probe.matches(parseJson(text))) return result("ok", status, null);
     return result("not_detected", status, `${prefix}: not a ${format} response`);
   }
   const detail = extractErrorDetail(text, input.apiKey);
   const message = detail ? `${prefix}: ${detail}` : prefix;
   return result(status === 401 || status === 403 ? "auth_failed" : "not_detected", status, message);
+}
+
+function isSuccess(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+/** 发出去的请求体与请求头。 */
+function probeRequest(input: {
+  format: ApiEndpointRequestFormat;
+  probe: FormatProbe;
+  apiKey: string | null;
+  templateId: string | undefined;
+  modelId: string;
+  sentModel: string | null;
+  capsReply?: boolean;
+  asCli?: { client: CliTestClient; headers: CliHeaderSample };
+}): { body: Record<string, unknown>; headers: Record<string, string> } {
+  const { format, probe, templateId, asCli } = input;
+  const keys = templateKeyHeaders({ templateId, format }) ?? probe.keys;
+  const asked = probe.body(input.sentModel ?? input.modelId);
+  if (input.capsReply === true && format === "openai_responses") asked.max_output_tokens = 16;
+  // Bedrock、Azure 的 Chat 不收 max_tokens（照 magpie tinyBody）。
+  const completionTokens = format === "openai_chat" && takesCompletionTokens(templateId);
+  const capped = completionTokens ? asCompletionTokens(asked) : asked;
+  let body = capped;
+  // 按 CLI 的样子测：它的请求头在 Osuna 的之上，认证头仍是这家的 key（magpie clientHeaders）。
+  let cliHeaders: Record<string, string> = {};
+  if (asCli) {
+    body = asCliBody({ client: asCli.client, format, body: capped });
+    cliHeaders = { ...asCli.headers, accept: "application/json, text/event-stream" };
+  }
+  const headers = {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...probe.headers,
+    ...cliHeaders,
+    ...keyHeaderValues({ apiKey: input.apiKey, keys }),
+  };
+  return { body, headers };
+}
+
+/** 读回来的：流式的读到第一段内容或错误为止（failure 为 null 即答上了），其余整份读成文字。 */
+type ProbeReply = { kind: "streamed"; failure: string | null } | { kind: "whole"; text: string };
+
+async function readProbeReply(input: {
+  response: Response;
+  isStreamed: boolean;
+}): Promise<ProbeReply> {
+  if (input.isStreamed) return { kind: "streamed", failure: await streamAnswer(input.response) };
+  return { kind: "whole", text: await input.response.text() };
+}
+
+// 流式回答最多读这么多字节（magpie streamAnswer 的 1 MB）。
+const STREAM_READ_LIMIT = 1 << 20;
+
+/** 这一行事件说明模型开口了：一段文字、一段思考或一次工具调用（Chat、Responses、Anthropic 的事件）。 */
+function saysSomething(event: Record<string, unknown>): boolean {
+  const type = typeof event.type === "string" ? event.type : "";
+  const isContentEvent =
+    type === "content_block_start" ||
+    type === "content_block_delta" ||
+    type === "response.output_item.added" ||
+    (type.startsWith("response.") && type.endsWith(".delta"));
+  if (isContentEvent) return true;
+  const choices = Array.isArray(event.choices) ? event.choices : [];
+  return choices.some((choice) => {
+    const delta = isRecord(choice) && isRecord(choice.delta) ? choice.delta : {};
+    return ["content", "reasoning", "reasoning_content", "tool_calls"].some((key) => {
+      const value = delta[key];
+      return value !== undefined && value !== null && value !== "";
+    });
+  });
+}
+
+/** 这一行事件是流里的错误时，它的原因；不是为 null。 */
+function streamError(event: Record<string, unknown>, data: string): string | null {
+  const hasError = event.error !== undefined && event.error !== null;
+  if (event.type === "error" || hasError)
+    return extractErrorDetail(data, null) || "error in the stream";
+  if (event.type !== "response.failed") return null;
+  const response = isRecord(event.response) ? event.response : {};
+  const failed = response.error;
+  if (failed === undefined || failed === null) return "response failed";
+  return extractErrorDetail(JSON.stringify({ error: failed }), null) || "response failed";
+}
+
+/**
+ * 流式请求先回 200，模型还可能在流里失败：读到它第一次开口或报错为止（magpie streamAnswer）。
+ * 流读完了两样都没有也算答上，和整份回答的 200 一样。返回失败的原因，答上为 null。
+ */
+async function streamAnswer(response: Response): Promise<string | null> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return null;
+  const decoder = new TextDecoder();
+  let pending = "";
+  let read = 0;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) return null;
+      read += chunk.value.byteLength;
+      pending += decoder.decode(chunk.value, { stream: true });
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        const verdict = lineVerdict(line);
+        if (verdict?.kind === "answered") return null;
+        if (verdict?.kind === "failed") return verdict.reason;
+      }
+      if (read >= STREAM_READ_LIMIT) return null;
+    }
+  } finally {
+    await reader.cancel();
+  }
+}
+
+type StreamVerdict = { kind: "answered" } | { kind: "failed"; reason: string };
+
+/** 一行流说明了什么；还说不准为 null。 */
+function lineVerdict(line: string): StreamVerdict | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) return null;
+  const data = trimmed.slice("data:".length).trim();
+  if (data === "" || data === "[DONE]") return null;
+  const event = parseJson(data);
+  if (!isRecord(event)) return null;
+  const reason = streamError(event, data);
+  if (reason !== null) return { kind: "failed", reason };
+  return saysSomething(event) ? { kind: "answered" } : null;
 }
 
 // OpenAI 自家模型名的前缀（magpie internal/agent/icons.go 的 gpt 家族）。

@@ -34,6 +34,7 @@ import { isRecord, parseJson } from "../upstream-http.js";
 import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { judgeCaller } from "./callers.js";
+import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
 import type { GatewaySightings } from "../cli-bypass.js";
 import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
@@ -206,6 +207,7 @@ export function createApiEndpointGateway(options: {
     keepAliveQuietMs: options.overrides?.gatewayKeepAliveQuietMs ?? KEEPALIVE_QUIET_MOST_MS,
     bodyLimitBytes: options.overrides?.gatewayBodyLimitBytes ?? MAX_REQUEST_BODY_BYTES,
     ownUserAgent: `Osuna/${options.daemonVersion}`,
+    cliSamples: new CliHeaderSamples({ store, logger }),
   };
   const chatgpt: ChatGptBackend = {
     bases: {
@@ -600,6 +602,8 @@ interface Failover {
   bodyLimitBytes: number;
   // CLI 没带 User-Agent 时发给上游的。
   ownUserAgent: string;
+  // 「按 Claude Code / Codex 的样子测」用的 CLI 请求头样本（ADR 0013）。
+  cliSamples: CliHeaderSamples;
 }
 
 /** 读出 Agent 的请求体与模型名，按模型名找到候选；读不了或找不到时已按 Agent 协议回了错误，返回 null。 */
@@ -1001,6 +1005,10 @@ async function handleAgentRequest(input: {
 
   const routed = await routeAgentRequest(input);
   if (!routed) return;
+  // Claude Code 的请求不管最后去哪家都记下它的头（magpie：去订阅、Chat 或翻译过的那家的请求都不带它的头）。
+  const isClaudeCodeTurn = input.format === "anthropic_messages" && isFromClaudeCode(req.headers);
+  if (isClaudeCodeTurn)
+    input.failover.cliSamples.saw({ client: "claude_code", headers: req.headers });
   const { model, candidates, fixedEffort } = routed;
   const body = withAgentEffort({ body: routed.body, agent: input.agent, fixedEffort });
   const parsed = body === routed.body ? routed.parsed : parseJson(body.toString("utf8"));
@@ -1612,6 +1620,7 @@ function shapeRefusals(input: EndpointAsk): ShapeRefusals {
 /** 问一次：这家用 Agent 自己的格式就直通，否则翻译。 */
 function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
   const { candidate } = input;
+  noteCodexSample(input);
   const refused = shapeRefusals(input);
   const target = {
     res: input.res,
@@ -1646,6 +1655,16 @@ function askOnce(input: EndpointAsk): Promise<AttemptOutcome> {
     facts: input.failover.modelFacts(candidate.endpoint, candidate.upstreamModel),
     retryPauseMs: input.failover.retryPauseMs,
   });
+}
+
+/** Codex 的请求发往一家的 Responses 或 Chat 地址时，记下它表明身份的头（magpie：只放行 Codex 的中转服务认这些头）。 */
+function noteCodexSample(input: EndpointAsk): void {
+  const headers = input.forwardedHeaders ?? input.req.headers;
+  const toOpenAi =
+    input.candidate.format === "openai_responses" || input.candidate.format === "openai_chat";
+  if (toOpenAi && isFromCodex(headers)) {
+    input.failover.cliSamples.saw({ client: "codex", headers });
+  }
 }
 
 /**

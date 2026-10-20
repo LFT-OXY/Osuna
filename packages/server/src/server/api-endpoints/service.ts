@@ -247,9 +247,24 @@ const CLAUDE_START_THINKING = "high";
 type CliPickInput = Omit<DefaultModelPickInput, "state" | "provider">;
 import { detectUpstreamFormats, pickProbeModel, probeUpstreamFormat } from "./upstream-detect.js";
 import {
+  CODEX_CLIENT_VERSION,
+  cachedCodexVersion,
+  codexSignHeaders,
+  newerCodexVersion,
+  readCodexSystem,
+} from "./cli-header-samples.js";
+import {
+  cliTestAddress,
+  cliTestRefusal,
+  cliTestsOffered,
+  CLI_SAMPLE_MISSING,
+  isCliTestClient,
+} from "./test-as.js";
+import {
   MODEL_TEST_DEFAULTS,
   runModelTests,
   type ModelTestAttempt,
+  type ModelTestIdentity,
   type ModelTestLimits,
   type ModelTestPlan,
   type ModelTestProgress,
@@ -3351,10 +3366,15 @@ export class ApiEndpointService {
     const listed = findEndpoint(this.retiredModels.listed(state), endpoint.id) ?? endpoint;
     const typed = request.modelId?.trim();
     const modelIds = typed ? [typed] : listed.models.map((model) => model.id);
+    const identity = await this.testIdentity({ endpoint, method });
+    // 按 CLI 的样子测只问那个 CLI 的请求去的格式，不管「只用这种格式」（magpie clientProto）。
+    let cliAddress: ModelTestAttempt | null = null;
+    if (isCliTestClient(method)) cliAddress = cliTestAddress({ endpoint, client: method });
     const plans = modelIds.map((modelId): ModelTestPlan => {
       const sentModel = upstreamModelName({ settings: endpoint.modelSettings, modelId });
       const disabledBy = endpointDisabledBy({ state, endpoint, model: modelId });
-      const attempts = testAttempts({ endpoint, modelId });
+      let attempts = testAttempts({ endpoint, modelId });
+      if (cliAddress !== null) attempts = [cliAddress];
       return { modelId, sentModel, disabledBy, attempts };
     });
     input.onStarted(modelIds);
@@ -3364,11 +3384,35 @@ export class ApiEndpointService {
       plans,
       apiKey,
       templateId: endpoint.templateId,
+      identity,
       limits: this.modelTestLimits,
       clock,
       signal: input.signal,
       onResult: input.onResult,
     });
+  }
+
+  /**
+   * 以谁的样子测（ADR 0013）：plain 是 Osuna 自己；按 CLI 测时这家不提供就拒收，Claude Code 没有样本时每个模型记成
+   * cli_sample_missing，Codex 没有样本时用 ChatGPT 账号那套 Codex 请求头（magpie clientHeaders）。
+   */
+  private async testIdentity(input: {
+    endpoint: StoredApiEndpoint;
+    method: string;
+  }): Promise<ModelTestIdentity> {
+    const { endpoint, method } = input;
+    if (!isCliTestClient(method)) return { kind: "own" };
+    const refusal = cliTestRefusal({ endpoint, client: method });
+    if (refusal !== null) {
+      throw new ApiEndpointRequestError({ code: "invalid_input", message: refusal });
+    }
+    const sample = this.store.readCliHeaderSample(method);
+    if (sample !== null) return { kind: "cli", client: method, headers: sample };
+    if (method === "claude_code") return { kind: "refused", error: CLI_SAMPLE_MISSING };
+    const cached = readCodexModelsCache(path.dirname(this.resolveCodexConfigPath()));
+    const version = newerCodexVersion(CODEX_CLIENT_VERSION, cachedCodexVersion(cached));
+    const headers = codexSignHeaders({ version, system: await readCodexSystem() });
+    return { kind: "cli", client: method, headers };
   }
 
   /**
@@ -3987,6 +4031,10 @@ export class ApiEndpointService {
       ...(endpoint.icon !== undefined ? { icon: endpoint.icon } : {}),
       ...(endpoint.modelSettings !== undefined ? { modelSettings: endpoint.modelSettings } : {}),
       modelFacts: this.wireModelFacts(endpoint),
+      testsAs: cliTestsOffered({
+        endpoint,
+        hasSample: (client) => this.store.readCliHeaderSample(client) !== null,
+      }),
     };
   }
 

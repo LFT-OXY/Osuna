@@ -177,6 +177,17 @@ export const ApiEndpointModelCatalogSchema = z.object({
 });
 export type ApiEndpointModelCatalog = z.infer<typeof ApiEndpointModelCatalogSchema>;
 
+/**
+ * 这家能用的一种 CLI 测法（ADR 0013）：`method` 是 test_models 的测法（claude_code、codex）。只列这家提供的：
+ * 按 Claude Code 测只给有 Anthropic 地址的中转服务（模板分组是 relay，或「自定义」加的），按 Codex 测给有 Responses 或 Chat 地址的。
+ * `unavailable` 为 null 即现在就能测；否则是现在测不了的原因（cli_sample_missing：还没有 Claude Code 请求经过中转站）。
+ */
+export const ApiEndpointTestAsSchema = z.object({
+  method: z.string(),
+  unavailable: z.object({ code: z.string(), message: z.string() }).nullable(),
+});
+export type ApiEndpointTestAs = z.infer<typeof ApiEndpointTestAsSchema>;
+
 export const ApiEndpointSchema = z.object({
   id: z.string(),
   provider: z.string(),
@@ -218,6 +229,8 @@ export const ApiEndpointSchema = z.object({
   modelSettings: ApiEndpointModelSettingsSchema.optional(),
   // 在服务的、上游清单里的与手动添加的模型各自自动取到的资料，按模型 id；老 daemon 不发。
   modelFacts: z.record(z.string(), ApiEndpointModelFactsSchema).optional(),
+  // 「按 Claude Code / Codex 的样子测」这家提供哪几种；老 daemon 不发，即都不提供。
+  testsAs: z.array(ApiEndpointTestAsSchema).optional(),
 });
 export type ApiEndpoint = z.infer<typeof ApiEndpointSchema>;
 
@@ -1084,11 +1097,13 @@ export type ApiEndpointTestConnectionResponse = z.infer<
 /**
  * 测试模型（Test models，照 magpie TestModels）：daemon 给这家的每个在服务的模型发一条最小请求（「hi」，回复上限 16），
  * 并发 4 个、单个 20 秒、整批 3 分钟。给了 `modelId` 只测这一个（可以不在服务）。`method` 是测法：缺省 plain，
- * 按这家的地址依次试格式（设了「只用这种格式」的只试那种）；以后加的测法老 daemon 拒收。
+ * 按这家的地址依次试格式（设了「只用这种格式」的只试那种）；claude_code、codex 带中转站记下的那个 CLI 的请求头、
+ * 以流式发到那个 CLI 的格式（ADR 0013，见 ApiEndpointTestAsSchema）；这家不提供的测法拒收（invalid_input），
+ * 还没有 Claude Code 样本时每个模型记成 cli_sample_missing、不发请求。以后加的测法老 daemon 拒收。
  * 开测前推一条 test_models.started（要测哪些），每测完一个推一条 test_models.progress，最后回 test_models.response 带全部结果。用 cancel 按 requestId 取消：
  * 不再发新请求，回应带已测完的结果与 cancelled。只有声明了 apiEndpointManagement 的 daemon 认它。
  */
-export const API_ENDPOINT_MODEL_TEST_METHODS = ["plain"] as const;
+export const API_ENDPOINT_MODEL_TEST_METHODS = ["plain", "claude_code", "codex"] as const;
 export type ApiEndpointModelTestMethod = (typeof API_ENDPOINT_MODEL_TEST_METHODS)[number];
 
 export const ApiEndpointTestModelsRequestSchema = z.object({
@@ -1104,7 +1119,8 @@ export type ApiEndpointTestModelsRequest = z.infer<typeof ApiEndpointTestModelsR
  * 一个模型的测试结果。`format` 是答上（或最后失败）的请求格式，没发请求（已禁用、没有能问的地址）时为 null；
  * `status` 是 HTTP 状态码，没收到响应时为 null；`durationMs` 是这个模型花的时间。
  * `error.code`：model_disabled（params：model、pattern）、auth_failed、upstream_error、upstream_unreachable、
- * upstream_timeout（单个超时，params：seconds）、batch_timeout（整批超时，没来得及测或被打断）、no_format（这家没有能问它的地址）。
+ * upstream_timeout（单个超时，params：seconds）、batch_timeout（整批超时，没来得及测或被打断）、no_format（这家没有能问它的地址）、
+ * cli_sample_missing（按 Claude Code 测，但还没有 Claude Code 请求经过中转站）。
  * `error.message` 是原因本身（上游的原文），不带请求地址与状态码。
  */
 export const ApiEndpointModelTestResultSchema = z.object({

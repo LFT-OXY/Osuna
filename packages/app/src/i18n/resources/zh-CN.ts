@@ -2784,6 +2784,10 @@ export const zhCN: TranslationResources = {
           batchTimeout: "整批测试到时间了，这个模型还没回应",
           unreachable: "连不上这个地址",
           noFormat: "这家没有能问这个模型的格式地址",
+          testAsClaudeCode: "按 Claude Code 的样子测",
+          testAsCodex: "按 Codex 的样子测",
+          claudeCodeSampleMissing:
+            "还没有 Claude Code 的请求经过内置中转站。先打开「使用第三方接口」用 Claude Code 跑一次，再来测试。",
           noAnswer: "没有回应",
           took: {
             ms: "{{value}} 毫秒",

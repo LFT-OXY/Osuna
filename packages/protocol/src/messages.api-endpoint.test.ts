@@ -1416,6 +1416,36 @@ describe("API endpoint model settings (apiEndpointManagement)", () => {
 });
 
 describe("provider.api_endpoint.test_models", () => {
+  it("parses the CLI test methods an endpoint offers, with methods and reasons the client has never seen", () => {
+    const testsAs = [
+      { method: "codex", unavailable: null },
+      {
+        method: "claude_code",
+        unavailable: { code: "cli_sample_missing", message: "No Claude Code request yet" },
+      },
+      { method: "a_future_cli", unavailable: { code: "a_future_code", message: "Not yet" } },
+    ];
+    const response = {
+      type: "provider.api_endpoint.list.response" as const,
+      payload: {
+        requestId: "req-t0",
+        provider: "claude",
+        endpoints: [{ ...ENDPOINT, testsAs }],
+        activeEndpointId: null,
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const request = {
+      type: "provider.api_endpoint.test_models.request" as const,
+      requestId: "req-t0",
+      endpointId: "ep_1",
+      modelId: "claude-sonnet-4-5",
+      method: "claude_code",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  });
+
   it("parses a whole-endpoint request and a single-model request with a method", () => {
     const whole = {
       type: "provider.api_endpoint.test_models.request" as const,

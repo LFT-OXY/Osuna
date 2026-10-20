@@ -223,6 +223,8 @@ function resolveItemLabel(input: {
 
 export interface MenuItemProps {
   description?: string;
+  /** How many lines the description may take before it is cut; a reason the row can't be used needs all of it. */
+  descriptionLines?: number;
   onSelect?: () => void;
   disabled?: boolean;
   muted?: boolean;
@@ -253,9 +255,18 @@ export interface MenuItemProps {
   tooltip?: string;
 }
 
+function ItemDescription({ text, lines = 2 }: { text: string; lines: number | undefined }) {
+  return (
+    <Text numberOfLines={lines} style={styles.itemDescription}>
+      {text}
+    </Text>
+  );
+}
+
 export function MenuItem({
   children,
   description,
+  descriptionLines,
   onSelect,
   disabled,
   muted = false,
@@ -352,9 +363,7 @@ export function MenuItem({
           {label}
         </Text>
         {description && !isPending && !isSuccess ? (
-          <Text numberOfLines={2} style={styles.itemDescription}>
-            {description}
-          </Text>
+          <ItemDescription text={description} lines={descriptionLines} />
         ) : null}
       </View>
       {trailingContent ? <View style={styles.trailingSlot}>{trailingContent}</View> : null}

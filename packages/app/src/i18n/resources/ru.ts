@@ -2799,6 +2799,10 @@ export const ru: TranslationResources = {
           batchTimeout: "Время проверки кончилось раньше, чем ответила эта модель",
           unreachable: "Не удалось подключиться к этому адресу",
           noFormat: "У этого эндпоинта нет URL в формате, который обслуживает эту модель",
+          testAsClaudeCode: "Проверить как Claude Code",
+          testAsCodex: "Проверить как Codex",
+          claudeCodeSampleMissing:
+            "Через встроенный шлюз ещё не проходил ни один запрос Claude Code. Запустите Claude Code один раз с включённым «Использовать сторонние API», затем проверьте снова.",
           noAnswer: "Не ответила",
           took: {
             ms: "{{value}} мс",

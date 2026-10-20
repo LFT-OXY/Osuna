@@ -2776,6 +2776,10 @@ export const ko: TranslationResources = {
           batchTimeout: "이 모델이 응답하기 전에 테스트 시간이 끝났습니다",
           unreachable: "이 주소에 연결할 수 없습니다",
           noFormat: "이 엔드포인트에는 이 모델을 제공하는 형식의 URL이 없습니다",
+          testAsClaudeCode: "Claude Code로 테스트",
+          testAsCodex: "Codex로 테스트",
+          claudeCodeSampleMissing:
+            '아직 Claude Code 요청이 내장 게이트웨이를 거친 적이 없습니다. "서드파티 API 사용"을 켠 상태로 Claude Code를 한 번 실행한 뒤 다시 테스트하세요.',
           noAnswer: "응답 없음",
           took: {
             ms: "{{value}}밀리초",

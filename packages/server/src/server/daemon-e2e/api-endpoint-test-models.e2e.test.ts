@@ -1,8 +1,13 @@
 // 用例取自 magpie（https://github.com/yetone/magpie，internal/provider/test.go 的 TestModels、testOne）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +20,8 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 /*
  * 测试模型（工单 19，prd 第 26–28 条）：真实 daemon + 本机假上游，绝不连真实中转站。
  * 假上游按模型名答：slow-* 一直不答，bad-* 回 404（bad-then-slow-* 在 Chat 上不答），anthropic-refused-* 在 Anthropic 上回 400、
- * Chat 上答，其余都答。单个与整批的时限用手动计时器，用例自己决定何时到点。
+ * Chat 上答，其余都答；cc-only-* 只答 User-Agent 是 Claude Code 的，codex-only-* 只答 originator 是 Codex 的
+ * （照「只允许某 CLI」的分组）。请求要流式时按格式回事件流。单个与整批的时限用手动计时器，用例自己决定何时到点。
  */
 
 const MODEL_TIMEOUT_MS = 60_000;
@@ -62,6 +68,7 @@ interface UpstreamRequest {
   model: string;
   body: Record<string, unknown>;
   authorization: string | undefined;
+  headers: IncomingHttpHeaders;
 }
 
 interface FakeUpstream {
@@ -91,6 +98,7 @@ async function startUpstream(): Promise<FakeUpstream> {
         model,
         body,
         authorization: request.headers.authorization,
+        headers: request.headers,
       });
       upstream.inFlight += 1;
       upstream.maxInFlight = Math.max(upstream.maxInFlight, upstream.inFlight);
@@ -101,7 +109,10 @@ async function startUpstream(): Promise<FakeUpstream> {
       const hangsHere = model.startsWith("slow-") || (model.startsWith("bad-then-slow-") && isChat);
       if (hangsHere) return;
       // 稍等再答，好让并发的请求叠在一起。
-      setTimeout(() => answer({ path: request.url ?? "", model, response }), 30);
+      setTimeout(
+        () => answer({ path: request.url ?? "", model, headers: request.headers, body, response }),
+        30,
+      );
     });
   });
   servers.push(server);
@@ -110,8 +121,46 @@ async function startUpstream(): Promise<FakeUpstream> {
   return upstream;
 }
 
-function answer(input: { path: string; model: string; response: ServerResponse }): void {
-  const { path: url, model, response } = input;
+// 照 sub2api 一类只放行某 CLI 的分组的说法。
+const CLAUDE_CODE_ONLY = "This group only allows Claude Code clients";
+const CODEX_ONLY = "This account only allows Codex official clients";
+
+/** 流式回答：Anthropic、Responses、Chat 各自的第一段文字。 */
+const STREAMED_ANSWER: Record<string, string> = {
+  "/v1/messages": `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: "hi" } })}\n\n`,
+  "/responses": `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "hi" })}\n\n`,
+  "/chat/completions": `data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }] })}\n\ndata: [DONE]\n\n`,
+};
+
+function answer(input: {
+  path: string;
+  model: string;
+  headers: IncomingHttpHeaders;
+  body: Record<string, unknown>;
+  response: ServerResponse;
+}): void {
+  const { path: url, model, response, headers } = input;
+  const isClaudeCode = String(headers["user-agent"] ?? "").startsWith("claude-cli/");
+  if (model.startsWith("cc-only-") && !isClaudeCode) {
+    sendJson(response, 403, { error: { message: CLAUDE_CODE_ONLY } });
+    return;
+  }
+  if (model.startsWith("codex-only-") && headers.originator !== "codex_cli_rs") {
+    sendJson(response, 403, { error: { message: CODEX_ONLY } });
+    return;
+  }
+  if (model.startsWith("stream-fails-") && input.body.stream === true) {
+    const failure = JSON.stringify({ type: "error", error: { message: "Overloaded mid-stream" } });
+    response
+      .writeHead(200, { "content-type": "text/event-stream" })
+      .end(`event: error\ndata: ${failure}\n\n`);
+    return;
+  }
+  const streamed = Object.entries(STREAMED_ANSWER).find(([suffix]) => url.endsWith(suffix));
+  if (input.body.stream === true && streamed) {
+    response.writeHead(200, { "content-type": "text/event-stream" }).end(streamed[1]);
+    return;
+  }
   if (model.startsWith("bad-")) {
     sendJson(response, 404, { error: { message: `The model ${model} does not exist` } });
     return;
@@ -139,6 +188,7 @@ interface EndpointInput {
   models: string[];
   baseUrls: { format: string; url: string }[];
   modelSettings?: Record<string, unknown>;
+  templateId?: string;
 }
 
 async function start(input: {
@@ -162,6 +212,7 @@ async function start(input: {
           baseUrls: shape.baseUrls,
           models: shape.models.map((id) => ({ id })),
           ...(shape.modelSettings ? { modelSettings: shape.modelSettings } : {}),
+          ...(shape.templateId ? { templateId: shape.templateId } : {}),
           enabled: true,
           createdAt: "2026-10-01T00:00:00.000Z",
           updatedAt: "2026-10-01T00:00:00.000Z",
@@ -200,7 +251,13 @@ async function start(input: {
   clients.push(client);
   await client.connect();
   await client.fetchAgents({ subscribe: {} });
-  return { client, upstream, timers };
+  return {
+    client,
+    upstream,
+    timers,
+    endpointsDir,
+    gateway: `http://127.0.0.1:${daemon.port}/api-endpoint-gateway`,
+  };
 }
 
 /** Anthropic 与 Chat 两个地址，Anthropic 在前。 */
@@ -439,5 +496,269 @@ describe("test models", () => {
     });
     expect(method).toMatchObject({ results: [], error: { code: "invalid_input" } });
     expect(upstream.requests).toHaveLength(0);
+  });
+});
+
+const CLAUDE_CODE_UA = "claude-cli/2.1.302 (external, cli)";
+const CODEX_UA = "codex_cli_rs/0.162.3 (Mac OS 26.6.0; arm64) kitty";
+// 这些只属于会话、账号或签名，样本里一个都不能有。
+const SECRETS = [
+  "gateway-token-1",
+  "session-secret-1",
+  "beta-secret-1",
+  "cookie-secret-1",
+  "request-secret-1",
+];
+
+/** 经中转站发一条 Claude Code 的请求（带认证、会话、beta、Cookie 等不该进样本的头）。 */
+async function claudeCodeThroughGateway(input: { gateway: string; model: string }) {
+  const response = await fetch(`${input.gateway}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "user-agent": CLAUDE_CODE_UA,
+      "x-app": "cli",
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "anthropic-beta": "claude-code-20250219,beta-secret-1",
+      "x-stainless-lang": "js",
+      "x-claude-code-session-id": "session-secret-1",
+      authorization: "Bearer gateway-token-1",
+      "x-api-key": "gateway-token-1",
+      cookie: "id=cookie-secret-1",
+      "x-client-request-id": "request-secret-1",
+    },
+    body: JSON.stringify({
+      model: input.model,
+      max_tokens: 32,
+      messages: [{ role: "user", content: "a prompt that must never be kept" }],
+    }),
+  });
+  expect(response.status).toBe(200);
+  await response.text();
+}
+
+function testsAsOf(
+  endpoints: { id: string; testsAs?: { method: string; unavailable: unknown }[] }[],
+) {
+  return endpoints.find((endpoint) => endpoint.id === "ep_a")?.testsAs;
+}
+
+describe("test models as Claude Code or Codex", () => {
+  test("a Claude Code request through the gateway leaves a sample with no secrets, and testing as Claude Code sends it", async () => {
+    const { client, upstream, endpointsDir, gateway } = await start({
+      endpoint: twoFormats(["cc-only-sonnet"]),
+    });
+    await claudeCodeThroughGateway({ gateway, model: "cc-only-sonnet" });
+
+    const samplePath = path.join(endpointsDir, "cli-header-samples.json");
+    const text = await readFile(samplePath, "utf8");
+    for (const secret of SECRETS) expect(text).not.toContain(secret);
+    expect(text).not.toContain("a prompt that must never be kept");
+    expect(JSON.parse(text)).toEqual({
+      claude_code: {
+        "user-agent": CLAUDE_CODE_UA,
+        "x-app": "cli",
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "x-stainless-lang": "js",
+      },
+    });
+    if (process.platform !== "win32") expect((await stat(samplePath)).mode & 0o777).toBe(0o600);
+
+    const listed = await client.apiEndpointList("claude");
+    expect(testsAsOf(listed.endpoints)).toEqual([
+      { method: "codex", unavailable: null },
+      { method: "claude_code", unavailable: null },
+    ]);
+
+    // 普通的测试被只放行 Claude Code 的分组拒掉；按 Claude Code 的样子测能用。
+    const plain = await client.apiEndpointTestModels({ endpointId: "ep_a" });
+    expect(plain.results[0]).toMatchObject({ ok: false, status: 403 });
+    upstream.requests.length = 0;
+    const asClaudeCode = await client.apiEndpointTestModels({
+      endpointId: "ep_a",
+      modelId: "cc-only-sonnet",
+      method: "claude_code",
+    });
+    expect(asClaudeCode.error).toBeNull();
+    expect(asClaudeCode.results).toEqual([
+      {
+        modelId: "cc-only-sonnet",
+        ok: true,
+        format: "anthropic_messages",
+        status: 200,
+        durationMs: expect.any(Number),
+        error: null,
+      },
+    ]);
+    expect(upstream.requests).toHaveLength(1);
+    const [sent] = upstream.requests;
+    expect(sent?.path).toBe("/a/v1/messages");
+    expect(sent?.headers).toMatchObject({
+      "user-agent": CLAUDE_CODE_UA,
+      "x-app": "cli",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "x-stainless-lang": "js",
+      accept: "application/json, text/event-stream",
+      authorization: "Bearer sk-a",
+    });
+    expect(sent?.headers["anthropic-beta"]).toBeUndefined();
+    expect(sent?.headers["x-claude-code-session-id"]).toBeUndefined();
+    expect(sent?.body).toMatchObject({ model: "cc-only-sonnet", stream: true });
+  });
+
+  test("without a Claude Code sample, testing as Claude Code sends nothing and says to run Claude Code through the gateway first", async () => {
+    const { client, upstream } = await start({
+      endpoint: (url) => ({ ...twoFormats(["claude-sonnet-4-5"])(url), templateId: "openrouter" }),
+    });
+    const listed = await client.apiEndpointList("claude");
+    expect(testsAsOf(listed.endpoints)).toEqual([
+      { method: "codex", unavailable: null },
+      {
+        method: "claude_code",
+        unavailable: { code: "cli_sample_missing", message: expect.stringContaining("gateway") },
+      },
+    ]);
+    const response = await client.apiEndpointTestModels({
+      endpointId: "ep_a",
+      method: "claude_code",
+    });
+
+    expect(response.error).toBeNull();
+    expect(response.results).toEqual([
+      {
+        modelId: "claude-sonnet-4-5",
+        ok: false,
+        format: null,
+        status: null,
+        durationMs: 0,
+        error: {
+          code: "cli_sample_missing",
+          message:
+            "No Claude Code request has come through the gateway yet: run Claude Code with API endpoints once, then test again",
+        },
+      },
+    ]);
+    expect(upstream.requests).toHaveLength(0);
+  });
+
+  test("an endpoint from a vendor's template, or without an Anthropic URL, is not tested as Claude Code", async () => {
+    const vendor = await start({
+      endpoint: (url) => ({ ...twoFormats(["deepseek-chat"])(url), templateId: "deepseek" }),
+    });
+    const listed = await vendor.client.apiEndpointList("claude");
+    expect(testsAsOf(listed.endpoints)).toEqual([{ method: "codex", unavailable: null }]);
+    const refused = await vendor.client.apiEndpointTestModels({
+      endpointId: "ep_a",
+      method: "claude_code",
+    });
+    expect(refused).toMatchObject({ results: [], error: { code: "invalid_input" } });
+    expect(vendor.upstream.requests).toHaveLength(0);
+
+    const chatOnly = await start({
+      endpoint: (url) => ({
+        models: ["glm-5"],
+        baseUrls: [{ format: "openai_chat", url: `${url}/c/v1` }],
+      }),
+    });
+    const chatListed = await chatOnly.client.apiEndpointList("claude");
+    expect(testsAsOf(chatListed.endpoints)).toEqual([{ method: "codex", unavailable: null }]);
+  });
+
+  test("without a Codex sample, testing as Codex says it is Codex CLI, on Responses when the endpoint has it", async () => {
+    const { client, upstream } = await start({
+      endpoint: (url) => ({
+        models: ["codex-only-gpt"],
+        baseUrls: [
+          { format: "anthropic_messages", url: `${url}/a` },
+          { format: "openai_chat", url: `${url}/c/v1` },
+          { format: "openai_responses", url: `${url}/r/v1` },
+        ],
+        templateId: "deepseek",
+      }),
+    });
+    const plain = await client.apiEndpointTestModels({ endpointId: "ep_a" });
+    expect(plain.results.every((result) => !result.ok)).toBe(true);
+    upstream.requests.length = 0;
+    const response = await client.apiEndpointTestModels({ endpointId: "ep_a", method: "codex" });
+
+    expect(response.results[0]).toMatchObject({ ok: true, format: "openai_responses" });
+    expect(upstream.requests).toHaveLength(1);
+    const [sent] = upstream.requests;
+    expect(sent?.path).toBe("/r/v1/responses");
+    expect(sent?.headers.originator).toBe("codex_cli_rs");
+    expect(sent?.headers["user-agent"]).toMatch(/^codex_cli_rs\/\d+\.\d+\.\d+ \(.+; .+\) \S+$/);
+    expect(sent?.headers.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(sent?.headers.authorization).toBe("Bearer sk-a");
+    expect(sent?.body).toMatchObject({ stream: true, store: false });
+  });
+
+  test("a Codex request through the gateway leaves its sample, and testing as Codex goes to Chat when there is no Responses URL", async () => {
+    const { client, upstream, endpointsDir, gateway } = await start({
+      endpoint: (url) => ({
+        models: ["codex-only-glm", "stream-fails-glm", "ok-glm"],
+        baseUrls: [{ format: "openai_chat", url: `${url}/c/v1` }],
+      }),
+    });
+    // Codex 只走 /v1/responses；这家只有 Chat，中转站翻过去。
+    const response = await fetch(`${gateway}/v1/responses`, {
+      method: "POST",
+      headers: {
+        "user-agent": CODEX_UA,
+        originator: "codex_cli_rs",
+        version: "0.162.3",
+        "content-type": "application/json",
+        "session-id": "session-secret-1",
+        "thread-id": "session-secret-1",
+        "x-codex-turn-metadata": '{"turn_id":"session-secret-1"}',
+        "x-codex-beta-features": "collab",
+        authorization: "Bearer gateway-token-1",
+      },
+      body: JSON.stringify({
+        model: "ok-glm",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "a prompt that must never be kept" }],
+          },
+        ],
+      }),
+    });
+    expect(response.status).toBe(200);
+    await response.text();
+    const text = await readFile(path.join(endpointsDir, "cli-header-samples.json"), "utf8");
+    for (const secret of SECRETS) expect(text).not.toContain(secret);
+    expect(JSON.parse(text)).toEqual({
+      codex: {
+        "user-agent": CODEX_UA,
+        originator: "codex_cli_rs",
+        version: "0.162.3",
+        "x-codex-beta-features": "collab",
+      },
+    });
+
+    upstream.requests.length = 0;
+    const tested = await client.apiEndpointTestModels({ endpointId: "ep_a", method: "codex" });
+    const results = byModel(tested.results);
+    expect(results["codex-only-glm"]).toMatchObject({ ok: true, format: "openai_chat" });
+    // 流里先报了错：照 magpie 读到第一段文字或错误为止，报的是那个错误。
+    expect(results["stream-fails-glm"]).toMatchObject({
+      ok: false,
+      format: "openai_chat",
+      status: 200,
+      error: { code: "upstream_error", message: "Overloaded mid-stream" },
+    });
+    const sent = upstream.requests.find((request) => request.model === "codex-only-glm");
+    expect(sent?.path).toBe("/c/v1/chat/completions");
+    expect(sent?.headers).toMatchObject({
+      "user-agent": CODEX_UA,
+      originator: "codex_cli_rs",
+      "x-codex-beta-features": "collab",
+    });
+    expect(sent?.headers["session-id"]).toBeUndefined();
+    expect(sent?.body).toMatchObject({ stream: true });
+    expect(sent?.body.store).toBeUndefined();
   });
 });

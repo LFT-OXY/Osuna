@@ -2827,6 +2827,10 @@ export const en = {
           batchTimeout: "The test ran out of time before this model answered",
           unreachable: "Couldn't reach this address",
           noFormat: "This endpoint has no URL in a format that serves this model",
+          testAsClaudeCode: "Test as Claude Code",
+          testAsCodex: "Test as Codex",
+          claudeCodeSampleMissing:
+            'No Claude Code request has come through the built-in gateway yet. Run Claude Code once with "Use API endpoints" on, then test again.',
           noAnswer: "Didn't answer",
           took: {
             ms: "{{value}} ms",

@@ -61,6 +61,7 @@ import { formatLabel } from "./model-settings-sheet";
 import type {
   ApiEndpointModelTestResult,
   ApiEndpointRequestFormat,
+  ApiEndpointTestAs,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { CatalogForgetState, ModelFetchState } from "./use-endpoint-detail";
 import type { ModelTestRun } from "./use-model-tests";
@@ -102,6 +103,9 @@ export interface ModelTestsControl {
   run: ModelTestRun;
   onTestAll: () => void;
   onTestOne: (modelId: string) => void;
+  // 「按 Claude Code / Codex 的样子测」：这家提供的测法（老主机为空），与测一个模型。
+  testsAs: ApiEndpointTestAs[];
+  onTestOneAs: (input: { modelId: string; method: string }) => void;
   onCancel: () => void;
   factsOf: (modelId: string) => { name: string | undefined; context: number | undefined };
 }
@@ -859,6 +863,8 @@ function ModelRow({
             modelId={entry.id}
             onOpenSettings={onOpenSettings}
             onTest={modelTests?.onTestOne ?? null}
+            testsAs={modelTests?.testsAs ?? []}
+            onTestAs={modelTests?.onTestOneAs ?? null}
             isTesting={modelTests?.run.status === "running"}
             formatPins={formatPins}
             pinned={pinned}
@@ -983,6 +989,8 @@ function failureCause(t: TFunction, result: ApiEndpointModelTestResult): string 
       return t(`${key}.batchTimeout`);
     case "no_format":
       return t(`${key}.noFormat`);
+    case "cli_sample_missing":
+      return t(`${key}.claudeCodeSampleMissing`);
     default:
       return error?.message || t(`${key}.noAnswer`);
   }
@@ -1058,6 +1066,8 @@ function ModelRowMenu({
   modelId,
   onOpenSettings,
   onTest,
+  testsAs,
+  onTestAs,
   isTesting,
   formatPins,
   pinned,
@@ -1066,6 +1076,8 @@ function ModelRowMenu({
   onOpenSettings: (modelId: string) => void;
   // 「测试这个」；老主机没有，为 null。
   onTest: ((modelId: string) => void) | null;
+  testsAs: ApiEndpointTestAs[];
+  onTestAs: ((input: { modelId: string; method: string }) => void) | null;
   isTesting: boolean;
   formatPins: ModelFormatPins | null;
   pinned: ModelFormatPin | null;
@@ -1105,6 +1117,20 @@ function ModelRowMenu({
     ];
   }, [formatPins, formatTitle, modelId, pinned]);
   const pinnedLabel = pinnedFormatLabel(t, pinned);
+  const testAsItems: ReactNode[] = [];
+  if (onTestAs !== null) {
+    for (const offered of testsAs) {
+      testAsItems.push(
+        <TestAsItem
+          key={offered.method}
+          modelId={modelId}
+          offered={offered}
+          isTesting={isTesting}
+          onTestAs={onTestAs}
+        />,
+      );
+    }
+  }
   return (
     <DropdownMenu>
       <RowActionsMenuTrigger
@@ -1129,6 +1155,7 @@ function ModelRowMenu({
             {t("settings.apiEndpoints.models.tests.testOne")}
           </DropdownMenuItem>
         ) : null}
+        {testAsItems}
         {pages ? (
           <DropdownMenuSubTrigger
             id={FORMAT_PAGE}
@@ -1140,6 +1167,67 @@ function ModelRowMenu({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// 测不了的原因整段写出来，不截断（最长的语言在窄窗口里也在这几行内）。
+const TEST_AS_REASON_LINES = 6;
+
+// 认得的 CLI 测法与它的菜单文字；新 daemon 多出来的测法不列。
+const TEST_AS_LABEL_KEYS: Record<string, string> = {
+  claude_code: "settings.apiEndpoints.models.tests.testAsClaudeCode",
+  codex: "settings.apiEndpoints.models.tests.testAsCodex",
+};
+
+/** 现在测不了的原因：认得的用界面语言说，否则照 daemon 的原文。 */
+function testAsUnavailableReason(input: {
+  t: TFunction;
+  unavailable: NonNullable<ApiEndpointTestAs["unavailable"]>;
+}): string {
+  const { t, unavailable } = input;
+  if (unavailable.code === "cli_sample_missing") {
+    return t("settings.apiEndpoints.models.tests.claudeCodeSampleMissing");
+  }
+  return unavailable.message;
+}
+
+/** 「按 Claude Code / Codex 的样子测」一项；测不了时点不了，下面写明原因（照 magpie 的行菜单）。 */
+function TestAsItem({
+  modelId,
+  offered,
+  isTesting,
+  onTestAs,
+}: {
+  modelId: string;
+  offered: ApiEndpointTestAs;
+  isTesting: boolean;
+  onTestAs: (input: { modelId: string; method: string }) => void;
+}) {
+  const { t } = useTranslation();
+  const { method, unavailable } = offered;
+  const handleSelect = useCallback(
+    () => onTestAs({ modelId, method }),
+    [method, modelId, onTestAs],
+  );
+  const leading = useMemo(
+    () => <ThemedGauge size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  const labelKey = TEST_AS_LABEL_KEYS[method];
+  if (labelKey === undefined) return null;
+  let description: string | undefined;
+  if (unavailable !== null) description = testAsUnavailableReason({ t, unavailable });
+  return (
+    <DropdownMenuItem
+      leading={leading}
+      onSelect={handleSelect}
+      disabled={isTesting || unavailable !== null}
+      description={description}
+      descriptionLines={TEST_AS_REASON_LINES}
+      testID={`api-endpoint-model-test-as-${method}-${modelId}`}
+    >
+      {t(labelKey)}
+    </DropdownMenuItem>
   );
 }
 

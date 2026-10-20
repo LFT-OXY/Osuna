@@ -2759,6 +2759,10 @@ export const ar: TranslationResources = {
           batchTimeout: "انتهى وقت الاختبار قبل أن يستجيب هذا النموذج",
           unreachable: "تعذّر الوصول إلى هذا العنوان",
           noFormat: "ليس لنقطة النهاية هذه عنوان بصيغة تخدم هذا النموذج",
+          testAsClaudeCode: "اختبار كـ Claude Code",
+          testAsCodex: "اختبار كـ Codex",
+          claudeCodeSampleMissing:
+            'لم يمر أي طلب من Claude Code عبر البوابة المدمجة بعد. شغّل Claude Code مرة واحدة مع تفعيل "استخدام واجهات API الخارجية"، ثم اختبر مرة أخرى.',
           noAnswer: "لم يستجب",
           took: {
             ms: "{{value}} مللي ثانية",

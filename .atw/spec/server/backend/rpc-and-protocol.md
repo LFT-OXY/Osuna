@@ -1467,7 +1467,9 @@ if (format !== null && input.endpointId) await this.keepCatalog(input.endpointId
 ### 2. Signatures
 
 - `provider.api_endpoint.test_models.request { requestId, endpointId, modelId?, method? }` → pushes `test_models.started { requestId, modelIds }`, then one `test_models.progress { requestId, result, done, total }` per finished model, then `test_models.response { requestId, results, error }`. Cancel with the existing `provider.api_endpoint.cancel` by `requestId`.
-- `method` is a loose string; `API_ENDPOINT_MODEL_TEST_METHODS = ["plain"]` today (ticket 20 adds the CLI-style methods). A daemon rejects a method it doesn't know with `invalid_input`.
+- `method` is a loose string; `API_ENDPOINT_MODEL_TEST_METHODS = ["plain", "claude_code", "codex"]`. A daemon rejects a method it doesn't know with `invalid_input`.
+- CLI methods (ticket 20, ADR 0013, `test-as.ts` / `cli-header-samples.ts`): `ApiEndpoint.testsAs?: { method, unavailable: { code, message } | null }[]` lists what the endpoint offers — `codex` with a Responses or Chat URL, `claude_code` with an Anthropic URL on a relay-group template or "Custom" (and not an `anthropic.com` / `googleapis.com` host). A method not offered → `invalid_input`, nothing sent. No Claude Code sample → every model `cli_sample_missing`, no request. No Codex sample → magpie `codexSign` headers. One attempt only, on the CLI's format (pins ignored), body `stream: true` (+ `store: false` for Codex on Responses), sample headers over Osuna's, the endpoint's key on top; a 2xx stream is read to its first content event or error (`streamAnswer`).
+- The gateway writes the sample (`CliHeaderSamples.saw`): Claude Code once a `/v1/messages` request from `claude-cli/` is routed; Codex in `askOnce` when the attempt goes to Responses or Chat. Unchanged samples are not rewritten (memory cache per gateway), so a test that deletes the file must send different headers to get it back.
 - `MODEL_TEST_DEFAULTS = { concurrency: 4, modelTimeoutMs: 20_000, batchTimeoutMs: 180_000 }`; `ModelTestClock { now, timers }` is injected (tests use manual timers).
 
 ### 3. Contracts

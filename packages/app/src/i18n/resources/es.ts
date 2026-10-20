@@ -2819,6 +2819,10 @@ export const es: TranslationResources = {
           batchTimeout: "La prueba se quedó sin tiempo antes de que respondiera este modelo",
           unreachable: "No se pudo llegar a esta dirección",
           noFormat: "Este endpoint no tiene una URL en un formato que sirva este modelo",
+          testAsClaudeCode: "Probar como Claude Code",
+          testAsCodex: "Probar como Codex",
+          claudeCodeSampleMissing:
+            'Todavía no ha pasado ninguna solicitud de Claude Code por la pasarela integrada. Ejecuta Claude Code una vez con "Usar endpoints de API" activado y vuelve a probar.',
           noAnswer: "No respondió",
           took: {
             ms: "{{value}} ms",

@@ -43,6 +43,8 @@ export interface UseModelTestsResult {
   run: ModelTestRun;
   testAll: () => void;
   testOne: (modelId: string) => void;
+  // 按 Claude Code / Codex 的样子测一个模型（method 是 claude_code 或 codex）。
+  testOneAs: (input: { modelId: string; method: string }) => void;
   cancel: () => void;
 }
 
@@ -53,6 +55,8 @@ interface RunInput {
   client: DaemonClient;
   endpointId: string;
   modelId: string | null;
+  // 测法；null 为普通测试。
+  method: string | null;
   requestId: string;
   runningRef: MutableRefObject<string | null>;
   setTests: SetTests;
@@ -86,6 +90,7 @@ async function runTests(input: RunInput): Promise<void> {
   const isCurrent = () => runningRef.current === requestId;
   const options: ApiEndpointTestModelsOptions = { endpointId: input.endpointId };
   if (input.modelId !== null) options.modelId = input.modelId;
+  if (input.method !== null) options.method = input.method;
   const onStarted = ({ modelIds }: { modelIds: string[] }) => {
     if (!isCurrent()) return;
     setTests((previous) => startTests(previous, modelIds));
@@ -134,7 +139,8 @@ export function useModelTests(input: {
   const runningRef = useRef<string | null>(null);
 
   const start = useCallback(
-    (modelId: string | null) => {
+    (target: { modelId: string | null; method: string | null }) => {
+      const { modelId, method } = target;
       if (!client || runningRef.current !== null) return;
       const requestId = createUpstreamRequestId();
       runningRef.current = requestId;
@@ -144,15 +150,27 @@ export function useModelTests(input: {
         runningRef.current = null;
         setRun({ status: "failed", message: toErrorMessage(error) });
       };
-      void runTests({ client, endpointId, modelId, requestId, runningRef, setTests, setRun }).catch(
-        showFailure,
-      );
+      const runInput = {
+        client,
+        endpointId,
+        modelId,
+        method,
+        requestId,
+        runningRef,
+        setTests,
+        setRun,
+      };
+      void runTests(runInput).catch(showFailure);
     },
     [client, endpointId],
   );
 
-  const testAll = useCallback(() => start(null), [start]);
-  const testOne = useCallback((modelId: string) => start(modelId), [start]);
+  const testAll = useCallback(() => start({ modelId: null, method: null }), [start]);
+  const testOne = useCallback((modelId: string) => start({ modelId, method: null }), [start]);
+  const testOneAs = useCallback(
+    (target: { modelId: string; method: string }) => start(target),
+    [start],
+  );
 
   const cancel = useCallback(() => {
     const requestId = runningRef.current;
@@ -179,7 +197,7 @@ export function useModelTests(input: {
   );
 
   return useMemo(
-    () => ({ tests, run, testAll, testOne, cancel }),
-    [cancel, run, testAll, testOne, tests],
+    () => ({ tests, run, testAll, testOne, testOneAs, cancel }),
+    [cancel, run, testAll, testOne, testOneAs, tests],
   );
 }

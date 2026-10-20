@@ -2804,6 +2804,10 @@ export const ptBR: TranslationResources = {
           batchTimeout: "O teste ficou sem tempo antes de este modelo responder",
           unreachable: "Não foi possível acessar este endereço",
           noFormat: "Este endpoint não tem URL em um formato que sirva este modelo",
+          testAsClaudeCode: "Testar como Claude Code",
+          testAsCodex: "Testar como Codex",
+          claudeCodeSampleMissing:
+            'Nenhuma solicitação do Claude Code passou pelo gateway embutido ainda. Execute o Claude Code uma vez com "Usar endpoints de API" ativado e teste de novo.',
           noAnswer: "Não respondeu",
           took: {
             ms: "{{value}} ms",

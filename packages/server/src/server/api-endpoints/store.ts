@@ -236,7 +236,20 @@ export interface CliStartRead {
   at: Date;
 }
 
+/** 「按 Claude Code / Codex 的样子测」的两种 CLI（ADR 0013）。 */
+export type CliTestClient = "claude_code" | "codex";
+
+// CLI 请求头样本：头名小写，只有表明 CLI 身份的头，不含认证、会话与请求体（cli-header-samples.ts）。
+const CliHeaderSampleSchema = z.record(z.string(), z.string());
+export type CliHeaderSample = z.infer<typeof CliHeaderSampleSchema>;
+const CliHeaderSamplesFileSchema = z.object({
+  claude_code: CliHeaderSampleSchema.optional(),
+  codex: CliHeaderSampleSchema.optional(),
+});
+type CliHeaderSamplesFile = z.infer<typeof CliHeaderSamplesFileSchema>;
+
 const ENDPOINTS_FILE = "endpoints.json";
+const CLI_HEADER_SAMPLES_FILE = "cli-header-samples.json";
 const CLI_START_READS_FILE = "cli-start-reads.json";
 const CLI_REWRITES_FILE = "cli-rewrites.json";
 const CODEX_MODEL_CATALOG_FILE = "codex-models.json";
@@ -389,6 +402,16 @@ export class ApiEndpointStore {
     this.writeJson(CLI_START_READS_FILE, CliStartReadsFileSchema.parse(next));
   }
 
+  /** 这个 CLI 最近一次经过中转站时记下的请求头；还没经过、或文件读不懂为 null。 */
+  readCliHeaderSample(client: CliTestClient): CliHeaderSample | null {
+    return this.readCliHeaderSamples()[client] ?? null;
+  }
+
+  writeCliHeaderSample(input: { client: CliTestClient; sample: CliHeaderSample }): void {
+    const next = { ...this.readCliHeaderSamples(), [input.client]: input.sample };
+    this.writeJson(CLI_HEADER_SAMPLES_FILE, CliHeaderSamplesFileSchema.parse(next));
+  }
+
   readClaudeTakeover(): ClaudeTakeoverFile {
     const raw = this.readJson("takeover-claude.json");
     return raw === null ? { takeover: null, backup: null } : ClaudeTakeoverFileSchema.parse(raw);
@@ -467,6 +490,19 @@ export class ApiEndpointStore {
       throw error;
     }
     const parsed = CliRewritesFileSchema.safeParse(raw ?? {});
+    if (!parsed.success) return {};
+    return parsed.data;
+  }
+
+  private readCliHeaderSamples(): CliHeaderSamplesFile {
+    let raw: unknown;
+    try {
+      raw = this.readJson(CLI_HEADER_SAMPLES_FILE);
+    } catch (error) {
+      if (error instanceof SyntaxError) return {};
+      throw error;
+    }
+    const parsed = CliHeaderSamplesFileSchema.safeParse(raw ?? {});
     if (!parsed.success) return {};
     return parsed.data;
   }

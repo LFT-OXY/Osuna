@@ -750,6 +750,9 @@ function ApiEndpointDetailSections({
       run: modelTestsState.run,
       onTestAll: modelTestsState.testAll,
       onTestOne: modelTestsState.testOne,
+      onTestOneAs: modelTestsState.testOneAs,
+      // 老 daemon 不发，即都不提供。
+      testsAs: endpoint.testsAs ?? [],
       onCancel: modelTestsState.cancel,
       factsOf: (modelId) => {
         const auto = endpoint.modelFacts?.[modelId] ?? {};

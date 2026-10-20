@@ -2823,6 +2823,10 @@ export const fr: TranslationResources = {
           batchTimeout: "Le test a manqué de temps avant que ce modèle réponde",
           unreachable: "Impossible de joindre cette adresse",
           noFormat: "Ce point d'accès n'a pas d'URL dans un format qui sert ce modèle",
+          testAsClaudeCode: "Tester comme Claude Code",
+          testAsCodex: "Tester comme Codex",
+          claudeCodeSampleMissing:
+            "Aucune requête de Claude Code n'est encore passée par la passerelle intégrée. Lancez Claude Code une fois avec « Utiliser les points d'accès API » activé, puis testez à nouveau.",
           noAnswer: "Pas de réponse",
           took: {
             ms: "{{value}} ms",
