@@ -11,6 +11,7 @@ import {
   Copy,
   GripVertical,
   Plus,
+  ShieldAlert,
 } from "lucide-react-native";
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -26,6 +27,7 @@ import {
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { SearchField } from "@/components/ui/search-field";
 import { Shortcut } from "@/components/ui/shortcut";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Text as UiText } from "@/components/ui/text";
 import type { ProviderStatusDisplay } from "@/provider-detail/status";
@@ -60,8 +62,10 @@ const ThemedArrowDown = withUnistyles(ArrowDown);
 const ThemedArrowUpToLine = withUnistyles(ArrowUpToLine);
 const ThemedArrowDownToLine = withUnistyles(ArrowDownToLine);
 const ThemedCopy = withUnistyles(Copy);
+const ThemedShieldAlert = withUnistyles(ShieldAlert);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const warningColorMapping = (theme: Theme) => ({ color: theme.colors.statusWarning });
 
 export interface ApiEndpointsListSectionProps {
   state: HostEndpointsLoadState;
@@ -465,10 +469,13 @@ function EndpointRow({
                 </View>,
               )}
               <View style={settingsStyles.rowContent}>
-                {/* 名称不截断，窄屏上换行。 */}
-                <Text style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}>
-                  {endpoint.name}
-                </Text>
+                {/* 名称不截断，窄屏上换行；不校验证书的一直挂着标记，放不下时挪到下一行。 */}
+                <View style={styles.titleLine}>
+                  <Text style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}>
+                    {endpoint.name}
+                  </Text>
+                  {endpoint.insecureTls === true ? <InsecureTlsMark /> : null}
+                </View>
                 <ProviderStatusLine status={statusLine}>
                   <RestingStateText status={status} />
                   {status.kind === "cooling" ? (
@@ -653,6 +660,23 @@ const STATUS_WORD_KEYS: Record<EndpointRowStatus["kind"], string> = {
   disabled: "settings.apiEndpoints.status.disabled",
 };
 
+const INSECURE_TLS_ICON = <ThemedShieldAlert size={ICON_SIZE.xs} uniProps={warningColorMapping} />;
+
+/** 不校验证书的接口行上一直挂着的标记（警示色），提醒它关着证书校验。 */
+function InsecureTlsMark() {
+  const { t } = useTranslation();
+  return (
+    <View testID="api-endpoint-row-insecure-tls">
+      <StatusBadge
+        variant="warning"
+        size="xs"
+        label={t("settings.apiEndpoints.form.insecureTls.rowMark")}
+        leading={INSECURE_TLS_ICON}
+      />
+    </View>
+  );
+}
+
 /** 冷却中与需要检查时接在摘要后面的状态色文字；可用与已关闭不接。 */
 function RestingStateText({ status }: { status: EndpointRowStatus }) {
   const { t } = useTranslation();
@@ -836,6 +860,13 @@ const styles = StyleSheet.create((theme) => ({
   // 说明段落限宽，宽卡片里不拉成一长行。
   emptyParagraph: {
     maxWidth: 480,
+  },
+  titleLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: theme.spacing[2],
+    rowGap: theme.spacing[1],
   },
   separator: {
     color: theme.colors.foregroundMuted,

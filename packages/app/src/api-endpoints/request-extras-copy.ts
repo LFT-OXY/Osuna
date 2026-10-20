@@ -33,8 +33,11 @@ export function extraBodyProblemText(t: TFunction, problem: ExtraBodyTextProblem
   }
 }
 
-/** daemon 拒收保存的 invalid_header、invalid_extra_body 按界面语言说；别的错误为 null。 */
+/** daemon 拒收保存的 invalid_header、invalid_extra_body、insecure_tls_template 按界面语言说；别的错误为 null。 */
 export function requestExtrasErrorText(t: TFunction, error: ApiEndpointError): string | null {
+  if (error.code === "insecure_tls_template") {
+    return t("settings.apiEndpoints.form.insecureTls.templateRefused");
+  }
   const params = error.params ?? {};
   const name = params.name ?? "";
   const field = params.field ?? "";

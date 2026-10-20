@@ -2693,6 +2693,18 @@ export const en = {
             "Which header the API key goes in on the Anthropic address. Most services take both; pick one for a service that refuses the two together. Osuna also switches to one by itself when a service says so.",
           keyHeaderBoth: "Both",
         },
+        insecureTls: {
+          label: "Certificate",
+          switch: "Don't check its certificate",
+          info: "For your own server with a self-signed certificate or one from your company's CA. Only this endpoint's own https addresses go unchecked; everything else Osuna asks is checked as before.",
+          confirmTitle: "Don't check its certificate?",
+          confirmMessage:
+            "Osuna then can't tell this server from another machine answering at its address. Whoever answers there could pretend to be it and see your API key and your conversations. Turn this on only on a network you trust.",
+          confirm: "Don't check",
+          rowMark: "Don't check its certificate",
+          templateRefused:
+            "An endpoint added from a template always checks its certificate. Only an endpoint added with Custom can skip the check.",
+        },
         address: "Address",
         resourceEndpoint: "Resource endpoint",
         serviceAddress: "Server address",

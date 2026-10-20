@@ -36,6 +36,7 @@ import { useConnectionFormModel } from "./use-connection-form-model";
 import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
 import { RequestExtrasFields } from "./request-extras-fields";
+import { InsecureTlsField } from "./insecure-tls-field";
 import { headerProblemText } from "./request-extras-copy";
 import type {
   ConnectionCurlFill,
@@ -291,6 +292,7 @@ export function ApiEndpointConnectionSheet({
         )}
         {state.canPickIcon ? <IconField state={state} model={model} size={fieldSize} /> : null}
         <TemplateAddresses state={state} model={model} size={fieldSize} />
+        <InsecureTlsField state={state} model={model} />
         <ConnectionTestField state={state} model={model} />
         {state.hasModelField ? (
           <ModelIdsField state={state} model={model} size={fieldSize} />

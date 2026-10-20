@@ -2643,6 +2643,18 @@ export const ko: TranslationResources = {
             "Anthropic 주소에서 API 키를 어느 헤더에 넣을지 정합니다. 대부분의 서비스는 둘 다 받습니다. 둘을 함께 보내면 거부하는 서비스라면 하나를 고르세요. 서비스가 그렇게 알려 주면 Osuna도 스스로 하나로 바꿉니다.",
           keyHeaderBoth: "둘 다",
         },
+        insecureTls: {
+          label: "인증서",
+          switch: "인증서 확인 안 함",
+          info: "자체 서명 인증서나 회사 CA 인증서를 쓰는 직접 운영하는 서버용입니다. 이 엔드포인트 자체의 https 주소만 확인하지 않고, Osuna가 보내는 다른 요청은 그대로 확인합니다.",
+          confirmTitle: "인증서를 확인하지 않을까요?",
+          confirmMessage:
+            "켜면 Osuna는 이 주소에서 응답하는 것이 정말 내 서버인지 구별할 수 없습니다. 다른 사람이 이 주소를 사칭해 API 키와 대화를 볼 수 있습니다. 믿을 수 있는 네트워크에서만 켜세요.",
+          confirm: "확인 안 함",
+          rowMark: "인증서 확인 안 함",
+          templateRefused:
+            "템플릿으로 추가한 엔드포인트는 항상 인증서를 확인합니다. 확인을 건너뛸 수 있는 것은 '사용자 지정'으로 추가한 엔드포인트뿐입니다.",
+        },
         address: "주소",
         resourceEndpoint: "리소스 엔드포인트",
         serviceAddress: "서버 주소",

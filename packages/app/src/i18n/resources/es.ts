@@ -2682,6 +2682,18 @@ export const es: TranslationResources = {
             "En qué cabecera va la clave de API en la dirección de Anthropic. La mayoría de servicios aceptan las dos; elige una si el servicio rechaza ambas juntas. Osuna también cambia a una sola por su cuenta cuando el servicio lo indica.",
           keyHeaderBoth: "Las dos",
         },
+        insecureTls: {
+          label: "Certificado",
+          switch: "No comprobar su certificado",
+          info: "Para tu propio servidor con un certificado autofirmado o emitido por la CA de tu empresa. Solo las direcciones https de este endpoint no se comprueban; todo lo demás que pide Osuna se comprueba como siempre.",
+          confirmTitle: "¿No comprobar su certificado?",
+          confirmMessage:
+            "Osuna ya no podrá distinguir este servidor de otra máquina que responda en su dirección. Esa máquina podría hacerse pasar por él y ver tu clave de API y tus conversaciones. Actívalo solo en una red de confianza.",
+          confirm: "No comprobar",
+          rowMark: "No comprobar su certificado",
+          templateRefused:
+            "Un endpoint añadido desde una plantilla siempre comprueba su certificado. Solo un endpoint añadido con «Personalizado» puede omitir la comprobación.",
+        },
         address: "Dirección",
         resourceEndpoint: "Endpoint del recurso",
         serviceAddress: "Dirección del servidor",

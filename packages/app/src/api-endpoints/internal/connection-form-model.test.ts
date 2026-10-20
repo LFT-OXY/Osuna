@@ -2588,3 +2588,87 @@ describe("connection form: headers, extra body and key header", () => {
     expect(older.getState()).toMatchObject({ canSetRequestExtras: false, showsKeyHeader: false });
   });
 });
+
+// 接口管理好用性工单 23：不校验证书（照 magpie app.js 的 tlsTakes、onHTTPS 与 provider-insecure-tls.test.cjs），打开前先确认。
+describe("connection form: skip certificate check", () => {
+  it("asks before turning it on: cancel leaves it off, confirm turns it on and the save carries it", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({ showsInsecureTls: true, insecureTls: false });
+    model.setInsecureTls(true);
+    expect(model.getState()).toMatchObject({ isConfirmingInsecureTls: true, insecureTls: false });
+    model.cancelInsecureTls();
+    expect(model.getState()).toMatchObject({ isConfirmingInsecureTls: false, insecureTls: false });
+    model.setInsecureTls(true);
+    model.confirmInsecureTls();
+    expect(model.getState()).toMatchObject({ isConfirmingInsecureTls: false, insecureTls: true });
+    await model.submit();
+    expect(fake.saves[0]?.insecureTls).toBe(true);
+
+    // 关掉不用确认，保存带上 false。
+    const opened = createConnectionFormModel(
+      { mode: "edit", endpoint: { ...SAVED_ENDPOINT, insecureTls: true } },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(opened.getState().insecureTls).toBe(true);
+    opened.setInsecureTls(false);
+    expect(opened.getState()).toMatchObject({ insecureTls: false, isConfirmingInsecureTls: false });
+    await opened.submit();
+    expect(fake.saves[1]?.insecureTls).toBe(false);
+  });
+
+  it("checks before save with it, and copies it from the endpoint being duplicated", () => {
+    const fake = fakeDeps();
+    const unchecked: ApiEndpoint = { ...SAVED_ENDPOINT, insecureTls: true };
+    const model = createConnectionFormModel(
+      { mode: "duplicate", source: unchecked, name: "Relay copy" },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState().insecureTls).toBe(true);
+    model.fetchModels();
+    model.testConnection();
+    expect(fake.fetches[0]?.request.insecureTls).toBe(true);
+    expect(fake.tests[0]?.request.insecureTls).toBe(true);
+  });
+
+  it("is offered only with an https address, off over plain http, and never for a template or an older host", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "create", templateId: null },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    model.setUrl("openai_chat", "https://192.168.1.20:8443/v1");
+    expect(model.getState().showsInsecureTls).toBe(true);
+    model.setInsecureTls(true);
+    model.confirmInsecureTls();
+    // 地址改成 http：这一项收起，保存时按关着算（照 magpie draft.insecureTLS && onHTTPS()），新的这家就不带。
+    model.setUrl("openai_chat", "http://192.168.1.21:8000/v1");
+    expect(model.getState().showsInsecureTls).toBe(false);
+    model.setName("LAN vLLM");
+    await model.submit();
+    expect(fake.saves[0]).not.toHaveProperty("insecureTls");
+
+    const templated = createConnectionFormModel(
+      { mode: "create", templateId: "zhipu" },
+      fake.deps,
+      WITH_TEMPLATES,
+    );
+    expect(templated.getState().showsInsecureTls).toBe(false);
+    await templated.submit();
+    expect(fake.saves[1]).not.toHaveProperty("insecureTls");
+
+    const older = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      fake.deps,
+      KEY_REQUIRED,
+    );
+    expect(older.getState().showsInsecureTls).toBe(false);
+  });
+});

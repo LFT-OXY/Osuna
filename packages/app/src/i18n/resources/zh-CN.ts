@@ -2656,6 +2656,17 @@ export const zhCN: TranslationResources = {
             "Anthropic 地址上 API key 放在哪个请求头。多数服务两个都收；有的服务不许同时带两个，就选一个。服务这样说时 Osuna 也会自己改成只放一个。",
           keyHeaderBoth: "两个都放",
         },
+        insecureTls: {
+          label: "证书",
+          switch: "不校验证书",
+          info: "给自己的服务用：证书是自签的，或由公司自己的 CA 签发。只有这家自己的 https 地址不校验，Osuna 发往别处的请求照常校验。",
+          confirmTitle: "不校验证书？",
+          confirmMessage:
+            "打开后，Osuna 分不清回应这个地址的是不是你的服务。别人可能冒充这个地址，看到你的 API key 和对话。只在你信得过的网络里打开。",
+          confirm: "不校验",
+          rowMark: "不校验证书",
+          templateRefused: "从模板添加的接口总是校验证书。只有用「自定义」添加的接口能不校验。",
+        },
         address: "地址",
         resourceEndpoint: "资源地址",
         serviceAddress: "服务地址",

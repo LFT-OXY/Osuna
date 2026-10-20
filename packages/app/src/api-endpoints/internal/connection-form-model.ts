@@ -21,6 +21,7 @@ import { siteChoicesOf, type TemplateSiteChoice } from "./templates";
 import {
   isThirdPartyAnthropicUrl,
   keyHeaderOf,
+  takesInsecureTls,
   type ApiEndpointKeyHeader,
   type HeaderProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
@@ -388,6 +389,11 @@ export interface ConnectionFormState {
   keyHeader: ApiEndpointKeyHeader;
   // 只对第三方 Anthropic 地址显示（Anthropic 自己、Bedrock、Azure 的只收一种）。
   showsKeyHeader: boolean;
+  // 不校验证书：只对「自定义」、至少一个 https 地址时显示（照 magpie tlsTakes、onHTTPS）。
+  showsInsecureTls: boolean;
+  insecureTls: boolean;
+  // 打开前的确认框开着。
+  isConfirmingInsecureTls: boolean;
 }
 
 export interface ConnectionFormDeps {
@@ -461,6 +467,10 @@ export interface ConnectionFormModel {
   toggleHeaderJson(id: number): void;
   setExtraBody(value: string): void;
   setKeyHeader(value: ApiEndpointKeyHeader): void;
+  // 打开先弹确认框（confirmInsecureTls 才真的打开），关掉直接关。
+  setInsecureTls(value: boolean): void;
+  confirmInsecureTls(): void;
+  cancelInsecureTls(): void;
   detect(): void;
   // 「逐个模型」：表单里的模型（前 30 个）在每种格式上各问一次。
   detectEachModel(): void;
@@ -533,6 +543,8 @@ interface Values {
   nextHeaderId: number;
   extraBodyText: string;
   keyHeader: ApiEndpointKeyHeader;
+  insecureTls: boolean;
+  isConfirmingInsecureTls: boolean;
 }
 
 // 粘贴的 curl 给「自定义」填的地址与它的格式。
@@ -618,6 +630,9 @@ export function createConnectionFormModel(
     submitting: false,
     submitError: null,
     ...seededExtras,
+    // 复制时随原来那家（照 magpie 复制的草稿带 insecureTLS）。
+    insecureTls: keyOwner?.insecureTls === true,
+    isConfirmingInsecureTls: false,
   };
   let state = derive(values);
   const extrasAtOpen = extrasNow();
@@ -719,6 +734,9 @@ export function createConnectionFormModel(
     | "extraBodyProblem"
     | "keyHeader"
     | "showsKeyHeader"
+    | "showsInsecureTls"
+    | "insecureTls"
+    | "isConfirmingInsecureTls"
   >;
 
   /** 「高级」那部分：请求头、附加请求体、key 放哪个头与哪里不对。主机不认它们时都不算。 */
@@ -736,6 +754,7 @@ export function createConnectionFormModel(
       showsKeyHeader = isThirdPartyAnthropicUrl(anthropicUrl);
     }
     const isAdvancedOpen = next.isAdvancedOpen;
+    const showsInsecureTls = canSetRequestExtras && takesInsecureTlsAt(next);
     return {
       canSetRequestExtras,
       isAdvancedOpen,
@@ -746,7 +765,29 @@ export function createConnectionFormModel(
       extraBodyProblem,
       keyHeader,
       showsKeyHeader,
+      showsInsecureTls,
+      insecureTls: next.insecureTls,
+      isConfirmingInsecureTls: next.isConfirmingInsecureTls,
     };
+  }
+
+  /** 这张表单的接口能不能不校验证书：「自定义」，且保存时会存的地址里有 https 的。 */
+  function takesInsecureTlsAt(from: Values): boolean {
+    const urls = Object.values(urlsToSave(from));
+    return takesInsecureTls({ templateId: from.template?.id, urls });
+  }
+
+  /**
+   * 不校验证书：「自定义」的表单保存、拉模型、测试、检测都带上（照 magpie：开着且有 https 地址才为 true）；
+   * 这家原来没开、现在也没开时不带，和以前一样。模板接口与老主机不带。
+   */
+  function insecureTlsRequest(): Pick<ConnectionSaveRequest, "insecureTls"> {
+    const isCustom = values.template === null;
+    if (!canSetRequestExtras || !isCustom) return {};
+    const insecureTls = values.insecureTls && takesInsecureTlsAt(values);
+    const wasOn = keyOwner?.insecureTls === true;
+    const isNeverOn = !insecureTls && !wasOn;
+    return isNeverOn ? {} : { insecureTls };
   }
 
   type CheckState = Pick<
@@ -1095,6 +1136,7 @@ export function createConnectionFormModel(
         preview: true,
         ...placeRequest(),
         ...typedExtrasRequest(),
+        ...insecureTlsRequest(),
       },
       controller.signal,
     );
@@ -1115,6 +1157,7 @@ export function createConnectionFormModel(
         ...placeRequest(),
         modelIds: testModelIds(),
         ...typedExtrasRequest(),
+        ...insecureTlsRequest(),
       },
       controller.signal,
     );
@@ -1141,6 +1184,7 @@ export function createConnectionFormModel(
         ...(picked.length > 0 ? { modelIds: picked } : {}),
         ...(isEach ? { eachModel: true } : {}),
         ...typedExtrasRequest(),
+        ...insecureTlsRequest(),
       },
       controller.signal,
     );
@@ -1218,6 +1262,7 @@ export function createConnectionFormModel(
       ...(values.catalogFetch.status === "fetched" ? { catalog: values.catalogFetch.models } : {}),
       ...stagedModelSettings(),
       ...savedExtrasRequest(),
+      ...insecureTlsRequest(),
     };
   }
 
@@ -1552,6 +1597,16 @@ export function createConnectionFormModel(
     },
     setKeyHeader(value) {
       update({ keyHeader: value });
+    },
+    setInsecureTls(value) {
+      if (value) update({ isConfirmingInsecureTls: true });
+      else update({ insecureTls: false });
+    },
+    confirmInsecureTls() {
+      update({ insecureTls: true, isConfirmingInsecureTls: false });
+    },
+    cancelInsecureTls() {
+      update({ isConfirmingInsecureTls: false });
     },
     cancelDetect() {
       if (!pendingDetect) return;

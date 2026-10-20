@@ -3033,6 +3033,124 @@ test.describe("An endpoint's headers, extra body and key header", () => {
   });
 });
 
+// 接口管理好用性工单 23：不校验证书（照 magpie 编辑窗口的 Certificate），打开前先确认，打开后行上一直有标记。
+test.describe("Don't check its certificate", () => {
+  // 保留域名，不会解析到任何地方：保存后当场拉清单也出不了本机。
+  const SELF_SIGNED_URL = "https://relay.self-signed.example/v1";
+
+  test("asks before turning it on: cancel keeps it off, confirm turns it on; a refused save says why and keeps the form; a save marks the row", async ({
+    page,
+  }) => {
+    await refuseFirstSaveAsTemplate(page);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-name").fill("Self-signed relay");
+    const field = page.getByTestId("api-endpoint-connection-insecure-tls");
+    const toggle = page.getByTestId("api-endpoint-connection-insecure-tls-switch");
+    const sheet = page.getByTestId("api-endpoint-insecure-tls-confirm-sheet");
+
+    await test.step("offered only once an address is https", async () => {
+      await page.getByTestId("api-endpoint-connection-url-openai_chat").fill(`${relay.origin}/v1`);
+      await expect(field).toHaveCount(0);
+      await page.getByTestId("api-endpoint-connection-url-openai_chat").fill(SELF_SIGNED_URL);
+      await expect(field).toBeVisible();
+      await expect(toggle).not.toBeChecked();
+    });
+
+    await test.step("turning it on asks first; Cancel leaves it off", async () => {
+      await toggle.click();
+      await expect(sheet).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-insecure-tls-risk")).toContainText(
+        "Whoever answers there could pretend to be it and see your API key and your conversations.",
+      );
+      await page.getByTestId("api-endpoint-insecure-tls-cancel").click();
+      await expect(sheet).toHaveCount(0);
+      await expect(toggle).not.toBeChecked();
+    });
+
+    await test.step("Don't check turns it on", async () => {
+      await toggle.click();
+      await page.getByTestId("api-endpoint-insecure-tls-confirm").click();
+      await expect(sheet).toHaveCount(0);
+      await expect(toggle).toBeChecked();
+      await expect(connectionForm(page)).toBeVisible();
+    });
+
+    await test.step("a save the host refuses says why in the window and keeps the setting", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(page.getByTestId("api-endpoint-connection-error")).toHaveText(
+        "An endpoint added from a template always checks its certificate. Only an endpoint added with Custom can skip the check.",
+      );
+      await expect(toggle).toBeChecked();
+      expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+    });
+
+    await test.step("saving again keeps it, and the row carries the mark", async () => {
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.insecureTls).toBe(true);
+      await openApiEndpointsPage(page);
+      await expect(page.getByTestId("api-endpoint-row-insecure-tls")).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-row-insecure-tls")).toHaveText(
+        "Don't check its certificate",
+      );
+    });
+
+    await test.step("turning it off needs no confirm and takes the mark away", async () => {
+      await openEndpointRow(page, await firstEndpointId());
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await expect(toggle).toBeChecked();
+      await toggle.click();
+      await expect(sheet).toHaveCount(0);
+      await expect(toggle).not.toBeChecked();
+      await page.getByTestId("api-endpoint-connection-save").click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.insecureTls).toBeUndefined();
+      await openApiEndpointsPage(page);
+      await expect(page.getByTestId(`api-endpoint-row-${saved?.id ?? ""}`)).toBeVisible();
+      await expect(page.getByTestId("api-endpoint-row-insecure-tls")).toHaveCount(0);
+    });
+  });
+
+  test("not offered for an endpoint added from a template", async ({ page }) => {
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-empty-add").click();
+    await page.getByTestId("api-endpoint-template-anthropic").click();
+    await expect(page.getByTestId("api-endpoint-connection-name")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-connection-insecure-tls")).toHaveCount(0);
+  });
+});
+
+async function firstEndpointId(): Promise<string> {
+  const [endpoint] = (await client.apiEndpointList("claude")).endpoints;
+  if (!endpoint) throw new Error("Expected a saved endpoint");
+  return endpoint.id;
+}
+
+/** 第一次保存塞进模板 id：daemon 按模板接口拒收不校验证书，看拒收怎么显示；之后的保存照常。 */
+async function refuseFirstSaveAsTemplate(page: Page): Promise<void> {
+  const host = { isRefusing: true };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isSave =
+        typeof message === "string" && message.includes("provider.api_endpoint.save.request");
+      if (!isSave || !host.isRefusing) {
+        server.send(message);
+        return;
+      }
+      host.isRefusing = false;
+      const envelope = JSON.parse(message) as { message: Record<string, unknown> };
+      envelope.message.templateId = "deepseek";
+      server.send(JSON.stringify(envelope));
+    });
+  });
+}
+
 test.describe("API endpoints on the Claude Code page and in the model selector", () => {
   test("the switch, the default model and the manage row replace the old radio rows", async ({
     page,

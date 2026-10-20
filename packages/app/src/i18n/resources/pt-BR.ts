@@ -2667,6 +2667,18 @@ export const ptBR: TranslationResources = {
             "Em qual cabeçalho vai a chave de API no endereço Anthropic. A maioria dos serviços aceita os dois; escolha um para um serviço que recusa os dois juntos. O Osuna também passa para um só sozinho quando o serviço avisa.",
           keyHeaderBoth: "Os dois",
         },
+        insecureTls: {
+          label: "Certificado",
+          switch: "Não verificar o certificado",
+          info: "Para o seu próprio servidor com certificado autoassinado ou emitido pela CA da sua empresa. Só os endereços https deste endpoint deixam de ser verificados; tudo o mais que o Osuna pede continua verificado.",
+          confirmTitle: "Não verificar o certificado?",
+          confirmMessage:
+            "O Osuna deixa de conseguir distinguir este servidor de outra máquina que responda no endereço dele. Ela poderia se passar por ele e ver sua chave de API e suas conversas. Ative só em uma rede confiável.",
+          confirm: "Não verificar",
+          rowMark: "Não verificar o certificado",
+          templateRefused:
+            'Um endpoint adicionado a partir de um modelo sempre verifica o certificado. Só um endpoint adicionado com "Personalizado" pode pular a verificação.',
+        },
         address: "Endereço",
         resourceEndpoint: "Endpoint do recurso",
         serviceAddress: "Endereço do servidor",
