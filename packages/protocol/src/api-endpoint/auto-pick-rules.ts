@@ -1,3 +1,5 @@
+// 自动勾选规则的写法（glob 与 re:）与编译移植自 magpie（https://github.com/yetone/magpie，internal/provider/groupmatch.go 的 IsPattern、compilePattern、CleanPatterns、PatternMatches）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { RE2JS, RE2JSSyntaxException } from "re2js";
 import { compileGlob, type GlobMatcher } from "./glob.js";
 

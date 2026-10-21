@@ -1,3 +1,5 @@
+// 按格式各拉一次再合并清单、留下没答上的格式上次列过的模型移植自 magpie（https://github.com/yetone/magpie，internal/provider/models.go 的 fetchOne、keepDeadSides）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { ApiEndpointRequestFormat } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import type { ModelFacts } from "./model-facts.js";
 import type { ListedModel } from "./upstream-models.js";

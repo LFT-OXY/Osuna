@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/groupmatch_test.go 的做法（区分大小写、RE2 编译不过的写法）。
 import { describe, expect, it } from "vitest";
 import { autoPickRuleProblem, compileAutoPickRule } from "./auto-pick-rules";
 

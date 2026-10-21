@@ -1,3 +1,5 @@
+// 服务范围与自动勾选规则移植自 magpie（https://github.com/yetone/magpie，internal/provider/models.go 的 manyModels、NoAPIFor，internal/provider/autolist.go 的 CleanAutoInclude、takeMatching）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { isDeepStrictEqual } from "node:util";
 import {
   autoPickRuleProblem,

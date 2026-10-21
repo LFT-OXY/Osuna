@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/importapps.go 各个 reader 与 importapps_test.go 的做法。
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import os from "node:os";

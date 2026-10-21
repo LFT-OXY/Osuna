@@ -1,3 +1,5 @@
+// 已禁用的模型区的命中与可挑模型移植自 magpie（https://github.com/yetone/magpie，internal/provider/disabled.go 的 DisabledHits，internal/gui/assets/app.js 的 titleModels）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { ApiEndpoint } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   cleanDisabledModels,

@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/extrabody_test.go、authheader.go 与 internal/gui/tests/provider-insecure-tls.test.cjs。
 import { describe, expect, it } from "vitest";
 import {
   cleanRequestHeaders,

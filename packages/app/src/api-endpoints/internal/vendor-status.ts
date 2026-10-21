@@ -1,3 +1,5 @@
+// 厂商状态页提示移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 upstreamOf、upstreamBadge）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_VENDOR_LEVELS,
   type ApiEndpointVendorLevel,

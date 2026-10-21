@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/importurl_test.go（链接的几种写法）。
 import { describe, expect, it } from "vitest";
 import { isApiEndpointImportLink } from "./import-link.js";
 

@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/ruleparse.go 的 ParseTokens 与 internal/gui/assets/app.js 的 parseContexts。
 import { describe, expect, it } from "vitest";
 import type {
   ApiEndpoint,

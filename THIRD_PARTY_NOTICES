@@ -551,6 +551,7 @@ headersOf, extraBodyOf and twoKeyHeaders in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/request-extras.ts
   packages/server/src/server/api-endpoints/request-extras.test.ts
   packages/app/src/api-endpoints/internal/request-extras-form.ts
+  packages/app/src/api-endpoints/internal/request-extras-form.test.ts
 
 Skipping the certificate check for an endpoint (only one added as Custom,
 only the https hosts of its own addresses, each such host on connections of its
@@ -989,10 +990,16 @@ Levels, effortsKept, Labels, setModelName, setModelEfforts and setModelImage in
 modelprefs.go; a model with no level kept is sent no thinking field, as
 withoutAnyReasoning in internal/gateway/quiet.go, and Codex's model list takes
 the smaller of a model's window and its compaction threshold as entriesAt in
-internal/codexcat/codexcat.go:
+internal/codexcat/codexcat.go. The model settings dialog's format choice (the
+formats offered when an endpoint has two or more, a saved one shown even when
+void) and the token counts it reads (1m, 200k and the like) follow the Names &
+levels editor, modelAPIs and parseContexts in internal/gui/assets/app.js and
+ParseTokens in internal/provider/ruleparse.go:
 
   packages/protocol/src/api-endpoint/model-settings.ts
   packages/server/src/server/api-endpoints/model-settings.ts
+  packages/app/src/api-endpoints/internal/model-settings-form.ts
+  packages/app/src/api-endpoints/internal/model-settings-form.test.ts
   packages/server/src/server/api-endpoints/gateway/no-thinking.ts
   packages/server/src/server/api-endpoints/codex-model-catalog.ts
 
@@ -1013,12 +1020,54 @@ Codex's own models as codex/<model>, and the gateway turning a request down
 before any endpoint is asked, naming the entry) follows matchDisabled,
 globMatch, namesOf, IDDisabled, normalDisabled and BareDisabled in magpie's
 internal/provider/disabled.go and disabledError, idOff and codexNativeOff in
-internal/gateway/disabled.go; its end-to-end tests follow disabled_test.go in
-both:
+internal/gateway/disabled.go; the settings page's list (which models each entry
+hits now, and the models offered to pick) follows DisabledHits in disabled.go
+and titleModels in internal/gui/assets/app.js; its tests follow disabled_test.go
+in both:
 
   packages/protocol/src/api-endpoint/disabled-models.ts
+  packages/protocol/src/api-endpoint/disabled-models.test.ts
+  packages/app/src/api-endpoints/internal/disabled-models-list.ts
   packages/server/src/server/api-endpoints/disabled-models.ts
   packages/server/src/server/daemon-e2e/api-endpoint-disabled-models.e2e.test.ts
+
+An endpoint's model scope and auto-pick rules (the vendor's list served up to
+its first 24 models, a model the list serves only on a format the endpoint has
+no URL for left out, rules written as a glob or as re: compiled with RE2, any
+case for a glob, only adding models newly listed) follow manyModels and NoAPIFor
+in magpie's internal/provider/models.go, IsPattern, compilePattern,
+CleanPatterns and PatternMatches in internal/provider/groupmatch.go, and
+CleanAutoInclude and takeMatching in internal/provider/autolist.go; reading a
+glob follows globMatch in internal/provider/disabled.go:
+
+  packages/protocol/src/api-endpoint/auto-pick-rules.ts
+  packages/protocol/src/api-endpoint/auto-pick-rules.test.ts
+  packages/protocol/src/api-endpoint/glob.ts
+  packages/server/src/server/api-endpoints/model-scope.ts
+
+An endpoint's model list (each format's list fetched and merged by model id,
+the first format listed winning, a format that did not answer keeping the
+models it listed last time) and its daily refresh (checked every minute, a
+list under a day old skipped, a failed one tried again 15 minutes later) follow
+fetchOne and keepDeadSides in magpie's internal/provider/models.go and
+listsEvery, listRetry, listsTried and refreshDueLists in
+internal/provider/autolist.go:
+
+  packages/server/src/server/api-endpoints/catalog-merge.ts
+  packages/server/src/server/api-endpoints/catalog-refresh.ts
+
+The endpoint list's order and search (moving a row up, down, to the top or
+bottom within its group, a move while searching going among the rows shown,
+and the words of a search each found in the name, id, address or models)
+follow stepProvider, shownToOn, arrangeProvider and findProviders in magpie's
+internal/gui/assets/app.js; showing an endpoint's name after its models
+always, on a clash or never, a clash being names that read the same in any
+case, follows Provider in model names and Labels in
+internal/provider/modelprefs.go:
+
+  packages/app/src/api-endpoints/internal/host-list.ts
+  packages/protocol/src/api-endpoint/endpoint-names.ts
+  packages/protocol/src/api-endpoint/endpoint-names.test.ts
 
 The vendors' own status pages (which vendors, their pages and API hosts, which
 of a page's parts the API stands on, an endpoint matched to a vendor by its base
@@ -1076,6 +1125,7 @@ and importurl_test.go in magpie's internal/provider, internal/gui/importlink.go,
 and renderImport in internal/gui/assets/app.js:
 
   packages/protocol/src/api-endpoint/import-link.ts
+  packages/protocol/src/api-endpoint/import-link.test.ts
   packages/protocol/src/api-endpoint/template-icons.ts
   packages/server/src/utils/local-host.ts
   packages/server/src/server/api-endpoints/import-link.ts

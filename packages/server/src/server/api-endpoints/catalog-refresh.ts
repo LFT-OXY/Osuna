@@ -1,3 +1,5 @@
+// 每天刷新清单的检查间隔与失败重试移植自 magpie（https://github.com/yetone/magpie，internal/provider/autolist.go 的 listsEvery、listRetry、listsTried、refreshDueLists）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type pino from "pino";
 import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
 
@@ -26,7 +28,7 @@ export interface CatalogRefreshCandidate {
 export interface CatalogRefreshScheduleOptions {
   logger: pino.Logger;
   now: () => Date;
-  // 每次检查前问一次：「价格表自动更新」关着就不拉，一小时后再问。
+  // 每次检查前问一次：「价格表自动更新」关着就不拉，下一次检查（一分钟后）再问。
   isAllowed: () => boolean;
   candidates: () => CatalogRefreshCandidate[];
   // 拉一家并记下；上游的失败自己记日志、回 failed，不抛。

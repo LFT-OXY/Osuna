@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/gui/tests/fixtures/curl 里各厂商的 curl 示例。
 import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";

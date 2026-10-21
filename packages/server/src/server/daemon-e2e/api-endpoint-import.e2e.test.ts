@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/importapps_test.go 与 importurl.go 的 Find(id)。
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";

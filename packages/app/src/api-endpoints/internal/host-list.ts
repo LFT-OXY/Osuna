@@ -1,3 +1,5 @@
+// 接口列表的挪动与搜索移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 stepProvider、shownToOn、arrangeProvider、findProviders）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   apiEndpointNameDisplayOf,
   type ApiEndpointNameDisplay,

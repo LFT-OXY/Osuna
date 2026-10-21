@@ -1,3 +1,5 @@
+// 接口名显示方式与撞名判断移植自 magpie（https://github.com/yetone/magpie，internal/provider/modelprefs.go 的 Labels）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 /**
  * 接口名显示方式（Endpoint name in model lists，整台主机共用，照 magpie 的 Provider in model names）：
  * always 每个接口模型后面都带接口名（缺省）；clash 只有几家用同一个名字时带；never 都不带。

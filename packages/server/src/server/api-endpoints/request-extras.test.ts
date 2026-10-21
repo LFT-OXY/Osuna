@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/account_test.go、extrabody_test.go。
 import { describe, expect, test } from "vitest";
 import {
   extraBodySession,

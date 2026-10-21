@@ -1,3 +1,5 @@
+// 冷却设置里读不懂的每天时刻当没设移植自 magpie（https://github.com/yetone/magpie，internal/provider/concurrency.go 的 ParseResetAt 与 internal/provider/provider.go 的 normalize）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type { CliTestClient } from "./test-as.js";
 import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";

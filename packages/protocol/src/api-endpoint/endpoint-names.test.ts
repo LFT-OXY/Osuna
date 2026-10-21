@@ -1,3 +1,4 @@
+// 用例取自 magpie（MIT，THIRD_PARTY_NOTICES）：https://github.com/yetone/magpie 的 internal/provider/modelprefs.go 的 Labels（不分大小写的撞名）。
 import { describe, expect, it } from "vitest";
 import { apiEndpointNameDisplayOf, showsEndpointNames } from "./endpoint-names";
 

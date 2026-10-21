@@ -1,3 +1,5 @@
+// 可选的内置图标名单移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 iconPicker 与 MORE_ICONS）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { API_ENDPOINT_TEMPLATE_ICONS } from "@getpaseo/protocol/api-endpoint/template-icons";
 import {
   ENDPOINT_TEMPLATE_ICON_PNGS,

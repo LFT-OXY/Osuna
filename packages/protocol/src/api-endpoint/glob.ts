@@ -1,3 +1,5 @@
+// glob 的读法移植自 magpie（https://github.com/yetone/magpie，internal/provider/disabled.go 的 globMatch、internal/provider/groupmatch.go 的 compilePattern）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import { RE2JS } from "re2js";
 
 /*

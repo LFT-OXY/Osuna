@@ -1,3 +1,5 @@
+// 添加窗口的逐个模型识别、自选图标与粘贴 curl移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 detectAPIs、iconPicker、curlOf、respellURL、fromCurl）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,

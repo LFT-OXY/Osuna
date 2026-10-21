@@ -1,3 +1,5 @@
+// 从别的软件导入的窗口移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 openImportApps、renderImportApps、importAppRow）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";

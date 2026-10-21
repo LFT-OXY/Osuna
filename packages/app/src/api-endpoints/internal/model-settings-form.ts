@@ -1,3 +1,5 @@
+// 模型设置的格式选择与数字简写移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 Names & levels、modelAPIs、parseContexts，internal/provider/ruleparse.go 的 ParseTokens）
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   type ApiEndpoint,
