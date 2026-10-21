@@ -739,3 +739,99 @@ describe("the prompt on the endpoints page (ticket 27)", () => {
     ]);
   });
 });
+
+describe("import links (ticket 28)", () => {
+  test("the daemon refuses an unsafe link itself, with the reason and never the key", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const unsafe = [
+      ["paseo://import?name=X&chat=http://relay.example/v1&key=sk-secret-1", "needs_https"],
+      ["paseo://import?name=X&chat=https://u:p@relay.example/v1&key=sk-secret-1", "bad_url"],
+      ["paseo://import?preset=google-vertex&key=sk-secret-1", "vertex"],
+      ["paseo://import?preset=nope&key=sk-secret-1", "unknown_template"],
+      ["paseo://import?name=X&key=sk-secret-1", "no_base_url"],
+      [`paseo://import?preset=deepseek&key=${"k".repeat(4097)}`, "bad_key"],
+    ] as const;
+    for (const [link, reason] of unsafe) {
+      const preview = await client.apiEndpointImportLinkPreview(link);
+      expect(preview.preview, link).toBeNull();
+      expect(preview.error, link).toMatchObject({
+        code: "import_link_refused",
+        params: { reason },
+      });
+      expect(JSON.stringify(preview), link).not.toContain("sk-secret-1");
+      // 不经确认框直接要添加也一样拒收：客户端说的不算。
+      const added = await client.apiEndpointImportLink({ link, name: "X", key: "sk-secret-1" });
+      expect(added.endpoint, link).toBeNull();
+      expect(added.error, link).toMatchObject({ code: "import_link_refused", params: { reason } });
+    }
+    expect((await client.apiEndpointList("claude")).endpoints).toEqual([]);
+  });
+
+  test("preview saves nothing; add takes the dialog's name and key; the same id replaces in place", async () => {
+    const { client } = await start({
+      endpoints: [
+        storedEndpoint({ id: "ep_first", name: "First", url: "https://first.example" }),
+        storedEndpoint({ id: "my-relay", name: "Old Relay", url: "https://old-relay.example" }),
+      ],
+      keys: { ep_first: "sk-first", "my-relay": "sk-old" },
+    });
+    const fresh =
+      "paseo://import?name=Fresh&chat=https://fresh.example/v1/&anthropic=https://fresh.example&gemini=https://fresh.example/v1beta&key=sk-link&models=m1,m2";
+    const preview = await client.apiEndpointImportLinkPreview(fresh);
+    expect(preview.error).toBeNull();
+    expect(preview.preview).toMatchObject({
+      name: "Fresh",
+      key: "sk-link",
+      hosts: ["fresh.example"],
+      models: ["m1", "m2"],
+      replaces: null,
+      ignoredGemini: true,
+    });
+    expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(2);
+
+    const added = await client.apiEndpointImportLink({
+      link: fresh,
+      name: " Mine ",
+      key: "sk-mine",
+    });
+    expect(added.error).toBeNull();
+    const addedId = added.endpoint?.endpointId ?? "";
+    expect(added.endpoint?.name).toBe("Mine");
+    expect((await client.apiEndpointRevealKey(addedId)).apiKey).toBe("sk-mine");
+
+    const replacing =
+      "paseo://import?name=New%20Relay&id=my-relay&chat=https://new-relay.example/v1";
+    const replacePreview = await client.apiEndpointImportLinkPreview(replacing);
+    expect(replacePreview.preview?.replaces).toEqual({ endpointId: "my-relay", name: "Old Relay" });
+    const replaced = await client.apiEndpointImportLink({
+      link: replacing,
+      name: "New Relay",
+      key: "",
+    });
+    expect(replaced.error).toBeNull();
+    expect(replaced.endpoint).toEqual({ endpointId: "my-relay", name: "New Relay" });
+
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.map((endpoint) => [endpoint.id, endpoint.name])).toEqual([
+      ["ep_first", "First"],
+      ["my-relay", "New Relay"],
+      [addedId, "Mine"],
+    ]);
+    expect(listed.endpoints[1]?.baseUrls).toEqual([
+      { format: "openai_chat", url: "https://new-relay.example/v1" },
+    ]);
+    expect(listed.endpoints[2]?.models).toEqual([{ id: "m1" }, { id: "m2" }]);
+    // 换成链接里没有 key 的那家：原来那把 key 不再是它的。
+    expect((await client.apiEndpointRevealKey("my-relay")).apiKey).toBeNull();
+    // 确认框里改的 key 也照链接的规矩拒收。
+    const badKey = await client.apiEndpointImportLink({
+      link: fresh,
+      name: "Bad",
+      key: "sk\u0001x",
+    });
+    expect(badKey.error).toMatchObject({
+      code: "import_link_refused",
+      params: { reason: "bad_key" },
+    });
+  });
+});

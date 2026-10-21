@@ -190,6 +190,12 @@ on this computer or the local network is refused before any request. The
 whole search stops after 30 seconds, each picture after 15, and the picture is
 kept like one you picked yourself. The price table switch does not cover it.
 
+An import link (`paseo://import?...`) for a custom endpoint can name its own
+picture with `icon=`. The daemon fetches that one picture only when you press
+Add in the link's dialog, with the same identity and public-host rule, and gives
+up after 15 seconds, keeping the default icon. The link's key is never sent
+with it.
+
 While Claude Code's or Codex's API endpoint switch is on, reading that
 provider's settings page can send two checks of the daemon's own. Each times out
 after 3 seconds and its answer is reused for 20 seconds:

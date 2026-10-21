@@ -134,6 +134,10 @@ import {
   ApiEndpointImportDiscoveryResponseSchema,
   ApiEndpointImportIgnoreRequestSchema,
   ApiEndpointImportIgnoreResponseSchema,
+  ApiEndpointImportLinkPreviewRequestSchema,
+  ApiEndpointImportLinkPreviewResponseSchema,
+  ApiEndpointImportLinkRequestSchema,
+  ApiEndpointImportLinkResponseSchema,
   ApiEndpointListTemplatesRequestSchema,
   ApiEndpointListTemplatesResponseSchema,
   ApiEndpointStoreIconRequestSchema,
@@ -3619,6 +3623,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointImportRequestSchema,
   ApiEndpointImportDiscoveryRequestSchema,
   ApiEndpointImportIgnoreRequestSchema,
+  ApiEndpointImportLinkPreviewRequestSchema,
+  ApiEndpointImportLinkRequestSchema,
   ApiEndpointListTemplatesRequestSchema,
   ApiEndpointStoreIconRequestSchema,
   ApiEndpointFetchSiteIconRequestSchema,
@@ -4005,7 +4011,8 @@ export const ServerInfoStatusPayloadSchema = z
         // 列表带 disabledModels，支持 set_disabled_models（已禁用的模型）；
         // 列表带 endpointNameDisplay、快照带 apiEndpointNameDisplay，支持 set_endpoint_name_display（接口名显示方式）；
         // vendor_status（厂商官方状态页）；import_scan 与 import（从别的软件导入）；
-        // import_discovery 与 import_ignore（「第三方接口」页的发现提示与忽略）。
+        // import_discovery 与 import_ignore（「第三方接口」页的发现提示与忽略）；
+        // import_link_preview 与 import_link（桌面端收到的导入链接）。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7420,6 +7427,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointImportResponseSchema,
   ApiEndpointImportDiscoveryResponseSchema,
   ApiEndpointImportIgnoreResponseSchema,
+  ApiEndpointImportLinkPreviewResponseSchema,
+  ApiEndpointImportLinkResponseSchema,
   ApiEndpointListTemplatesResponseSchema,
   ApiEndpointStoreIconResponseSchema,
   ApiEndpointFetchSiteIconResponseSchema,

@@ -1487,3 +1487,96 @@ export const ApiEndpointImportResponseSchema = z.object({
   }),
 });
 export type ApiEndpointImportResponse = z.infer<typeof ApiEndpointImportResponseSchema>;
+
+/**
+ * 导入链接（`paseo://import?…`，ADR 0013）为什么拒收（照 magpie importurl.go），放在 error.params.reason（error.code 是
+ * import_link_refused），params.field 是出问题的参数名（chat、responses、anthropic、gemini、icon），params.template、
+ * params.region 是认不出的模板与区域。线上是字符串，daemon 以后多一种老客户端照样解析。
+ * not_import_link：不是 paseo://import 链接；unknown_template；vertex（Google Vertex AI 要用自己的 Google Cloud 项目加）；
+ * unknown_region；no_name（没有 preset= 也没有 name=）；no_id（名称里没有字母或数字可做标识）；
+ * bad_url（不是一个地址：读不懂、没有主机、带账号、查询串或片段）；needs_https（公网地址不是 https）；
+ * no_base_url（没有任何地址）；gemini_only（只有 Gemini 地址，Osuna 还不能用）；bad_key（超过 4096 字节或带控制字符）；
+ * bad_icon（图片地址不是公网主机上的 https）。
+ */
+export const API_ENDPOINT_IMPORT_LINK_REFUSALS = [
+  "not_import_link",
+  "unknown_template",
+  "vertex",
+  "unknown_region",
+  "no_name",
+  "no_id",
+  "bad_url",
+  "needs_https",
+  "no_base_url",
+  "gemini_only",
+  "bad_key",
+  "bad_icon",
+] as const;
+export type ApiEndpointImportLinkRefusal = (typeof API_ENDPOINT_IMPORT_LINK_REFUSALS)[number];
+
+/**
+ * 导入链接要加的那家，给确认框看（照 magpie renderImport）：hosts 是对话与 key 会发往的主机；key 是链接里带的（没有为 null）；
+ * replaces 是会被它替换的那家（照 magpie 同一标识的；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
+ * ignoredGemini：链接里的 Gemini 地址没用上（Osuna 还没有 Gemini 格式）。
+ */
+export const ApiEndpointImportLinkPreviewSchema = z.object({
+  name: z.string(),
+  key: z.string().nullable(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  hosts: z.array(z.string()),
+  models: z.array(z.string()),
+  templateId: z.string().nullable(),
+  region: z.string().nullable(),
+  keysUrl: z.string().nullable(),
+  replaces: z.object({ endpointId: z.string(), name: z.string() }).nullable(),
+  ignoredGemini: z.boolean(),
+});
+export type ApiEndpointImportLinkPreview = z.infer<typeof ApiEndpointImportLinkPreviewSchema>;
+
+/**
+ * 读一条导入链接给确认框：daemon 照 magpie 解析、拒收，不存任何东西。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkPreviewRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_preview.request"),
+  requestId: z.string(),
+  link: z.string(),
+});
+export type ApiEndpointImportLinkPreviewRequest = z.infer<
+  typeof ApiEndpointImportLinkPreviewRequestSchema
+>;
+
+export const ApiEndpointImportLinkPreviewResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_preview.response"),
+  payload: z.object({
+    requestId: z.string(),
+    preview: ApiEndpointImportLinkPreviewSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkPreviewResponse = z.infer<
+  typeof ApiEndpointImportLinkPreviewResponseSchema
+>;
+
+/**
+ * 用户在确认框里点了「添加」/「替换」：daemon 重新解析、拒收一遍链接，用确认框里的名称与 key 加上或换上那家。
+ * key 是空的即不带 key。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link.request"),
+  requestId: z.string(),
+  link: z.string(),
+  name: z.string(),
+  key: z.string(),
+});
+export type ApiEndpointImportLinkRequest = z.infer<typeof ApiEndpointImportLinkRequestSchema>;
+
+export const ApiEndpointImportLinkResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link.response"),
+  payload: z.object({
+    requestId: z.string(),
+    // 加上或换上的那家；失败为 null。
+    endpoint: z.object({ endpointId: z.string(), name: z.string() }).nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkResponse = z.infer<typeof ApiEndpointImportLinkResponseSchema>;

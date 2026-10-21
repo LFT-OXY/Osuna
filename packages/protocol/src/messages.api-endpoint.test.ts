@@ -1862,4 +1862,58 @@ describe("provider.api_endpoint.test_models", () => {
     };
     expect(SessionOutboundMessageSchema.parse(ignored)).toEqual(ignored);
   });
+  it("parses import_link_preview and import_link, with a reason the client may not know", () => {
+    const preview = {
+      type: "provider.api_endpoint.import_link_preview.request" as const,
+      requestId: "req-lp",
+      link: "paseo://import?preset=deepseek&key=sk-abc",
+    };
+    expect(SessionInboundMessageSchema.parse(preview)).toEqual(preview);
+    for (const payload of [
+      {
+        requestId: "req-lp",
+        preview: {
+          name: "DeepSeek",
+          key: "sk-abc",
+          baseUrls: [{ format: "openai_chat", url: "https://api.deepseek.com/v1" }],
+          hosts: ["api.deepseek.com"],
+          models: [],
+          templateId: "deepseek",
+          region: null,
+          keysUrl: null,
+          replaces: { endpointId: "ep_1", name: "DeepSeek" },
+          ignoredGemini: false,
+        },
+        error: null,
+      },
+      {
+        requestId: "req-lp",
+        preview: null,
+        error: {
+          code: "import_link_refused",
+          params: { reason: "some_new_reason", field: "chat" },
+          message: "refused",
+        },
+      },
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.import_link_preview.response" as const,
+        payload,
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    const add = {
+      type: "provider.api_endpoint.import_link.request" as const,
+      requestId: "req-la",
+      link: "paseo://import?preset=deepseek",
+      name: "Mine",
+      key: "",
+    };
+    expect(SessionInboundMessageSchema.parse(add)).toEqual(add);
+    const added = {
+      type: "provider.api_endpoint.import_link.response" as const,
+      payload: { requestId: "req-la", endpoint: { endpointId: "ep_2", name: "Mine" }, error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(added)).toEqual(added);
+  });
 });

@@ -8,6 +8,8 @@ import type {
   ApiEndpointImportScanResponse,
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
+  ApiEndpointImportLinkPreviewResponse,
+  ApiEndpointImportLinkResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
@@ -47,6 +49,8 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.import_discovery.request"
       | "provider.api_endpoint.import_ignore.request"
+      | "provider.api_endpoint.import_link_preview.request"
+      | "provider.api_endpoint.import_link.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
       | "provider.api_endpoint.fetch_site_icon.request"
@@ -80,6 +84,8 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.import_discovery.request": true,
   "provider.api_endpoint.import_ignore.request": true,
+  "provider.api_endpoint.import_link_preview.request": true,
+  "provider.api_endpoint.import_link.request": true,
   "provider.api_endpoint.list_templates.request": true,
   "provider.api_endpoint.store_icon.request": true,
   "provider.api_endpoint.fetch_site_icon.request": true,
@@ -171,6 +177,8 @@ export class ApiEndpointSession {
           | "provider.api_endpoint.import.request"
           | "provider.api_endpoint.import_discovery.request"
           | "provider.api_endpoint.import_ignore.request"
+          | "provider.api_endpoint.import_link_preview.request"
+          | "provider.api_endpoint.import_link.request"
           | "provider.api_endpoint.list_templates.request"
           | "provider.api_endpoint.store_icon.request"
           | "provider.api_endpoint.read_icon.request"
@@ -193,6 +201,10 @@ export class ApiEndpointSession {
         return this.handleImportDiscovery(request);
       case "provider.api_endpoint.import_ignore.request":
         return this.handleImportIgnore(request);
+      case "provider.api_endpoint.import_link_preview.request":
+        return this.handleImportLinkPreview(request);
+      case "provider.api_endpoint.import_link.request":
+        return this.handleImportLink(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
@@ -650,6 +662,45 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.import_ignore.response",
       payload: { requestId: request.requestId, error },
+    });
+  }
+
+  /** 导入链接的确认框：拒收与读接口存储失败都放进 error。链接里的 key 从不写日志。 */
+  private handleImportLinkPreview(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_link_preview.request" }
+    >,
+  ): void {
+    let payload: Omit<ApiEndpointImportLinkPreviewResponse["payload"], "requestId">;
+    try {
+      payload = { preview: this.service.previewImportLink(request.link), error: null };
+    } catch (caught) {
+      payload = { preview: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link_preview.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImportLink(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_link.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportLinkResponse["payload"], "requestId">;
+    try {
+      const endpoint = await this.service.addFromImportLink({
+        link: request.link,
+        name: request.name,
+        key: request.key,
+      });
+      payload = { endpoint, error: null };
+    } catch (caught) {
+      payload = { endpoint: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link.response",
+      payload: { requestId: request.requestId, ...payload },
     });
   }
 

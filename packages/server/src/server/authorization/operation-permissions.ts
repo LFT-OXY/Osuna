@@ -177,6 +177,8 @@ const INBOUND_PERMISSION = {
   "provider.api_endpoint.import.request": "daemon.manage",
   "provider.api_endpoint.import_discovery.request": "daemon.manage",
   "provider.api_endpoint.import_ignore.request": "daemon.manage",
+  "provider.api_endpoint.import_link_preview.request": "daemon.manage",
+  "provider.api_endpoint.import_link.request": "daemon.manage",
   // 往 daemon 目录里写图片，和保存同一级；取回只读，和列表同一级。
   "provider.api_endpoint.store_icon.request": "daemon.manage",
   // 让 daemon 向外网站点发请求再存图片，和保存同一级。
@@ -445,6 +447,8 @@ const OUTBOUND_PERMISSION = {
   "provider.api_endpoint.import.response": "daemon.manage",
   "provider.api_endpoint.import_discovery.response": "daemon.manage",
   "provider.api_endpoint.import_ignore.response": "daemon.manage",
+  "provider.api_endpoint.import_link_preview.response": "daemon.manage",
+  "provider.api_endpoint.import_link.response": "daemon.manage",
   "provider.api_endpoint.store_icon.response": "daemon.manage",
   "provider.api_endpoint.fetch_site_icon.response": "daemon.manage",
   "provider.api_endpoint.read_icon.response": "daemon.read",

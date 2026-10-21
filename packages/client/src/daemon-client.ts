@@ -720,6 +720,14 @@ type ApiEndpointImportIgnorePayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import_ignore.response" }
 >["payload"];
+type ApiEndpointImportLinkPreviewPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link_preview.response" }
+>["payload"];
+type ApiEndpointImportLinkPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link.response" }
+>["payload"];
 type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
@@ -6639,6 +6647,28 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.import_ignore.request", fingerprints },
+    });
+  }
+
+  /** 读一条导入链接给确认框（daemon 解析、拒收，不存）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLinkPreview(
+    link: string,
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkPreviewPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link_preview.request", link },
+    });
+  }
+
+  /** 确认框里点了添加：daemon 重新拒收一遍链接，用这里的名称与 key 加上或换上那家。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLink(
+    input: { link: string; name: string; key: string },
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link.request", ...input },
     });
   }
 

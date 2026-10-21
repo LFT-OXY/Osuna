@@ -141,6 +141,25 @@ export async function findSiteIcon(input: {
   );
 }
 
+/**
+ * 导入链接给的图标图片（照 magpie FetchIcon，用户点了添加才取）：取到并存下，返回图标值；取不到为 null，留着默认图标。
+ * 只取公网主机上的 https 图片。
+ */
+export async function fetchIconPicture(input: {
+  url: string;
+  fetchSite: FetchSite;
+  store: (bytes: Buffer) => string;
+  signal: AbortSignal;
+}): Promise<string | null> {
+  const outcome = await iconFrom({
+    fetchSite: input.fetchSite,
+    signal: input.signal,
+    candidate: input.url,
+    store: input.store,
+  });
+  return outcome.icon;
+}
+
 interface FetchContext {
   fetchSite: FetchSite;
   signal: AbortSignal;

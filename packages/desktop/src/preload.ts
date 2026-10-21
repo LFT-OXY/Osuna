@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
         agentId: string;
       } | null>,
   },
+  importLinks: {
+    ready: () => ipcRenderer.invoke("paseo:import-link:ready") as Promise<string | null>,
+  },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {
       const listener = (_ipcEvent: Electron.IpcRendererEvent, payload: unknown) => {

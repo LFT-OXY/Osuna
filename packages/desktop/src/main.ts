@@ -106,6 +106,8 @@ import {
   type AgentDeepLinkTarget,
 } from "@getpaseo/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
+import { ImportLinkInbox, parseImportLinkFromArgv } from "./import-link.js";
+import { isApiEndpointImportLink } from "@getpaseo/protocol/api-endpoint/import-link";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
@@ -123,6 +125,7 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
 const agentNavigationInbox = new AgentNavigationInbox();
+const importLinkInbox = new ImportLinkInbox();
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -364,6 +367,8 @@ let pendingOpenProjectPath = parseOpenProjectPathFromArgv({
   isDefaultApp: process.defaultApp,
 });
 let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
+// 冷启动时带的导入链接（Windows、Linux 放在启动参数里；macOS 走 open-url）：第一个窗口开好后交给它。
+let pendingImportLink = parseImportLinkFromArgv(process.argv);
 
 // Each window pulls its own pending open-project path on mount, keyed by
 // webContents id, so deep-linked windows (second-instance launches, the
@@ -372,7 +377,11 @@ let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
 let desktopWindowOwner: DesktopWindowOwner<AgentDeepLinkTarget>;
 
 if (PASEO_DEBUG) {
-  log.info("[open-project] argv:", process.argv);
+  // 导入链接里有 key：日志里只写它是导入链接。
+  log.info(
+    "[open-project] argv:",
+    process.argv.map((arg) => (isApiEndpointImportLink(arg) ? "paseo://import?…" : arg)),
+  );
   log.info("[open-project] isDefaultApp:", process.defaultApp);
   log.info("[open-project] pendingOpenProjectPath:", pendingOpenProjectPath);
 }
@@ -391,6 +400,10 @@ ipcMain.handle("paseo:get-pending-open-project", (event) => {
 
 ipcMain.handle("paseo:agent-navigation:ready", (event) => {
   return agentNavigationInbox.windowReady(event.sender.id);
+});
+
+ipcMain.handle("paseo:import-link:ready", (event) => {
+  return importLinkInbox.windowReady(event.sender.id);
 });
 
 ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => {
@@ -719,11 +732,13 @@ async function createWindow(
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
     if (isMainFrame && !isSameDocument) {
       agentNavigationInbox.windowLoading(webContentsId);
+      importLinkInbox.windowLoading(webContentsId);
     }
   });
   mainWindow.on("closed", () => {
     options.onClosed?.(webContentsId);
     agentNavigationInbox.removeWindow(webContentsId);
+    importLinkInbox.removeWindow(webContentsId);
     unregisterPaseoBrowserHost(webContentsId);
     browserKeyboard.detachHost(webContentsId);
   });
@@ -808,6 +823,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
     show: () => win.show(),
     focus: () => win.focus(),
     sendAgent: (target) => win.webContents.send("paseo:event:open-agent", target),
+    sendImportLink: (link) => win.webContents.send("paseo:event:import-link", link),
   };
 }
 
@@ -830,6 +846,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
   agentRoute: buildAgentDeepLinkRoute,
   deliverAgent: (webContentsId, target) =>
     agentNavigationInbox.deliverOrQueue(webContentsId, target),
+  deliverImportLink: (webContentsId, link) => importLinkInbox.deliverOrQueue(webContentsId, link),
 });
 
 // ---------------------------------------------------------------------------
@@ -862,8 +879,23 @@ function receiveAgentDeepLink(input: string): void {
   });
 }
 
+/** 导入链接交给当前窗口（ADR 0013）；启动还没完成时等第一个窗口开好。链接里有 key，不写日志。 */
+function receiveImportLink(link: string): void {
+  if (bootstrapIsComplete) {
+    void desktopWindowOwner
+      .deliverImportLink(link)
+      .catch((error) => log.error("[window] failed to hand an import link to a window", error));
+    return;
+  }
+  pendingImportLink = link.trim();
+}
+
 app.on("open-url", (event, url) => {
   event.preventDefault();
+  if (isApiEndpointImportLink(url)) {
+    receiveImportLink(url);
+    return;
+  }
   receiveAgentDeepLink(url);
 });
 
@@ -885,6 +917,15 @@ function setupSingleInstanceLock(): boolean {
       void bootstrapComplete
         .then(() => desktopWindowOwner.openOrFocusAgent(agentTarget))
         .catch((error) => log.error("[window] failed to route second-instance agent link", error));
+      return;
+    }
+    const importLink = parseImportLinkFromArgv(commandLine);
+    if (importLink) {
+      void bootstrapComplete
+        .then(() => desktopWindowOwner.deliverImportLink(importLink))
+        .catch((error) =>
+          log.error("[window] failed to hand a second-instance import link", error),
+        );
       return;
     }
 
@@ -1008,6 +1049,11 @@ async function bootstrap(): Promise<void> {
     pendingAgentNavigation = null;
     await desktopWindowOwner.openOrFocusAgent(target);
   }
+  if (pendingImportLink) {
+    const link = pendingImportLink;
+    pendingImportLink = null;
+    await desktopWindowOwner.deliverImportLink(link);
+  }
 
   app.on("activate", () => {
     void desktopWindowOwner.restoreWhenActivated().catch((error) => {
@@ -1017,7 +1063,9 @@ async function bootstrap(): Promise<void> {
 }
 
 void runDesktopStartup({
-  hasPendingGuiLaunchRequest: Boolean(pendingOpenProjectPath || pendingAgentNavigation),
+  hasPendingGuiLaunchRequest: Boolean(
+    pendingOpenProjectPath || pendingAgentNavigation || pendingImportLink,
+  ),
   runCliPassthroughIfRequested,
   inheritLoginShellEnv,
   bootstrapGui: bootstrap,

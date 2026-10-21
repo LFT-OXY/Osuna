@@ -46,6 +46,7 @@ import {
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
   type ApiEndpointImportCandidate,
+  type ApiEndpointImportLinkPreview,
   API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -291,6 +292,7 @@ import {
 import { ModelsDevCatalog } from "./models-dev.js";
 import {
   createPublicFetchSite,
+  fetchIconPicture,
   findSiteIcon,
   SiteIconError,
   type FetchSite,
@@ -331,6 +333,12 @@ import {
   type ImportSourcePaths,
   type SettledEntry,
 } from "./import-apps.js";
+import {
+  ImportLinkRefusedError,
+  isKeyLike,
+  parseImportLink,
+  type ParsedImportLink,
+} from "./import-link.js";
 import {
   askedDisabledBy,
   disabledMessage,
@@ -408,6 +416,8 @@ export type ApiEndpointErrorCode =
   | "import_failed"
   // 「忽略」没记上（params.reason：errno、endpoints_unparsable 或错误名）。
   | "import_ignore_failed"
+  // 不安全或读不懂的导入链接（params.reason 见 protocol 的 API_ENDPOINT_IMPORT_LINK_REFUSALS，另有 field、template、region）。
+  | "import_link_refused"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -421,6 +431,8 @@ const VIA_OSUNA = "via Osuna";
 const CODEX_GATEWAY_SUFFIX = "/v1";
 // 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
 const SAVE_LIST_TIMEOUT_MS = 8_000;
+// 导入链接给的图标图片最多等这么久，过了就用默认图标照常添加。
+const IMPORT_LINK_ICON_TIMEOUT_MS = 15_000;
 // 每天刷新时一家各格式加起来最多拉这么久。
 const DAILY_LIST_TIMEOUT_MS = 60_000;
 // 测试连接要等模型真正回一句话，比列出模型慢。
@@ -3363,25 +3375,49 @@ export class ApiEndpointService {
     if (found === null || entry.status === "added") return null;
     const action = importActionOf({ pick, found });
     const previous = this.readState();
+    if (action.kind === "replace") {
+      const index = replaceTargetIndex({ entry, endpoints: previous.endpoints });
+      return this.landImported({
+        previous,
+        found,
+        name: found.name,
+        replaceIndex: index,
+        icon: null,
+      });
+    }
+    // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
+    const holds = previous.endpoints.some((held) =>
+      sameAccount({ have: { ...held, key: this.store.getApiKey(held.id) }, found }),
+    );
+    if (holds) return null;
+    const name = freeEndpointName(previous, action.name);
+    return this.landImported({ previous, found, name, replaceIndex: null, icon: null });
+  }
+
+  /**
+   * 导入的一家落下（从别的软件导入与导入链接共用）：replaceIndex 是被换掉的那家（保留它的 id、标识与顺序位置），
+   * 为 null 时用 name 新增一家、加在最后。没有 key 的换上后去掉原来那家的 key。
+   */
+  private async landImported(input: {
+    previous: ApiEndpointState;
+    found: FoundEndpoint;
+    name: string;
+    replaceIndex: number | null;
+    icon: string | null;
+  }): Promise<ImportedEndpointRef> {
+    const { previous, found, name, replaceIndex, icon } = input;
     const timestamp = this.now().toISOString();
     let endpoints: StoredApiEndpoint[];
     let endpoint: StoredApiEndpoint;
-    if (action.kind === "replace") {
-      const index = replaceTargetIndex({ entry, endpoints: previous.endpoints });
-      const target = previous.endpoints[index];
+    if (replaceIndex !== null) {
+      const target = previous.endpoints[replaceIndex];
       if (target === undefined) throw importGone();
-      endpoint = importedEndpoint({ found, name: found.name, kept: target, timestamp });
-      endpoints = previous.endpoints.with(index, endpoint);
+      endpoint = importedEndpoint({ found, name, kept: target, timestamp, icon });
+      endpoints = previous.endpoints.with(replaceIndex, endpoint);
     } else {
-      // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
-      const holds = previous.endpoints.some((held) =>
-        sameAccount({ have: { ...held, key: this.store.getApiKey(held.id) }, found }),
-      );
-      if (holds) return null;
-      const name = freeEndpointName(previous, action.name);
       const slug = generateEndpointSlug(name, new Set(previous.endpoints.map((held) => held.slug)));
       const kept = { id: `ep_${randomUUID()}`, slug, createdAt: timestamp };
-      endpoint = importedEndpoint({ found, name, kept, timestamp });
+      endpoint = importedEndpoint({ found, name, kept, timestamp, icon });
       endpoints = [...previous.endpoints, endpoint];
     }
     const keys = found.key === null ? {} : { [endpoint.id]: found.key };
@@ -3390,8 +3426,91 @@ export class ApiEndpointService {
     if (found.key === null && this.store.getApiKey(endpoint.id) !== null) {
       this.store.removeApiKey(endpoint.id);
     }
-    if (action.kind === "replace") this.cooldowns.clear(endpoint.id);
+    if (replaceIndex !== null) this.cooldowns.clear(endpoint.id);
     return { endpointId: endpoint.id, name: endpoint.name };
+  }
+
+  /**
+   * 读一条导入链接给确认框（ADR 0013，magpie importlink.go）：照 magpie 解析、拒收，说会替换哪家；不存任何东西。
+   */
+  previewImportLink(link: string): ApiEndpointImportLinkPreview {
+    const parsed = parsedImportLinkOrRefuse(link);
+    const target = importLinkTarget({ endpoints: this.readState().endpoints, parsed });
+    const hosts = [...new Set(parsed.baseUrls.map(({ url }) => new URL(url).host))];
+    let replaces: ApiEndpointImportLinkPreview["replaces"] = null;
+    if (target !== null) replaces = { endpointId: target.id, name: target.name };
+    return {
+      name: parsed.name,
+      key: parsed.key,
+      baseUrls: parsed.baseUrls,
+      hosts,
+      models: parsed.models,
+      templateId: parsed.templateId,
+      region: parsed.region,
+      keysUrl: parsed.keysUrl,
+      replaces,
+      ignoredGemini: parsed.ignoredGemini,
+    };
+  }
+
+  /**
+   * 确认框里点了添加：重新解析、拒收一遍链接（客户端说的不算），用确认框里的名称与 key 加上那家，
+   * 或换上同一标识的那家（magpie Save 整个换上）。链接给了图标图片的「自定义」接口，这时才去取（取不到留着默认图标）。
+   * 加好的照保存那样当场拉一次清单。
+   */
+  async addFromImportLink(input: {
+    link: string;
+    name: string;
+    key: string;
+  }): Promise<ImportedEndpointRef> {
+    const parsed = parsedImportLinkOrRefuse(input.link);
+    const name = validateName(input.name);
+    const key = input.key.trim();
+    if (!isKeyLike(key)) {
+      throw new ApiEndpointRequestError({
+        code: "import_link_refused",
+        message: "That is not a key",
+        params: { reason: "bad_key" },
+      });
+    }
+    const icon = await this.importLinkIcon(parsed);
+    const found: FoundEndpoint = {
+      name,
+      key: key === "" ? null : key,
+      baseUrls: parsed.baseUrls,
+      models: parsed.models,
+      headers: null,
+      templateId: parsed.templateId,
+      region: parsed.region,
+    };
+    const added = await this.exclusiveFollowing(async () => {
+      const previous = this.readState();
+      const target = importLinkTarget({ endpoints: previous.endpoints, parsed });
+      if (target === null) {
+        const freeName = freeEndpointName(previous, name);
+        return this.landImported({ previous, found, name: freeName, replaceIndex: null, icon });
+      }
+      // 改了名的不和别的几家重名；和被换掉的那家同名不算。
+      const othersHeld = previous.endpoints.filter((held) => held !== target);
+      const freeName = freeEndpointName({ ...previous, endpoints: othersHeld }, name);
+      const replaceIndex = previous.endpoints.indexOf(target);
+      return this.landImported({ previous, found, name: freeName, replaceIndex, icon });
+    });
+    const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
+    await this.refreshCatalog({ endpointId: added.endpointId, signal });
+    return added;
+  }
+
+  /** 导入链接给的图标：只给「自定义」加的（模板接口用模板的图标）。 */
+  private async importLinkIcon(parsed: ParsedImportLink): Promise<string | null> {
+    if (parsed.templateId !== null || parsed.iconUrl === null) return null;
+    const signal = AbortSignal.timeout(IMPORT_LINK_ICON_TIMEOUT_MS);
+    return fetchIconPicture({
+      url: parsed.iconUrl,
+      fetchSite: this.fetchSite,
+      store: (bytes) => this.icons.store(bytes),
+      signal,
+    });
   }
 
   /**
@@ -5783,6 +5902,33 @@ function importActionOf(input: {
   return { kind: "add", name: found.name };
 }
 
+/** 解析导入链接，拒收时换成 import_link_refused（params.reason 加上拒收的参数，从不带 key）。 */
+function parsedImportLinkOrRefuse(link: string): ParsedImportLink {
+  try {
+    return parseImportLink(link);
+  } catch (error) {
+    if (!(error instanceof ImportLinkRefusedError)) throw error;
+    throw new ApiEndpointRequestError({
+      code: "import_link_refused",
+      message: error.message,
+      params: { ...error.params, reason: error.reason },
+    });
+  }
+}
+
+/** 导入链接会替换的那家（magpie 同一 id 的）：标识就是链接的标识，或名称不分大小写相同；没有为 null。 */
+function importLinkTarget(input: {
+  endpoints: readonly StoredApiEndpoint[];
+  parsed: ParsedImportLink;
+}): StoredApiEndpoint | null {
+  const { parsed } = input;
+  const name = parsed.name.toLowerCase();
+  const target = input.endpoints.find(
+    (endpoint) => endpoint.slug === parsed.identity || endpoint.name.toLowerCase() === name,
+  );
+  return target ?? null;
+}
+
 function importGone(): ApiEndpointRequestError {
   return new ApiEndpointRequestError({
     code: "import_gone",
@@ -5818,12 +5964,16 @@ function importedEndpoint(input: {
   name: string;
   kept: Pick<StoredApiEndpoint, "id" | "slug" | "createdAt">;
   timestamp: string;
+  icon: string | null;
 }): StoredApiEndpoint {
   const { found, kept } = input;
   const templateId = found.templateId ?? undefined;
   const models = found.models.map((id) => ({ id }));
   const scope: Pick<StoredApiEndpoint, "modelScope" | "manualModels"> =
     models.length > 0 ? { modelScope: "picked", manualModels: models } : { modelScope: "vendor" };
+  // 导入链接给的图标（只给「自定义」加的）；没有即用默认的。
+  const iconField: Pick<StoredApiEndpoint, "icon"> = {};
+  if (input.icon !== null) iconField.icon = input.icon;
   return {
     id: kept.id,
     slug: kept.slug,
@@ -5835,6 +5985,7 @@ function importedEndpoint(input: {
     ...(templateId !== undefined ? { templateId } : {}),
     ...(found.region !== null ? { region: found.region } : {}),
     ...(found.headers !== null ? { headers: found.headers } : {}),
+    ...iconField,
     createdAt: kept.createdAt,
     updatedAt: input.timestamp,
   };
