@@ -300,9 +300,11 @@ import {
 } from "./site-icon.js";
 import {
   EndpointIcons,
+  iconMimeType,
   isBuiltInIconName,
   StoreIconError,
   storedIconName,
+  type StoredIcon,
   type StoreIconFailure,
 } from "./endpoint-icons.js";
 import { isErrnoException } from "../../utils/errno.js";
@@ -334,6 +336,7 @@ import {
   type SettledEntry,
 } from "./import-apps.js";
 import {
+  cutImportLinkName,
   ImportLinkRefusedError,
   isKeyLike,
   parseImportLink,
@@ -431,8 +434,16 @@ const VIA_OSUNA = "via Osuna";
 const CODEX_GATEWAY_SUFFIX = "/v1";
 // 保存后当场拉清单最多等这么久（照 magpie），过了就照常回保存的结果。
 const SAVE_LIST_TIMEOUT_MS = 8_000;
-// 导入链接给的图标图片最多等这么久，过了就用默认图标照常添加。
+// 导入链接给的图标图片最多等这么久，过了就用默认图标。
 const IMPORT_LINK_ICON_TIMEOUT_MS = 15_000;
+// 确认框打开时取到的导入链接图片，内存里最多留这么几张，等添加时存下。
+const MAX_KEPT_LINK_PICTURES = 8;
+
+/** 导入链接 icon= 的图片：取到、认得，还没存。 */
+interface ImportLinkPicture {
+  bytes: Buffer;
+  mimeType: string;
+}
 // 每天刷新时一家各格式加起来最多拉这么久。
 const DAILY_LIST_TIMEOUT_MS = 60_000;
 // 测试连接要等模型真正回一句话，比列出模型慢。
@@ -867,6 +878,8 @@ export class ApiEndpointService {
   private readonly modelsDev: ModelsDevCatalog;
   private readonly icons: EndpointIcons;
   private readonly fetchSite: FetchSite;
+  // 确认框打开时取到的导入链接图片（按图片地址），添加时存下。
+  private readonly importLinkPictures = new Map<string, ImportLinkPicture>();
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
@@ -3432,13 +3445,21 @@ export class ApiEndpointService {
 
   /**
    * 读一条导入链接给确认框（ADR 0013，magpie importlink.go）：照 magpie 解析、拒收，说会替换哪家；不存任何东西。
+   * 链接给了图标图片的，确认框一打开就去取（magpie：确认框开着就是同意），图片先留在内存里，添加成功时才存下。
    */
-  previewImportLink(link: string): ApiEndpointImportLinkPreview {
+  async previewImportLink(link: string): Promise<ApiEndpointImportLinkPreview> {
     const parsed = parsedImportLinkOrRefuse(link);
     const target = importLinkTarget({ endpoints: this.readState().endpoints, parsed });
-    const hosts = [...new Set(parsed.baseUrls.map(({ url }) => new URL(url).host))];
+    const hostNames = parsed.baseUrls.map(({ url }) => new URL(url).host);
+    const hosts = [...new Set(hostNames)];
     let replaces: ApiEndpointImportLinkPreview["replaces"] = null;
     if (target !== null) replaces = { endpointId: target.id, name: target.name };
+    const picture = await this.importLinkPicture(parsed);
+    let iconImage: ApiEndpointImportLinkPreview["iconImage"] = null;
+    if (picture !== null) {
+      const data = picture.bytes.toString("base64");
+      iconImage = { data, mimeType: picture.mimeType };
+    }
     return {
       name: parsed.name,
       key: parsed.key,
@@ -3450,13 +3471,15 @@ export class ApiEndpointService {
       keysUrl: parsed.keysUrl,
       replaces,
       ignoredGemini: parsed.ignoredGemini,
+      icon: parsed.icon,
+      iconImage,
     };
   }
 
   /**
-   * 确认框里点了添加：重新解析、拒收一遍链接（客户端说的不算），用确认框里的名称与 key 加上那家，
-   * 或换上同一标识的那家（magpie Save 整个换上）。链接给了图标图片的「自定义」接口，这时才去取（取不到留着默认图标）。
-   * 加好的照保存那样当场拉一次清单。
+   * 确认框里点了添加：重新解析、拒收一遍链接（客户端说的不算），用确认框里的名称（同样截到 80 字节）与 key 加上那家，
+   * 或换上 magpie Find(id) 找到的那家（Save 整个换上）。icon= 的图片有就用它（模板接口也一样），否则用 catalog= 的图标；
+   * 图片在这一刻才存下，没加成就删掉。加好的照保存那样当场拉一次清单。
    */
   async addFromImportLink(input: {
     link: string;
@@ -3464,7 +3487,7 @@ export class ApiEndpointService {
     key: string;
   }): Promise<ImportedEndpointRef> {
     const parsed = parsedImportLinkOrRefuse(input.link);
-    const name = validateName(input.name);
+    const name = cutImportLinkName(validateName(input.name));
     const key = input.key.trim();
     if (!isKeyLike(key)) {
       throw new ApiEndpointRequestError({
@@ -3473,7 +3496,7 @@ export class ApiEndpointService {
         params: { reason: "bad_key" },
       });
     }
-    const icon = await this.importLinkIcon(parsed);
+    const picture = await this.importLinkPicture(parsed);
     const found: FoundEndpoint = {
       name,
       key: key === "" ? null : key,
@@ -3486,31 +3509,67 @@ export class ApiEndpointService {
     const added = await this.exclusiveFollowing(async () => {
       const previous = this.readState();
       const target = importLinkTarget({ endpoints: previous.endpoints, parsed });
-      if (target === null) {
-        const freeName = freeEndpointName(previous, name);
-        return this.landImported({ previous, found, name: freeName, replaceIndex: null, icon });
+      let stored: StoredIcon | null = null;
+      if (picture !== null) stored = this.icons.storeTracked(picture.bytes);
+      const icon = stored?.icon ?? parsed.icon;
+      let landed = false;
+      try {
+        let replaceIndex: number | null = null;
+        let freeName = freeEndpointName(previous, name);
+        if (target !== null) {
+          // 改了名的不和别的几家重名；和被换掉的那家同名不算。
+          const othersHeld = previous.endpoints.filter((held) => held !== target);
+          freeName = freeEndpointName({ ...previous, endpoints: othersHeld }, name);
+          replaceIndex = previous.endpoints.indexOf(target);
+        }
+        const ref = await this.landImported({
+          previous,
+          found,
+          name: freeName,
+          replaceIndex,
+          icon,
+        });
+        landed = true;
+        return ref;
+      } finally {
+        // 没加成：这次才存下的图片没人用，删掉。
+        if (!landed && stored?.isNew === true) this.icons.discard(stored.icon);
       }
-      // 改了名的不和别的几家重名；和被换掉的那家同名不算。
-      const othersHeld = previous.endpoints.filter((held) => held !== target);
-      const freeName = freeEndpointName({ ...previous, endpoints: othersHeld }, name);
-      const replaceIndex = previous.endpoints.indexOf(target);
-      return this.landImported({ previous, found, name: freeName, replaceIndex, icon });
     });
+    if (parsed.iconUrl !== null) this.importLinkPictures.delete(parsed.iconUrl);
     const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
     await this.refreshCatalog({ endpointId: added.endpointId, signal });
     return added;
   }
 
-  /** 导入链接给的图标：只给「自定义」加的（模板接口用模板的图标）。 */
-  private async importLinkIcon(parsed: ParsedImportLink): Promise<string | null> {
-    if (parsed.templateId !== null || parsed.iconUrl === null) return null;
+  /**
+   * 导入链接的 icon= 图片：确认框打开时取过的从内存里拿，没有就现取。取不到、不是认得的图片为 null（用默认图标），
+   * 原因写一行日志（只有主机名与原因，不写 key 与查询串）。
+   */
+  private async importLinkPicture(parsed: ParsedImportLink): Promise<ImportLinkPicture | null> {
+    const url = parsed.iconUrl;
+    if (url === null) return null;
+    const kept = this.importLinkPictures.get(url);
+    if (kept !== undefined) return kept;
     const signal = AbortSignal.timeout(IMPORT_LINK_ICON_TIMEOUT_MS);
-    return fetchIconPicture({
-      url: parsed.iconUrl,
-      fetchSite: this.fetchSite,
-      store: (bytes) => this.icons.store(bytes),
-      signal,
-    });
+    const fetched = await fetchIconPicture({ url, fetchSite: this.fetchSite, signal });
+    const host = new URL(url).host;
+    if (!fetched.ok) {
+      this.logger.warn({ host, reason: fetched.reason }, "Import link icon couldn't be fetched");
+      return null;
+    }
+    const mimeType = iconMimeType(fetched.bytes);
+    if (mimeType === null) {
+      this.logger.warn({ host, reason: "not_image" }, "Import link icon couldn't be fetched");
+      return null;
+    }
+    const picture = { bytes: fetched.bytes, mimeType };
+    this.importLinkPictures.set(url, picture);
+    // 只留最近几张：确认框关了没加的不一直占着内存。
+    for (const old of [...this.importLinkPictures.keys()].slice(0, -MAX_KEPT_LINK_PICTURES)) {
+      this.importLinkPictures.delete(old);
+    }
+    return picture;
   }
 
   /**
@@ -5916,17 +5975,20 @@ function parsedImportLinkOrRefuse(link: string): ParsedImportLink {
   }
 }
 
-/** 导入链接会替换的那家（magpie 同一 id 的）：标识就是链接的标识，或名称不分大小写相同；没有为 null。 */
+/**
+ * 导入链接会替换的那家（照 magpie Find(id)）：先找标识就是链接标识的，再找名称（不分大小写）就是链接标识的。
+ * 只看链接的名称不算：name=DeepSeek&id=my-ds 是新的一家，不替换用户的 DeepSeek。magpie 还认改过的旧 id，
+ * Osuna 的标识建好就锁定，没有旧 id。没有为 null。
+ */
 function importLinkTarget(input: {
   endpoints: readonly StoredApiEndpoint[];
   parsed: ParsedImportLink;
 }): StoredApiEndpoint | null {
-  const { parsed } = input;
-  const name = parsed.name.toLowerCase();
-  const target = input.endpoints.find(
-    (endpoint) => endpoint.slug === parsed.identity || endpoint.name.toLowerCase() === name,
-  );
-  return target ?? null;
+  const { endpoints, parsed } = input;
+  const byId = endpoints.find((endpoint) => endpoint.slug === parsed.identity);
+  if (byId !== undefined) return byId;
+  const byName = endpoints.find((endpoint) => endpoint.name.toLowerCase() === parsed.identity);
+  return byName ?? null;
 }
 
 function importGone(): ApiEndpointRequestError {

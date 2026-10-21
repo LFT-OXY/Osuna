@@ -87,6 +87,8 @@ describe("parseImportLink", () => {
 
   it("allows plain http only to this machine or the local network", () => {
     for (const host of [
+      "[::ffff:127.0.0.1]:8080",
+      "[::ffff:10.0.0.2]",
       "localhost:11434",
       "127.0.0.1:8080",
       "192.168.1.20:8000",
@@ -119,6 +121,21 @@ describe("parseImportLink", () => {
         params: { field: "anthropic" },
       });
     }
+  });
+
+  it("takes an empty query or fragment as Go does, and leaves it out of the base URL", () => {
+    for (const url of ["https://relay.example/v1?", "https://relay.example/v1#"]) {
+      expect(parseImportLink(link({ name: "X", chat: url })).baseUrls, url).toEqual([
+        { format: "openai_chat", url: "https://relay.example/v1" },
+      ]);
+    }
+  });
+
+  it("takes the vendor icon from catalog= (magpie IconForCatalog), never a made-up one", () => {
+    const base = { name: "My Relay", chat: "https://relay.example/v1" };
+    expect(parseImportLink(link({ ...base, catalog: "DeepSeek" })).icon).toBe("deepseek-color");
+    expect(parseImportLink(link({ ...base, catalog: "no-such-vendor" })).icon).toBeNull();
+    expect(parseImportLink(link({ ...base, catalog: "../evil" })).icon).toBeNull();
   });
 
   it("refuses a link with no base URL, and one with only a Gemini URL", () => {

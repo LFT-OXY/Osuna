@@ -666,15 +666,16 @@ export class ApiEndpointSession {
   }
 
   /** 导入链接的确认框：拒收与读接口存储失败都放进 error。链接里的 key 从不写日志。 */
-  private handleImportLinkPreview(
+  private async handleImportLinkPreview(
     request: Extract<
       ApiEndpointRequest,
       { type: "provider.api_endpoint.import_link_preview.request" }
     >,
-  ): void {
+  ): Promise<void> {
     let payload: Omit<ApiEndpointImportLinkPreviewResponse["payload"], "requestId">;
     try {
-      payload = { preview: this.service.previewImportLink(request.link), error: null };
+      const preview = await this.service.previewImportLink(request.link);
+      payload = { preview, error: null };
     } catch (caught) {
       payload = { preview: null, error: this.toWireError(caught, request) };
     }

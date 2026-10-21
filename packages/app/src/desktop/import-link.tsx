@@ -63,8 +63,9 @@ export function ImportLinkListener() {
         const pending = await ready();
         if (!disposed && pending) receive(pending);
       } catch (error) {
-        // 桌面端的桥一时不通：过一秒再接（同 Agent 链接）。
-        console.warn("[import-link] desktop bridge unavailable", error);
+        // 桌面端的桥一时不通（IPC 抛的都是 Error）：过一秒再接，同 Agent 链接；别的照常抛出。
+        if (!(error instanceof Error)) throw error;
+        console.warn("[import-link] desktop bridge unavailable", error.message);
         dispose?.();
         if (unlisten === dispose) unlisten = null;
         if (!disposed) retryTimer = setTimeout(() => void connect(), 1_000);

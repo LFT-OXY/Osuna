@@ -44,7 +44,8 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       } | null>,
   },
   importLinks: {
-    ready: () => ipcRenderer.invoke("paseo:import-link:ready") as Promise<string | null>,
+    // 主进程只交出字符串或 null（ImportLinkInbox）。
+    ready: (): Promise<string | null> => ipcRenderer.invoke("paseo:import-link:ready"),
   },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {

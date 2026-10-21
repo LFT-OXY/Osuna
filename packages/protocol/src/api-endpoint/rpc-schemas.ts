@@ -1453,6 +1453,10 @@ export const ApiEndpointImportIgnoreResponseSchema = z.object({
 });
 export type ApiEndpointImportIgnoreResponse = z.infer<typeof ApiEndpointImportIgnoreResponseSchema>;
 
+/** 加了、换上或会被换掉的那一家：id 与名称。 */
+export const ApiEndpointNameRefSchema = z.object({ endpointId: z.string(), name: z.string() });
+export type ApiEndpointNameRef = z.infer<typeof ApiEndpointNameRefSchema>;
+
 /** 导入的一条怎么进来：add（新增一家）、replace（替换名称撞上的那家，保留它的 id 与顺序位置）、rename（改名后新增，name 必填）。 */
 export const API_ENDPOINT_IMPORT_ACTIONS = ["add", "replace", "rename"] as const;
 export type ApiEndpointImportAction = (typeof API_ENDPOINT_IMPORT_ACTIONS)[number];
@@ -1480,7 +1484,7 @@ export const ApiEndpointImportResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     // 加了或换上的那几家；已经有的、读不了的不在里面。出错时是出错之前加好的。
-    imported: z.array(z.object({ endpointId: z.string(), name: z.string() })),
+    imported: z.array(ApiEndpointNameRefSchema),
     // 出错的那一条（error 说为什么）；整个请求失败或都成了为 null。
     failed: z.object({ fingerprint: z.string(), name: z.string() }).nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
@@ -1516,8 +1520,9 @@ export type ApiEndpointImportLinkRefusal = (typeof API_ENDPOINT_IMPORT_LINK_REFU
 
 /**
  * 导入链接要加的那家，给确认框看（照 magpie renderImport）：hosts 是对话与 key 会发往的主机；key 是链接里带的（没有为 null）；
- * replaces 是会被它替换的那家（照 magpie 同一标识的；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
+ * replaces 是会被它替换的那家（照 magpie Find(id)；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
  * ignoredGemini：链接里的 Gemini 地址没用上（Osuna 还没有 Gemini 格式）。
+ * icon 是 catalog= 对上的内置图标名；iconImage 是 icon= 那张图（确认框一打开就取，取不到为 null），有它就用它。
  */
 export const ApiEndpointImportLinkPreviewSchema = z.object({
   name: z.string(),
@@ -1528,8 +1533,10 @@ export const ApiEndpointImportLinkPreviewSchema = z.object({
   templateId: z.string().nullable(),
   region: z.string().nullable(),
   keysUrl: z.string().nullable(),
-  replaces: z.object({ endpointId: z.string(), name: z.string() }).nullable(),
+  replaces: ApiEndpointNameRefSchema.nullable(),
   ignoredGemini: z.boolean(),
+  icon: z.string().nullable().optional(),
+  iconImage: ApiEndpointIconImageSchema.nullable().optional(),
 });
 export type ApiEndpointImportLinkPreview = z.infer<typeof ApiEndpointImportLinkPreviewSchema>;
 
@@ -1575,7 +1582,7 @@ export const ApiEndpointImportLinkResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     // 加上或换上的那家；失败为 null。
-    endpoint: z.object({ endpointId: z.string(), name: z.string() }).nullable(),
+    endpoint: ApiEndpointNameRefSchema.nullable(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

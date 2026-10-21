@@ -2,7 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { View } from "react-native";
+import { Image, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ApiEndpointImportLinkPreview } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
@@ -14,6 +14,7 @@ import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { EndpointIcon } from "./endpoint-icon";
+import { importLinkRefusalText } from "./import-link-copy";
 import type {
   ImportLinkAddInput,
   ImportLinkAddResult,
@@ -43,6 +44,8 @@ export interface ImportLinkSheetProps {
 }
 
 const SNAP_POINTS = ["90%"];
+// 只有一句话的（拒收、加不了）：窄窗口里弹层只要这么高，不留一大片空白。
+const NOTICE_SNAP_POINTS = ["40%"];
 
 export function ImportLinkSheet({
   view,
@@ -67,7 +70,7 @@ export function ImportLinkSheet({
 }
 
 /** 还在读、读不到、拒收、加不了：一句话加「关闭」（读不到时还有「重试」）。 */
-function ImportLinkNotice({
+export function ImportLinkNotice({
   view,
   hostLabel,
   onRetry,
@@ -75,7 +78,8 @@ function ImportLinkNotice({
 }: {
   view: ImportLinkView;
   hostLabel: string | null;
-  onRetry: () => void;
+  // 只有读不到时用得上。
+  onRetry?: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -84,7 +88,8 @@ function ImportLinkNotice({
     [t],
   );
   const host = hostLabel ?? "";
-  const isFailedRead = view.kind === "preview" && view.preview.status === "error";
+  const isFailedRead =
+    view.kind === "preview" && view.preview.status === "error" && onRetry !== undefined;
   const footer = useMemo(
     () => (
       <View style={styles.actions}>
@@ -135,7 +140,8 @@ function ImportLinkNotice({
       <Alert variant="error" description={text} testID="api-endpoint-import-link-read-error" />
     );
   } else if (view.preview.status === "refused") {
-    const text = t("settings.apiEndpoints.importLink.refused", { reason: view.preview.reason });
+    const reason = importLinkRefusalText(t, view.preview);
+    const text = t("settings.apiEndpoints.importLink.refused", { reason });
     body = <Alert variant="error" description={text} testID="api-endpoint-import-link-refused" />;
   }
   return (
@@ -144,7 +150,7 @@ function ImportLinkNotice({
       visible
       onClose={onClose}
       desktopMaxWidth={520}
-      snapPoints={SNAP_POINTS}
+      snapPoints={NOTICE_SNAP_POINTS}
       footer={footer}
       testID="api-endpoint-import-link-sheet"
     >
@@ -208,19 +214,9 @@ function ImportLinkConfirm({
         {subtitleText}
       </Text>
     );
-    const leading = (
-      <View style={settingsStyles.rowIconFrame}>
-        <EndpointIcon
-          icon={null}
-          templateId={preview.templateId}
-          name={preview.name}
-          size={ICON_SIZE.md}
-          initialVariant="label"
-        />
-      </View>
-    );
+    const leading = <LinkIcon preview={preview} />;
     return { title: preview.name, subtitle, leading };
-  }, [hostLabel, preview.name, preview.templateId, t]);
+  }, [hostLabel, preview, t]);
 
   const submitKey = isReplacing
     ? "settings.apiEndpoints.importLink.replace"
@@ -289,9 +285,8 @@ function ImportLinkConfirm({
       testID="api-endpoint-import-link-sheet"
     >
       <View style={styles.body}>
-        <Alert
-          variant="warning"
-          description={t("settings.apiEndpoints.importLink.risk", { hosts })}
+        <WarningCallout
+          text={t("settings.apiEndpoints.importLink.risk", { hosts })}
           testID="api-endpoint-import-link-risk"
         />
         <Field label={t("settings.apiEndpoints.form.name")}>
@@ -341,14 +336,51 @@ function ImportLinkConfirm({
         <BaseUrlList preview={preview} />
         {preview.models.length > 0 ? <ModelList models={preview.models} /> : null}
         {replacesText ? (
-          <Alert
-            variant="warning"
-            description={replacesText}
-            testID="api-endpoint-import-link-replaces"
-          />
+          <WarningCallout text={replacesText} testID="api-endpoint-import-link-replaces" />
         ) : null}
       </View>
     </AdaptiveModalSheet>
+  );
+}
+
+/** 风险提示：警示色的底与三角，正文用主文字色，深色主题下也读得清。 */
+function WarningCallout({ text, testID }: { text: string; testID: string }) {
+  const description = useMemo(
+    () => (
+      <Text color="foreground" selectable>
+        {text}
+      </Text>
+    ),
+    [text],
+  );
+  return <Alert variant="warning" description={description} testID={testID} />;
+}
+
+/** 标题前的图标：icon= 那张图，否则 catalog= 或模板的图标，都没有用名称首字；放在一块带边的底上。 */
+function LinkIcon({ preview }: { preview: ApiEndpointImportLinkPreview }) {
+  const image = preview.iconImage ?? null;
+  const source = useMemo(() => {
+    if (image === null) return null;
+    const uri = `data:${image.mimeType};base64,${image.data}`;
+    return { uri };
+  }, [image]);
+  return (
+    <View
+      style={[settingsStyles.rowIconFrame, styles.iconTile]}
+      testID="api-endpoint-import-link-icon"
+    >
+      {source !== null ? (
+        <Image source={source} style={styles.iconImage} resizeMode="contain" />
+      ) : (
+        <EndpointIcon
+          icon={preview.icon ?? null}
+          templateId={preview.templateId}
+          name={preview.name}
+          size={ICON_SIZE.md}
+          initialVariant="label"
+        />
+      )}
+    </View>
   );
 }
 
@@ -438,6 +470,15 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     columnGap: theme.spacing[2],
+  },
+  // 弹窗的底与图标底同色时（桌面浅色）也看得出一块。
+  iconTile: {
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  iconImage: {
+    width: ICON_SIZE.md,
+    height: ICON_SIZE.md,
   },
   urlFormat: {
     minWidth: 120,

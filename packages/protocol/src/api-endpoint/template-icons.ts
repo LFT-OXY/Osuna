@@ -1,0 +1,58 @@
+// 模板的品牌图标名照 magpie（https://github.com/yetone/magpie，internal/provider/presets.go 的 Icon，7597c132）。
+// Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
+
+/**
+ * 按模板 id 取品牌图标名（内置图标的名字，图在客户端）。客户端画模板接口的图标；daemon 按导入链接的 catalog=
+ * 找到模板后取它的图标（magpie IconForCatalog）。
+ */
+export const API_ENDPOINT_TEMPLATE_ICONS: Readonly<Record<string, string>> = {
+  anthropic: "claude-color",
+  openai: "openai",
+  deepseek: "deepseek-color",
+  xai: "xai",
+  moonshot: "kimi",
+  "moonshot-cn": "kimi",
+  "kimi-code": "kimi",
+  "kimi-code-cn": "kimi",
+  zhipu: "zhipu-color",
+  zai: "zai",
+  minimax: "minimax-color",
+  "minimax-cn": "minimax-color",
+  stepfun: "stepfun-color",
+  "stepfun-cn": "stepfun-color",
+  // 小米 MiMo 的图标是文字商标，缩到图标大小认不出，用首字。
+  "baidu-qianfan": "baiducloud-color",
+  "tencent-cloud": "tencentcloud-color",
+  huaweicloud: "huaweicloud-color",
+  volcengine: "volcengine-color",
+  qwen: "qwen-color",
+  "qwen-cn": "qwen-color",
+  "qwen-token-plan": "qwen-color",
+  "bailian-token-plan": "bailian-color",
+  mistral: "mistral-color",
+  groq: "groq",
+  bedrock: "bedrock-color",
+  azure: "azure-color",
+  "ollama-cloud": "ollama",
+  nous: "nousresearch",
+  openrouter: "openrouter",
+  "opencode-go": "opencode",
+  clinepass: "cline",
+  "opencode-zen": "opencode",
+  kilo: "kilo",
+  commandcode: "commandcode",
+  together: "together-color",
+  fireworks: "fireworks-color",
+  siliconflow: "siliconcloud-color",
+  nvidia: "nvidia-color",
+  modelscope: "modelscope-color",
+  aihubmix: "aihubmix-color",
+  pipellm: "pipellm-color",
+  "302ai": "ai302-color",
+  cherryin: "cherryin-color",
+  yylx: "yylx",
+  ollama: "ollama",
+  lmstudio: "lmstudio",
+  omlx: "omlx",
+  "mlx-serve": "mlx-serve",
+};

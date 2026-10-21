@@ -1062,6 +1062,8 @@ magpie's internal/provider, internal/gui/importlink.go, and renderImport in
 internal/gui/assets/app.js:
 
   packages/protocol/src/api-endpoint/import-link.ts
+  packages/protocol/src/api-endpoint/template-icons.ts
+  packages/server/src/utils/local-host.ts
   packages/server/src/server/api-endpoints/import-link.ts
   packages/server/src/server/api-endpoints/import-link.test.ts
   packages/app/src/api-endpoints/import-link-sheet.tsx

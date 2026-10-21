@@ -2639,8 +2639,8 @@ export const fr: TranslationResources = {
         readFailed: "Impossible de lire le lien : {{message}}",
         retry: "Réessayer",
         close: "Fermer",
-        refused: "Ce lien ne peut pas être importé : {{reason}}",
-        refusedShort: "Le lien a été refusé : {{reason}}",
+        refused: "Ce lien ne peut pas être importé. {{reason}}",
+        refusedShort: "Le lien a été refusé. {{reason}}",
         risk: "Ajouté depuis un lien. Vos conversations et cette clé iront à {{hosts}}. Ajoutez-le seulement si vous faites confiance au site qui vous a envoyé ici.",
         keyFromLink: "Elle vient du lien. Vous pouvez coller la vôtre à la place.",
         keyPlaceholder: "Collez une clé API",
@@ -2662,23 +2662,24 @@ export const fr: TranslationResources = {
         updateHost:
           "{{host}} exécute un Osuna trop ancien pour ajouter des endpoints depuis un lien. Mettez l'hôte à jour, puis rouvrez le lien.",
         refusals: {
-          not_import_link: "ce n'est pas un lien paseo://import",
-          unknown_template: "Osuna n'a pas de modèle « {{template}} »",
+          not_import_link: "Ce n'est pas un lien paseo://import.",
+          unknown_template: "Osuna n'a pas de modèle « {{template}} ».",
           vertex:
-            "Google Vertex AI s'ajoute avec votre propre projet Google Cloud, pas depuis un lien",
-          unknown_region: "{{template}} n'a pas de région « {{region}} »",
-          no_name: "il ne désigne aucun endpoint (il faut preset= ou name=)",
-          no_id: "son nom ne contient ni lettre ni chiffre",
-          bad_url: "son {{field}}= n'est pas une URL de base : ni compte, ni requête, ni fragment",
+            "Google Vertex AI s'ajoute avec votre propre projet Google Cloud, pas depuis un lien.",
+          unknown_region: "{{template}} n'a pas de région « {{region}} ».",
+          no_name: "Il n'indique pas quel endpoint ajouter.",
+          no_id: "Son nom ne contient ni lettre ni chiffre.",
+          bad_url:
+            "Son URL de base {{field}} n'est pas une simple adresse : ni compte, ni requête, ni fragment.",
           needs_https:
-            "son {{field}}= doit utiliser https ; http ne vise que cet ordinateur ou le réseau local",
-          no_base_url: "il ne donne aucune URL de base",
+            "Son URL de base {{field}} doit utiliser https. En http, seuls cet ordinateur et le réseau local sont joignables.",
+          no_base_url: "Il ne donne aucune URL de base.",
           gemini_only:
-            "il ne donne qu'une URL de base Gemini, qu'Osuna ne peut pas encore utiliser",
+            "Il ne donne qu'une URL de base Gemini, qu'Osuna ne peut pas encore utiliser.",
           bad_key:
-            "sa clé n'est pas une clé (plus de 4096 octets, ou avec des caractères de contrôle)",
-          bad_icon: "son icon= doit être une image https sur un hôte public",
-          unknown: "Osuna n'a pas pu le lire",
+            "Sa clé n'est pas une clé : elle dépasse 4096 octets ou contient des caractères de contrôle.",
+          bad_icon: "Son icône doit être une image https sur un hôte public.",
+          unknown: "Osuna n'a pas pu le lire.",
         },
       },
       vendorStatus: {

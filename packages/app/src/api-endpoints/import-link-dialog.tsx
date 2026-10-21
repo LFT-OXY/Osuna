@@ -5,14 +5,13 @@ import { useHosts } from "@/runtime/host-runtime";
 import { normalizeHostLabel } from "@/types/host-connection";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { EndpointIconHostProvider } from "./endpoint-icon";
-import { ImportLinkSheet, type ImportLinkView } from "./import-link-sheet";
+import { ImportLinkNotice, ImportLinkSheet, type ImportLinkView } from "./import-link-sheet";
 import { useImportLink } from "./use-import-link";
 
 /*
  * 运行时接线：导入链接加到哪台主机、主机够不够新、读链接与添加。确认框本身是纯 props（import-link-sheet.tsx）。
  */
 
-const NO_OP = () => {};
 const NO_HOST_VIEW: ImportLinkView = { kind: "noHost" };
 const OFFLINE_VIEW: ImportLinkView = { kind: "offline" };
 const UPDATE_HOST_VIEW: ImportLinkView = { kind: "updateHost" };
@@ -33,22 +32,9 @@ export function ImportLinkDialog({
   onClose: () => void;
 }) {
   if (serverId === null) {
-    return (
-      <ImportLinkSheet
-        view={NO_HOST_VIEW}
-        hostLabel={null}
-        onRetry={NO_OP}
-        onAdd={noHostAdd}
-        onAdded={NO_OP}
-        onClose={onClose}
-      />
-    );
+    return <ImportLinkNotice view={NO_HOST_VIEW} hostLabel={null} onClose={onClose} />;
   }
   return <HostImportLinkDialog serverId={serverId} link={link} onClose={onClose} />;
-}
-
-async function noHostAdd(): Promise<{ status: "failed"; message: string }> {
-  return { status: "failed", message: "" };
 }
 
 function HostImportLinkDialog({
@@ -66,16 +52,7 @@ function HostImportLinkDialog({
   if (supported !== true) {
     // 还没收到主机的 server_info 是没连上，不是太旧。
     const view = supported === null ? OFFLINE_VIEW : UPDATE_HOST_VIEW;
-    return (
-      <ImportLinkSheet
-        view={view}
-        hostLabel={hostLabel}
-        onRetry={NO_OP}
-        onAdd={noHostAdd}
-        onAdded={NO_OP}
-        onClose={onClose}
-      />
-    );
+    return <ImportLinkNotice view={view} hostLabel={hostLabel} onClose={onClose} />;
   }
   return (
     <EndpointIconHostProvider serverId={serverId}>

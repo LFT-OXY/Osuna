@@ -6,6 +6,8 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import { MAX_ICON_BYTES } from "./endpoint-icons.js";
+import { isLocalHost } from "../../utils/local-host.js";
+import { isErrnoException } from "../../utils/errno.js";
 
 /*
  * 「自定义」接口的图标从它的地址所在网站取（只在用户点「从网站取图标」时）：先问 API 自己的主机，再问它上面的各级域名
@@ -46,20 +48,6 @@ const ICON_TIMEOUT_MS = 15_000;
 const MAX_PAGE_BYTES = 512 * 1024;
 const MAX_STATUS_BYTES = 1 << 20;
 const MAX_REDIRECTS = 10;
-
-/** 这台电脑或局域网上的主机（magpie local）：localhost、*.local、回环或私有地址。 */
-export function isLocalHost(host: string): boolean {
-  const bare = host.replace(/^\[|\]$/g, "").toLowerCase();
-  if (bare === "localhost" || bare.endsWith(".local")) return true;
-  if (net.isIPv4(bare)) return isLoopbackOrPrivateV4(bare);
-  if (net.isIPv6(bare)) return bare === "::1" || /^f[cd]/.test(bare);
-  return false;
-}
-
-function isLoopbackOrPrivateV4(ip: string): boolean {
-  const [a, b] = ip.split(".").map(Number);
-  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
 
 /** 图片地址要是公网主机上的 https、不带账号与锚点（magpie iconURL）。 */
 function checkedIconUrl(raw: string): string | null {
@@ -141,23 +129,32 @@ export async function findSiteIcon(input: {
   );
 }
 
+/** 导入链接的图标图片取到了（还没存），或为什么没取到（不含地址）。 */
+export type IconPictureFetch = { ok: true; bytes: Buffer } | { ok: false; reason: string };
+
 /**
- * 导入链接给的图标图片（照 magpie FetchIcon，用户点了添加才取）：取到并存下，返回图标值；取不到为 null，留着默认图标。
- * 只取公网主机上的 https 图片。
+ * 取导入链接给的图标图片（照 magpie FetchIcon，确认框一打开就取）：只取公网主机上的 https 图片，最多 1 MB、15 秒，
+ * 跟着跳转时每一跳也只到公网主机。只取不存，存在添加成功那一刻。reason 只写状态码或错误名，不写地址。
  */
 export async function fetchIconPicture(input: {
   url: string;
   fetchSite: FetchSite;
-  store: (bytes: Buffer) => string;
   signal: AbortSignal;
-}): Promise<string | null> {
-  const outcome = await iconFrom({
-    fetchSite: input.fetchSite,
-    signal: input.signal,
-    candidate: input.url,
-    store: input.store,
-  });
-  return outcome.icon;
+}): Promise<IconPictureFetch> {
+  const url = checkedIconUrl(input.url);
+  if (url === null) return { ok: false, reason: "not_public_https" };
+  const signal = AbortSignal.any([input.signal, AbortSignal.timeout(ICON_TIMEOUT_MS)]);
+  let response: SiteResponse;
+  try {
+    response = await input.fetchSite({ url, accept: "image/*", maxBytes: MAX_ICON_BYTES, signal });
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    const code = isErrnoException(error) ? error.code : undefined;
+    return { ok: false, reason: code ?? error.name };
+  }
+  if (response.status !== 200) return { ok: false, reason: `status_${response.status}` };
+  if (response.body.length > MAX_ICON_BYTES) return { ok: false, reason: "too_large" };
+  return { ok: true, bytes: response.body };
 }
 
 interface FetchContext {

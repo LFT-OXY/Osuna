@@ -2608,8 +2608,8 @@ export const ja: TranslationResources = {
         readFailed: "リンクを読み込めませんでした：{{message}}",
         retry: "再試行",
         close: "閉じる",
-        refused: "このリンクはインポートできません：{{reason}}",
-        refusedShort: "リンクは拒否されました：{{reason}}",
+        refused: "このリンクはインポートできません。{{reason}}",
+        refusedShort: "リンクは拒否されました。{{reason}}",
         risk: "リンクから追加されます。会話とこのキーは {{hosts}} に送られます。リンクを送ってきたサイトを信頼できる場合だけ追加してください。",
         keyFromLink: "リンクに含まれていたキーです。自分のキーに置き換えることもできます。",
         keyPlaceholder: "API キーを貼り付け",
@@ -2631,22 +2631,23 @@ export const ja: TranslationResources = {
         updateHost:
           "{{host}} の Osuna が古いため、リンクから追加できません。ホストを更新してから、もう一度リンクを開いてください。",
         refusals: {
-          not_import_link: "paseo://import のリンクではありません",
-          unknown_template: "Osuna に「{{template}}」というテンプレートはありません",
+          not_import_link: "paseo://import のリンクではありません。",
+          unknown_template: "Osuna に「{{template}}」というテンプレートはありません。",
           vertex:
-            "Google Vertex AI はリンクからではなく、自分の Google Cloud プロジェクトで追加します",
-          unknown_region: "{{template}} に「{{region}}」というリージョンはありません",
-          no_name: "追加する対象がありません（preset= か name= が必要です）",
-          no_id: "名前に英字も数字もありません",
+            "Google Vertex AI はリンクからではなく、自分の Google Cloud プロジェクトで追加します。",
+          unknown_region: "{{template}} に「{{region}}」というリージョンはありません。",
+          no_name: "どのエンドポイントを追加するのか書かれていません。",
+          no_id: "名前に英字も数字もありません。",
           bad_url:
-            "{{field}}= がアドレスではありません：アカウント、クエリ、フラグメントは使えません",
+            "{{field}} 形式のアドレスが単純なアドレスではありません。アカウント、クエリ、フラグメントは使えません。",
           needs_https:
-            "{{field}}= は https でなければなりません。http はこのコンピューターかローカルネットワークだけです",
-          no_base_url: "アドレスがひとつもありません",
-          gemini_only: "Gemini 形式のアドレスしかなく、Osuna はまだ使えません",
-          bad_key: "キーがキーとして正しくありません（4096 バイト超、または制御文字を含む）",
-          bad_icon: "icon= は公開ホスト上の https の画像でなければなりません",
-          unknown: "Osuna はこのリンクを読み取れません",
+            "{{field}} 形式のアドレスは https でなければなりません。http はこのコンピューターかローカルネットワークだけです。",
+          no_base_url: "アドレスがひとつもありません。",
+          gemini_only: "Gemini 形式のアドレスしかなく、Osuna はまだ使えません。",
+          bad_key:
+            "キーがキーとして正しくありません。4096 バイトを超えているか、制御文字を含んでいます。",
+          bad_icon: "アイコンは公開ホスト上の https の画像でなければなりません。",
+          unknown: "Osuna はこのリンクを読み取れません。",
         },
       },
       vendorStatus: {

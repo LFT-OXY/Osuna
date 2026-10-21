@@ -6249,8 +6249,9 @@ test.describe("Import links", () => {
     await openApiEndpointsPage(page);
     await openLink(page, "paseo://import?name=Evil&chat=http://relay.example/v1&key=sk-e2e-evil");
     const refused = linkSheet(page).getByTestId("api-endpoint-import-link-refused");
-    await expect(refused).toContainText("This link can't be imported");
-    await expect(refused).toContainText("its chat= must use https");
+    await expect(refused).toContainText(
+      "This link can't be imported. Its OpenAI Chat base URL must use https.",
+    );
     await expect(linkSheet(page).getByTestId("api-endpoint-import-link-add")).toHaveCount(0);
     await linkSheet(page).getByTestId("api-endpoint-import-link-close").click();
     await expect(linkSheet(page)).toHaveCount(0);

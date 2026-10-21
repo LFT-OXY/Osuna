@@ -1,3 +1,4 @@
+import { API_ENDPOINT_TEMPLATE_ICONS } from "@getpaseo/protocol/api-endpoint/template-icons";
 import {
   ENDPOINT_TEMPLATE_ICON_PNGS,
   ENDPOINT_TEMPLATE_ICON_SVGS,
@@ -178,58 +179,8 @@ export function iconTitle(name: string): string {
   return name.replace(/-color$/, "");
 }
 
-// 按模板 id 取品牌图标名（照 magpie presets.go 的 Icon）。
-export const TEMPLATE_ICONS: Readonly<Record<string, string>> = {
-  anthropic: "claude-color",
-  openai: "openai",
-  deepseek: "deepseek-color",
-  xai: "xai",
-  moonshot: "kimi",
-  "moonshot-cn": "kimi",
-  "kimi-code": "kimi",
-  "kimi-code-cn": "kimi",
-  zhipu: "zhipu-color",
-  zai: "zai",
-  minimax: "minimax-color",
-  "minimax-cn": "minimax-color",
-  stepfun: "stepfun-color",
-  "stepfun-cn": "stepfun-color",
-  // 小米 MiMo 的图标是文字商标，缩到图标大小认不出，用首字。
-  "baidu-qianfan": "baiducloud-color",
-  "tencent-cloud": "tencentcloud-color",
-  huaweicloud: "huaweicloud-color",
-  volcengine: "volcengine-color",
-  qwen: "qwen-color",
-  "qwen-cn": "qwen-color",
-  "qwen-token-plan": "qwen-color",
-  "bailian-token-plan": "bailian-color",
-  mistral: "mistral-color",
-  groq: "groq",
-  bedrock: "bedrock-color",
-  azure: "azure-color",
-  "ollama-cloud": "ollama",
-  nous: "nousresearch",
-  openrouter: "openrouter",
-  "opencode-go": "opencode",
-  clinepass: "cline",
-  "opencode-zen": "opencode",
-  kilo: "kilo",
-  commandcode: "commandcode",
-  together: "together-color",
-  fireworks: "fireworks-color",
-  siliconflow: "siliconcloud-color",
-  nvidia: "nvidia-color",
-  modelscope: "modelscope-color",
-  aihubmix: "aihubmix-color",
-  pipellm: "pipellm-color",
-  "302ai": "ai302-color",
-  cherryin: "cherryin-color",
-  yylx: "yylx",
-  ollama: "ollama",
-  lmstudio: "lmstudio",
-  omlx: "omlx",
-  "mlx-serve": "mlx-serve",
-};
+// 按模板 id 取品牌图标名（照 magpie presets.go 的 Icon）；daemon 按 catalog= 取图标也用它，所以放在 protocol。
+export const TEMPLATE_ICONS = API_ENDPOINT_TEMPLATE_ICONS;
 
 const FILE_ICON_PREFIX = "file:";
 

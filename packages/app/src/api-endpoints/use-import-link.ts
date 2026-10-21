@@ -1,25 +1,22 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import type {
-  ApiEndpointError,
-  ApiEndpointImportLinkPreview,
-} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { ApiEndpointImportLinkPreview } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { toErrorMessage } from "@/utils/error-messages";
 import { importLinkRefusalOf } from "./internal/import-link";
+import { importLinkErrorText, type ImportLinkRefusalCopy } from "./import-link-copy";
 import { importDiscoveryQueryKey } from "./use-import-discovery";
 
 export type ImportLinkPreviewState =
   | { status: "loading" }
   // 问不到主机（断了、RPC 失败）：可以重试。
   | { status: "error"; message: string }
-  // 主机拒收了这条链接：说为什么，只能关掉。
-  | { status: "refused"; reason: string }
+  // 主机拒收了这条链接：说为什么（画的时候按界面语言说），只能关掉。
+  | ({ status: "refused" } & ImportLinkRefusalCopy)
   | { status: "ready"; preview: ApiEndpointImportLinkPreview };
 
 export type ImportLinkAddResult =
@@ -67,10 +64,9 @@ export function useImportLink({
       if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
       const response = await client.apiEndpointImportLinkPreview(link);
       if (response.error) {
-        const isRefused = importLinkRefusalOf(response.error) !== null;
-        if (!isRefused) throw new Error(importLinkErrorText(t, response.error));
-        const reason = refusalText(t, response.error);
-        return { status: "refused", reason };
+        const reason = importLinkRefusalOf(response.error);
+        if (reason === null) throw new Error(importLinkErrorText(t, response.error));
+        return { status: "refused", reason, params: response.error.params ?? {} };
       }
       if (response.preview === null) throw new Error(t("settings.apiEndpoints.importLink.failed"));
       return { status: "ready", preview: response.preview };
@@ -108,25 +104,4 @@ export function useImportLink({
   if (query.data) preview = query.data;
   else if (query.error) preview = { status: "error", message: query.error.message };
   return { preview, retry, add };
-}
-
-/** 拒收的原因按界面语言说（params 里只有参数名、模板与区域）。 */
-function refusalText(t: TFunction, error: ApiEndpointError): string {
-  const reason = importLinkRefusalOf(error) ?? "unknown";
-  return t(`settings.apiEndpoints.importLink.refusals.${reason}`, {
-    field: error.params?.field ?? "",
-    template: error.params?.template ?? "",
-    region: error.params?.region ?? "",
-  });
-}
-
-/** 主机说的失败都按界面语言说，不照搬主机的英文。 */
-function importLinkErrorText(t: TFunction, error: ApiEndpointError): string {
-  if (importLinkRefusalOf(error) !== null) {
-    return t("settings.apiEndpoints.importLink.refusedShort", { reason: refusalText(t, error) });
-  }
-  if (error.code === "endpoints_unparsable") {
-    return t("settings.apiEndpoints.importLink.endpointsUnparsable");
-  }
-  return t("settings.apiEndpoints.importLink.failed");
 }

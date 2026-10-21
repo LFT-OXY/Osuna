@@ -6,7 +6,7 @@
  * 这里只认「是不是导入链接」：桌面端主进程据此交给窗口，daemon 解析前也先认它。字段与拒收规则在 daemon。
  */
 
-export const API_ENDPOINT_IMPORT_LINK_SCHEME = "paseo";
+const IMPORT_LINK_SCHEME = "paseo";
 
 /** `paseo://import?…`，以及 magpie 也认的 `paseo:import?…`、`paseo:///import?…`、`paseo://import/?…`。 */
 export function isApiEndpointImportLink(input: string): boolean {
@@ -18,7 +18,7 @@ export function importLinkAction(input: string): string | null {
   const text = input.trim();
   if (!URL.canParse(text)) return null;
   const url = new URL(text);
-  if (url.protocol.toLowerCase() !== `${API_ENDPOINT_IMPORT_LINK_SCHEME}:`) return null;
+  if (url.protocol.toLowerCase() !== `${IMPORT_LINK_SCHEME}:`) return null;
   if (url.host !== "") return url.host.toLowerCase();
   return url.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
 }

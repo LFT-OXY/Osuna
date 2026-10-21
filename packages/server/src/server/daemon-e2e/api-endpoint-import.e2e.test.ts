@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -7,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { NODE_DATA_FILE_SYSTEM, type DataFileSystem } from "../api-endpoints/last-good.js";
+import type { FetchSite } from "../api-endpoints/site-icon.js";
 
 /*
  * 从别的软件导入（工单 26，prd 第 39–41 条）：真实 daemon，临时 HOME 里放五种来源的假配置，
@@ -159,6 +161,7 @@ async function start(input: {
   // 起 daemon 之前在 api-endpoints/ 里放好的文件（文件名 → 内容）。
   files?: Record<string, string>;
   logger?: pino.Logger;
+  fetchSite?: FetchSite;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-import-"));
   tempRoots.push(root);
@@ -180,6 +183,7 @@ async function start(input: {
     dataFileSystem: input.dataFileSystem,
     now: input.now,
     logger: input.logger,
+    fetchSite: input.fetchSite,
   });
 }
 
@@ -190,6 +194,7 @@ async function startOn(input: {
   dataFileSystem?: DataFileSystem;
   now?: () => Date;
   logger?: pino.Logger;
+  fetchSite?: FetchSite;
 }) {
   const { root, sources } = input;
   const daemon = await createTestPaseoDaemon({
@@ -209,6 +214,7 @@ async function startOn(input: {
       },
       ...(input.dataFileSystem === undefined ? {} : { dataFileSystem: input.dataFileSystem }),
       ...(input.now === undefined ? {} : { now: input.now }),
+      ...(input.fetchSite === undefined ? {} : { fetchSite: input.fetchSite }),
     },
   });
   daemons.push(daemon);
@@ -833,5 +839,110 @@ describe("import links (ticket 28)", () => {
       code: "import_link_refused",
       params: { reason: "bad_key" },
     });
+  });
+
+  test("replaces what magpie's Find(id) finds: the same id, then a name equal to the id, never the link's name alone", async () => {
+    const { client } = await start({
+      endpoints: [
+        storedEndpoint({ id: "ep_ds", name: "DeepSeek", url: "https://api.deepseek.example" }),
+        storedEndpoint({ id: "ep_team", name: "team", url: "https://team.example" }),
+      ],
+      keys: { ep_ds: "sk-ds", ep_team: "sk-team" },
+    });
+    // 名称一样、标识不一样：新的一家，不替换用户的 DeepSeek。
+    const ownId = "paseo://import?name=DeepSeek&id=my-ds&chat=https://my-ds.example/v1";
+    expect((await client.apiEndpointImportLinkPreview(ownId)).preview?.replaces).toBeNull();
+    const added = await client.apiEndpointImportLink({ link: ownId, name: "DeepSeek", key: "" });
+    expect(added.endpoint?.endpointId).not.toBe("ep_ds");
+    expect(added.endpoint?.name).toBe("DeepSeek 2");
+    // 名称（不分大小写）就是链接的标识：照 magpie 换掉它。
+    const byName = "paseo://import?name=Team%20Relay&id=Team&chat=https://team-relay.example/v1";
+    expect((await client.apiEndpointImportLinkPreview(byName)).preview?.replaces).toEqual({
+      endpointId: "ep_team",
+      name: "team",
+    });
+    // 没给 id 时标识由名称来：名称一样的照样换掉。
+    const sameName = "paseo://import?name=DeepSeek&chat=https://api.deepseek.example/v1";
+    expect((await client.apiEndpointImportLinkPreview(sameName)).preview?.replaces).toEqual({
+      endpointId: "ep_ds",
+      name: "DeepSeek",
+    });
+  });
+
+  test("a name typed in the dialog is cut to 80 bytes like the link's", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const link = "paseo://import?name=Relay&chat=https://relay.example/v1";
+    const added = await client.apiEndpointImportLink({ link, name: "中".repeat(40), key: "" });
+    expect(added.endpoint?.name).toBe("中".repeat(26));
+  });
+
+  test("icon= is fetched when the dialog opens, wins over the template's icon, and is stored only once the add succeeds", async () => {
+    const SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>';
+    const asked: string[] = [];
+    const fetchSite: FetchSite = async ({ url }) => {
+      asked.push(url);
+      return { status: 200, url, body: Buffer.from(SVG) };
+    };
+    const control = { failWrite: false };
+    const dataFileSystem: DataFileSystem = {
+      ...NODE_DATA_FILE_SYSTEM,
+      rename(from, to) {
+        if (control.failWrite && to.endsWith("endpoints.json")) {
+          throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        }
+        NODE_DATA_FILE_SYSTEM.rename(from, to);
+      },
+    };
+    const { client, daemon } = await start({ endpoints: [], keys: {}, fetchSite, dataFileSystem });
+    const iconsDir = path.join(daemon.paseoHome, "api-endpoints", "icons");
+    const storedIcons = async () => (existsSync(iconsDir) ? (await readdir(iconsDir)).sort() : []);
+    const link = "paseo://import?preset=deepseek&icon=https://brand.example/logo.svg%3Fv%3D2";
+
+    const preview = await client.apiEndpointImportLinkPreview(link);
+    expect(asked).toEqual(["https://brand.example/logo.svg?v=2"]);
+    expect(preview.preview?.iconImage).toEqual({
+      data: Buffer.from(SVG).toString("base64"),
+      mimeType: "image/svg+xml",
+    });
+    expect(await storedIcons()).toEqual([]);
+
+    // 没加成：这次才存下的图片删掉。
+    control.failWrite = true;
+    const failed = await client.apiEndpointImportLink({ link, name: "DeepSeek", key: "" });
+    control.failWrite = false;
+    expect(failed.endpoint).toBeNull();
+    expect(await storedIcons()).toEqual([]);
+
+    const added = await client.apiEndpointImportLink({ link, name: "DeepSeek", key: "" });
+    expect(added.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    const endpoint = listed.endpoints.find((entry) => entry.id === added.endpoint?.endpointId);
+    expect(endpoint?.templateId).toBe("deepseek");
+    expect(endpoint?.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+    expect(await storedIcons()).toHaveLength(1);
+    // 确认框打开时取过，添加时不再取。
+    expect(asked).toHaveLength(1);
+  });
+
+  test("an icon= that can't be fetched leaves the default icon and is logged without the address's query", async () => {
+    const fetchSite: FetchSite = async ({ url }) => ({ status: 404, url, body: Buffer.from("") });
+    const lines: string[] = [];
+    const logger = pino({ level: "warn" }, { write: (line: string) => void lines.push(line) });
+    const { client } = await start({ endpoints: [], keys: {}, fetchSite, logger });
+    const link =
+      "paseo://import?name=Relay&chat=https://relay.example/v1&catalog=deepseek&icon=https://brand.example/logo.svg%3Ftoken%3Dabc";
+    const preview = await client.apiEndpointImportLinkPreview(link);
+    expect(preview.preview?.iconImage).toBeNull();
+    expect(preview.preview?.icon).toBe("deepseek-color");
+    const warning = lines.find((line) => line.includes("Import link icon couldn't be fetched"));
+    expect(warning).toContain("brand.example");
+    expect(warning).toContain("status_404");
+    expect(warning).not.toContain("token");
+    const added = await client.apiEndpointImportLink({ link, name: "Relay", key: "" });
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.find((entry) => entry.id === added.endpoint?.endpointId)?.icon).toBe(
+      "deepseek-color",
+    );
   });
 });

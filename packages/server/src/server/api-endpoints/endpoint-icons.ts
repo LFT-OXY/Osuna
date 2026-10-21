@@ -78,6 +78,19 @@ export function isBuiltInIconName(icon: string): boolean {
   return icon.length <= 64 && BUILT_IN_ICON_NAME.test(icon);
 }
 
+/** 认得的图片的 MIME 类型；超过 1 MB 或不是认得的图片为 null（同 store 的规矩）。 */
+export function iconMimeType(bytes: Buffer): string | null {
+  if (bytes.length === 0 || bytes.length > MAX_ICON_BYTES) return null;
+  const extension = iconExtension(bytes);
+  return extension === null ? null : MIME_TYPES[extension];
+}
+
+/** 存下的图标值，与它是不是这次才存下的。 */
+export interface StoredIcon {
+  icon: string;
+  isNew: boolean;
+}
+
 export class EndpointIcons {
   private readonly dir: string;
   private readonly now: () => Date;
@@ -89,6 +102,11 @@ export class EndpointIcons {
 
   /** 存下图片，返回指向它的图标值；同一张图片只存一份。 */
   store(bytes: Buffer): string {
+    return this.storeTracked(bytes).icon;
+  }
+
+  /** 同 store，另说这张图片是不是这次才存下的（之前没有同样的一张）。 */
+  storeTracked(bytes: Buffer): StoredIcon {
     if (bytes.length > MAX_ICON_BYTES) {
       throw new StoreIconError("icon_too_large", "The picture is over 1 MB; pick a smaller one");
     }
@@ -100,8 +118,16 @@ export class EndpointIcons {
       );
     }
     const name = `${createHash("sha256").update(bytes).digest("hex").slice(0, 16)}.${extension}`;
+    const icon = FILE_ICON_PREFIX + name;
+    const isNew = !this.isStored(icon);
     writePrivateFileAtomicSync(path.join(this.dir, name), bytes);
-    return FILE_ICON_PREFIX + name;
+    return { icon, isNew };
+  }
+
+  /** 删掉一张存下的图片（存了却没加成接口时）；不在了不算错。 */
+  discard(icon: string): void {
+    const name = storedIconName(icon);
+    if (name !== null) rmSync(path.join(this.dir, name), { force: true });
   }
 
   isStored(icon: string): boolean {
