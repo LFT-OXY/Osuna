@@ -1,8 +1,8 @@
 // 导入链接的确认框照 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 renderImport，7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Image, View } from "react-native";
+import { Image, type LayoutChangeEvent, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type {
   ApiEndpointIconImage,
@@ -48,7 +48,8 @@ export interface ImportLinkSheetProps {
   onClose: () => void;
 }
 
-const SNAP_POINTS = ["90%"];
+// 窄窗口里确认框最高这么高；内容短时缩到正好装下（useFitSnapPoints）。
+const MAX_SNAP_PERCENT = 90;
 // 只有一句话的（拒收、加不了）：窄窗口里弹层只要这么高，不留一大片空白。
 const NOTICE_SNAP_POINTS = ["40%"];
 
@@ -124,15 +125,13 @@ export function ImportLinkNotice({
   );
   let body: React.ReactNode = null;
   if (view.kind === "noHost") {
-    body = <Alert variant="warning" description={t("settings.apiEndpoints.importLink.noHost")} />;
+    body = <Callout variant="warning" text={t("settings.apiEndpoints.importLink.noHost")} />;
   } else if (view.kind === "offline") {
     const text = t("settings.apiEndpoints.importLink.offline", { host });
-    body = <Alert variant="warning" description={text} />;
+    body = <Callout variant="warning" text={text} />;
   } else if (view.kind === "updateHost") {
     const text = t("settings.apiEndpoints.importLink.updateHost", { host });
-    body = (
-      <Alert variant="warning" description={text} testID="api-endpoint-import-link-update-host" />
-    );
+    body = <Callout variant="warning" text={text} testID="api-endpoint-import-link-update-host" />;
   } else if (view.preview.status === "loading") {
     body = (
       <Text color="foregroundMuted" testID="api-endpoint-import-link-loading">
@@ -143,13 +142,11 @@ export function ImportLinkNotice({
     const text = t("settings.apiEndpoints.importLink.readFailed", {
       message: view.preview.message,
     });
-    body = (
-      <Alert variant="error" description={text} testID="api-endpoint-import-link-read-error" />
-    );
+    body = <Callout variant="error" text={text} testID="api-endpoint-import-link-read-error" />;
   } else if (view.preview.status === "refused") {
     const reason = importLinkRefusalText(t, view.preview);
     const text = t("settings.apiEndpoints.importLink.refused", { reason });
-    body = <Alert variant="error" description={text} testID="api-endpoint-import-link-refused" />;
+    body = <Callout variant="error" text={text} testID="api-endpoint-import-link-refused" />;
   }
   return (
     <AdaptiveModalSheet
@@ -191,6 +188,7 @@ function ImportLinkConfirm({
   const hasNoName = name.trim() === "";
   const keyFromLink = preview.key !== null;
   const showsKeysPage = !keyFromLink && preview.keysUrl !== null;
+  const fit = useFitSnapPoints();
 
   const handleAdd = useCallback(async () => {
     if (hasNoName) {
@@ -289,71 +287,127 @@ function ImportLinkConfirm({
       visible
       onClose={onClose}
       desktopMaxWidth={520}
-      snapPoints={SNAP_POINTS}
+      snapPoints={fit.snapPoints}
       footer={footer}
       testID="api-endpoint-import-link-sheet"
     >
-      <View style={styles.body}>
-        <WarningCallout
-          text={t("settings.apiEndpoints.importLink.risk", { hosts })}
-          testID="api-endpoint-import-link-risk"
-        />
-        <Field label={t("settings.apiEndpoints.form.name")}>
-          <FormTextInput
-            initialValue={preview.name}
-            onChangeText={setName}
-            placeholder={t("settings.apiEndpoints.form.namePlaceholder")}
-            autoCorrect={false}
-            testID="api-endpoint-import-link-name"
+      <View style={styles.fitFrame} onLayout={fit.onFrameLayout}>
+        <View style={styles.body} onLayout={fit.onContentLayout}>
+          <Callout
+            variant="warning"
+            text={t("settings.apiEndpoints.importLink.risk", { hosts })}
+            testID="api-endpoint-import-link-risk"
           />
-        </Field>
-        <Field label={t("settings.apiEndpoints.form.apiKeyOptionalLabel")} hint={keyHint}>
-          <View style={styles.inlineRow}>
-            <View style={styles.flex}>
-              <FormTextInput
-                initialValue={preview.key ?? ""}
-                onChangeText={setKey}
-                placeholder={keyPlaceholder}
-                secureTextEntry={!isKeyVisible}
-                autoCapitalize="none"
-                autoCorrect={false}
-                testID="api-endpoint-import-link-key"
-              />
+          <Field label={t("settings.apiEndpoints.form.name")}>
+            <FormTextInput
+              initialValue={preview.name}
+              onChangeText={setName}
+              placeholder={t("settings.apiEndpoints.form.namePlaceholder")}
+              autoCorrect={false}
+              testID="api-endpoint-import-link-name"
+            />
+          </Field>
+          <Field label={t("settings.apiEndpoints.form.apiKeyOptionalLabel")} hint={keyHint}>
+            <View style={styles.inlineRow}>
+              <View style={styles.flex}>
+                <FormTextInput
+                  initialValue={preview.key ?? ""}
+                  onChangeText={setKey}
+                  placeholder={keyPlaceholder}
+                  secureTextEntry={!isKeyVisible}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  testID="api-endpoint-import-link-key"
+                />
+              </View>
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={toggleKey}
+                testID="api-endpoint-import-link-show-key"
+              >
+                {keyToggleLabel}
+              </Button>
             </View>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={toggleKey}
-              testID="api-endpoint-import-link-show-key"
-            >
-              {keyToggleLabel}
-            </Button>
-          </View>
-        </Field>
-        {showsKeysPage ? (
-          <View style={styles.keysPage}>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={openKeysPage}
-              testID="api-endpoint-import-link-get-key"
-            >
-              {t("settings.apiEndpoints.templates.getKey")}
-            </Button>
-          </View>
-        ) : null}
-        <BaseUrlList preview={preview} />
-        {preview.models.length > 0 ? <ModelList models={preview.models} /> : null}
-        {replacesText ? (
-          <WarningCallout text={replacesText} testID="api-endpoint-import-link-replaces" />
-        ) : null}
+          </Field>
+          {showsKeysPage ? (
+            <View style={styles.keysPage}>
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={openKeysPage}
+                testID="api-endpoint-import-link-get-key"
+              >
+                {t("settings.apiEndpoints.templates.getKey")}
+              </Button>
+            </View>
+          ) : null}
+          <BaseUrlList preview={preview} />
+          {preview.models.length > 0 ? <ModelList models={preview.models} /> : null}
+          {replacesText ? (
+            <Callout
+              variant="warning"
+              text={replacesText}
+              testID="api-endpoint-import-link-replaces"
+            />
+          ) : null}
+        </View>
       </View>
     </AdaptiveModalSheet>
   );
 }
 
-/** 风险提示：警示色的底与三角，正文用主文字色，深色主题下也读得清。 */
-function WarningCallout({ text, testID }: { text: string; testID: string }) {
+/**
+ * 窄窗口的底部弹层高度是固定的档位，不随内容变：先按最高一档打开，量出正文下面空着多少，再缩掉这一截。
+ * 只缩一次：缩的动画里正文区仍按旧的高度排，再量会多减。装不下时没有空白，留在最高一档、正文滚动。
+ */
+function useFitSnapPoints(): {
+  snapPoints: string[];
+  onFrameLayout: (event: LayoutChangeEvent) => void;
+  onContentLayout: (event: LayoutChangeEvent) => void;
+} {
+  const { height: windowHeight } = useWindowDimensions();
+  const [percent, setPercent] = useState(MAX_SNAP_PERCENT);
+  const frameHeight = useRef<number | null>(null);
+  const contentHeight = useRef<number | null>(null);
+  const isSettled = useRef(false);
+  const settle = useCallback(() => {
+    const frame = frameHeight.current;
+    const content = contentHeight.current;
+    if (isSettled.current || frame === null || content === null || frame <= 0) return;
+    // 弹层还没排好时正文区与正文一样高：等到真有空白再缩。
+    if (windowHeight <= 0 || frame - content < 1) return;
+    isSettled.current = true;
+    setPercent(MAX_SNAP_PERCENT - ((frame - content) / windowHeight) * 100);
+  }, [windowHeight]);
+  const onFrameLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      frameHeight.current = event.nativeEvent.layout.height;
+      settle();
+    },
+    [settle],
+  );
+  const onContentLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      contentHeight.current = event.nativeEvent.layout.height;
+      settle();
+    },
+    [settle],
+  );
+  const snapPoints = useMemo(() => [`${percent.toFixed(1)}%`], [percent]);
+  return { snapPoints, onFrameLayout, onContentLayout };
+}
+
+/** 提示框：警示或出错的底、框与图标，正文用主文字色，深色主题下也读得清。 */
+function Callout({
+  variant,
+  text,
+  testID,
+}: {
+  variant: "warning" | "error";
+  text: string;
+  testID?: string;
+}) {
   const description = useMemo(
     () => (
       <Text color="foreground" selectable>
@@ -362,7 +416,7 @@ function WarningCallout({ text, testID }: { text: string; testID: string }) {
     ),
     [text],
   );
-  return <Alert variant="warning" description={description} testID={testID} />;
+  return <Alert variant={variant} description={description} testID={testID} />;
 }
 
 /** 标题前的图标：icon= 那张图，否则 catalog= 或模板的图标，都没有用名称首字；放在一块带边的底上。 */
@@ -452,6 +506,10 @@ function formatLabel(t: ReturnType<typeof useTranslation>["t"], format: string):
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // 撑满弹层的正文区，与正文自身的高度一比就知道空着多少。
+  fitFrame: {
+    flexGrow: 1,
+  },
   body: {
     gap: theme.spacing[4],
   },

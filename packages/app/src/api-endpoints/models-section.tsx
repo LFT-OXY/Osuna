@@ -10,7 +10,15 @@ import {
   type TextInputKeyPressEventData,
 } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Eraser, Gauge, Plus, RotateCw, Search, SlidersHorizontal } from "lucide-react-native";
+import {
+  Eraser,
+  Gauge,
+  Plus,
+  Route,
+  RotateCw,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react-native";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1056,8 +1064,11 @@ function ReasonText({ modelId, reason }: { modelId: string; reason: string }) {
 }
 
 const ThemedSlidersHorizontal = withUnistyles(SlidersHorizontal);
+const ThemedRoute = withUnistyles(Route);
 
 const FORMAT_PAGE = "format";
+// 宽到「只用这种格式」带图标与它的值（如「自动」）在一行里放得下，不截断。
+const MODEL_MENU_WIDTH = 300;
 
 /** 格式的名字；不起作用的标出来，没设为「自动」。 */
 function pinnedFormatLabel(t: TFunction, pinned: ModelFormatPin | null): string {
@@ -1093,6 +1104,10 @@ function ModelRowMenu({
   const handleTest = useCallback(() => onTest?.(modelId), [modelId, onTest]);
   const testLeading = useMemo(
     () => <ThemedGauge size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
+    [],
+  );
+  const formatLeading = useMemo(
+    () => <ThemedRoute size={ICON_SIZE.md} uniProps={mutedIconColorMapping} />,
     [],
   );
   const leading = useMemo(
@@ -1143,7 +1158,7 @@ function ModelRowMenu({
         accessibilityLabel={t("settings.apiEndpoints.modelSettings.rowMenu", { model: modelId })}
         testID={`api-endpoint-model-menu-${modelId}`}
       />
-      <DropdownMenuContent align="end" width={240} pages={pages}>
+      <DropdownMenuContent align="end" width={MODEL_MENU_WIDTH} pages={pages}>
         <DropdownMenuItem
           leading={leading}
           onSelect={handleOpen}
@@ -1166,6 +1181,7 @@ function ModelRowMenu({
           <DropdownMenuSubTrigger
             id={FORMAT_PAGE}
             value={pinnedLabel}
+            leading={formatLeading}
             testID={`api-endpoint-model-format-menu-${modelId}`}
           >
             {formatTitle}
