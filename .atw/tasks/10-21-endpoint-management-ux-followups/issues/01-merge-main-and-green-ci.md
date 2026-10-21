@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** doing
 
 - [ ] origin/main 以 merge（不 rebase）合进分支，冲突两边的修改都保留；合完跑 i18n 守卫，dist 旧了先重建；本机 typecheck、lint 与改到的测试文件通过。
 - [ ] app 浏览器测试文件里不再出现桌面端的桥；「导入链接」整组用例在桌面端 Playwright 测试里，断言与原来一致（先问再加、名称和 key 可改、取消不加、同 id 提示替换、不安全的链接拒收、主机不支持时提示升级）。
