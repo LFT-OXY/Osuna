@@ -1034,6 +1034,9 @@ renderImportApps and importAppRow in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/import-apps.ts
   packages/server/src/server/api-endpoints/import-apps.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-import.e2e.test.ts
+  packages/app/src/api-endpoints/internal/import-picks.ts
+  packages/app/src/api-endpoints/internal/import-picks.test.ts
+  packages/app/src/api-endpoints/import-apps-sheet.tsx
 
 MIT License
 

@@ -57,6 +57,11 @@ test.use({
     PASEO_E2E_PROCESS_TABLE_PATH: path.join(cliHome, "process-table.txt"),
     // 系统代理同样读这份假的（封条换掉 scutil 与注册表）。
     PASEO_E2E_SYSTEM_PROXY_PATH: path.join(cliHome, "system-proxy.json"),
+    // 从别的软件导入读 daemon 的家目录（CC Switch、Alma）与 XDG 目录（OpenCode）：都换成临时的，
+    // 绝不读开发者真实的配置。
+    HOME: path.join(cliHome, "import-home"),
+    XDG_CONFIG_HOME: path.join(cliHome, "import-home", ".config"),
+    XDG_DATA_HOME: path.join(cliHome, "import-home", ".local", "share"),
   },
 });
 
@@ -5707,4 +5712,195 @@ async function answerVendorStatus(
     });
   });
   return asked;
+}
+
+test.describe("Import from other apps", () => {
+  const importHome = path.join(cliHome, "import-home");
+
+  // 假配置：CC Switch（config.json）里一家新的中转服务，Codex 里一家和已有接口重名的，OpenCode 里一个登录。
+  async function writeImportSources(): Promise<void> {
+    await mkdir(path.join(importHome, ".cc-switch"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".cc-switch", "config.json"),
+      JSON.stringify({
+        claude: {
+          providers: {
+            team: {
+              name: "Team Relay",
+              settingsConfig: {
+                env: {
+                  ANTHROPIC_BASE_URL: `${relay.origin}/good`,
+                  ANTHROPIC_AUTH_TOKEN: RELAY_KEY,
+                  ANTHROPIC_MODEL: "claude-sonnet-4-5",
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+    await mkdir(path.join(cliHome, "codex"), { recursive: true });
+    await writeFile(
+      path.join(cliHome, "codex", "config.toml"),
+      [
+        "[model_providers.mine]",
+        'name = "My Relay"',
+        `base_url = "${relay.origin}/good/v1"`,
+        'experimental_bearer_token = "sk-e2e-codex"',
+        'wire_api = "chat"',
+        "",
+      ].join("\n"),
+    );
+    await mkdir(path.join(importHome, ".local", "share", "opencode"), { recursive: true });
+    await writeFile(
+      path.join(importHome, ".local", "share", "opencode", "auth.json"),
+      JSON.stringify({ anthropic: { type: "oauth", refresh: "r", access: "a", expires: 1 } }),
+    );
+  }
+
+  // 只删自己放的假配置：daemon 也在这个临时 HOME 里写东西。
+  test.afterEach(async () => {
+    await rm(path.join(importHome, ".cc-switch"), { recursive: true, force: true });
+    await rm(path.join(importHome, ".local", "share", "opencode"), {
+      recursive: true,
+      force: true,
+    });
+    await rm(path.join(cliHome, "codex", "config.toml"), { force: true });
+  });
+
+  function importSheet(page: Page): Locator {
+    return page.getByTestId("api-endpoint-import-sheet").filter({ visible: true });
+  }
+
+  function importItem(page: Page, ref: string): Locator {
+    return importSheet(page).getByTestId(`api-endpoint-import-item-${ref}`);
+  }
+
+  test("lists each app's entries with their standing, renames one in place and imports them", async ({
+    page,
+  }) => {
+    await writeImportSources();
+    await seedApiEndpoint(client, {
+      name: "My Relay",
+      // 换个主机名：同一主机上另一把 key 会是「同一家、key 不同」。
+      baseUrls: [
+        { format: "openai_chat", url: `${relay.origin.replace("127.0.0.1", "localhost")}/free/v1` },
+      ],
+      models: ["gpt-5"],
+      apiKey: "sk-e2e-other",
+    });
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    await expect(importSheet(page)).toBeVisible();
+
+    const team = importItem(page, "claude/team");
+    await expect(team).toContainText("Team Relay");
+    await expect(team).toContainText("New");
+    await expect(team).toContainText("Claude Code");
+    // key 只给打码的。
+    await expect(team).toContainText("sk-e…elay");
+    await expect(importSheet(page)).not.toContainText(RELAY_KEY);
+    await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
+
+    const mine = importItem(page, "mine");
+    await expect(mine).toContainText("Name in use");
+    await expect(mine.getByTestId("api-endpoint-import-item-mine-pick")).not.toBeChecked();
+    await expect(mine.getByTestId("api-endpoint-import-item-mine-replace")).toBeVisible();
+    // 就地改名：选上这一条，只能新增一家。
+    await mine.getByTestId("api-endpoint-import-item-mine-name").fill("My Codex Relay");
+    await expect(mine.getByTestId("api-endpoint-import-item-mine-pick")).toBeChecked();
+    await expect(mine.getByTestId("api-endpoint-import-item-mine-replace")).toHaveCount(0);
+
+    // OpenCode 的登录读得到、导不了；Alma 没装。
+    await expect(importItem(page, "anthropic")).toContainText("Can't import");
+    await expect(importSheet(page).getByTestId("api-endpoint-import-source-alma-empty")).toHaveText(
+      "Not found on this host",
+    );
+
+    await expect(importSheet(page)).toContainText("2 selected");
+    await page.getByTestId("api-endpoint-import-submit").click();
+    await expect(importSheet(page)).toHaveCount(0);
+    await expect(page.getByText("Imported 2: Team Relay, My Codex Relay")).toBeVisible();
+    const list = page.getByTestId("api-endpoints-list");
+    await expect(list).toContainText("Team Relay");
+    await expect(list).toContainText("My Codex Relay");
+    await expect(list).toContainText("My Relay");
+  });
+
+  test("a scan that fails says why and can be tried again", async ({ page }) => {
+    const scan = { fails: true };
+    await answerImportRpc(page, {
+      type: "provider.api_endpoint.import_scan",
+      isAnswering: () => scan.fails,
+      payload: {
+        sources: [],
+        error: { code: "endpoints_unparsable", message: "endpoints.json could not be parsed" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    const failed = importSheet(page).getByTestId("api-endpoint-import-scan-error");
+    await expect(failed).toContainText("endpoints.json could not be parsed");
+    await expect(page.getByTestId("api-endpoint-import-submit")).toBeDisabled();
+    scan.fails = false;
+    await failed.getByRole("button", { name: "Try again" }).click();
+    await expect(
+      importSheet(page).getByTestId("api-endpoint-import-source-cc-switch"),
+    ).toBeVisible();
+  });
+
+  test("an import that fails keeps the dialog and the picks, and says why", async ({ page }) => {
+    await writeImportSources();
+    await answerImportRpc(page, {
+      type: "provider.api_endpoint.import",
+      isAnswering: () => true,
+      payload: {
+        imported: [],
+        error: { code: "import_gone", message: "That entry is no longer in the app" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    const team = importItem(page, "claude/team");
+    await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
+    await page.getByTestId("api-endpoint-import-submit").click();
+    await expect(importSheet(page).getByTestId("api-endpoint-import-error")).toHaveText(
+      "That entry is no longer in the app it came from. Close this and import again.",
+    );
+    await expect(importSheet(page)).toBeVisible();
+    await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
+    await expect(page.getByTestId("api-endpoints-list")).not.toContainText("Team Relay");
+  });
+});
+
+/**
+ * 导入的扫描或导入请求不送到 daemon，直接回给定的答案（isAnswering 为 false 时照常送去）。
+ * type 不带 .request：`provider.api_endpoint.import` 只认导入本身，不认 import_scan。
+ */
+async function answerImportRpc(
+  page: Page,
+  input: { type: string; isAnswering: () => boolean; payload: Record<string, unknown> },
+): Promise<void> {
+  const requestType = `"${input.type}.request"`;
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isAsked = typeof message === "string" && message.includes(requestType);
+      if (!isAsked || !input.isAnswering()) {
+        server.send(message);
+        return;
+      }
+      const request = (JSON.parse(message) as { message: { requestId: string } }).message;
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: `${input.type}.response`,
+            payload: { requestId: request.requestId, ...input.payload },
+          },
+        }),
+      );
+    });
+  });
 }

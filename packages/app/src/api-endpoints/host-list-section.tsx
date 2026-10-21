@@ -9,6 +9,7 @@ import {
   ArrowUpToLine,
   ChevronRight,
   Copy,
+  Download,
   GripVertical,
   Plus,
   ShieldAlert,
@@ -93,6 +94,8 @@ export interface ListManagement {
   onDuplicate: (endpoint: ApiEndpoint) => void;
   // 接口对上的厂商的官方状态页提示；没有提示的接口不在里面。
   vendorNotices: ReadonlyMap<string, VendorNotice>;
+  // 「导入」：打开从别的软件导入的窗口。
+  onImport: () => void;
 }
 
 const noArrange = () => {};
@@ -135,18 +138,32 @@ export function ApiEndpointsListSection({
         : undefined,
     [onArrange, shownIds],
   );
+  const onImport = management?.onImport ?? null;
   const addButton = useMemo(
     () => (
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={Plus}
-        onPress={onAdd}
-        accessibilityLabel={t("settings.apiEndpoints.add")}
-        testID="api-endpoints-add-button"
-      />
+      <View style={styles.groupActions}>
+        {onImport ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={Download}
+            onPress={onImport}
+            testID="api-endpoints-import-button"
+          >
+            {t("settings.apiEndpoints.import.open")}
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={Plus}
+          onPress={onAdd}
+          accessibilityLabel={t("settings.apiEndpoints.add")}
+          testID="api-endpoints-add-button"
+        />
+      </View>
     ),
-    [onAdd, t],
+    [onAdd, onImport, t],
   );
 
   if (state.status === "loading") {
@@ -887,6 +904,11 @@ function ProviderLink({ provider, management }: { provider: string; management: 
 const styles = StyleSheet.create((theme) => ({
   flex: {
     flex: 1,
+  },
+  groupActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
   },
   emptyCard: {
     padding: theme.spacing[6],
