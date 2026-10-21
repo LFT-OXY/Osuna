@@ -8,7 +8,7 @@
 
 **Blocked by:** 26
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：一分钟内两次打开只扫一次；忽略后同一批不再出现在提示里，新加一条后再提示。
 - [ ] 浏览器测试：查看、忽略的成功与失败。
