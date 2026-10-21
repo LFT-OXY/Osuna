@@ -123,11 +123,13 @@ separately.
 
 The daemon downloads two public files on its own initiative, both plain GETs:
 no authentication, no query string, no request body, nothing about you or your
-machine beyond the IP and user agent any HTTP request carries. Its other
-requests are something you asked for, such as the CLI update check; follow from a
-page you have open, such as the vendor status pages read while the API endpoints
-or usage page is open; or follow from a switch you turned on: the API endpoint
-checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
+machine beyond the IP and user agent any HTTP request carries. The one other
+request it makes on its own is the daily model list refresh of each API
+endpoint that is on, which carries that endpoint's key. Its other requests are
+something you asked for, such as the CLI update check or an endpoint's tests;
+follow from a page you have open, such as the vendor status pages read while the
+API endpoints or usage page is open; or follow from a switch you turned on: the
+API endpoint checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
 through the gateway is theirs, not the daemon's.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
@@ -152,7 +154,8 @@ Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
 or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
 from the built-in snapshot and your own prices, tells Claude Code and Codex what
 an endpoint's own model list says and what a models.dev copy fetched earlier
-says, reads no vendor status page, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
+says, reads no vendor status page, refreshes no endpoint's model list on its
+own, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
 "Refresh now" in the price table still fetches the price table when you press
 it.
 
@@ -176,6 +179,27 @@ itself. The answers stay in memory for an hour, so reopening the page
 does not ask again; refresh does. Nothing is looked up at startup, on a timer,
 or for a CLI that is disabled, not installed, or whose version could not be read. The price table switch does not
 cover it.
+
+### API endpoints
+
+These go to the base URLs of one API endpoint and carry its key, unless it has
+none, plus its own **Headers** and extra body
+([glossary](glossary.md)). They name Osuna as the client, except Test as
+Claude Code and Test as Codex
+([ADR 0013](adr/0013-osuna-reads-other-apps-and-tests-as-the-cli.md)). On a
+custom endpoint with **Don't check its certificate** on, its own `https` hosts
+are reached without checking their certificate.
+
+| Request                                                                                                  | Sent when                                                                                                                                                                                                                                                  | Price table switch |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Daily model list: each format's list (`GET <base>/v1/models`, then `<base>/models`; Azure's deployments) | For each endpoint that is on. First look 5 minutes after start, then every minute; an endpoint whose list is under a day old is skipped. Up to 60 seconds per endpoint; a failure is logged at `info`, keeps the list, and is tried again 15 minutes later | Stops it           |
+| Model list after saving                                                                                  | You add an endpoint or change its key, import endpoints from other apps, or add one from an import link. Up to 8 seconds; a failure doesn't stop the save                                                                                                  | Doesn't            |
+| Model list                                                                                               | You open an endpoint's page, or press "Fetch again" there or "Fetch models" in the add or edit dialog                                                                                                                                                      | Doesn't            |
+| Test connection, Auto-detect and Each picked model                                                       | You press it. Each picked model asks up to 30 models on every format, 8 at a time                                                                                                                                                                          | Doesn't            |
+| Test models, Test as Claude Code, Test as Codex                                                          | You press the button: one "hi" capped at 16 tokens per model, 4 at a time. The two "Test as" ones send the headers that CLI last sent through the gateway                                                                                                  | Doesn't            |
+
+The dialog's requests use what is in the form, so they can reach an address and
+key you haven't saved yet.
 
 "From the website" in the add or edit dialog of a custom API endpoint also runs
 only when you press it. The daemon looks for the icon of the site the endpoint's

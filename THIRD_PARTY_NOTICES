@@ -1006,6 +1006,20 @@ PublishedOutput, OutputWithin and Modalities in internal/provider:
   packages/server/src/server/api-endpoints/model-facts.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+Disabled models (the host-wide list of ids and globs in any case, a model on an
+endpoint matched by its id, by slug/id and by its last segment, a requested
+name by the whole of it, its last segment and what follows the first slash,
+Codex's own models as codex/<model>, and the gateway turning a request down
+before any endpoint is asked, naming the entry) follows matchDisabled,
+globMatch, namesOf, IDDisabled, normalDisabled and BareDisabled in magpie's
+internal/provider/disabled.go and disabledError, idOff and codexNativeOff in
+internal/gateway/disabled.go; its end-to-end tests follow disabled_test.go in
+both:
+
+  packages/protocol/src/api-endpoint/disabled-models.ts
+  packages/server/src/server/api-endpoints/disabled-models.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-disabled-models.e2e.test.ts
+
 The vendors' own status pages (which vendors, their pages and API hosts, which
 of a page's parts the API stands on, an endpoint matched to a vendor by its base
 URLs' hosts, the worst part's level, the open incidents on those parts, a page
@@ -1055,11 +1069,11 @@ link, https only except plain http to this machine or the local network, no
 account, query or fragment in a base URL, a key of at most 4096 bytes without
 control characters, a name cut to 80 bytes where a character begins, at most 200
 models, the unknown template, Vertex and no-base-URL refusals, the https picture
-on a public host fetched only once the user adds it, the endpoint with the same
-id replaced, and the dialog naming the hosts the prompts and the key go to with
-the name and key editable) follows importurl.go and importurl_test.go in
-magpie's internal/provider, internal/gui/importlink.go, and renderImport in
-internal/gui/assets/app.js:
+on a public host fetched when the dialog opens and kept only once the user adds
+it, the endpoint with the same id replaced, and the dialog naming the hosts the
+prompts and the key go to with the name and key editable) follows importurl.go
+and importurl_test.go in magpie's internal/provider, internal/gui/importlink.go,
+and renderImport in internal/gui/assets/app.js:
 
   packages/protocol/src/api-endpoint/import-link.ts
   packages/protocol/src/api-endpoint/template-icons.ts
