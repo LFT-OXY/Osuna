@@ -2,6 +2,7 @@
 import { mkdtempSync } from "node:fs";
 import { chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Locator, WebSocketRoute } from "@playwright/test";
@@ -820,6 +821,36 @@ test.describe("Settings API endpoints", () => {
       await expect(models.getByTestId("api-endpoint-model-family-claude")).toHaveCount(0);
       await expect(modelSwitch(page, "gpt-5")).toBeChecked();
       expect(await selectedModelsOf(endpointId)).toEqual(["gpt-5"]);
+    });
+  });
+
+  test("a failed fetch on the endpoint page says why without the request address", async ({
+    page,
+  }) => {
+    const rejected = await seedApiEndpoint(client, {
+      name: "Wrong key",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: [],
+      apiKey: "sk-wrong",
+    });
+    const unreachable = await seedApiEndpoint(client, {
+      name: "Gone relay",
+      baseUrls: [{ format: "anthropic_messages", url: `http://127.0.0.1:${await closedPort()}` }],
+      models: [],
+    });
+    const failed = page.getByTestId("api-endpoint-models-failed").filter({ visible: true });
+
+    await test.step("a rejected key", async () => {
+      await openEndpointDetail(page, rejected);
+      await expect(failed).toContainText("HTTP 401: Invalid API key · /v1/models");
+      await expect(failed).not.toContainText(/https?:\/\//);
+    });
+
+    await test.step("an address that does not answer", async () => {
+      await page.getByTestId("settings-api-endpoints-breadcrumb").filter({ visible: true }).click();
+      await openEndpointRow(page, unreachable);
+      await expect(failed).toContainText("ECONNREFUSED");
+      await expect(failed).not.toContainText(/https?:\/\//);
     });
   });
 
@@ -2854,6 +2885,10 @@ test.describe("Checking an API endpoint before saving it", () => {
     await page.getByTestId("api-endpoint-connection-fetch-models").click();
     await expect(page.getByTestId("api-endpoint-connection-models-field-error")).toContainText(
       "HTTP 401",
+    );
+    // 原因不露原样请求地址（地址就在上面的输入框里）。
+    await expect(page.getByTestId("api-endpoint-connection-models-field-error")).not.toContainText(
+      /https?:\/\//,
     );
     await expect(page.getByTestId("api-endpoint-connection-catalog")).toHaveCount(0);
 
@@ -5326,6 +5361,15 @@ async function claudeSettingsBaseUrl(): Promise<string | undefined> {
 async function openEndpointRow(page: Page, endpointId: string): Promise<void> {
   await row(page, endpointId).click();
   await expect(page.getByTestId("api-endpoint-detail").filter({ visible: true })).toBeVisible();
+}
+
+/** 刚关掉的本机端口：连上去被拒。 */
+async function closedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
 }
 
 async function openEndpointDetail(page: Page, endpointId: string): Promise<void> {

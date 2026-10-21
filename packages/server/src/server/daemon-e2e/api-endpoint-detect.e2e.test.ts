@@ -232,8 +232,8 @@ describe("API endpoint request format detection over the daemon RPC", () => {
     expect(detected.results.map((result) => result.message)).toEqual(
       detected.results.map(
         () =>
-          `Could not list models to try: GET ${upstream.origin}/relay/v1/models: HTTP 404: nope\n` +
-          `GET ${upstream.origin}/relay/models: HTTP 404: Not Found`,
+          "Could not list models to try: HTTP 404: nope · /v1/models\n" +
+          "HTTP 404: Not Found · /models",
       ),
     );
     expect(detected.results.map((result) => result.code)).toEqual(
