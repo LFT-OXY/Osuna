@@ -6,6 +6,12 @@
 
 ## Requirements
 
+**合并进 main 前必做**（2026-10-21 在分支上手动跑 CI，run 39565218013）：
+
+- CI 规矩检查 `scripts/ci-workflow.test.mjs`「browser and desktop tests have exclusive, directory-owned suites」失败：`packages/app/e2e/browser/settings-api-endpoints.spec.ts` 里用了 `paseoDesktop`（工单 28 导入链接的用例），要挪到桌面端测试目录。
+- `packages/server/src/server/api-endpoints/import-apps.test.ts`「a database Osuna has no permission to open is unreadable…」在 Windows 上失败（chmod 在 Windows 不生效），要按平台处理。
+- 先合并 origin/main（含 #24 把 Linux 机器固定在 24.04，否则 Playwright 装不上、浏览器测试一条都没跑），再跑一遍 CI，确认浏览器测试与 app 测试全过。分支起点就有的 `claude.test.ts`「keeps provider names out of the generic server bootstrap」和 Windows 上 `cli-bypass.test.ts`、`login-shell-env.test.ts` 的失败在 main 上已不出现，合并后复查。
+
 验收没勾上的项（原任务工单里仍是 `- [ ]`）：
 
 - 工单 05「编辑窗口 / key 已显示 / 窄窗口 390 — 原文完整可读」：英文 390 截图里 key 末尾被截掉（`Hide` 按钮比中文宽）；真实长度的 key 中英文都会截断。
