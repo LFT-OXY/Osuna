@@ -55,6 +55,8 @@ export interface FakeRelay {
   }[];
   // /good 列出的模型；用例可以改它模拟上游清单变化。
   goodModels: string[];
+  // /good 清单里某些模型带的上下文（按 OpenRouter 的 context_length 写）；没写的不带。
+  goodModelContexts: Record<string, number>;
   // 问 slow-* 挂着的请求里被对方断开的个数（测试模型被取消时 daemon 断开它们）。
   abandoned: number;
   close(): Promise<void>;
@@ -84,6 +86,7 @@ export async function startFakeRelay(): Promise<FakeRelay> {
     origin: "",
     requests: [],
     goodModels: ["claude-sonnet-4-5", "gpt-5"],
+    goodModelContexts: {},
     abandoned: 0,
   };
   const server: Server = createServer((request, response) => {
@@ -111,7 +114,12 @@ export async function startFakeRelay(): Promise<FakeRelay> {
       if (turnsAwayOtherClients({ url, model, headers, response })) return;
       if (holdsOrLacksList({ url, isNoList, model, response, onAbandoned })) return;
       if (request.method === "GET" && url === "/good/v1/models") {
-        send(response, 200, { data: relay.goodModels.map((id) => ({ id })) });
+        send(response, 200, {
+          data: relay.goodModels.map((id) => {
+            const context = relay.goodModelContexts[id];
+            return context === undefined ? { id } : { id, context_length: context };
+          }),
+        });
         return;
       }
       if (request.method === "GET" && url === "/many/v1/models") {
@@ -398,6 +406,7 @@ export async function seedApiEndpoint(
     apiKey?: string;
     // 服务范围；省略即「只用挑选的」。
     modelScope?: string;
+    templateId?: string;
   },
 ): Promise<string> {
   const saved = await client.apiEndpointSave({
@@ -407,6 +416,7 @@ export async function seedApiEndpoint(
     apiKey: input.apiKey ?? RELAY_KEY,
     models: input.models.map((id) => ({ id })),
     ...(input.modelScope !== undefined ? { modelScope: input.modelScope } : {}),
+    ...(input.templateId !== undefined ? { templateId: input.templateId } : {}),
   });
   if (!saved.endpoint) throw new Error(`Saving ${input.name} failed: ${saved.error?.message}`);
   return saved.endpoint.id;

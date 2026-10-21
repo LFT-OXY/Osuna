@@ -38,6 +38,8 @@ import { gotoWorkspace } from "../support/helpers/launcher";
 import { expectSavedSelection } from "../support/helpers/model-memory";
 import { openGlobalNewWorkspaceComposer } from "../support/helpers/new-workspace";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { installLoginUsage } from "../support/helpers/usage-login";
+import { openUsagePageFromShell } from "../support/helpers/usage-page";
 import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { getServerId } from "../support/helpers/server-id";
 import {
@@ -784,6 +786,32 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("a model the vendor lists with a window of a million tokens or more carries its size beside the name; a smaller one carries none", async ({
+    page,
+  }) => {
+    relay.goodModels = ["wide-window", "huge-window", "narrow-window"];
+    relay.goodModelContexts = {
+      "wide-window": 1_048_576,
+      "huge-window": 2_000_000,
+      "narrow-window": 200_000,
+    };
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["wide-window"],
+    });
+    await openEndpointDetail(page, endpointId);
+    const context = (modelId: string) =>
+      page.getByTestId(`api-endpoint-model-context-${modelId}`).filter({ visible: true });
+
+    await expect(context("wide-window")).toHaveText("1M");
+    await expect(context("huge-window")).toHaveText("2M");
+    await expect(
+      page.getByTestId("api-endpoint-model-narrow-window").filter({ visible: true }),
+    ).toBeVisible();
+    await expect(context("narrow-window")).toHaveCount(0);
+  });
+
   test("Forget fetched list empties the list and its time; a failed forget stays in place", async ({
     page,
   }) => {
@@ -1508,12 +1536,19 @@ test.describe("Settings API endpoints", () => {
     await expect(error).toHaveCount(0);
     expect(await hostList()).toEqual(["*-PREVIEW"]);
 
-    await section
-      .getByTestId("api-endpoints-disabled-model-*-PREVIEW")
-      .getByRole("button", { name: "Enable *-PREVIEW" })
-      .click();
+    // 「启用」被主机拒绝：原因就地写出，条目和它命中的模型都留着；再点一次成功，条目才消失。
+    const enable = entry.getByRole("button", { name: "Enable *-PREVIEW" });
+    host.failing = true;
+    await enable.click();
+    await expect(error).toContainText("EACCES: permission denied");
+    await expect(entry).toContainText("good-relay/gemini-3-preview");
+    expect(await hostList()).toEqual(["*-PREVIEW"]);
+
+    host.failing = false;
+    await enable.click();
     await expect.poll(hostList).toEqual([]);
     await expect(section.getByTestId("api-endpoints-disabled-model-*-PREVIEW")).toHaveCount(0);
+    await expect(error).toHaveCount(0);
 
     // 从选单里挑：只禁这一家的这个模型（接口标识/模型）。
     await section.getByTestId("api-endpoints-disabled-models-add").click();
@@ -2273,6 +2308,43 @@ test.describe("Templates", () => {
       await expect(page.getByTestId("api-endpoint-connection-name")).toHaveValue("");
       await expect(page.getByTestId("api-endpoint-connection-detect")).toBeVisible();
       await expect(page.getByTestId("api-endpoint-connection-template")).toHaveCount(0);
+    });
+  });
+
+  test("the template list and an endpoint's row show the brand's icon; one without a brand icon shows its first letter", async ({
+    page,
+  }) => {
+    // DeepSeek 的鲸鱼是它自己的蓝色；小米 MiMo 的商标缩到图标大小认不出，只写首字。
+    const deepseekBlue = '[fill="#4D6BFE"]';
+    const deepseekId = await seedApiEndpoint(client, {
+      name: "DeepSeek",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+      templateId: "deepseek",
+    });
+    const customId = await seedApiEndpoint(client, {
+      name: "Home relay",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+    await openApiEndpointsPage(page);
+
+    await test.step("an endpoint from a template shows its brand; a custom one its first letter", async () => {
+      await expect(row(page, deepseekId).locator(deepseekBlue)).toHaveCount(1);
+      await expect(row(page, deepseekId).getByText("D", { exact: true })).toHaveCount(0);
+      await expect(row(page, customId).locator(deepseekBlue)).toHaveCount(0);
+      await expect(row(page, customId).getByText("H", { exact: true })).toBeVisible();
+    });
+
+    await test.step("the template list shows each brand the same way", async () => {
+      await page.getByTestId("api-endpoints-add-button").filter({ visible: true }).click();
+      await expect(templatePicker(page)).toBeVisible();
+      const deepseek = page.getByTestId("api-endpoint-template-deepseek");
+      await expect(deepseek.locator(deepseekBlue)).toHaveCount(1);
+      await expect(deepseek.getByText("D", { exact: true })).toHaveCount(0);
+      const xiaomi = page.getByTestId("api-endpoint-template-xiaomi");
+      await xiaomi.scrollIntoViewIfNeeded();
+      await expect(xiaomi.getByText("X", { exact: true })).toBeVisible();
     });
   });
 
@@ -5732,6 +5804,44 @@ test.describe("Vendor status pages", () => {
       "DeepSeek status ↗",
     );
     await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-text")).toHaveCount(0);
+  });
+
+  test("the status pages are asked only while the Usage page or the API endpoints page is open, every five minutes", async ({
+    page,
+  }) => {
+    // 用量页的订阅卡片要有一个账号才挂上；用 daemon 端真实的用量来源给它一个。
+    const usage = await installLoginUsage({
+      status: "available",
+      windows: [{ id: "weekly", label: "Weekly", shortLabel: "wk", summary: true, usedPct: 54 }],
+    });
+    try {
+      await page.clock.install();
+      const asked = await answerVendorStatus(page, {
+        payload: { autoUpdate: true, vendors: [], endpointVendors: {}, error: null },
+      });
+      const serverId = getServerId();
+      // 页面关着时问过的话，打开页面后第一次答之前就已经到了，次数会多出来（同一条连接按顺序到）。
+      const expectAsked = (times: number) => expect.poll(() => asked.count).toBe(times);
+
+      await gotoAppShell(page);
+      await page.clock.fastForward("11:00");
+      await openUsagePageFromShell(page);
+      await expect(page.getByTestId("usage-plan-usage-card")).toContainText("Weekly");
+      await expectAsked(1);
+      await page.clock.fastForward("05:01");
+      await expectAsked(2);
+
+      await openSettings(page);
+      await openSettingsHost(page, serverId);
+      await openSettingsHostSection(page, serverId, "providers");
+      await page.clock.fastForward("11:00");
+      await openSettingsHostSection(page, serverId, "api-endpoints");
+      await expectAsked(3);
+      await page.clock.fastForward("05:01");
+      await expectAsked(4);
+    } finally {
+      await usage.cleanup();
+    }
   });
 
   test("a failed status request leaves the list as it is", async ({ page }) => {
