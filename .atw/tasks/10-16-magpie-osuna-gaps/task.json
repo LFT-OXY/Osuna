@@ -27,7 +27,8 @@
     "10-16-pi-omp-endpoints",
     "10-16-gemini-upstream",
     "10-16-credential-switch-risk-notes",
-    "10-16-multi-account-rotation"
+    "10-16-multi-account-rotation",
+    "10-21-endpoint-management-ux-followups"
   ],
   "parent": null,
   "relatedFiles": [],

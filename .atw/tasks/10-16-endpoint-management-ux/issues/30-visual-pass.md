@@ -9,7 +9,7 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 截图清单齐全并给用户看过；发现的不一致已修。
+- [x] 截图清单齐全并给用户看过；发现的不一致已修。
 - [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md「UI and Design」；`docs/design.md`。

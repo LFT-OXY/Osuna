@@ -343,7 +343,7 @@
 ## Acceptance Criteria
 
 - [ ] 用户故事 1–113 的行为都有对应的 daemon 端到端测试或浏览器测试，并在 CI 通过（已知常红的 Nix 两项除外）。
-- [ ] 不改任何新设置的已有接口，升级后选路、自动切换、冷却、写进 CLI 的配置与升级前一致（端到端测试验证）。
+- [x] 不改任何新设置的已有接口，升级后选路、自动切换、冷却、写进 CLI 的配置与升级前一致（端到端测试验证）。验收时用户认可两处照 magpie 的有意变化（决定 18b、23，用户故事 57、58）：Claude Code 选单「一直显示」写成「模型名 (接口名)」、说明改为 via Osuna，并新写 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`；Codex 目录对超过工作窗口的模型写 `context_window` 272K 加 `max_context_window`。
 - [x] 旧客户端兼容：新字段都可选；旧形状的保存不清掉新字段；没有 `apiEndpointManagement` 时客户端照旧；官方 Paseo 手机 App 的接口视图照常工作。
 - [x] 文档：
   - ADR 0007 的「按创建顺序」改为接口顺序；ADR 0008 写明用户设的请求改动；新 ADR 记导入与按 CLI 样子测（第 15 条的例外）。
@@ -352,7 +352,7 @@
   - `docs/data-model.md` 写进接口与主机的新字段、CLI 请求头样本文件。
   - `THIRD_PARTY_NOTICES` 覆盖新借鉴的 magpie 文件与拷入的图标。
 - [x] 9 种界面语言的 i18n 测试通过：键齐全，中文没有残留英文。
-- [ ] 界面验收截图（UI and Design 的清单）由主会话拍摄并给用户看过。
+- [x] 界面验收截图（UI and Design 的清单）由主会话拍摄并给用户看过。
 - [x] 测试不读写真实 `~/.claude`、`~/.codex`、钥匙串，不在本机跑真的 Claude Code，不真升级 CLI。
 
 ## Further Notes
