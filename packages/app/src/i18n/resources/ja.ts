@@ -2585,7 +2585,8 @@ export const ja: TranslationResources = {
           unknown: "インポートできません",
         },
         errors: {
-          gone: "その項目は元のアプリにもうありません。閉じてからもう一度インポートしてください。",
+          gone: "スキャン結果が古くなっていたため、Osuna がもう一度スキャンしました。選択を確認してから再度インポートしてください。",
+          failed: "Osuna が保存できませんでした（{{reason}}）",
           cannotReplace:
             "{{name}} は既存のエンドポイントと名前が重なっていません。両方残すを選んでください。",
         },

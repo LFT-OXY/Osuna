@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
+import { NODE_DATA_FILE_SYSTEM, type DataFileSystem } from "../api-endpoints/last-good.js";
 
 /*
  * 从别的软件导入（工单 26，prd 第 39–41 条）：真实 daemon，临时 HOME 里放五种来源的假配置，
@@ -152,6 +153,7 @@ async function start(input: {
   endpoints: ReturnType<typeof storedEndpoint>[];
   keys: Record<string, string>;
   almaName?: string;
+  dataFileSystem?: DataFileSystem;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-import-"));
   tempRoots.push(root);
@@ -178,6 +180,7 @@ async function start(input: {
         almaDatabase: sources.almaDb,
         openCodeAuth: sources.openCodeAuth,
       },
+      ...(input.dataFileSystem === undefined ? {} : { dataFileSystem: input.dataFileSystem }),
     },
   });
   daemons.push(daemon);
@@ -192,9 +195,12 @@ async function start(input: {
 }
 
 /** 五个来源文件的修改时间，与它们所在目录里有哪些文件（SQLite 读时不该留下新文件）。 */
-async function sourceSnapshot(
-  sources: Sources,
-): Promise<{ times: number[]; listings: string[][] }> {
+interface SourceSnapshot {
+  times: number[];
+  listings: string[][];
+}
+
+async function sourceSnapshot(sources: Sources): Promise<SourceSnapshot> {
   const files = [
     sources.claudeSettings,
     sources.codexConfig,
@@ -465,5 +471,47 @@ describe("import from other apps", () => {
     ]);
     // 出错之后的那条没动。
     expect((await client.apiEndpointRevealKey("ep_taken")).apiKey).toBe("sk-elsewhere");
+  });
+
+  test("a write that fails partway stops there and still answers what came in before it; an unknown fingerprint says the scan is out of date", async () => {
+    // 换上 endpoints.json 时，armed 之后第二次改名失败（像磁盘写不进去）。
+    const control = { armed: false, endpointWrites: 0 };
+    const dataFileSystem: DataFileSystem = {
+      ...NODE_DATA_FILE_SYSTEM,
+      rename(from, to) {
+        if (control.armed && to.endsWith("endpoints.json")) {
+          control.endpointWrites += 1;
+          if (control.endpointWrites === 2) {
+            throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+          }
+        }
+        NODE_DATA_FILE_SYSTEM.rename(from, to);
+      },
+    };
+    const { client } = await start({ endpoints: [], keys: {}, dataFileSystem });
+    const scan = await client.apiEndpointImportScan();
+    const alma = itemsOf(scan, "alma")[0];
+    const ccRelay = itemsOf(scan, "cc-switch")[0];
+    const codex = itemsOf(scan, "codex")[0];
+    if (!alma || !ccRelay || !codex) throw new Error("Expected three entries");
+
+    control.armed = true;
+    const result = await client.apiEndpointImport([
+      { fingerprint: alma.fingerprint, action: "add" },
+      { fingerprint: ccRelay.fingerprint, action: "add" },
+      { fingerprint: codex.fingerprint, action: "add" },
+    ]);
+    control.armed = false;
+    expect(result.imported.map((entry) => entry.name)).toEqual(["Alma Relay"]);
+    expect(result.failed).toEqual({ fingerprint: ccRelay.fingerprint, name: "CC Relay" });
+    expect(result.error).toMatchObject({ code: "import_failed", params: { reason: "EACCES" } });
+    expect((await client.apiEndpointList("claude")).endpoints.map((e) => e.name)).toEqual([
+      "Alma Relay",
+    ]);
+
+    const gone = await client.apiEndpointImport([
+      { fingerprint: "from-before-a-restart", action: "add" },
+    ]);
+    expect(gone).toMatchObject({ imported: [], failed: null, error: { code: "import_gone" } });
   });
 });

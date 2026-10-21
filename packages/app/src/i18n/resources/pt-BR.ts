@@ -2600,7 +2600,8 @@ export const ptBR: TranslationResources = {
           unknown: "Não dá para importar",
         },
         errors: {
-          gone: "Essa entrada não está mais no app de origem. Feche e importe de novo.",
+          gone: "A verificação estava desatualizada, então o Osuna verificou de novo. Confira a seleção e importe novamente.",
+          failed: "O Osuna não conseguiu salvá-lo ({{reason}})",
           cannotReplace: "{{name}} não tem o nome de nenhum endpoint seu; mantenha os dois.",
         },
       },

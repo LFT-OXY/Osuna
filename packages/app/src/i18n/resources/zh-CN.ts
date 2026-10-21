@@ -2587,7 +2587,8 @@ export const zhCN: TranslationResources = {
           unknown: "不能导入",
         },
         errors: {
-          gone: "这一条已经不在原来的软件里了。关掉窗口后重新导入。",
+          gone: "扫描结果已经过时，Osuna 重新扫描了一遍。请检查选择后再导入。",
+          failed: "Osuna 没能保存它（{{reason}}）",
           cannotReplace: "「{{name}}」没有和你已有的接口重名，请改为两家都留。",
         },
       },

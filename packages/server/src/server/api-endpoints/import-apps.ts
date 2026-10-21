@@ -368,8 +368,10 @@ function placeAtTemplate(input: {
   const match = templateAt(input.urls);
   if (match === null) return;
   if (match.kind === "near") {
-    // 同一主机上的别的路径（如编程套餐）：模板的图标与模型资料照用，地址照原样（magpie 的 ID、Icon、Catalog）。
+    // 同一主机上的别的路径（如编程套餐）：模板的图标与模型资料（在区域的主机上用那个区域的）照用，地址照原样
+    // （magpie 的 ID、Icon、Catalog）。
     found.templateId = match.templateId;
+    found.region = match.region;
     return;
   }
   const preset = match.place;
@@ -397,9 +399,12 @@ interface TemplatePlace {
 /**
  * 地址在哪个模板（或它的一个区域、套餐）的主机上，是不是正好是它那几个地址（magpie presetAt）。本机模板不算。
  */
-function templateAt(
-  urls: FormatUrls,
-): { kind: "exact"; place: TemplatePlace } | { kind: "near"; templateId: string } | null {
+/** 地址正好是模板（或它的区域、套餐）的：那个位置；只在它的主机上：模板与对上的区域（没有为 null）。 */
+type TemplateMatch =
+  | { kind: "exact"; place: TemplatePlace }
+  | { kind: "near"; templateId: string; region: string | null };
+
+function templateAt(urls: FormatUrls): TemplateMatch | null {
   const given: Record<ApiEndpointRequestFormat, string> = {
     anthropic_messages: urls.anthropic,
     openai_chat: urls.chat,
@@ -420,7 +425,7 @@ function templateAt(
     return { hit, exact: hit && exact };
   };
   // 正好是某个模板的地址的，胜过前面同一主机上的别的模板（magpie：OpenCode Zen 与 OpenCode Go 都在 opencode.ai）。
-  let near: string | null = null;
+  let near: { templateId: string; region: string | null } | null = null;
   for (const template of API_ENDPOINT_TEMPLATES) {
     if (template.group === "local") continue;
     const own = template.baseUrls.flatMap(asImportBaseUrl);
@@ -431,7 +436,8 @@ function templateAt(
         place: { templateId: template.id, region: null, name: template.name, baseUrls: own },
       };
     }
-    let isNear = match.hit;
+    // 模板自己的主机先算；不在它上面、在某个区域的主机上时记下那个区域（magpie 的 firstNear）。
+    let nearRegion: string | null = null;
     for (const region of template.regions ?? []) {
       const regionOwn = region.baseUrls.flatMap(asImportBaseUrl);
       if (regionOwn.length === 0) continue;
@@ -445,11 +451,13 @@ function templateAt(
         };
         return { kind: "exact", place };
       }
-      if (regionMatch.hit) isNear = true;
+      if (regionMatch.hit && nearRegion === null) nearRegion = region.id;
     }
-    if (near === null && isNear) near = template.id;
+    if (near === null && match.hit) near = { templateId: template.id, region: null };
+    else if (near === null && nearRegion !== null)
+      near = { templateId: template.id, region: nearRegion };
   }
-  return near === null ? null : { kind: "near", templateId: near };
+  return near === null ? null : { kind: "near", ...near };
 }
 
 function asImportBaseUrl(entry: { format: string; url: string }): ImportBaseUrl[] {
@@ -1129,10 +1137,18 @@ const SqliteModuleSchema = z.object({
 });
 const SqliteErrorSchema = z.object({ errcode: z.number() });
 
-// SQLite 的结果码：库被别的连接锁着、文件不是数据库。
+// SQLite 的结果码：没有权限、库被别的连接锁着、打不开文件、要密码、文件不是数据库。
+const SQLITE_PERM = 3;
 const SQLITE_BUSY = 5;
 const SQLITE_LOCKED = 6;
+const SQLITE_CANTOPEN = 14;
+const SQLITE_AUTH = 23;
 const SQLITE_NOTADB = 26;
+const SQLITE_UNREADABLE: Record<number, string> = {
+  [SQLITE_PERM]: "SQLITE_PERM",
+  [SQLITE_CANTOPEN]: "SQLITE_CANTOPEN",
+  [SQLITE_AUTH]: "SQLITE_AUTH",
+};
 
 /**
  * 取 node:sqlite：没有 getBuiltinModule（Node 20.16 以前）或这个 Node 不给 node:sqlite（Node 22.13 以前要开实验开关）时为 null。
@@ -1198,7 +1214,10 @@ function queryReadOnly(input: { filePath: string; what: string; sql: string }): 
   }
 }
 
-/** 打开或查询失败的原因：被锁着、不是数据库、没有 Osuna 认得的 providers 表。 */
+/**
+ * 打开或查询失败的原因，按 SQLite 的结果码分：没权限或打不开文件是 unreadable，被锁着是 busy，不是数据库是 not_database；
+ * 打开时别的码也算打不开，查询时别的码是没有 Osuna 认得的 providers 表。
+ */
 function sqliteReadError(input: {
   error: unknown;
   what: string;
@@ -1209,11 +1228,15 @@ function sqliteReadError(input: {
   if (errcode === SQLITE_BUSY || errcode === SQLITE_LOCKED) {
     return new SourceReadError({ code: "busy", message: `${input.what} is locked by its app` });
   }
-  if (errcode === SQLITE_NOTADB || input.stage === "open") {
-    return new SourceReadError({
-      code: "not_database",
-      message: `${input.what} is not a database Osuna can open`,
-    });
+  if (errcode === SQLITE_NOTADB) {
+    const message = `${input.what} is not a database Osuna can open`;
+    return new SourceReadError({ code: "not_database", message });
+  }
+  const unreadable = errcode === null ? undefined : SQLITE_UNREADABLE[errcode];
+  if (unreadable !== undefined || input.stage === "open") {
+    const errno = unreadable ?? `SQLITE_${errcode ?? "ERROR"}`;
+    const message = `Osuna can't open ${input.what} (${errno})`;
+    return new SourceReadError({ code: "unreadable", params: { errno }, message });
   }
   return new SourceReadError({
     code: "no_providers_table",

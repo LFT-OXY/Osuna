@@ -5867,9 +5867,11 @@ test.describe("Import from other apps", () => {
     ).toBeVisible();
   });
 
-  test("an import that fails keeps the dialog and the picks, and says why", async ({ page }) => {
+  test("an import whose scan is out of date keeps the dialog, scans again and says so", async ({
+    page,
+  }) => {
     await writeImportSources();
-    await answerImportRpc(page, {
+    const seen = await answerImportRpc(page, {
       type: "provider.api_endpoint.import",
       isAnswering: () => true,
       payload: {
@@ -5883,8 +5885,9 @@ test.describe("Import from other apps", () => {
     await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
     await page.getByTestId("api-endpoint-import-submit").click();
     await expect(importSheet(page).getByTestId("api-endpoint-import-error")).toHaveText(
-      "That entry is no longer in the app it came from. Close this and import again.",
+      "The scan was out of date, so Osuna scanned again. Check the picks and import again.",
     );
+    await expect.poll(() => seen.scans).toBe(2);
     await expect(importSheet(page)).toBeVisible();
     await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
     await expect(page.getByTestId("api-endpoints-list")).not.toContainText("Team Relay");
@@ -5923,12 +5926,18 @@ test.describe("Import from other apps", () => {
 async function answerImportRpc(
   page: Page,
   input: { type: string; isAnswering: () => boolean; payload: Record<string, unknown> },
-): Promise<void> {
+): Promise<{ scans: number }> {
   const requestType = `"${input.type}.request"`;
+  // 窗口扫了几次（导入请求的答案说扫描过时时，窗口要再扫一次）。
+  const seen = { scans: 0 };
   await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
     const server = ws.connectToServer();
     server.onMessage((message) => ws.send(message));
     ws.onMessage((message) => {
+      const isScan =
+        typeof message === "string" &&
+        message.includes('"provider.api_endpoint.import_scan.request"');
+      if (isScan) seen.scans += 1;
       const isAsked = typeof message === "string" && message.includes(requestType);
       if (!isAsked || !input.isAnswering()) {
         server.send(message);
@@ -5946,6 +5955,7 @@ async function answerImportRpc(
       );
     });
   });
+  return seen;
 }
 
 const SessionRequestSchema = z.object({

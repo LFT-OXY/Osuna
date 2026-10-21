@@ -318,6 +318,7 @@ import {
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
+import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
   readImportSources,
@@ -400,6 +401,8 @@ export type ApiEndpointErrorCode =
   // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
   | "import_gone"
   | "import_cannot_replace"
+  // 加某一条时写文件等出了错（params.reason 是 errno 或错误名）。
+  | "import_failed"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -644,6 +647,8 @@ export interface ApiEndpointServiceOptions {
   vendorStatusTimers?: UsagePricingTimers;
   // 从别的软件导入时读的 CC Switch 目录、Alma 数据库与 OpenCode 的 auth.json；缺省按 magpie 的位置，
   // 测试 daemon 一律指到临时目录。Claude Code、Codex 的配置跟着 env 与 homeDir 走。
+  // endpoints.json 等文件的读与改名；只给测试换成会失败的假文件系统（如导入写到一半出错）。
+  dataFileSystem?: DataFileSystem;
   importSourcePaths?: Partial<
     Pick<ImportSourcePaths, "ccSwitchDir" | "almaDatabase" | "openCodeAuth">
   >;
@@ -848,7 +853,11 @@ export class ApiEndpointService {
 
   constructor(options: ApiEndpointServiceOptions) {
     this.logger = options.logger.child({ module: "api-endpoints" });
-    this.store = new ApiEndpointStore({ paseoHome: options.paseoHome, logger: this.logger });
+    this.store = new ApiEndpointStore({
+      paseoHome: options.paseoHome,
+      logger: this.logger,
+      fileSystem: options.dataFileSystem,
+    });
     this.env = options.env ?? process.env;
     this.homeDir = options.homeDir ?? homedir();
     this.claudeManagedSettingsDir =
@@ -3282,28 +3291,44 @@ export class ApiEndpointService {
     const entries = this.settledImports({ includeOpenCode: true }).flatMap(
       (source) => source.entries,
     );
-    const imported: ImportOutcome["imported"] = [];
+    const imported: ImportedEndpointRef[] = [];
     for (const pick of picks) {
       const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
+      // 指纹对不上（来源变了、daemon 重启过）：扫描结果过时了，没有可说的那一条。
+      if (entry === undefined) return { imported, failed: null, error: importGone() };
       try {
         const added = await this.importOne({ pick, entry });
         if (added !== null) imported.push(added);
       } catch (error) {
-        if (!(error instanceof ApiEndpointRequestError)) throw error;
-        const name = entry?.name ?? "";
-        return { imported, failed: { fingerprint: pick.fingerprint, name, error } };
+        // 任何错都停在这一条，回前面加好的（magpie 不论什么错都回 added）。
+        const failed = { fingerprint: pick.fingerprint, name: entry.name };
+        return { imported, failed, error: this.importItemError({ error, entry }) };
       }
     }
-    return { imported, failed: null };
+    return { imported, failed: null, error: null };
+  }
+
+  /** 一条没成的原因：请求的错照原样；写文件等别的错记日志，换成 import_failed（params.reason 是 errno 或错误名）。 */
+  private importItemError(input: { error: unknown; entry: SettledEntry }): ApiEndpointRequestError {
+    const { error } = input;
+    if (error instanceof ApiEndpointRequestError) return error;
+    this.logger.error({ err: error, source: input.entry.source }, "Importing an endpoint failed");
+    let reason = "unknown";
+    if (isErrnoException(error) && error.code !== undefined) reason = error.code;
+    else if (error instanceof Error) reason = error.name;
+    return new ApiEndpointRequestError({
+      code: "import_failed",
+      message: `Osuna couldn't save ${input.entry.name} (${reason})`,
+      params: { reason },
+    });
   }
 
   /** 加一条或换上一条，单独落下（magpie 每条 Save 一次）；已经有了的为 null。 */
   private async importOne(input: {
     pick: ApiEndpointImportPick;
-    entry: SettledEntry | undefined;
-  }): Promise<{ endpointId: string; name: string } | null> {
+    entry: SettledEntry;
+  }): Promise<ImportedEndpointRef | null> {
     const { pick, entry } = input;
-    if (entry === undefined) throw importGone();
     const found = entry.found;
     if (found === null || entry.status === "added") return null;
     const action = importActionOf({ pick, found });
@@ -5587,11 +5612,22 @@ function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
-/** 这次导入一出错就停下：加好的那几家，与出错的那条和原因。 */
-export interface ImportOutcome {
-  imported: { endpointId: string; name: string }[];
-  failed: { fingerprint: string; name: string; error: ApiEndpointRequestError } | null;
+export interface ImportedEndpointRef {
+  endpointId: string;
+  name: string;
 }
+
+/**
+ * 这次导入一出错就停下：加好的那几家，与出错的那条（指纹对不上时为 null）和原因。
+ */
+export interface ImportOutcome {
+  imported: ImportedEndpointRef[];
+  failed: { fingerprint: string; name: string } | null;
+  error: ApiEndpointRequestError | null;
+}
+
+/** 一条怎么进来：替换名称撞上的那家，或用某个名称新增一家。 */
+type ImportAction = { kind: "replace" } | { kind: "add"; name: string };
 
 /**
  * 这条怎么进来：替换，或用某个名称新增。改名后新增的名称是空的（或就是原名）当没改名，按新增（magpie 的 pk.Name）。
@@ -5599,7 +5635,7 @@ export interface ImportOutcome {
 function importActionOf(input: {
   pick: ApiEndpointImportPick;
   found: FoundEndpoint;
-}): { kind: "replace" } | { kind: "add"; name: string } {
+}): ImportAction {
   const { pick, found } = input;
   const action = API_ENDPOINT_IMPORT_ACTIONS.find((candidate) => candidate === pick.action);
   if (action === undefined) {
@@ -5617,7 +5653,7 @@ function importActionOf(input: {
 function importGone(): ApiEndpointRequestError {
   return new ApiEndpointRequestError({
     code: "import_gone",
-    message: "That entry is no longer in the app it came from; scan again",
+    message: "The scan is out of date: that entry changed or is no longer in its app. Scan again",
   });
 }
 

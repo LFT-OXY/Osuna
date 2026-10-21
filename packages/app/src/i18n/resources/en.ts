@@ -2626,7 +2626,8 @@ export const en = {
           unknown: "It can't be imported",
         },
         errors: {
-          gone: "That entry is no longer in the app it came from. Close this and import again.",
+          gone: "The scan was out of date, so Osuna scanned again. Check the picks and import again.",
+          failed: "Osuna couldn't save it ({{reason}})",
           cannotReplace:
             "{{name}} doesn't share a name with an endpoint you have; keep both instead.",
         },

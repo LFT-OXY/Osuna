@@ -81,7 +81,9 @@ export function useImportApps({ serverId }: { serverId: string }): {
         });
       }
       if (response.error) {
-        if (hasImported) void query.refetch();
+        // 加好了几家（让它们显示为已添加），或扫描结果过时了：重扫一遍。
+        const isStale = response.error.code === "import_gone";
+        if (hasImported || isStale) void query.refetch();
         const failed = response.failed ?? null;
         const reason = importErrorText(t, response.error);
         let message = reason;
@@ -108,6 +110,10 @@ function importErrorText(t: TFunction, error: ApiEndpointError): string {
   switch (error.code) {
     case "import_gone":
       return t("settings.apiEndpoints.import.errors.gone");
+    case "import_failed":
+      return t("settings.apiEndpoints.import.errors.failed", {
+        reason: error.params?.reason ?? "",
+      });
     case "import_cannot_replace":
       return t("settings.apiEndpoints.import.errors.cannotReplace", {
         name: error.params?.name ?? "",

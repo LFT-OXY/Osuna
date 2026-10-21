@@ -529,6 +529,7 @@ export interface PaseoDaemonConfig {
     | "vendorStatusUrls"
     | "vendorStatusTimers"
     | "importSourcePaths"
+    | "dataFileSystem"
     | "modelTests"
     | "detectEach"
     | "modelTestTimers"

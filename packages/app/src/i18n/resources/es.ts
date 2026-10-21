@@ -2615,7 +2615,8 @@ export const es: TranslationResources = {
           unknown: "No se puede importar",
         },
         errors: {
-          gone: "Esa entrada ya no está en la app de la que vino. Cierra esto e importa de nuevo.",
+          gone: "El escaneo estaba desactualizado y Osuna volvió a escanear. Revisa la selección e importa de nuevo.",
+          failed: "Osuna no pudo guardarlo ({{reason}})",
           cannotReplace:
             "{{name}} no comparte nombre con ningún endpoint tuyo; conserva ambos en su lugar.",
         },

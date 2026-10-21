@@ -2616,7 +2616,8 @@ export const fr: TranslationResources = {
           unknown: "Import impossible",
         },
         errors: {
-          gone: "Cette entrée n'est plus dans l'app d'origine. Fermez puis importez à nouveau.",
+          gone: "L'analyse n'était plus à jour, Osuna a analysé à nouveau. Vérifiez la sélection puis importez à nouveau.",
+          failed: "Osuna n'a pas pu l'enregistrer ({{reason}})",
           cannotReplace:
             "{{name}} ne porte le nom d'aucun de vos endpoints ; gardez les deux à la place.",
         },

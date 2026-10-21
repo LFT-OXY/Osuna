@@ -433,11 +433,17 @@ function NameTakenChoice({
  * 这条的状态标记与说明（一次按状态分开）：读不了为什么、对上了哪家、在那个软件里关着。
  * 能导入的（新的、同一家 key 不同的）是绿色，名称撞上的是警告色，已添加与不能导入是灰色。
  */
-function itemStanding(input: { t: TFunction; item: ApiEndpointImportItem; hasPick: boolean }): {
+interface ItemStanding {
   label: string;
   variant: StatusBadgeVariant;
   notes: string[];
-} {
+}
+
+function itemStanding(input: {
+  t: TFunction;
+  item: ApiEndpointImportItem;
+  hasPick: boolean;
+}): ItemStanding {
   const { t, item } = input;
   const cantImport = t("settings.apiEndpoints.import.status.cantImport");
   if (item.skip !== null) {
@@ -488,13 +494,16 @@ function itemStanding(input: { t: TFunction; item: ApiEndpointImportItem; hasPic
  * 名称下面的一行（照 magpie 的 sub）：在那个软件里的哪儿、主机、打码的 key、模型数，只在「·」处换行；
  * 打码的 key 整个不断开。
  */
-function itemFacts(input: {
-  t: TFunction;
-  item: ApiEndpointImportItem;
-}): { text: string; isUnbroken: boolean }[] {
+interface ImportFact {
+  text: string;
+  // 整段不断开（打码的 key、模型数）。
+  isUnbroken: boolean;
+}
+
+function itemFacts(input: { t: TFunction; item: ApiEndpointImportItem }): ImportFact[] {
   const { t, item } = input;
   const host = importItemHost(item);
-  const facts: { text: string; isUnbroken: boolean }[] = [];
+  const facts: ImportFact[] = [];
   if (item.from !== null) facts.push({ text: item.from, isUnbroken: false });
   if (host !== null) facts.push({ text: host, isUnbroken: false });
   if (item.maskedKey !== null) facts.push({ text: item.maskedKey, isUnbroken: true });

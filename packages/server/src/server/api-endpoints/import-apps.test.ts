@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -195,6 +196,50 @@ describe("readImportSources", () => {
         },
       },
     ]);
+  });
+
+  test("at a host of one of a template's regions: the template and that region are kept, the address as given", async () => {
+    const { context } = await contextIn();
+    await put(
+      context.paths.codexConfig,
+      [
+        "[model_providers.mimo]",
+        'name = "MiMo"',
+        'base_url = "https://token-plan-sgp.xiaomimimo.com/custom/v1"',
+        'experimental_bearer_token = "sk-mimo"',
+        "",
+      ].join("\n"),
+    );
+    const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "codex");
+    expect(source.entries).toMatchObject([
+      {
+        found: {
+          templateId: "xiaomi",
+          region: "plan-sgp",
+          baseUrls: [
+            { format: "openai_responses", url: "https://token-plan-sgp.xiaomimimo.com/custom/v1" },
+          ],
+        },
+      },
+    ]);
+  });
+
+  test("a database Osuna has no permission to open is unreadable, not 'not a database'", async () => {
+    const { context } = await contextIn();
+    await mkdir(path.dirname(context.paths.almaDatabase), { recursive: true });
+    const db = new DatabaseSync(context.paths.almaDatabase);
+    db.exec("CREATE TABLE providers (id TEXT)");
+    db.close();
+    await chmod(context.paths.almaDatabase, 0o000);
+    try {
+      const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "alma");
+      expect(source.error).toMatchObject({
+        code: "unreadable",
+        params: { errno: "SQLITE_CANTOPEN" },
+      });
+    } finally {
+      await chmod(context.paths.almaDatabase, 0o600);
+    }
   });
 });
 
