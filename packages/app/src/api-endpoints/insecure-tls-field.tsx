@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
-import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
+import { AdvancedFieldLabel } from "./advanced-field-label";
 import type { ConnectionFormModel, ConnectionFormState } from "./internal/connection-form-model";
 
 const KEY = "settings.apiEndpoints.form.insecureTls";
@@ -29,14 +29,12 @@ export function InsecureTlsField({
   const switchLabel = t(`${KEY}.switch`);
   return (
     <View style={styles.field} testID="api-endpoint-connection-insecure-tls">
-      <View style={styles.labelRow}>
-        <Text color="foregroundMuted">{label}</Text>
-        <SettingsInfoTip
-          title={switchLabel}
-          info={t(`${KEY}.info`)}
-          testID="api-endpoint-connection-insecure-tls-info"
-        />
-      </View>
+      <AdvancedFieldLabel
+        label={label}
+        title={switchLabel}
+        info={t(`${KEY}.info`)}
+        testID="api-endpoint-connection-insecure-tls-info"
+      />
       <View style={styles.switchRow}>
         <Text style={styles.switchText}>{switchLabel}</Text>
         <Switch
@@ -99,11 +97,6 @@ function InsecureTlsConfirmSheet({ model }: { model: ConnectionFormModel }) {
 const styles = StyleSheet.create((theme) => ({
   field: {
     gap: theme.spacing[2],
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
   },
   switchRow: {
     flexDirection: "row",

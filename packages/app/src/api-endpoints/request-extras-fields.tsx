@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
-import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { ConnectionFormModel, ConnectionFormState } from "./internal/connection-form-model";
 import { isBrokenJson, type HeaderRow } from "./internal/request-extras-form";
 import { extraBodyProblemText, headerProblemText } from "./request-extras-copy";
 import { CooldownSettingsFields } from "./cooldown-settings-fields";
+import { AdvancedFieldLabel } from "./advanced-field-label";
 
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedChevronDown = withUnistyles(ChevronDown);
@@ -79,15 +79,6 @@ export function RequestExtrasFields({
 const EXPANDED = { expanded: true };
 const COLLAPSED = { expanded: false };
 
-function FieldLabel({ label, info, testID }: { label: string; info: string; testID: string }) {
-  return (
-    <View style={styles.labelRow}>
-      <Text color="foregroundMuted">{label}</Text>
-      <SettingsInfoTip title={label} info={info} testID={testID} />
-    </View>
-  );
-}
-
 function HeadersField({
   state,
   model,
@@ -104,7 +95,7 @@ function HeadersField({
   const problem = state.headerProblem;
   return (
     <View style={styles.field} testID="api-endpoint-connection-headers">
-      <FieldLabel
+      <AdvancedFieldLabel
         label={t("settings.apiEndpoints.form.extras.headers")}
         info={t("settings.apiEndpoints.form.extras.headersInfo")}
         testID="api-endpoint-connection-headers-info"
@@ -284,7 +275,7 @@ function ExtraBodyField({
   const problem = state.extraBodyProblem;
   return (
     <View style={styles.field} testID="api-endpoint-connection-extra-body">
-      <FieldLabel
+      <AdvancedFieldLabel
         label={t("settings.apiEndpoints.form.extras.extraBody")}
         info={t("settings.apiEndpoints.form.extras.extraBodyInfo")}
         testID="api-endpoint-connection-extra-body-info"
@@ -346,7 +337,7 @@ function KeyHeaderField({
   );
   return (
     <View style={styles.field} testID="api-endpoint-connection-key-header">
-      <FieldLabel
+      <AdvancedFieldLabel
         label={t("settings.apiEndpoints.form.extras.keyHeader")}
         info={t("settings.apiEndpoints.form.extras.keyHeaderInfo")}
         testID="api-endpoint-connection-key-header-info"
@@ -380,11 +371,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   field: {
     gap: theme.spacing[2],
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
   },
   flex: {
     flex: 1,

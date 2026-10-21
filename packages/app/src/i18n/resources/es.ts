@@ -2684,7 +2684,7 @@ export const es: TranslationResources = {
           cooldown: {
             quotaRest: "Descanso al agotar la cuota",
             quotaRestInfo:
-              "Cuánto tiempo deja Osuna de elegir este endpoint cuando dice que agotó su cuota sin decir cuándo vuelve. Vacío son {{minutes}} minutos. Una hora que dé el proveedor sigue teniendo prioridad. O descansa hasta una hora cada día: 08:00 es en el reloj de este equipo, 00:00+08:00 en el del proveedor.",
+              "Cuánto tiempo deja Osuna de elegir este endpoint cuando dice que agotó su cuota sin decir cuándo vuelve. Vacío son {{minutes}} minutos. Una hora que dé el proveedor sigue teniendo prioridad. O descansa hasta una hora cada día, como 08:00. Sin zona es el reloj de este equipo; añade Z para UTC o +08:00 para la zona del proveedor.",
             restCap: "Descanso máximo",
             restCapInfo:
               "Lo máximo que descansa este endpoint mientras sigue fallando o recibiendo límites de frecuencia; cada descanso se duplica desde un minuto hasta este valor. Vacío son {{failure}} minutos tras fallos y {{rate}} tras límites de frecuencia. Una espera que pida el proveedor sigue teniendo prioridad.",
@@ -2695,7 +2695,7 @@ export const es: TranslationResources = {
             problem: "Escribe minutos enteros de 0 a {{max}} ({{days}} días)",
             forMinutes: "Minutos",
             untilTime: "Hasta una hora",
-            timeHint: "cada día",
+            timeHint: "cada día, p. ej. {{example}}",
             timeProblem: "Escribe una hora como 08:00, o 00:00+08:00 en el horario del proveedor",
           },
         },

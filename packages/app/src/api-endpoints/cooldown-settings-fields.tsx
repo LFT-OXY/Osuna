@@ -10,7 +10,7 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
-import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
+import { AdvancedFieldLabel } from "./advanced-field-label";
 import type { ConnectionFormModel, ConnectionFormState } from "./internal/connection-form-model";
 import type { QuotaRestMode } from "./internal/cooldown-settings-form";
 import { cooldownProblemText } from "./cooldown-settings-copy";
@@ -44,7 +44,7 @@ export function CooldownSettingsFields({
       <QuotaRestField state={state} model={model} size={size} problemField={problemField} />
       {state.showsRestCap ? (
         <View style={styles.field} testID="api-endpoint-connection-rest-cap">
-          <FieldLabel
+          <AdvancedFieldLabel
             label={t(`${KEY}.restCap`)}
             info={t(`${KEY}.restCapInfo`, {
               failure: DEFAULTS.failRestCapMinutes,
@@ -66,7 +66,7 @@ export function CooldownSettingsFields({
       ) : null}
       <View style={styles.switchRow} testID="api-endpoint-connection-no-fail-rest">
         <View style={styles.switchLabel}>
-          <FieldLabel
+          <AdvancedFieldLabel
             label={noFailRestLabel}
             info={t(`${KEY}.noFailRestInfo`, { rate: DEFAULTS.rateRestCapMinutes })}
             testID="api-endpoint-connection-no-fail-rest-info"
@@ -80,15 +80,6 @@ export function CooldownSettingsFields({
         />
       </View>
     </>
-  );
-}
-
-function FieldLabel({ label, info, testID }: { label: string; info: string; testID: string }) {
-  return (
-    <View style={styles.labelRow}>
-      <Text style={styles.labelText}>{label}</Text>
-      <SettingsInfoTip title={label} info={info} testID={testID} side="bottom" />
-    </View>
   );
 }
 
@@ -124,7 +115,7 @@ function QuotaRestField({
   const isTime = state.quotaRestMode === "time";
   return (
     <View style={styles.field} testID="api-endpoint-connection-quota-rest">
-      <FieldLabel
+      <AdvancedFieldLabel
         label={label}
         info={t(`${KEY}.quotaRestInfo`, { minutes: DEFAULTS.quotaRestMinutes })}
         testID="api-endpoint-connection-quota-rest-info"
@@ -185,7 +176,7 @@ function TimeInput({
           accessibilityLabel={label}
           testID="api-endpoint-connection-quota-reset-at-input"
         />
-        <Text color="foregroundMuted">{t(`${KEY}.timeHint`)}</Text>
+        <Text color="foregroundMuted">{t(`${KEY}.timeHint`, { example: TIME_PLACEHOLDER })}</Text>
       </View>
       {isInvalid ? (
         <Text
@@ -259,14 +250,6 @@ function MinutesInput({
 const styles = StyleSheet.create((theme) => ({
   field: {
     gap: theme.spacing[2],
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
-  labelText: {
-    flexShrink: 1,
   },
   inputRow: {
     flexDirection: "row",

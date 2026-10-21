@@ -292,7 +292,6 @@ function createCooldowns(input: { config: PaseoDaemonConfig; logger: Logger }): 
   return new EndpointCooldowns({ logger: input.logger, now: overrides.cooldownsNow });
 }
 
-/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
 /** 已下线模型的记录；测试可注入时钟与到期定时器。 */
 function createRetiredModels(input: {
   config: PaseoDaemonConfig;
@@ -310,6 +309,7 @@ function createRetiredModels(input: {
   });
 }
 
+/** 第三方接口中转站的地址，写进 CLI 配置；非 TCP 监听时没有。 */
 function createApiEndpointGatewayUrl(listenTarget: ListenTarget | null): string | null {
   if (!listenTarget || listenTarget.type !== "tcp") {
     return null;

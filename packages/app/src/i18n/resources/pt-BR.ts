@@ -2669,7 +2669,7 @@ export const ptBR: TranslationResources = {
           cooldown: {
             quotaRest: "Pausa após esgotar a cota",
             quotaRestInfo:
-              "Por quanto tempo o Osuna deixa de escolher este endpoint quando ele diz que esgotou a cota sem dizer quando volta. Vazio são {{minutes}} minutos. Um horário informado pelo fornecedor continua tendo prioridade. Ou pause até um horário todo dia: 08:00 no relógio deste computador, 00:00+08:00 no do fornecedor.",
+              "Por quanto tempo o Osuna deixa de escolher este endpoint quando ele diz que esgotou a cota sem dizer quando volta. Vazio são {{minutes}} minutos. Um horário informado pelo fornecedor continua tendo prioridade. Ou pause até um horário todo dia, como 08:00. Sem fuso, vale o relógio deste computador; adicione Z para UTC ou +08:00 para o fuso do fornecedor.",
             restCap: "Pausa máxima",
             restCapInfo:
               "O máximo que este endpoint pausa enquanto continua falhando ou sendo limitado por taxa; cada pausa dobra a partir de um minuto até este valor. Vazio são {{failure}} minutos após falhas e {{rate}} após limites de taxa. Uma espera pedida pelo fornecedor continua tendo prioridade.",
@@ -2680,7 +2680,7 @@ export const ptBR: TranslationResources = {
             problem: "Digite minutos inteiros de 0 a {{max}} ({{days}} dias)",
             forMinutes: "Minutos",
             untilTime: "Até um horário",
-            timeHint: "todo dia",
+            timeHint: "todo dia, ex.: {{example}}",
             timeProblem: "Digite um horário como 08:00, ou 00:00+08:00 no relógio do fornecedor",
           },
         },

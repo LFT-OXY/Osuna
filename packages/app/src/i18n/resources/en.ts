@@ -2695,7 +2695,7 @@ export const en = {
           cooldown: {
             quotaRest: "Rest after quota runs out",
             quotaRestInfo:
-              "How long Osuna stops picking this endpoint once it says its quota is used up without saying when it comes back. Empty is {{minutes}} minutes. A time the vendor gives still comes first. Or rest until a time each day: 08:00 is on this computer's clock, 00:00+08:00 on the vendor's.",
+              "How long Osuna stops picking this endpoint once it says its quota is used up without saying when it comes back. Empty is {{minutes}} minutes. A time the vendor gives still comes first. Or rest until a time each day, such as 08:00. With no zone it is this computer's clock; add Z for UTC, or +08:00 for the vendor's zone.",
             restCap: "Longest rest",
             restCapInfo:
               "The most this endpoint rests while it keeps failing or keeps being rate limited; each rest doubles from one minute up to this. Empty is {{failure}} minutes after failures and {{rate}} after rate limits. A wait the vendor asks for still comes first.",
@@ -2706,7 +2706,7 @@ export const en = {
             problem: "Enter whole minutes from 0 to {{max}} ({{days}} days)",
             forMinutes: "Minutes",
             untilTime: "Until a time",
-            timeHint: "each day",
+            timeHint: "each day, e.g. {{example}}",
             timeProblem: "Enter a time like 08:00, or 00:00+08:00 on the vendor's clock",
           },
         },

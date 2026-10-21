@@ -2684,7 +2684,7 @@ export const fr: TranslationResources = {
           cooldown: {
             quotaRest: "Pause après épuisement du quota",
             quotaRestInfo:
-              "Combien de temps Osuna cesse de choisir ce point de terminaison quand il indique avoir épuisé son quota sans dire quand il revient. Vide : {{minutes}} minutes. Une heure donnée par le fournisseur reste prioritaire. Ou faites une pause jusqu'à une heure chaque jour : 08:00 selon l'horloge de cet ordinateur, 00:00+08:00 selon celle du fournisseur.",
+              "Combien de temps Osuna cesse de choisir ce point de terminaison quand il indique avoir épuisé son quota sans dire quand il revient. Vide : {{minutes}} minutes. Une heure donnée par le fournisseur reste prioritaire. Ou faites une pause jusqu'à une heure chaque jour, comme 08:00. Sans fuseau, c'est l'horloge de cet ordinateur ; ajoutez Z pour UTC, ou +08:00 pour le fuseau du fournisseur.",
             restCap: "Pause maximale",
             restCapInfo:
               "La pause la plus longue de ce point de terminaison tant qu'il échoue ou reste limité en débit ; chaque pause double à partir d'une minute jusqu'à cette valeur. Vide : {{failure}} minutes après un échec et {{rate}} après une limite de débit. Une attente demandée par le fournisseur reste prioritaire.",
@@ -2695,7 +2695,7 @@ export const fr: TranslationResources = {
             problem: "Saisissez un nombre entier de minutes de 0 à {{max}} ({{days}} jours)",
             forMinutes: "Minutes",
             untilTime: "Jusqu'à une heure",
-            timeHint: "chaque jour",
+            timeHint: "chaque jour, p. ex. {{example}}",
             timeProblem:
               "Saisissez une heure comme 08:00, ou 00:00+08:00 selon l'horloge du fournisseur",
           },
