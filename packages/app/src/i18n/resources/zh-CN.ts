@@ -2658,7 +2658,7 @@ export const zhCN: TranslationResources = {
           cooldown: {
             quotaRest: "额度用完后冷却多久",
             quotaRestInfo:
-              "这家说额度用完、又没说何时恢复时，Osuna 多久不选它。空着是 {{minutes}} 分钟。厂商给了恢复时间时以厂商为准。",
+              "这家说额度用完、又没说何时恢复时，Osuna 多久不选它。空着是 {{minutes}} 分钟。厂商给了恢复时间时以厂商为准。也可以冷却到每天的某个时刻：08:00 按这台电脑的时钟，00:00+08:00 按厂商的时区。",
             restCap: "冷却最长多久",
             restCapInfo:
               "这家接连失败或接连被限流时最长冷却多久；每次冷却从一分钟起翻倍，到这里为止。空着是失败 {{failure}} 分钟、限流 {{rate}} 分钟。厂商要求等更久时以厂商为准。",
@@ -2667,6 +2667,10 @@ export const zhCN: TranslationResources = {
               "没说原因的失败（如服务器出错、连接断开）不让这家冷却，下一个请求照常问它。额度或余额用完、key 被拒、不提供这个模型时照样冷却，限流最长冷却 {{rate}} 分钟。打开后代替「冷却最长多久」。",
             minutes: "分钟",
             problem: "请填 0 到 {{max}} 的整数分钟（{{days}} 天）",
+            forMinutes: "按分钟",
+            untilTime: "到某个时刻",
+            timeHint: "每天",
+            timeProblem: "请填 08:00 这样的时刻；按厂商的时区就写 00:00+08:00",
           },
         },
         insecureTls: {

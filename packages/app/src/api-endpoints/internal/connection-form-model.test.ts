@@ -2770,3 +2770,47 @@ describe("connection form: cooldown settings", () => {
     expect(fake.saves[1]).not.toHaveProperty("cooldownSettings");
   });
 });
+
+describe("connection form: quota rest until a time of day", () => {
+  it("opens an endpoint resting until a time on that choice, and saves the time without the minutes", async () => {
+    const fake = fakeDeps();
+    const model = createConnectionFormModel(
+      {
+        mode: "edit",
+        endpoint: { ...SAVED_ENDPOINT, cooldownSettings: { quotaResetAt: "00:00+08:00" } },
+      },
+      fake.deps,
+      KEY_OPTIONAL,
+    );
+    expect(model.getState()).toMatchObject({
+      isAdvancedOpen: true,
+      quotaRestMode: "time",
+      quotaResetAtText: "00:00+08:00",
+    });
+    model.setQuotaRest("60");
+    model.setQuotaResetAt(" 08:00 ");
+    await model.submit();
+    expect(fake.saves[0]?.cooldownSettings).toEqual({ quotaResetAt: "08:00" });
+
+    model.setQuotaRestMode("minutes");
+    await model.submit();
+    expect(fake.saves[1]?.cooldownSettings).toEqual({ quotaRestMinutes: 60 });
+  });
+
+  it("says on the spot when the time can't be read, and holds the save", () => {
+    const { deps } = fakeDeps();
+    const model = createConnectionFormModel(
+      { mode: "edit", endpoint: SAVED_ENDPOINT },
+      deps,
+      KEY_OPTIONAL,
+    );
+    model.setQuotaRestMode("time");
+    model.setQuotaResetAt("8am");
+    expect(model.getState()).toMatchObject({
+      cooldownProblem: { field: "quotaResetAt" },
+      canSubmit: false,
+    });
+    model.setQuotaResetAt("16:00Z");
+    expect(model.getState()).toMatchObject({ cooldownProblem: null, canSubmit: true });
+  });
+});

@@ -566,14 +566,18 @@ onHTTPS in internal/gui/assets/app.js:
   packages/server/src/server/api-endpoints/insecure-tls.ts
 
 An endpoint's own cooldown settings (how long it rests out of quota when the
-vendor says nothing of when it is back, a Retry-After cut to the hour giving way to
-a longer one of its own; the most it rests while it keeps failing or being rate
+vendor says nothing of when it is back, or until a time of day it next comes
+round on the host's clock, in UTC or at a fixed offset, a Retry-After cut to the
+hour giving way to a longer one of its own; the most it rests while it keeps failing or being rate
 limited, the vendor's own time still standing over it; no rest at all after a
 failure that says nothing of why, which takes the place of that most; minutes from
 0, the gateway's own, to eight days) follow QuotaRest and RestCap in magpie's
-internal/provider/provider.go, MaxQuotaRest, QuotaRestFor, SetQuotaRest, RestCapOff,
+internal/provider/provider.go (and QuotaResetAt, cleared there when unreadable),
+MaxQuotaRest, QuotaRestFor, SetQuotaRest, ParseResetAt, NextResetAt, OwnQuotaRest,
+SetQuotaResetAt, RestCapOff,
 NoFailRest, RestCapOr and SetRestCap in internal/provider/concurrency.go, and their
-use in restAfterMarked and rateRest in internal/gateway/routing.go:
+use in restAfterMarked and rateRest in internal/gateway/routing.go and quotaRestCmd
+in internal/cli/providers_cli.go:
 
   packages/protocol/src/api-endpoint/cooldown-settings.ts
   packages/protocol/src/api-endpoint/cooldown-settings.test.ts
@@ -581,6 +585,7 @@ use in restAfterMarked and rateRest in internal/gateway/routing.go:
   packages/server/src/server/api-endpoints/gateway/cooldown.test.ts
   packages/server/src/server/daemon-e2e/api-endpoint-cooldown-settings.e2e.test.ts
   packages/app/src/api-endpoints/internal/cooldown-settings-form.ts
+  packages/server/src/server/api-endpoints/store.ts
 
 The installed Codex CLI's version (its npm package's package.json, or the
 package a Windows npm shim starts, before running --version; a run that said no

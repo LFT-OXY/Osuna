@@ -20,6 +20,7 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { describeUnparsableFile } from "./config-unparsable-copy";
 import { localizedTestResult, requestExtrasErrorText } from "./request-extras-copy";
+import { cooldownSettingsErrorText } from "./cooldown-settings-copy";
 import type {
   ConnectionDetectRequest,
   ConnectionDetectResult,
@@ -406,7 +407,10 @@ export function useHostEndpoints(serverId: string): UseHostEndpointsResult {
       try {
         const result = await client.apiEndpointSave({ provider: LIST_PROVIDER, ...request });
         if (result.error) {
-          const message = requestExtrasErrorText(t, result.error) ?? result.error.message;
+          const message =
+            requestExtrasErrorText(t, result.error) ??
+            cooldownSettingsErrorText(t, result.error) ??
+            result.error.message;
           return { status: "failed", message };
         }
         if (!result.endpoint) throw new Error("The host returned neither an endpoint nor an error");

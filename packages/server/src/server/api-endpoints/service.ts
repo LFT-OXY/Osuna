@@ -339,8 +339,10 @@ import {
   type ExtraBodyProblem,
 } from "@getpaseo/protocol/api-endpoint/request-extras";
 import {
+  API_ENDPOINT_COOLDOWN_MAX_DAYS,
   API_ENDPOINT_COOLDOWN_MAX_MINUTES,
   cooldownSettingsProblem,
+  type ApiEndpointCooldownField,
 } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import {
   closeUncheckedDispatchers,
@@ -4727,7 +4729,8 @@ type StoredCooldownSettings = Pick<StoredApiEndpoint, "cooldownSettings">;
 
 /**
  * 存下的冷却设置：请求给了就整份换上（0 是用中转站自己的，不存；「原因不明不冷却」开着时冷却上限不存，照 magpie 的
- * RestCapOff 与 RestCap 是同一项），没给留 base 的。分钟数不是 0 到八天的整数拒收（照 magpie SetQuotaRest、SetRestCap）。
+ * RestCapOff 与 RestCap 是同一项；设了每天几点恢复时分钟数不存），没给留 base 的。分钟数不是 0 到八天的整数、时刻读不懂的拒收
+ * （照 magpie SetQuotaRest、SetRestCap、SetQuotaResetAt）。
  * 什么都没设时没有这项。
  */
 function savedCooldownSettings(input: {
@@ -4741,7 +4744,7 @@ function savedCooldownSettings(input: {
   if (problem !== null) {
     throw new ApiEndpointRequestError({
       code: "invalid_cooldown_settings",
-      message: `${problem.field} is whole minutes from 0 (the gateway's own) to ${API_ENDPOINT_COOLDOWN_MAX_MINUTES} (8 days), not ${requested[problem.field]}`,
+      message: cooldownProblemMessage({ field: problem.field, requested }),
       params: { field: problem.field, max: String(API_ENDPOINT_COOLDOWN_MAX_MINUTES) },
     });
   }
@@ -4749,10 +4752,25 @@ function savedCooldownSettings(input: {
   const noFailRest = requested.noFailRest === true;
   const quotaRest = requested.quotaRestMinutes ?? 0;
   const restCap = requested.restCapMinutes ?? 0;
-  if (quotaRest > 0) saved.quotaRestMinutes = quotaRest;
+  const resetAt = requested.quotaResetAt?.trim() ?? "";
+  // 每天几点恢复与分钟数是同一项的两种设法（magpie SetQuotaResetAt 清掉 QuotaRest）：两个都给时时刻说了算。
+  if (resetAt !== "") saved.quotaResetAt = resetAt;
+  else if (quotaRest > 0) saved.quotaRestMinutes = quotaRest;
   if (noFailRest) saved.noFailRest = true;
   else if (restCap > 0) saved.restCapMinutes = restCap;
   return Object.keys(saved).length > 0 ? { cooldownSettings: saved } : {};
+}
+
+/** 冷却设置哪一项不对，用英文说给老客户端看（新客户端按 field 用界面语言说）。 */
+function cooldownProblemMessage(input: {
+  field: ApiEndpointCooldownField;
+  requested: ApiEndpointCooldownSettings;
+}): string {
+  const { field, requested } = input;
+  if (field === "quotaResetAt") {
+    return `quotaResetAt is a time of day like 08:00, or 00:00+08:00 on the vendor's clock, not "${requested.quotaResetAt}"`;
+  }
+  return `${field} is whole minutes from 0 (the gateway's own) to ${API_ENDPOINT_COOLDOWN_MAX_MINUTES} (${API_ENDPOINT_COOLDOWN_MAX_DAYS} days), not ${requested[field]}`;
 }
 
 /** 这次变更后不再不校验证书的主机：地址换了、不校验关了、整家关了或删了的那几家原来的。 */

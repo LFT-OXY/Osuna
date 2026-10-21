@@ -2695,7 +2695,7 @@ export const en = {
           cooldown: {
             quotaRest: "Rest after quota runs out",
             quotaRestInfo:
-              "How long Osuna stops picking this endpoint once it says its quota is used up without saying when it comes back. Empty is {{minutes}} minutes. A time the vendor gives still comes first.",
+              "How long Osuna stops picking this endpoint once it says its quota is used up without saying when it comes back. Empty is {{minutes}} minutes. A time the vendor gives still comes first. Or rest until a time each day: 08:00 is on this computer's clock, 00:00+08:00 on the vendor's.",
             restCap: "Longest rest",
             restCapInfo:
               "The most this endpoint rests while it keeps failing or keeps being rate limited; each rest doubles from one minute up to this. Empty is {{failure}} minutes after failures and {{rate}} after rate limits. A wait the vendor asks for still comes first.",
@@ -2704,6 +2704,10 @@ export const en = {
               "A failure that doesn't say why, such as a server error or a dropped connection, doesn't rest this endpoint: the next request asks it again. Running out of quota or credit, a rejected key or a model it doesn't serve still rest it, and rate limits rest it up to {{rate}} minutes. Replaces the longest rest.",
             minutes: "minutes",
             problem: "Enter whole minutes from 0 to {{max}} ({{days}} days)",
+            forMinutes: "Minutes",
+            untilTime: "Until a time",
+            timeHint: "each day",
+            timeProblem: "Enter a time like 08:00, or 00:00+08:00 on the vendor's clock",
           },
         },
         insecureTls: {

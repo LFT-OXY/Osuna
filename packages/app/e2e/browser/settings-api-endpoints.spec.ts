@@ -3196,6 +3196,30 @@ test.describe("An endpoint's cooldown settings", () => {
       const [saved] = (await client.apiEndpointList("claude")).endpoints;
       expect(saved?.cooldownSettings).toEqual({ noFailRest: true });
     });
+
+    await test.step("rest until a time each day: a time it can't read is said on the spot; one it reads replaces the minutes", async () => {
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await quotaRest.fill("60");
+      await page.getByTestId("api-endpoint-connection-quota-rest-time").click();
+      await expect(quotaRest).toHaveCount(0);
+      const resetAt = page.getByTestId("api-endpoint-connection-quota-reset-at-input");
+      await expect(resetAt).toHaveAttribute("placeholder", "08:00");
+      await resetAt.fill("8am");
+      await expect(page.getByTestId("api-endpoint-connection-quota-reset-at-problem")).toHaveText(
+        "Enter a time like 08:00, or 00:00+08:00 on the vendor's clock",
+      );
+      await expect(save).toBeDisabled();
+      await resetAt.fill("00:00+08:00");
+      await expect(page.getByTestId("api-endpoint-connection-quota-reset-at-problem")).toHaveCount(
+        0,
+      );
+      await save.click();
+      await expect(connectionForm(page)).toHaveCount(0);
+      const [saved] = (await client.apiEndpointList("claude")).endpoints;
+      expect(saved?.cooldownSettings).toEqual({ quotaResetAt: "00:00+08:00", noFailRest: true });
+      await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+      await expect(resetAt).toHaveValue("00:00+08:00");
+    });
   });
 });
 

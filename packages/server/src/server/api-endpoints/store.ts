@@ -7,6 +7,7 @@ import {
   apiEndpointNameDisplayOf,
   type ApiEndpointNameDisplay,
 } from "@getpaseo/protocol/api-endpoint/endpoint-names";
+import { parseResetAt } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import {
   API_ENDPOINT_REQUEST_FORMATS,
   ApiEndpointAgentSettingsSchema,
@@ -70,6 +71,15 @@ const StoredBaseUrlSchema = z.object({
   url: z.string(),
 });
 
+// 手改成读不懂的每天时刻当没设（照 magpie normalize 清掉 QuotaResetAt），别的项照留。
+const StoredCooldownSettingsSchema = ApiEndpointCooldownSettingsSchema.extend({
+  quotaResetAt: z
+    .string()
+    .refine((text) => parseResetAt(text).kind === "ok")
+    .optional()
+    .catch(undefined),
+});
+
 const StoredApiEndpointSchema = z.object({
   id: z.string(),
   // 从名称生成、建好即锁定，只在 Osuna 内部使用，任何响应都不带。
@@ -113,7 +123,7 @@ const StoredApiEndpointSchema = z.object({
   // 不校验证书（insecure-tls.ts）：只写 true；只对「自定义」加的接口自己的 https 主机起作用，模板接口手改成 true 也不算。
   insecureTls: z.boolean().optional().catch(undefined),
   // 冷却设置（gateway/cooldown.ts）：分钟数，0 不存；手改成别的类型时当没设，不让整个文件读不懂，越界的用时按 0 到八天算。
-  cooldownSettings: ApiEndpointCooldownSettingsSchema.optional().catch(undefined),
+  cooldownSettings: StoredCooldownSettingsSchema.optional().catch(undefined),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

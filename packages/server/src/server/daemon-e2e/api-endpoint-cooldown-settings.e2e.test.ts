@@ -207,6 +207,32 @@ describe("an endpoint's own cooldown settings", () => {
     expect(upstreamA.asked).toBe(1);
   });
 
+  test("set to rest until a time of day: the endpoint out of quota sits out until it next comes round", async () => {
+    const { client, upstreamA, ask } = await start();
+    const saved = await saveA(client, upstreamA.url, {
+      cooldownSettings: { quotaResetAt: " 16:00Z " },
+    });
+    expect(saved.endpoint?.cooldownSettings).toEqual({ quotaResetAt: "16:00Z" });
+    upstreamA.respond = (res) => failWith(res, QUOTA);
+
+    expect(await ask()).toBe("relay-b");
+
+    // 时钟停在 UTC 08:00：到 16:00 是 8 小时。
+    expect(await restOf(client, "ep_a")).toBe(8 * 60);
+  });
+
+  test("a time of day already past today rests until tomorrow's, on the vendor's clock", async () => {
+    const { client, upstreamA, ask } = await start({
+      cooldownSettingsA: { quotaResetAt: "08:00+08:00" },
+    });
+    upstreamA.respond = (res) => failWith(res, QUOTA);
+
+    await ask();
+
+    // UTC 08:00 是北京 16:00，北京今天的 08:00 已过：明天的，24 - 8 = 16 小时。
+    expect(await restOf(client, "ep_a")).toBe(16 * 60);
+  });
+
   test("a time the vendor names stands over the endpoint's own rest", async () => {
     const { client, upstreamA, ask } = await start({
       cooldownSettingsA: { quotaRestMinutes: 60 },
@@ -279,6 +305,27 @@ describe("saving cooldown settings", () => {
     expect(file.endpoints.find((entry) => entry.id === "ep_a")?.cooldownSettings).toBeUndefined();
   });
 
+  test("a time of day and minutes are one setting: the time stands, and one it can't read is refused", async () => {
+    const { client, upstreamA } = await start();
+    const both = await saveA(client, upstreamA.url, {
+      cooldownSettings: { quotaRestMinutes: 60, quotaResetAt: "00:00+08:00" },
+    });
+    expect(both.endpoint?.cooldownSettings).toEqual({ quotaResetAt: "00:00+08:00" });
+    const minutes = await saveA(client, upstreamA.url, {
+      cooldownSettings: { quotaRestMinutes: 60 },
+    });
+    expect(minutes.endpoint?.cooldownSettings).toEqual({ quotaRestMinutes: 60 });
+
+    const refused = await saveA(client, upstreamA.url, {
+      cooldownSettings: { quotaResetAt: "8am" },
+    });
+    expect(refused.endpoint).toBeNull();
+    expect(refused.error).toMatchObject({
+      code: "invalid_cooldown_settings",
+      params: { field: "quotaResetAt" },
+    });
+  });
+
   test("no rest after an unknown failure takes the place of a longest rest (magpie RestCapOff)", async () => {
     const { client, upstreamA } = await start();
     const saved = await saveA(client, upstreamA.url, {
@@ -300,6 +347,16 @@ describe("saving cooldown settings", () => {
       params: { field, max: "11520" },
     });
     expect((await endpointOf(client, "ep_a"))?.cooldownSettings).toBeUndefined();
+  });
+
+  test("a hand-edited time of day it can't read is as if unset: the minutes beside it stand", async () => {
+    const { client, upstreamA, ask } = await start({
+      cooldownSettingsA: { quotaResetAt: "25:00", quotaRestMinutes: 60 },
+    });
+    expect((await endpointOf(client, "ep_a"))?.cooldownSettings).toEqual({ quotaRestMinutes: 60 });
+    upstreamA.respond = (res) => failWith(res, QUOTA);
+    await ask();
+    expect(await restOf(client, "ep_a")).toBe(60);
   });
 
   test("a hand-edited value of the wrong kind leaves the file readable and the gateway's own rests", async () => {

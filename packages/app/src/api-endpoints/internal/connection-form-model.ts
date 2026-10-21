@@ -42,6 +42,7 @@ import {
   cooldownFieldsRead,
   hasCooldownSettings,
   type CooldownFieldsRead,
+  type QuotaRestMode,
 } from "./cooldown-settings-form";
 import type { CooldownSettingsProblem } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 
@@ -401,13 +402,16 @@ export interface ConnectionFormState {
   insecureTls: boolean;
   // 打开前的确认框开着。
   isConfirmingInsecureTls: boolean;
-  // 「高级」里的冷却设置（同 canSetRequestExtras）：两个分钟框（空即用中转站自己的）与「原因不明的失败不冷却」。
+  // 「高级」里的冷却设置（同 canSetRequestExtras）：额度冷却按分钟或到每天几点，冷却上限的分钟框（空即用中转站自己的），
+  // 与「原因不明的失败不冷却」。
+  quotaRestMode: QuotaRestMode;
   quotaRestText: string;
+  quotaResetAtText: string;
   restCapText: string;
   noFailRest: boolean;
   // 「原因不明不冷却」开着时冷却上限不起作用，不显示（照 magpie 两者是同一项）。
   showsRestCap: boolean;
-  // 哪一项不是 0 到八天的整数分钟；挡住保存。
+  // 哪一项不对（分钟数不是 0 到八天的整数、时刻读不懂）；挡住保存。
   cooldownProblem: CooldownSettingsProblem | null;
 }
 
@@ -486,7 +490,9 @@ export interface ConnectionFormModel {
   setInsecureTls(value: boolean): void;
   confirmInsecureTls(): void;
   cancelInsecureTls(): void;
+  setQuotaRestMode(value: QuotaRestMode): void;
   setQuotaRest(value: string): void;
+  setQuotaResetAt(value: string): void;
   setRestCap(value: string): void;
   setNoFailRest(value: boolean): void;
   detect(): void;
@@ -563,7 +569,9 @@ interface Values {
   keyHeader: ApiEndpointKeyHeader;
   insecureTls: boolean;
   isConfirmingInsecureTls: boolean;
+  quotaRestMode: QuotaRestMode;
   quotaRestText: string;
+  quotaResetAtText: string;
   restCapText: string;
   noFailRest: boolean;
 }
@@ -697,6 +705,7 @@ export function createConnectionFormModel(
       hasValidAddress,
     });
     const extras = deriveExtras(next);
+    const cooldown = deriveCooldown(next);
     return {
       mode: seed.mode,
       template: next.template ? templateStateOf(next.template, next.regionId) : null,
@@ -729,10 +738,19 @@ export function createConnectionFormModel(
       detecting: next.detecting,
       detectError: next.detectError,
       canDetect: !busy && hasKey && hasValidAddress,
-      canSubmit: canSubmitOf({ next, busy, hasKey, hasValidUrls, serviceAddressInvalid, extras }),
+      canSubmit: canSubmitOf({
+        next,
+        busy,
+        hasKey,
+        hasValidUrls,
+        serviceAddressInvalid,
+        extras,
+        cooldown,
+      }),
       submitting: next.submitting,
       submitError: next.submitError,
       ...extras,
+      ...cooldown,
     };
   }
 
@@ -744,10 +762,11 @@ export function createConnectionFormModel(
     hasValidUrls: boolean;
     serviceAddressInvalid: boolean;
     extras: ExtrasState;
+    cooldown: CooldownState;
   }): boolean {
     // 发不出去的请求头只提示、不挡保存（magpie 照存）；读不通的附加请求体挡住，daemon 也会拒收。
     const hasExtrasProblem =
-      input.extras.extraBodyProblem !== null || input.extras.cooldownProblem !== null;
+      input.extras.extraBodyProblem !== null || input.cooldown.cooldownProblem !== null;
     const isFilled = input.next.name.trim() !== "" && input.hasKey && input.hasValidUrls;
     return !input.busy && isFilled && !input.serviceAddressInvalid && !hasExtrasProblem;
   }
@@ -766,12 +785,33 @@ export function createConnectionFormModel(
     | "showsInsecureTls"
     | "insecureTls"
     | "isConfirmingInsecureTls"
+  >;
+
+  type CooldownState = Pick<
+    ConnectionFormState,
+    | "quotaRestMode"
     | "quotaRestText"
+    | "quotaResetAtText"
     | "restCapText"
     | "noFailRest"
     | "showsRestCap"
     | "cooldownProblem"
   >;
+
+  /** 「高级」里的冷却设置与哪一项不对。主机不认它们时不算不对。 */
+  function deriveCooldown(next: Values): CooldownState {
+    const read = cooldownFieldsRead(next);
+    const isInvalid = canSetRequestExtras && read.kind === "invalid";
+    return {
+      quotaRestMode: next.quotaRestMode,
+      quotaRestText: next.quotaRestText,
+      quotaResetAtText: next.quotaResetAtText,
+      restCapText: next.restCapText,
+      noFailRest: next.noFailRest,
+      showsRestCap: !next.noFailRest,
+      cooldownProblem: isInvalid ? read.problem : null,
+    };
+  }
 
   /** 「高级」那部分：请求头、附加请求体、key 放哪个头与哪里不对。主机不认它们时都不算。 */
   function deriveExtras(next: Values): ExtrasState {
@@ -782,13 +822,10 @@ export function createConnectionFormModel(
     let headerProblem: HeaderProblem | null = null;
     let extraBodyProblem: ExtraBodyTextProblem | null = null;
     let showsKeyHeader = false;
-    let cooldownProblem: CooldownSettingsProblem | null = null;
     if (canSetRequestExtras) {
       headerProblem = headerRowsProblem(headerRows);
       if (extraBody.kind === "invalid") extraBodyProblem = extraBody.problem;
       showsKeyHeader = isThirdPartyAnthropicUrl(anthropicUrl);
-      const cooldown = cooldownFieldsRead(next);
-      if (cooldown.kind === "invalid") cooldownProblem = cooldown.problem;
     }
     const isAdvancedOpen = next.isAdvancedOpen;
     const showsInsecureTls = canSetRequestExtras && takesInsecureTlsAt(next);
@@ -805,11 +842,6 @@ export function createConnectionFormModel(
       showsInsecureTls,
       insecureTls: next.insecureTls,
       isConfirmingInsecureTls: next.isConfirmingInsecureTls,
-      quotaRestText: next.quotaRestText,
-      restCapText: next.restCapText,
-      noFailRest: next.noFailRest,
-      showsRestCap: !next.noFailRest,
-      cooldownProblem,
     };
   }
 
@@ -1660,8 +1692,14 @@ export function createConnectionFormModel(
     cancelInsecureTls() {
       update({ isConfirmingInsecureTls: false });
     },
+    setQuotaRestMode(value) {
+      update({ quotaRestMode: value });
+    },
     setQuotaRest(value) {
       update({ quotaRestText: value });
+    },
+    setQuotaResetAt(value) {
+      update({ quotaResetAtText: value });
     },
     setRestCap(value) {
       update({ restCapText: value });

@@ -1,10 +1,13 @@
 // 部分逻辑移植自 magpie（https://github.com/yetone/magpie，internal/gateway/routing.go、fallback.go；
-// 每家的冷却设置照 internal/provider/concurrency.go 的 QuotaRestFor、NoFailRest、RestCapOr）
+// 每家的冷却设置照 internal/provider/concurrency.go 的 QuotaRestFor、OwnQuotaRest、NoFailRest、RestCapOr）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import type { IncomingHttpHeaders } from "node:http";
 import type pino from "pino";
-import { API_ENDPOINT_COOLDOWN_MAX_MINUTES } from "@getpaseo/protocol/api-endpoint/cooldown-settings";
+import {
+  API_ENDPOINT_COOLDOWN_MAX_MINUTES,
+  nextResetAt,
+} from "@getpaseo/protocol/api-endpoint/cooldown-settings";
 import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { hostOf } from "../model-facts.js";
 import { isRecord, parseJson } from "../upstream-http.js";
@@ -36,7 +39,7 @@ export const COOLDOWN = {
   // 厂商的 Retry-After 最多信这么久。
   longestWait: 60 * MINUTE,
   // 额度用完最多冷却这么久：一周的窗口再多一天。
-  longestQuota: 8 * 24 * 60 * MINUTE,
+  longestQuota: API_ENDPOINT_COOLDOWN_MAX_MINUTES * MINUTE,
   longestRetry: 10 * MINUTE,
   longestRateRest: 30 * MINUTE,
   // 上次限流冷却结束超过这么久再被限流，算新的一次，从一分钟重来。
@@ -354,11 +357,22 @@ function settingMs(minutes: number | undefined): number {
 }
 
 /**
- * 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就这家设的、没设就一刻钟；
- * 最多八天。Retry-After 被截到一小时、这家设的又更长时用这家设的（magpie #2008）。
+ * 这家自己的额度冷却（magpie OwnQuotaRest）：设了每天几点恢复就冷却到下一个那个时刻，否则是设的分钟数；
+ * 都没设（或手改的时刻读不懂）为 0，用中转站自己的。
+ */
+function ownQuotaRest(attempt: FailureReport, now: number): number {
+  const settings = attempt.endpoint.cooldownSettings;
+  const resetAt = nextResetAt({ text: settings?.quotaResetAt ?? "", now });
+  if (resetAt !== null) return resetAt - now;
+  return settingMs(settings?.quotaRestMinutes);
+}
+
+/**
+ * 额度用完：错误里写的重置时间（Cline 免费模型说的「再过多久」也算），其次 Retry-After，都没有就这家自己的、没设就一刻钟；
+ * 最多八天。Retry-After 被截到一小时、这家自己的又更长时用这家的（magpie #2008）。
  */
 function quotaRest(attempt: FailureReport, now: number): { duration: number; by: RestBy } {
-  const own = settingMs(attempt.endpoint.cooldownSettings?.quotaRestMinutes);
+  const own = ownQuotaRest(attempt, now);
   const resets = resetsAt(attempt.body, now) || clineBackIn(attempt);
   const said = retryAfter(attempt.headers, now);
   if (resets > 0) return { duration: Math.min(resets, COOLDOWN.longestQuota), by: "resets" };

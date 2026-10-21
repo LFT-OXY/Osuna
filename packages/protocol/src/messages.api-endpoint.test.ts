@@ -1242,6 +1242,8 @@ describe("API endpoint management (apiEndpointManagement)", () => {
       cooldownSettings,
     };
     expect(SessionInboundMessageSchema.parse(save)).toEqual(save);
+    const daily = { ...save, cooldownSettings: { quotaResetAt: "00:00+08:00" } };
+    expect(SessionInboundMessageSchema.parse(daily)).toEqual(daily);
     const cleared = { ...save, cooldownSettings: {} };
     expect(SessionInboundMessageSchema.parse(cleared)).toEqual(cleared);
     const { cooldownSettings: _settings, ...older } = save;

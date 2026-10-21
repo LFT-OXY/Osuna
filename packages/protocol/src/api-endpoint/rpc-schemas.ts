@@ -194,11 +194,14 @@ export type ApiEndpointRequestExtras = z.infer<typeof ApiEndpointRequestExtrasSc
 /**
  * 冷却设置（Cooldown settings，照 magpie 的 QuotaRest、RestCap，见 cooldown-settings.ts）：都以分钟计，0 或没有即用中转站自己的。
  * quotaRestMinutes：额度用完、厂商没说何时恢复时冷却多久（缺省 15 分钟；厂商给的时间仍优先）。
+ * quotaResetAt：或者冷却到每天的这个时刻（magpie QuotaResetAt）：「08:00」按 daemon 所在机器的时钟，「00:00+08:00」按厂商的时差，
+ * 「16:00Z」按 UTC（读法见 parseResetAt）；与 quotaRestMinutes 二选一，两个都给时它说了算。
  * restCapMinutes：接连失败或接连被限流时冷却最长多久（缺省失败 10 分钟、限流 30 分钟；厂商说的「多久后再试」仍优先）。
  * noFailRest：原因不明的失败不冷却（magpie RestCapOff），开着时 restCapMinutes 不存、限流仍按缺省。老 daemon 不发、忽略。
  */
 export const ApiEndpointCooldownSettingsSchema = z.object({
   quotaRestMinutes: z.number().optional(),
+  quotaResetAt: z.string().optional(),
   restCapMinutes: z.number().optional(),
   noFailRest: z.boolean().optional(),
 });
@@ -436,8 +439,8 @@ export type ApiEndpointListResponse = z.infer<typeof ApiEndpointListResponseSche
  * 老 daemon 忽略它。
  *
  * cooldownSettings：冷却设置，整份替换（空对象清掉），省略即保留（复制时是原来那家的）。分钟数不是 0 到八天
- * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes / restCapMinutes，
- * params.max）。老 daemon 忽略它。
+ * （API_ENDPOINT_COOLDOWN_MAX_MINUTES）的整数、时刻读不懂的拒收（invalid_cooldown_settings，params.field 为 quotaRestMinutes /
+ * restCapMinutes / quotaResetAt，params.max）。老 daemon 忽略它。
  */
 export const ApiEndpointSaveRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.save.request"),

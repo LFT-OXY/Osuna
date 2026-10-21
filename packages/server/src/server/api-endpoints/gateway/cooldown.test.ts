@@ -2,6 +2,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import pino from "pino";
+import type { ApiEndpointCooldownSettings } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { describe, expect, test, vi } from "vitest";
 import {
   COOLDOWN,
@@ -35,7 +36,7 @@ const B = { id: "ep_b", name: "Relay B" };
 interface FailingEndpoint {
   id: string;
   name: string;
-  cooldownSettings?: { quotaRestMinutes?: number; restCapMinutes?: number; noFailRest?: boolean };
+  cooldownSettings?: ApiEndpointCooldownSettings;
 }
 
 function fail(
@@ -315,7 +316,7 @@ describe("how long an endpoint sits out", () => {
 });
 
 describe("an endpoint's own cooldown settings (magpie quotaRest, restCap)", () => {
-  const settled = (cooldownSettings: NonNullable<FailingEndpoint["cooldownSettings"]>) => ({
+  const settled = (cooldownSettings: ApiEndpointCooldownSettings) => ({
     ...A,
     cooldownSettings,
   });
@@ -376,6 +377,44 @@ describe("an endpoint's own cooldown settings (magpie quotaRest, restCap)", () =
         endpoint: day,
       }),
     ).toMatchObject({ by: "quota", until: START + 24 * 60 * MINUTE });
+  });
+
+  test("out of quota with a time of day set: until it next comes round, on the vendor's clock; a vendor's reset time still stands over it", () => {
+    const { store } = cooldowns();
+    // START 是 UTC 12:00，北京时间 20:00：北京的 00:00 是 4 小时后。
+    const daily = settled({ quotaResetAt: "00:00+08:00", quotaRestMinutes: 60 });
+    expect(fail(store, { status: 429, body: "quota exhausted", endpoint: daily })).toMatchObject({
+      by: "quota",
+      until: START + 4 * 60 * MINUTE,
+    });
+    const resetsIn2h = Math.floor((START + 120 * MINUTE) / 1000);
+    expect(
+      fail(store, {
+        status: 429,
+        body: `Claude AI usage limit reached|${resetsIn2h}`,
+        endpoint: { ...daily, id: "ep_c" },
+      }),
+    ).toMatchObject({ by: "resets", until: resetsIn2h * 1000 });
+    // 被截到一小时的 Retry-After 让位给更长的「到那个时刻」。
+    expect(
+      fail(store, {
+        status: 429,
+        body: "quota exhausted",
+        headers: { "retry-after": String(5 * 60 * 60) },
+        endpoint: { ...daily, id: "ep_d" },
+      }),
+    ).toMatchObject({ by: "quota", until: START + 4 * 60 * MINUTE });
+  });
+
+  test("a time of day it can't read is as if unset: the minutes stand, else a quarter hour", () => {
+    const { store } = cooldowns();
+    expect(
+      fail(store, {
+        status: 429,
+        body: "quota exhausted",
+        endpoint: settled({ quotaResetAt: "8am", quotaRestMinutes: 60 }),
+      }),
+    ).toMatchObject({ until: START + 60 * MINUTE });
   });
 
   test("the longest rest caps failures and rate limits alike; the vendor's own time still stands over it", () => {
