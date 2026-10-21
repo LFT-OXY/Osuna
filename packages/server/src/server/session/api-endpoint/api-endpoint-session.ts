@@ -5,6 +5,8 @@ import type {
   ApiEndpointIconImage,
   ApiEndpointRequestExtras,
   ApiEndpointVendorStatusResponse,
+  ApiEndpointImportScanResponse,
+  ApiEndpointImportResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
@@ -40,6 +42,8 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.forget_catalog.request"
       | "provider.api_endpoint.vendor_status.request"
+      | "provider.api_endpoint.import_scan.request"
+      | "provider.api_endpoint.import.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
       | "provider.api_endpoint.fetch_site_icon.request"
@@ -69,6 +73,8 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.reveal_key.request": true,
   "provider.api_endpoint.forget_catalog.request": true,
   "provider.api_endpoint.vendor_status.request": true,
+  "provider.api_endpoint.import_scan.request": true,
+  "provider.api_endpoint.import.request": true,
   "provider.api_endpoint.list_templates.request": true,
   "provider.api_endpoint.store_icon.request": true,
   "provider.api_endpoint.fetch_site_icon.request": true,
@@ -145,6 +151,37 @@ export class ApiEndpointSession {
         return this.handleForgetCatalog(request);
       case "provider.api_endpoint.vendor_status.request":
         return this.handleVendorStatus(request);
+      default:
+        return this.handleAddingAids(request, connectionSignal);
+    }
+  }
+
+  /** 添加接口的辅助：模板、图标、从别的软件导入；其余是要向上游发请求的几种。 */
+  private async handleAddingAids(
+    request: Extract<
+      ApiEndpointRequest,
+      {
+        type:
+          | "provider.api_endpoint.import_scan.request"
+          | "provider.api_endpoint.import.request"
+          | "provider.api_endpoint.list_templates.request"
+          | "provider.api_endpoint.store_icon.request"
+          | "provider.api_endpoint.read_icon.request"
+          | "provider.api_endpoint.fetch_site_icon.request"
+          | "provider.api_endpoint.fetch_models.request"
+          | "provider.api_endpoint.test_connection.request"
+          | "provider.api_endpoint.detect_formats.request"
+          | "provider.api_endpoint.test_models.request"
+          | "provider.api_endpoint.cancel.request";
+      }
+    >,
+    connectionSignal: AbortSignal,
+  ): Promise<void> {
+    switch (request.type) {
+      case "provider.api_endpoint.import_scan.request":
+        return this.handleImportScan(request);
+      case "provider.api_endpoint.import.request":
+        return this.handleImport(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
@@ -531,6 +568,40 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.forget_catalog.response",
       payload: { requestId: request.requestId, error },
+    });
+  }
+
+  /** 读接口存储失败时整个请求失败；一个来源读不了只记在那个来源的 error 里。 */
+  private handleImportScan(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_scan.request" }>,
+  ): void {
+    let payload: Omit<ApiEndpointImportScanResponse["payload"], "requestId">;
+    try {
+      const sources = this.service.scanImports({
+        includeOpenCode: request.includeOpenCode === true,
+      });
+      payload = { sources, error: null };
+    } catch (caught) {
+      payload = { sources: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_scan.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImport(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportResponse["payload"], "requestId">;
+    try {
+      payload = { imported: await this.service.importFromApps(request.picks), error: null };
+    } catch (caught) {
+      payload = { imported: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import.response",
+      payload: { requestId: request.requestId, ...payload },
     });
   }
 

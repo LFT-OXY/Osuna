@@ -1146,7 +1146,7 @@ const AZURE_HOST_SUFFIXES = [
   ".services.ai.azure.com",
 ];
 
-function isAzureHost(host: string): boolean {
+export function isAzureHost(host: string): boolean {
   return AZURE_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix) && host.length > suffix.length);
 }
 

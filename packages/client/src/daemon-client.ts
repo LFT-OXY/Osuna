@@ -704,6 +704,14 @@ type ApiEndpointVendorStatusPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.vendor_status.response" }
 >["payload"];
+type ApiEndpointImportScanPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_scan.response" }
+>["payload"];
+type ApiEndpointImportPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import.response" }
+>["payload"];
 type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
@@ -6576,6 +6584,31 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.vendor_status.request", ...options },
+    });
+  }
+
+  /**
+   * 扫描本机别的软件里的接口配置（从别的软件导入）；includeOpenCode 只在打开导入窗口时给。
+   * key 只给打码的，导入时按指纹找回。只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointImportScan(
+    options: { includeOpenCode?: boolean } = {},
+    requestId?: string,
+  ): Promise<ApiEndpointImportScanPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_scan.request", ...options },
+    });
+  }
+
+  /** 导入选中的发现：每条带操作（add、replace、rename）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImport(
+    picks: { fingerprint: string; action: string; name?: string }[],
+    requestId?: string,
+  ): Promise<ApiEndpointImportPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import.request", picks },
     });
   }
 

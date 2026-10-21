@@ -271,6 +271,14 @@ async function prepareTestDaemonConfig(
         moonshot: "http://127.0.0.1:9/moonshot/api/v2/summary.json",
         ...options.apiEndpoints?.vendorStatusUrls,
       },
+      // 从别的软件导入：CC Switch、Alma、OpenCode 一律读临时目录（多半不存在），绝不读开发者真实的配置；
+      // Claude Code、Codex 跟着上面的 env 与 homeDir。关心导入的用例自己放假配置。
+      importSourcePaths: {
+        ccSwitchDir: path.join(paseoHomeRoot, "import-sources", "cc-switch"),
+        almaDatabase: path.join(paseoHomeRoot, "import-sources", "alma", "chat_threads.db"),
+        openCodeAuth: path.join(paseoHomeRoot, "import-sources", "opencode", "auth.json"),
+        ...options.apiEndpoints?.importSourcePaths,
+      },
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {

@@ -1021,6 +1021,20 @@ and upstreamOf, upstreamBadge and loadUpstream in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/vendor-notice.tsx
   packages/app/src/api-endpoints/use-vendor-status.ts
 
+Import from other apps (the five sources and where each keeps its file, how a
+CC Switch, Claude Code, Codex, Alma or OpenCode entry becomes an endpoint, a
+template's when the URLs are its own, entries of one account merged, Osuna's own
+gateway and Codex table refused, the lenient Codex TOML reading, read-only
+SQLite, the new / added / name in use / same vendor with another key standing,
+the fingerprint the key is looked up by, and add, replace and rename) follows
+importapps.go, import_codex.go and import_opencode.go in magpie's
+internal/provider, internal/gui/importapps.go, and openImportApps,
+renderImportApps and importAppRow in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/import-apps.ts
+  packages/server/src/server/api-endpoints/import-apps.test.ts
+  packages/server/src/server/daemon-e2e/api-endpoint-import.e2e.test.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

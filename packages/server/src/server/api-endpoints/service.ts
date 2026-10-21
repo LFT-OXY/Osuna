@@ -42,6 +42,11 @@ import {
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
   type ApiEndpointVendorStatusResponse,
+  type ApiEndpointImportItem,
+  type ApiEndpointImportPick,
+  type ApiEndpointImportSource,
+  API_ENDPOINT_IMPORT_ACTIONS,
+  type ApiEndpointImportAction,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   API_ENDPOINT_TEMPLATES,
@@ -315,6 +320,16 @@ import {
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
 import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
 import {
+  defaultImportSourcePaths,
+  readImportSources,
+  sameAccount,
+  settleImports,
+  type FoundEndpoint,
+  type ImportReadContext,
+  type ImportSourcePaths,
+  type SettledEntry,
+} from "./import-apps.js";
+import {
   askedDisabledBy,
   disabledMessage,
   endpointDisabledBy,
@@ -383,6 +398,9 @@ export type ApiEndpointErrorCode =
   | "insecure_tls_template"
   // 冷却设置的分钟数不是 0 到八天的整数（params.field、max）。
   | "invalid_cooldown_settings"
+  // 导入时那一条已经不在它的软件里了（重新扫描）；替换给的不是名称撞上的那条（params.name）。
+  | "import_gone"
+  | "import_cannot_replace"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -625,6 +643,11 @@ export interface ApiEndpointServiceOptions {
   vendorStatusUrls?: Partial<Record<VendorId, string>>;
   // 界面第一次看状态页时等候的计时器；测试换成手动到点的。
   vendorStatusTimers?: UsagePricingTimers;
+  // 从别的软件导入时读的 CC Switch 目录、Alma 数据库与 OpenCode 的 auth.json；缺省按 magpie 的位置，
+  // 测试 daemon 一律指到临时目录。Claude Code、Codex 的配置跟着 env 与 homeDir 走。
+  importSourcePaths?: Partial<
+    Pick<ImportSourcePaths, "ccSwitchDir" | "almaDatabase" | "openCodeAuth">
+  >;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
@@ -813,6 +836,7 @@ export class ApiEndpointService {
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
+  private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
   private readonly isAutoUpdate: () => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
@@ -893,6 +917,7 @@ export class ApiEndpointService {
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.isAutoUpdate = isModelsDevAutoUpdate;
+    this.importSourcePaths = options.importSourcePaths;
     this.vendorStatusPages = new VendorStatusPages({
       logger: this.logger,
       now: this.now,
@@ -3223,6 +3248,158 @@ export class ApiEndpointService {
   }
 
   /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
+  /**
+   * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
+   * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
+   */
+  scanImports(input: { includeOpenCode: boolean }): ApiEndpointImportSource[] {
+    return this.settledImports(input).map(({ source, entries }) => ({
+      id: source.id,
+      name: source.name,
+      path: this.homeRelative(source.path),
+      found: source.found,
+      error: source.error,
+      items: entries.map(wireImportItem),
+    }));
+  }
+
+  /**
+   * 导入选中的发现（magpie ImportFromApps）：重读一遍来源、按指纹找回 key，整批一次落下；有一条不成整批都不加。
+   * 已添加的、读不了的跳过；新增一家时名称重了照 freeEndpointName 加「 2」；替换保留那家的 id、标识与顺序位置。
+   * 加好后照保存那样当场拉一次清单。
+   */
+  async importFromApps(
+    picks: readonly ApiEndpointImportPick[],
+  ): Promise<{ endpointId: string; name: string }[]> {
+    const imported = await this.exclusiveFollowing(() => this.importPicked(picks));
+    await Promise.all(
+      imported.map(({ endpointId }) =>
+        this.refreshCatalog({ endpointId, signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS) }),
+      ),
+    );
+    return imported;
+  }
+
+  private async importPicked(
+    picks: readonly ApiEndpointImportPick[],
+  ): Promise<{ endpointId: string; name: string }[]> {
+    const entries = this.settledImports({ includeOpenCode: true }).flatMap(
+      (source) => source.entries,
+    );
+    const previous = this.readState();
+    let endpoints = [...previous.endpoints];
+    const keyOf = new Map(
+      endpoints.map((endpoint) => [endpoint.id, this.store.getApiKey(endpoint.id)]),
+    );
+    const keys: Record<string, string> = {};
+    const replaced: string[] = [];
+    const imported: { endpointId: string; name: string }[] = [];
+    const timestamp = this.now().toISOString();
+    for (const pick of picks) {
+      const action = importActionOf(pick.action);
+      const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
+      if (entry === undefined) throw importGone();
+      const found = entry.found;
+      if (found === null || entry.status === "added") continue;
+      let endpoint: StoredApiEndpoint;
+      if (action === "replace") {
+        const index = replaceTargetIndex({ entry, endpoints });
+        const target = endpoints[index];
+        if (target === undefined) throw importGone();
+        endpoint = importedEndpoint({ found, name: found.name, kept: target, timestamp });
+        endpoints = endpoints.with(index, endpoint);
+        replaced.push(endpoint.id);
+      } else {
+        // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
+        const holds = endpoints.some((held) =>
+          sameAccount({ have: { ...held, key: keyOf.get(held.id) ?? null }, found }),
+        );
+        if (holds) continue;
+        const name = freeEndpointName(
+          { ...previous, endpoints },
+          importedName({ pick, action, found }),
+        );
+        const slug = generateEndpointSlug(name, new Set(endpoints.map((held) => held.slug)));
+        const kept = { id: `ep_${randomUUID()}`, slug, createdAt: timestamp };
+        endpoint = importedEndpoint({ found, name, kept, timestamp });
+        endpoints = [...endpoints, endpoint];
+      }
+      keyOf.set(endpoint.id, found.key);
+      if (found.key !== null) keys[endpoint.id] = found.key;
+      imported.push({ endpointId: endpoint.id, name: endpoint.name });
+    }
+    if (imported.length === 0) return [];
+    await this.commit(previous, { ...previous, endpoints }, { keys });
+    // 替换成不要 key 的那家：原来那把 key 不再是它的。
+    for (const { endpointId } of imported) {
+      const hasNoKey = keyOf.get(endpointId) === null;
+      if (hasNoKey && this.store.getApiKey(endpointId) !== null)
+        this.store.removeApiKey(endpointId);
+    }
+    for (const endpointId of replaced) this.cooldowns.clear(endpointId);
+    return imported;
+  }
+
+  private settledImports(input: { includeOpenCode: boolean }) {
+    const held = this.readState().endpoints.map((endpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      slug: endpoint.slug,
+      baseUrls: endpoint.baseUrls,
+      headers: endpoint.headers,
+      key: this.store.getApiKey(endpoint.id),
+    }));
+    const sources = readImportSources({
+      context: this.importContext(),
+      includeOpenCode: input.includeOpenCode,
+    });
+    return settleImports({ sources, held });
+  }
+
+  private importContext(): ImportReadContext {
+    const defaults = defaultImportSourcePaths({
+      homeDir: this.homeDir,
+      env: this.env,
+      claudeSettings: this.resolveClaudeSettingsPath(),
+      codexConfig: this.resolveCodexConfigPath(),
+    });
+    return {
+      paths: { ...defaults, ...this.importSourcePaths },
+      homeDir: this.homeDir,
+      isGatewayUrl: (url) => this.isGatewayUrl(url),
+      claudeOriginalEnv: () => this.claudeOriginalEnv(),
+      osunaCodexCatalog: this.store.codexModelCatalogPath,
+    };
+  }
+
+  /** 本机上指向中转站的地址：路径是中转站的，或端口是它监听的（magpie gatewayURL）。 */
+  private isGatewayUrl(url: URL): boolean {
+    if (!LOOPBACK_HOSTS.has(url.hostname)) return false;
+    if (url.pathname.startsWith(API_ENDPOINT_GATEWAY_PATH)) return true;
+    const gateway = this.gatewayUrlFor("claude") ?? this.gatewayUrlFor("codex");
+    if (gateway === null || !URL.canParse(gateway)) return false;
+    return new URL(gateway).port === url.port;
+  }
+
+  /** Osuna 接管 Claude Code 时 ADR 0004 记下的 env 原值；没接管为 null。 */
+  private claudeOriginalEnv(): Record<string, string> | null {
+    const takeover = this.store.readClaudeTakeover().takeover;
+    if (takeover === null) return null;
+    const env: Record<string, string> = {};
+    for (const [name, record] of Object.entries(takeover.env)) {
+      const original = record.original;
+      if (original.present && typeof original.value === "string") env[name] = original.value;
+    }
+    return env;
+  }
+
+  /** 家目录下的路径写成 ~ 开头（magpie 的导入窗口这样显示）。 */
+  private homeRelative(filePath: string): string {
+    const relative = path.relative(this.homeDir, filePath);
+    const isInside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+    return isInside ? path.join("~", relative) : filePath;
+  }
+
   async forgetCatalog(endpointId: string): Promise<void> {
     if (!findEndpoint(this.readState(), endpointId)) {
       throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
@@ -5406,4 +5583,115 @@ function usesModelFacts(state: ApiEndpointState | null): boolean {
 /** 接管记录是 ChatGPT 登录的接法：Osuna 写了 openai_base_url。 */
 function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
   return typeof takeover?.keys.openai_base_url?.written === "string";
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+function importActionOf(raw: string): ApiEndpointImportAction {
+  const action = API_ENDPOINT_IMPORT_ACTIONS.find((candidate) => candidate === raw);
+  if (action === undefined) {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: `Unknown import action '${raw}'`,
+    });
+  }
+  return action;
+}
+
+function importGone(): ApiEndpointRequestError {
+  return new ApiEndpointRequestError({
+    code: "import_gone",
+    message: "That entry is no longer in the app it came from; scan again",
+  });
+}
+
+/** 替换只给名称撞上的那家（magpie 只让 taken 的替换）；那家已经不在了按来源变了处理。 */
+function replaceTargetIndex(input: {
+  entry: SettledEntry;
+  endpoints: readonly StoredApiEndpoint[];
+}): number {
+  const { entry } = input;
+  if (entry.status !== "name_taken" || entry.existing === null) {
+    throw new ApiEndpointRequestError({
+      code: "import_cannot_replace",
+      message: `${entry.name} doesn't share a name with an endpoint you have: add it instead`,
+      params: { name: entry.name },
+    });
+  }
+  const existingId = entry.existing.id;
+  const index = input.endpoints.findIndex((endpoint) => endpoint.id === existingId);
+  if (index === -1) throw importGone();
+  return index;
+}
+
+/** 新增时的名称：改名后新增用用户给的（不能是空的），否则用发现里的。 */
+function importedName(input: {
+  pick: ApiEndpointImportPick;
+  action: ApiEndpointImportAction;
+  found: FoundEndpoint;
+}): string {
+  if (input.action !== "rename") return input.found.name;
+  const name = input.pick.name?.trim() ?? "";
+  if (name === "") {
+    throw new ApiEndpointRequestError({
+      code: "invalid_input",
+      message: "A renamed import needs a name",
+    });
+  }
+  return name;
+}
+
+/**
+ * 导进来的那家（magpie 的 Save 整个换上）：kept 是保留的 id、标识与创建时间（替换时是原来那家的）。
+ * 带了模型的只用这几个（「只用挑选的」），没带的跟随接口清单，和新建的一样；开着。
+ */
+function importedEndpoint(input: {
+  found: FoundEndpoint;
+  name: string;
+  kept: Pick<StoredApiEndpoint, "id" | "slug" | "createdAt">;
+  timestamp: string;
+}): StoredApiEndpoint {
+  const { found, kept } = input;
+  const templateId = found.templateId ?? undefined;
+  const models = found.models.map((id) => ({ id }));
+  const scope: Pick<StoredApiEndpoint, "modelScope" | "manualModels"> =
+    models.length > 0 ? { modelScope: "picked", manualModels: models } : { modelScope: "vendor" };
+  return {
+    id: kept.id,
+    slug: kept.slug,
+    name: input.name,
+    baseUrls: templateBaseUrls({ templateId, baseUrls: found.baseUrls }),
+    models,
+    ...scope,
+    enabled: true,
+    ...(templateId !== undefined ? { templateId } : {}),
+    ...(found.region !== null ? { region: found.region } : {}),
+    ...(found.headers !== null ? { headers: found.headers } : {}),
+    createdAt: kept.createdAt,
+    updatedAt: input.timestamp,
+  };
+}
+
+function maskedKeyOf(key: string | null): string | null {
+  if (key === null) return null;
+  return maskApiKey(key);
+}
+
+function wireImportItem(entry: SettledEntry): ApiEndpointImportItem {
+  const found = entry.found;
+  return {
+    fingerprint: entry.fingerprint,
+    ref: entry.ref,
+    from: entry.from,
+    name: entry.name,
+    baseUrls: found?.baseUrls ?? [],
+    maskedKey: maskedKeyOf(found?.key ?? null),
+    models: found?.models ?? [],
+    templateId: found?.templateId ?? null,
+    status: entry.status,
+    existingEndpointId: entry.existing?.id ?? null,
+    existingName: entry.existing?.name ?? null,
+    skip: entry.skip,
+    off: entry.off,
+  };
 }

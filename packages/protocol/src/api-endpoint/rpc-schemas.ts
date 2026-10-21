@@ -1307,3 +1307,96 @@ export const ApiEndpointVendorStatusResponseSchema = z.object({
   }),
 });
 export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorStatusResponseSchema>;
+
+/**
+ * 从别的软件导入（Import）：daemon 只读地读本机别的软件的配置（ADR 0013）。每条发现照 Osuna 会加的那家给出，
+ * key 打码，原文留在 daemon，导入时按指纹找回。线上的 status、skip、off 是字符串，daemon 以后多一种老客户端照样解析。
+ * status：new（新的）、added（已添加）、name_taken（名称已被占用）、other_key（同一家、key 不同）。
+ * skip：读到了却不能导入的原因（sign_in、no_base_url、invalid_base_url、points_at_osuna、no_api_key、gemini_unsupported、
+ * no_azure_endpoint）；off：默认不选的原因（turned_off：在那个软件里关着）。
+ */
+export const API_ENDPOINT_IMPORT_STATUSES = ["new", "added", "name_taken", "other_key"] as const;
+export type ApiEndpointImportStatus = (typeof API_ENDPOINT_IMPORT_STATUSES)[number];
+
+export const ApiEndpointImportItemSchema = z.object({
+  fingerprint: z.string(),
+  ref: z.string(),
+  // 在那个软件里的哪儿（CC Switch 的 Claude Code、Codex……，或 settings.json 这样的文件名）。
+  from: z.string().nullable(),
+  name: z.string(),
+  baseUrls: z.array(ApiEndpointBaseUrlSchema),
+  maskedKey: z.string().nullable(),
+  models: z.array(z.string()),
+  templateId: z.string().nullable(),
+  status: z.string(),
+  // 对上的那家：已添加的、名称撞上的、同一家 key 不同的。
+  existingEndpointId: z.string().nullable(),
+  existingName: z.string().nullable(),
+  skip: z.string().nullable(),
+  off: z.string().nullable(),
+});
+export type ApiEndpointImportItem = z.infer<typeof ApiEndpointImportItemSchema>;
+
+export const ApiEndpointImportSourceSchema = z.object({
+  // alma、cc-switch、claude-code、codex、opencode。
+  id: z.string(),
+  name: z.string(),
+  // 读的文件，家目录写成 ~。
+  path: z.string(),
+  found: z.boolean(),
+  // 在那儿却读不了：code 为 unreadable 或 unparsable。
+  error: ApiEndpointErrorSchema.nullable(),
+  items: z.array(ApiEndpointImportItemSchema),
+});
+export type ApiEndpointImportSource = z.infer<typeof ApiEndpointImportSourceSchema>;
+
+/**
+ * 扫描别的软件的配置。`includeOpenCode`：打开导入窗口时才为 true，OpenCode 的 auth.json 存着它所有的登录。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportScanRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_scan.request"),
+  requestId: z.string(),
+  includeOpenCode: z.boolean().optional(),
+});
+export type ApiEndpointImportScanRequest = z.infer<typeof ApiEndpointImportScanRequestSchema>;
+
+export const ApiEndpointImportScanResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_scan.response"),
+  payload: z.object({
+    requestId: z.string(),
+    sources: z.array(ApiEndpointImportSourceSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportScanResponse = z.infer<typeof ApiEndpointImportScanResponseSchema>;
+
+/** 导入的一条怎么进来：add（新增一家）、replace（替换名称撞上的那家，保留它的 id 与顺序位置）、rename（改名后新增，name 必填）。 */
+export const API_ENDPOINT_IMPORT_ACTIONS = ["add", "replace", "rename"] as const;
+export type ApiEndpointImportAction = (typeof API_ENDPOINT_IMPORT_ACTIONS)[number];
+
+export const ApiEndpointImportPickSchema = z.object({
+  fingerprint: z.string(),
+  action: z.string(),
+  name: z.string().optional(),
+});
+export type ApiEndpointImportPick = z.infer<typeof ApiEndpointImportPickSchema>;
+
+/** 导入选中的发现：daemon 重读一遍来源，按指纹找回 key。一条不成整批都不加。只有声明了 apiEndpointManagement 的 daemon 认它。 */
+export const ApiEndpointImportRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import.request"),
+  requestId: z.string(),
+  picks: z.array(ApiEndpointImportPickSchema),
+});
+export type ApiEndpointImportRequest = z.infer<typeof ApiEndpointImportRequestSchema>;
+
+export const ApiEndpointImportResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import.response"),
+  payload: z.object({
+    requestId: z.string(),
+    // 加了或换上的那几家；已经有的、读不了的不在里面。
+    imported: z.array(z.object({ endpointId: z.string(), name: z.string() })),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportResponse = z.infer<typeof ApiEndpointImportResponseSchema>;

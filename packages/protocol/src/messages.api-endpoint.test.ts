@@ -1728,4 +1728,97 @@ describe("provider.api_endpoint.test_models", () => {
       expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
     }
   });
+  it("parses import_scan and import, with an unreadable source, a skipped entry and statuses the client may not know", () => {
+    const scan = {
+      type: "provider.api_endpoint.import_scan.request" as const,
+      requestId: "req-is",
+    };
+    expect(SessionInboundMessageSchema.parse(scan)).toEqual(scan);
+    const withOpenCode = { ...scan, includeOpenCode: true };
+    expect(SessionInboundMessageSchema.parse(withOpenCode)).toEqual(withOpenCode);
+    const item = {
+      fingerprint: "f1",
+      ref: "claude/p1",
+      from: "Claude Code, Codex",
+      name: "CC Relay",
+      baseUrls: [{ format: "anthropic_messages", url: "https://cc-relay.example/api" }],
+      maskedKey: "sk-c…1111",
+      models: ["cc-sonnet"],
+      templateId: null,
+      status: "other_key",
+      existingEndpointId: "ep_1",
+      existingName: "Relay One",
+      skip: null,
+      off: null,
+    };
+    const skipped = {
+      ...item,
+      fingerprint: "f2",
+      baseUrls: [],
+      maskedKey: null,
+      models: [],
+      status: "new",
+      existingEndpointId: null,
+      existingName: null,
+      skip: "sign_in",
+    };
+    const response = {
+      type: "provider.api_endpoint.import_scan.response" as const,
+      payload: {
+        requestId: "req-is",
+        sources: [
+          {
+            id: "cc-switch",
+            name: "CC Switch",
+            path: "~/.cc-switch/cc-switch.db",
+            found: true,
+            error: null,
+            items: [item, skipped, { ...item, status: "something_new" }],
+          },
+          {
+            id: "alma",
+            name: "Alma",
+            path: "~/alma/chat_threads.db",
+            found: true,
+            error: { code: "unparsable", message: "Can't open Alma's database" },
+            items: [],
+          },
+          {
+            id: "codex",
+            name: "Codex",
+            path: "~/.codex/config.toml",
+            found: false,
+            error: null,
+            items: [],
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    const importRequest = {
+      type: "provider.api_endpoint.import.request" as const,
+      requestId: "req-im",
+      picks: [
+        { fingerprint: "f1", action: "add" },
+        { fingerprint: "f3", action: "rename", name: "Mine" },
+      ],
+    };
+    expect(SessionInboundMessageSchema.parse(importRequest)).toEqual(importRequest);
+    for (const payload of [
+      { requestId: "req-im", imported: [{ endpointId: "ep_2", name: "CC Relay" }], error: null },
+      {
+        requestId: "req-im",
+        imported: [],
+        error: {
+          code: "import_cannot_replace",
+          params: { name: "CC Relay" },
+          message: "add it instead",
+        },
+      },
+    ]) {
+      const imported = { type: "provider.api_endpoint.import.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(imported)).toEqual(imported);
+    }
+  });
 });
