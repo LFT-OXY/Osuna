@@ -3196,6 +3196,26 @@ test.describe("An endpoint's headers, extra body and key header", () => {
     );
     await expect(suggested).toHaveCount(0);
   });
+
+  test("at 390 a header's name and value read as one pair: the gap between pairs is wider than inside one", async ({
+    page,
+  }) => {
+    await openApiEndpointsPage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoints-empty-add").filter({ visible: true }).click();
+    await page.getByTestId("api-endpoint-template-custom").click();
+    await page.getByTestId("api-endpoint-connection-advanced-toggle").click();
+    await page.getByTestId("api-endpoint-connection-add-header").click();
+    const name0 = await boxOf(page.getByTestId("api-endpoint-connection-header-name-0"));
+    const value0 = await boxOf(page.getByTestId("api-endpoint-connection-header-value-0"));
+    const name1 = await boxOf(page.getByTestId("api-endpoint-connection-header-name-1"));
+    // 窄窗口里名和值上下两行。
+    expect(value0.y).toBeGreaterThan(name0.y + name0.height - 1);
+    // testID 落在框里的文字上，框的上下留白两边一样，相减就抵消了。
+    const inside = value0.y - (name0.y + name0.height);
+    const between = name1.y - (value0.y + value0.height);
+    expect(between - inside).toBeGreaterThanOrEqual(8);
+  });
 });
 
 // 接口管理好用性工单 23：不校验证书（照 magpie 编辑窗口的 Certificate），打开前先确认，打开后行上一直有标记。
@@ -6325,4 +6345,10 @@ async function failImportPickAt(page: Page, index: number): Promise<void> {
       server.send(JSON.stringify({ ...request, message: { ...request.message, picks } }));
     });
   });
+}
+
+async function boxOf(locator: Locator): Promise<{ y: number; height: number }> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("not laid out");
+  return box;
 }
