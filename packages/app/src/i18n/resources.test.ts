@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { createInstance } from "i18next";
 import { describe, expect, it } from "vitest";
 import { ar } from "./resources/ar";
 import { en } from "./resources/en";
@@ -535,6 +536,21 @@ describe("translation resources", () => {
     expect(ptBR.settings.providers.models.many).toBe("{{count}} modelos");
     expect(ru.settings.providers.models.many).toBe("{{count}} моделей");
     expect(zhCN.settings.providers.models.many).toBe("{{count}} 个模型");
+  });
+
+  // 单复数用两个键（component-guidelines.md「Vary by key」）：ru、ar 的复数那条不随数量变形。
+  it("words the endpoint model search placeholder for one model and for many", async () => {
+    const i18n = createInstance();
+    await i18n.init({
+      lng: "en",
+      resources: { en: { translation: en }, ru: { translation: ru } },
+    });
+    const keys = "settings.apiEndpoints.models";
+    expect(i18n.t(`${keys}.searchPlaceholderOne`, { count: 1 })).toBe("Search 1 model");
+    expect(i18n.t(`${keys}.searchPlaceholderMany`, { count: 12 })).toBe("Search 12 models");
+    expect(i18n.t(`${keys}.searchPlaceholderMany`, { count: 5, lng: "ru" })).toBe(
+      "Поиск по моделям (5)",
+    );
   });
 
   it("preserves reviewed Korean status labels", () => {
