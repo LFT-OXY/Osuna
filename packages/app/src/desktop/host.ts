@@ -129,6 +129,11 @@ export interface DesktopAgentNavigationBridge {
   ready?: () => Promise<{ serverId: string; agentId: string } | null>;
 }
 
+/** 导入链接（paseo://import）：窗口准备好时取主进程存着的那一条，之后的从 import-link 事件来。 */
+export interface DesktopImportLinksBridge {
+  ready?: () => Promise<string | null>;
+}
+
 export type DesktopBrowserShortcutEvent =
   | { browserId?: string; action: "focus-url" }
   | { browserId: string; action: "new-tab" };
@@ -178,6 +183,7 @@ export interface DesktopHostBridge {
   invoke?: DesktopInvokeBridge["invoke"];
   getPendingOpenProject?: () => Promise<string | null>;
   agentNavigation?: DesktopAgentNavigationBridge;
+  importLinks?: DesktopImportLinksBridge;
   events?: DesktopEventsBridge;
   window?: DesktopWindowModuleBridge;
   dialog?: DesktopDialogBridge;

@@ -338,6 +338,7 @@ interface ApiEndpointSeedClient {
     error: { code: string; message: string } | null;
   }>;
   apiEndpointDelete(provider: string, endpointId: string): Promise<unknown>;
+  apiEndpointRevealKey(endpointId: string): Promise<{ apiKey: string | null }>;
   apiEndpointSetAgentSettings(options: {
     provider: string;
     enabled: boolean;

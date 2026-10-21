@@ -1050,6 +1050,22 @@ and the Ignore handler in internal/gui/assets/app.js:
   packages/app/src/api-endpoints/use-import-discovery.ts
   packages/app/src/api-endpoints/import-discovery-banner.tsx
 
+Import links (paseo://import?..., the parameters a link takes, the forms of the
+link, https only except plain http to this machine or the local network, no
+account, query or fragment in a base URL, a key of at most 4096 bytes without
+control characters, a name cut to 80 bytes where a character begins, at most 200
+models, the unknown template, Vertex and no-base-URL refusals, the https picture
+on a public host fetched only once the user adds it, the endpoint with the same
+id replaced, and the dialog naming the hosts the prompts and the key go to with
+the name and key editable) follows importurl.go and importurl_test.go in
+magpie's internal/provider, internal/gui/importlink.go, and renderImport in
+internal/gui/assets/app.js:
+
+  packages/protocol/src/api-endpoint/import-link.ts
+  packages/server/src/server/api-endpoints/import-link.ts
+  packages/server/src/server/api-endpoints/import-link.test.ts
+  packages/app/src/api-endpoints/import-link-sheet.tsx
+
 MIT License
 
 Copyright (c) 2026 yetone
