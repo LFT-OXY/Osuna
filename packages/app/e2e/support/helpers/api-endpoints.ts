@@ -19,8 +19,12 @@ import type {
   ApiEndpointSetAgentSettingsResponse,
   ApiEndpointListTemplatesResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { expect, type Page } from "@playwright/test";
+import { gotoAppShell, openSettings } from "./app";
 import { connectDaemonClient } from "./daemon-client-loader";
-import { getE2EDaemonPort } from "./daemon-port";
+import { daemonWsRoutePattern, getE2EDaemonPort } from "./daemon-port";
+import { getServerId } from "./server-id";
+import { openSettingsHost, openSettingsHostSection } from "./settings";
 
 /*
  * 第三方接口页的 e2e 夹具：本机假中转站、带接口方法的 daemon 客户端、经真实中转站让某家进入冷却。
@@ -526,3 +530,78 @@ export async function sendThroughGateway(model: string): Promise<number> {
   await response.text();
   return response.status;
 }
+
+/** 打开设置里本机 daemon 的第三方接口页，等列表出来。 */
+export async function openApiEndpointsPage(page: Page): Promise<void> {
+  const serverId = getServerId();
+  await gotoAppShell(page);
+  await openSettings(page);
+  await openSettingsHost(page, serverId);
+  await openSettingsHostSection(page, serverId, "api-endpoints");
+  await expect(page.getByTestId("api-endpoints-list")).toBeVisible();
+}
+
+/** 从 server_info 去掉 apiEndpointManagement，模拟没有接口管理能力的旧主机。 */
+export async function hideManagementCapability(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      if (typeof message !== "string" || !message.includes('"server_info"')) {
+        ws.send(message);
+        return;
+      }
+      const envelope = JSON.parse(message) as {
+        message?: { payload?: { status?: unknown; features?: Record<string, unknown> } };
+      };
+      const payload = envelope.message?.payload;
+      if (payload?.status === "server_info" && payload.features) {
+        delete payload.features.apiEndpointManagement;
+      }
+      ws.send(JSON.stringify(envelope));
+    });
+  });
+}
+
+/**
+ * 导入的扫描或导入请求不送到 daemon，直接回给定的答案（isAnswering 为 false 时照常送去）。
+ * type 不带 .request：`provider.api_endpoint.import` 只认导入本身，不认 import_scan。
+ */
+export async function answerImportRpc(
+  page: Page,
+  input: { type: string; isAnswering: () => boolean; payload: Record<string, unknown> },
+): Promise<{ scans: number }> {
+  const requestType = `"${input.type}.request"`;
+  // 窗口扫了几次（导入请求的答案说扫描过时时，窗口要再扫一次）。
+  const seen = { scans: 0 };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isScan =
+        typeof message === "string" &&
+        message.includes('"provider.api_endpoint.import_scan.request"');
+      if (isScan) seen.scans += 1;
+      const isAsked = typeof message === "string" && message.includes(requestType);
+      if (!isAsked || !input.isAnswering()) {
+        server.send(message);
+        return;
+      }
+      const request = SessionRequestSchema.parse(JSON.parse(message)).message;
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: `${input.type}.response`,
+            payload: { requestId: request.requestId, ...input.payload },
+          },
+        }),
+      );
+    });
+  });
+  return seen;
+}
+
+const SessionRequestSchema = z.object({
+  message: z.object({ requestId: z.string() }).passthrough(),
+});

@@ -225,23 +225,27 @@ describe("readImportSources", () => {
     ]);
   });
 
-  test("a database Osuna has no permission to open is unreadable, not 'not a database'", async () => {
-    const { context } = await contextIn();
-    await mkdir(path.dirname(context.paths.almaDatabase), { recursive: true });
-    const db = new DatabaseSync(context.paths.almaDatabase);
-    db.exec("CREATE TABLE providers (id TEXT)");
-    db.close();
-    await chmod(context.paths.almaDatabase, 0o000);
-    try {
-      const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "alma");
-      expect(source.error).toMatchObject({
-        code: "unreadable",
-        params: { errno: "SQLITE_CANTOPEN" },
-      });
-    } finally {
-      await chmod(context.paths.almaDatabase, 0o600);
-    }
-  });
+  // Windows 不按 chmod 的权限位拒绝打开文件，造不出「没权限打开」。
+  test.skipIf(process.platform === "win32")(
+    "a database Osuna has no permission to open is unreadable, not 'not a database'",
+    async () => {
+      const { context } = await contextIn();
+      await mkdir(path.dirname(context.paths.almaDatabase), { recursive: true });
+      const db = new DatabaseSync(context.paths.almaDatabase);
+      db.exec("CREATE TABLE providers (id TEXT)");
+      db.close();
+      await chmod(context.paths.almaDatabase, 0o000);
+      try {
+        const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "alma");
+        expect(source.error).toMatchObject({
+          code: "unreadable",
+          params: { errno: "SQLITE_CANTOPEN" },
+        });
+      } finally {
+        await chmod(context.paths.almaDatabase, 0o600);
+      }
+    },
+  );
 });
 
 describe("withoutSqliteExperimentalWarning", () => {
