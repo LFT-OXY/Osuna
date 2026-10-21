@@ -7,7 +7,7 @@
 
 **Blocked by:** 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 截图清单齐全并给用户看过；发现的不一致已修。
 - [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。

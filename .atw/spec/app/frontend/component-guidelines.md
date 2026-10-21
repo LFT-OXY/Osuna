@@ -163,6 +163,17 @@ A subagent call is `isDispatchToolCall` in `tool-calls/detail-level/dispatch/mod
 - `key` is a stable id, never an index (lint enforces `react/no-array-index-key`). A label repeats where a position does not — seven weekday initials are `M T W T F S S` — so key by a stable id list beside the labels, not by the label text (`components/usage/usage-heatmap-card.tsx`, `WEEKDAY_IDS`).
 - JSX never travels through a prop, not even via a local variable (`react-perf/jsx-no-jsx-as-prop`; `components/tree-rail.tsx` documents the same wall). A component that hands its caller a slot takes a render function, not a node: `renderHeaderRight?: () => ReactNode` called as `renderHeaderRight?.()` (`components/usage/usage-card.tsx`), with the caller's function in a `useCallback`. The same slot also breaks import cycles: `AssistantTurnFooter` in `components/message.tsx` takes `renderUsage` so `agent-stream/turn-usage-segment.tsx` can import the font constant back out of `message.tsx` without the two files importing each other. Typing the slot `ReactNode` compiles and then fails lint at every call site. `Alert`'s `description` is typed `ReactNode`, but the lint rule rejects JSX there, so a list of raw lines is `lines.join("\n")`; richer content goes in `children` or a sibling element. Wrapping the node in `useMemo` slips past the rule but is still JSX through a prop. The provider start-error card (`ProviderStartErrorAlert` in `provider-detail/index.tsx`) puts its monospace error text and its buttons in `children`, and cancels the actions slot's top margin so the text sits where a description would. The same plugin's `jsx-no-new-function-as-prop` makes every handler passed to a component a `useCallback`, which is the one case where the "only for memoized children" rule in Hooks and Data yields to the linter.
 
+## API endpoint screens: one look (endpoint-management-ux ticket 30)
+
+- Alerts and callouts on these screens use the shared `<Alert>` at `size="sm"`; a string description goes through `api-endpoints/primary-text-alert.tsx` so the body is primary text. Never hand-roll a tinted box (the old `CurlNoteAlert` / `Callout`). The shared `alert.tsx` is unchanged.
+- A button that overwrites the user's data (import-link Replace) uses the destructive variant.
+- Row menus follow docs/menus.md: at compact width both the endpoint row menu and the model row menu are bottom sheets; the shared menu drawer keeps a 16 px bottom inset.
+- Field and section info tips open below (`side="bottom"`); section headers inside sheets use the same heading as the detail page.
+- A horizontally scrolling tab strip fades only on the side that hides content (`components/ui/horizontal-scroll-fade.web.tsx
+components/ui/horizontal-scroll-fade.tsx`).
+- Sheets at compact width size to their content (import-link default / replace / refused), capped at 90%.
+- Screenshots for review are saved lossless; take them after the sheet has settled, and never press Escape first (it leaves a focus ring that isn't there for the user).
+
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
 `fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens outside the exceptions §14 names; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).
