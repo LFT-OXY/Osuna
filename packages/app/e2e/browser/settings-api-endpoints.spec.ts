@@ -1792,6 +1792,62 @@ test.describe("Settings API endpoints", () => {
     });
   });
 
+  test("a long key shown in a narrow window can be read in full, and Hide masks it again", async ({
+    page,
+  }) => {
+    const longKey = `sk-e2e-${"0123456789abcdef".repeat(7)}-end`;
+    expect(longKey.length).toBeGreaterThan(100);
+    const endpointId = await seedApiEndpoint(client, {
+      name: "Good relay",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+      apiKey: longKey,
+    });
+    await openEndpointDetail(page, endpointId);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("api-endpoint-edit-connection").filter({ visible: true }).click();
+    const key = page.getByTestId("api-endpoint-connection-api-key");
+    const show = page.getByTestId("api-endpoint-connection-show-key");
+
+    await show.click();
+    await expect(key).toHaveValue(longKey);
+    await expect(show).toHaveText("Hide");
+    // 框里不滚动就能读全：没有横向或纵向溢出。
+    const overflow = await key.evaluate((node) => ({
+      x: node.scrollWidth - node.clientWidth,
+      y: node.scrollHeight - node.clientHeight,
+    }));
+    expect(overflow.x).toBeLessThanOrEqual(0);
+    // 留 1px：行高取整后 scrollHeight 可能比 clientHeight 多出不到一像素。
+    expect(overflow.y).toBeLessThanOrEqual(1);
+    // 框不伸到按钮底下。
+    const keyBox = await key.boundingBox();
+    const showBox = await show.boundingBox();
+    if (!keyBox || !showBox) throw new Error("The key box or Show is not laid out");
+    expect(keyBox.x + keyBox.width).toBeLessThanOrEqual(showBox.x);
+
+    await show.click();
+    await expect(key).toHaveValue("");
+    await expect(key).toHaveAttribute("type", "password");
+    await expect(show).toHaveText("Show");
+
+    // 打了新 key 再显示：换成多行框后字还在，删字后框跟着变矮。
+    await key.fill(longKey);
+    await show.click();
+    await expect(key).toHaveValue(longKey);
+    const tall = await key.boundingBox();
+    if (!tall) throw new Error("The key box is not laid out");
+    await key.fill("sk-short");
+    await expect(key).toHaveValue("sk-short");
+    await expect
+      .poll(async () => (await key.boundingBox())?.height ?? Infinity)
+      .toBeLessThan(tall.height);
+    // 多行框里按回车不会把换行带进 key。
+    await key.press("End");
+    await key.press("Enter");
+    await expect(key).toHaveValue("sk-short");
+  });
+
   test("a custom endpoint's icon: a built-in one, or a picture kept by the host; a picture too large or not a picture says why", async ({
     page,
   }) => {

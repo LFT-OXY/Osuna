@@ -1,6 +1,6 @@
 // 添加窗口的逐个模型识别、自选图标与粘贴 curl移植自 magpie（https://github.com/yetone/magpie，internal/gui/assets/app.js 的 detectAPIs、iconPicker、curlOf、fromCurl）
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import React, { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import React, { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Pressable, ScrollView, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
@@ -19,6 +19,7 @@ import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Text } from "@/components/ui/text";
+import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
 import { useFilePicker, type FilePickFilter } from "@/hooks/use-file-picker";
@@ -36,6 +37,7 @@ import {
 import { useConnectionFormModel } from "./use-connection-form-model";
 import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
+import { wrapAnywhereAndCountLines } from "./text-box-lines";
 import { PrimaryTextAlert } from "./primary-text-alert";
 import { RequestExtrasFields } from "./request-extras-fields";
 import { InsecureTlsField } from "./insecure-tls-field";
@@ -149,7 +151,6 @@ export function ApiEndpointConnectionSheet({
     },
   );
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
-  const keyInputRef = useCurlPasteField({ model, field: "apiKey" });
   const saveLabel = saveLabelOf({ t, state });
   const keyHint = state.template?.keyHint ?? null;
   const isTemplateKeyOptional = state.template?.keyOptional === true;
@@ -171,7 +172,6 @@ export function ApiEndpointConnectionSheet({
       if (result?.status === "saved") onSaved(result);
     })();
   }, [model, onSaved]);
-  const handleToggleKey = useCallback(() => model.toggleKeyVisible(), [model]);
   // key 框旁「显示」与地址框旁「自动检测」取两者中较宽的宽度，两个输入框右端对齐。
   const [trailingWidth, setTrailingWidth] = useState(0);
   const handleTrailingLayout = useCallback((event: LayoutChangeEvent) => {
@@ -230,51 +230,14 @@ export function ApiEndpointConnectionSheet({
             testID="api-endpoint-connection-name"
           />
         </Field>
-        <Field
-          label={
-            state.isKeyOptional
-              ? t("settings.apiEndpoints.form.apiKeyOptionalLabel")
-              : t("settings.apiEndpoints.form.apiKey")
-          }
-          error={
-            state.revealError ??
-            (state.keyRejected ? t("settings.apiEndpoints.form.keyRejected") : null)
-          }
-          testID="api-endpoint-connection-api-key-field"
-        >
-          <View style={styles.inlineRow}>
-            <View style={styles.flex}>
-              <FormTextInput
-                ref={keyInputRef}
-                initialValue={state.keyBoxValue}
-                resetKey={state.keyBoxGeneration}
-                onChangeText={model.setApiKey}
-                placeholder={keyPlaceholder}
-                secureTextEntry={!state.isKeyVisible}
-                autoCapitalize="none"
-                autoCorrect={false}
-                invalid={state.keyRejected || state.revealError !== null}
-                size={fieldSize}
-                testID="api-endpoint-connection-api-key"
-              />
-            </View>
-            {state.canShowKey ? (
-              <View style={trailingStyle} onLayout={handleTrailingLayout}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={handleToggleKey}
-                  loading={state.isRevealingKey}
-                  testID="api-endpoint-connection-show-key"
-                >
-                  {state.isKeyVisible
-                    ? t("settings.apiEndpoints.form.hideKey")
-                    : t("settings.apiEndpoints.form.showKey")}
-                </Button>
-              </View>
-            ) : null}
-          </View>
-        </Field>
+        <ApiKeyField
+          state={state}
+          model={model}
+          size={fieldSize}
+          placeholder={keyPlaceholder}
+          trailingStyle={trailingStyle}
+          onTrailingLayout={handleTrailingLayout}
+        />
         <CurlNoteAlert note={state.curlNote} />
         {/* 模板已给好各格式地址，不用自动检测。 */}
         {template ? null : (
@@ -337,6 +300,102 @@ function sheetHeaderOf(input: {
         : t("settings.apiEndpoints.form.editTitle"),
     ...(onBack ? { back: { onPress: onBack } } : {}),
   };
+}
+
+function ApiKeyField({
+  state,
+  model,
+  size,
+  placeholder,
+  trailingStyle,
+  onTrailingLayout,
+}: {
+  state: ConnectionFormState;
+  model: ConnectionFormModel;
+  size: "sm" | "md";
+  placeholder: string;
+  trailingStyle: { minWidth: number };
+  onTrailingLayout: (event: LayoutChangeEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const keyInputRef = useCurlPasteField({ model, field: "apiKey" });
+  const handleToggleKey = useCallback(() => model.toggleKeyVisible(), [model]);
+  // 显示出来的 key 换行、框随内容长高，窄窗口里长 key 也能读全；隐藏时仍是单行打码框。
+  // 显示、打字、框变宽变窄时重新量行数。
+  const keyHandleRef = useRef<EditingTextInputHandle | null>(null);
+  const [keyLines, setKeyLines] = useState<number | null>(null);
+  const measureKeyLines = useCallback(() => {
+    setKeyLines(wrapAnywhereAndCountLines(keyHandleRef.current));
+  }, []);
+  const setKeyInputRef = useCallback(
+    (handle: EditingTextInputHandle | null) => {
+      keyHandleRef.current = handle;
+      keyInputRef(handle);
+      if (handle) measureKeyLines();
+    },
+    [keyInputRef, measureKeyLines],
+  );
+  const handleKeyChange = useCallback(
+    (text: string) => {
+      // 多行框里回车或粘贴会带进换行，key 里不该有，当场去掉。
+      const apiKey = text.replace(/[\r\n]/g, "");
+      if (apiKey !== text) keyHandleRef.current?.replaceText(apiKey);
+      model.setApiKey(apiKey);
+      measureKeyLines();
+    },
+    [measureKeyLines, model],
+  );
+  return (
+    <Field
+      label={
+        state.isKeyOptional
+          ? t("settings.apiEndpoints.form.apiKeyOptionalLabel")
+          : t("settings.apiEndpoints.form.apiKey")
+      }
+      error={
+        state.revealError ??
+        (state.keyRejected ? t("settings.apiEndpoints.form.keyRejected") : null)
+      }
+      testID="api-endpoint-connection-api-key-field"
+    >
+      <View style={[styles.inlineRow, state.isKeyVisible ? styles.inlineRowTop : null]}>
+        <View style={styles.flex} onLayout={measureKeyLines}>
+          {/* 单行与多行在网页上是不同元素，换的时候整个重挂，框里的字按当前值重新带进去。 */}
+          <FormTextInput
+            key={state.isKeyVisible ? "shown" : "hidden"}
+            ref={setKeyInputRef}
+            initialValue={state.keyBoxValue}
+            resetKey={state.keyBoxGeneration}
+            onChangeText={handleKeyChange}
+            placeholder={placeholder}
+            secureTextEntry={!state.isKeyVisible}
+            multiline={state.isKeyVisible}
+            numberOfLines={state.isKeyVisible ? (keyLines ?? undefined) : undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            invalid={state.keyRejected || state.revealError !== null}
+            size={size}
+            testID="api-endpoint-connection-api-key"
+          />
+        </View>
+        {state.canShowKey ? (
+          <View style={trailingStyle} onLayout={onTrailingLayout}>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleToggleKey}
+              loading={state.isRevealingKey}
+              testID="api-endpoint-connection-show-key"
+            >
+              {state.isKeyVisible
+                ? t("settings.apiEndpoints.form.hideKey")
+                : t("settings.apiEndpoints.form.showKey")}
+            </Button>
+          </View>
+        ) : null}
+      </View>
+    </Field>
+  );
 }
 
 /** 「自定义」的地址框与「自动检测」：检测三种格式各自的地址填到下面。 */
@@ -1818,6 +1877,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+  },
+  inlineRowTop: {
+    alignItems: "flex-start",
   },
   wrapRow: {
     flexDirection: "row",

@@ -176,6 +176,19 @@ A subagent call is `isDispatchToolCall` in `tool-calls/detail-level/dispatch/mod
 - A horizontally scrolling tab strip fades only on the side that hides content (`components/ui/horizontal-scroll-fade.tsx`, web variant `.web.tsx`).
 - Sheets at compact width size to their content (import-link default / replace / refused), capped at 90%.
 - Screenshots for review are saved lossless; take them after the sheet has settled, and never press Escape first (it leaves a focus ring that isn't there for the user).
+- A revealed API key is a multiline box that grows with the key and wraps at any character; hidden, it is the single-line masked box (`ApiKeyField` in `api-endpoints/connection-form-sheet.tsx`, ticket 03 of endpoint-management-ux-followups).
+
+## A `FormTextInput` that switches to multiline and grows with its text
+
+Reference: `ApiKeyField` in `api-endpoints/connection-form-sheet.tsx`, measured by `api-endpoints/text-box-lines.web.ts` (native stub `text-box-lines.ts`).
+
+- **Grow by lines, not height.** `FormTextInput` splits the caller's `style` into a frame part and a text part. `height` lands on the frame, so the textarea inside stays one line and scrolls. Pass `numberOfLines` (react-native-web turns it into the textarea's `rows`).
+- **Measure it yourself on web.** A web textarea does not grow with its text, and its `scrollHeight` never drops below its current height, so it does not shrink after a delete either. Set `rows` to 1, read `scrollHeight`, divide by the computed line height, and put `rows` back. Do this on mount, on every change, and on the wrapper's `onLayout` (the width changed). react-native-web's `onContentSizeChange` only fires when the content grows. On native a multiline `TextInput` grows by itself: return `null` and leave `numberOfLines` unset. On Android it fixes the line count.
+- **Remount when single-line ↔ multiline changes.** On web these are different elements (`input` / `textarea`). `EditingTextInput` keeps the `initialValue` from its first mount as `defaultValue`, so the new element comes up with that first value and the user's typing disappears. Give the `FormTextInput` a `key` that follows the mode, and keep `initialValue` on the current text.
+- **A value that must be one line strips line breaks.** In a multiline box, Enter or a paste adds `\n`. Remove it in `onChangeText` and `replaceText` the box, or the model saves a key with a newline in it.
+- **Long tokens wrap at any character.** A browser breaks a key without spaces at its hyphens, and a `-` at the end of a line looks like a wrap mark. Set `word-break: break-all` on the textarea. It is not a text style key, so it is set on the DOM node in the web measure helper.
+
+Test: the browser test "a long key shown in a narrow window can be read in full, and Hide masks it again" (`e2e/browser/settings-api-endpoints.spec.ts`). At 390 it asserts no horizontal or vertical overflow, that the box ends before Show, that a typed key survives Show, that the box shrinks after a delete, and that Enter adds nothing.
 
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
