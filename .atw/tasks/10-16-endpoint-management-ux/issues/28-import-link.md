@@ -8,7 +8,7 @@
 
 **Blocked by:** 26
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 单元测试：解析与每条拒收规则。
 - [ ] 桌面端链接处理测试：`paseo://import` 交给窗口、不影响已有的 Agent 链接。
