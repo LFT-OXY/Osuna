@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-10-21",
   "completedAt": null,
-  "branch": "start-magpie-osuna-gaps-subtask-3-api-usability",
+  "branch": "endpoint-ux-followups",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
@@ -23,6 +23,6 @@
   "relatedFiles": [],
   "notes": "",
   "meta": {
-    "implementation_base_sha": "2be942ad803aa07e18f88a9ac13a34db04268153"
+    "implementation_base_sha": "e4b629aed7a2a1c3aa73019320b92878bb3ee2bf"
   }
 }
