@@ -12,7 +12,7 @@
   "assignee": "oxy",
   "createdAt": "2026-10-21",
   "completedAt": null,
-  "branch": "endpoint-ux-followups",
+  "branch": "greet-user-await-task",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,

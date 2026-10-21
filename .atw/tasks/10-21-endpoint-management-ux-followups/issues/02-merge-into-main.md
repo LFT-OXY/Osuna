@@ -14,4 +14,4 @@
 
 ## Comments
 
-- 2026-10-21：用户本人在 GitHub 上以 merge commit 合并 PR #25（合并提交 e4b629a），本地 main 已同步到 e4b629a。用户同意：后续工单在从新 main 开的分支 `endpoint-ux-followups`（worktree `~/.paseo/worktrees/0x9u2djy/endpoint-ux-followups`）上做，没进 main 的工单 01 记录已带过来；新分支就绪后删旧分支与旧 worktree（jealous-bedbug），远端分支由用户在 GitHub 上删。
+- 2026-10-21：用户本人在 GitHub 上以 merge commit 合并 PR #25（合并提交 e4b629a），本地 main 已同步到 e4b629a。用户同意：后续工单在从新 main 开的分支 `greet-user-await-task`（worktree `~/.paseo/worktrees/0x9u2djy/boring-dugong`，Osuna 开 worktree 时按会话标题自动起的名，原定名 `endpoint-ux-followups` 没用上）上做，没进 main 的工单 01 记录已带过来；新分支就绪后删旧分支与旧 worktree（jealous-bedbug），远端分支由用户在 GitHub 上删。
