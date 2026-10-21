@@ -9,7 +9,7 @@
 
 **Blocked by:** 06, 22
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端（临时 HOME）：五种来源各放一份假配置，扫描结果与状态判定正确；扫描前后这些文件的修改时间不变。
 - [ ] 端到端：Osuna 接管 Claude Code 时导入读到的是原值，不把中转站自己导进来。
