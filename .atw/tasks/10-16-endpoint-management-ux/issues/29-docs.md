@@ -13,7 +13,7 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 文档与最终行为一致，`npm run format:files` 只格式化改到的文档。
+- [x] 文档与最终行为一致，`npm run format:files` 只格式化改到的文档。
 
 参考：prd.md Acceptance Criteria 的「文档」一项；`CLAUDE.md`「Writing docs」「Doc voice」。
 

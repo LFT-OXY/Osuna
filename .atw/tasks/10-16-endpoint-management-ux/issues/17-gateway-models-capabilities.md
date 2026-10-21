@@ -8,9 +8,9 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：中转站 `/v1/models` 每条带上述字段，手改的值生效；已禁用的模型不在列表里（16 号做完后补这一条断言，或在 16 号里补）。
-- [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：中转站 `/v1/models` 每条带上述字段，手改的值生效；已禁用的模型不在列表里（16 号做完后补这一条断言，或在 16 号里补）。
+- [x] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 25 条，用户故事 60；magpie `internal/gateway/gateway.go:827-865`。
 

@@ -10,14 +10,14 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：假 Bedrock 上游收到的认证头按格式正确；拉模型返回内置清单、不发清单请求。
-- [ ] 端到端：假 Azure 上游收到 `api-key` 头；部署列表成功时用它、失败时退到 `/v1/models`。
-- [ ] 浏览器测试：两种模板的添加成功与失败。
-- [ ] UI: 添加窗口 / Bedrock 选区域 / 窄窗口 390 — 区域选择可见；Azure 地址框说明要填自己的资源地址。
-- [ ] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
-- [ ] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
-- [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：假 Bedrock 上游收到的认证头按格式正确；拉模型返回内置清单、不发清单请求。
+- [x] 端到端：假 Azure 上游收到 `api-key` 头；部署列表成功时用它、失败时退到 `/v1/models`。
+- [x] 浏览器测试：两种模板的添加成功与失败。
+- [x] UI: 添加窗口 / Bedrock 选区域 / 窄窗口 390 — 区域选择可见；Azure 地址框说明要填自己的资源地址。
+- [x] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
+- [x] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
+- [x] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 7 条，用户故事 10、11；magpie `internal/provider/presets.go:368-400`、`azure.go`、`test.go:452-477`、`account.go:160-172`。
 

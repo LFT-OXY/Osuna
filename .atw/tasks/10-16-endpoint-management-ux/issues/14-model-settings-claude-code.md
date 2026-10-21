@@ -9,10 +9,10 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端（临时 `CLAUDE_CONFIG_DIR`）：手改的四项写进 Claude Code 设置；关掉「使用第三方接口」后恢复原值。
-- [ ] 端到端：不手改时写进的值与改动前对照，差异只来自照 magpie 的合并，并在实现记录里列出。
-- [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端（临时 `CLAUDE_CONFIG_DIR`）：手改的四项写进 Claude Code 设置；关掉「使用第三方接口」后恢复原值。
+- [x] 端到端：不手改时写进的值与改动前对照，差异只来自照 magpie 的合并，并在实现记录里列出。
+- [x] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 23 条，用户故事 58；ADR 0004；magpie `internal/agent/claude.go:249-355`。
 

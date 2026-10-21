@@ -10,15 +10,15 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 端到端：假 Claude Code 请求经过中转站后样本落盘，敏感头不在样本里；按 Claude Code 测时假上游收到样本里的头。
-- [ ] 端到端：没有 Claude Code 样本时拒绝并给原因；官方地址的接口不提供按 Claude Code 测。
-- [ ] 端到端：没有 Codex 样本时用 Codex 请求头那一套。
-- [ ] 浏览器测试：两种测法的成功、失败与被拒。
-- [ ] UI: 接口详情页 / 没有 Claude Code 样本 / 窄窗口 390 — 原因说明完整可读。
-- [ ] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
-- [ ] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
-- [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 端到端：假 Claude Code 请求经过中转站后样本落盘，敏感头不在样本里；按 Claude Code 测时假上游收到样本里的头。
+- [x] 端到端：没有 Claude Code 样本时拒绝并给原因；官方地址的接口不提供按 Claude Code 测。
+- [x] 端到端：没有 Codex 样本时用 Codex 请求头那一套。
+- [x] 浏览器测试：两种测法的成功、失败与被拒。
+- [x] UI: 接口详情页 / 没有 Claude Code 样本 / 窄窗口 390 — 原因说明完整可读。
+- [x] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
+- [x] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
+- [x] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 5、30 条，用户故事 65–67；decisions.md R2-Q5、R3-Q1；01 号的新 ADR；magpie `internal/provider/test_as.go:14-126`。
 

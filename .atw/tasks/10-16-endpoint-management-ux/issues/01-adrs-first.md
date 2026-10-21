@@ -11,8 +11,8 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 三篇 ADR 写好，措辞与 prd 第 3、30、35、44 条一致，按 `CLAUDE.md`「Doc voice」写。
-- [ ] `npm run format:files` 只格式化改到的文档。
+- [x] 三篇 ADR 写好，措辞与 prd 第 3、30、35、44 条一致，按 `CLAUDE.md`「Doc voice」写。
+- [x] `npm run format:files` 只格式化改到的文档。
 
 参考：prd.md 第 3、30、35、44 条；decisions.md R1-Q4、R3-Q1、R3-Q2；ADR 0002、0007、0008。
 

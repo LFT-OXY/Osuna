@@ -10,13 +10,13 @@
 **Status:** ready-for-agent
 **Impl:** done
 
-- [ ] 单元测试：magpie 的各类 curl 写法（含 PowerShell 的 `\"`、`^` 与反引号续行、各种占位符）解析结果一致。
-- [ ] 浏览器测试：在地址框、key 框各粘贴一次；模板模式只填 key；四条提示各出现一次。
-- [ ] UI: 添加窗口 / 粘贴 curl 后 / 窄窗口 390 — 提示条完整可读，填好的字段可见。
-- [ ] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
-- [ ] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
-- [ ] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
-- [ ] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
+- [x] 单元测试：magpie 的各类 curl 写法（含 PowerShell 的 `\"`、`^` 与反引号续行、各种占位符）解析结果一致。
+- [x] 浏览器测试：在地址框、key 框各粘贴一次；模板模式只填 key；四条提示各出现一次。
+- [x] UI: 添加窗口 / 粘贴 curl 后 / 窄窗口 390 — 提示条完整可读，填好的字段可见。
+- [x] 新文案 9 种语言齐全，中文是真翻译，用词与 `docs/glossary.md` 一致，资源测试通过。
+- [x] 截图用无头浏览器在临时目录里拍，不碰真实的 `~/.claude`、`~/.codex`（开工前确认用户已同意这种拍法）。
+- [x] 新功能只在主机声明 `apiEndpointManagement` 时出现；协议新字段都可选，协议兼容测试通过。
+- [x] `npm run typecheck`、`npm run lint` 通过，改到的测试文件本机通过。
 
 参考：prd.md 第 10 条，用户故事 12–16；decisions.md R1-Q2 与「照 magpie 直接记下的细则」的 curl 一条；magpie app `curlOf`（app:14433-14530）。
 
