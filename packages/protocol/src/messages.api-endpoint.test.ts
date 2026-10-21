@@ -1823,4 +1823,43 @@ describe("provider.api_endpoint.test_models", () => {
       expect(SessionOutboundMessageSchema.parse(imported)).toEqual(imported);
     }
   });
+  it("parses import_discovery and import_ignore, with a source the client may not know", () => {
+    const discovery = {
+      type: "provider.api_endpoint.import_discovery.request" as const,
+      requestId: "req-id",
+    };
+    expect(SessionInboundMessageSchema.parse(discovery)).toEqual(discovery);
+    for (const payload of [
+      {
+        requestId: "req-id",
+        candidates: [
+          { fingerprint: "f1", sourceId: "cc-switch", source: "CC Switch" },
+          { fingerprint: "f2", sourceId: "some-new-app", source: "Some New App" },
+        ],
+        error: null,
+      },
+      {
+        requestId: "req-id",
+        candidates: [],
+        error: { code: "unparsable", message: "endpoints.json could not be parsed" },
+      },
+    ]) {
+      const response = {
+        type: "provider.api_endpoint.import_discovery.response" as const,
+        payload,
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    const ignore = {
+      type: "provider.api_endpoint.import_ignore.request" as const,
+      requestId: "req-ig",
+      fingerprints: ["f1", "f2"],
+    };
+    expect(SessionInboundMessageSchema.parse(ignore)).toEqual(ignore);
+    const ignored = {
+      type: "provider.api_endpoint.import_ignore.response" as const,
+      payload: { requestId: "req-ig", error: null },
+    };
+    expect(SessionOutboundMessageSchema.parse(ignored)).toEqual(ignored);
+  });
 });

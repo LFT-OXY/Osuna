@@ -154,6 +154,7 @@ async function start(input: {
   keys: Record<string, string>;
   almaName?: string;
   dataFileSystem?: DataFileSystem;
+  now?: () => Date;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-import-"));
   tempRoots.push(root);
@@ -166,6 +167,17 @@ async function start(input: {
     JSON.stringify({ endpoints: input.endpoints, agents: {} }),
   );
   await writeFile(path.join(endpointsDir, "keys.json"), JSON.stringify({ keys: input.keys }));
+  return startOn({ root, sources, dataFileSystem: input.dataFileSystem, now: input.now });
+}
+
+/** 在已有的临时目录上起 daemon：重启后接着用同一份 PASEO_HOME 与来源。 */
+async function startOn(input: {
+  root: string;
+  sources: Sources;
+  dataFileSystem?: DataFileSystem;
+  now?: () => Date;
+}) {
+  const { root, sources } = input;
   const daemon = await createTestPaseoDaemon({
     paseoHomeRoot: root,
     cleanup: false,
@@ -181,6 +193,7 @@ async function start(input: {
         openCodeAuth: sources.openCodeAuth,
       },
       ...(input.dataFileSystem === undefined ? {} : { dataFileSystem: input.dataFileSystem }),
+      ...(input.now === undefined ? {} : { now: input.now }),
     },
   });
   daemons.push(daemon);
@@ -513,5 +526,151 @@ describe("import from other apps", () => {
       { fingerprint: "from-before-a-restart", action: "add" },
     ]);
     expect(gone).toMatchObject({ imported: [], failed: null, error: { code: "import_gone" } });
+  });
+});
+
+describe("the prompt on the endpoints page (ticket 27)", () => {
+  async function addCcSwitchRelay(sources: Sources, name: string): Promise<void> {
+    const db = new DatabaseSync(sources.ccSwitchDb);
+    db.prepare("INSERT INTO providers VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)").run(
+      `added-${name}`,
+      "claude",
+      name,
+      JSON.stringify({
+        env: {
+          ANTHROPIC_BASE_URL: `https://${name.toLowerCase()}.example/api`,
+          ANTHROPIC_AUTH_TOKEN: `sk-${name.toLowerCase()}-7777`,
+        },
+      }),
+      9,
+      9,
+    );
+    db.close();
+  }
+
+  function sourcesOf(discovery: Awaited<ReturnType<DaemonClient["apiEndpointImportDiscovery"]>>) {
+    return discovery.candidates.map((candidate) => [candidate.sourceId, candidate.source]);
+  }
+
+  test("offers what the dialog would preselect, never reads OpenCode, and reads the files at most once a minute", async () => {
+    let clock = new Date("2026-10-21T08:00:00.000Z");
+    const { client, sources } = await start({
+      endpoints: [
+        storedEndpoint({ id: "ep_hand", name: "Hand", url: "https://hand.example" }),
+        storedEndpoint({
+          id: "ep_only_taken",
+          name: "My Relay",
+          url: "https://elsewhere.example",
+        }),
+      ],
+      keys: { ep_hand: "sk-hand-2222", ep_only_taken: "sk-elsewhere" },
+      now: () => clock,
+    });
+    const first = await client.apiEndpointImportDiscovery();
+    expect(first.error).toBeNull();
+    // CC Relay 是新的；Alma 那条在 Alma 里关着、Claude Code 那条已添加、Codex 那条只是名称撞上，都要用户自己选；
+    // OpenCode 不读。
+    expect(sourcesOf(first)).toEqual([["cc-switch", "CC Switch"]]);
+    const scan = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(first.candidates[0]?.fingerprint).toBe(itemsOf(scan, "cc-switch")[0]?.fingerprint);
+    expect(JSON.stringify(first)).not.toContain("sk-cc-relay-1111");
+
+    await addCcSwitchRelay(sources, "Fresh");
+    clock = new Date("2026-10-21T08:00:59.000Z");
+    // 一分钟之内：不重读，新加的那条还没出现。
+    expect(sourcesOf(await client.apiEndpointImportDiscovery())).toHaveLength(1);
+    clock = new Date("2026-10-21T08:01:01.000Z");
+    expect(sourcesOf(await client.apiEndpointImportDiscovery())).toEqual([
+      ["cc-switch", "CC Switch"],
+      ["cc-switch", "CC Switch"],
+    ]);
+  });
+
+  test("an import makes the next prompt read again, even within the minute", async () => {
+    const clock = new Date("2026-10-21T08:00:00.000Z");
+    const { client, sources } = await start({ endpoints: [], keys: {}, now: () => clock });
+    const first = await client.apiEndpointImportDiscovery();
+    expect(sourcesOf(first)).toEqual([
+      ["cc-switch", "CC Switch"],
+      ["claude-code", "Claude Code"],
+      ["codex", "Codex"],
+    ]);
+    const ccRelay = first.candidates[0];
+    if (!ccRelay) throw new Error("Expected CC Relay");
+    await addCcSwitchRelay(sources, "Fresh");
+    const imported = await client.apiEndpointImport([
+      { fingerprint: ccRelay.fingerprint, action: "add" },
+    ]);
+    expect(imported.error).toBeNull();
+    expect(sourcesOf(await client.apiEndpointImportDiscovery())).toEqual([
+      ["cc-switch", "CC Switch"],
+      ["claude-code", "Claude Code"],
+      ["codex", "Codex"],
+    ]);
+  });
+
+  test("the import dialog's own scan reads the files, and the prompt goes by what it read", async () => {
+    const clock = new Date("2026-10-21T08:00:00.000Z");
+    const { client, sources } = await start({ endpoints: [], keys: {}, now: () => clock });
+    expect((await client.apiEndpointImportDiscovery()).candidates).toHaveLength(3);
+    await addCcSwitchRelay(sources, "Fresh");
+    await client.apiEndpointImportScan({ includeOpenCode: true });
+    const after = await client.apiEndpointImportDiscovery();
+    expect(after.candidates).toHaveLength(4);
+    expect(after.candidates.map((candidate) => candidate.sourceId)).not.toContain("opencode");
+  });
+
+  test("ignoring hides that batch, across a restart, until something new comes", async () => {
+    let clock = new Date("2026-10-21T08:00:00.000Z");
+    const { client, daemon, sources } = await start({
+      endpoints: [],
+      keys: {},
+      now: () => clock,
+    });
+    const shown = await client.apiEndpointImportDiscovery();
+    expect(shown.candidates).toHaveLength(3);
+    const ignored = await client.apiEndpointImportIgnore(
+      shown.candidates.map((candidate) => candidate.fingerprint),
+    );
+    expect(ignored.error).toBeNull();
+    expect((await client.apiEndpointImportDiscovery()).candidates).toEqual([]);
+
+    // 记在主机上，不存 key 原文。
+    const root = path.dirname(path.dirname(sources.ccSwitchDb));
+    const endpointsDir = path.join(root, ".paseo", "api-endpoints");
+    const stored = await readFile(path.join(endpointsDir, "endpoints.json"), "utf8");
+    expect(JSON.parse(stored).ignoredImports).toHaveLength(3);
+    for (const key of ["sk-cc-relay-1111", "sk-hand-2222", "sk-codex-3333"]) {
+      expect(stored).not.toContain(key);
+    }
+    // 指纹的密钥只有 daemon 能读。
+    const secret = await stat(path.join(endpointsDir, "import-fingerprint-key.json"));
+    expect(secret.mode & 0o077).toBe(0);
+
+    // 重启之后照样不提示。
+    clients.splice(clients.indexOf(client), 1);
+    await client.close();
+    daemons.splice(daemons.indexOf(daemon), 1);
+    await daemon.close();
+    const again = await startOn({ root, sources, now: () => clock });
+    expect((await again.client.apiEndpointImportDiscovery()).candidates).toEqual([]);
+
+    // 来了一条新的：只提示它。
+    await addCcSwitchRelay(sources, "Fresh");
+    clock = new Date("2026-10-21T08:02:00.000Z");
+    const fresh = await again.client.apiEndpointImportDiscovery();
+    expect(sourcesOf(fresh)).toEqual([["cc-switch", "CC Switch"]]);
+    // 改了 key 的也算新的（magpie 的指纹含 key）。
+    await writeFile(
+      sources.claudeSettings,
+      JSON.stringify({
+        env: { ANTHROPIC_BASE_URL: "https://hand.example", ANTHROPIC_AUTH_TOKEN: "sk-hand-9999" },
+      }),
+    );
+    clock = new Date("2026-10-21T08:04:00.000Z");
+    expect(sourcesOf(await again.client.apiEndpointImportDiscovery())).toEqual([
+      ["cc-switch", "CC Switch"],
+      ["claude-code", "Claude Code"],
+    ]);
   });
 });

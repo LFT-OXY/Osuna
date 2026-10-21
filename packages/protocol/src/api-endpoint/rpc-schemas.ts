@@ -1399,6 +1399,60 @@ export const ApiEndpointImportScanResponseSchema = z.object({
 });
 export type ApiEndpointImportScanResponse = z.infer<typeof ApiEndpointImportScanResponseSchema>;
 
+/**
+ * 「第三方接口」页打开时问有没有可以导入的（发现提示）：不含 OpenCode，daemon 一分钟内只真读一次别的软件的文件。
+ * 只回默认会选上、又没被忽略的那几条的指纹与来源软件（照 magpie importapps/discovery），不带地址与 key。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportDiscoveryRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_discovery.request"),
+  requestId: z.string(),
+});
+export type ApiEndpointImportDiscoveryRequest = z.infer<
+  typeof ApiEndpointImportDiscoveryRequestSchema
+>;
+
+export const ApiEndpointImportCandidateSchema = z.object({
+  // 和导入窗口里同一条的指纹相同：「查看」据此只选上提示里的那几条。
+  fingerprint: z.string(),
+  // 来源软件的 id 与名称（CC Switch、Codex……）。
+  sourceId: z.string(),
+  source: z.string(),
+});
+export type ApiEndpointImportCandidate = z.infer<typeof ApiEndpointImportCandidateSchema>;
+
+export const ApiEndpointImportDiscoveryResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_discovery.response"),
+  payload: z.object({
+    requestId: z.string(),
+    candidates: z.array(ApiEndpointImportCandidateSchema),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportDiscoveryResponse = z.infer<
+  typeof ApiEndpointImportDiscoveryResponseSchema
+>;
+
+/**
+ * 「忽略」发现提示里的这几条：指纹记进主机级的已忽略记录（不存 key 原文），同一批不再提示，有新的或改过的再提示。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportIgnoreRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_ignore.request"),
+  requestId: z.string(),
+  fingerprints: z.array(z.string()),
+});
+export type ApiEndpointImportIgnoreRequest = z.infer<typeof ApiEndpointImportIgnoreRequestSchema>;
+
+export const ApiEndpointImportIgnoreResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_ignore.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportIgnoreResponse = z.infer<typeof ApiEndpointImportIgnoreResponseSchema>;
+
 /** 导入的一条怎么进来：add（新增一家）、replace（替换名称撞上的那家，保留它的 id 与顺序位置）、rename（改名后新增，name 必填）。 */
 export const API_ENDPOINT_IMPORT_ACTIONS = ["add", "replace", "rename"] as const;
 export type ApiEndpointImportAction = (typeof API_ENDPOINT_IMPORT_ACTIONS)[number];

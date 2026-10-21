@@ -1,4 +1,5 @@
 import type { CliTestClient } from "./test-as.js";
+import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import type pino from "pino";
@@ -44,6 +45,7 @@ import { ModelFactsSchema } from "./model-facts.js";
  * - cli-rewrites.json：每个 Agent 最近一次改写 CLI 配置（含「重新应用」）的时刻，这之前 CLI 的使用不算「被绕过」（cli-bypass.ts）；
  * - cli-start-reads.json：每个 Agent 启动时读、Osuna 替它写的那部分的摘要与它变成这样的时刻，这之前启动的副本要重开（reopen-hints.ts）；
  * - gateway-seen.json：中转站最近一次收到每个 Agent 请求的时刻，重启后还在（cli-bypass.ts 的 GatewaySightings 读写）；
+ * - import-fingerprint-key.json：导入指纹的 HMAC 密钥，第一次扫描时随机取，重启后指纹不变、已忽略的发现照样认得（import-apps.ts）；
  * - icons/：「自定义」加的接口自选的图片，按内容起名，没有接口用就删（endpoint-icons.ts）；
  * - backups/：首次改写前的完整副本，只供手动找回。
  * endpoints.json、keys.json、gateway-tokens.json 写坏时用上一份好的 .bak（last-good.ts）；
@@ -139,6 +141,8 @@ const EndpointsFileSchema = z.object({
   disabledModels: z.array(z.string()).optional(),
   // 接口名显示方式（clash、never；always 不存）；没有即一直显示。
   endpointNameDisplay: z.string().optional(),
+  // 发现提示里点了「忽略」的那几条的指纹（HMAC，不含 key 原文）；没有即一条都没忽略。
+  ignoredImports: z.array(z.string()).optional(),
 });
 
 /** v0.15.0 及以前：接口按提供方各存一份，每个提供方一家「当前启用」。读时换算，写时升级。 */
@@ -180,6 +184,7 @@ export interface ApiEndpointState {
   disabledModels?: string[];
   // 接口名显示方式；always 不存。
   endpointNameDisplay?: Exclude<ApiEndpointNameDisplay, "always">;
+  ignoredImports?: string[];
 }
 
 /** 文件里的接口名显示方式：没有或认不出的当 always，always 不放进状态。 */
@@ -208,6 +213,9 @@ export class ApiEndpointsFileUnparsableError extends Error {
 }
 
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
+
+const IMPORT_FINGERPRINT_KEY_FILE = "import-fingerprint-key.json";
+const ImportFingerprintKeyFileSchema = z.object({ secret: z.string().regex(/^[0-9a-f]{64}$/) });
 type KeysFile = z.infer<typeof KeysFileSchema>;
 
 // 上次关掉开关时的默认模型与关掉后 CLI 配置里留下的模型；再打开时 CLI 的模型没变过就放回（default-model-pick.ts 的 again）。
@@ -355,7 +363,8 @@ export class ApiEndpointStore {
       return { endpoints: [], agents: { claude: OFFICIAL_AGENT, codex: OFFICIAL_AGENT } };
     }
     if (content.kind === "legacy") return upgradeLegacyFile(content.file);
-    const { agents, longConversations, disabledModels, endpointNameDisplay } = content.file;
+    const { agents, longConversations, disabledModels, endpointNameDisplay, ignoredImports } =
+      content.file;
     return {
       endpoints: content.file.endpoints,
       agents: {
@@ -365,12 +374,28 @@ export class ApiEndpointStore {
       ...(longConversations === undefined ? {} : { longConversations }),
       ...(disabledModels === undefined ? {} : { disabledModels }),
       ...storedNameDisplay(endpointNameDisplay),
+      ...(ignoredImports === undefined ? {} : { ignoredImports }),
     };
   }
 
   /** 每次都整份写新格式；旧格式的文件第一次写入后即升级。 */
   writeState(state: ApiEndpointState): void {
     this.endpointsFile.write(EndpointsFileSchema.parse(state));
+  }
+
+  /** 导入指纹的 HMAC 密钥；还没有、或读不懂时随机取一把存下（0600），之前忽略的发现随之不再认得。 */
+  readImportFingerprintSecret(): Buffer {
+    let raw: unknown = null;
+    try {
+      raw = this.readJson(IMPORT_FINGERPRINT_KEY_FILE);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+    const parsed = ImportFingerprintKeyFileSchema.safeParse(raw);
+    if (parsed.success) return Buffer.from(parsed.data.secret, "hex");
+    const secret = randomBytes(32);
+    this.writeJson(IMPORT_FINGERPRINT_KEY_FILE, { secret: secret.toString("hex") });
+    return secret;
   }
 
   setApiKey(id: string, apiKey: string): void {

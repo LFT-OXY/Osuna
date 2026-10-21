@@ -45,6 +45,7 @@ import {
   type ApiEndpointImportItem,
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
+  type ApiEndpointImportCandidate,
   API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -321,12 +322,15 @@ import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-sta
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
+  isOfferedImport,
   readImportSources,
   sameAccount,
   settleImports,
   type FoundEndpoint,
+  type HeldEndpoint,
   type ImportReadContext,
   type ImportSourcePaths,
+  type ImportSourceRead,
   type SettledEntry,
 } from "./import-apps.js";
 import {
@@ -666,6 +670,14 @@ export type VendorStatusResult = Omit<
   "requestId" | "error"
 >;
 
+// 发现提示一分钟内只真读一次别的软件的文件（magpie discoverLocalProviders 的 60000）。
+const DISCOVERY_READ_INTERVAL_MS = 60_000;
+
+interface DiscoveryRead {
+  at: number;
+  sources: ImportSourceRead[];
+}
+
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
 type ApiEndpointHealthCode = "modified_externally" | "config_unparsable" | "codex_profile_override";
 
@@ -841,8 +853,10 @@ export class ApiEndpointService {
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
   private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
-  // 导入指纹的 HMAC 密钥：每次启动随机取，只在内存里（import-apps.ts）。
-  private readonly importFingerprintSecret = randomBytes(32);
+  // 导入指纹的 HMAC 密钥：存在 api-endpoints/ 下（0600），第一次扫描时读出（import-apps.ts）。
+  private importSecret: Buffer | null = null;
+  // 发现提示上次真读别的软件的结果（不含 OpenCode）与时刻：一分钟内照用，导入之后丢掉。
+  private discoveryRead: DiscoveryRead | null = null;
   private readonly isAutoUpdate: () => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
@@ -3262,7 +3276,13 @@ export class ApiEndpointService {
    * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
    */
   scanImports(input: { includeOpenCode: boolean }): ApiEndpointImportSource[] {
-    return this.settledImports(input).map(({ source, entries }) => ({
+    const settled = this.settledImports(input);
+    // 刚读过的比发现提示存着的新：提示照它算（不含 OpenCode），一分钟从这一刻重新算。
+    this.discoveryRead = {
+      at: this.now().getTime(),
+      sources: settled.map(({ source }) => source).filter((source) => source.id !== "opencode"),
+    };
+    return settled.map(({ source, entries }) => ({
       id: source.id,
       name: source.name,
       path: this.homeRelative(source.path),
@@ -3279,6 +3299,8 @@ export class ApiEndpointService {
    */
   async importFromApps(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
     const outcome = await this.exclusiveFollowing(() => this.importPicked(picks));
+    // 导入之后的发现提示重新读一遍（magpie 导入后 discoverLocalProviders(true)）。
+    this.discoveryRead = null;
     await Promise.all(
       outcome.imported.map(({ endpointId }) =>
         this.refreshCatalog({ endpointId, signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS) }),
@@ -3364,8 +3386,58 @@ export class ApiEndpointService {
     return { endpointId: endpoint.id, name: endpoint.name };
   }
 
-  private settledImports(input: { includeOpenCode: boolean }) {
-    const held = this.readState().endpoints.map((endpoint) => ({
+  /**
+   * 发现提示（magpie importapps/discovery）：导入窗口打开时会默认选上、又没被忽略的那几条。不含 OpenCode；
+   * 别的软件的文件一分钟内只真读一次，对照已有的接口每次都重做。
+   */
+  discoverImports(): ApiEndpointImportCandidate[] {
+    const state = this.readState();
+    const ignored = new Set(state.ignoredImports ?? []);
+    const settled = settleImports({
+      sources: this.discoverySources(),
+      held: this.heldForImport(state),
+      fingerprintSecret: this.importFingerprintSecret(),
+    });
+    const candidates: ApiEndpointImportCandidate[] = [];
+    for (const { source, entries } of settled) {
+      for (const entry of entries) {
+        if (!isOfferedImport(entry) || ignored.has(entry.fingerprint)) continue;
+        candidates.push({
+          fingerprint: entry.fingerprint,
+          sourceId: source.id,
+          source: source.name,
+        });
+      }
+    }
+    return candidates;
+  }
+
+  /** 「忽略」：这几条的指纹并进主机的已忽略记录（magpie 记在 localStorage，这里记在主机上、跨客户端）。 */
+  ignoreImports(input: { fingerprints: readonly string[] }): Promise<void> {
+    return this.exclusiveFollowing(async () => {
+      const state = this.readState();
+      const ignoredImports = [...new Set([...(state.ignoredImports ?? []), ...input.fingerprints])];
+      await this.commit(state, { ...state, ignoredImports });
+    });
+  }
+
+  private discoverySources(): ImportSourceRead[] {
+    const at = this.now().getTime();
+    const cached = this.discoveryRead;
+    const isFresh = cached !== null && at - cached.at < DISCOVERY_READ_INTERVAL_MS;
+    if (isFresh) return cached.sources;
+    const sources = readImportSources({ context: this.importContext(), includeOpenCode: false });
+    this.discoveryRead = { at, sources };
+    return sources;
+  }
+
+  private importFingerprintSecret(): Buffer {
+    this.importSecret ??= this.store.readImportFingerprintSecret();
+    return this.importSecret;
+  }
+
+  private heldForImport(state: ApiEndpointState): HeldEndpoint[] {
+    return state.endpoints.map((endpoint) => ({
       id: endpoint.id,
       name: endpoint.name,
       slug: endpoint.slug,
@@ -3373,11 +3445,18 @@ export class ApiEndpointService {
       headers: endpoint.headers,
       key: this.store.getApiKey(endpoint.id),
     }));
+  }
+
+  private settledImports(input: { includeOpenCode: boolean }) {
     const sources = readImportSources({
       context: this.importContext(),
       includeOpenCode: input.includeOpenCode,
     });
-    return settleImports({ sources, held, fingerprintSecret: this.importFingerprintSecret });
+    return settleImports({
+      sources,
+      held: this.heldForImport(this.readState()),
+      fingerprintSecret: this.importFingerprintSecret(),
+    });
   }
 
   private importContext(): ImportReadContext {

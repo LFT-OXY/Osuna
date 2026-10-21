@@ -6,6 +6,7 @@ import type {
   ApiEndpointRequestExtras,
   ApiEndpointVendorStatusResponse,
   ApiEndpointImportScanResponse,
+  ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
@@ -44,6 +45,8 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.vendor_status.request"
       | "provider.api_endpoint.import_scan.request"
       | "provider.api_endpoint.import.request"
+      | "provider.api_endpoint.import_discovery.request"
+      | "provider.api_endpoint.import_ignore.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
       | "provider.api_endpoint.fetch_site_icon.request"
@@ -75,6 +78,8 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.vendor_status.request": true,
   "provider.api_endpoint.import_scan.request": true,
   "provider.api_endpoint.import.request": true,
+  "provider.api_endpoint.import_discovery.request": true,
+  "provider.api_endpoint.import_ignore.request": true,
   "provider.api_endpoint.list_templates.request": true,
   "provider.api_endpoint.store_icon.request": true,
   "provider.api_endpoint.fetch_site_icon.request": true,
@@ -164,6 +169,8 @@ export class ApiEndpointSession {
         type:
           | "provider.api_endpoint.import_scan.request"
           | "provider.api_endpoint.import.request"
+          | "provider.api_endpoint.import_discovery.request"
+          | "provider.api_endpoint.import_ignore.request"
           | "provider.api_endpoint.list_templates.request"
           | "provider.api_endpoint.store_icon.request"
           | "provider.api_endpoint.read_icon.request"
@@ -182,6 +189,10 @@ export class ApiEndpointSession {
         return this.handleImportScan(request);
       case "provider.api_endpoint.import.request":
         return this.handleImport(request);
+      case "provider.api_endpoint.import_discovery.request":
+        return this.handleImportDiscovery(request);
+      case "provider.api_endpoint.import_ignore.request":
+        return this.handleImportIgnore(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
@@ -605,6 +616,40 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.import.response",
       payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 发现提示：读接口存储失败时整个请求失败（客户端不出提示）；一个来源读不了只是它没有候选。 */
+  private handleImportDiscovery(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_discovery.request" }
+    >,
+  ): void {
+    let payload: Omit<ApiEndpointImportDiscoveryResponse["payload"], "requestId">;
+    try {
+      payload = { candidates: this.service.discoverImports(), error: null };
+    } catch (caught) {
+      payload = { candidates: [], error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_discovery.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  private async handleImportIgnore(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.import_ignore.request" }>,
+  ): Promise<void> {
+    let error: ApiEndpointError | null = null;
+    try {
+      await this.service.ignoreImports({ fingerprints: request.fingerprints });
+    } catch (caught) {
+      error = this.toWireError(caught, request);
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_ignore.response",
+      payload: { requestId: request.requestId, error },
     });
   }
 

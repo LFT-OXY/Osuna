@@ -712,6 +712,14 @@ type ApiEndpointImportPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import.response" }
 >["payload"];
+type ApiEndpointImportDiscoveryPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_discovery.response" }
+>["payload"];
+type ApiEndpointImportIgnorePayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_ignore.response" }
+>["payload"];
 type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
@@ -6609,6 +6617,28 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.import.request", picks },
+    });
+  }
+
+  /**
+   * 「第三方接口」页的发现提示：默认会选上、没被忽略的那几条的指纹与来源软件（不含 OpenCode）。
+   * daemon 一分钟内只真读一次别的软件的文件。只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointImportDiscovery(requestId?: string): Promise<ApiEndpointImportDiscoveryPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_discovery.request" },
+    });
+  }
+
+  /** 忽略发现提示里的这几条：记进主机的已忽略记录。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportIgnore(
+    fingerprints: string[],
+    requestId?: string,
+  ): Promise<ApiEndpointImportIgnorePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_ignore.request", fingerprints },
     });
   }
 

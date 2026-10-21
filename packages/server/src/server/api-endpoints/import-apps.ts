@@ -1277,7 +1277,7 @@ export interface SettledEntry extends ImportEntry {
 export function settleImports(input: {
   sources: ImportSourceRead[];
   held: readonly HeldEndpoint[];
-  // daemon 每次启动随机取的密钥，只在内存里：指纹不能拿来试猜 key。
+  // daemon 存在 0600 文件里的随机密钥：指纹不能拿来试猜 key，重启后不变（已忽略的发现要认得）。
   fingerprintSecret: Buffer;
 }): { source: ImportSourceRead; entries: SettledEntry[] }[] {
   return input.sources.map((source) => {
@@ -1332,6 +1332,15 @@ function settleEntry(input: {
   return settled;
 }
 
+/**
+ * 导入窗口打开时会默认选上的（magpie importapps/discovery 的条件，与客户端 initialImportPicks 一致）：读得了、
+ * 还没添加、在那个软件里开着；只是名称撞上的要用户自己选，名称撞上又是同一家 key 不同的算。
+ */
+export function isOfferedImport(entry: SettledEntry): boolean {
+  if (entry.skip !== null || entry.off !== null || entry.status === "added") return false;
+  return entry.status !== "name_taken" || entry.otherKey !== null;
+}
+
 /** 名称不分大小写相同，或由名称生成的标识就是那家的。 */
 export function isNameTaken(input: { held: HeldEndpoint; name: string }): boolean {
   const { held, name } = input;
@@ -1372,7 +1381,7 @@ function sameHeaders(a: Record<string, string> | null, b: Record<string, string>
 
 /**
  * 不透明的指纹（magpie importFingerprint）：来源、位置与要加的那家（含 key），导入时据此找回 key。
- * 用 daemon 内存里的随机密钥做 HMAC：客户端没法拿猜的 key 去比对。
+ * 用 daemon 存下的随机密钥做 HMAC：客户端没法拿猜的 key 去比对；同一条重启前后指纹相同，已忽略的记录据此认出它。
  */
 function importFingerprint(input: {
   source: ImportSourceId;
