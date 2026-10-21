@@ -79,7 +79,7 @@ function ImportLinkPreviewDialog({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { preview, retry, add } = useImportLink({ serverId, link });
+  const { preview, iconImage, retry, add } = useImportLink({ serverId, link });
   const view = useMemo<ImportLinkView>(() => ({ kind: "preview", preview }), [preview]);
   // 加好后关上，到那台主机的「第三方接口」页看它（magpie 加好后回到列表）；已经在那一页就不再压一层。
   const handleAdded = useCallback(() => {
@@ -91,6 +91,7 @@ function ImportLinkPreviewDialog({
     <ImportLinkSheet
       view={view}
       hostLabel={hostLabel}
+      iconImage={iconImage}
       onRetry={retry}
       onAdd={add}
       onAdded={handleAdded}

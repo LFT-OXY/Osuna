@@ -128,11 +128,21 @@ export function isKeyLike(key: string): boolean {
 
 /** 名称截到 80 字节，截在一个字的开头（magpie：中文名 27 个字就到 80 字节）。 */
 export function cutImportLinkName(text: string): string {
+  return cutToBytes({ text, maxBytes: MAX_NAME_BYTES });
+}
+
+/** 名称加上后缀（重名时的「 2」）仍不超过 80 字节：截名称、留着后缀。 */
+export function importLinkNameWithSuffix(input: { name: string; suffix: string }): string {
+  const maxBytes = MAX_NAME_BYTES - Buffer.byteLength(input.suffix);
+  return cutToBytes({ text: input.name, maxBytes }) + input.suffix;
+}
+
+function cutToBytes(input: { text: string; maxBytes: number }): string {
   let bytes = 0;
   let cut = "";
-  for (const char of text) {
+  for (const char of input.text) {
     bytes += Buffer.byteLength(char);
-    if (bytes > MAX_NAME_BYTES) break;
+    if (bytes > input.maxBytes) break;
     cut += char;
   }
   return cut;
@@ -261,30 +271,36 @@ function catalogIcon(catalog: string): string | null {
 function linkBaseUrl(input: { field: ImportLinkUrlField; raw: string }): string | null {
   const { field, raw } = input;
   if (raw === "") return null;
-  const needsHttps = new ImportLinkRefusedError({
-    reason: "needs_https",
-    message: `The link's ${field}= must use https`,
-    params: { field },
-  });
-  const badUrl = new ImportLinkRefusedError({
-    reason: "bad_url",
-    message: `The link's ${field}= is not a base URL`,
-    params: { field },
-  });
-  if (!URL.canParse(raw)) throw badUrl;
+  if (!URL.canParse(raw)) throw badUrl(field);
   const url = new URL(raw);
   const isHttp = url.protocol === "http:" || url.protocol === "https:";
-  if (!isHttp) throw needsHttps;
+  if (!isHttp) throw needsHttps(field);
   const hasExtras =
     url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
   // 「https:///v1」这种没写主机的，WHATWG 会把路径的第一段当主机；照原文看有没有主机。
   const hasHost = url.hostname !== "" && !/^https?:\/\/\//i.test(raw);
-  if (hasExtras || !hasHost) throw badUrl;
-  if (url.protocol === "http:" && !isLocalHost(url.hostname)) throw needsHttps;
+  if (hasExtras || !hasHost) throw badUrl(field);
+  if (url.protocol === "http:" && !isLocalHost(url.hostname)) throw needsHttps(field);
   // 空的「?」「#」不留在地址里，拼路径时不会夹在中间。
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/+$/, "");
+}
+
+function needsHttps(field: ImportLinkUrlField): ImportLinkRefusedError {
+  return new ImportLinkRefusedError({
+    reason: "needs_https",
+    message: `The link's ${field}= must use https`,
+    params: { field },
+  });
+}
+
+function badUrl(field: ImportLinkUrlField): ImportLinkRefusedError {
+  return new ImportLinkRefusedError({
+    reason: "bad_url",
+    message: `The link's ${field}= is not a base URL`,
+    params: { field },
+  });
 }
 
 /** 网页链接只留 https 的（magpie page）。 */

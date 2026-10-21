@@ -2637,6 +2637,7 @@ export const ptBR: TranslationResources = {
         replace: "Substituir",
         added: "{{name}} adicionado",
         failed: "O Osuna não conseguiu adicionar. Tente de novo.",
+        receiveFailed: "O Osuna não conseguiu abrir o link de importação. Abra de novo.",
         nameRequired: "Dê um nome",
         endpointsUnparsable:
           "O arquivo de endpoints do host não pôde ser lido, então nada foi adicionado.",

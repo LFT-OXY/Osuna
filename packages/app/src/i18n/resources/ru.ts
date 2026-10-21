@@ -2636,6 +2636,7 @@ export const ru: TranslationResources = {
         replace: "Заменить",
         added: "{{name}} добавлен",
         failed: "Osuna не удалось добавить. Попробуйте ещё раз.",
+        receiveFailed: "Osuna не удалось открыть ссылку для импорта. Откройте её ещё раз.",
         nameRequired: "Укажите название",
         endpointsUnparsable:
           "Файл API-эндпоинтов на хосте не читается, поэтому ничего не добавлено.",

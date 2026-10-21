@@ -2597,6 +2597,7 @@ export const ar: TranslationResources = {
         replace: "استبدال",
         added: "تمت إضافة {{name}}",
         failed: "تعذّر على Osuna إضافته. حاول مرة أخرى.",
+        receiveFailed: "تعذّر على Osuna فتح رابط الاستيراد. افتحه مرة أخرى.",
         nameRequired: "أعطه اسمًا",
         endpointsUnparsable: "تعذّرت قراءة ملف نقاط النهاية على المضيف، لذا لم يُضَف شيء.",
         noHost: "اتصل بمضيف أولًا، ثم افتح الرابط مرة أخرى.",

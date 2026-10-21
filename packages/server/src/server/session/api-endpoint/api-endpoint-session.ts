@@ -9,6 +9,7 @@ import type {
   ApiEndpointImportDiscoveryResponse,
   ApiEndpointImportResponse,
   ApiEndpointImportLinkPreviewResponse,
+  ApiEndpointImportLinkIconResponse,
   ApiEndpointImportLinkResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
@@ -50,6 +51,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.import_discovery.request"
       | "provider.api_endpoint.import_ignore.request"
       | "provider.api_endpoint.import_link_preview.request"
+      | "provider.api_endpoint.import_link_icon.request"
       | "provider.api_endpoint.import_link.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
@@ -85,6 +87,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.import_discovery.request": true,
   "provider.api_endpoint.import_ignore.request": true,
   "provider.api_endpoint.import_link_preview.request": true,
+  "provider.api_endpoint.import_link_icon.request": true,
   "provider.api_endpoint.import_link.request": true,
   "provider.api_endpoint.list_templates.request": true,
   "provider.api_endpoint.store_icon.request": true,
@@ -178,6 +181,7 @@ export class ApiEndpointSession {
           | "provider.api_endpoint.import_discovery.request"
           | "provider.api_endpoint.import_ignore.request"
           | "provider.api_endpoint.import_link_preview.request"
+          | "provider.api_endpoint.import_link_icon.request"
           | "provider.api_endpoint.import_link.request"
           | "provider.api_endpoint.list_templates.request"
           | "provider.api_endpoint.store_icon.request"
@@ -203,6 +207,8 @@ export class ApiEndpointSession {
         return this.handleImportIgnore(request);
       case "provider.api_endpoint.import_link_preview.request":
         return this.handleImportLinkPreview(request);
+      case "provider.api_endpoint.import_link_icon.request":
+        return this.handleImportLinkIcon(request);
       case "provider.api_endpoint.import_link.request":
         return this.handleImportLink(request);
       case "provider.api_endpoint.list_templates.request":
@@ -666,21 +672,41 @@ export class ApiEndpointSession {
   }
 
   /** 导入链接的确认框：拒收与读接口存储失败都放进 error。链接里的 key 从不写日志。 */
-  private async handleImportLinkPreview(
+  private handleImportLinkPreview(
     request: Extract<
       ApiEndpointRequest,
       { type: "provider.api_endpoint.import_link_preview.request" }
     >,
-  ): Promise<void> {
+  ): void {
     let payload: Omit<ApiEndpointImportLinkPreviewResponse["payload"], "requestId">;
     try {
-      const preview = await this.service.previewImportLink(request.link);
+      const preview = this.service.previewImportLink(request.link);
       payload = { preview, error: null };
     } catch (caught) {
       payload = { preview: null, error: this.toWireError(caught, request) };
     }
     this.host.emit({
       type: "provider.api_endpoint.import_link_preview.response",
+      payload: { requestId: request.requestId, ...payload },
+    });
+  }
+
+  /** 导入链接的图片：等主机取完；拒收、取图出了想不到的错都放进 error。 */
+  private async handleImportLinkIcon(
+    request: Extract<
+      ApiEndpointRequest,
+      { type: "provider.api_endpoint.import_link_icon.request" }
+    >,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointImportLinkIconResponse["payload"], "requestId">;
+    try {
+      const iconImage = await this.service.importLinkIcon(request.link);
+      payload = { iconImage, error: null };
+    } catch (caught) {
+      payload = { iconImage: null, error: this.toWireError(caught, request) };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.import_link_icon.response",
       payload: { requestId: request.requestId, ...payload },
     });
   }

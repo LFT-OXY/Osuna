@@ -1522,7 +1522,8 @@ export type ApiEndpointImportLinkRefusal = (typeof API_ENDPOINT_IMPORT_LINK_REFU
  * 导入链接要加的那家，给确认框看（照 magpie renderImport）：hosts 是对话与 key 会发往的主机；key 是链接里带的（没有为 null）；
  * replaces 是会被它替换的那家（照 magpie Find(id)；没有为 null）；keysUrl 是去拿 key 的页面（链接没带 key 时出「去拿 key」）；
  * ignoredGemini：链接里的 Gemini 地址没用上（Osuna 还没有 Gemini 格式）。
- * icon 是 catalog= 对上的内置图标名；iconImage 是 icon= 那张图（确认框一打开就取，取不到为 null），有它就用它。
+ * icon 是 catalog= 对上的内置图标名；iconPending：链接给了 icon= 图片，主机已经开始取，客户端用 import_link_icon 要它
+ * （取到了就用它，不等它也能添加）。
  */
 export const ApiEndpointImportLinkPreviewSchema = z.object({
   name: z.string(),
@@ -1536,7 +1537,7 @@ export const ApiEndpointImportLinkPreviewSchema = z.object({
   replaces: ApiEndpointNameRefSchema.nullable(),
   ignoredGemini: z.boolean(),
   icon: z.string().nullable().optional(),
-  iconImage: ApiEndpointIconImageSchema.nullable().optional(),
+  iconPending: z.boolean().optional(),
 });
 export type ApiEndpointImportLinkPreview = z.infer<typeof ApiEndpointImportLinkPreviewSchema>;
 
@@ -1562,6 +1563,31 @@ export const ApiEndpointImportLinkPreviewResponseSchema = z.object({
 });
 export type ApiEndpointImportLinkPreviewResponse = z.infer<
   typeof ApiEndpointImportLinkPreviewResponseSchema
+>;
+
+/**
+ * 导入链接 icon= 的图片（照 magpie 确认框打开后再取图标）：主机读链接时已开始取，这里等它取完；取不到为 null。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointImportLinkIconRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_icon.request"),
+  requestId: z.string(),
+  link: z.string(),
+});
+export type ApiEndpointImportLinkIconRequest = z.infer<
+  typeof ApiEndpointImportLinkIconRequestSchema
+>;
+
+export const ApiEndpointImportLinkIconResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.import_link_icon.response"),
+  payload: z.object({
+    requestId: z.string(),
+    iconImage: ApiEndpointIconImageSchema.nullable(),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointImportLinkIconResponse = z.infer<
+  typeof ApiEndpointImportLinkIconResponseSchema
 >;
 
 /**

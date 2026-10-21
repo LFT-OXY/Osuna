@@ -2664,6 +2664,7 @@ export const en = {
         replace: "Replace",
         added: "{{name}} added",
         failed: "Osuna couldn't add it. Try again.",
+        receiveFailed: "Osuna couldn't open the import link. Open it again.",
         nameRequired: "Give it a name",
         endpointsUnparsable: "The host's endpoints file can't be read, so nothing was added.",
         noHost: "Connect a host first, then open the link again.",

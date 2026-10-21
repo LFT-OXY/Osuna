@@ -57,6 +57,8 @@ test.use({
     PASEO_E2E_PROCESS_TABLE_PATH: path.join(cliHome, "process-table.txt"),
     // 系统代理同样读这份假的（封条换掉 scutil 与注册表）。
     PASEO_E2E_SYSTEM_PROXY_PATH: path.join(cliHome, "system-proxy.json"),
+    // 取网站图标、导入链接的图片只经封条的假外网（这份文件里写了的网址才有回复），绝不上网。
+    PASEO_E2E_FAKE_SITES_PATH: path.join(cliHome, "fake-sites.json"),
     // 从别的软件导入读 daemon 的家目录（CC Switch、Alma）与 XDG 目录（OpenCode）：都换成临时的，
     // 绝不读开发者真实的配置。
     HOME: path.join(cliHome, "import-home"),
@@ -6212,6 +6214,36 @@ test.describe("Import links", () => {
     if (!added) throw new Error("Expected the added endpoint");
     await expect(row(page, added.id)).toBeVisible();
     expect((await client.apiEndpointRevealKey(added.id)).apiKey).toBe("sk-e2e-mine");
+  });
+
+  test("icon= shows up in the dialog once the host has fetched it, and the added endpoint keeps it", async ({
+    page,
+  }) => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path fill="#2a6" d="M0 0h1v1H0z"/></svg>';
+    const fakeSites = path.join(cliHome, "fake-sites.json");
+    await writeFile(
+      fakeSites,
+      JSON.stringify({ "https://brand.example/logo.svg": { status: 200, body: svg } }),
+    );
+    try {
+      await openApiEndpointsPage(page);
+      const params = new URLSearchParams({
+        name: "Brand Relay",
+        chat: `${relay.origin}/good/v1`,
+        key: RELAY_KEY,
+        icon: "https://brand.example/logo.svg",
+      });
+      await openLink(page, `paseo://import?${params.toString()}`);
+      const icon = page.getByTestId("api-endpoint-import-link-icon").filter({ visible: true });
+      await expect(icon.locator("img")).toHaveCount(1);
+      await page.getByTestId("api-endpoint-import-link-add").filter({ visible: true }).click();
+      await expect(page.getByText("Brand Relay added")).toBeVisible();
+      const [added] = (await client.apiEndpointList("claude")).endpoints;
+      expect(added?.icon).toMatch(/^file:[0-9a-f]{16}\.svg$/);
+    } finally {
+      await rm(fakeSites, { force: true });
+    }
   });
 
   test("Cancel adds nothing", async ({ page }) => {

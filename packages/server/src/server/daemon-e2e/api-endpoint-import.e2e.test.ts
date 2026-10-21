@@ -900,8 +900,10 @@ describe("import links (ticket 28)", () => {
     const link = "paseo://import?preset=deepseek&icon=https://brand.example/logo.svg%3Fv%3D2";
 
     const preview = await client.apiEndpointImportLinkPreview(link);
+    expect(preview.preview?.iconPending).toBe(true);
+    const icon = await client.apiEndpointImportLinkIcon(link);
     expect(asked).toEqual(["https://brand.example/logo.svg?v=2"]);
-    expect(preview.preview?.iconImage).toEqual({
+    expect(icon.iconImage).toEqual({
       data: Buffer.from(SVG).toString("base64"),
       mimeType: "image/svg+xml",
     });
@@ -933,8 +935,8 @@ describe("import links (ticket 28)", () => {
     const link =
       "paseo://import?name=Relay&chat=https://relay.example/v1&catalog=deepseek&icon=https://brand.example/logo.svg%3Ftoken%3Dabc";
     const preview = await client.apiEndpointImportLinkPreview(link);
-    expect(preview.preview?.iconImage).toBeNull();
     expect(preview.preview?.icon).toBe("deepseek-color");
+    expect((await client.apiEndpointImportLinkIcon(link)).iconImage).toBeNull();
     const warning = lines.find((line) => line.includes("Import link icon couldn't be fetched"));
     expect(warning).toContain("brand.example");
     expect(warning).toContain("status_404");
@@ -944,5 +946,37 @@ describe("import links (ticket 28)", () => {
     expect(listed.endpoints.find((entry) => entry.id === added.endpoint?.endpointId)?.icon).toBe(
       "deepseek-color",
     );
+  });
+
+  test("the preview doesn't wait for the icon, and Add works while it is still being fetched", async () => {
+    const release: { done: () => void } = { done: () => undefined };
+    const fetchSite: FetchSite = ({ url }) =>
+      new Promise((resolve) => {
+        release.done = () => resolve({ status: 404, url, body: Buffer.from("") });
+      });
+    const { client } = await start({ endpoints: [], keys: {}, fetchSite });
+    const link =
+      "paseo://import?name=Slow&chat=https://slow.example/v1&icon=https://brand.example/slow.svg";
+    const preview = await client.apiEndpointImportLinkPreview(link);
+    expect(preview.preview).toMatchObject({ name: "Slow", iconPending: true });
+    const added = await client.apiEndpointImportLink({ link, name: "Slow", key: "" });
+    expect(added.error).toBeNull();
+    const listed = await client.apiEndpointList("claude");
+    expect(
+      listed.endpoints.find((entry) => entry.id === added.endpoint?.endpointId)?.icon,
+    ).toBeUndefined();
+    release.done();
+  });
+
+  test("a name taken twice over gets its number and still fits in 80 bytes", async () => {
+    // 正好 80 字节：再加「 2」就要截名称。
+    const long = `${"中".repeat(26)}ab`;
+    const { client } = await start({ endpoints: [], keys: {} });
+    const link = "paseo://import?name=Relay&chat=https://relay.example/v1";
+    await client.apiEndpointImportLink({ link, name: long, key: "" });
+    const other = "paseo://import?name=Relay&id=other&chat=https://other.example/v1";
+    const second = await client.apiEndpointImportLink({ link: other, name: long, key: "" });
+    expect(second.endpoint?.name).toBe(`${"中".repeat(26)} 2`);
+    expect(Buffer.byteLength(second.endpoint?.name ?? "")).toBeLessThanOrEqual(80);
   });
 });

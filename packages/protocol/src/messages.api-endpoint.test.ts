@@ -1915,5 +1915,20 @@ describe("provider.api_endpoint.test_models", () => {
       payload: { requestId: "req-la", endpoint: { endpointId: "ep_2", name: "Mine" }, error: null },
     };
     expect(SessionOutboundMessageSchema.parse(added)).toEqual(added);
+    const icon = {
+      type: "provider.api_endpoint.import_link_icon.request" as const,
+      requestId: "req-li",
+      link: "paseo://import?name=X&chat=https://x.example/v1&icon=https://x.example/logo.svg",
+    };
+    expect(SessionInboundMessageSchema.parse(icon)).toEqual(icon);
+    const fetched = {
+      type: "provider.api_endpoint.import_link_icon.response" as const,
+      payload: {
+        requestId: "req-li",
+        iconImage: { data: "PHN2Zy8+", mimeType: "image/svg+xml" },
+        error: null,
+      },
+    };
+    expect(SessionOutboundMessageSchema.parse(fetched)).toEqual(fetched);
   });
 });

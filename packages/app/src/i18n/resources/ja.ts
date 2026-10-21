@@ -2623,6 +2623,7 @@ export const ja: TranslationResources = {
         replace: "置き換え",
         added: "{{name}} を追加しました",
         failed: "追加できませんでした。もう一度お試しください。",
+        receiveFailed: "Osuna はインポートリンクを開けませんでした。もう一度開いてください。",
         nameRequired: "名前を入力してください",
         endpointsUnparsable:
           "ホストの API エンドポイントファイルを読み取れないため、何も追加されませんでした。",

@@ -18,6 +18,10 @@
  *    系统代理读 PASEO_E2E_SYSTEM_PROXY_PATH 文件（SystemProxy 的 JSON，没设或没有这个文件就是没设代理），
  *    不跑 scutil、不读注册表。
  *
+ * 7. 不上外网取图片：第三方接口取网站图标、导入链接的 icon= 图片都经这里装上的假外网（site-icon.ts 的
+ *    sealedFetchSite）。网址到回复写在 PASEO_E2E_FAKE_SITES_PATH 文件里（{ 网址: { status, body } }，body 是文本），
+ *    没设、没有这个文件或没写这个网址的一律抛错，绝不真的去取。
+ *
  * 6. 不带开发者的代理：daemon 自己的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（各种大小写）在这里删掉，
  *    查 Codex 经哪个代理时只会读到用例给的假系统代理（上面第 5 条）。spawn-node.ts 的 withUpgradeSeal 同样会删。
  *
@@ -152,6 +156,16 @@ globalThis[Symbol.for("paseo.e2e.hostProcesses")] = {
     return { exitCode: 0, output: "" };
   },
   readSystemProxy: async () => readFakeSystemProxy(),
+};
+
+/** PASEO_E2E_FAKE_SITES_PATH 里的假站点；没写的网址抛错。 */
+globalThis[Symbol.for("paseo.e2e.fetchSite")] = async ({ url }) => {
+  const file = process.env.PASEO_E2E_FAKE_SITES_PATH;
+  const sites = file && existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  const site = sites[url];
+  if (!site)
+    throw new Error(`The e2e daemon never fetches ${url}: add it to PASEO_E2E_FAKE_SITES_PATH`);
+  return { status: site.status, url, body: Buffer.from(site.body) };
 };
 
 const realSpawn = childProcess.spawn;

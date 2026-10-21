@@ -2614,6 +2614,7 @@ export const ko: TranslationResources = {
         replace: "교체",
         added: "{{name}} 추가됨",
         failed: "추가하지 못했습니다. 다시 시도하세요.",
+        receiveFailed: "Osuna가 가져오기 링크를 열지 못했습니다. 다시 여세요.",
         nameRequired: "이름을 입력하세요",
         endpointsUnparsable:
           "호스트의 API 엔드포인트 파일을 읽을 수 없어 아무것도 추가되지 않았습니다.",

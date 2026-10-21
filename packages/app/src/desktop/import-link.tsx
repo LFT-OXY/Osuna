@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { usePathname } from "expo-router";
 import { isApiEndpointImportLink } from "@getpaseo/protocol/api-endpoint/import-link";
 import { ImportLinkDialog } from "@/api-endpoints/import-link-dialog";
 import { importLinkServerId } from "@/api-endpoints/internal/import-link";
-import { listenToDesktopEvent } from "@/desktop/electron/events";
+import { DesktopBridgeUnavailableError, listenToDesktopEvent } from "@/desktop/electron/events";
+import { useDesktopIpcErrorReporter } from "@/desktop/hooks/desktop-ipc-error";
 import { getDesktopHost } from "@/desktop/host";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -22,6 +24,8 @@ interface ReceivedImportLink {
  * 只有桌面端有这条路；链接从不自己保存什么。
  */
 export function ImportLinkListener() {
+  const { t } = useTranslation();
+  const reportError = useDesktopIpcErrorReporter();
   const [received, setReceived] = useState<ReceivedImportLink | null>(null);
   const pathname = usePathname();
   const hosts = useHosts();
@@ -51,33 +55,56 @@ export function ImportLinkListener() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    const connect = async () => {
-      let dispose: (() => void) | null = null;
+    // 桥一时不通（冷启动时主进程还没装好 IPC）：过一秒再接，同 Agent 链接。
+    const retryLater = (error: DesktopBridgeUnavailableError) => {
+      console.warn("[import-link] desktop bridge unavailable", error.message);
+      if (!disposed) retryTimer = setTimeout(() => void start(), 1_000);
+    };
+    const connect = async (): Promise<void> => {
+      let dispose: () => void;
       try {
         dispose = await listenToDesktopEvent<unknown>("import-link", receive);
-        if (disposed) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-        const pending = await ready();
-        if (!disposed && pending) receive(pending);
       } catch (error) {
-        // 桌面端的桥一时不通（IPC 抛的都是 Error）：过一秒再接，同 Agent 链接；别的照常抛出。
-        if (!(error instanceof Error)) throw error;
-        console.warn("[import-link] desktop bridge unavailable", error.message);
-        dispose?.();
-        if (unlisten === dispose) unlisten = null;
-        if (!disposed) retryTimer = setTimeout(() => void connect(), 1_000);
+        if (!(error instanceof DesktopBridgeUnavailableError)) throw error;
+        retryLater(error);
+        return;
       }
+      if (disposed) {
+        dispose();
+        return;
+      }
+      unlisten = dispose;
+      let pending: string | null;
+      try {
+        pending = await ready();
+      } catch (cause) {
+        // ready 只是一次 IPC：它抛的 Error 就是桥不通；别的照常抛出。
+        if (!(cause instanceof Error)) throw cause;
+        dispose();
+        unlisten = null;
+        retryLater(
+          new DesktopBridgeUnavailableError("Import link inbox is unavailable.", { cause }),
+        );
+        return;
+      }
+      if (!disposed && pending) receive(pending);
     };
-    void connect();
+    // 别的错（如 receive 里的）不重试，交给桌面端的错误报告。
+    const start = () =>
+      connect().catch((error: unknown) =>
+        reportError({
+          logLabel: "[import-link] Failed to receive an import link",
+          message: t("settings.apiEndpoints.importLink.receiveFailed"),
+          error,
+        }),
+      );
+    void start();
     return () => {
       disposed = true;
       if (retryTimer) clearTimeout(retryTimer);
       unlisten?.();
     };
-  }, [receive]);
+  }, [receive, reportError, t]);
 
   const close = useCallback(() => setReceived(null), []);
   if (received === null) return null;

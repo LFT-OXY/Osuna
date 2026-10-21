@@ -724,6 +724,10 @@ type ApiEndpointImportLinkPreviewPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import_link_preview.response" }
 >["payload"];
+type ApiEndpointImportLinkIconPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.import_link_icon.response" }
+>["payload"];
 type ApiEndpointImportLinkPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.import_link.response" }
@@ -6658,6 +6662,17 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.import_link_preview.request", link },
+    });
+  }
+
+  /** 导入链接 icon= 的图片：主机读链接时已开始取，这里等它取完（取不到为 null）。只有声明了 apiEndpointManagement 的 daemon 认。 */
+  async apiEndpointImportLinkIcon(
+    link: string,
+    requestId?: string,
+  ): Promise<ApiEndpointImportLinkIconPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.import_link_icon.request", link },
     });
   }
 

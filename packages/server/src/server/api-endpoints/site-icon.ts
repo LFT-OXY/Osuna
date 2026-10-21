@@ -5,6 +5,7 @@ import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
+import { z } from "zod";
 import { MAX_ICON_BYTES } from "./endpoint-icons.js";
 import { isLocalHost } from "../../utils/local-host.js";
 import { isErrnoException } from "../../utils/errno.js";
@@ -443,6 +444,30 @@ function publicLookup(hostname: string, options: { all?: boolean }, callback: Lo
     if (options.all) callback(null, allowed);
     else callback(null, allowed[0].address, allowed[0].family);
   });
+}
+
+// 浏览器测试的 daemon 由 e2e 封条（packages/app/e2e/support/daemon-upgrade-seal.mjs）在这里装上假的外网：
+// 默认一律抛错，用例给的本机假站点才有回复，绝不上网；生产里没有它。
+const SEALED_FETCH_SITE = Symbol.for("paseo.e2e.fetchSite");
+
+/** e2e 封条装上的假外网；不在浏览器测试里为 null。 */
+export function sealedFetchSite(): FetchSite | null {
+  const sealed: unknown = Reflect.get(globalThis, SEALED_FETCH_SITE);
+  if (typeof sealed !== "function") return null;
+  return async (input) => {
+    const response: unknown = await Reflect.apply(sealed, undefined, [input]);
+    return siteResponseOf(response);
+  };
+}
+
+const SealedSiteResponseSchema = z.object({
+  status: z.number(),
+  url: z.string(),
+  body: z.instanceof(Buffer),
+});
+
+function siteResponseOf(value: unknown): SiteResponse {
+  return SealedSiteResponseSchema.parse(value);
 }
 
 /** 真的取：跟着跳转，每一跳都只连公网地址；User-Agent 写明是 Osuna（有的站拒绝没有名字的请求）。 */

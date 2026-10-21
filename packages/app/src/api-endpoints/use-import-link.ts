@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ApiEndpointImportLinkPreview } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointIconImage,
+  ApiEndpointImportLinkPreview,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
@@ -31,6 +34,8 @@ export interface ImportLinkAddInput {
 
 export interface UseImportLinkResult {
   preview: ImportLinkPreviewState;
+  // 链接 icon= 的图片：主机取到了才有，没取到、还在取为 null（确认框先用默认图标）。
+  iconImage: ApiEndpointIconImage | null;
   retry: () => void;
   add: (input: ImportLinkAddInput) => Promise<ImportLinkAddResult>;
 }
@@ -73,6 +78,23 @@ export function useImportLink({
     },
   });
   const retry = useCallback(() => void query.refetch(), [query]);
+  // 图片另外要（照 magpie 确认框打开后再取图标）：确认框不等它。
+  const isIconPending = query.data?.status === "ready" && query.data.preview.iconPending === true;
+  const iconQuery = useFetchQuery({
+    queryKey: ["api-endpoint-import-link-icon", serverId, link],
+    dataShape: "value",
+    staleTimeMs: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    enabled: Boolean(client) && isConnected && isIconPending,
+    retry: false,
+    queryFn: async (): Promise<ApiEndpointIconImage | null> => {
+      if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
+      const response = await client.apiEndpointImportLinkIcon(link);
+      return response.iconImage;
+    },
+  });
   const add = useCallback(
     async (input: ImportLinkAddInput): Promise<ImportLinkAddResult> => {
       if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
@@ -103,5 +125,5 @@ export function useImportLink({
   let preview: ImportLinkPreviewState = { status: "loading" };
   if (query.data) preview = query.data;
   else if (query.error) preview = { status: "error", message: query.error.message };
-  return { preview, retry, add };
+  return { preview, iconImage: iconQuery.data ?? null, retry, add };
 }

@@ -2623,6 +2623,7 @@ export const zhCN: TranslationResources = {
         replace: "替换",
         added: "已添加 {{name}}",
         failed: "没能添加，请重试。",
+        receiveFailed: "Osuna 没能打开这条导入链接，请再打开一次。",
         nameRequired: "请起个名称",
         endpointsUnparsable: "主机的接口文件读不懂，什么都没有添加。",
         noHost: "请先连接一台主机，再重新打开这条链接。",

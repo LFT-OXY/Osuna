@@ -2653,6 +2653,7 @@ export const es: TranslationResources = {
         replace: "Reemplazar",
         added: "{{name}} añadido",
         failed: "Osuna no pudo añadirlo. Inténtalo de nuevo.",
+        receiveFailed: "Osuna no pudo abrir el enlace de importación. Ábrelo de nuevo.",
         nameRequired: "Ponle un nombre",
         endpointsUnparsable:
           "No se puede leer el archivo de endpoints del host, así que no se añadió nada.",

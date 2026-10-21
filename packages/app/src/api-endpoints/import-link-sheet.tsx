@@ -4,7 +4,10 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Image, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ApiEndpointImportLinkPreview } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type {
+  ApiEndpointIconImage,
+  ApiEndpointImportLinkPreview,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,8 @@ export interface ImportLinkSheetProps {
   view: ImportLinkView;
   // 加到的那台主机的名字；没有主机为 null。
   hostLabel: string | null;
+  // 链接 icon= 的图片，取到了才有。
+  iconImage: ApiEndpointIconImage | null;
   onRetry: () => void;
   onAdd: (input: ImportLinkAddInput) => Promise<ImportLinkAddResult>;
   onAdded: (endpointId: string) => void;
@@ -50,6 +55,7 @@ const NOTICE_SNAP_POINTS = ["40%"];
 export function ImportLinkSheet({
   view,
   hostLabel,
+  iconImage,
   onRetry,
   onAdd,
   onAdded,
@@ -60,6 +66,7 @@ export function ImportLinkSheet({
       <ImportLinkConfirm
         preview={view.preview.preview}
         hostLabel={hostLabel}
+        iconImage={iconImage}
         onAdd={onAdd}
         onAdded={onAdded}
         onClose={onClose}
@@ -162,12 +169,14 @@ export function ImportLinkNotice({
 function ImportLinkConfirm({
   preview,
   hostLabel,
+  iconImage,
   onAdd,
   onAdded,
   onClose,
 }: {
   preview: ApiEndpointImportLinkPreview;
   hostLabel: string | null;
+  iconImage: ApiEndpointIconImage | null;
   onAdd: (input: ImportLinkAddInput) => Promise<ImportLinkAddResult>;
   onAdded: (endpointId: string) => void;
   onClose: () => void;
@@ -214,9 +223,9 @@ function ImportLinkConfirm({
         {subtitleText}
       </Text>
     );
-    const leading = <LinkIcon preview={preview} />;
+    const leading = <LinkIcon preview={preview} image={iconImage} />;
     return { title: preview.name, subtitle, leading };
-  }, [hostLabel, preview, t]);
+  }, [hostLabel, iconImage, preview, t]);
 
   const submitKey = isReplacing
     ? "settings.apiEndpoints.importLink.replace"
@@ -357,8 +366,13 @@ function WarningCallout({ text, testID }: { text: string; testID: string }) {
 }
 
 /** 标题前的图标：icon= 那张图，否则 catalog= 或模板的图标，都没有用名称首字；放在一块带边的底上。 */
-function LinkIcon({ preview }: { preview: ApiEndpointImportLinkPreview }) {
-  const image = preview.iconImage ?? null;
+function LinkIcon({
+  preview,
+  image,
+}: {
+  preview: ApiEndpointImportLinkPreview;
+  image: ApiEndpointIconImage | null;
+}) {
   const source = useMemo(() => {
     if (image === null) return null;
     const uri = `data:${image.mimeType};base64,${image.data}`;

@@ -47,6 +47,7 @@ import {
   type ApiEndpointImportSource,
   type ApiEndpointImportCandidate,
   type ApiEndpointImportLinkPreview,
+  type ApiEndpointNameRef,
   API_ENDPOINT_IMPORT_ACTIONS,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
@@ -293,6 +294,7 @@ import { ModelsDevCatalog } from "./models-dev.js";
 import {
   createPublicFetchSite,
   fetchIconPicture,
+  sealedFetchSite,
   findSiteIcon,
   SiteIconError,
   type FetchSite,
@@ -337,6 +339,7 @@ import {
 } from "./import-apps.js";
 import {
   cutImportLinkName,
+  importLinkNameWithSuffix,
   ImportLinkRefusedError,
   isKeyLike,
   parseImportLink,
@@ -878,8 +881,9 @@ export class ApiEndpointService {
   private readonly modelsDev: ModelsDevCatalog;
   private readonly icons: EndpointIcons;
   private readonly fetchSite: FetchSite;
-  // 确认框打开时取到的导入链接图片（按图片地址），添加时存下。
+  // 确认框打开时取到的导入链接图片（按图片地址），添加时存下；还在取的放在 importLinkPictureFetches。
   private readonly importLinkPictures = new Map<string, ImportLinkPicture>();
+  private readonly importLinkPictureFetches = new Map<string, Promise<ImportLinkPicture | null>>();
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
@@ -965,7 +969,7 @@ export class ApiEndpointService {
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
-    this.fetchSite = options.fetchSite ?? createPublicFetchSite({ userAgent });
+    this.fetchSite = options.fetchSite ?? defaultFetchSite({ userAgent });
     this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
     this.readCodexSignIn =
       options.readCodexSignIn ??
@@ -3346,7 +3350,7 @@ export class ApiEndpointService {
     const entries = this.settledImports({ includeOpenCode: true }).flatMap(
       (source) => source.entries,
     );
-    const imported: ImportedEndpointRef[] = [];
+    const imported: ApiEndpointNameRef[] = [];
     for (const pick of picks) {
       const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
       // 指纹对不上（来源变了、daemon 重启过）：扫描结果过时了，没有可说的那一条。
@@ -3382,7 +3386,7 @@ export class ApiEndpointService {
   private async importOne(input: {
     pick: ApiEndpointImportPick;
     entry: SettledEntry;
-  }): Promise<ImportedEndpointRef | null> {
+  }): Promise<ApiEndpointNameRef | null> {
     const { pick, entry } = input;
     const found = entry.found;
     if (found === null || entry.status === "added") return null;
@@ -3417,7 +3421,7 @@ export class ApiEndpointService {
     name: string;
     replaceIndex: number | null;
     icon: string | null;
-  }): Promise<ImportedEndpointRef> {
+  }): Promise<ApiEndpointNameRef> {
     const { previous, found, name, replaceIndex, icon } = input;
     const timestamp = this.now().toISOString();
     let endpoints: StoredApiEndpoint[];
@@ -3445,21 +3449,17 @@ export class ApiEndpointService {
 
   /**
    * 读一条导入链接给确认框（ADR 0013，magpie importlink.go）：照 magpie 解析、拒收，说会替换哪家；不存任何东西。
-   * 链接给了图标图片的，确认框一打开就去取（magpie：确认框开着就是同意），图片先留在内存里，添加成功时才存下。
+   * 链接给了图标图片的，这时开始在后台取（magpie：确认框开着就是同意），不等它；客户端用 importLinkIcon 要图片。
    */
-  async previewImportLink(link: string): Promise<ApiEndpointImportLinkPreview> {
+  previewImportLink(link: string): ApiEndpointImportLinkPreview {
     const parsed = parsedImportLinkOrRefuse(link);
     const target = importLinkTarget({ endpoints: this.readState().endpoints, parsed });
     const hostNames = parsed.baseUrls.map(({ url }) => new URL(url).host);
     const hosts = [...new Set(hostNames)];
     let replaces: ApiEndpointImportLinkPreview["replaces"] = null;
     if (target !== null) replaces = { endpointId: target.id, name: target.name };
-    const picture = await this.importLinkPicture(parsed);
-    let iconImage: ApiEndpointImportLinkPreview["iconImage"] = null;
-    if (picture !== null) {
-      const data = picture.bytes.toString("base64");
-      iconImage = { data, mimeType: picture.mimeType };
-    }
+    const iconUrl = parsed.iconUrl;
+    if (iconUrl !== null) void this.startLinkPictureFetch(iconUrl);
     return {
       name: parsed.name,
       key: parsed.key,
@@ -3472,7 +3472,7 @@ export class ApiEndpointService {
       replaces,
       ignoredGemini: parsed.ignoredGemini,
       icon: parsed.icon,
-      iconImage,
+      iconPending: iconUrl !== null,
     };
   }
 
@@ -3485,7 +3485,7 @@ export class ApiEndpointService {
     link: string;
     name: string;
     key: string;
-  }): Promise<ImportedEndpointRef> {
+  }): Promise<ApiEndpointNameRef> {
     const parsed = parsedImportLinkOrRefuse(input.link);
     const name = cutImportLinkName(validateName(input.name));
     const key = input.key.trim();
@@ -3496,7 +3496,9 @@ export class ApiEndpointService {
         params: { reason: "bad_key" },
       });
     }
-    const picture = await this.importLinkPicture(parsed);
+    // 只用已经取到的图片：没取到、还在取都不等，照常添加（默认图标）。
+    let picture: ImportLinkPicture | null = null;
+    if (parsed.iconUrl !== null) picture = this.importLinkPictures.get(parsed.iconUrl) ?? null;
     const found: FoundEndpoint = {
       name,
       key: key === "" ? null : key,
@@ -3515,11 +3517,11 @@ export class ApiEndpointService {
       let landed = false;
       try {
         let replaceIndex: number | null = null;
-        let freeName = freeEndpointName(previous, name);
+        let freeName = freeImportLinkName(previous, name);
         if (target !== null) {
           // 改了名的不和别的几家重名；和被换掉的那家同名不算。
           const othersHeld = previous.endpoints.filter((held) => held !== target);
-          freeName = freeEndpointName({ ...previous, endpoints: othersHeld }, name);
+          freeName = freeImportLinkName({ ...previous, endpoints: othersHeld }, name);
           replaceIndex = previous.endpoints.indexOf(target);
         }
         const ref = await this.landImported({
@@ -3536,21 +3538,52 @@ export class ApiEndpointService {
         if (!landed && stored?.isNew === true) this.icons.discard(stored.icon);
       }
     });
-    if (parsed.iconUrl !== null) this.importLinkPictures.delete(parsed.iconUrl);
+    if (parsed.iconUrl !== null) {
+      this.importLinkPictures.delete(parsed.iconUrl);
+      this.importLinkPictureFetches.delete(parsed.iconUrl);
+    }
     const signal = AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS);
     await this.refreshCatalog({ endpointId: added.endpointId, signal });
     return added;
   }
 
   /**
-   * 导入链接的 icon= 图片：确认框打开时取过的从内存里拿，没有就现取。取不到、不是认得的图片为 null（用默认图标），
-   * 原因写一行日志（只有主机名与原因，不写 key 与查询串）。
+   * 导入链接 icon= 的图片（给确认框）：读链接时已开始取的等它取完，没开始的现在开始。取不到为 null。
    */
-  private async importLinkPicture(parsed: ParsedImportLink): Promise<ImportLinkPicture | null> {
-    const url = parsed.iconUrl;
-    if (url === null) return null;
-    const kept = this.importLinkPictures.get(url);
-    if (kept !== undefined) return kept;
+  async importLinkIcon(link: string): Promise<ApiEndpointIconImage | null> {
+    const parsed = parsedImportLinkOrRefuse(link);
+    if (parsed.iconUrl === null) return null;
+    const picture = await this.startLinkPictureFetch(parsed.iconUrl);
+    if (picture === null) return null;
+    const data = picture.bytes.toString("base64");
+    return { data, mimeType: picture.mimeType };
+  }
+
+  /** 开始取（或接着等已经在取的）一张导入链接图片；取到的留在内存里，等添加时存下。 */
+  private startLinkPictureFetch(url: string): Promise<ImportLinkPicture | null> {
+    const running = this.importLinkPictureFetches.get(url);
+    if (running !== undefined) return running;
+    const fetching = this.fetchLinkPicture(url);
+    this.importLinkPictureFetches.set(url, fetching);
+    fetching.then(
+      (picture) => {
+        if (picture !== null) this.importLinkPictures.set(url, picture);
+        keepNewest(this.importLinkPictures);
+        return picture;
+      },
+      // 取图时想不到的错：记日志（只有主机名），确认框照常用默认图标；等它的请求会把错报回去。
+      (error: unknown) => {
+        this.importLinkPictureFetches.delete(url);
+        this.logger.error({ err: error, host: new URL(url).host }, "Import link icon fetch broke");
+        return null;
+      },
+    );
+    keepNewest(this.importLinkPictureFetches);
+    return fetching;
+  }
+
+  /** 取一张导入链接图片：取不到、不是认得的图片为 null，原因写一行日志（只有主机名与原因，不写 key 与查询串）。 */
+  private async fetchLinkPicture(url: string): Promise<ImportLinkPicture | null> {
     const signal = AbortSignal.timeout(IMPORT_LINK_ICON_TIMEOUT_MS);
     const fetched = await fetchIconPicture({ url, fetchSite: this.fetchSite, signal });
     const host = new URL(url).host;
@@ -3563,13 +3596,7 @@ export class ApiEndpointService {
       this.logger.warn({ host, reason: "not_image" }, "Import link icon couldn't be fetched");
       return null;
     }
-    const picture = { bytes: fetched.bytes, mimeType };
-    this.importLinkPictures.set(url, picture);
-    // 只留最近几张：确认框关了没加的不一直占着内存。
-    for (const old of [...this.importLinkPictures.keys()].slice(0, -MAX_KEPT_LINK_PICTURES)) {
-      this.importLinkPictures.delete(old);
-    }
-    return picture;
+    return { bytes: fetched.bytes, mimeType };
   }
 
   /**
@@ -5110,6 +5137,26 @@ function fetchesListOnSave(input: {
 /**
  * 新建的接口名称重了（不分大小写）就加「 2」「 3」……（照 magpie freeName）；编辑时不改用户起的名字。
  */
+/** 导入链接的那家重名时加「 2」「 3」……：加上之后仍截到 80 字节，截名称、留着后缀。 */
+function freeImportLinkName(state: ApiEndpointState, name: string): string {
+  const taken = new Set(state.endpoints.map((entry) => entry.name.toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n += 1) {
+    candidate = importLinkNameWithSuffix({ name, suffix: ` ${n}` });
+  }
+  return candidate;
+}
+
+/** 生产里取外网用公网限定的那个；浏览器测试的 daemon 用 e2e 封条装上的假外网。 */
+function defaultFetchSite(input: { userAgent: string }): FetchSite {
+  return sealedFetchSite() ?? createPublicFetchSite(input);
+}
+
+/** 内存里只留最近几项（Map 按放进去的先后排）。 */
+function keepNewest<T>(entries: Map<string, T>): void {
+  for (const old of [...entries.keys()].slice(0, -MAX_KEPT_LINK_PICTURES)) entries.delete(old);
+}
+
 function freeEndpointName(state: ApiEndpointState, name: string): string {
   const taken = new Set(state.endpoints.map((entry) => entry.name.toLowerCase()));
   let candidate = name;
@@ -5923,16 +5970,11 @@ function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
-export interface ImportedEndpointRef {
-  endpointId: string;
-  name: string;
-}
-
 /**
  * 这次导入一出错就停下：加好的那几家，与出错的那条（指纹对不上时为 null）和原因。
  */
 export interface ImportOutcome {
-  imported: ImportedEndpointRef[];
+  imported: ApiEndpointNameRef[];
   failed: { fingerprint: string; name: string } | null;
   error: ApiEndpointRequestError | null;
 }
