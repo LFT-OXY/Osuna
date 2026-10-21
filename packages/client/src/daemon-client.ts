@@ -700,6 +700,10 @@ type ApiEndpointForgetCatalogPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.forget_catalog.response" }
 >["payload"];
+type ApiEndpointVendorStatusPayload = Extract<
+  SessionOutboundMessage,
+  { type: "provider.api_endpoint.vendor_status.response" }
+>["payload"];
 type ApiEndpointListTemplatesPayload = Extract<
   SessionOutboundMessage,
   { type: "provider.api_endpoint.list_templates.response" }
@@ -6558,6 +6562,20 @@ export class DaemonClient {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId,
       message: { type: "provider.api_endpoint.forget_catalog.request", endpointId },
+    });
+  }
+
+  /**
+   * 各厂商官方状态页的读数与各接口对上的厂商；`vendors` 是另外要看的厂商（用量页的订阅卡片）。
+   * 只有声明了 apiEndpointManagement 的 daemon 认。
+   */
+  async apiEndpointVendorStatus(
+    options: { vendors?: string[] } = {},
+    requestId?: string,
+  ): Promise<ApiEndpointVendorStatusPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: { type: "provider.api_endpoint.vendor_status.request", ...options },
     });
   }
 

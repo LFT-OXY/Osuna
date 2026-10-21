@@ -526,6 +526,8 @@ export interface PaseoDaemonConfig {
     | "fetchSite"
     | "reachesUnasked"
     | "catalogRefreshTimers"
+    | "vendorStatusUrls"
+    | "vendorStatusTimers"
     | "modelTests"
     | "detectEach"
     | "modelTestTimers"

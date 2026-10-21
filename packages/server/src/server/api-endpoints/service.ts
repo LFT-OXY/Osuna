@@ -41,6 +41,7 @@ import {
   type ApiEndpointIconImage,
   type ApiEndpointTemplate,
   type ApiEndpointTestConnectionResult,
+  type ApiEndpointVendorStatusResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   API_ENDPOINT_TEMPLATES,
@@ -312,6 +313,7 @@ import {
   type FormatList,
 } from "./catalog-merge.js";
 import { CatalogRefreshSchedule, type CatalogRefreshOutcome } from "./catalog-refresh.js";
+import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-status.js";
 import {
   askedDisabledBy,
   disabledMessage,
@@ -619,6 +621,10 @@ export interface ApiEndpointServiceOptions {
   reachesUnasked?: (baseUrl: string) => boolean;
   // 每天刷新清单的检查定时器；测试换成手动到点的。
   catalogRefreshTimers?: UsagePricingTimers;
+  // 厂商状态页的 summary.json 换成别的地址；测试 daemon 一律指到本机，关心它的用例指到本机假页面。
+  vendorStatusUrls?: Partial<Record<VendorId, string>>;
+  // 界面第一次看状态页时等候的计时器；测试换成手动到点的。
+  vendorStatusTimers?: UsagePricingTimers;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
   // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
@@ -627,6 +633,11 @@ export interface ApiEndpointServiceOptions {
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
 }
+
+export type VendorStatusResult = Omit<
+  ApiEndpointVendorStatusResponse["payload"],
+  "requestId" | "error"
+>;
 
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
 type ApiEndpointHealthCode = "modified_externally" | "config_unparsable" | "codex_profile_override";
@@ -801,6 +812,8 @@ export class ApiEndpointService {
   private readonly fetchSite: FetchSite;
   private readonly reachesUnasked: (baseUrl: string) => boolean;
   private readonly catalogRefresh: CatalogRefreshSchedule;
+  private readonly vendorStatusPages: VendorStatusPages;
+  private readonly isAutoUpdate: () => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
   private codexSignIn: CodexSignIn | null = null;
@@ -879,6 +892,13 @@ export class ApiEndpointService {
       options.readCodexSignIn ??
       (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
+    this.isAutoUpdate = isModelsDevAutoUpdate;
+    this.vendorStatusPages = new VendorStatusPages({
+      logger: this.logger,
+      now: this.now,
+      summaryUrls: options.vendorStatusUrls,
+      timers: options.vendorStatusTimers,
+    });
     this.modelsDev = new ModelsDevCatalog({
       filePath: this.store.modelsDevPath,
       logger: this.logger,
@@ -3181,6 +3201,28 @@ export class ApiEndpointService {
   }
 
   /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
+  /**
+   * 各接口对上的厂商（按各格式地址的主机名）与这些厂商、另外要的厂商的状态页读数。
+   * 「价格表自动更新」关着时一页都不读（docs/usage.md「Outbound requests」）。
+   */
+  async vendorStatus(input: { vendors: readonly string[] }): Promise<VendorStatusResult> {
+    const endpointVendors: Record<string, string> = {};
+    for (const endpoint of this.readState().endpoints) {
+      const vendor = vendorOfBaseUrls(endpoint.baseUrls.map((baseUrl) => baseUrl.url));
+      if (vendor !== null) endpointVendors[endpoint.id] = vendor;
+    }
+    const vendorIds = [...new Set([...Object.values(endpointVendors), ...input.vendors])];
+    if (!this.isAutoUpdate()) {
+      return {
+        autoUpdate: false,
+        vendors: this.vendorStatusPages.unread(vendorIds),
+        endpointVendors,
+      };
+    }
+    const vendors = await this.vendorStatusPages.read({ vendors: vendorIds });
+    return { autoUpdate: true, vendors, endpointVendors };
+  }
+
   async forgetCatalog(endpointId: string): Promise<void> {
     if (!findEndpoint(this.readState(), endpointId)) {
       throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });

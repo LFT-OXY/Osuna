@@ -263,6 +263,14 @@ async function prepareTestDaemonConfig(
         },
         homeDir: paseoHomeRoot,
       }),
+      // 厂商状态页一律指到本机一个没人听的端口：开着自动更新的用例也绝不读真的状态页。
+      // 关心它的用例指到本机假页面；只换了一家时，其余几家照样留在本机。
+      vendorStatusUrls: {
+        anthropic: "http://127.0.0.1:9/anthropic/api/v2/summary.json",
+        openai: "http://127.0.0.1:9/openai/api/v2/summary.json",
+        moonshot: "http://127.0.0.1:9/moonshot/api/v2/summary.json",
+        ...options.apiEndpoints?.vendorStatusUrls,
+      },
     },
     // 测试 daemon 绝不去 npm registry 查最新版本；关心这件事的测试注入自己的桩。
     providerVersions: {

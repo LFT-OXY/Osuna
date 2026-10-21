@@ -4,6 +4,7 @@ import type {
   ApiEndpointError,
   ApiEndpointIconImage,
   ApiEndpointRequestExtras,
+  ApiEndpointVendorStatusResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { keyHeaderOf } from "@getpaseo/protocol/api-endpoint/request-extras";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
@@ -38,6 +39,7 @@ export type ApiEndpointRequest = Extract<
       | "provider.api_endpoint.set_endpoint_name_display.request"
       | "provider.api_endpoint.reveal_key.request"
       | "provider.api_endpoint.forget_catalog.request"
+      | "provider.api_endpoint.vendor_status.request"
       | "provider.api_endpoint.list_templates.request"
       | "provider.api_endpoint.store_icon.request"
       | "provider.api_endpoint.fetch_site_icon.request"
@@ -66,6 +68,7 @@ const API_ENDPOINT_REQUEST_TYPES: Record<ApiEndpointRequest["type"], true> = {
   "provider.api_endpoint.set_endpoint_name_display.request": true,
   "provider.api_endpoint.reveal_key.request": true,
   "provider.api_endpoint.forget_catalog.request": true,
+  "provider.api_endpoint.vendor_status.request": true,
   "provider.api_endpoint.list_templates.request": true,
   "provider.api_endpoint.store_icon.request": true,
   "provider.api_endpoint.fetch_site_icon.request": true,
@@ -140,6 +143,8 @@ export class ApiEndpointSession {
         return this.handleRevealKey(request);
       case "provider.api_endpoint.forget_catalog.request":
         return this.handleForgetCatalog(request);
+      case "provider.api_endpoint.vendor_status.request":
+        return this.handleVendorStatus(request);
       case "provider.api_endpoint.list_templates.request":
         return this.handleListTemplates(request);
       case "provider.api_endpoint.store_icon.request":
@@ -526,6 +531,30 @@ export class ApiEndpointSession {
     this.host.emit({
       type: "provider.api_endpoint.forget_catalog.response",
       payload: { requestId: request.requestId, error },
+    });
+  }
+
+  /** 读接口存储失败时整个请求失败；状态页读不到只记在那家的 error 里。 */
+  private async handleVendorStatus(
+    request: Extract<ApiEndpointRequest, { type: "provider.api_endpoint.vendor_status.request" }>,
+  ): Promise<void> {
+    let payload: Omit<ApiEndpointVendorStatusResponse["payload"], "requestId">;
+    try {
+      payload = {
+        ...(await this.service.vendorStatus({ vendors: request.vendors ?? [] })),
+        error: null,
+      };
+    } catch (caught) {
+      payload = {
+        autoUpdate: false,
+        vendors: [],
+        endpointVendors: {},
+        error: this.toWireError(caught, request),
+      };
+    }
+    this.host.emit({
+      type: "provider.api_endpoint.vendor_status.response",
+      payload: { requestId: request.requestId, ...payload },
     });
   }
 

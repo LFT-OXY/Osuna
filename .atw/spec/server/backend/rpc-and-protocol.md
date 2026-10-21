@@ -1245,6 +1245,7 @@ Example: `provider.version.check.request`, which compares each built-in CLI's in
 - Latest versions are cached in memory per provider for 1 hour; failures are not cached. Concurrent lookups for one provider share one request, `force` included. `force` skips the cache.
 - `updateAvailable` is a semver compare; either side unparseable → `false`.
 - No lookup at startup or on a timer. `createTestPaseoDaemon` injects a fetcher that throws, so a test daemon never reaches npm.
+- Same shape, page-driven: `provider.api_endpoint.vendor_status.request` (`api-endpoints/vendor-status.ts`). The client asks only while the API endpoints or usage page is mounted (react-query `refetchInterval`, 5 min); the daemon caches each page 5 min, failures included, and reads nothing while `isModelsDevAutoUpdate()` (the price table switch) is false. `createTestPaseoDaemon` merges `vendorStatusUrls` over loopback defaults, so a test that overrides one vendor never sends the others to the real pages.
 
 ### 4. Validation & Error Matrix
 

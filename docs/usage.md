@@ -151,9 +151,20 @@ Turn both off with `features.usage.pricing.autoUpdate: false` in `config.json`,
 or `PASEO_USAGE_PRICING_AUTO_UPDATE=0` at launch. Off means the daemon prices
 from the built-in snapshot and your own prices, tells Claude Code and Codex what
 an endpoint's own model list says and what a models.dev copy fetched earlier
-says, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
+says, reads no vendor status page, and fetches neither file — including on a host that has no network at all. The switch covers the automatic check only:
 "Refresh now" in the price table still fetches the price table when you press
 it.
+
+The vendor status check runs only while the API endpoints page or the usage
+page is open, and only while the price table's auto-update is on. The daemon
+reads the public status summary of each vendor an endpoint's base URL is on, and
+of Anthropic and OpenAI for Claude Code's and Codex's plan usage cards:
+`status.claude.com`, `status.openai.com` and `status.moonshot.cn`, each a GET of
+`/api/v2/summary.json` with no authentication and nothing else of yours. The
+open page asks every 5 minutes, and the daemon reads each summary at most once in 5
+minutes, waiting up to 4 seconds on the first look. A read times out after 15
+seconds; a failure is logged at `info` and shows nothing. DeepSeek's page is
+only linked, never read.
 
 The CLI update check runs only when you ask for it. Opening Settings →
 Providers, or pressing refresh on a provider there, makes the daemon look up the

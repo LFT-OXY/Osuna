@@ -1662,4 +1662,70 @@ describe("provider.api_endpoint.test_models", () => {
     };
     expect(SessionOutboundMessageSchema.parse(cancelled)).toEqual(cancelled);
   });
+  it("parses vendor_status with and without extra vendors, a degraded page, a link-only vendor, an unread page and the switch off", () => {
+    const request = {
+      type: "provider.api_endpoint.vendor_status.request" as const,
+      requestId: "req-vs",
+    };
+    expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+    const withVendors = { ...request, vendors: ["anthropic", "openai"] };
+    expect(SessionInboundMessageSchema.parse(withVendors)).toEqual(withVendors);
+    const anthropic = {
+      vendor: "anthropic",
+      name: "Anthropic",
+      page: "https://status.claude.com",
+      isLinkOnly: false,
+      level: "degraded",
+      parts: [{ name: "Claude API (api.anthropic.com)", status: "degraded_performance" }],
+      incidents: [{ name: "Elevated errors", impact: "minor", url: "https://stspg.io/x" }],
+      readAt: "2026-10-21T08:00:00.000Z",
+      error: null,
+    };
+    const deepseek = {
+      vendor: "deepseek",
+      name: "DeepSeek",
+      page: "https://status.deepseek.com",
+      isLinkOnly: true,
+      level: null,
+      parts: [],
+      incidents: [],
+      readAt: null,
+      error: null,
+    };
+    const unread = {
+      ...anthropic,
+      vendor: "moonshot",
+      level: null,
+      parts: [],
+      incidents: [],
+      error: { code: "page_status", params: { status: "503" }, message: "answered 503" },
+    };
+    for (const payload of [
+      {
+        requestId: "req-vs",
+        autoUpdate: true,
+        vendors: [anthropic, deepseek, unread],
+        endpointVendors: { ep_1: "anthropic", ep_2: "deepseek" },
+        error: null,
+      },
+      {
+        requestId: "req-vs",
+        autoUpdate: false,
+        vendors: [{ ...anthropic, level: null, parts: [], incidents: [], readAt: null }],
+        endpointVendors: { ep_1: "anthropic" },
+        error: null,
+      },
+      // 等级是字符串：daemon 以后多一种，老客户端照样解析。
+      {
+        requestId: "req-vs",
+        autoUpdate: true,
+        vendors: [{ ...anthropic, level: "something_new" }],
+        endpointVendors: {},
+        error: null,
+      },
+    ]) {
+      const response = { type: "provider.api_endpoint.vendor_status.response" as const, payload };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+  });
 });

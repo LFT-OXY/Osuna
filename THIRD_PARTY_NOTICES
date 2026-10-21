@@ -1006,6 +1006,21 @@ PublishedOutput, OutputWithin and Modalities in internal/provider:
   packages/server/src/server/api-endpoints/model-facts.ts
   packages/server/src/server/daemon-e2e/api-endpoint-gateway.e2e.test.ts
 
+The vendors' own status pages (which vendors, their pages and API hosts, which
+of a page's parts the API stands on, an endpoint matched to a vendor by its base
+URLs' hosts, the worst part's level, the open incidents on those parts, a page
+read at most once in five minutes and a first look waiting a little for it, a
+page that fails being unknown, DeepSeek's only linked) follow Vendors, VendorOf,
+hostOf, Of, Wait, ask and read in magpie's internal/upstream/upstream.go, its
+tests in upstream_test.go, the /api/upstream handler in internal/gui/providers.go,
+and upstreamOf, upstreamBadge and loadUpstream in internal/gui/assets/app.js:
+
+  packages/server/src/server/api-endpoints/vendor-status.ts
+  packages/server/src/server/api-endpoints/vendor-status.test.ts
+  packages/app/src/api-endpoints/internal/vendor-status.ts
+  packages/app/src/api-endpoints/vendor-notice.tsx
+  packages/app/src/api-endpoints/use-vendor-status.ts
+
 MIT License
 
 Copyright (c) 2026 yetone

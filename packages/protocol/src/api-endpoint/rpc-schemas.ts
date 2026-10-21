@@ -1250,3 +1250,60 @@ export const ApiEndpointTestModelsResponseSchema = z.object({
   }),
 });
 export type ApiEndpointTestModelsResponse = z.infer<typeof ApiEndpointTestModelsResponseSchema>;
+
+/**
+ * 厂商官方状态页说它的 API 怎样（照 magpie upstream）：等级是 API 依赖的那几项里最差的。
+ * 已知的等级；线上是字符串，daemon 以后多一种老客户端照样解析。
+ */
+export const API_ENDPOINT_VENDOR_LEVELS = [
+  "ok",
+  "maintenance",
+  "degraded",
+  "partial",
+  "major",
+] as const;
+export type ApiEndpointVendorLevel = (typeof API_ENDPOINT_VENDOR_LEVELS)[number];
+
+export const ApiEndpointVendorStatusSchema = z.object({
+  vendor: z.string(),
+  name: z.string(),
+  // 给人看的状态页。
+  page: z.string(),
+  // 这家的状态页没有能读的 summary.json（DeepSeek）：只给链接，从不读。
+  isLinkOnly: z.boolean(),
+  // 没读（只给链接的厂商、开关关着、读失败）时为 null：不知道，不等于正常。
+  level: z.string().nullable(),
+  // API 依赖的、不正常的那几项，状态照页面原文（degraded_performance、partial_outage、major_outage、under_maintenance）。
+  parts: z.array(z.object({ name: z.string(), status: z.string() })),
+  // 这几项上还没解决的事件；url 是事件自己的页面。
+  incidents: z.array(
+    z.object({ name: z.string(), impact: z.string().nullable(), url: z.string().nullable() }),
+  ),
+  readAt: z.string().nullable(),
+  error: ApiEndpointErrorSchema.nullable(),
+});
+export type ApiEndpointVendorStatus = z.infer<typeof ApiEndpointVendorStatusSchema>;
+
+/**
+ * 各厂商状态页的当前读数（每页 5 分钟最多读一次）。`vendors`：除了接口对上的厂商，另外要的（用量页的订阅卡片）。
+ * 只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
+export const ApiEndpointVendorStatusRequestSchema = z.object({
+  type: z.literal("provider.api_endpoint.vendor_status.request"),
+  requestId: z.string(),
+  vendors: z.array(z.string()).optional(),
+});
+export type ApiEndpointVendorStatusRequest = z.infer<typeof ApiEndpointVendorStatusRequestSchema>;
+
+/** `autoUpdate` 为 false：「价格表自动更新」关着，一页都不读，等级都为 null。`endpointVendors`：接口 id → 厂商。 */
+export const ApiEndpointVendorStatusResponseSchema = z.object({
+  type: z.literal("provider.api_endpoint.vendor_status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    autoUpdate: z.boolean(),
+    vendors: z.array(ApiEndpointVendorStatusSchema),
+    endpointVendors: z.record(z.string(), z.string()),
+    error: ApiEndpointErrorSchema.nullable(),
+  }),
+});
+export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorStatusResponseSchema>;

@@ -124,6 +124,8 @@ import {
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogRequestSchema,
   ApiEndpointForgetCatalogResponseSchema,
+  ApiEndpointVendorStatusRequestSchema,
+  ApiEndpointVendorStatusResponseSchema,
   ApiEndpointListTemplatesRequestSchema,
   ApiEndpointListTemplatesResponseSchema,
   ApiEndpointStoreIconRequestSchema,
@@ -3604,6 +3606,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetEndpointNameDisplayRequestSchema,
   ApiEndpointRevealKeyRequestSchema,
   ApiEndpointForgetCatalogRequestSchema,
+  ApiEndpointVendorStatusRequestSchema,
   ApiEndpointListTemplatesRequestSchema,
   ApiEndpointStoreIconRequestSchema,
   ApiEndpointFetchSiteIconRequestSchema,
@@ -3988,7 +3991,8 @@ export const ServerInfoStatusPayloadSchema = z
         // fetch_models 的 baseUrls（各格式各拉一次再合并）与 forget_catalog（丢掉拉回的清单）；
         // 列表带 longConversations，支持 set_long_conversations（长对话：完整窗口与全局压缩阈值）；
         // 列表带 disabledModels，支持 set_disabled_models（已禁用的模型）；
-        // 列表带 endpointNameDisplay、快照带 apiEndpointNameDisplay，支持 set_endpoint_name_display（接口名显示方式）。
+        // 列表带 endpointNameDisplay、快照带 apiEndpointNameDisplay，支持 set_endpoint_name_display（接口名显示方式）；
+        // vendor_status（厂商官方状态页）。
         apiEndpointManagement: z.boolean().optional(),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
@@ -7398,6 +7402,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ApiEndpointSetEndpointNameDisplayResponseSchema,
   ApiEndpointRevealKeyResponseSchema,
   ApiEndpointForgetCatalogResponseSchema,
+  ApiEndpointVendorStatusResponseSchema,
   ApiEndpointListTemplatesResponseSchema,
   ApiEndpointStoreIconResponseSchema,
   ApiEndpointFetchSiteIconResponseSchema,
