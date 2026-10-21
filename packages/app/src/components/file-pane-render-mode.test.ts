@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { filePreviewRenderKind, isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
+import {
+  filePreviewRenderKind,
+  filePreviewRenderKindForLocation,
+  isRenderedMarkdownFile,
+} from "@/components/file-pane-render-mode";
 
 describe("isRenderedMarkdownFile", () => {
   it("detects .md files", () => {
@@ -36,5 +40,46 @@ describe("filePreviewRenderKind", () => {
     expect(filePreviewRenderKind("src/index.ts")).toBe(null);
     expect(filePreviewRenderKind("page.mdx")).toBe(null);
     expect(filePreviewRenderKind("index.html.erb")).toBe(null);
+  });
+});
+
+describe("filePreviewRenderKindForLocation", () => {
+  const scrolls = { markdownPreviewScrollsToLine: true };
+
+  it("renders a file opened without a line", () => {
+    expect(filePreviewRenderKindForLocation({ location: { path: "spec.md" }, ...scrolls })).toBe(
+      "markdown",
+    );
+  });
+
+  it("shows a plain line target in the source view", () => {
+    expect(
+      filePreviewRenderKindForLocation({
+        location: { path: "spec.md", lineStart: 42 },
+        ...scrolls,
+      }),
+    ).toBeNull();
+  });
+
+  it("renders a Markdown line target marked for the preview, such as a node doc", () => {
+    expect(
+      filePreviewRenderKindForLocation({
+        location: { path: "spec.md", lineStart: 42, lineView: "preview" },
+        ...scrolls,
+      }),
+    ).toBe("markdown");
+  });
+
+  it("falls back to source where the preview cannot scroll to a line", () => {
+    const location = { path: "spec.md", lineStart: 42, lineView: "preview" } as const;
+    expect(
+      filePreviewRenderKindForLocation({ location, markdownPreviewScrollsToLine: false }),
+    ).toBeNull();
+    expect(
+      filePreviewRenderKindForLocation({
+        location: { path: "plan.html", lineStart: 2, lineView: "preview" },
+        ...scrolls,
+      }),
+    ).toBeNull();
   });
 });

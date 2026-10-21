@@ -14,15 +14,31 @@ export interface ViewportTransform {
   y: number;
 }
 
+/** 内容里的一块矩形，按适配后的内容坐标（左上为原点）。 */
+export interface ViewportRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ViewportScaleLimits {
   minScale: number;
   maxScale: number;
+  /** 内容比视口小的方向上也能在视口内移动，不强制居中（内容始终整个留在视口里）。 */
+  panWithinViewport?: boolean;
 }
 
 export interface ViewportFitOptions {
   padding?: number;
   maxWidth?: number;
   maxHeight?: number;
+  /** contain：整块放进视口（默认）；width：只按宽度铺满，高出的部分靠拖动看。 */
+  mode?: "contain" | "width";
+  /** 适配时最多放大到的倍数；不填则可以放大。 */
+  maxFitScale?: number;
+  /** 适配时最少缩到的倍数；内容更宽时不再缩小，超出的部分靠拖动看。 */
+  minFitScale?: number;
 }
 
 export const FIT_TRANSFORM: ViewportTransform = { scale: 1, x: 0, y: 0 };
@@ -65,7 +81,15 @@ export function fitContentSize(
     0,
     Math.min(viewport.height - padding * 2, options.maxHeight ?? Number.POSITIVE_INFINITY),
   );
-  const fitScale = Math.min(availableWidth / content.width, availableHeight / content.height);
+  const widthScale = availableWidth / content.width;
+  const containScale = Math.min(widthScale, availableHeight / content.height);
+  const fitScale = Math.max(
+    options.minFitScale ?? 0,
+    Math.min(
+      options.mode === "width" ? widthScale : containScale,
+      options.maxFitScale ?? Number.POSITIVE_INFINITY,
+    ),
+  );
   return {
     width: content.width * fitScale,
     height: content.height * fitScale,
@@ -90,8 +114,12 @@ export function clampTransform(
   limits: ViewportScaleLimits,
 ): ViewportTransform {
   const scale = clampScale(transform.scale, limits);
-  const maxX = Math.max(0, (fittedContent.width * scale - viewport.width) / 2);
-  const maxY = Math.max(0, (fittedContent.height * scale - viewport.height) / 2);
+  const slack = (content: number, available: number) =>
+    limits.panWithinViewport
+      ? Math.abs(content * scale - available) / 2
+      : Math.max(0, (content * scale - available) / 2);
+  const maxX = slack(fittedContent.width, viewport.width);
+  const maxY = slack(fittedContent.height, viewport.height);
   return {
     scale,
     x: clampOffset(transform.x, maxX),
@@ -145,4 +173,59 @@ export function panContent(input: {
     input.viewport,
     input.limits,
   );
+}
+
+/**
+ * 打开和复位时的"从顶部看起"：内容顶边贴着视口顶边；比视口宽时左边缘贴着视口左边，否则水平居中。
+ * 内容比视口矮时，只有允许在视口内移动（panWithinViewport）才能贴顶，否则仍居中。
+ */
+export function topAlignedTransform(input: {
+  fittedContent: ViewportSize;
+  viewport: ViewportSize;
+  limits: ViewportScaleLimits;
+}): ViewportTransform {
+  return clampTransform(
+    {
+      scale: 1,
+      x: Math.max(0, (input.fittedContent.width - input.viewport.width) / 2),
+      y: (input.fittedContent.height - input.viewport.height) / 2,
+    },
+    input.fittedContent,
+    input.viewport,
+    input.limits,
+  );
+}
+
+/** 一个方向上要挪多少才能让 [start, end] 落进 [0, size]；已经在里面为 0，比视口还长时对齐起点。 */
+function revealDelta(start: number, end: number, size: number): number {
+  if (start < 0 || end - start > size) return -start;
+  if (end > size) return size - end;
+  return 0;
+}
+
+/**
+ * 不改缩放，平移到刚好看见内容里的这块矩形；已经整块可见就原样返回同一个 transform。
+ */
+export function revealContentRect(input: {
+  transform: ViewportTransform;
+  rect: ViewportRect;
+  fittedContent: ViewportSize;
+  viewport: ViewportSize;
+  limits: ViewportScaleLimits;
+}): ViewportTransform {
+  const { transform, rect, fittedContent, viewport } = input;
+  const left =
+    viewport.width / 2 + transform.x + (rect.x - fittedContent.width / 2) * transform.scale;
+  const top =
+    viewport.height / 2 + transform.y + (rect.y - fittedContent.height / 2) * transform.scale;
+  const dx = revealDelta(left, left + rect.width * transform.scale, viewport.width);
+  const dy = revealDelta(top, top + rect.height * transform.scale, viewport.height);
+  if (dx === 0 && dy === 0) return transform;
+  return panContent({
+    transform,
+    delta: { x: dx, y: dy },
+    fittedContent,
+    viewport,
+    limits: input.limits,
+  });
 }

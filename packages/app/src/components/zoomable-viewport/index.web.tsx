@@ -6,12 +6,16 @@ import {
   fitContentSize,
   isPointInsideTransformedContent,
   panContent,
+  revealContentRect,
+  topAlignedTransform,
   zoomContentAtPoint,
   type ViewportPoint,
+  type ViewportRect,
+  type ViewportScaleLimits,
   type ViewportSize,
   type ViewportTransform,
 } from "./geometry";
-import { ViewportToolbar } from "./toolbar";
+import { ViewportToolbar, ViewportZoomBar } from "./toolbar";
 import type { ZoomableViewportProps } from "./types";
 
 const DEFAULT_MAX_SCALE = 8;
@@ -43,18 +47,89 @@ function distance(points: ViewportPoint[]): number {
   return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
 }
 
+/**
+ * 指针真的拖动起来才捕获：按下就捕获的话，抬起和点击都落到画布上，内容里可点的东西（逻辑图的子图卡片）收不到。
+ */
+function capturePointer(event: React.PointerEvent<HTMLDivElement>) {
+  if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+}
+
+/** 要看的那块（按 contentSize 坐标）变了、又不在视口里时平移进来；看得见就不动。 */
+function useRevealRect(input: {
+  revealRect: ViewportRect | null;
+  contentWidth: number;
+  fittedContent: ViewportSize | null;
+  viewport: ViewportSize | null;
+  limits: ViewportScaleLimits;
+  transformRef: React.RefObject<ViewportTransform>;
+  commitTransform: (next: ViewportTransform) => void;
+}) {
+  const {
+    revealRect,
+    contentWidth,
+    fittedContent,
+    viewport,
+    limits,
+    transformRef,
+    commitTransform,
+  } = input;
+  const revealX = revealRect?.x ?? null;
+  const revealY = revealRect?.y ?? null;
+  const revealWidth = revealRect?.width ?? null;
+  const revealHeight = revealRect?.height ?? null;
+  useEffect(() => {
+    if (revealX === null || revealY === null || revealWidth === null || revealHeight === null) {
+      return;
+    }
+    if (!fittedContent || !viewport) return;
+    const ratio = fittedContent.width / contentWidth;
+    const next = revealContentRect({
+      transform: transformRef.current,
+      rect: {
+        x: revealX * ratio,
+        y: revealY * ratio,
+        width: revealWidth * ratio,
+        height: revealHeight * ratio,
+      },
+      fittedContent,
+      viewport,
+      limits,
+    });
+    if (next !== transformRef.current) commitTransform(next);
+  }, [
+    commitTransform,
+    contentWidth,
+    fittedContent,
+    limits,
+    revealHeight,
+    revealWidth,
+    revealX,
+    revealY,
+    transformRef,
+    viewport,
+  ]);
+}
+
 export function ZoomableViewport({
   contentSize,
   children,
   actions = [],
   accessibilityLabel,
   fit,
+  initialPosition = "center",
+  controls = "hover-icons",
+  renderAtContentSize = false,
+  panWithinViewport = false,
   maxScale = DEFAULT_MAX_SCALE,
   minScale = DEFAULT_MIN_SCALE,
   onPressOutsideContent,
   style,
   testID,
   wheelActivation = "modifier",
+  wheelPan = false,
+  revealRect = null,
 }: ZoomableViewportProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, ViewportPoint>());
@@ -71,13 +146,36 @@ export function ZoomableViewport({
     () => (viewport ? fitContentSize(contentSize, viewport, fit) : null),
     [contentSize, fit, viewport],
   );
-  const limits = useMemo(() => ({ minScale, maxScale }), [maxScale, minScale]);
+  const limits = useMemo(
+    () => ({ minScale, maxScale, panWithinViewport }),
+    [maxScale, minScale, panWithinViewport],
+  );
+  const initialTransform = useMemo(
+    () =>
+      initialPosition === "top" && fittedContent && viewport
+        ? topAlignedTransform({ fittedContent, viewport, limits })
+        : FIT_TRANSFORM,
+    [fittedContent, initialPosition, limits, viewport],
+  );
 
   const commitTransform = useCallback((next: ViewportTransform) => {
     transformRef.current = next;
     setTransform(next);
   }, []);
-  const reset = useCallback(() => commitTransform(FIT_TRANSFORM), [commitTransform]);
+  const reset = useCallback(
+    () => commitTransform(initialTransform),
+    [commitTransform, initialTransform],
+  );
+  const canPanAt = useCallback(
+    (scale: number) =>
+      Boolean(
+        fittedContent &&
+        viewport &&
+        (fittedContent.width * scale > viewport.width ||
+          fittedContent.height * scale > viewport.height),
+      ),
+    [fittedContent, viewport],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -91,6 +189,17 @@ export function ZoomableViewport({
   }, []);
 
   useEffect(() => reset(), [contentSize.height, contentSize.width, reset, viewport]);
+
+  // 排在复位之后：换了内容或视口先回到初始位置，再把要看的那块挪进来。
+  useRevealRect({
+    revealRect,
+    contentWidth: contentSize.width,
+    fittedContent,
+    viewport,
+    limits,
+    transformRef,
+    commitTransform,
+  });
 
   const zoomAt = useCallback(
     (scale: number, focalPoint: ViewportPoint) => {
@@ -119,6 +228,15 @@ export function ZoomableViewport({
     [viewport, zoomAt],
   );
   const zoomIn = useCallback(() => zoomFromCenter(1.25), [zoomFromCenter]);
+  const panBy = useCallback(
+    (delta: ViewportPoint) => {
+      if (!fittedContent || !viewport) return;
+      commitTransform(
+        panContent({ transform: transformRef.current, delta, fittedContent, viewport, limits }),
+      );
+    },
+    [commitTransform, fittedContent, limits, viewport],
+  );
   const zoomOut = useCallback(() => zoomFromCenter(0.8), [zoomFromCenter]);
 
   useEffect(() => {
@@ -127,7 +245,13 @@ export function ZoomableViewport({
     const activeCanvas = canvas;
     function zoomWithWheel(event: WheelEvent) {
       const hasModifier = event.ctrlKey || event.metaKey;
-      if (wheelActivation === "modifier" && !hasModifier) return;
+      if (wheelActivation === "modifier" && !hasModifier) {
+        if (wheelPan) {
+          event.preventDefault();
+          panBy({ x: -event.deltaX, y: -event.deltaY });
+        }
+        return;
+      }
       event.preventDefault();
       const bounds = activeCanvas.getBoundingClientRect();
       const factor = Math.min(1.25, Math.max(0.8, Math.exp(-event.deltaY * 0.01)));
@@ -138,32 +262,34 @@ export function ZoomableViewport({
     }
     activeCanvas.addEventListener("wheel", zoomWithWheel, { passive: false });
     return () => activeCanvas.removeEventListener("wheel", zoomWithWheel);
-  }, [wheelActivation, zoomAt]);
+  }, [panBy, wheelActivation, wheelPan, zoomAt]);
 
-  const beginPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (event.pointerType !== "mouse") setHasTouchInput(true);
-    if (pointersRef.current.size === 0) suppressClickRef.current = false;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const points = Array.from(pointersRef.current.values());
-    if (points.length >= 2) {
+  const beginPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.pointerType !== "mouse") setHasTouchInput(true);
+      if (pointersRef.current.size === 0) suppressClickRef.current = false;
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const points = Array.from(pointersRef.current.values());
+      if (points.length >= 2) {
+        gestureRef.current = {
+          type: "pinch",
+          distance: distance(points),
+          midpoint: midpoint(points),
+        };
+        setIsDragging(true);
+        return;
+      }
       gestureRef.current = {
-        type: "pinch",
-        distance: distance(points),
-        midpoint: midpoint(points),
+        type: "drag",
+        pointerId: event.pointerId,
+        startPoint: points[0],
+        startTransform: transformRef.current,
       };
-      setIsDragging(true);
-      return;
-    }
-    gestureRef.current = {
-      type: "drag",
-      pointerId: event.pointerId,
-      startPoint: points[0],
-      startTransform: transformRef.current,
-    };
-    setIsDragging(transformRef.current.scale > 1);
-  }, []);
+      setIsDragging(canPanAt(transformRef.current.scale));
+    },
+    [canPanAt],
+  );
 
   const movePointer = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -173,6 +299,7 @@ export function ZoomableViewport({
       const points = Array.from(pointersRef.current.values());
       if (gesture?.type === "pinch" && points.length >= 2) {
         suppressClickRef.current = true;
+        capturePointer(event);
         const nextMidpoint = midpoint(points);
         const nextDistance = distance(points);
         const panned = panContent({
@@ -202,6 +329,7 @@ export function ZoomableViewport({
         Math.hypot(event.clientX - gesture.startPoint.x, event.clientY - gesture.startPoint.y) > 3
       ) {
         suppressClickRef.current = true;
+        capturePointer(event);
       }
       commitTransform(
         panContent({
@@ -219,26 +347,48 @@ export function ZoomableViewport({
     [commitTransform, fittedContent, limits, viewport],
   );
 
-  const endPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    pointersRef.current.delete(event.pointerId);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    const remaining = Array.from(pointersRef.current.entries());
-    if (remaining.length === 1) {
-      const [pointerId, point] = remaining[0];
-      gestureRef.current = {
-        type: "drag",
-        pointerId,
-        startPoint: point,
-        startTransform: transformRef.current,
-      };
-      setIsDragging(transformRef.current.scale > 1);
-      return;
-    }
-    gestureRef.current = null;
-    setIsDragging(false);
-  }, []);
+  const releasePointer = useCallback(
+    (pointerId: number) => {
+      if (!pointersRef.current.delete(pointerId)) return;
+      const remaining = Array.from(pointersRef.current.entries());
+      if (remaining.length === 1) {
+        const [remainingId, point] = remaining[0];
+        gestureRef.current = {
+          type: "drag",
+          pointerId: remainingId,
+          startPoint: point,
+          startTransform: transformRef.current,
+        };
+        setIsDragging(canPanAt(transformRef.current.scale));
+        return;
+      }
+      gestureRef.current = null;
+      setIsDragging(false);
+    },
+    [canPanAt],
+  );
+
+  const endPointer = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      releasePointer(event.pointerId);
+    },
+    [releasePointer],
+  );
+
+  // 还没拖动起来（没捕获）就移出视口松开的指针，抬起只落在别处；在 window 上收下来，免得它留在
+  // pointersRef 里：不按键移回来会被当成拖动，下一次按下会被当成双指缩放。
+  useEffect(() => {
+    const releaseAnywhere = (event: PointerEvent) => releasePointer(event.pointerId);
+    window.addEventListener("pointerup", releaseAnywhere);
+    window.addEventListener("pointercancel", releaseAnywhere);
+    return () => {
+      window.removeEventListener("pointerup", releaseAnywhere);
+      window.removeEventListener("pointercancel", releaseAnywhere);
+    };
+  }, [releasePointer]);
 
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -261,19 +411,33 @@ export function ZoomableViewport({
 
   const renderedCanvasStyle = useMemo<React.CSSProperties>(() => {
     let cursor: React.CSSProperties["cursor"] = "default";
-    if (transform.scale > 1) cursor = isDragging ? "grabbing" : "grab";
+    if (canPanAt(transform.scale)) cursor = isDragging ? "grabbing" : "grab";
     return { ...canvasDomStyle, cursor };
-  }, [isDragging, transform.scale]);
-  const renderedContentStyle = useMemo<React.CSSProperties>(
-    () => ({
+  }, [canPanAt, isDragging, transform.scale]);
+  // 适配比例：内容原始尺寸到适配尺寸；百分比与按原始尺寸排版都要乘上它。
+  const fitRatio = fittedContent ? fittedContent.width / contentSize.width : 1;
+  const renderedContentStyle = useMemo<React.CSSProperties>(() => {
+    if (renderAtContentSize && fittedContent) {
+      // 子元素按原始尺寸排版，再连同适配比例一起缩放；居中排版下视觉上与按适配尺寸排版一致。
+      return {
+        ...contentDomStyle,
+        width: contentSize.width,
+        height: contentSize.height,
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale * fitRatio})`,
+      };
+    }
+    return {
       ...contentDomStyle,
       width: fittedContent?.width ?? 0,
       height: fittedContent?.height ?? 0,
       transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
-    }),
-    [fittedContent, transform],
-  );
+    };
+  }, [contentSize, fitRatio, fittedContent, renderAtContentSize, transform]);
   const controlsVisible = isHovered || isFocusWithin || hasTouchInput;
+  const isAtInitialView =
+    transform.scale === initialTransform.scale &&
+    transform.x === initialTransform.x &&
+    transform.y === initialTransform.y;
   const handleFocus = useCallback(() => setIsFocusWithin(true), []);
   const handleBlur = useCallback(() => setIsFocusWithin(false), []);
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
@@ -300,24 +464,40 @@ export function ZoomableViewport({
       >
         <div style={renderedContentStyle}>{children}</div>
       </div>
-      <div
-        onBlurCapture={handleBlur}
-        onFocusCapture={handleFocus}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={toolbarDomStyle}
-      >
-        <ViewportToolbar
-          actions={actions}
+      {/* 悬停热区只给 hover-icons 用；zoom-bar 模式下不放，否则右上角这块内容点不到也拖不动。 */}
+      {controls === "hover-icons" ? (
+        <div
+          onBlurCapture={handleBlur}
+          onFocusCapture={handleFocus}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={toolbarDomStyle}
+        >
+          <ViewportToolbar
+            actions={actions}
+            maxScale={maxScale}
+            minScale={minScale}
+            onReset={reset}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            resetDisabled={isAtInitialView}
+            scale={transform.scale}
+            visible={controlsVisible}
+          />
+        </div>
+      ) : null}
+      {controls === "zoom-bar" ? (
+        <ViewportZoomBar
+          displayScale={transform.scale * fitRatio}
           maxScale={maxScale}
           minScale={minScale}
           onReset={reset}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
+          resetDisabled={isAtInitialView}
           scale={transform.scale}
-          visible={controlsVisible}
         />
-      </div>
+      ) : null}
     </View>
   );
 }

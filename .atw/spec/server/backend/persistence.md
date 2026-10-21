@@ -224,7 +224,7 @@ Reference implementation: API endpoints (api-endpoint tickets 01–02, conflict 
 - Guarded write (`config-file.ts`): `writeConfigFileGuarded<T>({ filePath, compute(current: Buffer | null) → { change: write{text} | delete | keep, value: T }, commit(value), rollback(), beforeRecheck? }) → { kind: "written", value } | { kind: "conflict" }`. The service wraps it as `writeConfigFile`, passes `compute(text, bytes)`, and turns `conflict` into `ApiEndpointRequestError("config_conflict")`. Every write and restore of `settings.json` / `config.toml` goes through it.
 - Inspect (pure, for health): `inspectClaudeSettings({ text, takeover }) → { kind: "parsed", modifiedKeys, baseUrl } | unparsable`; `inspectCodexConfig({ text, takeover }) → { kind: "parsed", modifiedKeys, profileOverride: { profile, keys } | null, baseUrl } | unparsable`. `takeover` is null in Official; the Codex table to check is `takeover.table`.
 - Gateway address: `ApiEndpointService.attachGateway(url: string | null): Promise<void>`, called by bootstrap right after the main listener binds with `createApiEndpointGatewayUrl(boundListenTarget)` (`http://127.0.0.1:<port>/api-endpoint-gateway`; `0.0.0.0` → `127.0.0.1`; `null` for a socket or pipe). Before it runs the service is `pending`.
-- Injection: `PaseoDaemonConfig.apiEndpoints: { env?, homeDir?, beforeConfigRecheck?, gatewayHeaderTimeoutMs? }`; bootstrap also passes `isModelsDevAutoUpdate: () => usage.pricing.autoUpdate`, absent (never download) in tests unless set; tests drive downloads with the test-only `modelsDevFetch` / `modelsDevTimers` options (fake fetch, manual timers — never the real network). `beforeConfigRecheck` is a test seam only: the daemon tests write the file from it to simulate another tool. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. There is no Codex version check and no `providerRuntimeSettings` option any more.
+- Injection: `PaseoDaemonConfig.apiEndpoints` is `ApiEndpointServiceOverrides` (the swappable option list, kept in `service.ts` so `bootstrap.ts` names no provider) `& ApiEndpointGatewayOverrides & RetiredModelsOverrides`; bootstrap also passes `isModelsDevAutoUpdate: () => usage.pricing.autoUpdate`, absent (never download) in tests unless set; tests drive downloads with the test-only `modelsDevFetch` / `modelsDevTimers` options (fake fetch, manual timers — never the real network). `beforeConfigRecheck` is a test seam only: the daemon tests write the file from it to simulate another tool. `createTestPaseoDaemon` defaults it to a temp `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so no test daemon can touch the real `~/.claude` or `~/.codex`. There is no Codex version check. `ApiEndpointServiceOptions.providerRuntimeSettings(provider)` is optional; bootstrap passes `(provider) => config.agentProviderSettings?.[provider]`, and the service uses it to find the user-configured `codex` for `createSystemHostProcesses` and, when `readCodexSignIn` is not injected, to build `createCodexSignInReader` (without it the sign-in reads as unknown, as in service unit tests).
 
 ### 3. Contracts
 
@@ -376,8 +376,63 @@ Reference implementation: cli-wiring-web-search ticket 13 (`server/codex-convers
 - Skip a conversation whose file was written in the last minute (`reason: "active"`); `not_found` when no file. Before changing anything, check Node has `sqlite` and zstd, else change nothing.
 - Backup first: copy every rollout file (plain and zstd twin) to `$PASEO_HOME/codex-model-provider-moves/<id>/` with `move.json` (thread id, from, to, at, file pairs), written with `writePrivateFileAtomicSync`, never read back. No guarded re-read before rename: the one-minute rule is the concurrency guard (ADR 0011).
 - Rewrite each `session_meta` carrying a provider — provider only, other bytes unchanged; zstd recompressed; temp file beside, fsync, mtime restored (Node keeps microseconds), rename. A file-step failure restores the changed files from the backup → `failed` with `backupPath`. Then each `state_*.sqlite`'s row for the thread; a missing table or a failing `pragma_table_info` is skipped (magpie); a DB failure leaves files moved → `state_database_failed` with `backupPath`. An unparsable `config.toml` doesn't abort the move. Settings-snapshot events keep the old provider (magpie). Moving back to the original provider restores plain files byte for byte.
-- Ticket 14: Session history multi-select moves rows of one provider at a time (one `CODEX_HOME` per move) and lists per-row results. Codex's ``Model provider `…` not found`` on resume becomes `CodexModelProviderMissingError` (`codex-conversations/model-provider-missing.ts`); import, `resume_agent_request` and `refresh_agent_request` map errors through `toAgentResumeWireError` (`agent-resume-errors.ts`) so the wire error carries `codex_model_provider_missing` (`CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE`) and the app never matches English text. The app shows the explanation and the move button in Session history's import error and in the archived agent callout; an unarchive (`refresh_agent_request`) that fails to resume puts the agent back in the archive with the error kept. Not covered (user deferred): an unarchived agent that fails to load after a daemon restart ("Failed to load agent" page).
+- Ticket 14: Session history multi-select moves rows of one provider at a time (one `CODEX_HOME` per move) and lists per-row results. Codex's ``Model provider `…` not found`` on resume becomes `CodexModelProviderMissingError` (`codex-conversations/model-provider-missing.ts`); import, `resume_agent_request` and `refresh_agent_request` map errors through `toAgentResumeWireError` (`agent-resume-errors.ts`) so the wire error carries `codex_model_provider_missing` (`CODEX_MODEL_PROVIDER_MISSING_ERROR_CODE`) and the app never matches English text. The app shows the explanation and the move button in Session history's import error and in the archived agent callout; an unarchive (`refresh_agent_request`) that fails to resume puts the agent back in the archive with the error kept only when `isCodexModelProviderMissing(error)` (walks `cause` for `CodexModelProviderMissingError`); any other resume failure leaves the agent unarchived and still returns `agent_refresh_failed`. Worktree restore depends on that: unarchiving an agent whose workspace directory is gone fails on the missing cwd, yet the agent must end up unarchived (`worktree-restore.spec.ts`; `session.workspaces.test.ts` "cannot resume because …" covers both branches). `resume_agent_request` (CLI only) still re-archives on any failure; the difference is intentional. Not covered (user deferred): an unarchived agent that fails to load after a daemon restart ("Failed to load agent" page).
 - Known limit (verified with real Codex 0.163.0, temp `CODEX_HOME`): if Codex rebuilds its state DB before the moved conversation is resumed once, the move reverts; the dialog says to resume once.
+
+## Scenario: a folder of files an agent edits in batches, inside the workspace
+
+Reference implementation: logic maps (`server/logic-map/`, logic-map ticket 02). Reuse this shape when agent tools write several files that must change together, in the user's repo rather than `$PASEO_HOME`.
+
+### 1. Scope / Trigger
+
+- One logical write touches a skeleton JSON plus per-item Markdown files, can come from two agents at once, and the files are hand-editable (they live in git under `<cwd>/docs/logic-maps/<name>/`).
+
+### 2. Signatures
+
+- `updateLogicMap(location: { cwd, mapName }, operations): Promise<{ skeleton, warnings }>` (`logic-map-store.ts`); `applyLogicMapOperations(current, operations)` is pure and returns `{ skeleton, docWrites, docDeletes, externalLinks, problems, warnings }` (`logic-map-operations.ts`).
+- `parseLogicMapSkeleton(value)` (`logic-map-skeleton.ts`): the disk schema. Wire schema `LogicMapSkeletonSchema` lives in `@getpaseo/protocol/messages`.
+- Tools `read_logic_map` / `update_logic_map` (`logic-map-tools.ts`), registered next to `create_agent`; they resolve the map from the caller agent's `paseo.logic-map` label and `cwd`, never from tool input.
+
+### 3. Contracts
+
+- Two schemas: the disk schema is `.strict()` with non-empty ids/titles so a hand-broken file reads as corrupt; the wire schema stays loose and pure so an old client parses a map with fields it does not know. New disk fields are optional with a default (`failure: z.boolean().default(false)`).
+- Validate the whole batch first (pure apply + external-file checks); any problem → `LogicMapUpdateRejectedError(problems)` and nothing touches disk.
+- Writes are serialized per resolved folder (`runExclusive`), so concurrent batches both land instead of last-write-wins.
+- Write order: docs → skeleton (atomic) → deletes. Before writing, `snapshotFiles` captures every file the batch touches; any failure runs `restoreFiles(snapshot)` and rethrows.
+- Derived flags (`pendingLink`) are recomputed over all nodes on every batch, not only the nodes written in it, so a later framework change updates old nodes.
+- Missing node docs are a warning, not a rejection (logic-map ticket 09): after every batch `missingDocWarnings` lists each non-subgraph node that should have a doc and has none — framework `none`: `doc === null`; framework present: no notes and no external link — as `id (title)` in the same `warnings` array as the 20-node reminder, and the instruction block tells the agent the tool lists them. Before the framework is judged nothing is listed. Subgraph nodes are exempt because clicking one enters its layer, so a doc on it has no way to be opened; the app's "没有文档" tag (`isMissingDoc`, `app/src/logic-map/layout.ts`) uses the same rule, change both together. Without the warning, Codex and Pi wrote docs for 3 of 43 and 7 of 20 nodes in real runs.
+- External-file checks branch on the error code: `ENOENT`/`ENOTDIR` → "does not exist", `EISDIR` → "is a folder", anything else rethrows.
+
+### 4. Validation & Error Matrix
+
+- Caller has no label → `LogicMapOffError`. Bad batch → `LogicMapUpdateRejectedError` with every problem listed for the agent. Over 20 nodes in a layer → written, plus a warning. Non-subgraph node missing its doc (framework judged) → written, plus a warning naming it. Hand-broken `map.json` on read → readable "which map, which file, what problem" error to clients.
+
+### 5. Good/Base/Bad Cases
+
+- Good: two agents update the same map concurrently; both changes are on disk.
+- Base: a batch with one bad edge; nothing changes on disk.
+- Bad: `fs.readFile(p).catch(() => null)` to test existence — EACCES reads as "missing".
+
+### 6. Tests Required
+
+- `logic-map-tools.test.ts`: one rejection case per rule (`test.each`), concurrency, rollback on a real write failure (a 240-char id makes the temp filename hit `ENAMETOOLONG`), `pendingLink` across framework changes, missing-doc warnings in both framework modes (listed, cleared once filled, subgraph nodes never listed), external heading matching (setext, inline code, links, fenced code ignored).
+- `logic-map-store.test.ts`: disk schema rejects empty id/title and unknown fields; missing `failure` reads as `false`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+for (const [file, content] of docWrites) await writeFileAtomic(file, content);
+await writeJsonFileAtomic(skeletonFile, skeleton); // fails → new docs stay on disk
+```
+
+#### Correct
+
+```ts
+const snapshot = await snapshotFiles([...docFiles, skeletonFile, ...docDeletes]);
+try { /* docs → skeleton → deletes */ } catch (error) { await restoreFiles(snapshot); throw error; }
+```
 
 ## Anti-patterns
 

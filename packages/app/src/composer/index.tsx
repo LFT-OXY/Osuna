@@ -88,6 +88,16 @@ import {
 } from "@/composer/actions";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
+import {
+  logicMapToggleReservedWidth,
+  LogicMapComposerToggle,
+  useLogicMapEnabled,
+} from "@/logic-map/composer-toggle";
+import {
+  useLogicMapToolsUnavailableReason,
+  type LogicMapToolsTarget,
+  type LogicMapToolsUnavailableReason,
+} from "@/logic-map/osuna-tools-availability";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -302,16 +312,86 @@ interface RenderLeftContentArgs {
   agentControls: DraftAgentControlsProps | undefined;
   agentId: string;
   serverId: string;
+  workspaceId: string | null;
   focusInput: () => void;
   isCompactLayout: boolean;
   showAgentControls: boolean;
+  showLogicMapToggle: boolean;
+  /** 主机是否支持逻辑图；决定给开关还是给更长的更新提示预留宽度。 */
+  logicMapSupported: boolean | null;
+  /** 会话拿不到 Osuna 工具的原因；开关旁给出说明，并预留更宽的位置。 */
+  logicMapToolsUnavailableReason: LogicMapToolsUnavailableReason | null;
+  /** 输入框外框；逻辑图的选择弹层开在它上方。 */
+  messageInputContainerRef: React.RefObject<View | null>;
+}
+
+interface LogicMapToolsTargetInput {
+  serverId: string;
+  agentId: string;
+  agentControls: DraftAgentControlsProps | undefined;
+}
+
+/** 草稿按所选 provider 的预测判定 Osuna 工具，运行中的 Agent 按 daemon 对会话的判定。 */
+function resolveLogicMapToolsTarget(input: LogicMapToolsTargetInput): LogicMapToolsTarget {
+  if (input.agentControls) {
+    return {
+      kind: "draft",
+      providerEntries: input.agentControls.providerEntries,
+      selectedProvider: input.agentControls.selectedProvider,
+    };
+  }
+  return { kind: "agent", serverId: input.serverId, agentId: input.agentId };
+}
+
+function renderLogicMapToggle(args: RenderLeftContentArgs, isDraft: boolean): ReactElement | null {
+  if (!args.showLogicMapToggle || args.isCompactLayout) return null;
+  if (isDraft) {
+    // 草稿的图建在它所在 workspace 的目录下；没有 workspace 的草稿（新建工作区页）不给开关。
+    if (!args.workspaceId) return null;
+    return (
+      <LogicMapComposerToggle
+        serverId={args.serverId}
+        popoverEdgeRef={args.messageInputContainerRef}
+        toolsUnavailableReason={args.logicMapToolsUnavailableReason}
+        kind="draft"
+        draftTabId={args.agentId}
+        workspaceId={args.workspaceId}
+      />
+    );
+  }
+  return (
+    <LogicMapComposerToggle
+      serverId={args.serverId}
+      popoverEdgeRef={args.messageInputContainerRef}
+      toolsUnavailableReason={args.logicMapToolsUnavailableReason}
+      kind="agent"
+      agentId={args.agentId}
+      workspaceId={args.workspaceId}
+    />
+  );
 }
 
 function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
   const { agentControls, agentId, serverId, focusInput, isCompactLayout } = args;
   if (!args.showAgentControls) return null;
-  if (resolveAgentControlsMode(agentControls) === "draft" && agentControls) {
-    return <DraftAgentControls {...agentControls} isCompactLayout={isCompactLayout} />;
+  const isDraft = resolveAgentControlsMode(agentControls) === "draft";
+  // 开关放进 Agent controls 那一行的末尾，控件收缩时给它预留宽度。
+  const logicMapToggle = renderLogicMapToggle(args, isDraft);
+  const trailingControlWidth = logicMapToggle
+    ? logicMapToggleReservedWidth({
+        supported: args.logicMapSupported,
+        toolsUnavailable: args.logicMapToolsUnavailableReason !== null,
+      })
+    : 0;
+  if (isDraft && agentControls) {
+    return (
+      <DraftAgentControls
+        {...agentControls}
+        isCompactLayout={isCompactLayout}
+        trailingControl={logicMapToggle}
+        trailingControlWidth={trailingControlWidth}
+      />
+    );
   }
   return (
     <AgentControls
@@ -319,6 +399,8 @@ function renderLeftContent(args: RenderLeftContentArgs): ReactElement | null {
       serverId={serverId}
       onDropdownClose={focusInput}
       isCompactLayout={isCompactLayout}
+      trailingControl={logicMapToggle}
+      trailingControlWidth={trailingControlWidth}
     />
   );
 }
@@ -1035,6 +1117,8 @@ interface ComposerProps {
   inputWrapperStyle?: import("react-native").ViewStyle;
   /** Optional panel/container layout breakpoint. Defaults to the screen breakpoint. */
   isCompactLayout?: boolean;
+  /** 工具栏上显示"逻辑图"开关（对话 pane 与 workspace 草稿用；紧凑布局不显示）。 */
+  showLogicMapToggle?: boolean;
   /** 在 Composer 底部挂上工作区类型 / 分支 / host 的窄条，分支可点开切换（工作区 pane 用，手机上不显示）。 */
   showContextStrip?: boolean;
   /**
@@ -1367,6 +1451,7 @@ function ComposerContentImpl({
   agentControls,
   inputWrapperStyle,
   isCompactLayout: isCompactLayoutOverride,
+  showLogicMapToggle = false,
   showContextStrip = false,
   inputMode = "chat",
   readOnly = false,
@@ -2384,17 +2469,46 @@ function ComposerContentImpl({
     [attachments, setSelectedAttachments, setGithubSearchQuery, setIsGithubPickerOpen],
   );
 
+  // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
+  const logicMapSupported = useHostFeatureAvailability(serverId, "logicMap");
+  const logicMapToolsReason = useLogicMapToolsUnavailableReason(
+    resolveLogicMapToolsTarget({ serverId, agentId, agentControls }),
+  );
+  const logicMapEnabled = useLogicMapEnabled({
+    serverId,
+    agentId,
+    isDraft: resolveAgentControlsMode(agentControls) === "draft",
+  });
+  // 只在开关开着时提示工具不可用：Osuna 工具默认关，常驻提示会挤掉速度等控件。
+  const logicMapToolsUnavailableReason = logicMapEnabled ? logicMapToolsReason : null;
+  const messageInputContainerRef = useRef<View>(null);
   const leftContent = useMemo(
     () =>
       renderLeftContent({
         agentControls,
         agentId,
         serverId,
+        workspaceId: workspaceId ?? null,
         focusInput,
         isCompactLayout,
         showAgentControls: mode.showAgentControls,
+        showLogicMapToggle,
+        logicMapSupported,
+        logicMapToolsUnavailableReason,
+        messageInputContainerRef,
       }),
-    [agentControls, agentId, focusInput, isCompactLayout, mode.showAgentControls, serverId],
+    [
+      logicMapSupported,
+      logicMapToolsUnavailableReason,
+      agentControls,
+      agentId,
+      workspaceId,
+      focusInput,
+      isCompactLayout,
+      mode.showAgentControls,
+      serverId,
+      showLogicMapToggle,
+    ],
   );
 
   const handleAttachButtonRef = useCallback((node: View | null) => {
@@ -2539,7 +2653,6 @@ function ComposerContentImpl({
       pluginClientSlashCommands,
     ],
   );
-  const messageInputContainerRef = useRef<View>(null);
 
   const isSubmitLoadingVisible =
     isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;

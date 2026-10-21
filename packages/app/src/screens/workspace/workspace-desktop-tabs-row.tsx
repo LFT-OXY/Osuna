@@ -617,6 +617,7 @@ function getFallbackTabLabel(
     files: string;
     pullRequest: string;
     sessionHistory: string;
+    logicMap: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -645,6 +646,9 @@ function getFallbackTabLabel(
   }
   if (tab.target.kind === "session_history") {
     return labels.sessionHistory;
+  }
+  if (tab.target.kind === "logic_map") {
+    return labels.logicMap;
   }
   return labels.agent;
 }
@@ -1137,6 +1141,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
       sessionHistory: t("panels.sessionHistory.label"),
+      logicMap: t("logicMap.panel.label"),
     }),
     [t],
   );

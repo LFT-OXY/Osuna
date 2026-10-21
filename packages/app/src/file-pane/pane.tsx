@@ -14,7 +14,7 @@ import { StyleSheet, UnistylesRuntime, withUnistyles } from "react-native-unisty
 import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useSessionStore, type ExplorerFile } from "@/stores/session-store";
-import { filePreviewRenderKind } from "@/components/file-pane-render-mode";
+import { filePreviewRenderKindForLocation } from "@/components/file-pane-render-mode";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
 import { getFileNameFromPath } from "@/attachments/utils";
 import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
@@ -29,7 +29,7 @@ import { useFilePreview } from "./preview-lifecycle/hook";
 import { resolveFilePreviewLifecycle } from "./preview-lifecycle/model";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
-import { FileMarkdownPreview } from "./markdown-preview";
+import { FileMarkdownPreview, MARKDOWN_PREVIEW_SCROLLS_TO_LINE } from "./markdown-preview";
 import type { MarkdownPreviewResources } from "./markdown-preview/resource";
 import { FileEditorModel, getFileConflictCallout, type FileConflictCallout } from "./editor/model";
 import { createFileObservationSource } from "./editor/observation-source";
@@ -144,9 +144,7 @@ function FilePreviewBody({
   // A line target means the caller wants to land on that line, so fall back to
   // the highlighted source view even for renderable files.
   const renderKind =
-    preview?.kind === "text" && !location.lineStart && mode !== "source"
-      ? filePreviewRenderKind(filePath)
-      : null;
+    preview?.kind === "text" && mode !== "source" ? previewRenderKindForLocation(location) : null;
 
   const previewScrollRef = useRef<RNScrollView>(null);
 
@@ -185,7 +183,12 @@ function FilePreviewBody({
             style={styles.previewContent}
             showsVerticalScrollIndicator
           >
-            <FileMarkdownPreview source={preview.content ?? ""} resources={markdownResources} />
+            <FileMarkdownPreview
+              source={preview.content ?? ""}
+              resources={markdownResources}
+              lineStart={location.lineStart}
+              navigationRevision={navigationRevision}
+            />
           </RNScrollView>
         </View>
       );
@@ -309,12 +312,12 @@ export function FilePane({
 
   const { file: preview, imageAttachment } = resolveFilePreviewLifecycle(previewLifecycle);
   const imagePreviewUri = useAttachmentPreviewUrl(imageAttachment);
-  const isRenderable = isRenderablePreview(preview, location.path);
+  const isRenderable = preview?.kind === "text" && previewRenderKindForLocation(location) !== null;
   const editable = isEditableTextFile({
     preview,
     supportsEditing,
   });
-  const canTogglePreviewMode = isRenderable && !location.lineStart;
+  const canTogglePreviewMode = isRenderable;
   const lineCount =
     preview?.kind === "text" ? (preview.content ?? "").split("\n").length : undefined;
   const errorMessage = previewLifecycle.status === "error" ? previewLifecycle.message : null;
@@ -350,8 +353,13 @@ export function FilePane({
   );
 }
 
-function isRenderablePreview(preview: ExplorerFile | null, path: string): boolean {
-  return preview?.kind === "text" && filePreviewRenderKind(path) !== null;
+// Only a line target marked lineView: "preview" (logic map node docs) stays in the
+// Markdown preview, and only where that preview can scroll to the line.
+function previewRenderKindForLocation(location: WorkspaceFileLocation) {
+  return filePreviewRenderKindForLocation({
+    location,
+    markdownPreviewScrollsToLine: MARKDOWN_PREVIEW_SCROLLS_TO_LINE,
+  });
 }
 
 function isEditableTextFile(input: {

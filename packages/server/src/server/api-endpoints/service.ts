@@ -6,6 +6,7 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 
 import { randomBytes, randomUUID } from "node:crypto";
+import type { IncomingHttpHeaders } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -73,7 +74,9 @@ import type {
 import {
   findCodexCommand,
   normalizeOpenAICompatibleBaseUrl,
+  probeCodexVersion,
 } from "../agent/providers/codex-app-server-agent.js";
+import type { ProviderRuntimeSettings } from "../agent/provider-launch-config.js";
 import {
   CLAUDE_CLOUD_SWITCH_KEYS,
   claudeManagedSettingsFiles,
@@ -149,7 +152,11 @@ import {
   readCodexModelsCache,
   type CodexOwnModel,
 } from "./codex-models-cache.js";
-import type { CodexSignIn, ReadCodexSignIn } from "./codex-sign-in.js";
+import {
+  createCodexSignInReader,
+  type CodexSignIn,
+  type ReadCodexSignIn,
+} from "./codex-sign-in.js";
 import { CHATGPT_BACKEND_PATH } from "./gateway/chatgpt-backend.js";
 import { FIXED_EFFORTS, askedAt } from "./gateway/fixed-effort.js";
 import type { ChatGptModelsListing } from "./gateway/chatgpt-models.js";
@@ -167,7 +174,6 @@ import { switchOffFileChange } from "./switch-off-preview.js";
 import {
   createSystemHostProcesses,
   HostProcessesError,
-  type FindCodexCommand,
   type HostProcesses,
 } from "./host-processes.js";
 import {
@@ -265,6 +271,7 @@ import {
   readCodexSystem,
   SeenCodexVersion,
 } from "./cli-header-samples.js";
+import { InstalledCodexVersion } from "./codex-cli-version.js";
 import {
   cliTestAddress,
   cliTestRefusal,
@@ -644,13 +651,11 @@ export interface ApiEndpointServiceOptions {
   hostProcesses?: HostProcesses;
   // daemon 的版本：Osuna 自己发出的请求（经代理问中转站、问托管地址是不是中转站）带 Osuna/<版本>。
   daemonVersion: string;
-  // 真的适配器找哪个 codex 执行它自己的命令；缺省按默认找，daemon 传用户配的 codex 命令（假的适配器自己答）。
-  findCodexCommand?: FindCodexCommand;
-  // 本机 Codex CLI 自报的版本（没有 Codex 样本时「按 Codex 的样子测」用，magpie codexCLIVersion）；daemon 传跑
-  // `codex --version` 的，缺省不查。测试一律换成假的，绝不跑真的 codex。
+  // 提供方当前生效的启动设置（含用户配的命令）；执行 codex 自己的命令、问 Codex 怎么登录、读本机 Codex 版本时用它找 codex。
+  providerRuntimeSettings?: (provider: ApiEndpointProvider) => ProviderRuntimeSettings | undefined;
+  // 本机 Codex CLI 自报的版本（没有 Codex 样本时「按 Codex 的样子测」用，magpie codexCLIVersion）；缺省：有
+  // providerRuntimeSettings 时先读 npm 包、读不到才跑 `codex --version`，没有时不查。测试一律换成假的，绝不跑真的 codex。
   readCodexCliVersion?: () => Promise<string | null>;
-  // 经中转站来过的 Codex 里最新的版本；daemon 传中转站共用的那个，缺省是空的。
-  codexSeenVersion?: SeenCodexVersion;
   upstreamTimeoutMs?: number;
   connectionTestTimeoutMs?: number;
   // 测试模型的并发与时限；缺省 4 个、单个 20 秒、整批 3 分钟（model-tests.ts），测试换成短的。
@@ -685,11 +690,58 @@ export interface ApiEndpointServiceOptions {
   >;
   // 每隔一会儿看要重开谁的计时器；测试换成手动触发的。
   reopenHintsTimers?: UsagePricingTimers;
-  // 问 Codex 自己是怎么登录的（ADR 0010）；生产起临时 app-server，测试换成固定答案。缺省按判断不出处理。
+  // 问 Codex 自己是怎么登录的（ADR 0010）；测试换成固定答案。缺省：有 providerRuntimeSettings 时
+  // 问临时 app-server 的 account/read，没有时按判断不出处理。
   readCodexSignIn?: ReadCodexSignIn;
   // 改写 CLI 配置时，落下接管记录之后、替换前重读比对之前调用。
   // 只给进程内 daemon 测试模拟「别的工具同时在改这份文件」，生产不传。
   beforeConfigRecheck?: (filePath: string) => void;
+}
+
+// daemon 配置里可以换掉的接口服务选项（PaseoDaemonConfig.apiEndpoints）；测试 daemon 用它们隔开真实环境。
+export type ApiEndpointServiceOverrides = Pick<
+  ApiEndpointServiceOptions,
+  | "env"
+  | "homeDir"
+  | "claudeManagedSettingsDir"
+  | "readLoginShellEnv"
+  | "probeGatewayAt"
+  | "probeThroughProxy"
+  | "proxyEnv"
+  | "beforeConfigRecheck"
+  | "isModelsDevAutoUpdate"
+  | "modelsDevFetch"
+  | "modelsDevTimers"
+  | "fetchSite"
+  | "reachesUnasked"
+  | "catalogRefreshTimers"
+  | "vendorStatusUrls"
+  | "vendorStatusTimers"
+  | "importSourcePaths"
+  | "dataFileSystem"
+  | "modelTests"
+  | "detectEach"
+  | "modelTestTimers"
+  | "readCodexSignIn"
+  | "readCodexCliVersion"
+  // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
+  | "now"
+  | "readCliUse"
+  // 列进程与执行 CLI 命令的适配器：测试 daemon 一律给假的（paseo-daemon.ts）。
+  | "hostProcesses"
+  | "reopenHintsTimers"
+>;
+
+function defaultCodexSignInReader(
+  options: Pick<ApiEndpointServiceOptions, "providerRuntimeSettings" | "logger">,
+): ReadCodexSignIn {
+  if (!options.providerRuntimeSettings) {
+    return () => Promise.reject(new Error("No way to tell how Codex is signed in"));
+  }
+  return createCodexSignInReader({
+    runtimeSettings: options.providerRuntimeSettings("codex"),
+    logger: options.logger,
+  });
 }
 
 export type VendorStatusResult = Omit<
@@ -872,7 +924,8 @@ export class ApiEndpointService {
   private readonly retiredModels: RetiredModels;
   private readonly sightings: GatewaySightings;
   private readonly readCodexCliVersion: (() => Promise<string | null>) | null;
-  private readonly codexSeenVersion: SeenCodexVersion;
+  // 经中转站来过的 Codex 里最新的版本（只在内存里）；中转站经 noteCliVersion 告诉它。
+  private readonly codexSeenVersion = new SeenCodexVersion();
   // 本机 Codex CLI 的版本隔一阵才重新问一次（magpie codexVersionCache 的 10 分钟）。
   private codexCliVersionCache: { at: number; version: string | null } | null = null;
   private readonly readCliUse: ReadCliUse;
@@ -928,7 +981,11 @@ export class ApiEndpointService {
     // 真的适配器用到时才造：测试里一造就抛错。
     const hostProcesses = (): HostProcesses => {
       adapter ??= createSystemHostProcesses({
-        findCodex: options.findCodexCommand ?? ((input) => findCodexCommand(input)),
+        findCodex: (input) =>
+          findCodexCommand({
+            ...input,
+            runtimeSettings: options.providerRuntimeSettings?.("codex"),
+          }),
       });
       return adapter;
     };
@@ -964,16 +1021,13 @@ export class ApiEndpointService {
     this.cooldowns = options.cooldowns;
     this.retiredModels = options.retiredModels;
     this.sightings = options.sightings;
-    ({ readCli: this.readCodexCliVersion, seen: this.codexSeenVersion } =
-      codexVersionSources(options));
+    this.readCodexCliVersion = codexCliVersionReader(options);
     this.readCliUse = options.readCliUse ?? readCliUse;
     this.startedAt = this.now();
     this.icons = new EndpointIcons({ endpointsDir: this.store.endpointsDir, now: this.now });
     this.fetchSite = options.fetchSite ?? defaultFetchSite({ userAgent });
     this.reachesUnasked = options.reachesUnasked ?? reachesAnyAddress;
-    this.readCodexSignIn =
-      options.readCodexSignIn ??
-      (() => Promise.reject(new Error("No way to tell how Codex is signed in")));
+    this.readCodexSignIn = options.readCodexSignIn ?? defaultCodexSignInReader(options);
     const isModelsDevAutoUpdate = options.isModelsDevAutoUpdate ?? (() => false);
     this.isAutoUpdate = isModelsDevAutoUpdate;
     this.importSourcePaths = options.importSourcePaths;
@@ -3032,7 +3086,12 @@ export class ApiEndpointService {
    * 这部分清单的标记，与正被改写的 config.toml 所在的 CODEX_HOME（ChatGPT 拿不到时读 Codex 上次的清单）。
    * 标记也跟着 Codex 的默认模型变。endpoints.json 读不懂时没有接口模型。
    */
-  codexChatGptListing(): ChatGptModelsListing {
+  /** 中转站收到 ChatGPT 后端那组路径的请求时调用：记下请求头里 Codex 的版本，「按 Codex 的样子测」用。 */
+  noteCliVersion(headers: IncomingHttpHeaders): void {
+    this.codexSeenVersion.saw(headers);
+  }
+
+  chatGptListing(): ChatGptModelsListing {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();
     const marksAgentsV1 = state?.agents.codex.allowsAnySubagentModel === true;
@@ -3076,7 +3135,7 @@ export class ApiEndpointService {
   private staleCodexModels(state: ApiEndpointState): void {
     if (!state.agents.codex.enabled) return;
     if (!isChatGptWiring(this.store.readCodexTakeover().takeover)) return;
-    const { codexHome, tag } = this.codexChatGptListing();
+    const { codexHome, tag } = this.chatGptListing();
     try {
       const marked = markCodexModelsCacheStale({ codexHome, tag });
       // Codex 正在改写它：不硬写，等它自己的缓存过期（几分钟）或下一次 X-Models-Etag 不同时重拉。
@@ -5691,15 +5750,24 @@ function providerWithListingHeaders(format: ApiEndpointRequestFormat): ApiEndpoi
 
 const CODEX_CLI_VERSION_TTL_MS = 10 * 60_000;
 
-/** 没有 Codex 样本时取版本的两个来源：本机 CLI（缺省不问）与中转站见过的（缺省是空的）。 */
-function codexVersionSources(options: ApiEndpointServiceOptions): {
-  readCli: (() => Promise<string | null>) | null;
-  seen: SeenCodexVersion;
-} {
-  return {
-    readCli: options.readCodexCliVersion ?? null,
-    seen: options.codexSeenVersion ?? new SeenCodexVersion(),
-  };
+/**
+ * 本机 Codex CLI 的版本：先读 npm 包，读不到才跑 codex --version，跑失败的同一个文件不再跑（magpie proc.Version）。
+ * 没注入、也没有 providerRuntimeSettings（不知道用户配的命令）时不查。
+ */
+function codexCliVersionReader(
+  options: Pick<ApiEndpointServiceOptions, "readCodexCliVersion" | "providerRuntimeSettings">,
+): (() => Promise<string | null>) | null {
+  if (options.readCodexCliVersion) return options.readCodexCliVersion;
+  const settings = options.providerRuntimeSettings;
+  if (!settings) return null;
+  const installed = new InstalledCodexVersion({
+    locate: async () => {
+      const program = await findCodexCommand({ runtimeSettings: settings("codex"), env: {} });
+      return program?.command ?? null;
+    },
+    runVersion: () => probeCodexVersion(settings("codex")),
+  });
+  return () => installed.read();
 }
 
 /** 测试模型的限值与计时器：没给的用缺省（并发 4、单个 20 秒、整批 3 分钟，真的计时器）。 */

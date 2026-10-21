@@ -1153,6 +1153,28 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 ### Summary
 
 /atw-implement-all 串行做完 10-16-endpoint-management-ux 的 31 张工单（每张派实现子代理、三轴审查、一轮修复、写回规范、关票）。31 号由用户在 dev 桌面端（临时 CLAUDE_CONFIG_DIR/CODEX_HOME）亲自验收 Claude Code 与 Codex 通过；Codex 用 API key 接时接口名显示方式按 magpie 设计不生效。验收：7 个只读子代理核对 240 余条，勾 230 条；i18n、协议兼容、252 个文件 lint 本机通过。分支推到 origin 手动跑 CI：Ubuntu 26 装不上 Playwright（main 已由 #24 修）、浏览器测试误用 paseoDesktop、import-apps 权限用例 Windows 失败；连同 5 条未勾项记入后续任务 10-21-endpoint-management-ux-followups（合并 main 前必做）。用户认可后归档。
+## Session 39: 逻辑图工单 08–10 收尾与任务归档
+<!-- atw-session: v=2 fp=73e61a8fc2130166 -->
+
+**Date**: 2026-10-20
+**Task**: 逻辑图工单 08–10 收尾与任务归档
+**Package**: app
+**Branch**: `feat-requirement-logic-graph-docs`
+
+### Summary
+
+/atw-implement-all 跑完 08（Osuna 工具不可用时开关旁提示、daemon 不发说明块）和 09（update_logic_map 列出缺文档节点，子图节点按用户决定豁免，图上没有文档标签）；各自三维审查、修一轮、复查后写回规范。10 由用户在 dev 桌面端复测通过（Codex 14 节点全有文档），79 个验收项勾选，任务已归档。副作用：dev daemon 曾改写真实 ~/.codex/config.toml 的 osuna_api_endpoint，之后已恢复为用户原设置。
+## Session 38: Diff 面板大改动卡顿第一期：工单 03–10 实现、验收与归档
+<!-- atw-session: v=2 fp=ab171c1af9db4563 -->
+
+**Date**: 2026-10-20
+**Task**: Diff 面板大改动卡顿第一期：工单 03–10 实现、验收与归档
+**Package**: app
+**Branch**: `perf-osuna-diff-view-large-changesets`
+
+### Summary
+
+/atw-implement-all 串行跑完 03–10：未跟踪文件并发与 too_large 占位、推送每秒一次（1 秒间隔优先）、按文件复用（单文件刷新 9.0s→0.27s）、默认展开规则与行数标签、Generated file、只开文件树走清单订阅（有评审评论时照旧完整）、页面 hidden 暂停订阅、改后复测。桌面版三条标准达标，浏览器打开清单 9–10s 未达标；08 两条 daemon E2E 本机超时未勾，待 CI。分支未推送、未开 PR。
 
 ### Git Commits
 
@@ -1288,6 +1310,26 @@ PR #16 并入后在主工作树拉取 main、重装依赖并重建，核对同�
 | `366eeb831` | docs(api-endpoints): ADR 0007 裸模型名改按接口顺序；ADR 0008 新增「What the user sets on an endpoint」——请求头、key 头、附加请求体、上游模型名、只用这种格式也改请求，用户认证头盖过 Osuna 的且不触发双认证头重发；新 ADR 0013 写明读别的软件配置、导入链接、按 CLI 的样子测是总任务第 15 条的例外；总任务第 15 条注记链到新 ADR（接口管理好用性工单 01） |
 | `b5371c704` | chore(task): 10-16-endpoint-management-ux 规划完成——需求、31 张工单、调研与术语表词条 |
 | `a5ed6d02f` | chore(task): 新建 10-19-codex-agent-load-failed-move——续不上的 Codex Agent 在加载失败页给说明和挪动按钮（10-16-cli-wiring-web-search 14 号留下的缺口），切成 1 张工单 |
+| `14b4e251d` | feat(logic-map): 08 Osuna 工具不可用时开关旁说明原因并给去开启入口，daemon 不再发逻辑图说明块 |
+| `638f84614` | fix(logic-map): 08 评审修正——提示收成警告图标加去开启，不挤压左侧控件；复用草稿判定，命名参数类型 |
+| `c269075f9` | feat(logic-map): 09 update_logic_map 逐个列出缺文档的节点，说明块要求每个节点都有文档；图上缺文档的节点带"没有文档"标签，点它提示还没有文档 |
+| `2912407c2` | fix(logic-map): 09 评审修正——子图节点不要求文档；补有框架时补齐后不再列出的测试；缺文档卡片读屏标签与蓝圈撤除；提高"没有文档"标签对比度 |
+| `9232915e8` | perf(server): 未跟踪文件并发读取，超出 2MB 的给 too_large 占位（10-19-diff-view-large-changesets 03） |
+| `5dbd792c4` | fix(server): 超出 2MB 的未跟踪二进制文件仍标 binary（10-19-diff-view-large-changesets 03） |
+| `c17968601` | perf(server): diff 推送同一 target 至少隔 1 秒，客户端每秒最多处理一次（10-19-diff-view-large-changesets 04) |
+| `8531f8193` | fix(server): diff 推送间隔等待可随订阅释放清掉，等待期间不提前暴露新结果（10-19-diff-view-large-changesets 04) |
+| `259859884` | perf(server): diff 订阅按文件复用 patch 与高亮，只重算变了的文件（10-19-diff-view-large-changesets 05) |
+| `1c4d4aa30` | fix(server): 按文件复用冻结单次计算的缓存视图、不复用子模块，路径与错误处理按规范（10-19-diff-view-large-changesets 05) |
+| `983d4c599` | feat(app): Changes 面板按规则决定文件默认展开，收起的大文件标出改动行数（10-19-diff-view-large-changesets 06) |
+| `9acf5b2f0` | fix(app): 默认展开改为收到 diff 时写回 tab 状态、规则测试与实现同目录、补千分位用例，重拍截图（10-19-diff-view-large-changesets 06) |
+| `8463e4807` | feat(server,app): daemon 标出 Generated file，Changes 面板默认收起并在文件头标「生成」（10-19-diff-view-large-changesets 07) |
+| `f10c0ead2` | fix(server,app): check-attr 失败时记警告并只按名单标 Generated file，补改名/删除与 daemon E2E 用例（10-19-diff-view-large-changesets 07) |
+| `23c53b313` | feat(server,app): 只开文件树时只订阅文件清单，daemon 不读全文、不做高亮（10-19-diff-view-large-changesets 08) |
+| `0dfac4d9c` | fix(server,app): 有未发评审评论时文件树照旧完整订阅并发布附件，补反向切换用例，三元改具名函数（10-19-diff-view-large-changesets 08) |
+| `09af62627` | perf(app): 页面 hidden 时释放 checkout diff 订阅，恢复可见时重新订阅拿最新快照（10-19-diff-view-large-changesets 09) |
+| `d36968c2c` | test(app): 用例串起页面可见性到 diff 订阅释放与重订（10-19-diff-view-large-changesets 09) |
+| `9644a74f9` | chore(task): 10-19-diff-view-large-changesets 10 改后复测与验收截图：三条合格标准桌面版达标，记录浏览器清单 9–13 秒与推送间隔不均两处差距 |
+| `fc95c82a7` | chore(task): 10-19-diff-view-large-changesets 10 修订复测记录：打开标准改为部分达标、补浏览器看到内容拆分与差距，重拍全部展开 6 张截图去掉悬停评论按钮 |
 
 ### Status
 

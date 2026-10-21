@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -147,6 +156,10 @@ interface ControlledAgentControlsProps {
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** 排在 Agent controls 后面、同一行里的控件（逻辑图开关）；紧凑布局不显示。 */
+  trailingControl?: ReactNode;
+  /** 它的估计宽度，算控件收缩档位时预留。 */
+  trailingControlWidth?: number;
 }
 
 export interface DraftAgentControlsProps {
@@ -177,6 +190,10 @@ export interface DraftAgentControlsProps {
   disabled?: boolean;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** 排在 Agent controls 后面、同一行里的控件（逻辑图开关）；紧凑布局不显示。 */
+  trailingControl?: ReactNode;
+  /** 它的估计宽度，算控件收缩档位时预留。 */
+  trailingControlWidth?: number;
 }
 
 interface AgentControlsProps {
@@ -184,6 +201,10 @@ interface AgentControlsProps {
   serverId: string;
   onDropdownClose?: () => void;
   isCompactLayout?: boolean;
+  /** 排在 Agent controls 后面、同一行里的控件（逻辑图开关）；紧凑布局不显示。 */
+  trailingControl?: ReactNode;
+  /** 它的估计宽度，算控件收缩档位时预留。 */
+  trailingControlWidth?: number;
 }
 
 function AgentControlCommandCenterRegistration({
@@ -504,6 +525,16 @@ function buildOpenChangeHandler(
   };
 }
 
+/** 紧凑布局把 Agent controls 收进弹层，排在后面的控件不显示，也不占宽度。 */
+function resolveTrailingControl(input: {
+  control: ReactNode | undefined;
+  width: number | undefined;
+  isCompact: boolean;
+}): { node: ReactNode; width: number } {
+  if (input.isCompact || !input.control) return { node: null, width: 0 };
+  return { node: input.control, width: input.width ?? 0 };
+}
+
 function ControlledAgentControls({
   provider,
   providerLabel,
@@ -534,10 +565,17 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  trailingControl,
+  trailingControlWidth,
 }: ControlledAgentControlsProps) {
   const { t } = useTranslation();
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompact = isCompactLayout ?? isCompactFormFactor;
+  const trailing = resolveTrailingControl({
+    control: trailingControl,
+    width: trailingControlWidth,
+    isCompact,
+  });
   const { fontScale } = useWindowDimensions();
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [openSelector, setOpenSelector] = useState<AgentControlSelector | null>(null);
@@ -593,11 +631,13 @@ function ControlledAgentControls({
       hasMode: modeControl !== null && modeControl !== undefined,
       features: featureControls,
       fontScale,
+      trailingWidth: trailing.width,
     }),
     [
       canSelectModel,
       featureControls,
       fontScale,
+      trailing.width,
       hasProviderControl,
       modeControl,
       thinkingControlState,
@@ -715,7 +755,7 @@ function ControlledAgentControls({
   );
 
   if (!hasAnyControl) {
-    return null;
+    return trailing.node;
   }
 
   return (
@@ -808,6 +848,7 @@ function ControlledAgentControls({
             modelSelectorServerId={modelSelectorServerId}
           />
         )}
+        {trailing.node}
       </View>
     </ComposerControlLayoutProvider>
   );
@@ -1510,6 +1551,8 @@ export const AgentControls = memo(function AgentControls({
   serverId,
   onDropdownClose,
   isCompactLayout,
+  trailingControl,
+  trailingControlWidth,
 }: AgentControlsProps) {
   const { updatePreferences } = useFormPreferences();
   const agent = useSessionStore(
@@ -1780,6 +1823,8 @@ export const AgentControls = memo(function AgentControls({
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
+        trailingControl={trailingControl}
+        trailingControlWidth={trailingControlWidth}
       />
     </>
   );
@@ -1813,6 +1858,8 @@ export function DraftAgentControls({
   disabled = false,
   modelSelectorServerId = null,
   isCompactLayout,
+  trailingControl,
+  trailingControlWidth,
 }: DraftAgentControlsProps) {
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
     return toThinkingControlOptions(thinkingOptions);
@@ -1913,6 +1960,8 @@ export function DraftAgentControls({
         modeControl={modeControl}
         modelSelectorServerId={modelSelectorServerId}
         isCompactLayout={isCompactLayout}
+        trailingControl={trailingControl}
+        trailingControlWidth={trailingControlWidth}
       />
     </>
   );

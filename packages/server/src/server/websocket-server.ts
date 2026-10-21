@@ -1884,6 +1884,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.apiEndpointService ? { apiEndpointManagement: true } : {}),
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         providerVersions: true,
+        // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
+        logicMap: true,
         agentRequestReceipts: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,
@@ -1954,6 +1956,8 @@ export class VoiceAssistantWebSocketServer {
         agentHistorySearch: true,
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: true,
+        // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
+        checkoutDiffFilesOnly: true,
         // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
         workspaceMultiplicity: true,
         // COMPAT(projectRemove): added in v0.1.97, drop the gate when floor >= v0.1.97.

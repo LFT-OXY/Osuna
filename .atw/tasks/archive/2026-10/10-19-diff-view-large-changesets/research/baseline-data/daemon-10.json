@@ -1,0 +1,91 @@
+{
+  "scenario": {
+    "moduleCount": 200,
+    "linesPerFile": 2000,
+    "changedBlocks": 5,
+    "linesPerBlock": 10,
+    "newFileCount": 50,
+    "linesPerNewFile": 200,
+    "lockEntries": 7500,
+    "streamLanguageFiles": 3,
+    "agentIntervalMs": 500,
+    "agentDurationMs": 60000,
+    "trackedModifiedFiles": 210,
+    "untrackedFiles": 50
+  },
+  "gitPolicy": {
+    "maxProcessesPerSecond": 64,
+    "maxProcessConcurrency": 8
+  },
+  "cold": {
+    "requestMs": 9688,
+    "files": 260,
+    "statuses": {
+      "too_large": 1,
+      "ok": 259
+    },
+    "payloadBytes": 15686433,
+    "stringifyMs": 25
+  },
+  "agent": {
+    "edits": 120,
+    "updates": 43,
+    "updateBytes": {
+      "count": 43,
+      "median": 15878400,
+      "p95": 16066072,
+      "max": 16079772
+    },
+    "updateGapsMs": {
+      "count": 42,
+      "median": 1016,
+      "p95": 2041,
+      "max": 11092
+    },
+    "lastEditToLastUpdateMs": 1284
+  },
+  "singleFileRefresh": {
+    "refreshMs": {
+      "count": 5,
+      "median": 333,
+      "p95": 506,
+      "max": 506
+    },
+    "refreshWithoutReuseMs": {
+      "count": 5,
+      "median": 8767,
+      "p95": 8853,
+      "max": 8853
+    },
+    "gitOnlyMs": {
+      "count": 5,
+      "median": 1146,
+      "p95": 1299,
+      "max": 1299
+    },
+    "highlightTotalMs": 7907,
+    "highlightShareOfRefresh": 0.902,
+    "highlightByExtension": {
+      "sh": {
+        "files": 3,
+        "totalMs": 59,
+        "shareOfRefresh": 0.007
+      },
+      "sql": {
+        "files": 3,
+        "totalMs": 89,
+        "shareOfRefresh": 0.01
+      },
+      "toml": {
+        "files": 3,
+        "totalMs": 83,
+        "shareOfRefresh": 0.009
+      },
+      "ts": {
+        "files": 250,
+        "totalMs": 7677,
+        "shareOfRefresh": 0.876
+      }
+    }
+  }
+}

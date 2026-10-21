@@ -100,9 +100,9 @@ export async function openWorkspacePanelFromExplorerMenu(
   });
   // 菜单分两组：内置项在前，插件贡献的面板在后。两组各自精确比对，新增内置项时补进
   // builtInViews 即可，插件那组的边界不会跟着松动。Files、Changes、会话历史默认已打开，
-  // 按单例被过滤掉；Agent 与终端配置在 Explorer 的菜单里不出现。内置项带快捷键提示，
-  // 字形随平台变（⇧⌘T / Ctrl+Shift+T），只比对条目名。
-  const builtInViews = [/^Terminal/, /^Diff/];
+  // 按单例被过滤掉；逻辑图不是默认标签，所以在菜单里；Agent 与终端配置在 Explorer 的菜单里不出现。
+  // 内置项带快捷键提示，字形随平台变（⇧⌘T / Ctrl+Shift+T），只比对条目名。
+  const builtInViews = [/^Terminal/, /^Diff/, "Logic map"];
   const pluginPanels = ["Other review", "Other review summary", "Review", "Review summary"];
   await expect(menu.getByRole("menuitem")).toHaveText([...builtInViews, ...pluginPanels]);
   await menu.getByRole("menuitem", { name: "Review", exact: true }).click();

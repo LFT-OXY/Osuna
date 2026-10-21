@@ -570,7 +570,7 @@ type ActiveManagedAgent =
   | ManagedAgentError;
 
 type LiveManagedAgent = ActiveManagedAgent;
-type AgentLabelPatch = Record<string, string | null>;
+export type AgentLabelPatch = Record<string, string | null>;
 
 function attachManagedTurnIdentity(
   agent: ActiveManagedAgent,
@@ -610,7 +610,7 @@ function limitAgentStreamEventContent(event: AgentStreamEvent): AgentStreamEvent
     : event;
 }
 
-interface WriteLabelsResult {
+export interface WriteLabelsResult {
   record: StoredAgentRecord | null;
   live: boolean;
 }
@@ -2244,6 +2244,11 @@ export class AgentManager {
       const agent = this.requireAgent(agentId);
       await this.writeLabels(agent.id, labels);
     });
+  }
+
+  /** 按补丁改 labels（值为 null 即删除）；Agent 没加载时改存储里的记录。 */
+  async patchLabels(agentId: string, patch: AgentLabelPatch): Promise<WriteLabelsResult> {
+    return this.runLifecycleMutation(agentId, () => this.writeLabels(agentId, patch));
   }
 
   private async writeLabels(agentId: string, patch: AgentLabelPatch): Promise<WriteLabelsResult> {

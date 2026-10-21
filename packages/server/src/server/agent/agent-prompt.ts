@@ -26,7 +26,7 @@ export type AgentRunController = Pick<
   reloadAgentSession(agentId: string): Promise<unknown>;
 };
 
-/** 按会话判定生成 Routing block；null 表示这条消息不附。只有客户端发来的用户消息会带。 */
+/** 按会话判定生成附在用户消息后的块（Routing block、逻辑图说明块）；null 表示这条消息不附。只有客户端发来的用户消息会带。 */
 export type RoutingBlockResolver = (agent: ManagedAgent) => Promise<string | null>;
 
 export interface StartAgentRunOptions {

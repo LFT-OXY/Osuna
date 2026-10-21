@@ -18,6 +18,20 @@ export type CreateAgentsCapability =
   | { canCreateAgents: true }
   | { canCreateAgents: false; unavailableReason: CreateAgentsUnavailableReason };
 
+export type PaseoToolsUnavailableReason = PaseoToolsGateReason | "tools_not_delivered";
+
+/**
+ * 会话整套 Osuna 工具有没有送到：create_agent 的判定里，开关原因与没送到说明整套工具都没有；
+ * create_agent_not_allowed 只管 create_agent 一个工具，不算。还没判定（undefined）按送到处理。
+ */
+export function resolvePaseoToolsUnavailableReason(
+  capability: CreateAgentsCapability | undefined,
+): PaseoToolsUnavailableReason | null {
+  if (!capability || capability.canCreateAgents) return null;
+  const reason = capability.unavailableReason;
+  return reason === "create_agent_not_allowed" ? null : reason;
+}
+
 export interface PaseoToolsGate {
   mcpEnabled: boolean;
   injectIntoAgents: boolean;

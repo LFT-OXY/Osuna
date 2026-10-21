@@ -159,14 +159,10 @@ import {
 } from "./api-endpoints/gateway/gateway.js";
 import { EndpointCooldowns } from "./api-endpoints/gateway/cooldown.js";
 import { GatewaySightings } from "./api-endpoints/cli-bypass.js";
-import { SeenCodexVersion } from "./api-endpoints/cli-header-samples.js";
 import { answerChatGptWebSocket } from "./api-endpoints/gateway/chatgpt-backend.js";
-import { ApiEndpointService, type ApiEndpointServiceOptions } from "./api-endpoints/service.js";
+import { ApiEndpointService, type ApiEndpointServiceOverrides } from "./api-endpoints/service.js";
 import { RetiredModels, type RetiredModelsOverrides } from "./api-endpoints/retired-models.js";
 import { ApiEndpointStore } from "./api-endpoints/store.js";
-import { createCodexSignInReader } from "./api-endpoints/codex-sign-in.js";
-import { findCodexCommand, probeCodexVersion } from "./agent/providers/codex-app-server-agent.js";
-import { InstalledCodexVersion } from "./api-endpoints/codex-cli-version.js";
 import type { ProviderVersionsConfig } from "./agent/provider-version-check.js";
 import { resolveUsagePricingSettings, type UsageConfig } from "./usage/config.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -510,39 +506,7 @@ export interface PaseoDaemonConfig {
   providerOverrides?: Record<string, ProviderOverride>;
   usage?: UsageConfig;
   // 定位第三方接口改写的 CLI 配置文件的环境；缺省用 daemon 自己的 process.env 与家目录。
-  apiEndpoints?: Pick<
-    ApiEndpointServiceOptions,
-    | "env"
-    | "homeDir"
-    | "claudeManagedSettingsDir"
-    | "readLoginShellEnv"
-    | "probeGatewayAt"
-    | "probeThroughProxy"
-    | "proxyEnv"
-    | "beforeConfigRecheck"
-    | "isModelsDevAutoUpdate"
-    | "modelsDevFetch"
-    | "modelsDevTimers"
-    | "fetchSite"
-    | "reachesUnasked"
-    | "catalogRefreshTimers"
-    | "vendorStatusUrls"
-    | "vendorStatusTimers"
-    | "importSourcePaths"
-    | "dataFileSystem"
-    | "modelTests"
-    | "detectEach"
-    | "modelTestTimers"
-    | "readCodexSignIn"
-    // 只给进程内 daemon 测试换时钟：接口服务与中转站记请求的时刻共用它。
-    | "now"
-    | "readCliUse"
-    // 列进程与执行 CLI 命令的适配器：测试 daemon 一律给假的（paseo-daemon.ts）。
-    | "hostProcesses"
-    | "reopenHintsTimers"
-  > &
-    ApiEndpointGatewayOverrides &
-    RetiredModelsOverrides;
+  apiEndpoints?: ApiEndpointServiceOverrides & ApiEndpointGatewayOverrides & RetiredModelsOverrides;
   // 查内置提供方 CLI 最新版本的联网函数与升级超时；缺省查 npm registry、10 分钟，测试换成桩和短超时。
   providerVersions?: ProviderVersionsConfig;
   log?: PersistedConfig["log"];
@@ -830,19 +794,6 @@ export async function createPaseoDaemon(
   // itself (no 100 kb JSON limit).
   // The gateway rests failing endpoints; the endpoint list reads and clears the same rests.
   const apiEndpointCooldowns = createCooldowns({ config, logger });
-  // 经中转站来过的 Codex 的最新版本：中转站记、「按 Codex 的样子测」读（只在内存里）。
-  const codexSeenVersion = new SeenCodexVersion();
-  // 本机 Codex CLI 的版本：先读 npm 包，读不到才跑 codex --version，跑失败的同一个文件不再跑（magpie proc.Version）。
-  const installedCodexVersion = new InstalledCodexVersion({
-    locate: async () => {
-      const program = await findCodexCommand({
-        runtimeSettings: config.agentProviderSettings?.codex,
-        env: {},
-      });
-      return program?.command ?? null;
-    },
-    runVersion: () => probeCodexVersion(config.agentProviderSettings?.codex),
-  });
   // 中转站记下每个提供方最近一次收到请求的时刻；接口服务据此判断「被绕过」。
   const apiEndpointSightings = new GatewaySightings({
     now: apiEndpointClock(config),
@@ -868,9 +819,10 @@ export async function createPaseoDaemon(
       retired: apiEndpointRetiredModels,
       // apiEndpointService 在下面创建；中转站只在 daemon 启动后收到请求时才查。
       modelFacts: (endpoint, modelId) => apiEndpointService.modelFacts(endpoint, modelId),
-      codexChatGptListing: () => apiEndpointService.codexChatGptListing(),
+      chatGptListing: () => apiEndpointService.chatGptListing(),
       sightings: apiEndpointSightings,
-      codexSeenVersion,
+      // apiEndpointService 在下面创建；只在 daemon 启动后收到请求时才记。
+      noteCliVersion: (headers) => apiEndpointService.noteCliVersion(headers),
       daemonVersion,
       overrides: config.apiEndpoints,
     }),
@@ -1028,7 +980,7 @@ export async function createPaseoDaemon(
   // script-bound upgrades are forwarded first. The handler is a no-op for
   // requests that don't match a registered script route.
   httpServer.on("upgrade", serviceProxy.upgradeHandler({ passthroughUnknown: true }));
-  // Codex tries Responses over a WebSocket first; the gateway's ChatGPT backend path answers 426 so it
+  // The CLI tries Responses over a WebSocket first; the gateway's ChatGPT backend path answers 426 so it
   // moves to HTTP at once. Registered before the daemon's own WebSocket server, which skips a socket
   // this has already answered and ended.
   httpServer.on("upgrade", (req, socket) => {
@@ -1096,19 +1048,11 @@ export async function createPaseoDaemon(
     // agentManager 在下面创建；只有列表查询会调用，那时 daemon 已经启动。
     countLiveSessions: (provider) => agentManager.countLiveAgents(provider),
     countSessionsStartedBefore: (input) => agentManager.countLiveAgentsStartedBefore(input),
-    // 重启 Codex 后台 app-server 用用户配的 codex 命令。
-    findCodexCommand: ({ env }) =>
-      findCodexCommand({ runtimeSettings: config.agentProviderSettings?.codex, env }),
+    // 执行 CLI 自己的命令、问 CLI 怎么登录都用用户配的命令。
+    providerRuntimeSettings: (provider) => config.agentProviderSettings?.[provider],
     // models.dev 是价格表之外的另一次主动下载，归同一个自动更新开关管（docs/usage.md）。
     isModelsDevAutoUpdate: () =>
       resolveUsagePricingSettings(daemonConfigStore.get().usage?.pricing).autoUpdate,
-    codexSeenVersion,
-    readCodexCliVersion: () => installedCodexVersion.read(),
-    // 问 Codex 自己是怎么登录的（临时 app-server 的 account/read），决定 config.toml 的接法（ADR 0010）。
-    readCodexSignIn: createCodexSignInReader({
-      runtimeSettings: config.agentProviderSettings?.codex,
-      logger,
-    }),
     ...config.apiEndpoints,
   });
   function apiEndpointModelOverride(provider: AgentProvider): AgentModelDefinition[] | null {
@@ -1678,6 +1622,10 @@ export async function createPaseoDaemon(
     voiceOnly: runtime.voiceOnly,
     resolveSpeakHandler: (agentId) => wsServer?.resolveVoiceSpeakHandler(agentId) ?? null,
     resolveCallerContext: (agentId) => wsServer?.resolveVoiceCallerContext(agentId) ?? null,
+    onLogicMapChanged: (event) =>
+      wsServer?.broadcast(
+        wrapSessionMessage({ type: "workspace.logic_map.changed", payload: event }),
+      ),
     logger,
   });
   const createAgentToolCatalog = (runtime: PaseoToolRuntimeContext) =>

@@ -35,12 +35,7 @@ import { sendAgentError, sendRefusal, type AgentWire } from "./agent-errors.js";
 import { ConversationSticks, conversationId, turnOf } from "./affinity.js";
 import { extraBodySession } from "../request-extras.js";
 import { judgeCaller } from "./callers.js";
-import {
-  CliHeaderSamples,
-  isFromClaudeCode,
-  isFromCodex,
-  type SeenCodexVersion,
-} from "../cli-header-samples.js";
+import { CliHeaderSamples, isFromClaudeCode, isFromCodex } from "../cli-header-samples.js";
 import type { GatewaySightings } from "../cli-bypass.js";
 import { isClaudeSignIn, keepClaudeSignIn } from "./claude-signin.js";
 import {
@@ -194,11 +189,11 @@ export function createApiEndpointGateway(options: {
   // daemon 自己的版本：CLI 没带 User-Agent 时写 Osuna/<版本>。
   daemonVersion: string;
   // 用 ChatGPT 登录的 Codex 的模型清单里接在后面的接口模型、它们的标记与 CODEX_HOME（ADR 0010）。
-  codexChatGptListing: () => ChatGptModelsListing;
+  chatGptListing: () => ChatGptModelsListing;
   // 每个提供方最近一次收到请求的时刻，接口服务据此判断「被绕过」。
   sightings: GatewaySightings;
-  // 经中转站来过的 Codex 的最新版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
-  codexSeenVersion: SeenCodexVersion;
+  // 记下经中转站来过的 Codex 的版本（magpie codexSeen），没有 Codex 样本时「按 Codex 的样子测」用。
+  noteCliVersion: (headers: IncomingHttpHeaders) => void;
   overrides?: ApiEndpointGatewayOverrides;
 }): RequestHandler {
   const logger = options.logger.child({ module: "api-endpoint-gateway" });
@@ -224,7 +219,7 @@ export function createApiEndpointGateway(options: {
       chatgpt: options.overrides?.gatewayChatGptBaseUrl ?? DEFAULT_CHATGPT_BASE_URL,
       openAiApi: options.overrides?.gatewayOpenAiApiBaseUrl ?? DEFAULT_OPENAI_API_BASE_URL,
     },
-    listing: options.codexChatGptListing,
+    listing: options.chatGptListing,
     modelsWaitMs: options.overrides?.gatewayChatGptModelsWaitMs ?? CHATGPT_MODELS_WAIT_MS,
   };
 
@@ -247,7 +242,7 @@ export function createApiEndpointGateway(options: {
     const chatgptRest = chatgptBackendRest(req.path);
     if (chatgptRest !== null) {
       options.sightings.saw("codex");
-      options.codexSeenVersion.saw(req.headers);
+      options.noteCliVersion(req.headers);
       const served = serveChatGptBackend({
         req,
         res,

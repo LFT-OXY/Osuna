@@ -144,7 +144,7 @@ export function ArchivedAgentCallout({ serverId, agentId }: ArchivedAgentCallout
 }
 
 /*
- * 上一次取消归档的失败，按主机与 Agent 分键放在 store 里：daemon 先取消归档、续不上再放回归档，
+ * 上一次取消归档的失败，按主机与 Agent 分键放在 store 里：Codex 服务商不在时 daemon 先取消归档、续不上再放回归档，
  * 这个提示会被卸载又挂上，放在组件状态里的错误会丢。
  */
 const useUnarchiveErrorStore = create<{ byKey: Record<string, UnarchiveError> }>()(() => ({

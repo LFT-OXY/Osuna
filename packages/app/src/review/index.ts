@@ -5,6 +5,7 @@ export {
   resetReviewDraftStore,
   useClearReviewDraft,
   useReviewAttachmentSnapshot,
+  useReviewCommentCount,
   addReviewDraftComment,
   type BuildReviewDraftKeyInput,
   type ReviewDraftCommentInput,

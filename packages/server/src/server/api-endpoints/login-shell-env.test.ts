@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { isPlatform } from "../../test-utils/platform.js";
 import {
   createLoginShellEnvReader,
   parseShellEnv,
@@ -45,6 +46,7 @@ describe("parseShellEnv", () => {
 });
 
 describe("createLoginShellEnvReader", () => {
+  // 假 shell 是 #!/bin/sh 脚本，Windows 起不来；读取器在 Windows 上本来就不问（见「does not ask on Windows」）。
   let dir: string | null = null;
 
   afterEach(() => {
@@ -68,24 +70,27 @@ describe("createLoginShellEnvReader", () => {
     };
   }
 
-  it("asks the login shell, marked as a probe, and keeps the answer for a minute", async () => {
-    const { shell, calls } = fakeShell("export CLAUDE_CODE_USE_VERTEX=1");
-    let clock = 0;
-    const read = createLoginShellEnvReader({
-      env: { SHELL: shell },
-      now: () => clock,
-      findShell: () => null,
-    });
+  it.skipIf(isPlatform("win32"))(
+    "asks the login shell, marked as a probe, and keeps the answer for a minute",
+    async () => {
+      const { shell, calls } = fakeShell("export CLAUDE_CODE_USE_VERTEX=1");
+      let clock = 0;
+      const read = createLoginShellEnvReader({
+        env: { SHELL: shell },
+        now: () => clock,
+        findShell: () => null,
+      });
 
-    expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
-    clock = 59_000;
-    expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
-    expect(calls()).toEqual(["-ilc 1"]);
+      expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
+      clock = 59_000;
+      expect(await read(KEYS)).toEqual({ CLAUDE_CODE_USE_VERTEX: "1" });
+      expect(calls()).toEqual(["-ilc 1"]);
 
-    clock = 61_000;
-    await read(KEYS);
-    expect(calls()).toEqual(["-ilc 1", "-ilc 1"]);
-  });
+      clock = 61_000;
+      await read(KEYS);
+      expect(calls()).toEqual(["-ilc 1", "-ilc 1"]);
+    },
+  );
 
   it("does not ask on Windows", async () => {
     const read = createLoginShellEnvReader({
@@ -107,26 +112,29 @@ describe("createLoginShellEnvReader", () => {
     expect(await read(KEYS)).toEqual({});
   });
 
-  it("also asks fish and nushell when they are set up, the login shell's value first", async () => {
-    const login = fakeShell("export CLAUDE_CODE_USE_VERTEX=0", "zsh");
-    const fish = fakeShell(
-      "export CLAUDE_CODE_USE_VERTEX=1\nexport CLAUDE_CODE_USE_BEDROCK=1",
-      "fish",
-    );
-    const home = path.join(dir ?? "", "home");
-    mkdirSync(path.join(home, ".config", "fish"), { recursive: true });
-    const read = createLoginShellEnvReader({
-      env: { SHELL: login.shell },
-      homeDir: home,
-      findShell: (name) => (name === "fish" ? fish.shell : null),
-    });
+  it.skipIf(isPlatform("win32"))(
+    "also asks fish and nushell when they are set up, the login shell's value first",
+    async () => {
+      const login = fakeShell("export CLAUDE_CODE_USE_VERTEX=0", "zsh");
+      const fish = fakeShell(
+        "export CLAUDE_CODE_USE_VERTEX=1\nexport CLAUDE_CODE_USE_BEDROCK=1",
+        "fish",
+      );
+      const home = path.join(dir ?? "", "home");
+      mkdirSync(path.join(home, ".config", "fish"), { recursive: true });
+      const read = createLoginShellEnvReader({
+        env: { SHELL: login.shell },
+        homeDir: home,
+        findShell: (name) => (name === "fish" ? fish.shell : null),
+      });
 
-    expect(await read(KEYS)).toEqual({
-      CLAUDE_CODE_USE_VERTEX: "0",
-      CLAUDE_CODE_USE_BEDROCK: "1",
-    });
-    expect(fish.calls()).toEqual(["-ilc 1"]);
-  });
+      expect(await read(KEYS)).toEqual({
+        CLAUDE_CODE_USE_VERTEX: "0",
+        CLAUDE_CODE_USE_BEDROCK: "1",
+      });
+      expect(fish.calls()).toEqual(["-ilc 1"]);
+    },
+  );
 });
 
 describe("terminalShells", () => {

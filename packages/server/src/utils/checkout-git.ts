@@ -31,6 +31,8 @@ import {
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { runGitCommand, type RunGitCommand } from "./run-git-command.js";
 import { readGitFileContents } from "./git-file-contents.js";
+import { findGeneratedPaths } from "./generated-files.js";
+import type { CheckoutDiffFileReuse, CheckoutDiffReuseRun } from "./checkout-diff-file-reuse.js";
 import { isPaseoOwnedWorktreeCwd, resolvePaseoWorktreesBaseRoot } from "./worktree.js";
 import {
   branchNameFromRef,
@@ -882,6 +884,8 @@ export interface CheckoutDiffCompare {
   baseRef?: string;
   ignoreWhitespace?: boolean;
   includeStructured?: boolean;
+  /** 结构化结果只留文件清单：hunks 为空，不读全文、不做高亮。只在 includeStructured 时生效。 */
+  filesOnly?: boolean;
 }
 
 export interface MergeToBaseOptions {
@@ -901,6 +905,8 @@ export interface CheckoutContext {
   logger?: Pick<Logger, "trace" | "warn">;
   facts?: CheckoutSnapshotFacts | null;
   runGitCommand?: RunGitCommand;
+  /** 按文件复用上一次的 patch 与高亮，只在 getCheckoutDiff 里用 */
+  diffFileReuse?: CheckoutDiffFileReuse;
 }
 
 export type CheckoutSnapshotFacts =
@@ -2128,16 +2134,23 @@ export const CHECKOUT_DIFF_MAX_STRUCTURED_BYTES =
 interface StructuredDiffAccumulator {
   files: ParsedDiffFile[];
   serializedBytes: number;
+  generatedPaths: ReadonlySet<string>;
 }
 
-function createStructuredDiffAccumulator(): StructuredDiffAccumulator {
-  return { files: [], serializedBytes: Buffer.byteLength("[]", "utf8") };
+function createStructuredDiffAccumulator(
+  generatedPaths: ReadonlySet<string>,
+): StructuredDiffAccumulator {
+  return { files: [], serializedBytes: Buffer.byteLength("[]", "utf8"), generatedPaths };
 }
 
 function appendStructuredFile(
   structured: StructuredDiffAccumulator,
-  file: ParsedDiffFile,
+  builtFile: ParsedDiffFile,
 ): boolean {
+  // 每次计算都重新标，复用的缓存对象不带 generated，.gitattributes 改了下一次就生效。
+  const file = structured.generatedPaths.has(builtFile.path)
+    ? { ...builtFile, generated: true }
+    : builtFile;
   const separatorBytes = structured.files.length > 0 ? 1 : 0;
   const fileBytes = Buffer.byteLength(JSON.stringify(file), "utf8");
   const nextBytes = structured.serializedBytes + separatorBytes + fileBytes;
@@ -3040,6 +3053,23 @@ interface AppendStructuredTrackedDiffsInput {
     change: CheckoutFileChange,
     status: "binary" | "too_large",
   ) => void;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}
+
+function buildTrackedFileListEntry(
+  change: CheckoutFileChange,
+  parsedFile: ParsedDiffFile,
+): ParsedDiffFile {
+  return {
+    ...parsedFile,
+    hunks: [],
+    path: change.path,
+    ...(change.oldPath ? { oldPath: change.oldPath } : {}),
+    isNew: change.isNew,
+    isDeleted: change.isDeleted,
+    status: "ok",
+  };
 }
 
 async function buildHighlightedTrackedDiffFile(input: {
@@ -3076,6 +3106,60 @@ async function buildHighlightedTrackedDiffFile(input: {
     isDeleted: change.isDeleted,
     status: "ok",
   };
+}
+
+/** 要高亮的文件才读全文；只要清单时一个也不读。 */
+async function readTrackedContentsToHighlight(input: {
+  cwd: string;
+  changes: CheckoutFileChange[];
+  refsForDiff: CheckoutDiffRefs;
+  trackedPlaceholderByPath: Map<string, unknown>;
+  parsedTrackedByPath: Map<string, ParsedDiffFile>;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}): Promise<Map<string, string | null> | null> {
+  const { cwd, changes, refsForDiff, trackedPlaceholderByPath, parsedTrackedByPath, reuse } = input;
+  if (input.filesOnly) {
+    return null;
+  }
+  const needsContent = (change: CheckoutFileChange) => {
+    const highlightable =
+      !trackedPlaceholderByPath.has(change.path) && parsedTrackedByPath.has(change.path);
+    return highlightable && !reuse?.hasHighlighted(change.path);
+  };
+  const changesToRead = changes.filter(needsContent);
+  return readTrackedDiffContents(cwd, changesToRead, refsForDiff);
+}
+
+async function appendParsedTrackedFile(input: {
+  cwd: string;
+  change: CheckoutFileChange;
+  parsedFile: ParsedDiffFile;
+  refsForDiff: CheckoutDiffRefs;
+  contents: Map<string, string | null> | null;
+  structured: StructuredDiffAccumulator;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}): Promise<boolean> {
+  const { cwd, change, parsedFile, refsForDiff, contents, structured, reuse } = input;
+  if (input.filesOnly) {
+    return appendStructuredFile(structured, buildTrackedFileListEntry(change, parsedFile));
+  }
+  const buildFile = () =>
+    buildHighlightedTrackedDiffFile({
+      cwd,
+      change,
+      parsedFile,
+      refsForDiff,
+      contents: contents ?? undefined,
+    });
+  const file = await (reuse?.highlighted(change.path, buildFile) ?? buildFile());
+  if (!appendStructuredFile(structured, file)) {
+    return false;
+  }
+  // Batched blobs remove the per-file I/O pause; keep serving other daemon work.
+  await setImmediate();
+  return true;
 }
 
 function isWhitespaceOnlyTrackedChange(input: {
@@ -3117,6 +3201,8 @@ async function appendStructuredTrackedDiffs(
     ignoreWhitespace,
     structured,
     appendTrackedPlaceholderComment,
+    filesOnly,
+    reuse,
   } = input;
 
   const parsedTrackedFiles = trackedDiffText.length > 0 ? parseDiff(trackedDiffText) : [];
@@ -3124,14 +3210,15 @@ async function appendStructuredTrackedDiffs(
 
   for (let start = 0; start < trackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const changes = trackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
-    const contents = await readTrackedDiffContents(
+    const contents = await readTrackedContentsToHighlight({
       cwd,
-      changes.filter(
-        (change) =>
-          !trackedPlaceholderByPath.has(change.path) && parsedTrackedByPath.has(change.path),
-      ),
+      changes,
       refsForDiff,
-    );
+      trackedPlaceholderByPath,
+      parsedTrackedByPath,
+      filesOnly,
+      reuse,
+    });
     for (const change of changes) {
       const placeholder = trackedPlaceholderByPath.get(change.path);
       if (placeholder) {
@@ -3149,18 +3236,19 @@ async function appendStructuredTrackedDiffs(
       const stat = trackedNumstatByPath.get(change.path) ?? null;
       const parsedFile = parsedTrackedByPath.get(change.path);
       if (parsedFile) {
-        const file = await buildHighlightedTrackedDiffFile({
+        const didAppend = await appendParsedTrackedFile({
           cwd,
           change,
           parsedFile,
           refsForDiff,
-          contents: contents ?? undefined,
+          contents,
+          structured,
+          filesOnly,
+          reuse,
         });
-        if (!appendStructuredFile(structured, file)) {
+        if (!didAppend) {
           return false;
         }
-        // Batched blobs remove the per-file I/O pause; keep serving other daemon work.
-        await setImmediate();
         continue;
       }
 
@@ -3190,18 +3278,99 @@ async function appendStructuredTrackedDiffs(
   return true;
 }
 
-interface ProcessUntrackedChangeInput {
+type UntrackedDiffText = Awaited<ReturnType<typeof getUntrackedDiffText>>;
+
+interface ProcessUntrackedChangesInput {
   cwd: string;
-  change: CheckoutFileChange;
+  untrackedChanges: CheckoutFileChange[];
+  remainingDiffBytes: number;
   ignoreWhitespace: boolean;
   includeStructured: boolean;
+  filesOnly: boolean;
   structured: StructuredDiffAccumulator;
   appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
-async function processUntrackedChange(input: ProcessUntrackedChangeInput): Promise<boolean> {
-  const { cwd, change, ignoreWhitespace, includeStructured, structured, appendDiff } = input;
-  const { text, truncated, stat } = await getUntrackedDiffText(cwd, change, ignoreWhitespace);
+async function processUntrackedChanges(input: ProcessUntrackedChangesInput): Promise<boolean> {
+  const {
+    cwd,
+    untrackedChanges,
+    ignoreWhitespace,
+    includeStructured,
+    filesOnly,
+    structured,
+    appendDiff,
+    reuse,
+  } = input;
+  let untrackedDiffBytes = 0;
+  for (let start = 0; start < untrackedChanges.length; start += TRACKED_DIFF_BATCH_SIZE) {
+    const changes = untrackedChanges.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
+    // 预算已满时不再跑 git diff，只嗅探是否二进制，其余直接给 too_large 占位
+    const budgetExhausted = untrackedDiffBytes >= input.remainingDiffBytes;
+    // 并发只靠 git 子进程限流兜底；结果仍按原顺序拼接，输出与串行一致
+    const diffTexts: Array<UntrackedDiffText | null> = await Promise.all(
+      changes.map((change) => {
+        if (budgetExhausted) return getUntrackedBinaryDiffText(cwd, change);
+        const loadText = () => getUntrackedDiffText(cwd, change, ignoreWhitespace);
+        return reuse?.untrackedText(change.path, loadText) ?? loadText();
+      }),
+    );
+    for (const [index, change] of changes.entries()) {
+      const diffText = diffTexts[index];
+      const diffBytes = diffText ? Buffer.byteLength(diffText.text, "utf8") : 0;
+      const fitsBudget =
+        diffText !== null && untrackedDiffBytes + diffBytes <= input.remainingDiffBytes;
+      const didAppend = await appendUntrackedChange({
+        cwd,
+        change,
+        diffText: fitsBudget
+          ? diffText
+          : { text: "", truncated: true, stat: diffText?.stat ?? null },
+        includeStructured,
+        filesOnly,
+        structured,
+        appendDiff,
+        reuse,
+      });
+      if (!didAppend) {
+        return false;
+      }
+      if (fitsBudget) {
+        untrackedDiffBytes += diffBytes;
+      }
+    }
+  }
+  return true;
+}
+
+async function getUntrackedBinaryDiffText(
+  cwd: string,
+  change: CheckoutFileChange,
+): Promise<UntrackedDiffText | null> {
+  try {
+    const { stat } = await inspectUntrackedFile(cwd, change.path);
+    return stat?.isBinary ? { text: "", truncated: false, stat } : null;
+  } catch {
+    return null;
+  }
+}
+
+interface AppendUntrackedChangeInput {
+  cwd: string;
+  change: CheckoutFileChange;
+  diffText: UntrackedDiffText;
+  includeStructured: boolean;
+  filesOnly: boolean;
+  structured: StructuredDiffAccumulator;
+  appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
+}
+
+async function appendUntrackedChange(input: AppendUntrackedChangeInput): Promise<boolean> {
+  const { cwd, change, diffText, includeStructured, filesOnly, structured, appendDiff, reuse } =
+    input;
+  const { text, truncated, stat } = diffText;
 
   if (!includeStructured) {
     if (stat?.isBinary) {
@@ -3241,7 +3410,7 @@ async function processUntrackedChange(input: ProcessUntrackedChangeInput): Promi
   }
 
   appendDiff(text);
-  const parsed = await parseAndHighlightDiff(text, cwd);
+  const parsed = await parseUntrackedDiffText({ cwd, path: change.path, text, filesOnly, reuse });
   const parsedFile =
     parsed[0] ??
     ({
@@ -3255,6 +3424,7 @@ async function processUntrackedChange(input: ProcessUntrackedChangeInput): Promi
 
   const file = {
     ...parsedFile,
+    ...(filesOnly ? { hunks: [] } : {}),
     path: change.path,
     isNew: change.isNew,
     isDeleted: change.isDeleted,
@@ -3263,12 +3433,30 @@ async function processUntrackedChange(input: ProcessUntrackedChangeInput): Promi
   return appendStructuredFile(structured, file);
 }
 
+/** 只要清单时只解析出增删行数，不读全文、不高亮。 */
+function parseUntrackedDiffText(input: {
+  cwd: string;
+  path: string;
+  text: string;
+  filesOnly: boolean;
+  reuse?: CheckoutDiffReuseRun;
+}): Promise<ParsedDiffFile[]> {
+  const { cwd, path, text, reuse } = input;
+  if (input.filesOnly) {
+    return Promise.resolve(parseDiff(text));
+  }
+  const parseText = () => parseAndHighlightDiff(text, cwd);
+  const reused = reuse?.untrackedParsed(path, parseText);
+  return reused ?? parseText();
+}
+
 interface ProcessTrackedChangesInput {
   cwd: string;
   refsForDiff: CheckoutDiffRefs;
   trackedChanges: CheckoutFileChange[];
   ignoreWhitespace: boolean;
   appendDiff: (text: string) => void;
+  reuse?: CheckoutDiffReuseRun;
 }
 
 interface ProcessTrackedChangesResult {
@@ -3280,7 +3468,7 @@ interface ProcessTrackedChangesResult {
 async function processTrackedChanges(
   input: ProcessTrackedChangesInput,
 ): Promise<ProcessTrackedChangesResult> {
-  const { cwd, refsForDiff, trackedChanges, ignoreWhitespace, appendDiff } = input;
+  const { cwd, refsForDiff, trackedChanges, ignoreWhitespace, appendDiff, reuse } = input;
   const trackedNumstatByPath =
     trackedChanges.length > 0
       ? await getTrackedNumstatByPath(cwd, refsForDiff, ignoreWhitespace)
@@ -3308,16 +3496,14 @@ async function processTrackedChanges(
   for (let start = 0; start < trackedDiffPaths.length; start += TRACKED_DIFF_BATCH_SIZE) {
     const paths = trackedDiffPaths.slice(start, start + TRACKED_DIFF_BATCH_SIZE);
     // Keep rename/copy path filtering identical to the existing per-file command.
-    const ordinary = await getTrackedDiffTexts({
-      cwd,
-      refsForDiff,
-      paths: paths.filter((path) => !renamedPaths.has(path)),
-      ignoreWhitespace,
-    });
-    const renamed = await Promise.all(
-      paths
-        .filter((path) => renamedPaths.has(path))
-        .map((path) =>
+    const loadOrdinary = (ordinaryPaths: string[]) =>
+      getTrackedDiffTexts({ cwd, refsForDiff, paths: ordinaryPaths, ignoreWhitespace });
+    const ordinaryPaths = paths.filter((path) => !renamedPaths.has(path));
+    const ordinary = await (reuse?.trackedPatches(ordinaryPaths, loadOrdinary) ??
+      loadOrdinary(ordinaryPaths));
+    const loadRenamed = (renamedBatch: string[]) =>
+      Promise.all(
+        renamedBatch.map((path) =>
           getTrackedDiffTextForPath({
             cwd,
             refsForDiff,
@@ -3325,7 +3511,10 @@ async function processTrackedChanges(
             ignoreWhitespace,
           }),
         ),
-    );
+      );
+    const renamedBatch = paths.filter((path) => renamedPaths.has(path));
+    const renamed = await (reuse?.trackedPatches(renamedBatch, loadRenamed) ??
+      loadRenamed(renamedBatch));
     const byPath = new Map([...ordinary, ...renamed].map((file) => [file.path, file]));
     const trackedDiffs = paths.map((path) => byPath.get(path)!);
 
@@ -3411,8 +3600,23 @@ export async function getCheckoutDiff(
     if (a.path === b.path) return 0;
     return a.path < b.path ? -1 : 1;
   });
+  const reuse = await context?.diffFileReuse?.begin({
+    cwd,
+    refs: effectiveRefsForDiff,
+    changes,
+    ignoreWhitespace,
+  });
 
-  const structured = createStructuredDiffAccumulator();
+  const structured = createStructuredDiffAccumulator(
+    compare.includeStructured
+      ? await findGeneratedPaths({
+          cwd,
+          paths: changes.map((change) => change.path),
+          runGitCommand: getRunGitCommand(context),
+          logger: context?.logger,
+        })
+      : new Set(),
+  );
   let diffText = "";
   let diffBytes = 0;
   const appendDiff = (text: string) => {
@@ -3439,6 +3643,7 @@ export async function getCheckoutDiff(
     trackedChanges,
     ignoreWhitespace,
     appendDiff,
+    reuse,
   });
 
   const appendTrackedPlaceholderComment = (
@@ -3463,6 +3668,8 @@ export async function getCheckoutDiff(
       ignoreWhitespace,
       structured,
       appendTrackedPlaceholderComment,
+      filesOnly: compare.filesOnly === true,
+      reuse,
     });
     if (!didAppendTrackedDiffs) {
       return { diff: "", structured: [], diffTooLarge: true };
@@ -3476,21 +3683,19 @@ export async function getCheckoutDiff(
     }
   }
 
-  for (const change of untrackedChanges) {
-    if (diffBytes >= TOTAL_DIFF_MAX_BYTES) {
-      break;
-    }
-    const didAppendUntrackedDiff = await processUntrackedChange({
-      cwd,
-      change,
-      ignoreWhitespace,
-      includeStructured: compare.includeStructured === true,
-      structured,
-      appendDiff,
-    });
-    if (!didAppendUntrackedDiff) {
-      return { diff: "", structured: [], diffTooLarge: true };
-    }
+  const didAppendUntrackedDiffs = await processUntrackedChanges({
+    cwd,
+    untrackedChanges,
+    remainingDiffBytes: TOTAL_DIFF_MAX_BYTES - diffBytes,
+    ignoreWhitespace,
+    includeStructured: compare.includeStructured === true,
+    filesOnly: compare.filesOnly === true,
+    structured,
+    appendDiff,
+    reuse,
+  });
+  if (!didAppendUntrackedDiffs) {
+    return { diff: "", structured: [], diffTooLarge: true };
   }
 
   if (compare.includeStructured) {

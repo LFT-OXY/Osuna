@@ -315,6 +315,7 @@ function getFallbackTabOptionLabel(
     files: string;
     pullRequest: string;
     sessionHistory: string;
+    logicMap: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -347,6 +348,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "session_history") {
     return labels.sessionHistory;
   }
+  if (tab.target.kind === "logic_map") {
+    return labels.logicMap;
+  }
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
@@ -366,6 +370,7 @@ function getFallbackTabOptionDescription(
     files: string;
     pullRequest: string;
     sessionHistory: string;
+    logicMap: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -403,6 +408,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "session_history") {
     return labels.sessionHistory;
+  }
+  if (tab.target.kind === "logic_map") {
+    return labels.logicMap;
   }
   if (tab.target.kind === "plugin") {
     return tab.target.panelId;
@@ -607,6 +615,7 @@ function MobileWorkspaceTabOption({
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
       sessionHistory: t("panels.sessionHistory.label"),
+      logicMap: t("logicMap.panel.label"),
     }),
     [t],
   );
@@ -2384,6 +2393,7 @@ function WorkspaceScreenContent({
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
       sessionHistory: t("panels.sessionHistory.label"),
+      logicMap: t("logicMap.panel.label"),
     }),
     [t],
   );

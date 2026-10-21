@@ -31,6 +31,12 @@ import {
 import { type ParsedDiffFile } from "@/git/use-diff-query";
 import type { ChangesState } from "@/panels/changes/state";
 import { defaultChangesState } from "@/panels/changes/state";
+import {
+  applyCollapsedFilePaths,
+  collapseAllFiles,
+  expandAllFiles,
+  recordDefaultFileExpansion,
+} from "@/panels/changes/file-expansion";
 import { DiffDocument, type WorkingDiffMode } from "@/git/diff-document";
 import { ChangedFilesTree } from "@/git/changed-files-tree";
 import { JUMP_TO_FILE_CLEARANCE, JumpToFile } from "@/git/jump-to-file";
@@ -1460,18 +1466,17 @@ export function ChangesSurface({
   const wrapLines = preferences.wrapLines;
   const desktopTreeVisible = instanceState.treeVisible;
   const effectiveLayout = resolveDiffLayout(preferences.layout, canUseSplitLayout);
-  const collapsedFilePaths = instanceState.collapsedFilePaths;
-  const updateCollapsedFilePaths = useCallback(
-    (paths: string[]) => updateState({ ...instanceState, collapsedFilePaths: paths }),
-    [instanceState, updateState],
-  );
   const updateCollapsedFolderPaths = useCallback(
     (paths: string[]) => updateState({ ...instanceState, collapsedFolderPaths: paths }),
     [instanceState, updateState],
   );
-  const collapseState = useMemo(
-    () => ({ paths: collapsedFilePaths, onChange: updateCollapsedFilePaths }),
-    [collapsedFilePaths, updateCollapsedFilePaths],
+  // 默认展开只在本 tab 第一次见到文件时决定一次：收到 diff 就把决定写回 tab 状态，文件变多时已显示的不再变。
+  const recordFileExpansionDefaults = useCallback(
+    (receivedFiles: ParsedDiffFile[]) => {
+      const next = recordDefaultFileExpansion(instanceState, receivedFiles);
+      if (next !== instanceState) updateState(next);
+    },
+    [instanceState, updateState],
   );
 
   const handleToggleWrapLines = useCallback(() => {
@@ -1548,19 +1553,23 @@ export function ChangesSurface({
     isDiffLoading,
     reviewActions,
     reviewAttachment,
+    publishReviewAttachment,
   } = useWorkingDiff({
     serverId,
     workspaceId: workspaceId ?? undefined,
     cwd,
     ignoreWhitespace: preferences.hideWhitespace,
     enabled: enabled !== false,
+    diffBodyHidden: presentation === "tree",
+    onFiles: recordFileExpansionDefaults,
   });
+  // 清单订阅时不发布，免得把显示正文的面板发布的评审附件清掉
   usePublishWorkingDiffAttachment({
     serverId,
     workspaceId: workspaceId ?? undefined,
     cwd,
     attachment: reviewAttachment,
-    enabled: true,
+    enabled: publishReviewAttachment,
   });
   const {
     status: pullRequestStatus,
@@ -1741,15 +1750,29 @@ export function ChangesSurface({
     () => computeSelectedDiffStat(files, isDiffLoading),
     [files, isDiffLoading],
   );
+  // 渲染时先按规则算出新文件的默认值；真正记进 tab 状态在收到 diff 时（recordFileExpansionDefaults）。
+  const fileExpansion = useMemo(
+    () => recordDefaultFileExpansion(instanceState, files),
+    [files, instanceState],
+  );
+  const collapsedFilePaths = fileExpansion.collapsedFilePaths;
+  const updateCollapsedFilePaths = useCallback(
+    (paths: string[]) => updateState(applyCollapsedFilePaths(fileExpansion, paths)),
+    [fileExpansion, updateState],
+  );
+  const collapseState = useMemo(
+    () => ({ paths: collapsedFilePaths, onChange: updateCollapsedFilePaths }),
+    [collapsedFilePaths, updateCollapsedFilePaths],
+  );
   const allFilesCollapsed =
     hasChanges && files.every((file) => collapsedFilePaths.includes(file.path));
   const handleCollapseAllFiles = useCallback(
-    () => updateCollapsedFilePaths(files.map((file) => file.path)),
-    [files, updateCollapsedFilePaths],
+    () => updateState(collapseAllFiles(fileExpansion, files)),
+    [fileExpansion, files, updateState],
   );
   const handleExpandAllFiles = useCallback(
-    () => updateCollapsedFilePaths([]),
-    [updateCollapsedFilePaths],
+    () => updateState(expandAllFiles(fileExpansion, files)),
+    [fileExpansion, files, updateState],
   );
   const diffErrorMessage = diffPayloadError?.message ?? null;
   const prErrorMessage = computePrErrorMessage(githubFeaturesEnabled, prPayloadError);

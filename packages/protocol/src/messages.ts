@@ -2200,6 +2200,153 @@ export const AgentDetachResponseMessageSchema = z.object({
   payload: AgentActionResponsePayloadSchema,
 });
 
+// 逻辑图开关的对象：一个 Agent，或某个 workspace 里还没发消息的草稿。
+// 打开时 daemon 在该 workspace 的目录下新建一张空图；草稿拿回图名，新建 Agent 时放进 labels。
+export const AgentLogicMapTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("agent"), agentId: z.string() }),
+  z.object({
+    kind: z.literal("draft"),
+    workspaceId: z.string(),
+    // 草稿之前新建的空图。草稿改为接着别的图时，daemon 在它还空着、也没有 Agent 用它时删掉。
+    createdMapName: z.string().optional(),
+  }),
+]);
+export type AgentLogicMapTarget = z.infer<typeof AgentLogicMapTargetSchema>;
+
+export const AgentLogicMapSetEnabledRequestMessageSchema = z.object({
+  type: z.literal("agent.logic_map.set_enabled.request"),
+  requestId: z.string(),
+  target: AgentLogicMapTargetSchema,
+  enabled: z.boolean(),
+  // 打开时接着这个 workspace 里已有的这张图；不给就新建（Agent 已开着时沿用当前那张）。
+  // 与 features.logicMap 同版加入，不另设标记。
+  mapName: z.string().optional(),
+});
+
+export const AgentLogicMapSetEnabledResponseMessageSchema = z.object({
+  type: z.literal("agent.logic_map.set_enabled.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string().nullable(),
+    mapName: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// 一张逻辑图的骨架（项目里 docs/logic-maps/<图名>/map.json）。
+// 节点文档来源：图文件夹里的自有文档，或项目里某个文件中的某个标题（存标题文字，不存行号）。
+export const LogicMapNodeDocSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("own"),
+    /** 相对图文件夹的文件名。 */
+    file: z.string(),
+    /** 装了 spec 框架时的临时要点，还没指向正式文档。 */
+    pendingLink: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("external"),
+    /** 相对 workspace 目录的路径。 */
+    path: z.string(),
+    heading: z.string(),
+  }),
+]);
+export type LogicMapNodeDoc = z.infer<typeof LogicMapNodeDocSchema>;
+
+export const LogicMapNodeKindSchema = z.enum(["start", "end", "step", "decision", "subgraph"]);
+export type LogicMapNodeKind = z.infer<typeof LogicMapNodeKindSchema>;
+
+export const LogicMapNodeSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  kind: LogicMapNodeKindSchema,
+  /** 所在子图节点的 id；顶层为 null。 */
+  parentId: z.string().nullable(),
+  /** 失败的那条路上的节点，图上画成红色；没有时按 false。 */
+  failure: z.boolean().optional(),
+  doc: LogicMapNodeDocSchema.nullable(),
+});
+export type LogicMapNode = z.infer<typeof LogicMapNodeSchema>;
+
+export const LogicMapEdgeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  condition: z.string().nullable(),
+});
+export type LogicMapEdge = z.infer<typeof LogicMapEdgeSchema>;
+
+export const LogicMapSpecFrameworkSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({ kind: z.literal("present"), docsPath: z.string() }),
+]);
+export type LogicMapSpecFramework = z.infer<typeof LogicMapSpecFrameworkSchema>;
+
+/** title 在 Agent 第一次写入前为 null，specFramework 在它判断前为 null。 */
+export const LogicMapSkeletonSchema = z.object({
+  title: z.string().nullable(),
+  specFramework: LogicMapSpecFrameworkSchema.nullable(),
+  nodes: z.array(LogicMapNodeSchema),
+  edges: z.array(LogicMapEdgeSchema),
+});
+export type LogicMapSkeleton = z.infer<typeof LogicMapSkeletonSchema>;
+
+export const WorkspaceLogicMapListRequestMessageSchema = z.object({
+  type: z.literal("workspace.logic_map.list.request"),
+  requestId: z.string(),
+  workspaceId: z.string(),
+});
+
+export const WorkspaceLogicMapSummarySchema = z.object({
+  name: z.string(),
+  /** 还没定标题，或骨架文件读不出来时为 null。 */
+  title: z.string().nullable(),
+});
+export type WorkspaceLogicMapSummary = z.infer<typeof WorkspaceLogicMapSummarySchema>;
+
+export const WorkspaceLogicMapListResponseMessageSchema = z.object({
+  type: z.literal("workspace.logic_map.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    maps: z.array(WorkspaceLogicMapSummarySchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const WorkspaceLogicMapGetRequestMessageSchema = z.object({
+  type: z.literal("workspace.logic_map.get.request"),
+  requestId: z.string(),
+  workspaceId: z.string(),
+  mapName: z.string(),
+});
+
+// corrupt：文件被手动改坏，说明是哪个文件、出了什么问题；error：其他原因读不到（图或 workspace 不存在）。
+export const WorkspaceLogicMapReadResultSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("ok"), map: LogicMapSkeletonSchema }),
+  z.object({ kind: z.literal("corrupt"), file: z.string(), problem: z.string() }),
+  z.object({ kind: z.literal("error"), message: z.string() }),
+]);
+export type WorkspaceLogicMapReadResult = z.infer<typeof WorkspaceLogicMapReadResultSchema>;
+
+export const WorkspaceLogicMapGetResponseMessageSchema = z.object({
+  type: z.literal("workspace.logic_map.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    mapName: z.string(),
+    result: WorkspaceLogicMapReadResultSchema,
+  }),
+});
+
+/** Agent 改了某张图之后推送；客户端按需重新读取。只发给订阅了这个事件的连接。 */
+export const WorkspaceLogicMapChangedMessageSchema = z.object({
+  type: z.literal("workspace.logic_map.changed"),
+  payload: z.object({
+    workspaceId: z.string(),
+    mapName: z.string(),
+  }),
+});
+export type WorkspaceLogicMapChangedMessage = z.infer<typeof WorkspaceLogicMapChangedMessageSchema>;
+
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
 
 export const AgentRewindRequestMessageSchema = z.object({
@@ -2358,6 +2505,9 @@ const CheckoutDiffCompareSchema = z.object({
   mode: z.enum(["uncommitted", "base"]),
   baseRef: z.string().optional(),
   ignoreWhitespace: z.boolean().optional(),
+  // 只要文件清单：每个 file 照常带清单字段，hunks 为空数组，daemon 不读全文、不做高亮。
+  // 客户端只在 server_info.features.checkoutDiffFilesOnly 为 true 时发送。
+  filesOnly: z.boolean().optional(),
 });
 
 export const CheckoutStatusRequestSchema = z.object({
@@ -2896,6 +3046,8 @@ const ParsedDiffFileSchema = z.object({
   deletions: z.number(),
   hunks: z.array(DiffHunkSchema),
   status: z.enum(["ok", "too_large", "binary"]).optional(),
+  // 只在为 true 时发送；旧 daemon 不发，客户端按不是 Generated file 处理。
+  generated: z.boolean().optional(),
 });
 
 const FileExplorerEntrySchema = z.object({
@@ -3357,6 +3509,9 @@ export const SessionEventSubscriptionSchema = z.enum([
   "usage.backfill.progress",
   "usage.updated",
   "usage.pricing.updated",
+  // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19. A client only
+  // asks for it once `features.logicMap` is advertised.
+  "workspace.logic_map.changed",
 ]);
 export type SessionEventSubscription = z.infer<typeof SessionEventSubscriptionSchema>;
 export const SessionEventsSetSubscriptionRequestSchema = z.object({
@@ -3496,6 +3651,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentLogicMapSetEnabledRequestMessageSchema,
+  WorkspaceLogicMapListRequestMessageSchema,
+  WorkspaceLogicMapGetRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -4020,6 +4178,13 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(providerVersions): added in v0.14.0, remove gate after 2027-04-01.
         // 快照带内置提供方的已装版本 version；daemon 支持 provider.version.check.* 与 provider.upgrade.*。
         providerVersions: z.boolean().optional(),
+        // COMPAT(logicMap): added in v0.17.0, remove gate after 2027-04-19.
+        // daemon 支持 agent.logic_map.set_enabled、workspace.logic_map.list / get 与 changed 事件，
+        // 并给开着逻辑图的 Agent 的消息附逻辑图说明块。
+        logicMap: z.boolean().optional(),
+        // COMPAT(checkoutDiffFilesOnly): added in v0.17.0, remove gate after 2027-04-19.
+        // daemon 理解 checkout diff compare 的 filesOnly，只发文件清单。
+        checkoutDiffFilesOnly: z.boolean().optional(),
       })
       .optional(),
   })
@@ -7293,6 +7458,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentLogicMapSetEnabledResponseMessageSchema,
+  WorkspaceLogicMapListResponseMessageSchema,
+  WorkspaceLogicMapGetResponseMessageSchema,
+  WorkspaceLogicMapChangedMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -7540,6 +7709,15 @@ export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingRes
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentLogicMapSetEnabledResponseMessage = z.infer<
+  typeof AgentLogicMapSetEnabledResponseMessageSchema
+>;
+export type WorkspaceLogicMapListResponseMessage = z.infer<
+  typeof WorkspaceLogicMapListResponseMessageSchema
+>;
+export type WorkspaceLogicMapGetResponseMessage = z.infer<
+  typeof WorkspaceLogicMapGetResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -7709,6 +7887,15 @@ export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequ
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentLogicMapSetEnabledRequestMessage = z.infer<
+  typeof AgentLogicMapSetEnabledRequestMessageSchema
+>;
+export type WorkspaceLogicMapListRequestMessage = z.infer<
+  typeof WorkspaceLogicMapListRequestMessageSchema
+>;
+export type WorkspaceLogicMapGetRequestMessage = z.infer<
+  typeof WorkspaceLogicMapGetRequestMessageSchema
+>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;

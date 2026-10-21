@@ -1,6 +1,6 @@
 import type { OwnedSubscription, SubscriptionObserver } from "@getpaseo/client";
 import { QueryClient, QueryObserver, skipToken } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MutableDaemonConfig, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { checkoutDiffQueryKey } from "@/git/query-keys";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
@@ -51,7 +51,12 @@ function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}
   emit: <K extends RouterMessageType>(message: Extract<RouterMessage, { type: K }>) => void;
   subscribeCheckoutDiffCalls: Array<{
     cwd: string;
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean };
+    compare: {
+      mode: "uncommitted" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+      filesOnly?: boolean;
+    };
     subscriptionId: string;
   }>;
   unsubscribeCheckoutDiffCalls: string[];
@@ -67,7 +72,12 @@ function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}
   };
   const subscribeCheckoutDiffCalls: Array<{
     cwd: string;
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean };
+    compare: {
+      mode: "uncommitted" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+      filesOnly?: boolean;
+    };
     subscriptionId: string;
   }> = [];
   const unsubscribeCheckoutDiffCalls: string[] = [];
@@ -199,6 +209,71 @@ function providerUpdate(generatedAt: string): ProvidersSnapshotUpdateMessage {
 }
 
 describe("server data push router", () => {
+  it("keeps a visible diff subscribed when a hidden panel switches to the same comparison", () => {
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "server-1";
+    const cwd = "/repo";
+    const options = (mode: "base" | "uncommitted", enabled: boolean) => {
+      const queryKey = checkoutDiffQueryKey(
+        serverId,
+        cwd,
+        mode,
+        mode === "base" ? "main" : undefined,
+      );
+      return {
+        queryKey,
+        queryFn: skipToken as typeof skipToken,
+        gcTime: Infinity,
+        meta: checkoutDiffPushRoute({
+          enabled,
+          serverId,
+          cwd,
+          subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+          compare: { mode, ...(mode === "base" ? { baseRef: "main" } : {}) },
+        }),
+      };
+    };
+    const visible = new QueryObserver(queryClient, options("base", true));
+    const hidden = new QueryObserver(queryClient, options("base", false));
+    const unsubscribeVisible = visible.subscribe(() => {});
+    const unsubscribeHidden = hidden.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    try {
+      visible.setOptions(options("uncommitted", true));
+      hidden.setOptions(options("uncommitted", false));
+      const subscription = fake.subscribeCheckoutDiffCalls.findLast(
+        (call) => call.compare.mode === "uncommitted",
+      )!;
+      const files = [
+        {
+          path: "README.md",
+          isNew: false,
+          isDeleted: false,
+          additions: 1,
+          deletions: 0,
+          hunks: [],
+        },
+      ];
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: { subscriptionId: subscription.subscriptionId, cwd, files, error: null },
+      });
+      expect(queryClient.getQueryData(options("uncommitted", true).queryKey)).toMatchObject({
+        files,
+      });
+      expect(fake.unsubscribeCheckoutDiffCalls).not.toContain(subscription.subscriptionId);
+
+      unsubscribeVisible();
+      expect(fake.unsubscribeCheckoutDiffCalls).toContain(subscription.subscriptionId);
+    } finally {
+      unsubscribeVisible();
+      unsubscribeHidden();
+      unmount();
+      queryClient.clear();
+    }
+  });
+
   it("retains equal diff files without reconstructing changed file bodies", () => {
     const queryClient = new QueryClient();
     const fake = createFakeClient();
@@ -314,6 +389,84 @@ describe("server data push router", () => {
       });
   });
 
+  it("keeps a files-only subscription apart and switches with the diff body both ways", () => {
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "server-1";
+    const cwd = "/repo";
+    const options = (filesOnly: boolean) => {
+      const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false, {
+        filesOnly,
+      });
+      return {
+        queryKey,
+        queryFn: skipToken as typeof skipToken,
+        gcTime: Infinity,
+        meta: checkoutDiffPushRoute({
+          enabled: true,
+          serverId,
+          cwd,
+          subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+          compare: {
+            mode: "uncommitted",
+            ignoreWhitespace: false,
+            ...(filesOnly ? { filesOnly } : {}),
+          },
+        }),
+      };
+    };
+    const observer = new QueryObserver(queryClient, options(true));
+    const unsubscribeObserver = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    try {
+      expect(fake.subscribeCheckoutDiffCalls.map((call) => call.compare)).toEqual([
+        { mode: "uncommitted", ignoreWhitespace: false, filesOnly: true },
+      ]);
+      const filesOnlyId = fake.subscribeCheckoutDiffCalls[0]!.subscriptionId;
+      const listedFile = {
+        path: "README.md",
+        isNew: false,
+        isDeleted: false,
+        additions: 1,
+        deletions: 0,
+        hunks: [],
+      };
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: { subscriptionId: filesOnlyId, cwd, files: [listedFile], error: null },
+      });
+
+      observer.setOptions(options(false));
+
+      // 切换途中可能先订阅再释放一次，只看最终留下的那份
+      const fullCall = fake.subscribeCheckoutDiffCalls.at(-1)!;
+      expect(fullCall.compare).toEqual({ mode: "uncommitted", ignoreWhitespace: false });
+      expect(fake.unsubscribeCheckoutDiffCalls).toContain(filesOnlyId);
+      expect(fake.unsubscribeCheckoutDiffCalls).not.toContain(fullCall.subscriptionId);
+      // 完整订阅的缓存不会拿到清单订阅那份没有 hunks 的数据
+      expect(queryClient.getQueryData(options(false).queryKey)).toMatchObject({ files: [] });
+      expect(queryClient.getQueryData(options(true).queryKey)).toMatchObject({
+        files: [listedFile],
+      });
+
+      // 正文再次收起：回到清单订阅，完整订阅释放
+      observer.setOptions(options(true));
+
+      const filesOnlyAgain = fake.subscribeCheckoutDiffCalls.at(-1)!;
+      expect(filesOnlyAgain.compare).toEqual({
+        mode: "uncommitted",
+        ignoreWhitespace: false,
+        filesOnly: true,
+      });
+      expect(fake.unsubscribeCheckoutDiffCalls).toContain(fullCall.subscriptionId);
+      expect(fake.unsubscribeCheckoutDiffCalls).not.toContain(filesOnlyAgain.subscriptionId);
+    } finally {
+      unsubscribeObserver();
+      unmount();
+      queryClient.clear();
+    }
+  });
+
   it("subscribes active checkout diff queries and writes matching diff events", () => {
     const queryClient = new QueryClient();
     const fake = createFakeClient();
@@ -391,6 +544,140 @@ describe("server data push router", () => {
     expect(fake.unsubscribeCheckoutDiffCalls).toEqual([serverSubscriptionId]);
 
     unmount();
+  });
+
+  it("applies at most one diff push per second, keeping the latest and the trailing one", () => {
+    vi.useFakeTimers();
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "diff-throttle";
+    const cwd = "/repo";
+    const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false);
+    const observer = new QueryObserver(queryClient, {
+      queryKey,
+      queryFn: skipToken,
+      meta: checkoutDiffPushRoute({
+        enabled: true,
+        serverId,
+        cwd,
+        subscriptionId: "diff-throttle",
+        compare: { mode: "uncommitted" },
+      }),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    const push = (path: string) =>
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: {
+          subscriptionId: fake.subscribeCheckoutDiffCalls[0]!.subscriptionId,
+          cwd,
+          files: [{ path, isNew: false, isDeleted: false, additions: 1, deletions: 0, hunks: [] }],
+          error: null,
+        },
+      });
+    const appliedPath = () =>
+      queryClient.getQueryData<{ files: Array<{ path: string }> }>(queryKey)?.files[0]?.path;
+    try {
+      push("first.ts");
+      expect(appliedPath()).toBe("first.ts");
+
+      push("second.ts");
+      vi.advanceTimersByTime(300);
+      push("third.ts");
+      vi.advanceTimersByTime(300);
+      push("fourth.ts");
+      vi.advanceTimersByTime(399);
+      expect(appliedPath()).toBe("first.ts");
+
+      vi.advanceTimersByTime(1);
+      expect(appliedPath()).toBe("fourth.ts");
+
+      push("trailing.ts");
+      vi.advanceTimersByTime(999);
+      expect(appliedPath()).toBe("fourth.ts");
+      vi.advanceTimersByTime(1);
+      expect(appliedPath()).toBe("trailing.ts");
+    } finally {
+      unsubscribe();
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases a diff while its route is disabled and shows the latest snapshot once re-enabled", () => {
+    vi.useFakeTimers();
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "diff-hidden";
+    const cwd = "/repo";
+    const queryKey = checkoutDiffQueryKey(serverId, cwd, "uncommitted", undefined, false);
+    // 页面 hidden、tab 不活跃时 useCheckoutDiffQuery 都把 route 的 enabled 置 false
+    const options = (pageVisible: boolean) => ({
+      queryKey,
+      queryFn: skipToken as typeof skipToken,
+      gcTime: Infinity,
+      meta: checkoutDiffPushRoute({
+        enabled: pageVisible,
+        serverId,
+        cwd,
+        subscriptionId: `checkoutDiff:${JSON.stringify(queryKey)}`,
+        compare: { mode: "uncommitted", ignoreWhitespace: false },
+      }),
+    });
+    const observer = new QueryObserver(queryClient, options(true));
+    const unsubscribe = observer.subscribe(() => {});
+    const unmount = mountServerDataPushRouter({ queryClient, client: fake.client, serverId });
+    const diffFile = (path: string) => ({
+      path,
+      isNew: false,
+      isDeleted: false,
+      additions: 1,
+      deletions: 0,
+      hunks: [],
+    });
+    const push = (subscriptionId: string, path: string) =>
+      fake.emit({
+        type: "checkout_diff_update",
+        payload: { subscriptionId, cwd, files: [diffFile(path)], error: null },
+      });
+    const shownPaths = () =>
+      queryClient
+        .getQueryData<{ files: Array<{ path: string }> }>(queryKey)
+        ?.files.map((file) => file.path);
+    try {
+      const first = fake.subscribeCheckoutDiffCalls[0]!.subscriptionId;
+      push(first, "before-hide.ts");
+      push(first, "throttled.ts");
+      expect(shownPaths()).toEqual(["before-hide.ts"]);
+
+      observer.setOptions(options(false));
+      expect(fake.unsubscribeCheckoutDiffCalls).toEqual([first]);
+      push(first, "while-hidden.ts");
+      vi.advanceTimersByTime(5000);
+      expect(shownPaths()).toEqual(["before-hide.ts"]);
+
+      observer.setOptions(options(true));
+      expect(fake.subscribeCheckoutDiffCalls).toHaveLength(2);
+      const second = fake.subscribeCheckoutDiffCalls[1]!.subscriptionId;
+      fake.emit({
+        type: "subscribe_checkout_diff_response",
+        payload: {
+          subscriptionId: second,
+          cwd,
+          files: [diffFile("while-hidden.ts"), diffFile("latest.ts")],
+          error: null,
+          requestId: "resume",
+        },
+      });
+      expect(shownPaths()).toEqual(["latest.ts", "while-hidden.ts"]);
+    } finally {
+      unsubscribe();
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
   });
 
   it("does not retry failed subscriptions on unrelated cache events", async () => {

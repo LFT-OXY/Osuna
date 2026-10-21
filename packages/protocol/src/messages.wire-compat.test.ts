@@ -2,9 +2,12 @@ import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
+  CheckoutDiffUpdateSchema,
   AgentTimelineItemPayloadSchema,
   ServerInfoStatusPayloadSchema,
+  SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
+  SubscribeCheckoutDiffRequestSchema,
   WSHelloMessageSchema,
   WorkspaceSetupSnapshotSchema,
   WorkspaceSetupProgressMessageSchema,
@@ -30,6 +33,69 @@ test("terminal listings accept older rows and retain new per-terminal directorie
     },
   };
   expect(SessionOutboundMessageSchema.parse(withDirectory)).toEqual(withDirectory);
+});
+
+test("checkout diff files parse with and without the generated mark", () => {
+  const file = {
+    path: "package-lock.json",
+    isNew: false,
+    isDeleted: false,
+    additions: 1200,
+    deletions: 40,
+    hunks: [],
+    status: "ok",
+  };
+  const update = (files: unknown[]) => ({
+    type: "checkout_diff_update",
+    payload: { subscriptionId: "diff-1", cwd: "/workspace", files, error: null },
+  });
+  // 加 generated 之前的客户端：file 结构里没有这个字段。
+  const payload = CheckoutDiffUpdateSchema.shape.payload;
+  const LegacyCheckoutDiffUpdateSchema = CheckoutDiffUpdateSchema.extend({
+    payload: payload.extend({
+      files: z.array(payload.shape.files.element.omit({ generated: true })),
+    }),
+  });
+
+  const fromNewDaemon = update([{ ...file, generated: true }]);
+  expect(LegacyCheckoutDiffUpdateSchema.parse(fromNewDaemon).payload.files[0]?.path).toBe(
+    "package-lock.json",
+  );
+  expect(SessionOutboundMessageSchema.parse(fromNewDaemon)).toEqual(fromNewDaemon);
+  const fromOldDaemon = update([file]);
+  expect(SessionOutboundMessageSchema.parse(fromOldDaemon)).toEqual(fromOldDaemon);
+});
+
+test("checkout diff subscriptions carry filesOnly to new daemons and old daemons ignore it", () => {
+  const request = {
+    type: "subscribe_checkout_diff_request",
+    subscriptionId: "diff-1",
+    cwd: "/workspace",
+    compare: { mode: "uncommitted", filesOnly: true },
+    requestId: "req-1",
+  };
+  // 加 filesOnly 之前的 daemon：compare 里没有这个字段。
+  const LegacySubscribeCheckoutDiffRequestSchema = SubscribeCheckoutDiffRequestSchema.extend({
+    compare: SubscribeCheckoutDiffRequestSchema.shape.compare.omit({ filesOnly: true }),
+  });
+
+  expect(LegacySubscribeCheckoutDiffRequestSchema.parse(request).compare).toEqual({
+    mode: "uncommitted",
+  });
+  expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+  const fromOldClient = { ...request, compare: { mode: "uncommitted" } };
+  expect(SessionInboundMessageSchema.parse(fromOldClient)).toEqual(fromOldClient);
+});
+
+test("server_info parses with and without the checkoutDiffFilesOnly feature", () => {
+  const base = { status: "server_info", serverId: "server-1" };
+  expect(
+    ServerInfoStatusPayloadSchema.parse({ ...base, features: { checkoutDiffFilesOnly: true } })
+      .features?.checkoutDiffFilesOnly,
+  ).toBe(true);
+  expect(
+    ServerInfoStatusPayloadSchema.parse({ ...base, features: {} }).features?.checkoutDiffFilesOnly,
+  ).toBeUndefined();
 });
 
 test("provider session listings accept older rows and retain each Codex row's model provider", () => {

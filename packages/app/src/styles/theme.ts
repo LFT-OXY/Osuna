@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
 import { hexColorWithAlpha, hexContrastRatio, mixHexColor } from "@/utils/color";
 import { USAGE_DARK_PALETTE, USAGE_LIGHT_PALETTE } from "./usage-palette";
+import { LOGIC_MAP_DARK_PALETTE, LOGIC_MAP_LIGHT_PALETTE } from "./logic-map-palette";
 
 export const baseColors = {
   // Base colors
@@ -1013,6 +1014,8 @@ export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemant
       // The usage page is a visual island with its own neutral scale; it rides
       // on the theme so Unistyles tracks it like any other token.
       usage: USAGE_DARK_PALETTE,
+      // 逻辑图画布的颜色例外（docs/design.md §14），同样挂在主题上让 Unistyles 跟踪。
+      logicMap: LOGIC_MAP_DARK_PALETTE,
     },
     shadow: darkShadow,
     ...commonTheme,
@@ -1401,6 +1404,7 @@ export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSema
       palette: baseColors,
       syntax: lightHighlightColors,
       usage: USAGE_LIGHT_PALETTE,
+      logicMap: LOGIC_MAP_LIGHT_PALETTE,
     },
     shadow: lightShadow,
     ...commonTheme,
