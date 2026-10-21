@@ -355,7 +355,8 @@ function MenuSheetSurface({
     () => ({
       paddingBottom: getMenuSheetBottomPadding({
         safeAreaBottom: safeAreaInsets.bottom,
-        breathingRoom: SPACING[1],
+        // 与带底栏的抽屉底下留的空一样多，最后一项不贴着屏幕底边。
+        breathingRoom: SPACING[4],
       }),
     }),
     [safeAreaInsets.bottom],

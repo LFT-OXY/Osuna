@@ -35,6 +35,7 @@ import { FormTextInput } from "@/components/ui/form-field";
 import { mutedIconColorMapping } from "@/components/ui/icon-color";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
+import { HorizontalScrollFade } from "@/components/ui/horizontal-scroll-fade";
 import { Text } from "@/components/ui/text";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { settingsStyles } from "@/styles/settings";
@@ -237,25 +238,30 @@ export function ApiEndpointModelsSection({
       </CenteredMessage>
     );
   } else {
+    const familyItems = groups.map((group) => (
+      <FamilyItem
+        key={group.family}
+        group={group}
+        isActive={group.family === active.family}
+        isCompact={isCompact}
+        onPress={setActiveFamily}
+      />
+    ));
     body = (
       <View style={isCompact ? styles.columnsCompact : styles.columns}>
-        <ScrollView
-          horizontal={isCompact}
-          showsHorizontalScrollIndicator={false}
-          style={isCompact ? styles.familyRowCompact : styles.familyColumn}
-          contentContainerStyle={isCompact ? styles.familyRowContent : undefined}
-          testID="api-endpoint-model-families"
-        >
-          {groups.map((group) => (
-            <FamilyItem
-              key={group.family}
-              group={group}
-              isActive={group.family === active.family}
-              isCompact={isCompact}
-              onPress={setActiveFamily}
-            />
-          ))}
-        </ScrollView>
+        {isCompact ? (
+          <HorizontalScrollFade
+            style={styles.familyRowCompact}
+            contentContainerStyle={styles.familyRowContent}
+            testID="api-endpoint-model-families"
+          >
+            {familyItems}
+          </HorizontalScrollFade>
+        ) : (
+          <ScrollView style={styles.familyColumn} testID="api-endpoint-model-families">
+            {familyItems}
+          </ScrollView>
+        )}
         <FamilyModels
           group={active}
           onToggle={handleToggleModel}

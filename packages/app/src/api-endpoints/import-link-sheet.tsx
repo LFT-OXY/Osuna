@@ -56,8 +56,8 @@ export interface ImportLinkSheetProps {
 
 // 窄窗口里确认框最高这么高；内容短时缩到正好装下（useFitSnapPoints）。
 const MAX_SNAP_PERCENT = 90;
-// 只有一句话的（拒收、加不了）：窄窗口里弹层只要这么高，不留一大片空白。
-const NOTICE_SNAP_POINTS = ["40%"];
+// 只有一句话的（拒收、加不了）：先按这么高打开，再同样缩到正好装下。
+const NOTICE_MAX_SNAP_PERCENT = 40;
 
 export function ImportLinkSheet({
   view,
@@ -97,6 +97,10 @@ export function ImportLinkNotice({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const fit = useFitSnapPoints({
+    maxPercent: NOTICE_MAX_SNAP_PERCENT,
+    contentKey: view.kind === "preview" ? view.preview.status : view.kind,
+  });
   const header = useMemo<SheetHeader>(
     () => ({ title: t("settings.apiEndpoints.importLink.title") }),
     [t],
@@ -183,11 +187,13 @@ export function ImportLinkNotice({
       visible
       onClose={onClose}
       desktopMaxWidth={520}
-      snapPoints={NOTICE_SNAP_POINTS}
+      snapPoints={fit.snapPoints}
       footer={footer}
       testID="api-endpoint-import-link-sheet"
     >
-      {body}
+      <View style={styles.fitFrame} onLayout={fit.onFrameLayout}>
+        <View onLayout={fit.onContentLayout}>{body}</View>
+      </View>
     </AdaptiveModalSheet>
   );
 }
@@ -217,7 +223,7 @@ function ImportLinkConfirm({
   const hasNoName = name.trim() === "";
   const keyFromLink = preview.key !== null;
   const showsKeysPage = !keyFromLink && preview.keysUrl !== null;
-  const fit = useFitSnapPoints();
+  const fit = useFitSnapPoints({ maxPercent: MAX_SNAP_PERCENT, contentKey: "confirm" });
 
   const handleAdd = useCallback(async () => {
     if (hasNoName) {
@@ -390,25 +396,33 @@ function ImportLinkConfirm({
  * 窄窗口的底部弹层高度是固定的档位，不随内容变：先按最高一档打开，量出正文下面空着多少，再缩掉这一截。
  * 只缩一次：缩的动画里正文区仍按旧的高度排，再量会多减。装不下时没有空白，留在最高一档、正文滚动。
  */
-function useFitSnapPoints(): {
+function useFitSnapPoints(input: { maxPercent: number; contentKey: string }): {
   snapPoints: string[];
   onFrameLayout: (event: LayoutChangeEvent) => void;
   onContentLayout: (event: LayoutChangeEvent) => void;
 } {
+  const { maxPercent, contentKey } = input;
   const { height: windowHeight } = useWindowDimensions();
-  const [percent, setPercent] = useState(MAX_SNAP_PERCENT);
+  const [percent, setPercent] = useState(maxPercent);
   const frameHeight = useRef<number | null>(null);
   const contentHeight = useRef<number | null>(null);
-  const isSettled = useRef(false);
+  // 每种内容只缩一次；换了内容（读完链接、出了结果）先回到最高一档，再缩到新内容的高度。
+  const settledFor = useRef<string | null>(null);
+  const [shownKey, setShownKey] = useState(contentKey);
+  if (shownKey !== contentKey) {
+    setShownKey(contentKey);
+    setPercent(maxPercent);
+  }
   const settle = useCallback(() => {
     const frame = frameHeight.current;
     const content = contentHeight.current;
-    if (isSettled.current || frame === null || content === null || frame <= 0) return;
+    if (settledFor.current === contentKey || frame === null || content === null || frame <= 0)
+      return;
     // 弹层还没排好时正文区与正文一样高：等到真有空白再缩。
     if (windowHeight <= 0 || frame - content < 1) return;
-    isSettled.current = true;
-    setPercent(MAX_SNAP_PERCENT - ((frame - content) / windowHeight) * 100);
-  }, [windowHeight]);
+    settledFor.current = contentKey;
+    setPercent(maxPercent - ((frame - content) / windowHeight) * 100);
+  }, [contentKey, maxPercent, windowHeight]);
   const onFrameLayout = useCallback(
     (event: LayoutChangeEvent) => {
       frameHeight.current = event.nativeEvent.layout.height;
