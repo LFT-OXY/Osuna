@@ -34,6 +34,7 @@ import {
   type ImportChoice,
   type ImportPick,
   type ImportPicks,
+  type OfferedFingerprints,
 } from "./internal/import-picks";
 import type { ImportResult, ImportScanState } from "./use-import-apps";
 
@@ -46,7 +47,7 @@ import type { ImportResult, ImportScanState } from "./use-import-apps";
 export interface ImportAppsSheetProps {
   scan: ImportScanState;
   // 从发现提示「查看」打开时提示里的那几条：只选上它们；从「导入」按钮打开时为 null。
-  offered: ReadonlySet<string> | null;
+  offered: OfferedFingerprints;
   onRetry: () => void;
   onImport: (picks: ReturnType<typeof importRequests>) => Promise<ImportResult>;
   onClose: () => void;

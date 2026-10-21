@@ -1045,6 +1045,8 @@ change) follows the GET /api/importapps/discovery handler in magpie's
 internal/gui/importapps.go, and discoverLocalProviders, renderProviderDiscovery
 and the Ignore handler in internal/gui/assets/app.js:
 
+  packages/protocol/src/api-endpoint/import-offer.ts
+  packages/protocol/src/api-endpoint/import-offer.test.ts
   packages/app/src/api-endpoints/use-import-discovery.ts
   packages/app/src/api-endpoints/import-discovery-banner.tsx
 

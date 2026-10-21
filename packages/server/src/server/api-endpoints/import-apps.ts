@@ -1332,15 +1332,6 @@ function settleEntry(input: {
   return settled;
 }
 
-/**
- * 导入窗口打开时会默认选上的（magpie importapps/discovery 的条件，与客户端 initialImportPicks 一致）：读得了、
- * 还没添加、在那个软件里开着；只是名称撞上的要用户自己选，名称撞上又是同一家 key 不同的算。
- */
-export function isOfferedImport(entry: SettledEntry): boolean {
-  if (entry.skip !== null || entry.off !== null || entry.status === "added") return false;
-  return entry.status !== "name_taken" || entry.otherKey !== null;
-}
-
 /** 名称不分大小写相同，或由名称生成的标识就是那家的。 */
 export function isNameTaken(input: { held: HeldEndpoint; name: string }): boolean {
   const { held, name } = input;

@@ -9,6 +9,7 @@ import {
   type ApiEndpointImportSource,
   type ApiEndpointImportStatus,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import { isPreselectedImport } from "@getpaseo/protocol/api-endpoint/import-offer";
 
 /** 线上的 status 是字符串；认不出的当不能导入。 */
 export function importItemStatusOf(item: ApiEndpointImportItem): ApiEndpointImportStatus | null {
@@ -40,23 +41,26 @@ export function isPickable(item: ApiEndpointImportItem): boolean {
   return item.skip === null && status !== null && status !== "added";
 }
 
+/** 从发现提示「查看」打开时提示里的那几条的指纹；从「导入」按钮打开时为 null，照常默认选择。 */
+export type OfferedFingerprints = ReadonlySet<string> | null;
+
 /**
- * 打开时默认选上的（magpie openImportApps）：新的与同一家 key 不同的选上（名称撞上、又是同一家 key 不同的也选上，新增一家）；
- * 只是名称撞上的、在那个软件里关着的要用户自己选。从发现提示的「查看」打开时，只选上提示里的那几条（offered）。
+ * 打开时默认选上的（magpie openImportApps，规则在 protocol 的 isPreselectedImport，发现提示同用）：
+ * 新的与同一家 key 不同的选上；只是名称撞上的、在那个软件里关着的要用户自己选。从发现提示打开时只选上提示里的那几条。
  */
 export function initialImportPicks(input: {
   sources: readonly ApiEndpointImportSource[];
-  offered: ReadonlySet<string> | null;
+  offered: OfferedFingerprints;
 }): ImportPicks {
   const { sources, offered } = input;
   const picks: Record<string, ImportPick> = {};
   for (const source of sources) {
     for (const item of source.items) {
       if (!isPickable(item)) continue;
-      const isOnlyTaken = item.status === "name_taken" && (item.otherKeyName ?? null) === null;
       const isOffered = offered === null || offered.has(item.fingerprint);
+      const facts = { ...item, hasOtherKey: (item.otherKeyName ?? null) !== null };
       picks[item.fingerprint] = {
-        on: isOffered && item.off === null && !isOnlyTaken,
+        on: isOffered && isPreselectedImport(facts),
         choice: "add",
         name: item.name,
       };

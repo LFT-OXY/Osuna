@@ -3,11 +3,14 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ApiEndpointImportCandidate } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
+import type { TFunction } from "i18next";
+import type {
+  ApiEndpointError,
+  ApiEndpointImportCandidate,
+} from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { DaemonConnectionError, DaemonRpcError } from "@getpaseo/client/internal/daemon-client";
 import { useFetchQuery } from "@/data/query";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
-import { toErrorMessage } from "@/utils/error-messages";
 
 export function importDiscoveryQueryKey(serverId: string) {
   return ["api-endpoint-import-discovery", serverId] as const;
@@ -67,10 +70,12 @@ export function useImportDiscovery(input: { serverId: string; enabled: boolean }
       const response = await client.apiEndpointImportIgnore(
         candidates.map((candidate) => candidate.fingerprint),
       );
-      if (response.error) message = response.error.message;
+      if (response.error) message = ignoreErrorText(t, response.error);
     } catch (error) {
-      if (!(error instanceof DaemonConnectionError || error instanceof DaemonRpcError)) throw error;
-      message = toErrorMessage(error);
+      if (error instanceof DaemonConnectionError)
+        message = t("workspace.terminal.hostDisconnected");
+      else if (error instanceof DaemonRpcError) message = t(IGNORE_FAILED_PLAIN);
+      else throw error;
     }
     if (message !== null) {
       setIgnoreState({ status: "failed", message });
@@ -83,4 +88,16 @@ export function useImportDiscovery(input: { serverId: string; enabled: boolean }
     setIgnoreState({ status: "idle" });
   }, [candidates, client, queryClient, serverId, t]);
   return { candidates, ignoreState, ignore };
+}
+
+const IGNORE_FAILED_PLAIN = "settings.apiEndpoints.import.discovery.ignoreFailedPlain";
+
+/** 主机说的原因按界面语言说：import_ignore_failed 带 reason（errno 或错误名）；别的只说没忽略成，不露主机的英文。 */
+function ignoreErrorText(t: TFunction, error: ApiEndpointError): string {
+  if (error.code === "import_ignore_failed") {
+    return t("settings.apiEndpoints.import.discovery.ignoreFailed", {
+      reason: error.params?.reason ?? "unknown",
+    });
+  }
+  return t(IGNORE_FAILED_PLAIN);
 }

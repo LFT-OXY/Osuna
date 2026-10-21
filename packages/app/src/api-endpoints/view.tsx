@@ -61,6 +61,7 @@ import { EndpointIconHostProvider } from "./endpoint-icon";
 import { TemplatePickerSheet } from "./template-picker-sheet";
 import { ImportAppsSheet } from "./import-apps-sheet";
 import { useImportApps } from "./use-import-apps";
+import type { OfferedFingerprints } from "./internal/import-picks";
 import { ImportDiscoveryBanner } from "./import-discovery-banner";
 import { useImportDiscovery } from "./use-import-discovery";
 import { useEndpointTemplates } from "./use-endpoint-templates";
@@ -536,7 +537,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
     [router, serverId],
   );
 
-  const isFirstEndpoint =
+  const hasNoEndpointsYet =
     endpoints.state.status === "ready" && endpoints.state.endpoints.length === 0;
 
   return (
@@ -545,7 +546,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         <ImportDiscoveryBanner
           candidates={discovery.candidates}
           ignoreState={discovery.ignoreState}
-          isFirstEndpoint={isFirstEndpoint}
+          hasNoEndpointsYet={hasNoEndpointsYet}
           onReview={reviewDiscovery}
           onIgnore={discovery.ignore}
         />
@@ -606,7 +607,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
 
 interface ImportOpen {
   // 发现提示里的那几条；从「导入」按钮打开时为 null，照常默认选择。
-  offered: ReadonlySet<string> | null;
+  offered: OfferedFingerprints;
 }
 
 /** 从别的软件导入：开着时扫一次（含 OpenCode），导入成功就关上。 */
@@ -616,7 +617,7 @@ function ImportSheet({
   onClose,
 }: {
   serverId: string;
-  offered: ReadonlySet<string> | null;
+  offered: OfferedFingerprints;
   onClose: () => void;
 }) {
   const { scan, retryScan, importPicked } = useImportApps({ serverId });

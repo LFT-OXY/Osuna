@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -155,6 +156,9 @@ async function start(input: {
   almaName?: string;
   dataFileSystem?: DataFileSystem;
   now?: () => Date;
+  // 起 daemon 之前在 api-endpoints/ 里放好的文件（文件名 → 内容）。
+  files?: Record<string, string>;
+  logger?: pino.Logger;
 }) {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-api-endpoint-import-"));
   tempRoots.push(root);
@@ -167,7 +171,16 @@ async function start(input: {
     JSON.stringify({ endpoints: input.endpoints, agents: {} }),
   );
   await writeFile(path.join(endpointsDir, "keys.json"), JSON.stringify({ keys: input.keys }));
-  return startOn({ root, sources, dataFileSystem: input.dataFileSystem, now: input.now });
+  for (const [name, text] of Object.entries(input.files ?? {})) {
+    await writeFile(path.join(endpointsDir, name), text);
+  }
+  return startOn({
+    root,
+    sources,
+    dataFileSystem: input.dataFileSystem,
+    now: input.now,
+    logger: input.logger,
+  });
 }
 
 /** 在已有的临时目录上起 daemon：重启后接着用同一份 PASEO_HOME 与来源。 */
@@ -176,9 +189,11 @@ async function startOn(input: {
   sources: Sources;
   dataFileSystem?: DataFileSystem;
   now?: () => Date;
+  logger?: pino.Logger;
 }) {
   const { root, sources } = input;
   const daemon = await createTestPaseoDaemon({
+    ...(input.logger === undefined ? {} : { logger: input.logger }),
     paseoHomeRoot: root,
     cleanup: false,
     apiEndpoints: {
@@ -618,6 +633,56 @@ describe("the prompt on the endpoints page (ticket 27)", () => {
     const after = await client.apiEndpointImportDiscovery();
     expect(after.candidates).toHaveLength(4);
     expect(after.candidates.map((candidate) => candidate.sourceId)).not.toContain("opencode");
+  });
+
+  test("a fingerprint key file that can't be parsed is replaced, with a warning that has no secret in it", async () => {
+    const lines: string[] = [];
+    const logger = pino({ level: "warn" }, { write: (line: string) => void lines.push(line) });
+    const { client, sources } = await start({
+      endpoints: [],
+      keys: {},
+      files: { "import-fingerprint-key.json": "{ not json" },
+      logger,
+    });
+    expect((await client.apiEndpointImportDiscovery()).candidates).toHaveLength(3);
+    const keyFile = path.join(
+      path.dirname(path.dirname(sources.ccSwitchDb)),
+      ".paseo",
+      "api-endpoints",
+      "import-fingerprint-key.json",
+    );
+    const secret: unknown = JSON.parse(await readFile(keyFile, "utf8")).secret;
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    const warning = lines.find((line) => line.includes("Import fingerprint key file"));
+    expect(warning).toBeDefined();
+    expect(warning).not.toContain(String(secret));
+  });
+
+  test("a fingerprint key file Osuna can't read fails the prompt and the dialog's scan alike, each saying so", async () => {
+    const { client, sources } = await start({
+      endpoints: [],
+      keys: {},
+      files: { "import-fingerprint-key.json": JSON.stringify({ secret: "ab".repeat(32) }) },
+    });
+    const keyFile = path.join(
+      path.dirname(path.dirname(sources.ccSwitchDb)),
+      ".paseo",
+      "api-endpoints",
+      "import-fingerprint-key.json",
+    );
+    await chmod(keyFile, 0o000);
+    const discovery = await client.apiEndpointImportDiscovery();
+    expect(discovery).toMatchObject({ candidates: [], error: { code: "unknown" } });
+    const scan = await client.apiEndpointImportScan({ includeOpenCode: true });
+    expect(scan).toMatchObject({ sources: [], error: { code: "unknown" } });
+    await chmod(keyFile, 0o600);
+    expect((await client.apiEndpointImportDiscovery()).candidates).toHaveLength(3);
+  });
+
+  test("Ignore takes only fingerprints", async () => {
+    const { client } = await start({ endpoints: [], keys: {} });
+    const refused = await client.apiEndpointImportIgnore(["not-a-fingerprint"]);
+    expect(refused.error).toMatchObject({ code: "invalid_input" });
   });
 
   test("ignoring hides that batch, across a restart, until something new comes", async () => {

@@ -322,7 +322,6 @@ import { VendorStatusPages, vendorOfBaseUrls, type VendorId } from "./vendor-sta
 import type { DataFileSystem } from "./last-good.js";
 import {
   defaultImportSourcePaths,
-  isOfferedImport,
   readImportSources,
   sameAccount,
   settleImports,
@@ -330,7 +329,6 @@ import {
   type HeldEndpoint,
   type ImportReadContext,
   type ImportSourcePaths,
-  type ImportSourceRead,
   type SettledEntry,
 } from "./import-apps.js";
 import {
@@ -340,6 +338,7 @@ import {
   withoutDisabledModels,
 } from "./disabled-models.js";
 import { cleanDisabledModels } from "@getpaseo/protocol/api-endpoint/disabled-models";
+import { isPreselectedImport } from "@getpaseo/protocol/api-endpoint/import-offer";
 import {
   isApiEndpointNameDisplay,
   showsEndpointNames,
@@ -407,6 +406,8 @@ export type ApiEndpointErrorCode =
   | "import_cannot_replace"
   // 加某一条时写文件等出了错（params.reason 是 errno 或错误名）。
   | "import_failed"
+  // 「忽略」没记上（params.reason：errno、endpoints_unparsable 或错误名）。
+  | "import_ignore_failed"
   // 给接口当图标的图片超过 1 MB，或不是认得的图片格式。
   | StoreIconFailure
   // 从网站取图标：地址不是网址、在本机或局域网、找不到图标。
@@ -673,9 +674,14 @@ export type VendorStatusResult = Omit<
 // 发现提示一分钟内只真读一次别的软件的文件（magpie discoverLocalProviders 的 60000）。
 const DISCOVERY_READ_INTERVAL_MS = 60_000;
 
+// 已忽略的记录最多留这么多条，多了丢最早的。
+const MAX_IGNORED_IMPORTS = 500;
+const IMPORT_FINGERPRINT = /^[0-9a-f]{64}$/;
+
+// 发现提示存着的上次结果：只有指纹与来源软件，不留 key 原文。
 interface DiscoveryRead {
   at: number;
-  sources: ImportSourceRead[];
+  candidates: ApiEndpointImportCandidate[];
 }
 
 /** 线上 `code` 是字符串；daemon 这一侧只会发这几种。 */
@@ -2514,6 +2520,7 @@ export class ApiEndpointService {
       isFollowingCli?: boolean;
     } = {},
   ): Promise<ApiEndpointState> {
+    this.forgetDiscoveryIfHeldChanges({ previous, proposed, keys: options.keys });
     const ownModels = this.codexOwnModels().map((model) => model.slug);
     // 默认模型等按在服务的模型整理：被禁的和删掉的一样换掉；存下的已选模型不动。
     const { agents } = settleAgentSettings({
@@ -3278,9 +3285,10 @@ export class ApiEndpointService {
   scanImports(input: { includeOpenCode: boolean }): ApiEndpointImportSource[] {
     const settled = this.settledImports(input);
     // 刚读过的比发现提示存着的新：提示照它算（不含 OpenCode），一分钟从这一刻重新算。
+    const withoutOpenCode = settled.filter(({ source }) => source.id !== "opencode");
     this.discoveryRead = {
       at: this.now().getTime(),
-      sources: settled.map(({ source }) => source).filter((source) => source.id !== "opencode"),
+      candidates: offeredCandidates(withoutOpenCode),
     };
     return settled.map(({ source, entries }) => ({
       id: source.id,
@@ -3388,47 +3396,78 @@ export class ApiEndpointService {
 
   /**
    * 发现提示（magpie importapps/discovery）：导入窗口打开时会默认选上、又没被忽略的那几条。不含 OpenCode；
-   * 别的软件的文件一分钟内只真读一次，对照已有的接口每次都重做。
+   * 一分钟内只真读、对照一次（magpie 的发现也是整个一分钟一次），接口变了或导入之后重来。已忽略的每次现滤。
    */
   discoverImports(): ApiEndpointImportCandidate[] {
-    const state = this.readState();
-    const ignored = new Set(state.ignoredImports ?? []);
-    const settled = settleImports({
-      sources: this.discoverySources(),
-      held: this.heldForImport(state),
-      fingerprintSecret: this.importFingerprintSecret(),
-    });
-    const candidates: ApiEndpointImportCandidate[] = [];
-    for (const { source, entries } of settled) {
-      for (const entry of entries) {
-        if (!isOfferedImport(entry) || ignored.has(entry.fingerprint)) continue;
-        candidates.push({
-          fingerprint: entry.fingerprint,
-          sourceId: source.id,
-          source: source.name,
-        });
-      }
-    }
-    return candidates;
+    const ignored = new Set(this.readState().ignoredImports ?? []);
+    return this.discoveryCandidates().filter((candidate) => !ignored.has(candidate.fingerprint));
   }
 
-  /** 「忽略」：这几条的指纹并进主机的已忽略记录（magpie 记在 localStorage，这里记在主机上、跨客户端）。 */
+  /**
+   * 「忽略」：这几条的指纹并进主机的已忽略记录（magpie 记在 localStorage，这里记在主机上、跨客户端）。
+   * 不是指纹的拒收；最多留 MAX_IGNORED_IMPORTS 条，丢最早的。暂时不在的不删（magpie 也不忘：来源一时读不到时照样认得）。
+   */
   ignoreImports(input: { fingerprints: readonly string[] }): Promise<void> {
+    const malformed = input.fingerprints.find(
+      (fingerprint) => !IMPORT_FINGERPRINT.test(fingerprint),
+    );
+    if (malformed !== undefined) {
+      return Promise.reject(
+        new ApiEndpointRequestError({
+          code: "invalid_input",
+          message: `'${malformed}' isn't an import fingerprint`,
+        }),
+      );
+    }
     return this.exclusiveFollowing(async () => {
       const state = this.readState();
-      const ignoredImports = [...new Set([...(state.ignoredImports ?? []), ...input.fingerprints])];
+      const merged = [...new Set([...(state.ignoredImports ?? []), ...input.fingerprints])];
+      const ignoredImports = merged.slice(-MAX_IGNORED_IMPORTS);
       await this.commit(state, { ...state, ignoredImports });
+    }).catch((error: unknown) => {
+      throw this.ignoreError(error);
     });
   }
 
-  private discoverySources(): ImportSourceRead[] {
+  /** 忽略没记上的原因：请求的错照原样；别的记日志，换成 import_ignore_failed（params.reason 同 import_failed）。 */
+  private ignoreError(error: unknown): ApiEndpointRequestError {
+    if (error instanceof ApiEndpointRequestError) return error;
+    this.logger.error({ err: error }, "Ignoring import candidates failed");
+    let reason = "unknown";
+    if (isErrnoException(error) && error.code !== undefined) reason = error.code;
+    else if (error instanceof ApiEndpointsFileUnparsableError) reason = "endpoints_unparsable";
+    else if (error instanceof Error) reason = error.name;
+    return new ApiEndpointRequestError({
+      code: "import_ignore_failed",
+      message: `Osuna couldn't save the ignored entries (${reason})`,
+      params: { reason },
+    });
+  }
+
+  /** 接口或 key 变了：发现提示存着的对照结果作废。 */
+  private forgetDiscoveryIfHeldChanges(input: {
+    previous: ApiEndpointState;
+    proposed: ApiEndpointState;
+    keys: Record<string, string> | undefined;
+  }): void {
+    const changesHeld =
+      input.previous.endpoints !== input.proposed.endpoints || input.keys !== undefined;
+    if (changesHeld) this.discoveryRead = null;
+  }
+
+  private discoveryCandidates(): ApiEndpointImportCandidate[] {
     const at = this.now().getTime();
     const cached = this.discoveryRead;
-    const isFresh = cached !== null && at - cached.at < DISCOVERY_READ_INTERVAL_MS;
-    if (isFresh) return cached.sources;
-    const sources = readImportSources({ context: this.importContext(), includeOpenCode: false });
-    this.discoveryRead = { at, sources };
-    return sources;
+    if (cached !== null && at - cached.at < DISCOVERY_READ_INTERVAL_MS) return cached.candidates;
+    this.discoveryRead = null;
+    const settled = settleImports({
+      sources: readImportSources({ context: this.importContext(), includeOpenCode: false }),
+      held: this.heldForImport(this.readState()),
+      fingerprintSecret: this.importFingerprintSecret(),
+    });
+    const candidates = offeredCandidates(settled);
+    this.discoveryRead = { at, candidates };
+    return candidates;
   }
 
   private importFingerprintSecret(): Buffer {
@@ -4566,6 +4605,21 @@ export class ApiEndpointService {
     this.queue = next.catch(() => undefined);
     return next;
   }
+}
+
+/** 导入窗口会默认选上的那几条（发现提示的候选）：只留指纹与来源软件。 */
+function offeredCandidates(
+  settled: ReturnType<typeof settleImports>,
+): ApiEndpointImportCandidate[] {
+  const candidates: ApiEndpointImportCandidate[] = [];
+  for (const { source, entries } of settled) {
+    for (const entry of entries) {
+      const facts = { ...entry, hasOtherKey: entry.otherKey !== null };
+      if (!isPreselectedImport(facts)) continue;
+      candidates.push({ fingerprint: entry.fingerprint, sourceId: source.id, source: source.name });
+    }
+  }
+  return candidates;
 }
 
 /** 接口顺序里最靠前、开着、选了这个模型的那家（中转站对光秃秃的模型名先发给它）。 */

@@ -213,10 +213,11 @@ export class ApiEndpointsFileUnparsableError extends Error {
 }
 
 const KeysFileSchema = z.object({ keys: z.record(z.string(), z.string()) });
+type KeysFile = z.infer<typeof KeysFileSchema>;
 
+// 导入指纹的 HMAC 密钥（import-apps.ts）。
 const IMPORT_FINGERPRINT_KEY_FILE = "import-fingerprint-key.json";
 const ImportFingerprintKeyFileSchema = z.object({ secret: z.string().regex(/^[0-9a-f]{64}$/) });
-type KeysFile = z.infer<typeof KeysFileSchema>;
 
 // 上次关掉开关时的默认模型与关掉后 CLI 配置里留下的模型；再打开时 CLI 的模型没变过就放回（default-model-pick.ts 的 again）。
 // 下一次接管时随整份记录重写而去掉。
@@ -298,12 +299,14 @@ export interface ApiEndpointStoreOptions {
 
 export class ApiEndpointStore {
   private readonly root: string;
+  private readonly logger: pino.Logger;
   private readonly endpointsFile: LastGoodFile<EndpointsFileContent>;
   private readonly keysFile: LastGoodFile<KeysFile>;
   private readonly gatewayTokensFile: LastGoodFile<GatewayTokensFile>;
 
   constructor(options: ApiEndpointStoreOptions) {
     this.root = path.join(options.paseoHome, "api-endpoints");
+    this.logger = options.logger;
     const shared = {
       logger: options.logger,
       now: options.now ?? (() => new Date()),
@@ -383,16 +386,26 @@ export class ApiEndpointStore {
     this.endpointsFile.write(EndpointsFileSchema.parse(state));
   }
 
-  /** 导入指纹的 HMAC 密钥；还没有、或读不懂时随机取一把存下（0600），之前忽略的发现随之不再认得。 */
+  /**
+   * 导入指纹的 HMAC 密钥；还没有、或读不懂时随机取一把存下（0600），之前忽略的发现随之不再认得（再提示）。
+   * 读不了（没权限等）照样抛出。
+   */
   readImportFingerprintSecret(): Buffer {
     let raw: unknown = null;
     try {
       raw = this.readJson(IMPORT_FINGERPRINT_KEY_FILE);
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error;
+      raw = undefined;
     }
     const parsed = ImportFingerprintKeyFileSchema.safeParse(raw);
     if (parsed.success) return Buffer.from(parsed.data.secret, "hex");
+    if (raw !== null) {
+      this.logger.warn(
+        { file: IMPORT_FINGERPRINT_KEY_FILE },
+        "Import fingerprint key file could not be parsed; a new key replaces it and ignored entries come back",
+      );
+    }
     const secret = randomBytes(32);
     this.writeJson(IMPORT_FINGERPRINT_KEY_FILE, { secret: secret.toString("hex") });
     return secret;

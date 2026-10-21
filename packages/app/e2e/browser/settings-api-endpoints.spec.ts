@@ -6041,23 +6041,37 @@ test.describe("The prompt for local configurations", () => {
     await expect(pickOf(page, "claude/team")).not.toBeChecked();
   });
 
-  test("a failed Ignore keeps the prompt and says why; trying again hides it", async ({ page }) => {
+  test("a failed Ignore keeps the prompt and says why in the app's words; trying again hides it", async ({
+    page,
+  }) => {
     await writeDiscoverySources({ extra: false });
-    const ignore = { fails: true };
+    const ignore: { error: Record<string, unknown> | null } = {
+      error: {
+        code: "import_ignore_failed",
+        params: { reason: "EACCES" },
+        message: "Osuna couldn't save the ignored entries (EACCES)",
+      },
+    };
     await answerImportRpc(page, {
       type: "provider.api_endpoint.import_ignore",
-      isAnswering: () => ignore.fails,
+      isAnswering: () => ignore.error !== null,
       payload: {
-        error: { code: "endpoints_unparsable", message: "endpoints.json could not be parsed" },
+        get error() {
+          return ignore.error;
+        },
       },
     });
     await openApiEndpointsPage(page);
-    await prompt(page).getByTestId("api-endpoints-import-discovery-ignore").click();
-    await expect(prompt(page).getByTestId("api-endpoints-import-discovery-error")).toHaveText(
-      "Couldn't ignore them: endpoints.json could not be parsed",
-    );
-    ignore.fails = false;
-    await prompt(page).getByTestId("api-endpoints-import-discovery-ignore").click();
+    const ignoreButton = prompt(page).getByTestId("api-endpoints-import-discovery-ignore");
+    const error = prompt(page).getByTestId("api-endpoints-import-discovery-error");
+    await ignoreButton.click();
+    await expect(error).toHaveText("Couldn't ignore them (EACCES). Try again.");
+    // 认不出的原因不露主机的英文。
+    ignore.error = { code: "something_new", message: "a host sentence in English" };
+    await ignoreButton.click();
+    await expect(error).toHaveText("Couldn't ignore them. Try again.");
+    ignore.error = null;
+    await ignoreButton.click();
     await expect(prompt(page)).toHaveCount(0);
   });
 

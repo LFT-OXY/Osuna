@@ -15,7 +15,7 @@ export interface ImportDiscoveryBannerProps {
   candidates: readonly ApiEndpointImportCandidate[];
   ignoreState: IgnoreState;
   // 还没有接口时「查看」是主按钮（magpie 列表空时 review 是 primary）。
-  isFirstEndpoint: boolean;
+  hasNoEndpointsYet: boolean;
   onReview: () => void;
   onIgnore: () => void;
 }
@@ -24,7 +24,7 @@ export interface ImportDiscoveryBannerProps {
 export function ImportDiscoveryBanner({
   candidates,
   ignoreState,
-  isFirstEndpoint,
+  hasNoEndpointsYet,
   onReview,
   onIgnore,
 }: ImportDiscoveryBannerProps) {
@@ -58,9 +58,7 @@ export function ImportDiscoveryBanner({
             selectable
             testID="api-endpoints-import-discovery-error"
           >
-            {t("settings.apiEndpoints.import.discovery.ignoreFailed", {
-              message: ignoreState.message,
-            })}
+            {ignoreState.message}
           </Text>
         ) : null}
       </View>
@@ -70,12 +68,13 @@ export function ImportDiscoveryBanner({
           size="sm"
           onPress={onIgnore}
           loading={isIgnoring}
+          textStyle={styles.ignoreText}
           testID="api-endpoints-import-discovery-ignore"
         >
           {t("settings.apiEndpoints.import.discovery.ignore")}
         </Button>
         <Button
-          variant={isFirstEndpoint ? "default" : "secondary"}
+          variant={hasNoEndpointsYet ? "default" : "secondary"}
           size="sm"
           onPress={onReview}
           disabled={isIgnoring}
@@ -113,6 +112,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   title: {
     flexShrink: 1,
+  },
+  // 幽灵按钮的默认字色在深色里像是点不了：抬到次要按钮的字色。
+  ignoreText: {
+    color: theme.colors.secondaryForeground,
   },
   actions: {
     flexDirection: "row",
