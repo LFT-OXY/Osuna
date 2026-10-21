@@ -8,7 +8,7 @@
 
 **Blocked by:** 02
 **Status:** ready-for-agent
-**Impl:** ready
+**Impl:** done
 
 - [ ] 端到端：假状态页返回降级时 RPC 报降级；5 分钟内不重复请求；开关关着时不发请求。
 - [ ] 浏览器测试：降级时行上出提示与链接；正常时不出；RPC 失败时不影响列表。
