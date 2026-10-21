@@ -46,7 +46,6 @@ import {
   type ApiEndpointImportPick,
   type ApiEndpointImportSource,
   API_ENDPOINT_IMPORT_ACTIONS,
-  type ApiEndpointImportAction,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import {
   API_ENDPOINT_TEMPLATES,
@@ -837,6 +836,8 @@ export class ApiEndpointService {
   private readonly catalogRefresh: CatalogRefreshSchedule;
   private readonly vendorStatusPages: VendorStatusPages;
   private readonly importSourcePaths: ApiEndpointServiceOptions["importSourcePaths"];
+  // 导入指纹的 HMAC 密钥：每次启动随机取，只在内存里（import-apps.ts）。
+  private readonly importFingerprintSecret = randomBytes(32);
   private readonly isAutoUpdate: () => boolean;
   private readonly readCodexSignIn: ReadCodexSignIn;
   // 最近一次判断出的 Codex 登录方式；还没判断过、或一直判断不出时为 null，按接管记录现在的接法。
@@ -3247,7 +3248,6 @@ export class ApiEndpointService {
     return { autoUpdate: true, vendors, endpointVendors };
   }
 
-  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
   /**
    * 本机别的软件里的接口配置，对照已有的接口（从别的软件导入，ADR 0013）。只读；key 只给打码的。
    * includeOpenCode 为 false 时不碰 OpenCode 的 auth.json。
@@ -3264,80 +3264,79 @@ export class ApiEndpointService {
   }
 
   /**
-   * 导入选中的发现（magpie ImportFromApps）：重读一遍来源、按指纹找回 key，整批一次落下；有一条不成整批都不加。
-   * 已添加的、读不了的跳过；新增一家时名称重了照 freeEndpointName 加「 2」；替换保留那家的 id、标识与顺序位置。
-   * 加好后照保存那样当场拉一次清单。
+   * 导入选中的发现（magpie ImportFromApps）：重读一遍来源、按指纹找回 key，一条一条地加；一条不成就停下，前面加好的留着，
+   * 回出错的那条与原因。已添加的、读不了的跳过；新增一家时名称重了照 freeEndpointName 加「 2」；替换保留那家的 id、标识与顺序位置。
+   * 加好的照保存那样当场拉一次清单。
    */
-  async importFromApps(
-    picks: readonly ApiEndpointImportPick[],
-  ): Promise<{ endpointId: string; name: string }[]> {
-    const imported = await this.exclusiveFollowing(() => this.importPicked(picks));
+  async importFromApps(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
+    const outcome = await this.exclusiveFollowing(() => this.importPicked(picks));
     await Promise.all(
-      imported.map(({ endpointId }) =>
+      outcome.imported.map(({ endpointId }) =>
         this.refreshCatalog({ endpointId, signal: AbortSignal.timeout(SAVE_LIST_TIMEOUT_MS) }),
       ),
     );
-    return imported;
+    return outcome;
   }
 
-  private async importPicked(
-    picks: readonly ApiEndpointImportPick[],
-  ): Promise<{ endpointId: string; name: string }[]> {
+  private async importPicked(picks: readonly ApiEndpointImportPick[]): Promise<ImportOutcome> {
     const entries = this.settledImports({ includeOpenCode: true }).flatMap(
       (source) => source.entries,
     );
-    const previous = this.readState();
-    let endpoints = [...previous.endpoints];
-    const keyOf = new Map(
-      endpoints.map((endpoint) => [endpoint.id, this.store.getApiKey(endpoint.id)]),
-    );
-    const keys: Record<string, string> = {};
-    const replaced: string[] = [];
-    const imported: { endpointId: string; name: string }[] = [];
-    const timestamp = this.now().toISOString();
+    const imported: ImportOutcome["imported"] = [];
     for (const pick of picks) {
-      const action = importActionOf(pick.action);
       const entry = entries.find((candidate) => candidate.fingerprint === pick.fingerprint);
-      if (entry === undefined) throw importGone();
-      const found = entry.found;
-      if (found === null || entry.status === "added") continue;
-      let endpoint: StoredApiEndpoint;
-      if (action === "replace") {
-        const index = replaceTargetIndex({ entry, endpoints });
-        const target = endpoints[index];
-        if (target === undefined) throw importGone();
-        endpoint = importedEndpoint({ found, name: found.name, kept: target, timestamp });
-        endpoints = endpoints.with(index, endpoint);
-        replaced.push(endpoint.id);
-      } else {
-        // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
-        const holds = endpoints.some((held) =>
-          sameAccount({ have: { ...held, key: keyOf.get(held.id) ?? null }, found }),
-        );
-        if (holds) continue;
-        const name = freeEndpointName(
-          { ...previous, endpoints },
-          importedName({ pick, action, found }),
-        );
-        const slug = generateEndpointSlug(name, new Set(endpoints.map((held) => held.slug)));
-        const kept = { id: `ep_${randomUUID()}`, slug, createdAt: timestamp };
-        endpoint = importedEndpoint({ found, name, kept, timestamp });
-        endpoints = [...endpoints, endpoint];
+      try {
+        const added = await this.importOne({ pick, entry });
+        if (added !== null) imported.push(added);
+      } catch (error) {
+        if (!(error instanceof ApiEndpointRequestError)) throw error;
+        const name = entry?.name ?? "";
+        return { imported, failed: { fingerprint: pick.fingerprint, name, error } };
       }
-      keyOf.set(endpoint.id, found.key);
-      if (found.key !== null) keys[endpoint.id] = found.key;
-      imported.push({ endpointId: endpoint.id, name: endpoint.name });
     }
-    if (imported.length === 0) return [];
+    return { imported, failed: null };
+  }
+
+  /** 加一条或换上一条，单独落下（magpie 每条 Save 一次）；已经有了的为 null。 */
+  private async importOne(input: {
+    pick: ApiEndpointImportPick;
+    entry: SettledEntry | undefined;
+  }): Promise<{ endpointId: string; name: string } | null> {
+    const { pick, entry } = input;
+    if (entry === undefined) throw importGone();
+    const found = entry.found;
+    if (found === null || entry.status === "added") return null;
+    const action = importActionOf({ pick, found });
+    const previous = this.readState();
+    const timestamp = this.now().toISOString();
+    let endpoints: StoredApiEndpoint[];
+    let endpoint: StoredApiEndpoint;
+    if (action.kind === "replace") {
+      const index = replaceTargetIndex({ entry, endpoints: previous.endpoints });
+      const target = previous.endpoints[index];
+      if (target === undefined) throw importGone();
+      endpoint = importedEndpoint({ found, name: found.name, kept: target, timestamp });
+      endpoints = previous.endpoints.with(index, endpoint);
+    } else {
+      // 两个软件里是同一个账号、两条都选了：只加一次（magpie holds）。
+      const holds = previous.endpoints.some((held) =>
+        sameAccount({ have: { ...held, key: this.store.getApiKey(held.id) }, found }),
+      );
+      if (holds) return null;
+      const name = freeEndpointName(previous, action.name);
+      const slug = generateEndpointSlug(name, new Set(previous.endpoints.map((held) => held.slug)));
+      const kept = { id: `ep_${randomUUID()}`, slug, createdAt: timestamp };
+      endpoint = importedEndpoint({ found, name, kept, timestamp });
+      endpoints = [...previous.endpoints, endpoint];
+    }
+    const keys = found.key === null ? {} : { [endpoint.id]: found.key };
     await this.commit(previous, { ...previous, endpoints }, { keys });
-    // 替换成不要 key 的那家：原来那把 key 不再是它的。
-    for (const { endpointId } of imported) {
-      const hasNoKey = keyOf.get(endpointId) === null;
-      if (hasNoKey && this.store.getApiKey(endpointId) !== null)
-        this.store.removeApiKey(endpointId);
+    // 换成不要 key 的那家：原来那把 key 不再是它的。
+    if (found.key === null && this.store.getApiKey(endpoint.id) !== null) {
+      this.store.removeApiKey(endpoint.id);
     }
-    for (const endpointId of replaced) this.cooldowns.clear(endpointId);
-    return imported;
+    if (action.kind === "replace") this.cooldowns.clear(endpoint.id);
+    return { endpointId: endpoint.id, name: endpoint.name };
   }
 
   private settledImports(input: { includeOpenCode: boolean }) {
@@ -3353,7 +3352,7 @@ export class ApiEndpointService {
       context: this.importContext(),
       includeOpenCode: input.includeOpenCode,
     });
-    return settleImports({ sources, held });
+    return settleImports({ sources, held, fingerprintSecret: this.importFingerprintSecret });
   }
 
   private importContext(): ImportReadContext {
@@ -3400,6 +3399,7 @@ export class ApiEndpointService {
     return isInside ? path.join("~", relative) : filePath;
   }
 
+  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
   async forgetCatalog(endpointId: string): Promise<void> {
     if (!findEndpoint(this.readState(), endpointId)) {
       throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });
@@ -5587,15 +5587,31 @@ function isChatGptWiring(takeover: CodexConfigTakeover | null): boolean {
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
-function importActionOf(raw: string): ApiEndpointImportAction {
-  const action = API_ENDPOINT_IMPORT_ACTIONS.find((candidate) => candidate === raw);
+/** 这次导入一出错就停下：加好的那几家，与出错的那条和原因。 */
+export interface ImportOutcome {
+  imported: { endpointId: string; name: string }[];
+  failed: { fingerprint: string; name: string; error: ApiEndpointRequestError } | null;
+}
+
+/**
+ * 这条怎么进来：替换，或用某个名称新增。改名后新增的名称是空的（或就是原名）当没改名，按新增（magpie 的 pk.Name）。
+ */
+function importActionOf(input: {
+  pick: ApiEndpointImportPick;
+  found: FoundEndpoint;
+}): { kind: "replace" } | { kind: "add"; name: string } {
+  const { pick, found } = input;
+  const action = API_ENDPOINT_IMPORT_ACTIONS.find((candidate) => candidate === pick.action);
   if (action === undefined) {
     throw new ApiEndpointRequestError({
       code: "invalid_input",
-      message: `Unknown import action '${raw}'`,
+      message: `Unknown import action '${pick.action}'`,
     });
   }
-  return action;
+  const renamed = action === "rename" ? (pick.name?.trim() ?? "") : "";
+  if (renamed !== "" && renamed !== found.name) return { kind: "add", name: renamed };
+  if (action === "replace") return { kind: "replace" };
+  return { kind: "add", name: found.name };
 }
 
 function importGone(): ApiEndpointRequestError {
@@ -5622,23 +5638,6 @@ function replaceTargetIndex(input: {
   const index = input.endpoints.findIndex((endpoint) => endpoint.id === existingId);
   if (index === -1) throw importGone();
   return index;
-}
-
-/** 新增时的名称：改名后新增用用户给的（不能是空的），否则用发现里的。 */
-function importedName(input: {
-  pick: ApiEndpointImportPick;
-  action: ApiEndpointImportAction;
-  found: FoundEndpoint;
-}): string {
-  if (input.action !== "rename") return input.found.name;
-  const name = input.pick.name?.trim() ?? "";
-  if (name === "") {
-    throw new ApiEndpointRequestError({
-      code: "invalid_input",
-      message: "A renamed import needs a name",
-    });
-  }
-  return name;
 }
 
 /**
@@ -5691,6 +5690,7 @@ function wireImportItem(entry: SettledEntry): ApiEndpointImportItem {
     status: entry.status,
     existingEndpointId: entry.existing?.id ?? null,
     existingName: entry.existing?.name ?? null,
+    otherKeyName: entry.otherKey?.name ?? null,
     skip: entry.skip,
     off: entry.off,
   };

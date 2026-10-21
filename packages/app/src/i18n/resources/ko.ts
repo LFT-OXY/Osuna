@@ -2536,8 +2536,15 @@ export const ko: TranslationResources = {
         imported_other: "{{count}}개를 가져왔습니다: {{names}}",
         importedNone: "새로 가져올 항목이 없습니다",
         notFound: "이 호스트에서 찾을 수 없습니다",
-        unreadable: "Osuna가 이 파일을 열 수 없습니다",
-        unparsable: "Osuna가 이 파일을 읽을 수 없습니다",
+        failedItem: "{{name}}을(를) 가져오지 못했습니다: {{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna가 이 파일을 열 수 없습니다({{errno}})",
+          not_json: "올바른 JSON이 아닙니다",
+          not_database: "Osuna가 열 수 있는 데이터베이스가 아닙니다",
+          no_providers_table: "데이터베이스에 Osuna가 아는 providers 테이블이 없습니다",
+          busy: "앱이 쓰는 중입니다. 잠시 후 다시 시도하세요",
+          no_sqlite: "Osuna를 실행하는 Node.js({{node}})는 SQLite 데이터베이스를 열 수 없습니다",
+        },
         noEntries: "엔드포인트가 없습니다",
         status: {
           new: "새 항목",

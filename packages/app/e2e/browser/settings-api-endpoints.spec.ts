@@ -5718,13 +5718,24 @@ test.describe("Import from other apps", () => {
   const importHome = path.join(cliHome, "import-home");
 
   // 假配置：CC Switch（config.json）里一家新的中转服务，Codex 里一家和已有接口重名的，OpenCode 里一个登录。
-  async function writeImportSources(): Promise<void> {
+  // extra：CC Switch 里再多一家新的（Second Relay，在 localhost 上）。
+  async function writeImportSources(input: { extra?: boolean } = {}): Promise<void> {
+    const second = {
+      name: "Second Relay",
+      settingsConfig: {
+        env: {
+          ANTHROPIC_BASE_URL: `${relay.origin.replace("127.0.0.1", "localhost")}/good`,
+          ANTHROPIC_AUTH_TOKEN: "sk-e2e-second",
+        },
+      },
+    };
     await mkdir(path.join(importHome, ".cc-switch"), { recursive: true });
     await writeFile(
       path.join(importHome, ".cc-switch", "config.json"),
       JSON.stringify({
         claude: {
           providers: {
+            ...(input.extra ? { second } : {}),
             team: {
               name: "Team Relay",
               settingsConfig: {
@@ -5816,6 +5827,13 @@ test.describe("Import from other apps", () => {
     await expect(importSheet(page).getByTestId("api-endpoint-import-source-alma-empty")).toHaveText(
       "Not found on this host",
     );
+    // 每个软件一节标着能导入几条；没找到的是「–」。
+    await expect(importSheet(page).getByTestId("api-endpoint-import-source-alma-count")).toHaveText(
+      "–",
+    );
+    await expect(
+      importSheet(page).getByTestId("api-endpoint-import-source-cc-switch-count"),
+    ).toHaveText("1");
 
     await expect(importSheet(page)).toContainText("2 selected");
     await page.getByTestId("api-endpoint-import-submit").click();
@@ -5871,6 +5889,31 @@ test.describe("Import from other apps", () => {
     await expect(team.getByTestId("api-endpoint-import-item-claude/team-pick")).toBeChecked();
     await expect(page.getByTestId("api-endpoints-list")).not.toContainText("Team Relay");
   });
+
+  test("one entry that fails stops the import: the ones before it are added and named, the dialog stays on the failed one", async ({
+    page,
+  }) => {
+    await writeImportSources({ extra: true });
+    await failImportPickAt(page, 1);
+    await openApiEndpointsPage(page);
+    await page.getByTestId("api-endpoints-import-button").click();
+    await expect(importItem(page, "claude/second")).toContainText("New");
+    await expect(importItem(page, "claude/team")).toContainText("New");
+    await page.getByTestId("api-endpoint-import-submit").click();
+
+    await expect(page.getByText("Imported 1: Second Relay")).toBeVisible();
+    await expect(page.getByTestId("api-endpoints-list")).toContainText("Second Relay");
+    await expect(importSheet(page)).toBeVisible();
+    const reason =
+      "Team Relay wasn't imported: Team Relay doesn't share a name with an endpoint you have; keep both instead.";
+    await expect(importSheet(page).getByTestId("api-endpoint-import-error")).toHaveText(reason);
+    await expect(
+      importItem(page, "claude/team").getByTestId("api-endpoint-import-item-claude/team-failed"),
+    ).toHaveText(reason);
+    // 重扫过：加好的那条已添加，不能再选。
+    await expect(importItem(page, "claude/second")).toContainText("Already added");
+    await expect(page.getByTestId("api-endpoints-list")).not.toContainText("Team Relay");
+  });
 });
 
 /**
@@ -5891,7 +5934,7 @@ async function answerImportRpc(
         server.send(message);
         return;
       }
-      const request = (JSON.parse(message) as { message: { requestId: string } }).message;
+      const request = SessionRequestSchema.parse(JSON.parse(message)).message;
       ws.send(
         JSON.stringify({
           type: "session",
@@ -5901,6 +5944,41 @@ async function answerImportRpc(
           },
         }),
       );
+    });
+  });
+}
+
+const SessionRequestSchema = z.object({
+  message: z.object({ requestId: z.string() }).passthrough(),
+});
+
+const ImportRequestSchema = z
+  .object({
+    message: z
+      .object({
+        picks: z.array(z.object({ fingerprint: z.string(), action: z.string() }).passthrough()),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+/** 导入请求照常送到 daemon，只把第 index 条改成替换：它不和谁重名，daemon 会停在这一条（之前的照常加上）。 */
+async function failImportPickAt(page: Page, index: number): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const isImport =
+        typeof message === "string" && message.includes('"provider.api_endpoint.import.request"');
+      if (!isImport) {
+        server.send(message);
+        return;
+      }
+      const request = ImportRequestSchema.parse(JSON.parse(message));
+      const picks = request.message.picks.map((pick, at) =>
+        at === index ? { ...pick, action: "replace" } : pick,
+      );
+      server.send(JSON.stringify({ ...request, message: { ...request.message, picks } }));
     });
   });
 }

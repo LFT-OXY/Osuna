@@ -1,8 +1,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
-import { readImportSources, type ImportReadContext } from "./import-apps.js";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  readImportSources,
+  withoutSqliteExperimentalWarning,
+  type ImportReadContext,
+} from "./import-apps.js";
 
 /*
  * 来源的读法（照 magpie importapps.go 的各个 reader）：临时目录里的假配置，绝不读真实的家目录。
@@ -91,7 +95,12 @@ describe("readImportSources", () => {
     await put(
       context.paths.codexConfig,
       [
-        'model_provider = "osuna_api_endpoint"',
+        'model_provider = "relay"',
+        'model = "relay-top"',
+        'model_catalog_json = "catalog.json"',
+        "[profiles.fast]",
+        'model = "relay-fast"',
+        'model_catalog_json = "~/osuna/codex-models.json"',
         "[model_providers.osuna_api_endpoint]",
         'base_url = "http://127.0.0.1:6767/api-endpoint-gateway/v1"',
         "[model_providers.loop]",
@@ -107,6 +116,17 @@ describe("readImportSources", () => {
         "",
       ].join("\n"),
     );
+    await put(
+      path.join(path.dirname(context.paths.codexConfig), "catalog.json"),
+      JSON.stringify({
+        models: [
+          { slug: "listed-a", visibility: "list" },
+          { slug: "hidden-b", visibility: "hide" },
+          { slug: "relay-top" },
+        ],
+      }),
+    );
+    await put(context.osunaCodexCatalog, JSON.stringify({ models: [{ slug: "osuna-own" }] }));
     const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "codex");
     expect(source.entries).toMatchObject([
       { ref: "loop", skip: "points_at_osuna" },
@@ -116,6 +136,8 @@ describe("readImportSources", () => {
         found: {
           baseUrls: [{ format: "openai_chat", url: "https://relay.example/v1" }],
           headers: { "X-Org": "team" },
+          // 顶层与 profile 的 model，加上 model_catalog_json 里没藏起来的；Osuna 自己写的目录不算。
+          models: ["relay-top", "listed-a", "relay-fast"],
         },
       },
     ]);
@@ -130,13 +152,74 @@ describe("readImportSources", () => {
       '[model_providers.r]\nbase_url = "https://r.example/v1"\nexperimental_bearer_token = "k"\n',
     );
     const sources = readImportSources({ context, includeOpenCode: false });
-    expect(sourceOf(sources, "claude-code").error).toMatchObject({ code: "unparsable" });
-    expect(sourceOf(sources, "alma").error).toMatchObject({ code: "unparsable" });
+    expect(sourceOf(sources, "claude-code").error).toMatchObject({ code: "not_json" });
+    expect(sourceOf(sources, "alma").error).toMatchObject({ code: "not_database" });
     expect(sourceOf(sources, "codex").entries).toHaveLength(1);
     expect(sourceOf(sources, "cc-switch")).toMatchObject({
       found: false,
       error: null,
       entries: [],
     });
+  });
+
+  test("at a template's host but not its exact address: the template is kept, the address as given", async () => {
+    const { context } = await contextIn();
+    await put(
+      path.join(context.paths.ccSwitchDir, "config.json"),
+      JSON.stringify({
+        claude: {
+          providers: {
+            plan: {
+              name: "Kimi plan",
+              settingsConfig: {
+                env: {
+                  ANTHROPIC_BASE_URL: "https://api.moonshot.ai/some-plan/anthropic",
+                  ANTHROPIC_AUTH_TOKEN: "sk-plan",
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+    const source = sourceOf(readImportSources({ context, includeOpenCode: false }), "cc-switch");
+    expect(source.entries).toMatchObject([
+      {
+        name: "Kimi plan",
+        found: {
+          templateId: "moonshot",
+          region: null,
+          baseUrls: [
+            { format: "anthropic_messages", url: "https://api.moonshot.ai/some-plan/anthropic" },
+          ],
+        },
+      },
+    ]);
+  });
+});
+
+describe("withoutSqliteExperimentalWarning", () => {
+  test("drops only node:sqlite's ExperimentalWarning and puts emitWarning back", () => {
+    const original = process.emitWarning;
+    const seen = vi.fn();
+    process.emitWarning = seen;
+    try {
+      withoutSqliteExperimentalWarning(() => {
+        process.emitWarning(
+          "SQLite is an experimental feature and might change at any time",
+          "ExperimentalWarning",
+        );
+        process.emitWarning("SQLite is an experimental feature", { type: "ExperimentalWarning" });
+        process.emitWarning("Something else is experimental", "ExperimentalWarning");
+        process.emitWarning("SQLite went away", "DeprecationWarning");
+      });
+      expect(seen.mock.calls.map((call) => call[0])).toEqual([
+        "Something else is experimental",
+        "SQLite went away",
+      ]);
+      expect(process.emitWarning).toBe(seen);
+    } finally {
+      process.emitWarning = original;
+    }
   });
 });

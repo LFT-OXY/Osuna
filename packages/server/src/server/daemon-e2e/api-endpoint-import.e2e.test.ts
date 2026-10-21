@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -191,7 +191,10 @@ async function start(input: {
   return { client, daemon, sources };
 }
 
-async function modifiedTimes(sources: Sources): Promise<number[]> {
+/** 五个来源文件的修改时间，与它们所在目录里有哪些文件（SQLite 读时不该留下新文件）。 */
+async function sourceSnapshot(
+  sources: Sources,
+): Promise<{ times: number[]; listings: string[][] }> {
   const files = [
     sources.claudeSettings,
     sources.codexConfig,
@@ -199,7 +202,11 @@ async function modifiedTimes(sources: Sources): Promise<number[]> {
     sources.almaDb,
     sources.openCodeAuth,
   ];
-  return Promise.all(files.map(async (file) => (await stat(file)).mtimeMs));
+  const times = await Promise.all(files.map(async (file) => (await stat(file)).mtimeMs));
+  const listings = await Promise.all(
+    files.map(async (file) => (await readdir(path.dirname(file))).sort()),
+  );
+  return { times, listings };
 }
 
 type ScanPayload = Awaited<ReturnType<DaemonClient["apiEndpointImportScan"]>>;
@@ -213,12 +220,17 @@ describe("import from other apps", () => {
     const { client, sources } = await start({
       endpoints: [
         storedEndpoint({ id: "ep_hand", name: "Hand", url: "https://hand.example" }),
-        storedEndpoint({ id: "ep_taken", name: "My Relay", url: "https://elsewhere.example" }),
+        // 和 Codex 那条同名、同一主机、另一把 key：名称已被占用，也是同一家。
+        storedEndpoint({
+          id: "ep_taken",
+          name: "My Relay",
+          url: "https://codex-relay.example/anthropic",
+        }),
         storedEndpoint({ id: "ep_other", name: "Relay One", url: "https://cc-relay.example/api" }),
       ],
       keys: { ep_hand: "sk-hand-2222", ep_taken: "sk-elsewhere", ep_other: "sk-another-key" },
     });
-    const before = await modifiedTimes(sources);
+    const before = await sourceSnapshot(sources);
 
     // 打开接口页时的扫描不碰 OpenCode。
     const discovery = await client.apiEndpointImportScan();
@@ -241,6 +253,10 @@ describe("import from other apps", () => {
     ]);
     expect(scan.sources.find((source) => source.id === "codex")?.path).toBe(
       path.join("~", "codex", "config.toml"),
+    );
+    // 读的是数据库，显示的也是它。
+    expect(scan.sources.find((source) => source.id === "cc-switch")?.path).toBe(
+      path.join("~", "cc-switch", "cc-switch.db"),
     );
 
     expect(itemsOf(scan, "alma")).toMatchObject([
@@ -279,6 +295,7 @@ describe("import from other apps", () => {
         models: ["relay-gpt"],
         status: "name_taken",
         existingEndpointId: "ep_taken",
+        otherKeyName: "My Relay",
       },
     ]);
     // 读不了的排在后面。
@@ -298,7 +315,7 @@ describe("import from other apps", () => {
     ]) {
       expect(text).not.toContain(key);
     }
-    expect(await modifiedTimes(sources)).toEqual(before);
+    expect(await sourceSnapshot(sources)).toEqual(before);
   });
 
   test("while Osuna has taken over Claude Code, the scan reads the original values, not the gateway", async () => {
@@ -352,13 +369,6 @@ describe("import from other apps", () => {
       "name_taken",
     ]);
 
-    // 改名不能是空的；一条不成整批都不加。
-    const refused = await client.apiEndpointImport([
-      { fingerprint: ccRelay.fingerprint, action: "add" },
-      { fingerprint: alma.fingerprint, action: "rename", name: "  " },
-    ]);
-    expect(refused.error).toMatchObject({ code: "invalid_input" });
-    expect((await client.apiEndpointList("claude")).endpoints).toHaveLength(3);
     // 只有名称撞上的能替换。
     const notTaken = await client.apiEndpointImport([
       { fingerprint: ccRelay.fingerprint, action: "replace" },
@@ -392,6 +402,7 @@ describe("import from other apps", () => {
       { format: "openai_responses", url: "https://codex-relay.example/v1" },
     ]);
     expect(replaced?.models).toEqual([{ id: "relay-gpt" }]);
+    expect(replaced?.enabled).toBe(true);
     const added = listed.endpoints[3];
     expect(added?.baseUrls).toEqual([
       { format: "anthropic_messages", url: "https://cc-relay.example/api" },
@@ -416,5 +427,43 @@ describe("import from other apps", () => {
         (item) => item?.status,
       ),
     ).toEqual(["added", "added", "added"]);
+  });
+
+  test("one at a time: what came in before an entry fails stays, and the reply names the failed one; an empty rename is no rename", async () => {
+    const { client } = await start({
+      endpoints: [
+        storedEndpoint({ id: "ep_first", name: "First", url: "https://first.example" }),
+        storedEndpoint({ id: "ep_taken", name: "My Relay", url: "https://elsewhere.example" }),
+      ],
+      keys: { ep_first: "sk-first", ep_taken: "sk-elsewhere" },
+      almaName: "First",
+    });
+    const scan = await client.apiEndpointImportScan();
+    const alma = itemsOf(scan, "alma")[0];
+    const ccRelay = itemsOf(scan, "cc-switch")[0];
+    const codex = itemsOf(scan, "codex")[0];
+    if (!alma || !ccRelay || !codex) throw new Error("Expected three entries");
+
+    const result = await client.apiEndpointImport([
+      // 空名称当没改名：照新增，名称重了加「 2」。
+      { fingerprint: alma.fingerprint, action: "rename", name: "  " },
+      // CC Relay 不和谁重名，不能替换：停在这里。
+      { fingerprint: ccRelay.fingerprint, action: "replace" },
+      { fingerprint: codex.fingerprint, action: "replace" },
+    ]);
+    expect(result.imported.map((entry) => entry.name)).toEqual(["First 2"]);
+    expect(result.failed).toEqual({ fingerprint: ccRelay.fingerprint, name: "CC Relay" });
+    expect(result.error).toMatchObject({
+      code: "import_cannot_replace",
+      params: { name: "CC Relay" },
+    });
+    const listed = await client.apiEndpointList("claude");
+    expect(listed.endpoints.map((endpoint) => endpoint.name)).toEqual([
+      "First",
+      "My Relay",
+      "First 2",
+    ]);
+    // 出错之后的那条没动。
+    expect((await client.apiEndpointRevealKey("ep_taken")).apiKey).toBe("sk-elsewhere");
   });
 });

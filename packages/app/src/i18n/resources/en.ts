@@ -2586,8 +2586,15 @@ export const en = {
         imported_other: "Imported {{count}}: {{names}}",
         importedNone: "Nothing new to import",
         notFound: "Not found on this host",
-        unreadable: "Osuna can't open this file",
-        unparsable: "Osuna can't read this file",
+        failedItem: "{{name}} wasn't imported: {{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna can't open this file ({{errno}})",
+          not_json: "It isn't valid JSON",
+          not_database: "It isn't a database Osuna can open",
+          no_providers_table: "Its database has no providers table Osuna knows",
+          busy: "Its app is writing to it; try again in a moment",
+          no_sqlite: "The Node.js running Osuna ({{node}}) can't open SQLite databases",
+        },
         noEntries: "No endpoints in it",
         status: {
           new: "New",

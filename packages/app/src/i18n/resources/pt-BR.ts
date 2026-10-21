@@ -2560,8 +2560,15 @@ export const ptBR: TranslationResources = {
         imported_other: "{{count}} importados: {{names}}",
         importedNone: "Nada novo para importar",
         notFound: "Não encontrado neste host",
-        unreadable: "O Osuna não consegue abrir este arquivo",
-        unparsable: "O Osuna não consegue ler este arquivo",
+        failedItem: "{{name}} não foi importado: {{reason}}",
+        sourceErrors: {
+          unreadable: "O Osuna não consegue abrir este arquivo ({{errno}})",
+          not_json: "Não é um JSON válido",
+          not_database: "Não é um banco de dados que o Osuna consiga abrir",
+          no_providers_table: "O banco de dados não tem uma tabela providers que o Osuna conheça",
+          busy: "O app está gravando nele; tente de novo em instantes",
+          no_sqlite: "O Node.js que roda o Osuna ({{node}}) não abre bancos SQLite",
+        },
         noEntries: "Nenhum endpoint nele",
         status: {
           new: "Novo",

@@ -2523,8 +2523,15 @@ export const ar: TranslationResources = {
         imported_other: "تم استيراد {{count}}: {{names}}",
         importedNone: "لا شيء جديد لاستيراده",
         notFound: "غير موجود على هذا المضيف",
-        unreadable: "لا يستطيع Osuna فتح هذا الملف",
-        unparsable: "لا يستطيع Osuna قراءة هذا الملف",
+        failedItem: "لم يُستورد {{name}}: {{reason}}",
+        sourceErrors: {
+          unreadable: "لا يستطيع Osuna فتح هذا الملف ({{errno}})",
+          not_json: "ليس JSON صالحًا",
+          not_database: "ليس قاعدة بيانات يستطيع Osuna فتحها",
+          no_providers_table: "لا تحتوي قاعدة البيانات على جدول providers يعرفه Osuna",
+          busy: "يكتب تطبيقه فيها الآن؛ أعد المحاولة بعد لحظة",
+          no_sqlite: "لا يستطيع Node.js الذي يشغّل Osuna ({{node}}) فتح قواعد بيانات SQLite",
+        },
         noEntries: "لا توجد نقاط نهاية فيه",
         status: {
           new: "جديد",

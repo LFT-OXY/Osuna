@@ -1,13 +1,16 @@
 // 从别的软件导入（Import）照 magpie（https://github.com/yetone/magpie，7597c132）的 internal/provider/importapps.go、
 // import_codex.go、import_opencode.go 与 internal/gui/importapps.go 的指纹。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { z } from "zod";
 import {
   API_ENDPOINT_REQUEST_FORMATS,
+  type ApiEndpointImportSkipReason,
+  type ApiEndpointImportSourceErrorCode,
+  type ApiEndpointImportStatus,
   type ApiEndpointRequestFormat,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { cleanRequestHeaders } from "@getpaseo/protocol/api-endpoint/request-extras";
@@ -20,7 +23,8 @@ import {
 } from "./templates.js";
 
 /*
- * 别的软件里已经配好的中转服务：每个来源只读（数据库用 node:sqlite 只读打开，从不写、不锁、不改修改时间），
+ * 别的软件里已经配好的中转服务：每个来源只读打开、从不写（数据库用 node:sqlite 的只读模式；SQLite 读时会加共享锁，
+ * WAL 模式的库可能碰到 -wal/-shm 文件），
  * 每条换算成 Osuna 会加的那家，再和已有的接口对照，导入窗口据此说哪些是新的、已添加、名称已被占用、同一家 key 不同。
  * key 原文只在 daemon 里，客户端拿到的是打码的 key 和指纹。
  */
@@ -36,20 +40,13 @@ const SOURCE_NAMES: Record<ImportSourceId, string> = {
   opencode: "OpenCode",
 };
 
-/** 读不了这条的原因（照 magpie 的 Skip 文案，换成代码）。 */
-export type ImportSkipReason =
-  | "sign_in"
-  | "no_base_url"
-  | "invalid_base_url"
-  | "points_at_osuna"
-  | "no_api_key"
-  | "gemini_unsupported"
-  | "no_azure_endpoint";
+/** 读不了这条的原因（照 magpie 的 Skip 文案，换成代码；清单在 protocol）。 */
+export type ImportSkipReason = ApiEndpointImportSkipReason;
 
 /** 默认不选的原因（magpie 的 Off）。 */
 export type ImportOffReason = "turned_off";
 
-export type ImportStatus = "new" | "added" | "name_taken" | "other_key";
+export type ImportStatus = ApiEndpointImportStatus;
 
 export interface ImportBaseUrl {
   format: ApiEndpointRequestFormat;
@@ -77,14 +74,19 @@ export interface ImportEntry {
   off: ImportOffReason | null;
 }
 
-export type ImportSourceErrorCode = "unreadable" | "unparsable";
+/** 来源读不了的原因：code 加 params（unreadable 带 errno，no_sqlite 带 Node 版本），message 是同一件事的英文。 */
+export interface ImportSourceError {
+  code: ApiEndpointImportSourceErrorCode;
+  params?: Record<string, string>;
+  message: string;
+}
 
 export interface ImportSourceRead {
   id: ImportSourceId;
   name: string;
   path: string;
   found: boolean;
-  error: { code: ImportSourceErrorCode; message: string } | null;
+  error: ImportSourceError | null;
   entries: ImportEntry[];
 }
 
@@ -159,8 +161,16 @@ function fileExists(filePath: string): boolean {
   }
 }
 
-/** 读不懂文件的格式（数据库的表、JSON、TOML）：这个来源报 unparsable，别的来源照常。 */
-class SourceUnparsableError extends Error {}
+/** 这个来源读不了：只记在它自己身上，别的来源照常。 */
+class SourceReadError extends Error {
+  readonly reason: ImportSourceError;
+
+  constructor(reason: ImportSourceError) {
+    super(reason.message);
+    this.name = "SourceReadError";
+    this.reason = reason;
+  }
+}
 
 interface SourceReader {
   id: ImportSourceId;
@@ -213,7 +223,7 @@ export function readImportSources(input: {
     source.found = true;
     if (there.kind === "unreadable") {
       // 在那儿、却看不了：不是「没找到」，那会说这个软件什么都没有。
-      source.error = { code: "unreadable", message: there.message };
+      source.error = there.error;
       out.push(source);
       continue;
     }
@@ -229,22 +239,24 @@ export function readImportSources(input: {
 
 function statOf(
   filePath: string,
-): { kind: "there" } | { kind: "missing" } | { kind: "unreadable"; message: string } {
+): { kind: "there" } | { kind: "missing" } | { kind: "unreadable"; error: ImportSourceError } {
   try {
     statSync(filePath);
     return { kind: "there" };
   } catch (error) {
     if (!isErrnoException(error)) throw error;
     if (error.code === "ENOENT" || error.code === "ENOTDIR") return { kind: "missing" };
-    return { kind: "unreadable", message: error.message };
+    return { kind: "unreadable", error: unreadableError(error) };
   }
 }
 
-function sourceError(error: unknown): ImportSourceRead["error"] {
-  if (error instanceof SourceUnparsableError) return { code: "unparsable", message: error.message };
-  if (isErrnoException(error) || isSqliteError(error)) {
-    return { code: "unreadable", message: error instanceof Error ? error.message : String(error) };
-  }
+function unreadableError(error: NodeJS.ErrnoException): ImportSourceError {
+  return { code: "unreadable", params: { errno: error.code ?? "" }, message: error.message };
+}
+
+function sourceError(error: unknown): ImportSourceError {
+  if (error instanceof SourceReadError) return error.reason;
+  if (isErrnoException(error) && !isSqliteError(error)) return unreadableError(error);
   throw error;
 }
 
@@ -338,7 +350,10 @@ function urlProblem(input: {
   return null;
 }
 
-/** Azure 资源的地址按 Azure 模板；正是某个模板自己的地址就用那个模板，名称没起或叫 default 时用模板的名字。 */
+/**
+ * Azure 资源的地址按 Azure 模板；正是某个模板自己的地址就用那个模板（全部地址、区域或套餐），名称没起或叫 default 时用模板的名字；
+ * 只在模板的主机上就记下模板、地址照原样。
+ */
 function placeAtTemplate(input: {
   found: FoundEndpoint;
   urls: FormatUrls;
@@ -350,8 +365,14 @@ function placeAtTemplate(input: {
     found.templateId = AZURE_TEMPLATE_ID;
     return;
   }
-  const preset = templateAt(input.urls);
-  if (preset === null) return;
+  const match = templateAt(input.urls);
+  if (match === null) return;
+  if (match.kind === "near") {
+    // 同一主机上的别的路径（如编程套餐）：模板的图标与模型资料照用，地址照原样（magpie 的 ID、Icon、Catalog）。
+    found.templateId = match.templateId;
+    return;
+  }
+  const preset = match.place;
   found.templateId = preset.templateId;
   found.region = preset.region;
   found.baseUrls = preset.baseUrls;
@@ -374,46 +395,61 @@ interface TemplatePlace {
 }
 
 /**
- * 地址正好是某个模板（或它的一个区域、套餐）自己的那几个（magpie presetAt 的 exact）：用那个模板。
- * 本机模板不算；只是同一主机上的别的路径时按「自定义」，Osuna 没有只带图标的半个模板。
+ * 地址在哪个模板（或它的一个区域、套餐）的主机上，是不是正好是它那几个地址（magpie presetAt）。本机模板不算。
  */
-function templateAt(urls: FormatUrls): TemplatePlace | null {
+function templateAt(
+  urls: FormatUrls,
+): { kind: "exact"; place: TemplatePlace } | { kind: "near"; templateId: string } | null {
   const given: Record<ApiEndpointRequestFormat, string> = {
     anthropic_messages: urls.anthropic,
     openai_chat: urls.chat,
     openai_responses: urls.responses,
   };
-  const isExactly = (own: readonly ImportBaseUrl[]) => {
+  // 在不在这几个地址的主机上，是不是正好就是它们。
+  const matchOf = (own: readonly ImportBaseUrl[]) => {
     const ownHosts = new Set(own.map(({ url }) => hostOf(url)));
     let hit = false;
+    let exact = true;
     for (const format of API_ENDPOINT_REQUEST_FORMATS) {
       const url = given[format];
       if (url === "") continue;
       if (ownHosts.has(hostOf(url))) hit = true;
       const ownUrl = own.find((entry) => entry.format === format)?.url ?? "";
-      if (ownUrl.toLowerCase() !== url.toLowerCase()) return false;
+      if (ownUrl.toLowerCase() !== url.toLowerCase()) exact = false;
     }
-    return hit;
+    return { hit, exact: hit && exact };
   };
+  // 正好是某个模板的地址的，胜过前面同一主机上的别的模板（magpie：OpenCode Zen 与 OpenCode Go 都在 opencode.ai）。
+  let near: string | null = null;
   for (const template of API_ENDPOINT_TEMPLATES) {
     if (template.group === "local") continue;
     const own = template.baseUrls.flatMap(asImportBaseUrl);
-    if (own.length > 0 && isExactly(own)) {
-      return { templateId: template.id, region: null, name: template.name, baseUrls: own };
+    const match = own.length > 0 ? matchOf(own) : { hit: false, exact: false };
+    if (match.exact) {
+      return {
+        kind: "exact",
+        place: { templateId: template.id, region: null, name: template.name, baseUrls: own },
+      };
     }
+    let isNear = match.hit;
     for (const region of template.regions ?? []) {
       const regionOwn = region.baseUrls.flatMap(asImportBaseUrl);
-      if (regionOwn.length > 0 && isExactly(regionOwn)) {
-        return {
+      if (regionOwn.length === 0) continue;
+      const regionMatch = matchOf(regionOwn);
+      if (regionMatch.exact) {
+        const place = {
           templateId: template.id,
           region: region.id,
           name: template.name,
           baseUrls: regionOwn,
         };
+        return { kind: "exact", place };
       }
+      if (regionMatch.hit) isNear = true;
     }
+    if (near === null && isNear) near = template.id;
   }
-  return null;
+  return near === null ? null : { kind: "near", templateId: near };
 }
 
 function asImportBaseUrl(entry: { format: string; url: string }): ImportBaseUrl[] {
@@ -488,7 +524,9 @@ function parseJsonText(input: { text: string; what: string }): unknown {
   const value: unknown = parseJsonc(input.text.replace(/^﻿/, ""), errors, {
     allowTrailingComma: true,
   });
-  if (errors.length > 0) throw new SourceUnparsableError(`${input.what} is not valid JSON`);
+  if (errors.length > 0) {
+    throw new SourceReadError({ code: "not_json", message: `${input.what} is not valid JSON` });
+  }
   return value;
 }
 
@@ -519,7 +557,7 @@ function readClaudeSettings(filePath: string, context: ImportReadContext): Impor
       ref: "settings",
       from: "settings.json",
       name: hostOf(cleanBase(base)),
-      result: entry.kind === "skip" ? entry : importedOf(entry, context),
+      result: entry.kind === "skip" ? entry : imported({ ...entry, context }),
     }),
   ];
 }
@@ -532,9 +570,8 @@ interface ReadEntry {
   models: string[];
 }
 
-function importedOf(entry: ReadEntry, context: ImportReadContext): Imported {
-  return imported({ ...entry, context });
-}
+/** 软件里的一条读出来是什么：地址与 key，或读不了的原因。 */
+type ReadOutcome = ReadEntry | { kind: "skip"; reason: ImportSkipReason };
 
 const CLAUDE_MODEL_KEYS = [
   "ANTHROPIC_MODEL",
@@ -544,10 +581,7 @@ const CLAUDE_MODEL_KEYS = [
   "ANTHROPIC_SMALL_FAST_MODEL",
 ];
 
-function claudeEntry(input: {
-  env: Loose;
-  name: string;
-}): ReadEntry | { kind: "skip"; reason: ImportSkipReason } {
+function claudeEntry(input: { env: Loose; name: string }): ReadOutcome {
   let base = textOf(input.env, "ANTHROPIC_BASE_URL");
   const key = textOf(input.env, "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY");
   if (base === "" && key === "") return { kind: "skip", reason: "sign_in" };
@@ -593,7 +627,7 @@ function readCcSwitch(filePath: string, context: ImportReadContext): ImportEntry
     const from = CC_SWITCH_APPS[entry.app] ?? entry.app;
     const ref = `${entry.app}/${entry.id}`;
     const read = ccSwitchEntry(entry);
-    const result = read.kind === "skip" ? read : importedOf(read, context);
+    const result = read.kind === "skip" ? read : imported({ ...read, context });
     out.push(...merged(out, entryOf({ ref, from, name: entry.name.trim(), result })));
   }
   return out;
@@ -603,7 +637,7 @@ function readCcSwitchDatabase(filePath: string): CcEntry[] {
   const rows = queryReadOnly({
     filePath,
     what: "CC Switch's database",
-    sql: `SELECT id, app_type, name, settings_config, COALESCE(website_url,'') AS website_url, COALESCE(category,'') AS category FROM providers ORDER BY app_type, COALESCE(sort_index, 0), created_at`,
+    sql: `SELECT id, app_type, name, settings_config FROM providers ORDER BY app_type, COALESCE(sort_index, 0), created_at`,
   });
   return rows.flatMap((raw) => {
     const row = CcRowSchema.safeParse(raw);
@@ -673,7 +707,7 @@ function merged(have: ImportEntry[], entry: ImportEntry): ImportEntry[] {
 }
 
 /** CC Switch 的一条：它的设置就是那个软件自己的配置，各软件不一样（magpie ccSwitchEntry）。 */
-function ccSwitchEntry(entry: CcEntry): ReadEntry | { kind: "skip"; reason: ImportSkipReason } {
+function ccSwitchEntry(entry: CcEntry): ReadOutcome {
   const { settings } = entry;
   const name = entry.name.trim();
   const env = mapOf(settings.env);
@@ -694,10 +728,7 @@ function ccSwitchEntry(entry: CcEntry): ReadEntry | { kind: "skip"; reason: Impo
   }
 }
 
-function codexSwitchEntry(input: {
-  settings: Loose;
-  name: string;
-}): ReadEntry | { kind: "skip"; reason: ImportSkipReason } {
+function codexSwitchEntry(input: { settings: Loose; name: string }): ReadOutcome {
   let key = textOf(mapOf(input.settings.auth), "OPENAI_API_KEY");
   const config = typeof input.settings.config === "string" ? input.settings.config : "";
   const { top, tables } = parseToml(config);
@@ -715,10 +746,7 @@ function codexSwitchEntry(input: {
 }
 
 /** OpenCode、OpenClaw、Pi……：地址与 key，格式由 api 或 npm 字段说。 */
-function otherSwitchEntry(input: {
-  settings: Loose;
-  name: string;
-}): ReadEntry | { kind: "skip"; reason: ImportSkipReason } {
+function otherSwitchEntry(input: { settings: Loose; name: string }): ReadOutcome {
   const { settings } = input;
   const options = mapOf(settings.options);
   const base =
@@ -1099,30 +1127,98 @@ interface Sqlite {
 const SqliteModuleSchema = z.object({
   DatabaseSync: z.custom<Sqlite["DatabaseSync"]>((value) => typeof value === "function"),
 });
+const SqliteErrorSchema = z.object({ errcode: z.number() });
 
-/** 只读打开别的软件的数据库，等它自己的写入最多 3 秒（magpie openReadOnly 的 busy_timeout）。 */
+// SQLite 的结果码：库被别的连接锁着、文件不是数据库。
+const SQLITE_BUSY = 5;
+const SQLITE_LOCKED = 6;
+const SQLITE_NOTADB = 26;
+
+/**
+ * 取 node:sqlite：没有 getBuiltinModule（Node 20.16 以前）或这个 Node 不给 node:sqlite（Node 22.13 以前要开实验开关）时为 null。
+ * Node 22、23 第一次取时报一条「SQLite 是实验功能」的 ExperimentalWarning：只把这一条按下，别的警告照常。
+ */
+function loadSqlite(): Sqlite | null {
+  if (typeof process.getBuiltinModule !== "function") return null;
+  let module: unknown;
+  try {
+    module = withoutSqliteExperimentalWarning(() => process.getBuiltinModule("node:sqlite"));
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ERR_UNKNOWN_BUILTIN_MODULE") return null;
+    throw error;
+  }
+  const parsed = SqliteModuleSchema.safeParse(module);
+  return parsed.success ? parsed.data : null;
+}
+
+/** run 期间只丢掉「SQLite 是实验功能」那一条 ExperimentalWarning，别的警告照常发出；之后放回原来的 emitWarning。 */
+export function withoutSqliteExperimentalWarning<T>(run: () => T): T {
+  const emitWarning = process.emitWarning;
+  process.emitWarning = function emitWarningExceptSqlite(
+    warning: string | Error,
+    ...rest: unknown[]
+  ) {
+    const text = typeof warning === "string" ? warning : warning.message;
+    const type = typeof rest[0] === "string" ? rest[0] : mapOf(rest[0]).type;
+    const isSqliteExperimental = type === "ExperimentalWarning" && text.includes("SQLite");
+    if (isSqliteExperimental) return;
+    Reflect.apply(emitWarning, process, [warning, ...rest]);
+  };
+  try {
+    return run();
+  } finally {
+    process.emitWarning = emitWarning;
+  }
+}
+
+/** 只读打开别的软件的数据库（不写；SQLite 读时加共享锁，WAL 库可能碰到 -wal/-shm），等它自己的写入最多 3 秒（magpie busy_timeout）。 */
 function queryReadOnly(input: { filePath: string; what: string; sql: string }): unknown[] {
-  // @types/node 还停在 20、没有 node:sqlite 的类型：经 getBuiltinModule 取到再用 zod 认。
-  const sqlite = SqliteModuleSchema.safeParse(process.getBuiltinModule("node:sqlite"));
-  if (!sqlite.success) {
-    throw new SourceUnparsableError("The Node.js running Osuna has no node:sqlite");
+  const sqlite = loadSqlite();
+  if (sqlite === null) {
+    throw new SourceReadError({
+      code: "no_sqlite",
+      params: { node: process.version },
+      message: `The Node.js running Osuna (${process.version}) can't open SQLite databases`,
+    });
   }
   let db: SqliteDatabase;
   try {
-    db = new sqlite.data.DatabaseSync(input.filePath, { readOnly: true, timeout: 3000 });
+    db = new sqlite.DatabaseSync(input.filePath, { readOnly: true, timeout: 3000 });
   } catch (error) {
-    if (isSqliteError(error)) throw new SourceUnparsableError(`Can't open ${input.what}`);
+    if (isSqliteError(error)) throw sqliteReadError({ error, what: input.what, stage: "open" });
     throw error;
   }
   try {
     return db.prepare(input.sql).all();
   } catch (error) {
-    if (isSqliteError(error))
-      throw new SourceUnparsableError(`${input.what} has no providers table Osuna can read`);
+    if (isSqliteError(error)) throw sqliteReadError({ error, what: input.what, stage: "query" });
     throw error;
   } finally {
     db.close();
   }
+}
+
+/** 打开或查询失败的原因：被锁着、不是数据库、没有 Osuna 认得的 providers 表。 */
+function sqliteReadError(input: {
+  error: unknown;
+  what: string;
+  stage: "open" | "query";
+}): SourceReadError {
+  const parsed = SqliteErrorSchema.safeParse(input.error);
+  const errcode = parsed.success ? parsed.data.errcode : null;
+  if (errcode === SQLITE_BUSY || errcode === SQLITE_LOCKED) {
+    return new SourceReadError({ code: "busy", message: `${input.what} is locked by its app` });
+  }
+  if (errcode === SQLITE_NOTADB || input.stage === "open") {
+    return new SourceReadError({
+      code: "not_database",
+      message: `${input.what} is not a database Osuna can open`,
+    });
+  }
+  return new SourceReadError({
+    code: "no_providers_table",
+    message: `${input.what} has no providers table Osuna can read`,
+  });
 }
 
 /** node:sqlite 抛的错（打不开、不是数据库、没有这张表或这些列、库被锁）。 */
@@ -1147,6 +1243,8 @@ export interface SettledEntry extends ImportEntry {
   status: ImportStatus;
   // 对上的那家：已添加的、名称撞上的、或同一家 key 不同的。
   existing: { id: string; name: string } | null;
+  // 同一地址、另一把 key 的那家（magpie 的 KeyOf）：名称撞上时也记着，这样的默认选上、新增一家。
+  otherKey: { id: string; name: string } | null;
 }
 
 /**
@@ -1156,10 +1254,12 @@ export interface SettledEntry extends ImportEntry {
 export function settleImports(input: {
   sources: ImportSourceRead[];
   held: readonly HeldEndpoint[];
+  // daemon 每次启动随机取的密钥，只在内存里：指纹不能拿来试猜 key。
+  fingerprintSecret: Buffer;
 }): { source: ImportSourceRead; entries: SettledEntry[] }[] {
   return input.sources.map((source) => {
     const entries = source.entries.map((entry) =>
-      settleEntry({ source: source.id, entry, held: input.held }),
+      settleEntry({ source: source.id, entry, held: input.held, secret: input.fingerprintSecret }),
     );
     // 能导入的在前（magpie 的稳定排序）。
     const sorted = [
@@ -1174,30 +1274,38 @@ function settleEntry(input: {
   source: ImportSourceId;
   entry: ImportEntry;
   held: readonly HeldEndpoint[];
+  secret: Buffer;
 }): SettledEntry {
   const { entry } = input;
   const settled: SettledEntry = {
     ...entry,
     source: input.source,
-    fingerprint: importFingerprint({ source: input.source, entry }),
+    fingerprint: importFingerprint({ source: input.source, entry, secret: input.secret }),
     status: "new",
     existing: null,
+    otherKey: null,
   };
   const found = entry.found;
   if (found === null) return settled;
   const same = input.held.find((held) => sameAccount({ have: held, found }));
-  if (same !== undefined)
+  if (same !== undefined) {
     return { ...settled, status: "added", existing: { id: same.id, name: same.name } };
-  const taken = input.held.find((held) => isNameTaken({ held, name: found.name }));
-  if (taken !== undefined) {
-    return { ...settled, status: "name_taken", existing: { id: taken.id, name: taken.name } };
   }
-  const otherKey = input.held.find(
+  const otherKeyHeld = input.held.find(
     (held) => held.key !== null && sameAccount({ have: { ...held, key: found.key }, found }),
   );
-  if (otherKey !== undefined) {
-    return { ...settled, status: "other_key", existing: { id: otherKey.id, name: otherKey.name } };
+  const otherKey =
+    otherKeyHeld === undefined ? null : { id: otherKeyHeld.id, name: otherKeyHeld.name };
+  const taken = input.held.find((held) => isNameTaken({ held, name: found.name }));
+  if (taken !== undefined) {
+    return {
+      ...settled,
+      status: "name_taken",
+      existing: { id: taken.id, name: taken.name },
+      otherKey,
+    };
   }
+  if (otherKey !== null) return { ...settled, status: "other_key", existing: otherKey, otherKey };
   return settled;
 }
 
@@ -1239,8 +1347,15 @@ function sameHeaders(a: Record<string, string> | null, b: Record<string, string>
   return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
 }
 
-/** 不透明的指纹（magpie importFingerprint）：来源、位置与要加的那家，导入时据此找回 key。 */
-function importFingerprint(input: { source: ImportSourceId; entry: ImportEntry }): string {
+/**
+ * 不透明的指纹（magpie importFingerprint）：来源、位置与要加的那家（含 key），导入时据此找回 key。
+ * 用 daemon 内存里的随机密钥做 HMAC：客户端没法拿猜的 key 去比对。
+ */
+function importFingerprint(input: {
+  source: ImportSourceId;
+  entry: ImportEntry;
+  secret: Buffer;
+}): string {
   const { entry } = input;
   const body = JSON.stringify({
     source: input.source,
@@ -1249,5 +1364,5 @@ function importFingerprint(input: { source: ImportSourceId; entry: ImportEntry }
     skip: entry.skip,
     found: entry.found,
   });
-  return createHash("sha256").update(body).digest("hex");
+  return createHmac("sha256", input.secret).update(body).digest("hex");
 }

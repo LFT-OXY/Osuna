@@ -50,6 +50,13 @@ const sources = [
     item({ fingerprint: "other", status: "other_key", existingName: "Relay One" }),
     item({ fingerprint: "taken", name: "Mine", status: "name_taken", existingName: "Mine" }),
     item({ fingerprint: "off", off: "turned_off" }),
+    item({
+      fingerprint: "takenOther",
+      name: "Shared",
+      status: "name_taken",
+      existingName: "Shared",
+      otherKeyName: "Shared",
+    }),
     item({ fingerprint: "added", status: "added" }),
     item({ fingerprint: "skip", skip: "sign_in" }),
     item({ fingerprint: "future", status: "something_new" }),
@@ -57,16 +64,17 @@ const sources = [
 ];
 
 describe("import picks", () => {
-  it("picks new and same-vendor entries by default; a name in use or one turned off waits for the user", () => {
+  it("picks new and same-vendor entries by default, a name in use that is also the same vendor too; a name in use alone or one turned off waits for the user", () => {
     const picks = initialImportPicks(sources);
-    expect(Object.keys(picks)).toEqual(["new", "other", "taken", "off"]);
-    expect(Object.entries(picks).map(([key, pick]) => [key, pick.on])).toEqual([
-      ["new", true],
-      ["other", true],
-      ["taken", false],
-      ["off", false],
+    expect(Object.keys(picks)).toEqual(["new", "other", "taken", "off", "takenOther"]);
+    expect(Object.entries(picks).map(([key, pick]) => [key, pick.on, pick.choice])).toEqual([
+      ["new", true, "add"],
+      ["other", true, "add"],
+      ["taken", false, "add"],
+      ["off", false, "add"],
+      ["takenOther", true, "add"],
     ]);
-    expect(pickedCount(picks)).toBe(2);
+    expect(pickedCount(picks)).toBe(3);
   });
 
   it("a name in use can keep both or replace; renaming drops replace and picks the entry", () => {
@@ -96,6 +104,7 @@ describe("import picks", () => {
       { fingerprint: "new", action: "add" },
       { fingerprint: "other", action: "add" },
       { fingerprint: "taken", action: "rename", name: "Mine 2" },
+      { fingerprint: "takenOther", action: "add" },
     ]);
     picks = { ...picks, taken: choosePick({ ...picks.taken!, name: "Mine" }, "replace") };
     expect(importRequests({ sources, picks })).toContainEqual({
@@ -107,8 +116,8 @@ describe("import picks", () => {
   it("select all turns every pickable entry of a source on or off", () => {
     const only = sources[0]!;
     const all = setSourcePicks({ source: only, picks: initialImportPicks(sources), on: true });
-    expect(sourcePickState({ source: only, picks: all })).toEqual({ pickable: 4, on: 4 });
+    expect(sourcePickState({ source: only, picks: all })).toEqual({ pickable: 5, on: 5 });
     const none = setSourcePicks({ source: only, picks: all, on: false });
-    expect(sourcePickState({ source: only, picks: none })).toEqual({ pickable: 4, on: 0 });
+    expect(sourcePickState({ source: only, picks: none })).toEqual({ pickable: 5, on: 0 });
   });
 });

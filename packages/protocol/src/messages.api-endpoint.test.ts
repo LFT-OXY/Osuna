@@ -1748,6 +1748,7 @@ describe("provider.api_endpoint.test_models", () => {
       status: "other_key",
       existingEndpointId: "ep_1",
       existingName: "Relay One",
+      otherKeyName: "Relay One",
       skip: null,
       off: null,
     };
@@ -1809,7 +1810,8 @@ describe("provider.api_endpoint.test_models", () => {
       { requestId: "req-im", imported: [{ endpointId: "ep_2", name: "CC Relay" }], error: null },
       {
         requestId: "req-im",
-        imported: [],
+        imported: [{ endpointId: "ep_2", name: "CC Relay" }],
+        failed: { fingerprint: "f3", name: "Mine" },
         error: {
           code: "import_cannot_replace",
           params: { name: "CC Relay" },

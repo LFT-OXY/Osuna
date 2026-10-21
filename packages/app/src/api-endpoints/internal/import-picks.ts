@@ -1,24 +1,25 @@
 // 导入窗口里每条选不选、怎么进来，照 magpie（https://github.com/yetone/magpie，7597c132）internal/gui/assets/app.js 的
 // openImportApps、importAppRow。Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
-import type {
-  ApiEndpointImportItem,
-  ApiEndpointImportPick,
-  ApiEndpointImportSource,
+import {
+  API_ENDPOINT_IMPORT_SKIP_REASONS,
+  API_ENDPOINT_IMPORT_STATUSES,
+  type ApiEndpointImportItem,
+  type ApiEndpointImportPick,
+  type ApiEndpointImportSkipReason,
+  type ApiEndpointImportSource,
+  type ApiEndpointImportStatus,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /** 线上的 status 是字符串；认不出的当不能导入。 */
-export type ImportItemStatus = "new" | "added" | "name_taken" | "other_key";
+export function importItemStatusOf(item: ApiEndpointImportItem): ApiEndpointImportStatus | null {
+  return API_ENDPOINT_IMPORT_STATUSES.find((status) => status === item.status) ?? null;
+}
 
-export function importItemStatusOf(item: ApiEndpointImportItem): ImportItemStatus | null {
-  switch (item.status) {
-    case "new":
-    case "added":
-    case "name_taken":
-    case "other_key":
-      return item.status;
-    default:
-      return null;
-  }
+/** 读不了的原因；认不出的为 unknown。 */
+export function importSkipReasonOf(
+  item: ApiEndpointImportItem,
+): ApiEndpointImportSkipReason | "unknown" {
+  return API_ENDPOINT_IMPORT_SKIP_REASONS.find((reason) => reason === item.skip) ?? "unknown";
 }
 
 /** 名称撞上时的两种进来法：留着两家（新增一家）或替换原来那家。改了名就只能新增。 */
@@ -40,16 +41,17 @@ export function isPickable(item: ApiEndpointImportItem): boolean {
 }
 
 /**
- * 打开时默认选上的（magpie openImportApps）：新的与同一家 key 不同的选上；名称撞上的、在那个软件里关着的要用户自己选。
+ * 打开时默认选上的（magpie openImportApps）：新的与同一家 key 不同的选上（名称撞上、又是同一家 key 不同的也选上，新增一家）；
+ * 只是名称撞上的、在那个软件里关着的要用户自己选。
  */
 export function initialImportPicks(sources: readonly ApiEndpointImportSource[]): ImportPicks {
   const picks: Record<string, ImportPick> = {};
   for (const source of sources) {
     for (const item of source.items) {
       if (!isPickable(item)) continue;
-      const isTaken = item.status === "name_taken";
+      const isOnlyTaken = item.status === "name_taken" && (item.otherKeyName ?? null) === null;
       picks[item.fingerprint] = {
-        on: item.off === null && !isTaken,
+        on: item.off === null && !isOnlyTaken,
         choice: "add",
         name: item.name,
       };

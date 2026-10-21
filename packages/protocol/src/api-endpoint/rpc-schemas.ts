@@ -1318,6 +1318,32 @@ export type ApiEndpointVendorStatusResponse = z.infer<typeof ApiEndpointVendorSt
 export const API_ENDPOINT_IMPORT_STATUSES = ["new", "added", "name_taken", "other_key"] as const;
 export type ApiEndpointImportStatus = (typeof API_ENDPOINT_IMPORT_STATUSES)[number];
 
+export const API_ENDPOINT_IMPORT_SKIP_REASONS = [
+  "sign_in",
+  "no_base_url",
+  "invalid_base_url",
+  "points_at_osuna",
+  "no_api_key",
+  "gemini_unsupported",
+  "no_azure_endpoint",
+] as const;
+export type ApiEndpointImportSkipReason = (typeof API_ENDPOINT_IMPORT_SKIP_REASONS)[number];
+
+/**
+ * 来源读不了的原因：unreadable（文件打不开，params.errno）、not_json、not_database、no_providers_table（数据库里没有认得的表）、
+ * busy（数据库被它的软件锁着）、no_sqlite（跑 daemon 的 Node 打不开 SQLite，params.node）。
+ */
+export const API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES = [
+  "unreadable",
+  "not_json",
+  "not_database",
+  "no_providers_table",
+  "busy",
+  "no_sqlite",
+] as const;
+export type ApiEndpointImportSourceErrorCode =
+  (typeof API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES)[number];
+
 export const ApiEndpointImportItemSchema = z.object({
   fingerprint: z.string(),
   ref: z.string(),
@@ -1332,6 +1358,8 @@ export const ApiEndpointImportItemSchema = z.object({
   // 对上的那家：已添加的、名称撞上的、同一家 key 不同的。
   existingEndpointId: z.string().nullable(),
   existingName: z.string().nullable(),
+  // 同一地址、另一把 key 的那家（名称撞上时也给）：这样的默认选上、新增一家。
+  otherKeyName: z.string().nullable().optional(),
   skip: z.string().nullable(),
   off: z.string().nullable(),
 });
@@ -1344,7 +1372,7 @@ export const ApiEndpointImportSourceSchema = z.object({
   // 读的文件，家目录写成 ~。
   path: z.string(),
   found: z.boolean(),
-  // 在那儿却读不了：code 为 unreadable 或 unparsable。
+  // 在那儿却读不了：code 见 API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES。
   error: ApiEndpointErrorSchema.nullable(),
   items: z.array(ApiEndpointImportItemSchema),
 });
@@ -1382,7 +1410,10 @@ export const ApiEndpointImportPickSchema = z.object({
 });
 export type ApiEndpointImportPick = z.infer<typeof ApiEndpointImportPickSchema>;
 
-/** 导入选中的发现：daemon 重读一遍来源，按指纹找回 key。一条不成整批都不加。只有声明了 apiEndpointManagement 的 daemon 认它。 */
+/**
+ * 导入选中的发现：daemon 重读一遍来源，按指纹找回 key，照 magpie 一条一条地加；一条不成就停下，前面加好的留着。
+ * rename 的名称是空的当没改名、按新增。只有声明了 apiEndpointManagement 的 daemon 认它。
+ */
 export const ApiEndpointImportRequestSchema = z.object({
   type: z.literal("provider.api_endpoint.import.request"),
   requestId: z.string(),
@@ -1394,8 +1425,10 @@ export const ApiEndpointImportResponseSchema = z.object({
   type: z.literal("provider.api_endpoint.import.response"),
   payload: z.object({
     requestId: z.string(),
-    // 加了或换上的那几家；已经有的、读不了的不在里面。
+    // 加了或换上的那几家；已经有的、读不了的不在里面。出错时是出错之前加好的。
     imported: z.array(z.object({ endpointId: z.string(), name: z.string() })),
+    // 出错的那一条（error 说为什么）；整个请求失败或都成了为 null。
+    failed: z.object({ fingerprint: z.string(), name: z.string() }).nullable().optional(),
     error: ApiEndpointErrorSchema.nullable(),
   }),
 });

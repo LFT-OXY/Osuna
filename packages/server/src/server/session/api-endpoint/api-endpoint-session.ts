@@ -595,9 +595,15 @@ export class ApiEndpointSession {
   ): Promise<void> {
     let payload: Omit<ApiEndpointImportResponse["payload"], "requestId">;
     try {
-      payload = { imported: await this.service.importFromApps(request.picks), error: null };
+      const outcome = await this.service.importFromApps(request.picks);
+      const { failed } = outcome;
+      payload = {
+        imported: outcome.imported,
+        failed: failed === null ? null : { fingerprint: failed.fingerprint, name: failed.name },
+        error: failed === null ? null : this.toWireError(failed.error, request),
+      };
     } catch (caught) {
-      payload = { imported: [], error: this.toWireError(caught, request) };
+      payload = { imported: [], failed: null, error: this.toWireError(caught, request) };
     }
     this.host.emit({
       type: "provider.api_endpoint.import.response",

@@ -474,8 +474,8 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机没有 set_order、长对话设置、已禁用的模型与接口名显示方式。
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const closeImport = useCallback(() => setIsImporting(false), []);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const closeImport = useCallback(() => setIsImportOpen(false), []);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
   // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
   const vendorStatus = useVendorStatus({ serverId });
@@ -491,7 +491,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
               router.push(buildProviderSettingsRoute(serverId, provider)),
             onDuplicate: (endpoint) =>
               setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
-            onImport: () => setIsImporting(true),
+            onImport: () => setIsImportOpen(true),
           }
         : undefined,
     [hasManagement, providerEntries, router, serverId, t, vendorNotices],
@@ -573,14 +573,14 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
         onSaved={handleSaved}
         onOpenEndpoint={handleOpenById}
       />
-      {isImporting ? <ImportSheet serverId={serverId} onClose={closeImport} /> : null}
+      {isImportOpen ? <ImportSheet serverId={serverId} onClose={closeImport} /> : null}
     </>
   );
 }
 
 /** 从别的软件导入：开着时扫一次（含 OpenCode），导入成功就关上。 */
 function ImportSheet({ serverId, onClose }: { serverId: string; onClose: () => void }) {
-  const { scan, retryScan, importPicked } = useImportApps({ serverId, isOpen: true });
+  const { scan, retryScan, importPicked } = useImportApps({ serverId });
   const handleImport = useCallback(
     async (picks: Parameters<typeof importPicked>[0]) => {
       const result = await importPicked(picks);

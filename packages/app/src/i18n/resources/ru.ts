@@ -2557,8 +2557,16 @@ export const ru: TranslationResources = {
         imported_other: "Импортировано: {{count}} — {{names}}",
         importedNone: "Нечего импортировать",
         notFound: "На этом хосте не найдено",
-        unreadable: "Osuna не может открыть этот файл",
-        unparsable: "Osuna не может прочитать этот файл",
+        failedItem: "{{name}} не импортирован: {{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna не может открыть этот файл ({{errno}})",
+          not_json: "Это не корректный JSON",
+          not_database: "Это не база данных, которую Osuna может открыть",
+          no_providers_table: "В базе нет таблицы providers, известной Osuna",
+          busy: "Приложение сейчас пишет в неё; попробуйте чуть позже",
+          no_sqlite:
+            "Node.js, на котором работает Osuna ({{node}}), не умеет открывать базы SQLite",
+        },
         noEntries: "Эндпоинтов нет",
         status: {
           new: "Новый",

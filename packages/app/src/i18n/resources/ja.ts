@@ -2545,8 +2545,15 @@ export const ja: TranslationResources = {
         imported_other: "{{count}} 件インポートしました: {{names}}",
         importedNone: "新しくインポートするものはありません",
         notFound: "このホストに見つかりません",
-        unreadable: "Osuna はこのファイルを開けません",
-        unparsable: "Osuna はこのファイルを読み取れません",
+        failedItem: "{{name}} はインポートされませんでした: {{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna はこのファイルを開けません（{{errno}}）",
+          not_json: "有効な JSON ではありません",
+          not_database: "Osuna が開けるデータベースではありません",
+          no_providers_table: "データベースに Osuna が認識できる providers テーブルがありません",
+          busy: "アプリが書き込み中です。少し待ってから再試行してください",
+          no_sqlite: "Osuna を動かしている Node.js（{{node}}）は SQLite データベースを開けません",
+        },
         noEntries: "エンドポイントがありません",
         status: {
           new: "新規",

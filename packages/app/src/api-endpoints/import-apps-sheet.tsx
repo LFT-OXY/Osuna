@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type {
-  ApiEndpointImportItem,
-  ApiEndpointImportSource,
+import {
+  API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES,
+  type ApiEndpointImportItem,
+  type ApiEndpointImportSource,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsInfoTip } from "@/components/settings/headings/settings-info-tip";
@@ -23,6 +24,7 @@ import {
   importChoices,
   importItemHost,
   importItemStatusOf,
+  importSkipReasonOf,
   importRequests,
   initialImportPicks,
   pickedCount,
@@ -54,7 +56,7 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
   // 每份新的扫描结果重新定默认选择（React 的「渲染时按 props 调整 state」）。
   const [seenAt, setSeenAt] = useState<number | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ImportFailure | null>(null);
   if (scan.status === "ready" && scan.updatedAt !== seenAt) {
     setSeenAt(scan.updatedAt);
     setPicks(initialImportPicks(scan.sources));
@@ -69,7 +71,9 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
     setFailure(null);
     const result = await onImport(importRequests({ sources, picks }));
     setIsImporting(false);
-    if (result.status === "failed") setFailure(result.message);
+    if (result.status === "failed") {
+      setFailure({ message: result.message, fingerprint: result.failedFingerprint });
+    }
   }, [onImport, picks, sources]);
   const updatePick = useCallback(
     (fingerprint: string, next: ImportPick) =>
@@ -102,7 +106,7 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
             selectable
             testID="api-endpoint-import-error"
           >
-            {failure}
+            {failure.message}
           </Text>
         ) : null}
         <View style={styles.actions}>
@@ -160,6 +164,7 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
               key={source.id}
               source={source}
               picks={picks}
+              failure={failure}
               onPicks={setPicks}
               onPick={updatePick}
             />
@@ -170,14 +175,22 @@ export function ImportAppsSheet({ scan, onRetry, onImport, onClose }: ImportApps
   );
 }
 
+/** 导入停在了哪一条、为什么；整个请求失败时 fingerprint 为 null。 */
+interface ImportFailure {
+  message: string;
+  fingerprint: string | null;
+}
+
 function ImportSourceSection({
   source,
   picks,
+  failure,
   onPicks,
   onPick,
 }: {
   source: ApiEndpointImportSource;
   picks: ImportPicks;
+  failure: ImportFailure | null;
   onPicks: (next: ImportPicks) => void;
   onPick: (fingerprint: string, next: ImportPick) => void;
 }) {
@@ -189,18 +202,30 @@ function ImportSourceSection({
     [onPicks, picks, source],
   );
   const emptyText = sourceEmptyText({ t, source });
+  // 能导入的条数；没找到、读不了时是「–」（magpie 的标签页数字）。
+  const isReadable = source.found && source.error === null;
+  const countLabel = isReadable ? String(state.pickable) : "–";
   return (
     <View style={styles.section} testID={`api-endpoint-import-source-${source.id}`}>
       <View style={styles.sectionHead}>
         <View style={styles.sectionTitle}>
-          <Text variant="label" weight="medium">
-            {source.name}
-          </Text>
+          <View style={styles.sourceNameLine}>
+            <Text variant="label" weight="medium">
+              {source.name}
+            </Text>
+            <Text
+              variant="label"
+              color="foregroundMuted"
+              testID={`api-endpoint-import-source-${source.id}-count`}
+            >
+              {countLabel}
+            </Text>
+          </View>
           <Text variant="caption" color="foregroundMuted" selectable>
             {source.path}
           </Text>
         </View>
-        {state.pickable > 1 ? (
+        {state.pickable > 0 ? (
           <View style={styles.selectAll}>
             <Text variant="caption" color="foregroundMuted">
               {t("settings.apiEndpoints.import.selectAll")}
@@ -223,6 +248,7 @@ function ImportSourceSection({
               key={item.fingerprint}
               item={item}
               pick={picks[item.fingerprint] ?? null}
+              failedBecause={failure?.fingerprint === item.fingerprint ? failure.message : null}
               hasRowAbove={index > 0}
               onPick={onPick}
             />
@@ -242,12 +268,20 @@ function ImportSourceSection({
   );
 }
 
-/** 没有条目可列时的一句：没找到、读不了、里面什么都没有；有条目为 null。 */
+/** 没有条目可列时的一句：没找到、读不了（按 daemon 说的原因）、里面什么都没有；有条目为 null。 */
 function sourceEmptyText(input: { t: TFunction; source: ApiEndpointImportSource }): string | null {
   const { t, source } = input;
   if (!source.found) return t("settings.apiEndpoints.import.notFound");
-  if (source.error?.code === "unreadable") return t("settings.apiEndpoints.import.unreadable");
-  if (source.error) return t("settings.apiEndpoints.import.unparsable");
+  if (source.error) {
+    const code = API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES.find(
+      (known) => known === source.error?.code,
+    );
+    if (code === undefined) return source.error.message;
+    return t(`settings.apiEndpoints.import.sourceErrors.${code}`, {
+      errno: source.error.params?.errno ?? "",
+      node: source.error.params?.node ?? "",
+    });
+  }
   if (source.items.length === 0) return t("settings.apiEndpoints.import.noEntries");
   return null;
 }
@@ -255,17 +289,20 @@ function sourceEmptyText(input: { t: TFunction; source: ApiEndpointImportSource 
 function ImportItemRow({
   item,
   pick,
+  failedBecause,
   hasRowAbove,
   onPick,
 }: {
   item: ApiEndpointImportItem;
   // 不能选的（读不了、已添加）为 null。
   pick: ImportPick | null;
+  // 上次导入停在这一条时的原因。
+  failedBecause: string | null;
   hasRowAbove: boolean;
   onPick: (fingerprint: string, next: ImportPick) => void;
 }) {
   const { t } = useTranslation();
-  const badge = itemBadge({ t, item });
+  const standing = itemStanding({ t, item, hasPick: pick !== null });
   const facts = itemFacts({ t, item });
   const handleToggle = useCallback(
     (on: boolean) => {
@@ -274,6 +311,7 @@ function ImportItemRow({
     [item.fingerprint, onPick, pick],
   );
   const testID = `api-endpoint-import-item-${item.ref}`;
+  const showsChoice = pick !== null && importItemStatusOf(item) === "name_taken";
   return (
     <View style={[styles.item, hasRowAbove && settingsStyles.rowBorder]} testID={testID}>
       <View style={styles.itemTop}>
@@ -289,11 +327,21 @@ function ImportItemRow({
         <View style={styles.itemText}>
           <View style={styles.nameLine}>
             <Text weight="medium">{item.name}</Text>
-            <StatusBadge label={badge.label} variant={badge.variant} size="xs" />
+            <StatusBadge label={standing.label} variant={standing.variant} size="xs" />
           </View>
-          <Text variant="caption" color="foregroundMuted" selectable>
-            {facts}
-          </Text>
+          <View style={styles.facts}>
+            {facts.map((fact, index) => (
+              <Text
+                key={fact.text}
+                variant="caption"
+                color="foregroundMuted"
+                selectable
+                style={fact.isUnbroken ? styles.unbroken : null}
+              >
+                {index > 0 ? `· ${fact.text}` : fact.text}
+              </Text>
+            ))}
+          </View>
         </View>
         {pick ? (
           <Switch
@@ -304,37 +352,22 @@ function ImportItemRow({
           />
         ) : null}
       </View>
-      <ItemDetails item={item} pick={pick} onPick={onPick} testID={testID} />
-    </View>
-  );
-}
-
-/** 状态、原因与名称撞上时的选择，缩进到名称下面。 */
-function ItemDetails({
-  item,
-  pick,
-  onPick,
-  testID,
-}: {
-  item: ApiEndpointImportItem;
-  pick: ImportPick | null;
-  onPick: (fingerprint: string, next: ImportPick) => void;
-  testID: string;
-}) {
-  const { t } = useTranslation();
-  const status = importItemStatusOf(item);
-  const notes = itemNotes({ t, item, hasPick: pick !== null });
-  const showsChoice = pick !== null && status === "name_taken";
-  if (notes.length === 0 && !showsChoice) return null;
-  return (
-    <View style={styles.details}>
-      {notes.map((note) => (
-        <Text key={note} variant="caption" color="foregroundMuted">
-          {note}
-        </Text>
-      ))}
-      {showsChoice && pick ? (
-        <NameTakenChoice item={item} pick={pick} onPick={onPick} testID={testID} />
+      {standing.notes.length > 0 || showsChoice || failedBecause !== null ? (
+        <View style={styles.details}>
+          {standing.notes.map((note) => (
+            <Text key={note} variant="caption" color="foregroundMuted">
+              {note}
+            </Text>
+          ))}
+          {failedBecause !== null ? (
+            <Text variant="caption" color="statusDanger" selectable testID={`${testID}-failed`}>
+              {failedBecause}
+            </Text>
+          ) : null}
+          {showsChoice && pick ? (
+            <NameTakenChoice item={item} pick={pick} onPick={onPick} testID={testID} />
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -370,8 +403,9 @@ function NameTakenChoice({
     (name: string) => onPick(item.fingerprint, renamePick({ item, pick, name })),
     [item, onPick, pick],
   );
+  // 开关关着时淡下去：改名或选一种进来法会把它选上。
   return (
-    <View style={styles.choice}>
+    <View style={[styles.choice, !pick.on && styles.choiceIdle]}>
       <FormTextInput
         initialValue={pick.name}
         onChangeText={handleName}
@@ -395,73 +429,50 @@ function NameTakenChoice({
   );
 }
 
-function itemBadge(input: { t: TFunction; item: ApiEndpointImportItem }): {
+/**
+ * 这条的状态标记与说明（一次按状态分开）：读不了为什么、对上了哪家、在那个软件里关着。
+ * 能导入的（新的、同一家 key 不同的）是绿色，名称撞上的是警告色，已添加与不能导入是灰色。
+ */
+function itemStanding(input: { t: TFunction; item: ApiEndpointImportItem; hasPick: boolean }): {
   label: string;
   variant: StatusBadgeVariant;
+  notes: string[];
 } {
   const { t, item } = input;
+  const cantImport = t("settings.apiEndpoints.import.status.cantImport");
   if (item.skip !== null) {
-    return { label: t("settings.apiEndpoints.import.status.cantImport"), variant: "muted" };
-  }
-  switch (importItemStatusOf(item)) {
-    case "new":
-      return { label: t("settings.apiEndpoints.import.status.new"), variant: "success" };
-    case "added":
-      return { label: t("settings.apiEndpoints.import.status.added"), variant: "muted" };
-    case "name_taken":
-      return { label: t("settings.apiEndpoints.import.status.nameTaken"), variant: "warning" };
-    case "other_key":
-      return { label: t("settings.apiEndpoints.import.status.otherKey"), variant: "muted" };
-    default:
-      return { label: t("settings.apiEndpoints.import.status.cantImport"), variant: "muted" };
-  }
-}
-
-/** 名称下面的一行：在那个软件里的哪儿、主机、打码的 key、模型数（照 magpie 的 sub）。 */
-function itemFacts(input: { t: TFunction; item: ApiEndpointImportItem }): string {
-  const { t, item } = input;
-  const host = importItemHost(item);
-  const facts: string[] = [];
-  if (item.from !== null) facts.push(item.from);
-  if (host !== null) facts.push(host);
-  if (item.maskedKey !== null) facts.push(item.maskedKey);
-  if (item.models.length > 0) {
-    facts.push(t("settings.apiEndpoints.import.models", { count: item.models.length }));
-  }
-  return facts.join(" · ");
-}
-
-const SKIP_REASONS = [
-  "sign_in",
-  "no_base_url",
-  "invalid_base_url",
-  "points_at_osuna",
-  "no_api_key",
-  "gemini_unsupported",
-  "no_azure_endpoint",
-] as const;
-
-/** 状态与原因的说明：读不了为什么、对上了哪家、在那个软件里关着。 */
-function itemNotes(input: {
-  t: TFunction;
-  item: ApiEndpointImportItem;
-  hasPick: boolean;
-}): string[] {
-  const { t, item } = input;
-  if (item.skip !== null) {
-    const reason = SKIP_REASONS.find((candidate) => candidate === item.skip) ?? "unknown";
-    return [t(`settings.apiEndpoints.import.skip.${reason}`)];
+    const reason = importSkipReasonOf(item);
+    return {
+      label: cantImport,
+      variant: "muted",
+      notes: [t(`settings.apiEndpoints.import.skip.${reason}`)],
+    };
   }
   const existing = item.existingName ?? "";
+  const otherKey = item.otherKeyName ?? null;
   const notes: string[] = [];
+  let label = cantImport;
+  let variant: StatusBadgeVariant = "muted";
   switch (importItemStatusOf(item)) {
+    case "new":
+      label = t("settings.apiEndpoints.import.status.new");
+      variant = "success";
+      break;
     case "added":
+      label = t("settings.apiEndpoints.import.status.added");
       notes.push(t("settings.apiEndpoints.import.notes.added", { name: existing }));
       break;
     case "name_taken":
+      label = t("settings.apiEndpoints.import.status.nameTaken");
+      variant = "warning";
       notes.push(t("settings.apiEndpoints.import.notes.nameTaken", { name: existing }));
+      if (otherKey !== null) {
+        notes.push(t("settings.apiEndpoints.import.notes.otherKey", { name: otherKey }));
+      }
       break;
     case "other_key":
+      label = t("settings.apiEndpoints.import.status.otherKey");
+      variant = "success";
       notes.push(t("settings.apiEndpoints.import.notes.otherKey", { name: existing }));
       break;
     default:
@@ -470,7 +481,28 @@ function itemNotes(input: {
   if (input.hasPick && item.off === "turned_off") {
     notes.push(t("settings.apiEndpoints.import.notes.turnedOff"));
   }
-  return notes;
+  return { label, variant, notes };
+}
+
+/**
+ * 名称下面的一行（照 magpie 的 sub）：在那个软件里的哪儿、主机、打码的 key、模型数，只在「·」处换行；
+ * 打码的 key 整个不断开。
+ */
+function itemFacts(input: {
+  t: TFunction;
+  item: ApiEndpointImportItem;
+}): { text: string; isUnbroken: boolean }[] {
+  const { t, item } = input;
+  const host = importItemHost(item);
+  const facts: { text: string; isUnbroken: boolean }[] = [];
+  if (item.from !== null) facts.push({ text: item.from, isUnbroken: false });
+  if (host !== null) facts.push({ text: host, isUnbroken: false });
+  if (item.maskedKey !== null) facts.push({ text: item.maskedKey, isUnbroken: true });
+  if (item.models.length > 0) {
+    const text = t("settings.apiEndpoints.import.models", { count: item.models.length });
+    facts.push({ text, isUnbroken: true });
+  }
+  return facts;
 }
 
 const SNAP_POINTS = ["90%"];
@@ -495,6 +527,11 @@ const styles = StyleSheet.create((theme) => ({
   sectionTitle: {
     flexShrink: 1,
     gap: theme.spacing[0.5],
+  },
+  sourceNameLine: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: theme.spacing[2],
   },
   selectAll: {
     flexDirection: "row",
@@ -528,6 +565,15 @@ const styles = StyleSheet.create((theme) => ({
     columnGap: theme.spacing[2],
     rowGap: theme.spacing[1],
   },
+  facts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: theme.spacing[1],
+  },
+  // 整段不断开：放不下就整段换到下一行。
+  unbroken: {
+    flexShrink: 0,
+  },
   // 与名称对齐：图标宽度加间距。
   details: {
     marginLeft: ICON_SIZE.md + theme.spacing[1] + theme.spacing[3],
@@ -536,6 +582,9 @@ const styles = StyleSheet.create((theme) => ({
   choice: {
     gap: theme.spacing[2],
     alignItems: "flex-start",
+  },
+  choiceIdle: {
+    opacity: 0.5,
   },
   footer: {
     flex: 1,

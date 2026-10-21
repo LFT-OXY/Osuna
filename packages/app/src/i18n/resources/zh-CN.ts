@@ -2549,8 +2549,15 @@ export const zhCN: TranslationResources = {
         imported_other: "已导入 {{count}} 个：{{names}}",
         importedNone: "没有可导入的新条目",
         notFound: "这台主机上没有找到",
-        unreadable: "Osuna 打不开这个文件",
-        unparsable: "Osuna 读不懂这个文件",
+        failedItem: "「{{name}}」没有导入：{{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna 打不开这个文件（{{errno}}）",
+          not_json: "不是有效的 JSON",
+          not_database: "不是 Osuna 能打开的数据库",
+          no_providers_table: "数据库里没有 Osuna 认得的服务商表",
+          busy: "它的软件正在写这个数据库，稍后再试",
+          no_sqlite: "运行 Osuna 的 Node.js（{{node}}）打不开 SQLite 数据库",
+        },
         noEntries: "里面没有接口",
         status: {
           new: "新的",

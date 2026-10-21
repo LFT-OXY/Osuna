@@ -19,13 +19,17 @@ export type ImportScanState =
   // updatedAt：这份扫描结果的时刻，变了就重新定默认选择。
   | { status: "ready"; sources: ApiEndpointImportSource[]; updatedAt: number };
 
-export type ImportResult = { status: "imported" } | { status: "failed"; message: string };
+// failedFingerprint：出错的那一条（窗口在它下面说原因）；整个请求失败时为 null。
+export type ImportResult =
+  | { status: "imported" }
+  | { status: "failed"; message: string; failedFingerprint: string | null };
 
 /**
- * 导入窗口开着时扫一次别的软件的配置（含 OpenCode）；关了就丢掉结果，下次打开重扫。
- * 导入成功后刷新接口列表并提示加了哪几家（照 magpie 的「Imported {n}: …」）。
+ * 导入窗口挂着时扫一次别的软件的配置（含 OpenCode）；关了就丢掉结果，下次打开重扫。
+ * 加好了几家就刷新接口列表并提示是哪几家（照 magpie 的「Imported {n}: …」）；daemon 一条一条地加，
+ * 中途有一条不成时前面的留着，重扫一遍让它们显示为已添加，窗口留着说哪一条为什么没成。
  */
-export function useImportApps({ serverId, isOpen }: { serverId: string; isOpen: boolean }): {
+export function useImportApps({ serverId }: { serverId: string }): {
   scan: ImportScanState;
   retryScan: () => void;
   importPicked: (picks: ApiEndpointImportPick[]) => Promise<ImportResult>;
@@ -42,7 +46,7 @@ export function useImportApps({ serverId, isOpen }: { serverId: string; isOpen: 
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    enabled: isOpen && Boolean(client) && isConnected,
+    enabled: Boolean(client) && isConnected,
     retry: false,
     queryFn: async () => {
       if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
@@ -54,7 +58,10 @@ export function useImportApps({ serverId, isOpen }: { serverId: string; isOpen: 
   const retryScan = useCallback(() => void query.refetch(), [query]);
   const importPicked = useCallback(
     async (picks: ApiEndpointImportPick[]): Promise<ImportResult> => {
-      if (!client) return { status: "failed", message: t("workspace.terminal.hostDisconnected") };
+      if (!client) {
+        const message = t("workspace.terminal.hostDisconnected");
+        return { status: "failed", message, failedFingerprint: null };
+      }
       let response: Awaited<ReturnType<typeof client.apiEndpointImport>>;
       try {
         response = await client.apiEndpointImport(picks);
@@ -62,22 +69,33 @@ export function useImportApps({ serverId, isOpen }: { serverId: string; isOpen: 
         // 连接断了、RPC 失败：留在窗口里说明；别的照常抛出。
         if (!(error instanceof DaemonConnectionError || error instanceof DaemonRpcError))
           throw error;
-        return { status: "failed", message: toErrorMessage(error) };
+        return { status: "failed", message: toErrorMessage(error), failedFingerprint: null };
       }
-      if (response.error) return { status: "failed", message: importErrorText(t, response.error) };
-      await queryClient.invalidateQueries({ queryKey: ["api-endpoints", serverId] });
-      const names = response.imported.map((entry) => entry.name).join(", ");
-      const message =
-        response.imported.length === 0
-          ? t("settings.apiEndpoints.import.importedNone")
-          : t("settings.apiEndpoints.import.imported", {
-              count: response.imported.length,
-              names,
-            });
-      toast.show(message, { variant: "success" });
+      const hasImported = response.imported.length > 0;
+      if (hasImported) {
+        await queryClient.invalidateQueries({ queryKey: ["api-endpoints", serverId] });
+        const names = response.imported.map((entry) => entry.name).join(", ");
+        const count = response.imported.length;
+        toast.show(t("settings.apiEndpoints.import.imported", { count, names }), {
+          variant: "success",
+        });
+      }
+      if (response.error) {
+        if (hasImported) void query.refetch();
+        const failed = response.failed ?? null;
+        const reason = importErrorText(t, response.error);
+        let message = reason;
+        if (failed !== null) {
+          message = t("settings.apiEndpoints.import.failedItem", { name: failed.name, reason });
+        }
+        return { status: "failed", message, failedFingerprint: failed?.fingerprint ?? null };
+      }
+      if (!hasImported) {
+        toast.show(t("settings.apiEndpoints.import.importedNone"), { variant: "success" });
+      }
       return { status: "imported" };
     },
-    [client, queryClient, serverId, t, toast],
+    [client, query, queryClient, serverId, t, toast],
   );
   let scan: ImportScanState = { status: "loading" };
   if (query.data) scan = { status: "ready", sources: query.data, updatedAt: query.dataUpdatedAt };

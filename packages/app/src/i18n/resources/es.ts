@@ -2575,8 +2575,15 @@ export const es: TranslationResources = {
         imported_other: "Importados {{count}}: {{names}}",
         importedNone: "No hay nada nuevo que importar",
         notFound: "No se encontró en este host",
-        unreadable: "Osuna no puede abrir este archivo",
-        unparsable: "Osuna no puede leer este archivo",
+        failedItem: "{{name}} no se importó: {{reason}}",
+        sourceErrors: {
+          unreadable: "Osuna no puede abrir este archivo ({{errno}})",
+          not_json: "No es un JSON válido",
+          not_database: "No es una base de datos que Osuna pueda abrir",
+          no_providers_table: "Su base de datos no tiene una tabla providers que Osuna conozca",
+          busy: "Su app la está escribiendo; inténtalo de nuevo en un momento",
+          no_sqlite: "El Node.js que ejecuta Osuna ({{node}}) no puede abrir bases de datos SQLite",
+        },
         noEntries: "No contiene endpoints",
         status: {
           new: "Nuevo",
