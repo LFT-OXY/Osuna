@@ -60,6 +60,14 @@ describe("buildUsageHeatmap", () => {
     expect(matrix.cells).toHaveLength(15);
   });
 
+  it("drops the first column's label when the next month starts a column later", () => {
+    // 2026-04-27 is the last Monday of April; the next column opens on May 4.
+    const matrix = buildUsageHeatmap({ days: [], weeks: 4, today: "2026-05-20" });
+
+    expect(matrix.startDay).toBe("2026-04-27");
+    expect(matrix.monthLabels).toEqual([{ week: 1, month: "2026-05" }]);
+  });
+
   it("puts every day at level 4 when a single day carries all the usage", () => {
     const matrix = buildUsageHeatmap({
       days: [day("2026-09-18", 1_000)],

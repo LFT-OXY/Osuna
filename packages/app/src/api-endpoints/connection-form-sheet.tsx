@@ -5,14 +5,13 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Pressable, ScrollView, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { AlertTriangle, Check, Info, X } from "lucide-react-native";
+import { Check, X } from "lucide-react-native";
 import type {
   ApiEndpointModel,
   ApiEndpointRequestFormat,
   ApiEndpointTemplate,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { buttonIconSize, createControlGeometry } from "@/components/ui/control-geometry";
 import { AutocompleteFadeFrame } from "@/components/ui/autocomplete-fade";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -37,6 +36,7 @@ import {
 import { useConnectionFormModel } from "./use-connection-form-model";
 import { formatLabel } from "./model-settings-sheet";
 import { useCurlPasteField } from "./use-curl-paste-field";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { RequestExtrasFields } from "./request-extras-fields";
 import { InsecureTlsField } from "./insecure-tls-field";
 import { headerProblemText } from "./request-extras-copy";
@@ -92,12 +92,6 @@ export interface ApiEndpointConnectionSheetProps {
 
 const ThemedCheck = withUnistyles(Check, (theme: Theme) => ({ color: theme.colors.statusSuccess }));
 const ThemedCross = withUnistyles(X, (theme: Theme) => ({ color: theme.colors.statusDanger }));
-const ThemedWarningIcon = withUnistyles(AlertTriangle, (theme: Theme) => ({
-  color: theme.colors.statusWarning,
-}));
-const ThemedInfoIcon = withUnistyles(Info, (theme: Theme) => ({
-  color: theme.colors.foregroundMuted,
-}));
 
 const URL_PLACEHOLDERS: Record<ApiEndpointRequestFormat, string> = {
   anthropic_messages: "https://relay.example.com",
@@ -449,6 +443,7 @@ function AddressField({
             <SettingsInfoTip
               title={eachLabel}
               info={eachInfo}
+              side="bottom"
               testID="api-endpoint-connection-detect-each-info"
             />
           </View>
@@ -1190,24 +1185,12 @@ function CurlNoteAlert({ note }: { note: ConnectionCurlNote | null }) {
   }
   const needsAction =
     note.isEndpointUnknown || note.urlPlaceholder !== null || note.keyPlaceholder !== null;
-  // 两种提示条同一结构：浅底、无边框，只换底色与图标（与 <Alert variant="warning"> 的警示块同源）。
-  const toneStyle = needsAction ? styles.curlNoteWarning : styles.curlNoteInfo;
-  const icon = needsAction ? (
-    <ThemedWarningIcon size={buttonIconSize.sm} />
-  ) : (
-    <ThemedInfoIcon size={buttonIconSize.sm} />
-  );
   return (
-    <View
-      style={[styles.curlNote, toneStyle]}
-      accessibilityRole="alert"
+    <PrimaryTextAlert
+      variant={needsAction ? "warning" : "info"}
+      description={sentences.join(" ")}
       testID="api-endpoint-connection-curl-note"
-    >
-      <View style={styles.curlNoteIcon}>{icon}</View>
-      <Text color="foreground" style={styles.flex}>
-        {sentences.join(" ")}
-      </Text>
-    </View>
+    />
   );
 }
 
@@ -1799,23 +1782,6 @@ function FormatUrlField({
 const FORM_SNAP_POINTS = ["85%"];
 
 const styles = StyleSheet.create((theme) => ({
-  curlNote: {
-    ...createControlGeometry(theme).alert.sm.container,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.spacing[3],
-  },
-  curlNoteWarning: {
-    backgroundColor: theme.colors.surfaceWarning,
-  },
-  curlNoteInfo: {
-    backgroundColor: theme.colors.surface2,
-  },
-  // 图标与第一行文字对齐。
-  curlNoteIcon: {
-    height: theme.typeScale.body.lineHeight,
-    justifyContent: "center",
-  },
   form: {
     gap: theme.spacing[4],
   },

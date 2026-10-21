@@ -9,7 +9,7 @@ import { StyleSheet } from "react-native-unistyles";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { ApiEndpointError } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { Alert } from "@/components/ui/alert";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { Button } from "@/components/ui/button";
 import { Text, type TextColor } from "@/components/ui/text";
 import { useFetchQuery } from "@/data/query";
@@ -246,9 +246,8 @@ function SwitchOffFailure({
     description = `${message}\n${keepHint}`;
   }
   return (
-    <Alert
+    <PrimaryTextAlert
       variant="error"
-      size="sm"
       title={t("settings.apiEndpoints.agent.saveFailed", { agent: providerLabel })}
       description={description}
       testID="switch-off-error"

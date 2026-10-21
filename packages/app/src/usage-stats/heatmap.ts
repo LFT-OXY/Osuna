@@ -8,6 +8,13 @@ export const USAGE_HEATMAP_WEEKS_COMPACT = 20;
 
 export const USAGE_HEATMAP_ROWS = 7;
 
+/**
+ * A month label needs about two columns of room. When the next month starts sooner, the first
+ * column's label is only the tail of a month and would run into the next one, so it is dropped,
+ * as GitHub's contribution graph does.
+ */
+const MIN_LABEL_GAP_WEEKS = 2;
+
 export type UsageHeatmapLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface UsageHeatmapCell {
@@ -93,8 +100,15 @@ export function buildUsageHeatmap(input: UsageHeatmapInput): UsageHeatmapMatrix 
       week: cell.week,
       weekday: cell.weekday,
     })),
-    monthLabels,
+    monthLabels: dropCrowdedLeadingLabel(monthLabels),
   };
+}
+
+function dropCrowdedLeadingLabel(labels: UsageHeatmapMonthLabel[]): UsageHeatmapMonthLabel[] {
+  const [first, second] = labels;
+  if (first === undefined || second === undefined) return labels;
+  if (second.week - first.week >= MIN_LABEL_GAP_WEEKS) return labels;
+  return labels.slice(1);
 }
 
 /** Monday-first weekday names in the UI language, for the row gutter. */

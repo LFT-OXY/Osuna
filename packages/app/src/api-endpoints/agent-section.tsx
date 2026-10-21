@@ -4,7 +4,7 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronRight } from "lucide-react-native";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
-import { Alert } from "@/components/ui/alert";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { Button } from "@/components/ui/button";
 import {
   SelectField,
@@ -111,9 +111,8 @@ export function AgentApiEndpointsSection({
     <AgentApiEndpointsFrame>
       {actionError ? (
         <View style={styles.alert}>
-          <Alert
+          <PrimaryTextAlert
             variant="error"
-            size="sm"
             title={t("settings.apiEndpoints.agent.saveFailed", { agent: providerLabel })}
             description={actionError}
             testID="agent-api-endpoints-error"
@@ -121,7 +120,7 @@ export function AgentApiEndpointsSection({
             <Button variant="outline" size="sm" onPress={onDismissError}>
               {t("common.actions.dismiss")}
             </Button>
-          </Alert>
+          </PrimaryTextAlert>
         </View>
       ) : null}
       {issueActions ? (

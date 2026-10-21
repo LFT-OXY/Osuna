@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { RowActionsMenuTrigger } from "@/components/ui/row-actions-menu-trigger";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
-import { Alert } from "@/components/ui/alert";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { Button } from "@/components/ui/button";
 import { FormTextInput } from "@/components/ui/form-field";
@@ -311,9 +311,8 @@ export function ApiEndpointModelsSection({
         {isAddOpen ? <AddModelRow existing={entries} onAdd={onAdd} onClose={closeAdd} /> : null}
         {forgetState.status === "failed" ? (
           <View style={[styles.inlineError, settingsStyles.rowBorder]}>
-            <Alert
+            <PrimaryTextAlert
               variant="error"
-              size="sm"
               title={t("settings.apiEndpoints.models.forgetFailed")}
               description={forgetState.message}
               testID="api-endpoint-models-forget-error"
@@ -323,16 +322,15 @@ export function ApiEndpointModelsSection({
         {/* 已有清单时重新拉取失败：原因接在搜索行下面，清单照常可用。 */}
         {entries.length > 0 && fetchState.status === "failed" ? (
           <View style={[styles.inlineError, settingsStyles.rowBorder]}>
-            <Alert
+            <PrimaryTextAlert
               variant="error"
-              size="sm"
               title={t("settings.apiEndpoints.models.fetchFailed")}
               description={fetchState.message}
               testID="api-endpoint-models-fetch-error"
             />
           </View>
         ) : null}
-        <View style={styles.body}>{body}</View>
+        <View style={[styles.body, isCompact && active ? styles.bodyFit : null]}>{body}</View>
       </View>
     </SettingsSection>
   );
@@ -584,9 +582,8 @@ function TestRunRow({ run, onCancel }: { run: ModelTestRun; onCancel: () => void
   if (run.status === "failed") {
     return (
       <View style={[styles.inlineError, settingsStyles.rowBorder]}>
-        <Alert
+        <PrimaryTextAlert
           variant="error"
-          size="sm"
           title={t("settings.apiEndpoints.models.tests.failed")}
           description={run.message}
           testID="api-endpoint-models-test-error"
@@ -667,9 +664,8 @@ function ModelsEmptyState({ fetchState }: { fetchState: ModelFetchState }) {
     return (
       <View style={styles.centered}>
         <View style={styles.reason}>
-          <Alert
+          <PrimaryTextAlert
             variant="error"
-            size="sm"
             title={t("settings.apiEndpoints.models.fetchFailed")}
             description={fetchState.message}
             testID="api-endpoint-models-failed"
@@ -768,7 +764,10 @@ function FamilyModels({
     [group, onSelectAll, selectAll],
   );
   return (
-    <View style={styles.modelColumn} testID="api-endpoint-family-models">
+    <View
+      style={[styles.modelColumn, isCompact ? styles.fitContent : null]}
+      testID="api-endpoint-family-models"
+    >
       <View style={styles.familyHeader}>
         <ModelFamilyIcon family={group.family} size={FAMILY_ICON_SIZE} />
         <Text weight="medium" numberOfLines={1}>
@@ -791,7 +790,10 @@ function FamilyModels({
             : t("settings.apiEndpoints.models.selectNone")}
         </Button>
       </View>
-      <ScrollView style={styles.flex} testID="api-endpoint-family-model-list">
+      <ScrollView
+        style={[styles.flex, isCompact ? styles.fitContent : null]}
+        testID="api-endpoint-family-model-list"
+      >
         {group.matches.map((entry) => (
           <ModelRow
             key={entry.id}
@@ -1138,6 +1140,8 @@ function ModelRowMenu({
     ];
   }, [formatPins, formatTitle, modelId, pinned]);
   const pinnedLabel = pinnedFormatLabel(t, pinned);
+  // 窄屏同列表行的菜单一样是底部弹层（docs/menus.md）。
+  const menuLabel = t("settings.apiEndpoints.modelSettings.rowMenu", { model: modelId });
   const testAsItems: ReactNode[] = [];
   if (onTestAs !== null) {
     for (const offered of testsAs) {
@@ -1153,12 +1157,17 @@ function ModelRowMenu({
     }
   }
   return (
-    <DropdownMenu>
+    <DropdownMenu compactMode="sheet">
       <RowActionsMenuTrigger
-        accessibilityLabel={t("settings.apiEndpoints.modelSettings.rowMenu", { model: modelId })}
+        accessibilityLabel={menuLabel}
         testID={`api-endpoint-model-menu-${modelId}`}
       />
-      <DropdownMenuContent align="end" width={MODEL_MENU_WIDTH} pages={pages}>
+      <DropdownMenuContent
+        align="end"
+        width={MODEL_MENU_WIDTH}
+        pages={pages}
+        sheetTitle={menuLabel}
+      >
         <DropdownMenuItem
           leading={leading}
           onSelect={handleOpen}
@@ -1429,8 +1438,18 @@ const styles = StyleSheet.create((theme) => ({
     borderRightColor: theme.colors.borderCardRow,
     padding: theme.spacing[2],
   },
+  // 窄屏上下排：高度跟着模型数，最高到 MODELS_BODY_HEIGHT，再多就在列表里滚动。
   columnsCompact: {
-    flex: 1,
+    flexShrink: 1,
+  },
+  bodyFit: {
+    height: "auto",
+    maxHeight: MODELS_BODY_HEIGHT,
+  },
+  fitContent: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "auto",
   },
   familyRowCompact: {
     flexGrow: 0,

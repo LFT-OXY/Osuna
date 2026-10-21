@@ -18,7 +18,7 @@ import type {
   ApiEndpointAgentSettings,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { ScreenTitle } from "@/components/headers/screen-title";
-import { Alert } from "@/components/ui/alert";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { Button } from "@/components/ui/button";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature, useHostFeatureAvailability } from "@/runtime/host-features";
@@ -878,11 +878,10 @@ function ApiEndpointDetailSections({
       />
       {pageError ? (
         <View style={styles.pageError}>
-          <Alert
+          <PrimaryTextAlert
             variant="error"
-            size="sm"
             title={pageError.title}
-            description={pageError.message || undefined}
+            description={pageError.message}
             testID="api-endpoint-detail-error-alert"
           />
         </View>

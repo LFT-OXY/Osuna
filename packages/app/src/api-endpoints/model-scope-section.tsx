@@ -137,6 +137,7 @@ function AutoPickRules({
           <SettingsInfoTip
             title={t("settings.apiEndpoints.modelScope.rules.title")}
             info={t("settings.apiEndpoints.modelScope.rules.syntax")}
+            side="bottom"
             testID="api-endpoint-auto-pick-info"
           />
         </View>

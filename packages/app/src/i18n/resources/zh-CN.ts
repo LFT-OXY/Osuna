@@ -2611,7 +2611,7 @@ export const zhCN: TranslationResources = {
         close: "关闭",
         refused: "这条链接不能导入。{{reason}}",
         refusedShort: "链接被拒收。{{reason}}",
-        risk: "这家来自一条链接。你的对话和这把 key 会发往 {{hosts}}，只在信任发链接的网站时添加。",
+        risk: "这个接口来自导入链接，你的对话和这把 key 会发往 {{hosts}}。只在信任给你这个链接的网站时添加。",
         keyFromLink: "来自链接，也可以换成你自己的 key。",
         keyPlaceholder: "粘贴 API key",
         baseUrls: "地址",

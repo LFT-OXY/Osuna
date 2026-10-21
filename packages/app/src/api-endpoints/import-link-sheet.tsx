@@ -2,14 +2,19 @@
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Image, type LayoutChangeEvent, useWindowDimensions, View } from "react-native";
+import {
+  Image,
+  type LayoutChangeEvent,
+  Text as RNText,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type {
   ApiEndpointIconImage,
   ApiEndpointImportLinkPreview,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Text } from "@/components/ui/text";
@@ -17,6 +22,7 @@ import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { EndpointIcon } from "./endpoint-icon";
+import { PrimaryTextAlert } from "./primary-text-alert";
 import { importLinkRefusalText } from "./import-link-copy";
 import type {
   ImportLinkAddInput,
@@ -125,13 +131,24 @@ export function ImportLinkNotice({
   );
   let body: React.ReactNode = null;
   if (view.kind === "noHost") {
-    body = <Callout variant="warning" text={t("settings.apiEndpoints.importLink.noHost")} />;
+    body = (
+      <PrimaryTextAlert
+        variant="warning"
+        description={t("settings.apiEndpoints.importLink.noHost")}
+      />
+    );
   } else if (view.kind === "offline") {
     const text = t("settings.apiEndpoints.importLink.offline", { host });
-    body = <Callout variant="warning" text={text} />;
+    body = <PrimaryTextAlert variant="warning" description={text} />;
   } else if (view.kind === "updateHost") {
     const text = t("settings.apiEndpoints.importLink.updateHost", { host });
-    body = <Callout variant="warning" text={text} testID="api-endpoint-import-link-update-host" />;
+    body = (
+      <PrimaryTextAlert
+        variant="warning"
+        description={text}
+        testID="api-endpoint-import-link-update-host"
+      />
+    );
   } else if (view.preview.status === "loading") {
     body = (
       <Text color="foregroundMuted" testID="api-endpoint-import-link-loading">
@@ -142,11 +159,23 @@ export function ImportLinkNotice({
     const text = t("settings.apiEndpoints.importLink.readFailed", {
       message: view.preview.message,
     });
-    body = <Callout variant="error" text={text} testID="api-endpoint-import-link-read-error" />;
+    body = (
+      <PrimaryTextAlert
+        variant="error"
+        description={text}
+        testID="api-endpoint-import-link-read-error"
+      />
+    );
   } else if (view.preview.status === "refused") {
     const reason = importLinkRefusalText(t, view.preview);
     const text = t("settings.apiEndpoints.importLink.refused", { reason });
-    body = <Callout variant="error" text={text} testID="api-endpoint-import-link-refused" />;
+    body = (
+      <PrimaryTextAlert
+        variant="error"
+        description={text}
+        testID="api-endpoint-import-link-refused"
+      />
+    );
   }
   return (
     <AdaptiveModalSheet
@@ -253,7 +282,7 @@ function ImportLinkConfirm({
             {t("common.actions.cancel")}
           </Button>
           <Button
-            variant="default"
+            variant={isReplacing ? "destructive" : "default"}
             size="sm"
             onPress={handleAdd}
             loading={isAdding}
@@ -264,7 +293,7 @@ function ImportLinkConfirm({
         </View>
       </View>
     ),
-    [failure, handleAdd, isAdding, onClose, submitLabel, t],
+    [failure, handleAdd, isAdding, isReplacing, onClose, submitLabel, t],
   );
 
   const hosts = preview.hosts.join(t("settings.apiEndpoints.listSeparator"));
@@ -293,9 +322,9 @@ function ImportLinkConfirm({
     >
       <View style={styles.fitFrame} onLayout={fit.onFrameLayout}>
         <View style={styles.body} onLayout={fit.onContentLayout}>
-          <Callout
+          <PrimaryTextAlert
             variant="warning"
-            text={t("settings.apiEndpoints.importLink.risk", { hosts })}
+            description={t("settings.apiEndpoints.importLink.risk", { hosts })}
             testID="api-endpoint-import-link-risk"
           />
           <Field label={t("settings.apiEndpoints.form.name")}>
@@ -345,9 +374,9 @@ function ImportLinkConfirm({
           <BaseUrlList preview={preview} />
           {preview.models.length > 0 ? <ModelList models={preview.models} /> : null}
           {replacesText ? (
-            <Callout
+            <PrimaryTextAlert
               variant="warning"
-              text={replacesText}
+              description={replacesText}
               testID="api-endpoint-import-link-replaces"
             />
           ) : null}
@@ -398,27 +427,6 @@ function useFitSnapPoints(): {
   return { snapPoints, onFrameLayout, onContentLayout };
 }
 
-/** 提示框：警示或出错的底、框与图标，正文用主文字色，深色主题下也读得清。 */
-function Callout({
-  variant,
-  text,
-  testID,
-}: {
-  variant: "warning" | "error";
-  text: string;
-  testID?: string;
-}) {
-  const description = useMemo(
-    () => (
-      <Text color="foreground" selectable>
-        {text}
-      </Text>
-    ),
-    [text],
-  );
-  return <Alert variant={variant} description={description} testID={testID} />;
-}
-
 /** 标题前的图标：icon= 那张图，否则 catalog= 或模板的图标，都没有用名称首字；放在一块带边的底上。 */
 function LinkIcon({
   preview,
@@ -456,9 +464,9 @@ function BaseUrlList({ preview }: { preview: ApiEndpointImportLinkPreview }) {
   const { t } = useTranslation();
   return (
     <View style={styles.group}>
-      <Text variant="label" weight="medium">
+      <RNText style={settingsStyles.sectionHeaderTitle}>
         {t("settings.apiEndpoints.importLink.baseUrls")}
-      </Text>
+      </RNText>
       {preview.baseUrls.map((entry) => (
         <View key={entry.format} style={styles.urlRow}>
           <Text variant="caption" color="foregroundMuted" style={styles.urlFormat}>
@@ -482,9 +490,9 @@ function ModelList({ models }: { models: string[] }) {
   const { t } = useTranslation();
   return (
     <View style={styles.group}>
-      <Text variant="label" weight="medium">
+      <RNText style={settingsStyles.sectionHeaderTitle}>
         {t("settings.apiEndpoints.importLink.models", { count: models.length })}
-      </Text>
+      </RNText>
       <Text variant="caption" color="foregroundMuted" selectable>
         {models.join(t("settings.apiEndpoints.listSeparator"))}
       </Text>

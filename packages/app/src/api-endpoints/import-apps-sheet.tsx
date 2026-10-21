@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { View } from "react-native";
+import { Text as RNText, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
   API_ENDPOINT_IMPORT_SOURCE_ERROR_CODES,
@@ -221,16 +221,13 @@ function ImportSourceSection({
       <View style={styles.sectionHead}>
         <View style={styles.sectionTitle}>
           <View style={styles.sourceNameLine}>
-            <Text variant="label" weight="medium">
-              {source.name}
-            </Text>
-            <Text
-              variant="label"
-              color="foregroundMuted"
+            <RNText style={settingsStyles.sectionHeaderTitle}>{source.name}</RNText>
+            <RNText
+              style={[settingsStyles.sectionHeaderTitle, styles.sourceCount]}
               testID={`api-endpoint-import-source-${source.id}-count`}
             >
               {countLabel}
-            </Text>
+            </RNText>
           </View>
           <Text variant="caption" color="foregroundMuted" selectable>
             {source.path}
@@ -326,7 +323,7 @@ function ImportItemRow({
   return (
     <View style={[styles.item, hasRowAbove && settingsStyles.rowBorder]} testID={testID}>
       <View style={styles.itemTop}>
-        <View style={styles.iconFrame}>
+        <View style={settingsStyles.rowIconFrame}>
           <EndpointIcon
             icon={null}
             templateId={item.templateId}
@@ -563,15 +560,14 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[4],
   },
+  // 与 SettingsSection 标题后的数字同色。
+  sourceCount: {
+    color: theme.colors.foregroundExtraMuted,
+  },
   itemTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: theme.spacing[3],
-  },
-  iconFrame: {
-    width: ICON_SIZE.md + theme.spacing[1],
-    paddingTop: theme.spacing[0.5],
-    alignItems: "center",
   },
   itemText: {
     flex: 1,
