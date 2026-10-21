@@ -125,6 +125,11 @@ function createCounter() {
   };
 }
 
+function stringsOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 /** 答 vendor_status 请求（给了答案时），记下要的厂商；答了返回 true。 */
 function answerVendorStatus(input: {
   request: Record<string, unknown> | null;
@@ -136,9 +141,7 @@ function answerVendorStatus(input: {
   const requestId = request?.requestId;
   const isVendorStatus = request?.type === "provider.api_endpoint.vendor_status.request";
   if (!request || !isVendorStatus || !answer || typeof requestId !== "string") return false;
-  input.vendorStatusRequests.push(
-    Array.isArray(request.vendors) ? (request.vendors as string[]) : [],
-  );
+  input.vendorStatusRequests.push(stringsOf(request.vendors));
   input.ws.send(
     JSON.stringify({
       type: "session",
