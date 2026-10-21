@@ -2,10 +2,10 @@
 // Of、Wait、ask、read，internal/gui/providers.go 的 /api/upstream，7597c132）。
 // Copyright (c) 2026 yetone. MIT License — 完整声明见本仓库 THIRD_PARTY_NOTICES。
 import type pino from "pino";
-import type {
-  ApiEndpointError,
-  ApiEndpointVendorLevel,
-  ApiEndpointVendorStatus,
+import {
+  API_ENDPOINT_VENDOR_LEVELS,
+  type ApiEndpointError,
+  type ApiEndpointVendorStatus,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { z } from "zod";
 import { REAL_PRICING_TIMERS, type UsagePricingTimers } from "../usage/pricing/service.js";
@@ -71,26 +71,19 @@ const VENDORS: readonly Vendor[] = [
 ];
 
 /** 一页读数保留多久：故障时页面按分钟变，没人需要精确到秒。 */
-export const VENDOR_STATUS_FRESH_MS = 5 * 60_000;
+const VENDOR_STATUS_FRESH_MS = 5 * 60_000;
 // 界面第一次看时为正在读的页等一会儿（magpie Wait 4 秒）。
 const FIRST_LOOK_WAIT_MS = 4_000;
 const READ_TIMEOUT_MS = 15_000;
 const MAX_SUMMARY_BYTES = 4 << 20;
 
-// 组件状态的严重程度；0 是正常（或不认识的状态）。
+// 组件状态的严重程度；0 是正常（或不认识的状态）。数值就是协议等级（按从好到坏排）的下标。
 const PART_LEVEL: Record<string, number> = {
   under_maintenance: 1,
   degraded_performance: 2,
   partial_outage: 3,
   major_outage: 4,
 };
-const LEVEL_NAMES: readonly ApiEndpointVendorLevel[] = [
-  "ok",
-  "maintenance",
-  "degraded",
-  "partial",
-  "major",
-];
 
 type VendorStatusFailure =
   | "vendor_status_unreachable"
@@ -114,24 +107,27 @@ class VendorStatusReadError extends Error {
   }
 }
 
-// summary.json 里读的部分；OpenAI 的（incident.io）也是这个形状。不认识的字段不管。
+// summary.json 里读的部分；OpenAI 的（incident.io）也是这个形状。像 magpie 的 json.Unmarshal 那样宽松：
+// 不认识的字段不管，缺了或为 null 的字段当空的；只有没有 components 才算读不懂。
 const SummarySchema = z.object({
   components: z.array(
     z.object({
-      id: z.string(),
-      name: z.string(),
-      status: z.string(),
+      id: z.string().nullish(),
+      name: z.string().nullish(),
+      status: z.string().nullish(),
       group: z.boolean().nullish(),
     }),
   ),
   incidents: z
     .array(
       z.object({
-        name: z.string(),
-        status: z.string(),
+        name: z.string().nullish(),
+        status: z.string().nullish(),
         impact: z.string().nullish(),
         shortlink: z.string().nullish(),
-        components: z.array(z.object({ id: z.string(), name: z.string().optional() })).nullish(),
+        components: z
+          .array(z.object({ id: z.string().nullish(), name: z.string().nullish() }))
+          .nullish(),
       }),
     )
     .nullish(),
@@ -291,18 +287,7 @@ function unreadStatus(vendor: Vendor): ApiEndpointVendorStatus {
 /** API 依赖的那几项里最差的等级、不正常的项，与它们上面还没解决的事件。 */
 function summarize(input: { vendor: Vendor; summary: Summary }): ApiEndpointVendorStatus {
   const { vendor, summary } = input;
-  let worst = 0;
-  const apiParts = new Set<string>();
-  const parts: ApiEndpointVendorStatus["parts"] = [];
-  for (const component of summary.components) {
-    if (component.group === true || !vendor.isApiPart(component.name)) continue;
-    apiParts.add(component.id);
-    apiParts.add(component.name);
-    const level = PART_LEVEL[component.status] ?? 0;
-    if (level === 0) continue;
-    worst = Math.max(worst, level);
-    parts.push({ name: component.name, status: component.status });
-  }
+  const { worst, apiParts, parts } = readApiParts({ vendor, components: summary.components });
   if (apiParts.size === 0) {
     // 页面改了，API 依赖的项一个都不在：说不出 API 怎样。
     throw new VendorStatusReadError({
@@ -310,28 +295,60 @@ function summarize(input: { vendor: Vendor; summary: Summary }): ApiEndpointVend
       message: "The status page lists none of the API's parts",
     });
   }
+  return {
+    ...unreadStatus(vendor),
+    level: API_ENDPOINT_VENDOR_LEVELS[worst] ?? "ok",
+    parts,
+    incidents: openIncidents({ incidents: summary.incidents ?? [], apiParts, worst }),
+  };
+}
+
+/** API 依赖的项（id 与名称都记下，事件按哪个引用都算）、其中最差的严重程度与不正常的项。 */
+function readApiParts(input: { vendor: Vendor; components: Summary["components"] }): {
+  worst: number;
+  apiParts: Set<string>;
+  parts: ApiEndpointVendorStatus["parts"];
+} {
+  let worst = 0;
+  const apiParts = new Set<string>();
+  const parts: ApiEndpointVendorStatus["parts"] = [];
+  for (const component of input.components) {
+    const name = component.name ?? "";
+    const status = component.status ?? "";
+    if (component.group === true || !input.vendor.isApiPart(name)) continue;
+    apiParts.add(component.id ?? "");
+    apiParts.add(name);
+    const level = PART_LEVEL[status] ?? 0;
+    if (level === 0) continue;
+    worst = Math.max(worst, level);
+    parts.push({ name, status });
+  }
+  return { worst, apiParts, parts };
+}
+
+function openIncidents(input: {
+  incidents: NonNullable<Summary["incidents"]>;
+  apiParts: ReadonlySet<string>;
+  worst: number;
+}): ApiEndpointVendorStatus["incidents"] {
+  const { apiParts, worst } = input;
   const incidents: ApiEndpointVendorStatus["incidents"] = [];
-  for (const incident of summary.incidents ?? []) {
+  for (const incident of input.incidents) {
     if (incident.status === "resolved" || incident.status === "postmortem") continue;
     const named = incident.components ?? [];
     // 不写影响哪几项的事件（OpenAI 的都不写）只在 API 的项不正常时算。
     const isUnnamedWhileAffected = named.length === 0 && worst > 0;
     const isOnApi = named.some(
-      (component) => apiParts.has(component.id) || apiParts.has(component.name ?? ""),
+      (component) => apiParts.has(component.id ?? "") || apiParts.has(component.name ?? ""),
     );
     if (!isUnnamedWhileAffected && !isOnApi) continue;
     incidents.push({
-      name: incident.name,
+      name: incident.name ?? "",
       impact: incident.impact ?? null,
       url: webUrlOrNull(incident.shortlink),
     });
   }
-  return {
-    ...unreadStatus(vendor),
-    level: LEVEL_NAMES[worst] ?? "ok",
-    parts,
-    incidents,
-  };
+  return incidents;
 }
 
 // 事件链接由界面直接打开：只收 http(s) 的。

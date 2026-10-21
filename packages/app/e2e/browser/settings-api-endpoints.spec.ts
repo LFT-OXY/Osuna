@@ -5647,7 +5647,9 @@ test.describe("Vendor status pages", () => {
     await expect(row(page, openai).getByTestId("api-endpoint-row-vendor-status")).toHaveCount(0);
     // DeepSeek 只给链接，不说异常。
     const deepseekLink = row(page, deepseek).getByTestId("api-endpoint-row-vendor-status");
-    await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-link")).toBeVisible();
+    await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-link")).toHaveText(
+      "DeepSeek status ↗",
+    );
     await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-text")).toHaveCount(0);
   });
 

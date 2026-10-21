@@ -130,6 +130,34 @@ describe("vendor status pages", () => {
     expect(status).toMatchObject({ level: "ok", parts: [], incidents: [] });
   });
 
+  test("a page whose incident and components lack fields is still read, like magpie's json.Unmarshal", async () => {
+    const fake = fakePages();
+    fake.answer.body = `{"components":[
+{"id":"api","name":"Claude API (api.anthropic.com)","status":"degraded_performance"},
+{"name":"Claude Code","status":null,"group":null},
+{"id":"x"}],
+"incidents":[{"impact":null,"components":[{"name":"Claude API (api.anthropic.com)"}]},
+{"name":"Elevated errors","status":"investigating","components":[{"id":"api"}]}]}`;
+    expect(await one(fake, "anthropic")).toMatchObject({
+      level: "degraded",
+      parts: [{ name: "Claude API (api.anthropic.com)", status: "degraded_performance" }],
+      incidents: [
+        { name: "", impact: null, url: null },
+        { name: "Elevated errors", impact: null, url: null },
+      ],
+      error: null,
+    });
+  });
+
+  test("a page without components cannot be read", async () => {
+    const fake = fakePages();
+    fake.answer.body = `{"components":null,"incidents":[]}`;
+    expect(await one(fake, "anthropic")).toMatchObject({
+      level: null,
+      error: { code: "vendor_status_unreadable" },
+    });
+  });
+
   test("Claude Code degraded is the API degraded", async () => {
     const fake = fakePages();
     fake.answer.body = claudePage({

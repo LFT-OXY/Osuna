@@ -3200,7 +3200,6 @@ export class ApiEndpointService {
     return this.writeCatalog(endpointId, { fetchedAt: this.now().toISOString(), models });
   }
 
-  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
   /**
    * 各接口对上的厂商（按各格式地址的主机名）与这些厂商、另外要的厂商的状态页读数。
    * 「价格表自动更新」关着时一页都不读（docs/usage.md「Outbound requests」）。
@@ -3223,6 +3222,7 @@ export class ApiEndpointService {
     return { autoUpdate: true, vendors, endpointVendors };
   }
 
+  /** 丢掉拉回的清单：清空上游清单与拉取时间，已选与手动添加的不动（照 magpie unfetch）。 */
   async forgetCatalog(endpointId: string): Promise<void> {
     if (!findEndpoint(this.readState(), endpointId)) {
       throw new ApiEndpointRequestError({ code: "not_found", message: "API endpoint not found" });

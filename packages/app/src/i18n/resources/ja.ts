@@ -2528,6 +2528,7 @@ export const ja: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}} が障害を報告しています",
         statusPage: "ステータスページ ↗",
+        statusPageOf: "{{vendor}} のステータス ↗",
         statusPageLabel: "{{vendor}} のステータスページを開く",
         parts: {
           degraded_performance: "パフォーマンス低下",

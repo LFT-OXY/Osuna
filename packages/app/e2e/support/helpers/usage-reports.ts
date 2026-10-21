@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import { daemonWsRoutePattern, wsRoutePatternForPort } from "./daemon-port";
 
@@ -10,6 +10,8 @@ export interface UsageListRequest {
 
 export interface UsageReportsFixture {
   listRequests(): UsageListRequest[];
+  /** The `vendors` of each vendor status request answered from `vendorStatus`. */
+  vendorStatusRequests(): string[][];
   waitForListRequests(count: number): Promise<void>;
 }
 
@@ -29,6 +31,11 @@ interface UsageReportsFixtureOptions {
   providerUsageListOnly?: boolean;
   /** The host daemon's port; defaults to the E2E daemon. */
   port?: number;
+  /**
+   * The answer to `provider.api_endpoint.vendor_status`, without its requestId; the daemon never
+   * reads a real status page in a test. Omitted, the request goes to the daemon.
+   */
+  vendorStatus?: Record<string, unknown>;
 }
 
 /**
@@ -118,11 +125,38 @@ function createCounter() {
   };
 }
 
+/** 答 vendor_status 请求（给了答案时），记下要的厂商；答了返回 true。 */
+function answerVendorStatus(input: {
+  request: Record<string, unknown> | null;
+  answer: Record<string, unknown> | undefined;
+  ws: WebSocketRoute;
+  vendorStatusRequests: string[][];
+}): boolean {
+  const { request, answer } = input;
+  const requestId = request?.requestId;
+  const isVendorStatus = request?.type === "provider.api_endpoint.vendor_status.request";
+  if (!request || !isVendorStatus || !answer || typeof requestId !== "string") return false;
+  input.vendorStatusRequests.push(
+    Array.isArray(request.vendors) ? (request.vendors as string[]) : [],
+  );
+  input.ws.send(
+    JSON.stringify({
+      type: "session",
+      message: {
+        type: "provider.api_endpoint.vendor_status.response",
+        payload: { requestId, ...answer },
+      },
+    }),
+  );
+  return true;
+}
+
 export async function installUsageReportsFixture(
   page: Page,
   options: UsageReportsFixtureOptions,
 ): Promise<UsageReportsFixture> {
   const listRequests: UsageListRequest[] = [];
+  const vendorStatusRequests: string[][] = [];
   const listCounter = createCounter();
   const usageSupported = options.usageSupported ?? true;
   const isUsageSupported = () =>
@@ -140,6 +174,9 @@ export async function installUsageReportsFixture(
     ws.onMessage((message) => {
       const request = getSessionMessage(message);
       const requestId = request?.requestId;
+      if (answerVendorStatus({ request, answer: options.vendorStatus, ws, vendorStatusRequests })) {
+        return;
+      }
       if (request?.type === requestType && typeof requestId === "string") {
         const listRequest: UsageListRequest = {
           forceRefresh: request.forceRefresh === true,
@@ -237,6 +274,7 @@ export async function installUsageReportsFixture(
 
   return {
     listRequests: () => [...listRequests],
+    vendorStatusRequests: () => [...vendorStatusRequests],
     waitForListRequests: (count) => listCounter.waitFor(count),
   };
 }

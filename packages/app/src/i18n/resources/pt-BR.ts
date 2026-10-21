@@ -2543,6 +2543,7 @@ export const ptBR: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}} informa problemas",
         statusPage: "Página de status ↗",
+        statusPageOf: "Status da {{vendor}} ↗",
         statusPageLabel: "Abrir a página de status da {{vendor}}",
         parts: {
           degraded_performance: "desempenho degradado",

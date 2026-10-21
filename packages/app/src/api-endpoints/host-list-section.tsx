@@ -430,12 +430,12 @@ function EndpointRow({
     [],
   );
   // 有行信息时模型数挪到下一行，和 key 打码、默认模型写在一起。
-  const vendorNotice = management?.vendorNotices.get(endpoint.id) ?? null;
   const statusLine = useEndpointStatusLine({
     endpoint,
     status,
     includesModelCount: management === undefined,
   });
+  const vendorNotice = management?.vendorNotices.get(endpoint.id) ?? null;
 
   return (
     <View
@@ -454,84 +454,121 @@ function EndpointRow({
         testID={`api-endpoint-row-${endpoint.id}`}
       >
         {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
-          <View style={[styles.rowInner, row.isPlaceholder && styles.hidden]}>
-            <View style={styles.rowContent}>
-              {/* 已关闭是状态不是禁用：只把头像调淡、名称调灰，开关和整行照常可点。 */}
-              {row.wrapHandle(
-                <View style={[settingsStyles.rowIconFrame, !enabled && styles.disabledIcon]}>
-                  {/* 握把悬停才画；悬停只在网页有，窄屏与原生端一直画（docs/hover.md）。 */}
-                  {row.hasHandle && (hovered || row.isDragging || isNative || isCompact) ? (
-                    <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
-                  ) : (
-                    <EndpointIcon
-                      icon={endpoint.icon ?? null}
-                      templateId={endpoint.templateId ?? null}
-                      name={endpoint.name}
-                      size={ICON_SIZE.md}
-                      initialVariant="label"
-                    />
-                  )}
-                </View>,
-              )}
-              <View style={settingsStyles.rowContent}>
-                {/* 名称不截断，窄屏上换行；不校验证书的一直挂着标记，放不下时挪到下一行。 */}
-                <View style={styles.titleLine}>
-                  <Text style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}>
-                    {endpoint.name}
-                  </Text>
-                  {endpoint.insecureTls === true ? <InsecureTlsMark /> : null}
-                </View>
-                <ProviderStatusLine status={statusLine}>
-                  <RestingStateText status={status} />
-                  {status.kind === "cooling" ? (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onPress={handleResume}
-                      loading={isPending}
-                      accessibilityLabel={t("settings.apiEndpoints.resumeNowLabel", {
-                        name: endpoint.name,
-                      })}
-                      testID="api-endpoint-resume"
-                    >
-                      {t("settings.apiEndpoints.resumeNow")}
-                    </Button>
-                  ) : null}
-                </ProviderStatusLine>
-                {management ? <EndpointFacts endpoint={endpoint} management={management} /> : null}
-                {vendorNotice ? (
-                  <VendorNoticeLine notice={vendorNotice} testID="api-endpoint-row-vendor-status" />
+          <View style={[styles.rowBody, row.isPlaceholder && styles.hidden]}>
+            <View style={styles.rowInner}>
+              <View style={styles.rowContent}>
+                {/* 已关闭是状态不是禁用：只把头像调淡、名称调灰，开关和整行照常可点。 */}
+                {row.wrapHandle(
+                  <View style={[settingsStyles.rowIconFrame, !enabled && styles.disabledIcon]}>
+                    {/* 握把悬停才画；悬停只在网页有，窄屏与原生端一直画（docs/hover.md）。 */}
+                    {row.hasHandle && (hovered || row.isDragging || isNative || isCompact) ? (
+                      <ThemedGripVertical size={ICON_SIZE.sm} uniProps={foregroundColorMapping} />
+                    ) : (
+                      <EndpointIcon
+                        icon={endpoint.icon ?? null}
+                        templateId={endpoint.templateId ?? null}
+                        name={endpoint.name}
+                        size={ICON_SIZE.md}
+                        initialVariant="label"
+                      />
+                    )}
+                  </View>,
+                )}
+                <EndpointRowText
+                  endpoint={endpoint}
+                  enabled={enabled}
+                  status={status}
+                  statusLine={statusLine}
+                  isPending={isPending}
+                  management={management}
+                  onResume={handleResume}
+                />
+              </View>
+              <View style={styles.trailingControls}>
+                <Switch
+                  value={enabled}
+                  onValueChange={handleToggle}
+                  disabled={isPending}
+                  accessibilityLabel={t("settings.apiEndpoints.endpointSwitch", {
+                    name: endpoint.name,
+                  })}
+                  testID={`api-endpoint-switch-${endpoint.id}`}
+                />
+                {moves && onArrange ? (
+                  <EndpointRowMenu
+                    endpoint={endpoint}
+                    moves={moves}
+                    isOpen={row.isMenuOpen}
+                    onOpenChange={row.onMenuOpenChange}
+                    onArrange={onArrange}
+                    onDuplicate={management ? management.onDuplicate : null}
+                  />
                 ) : null}
+                <ThemedChevronRight
+                  size={ICON_SIZE.sm}
+                  uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
+                />
               </View>
             </View>
-            <View style={styles.trailingControls}>
-              <Switch
-                value={enabled}
-                onValueChange={handleToggle}
-                disabled={isPending}
-                accessibilityLabel={t("settings.apiEndpoints.endpointSwitch", {
-                  name: endpoint.name,
-                })}
-                testID={`api-endpoint-switch-${endpoint.id}`}
-              />
-              {moves && onArrange ? (
-                <EndpointRowMenu
-                  endpoint={endpoint}
-                  moves={moves}
-                  isOpen={row.isMenuOpen}
-                  onOpenChange={row.onMenuOpenChange}
-                  onArrange={onArrange}
-                  onDuplicate={management ? management.onDuplicate : null}
-                />
-              ) : null}
-              <ThemedChevronRight
-                size={ICON_SIZE.sm}
-                uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-              />
-            </View>
+            {/* 官方状态页的提示占满整行宽度（不挤在开关旁边），左边与名称对齐。 */}
+            {vendorNotice ? (
+              <View style={styles.vendorNotice}>
+                <VendorNoticeLine notice={vendorNotice} testID="api-endpoint-row-vendor-status" />
+              </View>
+            ) : null}
           </View>
         )}
       </Pressable>
+    </View>
+  );
+}
+
+/** 行上的文字列：名称（与不校验证书的标记）、状态行，有行信息时再加 key 打码、模型数与默认模型。 */
+function EndpointRowText({
+  endpoint,
+  enabled,
+  status,
+  statusLine,
+  isPending,
+  management,
+  onResume,
+}: {
+  endpoint: ApiEndpoint;
+  enabled: boolean;
+  status: EndpointRowStatus;
+  statusLine: ProviderStatusDisplay;
+  isPending: boolean;
+  management: ListManagement | undefined;
+  onResume: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={settingsStyles.rowContent}>
+      {/* 名称不截断，窄屏上换行；不校验证书的一直挂着标记，放不下时挪到下一行。 */}
+      <View style={styles.titleLine}>
+        <Text style={[settingsStyles.rowTitle, !enabled && styles.disabledTitle]}>
+          {endpoint.name}
+        </Text>
+        {endpoint.insecureTls === true ? <InsecureTlsMark /> : null}
+      </View>
+      <ProviderStatusLine status={statusLine}>
+        <RestingStateText status={status} />
+        {status.kind === "cooling" ? (
+          <Button
+            variant="outline"
+            size="xs"
+            onPress={onResume}
+            loading={isPending}
+            accessibilityLabel={t("settings.apiEndpoints.resumeNowLabel", {
+              name: endpoint.name,
+            })}
+            testID="api-endpoint-resume"
+          >
+            {t("settings.apiEndpoints.resumeNow")}
+          </Button>
+        ) : null}
+      </ProviderStatusLine>
+      {management ? <EndpointFacts endpoint={endpoint} management={management} /> : null}
     </View>
   );
 }
@@ -907,6 +944,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   hidden: {
     opacity: 0,
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  // 让过行图标（28）与它后面的间距，和名称对齐。
+  vendorNotice: {
+    paddingLeft: 28 + theme.spacing[3],
   },
   rowDragging: {
     backgroundColor: theme.colors.surface1,

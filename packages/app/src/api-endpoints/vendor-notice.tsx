@@ -10,8 +10,8 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import type { VendorNotice, VendorNoticeDetail, VendorNoticeTone } from "./internal/vendor-status";
 
 /*
- * 厂商官方状态页的提示：「{厂商} 官方报告服务异常」、受影响的项与事件，加「状态页 ↗」；只给链接的厂商只有链接。
- * 自成一行放在名称下面，不和名称抢宽度；文字不截断，窄屏换行。
+ * 厂商官方状态页的提示：「{厂商} 官方报告服务异常」、受影响的项与事件，再是「状态页 ↗」；
+ * 只给链接的厂商只有「{厂商} 状态页 ↗」。文字不截断，放不下就换行。
  */
 
 const ThemedTriangleAlert = withUnistyles(TriangleAlert);
@@ -34,55 +34,57 @@ export function VendorNoticeLine({ notice, testID }: { notice: VendorNotice; tes
   const handleOpen = useCallback(() => {
     void openExternalUrl(link);
   }, [link]);
+  // 只给链接时按钮写出厂商名，看得出这一行为什么有它。
+  const isLinkOnly = problem === null;
+  const linkLabelKey = isLinkOnly
+    ? "settings.apiEndpoints.vendorStatus.statusPageOf"
+    : "settings.apiEndpoints.vendorStatus.statusPage";
+  const linkLabel = t(linkLabelKey, { vendor: vendorName });
   const statusPage = (
-    <Button
-      variant="outline"
-      size="xs"
-      onPress={handleOpen}
-      accessibilityRole="link"
-      accessibilityLabel={t("settings.apiEndpoints.vendorStatus.statusPageLabel", {
-        vendor: vendorName,
-      })}
-      testID={`${testID}-link`}
-    >
-      {t("settings.apiEndpoints.vendorStatus.statusPage")}
-    </Button>
+    <View style={styles.link}>
+      <Button
+        variant="outline"
+        size="xs"
+        onPress={handleOpen}
+        accessibilityRole="link"
+        accessibilityLabel={t("settings.apiEndpoints.vendorStatus.statusPageLabel", {
+          vendor: vendorName,
+        })}
+        testID={`${testID}-link`}
+      >
+        {linkLabel}
+      </Button>
+    </View>
   );
-  if (problem === null) {
-    return (
-      <View style={styles.linkOnly} testID={testID}>
-        {statusPage}
-      </View>
-    );
+  if (isLinkOnly) {
+    return <View testID={testID}>{statusPage}</View>;
   }
+  // 提示、受影响的项与事件、链接从上往下排；后两样与提示文字对齐。
   return (
     <View style={styles.notice} testID={testID}>
-      <View style={styles.headline}>
-        {/* 图标和文字是一块，放不下时链接整块挪到下一行。 */}
-        <View style={styles.message}>
-          <ThemedTriangleAlert size={ICON_SIZE.sm} uniProps={TONE_ICON_COLORS[problem.tone]} />
-          <Text
-            variant="caption"
-            weight="medium"
-            color={TONE_TEXT_COLORS[problem.tone]}
-            style={styles.messageText}
-            testID={`${testID}-text`}
-          >
-            {t("settings.apiEndpoints.vendorStatus.reportsProblems", { vendor: vendorName })}
-          </Text>
-        </View>
-        {statusPage}
+      <View style={styles.message}>
+        <ThemedTriangleAlert size={ICON_SIZE.sm} uniProps={TONE_ICON_COLORS[problem.tone]} />
+        <Text
+          variant="caption"
+          weight="medium"
+          color={TONE_TEXT_COLORS[problem.tone]}
+          style={styles.messageText}
+          testID={`${testID}-text`}
+        >
+          {t("settings.apiEndpoints.vendorStatus.reportsProblems", { vendor: vendorName })}
+        </Text>
       </View>
       {problem.details.map((detail) => (
         <Text
           key={`${detail.kind}:${detail.name}`}
           variant="caption"
           color="foregroundMuted"
-          style={styles.detail}
+          style={styles.indented}
         >
           {detailText({ t, detail })}
         </Text>
       ))}
+      <View style={styles.indented}>{statusPage}</View>
     </View>
   );
 }
@@ -105,28 +107,21 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing[1.5],
     gap: theme.spacing[0.5],
   },
-  linkOnly: {
-    flexDirection: "row",
-    marginTop: theme.spacing[1.5],
-  },
-  headline: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    columnGap: theme.spacing[1.5],
-    rowGap: theme.spacing[1],
-  },
   message: {
     flexDirection: "row",
     alignItems: "center",
-    flexShrink: 1,
     gap: theme.spacing[1.5],
   },
   messageText: {
     flexShrink: 1,
   },
   // 与提示文字对齐：让过图标与间距。
-  detail: {
+  indented: {
     paddingLeft: ICON_SIZE.sm + theme.spacing[1.5],
+  },
+  // 按钮按自己的宽度，不被拉满。
+  link: {
+    flexDirection: "row",
+    marginTop: theme.spacing[1],
   },
 }));

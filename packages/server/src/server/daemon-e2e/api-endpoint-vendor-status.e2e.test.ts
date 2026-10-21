@@ -104,7 +104,8 @@ async function start() {
       agents: {},
     }),
   );
-  const control = { clock: START, autoUpdate: true };
+  // 第一次看时为正在读的页等候的计时器：记下等多久，从不到点，答案只能来自假页面。
+  const control = { clock: START, autoUpdate: true, waits: [] as number[] };
   const daemon = await createTestPaseoDaemon({
     paseoHomeRoot: root,
     cleanup: false,
@@ -117,6 +118,12 @@ async function start() {
         throw new Error("This suite never downloads models.dev");
       },
       vendorStatusUrls: { anthropic: page.url },
+      vendorStatusTimers: {
+        schedule(_handler, ms) {
+          control.waits.push(ms);
+          return () => {};
+        },
+      },
     },
   });
   daemons.push(daemon);
@@ -132,8 +139,10 @@ async function start() {
 
 describe("vendor status pages", () => {
   test("a degraded page is reported for the endpoints on that vendor's API; DeepSeek is only linked; a relay has none", async () => {
-    const { client, page } = await start();
+    const { client, page, control } = await start();
     const status = await client.apiEndpointVendorStatus();
+    // 第一次看等正在读的页最多 4 秒；页面先答了，用不着到点。
+    expect(control.waits).toEqual([4_000]);
     expect(status.error).toBeNull();
     expect(status.autoUpdate).toBe(true);
     expect(status.endpointVendors).toEqual({ ep_claude: "anthropic", ep_deepseek: "deepseek" });

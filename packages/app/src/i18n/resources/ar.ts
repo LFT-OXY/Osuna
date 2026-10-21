@@ -2506,6 +2506,7 @@ export const ar: TranslationResources = {
       vendorStatus: {
         reportsProblems: "تُبلغ {{vendor}} عن مشكلات",
         statusPage: "صفحة الحالة ↗",
+        statusPageOf: "حالة {{vendor}} ↗",
         statusPageLabel: "فتح صفحة حالة {{vendor}}",
         parts: {
           degraded_performance: "أداء متراجع",

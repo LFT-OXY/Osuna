@@ -1,17 +1,12 @@
-import type { ApiEndpointVendorStatusResponse } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 import { useTranslation } from "react-i18next";
 import { useFetchQuery } from "@/data/query";
 import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import type { VendorStatusAnswer } from "./internal/vendor-status";
 
 // 只在「第三方接口」页或用量页开着时每 5 分钟问一次（页面在后台时不问）；daemon 每页 5 分钟最多读一次。
 const VENDOR_STATUS_REFRESH_MS = 5 * 60_000;
 const NO_EXTRA_VENDORS: readonly string[] = [];
-
-export type VendorStatusAnswer = Pick<
-  ApiEndpointVendorStatusResponse["payload"],
-  "vendors" | "endpointVendors"
->;
 
 /**
  * 主机上各厂商官方状态页的读数；挂着这个 hook 的页面开着时才轮询。

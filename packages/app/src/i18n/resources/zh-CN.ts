@@ -2532,6 +2532,7 @@ export const zhCN: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}} 官方报告服务异常",
         statusPage: "状态页 ↗",
+        statusPageOf: "{{vendor}} 状态页 ↗",
         statusPageLabel: "打开 {{vendor}} 的状态页",
         parts: {
           degraded_performance: "性能下降",

@@ -1,6 +1,8 @@
-import type {
-  ApiEndpointVendorStatus,
-  ApiEndpointVendorStatusResponse,
+import {
+  API_ENDPOINT_VENDOR_LEVELS,
+  type ApiEndpointVendorLevel,
+  type ApiEndpointVendorStatus,
+  type ApiEndpointVendorStatusResponse,
 } from "@getpaseo/protocol/api-endpoint/rpc-schemas";
 
 /*
@@ -22,14 +24,16 @@ export interface VendorNotice {
   problem: { tone: VendorNoticeTone; details: VendorNoticeDetail[] } | null;
 }
 
-const LEVEL_TONES: Record<string, VendorNoticeTone> = {
+// 正常不提示。
+const LEVEL_TONES: Record<ApiEndpointVendorLevel, VendorNoticeTone | null> = {
+  ok: null,
   degraded: "warning",
   partial: "danger",
   major: "danger",
   maintenance: "muted",
 };
 
-type VendorStatusAnswer = Pick<
+export type VendorStatusAnswer = Pick<
   ApiEndpointVendorStatusResponse["payload"],
   "vendors" | "endpointVendors"
 >;
@@ -38,12 +42,16 @@ export function vendorNoticeOf(status: ApiEndpointVendorStatus): VendorNotice | 
   if (status.isLinkOnly) {
     return { vendorName: status.name, link: status.page, problem: null };
   }
-  const tone = status.level === null ? undefined : LEVEL_TONES[status.level];
-  if (tone === undefined) return null;
+  // 不认识的等级（daemon 以后多的）不提示。
+  const level = API_ENDPOINT_VENDOR_LEVELS.find((known) => known === status.level);
+  const tone = level === undefined ? null : LEVEL_TONES[level];
+  if (tone === null) return null;
   const incidentPage = status.incidents.find((incident) => incident.url !== null)?.url;
   const details: VendorNoticeDetail[] = [
     ...status.parts.map((part) => ({ kind: "part" as const, ...part })),
-    ...status.incidents.map((incident) => ({ kind: "incident" as const, name: incident.name })),
+    ...status.incidents
+      .filter((incident) => incident.name !== "")
+      .map((incident) => ({ kind: "incident" as const, name: incident.name })),
   ];
   return { vendorName: status.name, link: incidentPage ?? status.page, problem: { tone, details } };
 }

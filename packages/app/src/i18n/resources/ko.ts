@@ -2519,6 +2519,7 @@ export const ko: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}}에서 서비스 장애를 보고했습니다",
         statusPage: "상태 페이지 ↗",
+        statusPageOf: "{{vendor}} 상태 ↗",
         statusPageLabel: "{{vendor}} 상태 페이지 열기",
         parts: {
           degraded_performance: "성능 저하",

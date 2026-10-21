@@ -124,10 +124,11 @@ separately.
 The daemon downloads two public files on its own initiative, both plain GETs:
 no authentication, no query string, no request body, nothing about you or your
 machine beyond the IP and user agent any HTTP request carries. Its other
-requests are something you asked for, such as the CLI update check, or follow
-from a switch you turned on: the API endpoint checks and the gateway's calls to
-endpoints, all below. Traffic the CLIs send through the gateway is theirs, not
-the daemon's.
+requests are something you asked for, such as the CLI update check; follow from a
+page you have open, such as the vendor status pages read while the API endpoints
+or usage page is open; or follow from a switch you turned on: the API endpoint
+checks and the gateway's calls to endpoints, all below. Traffic the CLIs send
+through the gateway is theirs, not the daemon's.
 
 | File                                           | Fetched when                                      | Used for                                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

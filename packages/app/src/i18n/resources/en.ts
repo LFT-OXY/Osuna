@@ -2569,6 +2569,7 @@ export const en = {
       vendorStatus: {
         reportsProblems: "{{vendor}} reports problems",
         statusPage: "Status page ↗",
+        statusPageOf: "{{vendor}} status ↗",
         statusPageLabel: "Open the {{vendor}} status page",
         parts: {
           degraded_performance: "degraded performance",

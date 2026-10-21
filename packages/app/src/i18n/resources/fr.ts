@@ -2558,6 +2558,7 @@ export const fr: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}} signale des problèmes",
         statusPage: "Page d’état ↗",
+        statusPageOf: "État de {{vendor}} ↗",
         statusPageLabel: "Ouvrir la page d’état de {{vendor}}",
         parts: {
           degraded_performance: "performances dégradées",

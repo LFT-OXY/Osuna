@@ -2540,6 +2540,7 @@ export const ru: TranslationResources = {
       vendorStatus: {
         reportsProblems: "{{vendor}} сообщает о проблемах",
         statusPage: "Страница статуса ↗",
+        statusPageOf: "Статус {{vendor}} ↗",
         statusPageLabel: "Открыть страницу статуса {{vendor}}",
         parts: {
           degraded_performance: "снижена производительность",
