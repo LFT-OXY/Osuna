@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { isPlatform } from "../../test-utils/platform.js";
 import {
   readImportSources,
   withoutSqliteExperimentalWarning,
@@ -226,7 +227,7 @@ describe("readImportSources", () => {
   });
 
   // Windows 不按 chmod 的权限位拒绝打开文件，造不出「没权限打开」。
-  test.skipIf(process.platform === "win32")(
+  test.skipIf(isPlatform("win32"))(
     "a database Osuna has no permission to open is unreadable, not 'not a database'",
     async () => {
       const { context } = await contextIn();

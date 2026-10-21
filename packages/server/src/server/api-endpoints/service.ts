@@ -3081,16 +3081,16 @@ export class ApiEndpointService {
     this.staleCodexModels(state);
   }
 
-  /**
-   * 用 ChatGPT 登录的 Codex 的模型清单里接在 ChatGPT 自带模型后面的接口模型（中转站合并清单时用）、
-   * 这部分清单的标记，与正被改写的 config.toml 所在的 CODEX_HOME（ChatGPT 拿不到时读 Codex 上次的清单）。
-   * 标记也跟着 Codex 的默认模型变。endpoints.json 读不懂时没有接口模型。
-   */
   /** 中转站收到 ChatGPT 后端那组路径的请求时调用：记下请求头里 Codex 的版本，「按 Codex 的样子测」用。 */
   noteCliVersion(headers: IncomingHttpHeaders): void {
     this.codexSeenVersion.saw(headers);
   }
 
+  /**
+   * 用 ChatGPT 登录的 Codex 的模型清单里接在 ChatGPT 自带模型后面的接口模型（中转站合并清单时用）、
+   * 这部分清单的标记，与正被改写的 config.toml 所在的 CODEX_HOME（ChatGPT 拿不到时读 Codex 上次的清单）。
+   * 标记也跟着 Codex 的默认模型变。endpoints.json 读不懂时没有接口模型。
+   */
   chatGptListing(): ChatGptModelsListing {
     const codexHome = path.dirname(this.resolveCodexConfigPath());
     const state = this.readStateForSnapshot();

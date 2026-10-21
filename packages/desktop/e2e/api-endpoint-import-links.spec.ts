@@ -18,7 +18,7 @@ import {
 import { getServerId } from "../../app/e2e/support/helpers/server-id";
 
 // 只有桌面端收导入链接（paseo://import），用例要装桌面端的桥，所以放在桌面端测试里。
-// 打开总开关会改写 CLI 自己的配置：指到临时目录，绝不碰开发者的 ~/.claude 与 ~/.codex。
+// daemon 读写的 CLI 配置、进程表、系统代理与别的软件的目录都指到临时目录，绝不碰开发者真实的。
 const cliHome = mkdtempSync(path.join(tmpdir(), "paseo-e2e-import-links-"));
 test.use({
   e2eDaemonEnvironment: {
