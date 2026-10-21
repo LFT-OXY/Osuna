@@ -2540,6 +2540,18 @@ export const ptBR: TranslationResources = {
         cooling_hours_other: "Em pausa, volta em {{count}} horas",
         needsCheck: "Chave recusada, precisa de revisão",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} informa problemas",
+        statusPage: "Página de status ↗",
+        statusPageLabel: "Abrir a página de status da {{vendor}}",
+        parts: {
+          degraded_performance: "desempenho degradado",
+          partial_outage: "interrupção parcial",
+          major_outage: "interrupção grave",
+          under_maintenance: "em manutenção",
+        },
+        partLine: "{{part}}: {{state}}",
+      },
       switchOff: {
         title: "Desativar {{name}}?",
         returnsToOfficial: "{{agent}} voltará para Oficial.",

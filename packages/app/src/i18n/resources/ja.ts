@@ -2525,6 +2525,18 @@ export const ja: TranslationResources = {
         cooling_hours_other: "クールダウン中、{{count}} 時間後に再開",
         needsCheck: "キーが拒否されました。確認が必要です",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} が障害を報告しています",
+        statusPage: "ステータスページ ↗",
+        statusPageLabel: "{{vendor}} のステータスページを開く",
+        parts: {
+          degraded_performance: "パフォーマンス低下",
+          partial_outage: "一部停止",
+          major_outage: "大規模停止",
+          under_maintenance: "メンテナンス中",
+        },
+        partLine: "{{part}}：{{state}}",
+      },
       switchOff: {
         title: "{{name}} をオフにしますか？",
         returnsToOfficial: "{{agent}} は公式に戻ります。",

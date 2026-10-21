@@ -2529,6 +2529,18 @@ export const zhCN: TranslationResources = {
         cooling_hours_other: "冷却中，{{count}} 小时后恢复",
         needsCheck: "key 无效，需要检查",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} 官方报告服务异常",
+        statusPage: "状态页 ↗",
+        statusPageLabel: "打开 {{vendor}} 的状态页",
+        parts: {
+          degraded_performance: "性能下降",
+          partial_outage: "部分中断",
+          major_outage: "严重中断",
+          under_maintenance: "维护中",
+        },
+        partLine: "{{part}}：{{state}}",
+      },
       switchOff: {
         title: "关闭「{{name}}」？",
         returnsToOfficial: "{{agent}} 将回到官方。",

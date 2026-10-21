@@ -1,9 +1,12 @@
 import { RefreshCw } from "lucide-react-native";
-import { Fragment, useCallback } from "react";
+import { Fragment, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { selectActiveApiEndpoint } from "@/api-endpoints";
+import { subscriptionVendorOf, vendorNoticeById } from "@/api-endpoints/internal/vendor-status";
+import { useVendorStatus } from "@/api-endpoints/use-vendor-status";
+import { VendorNoticeLine } from "@/api-endpoints/vendor-notice";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { UsageCard } from "@/components/usage/usage-card";
@@ -122,10 +125,19 @@ function PlanUsageReports({
   const { inSidebar } = useUsageInSidebar();
   // 同一主机的提供方快照，用来标注启用了第三方接口的提供方：它的套餐额度这时不代表实际消耗。
   const { entries } = useProvidersSnapshot(serverId);
+  // 这一页开着时每 5 分钟问一次订阅对上的厂商官方状态页（照 magpie 标订阅卡片）。
+  const vendors = useMemo(
+    () => [...new Set(reports.flatMap((entry) => subscriptionVendorOf(entry.sourceId) ?? []))],
+    [reports],
+  );
+  const vendorStatus = useVendorStatus({ serverId, vendors });
   return (
     <View style={styles.reports}>
       {reports.map((entry, index) => {
         const usesApiEndpoints = selectActiveApiEndpoint(entries, entry.sourceId) !== null;
+        const vendorId = subscriptionVendorOf(entry.sourceId);
+        const vendorNotice =
+          vendorId === null ? null : vendorNoticeById({ answer: vendorStatus, vendorId });
         return (
           <Fragment key={entry.id}>
             {index > 0 ? <View style={styles.divider} /> : null}
@@ -137,6 +149,9 @@ function PlanUsageReports({
               pinnable={inSidebar}
               refreshable
             />
+            {vendorNotice ? (
+              <VendorNoticeLine notice={vendorNotice} testID="usage-plan-vendor-status" />
+            ) : null}
             {usesApiEndpoints ? (
               <Text style={styles.note}>{t("usage.planUsage.apiEndpointsOnNote")}</Text>
             ) : null}

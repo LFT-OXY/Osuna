@@ -2503,6 +2503,18 @@ export const ar: TranslationResources = {
         cooling_hours_other: "في فترة تهدئة، يعود بعد {{count}} ساعات",
         needsCheck: "المفتاح مرفوض، يحتاج إلى مراجعة",
       },
+      vendorStatus: {
+        reportsProblems: "تُبلغ {{vendor}} عن مشكلات",
+        statusPage: "صفحة الحالة ↗",
+        statusPageLabel: "فتح صفحة حالة {{vendor}}",
+        parts: {
+          degraded_performance: "أداء متراجع",
+          partial_outage: "انقطاع جزئي",
+          major_outage: "انقطاع كبير",
+          under_maintenance: "قيد الصيانة",
+        },
+        partLine: "{{part}}: {{state}}",
+      },
       switchOff: {
         title: "إيقاف {{name}}؟",
         returnsToOfficial: "سيعود {{agent}} إلى الرسمي.",

@@ -2516,6 +2516,18 @@ export const ko: TranslationResources = {
         cooling_hours_other: "쿨다운 중, {{count}}시간 후 재개",
         needsCheck: "키가 거부됨, 확인 필요",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}}에서 서비스 장애를 보고했습니다",
+        statusPage: "상태 페이지 ↗",
+        statusPageLabel: "{{vendor}} 상태 페이지 열기",
+        parts: {
+          degraded_performance: "성능 저하",
+          partial_outage: "부분 중단",
+          major_outage: "전면 중단",
+          under_maintenance: "점검 중",
+        },
+        partLine: "{{part}}: {{state}}",
+      },
       switchOff: {
         title: "{{name}}을(를) 끌까요?",
         returnsToOfficial: "{{agent}}은(는) 공식으로 돌아갑니다.",

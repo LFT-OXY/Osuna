@@ -48,6 +48,8 @@ import {
 } from "./internal/host-list";
 import { EndpointIcon } from "./endpoint-icon";
 import { SortableEndpointRows } from "./sortable-endpoint-rows";
+import type { VendorNotice } from "./internal/vendor-status";
+import { VendorNoticeLine } from "./vendor-notice";
 import type { SortableEndpointRowInfo } from "./sortable-endpoint-rows.types";
 
 /*
@@ -89,6 +91,8 @@ export interface ListManagement {
   onOpenProvider: (provider: string) => void;
   // 行菜单「复制」：和详情页 ⋯ 菜单里的是同一个入口。
   onDuplicate: (endpoint: ApiEndpoint) => void;
+  // 接口对上的厂商的官方状态页提示；没有提示的接口不在里面。
+  vendorNotices: ReadonlyMap<string, VendorNotice>;
 }
 
 const noArrange = () => {};
@@ -426,6 +430,7 @@ function EndpointRow({
     [],
   );
   // 有行信息时模型数挪到下一行，和 key 打码、默认模型写在一起。
+  const vendorNotice = management?.vendorNotices.get(endpoint.id) ?? null;
   const statusLine = useEndpointStatusLine({
     endpoint,
     status,
@@ -494,6 +499,9 @@ function EndpointRow({
                   ) : null}
                 </ProviderStatusLine>
                 {management ? <EndpointFacts endpoint={endpoint} management={management} /> : null}
+                {vendorNotice ? (
+                  <VendorNoticeLine notice={vendorNotice} testID="api-endpoint-row-vendor-status" />
+                ) : null}
               </View>
             </View>
             <View style={styles.trailingControls}>

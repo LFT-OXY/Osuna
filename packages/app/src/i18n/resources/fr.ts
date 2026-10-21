@@ -2555,6 +2555,18 @@ export const fr: TranslationResources = {
         cooling_hours_other: "En pause, de retour dans {{count}} heures",
         needsCheck: "Clé refusée, à vérifier",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} signale des problèmes",
+        statusPage: "Page d’état ↗",
+        statusPageLabel: "Ouvrir la page d’état de {{vendor}}",
+        parts: {
+          degraded_performance: "performances dégradées",
+          partial_outage: "panne partielle",
+          major_outage: "panne majeure",
+          under_maintenance: "en maintenance",
+        },
+        partLine: "{{part}} : {{state}}",
+      },
       switchOff: {
         title: "Désactiver {{name}} ?",
         returnsToOfficial: "{{agent}} repassera sur Officiel.",

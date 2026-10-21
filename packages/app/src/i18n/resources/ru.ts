@@ -2537,6 +2537,18 @@ export const ru: TranslationResources = {
         cooling_hours_other: "Пауза, вернётся через {{count}} ч",
         needsCheck: "Ключ отклонён, нужна проверка",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} сообщает о проблемах",
+        statusPage: "Страница статуса ↗",
+        statusPageLabel: "Открыть страницу статуса {{vendor}}",
+        parts: {
+          degraded_performance: "снижена производительность",
+          partial_outage: "частичный сбой",
+          major_outage: "серьёзный сбой",
+          under_maintenance: "техобслуживание",
+        },
+        partLine: "{{part}}: {{state}}",
+      },
       switchOff: {
         title: "Выключить {{name}}?",
         returnsToOfficial: "{{agent}} вернётся на официальный.",

@@ -5562,3 +5562,147 @@ async function recordEnabledOrders(page: Page): Promise<void> {
 async function recordedOrders(page: Page): Promise<string[][]> {
   return page.evaluate(() => (window as unknown as { __orderSamples: string[][] }).__orderSamples);
 }
+
+test.describe("Vendor status pages", () => {
+  function vendor(input: {
+    vendor: string;
+    name: string;
+    page: string;
+    level: string | null;
+    isLinkOnly?: boolean;
+  }) {
+    return {
+      vendor: input.vendor,
+      name: input.name,
+      page: input.page,
+      isLinkOnly: input.isLinkOnly ?? false,
+      level: input.level,
+      parts:
+        input.level === "degraded"
+          ? [{ name: "Claude API (api.anthropic.com)", status: "degraded_performance" }]
+          : [],
+      incidents: [],
+      readAt: "2026-10-21T08:00:00.000Z",
+      error: null,
+    };
+  }
+
+  test("a vendor that reports problems is said on its endpoints' rows with a link to its status page; a vendor that is well says nothing", async ({
+    page,
+  }) => {
+    const official = await seedApiEndpoint(client, {
+      name: "Anthropic official",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const openai = await seedApiEndpoint(client, {
+      name: "OpenAI official",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["gpt-5"],
+    });
+    const deepseek = await seedApiEndpoint(client, {
+      name: "DeepSeek official",
+      baseUrls: [{ format: "openai_chat", url: `${relay.origin}/good/v1` }],
+      models: ["deepseek-chat"],
+    });
+    const asked = await answerVendorStatus(page, {
+      payload: {
+        autoUpdate: true,
+        vendors: [
+          vendor({
+            vendor: "anthropic",
+            name: "Anthropic",
+            page: "https://status.claude.com",
+            level: "degraded",
+          }),
+          vendor({
+            vendor: "openai",
+            name: "OpenAI",
+            page: "https://status.openai.com",
+            level: "ok",
+          }),
+          vendor({
+            vendor: "deepseek",
+            name: "DeepSeek",
+            page: "https://status.deepseek.com",
+            level: null,
+            isLinkOnly: true,
+          }),
+        ],
+        endpointVendors: { [official]: "anthropic", [openai]: "openai", [deepseek]: "deepseek" },
+        error: null,
+      },
+    });
+    await openApiEndpointsPage(page);
+    await expect.poll(() => asked.count).toBeGreaterThan(0);
+
+    const notice = row(page, official).getByTestId("api-endpoint-row-vendor-status");
+    await expect(notice.getByTestId("api-endpoint-row-vendor-status-text")).toHaveText(
+      "Anthropic reports problems",
+    );
+    await expect(notice).toContainText("Claude API (api.anthropic.com): degraded performance");
+    await expect(notice.getByTestId("api-endpoint-row-vendor-status-link")).toHaveText(
+      "Status page ↗",
+    );
+    await expect(row(page, openai).getByTestId("api-endpoint-row-vendor-status")).toHaveCount(0);
+    // DeepSeek 只给链接，不说异常。
+    const deepseekLink = row(page, deepseek).getByTestId("api-endpoint-row-vendor-status");
+    await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-link")).toBeVisible();
+    await expect(deepseekLink.getByTestId("api-endpoint-row-vendor-status-text")).toHaveCount(0);
+  });
+
+  test("a failed status request leaves the list as it is", async ({ page }) => {
+    const official = await seedApiEndpoint(client, {
+      name: "Anthropic official",
+      baseUrls: [{ format: "anthropic_messages", url: `${relay.origin}/good` }],
+      models: ["claude-sonnet-4-5"],
+    });
+    const asked = await answerVendorStatus(page, {
+      payload: {
+        autoUpdate: false,
+        vendors: [],
+        endpointVendors: {},
+        error: { code: "unknown", message: "EACCES: permission denied" },
+      },
+    });
+    await openApiEndpointsPage(page);
+    await expect.poll(() => asked.count).toBeGreaterThan(0);
+    await expect(row(page, official)).toBeVisible();
+    await expect(row(page, official).getByTestId("api-endpoint-row-key")).toBeVisible();
+    await expect(page.getByTestId("api-endpoint-row-vendor-status")).toHaveCount(0);
+    await expect(page.getByTestId("api-endpoints-load-error")).toHaveCount(0);
+  });
+});
+
+/** 厂商状态的请求不送到 daemon，直接回给定的答案（daemon 不上网，假答案代替状态页），并数问了几次。 */
+async function answerVendorStatus(
+  page: Page,
+  input: { payload: Record<string, unknown> },
+): Promise<{ count: number }> {
+  const asked = { count: 0 };
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => ws.send(message));
+    ws.onMessage((message) => {
+      const request =
+        typeof message === "string" && message.includes("provider.api_endpoint.vendor_status")
+          ? (JSON.parse(message) as { message?: { requestId?: string } }).message
+          : undefined;
+      if (!request) {
+        server.send(message);
+        return;
+      }
+      asked.count += 1;
+      ws.send(
+        JSON.stringify({
+          type: "session",
+          message: {
+            type: "provider.api_endpoint.vendor_status.response",
+            payload: { requestId: request.requestId, ...input.payload },
+          },
+        }),
+      );
+    });
+  });
+  return asked;
+}

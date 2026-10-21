@@ -33,6 +33,8 @@ import { ApiEndpointConnectionSheet } from "./connection-form-sheet";
 import { ApiEndpointConnectionSection } from "./connection-section";
 import { ApiEndpointDetailHeader } from "./detail-header";
 import { ApiEndpointsListSection, NoticeCard, type ListManagement } from "./host-list-section";
+import { endpointVendorNotices } from "./internal/vendor-status";
+import { useVendorStatus } from "./use-vendor-status";
 import { AgentApiEndpointsFrame, AgentApiEndpointsSection } from "./agent-section";
 import { selectAgentApiEndpointsView, type AgentIssueAction } from "./internal/agent-settings";
 import type { ConnectionFormSeed, ConnectionSaveResult } from "./internal/connection-form-model";
@@ -471,11 +473,15 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
   const hasManagement = useHostFeature(serverId, "apiEndpointManagement");
   const [sheet, setSheet] = useState<ConnectionSheetState>(null);
   const { entries: providerEntries } = useProvidersSnapshot(serverId);
+  // 这一页开着时每 5 分钟问一次厂商官方状态页；问不到只是不出提示。
+  const vendorStatus = useVendorStatus({ serverId });
+  const vendorNotices = useMemo(() => endpointVendorNotices(vendorStatus), [vendorStatus]);
   // COMPAT(apiEndpointManagement): added in v0.17.0, remove gate after 2027-04-19. 老主机不发 key 打码与默认模型落在哪家。
   const management = useMemo<ListManagement | undefined>(
     () =>
       hasManagement
         ? {
+            vendorNotices,
             providerLabel: (provider) => resolveProviderLabel(provider, providerEntries),
             onOpenProvider: (provider) =>
               router.push(buildProviderSettingsRoute(serverId, provider)),
@@ -483,7 +489,7 @@ function ApiEndpointsListPage({ serverId }: { serverId: string }) {
               setSheet({ kind: "form", seed: duplicateSeed(endpoint, t), backToPicker: false }),
           }
         : undefined,
-    [hasManagement, providerEntries, router, serverId, t],
+    [hasManagement, providerEntries, router, serverId, t, vendorNotices],
   );
 
   // 主机声明了 apiEndpointManagement 时「+」先出模板列表，否则直接打开「自定义」表单。

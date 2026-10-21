@@ -2566,6 +2566,18 @@ export const en = {
         cooling_hours_other: "Cooling down, back in {{count}} hours",
         needsCheck: "Key rejected, needs a check",
       },
+      vendorStatus: {
+        reportsProblems: "{{vendor}} reports problems",
+        statusPage: "Status page ↗",
+        statusPageLabel: "Open the {{vendor}} status page",
+        parts: {
+          degraded_performance: "degraded performance",
+          partial_outage: "partial outage",
+          major_outage: "major outage",
+          under_maintenance: "under maintenance",
+        },
+        partLine: "{{part}}: {{state}}",
+      },
       switchOff: {
         title: "Switch off {{name}}?",
         returnsToOfficial: "{{agent}} will go back to official.",
