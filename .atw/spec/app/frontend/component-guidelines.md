@@ -191,6 +191,17 @@ Reference: `ApiKeyField` in `api-endpoints/connection-form-sheet.tsx`, measured 
 
 Test: the browser test "a long key shown in a narrow window can be read in full, and Hide masks it again" (`e2e/browser/settings-api-endpoints.spec.ts`). At 390 it asserts no horizontal or vertical overflow, that the box ends before Show, that a typed key survives Show, that the box shrinks after a delete, and that Enter adds nothing.
 
+## A numeric table that condenses before it scrolls
+
+Reference: `useTableLayout` in `components/usage/usage-details-card.tsx` (the Usage page Daily and Monthly tables, ticket 07 of endpoint-management-ux-followups).
+
+- **Condense first, scroll second.** Each column has a full and a condensed floor (`FULL_COLUMNS` / `CONDENSED_COLUMNS`, each including the column gap). The horizontal `ScrollView`'s `onLayout` width decides: narrower than the full table's floor sum, switch to the condensed floors and `formatUsageTokensCompact` (`180.2K`); session counts and costs keep their own format. Ignore a width of 0 (not laid out yet). At 1280 the card is about 551px wide, so the full Daily table (728) condenses to fit (528); at 390 it still scrolls sideways.
+- **The table takes the card's width, not its longest header word.** Give the table `width: 0` plus `flexGrow: 1` and its `minWidth`. Without `width: 0`, the horizontal scroll content sizes to the table's max-content, and a long single-word header ("Raisonnement", "Рассуждения") pushes the table 13–16px past the card even when every floor fits. `flexBasis: 0` alone does not stop that.
+- **Gaps come from padding, not width.** Every right-aligned column takes `paddingLeft: theme.spacing[2]` inside its floor, so two right-aligned headers never read as one word ("ReasoningSessions"). A long word wider than its condensed floor wraps onto a second line (fr, es, ru); it never overlaps the next column.
+- **Unistyles: pick between fixed style entries, no inline `{ minWidth }`.** Column overrides are `firstColumnCondensed` / `numberColumnCondensed` appended in an array; the table style comes from one `tableStyle(kind, isCondensed)` helper.
+
+Test: "Usage page daily table headers" in `e2e/browser/usage-page-details.spec.ts`, en and zh-CN. It measures each header's drawn text with a DOM `Range`, not its cell: at 1280 nothing is hidden, every header is in order, neighbouring texts are at least 4px apart, and the last one is inside the scroller. At 390, after sliding to the end, it checks the same. The row tests read `180.2K` at 1280 and the exact `180,248` at 1680.
+
 ## Forbidden (from `docs/design.md` §14, enforced in review)
 
 `fontWeight.medium` outside the structural-label tier; hardcoded hex or new color tokens outside the exceptions §14 names; spacing outside the scale (`padding: 20`, `gap: 10`); color changes for disabled state; a muted paragraph under a section header; a "Settings" CTA on a detail page; placeholder text dimmed beyond `foregroundMuted`; raw DOM without `isWeb`; destructive actions without a confirmation (`confirmDialog`, or a sheet whose footer holds the destructive button).
