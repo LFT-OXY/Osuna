@@ -7,7 +7,7 @@
 
 **Blocked by:** 14, 29
 **Status:** ready-for-human
-**Impl:** ready
+**Impl:** done
 
 - [ ] 用户确认 Claude Code 按手改的上下文、回复上限、思考档位、压缩阈值工作。
 - [ ] 用户确认 Codex 的 `/model` 显示名、思考档位、上下文符合设置，接口名显示方式三种都看过。
