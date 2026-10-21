@@ -169,8 +169,7 @@ A subagent call is `isDispatchToolCall` in `tool-calls/detail-level/dispatch/mod
 - A button that overwrites the user's data (import-link Replace) uses the destructive variant.
 - Row menus follow docs/menus.md: at compact width both the endpoint row menu and the model row menu are bottom sheets; the shared menu drawer keeps a 16 px bottom inset.
 - Field and section info tips open below (`side="bottom"`); section headers inside sheets use the same heading as the detail page.
-- A horizontally scrolling tab strip fades only on the side that hides content (`components/ui/horizontal-scroll-fade.web.tsx
-components/ui/horizontal-scroll-fade.tsx`).
+- A horizontally scrolling tab strip fades only on the side that hides content (`components/ui/horizontal-scroll-fade.tsx`, web variant `.web.tsx`).
 - Sheets at compact width size to their content (import-link default / replace / refused), capped at 90%.
 - Screenshots for review are saved lossless; take them after the sheet has settled, and never press Escape first (it leaves a focus ring that isn't there for the user).
 
