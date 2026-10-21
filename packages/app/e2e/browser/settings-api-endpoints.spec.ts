@@ -4158,8 +4158,9 @@ test.describe("Turning Use API endpoints off previews what it puts back", () => 
     '"modelPicker": {',
     '"options": [',
     '"model": "relay-a/claude-sonnet-4-5",',
-    '"label": "claude-sonnet-4-5",',
-    '"description": "Relay A"',
+    // 接口名显示方式缺省是「总是」（照 magpie）：选单行写「模型名 (接口名)」，说明换成 via Osuna。
+    '"label": "claude-sonnet-4-5 (Relay A)",',
+    '"description": "via Osuna"',
   ];
   const FOLDED_LINE_COUNT = 4;
   const NOW_LINES = [

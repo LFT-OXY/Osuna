@@ -268,7 +268,8 @@ export async function expectUsageOptionsFitContent(page: Page): Promise<void> {
   const surface = await usageOptionsSurface(page).boundingBox();
   const fields = await page.getByTestId("usage-options-fields").boundingBox();
   if (!surface || !fields) throw new Error("Settings must be visible before measuring its fit.");
-  expect(surface.y + surface.height - (fields.y + fields.height)).toBeLessThanOrEqual(10);
+  // 窄窗口的菜单抽屉底下另留 16（menu-surface.tsx 的 breathingRoom），最后一项不贴屏幕底边。
+  expect(surface.y + surface.height - (fields.y + fields.height)).toBeLessThanOrEqual(10 + 16);
 }
 
 export async function closeUsageOptions(page: Page): Promise<void> {
